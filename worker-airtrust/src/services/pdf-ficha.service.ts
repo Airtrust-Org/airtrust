@@ -148,9 +148,17 @@ export async function gerarPDFFicha(dados: FichaPDFData): Promise<Buffer> {
   currentY -= 20;
 
   // NOTECHS calibration warning + regulatory disclaimer
-  const hasNotechs = dados.manobras.some((m) => (m.categoria || '').toUpperCase() === NOTECHS_CATEGORIA);
+  const hasNotechs = dados.manobras.some(
+    (m) => (m.categoria || '').toUpperCase() === NOTECHS_CATEGORIA,
+  );
   if (hasNotechs) {
-    currentY = drawDisclaimerText(page, fontRegular, NOTECHS_CALIBRATION_WARNING, currentY, contentWidth);
+    currentY = drawDisclaimerText(
+      page,
+      fontRegular,
+      NOTECHS_CALIBRATION_WARNING,
+      currentY,
+      contentWidth,
+    );
   }
   currentY = drawDisclaimerText(page, fontRegular, REGULATORY_DISCLAIMER, currentY, contentWidth);
 
@@ -419,10 +427,10 @@ function drawManobrasSection(
     });
   });
 
-  // NOTECHS category sub-divider labels (compact, inline)
+  // NOTECHS category sub-divider labels
   const NOTECHS_GROUP_LABELS: Record<string, string> = {
     COO: 'COO \u2014 Coopera\u00E7\u00E3o / Cooperation',
-    LID: 'LID \u2014 Lideran\u00E7a e Hab. Gerenciais / Leadership and Management Skills',
+    LID: 'LID \u2014 Lideran\u00E7a e Habilidades Gerenciais / Leadership and Management Skills',
     CSA: 'CSA \u2014 Consci\u00EAncia Situacional / Situational Awareness',
     TMD: 'TMD \u2014 Tomada de Decis\u00E3o / Decision Making',
   };
@@ -458,9 +466,10 @@ function drawManobrasSection(
   // Draw all rows
   for (let ri = 0; ri < allRows.length; ri++) {
     const row = allRows[ri];
-    const isNotechsStart = row.tipo === 'notechs' && (ri === 0 || allRows[ri - 1].tipo === 'tecnica');
+    const isNotechsStart =
+      row.tipo === 'notechs' && (ri === 0 || allRows[ri - 1].tipo === 'tecnica');
 
-    // NOTECHS main divider (compact)
+    // NOTECHS main divider (single-line compact)
     if (isNotechsStart) {
       notecsRowIdx = 0;
       currentY -= 2;
@@ -470,9 +479,16 @@ function drawManobrasSection(
         color: COLOR.border,
         thickness: 0.5,
       });
-      drawText(page, 'NOTECHS \u2014 Non-Technical Skills', margin + 2, currentY - 4, fontBold, 6, COLOR.textSecondary);
-      drawText(page, 'Habilidades N\u00E3o T\u00E9cnicas / Comportamentais', margin + 2, currentY - 8, fontRegular, 5, COLOR.textSecondary);
-      currentY -= 10;
+      drawText(
+        page,
+        'NOTECHS \u2014 Non-Technical Skills / Habilidades N\u00E3o T\u00E9cnicas e Comportamentais',
+        margin + 2,
+        currentY - 4,
+        fontBold,
+        5.5,
+        COLOR.textSecondary,
+      );
+      currentY -= 7;
       page.drawLine({
         start: { x: margin, y: currentY },
         end: { x: margin + contentWidth, y: currentY },
@@ -531,7 +547,15 @@ function drawManobrasSection(
 
     // Code
     const codeText = row.codigo.length > 13 ? row.codigo.substring(0, 12) + '…' : row.codigo;
-    drawText(page, codeText, colCodigo.x, textY, fontRegular, TABLE_FONT_SMALL, COLOR.textSecondary);
+    drawText(
+      page,
+      codeText,
+      colCodigo.x,
+      textY,
+      fontRegular,
+      TABLE_FONT_SMALL,
+      COLOR.textSecondary,
+    );
 
     // Tripulante badge
     const tripBadgeW = 8;
@@ -561,12 +585,23 @@ function drawManobrasSection(
     // Item name (with word wrap)
     const nomeLines = wrapText(row.nome, fontRegular, TABLE_FONT, colItens.w);
     for (let li = 0; li < Math.min(nomeLines.length, 3); li++) {
-      drawText(page, nomeLines[li], colItens.x, textY - li * LINE_SPACING, fontRegular, TABLE_FONT, COLOR.text);
+      drawText(
+        page,
+        nomeLines[li],
+        colItens.x,
+        textY - li * LINE_SPACING,
+        fontRegular,
+        TABLE_FONT,
+        COLOR.text,
+      );
     }
 
     // Observações
     if (row.observacoes) {
-      const obsLines = wrapText(row.observacoes, fontRegular, TABLE_FONT_SMALL, colObs.w).slice(0, 2);
+      const obsLines = wrapText(row.observacoes, fontRegular, TABLE_FONT_SMALL, colObs.w).slice(
+        0,
+        2,
+      );
       for (let li = 0; li < obsLines.length; li++) {
         drawText(
           page,
@@ -595,7 +630,16 @@ function drawManobrasSection(
         height: badgeSize,
         color: getScoreBgColor(score),
       });
-      drawTextCentered(page, String(score), badgeX, badgeY + 3, badgeSize, fontBold, 7, COLOR.white);
+      drawTextCentered(
+        page,
+        String(score),
+        badgeX,
+        badgeY + 3,
+        badgeSize,
+        fontBold,
+        7,
+        COLOR.white,
+      );
     } else {
       page.drawRectangle({
         x: badgeX,
@@ -604,7 +648,16 @@ function drawManobrasSection(
         height: badgeSize,
         color: COLOR.border,
       });
-      drawTextCentered(page, '-', badgeX, badgeY + 3, badgeSize, fontRegular, 6, COLOR.textSecondary);
+      drawTextCentered(
+        page,
+        '-',
+        badgeX,
+        badgeY + 3,
+        badgeSize,
+        fontRegular,
+        6,
+        COLOR.textSecondary,
+      );
     }
 
     currentY -= ROW_H_BASE + 1;
@@ -671,10 +724,13 @@ function drawAvaliacaoScaleSection(
     const faixa = faixas.find((c) => c.noteIndexes.includes(index));
     const x = PAGE.margin + index * cellWidth;
     page.drawRectangle({
-      x, y: tableTop - cellHeight,
-      width: cellWidth, height: cellHeight,
+      x,
+      y: tableTop - cellHeight,
+      width: cellWidth,
+      height: cellHeight,
       color: faixa?.color || COLOR.textSecondary,
-      borderColor: COLOR.white, borderWidth: 0.5,
+      borderColor: COLOR.white,
+      borderWidth: 0.5,
     });
     drawTextCentered(page, String(nota), x, tableTop - 9, cellWidth, fontBold, 7, COLOR.white);
   });

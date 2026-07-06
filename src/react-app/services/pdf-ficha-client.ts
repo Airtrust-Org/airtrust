@@ -80,7 +80,10 @@ export function getFichaPdfTableHeaders() {
 import { getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
-import { FICHA_AVALIACAO_FAIXAS, FICHA_AVALIACAO_NOTAS } from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
+import {
+  FICHA_AVALIACAO_FAIXAS,
+  FICHA_AVALIACAO_NOTAS,
+} from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
 
 // ── Sanitização de metadados internos ──────────────────────────────────────
 const INTERNAL_METADATA_LEAK_RE = new RegExp(
@@ -164,28 +167,26 @@ const COLORS = {
 const FICHA_AVALIACAO_SCALE_HEIGHT = 22;
 
 export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
-  // Column layout (all positions are absolute mm from left edge of page):
-  //   #      : margin+3   — 5mm wide
-  //   CÓDIGO : margin+10  — 20mm wide  → ends at margin+30
-  //   TRIP.  : margin+35  — 12mm wide (badge 8mm centered) → badge spans margin+31–margin+39
-  //             gap from CÓDIGO end (+30) to badge start (+31) = 1mm clear
-  //   ITENS  : margin+40  — 62mm wide  → ends at margin+102 (sized so the longest real
-  //             manobra/NOTECHS title wraps to at most 2 lines at TABLE_FONT, no ellipsis)
-  //   OBS    : margin+104 — 61mm wide  → ends at margin+165
-  //   NOTA   : margin+172 — centred badge, 10mm wide (unchanged, stays aligned with header)
+  // Column layout (absolute mm from left edge):
+  //   #      : margin+3   — 5mm
+  //   CÓDIGO : margin+10  — 20mm (fits NOTECHS-COO-01 etc.)
+  //   TRIP.  : margin+33  — 12mm (badge 8mm centered)
+  //   ITENS  : margin+48  — 54mm (2-line wrap for long names)
+  //   OBS    : margin+105 — 58mm (operational priority)
+  //   NOTA   : margin+172 — 10mm badge
   return {
     positions: {
       num: margin + 3,
       codigo: margin + 10,
-      tripulante: margin + 35,
-      itens: margin + 40,
-      obs: margin + 104,
+      tripulante: margin + 33,
+      itens: margin + 48,
+      obs: margin + 105,
       nota: margin + 172,
     },
     codigoWidth: 20,
     tripulanteWidth: 12,
-    itensWidth: 62,
-    obsWidth: 61,
+    itensWidth: 54,
+    obsWidth: 58,
     notaBadgeWidth: 10,
     notaBadgeHeight: 4,
   };
@@ -220,8 +221,21 @@ function drawFichaAvaliacaoScale(
     setDrawColor: (color: string | number, g?: number, b?: number) => void;
     setFillColor: (color: string | number, g?: number, b?: number) => void;
     rect: (x: number, y: number, w: number, h: number, style?: string) => void;
-    roundedRect: (x: number, y: number, w: number, h: number, rx: number, ry: number, style?: string) => void;
-    text: (text: string | string[], x: number, y: number, options?: Record<string, unknown>) => void;
+    roundedRect: (
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      rx: number,
+      ry: number,
+      style?: string,
+    ) => void;
+    text: (
+      text: string | string[],
+      x: number,
+      y: number,
+      options?: Record<string, unknown>,
+    ) => void;
     splitTextToSize: (text: string, maxWidth: number) => string[];
   },
   x: number,
@@ -248,7 +262,9 @@ function drawFichaAvaliacaoScale(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6);
     doc.setTextColor(getContrastTextColor(fill));
-    doc.text(String(nota), x + index * cellWidth + cellWidth / 2, tableY + 2.9, { align: 'center' });
+    doc.text(String(nota), x + index * cellWidth + cellWidth / 2, tableY + 2.9, {
+      align: 'center',
+    });
   });
 
   // Descriptor legend — all 4 bands in a single row with PROPORTIONAL widths.
@@ -490,8 +506,8 @@ export async function gerarPDFFichaCliente(
   const isModoModelo = dados.modoModelo === true;
   // ── Geometria base do header (compacto) ───────────────────────────────────
   const headerTop = 4;
-  const headerHeight = 22; // compacto — logo landscape rende ~13mm de altura
-  const headerBottom = headerTop + headerHeight; // = 26
+  const headerHeight = 20; // compacto
+  const headerBottom = headerTop + headerHeight;
   const headerCenterX = pageWidth / 2;
   const headerGap = 1;
   // Col1: logo — box mais justo para liberar largura útil à coluna central
@@ -632,12 +648,12 @@ export async function gerarPDFFichaCliente(
   doc.setFontSize(6);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(COLORS.primary);
-  doc.text('SESSÃO', tituloX, headerTop + 11, { align: 'center' });
+  doc.text('SESSÃO', tituloX, headerTop + 9, { align: 'center' });
 
   doc.setFontSize(sessaoFontSize);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(COLORS.textSecondary);
-  doc.text(sessaoLine, tituloX, headerTop + 16, { align: 'center' });
+  doc.text(sessaoLine, tituloX, headerTop + 14, { align: 'center' });
 
   // Status badge (canto direito)
   const statusText = dados.status || 'PENDENTE';
@@ -806,7 +822,9 @@ export async function gerarPDFFichaCliente(
   // Prepara linhas NOTECHS no mesmo formato dos itens técnicos.
   const notechsRows = manobrasNotechs.map((n, i) => ({
     ordem: n.ordem,
-    codigo: (n as Record<string, unknown>).codigo as string || `NOTECHS-${String(i + 1).padStart(2, '0')}`,
+    codigo:
+      ((n as Record<string, unknown>).codigo as string) ||
+      `NOTECHS-${String(i + 1).padStart(2, '0')}`,
     nome: sanitizeForPdf(n.nome) || sanitizeForPdf(n.descricao) || n.nome || n.descricao || '',
     descricao: sanitizeForPdf(n.descricao) || n.descricao || '',
     resultado: n.resultado,
@@ -831,9 +849,7 @@ export async function gerarPDFFichaCliente(
     const nomeLines = doc.splitTextToSize(nomeTxt, ITENS_WIDTH);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
-      obsTxt.length > 0
-        ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), 3)
-        : [];
+      obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), 3) : [];
     const maxLines = Math.max(1, nomeLines.length, obsLines.length);
     const rowH = Math.max(6, 2 + maxLines * 3.5);
     return { m, nomeLines, obsLines, rowH };
@@ -850,9 +866,8 @@ export async function gerarPDFFichaCliente(
   const isTemplateV6 = dados.templateVersion === 'v6' || isModoModelo;
   const SCALE_RESERVED = isTemplateV6 ? 0 : FICHA_AVALIACAO_SCALE_HEIGHT;
   // NOTECHS agora é parte da tabela, não um bloco separado.
-  // Header bilíngue compacto + divisores de grupo inline e discretos.
-  const NOTECHS_HEADER_H = manobrasNotechs.length > 0 ? 10 : 0;
-  const NOTECHS_CATEGORY_DIVIDER_H = 5.5;
+  const NOTECHS_HEADER_H = manobrasNotechs.length > 0 ? 6 : 0;
+  const NOTECHS_CATEGORY_DIVIDER_H = 4.5;
   const NOTECHS_DIVIDER_H = NOTECHS_HEADER_H;
   const NOTECHS_CATEGORY_BUDGET = manobrasNotechs.length > 0 ? NOTECHS_CATEGORY_DIVIDER_H * 4 : 0;
   const tableBodyBudget =
@@ -886,10 +901,10 @@ export async function gerarPDFFichaCliente(
   let notechsDividerInserted = false;
   let lastNotechsGroup = '';
 
-  // NOTECHS category sub-divider labels (compact, inline)
+  // NOTECHS category sub-divider labels
   const NOTECHS_GROUP_LABELS: Record<string, string> = {
     COO: 'COO \u2014 Coopera\u00E7\u00E3o / Cooperation',
-    LID: 'LID \u2014 Lideran\u00E7a e Hab. Gerenciais / Leadership and Management Skills',
+    LID: 'LID \u2014 Lideran\u00E7a e Habilidades Gerenciais / Leadership and Management Skills',
     CSA: 'CSA \u2014 Consci\u00EAncia Situacional / Situational Awareness',
     TMD: 'TMD \u2014 Tomada de Decis\u00E3o / Decision Making',
   };
@@ -907,19 +922,20 @@ export async function gerarPDFFichaCliente(
     // Insere divisor NOTECHS antes do primeiro item NOTECHS
     if ((m as Record<string, unknown>)._section === 'notechs' && !notechsDividerInserted) {
       notechsDividerInserted = true;
-      // Linha divisora + header bilíngue compacto
+      // Single-line compact divider
       doc.setDrawColor(COLORS.border);
       doc.setLineWidth(0.5);
       doc.line(margin, currentY + 1, margin + contentWidth, currentY + 1);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6);
+      doc.setFontSize(5.5);
       doc.setTextColor(COLORS.textSecondary);
-      doc.text('NOTECHS \u2014 Non-Technical Skills', margin + 2, currentY + 3.5);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(5);
-      doc.text('Habilidades N\u00E3o T\u00E9cnicas / Comportamentais', margin + 2, currentY + 7);
+      doc.text(
+        'NOTECHS \u2014 Non-Technical Skills / Habilidades N\u00E3o T\u00E9cnicas e Comportamentais',
+        margin + 2,
+        currentY + 4,
+      );
       doc.setLineWidth(0.5);
-      doc.line(margin, currentY + 8.5, margin + contentWidth, currentY + 8.5);
+      doc.line(margin, currentY + 5, margin + contentWidth, currentY + 5);
       currentY += NOTECHS_DIVIDER_H;
     }
 
@@ -955,15 +971,19 @@ export async function gerarPDFFichaCliente(
     const textTopY = currentY + 2.8;
 
     // Número: técnicas usam ordem original, NOTECHS usam 01-15
-    const numStr = (m as Record<string, unknown>)._section === 'notechs'
-      ? String(index - manobras.length + 1).padStart(2, '0')
-      : String(m.ordem).padStart(2, '0');
+    const numStr =
+      (m as Record<string, unknown>)._section === 'notechs'
+        ? String(index - manobras.length + 1).padStart(2, '0')
+        : String(m.ordem).padStart(2, '0');
     doc.text(numStr, col.num, textTopY, { align: 'center' });
 
     // Código — truncado com reticências para caber na coluna (alinhado com Worker)
-    const codigo = (m as Record<string, unknown>)._section === 'notechs'
-      ? (m as Record<string, string>).codigo || ''
-      : ((m.codigo || '').length > 13 ? (m.codigo || '').substring(0, 12) + '…' : (m.codigo || ''));
+    const codigo =
+      (m as Record<string, unknown>)._section === 'notechs'
+        ? (m as Record<string, string>).codigo || ''
+        : (m.codigo || '').length > 13
+          ? (m.codigo || '').substring(0, 12) + '…'
+          : m.codigo || '';
     doc.text(codigo, col.codigo, textTopY);
 
     // Tripulante badge
@@ -1010,7 +1030,11 @@ export async function gerarPDFFichaCliente(
           ? parseFloat(resultadoRaw)
           : NaN;
     const notaValida =
-      !isNR && resultadoRaw !== null && resultadoRaw !== undefined && !isNaN(notaNum) && notaNum > 0;
+      !isNR &&
+      resultadoRaw !== null &&
+      resultadoRaw !== undefined &&
+      !isNaN(notaNum) &&
+      notaNum > 0;
 
     const badgeX = col.nota - NOTA_BADGE_W / 2;
     const badgeY = currentY + (rowH - NOTA_BADGE_H) / 2;
