@@ -395,7 +395,7 @@ function drawManobrasSection(
     (m) => (m.categoria || '').toUpperCase() === NOTECHS_CATEGORIA,
   );
 
-  // Combine: technical first, then NOTECHS with divider
+  // Combine: technical first, then NOTECHS with dividers and sub-category labels
   const allRows: Array<{
     tipo: 'tecnica' | 'notechs';
     idx: number;
@@ -404,6 +404,7 @@ function drawManobrasSection(
     resultado: number | null;
     observacoes: string;
     tripulante: string;
+    notecsGroup?: string; // COO | LID | CSA | TMD category for sub-dividers
   }> = [];
 
   tecnicas.forEach((m, i) => {
@@ -418,17 +419,50 @@ function drawManobrasSection(
     });
   });
 
+  // NOTECHS category sub-divider labels (compact, one line per group)
+  const NOTECHS_GROUP_LABELS: Record<string, string> = {
+    COO: 'COOPERA\u00C7\u00C3O / COOPERATION',
+    LID: 'LIDERAN\u00C7A E HABILIDADES GERENCIAIS / LEADERSHIP AND MANAGEMENT SKILLS',
+    CSA: 'CONSCI\u00CANCIA SITUACIONAL / SITUATIONAL AWARENESS',
+    TMD: 'TOMADA DE DECIS\u00C3O / DECISION MAKING',
+  };
+
+  const getNotechsGroup = (codigo: string): string => {
+    if (codigo.includes('-COO-')) return 'COO';
+    if (codigo.includes('-LID-')) return 'LID';
+    if (codigo.includes('-CSA-')) return 'CSA';
+    if (codigo.includes('-TMD-')) return 'TMD';
+    return '';
+  };
+
+  notechs.forEach((m) => {
+    const group = getNotechsGroup(m.codigo || '');
+    allRows.push({
+      tipo: 'notechs',
+      idx: 0, // placeholder — NOTECHS use separate numbering
+      codigo: m.codigo || '-',
+      nome: sanitizeForPdf(m.descricao) || m.descricao || '-',
+      resultado: m.resultado,
+      observacoes: sanitizeForPdf(m.observacoes) || (m.observacoes || '').trim(),
+      tripulante: 'AB',
+      notecsGroup: group,
+    });
+  });
+
   // Add NOTECHS divider row
   let currentY = headerY - TABLE_HEADER_H;
   const hasNotechs = notechs.length > 0;
+
+  let notecsRowIdx = 0;
 
   // Draw all rows
   for (let ri = 0; ri < allRows.length; ri++) {
     const row = allRows[ri];
     const isNotechsStart = row.tipo === 'notechs' && (ri === 0 || allRows[ri - 1].tipo === 'tecnica');
 
-    // NOTECHS divider
+    // NOTECHS main divider
     if (isNotechsStart) {
+      notecsRowIdx = 0;
       currentY -= 2;
       page.drawLine({
         start: { x: margin, y: currentY },
@@ -436,8 +470,9 @@ function drawManobrasSection(
         color: COLOR.border,
         thickness: 0.5,
       });
-      drawText(page, 'NOTECHS', margin + 2, currentY - 5, fontBold, 6.5, COLOR.textSecondary);
-      currentY -= 8;
+      drawText(page, 'NOTECHS \u2014 Non-Technical Skills', margin + 2, currentY - 5, fontBold, 6.5, COLOR.textSecondary);
+      drawText(page, 'Habilidades N\u00E3o T\u00E9cnicas / Comportamentais', margin + 2, currentY - 11, fontRegular, 5.5, COLOR.textSecondary);
+      currentY -= 15;
       page.drawLine({
         start: { x: margin, y: currentY },
         end: { x: margin + contentWidth, y: currentY },
@@ -445,6 +480,35 @@ function drawManobrasSection(
         thickness: 0.5,
       });
       currentY -= 2;
+    }
+
+    // NOTECHS sub-category divider
+    if (row.tipo === 'notechs' && row.notecsGroup && !isNotechsStart) {
+      const prevRow = allRows[ri - 1];
+      if (prevRow?.notecsGroup !== row.notecsGroup) {
+        currentY -= 2;
+        page.drawLine({
+          start: { x: margin, y: currentY },
+          end: { x: margin + contentWidth, y: currentY },
+          color: COLOR.border,
+          thickness: 0.3,
+        });
+        const label = NOTECHS_GROUP_LABELS[row.notecsGroup] || row.notecsGroup;
+        drawText(page, label, margin + 4, currentY - 4.5, fontRegular, 5, COLOR.textSecondary);
+        currentY -= 7;
+        page.drawLine({
+          start: { x: margin, y: currentY },
+          end: { x: margin + contentWidth, y: currentY },
+          color: COLOR.border,
+          thickness: 0.3,
+        });
+        currentY -= 2;
+      }
+    }
+
+    // NOTECHS row numbering (1-indexed, reset after each group for clarity — use global 1-15)
+    if (row.tipo === 'notechs') {
+      notecsRowIdx++;
     }
 
     // Alternate row background
@@ -462,9 +526,10 @@ function drawManobrasSection(
     const textY = currentY - 4;
 
     // Row number
+    const rowNum = row.tipo === 'notechs' ? notecsRowIdx : row.idx;
     drawText(
       page,
-      String(row.idx).padStart(2, '0'),
+      String(rowNum).padStart(2, '0'),
       colNum.x,
       textY,
       fontRegular,

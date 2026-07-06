@@ -371,7 +371,12 @@ export function loadSimuladoresMatrizV6Data() {
     registry,
     issues,
     rpeaPendingGaps: RPEA_PENDING_GAPS.map((gap) => ({ ...gap })),
-    notechsCodes: Array.from({ length: 15 }, (_, index) => `NOTECHS-${String(index + 1).padStart(2, '0')}`),
+    notechsCodes: [
+      'NOTECHS-COO-01', 'NOTECHS-COO-02', 'NOTECHS-COO-03', 'NOTECHS-COO-04',
+      'NOTECHS-LID-05', 'NOTECHS-LID-06', 'NOTECHS-LID-07', 'NOTECHS-LID-08',
+      'NOTECHS-CSA-09', 'NOTECHS-CSA-10', 'NOTECHS-CSA-11',
+      'NOTECHS-TMD-12', 'NOTECHS-TMD-13', 'NOTECHS-TMD-14', 'NOTECHS-TMD-15',
+    ],
     notechsSummary,
     sourceMapSummary,
   };
