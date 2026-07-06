@@ -21,6 +21,10 @@ import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
 } from '../utils/qualificacoes-alerta-config';
+import {
+  buildRenewalSqlPredicates,
+  hasHistoricoRenovacaoDeColumn,
+} from './qualificacoes/historico';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -164,6 +168,8 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
+    const hasRenovacaoDe = await hasHistoricoRenovacaoDeColumn(db);
+    const { activeRenewedQualificationPredicate } = buildRenewalSqlPredicates(hasRenovacaoDe);
 
     // MODELO_AERONAVE_EXPR idêntico ao historico.ts — inclui funcionarios_aeronaves
     const MODELO_AERONAVE_EXPR = `COALESCE(
@@ -232,6 +238,7 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
                                                                            AS data_vencimento_raw,
         qh.renovada,
         qh.status                                                          AS qualificacao_status,
+        CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END AS tem_renovacao_posterior,
         qh.numero_certificado,
         qh.instrutor,
         qh.carga_horaria,
@@ -288,11 +295,14 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
       }
 
       // Derivar status — mesma lógica do historico.ts
-      // RENOVADA: NUNCA derivar baseado apenas em renovada=1.
-      // Só é RENOVADA se existe sucessora real (não é vigente operacional).
+      // RENOVADA: NUNCA derivar baseado apenas em renovada=1 ou status='RENOVADA' persistido.
+      // Só é RENOVADA se tem_renovacao_posterior=1 (sucessora real via renovacao_de).
       const dbStatus = (r.qualificacao_status as string | null)?.toUpperCase();
+      const temRenovacaoPosterior = Number(r.tem_renovacao_posterior || 0) === 1;
       let status: string;
-      if (dbStatus === 'PLANEJADA' || (!r.data_realizacao && !dataVencimento)) {
+      if (temRenovacaoPosterior) {
+        status = 'RENOVADA';
+      } else if (dbStatus === 'PLANEJADA' || (!r.data_realizacao && !dataVencimento)) {
         status = 'PLANEJADA';
       } else if (!dataVencimento) {
         status = 'INDEFINIDA';

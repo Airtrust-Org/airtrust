@@ -51,7 +51,7 @@ const cancelledQualificationPredicate = sqlStatusEqualsAny(
 );
 let historicoRenovacaoDeColumnPromise: Promise<boolean> | null = null;
 
-function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
+export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
   const qualificationIdentityExpr = (qhAlias: string, qtAlias: string) =>
     `UPPER(TRIM(COALESCE(
       NULLIF(CAST(${qhAlias}.qualificacao_id AS TEXT), ''),
@@ -106,7 +106,7 @@ function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
   };
 }
 
-async function hasHistoricoRenovacaoDeColumn(db: D1Database): Promise<boolean> {
+export async function hasHistoricoRenovacaoDeColumn(db: D1Database): Promise<boolean> {
   if (!historicoRenovacaoDeColumnPromise) {
     historicoRenovacaoDeColumnPromise = db
       .prepare('PRAGMA table_info(qualificacoes_historico)')
@@ -595,20 +595,7 @@ router.get(
       qh.data_vencimento AS data_vencimento,
       qh.instrutor AS instrutor,
       qh.renovada,
-      ${
-        hasRenovacaoDe
-          ? `CASE
-        WHEN EXISTS (
-          SELECT 1
-          FROM qualificacoes_historico qh_renovadora
-          WHERE qh_renovadora.deleted_at IS NULL
-            AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
-            AND qh_renovadora.renovacao_de = qh.id
-        ) THEN 1
-        ELSE 0
-      END`
-          : '0'
-      } AS tem_renovacao_posterior,
+      CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END AS tem_renovacao_posterior,
       ${hasRenovacaoDe ? 'qh.renovacao_de' : 'NULL'} AS renovacao_de,
       CASE WHEN ${operationalCurrentQualificationPredicate} THEN 1 ELSE 0 END AS vigente_operacional,
       qh.numero_certificado,
