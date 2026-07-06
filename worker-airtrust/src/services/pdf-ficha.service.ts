@@ -7,6 +7,51 @@
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 
+// ── Sanitização de metadados internos (mesma lógica de src/shared/simuladores/modelos-sessao-observacoes.ts) ──
+const INTERNAL_METADATA_LEAK_RE = new RegExp(
+  [
+    'tipo_item\\s*=',
+    'fase_voo\\s*=',
+    'carater\\s*=',
+    'fap_refs\\s*=',
+    'matriz_v6_modelo\\s*=',
+    'sourceNotes',
+    'source_notes',
+    '\\bprompt\\b',
+    '\\bdebug\\b',
+    '\\brbac\\b',
+    '\\brole\\b',
+    '\\btenant\\b',
+    '\\bmigration\\b',
+    '\\bseed\\b',
+    '\\bfixture\\b',
+    '\\bbanco\\b',
+    '\\bbd\\b',
+    'empresa_id',
+    '\\bauth\\b',
+    '\\bjwt\\b',
+    '\\btoken\\b',
+    'auditoria\\s+interna',
+    'bastidor(?:es)?\\s+t[eé]cnico',
+    'instru[cç][aã]o\\s+de\\s+agente',
+    '[{}]',
+    `["'](?:source|metadata|internal|audit)["']`,
+  ].join('|'),
+  'i',
+);
+
+function sanitizeForPdf(value: unknown): string {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return INTERNAL_METADATA_LEAK_RE.test(text) ? '' : text;
+}
+
+const NOTECHS_CALIBRATION_WARNING =
+  'Nota: os descritores NOTECHS apresentados nesta ficha são estrutura de apoio à observação comportamental e devem ser calibrados pela empresa contra sua ficha-fonte, manual de treinamento e critérios internos antes de uso avaliativo formal.';
+
+const REGULATORY_DISCLAIMER =
+  'Esta ficha é instrumento interno de treinamento e avaliação operacional da empresa. Não substitui FAP oficial, documento ANAC, homologação, aprovação ou aceite formal da ANAC. A aderência regulatória deve ser verificada contra os documentos oficiais vigentes da empresa, da ANAC e dos contratantes aplicáveis.';
+
 interface FichaPDFData {
   fichaId: string;
   sessao_titulo: string;
@@ -100,6 +145,15 @@ export async function gerarPDFFicha(dados: FichaPDFData): Promise<Buffer> {
   currentY -= 14;
 
   drawAssinaturasSection(page, fontRegular, fontBold, dados, currentY, contentWidth);
+  currentY -= 20;
+
+  // NOTECHS calibration warning + regulatory disclaimer
+  const hasNotechs = dados.manobras.some((m) => (m.categoria || '').toUpperCase() === NOTECHS_CATEGORIA);
+  if (hasNotechs) {
+    currentY = drawDisclaimerText(page, fontRegular, NOTECHS_CALIBRATION_WARNING, currentY, contentWidth);
+  }
+  currentY = drawDisclaimerText(page, fontRegular, REGULATORY_DISCLAIMER, currentY, contentWidth);
+
   drawFooter(page, fontRegular, dados, contentWidth);
 
   const bytes = await pdfDoc.save();
@@ -357,9 +411,9 @@ function drawManobrasSection(
       tipo: 'tecnica',
       idx: i + 1,
       codigo: m.codigo || '-',
-      nome: m.descricao || '-',
+      nome: sanitizeForPdf(m.descricao) || m.descricao || '-',
       resultado: m.resultado,
-      observacoes: (m.observacoes || '').trim(),
+      observacoes: sanitizeForPdf(m.observacoes) || (m.observacoes || '').trim(),
       tripulante: (m.tripulante || 'AB').toUpperCase(),
     });
   });
@@ -607,6 +661,22 @@ function drawSignatureStatus(
   }
 
   drawText(page, 'Aguardando assinatura', x, y, fontRegular, 6, COLOR.warning);
+}
+
+function drawDisclaimerText(
+  page: PDFPage,
+  fontRegular: PDFFont,
+  text: string,
+  startY: number,
+  contentWidth: number,
+): number {
+  const lines = wrapText(text, fontRegular, 5.5, contentWidth - 4);
+  let y = startY;
+  for (const line of lines) {
+    y -= 8;
+    drawText(page, line, PAGE.margin + 2, y, fontRegular, 5.5, COLOR.textSecondary);
+  }
+  return y - 4;
 }
 
 function drawFooter(
