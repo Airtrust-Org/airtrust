@@ -205,7 +205,7 @@ const MinhasAssinaturas: React.FC = () => {
               <p>• As fichas aparecem aqui após a sessão no simulador ser concluída</p>
               <p>• Você deve revisar e assinar para confirmar a participação</p>
               <p>• Após sua assinatura, a ficha segue para validação do instrutor</p>
-              <p>• O processo é finalizado com a assinatura do checador</p>
+              <p>• O processo é finalizado com a assinatura do instrutor responsável</p>
             </div>
           </div>
         </ContentCard>

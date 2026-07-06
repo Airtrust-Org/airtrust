@@ -82,6 +82,48 @@ import { apiFetch } from '@/react-app/lib/apiFetch';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
 import { FICHA_AVALIACAO_FAIXAS, FICHA_AVALIACAO_NOTAS } from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
 
+// ── Sanitização de metadados internos ──────────────────────────────────────
+const INTERNAL_METADATA_LEAK_RE = new RegExp(
+  [
+    'tipo_item\\s*=',
+    'fase_voo\\s*=',
+    'carater\\s*=',
+    'fap_refs\\s*=',
+    'matriz_v6_modelo\\s*=',
+    'sourceNotes',
+    'source_notes',
+    '\\bprompt\\b',
+    '\\bdebug\\b',
+    '\\brbac\\b',
+    '\\brole\\b',
+    '\\btenant\\b',
+    '\\bmigration\\b',
+    '\\bseed\\b',
+    '\\bfixture\\b',
+    '\\bbanco\\b',
+    '\\bbd\\b',
+    'empresa_id',
+    '\\bauth\\b',
+    '\\bjwt\\b',
+    '\\btoken\\b',
+    'auditoria\\s+interna',
+    'bastidor(?:es)?\\s+t[eé]cnico',
+    'instru[cç][aã]o\\s+de\\s+agente',
+    '[{}]',
+    `["'](?:source|metadata|internal|audit)["']`,
+  ].join('|'),
+  'i',
+);
+
+function sanitizeForPdf(value: unknown): string {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return INTERNAL_METADATA_LEAK_RE.test(text) ? '' : text;
+}
+
+const REGULATORY_DISCLAIMER =
+  'Esta ficha é instrumento interno de treinamento e avaliação operacional da empresa. Não substitui FAP oficial, documento ANAC, homologação, aprovação ou aceite formal da ANAC. A aderência regulatória deve ser verificada contra os documentos oficiais vigentes da empresa, da ANAC e dos contratantes aplicáveis.';
+
 function isSafariBrowser(): boolean {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent;
@@ -765,16 +807,21 @@ export async function gerarPDFFichaCliente(
   const notechsRows = manobrasNotechs.map((n, i) => ({
     ordem: n.ordem,
     codigo: `NOTECHS-${String(i + 1).padStart(2, '0')}`,
-    nome: n.nome || n.descricao || '',
-    descricao: n.descricao || '',
+    nome: sanitizeForPdf(n.nome) || sanitizeForPdf(n.descricao) || n.nome || n.descricao || '',
+    descricao: sanitizeForPdf(n.descricao) || n.descricao || '',
     resultado: n.resultado,
-    observacoes: n.observacoes || '',
+    observacoes: sanitizeForPdf(n.observacoes) || n.observacoes || '',
     tripulante: (n.tripulante || 'AB') as 'A' | 'B' | 'AB',
   }));
 
   // Combina técnicas + NOTECHS para cálculo de altura unificado.
   const allRows = [
-    ...manobras.map((m) => ({ ...m, _section: 'tecnica' as const })),
+    ...manobras.map((m) => ({
+      ...m,
+      nome: sanitizeForPdf(m.nome) || m.nome,
+      observacoes: sanitizeForPdf(m.observacoes) || m.observacoes,
+      _section: 'tecnica' as const,
+    })),
     ...notechsRows.map((n) => ({ ...n, _section: 'notechs' as const })),
   ];
 
@@ -869,10 +916,10 @@ export async function gerarPDFFichaCliente(
       : String(m.ordem).padStart(2, '0');
     doc.text(numStr, col.num, textTopY, { align: 'center' });
 
-    // Código
+    // Código — truncado com reticências para caber na coluna (alinhado com Worker)
     const codigo = (m as Record<string, unknown>)._section === 'notechs'
       ? (m as Record<string, string>).codigo || ''
-      : (m.codigo || '').substring(0, 13);
+      : ((m.codigo || '').length > 13 ? (m.codigo || '').substring(0, 12) + '…' : (m.codigo || ''));
     doc.text(codigo, col.codigo, textTopY);
 
     // Tripulante badge
@@ -1099,6 +1146,18 @@ export async function gerarPDFFichaCliente(
     FOOTER_Y,
     { align: 'center' },
   );
+
+  // ========== AVISO NOTECHS + DISCLAIMER (visível em todas as fichas) ==========
+  const hasNotechsItems = manobrasNotechs.length > 0;
+  const disclaimerY = FOOTER_Y - 8;
+  doc.setFontSize(5);
+  doc.setTextColor(COLORS.textSecondary);
+  if (hasNotechsItems) {
+    const notechsAvisoLinhas = doc.splitTextToSize(NOTECHS_PROVENIENCIA_AVISO, contentWidth);
+    doc.text(notechsAvisoLinhas, margin, disclaimerY);
+  }
+  const disclaimerLinhas = doc.splitTextToSize(REGULATORY_DISCLAIMER, contentWidth);
+  doc.text(disclaimerLinhas, margin, disclaimerY - (hasNotechsItems ? 10 : 0));
 
   // ========== PÁGINA 2 (opcional) — Régua NOTECHS, descritores completos ==========
   // Só é adicionada quando a ficha tem itens NOTECHS e não é ficha modelo/V6.2.

@@ -756,6 +756,32 @@ app.post('/sessoes', async (c) => {
       );
     }
 
+    // ── Guardrail: validar papéis de instrutor e examinador ──────────────────
+    // O instrutor deve ter flag is_instrutor. O examinador deve ter flag
+    // is_examinador ou is_checador. Isso previne que um examinador seja
+    // acidentalmente designado como instrutor da ficha pedagógica.
+    const fCols = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all();
+    const fColSet = new Set((fCols.results || []).map((r: any) => r.name));
+    const hasIsInstrutor = fColSet.has('is_instrutor');
+
+    if (hasIsInstrutor) {
+      const instrutorRow = await c.env.DB.prepare(
+        `SELECT COALESCE(is_instrutor, 0) as is_instrutor
+         FROM funcionarios
+         WHERE id = ? AND deleted_at IS NULL`,
+      )
+        .bind(instrutor_id)
+        .first<{ is_instrutor: number }>();
+
+      if (!instrutorRow || Number(instrutorRow.is_instrutor) !== 1) {
+        return c.json(
+          { success: false, error: 'O funcionário selecionado como instrutor não possui o flag is_instrutor. Selecione um instrutor válido.' },
+          400,
+        );
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     if (tipoDispositivo === 'SIMULADOR' && simulador_id) {
       const simulador = await c.env.DB.prepare(
         `SELECT id
@@ -1001,6 +1027,10 @@ app.post('/sessoes', async (c) => {
 
         for (const especial of fichasEspeciais) {
           if (!especial.ativo) continue;
+          // Fichas especiais TRE-INST e CRED-EXA: o instrutor da sessão é o
+          // aluno (sendo treinado/credenciado) e o examinador atua como
+          // instrutor-avaliador. Esta é a ÚNICA exceção onde examinador_id
+          // pode ser usado como instrutor_id em uma ficha.
           await c.env.DB.prepare(
             `INSERT INTO fichas_sessao
                (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
@@ -1053,6 +1083,15 @@ app.post('/sessoes', async (c) => {
     });
 
     // 3. CRIAR FICHAS PARA CADA PARTICIPANTE
+    //
+    // REGRA: A ficha pedagógica do tripulante deve SEMPRE ter como instrutor
+    // o instrutor responsável da sessão (instrutor_id), NUNCA o examinador.
+    // O examinador/checador preenche documentação ANAC separada (checks) e
+    // NÃO assina a ficha pedagógica de avaliação do tripulante.
+    //
+    // Apenas fichas especiais TRE-INST/CRED-EXA (criadas separadamente acima)
+    // usam o examinador como instrutor, pois nelas o instrutor da sessão é o
+    // aluno sendo avaliado para credenciamento.
     let fichas_criadas = 0;
     // H-3: acumular todos os INSERTs de manobras para batch ao final
     const manobraStmts: ReturnType<typeof c.env.DB.prepare>[] = [];

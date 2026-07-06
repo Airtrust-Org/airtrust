@@ -70,6 +70,33 @@ app.put('/sessoes/:id', async (c) => {
         409,
       );
     }
+
+    // ── Guardrail: se instrutor_id for alterado, validar flag is_instrutor ──
+    // O instrutor da sessão deve ter flag is_instrutor. Isso previne que um
+    // examinador/checador seja acidentalmente designado como instrutor da
+    // ficha pedagógica do tripulante.
+    if (b.instrutor_id !== undefined) {
+      const fColsAll = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all();
+      const fColSetAll = new Set((fColsAll.results || []).map((r: any) => r.name));
+      if (fColSetAll.has('is_instrutor')) {
+        const instrutorRow = await c.env.DB.prepare(
+          `SELECT COALESCE(is_instrutor, 0) as is_instrutor
+           FROM funcionarios
+           WHERE id = ? AND deleted_at IS NULL`,
+        )
+          .bind(b.instrutor_id)
+          .first<{ is_instrutor: number }>();
+
+        if (!instrutorRow || Number(instrutorRow.is_instrutor) !== 1) {
+          return c.json(
+            { success: false, error: 'O funcionário selecionado como instrutor não possui o flag is_instrutor. Selecione um instrutor válido.' },
+            400,
+          );
+        }
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     let participantesParaNotificacaoAlterados = false;
     const modeloAeronaveSessao =
       normalizeModeloAeronave(b.tipo_aeronave) ||
@@ -565,26 +592,32 @@ app.put('/sessoes/:id', async (c) => {
     // ──────────────────────────────────────────────────────────────────────────
     // SINCRONIZAR instrutor_id nas fichas quando o instrutor da sessão muda.
     // Apenas fichas ainda não assinadas pelo instrutor (não concluídas).
-    // Fichas de sessões de CHECK (is_check=1) NÃO são atualizadas aqui —
-    // nesses casos o instrutor da ficha é o examinador, não o instrutor da sessão.
+    //
+    // REGRA: A ficha pedagógica (avaliação do tripulante) deve SEMPRE ter como
+    // instrutor o instrutor responsável da sessão, nunca o examinador/checador.
+    // O examinador preenche documentação ANAC separada (checks) e não assina a
+    // ficha pedagógica.
+    //
+    // EXCEÇÃO: Fichas especiais TRE-INST e CRED-EXA são fichas onde o próprio
+    // instrutor é o aluno avaliado e o examinador atua como instrutor-avaliador.
+    // Essas fichas NÃO são sincronizadas aqui — o examinador permanece como
+    // instrutor_id apenas nesses casos especiais.
     // ──────────────────────────────────────────────────────────────────────────
     if (
       b.instrutor_id !== undefined &&
       String(b.instrutor_id) !== String((a as any).instrutor_id)
     ) {
-      const isCheckSession = (a as any).is_check === 1;
-      if (!isCheckSession) {
-        await c.env.DB.prepare(
-          `UPDATE fichas_sessao
-           SET instrutor_id = ?,
-               updated_at = datetime('now')
-           WHERE agendamento_slot_id = ?
-             AND deleted_at IS NULL
-             AND assinatura_instrutor_timestamp IS NULL`,
-        )
-          .bind(b.instrutor_id, id)
-          .run();
-      }
+      await c.env.DB.prepare(
+        `UPDATE fichas_sessao
+         SET instrutor_id = ?,
+             updated_at = datetime('now')
+         WHERE agendamento_slot_id = ?
+           AND deleted_at IS NULL
+           AND assinatura_instrutor_timestamp IS NULL
+           AND (tipo_sessao IS NULL OR UPPER(tipo_sessao) NOT IN ('TRE-INST', 'CRED-EXA'))`,
+      )
+        .bind(b.instrutor_id, id)
+        .run();
     }
 
     if (resetarFluxoFichas) {

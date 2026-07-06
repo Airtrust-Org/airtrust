@@ -1057,7 +1057,10 @@ export default function FichaDetalhe() {
                     <p className="text-xs text-amber-700">
                       {ficha.examinador_nome ? (
                         <>
-                          Examinador: <strong>{ficha.examinador_nome}</strong>
+                          Examinador ANAC: <strong>{ficha.examinador_nome}</strong>
+                          <span className="block mt-0.5 text-amber-600">
+                            Documentação ANAC separada — a assinatura desta ficha pedagógica é do instrutor
+                          </span>
                         </>
                       ) : (
                         'Esta sessão está vinculada a uma avaliação de check'
