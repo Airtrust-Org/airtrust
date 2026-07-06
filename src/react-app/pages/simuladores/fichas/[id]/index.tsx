@@ -1273,20 +1273,20 @@ export default function FichaDetalhe() {
               </div>
             </div>
             {manobrasNotechs.length > 0 && (
-              <div className="mb-6 rounded-lg border border-purple-200 bg-white p-6">
+              <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-purple-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+                    <span className="rounded-full bg-slate-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
                       NOTECHS
                     </span>
                     <h3 className="text-lg font-bold text-slate-900">
-                      Habilidades Não Técnicas (CRM)
+                      Habilidades Não Técnicas
                     </h3>
                   </div>
                   <button
                     type="button"
                     onClick={() => setModalNotechsAberto(true)}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-purple-300 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-50"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                   >
                     <Info className="h-3.5 w-3.5" />
                     Ver descritores completos
@@ -1296,9 +1296,9 @@ export default function FichaDetalhe() {
                   {manobrasNotechs.map((manobra) => (
                     <div
                       key={manobra.id}
-                      className="flex items-center gap-3 rounded-md border border-purple-100 bg-purple-50/40 p-2.5"
+                      className="flex items-center gap-3 rounded-md border border-slate-100 bg-slate-50/40 p-2.5"
                     >
-                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">
+                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs">
                         {manobra.ordem - NOTECHS_ORDEM_BASE + 1}
                       </div>
                       <div className="min-w-0 flex-1">

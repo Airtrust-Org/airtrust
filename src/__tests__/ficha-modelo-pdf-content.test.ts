@@ -130,12 +130,14 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     expect(allText).not.toMatch(/carater\s*[:=]/i);
     expect(allText).not.toMatch(/fap_refs\s*[:=]/i);
     expect(allText).not.toMatch(/matriz_v6_modelo\s*[:=]/i);
+    expect(allText).not.toMatch(/\(CRM\)/i);
+    expect(allText).not.toContain('NOTECHS — Habilidades Nao Tecnicas (CRM)');
 
     // sem página extra de descritores NOTECHS na ficha modelo
     expect(addPageCalls.count).toBe(0);
   });
 
-  it('contem a sessao A139-I-01/12, itens tecnicos e os 15 NOTECHS um por item', async () => {
+  it('contem a sessao A139-I-01/12, itens tecnicos e os 15 NOTECHS um por item com codigos', async () => {
     const dadosPDF = buildA139Modelo();
     await gerarPDFFichaCliente(dadosPDF);
 
@@ -150,11 +152,16 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     expect(allText).toContain('Arremetida normal');
     expect(allText).toContain('Pouso normal');
 
-    // 15 titulos NOTECHS, cada um desenhado (uma linha por item)
+    // 15 titulos NOTECHS, cada um desenhado
     NOTECHS_ITENS.forEach((item) => {
       expect(allText).toContain(item.tituloPt);
     });
     expect(NOTECHS_ITENS).toHaveLength(15);
+
+    // NOTECHS codes visiveis (NOTECHS-01 a NOTECHS-15)
+    for (let i = 1; i <= 15; i++) {
+      expect(allText).toContain(`NOTECHS-${String(i).padStart(2, '0')}`);
+    }
   });
 
   it('usa cor cinza (nao roxo/rosa) no bloco NOTECHS', async () => {

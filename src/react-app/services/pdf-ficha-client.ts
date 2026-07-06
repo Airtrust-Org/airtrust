@@ -10,7 +10,6 @@
  */
 
 import {
-  NOTECHS_ORDEM_BASE,
   NOTECHS_GRUPOS,
   NOTECHS_PROVENIENCIA_AVISO,
   getNotechsItensPorGrupo,
@@ -250,122 +249,6 @@ function drawFichaAvaliacaoScale(
   });
 
   return legendTop + legendHeight + 1;
-}
-
-/**
- * Bloco compacto NOTECHS — código + título + nota, SEM descritores completos
- * (esses ficam só na página de referência opcional / modal). Layout em 2
- * colunas, altura fixa e pequena — nunca compete pelo orçamento de altura
- * variável das manobras técnicas (ver NOTECHS_RESERVED em gerarPDFFichaCliente).
- */
-function drawNotechsCompactBlock(
-  doc: {
-    setFont: (family: string, style?: string) => void;
-    setFontSize: (size: number) => void;
-    setTextColor: (color: string | number, g?: number, b?: number) => void;
-    setDrawColor: (color: string | number, g?: number, b?: number) => void;
-    setFillColor: (color: string | number, g?: number, b?: number) => void;
-    rect: (x: number, y: number, w: number, h: number, style?: string) => void;
-    roundedRect: (x: number, y: number, w: number, h: number, rx: number, ry: number, style?: string) => void;
-    text: (text: string | string[], x: number, y: number, options?: Record<string, unknown>) => void;
-    splitTextToSize: (text: string, maxWidth: number) => string[];
-  },
-  x: number,
-  y: number,
-  width: number,
-  itens: FichaPDFData['manobras'],
-  columns: 1 | 2 = 2,
-): number {
-  const NOTECHS_COLOR = COLORS.textSecondary;
-  const HEADER_H = 5;
-  const ROW_H = 4.2;
-  const colGap = 3;
-  const colWidth = columns === 1 ? width : (width - colGap) / 2;
-  const half = columns === 1 ? itens.length : Math.ceil(itens.length / 2);
-  const colunaEsquerda = itens.slice(0, half);
-  const colunaDireita = itens.slice(half);
-
-  doc.setFillColor(NOTECHS_COLOR);
-  doc.rect(x, y, width, HEADER_H, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.text('NOTECHS — Habilidades Nao Tecnicas (CRM)', x + 2, y + 3.6);
-
-  const bodyY = y + HEADER_H + 1;
-
-  const drawColuna = (coluna: FichaPDFData['manobras'], colX: number) => {
-    coluna.forEach((item, index) => {
-      const rowY = bodyY + index * ROW_H;
-      const isEven = index % 2 === 0;
-      if (isEven) {
-        doc.setFillColor(COLORS.bgLight);
-        doc.rect(colX, rowY, colWidth, ROW_H, 'F');
-      }
-
-      const numLabel = String(item.ordem - NOTECHS_ORDEM_BASE + 1).padStart(2, '0');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6);
-      doc.setTextColor(NOTECHS_COLOR);
-      doc.text(numLabel, colX + 1.5, rowY + 3);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(6.5);
-      doc.setTextColor(COLORS.text);
-      const tituloWidth = colWidth - 22;
-      const tituloLines = doc.splitTextToSize((item.nome || item.descricao || '').trim(), tituloWidth);
-      doc.text(tituloLines[0] || '', colX + 7, rowY + 3, { maxWidth: tituloWidth });
-
-      const resultadoRaw = item.resultado;
-      const isNR = resultadoRaw === 'NR' || resultadoRaw === 'NAO_REALIZADA';
-      const notaNum = typeof resultadoRaw === 'number' ? resultadoRaw : Number(resultadoRaw);
-      const notaValida = !isNR && resultadoRaw !== null && resultadoRaw !== undefined && !isNaN(notaNum) && notaNum > 0;
-
-      const badgeW = 10;
-      const badgeH = 3.4;
-      const badgeX = colX + colWidth - badgeW - 1;
-      const badgeY = rowY + (ROW_H - badgeH) / 2;
-
-      if (isNR) {
-        doc.setFillColor('#64748B');
-        doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(5);
-        doc.setTextColor(255, 255, 255);
-        doc.text('NR', badgeX + badgeW / 2, badgeY + badgeH - 0.9, { align: 'center' });
-      } else if (notaValida) {
-        doc.setFillColor(getNotaColor(notaNum));
-        doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(5);
-        doc.setTextColor(255, 255, 255);
-        doc.text(notaNum.toFixed(1), badgeX + badgeW / 2, badgeY + badgeH - 0.9, { align: 'center' });
-      } else {
-        doc.setDrawColor(COLORS.border);
-        doc.setFillColor(COLORS.white);
-        doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, 'FD');
-      }
-    });
-  };
-
-  drawColuna(colunaEsquerda, x);
-  drawColuna(colunaDireita, x + colWidth + colGap);
-
-  const maxRows = Math.max(colunaEsquerda.length, colunaDireita.length);
-  return bodyY + maxRows * ROW_H + 2;
-}
-
-function getNotechsCompactReservedHeight(itensCount: number, columns: 1 | 2 = 2): number {
-  if (itensCount <= 0) return 0;
-
-  const HEADER_H = 5;
-  const BODY_TOP_GAP = 1;
-  const ROW_H = 4.2;
-  const BLOCK_BOTTOM_GAP = 2;
-  const AFTER_BLOCK_GAP = 2;
-  const maxRows = columns === 1 ? itensCount : Math.ceil(itensCount / 2);
-
-  return HEADER_H + BODY_TOP_GAP + maxRows * ROW_H + BLOCK_BOTTOM_GAP + AFTER_BLOCK_GAP;
 }
 
 /**
@@ -679,7 +562,7 @@ export async function gerarPDFFichaCliente(
   // Título e sessão reservando espaço fixo entre logo e badge
   const tituloX = headerCenterX;
   const sessaoNome = dados.sessao_titulo || dados.simulador || 'Sessão de Treinamento';
-  const SESSAO_FONT_BASE = 8;
+  const SESSAO_FONT_BASE = 9;
   const SESSAO_FONT_MIN = 6;
 
   doc.setFont('helvetica', 'normal');
@@ -862,69 +745,71 @@ export async function gerarPDFFichaCliente(
   // ── Calcular alturas uniformes ────────────────────────────────────────────
   // Regra: ITENS máx 1 linha (trunca com …), OBS máx 2 linhas (trunca com …)
   // Todas as linhas terão a MESMA altura (uniformRowH)
-  const TABLE_FONT = 7;
+  const TABLE_FONT = 8;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(TABLE_FONT);
 
-  // NOTECHS (ordem >= NOTECHS_ORDEM_BASE) nunca entra na tabela de manobras
-  // técnicas variáveis — tem bloco compacto próprio, com orçamento de altura
-  // reservado à parte (NOTECHS_RESERVED), para nunca competir pelo espaço da
-  // tabela variável. Fichas antigas sem NOTECHS têm manobrasNotechs vazio e
-  // NOTECHS_RESERVED = 0 — layout idêntico ao anterior, sem regressão.
+  // NOTECHS agora é continuação da tabela principal (mesmas colunas, mesma fonte).
   const { tecnicas: manobras, notechs: manobrasNotechs } = splitManobrasNotechs(
     dados.manobras || [],
   );
 
+  // Prepara linhas NOTECHS no mesmo formato dos itens técnicos.
+  const notechsRows = manobrasNotechs.map((n, i) => ({
+    ordem: n.ordem,
+    codigo: `NOTECHS-${String(i + 1).padStart(2, '0')}`,
+    nome: n.nome || n.descricao || '',
+    descricao: n.descricao || '',
+    resultado: n.resultado,
+    observacoes: n.observacoes || '',
+    tripulante: (n.tripulante || 'AB') as 'A' | 'B' | 'AB',
+  }));
+
+  // Combina técnicas + NOTECHS para cálculo de altura unificado.
+  const allRows = [
+    ...manobras.map((m) => ({ ...m, _section: 'tecnica' as const })),
+    ...notechsRows.map((n) => ({ ...n, _section: 'notechs' as const })),
+  ];
+
   // 1ª passagem: altura natural de cada linha (ITENS=1 linha, OBS=3 linhas máx)
-  const rowData = manobras.map((m) => {
+  const rowData = allRows.map((m) => {
     const nomeTxt = (m.nome || '').trim();
-    const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), 1); // máx 1 linha
+    const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), 1);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
       obsTxt.length > 0
-        ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), 3) // máx 3 linhas
+        ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), 3)
         : [];
     const maxLines = Math.max(1, nomeLines.length, obsLines.length);
-    const rowH = Math.max(6, 2 + maxLines * 3.5); // altura variável: 1 linha=5.5, 2=9, 3=12.5
+    const rowH = Math.max(6, 2 + maxLines * 3.5);
     return { m, nomeLines, obsLines, rowH };
   });
 
   const totalNatural = rowData.reduce((s, r) => s + r.rowH, 0);
 
   // Layout de baixo para cima:
-  //   rodapé: 6mm no fundo (pageHeight - 6)
-  //   assinaturas: SIG_RESERVED mm antes do rodapé
-  //   obs gerais: 14mm antes das assinaturas
-  //   gap: 4mm
-  const FOOTER_H = 6; // espaço do rodapé no fundo
-  const SIG_RESERVED = 40; // altura máxima reservada para as caixas de assinatura
-  const OBS_RESERVED = 23; // caixa mínima (~18mm) + gap antes das assinaturas
-  // Ficha modelo (impressão em branco, sem avaliação) não exibe a régua.
+  const FOOTER_H = 6;
+  const SIG_RESERVED = 40;
+  const OBS_RESERVED = 23;
   const SCALE_RESERVED = isModoModelo ? 0 : FICHA_AVALIACAO_SCALE_HEIGHT;
-  // Reserva derivada do layout real do bloco compacto NOTECHS, incluindo o gap
-  // imediatamente antes da régua. 0 quando a ficha não tem NOTECHS.
-  // Ficha modelo usa coluna única (um item por linha, sem competir por nota).
-  const NOTECHS_RESERVED = getNotechsCompactReservedHeight(
-    manobrasNotechs.length,
-    isModoModelo ? 1 : 2,
-  );
+  // NOTECHS agora é parte da tabela, não um bloco separado — sem reserva extra.
+  const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 6 : 0; // linha sutil do divisor
   const tableBodyBudget =
     pageHeight -
     currentY -
     4 -
-    NOTECHS_RESERVED -
+    NOTECHS_DIVIDER_H -
     SCALE_RESERVED -
     OBS_RESERVED -
     3 -
     SIG_RESERVED -
     FOOTER_H;
 
-  // Factor de escala — só encolhe, nunca cresce
   const scaleFactor = totalNatural > tableBodyBudget ? tableBodyBudget / totalNatural : 1;
   const finalFontSize = scaleFactor < 0.95 ? Math.max(5.5, TABLE_FONT * scaleFactor) : TABLE_FONT;
   const LINE_SPACING = 3.4 * Math.min(1, scaleFactor);
 
-  // 2ª passagem: re-split com fonte final (escala muda as quebras de linha)
+  // 2ª passagem: re-split com fonte final
   doc.setFontSize(finalFontSize);
   const scaledRows = rowData.map(({ m, nomeLines: _, obsLines: __, rowH }) => {
     const nomeTxt = (m.nome || '').trim();
@@ -935,8 +820,27 @@ export async function gerarPDFFichaCliente(
     return { m, nomeLines, obsLines, rowH: Math.max(5.5, rowH * scaleFactor) };
   });
 
-  // 2ª passagem: renderizar
+  // Flag: já inserimos o divisor NOTECHS?
+  let notechsDividerInserted = false;
+
+  // Renderizar todas as linhas (técnicas + NOTECHS)
   scaledRows.forEach(({ m, nomeLines, obsLines, rowH }, index) => {
+    // Insere divisor NOTECHS antes do primeiro item NOTECHS
+    if ((m as Record<string, unknown>)._section === 'notechs' && !notechsDividerInserted) {
+      notechsDividerInserted = true;
+      // Linha divisora sutil com label NOTECHS
+      doc.setDrawColor(COLORS.border);
+      doc.setLineWidth(0.3);
+      doc.line(margin, currentY + 1, margin + contentWidth, currentY + 1);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(COLORS.textSecondary);
+      doc.text('NOTECHS', margin + 2, currentY + 4.2);
+      doc.setLineWidth(0.3);
+      doc.line(margin, currentY + 5.5, margin + contentWidth, currentY + 5.5);
+      currentY += NOTECHS_DIVIDER_H;
+    }
+
     const isEven = index % 2 === 0;
     if (isEven) {
       doc.setFillColor(COLORS.bgLight);
@@ -947,16 +851,21 @@ export async function gerarPDFFichaCliente(
     doc.setFontSize(finalFontSize);
     doc.setTextColor(COLORS.text);
 
-    // Texto sempre alinhado ao topo da linha (consistente independente da altura da linha)
     const textTopY = currentY + 2.8;
 
-    // Número
-    doc.text(String(m.ordem).padStart(2, '0'), col.num, textTopY, { align: 'center' });
+    // Número: técnicas usam ordem original, NOTECHS usam 01-15
+    const numStr = (m as Record<string, unknown>)._section === 'notechs'
+      ? String(index - manobras.length + 1).padStart(2, '0')
+      : String(m.ordem).padStart(2, '0');
+    doc.text(numStr, col.num, textTopY, { align: 'center' });
 
     // Código
-    doc.text((m.codigo || '').substring(0, 13), col.codigo, textTopY);
+    const codigo = (m as Record<string, unknown>)._section === 'notechs'
+      ? (m as Record<string, string>).codigo || ''
+      : (m.codigo || '').substring(0, 13);
+    doc.text(codigo, col.codigo, textTopY);
 
-    // Tripulante (A/B/AB)
+    // Tripulante badge
     const tripulante = m.tripulante || 'AB';
     const tripBadge = getTripulanteBadgeColors(tripulante);
     const tripBadgeW = 8;
@@ -979,7 +888,7 @@ export async function gerarPDFFichaCliente(
       doc.text(nomeLines[li] || '', col.itens, textTopY + li * LINE_SPACING);
     }
 
-    // Observações (2 linhas máx, fonte ligeiramente menor)
+    // Observações
     if (obsLines.length > 0) {
       doc.setFontSize(Math.max(4.5, finalFontSize - 0.5));
       doc.setTextColor(COLORS.textSecondary);
@@ -990,7 +899,7 @@ export async function gerarPDFFichaCliente(
       doc.setTextColor(COLORS.text);
     }
 
-    // Nota com cor — trata NR, número ou vazio
+    // Nota
     const resultadoRaw = m.resultado;
     const isNR = resultadoRaw === 'NR' || resultadoRaw === 'NAO_REALIZADA' || resultadoRaw === -1;
     const notaNum =
@@ -1000,13 +909,8 @@ export async function gerarPDFFichaCliente(
           ? parseFloat(resultadoRaw)
           : NaN;
     const notaValida =
-      !isNR &&
-      resultadoRaw !== null &&
-      resultadoRaw !== undefined &&
-      !isNaN(notaNum) &&
-      notaNum > 0;
+      !isNR && resultadoRaw !== null && resultadoRaw !== undefined && !isNaN(notaNum) && notaNum > 0;
 
-    // Badge SEMPRE com tamanho fixo e centralizado verticalmente na linha
     const badgeX = col.nota - NOTA_BADGE_W / 2;
     const badgeY = currentY + (rowH - NOTA_BADGE_H) / 2;
     const badgeTextY = badgeY + NOTA_BADGE_H - 1.2;
@@ -1040,18 +944,6 @@ export async function gerarPDFFichaCliente(
   });
 
   currentY += 4;
-
-  if (manobrasNotechs.length > 0) {
-    currentY =
-      drawNotechsCompactBlock(
-        doc,
-        margin,
-        currentY,
-        contentWidth,
-        manobrasNotechs,
-        isModoModelo ? 1 : 2,
-      ) + 2;
-  }
 
   // Ficha modelo (impressão em branco, sem avaliação) não exibe a régua.
   if (!isModoModelo) {
