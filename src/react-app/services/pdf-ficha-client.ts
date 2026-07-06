@@ -41,6 +41,9 @@ export interface FichaPDFData {
   assinatura_instrutor_dataUrl?: string | null;
   logoUrl?: string; // URL do logo da empresa
   modoModelo?: boolean;
+  /** Template version: 'legacy' = pre-V6.2 (with régua), 'v6' = V6.2+ (no régua).
+   *  Default (undefined) = legacy for backward compatibility with existing callers. */
+  templateVersion?: 'legacy' | 'v6';
   fileName?: string;
   manobras: Array<{
     ordem: number;
@@ -795,7 +798,10 @@ export async function gerarPDFFichaCliente(
   const FOOTER_H = 6;
   const SIG_RESERVED = 40;
   const OBS_RESERVED = 23;
-  const SCALE_RESERVED = isModoModelo ? 0 : FICHA_AVALIACAO_SCALE_HEIGHT;
+  // Ficha modelo ALWAYS uses v6 template (no régua).
+  // Real fichas: v6 template also has no régua. Only legacy keeps it.
+  const isTemplateV6 = dados.templateVersion === 'v6' || isModoModelo;
+  const SCALE_RESERVED = isTemplateV6 ? 0 : FICHA_AVALIACAO_SCALE_HEIGHT;
   // NOTECHS agora é parte da tabela, não um bloco separado — sem reserva extra.
   const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 6 : 0; // linha sutil do divisor
   const tableBodyBudget =
@@ -949,8 +955,9 @@ export async function gerarPDFFichaCliente(
 
   currentY += 4;
 
-  // Ficha modelo (impressão em branco, sem avaliação) não exibe a régua.
-  if (!isModoModelo) {
+  // Régua de avaliação: apenas para template legado (pre-V6.2).
+  // Ficha-modelo e fichas V6.2 NUNCA exibem régua.
+  if (!isTemplateV6) {
     currentY = drawFichaAvaliacaoScale(doc, margin, currentY, contentWidth) + 4;
   }
 
@@ -1094,11 +1101,9 @@ export async function gerarPDFFichaCliente(
   );
 
   // ========== PÁGINA 2 (opcional) — Régua NOTECHS, descritores completos ==========
-  // Só é adicionada quando a ficha tem itens NOTECHS e não é uma ficha modelo
-  // (impressão em branco, sem avaliação). Mantém a página 1 (A4 principal)
-  // legível e compacta — os 60 descritores completos ficam aqui, fora do
-  // orçamento de altura da página principal.
-  if (manobrasNotechs.length > 0 && !isModoModelo) {
+  // Só é adicionada quando a ficha tem itens NOTECHS e não é ficha modelo/V6.2.
+  // Fichas V6.2 não exibem página extra de descritores.
+  if (manobrasNotechs.length > 0 && !isModoModelo && !isTemplateV6) {
     doc.addPage();
     let refY = margin;
     doc.setFont('helvetica', 'bold');
