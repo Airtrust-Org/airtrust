@@ -888,7 +888,10 @@ app.post('/fichas/:id/pdf', async (c) => {
         ordem,
         descricao,
         codigo,
-        resultado
+        resultado,
+        categoria,
+        observacoes,
+        tripulante
       FROM fichas_sessao_manobras 
       WHERE ficha_id = ? AND deleted_at IS NULL 
       ORDER BY ordem ASC`,
@@ -927,6 +930,9 @@ app.post('/fichas/:id/pdf', async (c) => {
         descricao: man.descricao,
         codigo: man.codigo,
         resultado: man.resultado,
+        categoria: man.categoria || null,
+        observacoes: man.observacoes || null,
+        tripulante: man.tripulante || 'AB',
       })),
     };
 
