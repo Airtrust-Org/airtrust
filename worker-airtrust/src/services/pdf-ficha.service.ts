@@ -30,6 +30,9 @@ interface FichaPDFData {
     descricao: string;
     codigo: string;
     resultado: number | null;
+    categoria?: string | null;
+    observacoes?: string | null;
+    tripulante?: string | null;
   }>;
 }
 
@@ -49,39 +52,11 @@ const COLOR = {
   border: rgb(0.88, 0.89, 0.91),
   bgLight: rgb(0.96, 0.97, 0.98),
   white: rgb(1, 1, 1),
+  tripA: rgb(0.86, 0.93, 0.98),
+  tripB: rgb(0.98, 0.93, 0.78),
 };
 
-const AVALIACAO_SCALE_NOTAS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
-
-const AVALIACAO_SCALE_FAIXAS = [
-  {
-    rangeLabel: '1-2',
-    color: rgb(0.78, 0.16, 0.16),
-    description:
-      'Padrao Nao Satisfatorio. Ocorreram erros criticos e/ou foram utilizadas tecnicas ou procedimentos incorretos, resultando em desempenho inaceitavel. Voo perigoso.',
-    noteIndexes: [0, 1],
-  },
-  {
-    rangeLabel: '3-4',
-    color: rgb(0.94, 0.43, 0),
-    description: 'Abaixo da Media. Nao atendeu ao padrao exigido.',
-    noteIndexes: [2, 3],
-  },
-  {
-    rangeLabel: '5-7',
-    color: rgb(0.96, 0.77, 0.26),
-    description:
-      'Padrao de Medio a Bom. Desempenho aceitavel com apenas erros menores e/ou criticos. Sem areas fracas evidentes.',
-    noteIndexes: [4, 5, 6],
-  },
-  {
-    rangeLabel: '8-10',
-    color: rgb(0.18, 0.49, 0.2),
-    description:
-      'Acima da Media. Exercicios e procedimentos executados com habilidade, utilizando tecnicas corretas. O piloto demonstra proficiencia em todos os aspectos.',
-    noteIndexes: [7, 8, 9],
-  },
-];
+const NOTECHS_CATEGORIA = 'NOTECHS';
 
 export async function gerarPDFFicha(dados: FichaPDFData): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create();
@@ -110,9 +85,6 @@ export async function gerarPDFFicha(dados: FichaPDFData): Promise<Buffer> {
   currentY -= 14;
 
   currentY = drawManobrasSection(page, fontRegular, fontBold, dados, currentY, contentWidth);
-  currentY -= 10;
-
-  currentY = drawAvaliacaoScaleSection(page, fontRegular, fontBold, currentY, contentWidth);
   currentY -= 10;
 
   currentY = drawObservacoesSection(page, fontRegular, fontBold, dados, currentY, contentWidth);
@@ -318,92 +290,207 @@ function drawManobrasSection(
   startY: number,
   contentWidth: number,
 ): number {
-  drawText(page, 'ITENS AVALIADOS', PAGE.margin, startY, fontBold, 7, COLOR.text);
+  const TABLE_HEADER_H = 14;
+  const ROW_H_BASE = 11;
+  const LINE_SPACING = 6.5;
+  const TABLE_FONT = 7;
+  const TABLE_FONT_SMALL = 5.5;
 
-  const colGap = 16;
-  const colWidth = (contentWidth - colGap) / 2;
-  const leftX = PAGE.margin;
-  const rightX = leftX + colWidth + colGap;
-  const rowsPerColumn = Math.ceil(dados.manobras.length / 2);
-  const leftItems = dados.manobras.slice(0, rowsPerColumn);
-  const rightItems = dados.manobras.slice(rowsPerColumn);
+  // Column layout: # (7mm) | CÓDIGO (22mm) | TRIP. (10mm) | ITENS (60mm) | OBS (50mm) | NOTA (14mm)
+  const margin = PAGE.margin;
+  const colNum = { x: margin + 1, w: 7 };
+  const colCodigo = { x: colNum.x + colNum.w + 2, w: 22 };
+  const colTrip = { x: colCodigo.x + colCodigo.w + 2, w: 10 };
+  const colItens = { x: colTrip.x + colTrip.w + 2, w: 60 };
+  const colObs = { x: colItens.x + colItens.w + 2, w: 50 };
+  const colNota = { x: colObs.x + colObs.w + 2, w: 14 };
 
-  const leftEndY = drawManobraColumn(
-    page,
-    fontRegular,
-    fontBold,
-    leftItems,
-    leftX,
-    startY - 14,
-    colWidth,
+  // Draw table header
+  drawText(page, 'ITENS AVALIADOS', margin, startY, fontBold, 8, COLOR.text);
+  const headerY = startY - 12;
+  page.drawRectangle({
+    x: margin,
+    y: headerY - TABLE_HEADER_H,
+    width: contentWidth,
+    height: TABLE_HEADER_H,
+    color: COLOR.primary,
+  });
+
+  const headerTextY = headerY - 10;
+  drawText(page, '#', colNum.x, headerTextY, fontBold, 7, COLOR.white);
+  drawText(page, 'CÓDIGO', colCodigo.x, headerTextY, fontBold, 7, COLOR.white);
+  drawText(page, 'TRIP.', colTrip.x, headerTextY, fontBold, 7, COLOR.white);
+  drawText(page, 'ITENS', colItens.x, headerTextY, fontBold, 7, COLOR.white);
+  drawText(page, 'OBSERVAÇÕES', colObs.x, headerTextY, fontBold, 7, COLOR.white);
+  drawTextCentered(page, 'NOTA', colNota.x, headerTextY, colNota.w, fontBold, 7, COLOR.white);
+
+  // Split maneuvers into technical and NOTECHS
+  const tecnicas = dados.manobras.filter(
+    (m) => (m.categoria || '').toUpperCase() !== NOTECHS_CATEGORIA,
   );
-  const rightEndY = drawManobraColumn(
-    page,
-    fontRegular,
-    fontBold,
-    rightItems,
-    rightX,
-    startY - 14,
-    colWidth,
+  const notechs = dados.manobras.filter(
+    (m) => (m.categoria || '').toUpperCase() === NOTECHS_CATEGORIA,
   );
 
-  return Math.min(leftEndY, rightEndY);
-}
+  // Combine: technical first, then NOTECHS with divider
+  const allRows: Array<{
+    tipo: 'tecnica' | 'notechs';
+    idx: number;
+    codigo: string;
+    nome: string;
+    resultado: number | null;
+    observacoes: string;
+    tripulante: string;
+  }> = [];
 
-function drawManobraColumn(
-  page: PDFPage,
-  fontRegular: PDFFont,
-  fontBold: PDFFont,
-  manobras: FichaPDFData['manobras'],
-  x: number,
-  startY: number,
-  width: number,
-): number {
-  let y = startY;
+  tecnicas.forEach((m, i) => {
+    allRows.push({
+      tipo: 'tecnica',
+      idx: i + 1,
+      codigo: m.codigo || '-',
+      nome: m.descricao || '-',
+      resultado: m.resultado,
+      observacoes: (m.observacoes || '').trim(),
+      tripulante: (m.tripulante || 'AB').toUpperCase(),
+    });
+  });
 
-  for (const manobra of manobras) {
-    const title = `${manobra.ordem}. ${manobra.descricao}`;
-    const titleLines = wrapText(title, fontBold, 6, width - 28);
-    const codeLines = wrapText(manobra.codigo || '-', fontRegular, 5, width - 28);
-    const blockHeight = Math.max(18, titleLines.length * 7 + codeLines.length * 6 + 2);
+  // Add NOTECHS divider row
+  let currentY = headerY - TABLE_HEADER_H;
+  const hasNotechs = notechs.length > 0;
 
-    drawWrappedText(page, titleLines, x, y, fontBold, 6, 7, COLOR.text);
-    drawWrappedText(
+  // Draw all rows
+  for (let ri = 0; ri < allRows.length; ri++) {
+    const row = allRows[ri];
+    const isNotechsStart = row.tipo === 'notechs' && (ri === 0 || allRows[ri - 1].tipo === 'tecnica');
+
+    // NOTECHS divider
+    if (isNotechsStart) {
+      currentY -= 2;
+      page.drawLine({
+        start: { x: margin, y: currentY },
+        end: { x: margin + contentWidth, y: currentY },
+        color: COLOR.border,
+        thickness: 0.5,
+      });
+      drawText(page, 'NOTECHS', margin + 2, currentY - 5, fontBold, 6.5, COLOR.textSecondary);
+      currentY -= 8;
+      page.drawLine({
+        start: { x: margin, y: currentY },
+        end: { x: margin + contentWidth, y: currentY },
+        color: COLOR.border,
+        thickness: 0.5,
+      });
+      currentY -= 2;
+    }
+
+    // Alternate row background
+    const isEven = ri % 2 === 0;
+    if (isEven) {
+      page.drawRectangle({
+        x: margin,
+        y: currentY - ROW_H_BASE - 1,
+        width: contentWidth,
+        height: ROW_H_BASE + 1,
+        color: COLOR.bgLight,
+      });
+    }
+
+    const textY = currentY - 4;
+
+    // Row number
+    drawText(
       page,
-      codeLines,
-      x,
-      y - titleLines.length * 7 - 1,
+      String(row.idx).padStart(2, '0'),
+      colNum.x,
+      textY,
       fontRegular,
-      5,
-      6,
+      TABLE_FONT,
       COLOR.textSecondary,
     );
 
-    drawScoreBadge(page, fontBold, manobra.resultado, x + width - 18, y - 2);
-    y -= blockHeight;
+    // Code
+    const codeText = row.codigo.length > 13 ? row.codigo.substring(0, 12) + '…' : row.codigo;
+    drawText(page, codeText, colCodigo.x, textY, fontRegular, TABLE_FONT_SMALL, COLOR.textSecondary);
+
+    // Tripulante badge
+    const tripBadgeW = 8;
+    const tripBadgeH = 5;
+    const tripBadgeX = colTrip.x + (colTrip.w - tripBadgeW) / 2;
+    const tripBadgeY = currentY - ROW_H_BASE + 2;
+    const tripColor =
+      row.tripulante === 'A' ? COLOR.tripA : row.tripulante === 'B' ? COLOR.tripB : COLOR.border;
+    page.drawRectangle({
+      x: tripBadgeX,
+      y: tripBadgeY,
+      width: tripBadgeW,
+      height: tripBadgeH,
+      color: tripColor,
+    });
+    drawTextCentered(
+      page,
+      row.tripulante,
+      tripBadgeX,
+      tripBadgeY + 1.2,
+      tripBadgeW,
+      fontBold,
+      5,
+      COLOR.text,
+    );
+
+    // Item name (with word wrap)
+    const nomeLines = wrapText(row.nome, fontRegular, TABLE_FONT, colItens.w);
+    for (let li = 0; li < Math.min(nomeLines.length, 3); li++) {
+      drawText(page, nomeLines[li], colItens.x, textY - li * LINE_SPACING, fontRegular, TABLE_FONT, COLOR.text);
+    }
+
+    // Observações
+    if (row.observacoes) {
+      const obsLines = wrapText(row.observacoes, fontRegular, TABLE_FONT_SMALL, colObs.w).slice(0, 2);
+      for (let li = 0; li < obsLines.length; li++) {
+        drawText(
+          page,
+          obsLines[li],
+          colObs.x,
+          textY - li * LINE_SPACING,
+          fontRegular,
+          TABLE_FONT_SMALL,
+          COLOR.textSecondary,
+        );
+      }
+    }
+
+    // Nota badge
+    const badgeSize = 10;
+    const badgeX = colNota.x + (colNota.w - badgeSize) / 2;
+    const badgeY = currentY - ROW_H_BASE + 2;
+    const score = row.resultado;
+    const isNR = score === null;
+
+    if (!isNR && score !== null) {
+      page.drawRectangle({
+        x: badgeX,
+        y: badgeY,
+        width: badgeSize,
+        height: badgeSize,
+        color: getScoreBgColor(score),
+      });
+      drawTextCentered(page, String(score), badgeX, badgeY + 3, badgeSize, fontBold, 7, COLOR.white);
+    } else {
+      page.drawRectangle({
+        x: badgeX,
+        y: badgeY,
+        width: badgeSize,
+        height: badgeSize,
+        color: COLOR.border,
+      });
+      drawTextCentered(page, '-', badgeX, badgeY + 3, badgeSize, fontRegular, 6, COLOR.textSecondary);
+    }
+
+    currentY -= ROW_H_BASE + 1;
   }
 
-  return y;
-}
-
-function drawScoreBadge(
-  page: PDFPage,
-  fontBold: PDFFont,
-  score: number | null,
-  x: number,
-  topY: number,
-): void {
-  const size = 16;
-  page.drawRectangle({
-    x,
-    y: topY - size + 2,
-    width: size,
-    height: size,
-    color: getScoreBgColor(score),
-  });
-
-  if (score === null) return;
-  drawTextCentered(page, String(score), x, topY - 7, size, fontBold, 8, COLOR.white);
+  return currentY;
 }
 
 function drawObservacoesSection(
@@ -437,63 +524,6 @@ function drawObservacoesSection(
   drawWrappedText(page, textLines, PAGE.margin + 5, boxTop - 8, fontRegular, 6, 8, COLOR.text);
 
   return boxTop - boxHeight;
-}
-
-function drawAvaliacaoScaleSection(
-  page: PDFPage,
-  fontRegular: PDFFont,
-  fontBold: PDFFont,
-  startY: number,
-  contentWidth: number,
-): number {
-  drawText(page, 'REGUA DE AVALIACAO', PAGE.margin, startY, fontBold, 7, COLOR.text);
-
-  const tableTop = startY - 10;
-  const cellWidth = contentWidth / AVALIACAO_SCALE_NOTAS.length;
-  const cellHeight = 14;
-
-  AVALIACAO_SCALE_NOTAS.forEach((nota, index) => {
-    const faixa = AVALIACAO_SCALE_FAIXAS.find((candidate) => candidate.noteIndexes.includes(index));
-    const x = PAGE.margin + index * cellWidth;
-    page.drawRectangle({
-      x,
-      y: tableTop - cellHeight,
-      width: cellWidth,
-      height: cellHeight,
-      color: faixa?.color || COLOR.textSecondary,
-      borderColor: COLOR.white,
-      borderWidth: 0.6,
-    });
-    drawTextCentered(page, String(nota), x, tableTop - 9, cellWidth, fontBold, 8, COLOR.white);
-  });
-
-  const legendTop = tableTop - cellHeight - 8;
-  const legendGap = 8;
-  const legendWidth = (contentWidth - legendGap) / 2;
-  const legendHeight = 28;
-
-  AVALIACAO_SCALE_FAIXAS.forEach((faixa, index) => {
-    const column = index % 2;
-    const row = Math.floor(index / 2);
-    const x = PAGE.margin + column * (legendWidth + legendGap);
-    const y = legendTop - row * (legendHeight + 6);
-
-    page.drawRectangle({
-      x,
-      y: y - legendHeight,
-      width: legendWidth,
-      height: legendHeight,
-      color: COLOR.bgLight,
-      borderColor: COLOR.border,
-      borderWidth: 0.5,
-    });
-
-    drawText(page, faixa.rangeLabel, x + 4, y - 8, fontBold, 7, faixa.color);
-    const lines = wrapText(faixa.description, fontRegular, 5.5, legendWidth - 20).slice(0, 4);
-    drawWrappedText(page, lines, x + 18, y - 8, fontRegular, 5.5, 7, COLOR.textSecondary);
-  });
-
-  return legendTop - legendHeight * 2 - 8;
 }
 
 function drawAssinaturasSection(
