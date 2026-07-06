@@ -30,7 +30,7 @@ const C = {
   primary: '#2180B0', danger: '#C0152F', success: '#208090',
   text: '#134252', textSec: '#626C7C', border: '#E0E4E8', bgLight: '#F5F7FA', white: '#FFFFFF',
 };
-const NOTECHS_COLOR = '#7c3aed';
+const NOTECHS_COLOR = '#626C7C';
 const MARGIN = 15;
 
 function formatData(v: string) { return v; } // ja vem como dd/mm/yyyy
