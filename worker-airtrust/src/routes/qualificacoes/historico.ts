@@ -45,7 +45,6 @@ import writeRouter from './historico-write';
 const router = new Hono<{ Bindings: Env }>();
 
 const QUALIFICATION_STATUS_EXPR = "UPPER(COALESCE(qh.status, ''))";
-const RENEWED_STATUS_VALUES = ['RENOVADA', 'RENOVADO'] as const;
 const cancelledQualificationPredicate = sqlStatusEqualsAny(
   QUALIFICATION_STATUS_EXPR,
   CANCELLED_STATUS_VALUES,
@@ -81,19 +80,17 @@ function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
         )
       )
   )`;
-  const renewalLinkPredicate = hasRenovacaoDe
-    ? ` OR EXISTS (
+  // RENOVADA: somente se existe sucessora real via link explícito renovacao_de.
+  // renovada=1 e status='RENOVADA' são legado informativo, nunca critério final.
+  const renewedQualificationPredicate = hasRenovacaoDe
+    ? `EXISTS (
       SELECT 1
       FROM qualificacoes_historico qh_renovadora
       WHERE qh_renovadora.deleted_at IS NULL
         AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
         AND qh_renovadora.renovacao_de = qh.id
     )`
-    : '';
-  const renewedQualificationPredicate = `(COALESCE(qh.renovada, 0) = 1 OR ${sqlStatusEqualsAny(
-    QUALIFICATION_STATUS_EXPR,
-    RENEWED_STATUS_VALUES,
-  )}${renewalLinkPredicate})`;
+    : '0 = 1';
   const operationalCurrentQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND COALESCE(qh.data_vencimento, qh.data_conclusao) IS NOT NULL AND NOT (${newerOperationalQualificationExistsPredicate}))`;
   const activeRenewedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND ${renewedQualificationPredicate} AND NOT (${operationalCurrentQualificationPredicate}))`;
   const activePlannedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${renewedQualificationPredicate}) AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny(
@@ -114,10 +111,9 @@ async function hasHistoricoRenovacaoDeColumn(db: D1Database): Promise<boolean> {
     historicoRenovacaoDeColumnPromise = db
       .prepare('PRAGMA table_info(qualificacoes_historico)')
       .all()
-      .then(
-        ({ results }) =>
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (results || []).some((column: any) => column?.name === 'renovacao_de'),
+      .then(({ results }) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (results || []).some((column: any) => column?.name === 'renovacao_de'),
       )
       .catch(() => false);
   }
@@ -139,9 +135,7 @@ function parseRequestedSetorIds(rawSetorId?: string, rawSetorIds?: string): numb
 
   return Array.from(
     new Set(
-      values
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0),
+      values.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0),
     ),
   );
 }
@@ -177,9 +171,7 @@ function normalizeCacheRole(value: unknown): string {
 function normalizeCacheSetorIds(values: readonly number[]): number[] {
   return Array.from(
     new Set(
-      values
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0),
+      values.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0),
     ),
   ).sort((left, right) => left - right);
 }
@@ -236,9 +228,7 @@ async function hasTableColumn(
   columnName: string,
 ): Promise<boolean> {
   try {
-    const columns = await db
-      .prepare(`PRAGMA table_info('${tableName}')`)
-      .all<{ name: string }>();
+    const columns = await db.prepare(`PRAGMA table_info('${tableName}')`).all<{ name: string }>();
     if (!columns.results || columns.results.length === 0) {
       return true;
     }
@@ -292,7 +282,11 @@ router.get(
     await ensureHistoricoSchema(db);
     const hasRenovacaoDe = await hasHistoricoRenovacaoDeColumn(db);
     const employeeScope = await buildHistoricoEmployeeScopeCompat(db, access, 'f');
-    const hasCategoriaEmpresaId = await hasTableColumn(db, 'qualificacoes_categorias', 'empresa_id');
+    const hasCategoriaEmpresaId = await hasTableColumn(
+      db,
+      'qualificacoes_categorias',
+      'empresa_id',
+    );
     const {
       operationalCurrentQualificationPredicate,
       renewedQualificationPredicate,
@@ -509,7 +503,10 @@ router.get(
       LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
       WHERE ${whereClause}`;
 
-      const statsResult = await db.prepare(statsQuery).bind(...params).first();
+      const statsResult = await db
+        .prepare(statsQuery)
+        .bind(...params)
+        .first();
 
       // Global counts (independent of status filter) for badge chips
       const nonStatusWhere = nonStatusConditions.join(' AND ');
@@ -547,7 +544,10 @@ router.get(
       LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
       WHERE ${whereClause}`;
 
-      const totalOnlyResult = await db.prepare(totalOnlyQuery).bind(...params).first();
+      const totalOnlyResult = await db
+        .prepare(totalOnlyQuery)
+        .bind(...params)
+        .first();
       statsPayload.total = Number((totalOnlyResult as any)?.total || 0);
     }
 
@@ -566,10 +566,9 @@ router.get(
            ORDER BY COALESCE(pv_doc.created_at, pv_cert.created_at) DESC, pv_doc.id DESC
            LIMIT 1)`
       : 'NULL';
-    const fallbackCertificadoExistsExpr =
-      storageColumns.pastaVirtualHasCertificacaoId
-        ? `${fallbackCertificadoDocIdExpr} IS NOT NULL`
-        : '0 = 1';
+    const fallbackCertificadoExistsExpr = storageColumns.pastaVirtualHasCertificacaoId
+      ? `${fallbackCertificadoDocIdExpr} IS NOT NULL`
+      : '0 = 1';
 
     const dataQuery = `SELECT 
       qh.id,
@@ -596,7 +595,9 @@ router.get(
       qh.data_vencimento AS data_vencimento,
       qh.instrutor AS instrutor,
       qh.renovada,
-      ${hasRenovacaoDe ? `CASE
+      ${
+        hasRenovacaoDe
+          ? `CASE
         WHEN EXISTS (
           SELECT 1
           FROM qualificacoes_historico qh_renovadora
@@ -605,7 +606,9 @@ router.get(
             AND qh_renovadora.renovacao_de = qh.id
         ) THEN 1
         ELSE 0
-      END` : '0'} AS tem_renovacao_posterior,
+      END`
+          : '0'
+      } AS tem_renovacao_posterior,
       ${hasRenovacaoDe ? 'qh.renovacao_de' : 'NULL'} AS renovacao_de,
       CASE WHEN ${operationalCurrentQualificationPredicate} THEN 1 ELSE 0 END AS vigente_operacional,
       qh.numero_certificado,
@@ -700,12 +703,10 @@ router.get(
         r.tem_renovacao_posterior === true || Number(r.tem_renovacao_posterior || 0) === 1;
       const isOperationalCurrent =
         r.vigente_operacional === true || Number(r.vigente_operacional || 0) === 1;
-      const isRenewedQualification =
-        hasRenewalSuccessor ||
-        (!isOperationalCurrent &&
-          (r.renovada === true ||
-            Number(r.renovada || 0) === 1 ||
-            RENEWED_STATUS_VALUES.includes(dbStatus as (typeof RENEWED_STATUS_VALUES)[number])));
+
+      // RENOVADA: somente se existe sucessora real via link explícito renovacao_de.
+      // renovada=1 e status='RENOVADA' são legado informativo, nunca critério final.
+      const isRenewedQualification = hasRenewalSuccessor;
       // Se o status salvo é PLANEJADA (data futura ou sem data), respeitar
       if (isRenewedQualification) {
         derivedStatus = 'RENOVADA';
@@ -716,8 +717,7 @@ router.get(
         derivedStatus = QUALIFICACAO_STATUS.PLANEJADA;
       } else if (!dataVencimentoCalculada) {
         const dbStatusUpper = String(dbStatus || '').toUpperCase();
-        const isCompletionStatus =
-          dbStatusUpper === 'CONCLUIDA' || dbStatusUpper === 'CONCLUIDO';
+        const isCompletionStatus = dbStatusUpper === 'CONCLUIDA' || dbStatusUpper === 'CONCLUIDO';
         derivedStatus =
           r.data_realizacao && (isCompletionStatus || dbStatusUpper.length === 0)
             ? QUALIFICACAO_STATUS.CONCLUIDA

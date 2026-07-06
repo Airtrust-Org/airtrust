@@ -13,7 +13,10 @@ describe('qualificacoes historico status utils', () => {
       'PLANEJADA',
     );
     expect(getHistoricoDisplayStatus({ status: 'PROXIMA_VENCIMENTO' })).toBe('VENCENDO_30');
-    expect(getHistoricoDisplayStatus({ renovada: 1 })).toBe('RENOVADA');
+    // renovada=1 SEM tem_renovacao_posterior NÃO é RENOVADA — legado informativo apenas
+    expect(
+      getHistoricoDisplayStatus({ renovada: 1, vigente_operacional: 0, tem_renovacao_posterior: 0 }),
+    ).toBe('VALIDA');
   });
 
   it('prioriza o status derivado do backend para nao marcar a renovacao vigente como renovada', () => {
@@ -41,6 +44,141 @@ describe('qualificacoes historico status utils', () => {
         data_vencimento: '2099-12-31',
       }),
     ).toBe('VALIDA');
+  });
+
+  // NOVOS TESTES: regra RENOVADA requer sucessora real
+
+  it('NAO marca como RENOVADA quando renovada=1 mas é a vigente operacional (sem sucessora)', () => {
+    // Cenário: registro com flag renovada=1 mas é o último registro do tipo
+    // (vigente_operacional=1). Deve mostrar status baseado em datas, não RENOVADA.
+    expect(
+      getHistoricoDisplayStatus({
+        renovada: 1,
+        status: 'VALIDA',
+        vigente_operacional: 1,
+        tem_renovacao_posterior: 0,
+        qualificacao_status: 'CONCLUIDA',
+        data_vencimento: '2099-12-31',
+      }),
+    ).toBe('VALIDA');
+  });
+
+  it('NAO marca como RENOVADA quando status=RENOVADA mas é vigente operacional', () => {
+    // Caso clássico: registro marcado como RENOVADA no banco mas sem sucessora real
+    expect(
+      getHistoricoDisplayStatus({
+        renovada: 0,
+        status: 'VALIDA',
+        vigente_operacional: 1,
+        tem_renovacao_posterior: 0,
+        qualificacao_status: 'RENOVADA',
+        data_vencimento: '2026-08-13',
+      }),
+    ).toBe('VALIDA');
+  });
+
+  it('marca como RENOVADA quando tem link explícito de sucessão (tem_renovacao_posterior=1)', () => {
+    // Backend enviaria status='RENOVADA' neste caso; não passa status conflitante
+    expect(
+      getHistoricoDisplayStatus({
+        renovada: 1,
+        status: 'RENOVADA',
+        vigente_operacional: 0,
+        tem_renovacao_posterior: 1,
+        qualificacao_status: 'CONCLUIDA',
+        data_vencimento: '2024-01-27',
+      }),
+    ).toBe('RENOVADA');
+  });
+
+  // TESTES EXPLÍCITOS: regra final RENOVADA = tem_renovacao_posterior=1
+
+  it('registro vencido com renovada=1 e status=RENOVADA mas sem sucessor real → VENCIDA', () => {
+    // Cenário: registro expirado, flags legados de renovação, mas sem sucessora real.
+    // Deve ser classificado por data, NUNCA como RENOVADA.
+    expect(
+      getHistoricoDisplayStatus({
+        renovada: 1,
+        status: 'RENOVADA',
+        vigente_operacional: 1,
+        tem_renovacao_posterior: 0,
+        qualificacao_status: 'RENOVADA',
+        data_vencimento: '2024-01-27',
+      }),
+    ).toBe('VENCIDA');
+  });
+
+  it('registro não vigente com renovada=1 mas sucessor cancelado → NÃO é RENOVADA', () => {
+    // Cenário: não é a vigente operacional (existe outro registro posterior),
+    // mas o sucessor foi cancelado ou deletado. Sem tem_renovacao_posterior=1,
+    // NÃO deve ser RENOVADA.
+    expect(
+      getHistoricoDisplayStatus({
+        renovada: 1,
+        status: 'RENOVADA',
+        vigente_operacional: 0,
+        tem_renovacao_posterior: 0,
+        qualificacao_status: 'RENOVADA',
+        data_vencimento: '2024-01-27',
+      }),
+    ).toBe('VENCIDA');
+  });
+
+  it('NAO marca como RENOVADA quando renovada=1 sem link explícito de sucessão', () => {
+    // Registro não é vigente operacional E tem renovada=1,
+    // mas NÃO tem tem_renovacao_posterior=1 → NÃO é RENOVADA.
+    // Deve ser classificada por data: 2024-01-27 < hoje → VENCIDA.
+    expect(
+      getHistoricoDisplayStatus({
+        renovada: 1,
+        status: 'RENOVADA',
+        vigente_operacional: 0,
+        tem_renovacao_posterior: 0,
+        qualificacao_status: 'CONCLUIDA',
+        data_vencimento: '2024-01-27',
+      }),
+    ).toBe('VENCIDA');
+  });
+
+  it('qualificação válida sem sucessora aparece como VALIDA, não RENOVADA', () => {
+    expect(
+      getHistoricoDisplayStatus({
+        renovada: 0,
+        status: 'VALIDA',
+        vigente_operacional: 1,
+        tem_renovacao_posterior: 0,
+        qualificacao_status: 'CONCLUIDA',
+        data_vencimento: '2099-12-31',
+      }),
+    ).toBe('VALIDA');
+  });
+
+  it('qualificação vencendo sem sucessora aparece como VENCENDO_30', () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 15);
+    const futureStr = tomorrow.toISOString().split('T')[0];
+    // Não passa status derivado — deixa o cálculo por data prevalecer
+    expect(
+      getHistoricoDisplayStatus({
+        renovada: 0,
+        vigente_operacional: 1,
+        tem_renovacao_posterior: 0,
+        qualificacao_status: 'CONCLUIDA',
+        data_vencimento: futureStr,
+      }),
+    ).toBe('VENCENDO_30');
+  });
+
+  it('qualificação vencida sem sucessora aparece como VENCIDA', () => {
+    expect(
+      getHistoricoDisplayStatus({
+        renovada: 0,
+        vigente_operacional: 1,
+        tem_renovacao_posterior: 0,
+        qualificacao_status: 'CONCLUIDA',
+        data_vencimento: '2020-01-01',
+      }),
+    ).toBe('VENCIDA');
   });
 
   it('detecta quando uma qualificação vencida já possui ação planejada relacionada', () => {

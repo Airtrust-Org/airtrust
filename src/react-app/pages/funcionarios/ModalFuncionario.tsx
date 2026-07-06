@@ -71,6 +71,8 @@ type QualItem = {
   renovada?: number | boolean | string | null;
   status?: string | null;
   qualificacao_status?: string | null;
+  tem_renovacao_posterior?: number | boolean | null;
+  vigente_operacional?: number | boolean | null;
   // Campos retornados pela API com prefixo tipo_
   tipo_nome?: string;
   tipo_codigo?: string;
@@ -121,13 +123,15 @@ function StatusBadge({ vencimento }: { vencimento: string }) {
   );
 }
 
+/**
+ * Determina se uma qualificação é realmente RENOVADA.
+ *
+ * RENOVADA somente se existe sucessora real via link explícito renovacao_de
+ * (tem_renovacao_posterior = 1).
+ * renovada=1 e status='RENOVADA' são legado informativo, nunca critério final.
+ */
 function isQualificacaoRenovada(qual: QualItem): boolean {
-  const renovada = qual.renovada;
-  const status = String(qual.qualificacao_status || qual.status || '')
-    .trim()
-    .toUpperCase();
-
-  return renovada === true || renovada === 1 || String(renovada) === '1' || status === 'RENOVADA';
+  return qual.tem_renovacao_posterior === 1 || qual.tem_renovacao_posterior === true;
 }
 
 function addMonthsYmd(base: Date, months: number): string {
@@ -1245,8 +1249,9 @@ export default function ModalFuncionario({
                 </div>
 
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Número CMA, número ASO e nível ICAO são salvos no cadastro do funcionário. As datas de
-                  realização e vencimento vêm do histórico de qualificações (somente leitura).
+                  Número CMA, número ASO e nível ICAO são salvos no cadastro do funcionário. As
+                  datas de realização e vencimento vêm do histórico de qualificações (somente
+                  leitura).
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-4">

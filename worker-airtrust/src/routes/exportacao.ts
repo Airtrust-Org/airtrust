@@ -288,14 +288,14 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
       }
 
       // Derivar status — mesma lógica do historico.ts
+      // RENOVADA: NUNCA derivar baseado apenas em renovada=1.
+      // Só é RENOVADA se existe sucessora real (não é vigente operacional).
       const dbStatus = (r.qualificacao_status as string | null)?.toUpperCase();
       let status: string;
       if (dbStatus === 'PLANEJADA' || (!r.data_realizacao && !dataVencimento)) {
         status = 'PLANEJADA';
       } else if (!dataVencimento) {
         status = 'INDEFINIDA';
-      } else if (r.renovada) {
-        status = 'RENOVADA';
       } else if (dataVencimento < today) {
         status = 'VENCIDA';
       } else if (dataVencimento <= todayThreshold) {
