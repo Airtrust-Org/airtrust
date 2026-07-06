@@ -75,24 +75,93 @@ import {
 import { NOTECHS_ITENS } from '@/react-app/pages/simuladores/fichas/notechs';
 
 const A139_I_01_12_MANOBRAS: ModeloSessaoManobra[] = [
-  { ordem: 1, manobra_codigo: 'A139-CAB-01', manobra_nome: 'Cabine AW139 e power-up', tripulante: 'AB', observacoes: 'tipo_item=tecnica; fase_voo=pre_voo_cockpit; carater=treinamento; fap_refs=FAP05.2basico/normais; nota=Familiarizacao antes de qualquer manobra.; matriz_v6_modelo=A139-I-01/12' },
-  { ordem: 2, manobra_codigo: 'A139-CKL-01', manobra_nome: 'Normal checklist', tripulante: 'AB', observacoes: 'tipo_item=tecnica; fase_voo=pre_partida; carater=treinamento; matriz_v6_modelo=A139-I-01/12' },
-  { ordem: 3, manobra_codigo: 'A139-CAS-01', manobra_nome: 'Leitura e reconhecimento basico de CAS', tripulante: 'AB' },
-  { ordem: 4, manobra_codigo: 'A139-QRH-01', manobra_nome: 'Localizacao guiada de procedimento no QRH', tripulante: 'AB' },
-  { ordem: 5, manobra_codigo: 'A139-AFC-01', manobra_nome: 'Engajamento e desconexao normal do AFCS', tripulante: 'AB' },
-  { ordem: 6, manobra_codigo: 'A139-TAX-01', manobra_nome: 'Taxi e deslocamento em solo e heliponto', tripulante: 'AB' },
+  {
+    ordem: 1,
+    manobra_codigo: 'A139-CAB-01',
+    manobra_nome: 'Cabine AW139 e power-up',
+    tripulante: 'AB',
+    observacoes:
+      'tipo_item=tecnica; fase_voo=pre_voo_cockpit; carater=treinamento; fap_refs=FAP05.2basico/normais; nota=Familiarizacao antes de qualquer manobra.; matriz_v6_modelo=A139-I-01/12',
+  },
+  {
+    ordem: 2,
+    manobra_codigo: 'A139-CKL-01',
+    manobra_nome: 'Normal checklist',
+    tripulante: 'AB',
+    observacoes:
+      'tipo_item=tecnica; fase_voo=pre_partida; carater=treinamento; matriz_v6_modelo=A139-I-01/12',
+  },
+  {
+    ordem: 3,
+    manobra_codigo: 'A139-CAS-01',
+    manobra_nome: 'Leitura e reconhecimento basico de CAS',
+    tripulante: 'AB',
+  },
+  {
+    ordem: 4,
+    manobra_codigo: 'A139-QRH-01',
+    manobra_nome: 'Localizacao guiada de procedimento no QRH',
+    tripulante: 'AB',
+  },
+  {
+    ordem: 5,
+    manobra_codigo: 'A139-AFC-01',
+    manobra_nome: 'Engajamento e desconexao normal do AFCS',
+    tripulante: 'AB',
+  },
+  {
+    ordem: 6,
+    manobra_codigo: 'A139-TAX-01',
+    manobra_nome: 'Taxi e deslocamento em solo e heliponto',
+    tripulante: 'AB',
+  },
   { ordem: 7, manobra_codigo: 'FLY-BAS-X3', manobra_nome: 'Hover e taxi', tripulante: 'AB' },
-  { ordem: 8, manobra_codigo: 'A139-PWR-01', manobra_nome: 'Controle normal de potencia e parametros', tripulante: 'AB' },
+  {
+    ordem: 8,
+    manobra_codigo: 'A139-PWR-01',
+    manobra_nome: 'Controle normal de potencia e parametros',
+    tripulante: 'AB',
+  },
   { ordem: 9, manobra_codigo: 'OPS-NRM-X2', manobra_nome: 'Decolagem normal', tripulante: 'AB' },
   { ordem: 10, manobra_codigo: 'FLY-BAS-X1', manobra_nome: 'Controle geral VFR', tripulante: 'AB' },
-  { ordem: 11, manobra_codigo: 'OPS-NRM-X1', manobra_nome: 'Procedimentos normais', tripulante: 'AB' },
-  { ordem: 12, manobra_codigo: 'A139-FMA-01', manobra_nome: 'Monitoramento basico de FMA', tripulante: 'AB' },
-  { ordem: 13, manobra_codigo: 'OPS-NRM-X3', manobra_nome: 'Circuito de trafego', tripulante: 'AB' },
-  { ordem: 14, manobra_codigo: 'A139-STB-01', manobra_nome: 'Aproximacao visual estabilizada', tripulante: 'AB' },
+  {
+    ordem: 11,
+    manobra_codigo: 'OPS-NRM-X1',
+    manobra_nome: 'Procedimentos normais',
+    tripulante: 'AB',
+  },
+  {
+    ordem: 12,
+    manobra_codigo: 'A139-FMA-01',
+    manobra_nome: 'Monitoramento basico de FMA',
+    tripulante: 'AB',
+  },
+  {
+    ordem: 13,
+    manobra_codigo: 'OPS-NRM-X3',
+    manobra_nome: 'Circuito de trafego',
+    tripulante: 'AB',
+  },
+  {
+    ordem: 14,
+    manobra_codigo: 'A139-STB-01',
+    manobra_nome: 'Aproximacao visual estabilizada',
+    tripulante: 'AB',
+  },
   { ordem: 15, manobra_codigo: 'A139-ARN-01', manobra_nome: 'Arremetida normal', tripulante: 'AB' },
   { ordem: 16, manobra_codigo: 'A139-PNO-01', manobra_nome: 'Pouso normal', tripulante: 'AB' },
-  { ordem: 17, manobra_codigo: 'A139-EST-01', manobra_nome: 'Estacionamento e corte de motores', tripulante: 'AB' },
-  { ordem: 18, manobra_codigo: 'FLY-BAS-X4', manobra_nome: 'Recuperacao de atitudes anormais basica', tripulante: 'AB' },
+  {
+    ordem: 17,
+    manobra_codigo: 'A139-EST-01',
+    manobra_nome: 'Estacionamento e corte de motores',
+    tripulante: 'AB',
+  },
+  {
+    ordem: 18,
+    manobra_codigo: 'FLY-BAS-X4',
+    manobra_nome: 'Recuperacao de atitudes anormais basica',
+    tripulante: 'AB',
+  },
 ];
 
 function buildA139Modelo() {
@@ -160,29 +229,43 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
 
     // NOTECHS codes visiveis categorizados (COO-01..04, LID-05..08, CSA-09..11, TMD-12..15)
     const expectedCodes = [
-      'NOTECHS-COO-01', 'NOTECHS-COO-02', 'NOTECHS-COO-03', 'NOTECHS-COO-04',
-      'NOTECHS-LID-05', 'NOTECHS-LID-06', 'NOTECHS-LID-07', 'NOTECHS-LID-08',
-      'NOTECHS-CSA-09', 'NOTECHS-CSA-10', 'NOTECHS-CSA-11',
-      'NOTECHS-TMD-12', 'NOTECHS-TMD-13', 'NOTECHS-TMD-14', 'NOTECHS-TMD-15',
+      'NOTECHS-COO-01',
+      'NOTECHS-COO-02',
+      'NOTECHS-COO-03',
+      'NOTECHS-COO-04',
+      'NOTECHS-LID-05',
+      'NOTECHS-LID-06',
+      'NOTECHS-LID-07',
+      'NOTECHS-LID-08',
+      'NOTECHS-CSA-09',
+      'NOTECHS-CSA-10',
+      'NOTECHS-CSA-11',
+      'NOTECHS-TMD-12',
+      'NOTECHS-TMD-13',
+      'NOTECHS-TMD-14',
+      'NOTECHS-TMD-15',
     ];
     for (const code of expectedCodes) {
       expect(allText).toContain(code);
     }
   });
 
-  it('mostra header bilingue NOTECHS e 4 divisores de categoria no PDF V6.2', async () => {
+  it('mostra header NOTECHS single-line e 4 divisores de categoria no PDF V6.2', async () => {
     const dadosPDF = buildA139Modelo();
     await gerarPDFFichaCliente(dadosPDF);
 
     const allText = capturedTexts.join('\n');
 
-    // Header bilingue
-    expect(allText).toContain('NOTECHS \u2014 Non-Technical Skills');
-    expect(allText).toContain('Habilidades N\u00E3o T\u00E9cnicas / Comportamentais');
+    // Single-line bilingual header
+    expect(allText).toContain(
+      'NOTECHS \u2014 Non-Technical Skills / Habilidades N\u00E3o T\u00E9cnicas e Comportamentais',
+    );
 
-    // 4 category dividers (compact inline form)
+    // 4 category dividers (full labels)
     expect(allText).toContain('COO \u2014 Coopera\u00E7\u00E3o / Cooperation');
-    expect(allText).toContain('LID \u2014 Lideran\u00E7a e Hab. Gerenciais / Leadership and Management Skills');
+    expect(allText).toContain(
+      'LID \u2014 Lideran\u00E7a e Habilidades Gerenciais / Leadership and Management Skills',
+    );
     expect(allText).toContain('CSA \u2014 Consci\u00EAncia Situacional / Situational Awareness');
     expect(allText).toContain('TMD \u2014 Tomada de Decis\u00E3o / Decision Making');
 
