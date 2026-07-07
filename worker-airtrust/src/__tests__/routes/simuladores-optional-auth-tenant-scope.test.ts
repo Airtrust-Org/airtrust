@@ -45,7 +45,12 @@ type RelatoriosUsoResponse = {
 };
 
 type EquipamentosResponse = {
-  data: Array<{ nome: string }>;
+  data: Array<{
+    nome: string;
+    aeronave_codigo?: string | null;
+    modelo_aeronave?: string | null;
+    aeronave_vinculo_status?: string;
+  }>;
 };
 
 type ModelosResponse = {
@@ -124,9 +129,9 @@ function createEquipamentosDb() {
         bind(...args: unknown[]) {
           return {
             async all() {
-              if (sql.startsWith('SELECT id, nome, modelo, tipo, fabricante, localizacao, status')) {
-                const empresaId = Number(args[0]);
-                expect(sql).toContain('empresa_id = ?');
+              if (sql.startsWith('SELECT s.id, s.nome, s.modelo, s.tipo, s.fabricante, s.localizacao, s.status')) {
+                const empresaId = Number(args[0]);  // JOIN param for modelos_aeronave
+                expect(sql).toContain('s.empresa_id = ?');
                 return {
                   results: [
                     {
@@ -137,6 +142,9 @@ function createEquipamentosDb() {
                       fabricante: 'CAE',
                       localizacao: 'RIO',
                       status: 'ATIVO',
+                      aeronave_codigo: 'AW139',
+                      modelo_aeronave: 'AW139',
+                      aeronave_vinculo_status: 'OK',
                     },
                   ],
                 };
@@ -146,7 +154,7 @@ function createEquipamentosDb() {
             },
             async first<T>() {
               if (sql.startsWith('SELECT COUNT(*) as total FROM simuladores')) {
-                expect(sql).toContain('empresa_id = ?');
+                expect(sql).toContain('s.empresa_id = ?');
                 return { total: 1 } as T;
               }
               return null as T | null;

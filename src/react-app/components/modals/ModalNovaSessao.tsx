@@ -64,6 +64,7 @@ interface Simulador {
   tipo?: string; // Tipo de aeronave (ex: AW139)
   fabricante?: string;
   aeronave_codigo?: string; // FK para aeronaves.codigo
+  aeronave_vinculo_status?: string; // 'OK' | 'SOFT_DELETED' | 'MISSING' | 'UNLINKED'
 }
 
 interface TipoSessao {
@@ -143,6 +144,14 @@ interface ModalNovaSessaoProps {
   onVerFichas?: (sessaoId: number) => void; // Callback para ver fichas
 }
 
+/**
+ * Normaliza string para comparação de modelo de aeronave:
+ * trim + uppercase. Elimina diferenças de capitalização e espaços.
+ */
+export function normalizarModelo(str?: string | null): string {
+  return (str || '').trim().toUpperCase();
+}
+
 export default function ModalNovaSessao({
   isOpen,
   onClose,
@@ -166,6 +175,7 @@ export default function ModalNovaSessao({
   const [aeronaves, setAeronaves] = useState<ModeloAeronave[]>([]);
   const [simuladores, setSimuladores] = useState<Simulador[]>([]);
   const [simuladoresFiltrados, setSimuladoresFiltrados] = useState<Simulador[]>([]);
+  const [simuladoresLoading, setSimuladoresLoading] = useState(false);
   const [tiposSessao, setTiposSessao] = useState<TipoSessao[]>([]);
   const [instrutores, setInstrutores] = useState<Funcionario[]>([]);
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
@@ -312,6 +322,27 @@ export default function ModalNovaSessao({
       phase1MergedRef.current = null;
     }
   }, [isOpen]);
+
+  // Corrige race condition: se o usuário selecionou equipamento antes de
+  // fetchSimuladores() terminar, recalcula o filtro assim que a lista chega.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (simuladoresLoading) return;
+    if (!aeronaveCodigo) {
+      setSimuladoresFiltrados([]);
+      return;
+    }
+    const modeloNorm = normalizarModelo(aeronaveCodigo);
+    const filtrados = simuladores.filter(
+      (s) =>
+        normalizarModelo(s.modelo_aeronave) === modeloNorm ||
+        normalizarModelo(s.aeronave_codigo) === modeloNorm ||
+        // Fallback legado — REMOVER após DML de saneamento de vínculos
+        normalizarModelo(s.modelo) === modeloNorm ||
+        normalizarModelo(s.tipo) === modeloNorm,
+    );
+    setSimuladoresFiltrados(filtrados);
+  }, [isOpen, simuladores, simuladoresLoading, aeronaveCodigo]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -578,12 +609,14 @@ export default function ModalNovaSessao({
 
         const modeloFinal = aeronaveEncontrada?.modelo ?? modeloDirecto ?? '';
         if (modeloFinal) {
+          const modeloNorm = normalizarModelo(modeloFinal);
           const filtrados = simuladores.filter(
             (s) =>
-              s.aeronave_codigo === modeloFinal ||
-              s.tipo === modeloFinal ||
-              s.modelo === modeloFinal ||
-              s.modelo_aeronave === modeloFinal,
+              normalizarModelo(s.modelo_aeronave) === modeloNorm ||
+              normalizarModelo(s.aeronave_codigo) === modeloNorm ||
+              // Fallback legado — REMOVER após DML de saneamento de vínculos
+              normalizarModelo(s.modelo) === modeloNorm ||
+              normalizarModelo(s.tipo) === modeloNorm,
           );
           setSimuladoresFiltrados(filtrados);
         }
@@ -746,12 +779,15 @@ export default function ModalNovaSessao({
   }
 
   async function fetchSimuladores() {
+    setSimuladoresLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/simuladores`, { headers: _authHeaders() });
       const data = await res.json();
       setSimuladores(data.data || []);
     } catch (error) {
       console.error('Erro ao buscar simuladores:', error);
+    } finally {
+      setSimuladoresLoading(false);
     }
   }
 
@@ -930,13 +966,19 @@ export default function ModalNovaSessao({
     setGerarFichaExaminador(false);
     setParticipantes(participantesIniciais());
 
-    // Filtrar simuladores por modelo de aeronave (com fallback legados)
+    // Filtrar simuladores por modelo de aeronave, com fallback legado
+    // Ordem: modelo_aeronave (canônico) → aeronave_codigo (FK) → modelo/tipo (legado)
+    // Fallback legado existe por compatibilidade até saneamento dos dados (DML pendente):
+    //   - SK76: aeronave_codigo=NULL, funciona por modelo/tipo="SK76"
+    //   - AW139: aeronave_codigo="AW139" mas aeronave id=19 soft-deleted
+    const modeloNorm = normalizarModelo(modelo);
     const filtrados = simuladores.filter(
       (s) =>
-        s.modelo_aeronave === modelo ||
-        s.aeronave_codigo === modelo ||
-        s.tipo === modelo ||
-        s.modelo === modelo,
+        normalizarModelo(s.modelo_aeronave) === modeloNorm ||
+        normalizarModelo(s.aeronave_codigo) === modeloNorm ||
+        // Fallback legado — REMOVER após DML de saneamento de vínculos
+        normalizarModelo(s.modelo) === modeloNorm ||
+        normalizarModelo(s.tipo) === modeloNorm,
     );
     setSimuladoresFiltrados(filtrados);
 
@@ -1882,10 +1924,14 @@ export default function ModalNovaSessao({
                 value={simuladorId || ''}
                 onChange={(e) => handleSimuladorChange(Number(e.target.value))}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
-                disabled={loading || !aeronaveId}
+                disabled={loading || !aeronaveId || simuladoresLoading}
               >
                 <option value="">
-                  {aeronaveId ? 'Selecione o simulador' : 'Selecione o equipamento primeiro'}
+                  {simuladoresLoading
+                    ? 'Carregando simuladores…'
+                    : aeronaveId
+                      ? 'Selecione o simulador'
+                      : 'Selecione o equipamento primeiro'}
                 </option>
                 {simuladoresFiltrados.map((sim) => (
                   <option key={sim.id} value={sim.id}>
@@ -1893,9 +1939,12 @@ export default function ModalNovaSessao({
                   </option>
                 ))}
               </select>
-              {aeronaveId && simuladoresFiltrados.length === 0 && (
+              {aeronaveId && !simuladoresLoading && simuladoresFiltrados.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  ⚠️ Nenhum simulador disponível para este equipamento
+                  ⚠️ Nenhum simulador disponível para este equipamento.
+                  {simuladores.length > 0 && (
+                    <> Disponíveis: {simuladores.map((s) => s.modelo).join(', ')}.</>
+                  )}
                 </p>
               )}
             </div>
