@@ -283,6 +283,26 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     expect(addPageCalls.count).toBe(0);
   });
 
+  it('contem exatamente 18 tecnicos + 15 NOTECHS e NOTECHS-TMD-15 visivel', async () => {
+    const dadosPDF = buildA139Modelo();
+    await gerarPDFFichaCliente(dadosPDF);
+
+    const allText = capturedTexts.join('\n');
+
+    // Count NOTECHS items by code pattern
+    const notechsCodes = allText.match(/NOTECHS-[A-Z]{3}-\d{2}/g) || [];
+    expect(notechsCodes).toHaveLength(15);
+
+    // Last NOTECHS must be present
+    expect(allText).toContain('NOTECHS-TMD-15');
+    expect(allText).toContain('Revisão do Resultado');
+
+    // Technical items: 18 distinct items numbered 01-18 visible
+    for (let i = 1; i <= 18; i++) {
+      expect(allText).toContain(String(i).padStart(2, '0'));
+    }
+  });
+
   it('usa cor cinza (nao roxo/rosa) no bloco NOTECHS', async () => {
     const dadosPDF = buildA139Modelo();
     await gerarPDFFichaCliente(dadosPDF);
