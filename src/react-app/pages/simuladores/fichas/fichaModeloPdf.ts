@@ -1,3 +1,11 @@
+/**
+ * Construtor de dados da ficha-modelo V6.2 (18 técnicas + 15 NOTECHS).
+ * Não gera PDF diretamente — monta o FichaPDFData consumido pelo
+ * renderer oficial gerarPDFFichaCliente() em
+ * src/react-app/services/pdf-ficha-client.ts. Único caminho de código
+ * que produz uma ficha-modelo em branco; chamado por
+ * src/react-app/pages/simuladores/fichas/index.tsx.
+ */
 import type { FichaPDFData } from '@/react-app/services/pdf-ficha-client';
 import { resolveModeloSessaoObservacoesOverride } from '@/shared/simuladores/modelos-sessao-observacoes';
 import { NOTECHS_ITENS } from './notechs';

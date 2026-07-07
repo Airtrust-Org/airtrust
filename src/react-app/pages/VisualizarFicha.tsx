@@ -1,3 +1,10 @@
+/**
+ * @deprecated ÓRFÃO — não há <Route> para esta página em
+ * src/react-app/App.tsx. O único componente que navegaria até aqui
+ * (src/react-app/components/simuladores/AcoesFicha.tsx) também não é
+ * importado por ninguém. Não usar como referência para ficha-modelo
+ * V6.2; o caminho ativo é src/react-app/pages/simuladores/fichas/[id]/index.tsx.
+ */
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
