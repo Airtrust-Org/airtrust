@@ -23,6 +23,10 @@ import { getTenantContext } from '../middleware/tenant';
 import { badRequest, forbidden, notFound } from '../middleware/error-handler';
 import { createLogger } from '../utils/logger';
 import { hashPassword } from '../utils/security';
+import {
+  isPlatformAdminAccess,
+  resolvePlatformAccessState,
+} from '../lib/rbac/platform-access';
 // crypto.randomBytes está disponível via Node.js compat ou podemos usar crypto.getRandomValues
 
 type AdminVars = {
@@ -67,6 +71,45 @@ function requireAdmin(role: string, action?: string): void {
       'INSUFFICIENT_ROLE',
     );
   }
+}
+
+/**
+ * Verifica se o caller tem acesso ao usuário-alvo dentro do tenant.
+ *
+ * - Se o target tem vínculo com a empresa do caller → permitido.
+ * - Se o caller é platform admin → permitido (cross-tenant).
+ * - Caso contrário → 403 WRONG_TENANT.
+ *
+ * FAIL-CLOSED: contexto de empresa inválido (ausente/zero) bloqueia a operação
+ * para qualquer perfil que não seja platform admin.
+ */
+async function requireTenantAccess(
+  db: D1Database,
+  callerId: number,
+  targetUserId: number,
+  empresaId: number,
+): Promise<void> {
+  // Fail-closed: invalid empresa context blocks non-platform-admin
+  if (!empresaId || empresaId <= 0) {
+    const platformAccessState = await resolvePlatformAccessState(db, callerId);
+    if (!isPlatformAdminAccess(platformAccessState)) {
+      throw forbidden('Contexto de empresa inválido', 'INVALID_TENANT_CONTEXT');
+    }
+    return; // platform admin pode operar sem tenant fixo (cross-tenant support)
+  }
+
+  const vinculo = await db
+    .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
+    .bind(targetUserId, empresaId)
+    .first();
+
+  if (vinculo) return; // target pertence ao tenant do caller
+
+  // Platform admin pode operar cross-tenant
+  const platformAccessState = await resolvePlatformAccessState(db, callerId);
+  if (isPlatformAdminAccess(platformAccessState)) return;
+
+  throw forbidden('Usuário não pertence à sua empresa', 'WRONG_TENANT');
 }
 
 function getCallerId(c: { get: (k: string) => unknown }): number {
@@ -300,7 +343,6 @@ adminUsuariosRoutes.get('/', async (c) => {
 // ---------------------------------------------------------------------------
 adminUsuariosRoutes.get('/:id', async (c) => {
   requireAdminOrGestor(getCallerRole(c), 'ver usuário');
-  const callerRole = getCallerRole(c);
   const { empresaId } = getTenantContext(c);
   const id = Number(c.req.param('id'));
   const db = c.env.DB;
@@ -337,20 +379,8 @@ adminUsuariosRoutes.get('/:id', async (c) => {
 
   if (!user) throw notFound('Usuário não encontrado');
 
-  // Verificar vínculo com a empresa (apenas para GESTOR — ADMIN pode ver qualquer usuário)
-  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
-    const vinculo = await db
-      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
-      .bind(id, empresaId)
-      .first();
-
-    if (!vinculo) {
-      throw forbidden(
-        'Usuário não pertence à sua empresa',
-        'WRONG_TENANT',
-      );
-    }
-  }
+  // Verificar vínculo com a empresa (platform admin pode cross-tenant)
+  await requireTenantAccess(db, getCallerId(c), id, empresaId);
 
   // Carregar permissões individuais
   const permissoes = await db
@@ -528,20 +558,8 @@ adminUsuariosRoutes.put('/:id', async (c) => {
 
   if (!existente) throw notFound('Usuário não encontrado');
 
-  // Verificar vínculo com a empresa (apenas para GESTOR — ADMIN pode editar qualquer usuário)
-  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
-    const vinculo = await db
-      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
-      .bind(id, empresaId)
-      .first();
-
-    if (!vinculo) {
-      throw forbidden(
-        'Usuário não pertence à sua empresa',
-        'WRONG_TENANT',
-      );
-    }
-  }
+  // Verificar vínculo com a empresa (platform admin pode cross-tenant)
+  await requireTenantAccess(db, getCallerId(c), id, empresaId);
 
   // Gestor não pode editar ADMINISTRADOR
   const targetPerfil = body?.perfil?.toUpperCase() || existente.perfil.toUpperCase();
@@ -637,20 +655,8 @@ adminUsuariosRoutes.delete('/:id', async (c) => {
 
   if (!existente) throw notFound('Usuário não encontrado');
 
-  // Verificar vínculo com a empresa (apenas para GESTOR — ADMIN pode gerenciar qualquer usuário)
-  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
-    const vinculo = await db
-      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
-      .bind(id, empresaId)
-      .first();
-
-    if (!vinculo) {
-      throw forbidden(
-        'Usuário não pertence à sua empresa',
-        'WRONG_TENANT',
-      );
-    }
-  }
+  // Verificar vínculo com a empresa (platform admin pode cross-tenant)
+  await requireTenantAccess(db, getCallerId(c), id, empresaId);
 
   // Gestor não pode deletar ADMINISTRADOR
   if (
@@ -680,7 +686,6 @@ adminUsuariosRoutes.delete('/:id', async (c) => {
 adminUsuariosRoutes.post('/:id/invite', async (c) => {
   requireAdminOrGestor(getCallerRole(c), 'reenviar convite');
   const callerId = getCallerId(c);
-  const callerRole = getCallerRole(c);
   const { empresaId } = getTenantContext(c);
   const id = Number(c.req.param('id'));
   const db = c.env.DB;
@@ -696,20 +701,8 @@ adminUsuariosRoutes.post('/:id/invite', async (c) => {
 
   if (!user) throw notFound('Usuário não encontrado');
 
-  // Verificar vínculo com a empresa (apenas para GESTOR)
-  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
-    const vinculo = await db
-      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
-      .bind(id, empresaId)
-      .first();
-
-    if (!vinculo) {
-      throw forbidden(
-        'Usuário não pertence à sua empresa',
-        'WRONG_TENANT',
-      );
-    }
-  }
+  // Verificar vínculo com a empresa (platform admin pode cross-tenant)
+  await requireTenantAccess(db, getCallerId(c), id, empresaId);
 
   // Invalidar convites anteriores
   await db
@@ -759,7 +752,6 @@ adminUsuariosRoutes.post('/:id/invite', async (c) => {
 // ---------------------------------------------------------------------------
 adminUsuariosRoutes.get('/:id/permissoes', async (c) => {
   requireAdminOrGestor(getCallerRole(c), 'ver permissões');
-  const callerRole = getCallerRole(c);
   const { empresaId } = getTenantContext(c);
   const id = Number(c.req.param('id'));
   const db = c.env.DB;
@@ -775,19 +767,7 @@ adminUsuariosRoutes.get('/:id/permissoes', async (c) => {
 
   if (!exists) throw notFound('Usuário não encontrado');
 
-  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
-    const vinculo = await db
-      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
-      .bind(id, empresaId)
-      .first();
-
-    if (!vinculo) {
-      throw forbidden(
-        'Usuário não pertence à sua empresa',
-        'WRONG_TENANT',
-      );
-    }
-  }
+  await requireTenantAccess(db, getCallerId(c), id, empresaId);
 
   const permissoes = await db
     .prepare(
@@ -827,20 +807,8 @@ adminUsuariosRoutes.put('/:id/permissoes', async (c) => {
 
   if (!targetUser) throw notFound('Usuário não encontrado');
 
-  // Verificar vínculo com a empresa (apenas para GESTOR)
-  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
-    const vinculo = await db
-      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
-      .bind(id, empresaId)
-      .first();
-
-    if (!vinculo) {
-      throw forbidden(
-        'Usuário não pertence à sua empresa',
-        'WRONG_TENANT',
-      );
-    }
-  }
+  // Verificar vínculo com a empresa (platform admin pode cross-tenant)
+  await requireTenantAccess(db, getCallerId(c), id, empresaId);
 
   // Gestor não pode alterar permissões de ADMINISTRADOR
   if (

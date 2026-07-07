@@ -14,7 +14,7 @@ import {
   extractBearerToken,
   verifyJWT,
 } from '../utils/security';
-import { badRequest, internalError, unauthorized } from '../middleware/error-handler';
+import { badRequest, forbidden, internalError, unauthorized } from '../middleware/error-handler';
 import { auth } from '../middleware/auth';
 import { rateLimiter, rateLimitPresets } from '../middleware/rate-limit';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
@@ -1779,7 +1779,31 @@ authRoutes.post('/impersonate', auth(), async (c) => {
       throw unauthorized('Usuário alvo não encontrado', 'USER_NOT_FOUND');
     }
 
-    const empresaId = await resolveUserEmpresaId(db, target.id);
+    const targetEmpresaId = await resolveUserEmpresaId(db, target.id);
+
+    // SECURITY: Fail-closed — contexto de empresa inválido bloqueia a operação,
+    // a menos que o caller seja platform admin (acesso cross-tenant legítimo).
+    const callerEmpresaIdNum = Number(c.get('empresaId') || 0);
+    const isCallerPlatformAdmin = (async () => {
+      const state = await resolvePlatformAccessState(db, callerId);
+      return isPlatformAdminAccess(state);
+    })();
+
+    if (!callerEmpresaIdNum || callerEmpresaIdNum <= 0) {
+      if (!(await isCallerPlatformAdmin)) {
+        throw forbidden('Contexto de empresa inválido', 'INVALID_TENANT_CONTEXT');
+      }
+    } else if (targetEmpresaId !== callerEmpresaIdNum) {
+      if (!(await isCallerPlatformAdmin)) {
+        throw forbidden(
+          'Usuário alvo não pertence à sua empresa',
+          'WRONG_TENANT',
+        );
+      }
+    }
+
+    const empresaId = targetEmpresaId; // mantém compatibilidade com código abaixo
+
     const resolvedRole = await resolveAuthRoleForUser(db, target.id, empresaId, target.perfil);
 
     const permissoesRows = await db
