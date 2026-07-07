@@ -367,12 +367,12 @@ function drawManobrasSection(
   const TABLE_FONT = 7;
   const TABLE_FONT_SMALL = 5.5;
 
-  // Column layout: # (7mm) | CÓDIGO (22mm) | TRIP. (12mm) | ITENS (48mm) | OBS (55mm) | NOTA (14mm)
+  // Column layout: # (7mm) | CÓDIGO (27mm) | TRIP. (12mm) | ITENS (44mm) | OBS (55mm) | NOTA (14mm)
   const margin = PAGE.margin;
   const colNum = { x: margin + 1, w: 7 };
-  const colCodigo = { x: colNum.x + colNum.w + 2, w: 23 };
+  const colCodigo = { x: colNum.x + colNum.w + 2, w: 27 };
   const colTrip = { x: colCodigo.x + colCodigo.w + 5, w: 12 };
-  const colItens = { x: colTrip.x + colTrip.w + 3, w: 48 };
+  const colItens = { x: colTrip.x + colTrip.w + 3, w: 44 };
   const colObs = { x: colItens.x + colItens.w + 3, w: 55 };
   const colNota = { x: colObs.x + colObs.w + 2, w: 14 };
 
