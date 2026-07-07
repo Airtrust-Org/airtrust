@@ -252,44 +252,66 @@ app.get('/', async (c) => {
     const search = (c.req.query('search') || '').trim();
     const status = c.req.query('status') || '';
     const tipo = c.req.query('tipo') || '';
-    const empresaClause = hasEmpresaId ? ' AND empresa_id = ?' : '';
+    const empresaClause = hasEmpresaId ? ' AND s.empresa_id = ?' : '';
+    // LEFT JOIN with modelos_aeronave for canonical modelo_aeronave name.
+    // LEFT JOIN with aeronaves to detect SOFT_DELETED linked aircraft.
+    // Both JOINs use the current tenant's empresa_id.
+    // Simuladores table is global (no empresa_id), so the JOIN provides
+    // tenant-scoped aircraft model resolution without filtering simulators.
     let q = `SELECT
-      id,
-      nome,
-      modelo,
-      tipo,
-      fabricante,
-      localizacao,
-      status,
-      created_at,
-      updated_at
-    FROM simuladores
-    WHERE deleted_at IS NULL${empresaClause}`;
-    let countQuery = `SELECT COUNT(*) as total FROM simuladores WHERE deleted_at IS NULL${empresaClause}`;
-    const ps: any[] = hasEmpresaId ? [empresaId] : [];
+      s.id,
+      s.nome,
+      s.modelo,
+      s.tipo,
+      s.fabricante,
+      s.localizacao,
+      s.status,
+      s.created_at,
+      s.updated_at,
+      s.aeronave_codigo,
+      ma.modelo AS modelo_aeronave,
+      CASE
+        WHEN s.aeronave_codigo IS NULL OR TRIM(s.aeronave_codigo) = '' THEN 'UNLINKED'
+        WHEN ae.id IS NOT NULL AND ae.deleted_at IS NOT NULL THEN 'SOFT_DELETED'
+        WHEN ma.id IS NULL THEN 'MISSING'
+        ELSE 'OK'
+      END AS aeronave_vinculo_status
+    FROM simuladores s
+    LEFT JOIN modelos_aeronave ma
+      ON ma.empresa_id = ?
+      AND ma.deleted_at IS NULL
+      AND (ma.codigo = s.aeronave_codigo OR ma.modelo = s.aeronave_codigo)
+    LEFT JOIN aeronaves ae
+      ON ae.empresa_id = ?
+      AND ae.codigo = s.aeronave_codigo
+    WHERE s.deleted_at IS NULL${empresaClause}`;
+    let countQuery = `SELECT COUNT(*) as total FROM simuladores s WHERE s.deleted_at IS NULL${empresaClause}`;
+    // JOIN params: empresaId for modelos_aeronave, empresaId for aeronaves, then optional WHERE empresa_id
+    const ps: any[] = [empresaId, empresaId];
+    if (hasEmpresaId) ps.push(empresaId);
     const countParams: any[] = hasEmpresaId ? [empresaId] : [];
     if (search) {
       q +=
-        ' AND (nome LIKE ? OR modelo LIKE ? OR tipo LIKE ? OR fabricante LIKE ? OR localizacao LIKE ?)';
+        ' AND (s.nome LIKE ? OR s.modelo LIKE ? OR s.tipo LIKE ? OR s.fabricante LIKE ? OR s.localizacao LIKE ?)';
       countQuery +=
-        ' AND (nome LIKE ? OR modelo LIKE ? OR tipo LIKE ? OR fabricante LIKE ? OR localizacao LIKE ?)';
+        ' AND (s.nome LIKE ? OR s.modelo LIKE ? OR s.tipo LIKE ? OR s.fabricante LIKE ? OR s.localizacao LIKE ?)';
       const searchPattern = `%${search}%`;
       ps.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
       countParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
     }
     if (status) {
-      q += ' AND status=?';
-      countQuery += ' AND status=?';
+      q += ' AND s.status=?';
+      countQuery += ' AND s.status=?';
       ps.push(status);
       countParams.push(status);
     }
     if (tipo) {
-      q += ' AND tipo=?';
-      countQuery += ' AND tipo=?';
+      q += ' AND s.tipo=?';
+      countQuery += ' AND s.tipo=?';
       ps.push(tipo);
       countParams.push(tipo);
     }
-    q += ' ORDER BY nome ASC LIMIT ? OFFSET ?';
+    q += ' ORDER BY s.nome ASC LIMIT ? OFFSET ?';
     const totalRow = await c.env.DB.prepare(countQuery)
       .bind(...countParams)
       .first<{ total: number }>();
