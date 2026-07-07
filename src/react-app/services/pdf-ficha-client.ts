@@ -124,26 +124,25 @@ const COLORS = {
 export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
   // Column layout (all positions are absolute mm from left edge of page):
   //   #      : margin+3   — 5mm wide
-  //   CÓDIGO : margin+10  — 20mm wide  → ends at margin+30
-  //   TRIP.  : margin+35  — 12mm wide (badge 8mm centered) → badge spans margin+31–margin+39
-  //             gap from CÓDIGO end (+30) to badge start (+31) = 1mm clear
-  //   ITENS  : margin+44  — 48mm wide  → ends at margin+92 (larga o bastante p/
-  //             nomes de manobra/NOTECHS longos sem truncar)
-  //   OBS    : margin+94  — 68mm wide  → ends at margin+162 (mais larga — a
-  //             observação frequentemente ocupa 2 linhas)
+  //   CÓDIGO : margin+10  — 24mm wide → ends at margin+34 (cabe NOTECHS-TMD-15 @7pt: 21.7mm)
+  //                                      measured: NOTECHS-COO-01=22.0mm, NOTECHS-TMD-15=21.7mm @7pt
+  //   TRIP.  : margin+39  — 12mm wide (badge 8mm centered) → badge spans margin+35–margin+43
+  //             gap from CÓDIGO end (+34) to badge start (+35) = 1mm clear
+  //   ITENS  : margin+48  — 44mm wide → ends at margin+92
+  //   OBS    : margin+94  — 68mm wide → ends at margin+162
   //   NOTA   : margin+172 — centred badge, 10mm wide
   return {
     positions: {
       num: margin + 3,
       codigo: margin + 10,
-      tripulante: margin + 35,
-      itens: margin + 44,
+      tripulante: margin + 39,
+      itens: margin + 48,
       obs: margin + 94,
       nota: margin + 172,
     },
-    codigoWidth: 20,
+    codigoWidth: 24,
     tripulanteWidth: 12,
-    itensWidth: 48,
+    itensWidth: 44,
     obsWidth: 68,
     notaBadgeWidth: 10,
     notaBadgeHeight: 4,
