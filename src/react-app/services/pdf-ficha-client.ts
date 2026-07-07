@@ -624,13 +624,7 @@ export async function gerarPDFFichaCliente(
   // Avançar currentY: session box + gap (3mm)
   currentY += SESSION_BOX_H + 3;
 
-  // ── Header da tabela (compacto, 6mm) ─────────────────────────────────────
-  doc.setFillColor(COLORS.primary);
-  doc.rect(margin, currentY, contentWidth, 6, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'bold');
-
+  // ── Table layout constants ────────────────────────────────────────────────
   const tableLayout = getFichaPdfTableLayout(margin);
   const col = tableLayout.positions;
   const ITENS_WIDTH = tableLayout.itensWidth;
@@ -638,111 +632,73 @@ export async function gerarPDFFichaCliente(
   const TRIP_WIDTH = tableLayout.tripulanteWidth;
   const NOTA_BADGE_W = tableLayout.notaBadgeWidth;
   const NOTA_BADGE_H = tableLayout.notaBadgeHeight;
+  const TABLE_HEADER_H = 6;
 
-  const [numHeader, codigoHeader, tripHeader, itensHeader, obsHeader, notaHeader] =
+  const [numLabel, codigoLabel, tripLabel, itensLabel, obsLabel, notaLabel] =
     getFichaPdfTableHeaders();
-  doc.text(numHeader, col.num, currentY + 4, { align: 'center', maxWidth: 7 });
-  doc.text(codigoHeader, col.codigo, currentY + 4, {
-    align: 'left',
-    maxWidth: tableLayout.codigoWidth,
-  });
-  doc.text(tripHeader, col.tripulante, currentY + 4, { align: 'center', maxWidth: TRIP_WIDTH });
-  doc.text(itensHeader, col.itens, currentY + 4, { align: 'left', maxWidth: ITENS_WIDTH });
-  doc.text(obsHeader, col.obs, currentY + 4, { align: 'left', maxWidth: OBS_WIDTH });
-  doc.text(notaHeader, col.nota, currentY + 4, { align: 'center', maxWidth: NOTA_BADGE_W });
-  currentY += 6;
 
-  // ── Calcular alturas uniformes ────────────────────────────────────────────
-  // Regra: ITENS máx 1 linha (trunca com …), OBS máx 3 linhas (trunca com …)
+  // ── Calcular alturas fixas e uniformes ────────────────────────────────────
+  // Regra: todas as linhas têm a mesma altura (ITEM_ROW_HEIGHT).
+  // ITENS máx 2 linhas, OBS máx 2 linhas — truncamento com "…" se exceder.
+  // Se o total não couber na página, paginação controlada (addPage).
+  // NUNCA usar row scaling — altura fixa garante linhas uniformes.
   const TABLE_FONT = 7;
+  const ITEM_ROW_HEIGHT = 7; // mm — altura fixa para CADA linha (técnica e NOTECHS)
+  const MAX_ITEM_LINES = 2;
+  const MAX_OBS_LINES = 2;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(TABLE_FONT);
 
   // Técnicas e NOTECHS formam UMA ÚNICA tabela vertical contínua — mesmo
   // padrão de colunas, mesma fonte, mesmo orçamento de altura. NOTECHS entra
-  // logo abaixo das técnicas, separado só por uma barra de seção (ver pedido
-  // do owner de 2026-07-02: nada de bloco em duas colunas ou reservado à parte).
+  // logo abaixo das técnicas, separado só por uma barra de seção.
   const { tecnicas: manobras, notechs: manobrasNotechs } = splitManobrasNotechs(
     dados.manobras || [],
   );
 
-  const computeRowHeight = (m: FichaPDFData['manobras'][number]): number => {
-    const nomeTxt = (m.nome || '').trim();
-    const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), 1);
-    const obsTxt = (m.observacoes || '').trim();
-    const obsLines =
-      obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), 3) : [];
-    const maxLines = Math.max(1, nomeLines.length, obsLines.length);
-    return Math.max(6, 2 + maxLines * 3.5); // altura variável: 1 linha=5.5, 2=9, 3=12.5
-  };
-
   // NOTECHS exibe numeração própria (1–15) na coluna #, independente da ordem
   // interna (>= NOTECHS_ORDEM_BASE) usada só para separar do bloco técnico.
-  const tecnicasNatural = manobras.map((m) => ({
+  const tecnicasRows = manobras.map((m) => ({
     m,
-    rowH: computeRowHeight(m),
+    rowH: ITEM_ROW_HEIGHT,
     displayNum: m.ordem,
   }));
-  const notechsNatural = manobrasNotechs.map((m) => ({
+  const notechsRows = manobrasNotechs.map((m) => ({
     m,
-    rowH: computeRowHeight(m),
+    rowH: ITEM_ROW_HEIGHT,
     displayNum: m.ordem - NOTECHS_ORDEM_BASE + 1,
   }));
   const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 6 : 0;
 
-  const totalNatural =
-    tecnicasNatural.reduce((s, r) => s + r.rowH, 0) +
-    notechsNatural.reduce((s, r) => s + r.rowH, 0) +
-    NOTECHS_DIVIDER_H;
+  const allRows = [...tecnicasRows, ...notechsRows];
+  const totalTableH =
+    allRows.length * ITEM_ROW_HEIGHT + NOTECHS_DIVIDER_H;
 
   // Layout de baixo para cima:
   //   rodapé: 6mm no fundo (pageHeight - 6)
   //   assinaturas: SIG_RESERVED mm antes do rodapé
   //   obs gerais: OBS_RESERVED mm antes das assinaturas
-  const FOOTER_H = 6; // espaço do rodapé no fundo
-  const SIG_RESERVED = 40; // altura máxima reservada para as caixas de assinatura
-  const OBS_RESERVED = 23; // caixa mínima (~18mm) + gap antes das assinaturas
-  const tableBodyBudget = pageHeight - currentY - 4 - OBS_RESERVED - 3 - SIG_RESERVED - FOOTER_H;
+  const FOOTER_H = 6;
+  const SIG_RESERVED = 40;
+  const OBS_RESERVED = 23;
+  const availableBottomY = pageHeight - FOOTER_H - SIG_RESERVED - 3 - OBS_RESERVED - 4;
 
-  // Factor de escala — só encolhe, nunca cresce
-  const scaleFactor = totalNatural > tableBodyBudget ? tableBodyBudget / totalNatural : 1;
-  const finalFontSize = scaleFactor < 0.95 ? Math.max(5.5, TABLE_FONT * scaleFactor) : TABLE_FONT;
-  const LINE_SPACING = 3.4 * Math.min(1, scaleFactor);
-
-  // Passagem dedicada de quebra de linha, na fonte final, ANTES de qualquer
-  // desenho. jsPDF é stateful (splitTextToSize/getTextWidth usam a fonte
-  // setada no momento da chamada) — calcular nomeLines/obsLines aqui, de uma
-  // vez só, evita que o resto do desenho da linha anterior (badge em negrito,
-  // ou a barra do divisor NOTECHS) contamine a largura usada para quebrar o
-  // título da linha seguinte.
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(finalFontSize);
-  const buildScaledRow = (
-    m: FichaPDFData['manobras'][number],
-    naturalRowH: number,
-    displayNum: number,
-  ) => {
+  // Pré-calcular nomeLines/obsLines para TODAS as linhas (sem row scaling)
+  const precomputedRows = allRows.map(({ m, rowH, displayNum }) => {
     const nomeTxt = (m.nome || '').trim();
-    const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), 1);
+    const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), MAX_ITEM_LINES);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
-      obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), 3) : [];
-    return { m, nomeLines, obsLines, rowH: Math.max(5.5, naturalRowH * scaleFactor), displayNum };
-  };
-
-  const tecnicasScaled = tecnicasNatural.map(({ m, rowH, displayNum }) =>
-    buildScaledRow(m, rowH, displayNum),
-  );
-  const notechsScaled = notechsNatural.map(({ m, rowH, displayNum }) =>
-    buildScaledRow(m, rowH, displayNum),
-  );
+      obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), MAX_OBS_LINES) : [];
+    return { m, nomeLines, obsLines, rowH, displayNum };
+  });
 
   // Desenha uma linha da tabela (já com nomeLines/obsLines/rowH resolvidos) —
   // usada tanto para as 18 manobras técnicas quanto para os 15 itens NOTECHS
   // logo abaixo: mesmas colunas (#, CÓDIGO, TRIP., ITENS, OBSERVAÇÕES, NOTA),
   // mesma fonte, mesmo zebrado.
   const drawTableRow = (
-    { m, nomeLines, obsLines, rowH, displayNum }: (typeof tecnicasScaled)[number],
+    { m, nomeLines, obsLines, rowH, displayNum }: (typeof precomputedRows)[number],
     isEven: boolean,
   ) => {
     if (isEven) {
@@ -751,7 +707,7 @@ export async function gerarPDFFichaCliente(
     }
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(finalFontSize);
+    doc.setFontSize(TABLE_FONT);
     doc.setTextColor(COLORS.text);
 
     // Texto sempre alinhado ao topo da linha (consistente independente da altura da linha)
@@ -774,26 +730,26 @@ export async function gerarPDFFichaCliente(
     doc.setFillColor(tripBadge.fill);
     doc.roundedRect(tripBadgeX, tripBadgeY, tripBadgeW, tripBadgeH, 1, 1, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(Math.max(4.5, finalFontSize - 0.5));
+    doc.setFontSize(Math.max(4.5, TABLE_FONT - 0.5));
     doc.setTextColor(tripBadge.text);
     doc.text(tripulante, col.tripulante, tripBadgeTextY, { align: 'center' });
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(finalFontSize);
+    doc.setFontSize(TABLE_FONT);
     doc.setTextColor(COLORS.text);
 
     // Nome (1 linha máx)
     for (let li = 0; li < nomeLines.length; li++) {
-      doc.text(nomeLines[li] || '', col.itens, textTopY + li * LINE_SPACING);
+      doc.text(nomeLines[li] || '', col.itens, textTopY + li * 3.4);
     }
 
     // Observações (até 3 linhas, fonte ligeiramente menor)
     if (obsLines.length > 0) {
-      doc.setFontSize(Math.max(4.5, finalFontSize - 0.5));
+      doc.setFontSize(Math.max(4.5, TABLE_FONT - 0.5));
       doc.setTextColor(COLORS.textSecondary);
       for (let li = 0; li < obsLines.length; li++) {
-        doc.text(obsLines[li] || '', col.obs, textTopY + li * LINE_SPACING);
+        doc.text(obsLines[li] || '', col.obs, textTopY + li * 3.4);
       }
-      doc.setFontSize(finalFontSize);
+      doc.setFontSize(TABLE_FONT);
       doc.setTextColor(COLORS.text);
     }
 
@@ -821,14 +777,14 @@ export async function gerarPDFFichaCliente(
     if (isNR) {
       doc.setFillColor('#64748B');
       doc.roundedRect(badgeX, badgeY, NOTA_BADGE_W, NOTA_BADGE_H, 1, 1, 'F');
-      doc.setFontSize(Math.max(4.5, finalFontSize - 0.5));
+      doc.setFontSize(Math.max(4.5, TABLE_FONT - 0.5));
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(255, 255, 255);
       doc.text('NR', col.nota, badgeTextY, { align: 'center' });
     } else if (notaValida) {
       doc.setFillColor(getNotaColor(notaNum));
       doc.roundedRect(badgeX, badgeY, NOTA_BADGE_W, NOTA_BADGE_H, 1, 1, 'F');
-      doc.setFontSize(Math.max(4.5, finalFontSize - 0.5));
+      doc.setFontSize(Math.max(4.5, TABLE_FONT - 0.5));
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(255, 255, 255);
       doc.text(notaNum.toFixed(1), col.nota, badgeTextY, { align: 'center' });
@@ -838,7 +794,7 @@ export async function gerarPDFFichaCliente(
       doc.roundedRect(badgeX, badgeY, NOTA_BADGE_W, NOTA_BADGE_H, 1, 1, 'FD');
     } else {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(finalFontSize);
+      doc.setFontSize(TABLE_FONT);
       doc.setTextColor(COLORS.textSecondary);
       doc.text('-', col.nota, currentY + rowH / 2 + 1, { align: 'center' });
     }
@@ -846,28 +802,68 @@ export async function gerarPDFFichaCliente(
     currentY += rowH;
   };
 
-  tecnicasScaled.forEach((row, index) => drawTableRow(row, index % 2 === 0));
+  // ── Desenhar todas as linhas com paginação controlada ────────────────────
+  // ITEM_ROW_HEIGHT fixo garante linhas uniformes. Se uma linha não couber
+  // na página atual, abre nova página com cabeçalho mínimo e continua.
+  // NOTECHS divider é inserido antes do primeiro NOTECHS.
 
-  if (notechsScaled.length > 0) {
-    // Barra de seção NOTECHS — mesma altura do header da tabela, em cinza
-    // CLARO e discreto (era roxo, depois azul, depois cinza escuro) com texto
-    // escuro em vez de branco/negrito, para não parecer um segundo título de
-    // coluna competindo com o cabeçalho azul das colunas logo acima. As
-    // linhas abaixo dela usam a MESMA drawTableRow das técnicas: uma
-    // manobra/item por linha, coluna OBSERVAÇÕES incluída, sem colunas duplas.
-    doc.setFillColor(COLORS.sectionBar);
-    doc.rect(margin, currentY, contentWidth, NOTECHS_DIVIDER_H, 'F');
-    doc.setTextColor(COLORS.text);
+  const tecnicasCount = manobras.length;
+  let rowIndex = 0;
+  let pageRowStart = 0; // índice da primeira linha na página atual
+
+  const drawPageHeader = () => {
+    // Cabeçalho mínimo da tabela (repetido em cada página)
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
-    doc.text(
-      'NOTECHS — Habilidades Não Técnicas (CRM)',
-      margin + 2,
-      currentY + NOTECHS_DIVIDER_H / 2 + 1.3,
-    );
-    currentY += NOTECHS_DIVIDER_H;
+    doc.setTextColor(255, 255, 255);
+    doc.setFillColor(COLORS.primary);
+    doc.rect(margin, currentY, contentWidth, TABLE_HEADER_H, 'F');
+    const headerY = currentY + TABLE_HEADER_H / 2 + 1;
+    doc.text(numLabel, col.num, currentY + 4, { align: 'center', maxWidth: 7 });
+    doc.text(codigoLabel, col.codigo, currentY + 4, { align: 'left', maxWidth: tableLayout.codigoWidth });
+    doc.text(tripLabel, col.tripulante, currentY + 4, { align: 'center', maxWidth: TRIP_WIDTH });
+    doc.text(itensLabel, col.itens, currentY + 4, { align: 'left', maxWidth: ITENS_WIDTH });
+    doc.text(obsLabel, col.obs, currentY + 4, { align: 'left', maxWidth: OBS_WIDTH });
+    doc.text(notaLabel, col.nota, currentY + 4, { align: 'center', maxWidth: NOTA_BADGE_W });
+    currentY += TABLE_HEADER_H;
+    doc.setTextColor(COLORS.text);
+  };
 
-    notechsScaled.forEach((row, index) => drawTableRow(row, index % 2 === 0));
+  // Desenha o cabeçalho inicial
+  drawPageHeader();
+
+  for (const row of precomputedRows) {
+    // Paginação: se a próxima linha não couber, abre nova página
+    if (currentY + ITEM_ROW_HEIGHT > availableBottomY) {
+      doc.addPage();
+      currentY = margin;
+      drawPageHeader();
+      pageRowStart = rowIndex;
+    }
+
+    // Inserir NOTECHS divider antes do primeiro NOTECHS
+    if (rowIndex === tecnicasCount && manobrasNotechs.length > 0) {
+      if (currentY + NOTECHS_DIVIDER_H + ITEM_ROW_HEIGHT > availableBottomY) {
+        doc.addPage();
+        currentY = margin;
+        drawPageHeader();
+        pageRowStart = rowIndex;
+      }
+      doc.setFillColor(COLORS.sectionBar);
+      doc.rect(margin, currentY, contentWidth, NOTECHS_DIVIDER_H, 'F');
+      doc.setTextColor(COLORS.text);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.text(
+        'NOTECHS — Habilidades Não Técnicas (CRM)',
+        margin + 2,
+        currentY + NOTECHS_DIVIDER_H / 2 + 1.3,
+      );
+      currentY += NOTECHS_DIVIDER_H;
+    }
+
+    drawTableRow(row, rowIndex % 2 === 0);
+    rowIndex++;
   }
 
   currentY += 4;
