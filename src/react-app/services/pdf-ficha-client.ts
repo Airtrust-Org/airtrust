@@ -167,26 +167,26 @@ const COLORS = {
 const FICHA_AVALIACAO_SCALE_HEIGHT = 22;
 
 export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
-  // Column layout (absolute mm from left edge):
+  // Column layout (mm from left edge). Measured: NOTECHS-COO-01 = 25.15mm at font 8.
   //   #      : margin+3   — 5mm
-  //   CÓDIGO : margin+10  — 20mm (fits NOTECHS-COO-01 etc.)
-  //   TRIP.  : margin+33  — 12mm (badge 8mm centered)
-  //   ITENS  : margin+48  — 54mm (2-line wrap for long names)
-  //   OBS    : margin+105 — 58mm (operational priority)
+  //   CÓDIGO : margin+10  — 27mm (25.15mm measured + 1.85mm padding)
+  //   TRIP.  : margin+42  — 12mm (badge 8mm centered, 5mm clear of CÓDIGO)
+  //   ITENS  : margin+57  — 44mm (2-line wrap)
+  //   OBS    : margin+104 — 55mm (operational priority)
   //   NOTA   : margin+172 — 10mm badge
   return {
     positions: {
       num: margin + 3,
       codigo: margin + 10,
-      tripulante: margin + 33,
-      itens: margin + 48,
-      obs: margin + 105,
+      tripulante: margin + 42,
+      itens: margin + 57,
+      obs: margin + 104,
       nota: margin + 172,
     },
-    codigoWidth: 20,
+    codigoWidth: 27,
     tripulanteWidth: 12,
-    itensWidth: 54,
-    obsWidth: 58,
+    itensWidth: 44,
+    obsWidth: 55,
     notaBadgeWidth: 10,
     notaBadgeHeight: 4,
   };
