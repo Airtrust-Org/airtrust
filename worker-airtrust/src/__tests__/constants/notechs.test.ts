@@ -25,9 +25,7 @@ describe('NOTECHS catalog integrity', () => {
 
   it('preserves fixed order via sequential ordem starting at NOTECHS_ORDEM_BASE', () => {
     const ordens = NOTECHS_ITENS_CATALOGO.map((item) => item.ordem);
-    expect(ordens).toEqual(
-      Array.from({ length: 15 }, (_, i) => NOTECHS_ORDEM_BASE + i),
-    );
+    expect(ordens).toEqual(Array.from({ length: 15 }, (_, i) => NOTECHS_ORDEM_BASE + i));
   });
 
   it('reserves an ordem namespace outside the 1-22 range used by variable manobras', () => {
@@ -40,7 +38,7 @@ describe('NOTECHS catalog integrity', () => {
     for (const item of NOTECHS_ITENS_CATALOGO) {
       expect(item.nome.trim().length).toBeGreaterThan(0);
       expect(item.descricao.trim().length).toBeGreaterThan(0);
-      expect(item.codigo).toMatch(/^NOTECHS-\d{2}$/);
+      expect(item.codigo).toMatch(/^NOTECHS-(COO|LID|CSA|TMD)-\d{2}$/);
     }
   });
 });
@@ -75,9 +73,7 @@ describe('hasNotechsItens', () => {
   });
 
   it('returns true when at least one NOTECHS row is present', () => {
-    expect(
-      hasNotechsItens([{ categoria: 'GERAL' }, { categoria: NOTECHS_CATEGORIA }]),
-    ).toBe(true);
+    expect(hasNotechsItens([{ categoria: 'GERAL' }, { categoria: NOTECHS_CATEGORIA }])).toBe(true);
   });
 
   it('is case-insensitive on categoria', () => {
@@ -104,10 +100,12 @@ describe('getMissingNotechsItens / hasCompleteNotechsItens', () => {
 
     expect(missing).toHaveLength(13);
     expect(missing[0]?.codigo).toBe('NOTECHS-COO-03');
-    expect(hasCompleteNotechsItens([
-      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-COO-01' },
-      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-COO-02' },
-    ])).toBe(false);
+    expect(
+      hasCompleteNotechsItens([
+        { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-COO-01' },
+        { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-COO-02' },
+      ]),
+    ).toBe(false);
   });
 
   it('returns no missing items when all 15 NOTECHS already exist', () => {
@@ -123,7 +121,9 @@ describe('getMissingNotechsItens / hasCompleteNotechsItens', () => {
   it('classifies missing, partial and complete NOTECHS states', () => {
     expect(getNotechsStatus([{ categoria: 'GERAL', codigo: 'MAN-01' }])).toBe('missing');
     expect(
-      getNotechsStatus([{ categoria: NOTECHS_CATEGORIA, codigo: NOTECHS_ITENS_CATALOGO[0].codigo }]),
+      getNotechsStatus([
+        { categoria: NOTECHS_CATEGORIA, codigo: NOTECHS_ITENS_CATALOGO[0].codigo },
+      ]),
     ).toBe('partial');
     expect(
       getNotechsStatus(
@@ -156,14 +156,16 @@ describe('buildOperationalFichaManobras', () => {
     }));
 
     const materialized = buildOperationalFichaManobras(tecnicas);
-    const tecnicasMaterialized = materialized.filter((item) => item.categoria !== NOTECHS_CATEGORIA);
+    const tecnicasMaterialized = materialized.filter(
+      (item) => item.categoria !== NOTECHS_CATEGORIA,
+    );
     const notechsMaterialized = materialized.filter((item) => item.categoria === NOTECHS_CATEGORIA);
 
     expect(tecnicasMaterialized).toHaveLength(FICHA_TECNICAS_PADRAO_LIMITE);
     expect(tecnicasMaterialized.at(-1)?.codigo).toBe('MAN-18');
     expect(notechsMaterialized).toHaveLength(15);
-    expect(notechsMaterialized[0]?.codigo).toBe('NOTECHS-01');
-    expect(notechsMaterialized.at(-1)?.codigo).toBe('NOTECHS-15');
+    expect(notechsMaterialized[0]?.codigo).toMatch(/^NOTECHS-COO-01$/);
+    expect(notechsMaterialized.at(-1)?.codigo).toMatch(/^NOTECHS-TMD-15$/);
   });
 
   it('uses modelos_sessao_manobras.observacoes as a per-model text override when present', () => {
