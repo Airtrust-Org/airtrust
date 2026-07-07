@@ -354,7 +354,7 @@ export async function gerarPDFFichaCliente(
   const isModoModelo = dados.modoModelo === true;
   // ── Geometria base do header (compacto) ───────────────────────────────────
   const headerTop = 4;
-  const headerHeight = 19; // apertado mais um pouco (era 22) p/ sobrar espaço à tabela
+  const headerHeight = 15; // compacto (era 19) para caber 33 itens em 1 página
   const headerBottom = headerTop + headerHeight; // = 23
   const headerCenterX = pageWidth / 2;
   const headerGap = 1;
@@ -546,7 +546,7 @@ export async function gerarPDFFichaCliente(
   const COL2 = margin + 65;
   const COL3 = margin + 99;
   const COL4 = margin + 136;
-  const SESSION_BOX_H = 20;
+  const SESSION_BOX_H = 14; // compacto (era 20) para 1 página
   const SESSION_LINE_H = 5.5;
   doc.setDrawColor(COLORS.border);
   doc.setFillColor(COLORS.bgLight);
@@ -621,7 +621,7 @@ export async function gerarPDFFichaCliente(
   );
 
   // Avançar currentY: session box + gap (3mm)
-  currentY += SESSION_BOX_H + 3;
+  currentY += SESSION_BOX_H + 1;
 
   // ── Table layout constants ────────────────────────────────────────────────
   const tableLayout = getFichaPdfTableLayout(margin);
@@ -631,18 +631,32 @@ export async function gerarPDFFichaCliente(
   const TRIP_WIDTH = tableLayout.tripulanteWidth;
   const NOTA_BADGE_W = tableLayout.notaBadgeWidth;
   const NOTA_BADGE_H = tableLayout.notaBadgeHeight;
-  const TABLE_HEADER_H = 6;
+  const TABLE_HEADER_H = 5;
 
   const [numLabel, codigoLabel, tripLabel, itensLabel, obsLabel, notaLabel] =
     getFichaPdfTableHeaders();
 
-  // ── Calcular alturas fixas e uniformes ────────────────────────────────────
-  // Regra: todas as linhas têm a mesma altura (ITEM_ROW_HEIGHT).
-  // ITENS máx 2 linhas, OBS máx 2 linhas — truncamento com "…" se exceder.
-  // Se o total não couber na página, paginação controlada (addPage).
-  // NUNCA usar row scaling — altura fixa garante linhas uniformes.
-  const TABLE_FONT = 7;
-  const ITEM_ROW_HEIGHT = 7; // mm — altura fixa para CADA linha (técnica e NOTECHS)
+  // ── Layout budget — single page A4, no pagination ─────────────────────────
+  // V6.2 ficha-modelo MUST fit in 1 A4 page (297mm) with margins.
+  // Budget: pageHeight(297) - topMargin(10) - bottomMargin(10) = 277mm usable.
+  //
+  // Measured vertical budget:
+  //   header area:  ~12mm (logo + title + ficha info, compact)
+  //   session box:  ~8mm + 1mm gap = 9mm
+  //   table header: 5mm
+  //   18 técnicas × 5.5mm = 99mm
+  //   NOTECHS divider: 4mm
+  //   15 NOTECHS × 5.5mm = 82.5mm
+  //   observations: ~14mm
+  //   signatures:   ~28mm
+  //   footer:       ~4mm
+  //   internal gaps: ~6mm
+  //   ─────────────────
+  //   TOTAL:         ~263.5mm  →  ✅ fits in 277mm (13.5mm safety)
+  //
+  // NUNCA usar row scaling, paginação, ou altura variável.
+  const TABLE_FONT = 6.5;
+  const ITEM_ROW_HEIGHT = 5.5; // mm — altura fixa UNIFORME para cada linha
   const MAX_ITEM_LINES = 2;
   const MAX_OBS_LINES = 2;
   doc.setFont('helvetica', 'normal');
@@ -667,20 +681,29 @@ export async function gerarPDFFichaCliente(
     rowH: ITEM_ROW_HEIGHT,
     displayNum: m.ordem - NOTECHS_ORDEM_BASE + 1,
   }));
-  const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 6 : 0;
+  const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 4 : 0;
 
   const allRows = [...tecnicasRows, ...notechsRows];
   const totalTableH =
     allRows.length * ITEM_ROW_HEIGHT + NOTECHS_DIVIDER_H;
 
-  // Layout de baixo para cima:
-  //   rodapé: 6mm no fundo (pageHeight - 6)
-  //   assinaturas: SIG_RESERVED mm antes do rodapé
-  //   obs gerais: OBS_RESERVED mm antes das assinaturas
-  const FOOTER_H = 6;
-  const SIG_RESERVED = 40;
-  const OBS_RESERVED = 23;
-  const availableBottomY = pageHeight - FOOTER_H - SIG_RESERVED - 3 - OBS_RESERVED - 4;
+  // Layout de baixo para cima — single page (sem paginação para ficha-modelo):
+  //   rodapé: 4mm no fundo
+  //   assinaturas: 28mm (duas caixas lado a lado, compactas)
+  //   obs gerais: 14mm
+  const FOOTER_H = 4;
+  const SIG_RESERVED = 28;
+  const OBS_RESERVED = 14;
+  const availableBottomY = pageHeight - FOOTER_H - SIG_RESERVED - 2 - OBS_RESERVED - 2;
+
+  // Single-page budget assertion (dev warning only)
+  const totalRequiredH =
+    currentY + TABLE_HEADER_H + totalTableH + 2 + OBS_RESERVED + 2 + SIG_RESERVED + FOOTER_H;
+  if (totalRequiredH > pageHeight) {
+    console.warn(
+      `[PDF-FICHA] Layout budget: ${totalRequiredH.toFixed(0)}mm > ${pageHeight}mm. May clip.`,
+    );
+  }
 
   // Pré-calcular nomeLines/obsLines para TODAS as linhas (sem row scaling)
   const precomputedRows = allRows.map(({ m, rowH, displayNum }) => {
@@ -709,8 +732,9 @@ export async function gerarPDFFichaCliente(
     doc.setFontSize(TABLE_FONT);
     doc.setTextColor(COLORS.text);
 
-    // Texto sempre alinhado ao topo da linha (consistente independente da altura da linha)
-    const textTopY = currentY + 2.8;
+    // Texto sempre alinhado ao topo da linha (compacto, rowH=5.5mm)
+    const textTopY = currentY + 1.8;
+    const itemLineSpacing = 2.8;
 
     // Número
     doc.text(String(displayNum).padStart(2, '0'), col.num, textTopY, { align: 'center' });
@@ -738,7 +762,7 @@ export async function gerarPDFFichaCliente(
 
     // Nome (1 linha máx)
     for (let li = 0; li < nomeLines.length; li++) {
-      doc.text(nomeLines[li] || '', col.itens, textTopY + li * 3.4);
+      doc.text(nomeLines[li] || '', col.itens, textTopY + li * itemLineSpacing);
     }
 
     // Observações (até 3 linhas, fonte ligeiramente menor)
@@ -746,7 +770,7 @@ export async function gerarPDFFichaCliente(
       doc.setFontSize(Math.max(4.5, TABLE_FONT - 0.5));
       doc.setTextColor(COLORS.textSecondary);
       for (let li = 0; li < obsLines.length; li++) {
-        doc.text(obsLines[li] || '', col.obs, textTopY + li * 3.4);
+        doc.text(obsLines[li] || '', col.obs, textTopY + li * itemLineSpacing);
       }
       doc.setFontSize(TABLE_FONT);
       doc.setTextColor(COLORS.text);
@@ -801,62 +825,40 @@ export async function gerarPDFFichaCliente(
     currentY += rowH;
   };
 
-  // ── Desenhar todas as linhas com paginação controlada ────────────────────
-  // ITEM_ROW_HEIGHT fixo garante linhas uniformes. Se uma linha não couber
-  // na página atual, abre nova página com cabeçalho mínimo e continua.
+  // ── Desenhar tabela: header + técnicas + NOTECHS divider + NOTECHS ────────
+  // Single page — sem paginação. O layout budget é validado acima.
   // NOTECHS divider é inserido antes do primeiro NOTECHS.
+
+  // Table header (drawn once, not repeated)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(255, 255, 255);
+  doc.setFillColor(COLORS.primary);
+  doc.rect(margin, currentY, contentWidth, TABLE_HEADER_H, 'F');
+  doc.text(numLabel, col.num, currentY + 3.5, { align: 'center', maxWidth: 7 });
+  doc.text(codigoLabel, col.codigo, currentY + 3.5, { align: 'left', maxWidth: tableLayout.codigoWidth });
+  doc.text(tripLabel, col.tripulante, currentY + 3.5, { align: 'center', maxWidth: TRIP_WIDTH });
+  doc.text(itensLabel, col.itens, currentY + 3.5, { align: 'left', maxWidth: ITENS_WIDTH });
+  doc.text(obsLabel, col.obs, currentY + 3.5, { align: 'left', maxWidth: OBS_WIDTH });
+  doc.text(notaLabel, col.nota, currentY + 3.5, { align: 'center', maxWidth: NOTA_BADGE_W });
+  currentY += TABLE_HEADER_H;
+  doc.setTextColor(COLORS.text);
 
   const tecnicasCount = manobras.length;
   let rowIndex = 0;
-  let pageRowStart = 0; // índice da primeira linha na página atual
-
-  const drawPageHeader = () => {
-    // Cabeçalho mínimo da tabela (repetido em cada página)
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(255, 255, 255);
-    doc.setFillColor(COLORS.primary);
-    doc.rect(margin, currentY, contentWidth, TABLE_HEADER_H, 'F');
-    const headerY = currentY + TABLE_HEADER_H / 2 + 1;
-    doc.text(numLabel, col.num, currentY + 4, { align: 'center', maxWidth: 7 });
-    doc.text(codigoLabel, col.codigo, currentY + 4, { align: 'left', maxWidth: tableLayout.codigoWidth });
-    doc.text(tripLabel, col.tripulante, currentY + 4, { align: 'center', maxWidth: TRIP_WIDTH });
-    doc.text(itensLabel, col.itens, currentY + 4, { align: 'left', maxWidth: ITENS_WIDTH });
-    doc.text(obsLabel, col.obs, currentY + 4, { align: 'left', maxWidth: OBS_WIDTH });
-    doc.text(notaLabel, col.nota, currentY + 4, { align: 'center', maxWidth: NOTA_BADGE_W });
-    currentY += TABLE_HEADER_H;
-    doc.setTextColor(COLORS.text);
-  };
-
-  // Desenha o cabeçalho inicial
-  drawPageHeader();
 
   for (const row of precomputedRows) {
-    // Paginação: se a próxima linha não couber, abre nova página
-    if (currentY + ITEM_ROW_HEIGHT > availableBottomY) {
-      doc.addPage();
-      currentY = margin;
-      drawPageHeader();
-      pageRowStart = rowIndex;
-    }
-
     // Inserir NOTECHS divider antes do primeiro NOTECHS
     if (rowIndex === tecnicasCount && manobrasNotechs.length > 0) {
-      if (currentY + NOTECHS_DIVIDER_H + ITEM_ROW_HEIGHT > availableBottomY) {
-        doc.addPage();
-        currentY = margin;
-        drawPageHeader();
-        pageRowStart = rowIndex;
-      }
       doc.setFillColor(COLORS.sectionBar);
       doc.rect(margin, currentY, contentWidth, NOTECHS_DIVIDER_H, 'F');
       doc.setTextColor(COLORS.text);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
+      doc.setFontSize(6.5);
       doc.text(
         'NOTECHS — Habilidades Não Técnicas (CRM)',
         margin + 2,
-        currentY + NOTECHS_DIVIDER_H / 2 + 1.3,
+        currentY + NOTECHS_DIVIDER_H / 2 + 1,
       );
       currentY += NOTECHS_DIVIDER_H;
     }
@@ -865,9 +867,9 @@ export async function gerarPDFFichaCliente(
     rowIndex++;
   }
 
-  currentY += 4;
+  currentY += 2;
 
-  // ========== OBSERVAÇÕES GERAIS — mínimo 3 linhas de texto ==========
+  // ========== OBSERVAÇÕES GERAIS — compacto ==========
   if (dados.observacoes_gerais || isModoModelo) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7.5);
@@ -879,13 +881,13 @@ export async function gerarPDFFichaCliente(
     // espaço reservado (OBS_RESERVED) e invadir as caixas de assinatura, que
     // são posicionadas de baixo para cima de forma independente do texto aqui.
     const obsLines = limitTextLines(doc.splitTextToSize(obsTxt, contentWidth - 6), 4);
-    const obsBoxH = Math.max(18, 5 + obsLines.length * 4.5); // mínimo 3 linhas de texto
+    const obsBoxH = Math.max(12, 4 + obsLines.length * 4);
 
     doc.setDrawColor(COLORS.border);
     doc.setFillColor(COLORS.bgLight);
     doc.roundedRect(margin, currentY, contentWidth, obsBoxH, 2, 2, 'FD');
-    doc.text(obsLines, margin + 3, currentY + 5);
-    currentY += obsBoxH + 5; // gap maior (5mm) antes das assinaturas
+    doc.text(obsLines, margin + 3, currentY + 4);
+    currentY += obsBoxH + 3;
   }
 
   // ========== ASSINATURAS — ancoradas no fundo, proporcionais ==========
