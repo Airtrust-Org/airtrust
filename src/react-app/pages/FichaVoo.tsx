@@ -3,6 +3,15 @@
  * Layout completo com 22 manobras em 2 colunas
  * Inclui: Botões de ação + Modal de Avaliação + Modal de Assinatura
  * Data: 03/12/2025
+ *
+ * @deprecated ÓRFÃO — não há <Route> para esta página em
+ * src/react-app/App.tsx; a rota ativa /simuladores/fichas/:id usa
+ * src/react-app/pages/simuladores/fichas/[id]/index.tsx (via
+ * FichaDetalhe.tsx). Este arquivo ainda chama gerarPDFFichaCliente()
+ * diretamente, mas é inalcançável em produção — não tratar como entrada
+ * viva do gerador de PDF. Mantido apenas porque
+ * src/react-app/utils/__tests__/pasta360Usage.test.ts referencia seu uso
+ * de buildPasta360Url; não remover sem ajustar esse teste primeiro.
  */
 
 import { useState, useEffect } from 'react';

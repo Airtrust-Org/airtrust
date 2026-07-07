@@ -1,3 +1,11 @@
+/**
+ * @deprecated ÓRFÃO — não importado por nenhuma rota (não aparece em
+ * src/react-app/App.tsx). Abordagem antiga de impressão via HTML nativo,
+ * substituída pelo renderer jsPDF oficial em
+ * src/react-app/services/pdf-ficha-client.ts. Não usar como referência
+ * para correções de ficha-modelo V6.2. Mantido até confirmação de
+ * remoção segura.
+ */
 import { useState } from 'react';
 import { toast } from 'sonner';
 import DOMPurify from 'dompurify';

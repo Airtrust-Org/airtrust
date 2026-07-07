@@ -1,3 +1,9 @@
+/**
+ * @deprecated ÓRFÃO — não importado por nenhum componente vivo. Navega
+ * para /simuladores/ficha/:uuid/visualizar, rota que não existe em
+ * src/react-app/App.tsx (VisualizarFicha.tsx também é órfão). Não usar
+ * como referência para fluxo de ficha ativo.
+ */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 

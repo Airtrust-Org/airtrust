@@ -7,6 +7,23 @@
  * evitando problemas de compatibilidade com Cloudflare Workers.
  *
  * Versão: 2.0 - Layout melhorado
+ *
+ * RENDERER OFICIAL V6.2 — fonte única para:
+ *   - Ficha-modelo em branco (18 técnicas + 15 NOTECHS), via
+ *     buildFichaModeloPdfData() em
+ *     src/react-app/pages/simuladores/fichas/fichaModeloPdf.ts
+ *   - Ficha real/preenchida visualizada e baixada no cliente, via
+ *     src/react-app/pages/simuladores/fichas/[id]/index.tsx (rota
+ *     /simuladores/fichas/:id, reexportada por FichaDetalhe.tsx)
+ *
+ * NÃO usar como referência para correções de layout de ficha-modelo:
+ *   - worker-airtrust/src/services/pdf-ficha.service.ts (pdf-lib) — gera
+ *     PDF de fichas REAIS via Worker (rota POST /fichas/:id/pdf), nunca
+ *     de ficha-modelo em branco. Mantém compat de template para fichas
+ *     criadas antes de 2026-07-01 (layout legado com régua).
+ *   - src/react-app/pages/simuladores/components/PDFGenerator.tsx e
+ *     src/react-app/pages/FichaVoo.tsx / VisualizarFicha.tsx — órfãos,
+ *     não roteados em App.tsx (ver comentário nesses arquivos).
  */
 
 import {

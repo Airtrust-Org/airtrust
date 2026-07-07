@@ -3,6 +3,19 @@
  * Stack: pdf-lib + TypeScript
  * Output: PDF A4 compatível com Cloudflare Workers
  * Arquivo: worker-airtrust/src/services/pdf-ficha.service.ts
+ *
+ * ESCOPO: gera PDF apenas de fichas REAIS/preenchidas (linha existente em
+ * fichas_sessao, com aluno e instrutor), acionado pela rota
+ * POST /fichas/:id/pdf em worker-airtrust/src/routes/simuladores-fichas.ts.
+ * NUNCA usado para ficha-modelo em branco — o modelo em branco (18
+ * técnicas + 15 NOTECHS) é gerado exclusivamente no cliente por
+ * gerarPDFFichaCliente() em src/react-app/services/pdf-ficha-client.ts.
+ *
+ * Mantém compat de template por data de criação da ficha: registros
+ * criados antes de 2026-07-01 preservam o layout legado (com régua de
+ * avaliação); a partir dessa data usam o layout V6.2 (sem régua). Isso é
+ * compatibilidade de fichas históricas reais, não um "gerador antigo"
+ * concorrente do renderer V6.2 client-side.
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
