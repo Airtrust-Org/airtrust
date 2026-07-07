@@ -10,6 +10,7 @@
  */
 
 import {
+  NOTECHS_ORDEM_BASE,
   NOTECHS_GRUPOS,
   NOTECHS_PROVENIENCIA_AVISO,
   getNotechsItensPorGrupo,
@@ -41,9 +42,6 @@ export interface FichaPDFData {
   assinatura_instrutor_dataUrl?: string | null;
   logoUrl?: string; // URL do logo da empresa
   modoModelo?: boolean;
-  /** Template version: 'legacy' = pre-V6.2 (with régua), 'v6' = V6.2+ (no régua).
-   *  Default (undefined) = legacy for backward compatibility with existing callers. */
-  templateVersion?: 'legacy' | 'v6';
   fileName?: string;
   manobras: Array<{
     ordem: number;
@@ -80,52 +78,7 @@ export function getFichaPdfTableHeaders() {
 import { getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
-import {
-  FICHA_AVALIACAO_FAIXAS,
-  FICHA_AVALIACAO_NOTAS,
-} from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
-
-// ── Sanitização de metadados internos ──────────────────────────────────────
-const INTERNAL_METADATA_LEAK_RE = new RegExp(
-  [
-    'tipo_item\\s*=',
-    'fase_voo\\s*=',
-    'carater\\s*=',
-    'fap_refs\\s*=',
-    'matriz_v6_modelo\\s*=',
-    'sourceNotes',
-    'source_notes',
-    '\\bprompt\\b',
-    '\\bdebug\\b',
-    '\\brbac\\b',
-    '\\brole\\b',
-    '\\btenant\\b',
-    '\\bmigration\\b',
-    '\\bseed\\b',
-    '\\bfixture\\b',
-    '\\bbanco\\b',
-    '\\bbd\\b',
-    'empresa_id',
-    '\\bauth\\b',
-    '\\bjwt\\b',
-    '\\btoken\\b',
-    'auditoria\\s+interna',
-    'bastidor(?:es)?\\s+t[eé]cnico',
-    'instru[cç][aã]o\\s+de\\s+agente',
-    '[{}]',
-    `["'](?:source|metadata|internal|audit)["']`,
-  ].join('|'),
-  'i',
-);
-
-function sanitizeForPdf(value: unknown): string {
-  const text = String(value || '').trim();
-  if (!text) return '';
-  return INTERNAL_METADATA_LEAK_RE.test(text) ? '' : text;
-}
-
-const REGULATORY_DISCLAIMER =
-  'Esta ficha é instrumento interno de treinamento e avaliação operacional da empresa. Não substitui FAP oficial, documento ANAC, homologação, aprovação ou aceite formal da ANAC. A aderência regulatória deve ser verificada contra os documentos oficiais vigentes da empresa, da ANAC e dos contratantes aplicáveis.';
+import { FICHA_AVALIACAO_FAIXAS } from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
 
 function isSafariBrowser(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -161,32 +114,37 @@ const COLORS = {
   border: '#E0E4E8',
   bgLight: '#F5F7FA',
   white: '#FFFFFF',
+  // Cinza claro e discreto para a barra de seção NOTECHS — dá continuidade ao
+  // cabeçalho azul da tabela técnica sem repetir a cor nem parecer um segundo
+  // título de coluna (por isso claro/discreto, com texto escuro em vez de
+  // branco em negrito).
+  sectionBar: '#DDE3EA',
 };
 
-// Height reserved for the compact evaluation ruler section (title + cell row + 1-row proportional legend)
-const FICHA_AVALIACAO_SCALE_HEIGHT = 22;
-
 export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
-  // Column layout (mm from left edge). Measured: NOTECHS-COO-01 = 25.15mm at font 8.
-  //   #      : margin+3   — 5mm
-  //   CÓDIGO : margin+10  — 27mm (25.15mm measured + 1.85mm padding)
-  //   TRIP.  : margin+42  — 12mm (badge 8mm centered, 5mm clear of CÓDIGO)
-  //   ITENS  : margin+57  — 44mm (2-line wrap)
-  //   OBS    : margin+104 — 55mm (operational priority)
-  //   NOTA   : margin+172 — 10mm badge
+  // Column layout (all positions are absolute mm from left edge of page):
+  //   #      : margin+3   — 5mm wide
+  //   CÓDIGO : margin+10  — 20mm wide  → ends at margin+30
+  //   TRIP.  : margin+35  — 12mm wide (badge 8mm centered) → badge spans margin+31–margin+39
+  //             gap from CÓDIGO end (+30) to badge start (+31) = 1mm clear
+  //   ITENS  : margin+44  — 48mm wide  → ends at margin+92 (larga o bastante p/
+  //             nomes de manobra/NOTECHS longos sem truncar)
+  //   OBS    : margin+94  — 68mm wide  → ends at margin+162 (mais larga — a
+  //             observação frequentemente ocupa 2 linhas)
+  //   NOTA   : margin+172 — centred badge, 10mm wide
   return {
     positions: {
       num: margin + 3,
       codigo: margin + 10,
-      tripulante: margin + 42,
-      itens: margin + 57,
-      obs: margin + 104,
+      tripulante: margin + 35,
+      itens: margin + 44,
+      obs: margin + 94,
       nota: margin + 172,
     },
-    codigoWidth: 27,
+    codigoWidth: 20,
     tripulanteWidth: 12,
-    itensWidth: 44,
-    obsWidth: 55,
+    itensWidth: 48,
+    obsWidth: 68,
     notaBadgeWidth: 10,
     notaBadgeHeight: 4,
   };
@@ -202,115 +160,6 @@ function getTripulanteBadgeColors(tripulante?: 'A' | 'B' | 'AB') {
   }
 
   return { fill: '#E2E8F0', text: '#334155' };
-}
-
-function getContrastTextColor(hex: string): string {
-  const normalized = hex.replace('#', '');
-  const red = parseInt(normalized.slice(0, 2), 16);
-  const green = parseInt(normalized.slice(2, 4), 16);
-  const blue = parseInt(normalized.slice(4, 6), 16);
-  const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
-  return brightness > 150 ? '#111827' : '#FFFFFF';
-}
-
-function drawFichaAvaliacaoScale(
-  doc: {
-    setFont: (family: string, style?: string) => void;
-    setFontSize: (size: number) => void;
-    setTextColor: (color: string | number, g?: number, b?: number) => void;
-    setDrawColor: (color: string | number, g?: number, b?: number) => void;
-    setFillColor: (color: string | number, g?: number, b?: number) => void;
-    rect: (x: number, y: number, w: number, h: number, style?: string) => void;
-    roundedRect: (
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-      rx: number,
-      ry: number,
-      style?: string,
-    ) => void;
-    text: (
-      text: string | string[],
-      x: number,
-      y: number,
-      options?: Record<string, unknown>,
-    ) => void;
-    splitTextToSize: (text: string, maxWidth: number) => string[];
-  },
-  x: number,
-  y: number,
-  width: number,
-): number {
-  // Compact title — smaller font, less vertical space
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(COLORS.text);
-  doc.text('REGUA DE AVALIACAO', x, y);
-
-  // Colour-coded note cells — reduced height (4mm instead of 7mm)
-  const tableY = y + 2.5;
-  const cellWidth = width / FICHA_AVALIACAO_NOTAS.length;
-  const cellHeight = 4;
-
-  FICHA_AVALIACAO_NOTAS.forEach((nota, index) => {
-    const faixa = FICHA_AVALIACAO_FAIXAS.find((candidate) => candidate.noteIndexes.includes(index));
-    const fill = faixa?.color || '#94A3B8';
-    doc.setFillColor(fill);
-    doc.setDrawColor(COLORS.text);
-    doc.rect(x + index * cellWidth, tableY, cellWidth, cellHeight, 'FD');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6);
-    doc.setTextColor(getContrastTextColor(fill));
-    doc.text(String(nota), x + index * cellWidth + cellWidth / 2, tableY + 2.9, {
-      align: 'center',
-    });
-  });
-
-  // Descriptor legend — all 4 bands in a single row with PROPORTIONAL widths.
-  // Each band width is proportional to its note count relative to the total (10 notes):
-  //   1-2 (2 notes) = 20%, 3-4 (2 notes) = 20%, 5-7 (3 notes) = 30%, 8-10 (3 notes) = 30%
-  const legendTop = tableY + cellHeight + 1.5;
-  const legendGap = 1.5;
-  const colCount = FICHA_AVALIACAO_FAIXAS.length;
-  const totalNotes = FICHA_AVALIACAO_NOTAS.length;
-  const totalGapWidth = legendGap * (colCount - 1);
-  const availableWidth = width - totalGapWidth;
-  const legendHeight = 5;
-
-  // Pre-compute proportional widths and cumulative x offsets
-  const bandWidths = FICHA_AVALIACAO_FAIXAS.map(
-    (faixa) => (faixa.noteIndexes.length / totalNotes) * availableWidth,
-  );
-  const bandOffsets = bandWidths.reduce<number[]>((acc, bw, i) => {
-    acc.push(i === 0 ? 0 : acc[i - 1] + bandWidths[i - 1] + legendGap);
-    return acc;
-  }, []);
-
-  FICHA_AVALIACAO_FAIXAS.forEach((faixa, index) => {
-    const bandX = x + bandOffsets[index];
-    const bandY = legendTop;
-    const bw = bandWidths[index];
-
-    doc.setFillColor(COLORS.bgLight);
-    doc.setDrawColor(COLORS.border);
-    doc.roundedRect(bandX, bandY, bw, legendHeight, 1, 1, 'FD');
-
-    // Range label in band colour
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(5);
-    doc.setTextColor(faixa.color);
-    doc.text(faixa.rangeLabel, bandX + 1.5, bandY + 2.2);
-
-    // Descriptor text — up to 2 lines, slightly smaller font
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(4.5);
-    doc.setTextColor(COLORS.textSecondary);
-    const lines = doc.splitTextToSize(faixa.description, bw - 2).slice(0, 2);
-    doc.text(lines, bandX + 1.5, bandY + 4);
-  });
-
-  return legendTop + legendHeight + 1;
 }
 
 /**
@@ -506,8 +355,8 @@ export async function gerarPDFFichaCliente(
   const isModoModelo = dados.modoModelo === true;
   // ── Geometria base do header (compacto) ───────────────────────────────────
   const headerTop = 4;
-  const headerHeight = 20; // compacto
-  const headerBottom = headerTop + headerHeight;
+  const headerHeight = 19; // apertado mais um pouco (era 22) p/ sobrar espaço à tabela
+  const headerBottom = headerTop + headerHeight; // = 23
   const headerCenterX = pageWidth / 2;
   const headerGap = 1;
   // Col1: logo — box mais justo para liberar largura útil à coluna central
@@ -515,7 +364,7 @@ export async function gerarPDFFichaCliente(
     x: margin,
     y: headerTop + 1,
     width: 34,
-    height: 16,
+    height: 14,
   };
   // Col3: badge — conteúdo igual, margem mínima de 1mm para col2
   const badgeBox = {
@@ -624,7 +473,7 @@ export async function gerarPDFFichaCliente(
   // Título e sessão reservando espaço fixo entre logo e badge
   const tituloX = headerCenterX;
   const sessaoNome = dados.sessao_titulo || dados.simulador || 'Sessão de Treinamento';
-  const SESSAO_FONT_BASE = 9;
+  const SESSAO_FONT_BASE = 8;
   const SESSAO_FONT_MIN = 6;
 
   doc.setFont('helvetica', 'normal');
@@ -641,19 +490,19 @@ export async function gerarPDFFichaCliente(
   const sessaoLine = limitTextLines(doc.splitTextToSize(sessaoNome, headerText.width), 1);
 
   doc.setTextColor(COLORS.primary);
-  doc.setFontSize(11.5);
+  doc.setFontSize(10.5);
   doc.setFont('helvetica', 'bold');
-  doc.text('FICHA DE TREINAMENTO DE VOO', tituloX, headerTop + 6, { align: 'center' });
+  doc.text('FICHA DE TREINAMENTO DE VOO', tituloX, headerTop + 5.5, { align: 'center' });
 
   doc.setFontSize(6);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(COLORS.primary);
-  doc.text('SESSÃO', tituloX, headerTop + 9, { align: 'center' });
+  doc.text('SESSÃO', tituloX, headerTop + 9.5, { align: 'center' });
 
   doc.setFontSize(sessaoFontSize);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(COLORS.textSecondary);
-  doc.text(sessaoLine, tituloX, headerTop + 14, { align: 'center' });
+  doc.text(sessaoLine, tituloX, headerTop + 13.5, { align: 'center' });
 
   // Status badge (canto direito)
   const statusText = dados.status || 'PENDENTE';
@@ -677,14 +526,28 @@ export async function gerarPDFFichaCliente(
   // Gap compacto após header (era +8)
   currentY = headerBottom + 3;
 
-  // ========== DADOS DA SESSÃO — 3 linhas, Simulador na linha 1 ==========
-  // Linha 1: Data | Horário | Carga Horária | Simulador
-  // Linha 2: Tripulante | ANAC | Função
+  // ========== DADOS DA SESSÃO — 3 linhas ==========
+  // Linha 1: Data | Horário | Simulador | Carga Horária
+  // Linha 2: Tripulante | ANAC | Função | PF / PM
   // Linha 3: Instrutor | ANAC
-  const hasOperationalDetail = Boolean(
-    dados.tripulacao_nomes || dados.carga_horaria_pf || dados.carga_horaria_pm,
-  );
-  const SESSION_BOX_H = hasOperationalDetail ? 25.5 : 20;
+  // "Tripulação" foi removida do cabeçalho (linha 4 antiga) para liberar
+  // espaço vertical em favor da tabela NOTECHS de linha única (ver pedido do
+  // owner de 2026-07-02).
+  //
+  // Grade de colunas COMPARTILHADA entre as 3 linhas (mesmo X em todas as
+  // linhas que têm aquele campo), para eliminar o desalinhamento visual:
+  //   COL1 (Data / Tripulante / Instrutor)  — margin+3
+  //   COL2 (Horário / ANAC / ANAC)          — margin+65 (espaço suficiente à
+  //     esquerda para nomes longos de tripulante/instrutor na COL1)
+  //   COL3 (Simulador / Função)             — margin+99
+  //   COL4 (Carga Horária / PF-PM)          — margin+136
+  // Larguras calibradas via jsPDF.getTextWidth() com os piores casos reais
+  // (nomes/valores mais longos das fixtures) para não haver overlap.
+  const COL1 = margin + 3;
+  const COL2 = margin + 65;
+  const COL3 = margin + 99;
+  const COL4 = margin + 136;
+  const SESSION_BOX_H = 20;
   const SESSION_LINE_H = 5.5;
   doc.setDrawColor(COLORS.border);
   doc.setFillColor(COLORS.bgLight);
@@ -710,68 +573,53 @@ export async function gerarPDFFichaCliente(
     doc.text(value, x + labelW, y);
   };
 
-  // Linha 1: Data | Horário | Carga Horária | Simulador — 4 colunas uniformes de ~43mm
+  // Linha 1: Data | Horário | Simulador | Carga Horária
   let lineY = currentY + 4.5;
-  drawInfoField('Data:', getDisplayValue(dataFormatada), margin + 3, 9, lineY);
+  drawInfoField('Data:', getDisplayValue(dataFormatada), COL1, 9, lineY);
   drawInfoField(
     'Horário:',
     getDisplayValue(
       [dados.horario_inicio, dados.horario_fim].filter(Boolean).join(' – '),
       '__:__ – __:__',
     ),
-    margin + 46,
+    COL2,
     14,
     lineY,
   );
-  drawInfoField('Carga Horária:', getDisplayValue(cargaShort), margin + 90, 22, lineY);
-  drawInfoField('Simulador:', getDisplayValue(dados.simulador), margin + 133, 16, lineY);
+  drawInfoField('Simulador:', getDisplayValue(dados.simulador), COL3, 16, lineY);
+  drawInfoField('Carga Horária:', getDisplayValue(cargaShort), COL4, 19, lineY);
 
-  // Linha 2: Tripulante | ANAC | Função
+  // Linha 2: Tripulante | ANAC | Função | PF / PM
   lineY += SESSION_LINE_H;
-  drawInfoField('Tripulante:', getDisplayValue(dados.tripulante_nome), margin + 3, 18, lineY);
+  drawInfoField('Tripulante:', getDisplayValue(dados.tripulante_nome), COL1, 18, lineY);
   drawInfoField(
     'ANAC:',
     getDisplayValue(dados.tripulante_codigo_anac, '____________'),
-    margin + 88,
+    COL2,
     9,
     lineY,
   );
-  drawInfoField(
-    'Função:',
-    getDisplayValue(dados.tripulante_funcao, '______'),
-    margin + 145,
-    12,
-    lineY,
-  );
-
-  // Linha 3: Instrutor | ANAC
-  lineY += SESSION_LINE_H;
-  drawInfoField('Instrutor:', getDisplayValue(dados.instrutor_nome), margin + 3, 16, lineY);
-  drawInfoField(
-    'ANAC:',
-    getDisplayValue(dados.instrutor_codigo_anac, '____________'),
-    margin + 88,
-    9,
-    lineY,
-  );
-
-  if (hasOperationalDetail) {
-    lineY += SESSION_LINE_H;
+  drawInfoField('Função:', getDisplayValue(dados.tripulante_funcao, '______'), COL3, 12, lineY);
+  if (dados.carga_horaria_pf || dados.carga_horaria_pm) {
     drawInfoField(
       'PF / PM:',
       `${getDisplayValue(dados.carga_horaria_pf, '0')}h / ${getDisplayValue(dados.carga_horaria_pm, '0')}h`,
-      margin + 3,
+      COL4,
       15,
       lineY,
     );
-    drawInfoField(
-      'Tripulação:',
-      getDisplayValue(dados.tripulacao_nomes, dados.tripulante_nome),
-      margin + 65,
-      18,
-      lineY,
-    );
   }
+
+  // Linha 3: Instrutor | ANAC
+  lineY += SESSION_LINE_H;
+  drawInfoField('Instrutor:', getDisplayValue(dados.instrutor_nome), COL1, 16, lineY);
+  drawInfoField(
+    'ANAC:',
+    getDisplayValue(dados.instrutor_codigo_anac, '____________'),
+    COL2,
+    9,
+    lineY,
+  );
 
   // Avançar currentY: session box + gap (3mm)
   currentY += SESSION_BOX_H + 3;
@@ -780,7 +628,7 @@ export async function gerarPDFFichaCliente(
   doc.setFillColor(COLORS.primary);
   doc.rect(margin, currentY, contentWidth, 6, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setFont('helvetica', 'bold');
 
   const tableLayout = getFichaPdfTableLayout(margin);
@@ -805,152 +653,98 @@ export async function gerarPDFFichaCliente(
   currentY += 6;
 
   // ── Calcular alturas uniformes ────────────────────────────────────────────
-  // Regra: ITENS nunca trunca com "…" — quebra naturalmente (na largura/fonte
-  // atuais, os nomes reais da matriz cabem em até 2 linhas; se um nome futuro
-  // exceder isso, a linha cresce em vez de cortar o texto). OBS máx 3 linhas
-  // (trunca com …). A altura da linha cresce dinamicamente conforme o maior
-  // número de linhas entre as duas colunas.
-  const TABLE_FONT = 8;
+  // Regra: ITENS máx 1 linha (trunca com …), OBS máx 3 linhas (trunca com …)
+  const TABLE_FONT = 7;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(TABLE_FONT);
 
-  // NOTECHS agora é continuação da tabela principal (mesmas colunas, mesma fonte).
+  // Técnicas e NOTECHS formam UMA ÚNICA tabela vertical contínua — mesmo
+  // padrão de colunas, mesma fonte, mesmo orçamento de altura. NOTECHS entra
+  // logo abaixo das técnicas, separado só por uma barra de seção (ver pedido
+  // do owner de 2026-07-02: nada de bloco em duas colunas ou reservado à parte).
   const { tecnicas: manobras, notechs: manobrasNotechs } = splitManobrasNotechs(
     dados.manobras || [],
   );
 
-  // Prepara linhas NOTECHS no mesmo formato dos itens técnicos.
-  const notechsRows = manobrasNotechs.map((n, i) => ({
-    ordem: n.ordem,
-    codigo:
-      ((n as Record<string, unknown>).codigo as string) ||
-      `NOTECHS-${String(i + 1).padStart(2, '0')}`,
-    nome: sanitizeForPdf(n.nome) || sanitizeForPdf(n.descricao) || n.nome || n.descricao || '',
-    descricao: sanitizeForPdf(n.descricao) || n.descricao || '',
-    resultado: n.resultado,
-    observacoes: sanitizeForPdf(n.observacoes) || n.observacoes || '',
-    tripulante: (n.tripulante || 'AB') as 'A' | 'B' | 'AB',
-  }));
-
-  // Combina técnicas + NOTECHS para cálculo de altura unificado.
-  const allRows = [
-    ...manobras.map((m) => ({
-      ...m,
-      nome: sanitizeForPdf(m.nome) || m.nome,
-      observacoes: sanitizeForPdf(m.observacoes) || m.observacoes,
-      _section: 'tecnica' as const,
-    })),
-    ...notechsRows.map((n) => ({ ...n, _section: 'notechs' as const })),
-  ];
-
-  // 1ª passagem: altura natural de cada linha (ITENS sem limite de linhas, OBS=3 linhas máx)
-  const rowData = allRows.map((m) => {
+  const computeRowHeight = (m: FichaPDFData['manobras'][number]): number => {
     const nomeTxt = (m.nome || '').trim();
-    const nomeLines = doc.splitTextToSize(nomeTxt, ITENS_WIDTH);
+    const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), 1);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
       obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), 3) : [];
     const maxLines = Math.max(1, nomeLines.length, obsLines.length);
-    const rowH = Math.max(6, 2 + maxLines * 3.5);
-    return { m, nomeLines, obsLines, rowH };
-  });
+    return Math.max(6, 2 + maxLines * 3.5); // altura variável: 1 linha=5.5, 2=9, 3=12.5
+  };
 
-  const totalNatural = rowData.reduce((s, r) => s + r.rowH, 0);
+  // NOTECHS exibe numeração própria (1–15) na coluna #, independente da ordem
+  // interna (>= NOTECHS_ORDEM_BASE) usada só para separar do bloco técnico.
+  const tecnicasNatural = manobras.map((m) => ({
+    m,
+    rowH: computeRowHeight(m),
+    displayNum: m.ordem,
+  }));
+  const notechsNatural = manobrasNotechs.map((m) => ({
+    m,
+    rowH: computeRowHeight(m),
+    displayNum: m.ordem - NOTECHS_ORDEM_BASE + 1,
+  }));
+  const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 6 : 0;
 
-  // ── Safe area: reserve bottom space BEFORE rendering table ──────────────
-  const FOOTER_H = 5;
-  const FOOTER_GAP = 2;
+  const totalNatural =
+    tecnicasNatural.reduce((s, r) => s + r.rowH, 0) +
+    notechsNatural.reduce((s, r) => s + r.rowH, 0) +
+    NOTECHS_DIVIDER_H;
 
-  // Signature boxes — calculate actual height needed
-  const hasAnySignatureImg = !!(
-    dados.assinatura_aluno_dataUrl || dados.assinatura_instrutor_dataUrl
-  );
-  const SIG_PAD = 2;
-  const SIG_TITLE_H = 3.5;
-  const SIG_TEXT_H = 2.8;
-  const SIG_TS_H = 2.8;
-  const sigBoxW = (contentWidth - 4) / 2;
-  const sigBoxH = 12; // compact signature
+  // Layout de baixo para cima:
+  //   rodapé: 6mm no fundo (pageHeight - 6)
+  //   assinaturas: SIG_RESERVED mm antes do rodapé
+  //   obs gerais: OBS_RESERVED mm antes das assinaturas
+  const FOOTER_H = 6; // espaço do rodapé no fundo
+  const SIG_RESERVED = 40; // altura máxima reservada para as caixas de assinatura
+  const OBS_RESERVED = 23; // caixa mínima (~18mm) + gap antes das assinaturas
+  const tableBodyBudget = pageHeight - currentY - 4 - OBS_RESERVED - 3 - SIG_RESERVED - FOOTER_H;
 
-  // Observations area — minimum height
-  const OBS_MIN_H = 14;
-
-  const isTemplateV6 = dados.templateVersion === 'v6' || isModoModelo;
-  const SCALE_RESERVED = isTemplateV6 ? 0 : FICHA_AVALIACAO_SCALE_HEIGHT;
-
-  // NOTECHS overhead — header only, no category dividers
-  const NOTECHS_HEADER_H = manobrasNotechs.length > 0 ? 7 : 0;
-  const NOTECHS_CATEGORY_BUDGET = 0;
-
-  // Calculate safe boundary
-  const BOTTOM_RESERVED = OBS_MIN_H + 2 + sigBoxH + FOOTER_GAP + FOOTER_H + 2;
-  const tableMaxY = pageHeight - BOTTOM_RESERVED;
-  const tableBodyBudget = tableMaxY - currentY - 2 - NOTECHS_HEADER_H - NOTECHS_CATEGORY_BUDGET - SCALE_RESERVED;
-
-  const scaleFactor = totalNatural > tableBodyBudget ? Math.max(0.7, tableBodyBudget / totalNatural) : 1;
+  // Factor de escala — só encolhe, nunca cresce
+  const scaleFactor = totalNatural > tableBodyBudget ? tableBodyBudget / totalNatural : 1;
   const finalFontSize = scaleFactor < 0.95 ? Math.max(5.5, TABLE_FONT * scaleFactor) : TABLE_FONT;
-  const LINE_SPACING = 3.2 * Math.min(1, scaleFactor);
+  const LINE_SPACING = 3.4 * Math.min(1, scaleFactor);
 
-  // 2ª passagem: re-split com fonte final
+  // Passagem dedicada de quebra de linha, na fonte final, ANTES de qualquer
+  // desenho. jsPDF é stateful (splitTextToSize/getTextWidth usam a fonte
+  // setada no momento da chamada) — calcular nomeLines/obsLines aqui, de uma
+  // vez só, evita que o resto do desenho da linha anterior (badge em negrito,
+  // ou a barra do divisor NOTECHS) contamine a largura usada para quebrar o
+  // título da linha seguinte.
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(finalFontSize);
-  const scaledRows = rowData.map(({ m, nomeLines: _, obsLines: __, rowH }) => {
+  const buildScaledRow = (
+    m: FichaPDFData['manobras'][number],
+    naturalRowH: number,
+    displayNum: number,
+  ) => {
     const nomeTxt = (m.nome || '').trim();
-    const nomeLines = doc.splitTextToSize(nomeTxt, ITENS_WIDTH);
+    const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), 1);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
       obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), 3) : [];
-    return { m, nomeLines, obsLines, rowH: Math.max(5.5, rowH * scaleFactor) };
-  });
+    return { m, nomeLines, obsLines, rowH: Math.max(5.5, naturalRowH * scaleFactor), displayNum };
+  };
 
-  // Flag: já inserimos o divisor NOTECHS?
-  let notechsDividerInserted = false;
-  let pageCount = 1;
+  const tecnicasScaled = tecnicasNatural.map(({ m, rowH, displayNum }) =>
+    buildScaledRow(m, rowH, displayNum),
+  );
+  const notechsScaled = notechsNatural.map(({ m, rowH, displayNum }) =>
+    buildScaledRow(m, rowH, displayNum),
+  );
 
-  // Renderizar todas as linhas (técnicas + NOTECHS) com paginação
-  scaledRows.forEach(({ m, nomeLines, obsLines, rowH }, index) => {
-    // Page break if row would overflow page bottom
-    const PAGE_BOTTOM = pageHeight - margin;
-    if (currentY + rowH > PAGE_BOTTOM) {
-      doc.addPage();
-      pageCount++;
-      currentY = margin;
-
-      // Redraw compact table header on new page
-      doc.setFillColor(COLORS.primary);
-      doc.rect(margin, currentY, contentWidth, 6, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.text('#', col.num, currentY + 4, { align: 'center' });
-      doc.text('CÓDIGO', col.codigo, currentY + 4);
-      doc.text('TRIP.', col.tripulante, currentY + 4, { align: 'center' });
-      doc.text('ITENS', col.itens, currentY + 4);
-      doc.text('OBSERVAÇÕES', col.obs, currentY + 4);
-      doc.text('NOTA', col.nota, currentY + 4, { align: 'center' });
-      currentY += 6;
-    }
-
-    // NOTECHS section header — subtle banner, single line
-    if ((m as Record<string, unknown>)._section === 'notechs' && !notechsDividerInserted) {
-      notechsDividerInserted = true;
-      doc.setFillColor('#E8ECF0');
-      doc.rect(margin, currentY, contentWidth, NOTECHS_HEADER_H, 'F');
-      doc.setDrawColor(COLORS.border);
-      doc.setLineWidth(0.5);
-      doc.line(margin, currentY, margin + contentWidth, currentY);
-      doc.line(margin, currentY + NOTECHS_HEADER_H, margin + contentWidth, currentY + NOTECHS_HEADER_H);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6);
-      doc.setTextColor('#3A4A5C');
-      doc.text(
-        'NOTECHS \u2014 Non-Technical Skills / Habilidades N\u00E3o T\u00E9cnicas e Comportamentais',
-        margin + 3,
-        currentY + 4.8,
-      );
-      currentY += NOTECHS_HEADER_H;
-    }
-
-    const isEven = index % 2 === 0;
+  // Desenha uma linha da tabela (já com nomeLines/obsLines/rowH resolvidos) —
+  // usada tanto para as 18 manobras técnicas quanto para os 15 itens NOTECHS
+  // logo abaixo: mesmas colunas (#, CÓDIGO, TRIP., ITENS, OBSERVAÇÕES, NOTA),
+  // mesma fonte, mesmo zebrado.
+  const drawTableRow = (
+    { m, nomeLines, obsLines, rowH, displayNum }: (typeof tecnicasScaled)[number],
+    isEven: boolean,
+  ) => {
     if (isEven) {
       doc.setFillColor(COLORS.bgLight);
       doc.rect(margin, currentY, contentWidth, rowH, 'F');
@@ -960,25 +754,16 @@ export async function gerarPDFFichaCliente(
     doc.setFontSize(finalFontSize);
     doc.setTextColor(COLORS.text);
 
+    // Texto sempre alinhado ao topo da linha (consistente independente da altura da linha)
     const textTopY = currentY + 2.8;
 
-    // Número: técnicas usam ordem original, NOTECHS usam 01-15
-    const numStr =
-      (m as Record<string, unknown>)._section === 'notechs'
-        ? String(index - manobras.length + 1).padStart(2, '0')
-        : String(m.ordem).padStart(2, '0');
-    doc.text(numStr, col.num, textTopY, { align: 'center' });
+    // Número
+    doc.text(String(displayNum).padStart(2, '0'), col.num, textTopY, { align: 'center' });
 
-    // Código — truncado com reticências para caber na coluna (alinhado com Worker)
-    const codigo =
-      (m as Record<string, unknown>)._section === 'notechs'
-        ? (m as Record<string, string>).codigo || ''
-        : (m.codigo || '').length > 13
-          ? (m.codigo || '').substring(0, 12) + '…'
-          : m.codigo || '';
-    doc.text(codigo, col.codigo, textTopY);
+    // Código
+    doc.text((m.codigo || '').substring(0, 13), col.codigo, textTopY);
 
-    // Tripulante badge
+    // Tripulante (A/B/AB)
     const tripulante = m.tripulante || 'AB';
     const tripBadge = getTripulanteBadgeColors(tripulante);
     const tripBadgeW = 8;
@@ -996,12 +781,12 @@ export async function gerarPDFFichaCliente(
     doc.setFontSize(finalFontSize);
     doc.setTextColor(COLORS.text);
 
-    // Nome (sem limite de linhas — nunca corta o texto)
+    // Nome (1 linha máx)
     for (let li = 0; li < nomeLines.length; li++) {
       doc.text(nomeLines[li] || '', col.itens, textTopY + li * LINE_SPACING);
     }
 
-    // Observações
+    // Observações (até 3 linhas, fonte ligeiramente menor)
     if (obsLines.length > 0) {
       doc.setFontSize(Math.max(4.5, finalFontSize - 0.5));
       doc.setTextColor(COLORS.textSecondary);
@@ -1012,7 +797,7 @@ export async function gerarPDFFichaCliente(
       doc.setTextColor(COLORS.text);
     }
 
-    // Nota
+    // Nota com cor — trata NR, número ou vazio
     const resultadoRaw = m.resultado;
     const isNR = resultadoRaw === 'NR' || resultadoRaw === 'NAO_REALIZADA' || resultadoRaw === -1;
     const notaNum =
@@ -1028,6 +813,7 @@ export async function gerarPDFFichaCliente(
       !isNaN(notaNum) &&
       notaNum > 0;
 
+    // Badge SEMPRE com tamanho fixo e centralizado verticalmente na linha
     const badgeX = col.nota - NOTA_BADGE_W / 2;
     const badgeY = currentY + (rowH - NOTA_BADGE_H) / 2;
     const badgeTextY = badgeY + NOTA_BADGE_H - 1.2;
@@ -1058,80 +844,181 @@ export async function gerarPDFFichaCliente(
     }
 
     currentY += rowH;
-  });
+  };
+
+  tecnicasScaled.forEach((row, index) => drawTableRow(row, index % 2 === 0));
+
+  if (notechsScaled.length > 0) {
+    // Barra de seção NOTECHS — mesma altura do header da tabela, em cinza
+    // CLARO e discreto (era roxo, depois azul, depois cinza escuro) com texto
+    // escuro em vez de branco/negrito, para não parecer um segundo título de
+    // coluna competindo com o cabeçalho azul das colunas logo acima. As
+    // linhas abaixo dela usam a MESMA drawTableRow das técnicas: uma
+    // manobra/item por linha, coluna OBSERVAÇÕES incluída, sem colunas duplas.
+    doc.setFillColor(COLORS.sectionBar);
+    doc.rect(margin, currentY, contentWidth, NOTECHS_DIVIDER_H, 'F');
+    doc.setTextColor(COLORS.text);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.text(
+      'NOTECHS — Habilidades Não Técnicas (CRM)',
+      margin + 2,
+      currentY + NOTECHS_DIVIDER_H / 2 + 1.3,
+    );
+    currentY += NOTECHS_DIVIDER_H;
+
+    notechsScaled.forEach((row, index) => drawTableRow(row, index % 2 === 0));
+  }
 
   currentY += 4;
 
-  // Régua de avaliação: apenas para template legado (pre-V6.2).
-  if (!isTemplateV6) {
-    currentY = drawFichaAvaliacaoScale(doc, margin, currentY, contentWidth) + 4;
-  }
+  // ========== OBSERVAÇÕES GERAIS — mínimo 3 linhas de texto ==========
+  if (dados.observacoes_gerais || isModoModelo) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(COLORS.textSecondary);
+    const obsTxt =
+      dados.observacoes_gerais ||
+      (isModoModelo ? 'Observações gerais: _________________________________________________' : '');
+    // Limitada a 4 linhas (trunca com "…") para o box nunca crescer além do
+    // espaço reservado (OBS_RESERVED) e invadir as caixas de assinatura, que
+    // são posicionadas de baixo para cima de forma independente do texto aqui.
+    const obsLines = limitTextLines(doc.splitTextToSize(obsTxt, contentWidth - 6), 4);
+    const obsBoxH = Math.max(18, 5 + obsLines.length * 4.5); // mínimo 3 linhas de texto
 
-  // Move to last page bottom area — observations and signatures only on final page
-
-  // ========== OBSERVAÇÕES GERAIS — compact but visible ==========
-  const obsTxt = dados.observacoes_gerais || (isModoModelo ? 'Observações gerais: _________________________________________________' : '');
-  if (obsTxt) {
-    const obsLines = doc.splitTextToSize(obsTxt, contentWidth - 6);
     doc.setDrawColor(COLORS.border);
     doc.setFillColor(COLORS.bgLight);
-    doc.roundedRect(margin, currentY, contentWidth, OBS_MIN_H, 2, 2, 'FD');
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7);
-    doc.setTextColor(COLORS.textSecondary);
-    doc.text(obsLines.slice(0, 2), margin + 3, currentY + 4.5);
-    currentY += OBS_MIN_H + 2;
+    doc.roundedRect(margin, currentY, contentWidth, obsBoxH, 2, 2, 'FD');
+    doc.text(obsLines, margin + 3, currentY + 5);
+    currentY += obsBoxH + 5; // gap maior (5mm) antes das assinaturas
   }
 
-  // ========== ASSINATURAS — fixed clean layout ==========
-  const sigStartY = currentY;
-  const drawSigBox = (x: number, label: string, nome: string, timestamp: string | null | undefined) => {
+  // ========== ASSINATURAS — ancoradas no fundo, proporcionais ==========
+  // Rodapé fixo no fundo. Assinaturas calculadas de baixo para cima.
+  const FOOTER_Y = pageHeight - FOOTER_H + 1; // rodapé no fundo (fixo)
+  const FOOTER_GAP = 4; // espaço entre assinaturas e rodapé
+
+  const hasAnySignatureImg = !!(
+    dados.assinatura_aluno_dataUrl || dados.assinatura_instrutor_dataUrl
+  );
+  const SIG_PAD = 2.5;
+  const SIG_TITLE_H = 4; // título TRIPULANTE/INSTRUTOR
+  const SIG_TEXT_H = 3; // nome
+  const SIG_TS_H = 3; // timestamp/status
+  const SIG_IMG_MAX = 14; // imagem max 14mm — proporção mantida, sem achatar
+  const sigBoxW = (contentWidth - 4) / 2;
+
+  // Calcular altura proporcional da imagem (nunca distorce)
+  const calcImgH = (dataUrl: string | null | undefined): number => {
+    if (!dataUrl) return 0;
+    try {
+      const props = doc.getImageProperties(dataUrl);
+      const drawW = sigBoxW - SIG_PAD * 2;
+      const ratio = props.height / props.width;
+      return Math.min(SIG_IMG_MAX, Math.max(6, drawW * ratio));
+    } catch {
+      return Math.min(SIG_IMG_MAX, 10);
+    }
+  };
+
+  const sigImgH_a = calcImgH(dados.assinatura_aluno_dataUrl);
+  const sigImgH_i = calcImgH(dados.assinatura_instrutor_dataUrl);
+  const sigImgH = Math.max(sigImgH_a, sigImgH_i);
+
+  const sigBoxH = hasAnySignatureImg
+    ? SIG_PAD + SIG_TITLE_H + SIG_TEXT_H + SIG_TS_H + 2 + sigImgH + SIG_PAD // com imagem
+    : SIG_PAD + SIG_TITLE_H + SIG_TEXT_H + SIG_TS_H + SIG_PAD; // sem imagem
+
+  // Assinaturas começam de baixo para cima: rodapé ← gap ← sig boxes
+  const sigStartY = FOOTER_Y - FOOTER_GAP - sigBoxH;
+
+  const drawSigBox = (
+    x: number,
+    label: string,
+    nome: string,
+    timestamp: string | null | undefined,
+    sigDataUrl: string | null | undefined,
+  ) => {
     const hasSig = !!timestamp;
     doc.setDrawColor(COLORS.border);
     doc.setFillColor(hasSig ? '#EBF7EE' : COLORS.bgLight);
     doc.roundedRect(x, sigStartY, sigBoxW, sigBoxH, 2, 2, 'FD');
 
-    let ty = sigStartY + SIG_PAD + SIG_TITLE_H;
+    let ty = sigStartY + SIG_PAD + SIG_TITLE_H - 0.5;
+
+    // Título (fonte reduzida)
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(hasSig ? COLORS.success : COLORS.text);
     doc.text(label, x + SIG_PAD, ty);
 
+    // Nome
     ty += SIG_TEXT_H;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     doc.setTextColor(COLORS.textSecondary);
     doc.text(getDisplayValue(nome), x + SIG_PAD, ty, { maxWidth: sigBoxW - SIG_PAD * 2 });
 
+    // Timestamp / status
     ty += SIG_TS_H;
-    doc.setFontSize(5.5);
+    doc.setFontSize(6);
     if (hasSig) {
       const d = new Date(timestamp!);
       doc.setTextColor(COLORS.success);
-      doc.text(`\u2713 ${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR')}`, x + SIG_PAD, ty);
+      doc.text(
+        `\u2713 ${d.toLocaleDateString('pt-BR')}, ${d.toLocaleTimeString('pt-BR')}`,
+        x + SIG_PAD,
+        ty,
+      );
     } else {
       doc.setTextColor(COLORS.textSecondary);
-      doc.text(isModoModelo ? 'Campo para assinatura' : 'Aguardando', x + SIG_PAD, ty);
+      doc.text(isModoModelo ? 'Campo para assinatura' : 'Aguardando assinatura', x + SIG_PAD, ty);
+    }
+
+    // Imagem da assinatura — renderizada com proporção original
+    if (sigDataUrl && hasAnySignatureImg && sigImgH > 0) {
+      try {
+        const props = doc.getImageProperties(sigDataUrl);
+        const drawW = sigBoxW - SIG_PAD * 2;
+        const ratio = props.height / props.width;
+        const drawH = Math.min(sigImgH, drawW * ratio);
+        doc.addImage(sigDataUrl, 'PNG', x + SIG_PAD, ty + 2, drawW, drawH);
+      } catch {
+        /* ignore */
+      }
     }
   };
 
-  drawSigBox(margin, 'TRIPULANTE', dados.tripulante_nome, dados.assinatura_aluno_timestamp);
-  drawSigBox(margin + sigBoxW + 4, 'INSTRUTOR', dados.instrutor_nome, dados.assinatura_instrutor_timestamp);
-  currentY += sigBoxH + FOOTER_GAP;
+  drawSigBox(
+    margin,
+    'TRIPULANTE',
+    dados.tripulante_nome,
+    dados.assinatura_aluno_timestamp,
+    dados.assinatura_aluno_dataUrl,
+  );
+  drawSigBox(
+    margin + sigBoxW + 4,
+    'INSTRUTOR',
+    dados.instrutor_nome,
+    dados.assinatura_instrutor_timestamp,
+    dados.assinatura_instrutor_dataUrl,
+  );
 
-  // ========== RODAPÉ — single line with compact disclaimer ==========
-  const FOOTER_Y = pageHeight - FOOTER_H + 1;
-  const footerText = isModoModelo
-    ? `Gerado em ${new Date().toLocaleString('pt-BR')} | AirTrust — Ficha interna de treinamento. Uso conforme documentos oficiais.`
-    : `Gerado em ${new Date().toLocaleString('pt-BR')} | AirTrust — Aviation Management System`;
-  doc.setFontSize(5.5);
+  // ========== RODAPÉ — fixo no fundo, gap real acima ==========
+  doc.setFontSize(6.5);
   doc.setTextColor(COLORS.textSecondary);
-  doc.text(footerText, pageWidth / 2, FOOTER_Y, { align: 'center' });
+  doc.text(
+    `Gerado em ${new Date().toLocaleString('pt-BR')} | AirTrust - Aviation Management System`,
+    pageWidth / 2,
+    FOOTER_Y,
+    { align: 'center' },
+  );
 
   // ========== PÁGINA 2 (opcional) — Régua NOTECHS, descritores completos ==========
-  // Só é adicionada quando a ficha tem itens NOTECHS e não é ficha modelo/V6.2.
-  // Fichas V6.2 não exibem página extra de descritores.
-  if (manobrasNotechs.length > 0 && !isModoModelo && !isTemplateV6) {
+  // Só é adicionada quando a ficha tem itens NOTECHS. Mantém a página 1 (A4
+  // principal) legível e compacta — os 60 descritores completos ficam aqui,
+  // fora do orçamento de altura da página principal.
+  if (manobrasNotechs.length > 0) {
     doc.addPage();
     let refY = margin;
     doc.setFont('helvetica', 'bold');
@@ -1157,7 +1044,7 @@ export async function gerarPDFFichaCliente(
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8.5);
-      doc.setTextColor(COLORS.textSecondary);
+      doc.setTextColor('#7c3aed');
       doc.text(`${grupo.tituloPt} / ${grupo.tituloEn}`, margin, refY);
       refY += 4.5;
 
@@ -1205,11 +1092,14 @@ export async function gerarPDFFichaCliente(
   const fileName = dados.fileName || fallbackName;
   // Título visível na aba do preview: nome sem extensão .pdf
   const previewTitle = fileName.replace(/\.pdf$/i, '');
-  const blob = doc.output('blob');
+  // Fonte única de bytes: arraybuffer (em vez de Blob) evita a dependência do
+  // construtor Blob do documento/realm em que o jsPDF roda, e serve tanto o
+  // download direto quanto o preview a partir do mesmo buffer.
+  const pdfBytes = doc.output('arraybuffer');
 
   const mode = opts?.mode ?? 'preview';
   if (mode === 'download' || isSafariBrowser()) {
-    downloadBlobDirect(blob, fileName);
+    downloadBlobDirect(new Blob([pdfBytes], { type: 'application/pdf' }), fileName);
     return;
   }
 
@@ -1218,7 +1108,7 @@ export async function gerarPDFFichaCliente(
     title: previewTitle,
     mimeType: 'application/pdf',
     fetcher: async () =>
-      new Response(blob, {
+      new Response(pdfBytes, {
         headers: {
           'Content-Type': 'application/pdf',
         },

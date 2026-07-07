@@ -47,24 +47,99 @@ export interface FichaManobraMaterializada {
 
 export const NOTECHS_ITENS_CATALOGO: NotechsCatalogoItem[] = [
   // COO = Cooperação / Cooperation
-  { codigo: 'NOTECHS-COO-01', nome: 'Formação e Manutenção da Equipe', descricao: 'Team Building and Maintaining', ordem: 1001 },
-  { codigo: 'NOTECHS-COO-02', nome: 'Consideração pelos Outros', descricao: 'Considering Others', ordem: 1002 },
-  { codigo: 'NOTECHS-COO-03', nome: 'Apoio aos Outros', descricao: 'Supporting Others', ordem: 1003 },
-  { codigo: 'NOTECHS-COO-04', nome: 'Resolução de Conflitos', descricao: 'Conflict Solving', ordem: 1004 },
+  {
+    codigo: 'NOTECHS-COO-01',
+    nome: 'Formação e Manutenção da Equipe',
+    descricao: 'Team Building and Maintaining',
+    ordem: 1001,
+  },
+  {
+    codigo: 'NOTECHS-COO-02',
+    nome: 'Consideração pelos Outros',
+    descricao: 'Considering Others',
+    ordem: 1002,
+  },
+  {
+    codigo: 'NOTECHS-COO-03',
+    nome: 'Apoio aos Outros',
+    descricao: 'Supporting Others',
+    ordem: 1003,
+  },
+  {
+    codigo: 'NOTECHS-COO-04',
+    nome: 'Resolução de Conflitos',
+    descricao: 'Conflict Solving',
+    ordem: 1004,
+  },
   // LID = Liderança e Habilidades Gerenciais / Leadership and Management Skills
-  { codigo: 'NOTECHS-LID-05', nome: 'Uso da Autoridade e Assertividade', descricao: 'Use of Authority and Assertiveness', ordem: 1005 },
-  { codigo: 'NOTECHS-LID-06', nome: 'Manutenção de Padrões', descricao: 'Maintaining Standards', ordem: 1006 },
-  { codigo: 'NOTECHS-LID-07', nome: 'Planejamento e Coordenação', descricao: 'Planning and Coordination', ordem: 1007 },
-  { codigo: 'NOTECHS-LID-08', nome: 'Gerenciamento da Carga de Trabalho', descricao: 'Workload Management', ordem: 1008 },
+  {
+    codigo: 'NOTECHS-LID-05',
+    nome: 'Uso da Autoridade e Assertividade',
+    descricao: 'Use of Authority and Assertiveness',
+    ordem: 1005,
+  },
+  {
+    codigo: 'NOTECHS-LID-06',
+    nome: 'Manutenção de Padrões',
+    descricao: 'Maintaining Standards',
+    ordem: 1006,
+  },
+  {
+    codigo: 'NOTECHS-LID-07',
+    nome: 'Planejamento e Coordenação',
+    descricao: 'Planning and Coordination',
+    ordem: 1007,
+  },
+  {
+    codigo: 'NOTECHS-LID-08',
+    nome: 'Gerenciamento da Carga de Trabalho',
+    descricao: 'Workload Management',
+    ordem: 1008,
+  },
   // CSA = Consciência Situacional / Situational Awareness
-  { codigo: 'NOTECHS-CSA-09', nome: 'Consciência dos Sistemas da Aeronave', descricao: 'Aircraft Systems Awareness', ordem: 1009 },
-  { codigo: 'NOTECHS-CSA-10', nome: 'Consciência do Ambiente Externo', descricao: 'Awareness of External Environment', ordem: 1010 },
-  { codigo: 'NOTECHS-CSA-11', nome: 'Consciência do Tempo', descricao: 'Awareness of Time', ordem: 1011 },
+  {
+    codigo: 'NOTECHS-CSA-09',
+    nome: 'Consciência dos Sistemas da Aeronave',
+    descricao: 'Aircraft Systems Awareness',
+    ordem: 1009,
+  },
+  {
+    codigo: 'NOTECHS-CSA-10',
+    nome: 'Consciência do Ambiente Externo',
+    descricao: 'Awareness of External Environment',
+    ordem: 1010,
+  },
+  {
+    codigo: 'NOTECHS-CSA-11',
+    nome: 'Consciência do Tempo',
+    descricao: 'Awareness of Time',
+    ordem: 1011,
+  },
   // TMD = Tomada de Decisão / Decision Making
-  { codigo: 'NOTECHS-TMD-12', nome: 'Definição e Diagnóstico do Problema', descricao: 'Problem Definition and Diagnosis', ordem: 1012 },
-  { codigo: 'NOTECHS-TMD-13', nome: 'Geração de Opções', descricao: 'Option Generation', ordem: 1013 },
-  { codigo: 'NOTECHS-TMD-14', nome: 'Avaliação de Risco e Seleção de Opção', descricao: 'Risk Assessment and Option Selection', ordem: 1014 },
-  { codigo: 'NOTECHS-TMD-15', nome: 'Revisão do Resultado', descricao: 'Outcome Review', ordem: 1015 },
+  {
+    codigo: 'NOTECHS-TMD-12',
+    nome: 'Definição e Diagnóstico do Problema',
+    descricao: 'Problem Definition and Diagnosis',
+    ordem: 1012,
+  },
+  {
+    codigo: 'NOTECHS-TMD-13',
+    nome: 'Geração de Opções',
+    descricao: 'Option Generation',
+    ordem: 1013,
+  },
+  {
+    codigo: 'NOTECHS-TMD-14',
+    nome: 'Avaliação de Risco e Seleção de Opção',
+    descricao: 'Risk Assessment and Option Selection',
+    ordem: 1014,
+  },
+  {
+    codigo: 'NOTECHS-TMD-15',
+    nome: 'Revisão do Resultado',
+    descricao: 'Outcome Review',
+    ordem: 1015,
+  },
 ];
 
 /** Fichas nestes status são imutáveis (mesmo guard usado em PUT /fichas/:id). */
@@ -76,7 +151,9 @@ export function isFichaStatusFinalizado(status: string | null | undefined): bool
 
 /** Detecta se a ficha já tem itens NOTECHS vinculados (evita duplicar no self-heal). */
 export function hasNotechsItens(manobrasRows: Array<{ categoria?: string | null }>): boolean {
-  return manobrasRows.some((row) => String(row.categoria || '').toUpperCase() === NOTECHS_CATEGORIA);
+  return manobrasRows.some(
+    (row) => String(row.categoria || '').toUpperCase() === NOTECHS_CATEGORIA,
+  );
 }
 
 export function getMissingNotechsItens(
@@ -85,7 +162,11 @@ export function getMissingNotechsItens(
   const existingCodes = new Set(
     manobrasRows
       .filter((row) => String(row.categoria || '').toUpperCase() === NOTECHS_CATEGORIA)
-      .map((row) => String(row.codigo || '').trim().toUpperCase())
+      .map((row) =>
+        String(row.codigo || '')
+          .trim()
+          .toUpperCase(),
+      )
       .filter(Boolean),
   );
 
