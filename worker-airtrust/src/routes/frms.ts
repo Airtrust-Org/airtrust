@@ -3686,6 +3686,19 @@ frmsRoutes.put(
     if (!parsed.success) {
       return c.json({ success: false, error: parsed.error.flatten() }, 400);
     }
+
+    // SECURITY: Validar tenant via tripulante antes de permitir mutação
+    const escalaExiste = await c.env.DB.prepare(
+      'SELECT tripulante_id FROM frms_escala_quinzenal WHERE id = ? AND deleted_at IS NULL',
+    )
+      .bind(id)
+      .first<{ tripulante_id: string }>();
+    if (!escalaExiste) {
+      return c.json({ success: false, error: 'Escala não encontrada' }, 404);
+    }
+    const denied = await assertTripulanteEmpresa(c, escalaExiste.tripulante_id);
+    if (denied) return denied;
+
     const escala = await atualizarEscala(c.env.DB, id, parsed.data);
     await auditFrms(c, 'frms_escala', 'UPDATE', id, { depois: parsed.data });
     const limitesEscalaPut = await carregarLimites(c.env.DB);
@@ -3709,14 +3722,21 @@ frmsRoutes.delete(
     )
       .bind(id)
       .first<{ tripulante_id: string }>();
+
+    if (!escalaDel) {
+      return c.json({ success: false, error: 'Escala não encontrada' }, 404);
+    }
+
+    // SECURITY: Validar tenant via tripulante antes de permitir deleção
+    const denied = await assertTripulanteEmpresa(c, escalaDel.tripulante_id);
+    if (denied) return denied;
+
     await deletarEscala(c.env.DB, id);
     await auditFrms(c, 'frms_escala', 'DELETE', id);
-    if (escalaDel?.tripulante_id) {
-      const limitesEscalaDel = await carregarLimites(c.env.DB);
-      c.executionCtx.waitUntil(
-        reprocessarTripulanteCompleto(c.env.DB, Number(escalaDel.tripulante_id), limitesEscalaDel),
-      );
-    }
+    const limitesEscalaDel = await carregarLimites(c.env.DB);
+    c.executionCtx.waitUntil(
+      reprocessarTripulanteCompleto(c.env.DB, Number(escalaDel.tripulante_id), limitesEscalaDel),
+    );
     return c.json({ success: true });
   }),
 );
