@@ -904,13 +904,35 @@ export async function gerarPDFFichaCliente(
 
   // Flag: já inserimos o divisor NOTECHS?
   let notechsDividerInserted = false;
+  let pageCount = 1;
 
-  // Renderizar todas as linhas (técnicas + NOTECHS)
+  // Renderizar todas as linhas (técnicas + NOTECHS) com paginação
   scaledRows.forEach(({ m, nomeLines, obsLines, rowH }, index) => {
+    // Page break if row would overflow page bottom
+    const PAGE_BOTTOM = pageHeight - margin;
+    if (currentY + rowH > PAGE_BOTTOM) {
+      doc.addPage();
+      pageCount++;
+      currentY = margin;
+
+      // Redraw compact table header on new page
+      doc.setFillColor(COLORS.primary);
+      doc.rect(margin, currentY, contentWidth, 6, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('#', col.num, currentY + 4, { align: 'center' });
+      doc.text('CÓDIGO', col.codigo, currentY + 4);
+      doc.text('TRIP.', col.tripulante, currentY + 4, { align: 'center' });
+      doc.text('ITENS', col.itens, currentY + 4);
+      doc.text('OBSERVAÇÕES', col.obs, currentY + 4);
+      doc.text('NOTA', col.nota, currentY + 4, { align: 'center' });
+      currentY += 6;
+    }
+
     // NOTECHS section header — subtle banner, single line
     if ((m as Record<string, unknown>)._section === 'notechs' && !notechsDividerInserted) {
       notechsDividerInserted = true;
-      // Subtle gray-blue background banner
       doc.setFillColor('#E8ECF0');
       doc.rect(margin, currentY, contentWidth, NOTECHS_HEADER_H, 'F');
       doc.setDrawColor(COLORS.border);
@@ -1045,8 +1067,7 @@ export async function gerarPDFFichaCliente(
     currentY = drawFichaAvaliacaoScale(doc, margin, currentY, contentWidth) + 4;
   }
 
-  // Clamp currentY to safe area
-  if (currentY > tableMaxY) currentY = tableMaxY;
+  // Move to last page bottom area — observations and signatures only on final page
 
   // ========== OBSERVAÇÕES GERAIS — compact but visible ==========
   const obsTxt = dados.observacoes_gerais || (isModoModelo ? 'Observações gerais: _________________________________________________' : '');
