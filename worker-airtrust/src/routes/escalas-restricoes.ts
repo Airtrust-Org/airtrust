@@ -79,13 +79,26 @@ restricoes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 restricoes.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const { id } = c.req.param();
+  const empresaId = getEmpresaIdSafe(c);
   const now = new Date().toISOString();
   try {
+    // Só permite excluir restrições da própria empresa (nunca as globais com
+    // empresa_id NULL, nem as de outra empresa).
+    const existing = await db
+      .prepare(
+        `SELECT id FROM restricoes_tripulacao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(id, empresaId)
+      .first();
+    if (!existing) {
+      return c.json({ success: false, error: 'Restrição não encontrada' }, 404);
+    }
+
     await db
       .prepare(
-        `UPDATE restricoes_tripulacao SET deleted_at = ?, updated_at = ?, ativo = 0 WHERE id = ?`,
+        `UPDATE restricoes_tripulacao SET deleted_at = ?, updated_at = ?, ativo = 0 WHERE id = ? AND empresa_id = ?`,
       )
-      .bind(now, now, id)
+      .bind(now, now, id, empresaId)
       .run();
     return c.json({ success: true });
   } catch (e) {
