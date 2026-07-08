@@ -574,10 +574,14 @@ export async function gerarPDFFichaCliente(
   doc.setTextColor(COLORS.textSecondary);
 
   const dataFormatada = formatarData(dados.data);
-  // Valor curto para carga (só o total, sem o detalhe PF/PM que ocupa muito espaço)
+  // Valor curto para carga (só o total, sem o detalhe PF/PM que ocupa muito espaço).
+  // Sem dado real, fica vazio (em vez de "0h") para cair no placeholder em
+  // branco do getDisplayValue, igual aos demais campos do modelo.
   const cargaShort = dados.carga_horaria_total
     ? dados.carga_horaria_total.split('(')[0].trim()
-    : `${dados.carga_horaria_pf || '0'}h`;
+    : dados.carga_horaria_pf
+      ? `${dados.carga_horaria_pf}h`
+      : '';
 
   // drawInfoField: posiciona label (bold) + value (normal) com espaçamento mínimo
   const drawInfoField = (label: string, value: string, x: number, labelW: number, y: number) => {
@@ -640,6 +644,23 @@ export async function gerarPDFFichaCliente(
   // Avançar currentY: session box + gap (3mm)
   currentY += SESSION_BOX_H + 1;
 
+  // ========== LEGENDA IMPRESSA — TRIP. e NOTA ==========
+  // A ficha é um documento impresso usado isoladamente (briefing/cabine), sem
+  // acesso à legenda que só existe na UI (ModalAvaliarFicha.tsx). Sem isso o
+  // avaliador não sabe o que A/B/AB e a nota numérica significam.
+  const LEGEND_FONT = 5.8;
+  const LEGEND_H = 3.4;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(LEGEND_FONT);
+  doc.setTextColor(COLORS.textSecondary);
+  doc.text(
+    'TRIP.: A = Comandante  ·  B = Copiloto  ·  AB = Ambos      NOTA: 1–4 Insatisfatório  ·  5–7 Regular  ·  8–10 Excelente  ·  NR = Não Realizada',
+    margin,
+    currentY + 2.4,
+    { maxWidth: contentWidth },
+  );
+  currentY += LEGEND_H;
+
   // ── Table layout constants ────────────────────────────────────────────────
   const tableLayout = getFichaPdfTableLayout(margin);
   const col = tableLayout.positions;
@@ -692,11 +713,13 @@ export async function gerarPDFFichaCliente(
     m,
     rowH: ITEM_ROW_HEIGHT,
     displayNum: m.ordem,
+    isNotechs: false,
   }));
   const notechsRows = manobrasNotechs.map((m) => ({
     m,
     rowH: ITEM_ROW_HEIGHT,
     displayNum: m.ordem - NOTECHS_ORDEM_BASE + 1,
+    isNotechs: true,
   }));
   const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 4 : 0;
 
@@ -708,7 +731,9 @@ export async function gerarPDFFichaCliente(
   //   rodapé: 4mm no fundo
   //   assinaturas: 28mm (duas caixas lado a lado, compactas)
   //   obs gerais: 14mm
-  const FOOTER_H = 4;
+  // FOOTER_H em 5mm (era 4) para dar folga real ao texto do rodapé antes da
+  // margem não-imprimível física da maioria das impressoras (~4-5mm).
+  const FOOTER_H = 5;
   const SIG_RESERVED = 28;
   const OBS_RESERVED = 14;
   const availableBottomY = pageHeight - FOOTER_H - SIG_RESERVED - 2 - OBS_RESERVED - 2;
@@ -723,13 +748,13 @@ export async function gerarPDFFichaCliente(
   }
 
   // Pré-calcular nomeLines/obsLines para TODAS as linhas (sem row scaling)
-  const precomputedRows = allRows.map(({ m, rowH, displayNum }) => {
+  const precomputedRows = allRows.map(({ m, rowH, displayNum, isNotechs }) => {
     const nomeTxt = (m.nome || '').trim();
     const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), MAX_ITEM_LINES);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
       obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), MAX_OBS_LINES) : [];
-    return { m, nomeLines, obsLines, rowH, displayNum };
+    return { m, nomeLines, obsLines, rowH, displayNum, isNotechs };
   });
 
   // Desenha uma linha da tabela (já com nomeLines/obsLines/rowH resolvidos) —
@@ -737,7 +762,7 @@ export async function gerarPDFFichaCliente(
   // logo abaixo: mesmas colunas (#, CÓDIGO, TRIP., ITENS, OBSERVAÇÕES, NOTA),
   // mesma fonte, mesmo zebrado.
   const drawTableRow = (
-    { m, nomeLines, obsLines, rowH, displayNum }: (typeof precomputedRows)[number],
+    { m, nomeLines, obsLines, rowH, displayNum, isNotechs }: (typeof precomputedRows)[number],
     isEven: boolean,
   ) => {
     if (isEven) {
@@ -753,11 +778,19 @@ export async function gerarPDFFichaCliente(
     const textTopY = currentY + 1.8;
     const itemLineSpacing = 2.8;
 
-    // Número
-    doc.text(String(displayNum).padStart(2, '0'), col.num, textTopY, { align: 'center' });
+    // Número — NOTECHS ganha prefixo "N" (numeração própria 1–15) para não
+    // ser confundido com o item técnico de mesmo número em briefing oral.
+    const numText = isNotechs
+      ? `N${String(displayNum).padStart(2, '0')}`
+      : String(displayNum).padStart(2, '0');
+    doc.text(numText, col.num, textTopY, { align: 'center' });
 
     // Código
-    doc.text((m.codigo || '').substring(0, 13), col.codigo, textTopY);
+    // 20 chars cabe folgado na coluna de 24mm (NOTECHS-TMD-15 = 14 chars,
+    // medição já registrada em getFichaPdfTableLayout acima). O limite antigo
+    // de 13 cortava o último dígito de todo código NOTECHS (14 chars),
+    // tornando pares como NOTECHS-COO-01/02 indistinguíveis no PDF.
+    doc.text((m.codigo || '').substring(0, 20), col.codigo, textTopY);
 
     // Tripulante (A/B/AB)
     const tripulante = m.tripulante || 'AB';
@@ -909,7 +942,7 @@ export async function gerarPDFFichaCliente(
 
   // ========== ASSINATURAS — ancoradas no fundo, proporcionais ==========
   // Rodapé fixo no fundo. Assinaturas calculadas de baixo para cima.
-  const FOOTER_Y = pageHeight - FOOTER_H + 1; // rodapé no fundo (fixo)
+  const FOOTER_Y = pageHeight - FOOTER_H; // rodapé no fundo (fixo), com folga da borda física
   const FOOTER_GAP = 4; // espaço entre assinaturas e rodapé
 
   const hasAnySignatureImg = !!(
@@ -1022,7 +1055,7 @@ export async function gerarPDFFichaCliente(
   doc.setFontSize(6.5);
   doc.setTextColor(COLORS.textSecondary);
   doc.text(
-    `Gerado em ${new Date().toLocaleString('pt-BR')} | AirTrust - Aviation Management System`,
+    `Gerado em ${new Date().toLocaleString('pt-BR')} | AirTrust — Ficha de treinamento. Documento interno.`,
     pageWidth / 2,
     FOOTER_Y,
     { align: 'center' },
