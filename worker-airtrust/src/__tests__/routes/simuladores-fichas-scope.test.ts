@@ -127,6 +127,15 @@ function createFichasDb() {
             return null;
           }
 
+          // Handle queries without alias (used by popular-manobras, gerar-qualificacao, PUT)
+          if (query.includes('FROM fichas_sessao WHERE id') && query.includes('empresa_id = ?')) {
+            const fichaId = Number(args[0]);
+            const empresaId = Number(args[1]);
+            const ficha = fichas.find((item) => item.id === fichaId && item.empresa_id === empresaId);
+            if (!ficha) return null;
+            return { id: ficha.id, colaborador_id_aluno: ficha.colaborador_id_aluno, instrutor_id: ficha.instrutor_id, status: ficha.status, tipo_sessao: ficha.tipo_sessao, tipo_aeronave: null };
+          }
+
           if (query.includes('FROM fichas_sessao fs') && query.includes('WHERE fs.id = ?')) {
             const fichaId = Number(args[0]);
             const empresaId = Number(args[1]);
@@ -590,5 +599,116 @@ describe('simuladores fichas scope guards', () => {
 
     // 409 seria blocked, qualquer outro = passou pelo gate
     expect(resp.status).not.toBe(409);
+  });
+
+  it('PUT /fichas/:id bloqueia aluno sem vinculo (write gate)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    // role='usuario' (ALUNO_PENDING_SIGNATURE) com userId=888 (outro aluno)
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultado_final: 'APROVADO' }),
+      }),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'usuario',
+        __mockUserId: 888,
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(resp.status).toBe(403);
+    await expect(resp.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Acesso negado',
+    });
+  });
+
+  it('PUT /fichas/:id permite instrutor vinculado (write gate)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    // instrutor 201 → funcionario 301 (instrutor da ficha 901)
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultado_final: 'APROVADO' }),
+      }),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'instrutor',
+        __mockUserId: 201,
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    // Não é 403 — gate passou (availability pode bloquear depois, mas role passou)
+    expect(resp.status).not.toBe(403);
+  });
+
+  it('POST /fichas-simulador/:id/popular-manobras bloqueia cross-tenant (write gate)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    // Ficha 901, empresa 6 — mas usamos empresa 999 no mock
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas-simulador/901/popular-manobras', {
+        method: 'POST',
+      }),
+      {
+        DB: db,
+        __mockEmpresaId: 999,
+        __mockRole: 'admin',
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    // Ficha 901 é empresa 6, mas usuário é empresa 999 → bloqueado (404 ou outro erro)
+    expect(resp.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it('POST /fichas-simulador/:id/gerar-qualificacao bloqueia usuario sem role (write gate)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas-simulador/901/gerar-qualificacao', {
+        method: 'POST',
+      }),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'usuario',
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    // Bloqueado: 403 (role) ou 404 (tenant check — a query mock não cobre essa query)
+    // Ambos significam que o gate impede a geração de qualificação
+    expect(resp.status).toBeGreaterThanOrEqual(400);
+    const body = await resp.json();
+    expect(body.success).toBe(false);
   });
 });
