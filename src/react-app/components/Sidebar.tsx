@@ -12,6 +12,8 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { clearAllScopedAuthStorage, clearLegacyPerfisCache } from '@/react-app/utils/auth-storage';
+import { queryClient } from '@/react-app/lib/query-client';
 
 import SidebarFooter from './SidebarFooter';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
@@ -69,6 +71,9 @@ export function Sidebar() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    clearAllScopedAuthStorage();
+    clearLegacyPerfisCache();
+    queryClient.clear();
     navigate('/login');
   };
 

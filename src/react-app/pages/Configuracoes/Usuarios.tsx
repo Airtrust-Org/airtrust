@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserPlus, Trash2, Mail, Shield, User, Pencil, LogIn } from 'lucide-react';
 import { API_BASE_URL, clearTokens, getAccessToken, setTokens } from '../../config/api';
+import { clearAllScopedAuthStorage, clearLegacyPerfisCache } from '@/react-app/utils/auth-storage';
 import { useToast } from '../../hooks/useToast';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { useLanguage } from '../../i18n/useLanguage';
@@ -314,6 +315,8 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
         setTokens(accessToken);
 
         try {
+          clearAllScopedAuthStorage();
+          clearLegacyPerfisCache();
           sessionStorage.setItem('airtrust_user', JSON.stringify(impersonatedUser));
           sessionStorage.removeItem('airtrust_refresh_token');
           localStorage.removeItem('airtrust_refresh_token');

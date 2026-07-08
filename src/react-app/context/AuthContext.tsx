@@ -14,6 +14,7 @@ import {
 } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { queryClient } from '@/react-app/lib/query-client';
+import { clearAllScopedAuthStorage, clearLegacyPerfisCache } from '@/react-app/utils/auth-storage';
 import { AuthContext, type AuthContextType, type User, type UsuarioEmpresa } from './auth-context';
 import { getDevLoginCredentials } from '@/react-app/utils/devCredentials';
 
@@ -280,6 +281,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     queryClient.clear();
+    clearAllScopedAuthStorage();
+    clearLegacyPerfisCache();
     clearRefreshSchedule();
     setToken(null);
     setUser(null);
