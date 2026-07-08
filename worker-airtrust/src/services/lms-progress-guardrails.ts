@@ -314,12 +314,12 @@ export function mergeScormRuntimeState(params: {
   const blockedShorterSuspendData =
     Boolean(currentSuspendData) &&
     Boolean(incomingSuspendData) &&
-    incomingSuspendData.length < currentSuspendData.length;
+    incomingSuspendData!.length < currentSuspendData!.length;
   const mergedSuspendData: string | null = (() => {
     if (blockedEmptySuspendData || blockedShorterSuspendData) {
-      return currentSuspendData;
+      return currentSuspendData ?? null;
     }
-    return incomingSuspendData ?? currentSuspendData;
+    return incomingSuspendData ?? currentSuspendData ?? null;
   })();
 
   if (mergedCmi && mergedLocationValue) {
