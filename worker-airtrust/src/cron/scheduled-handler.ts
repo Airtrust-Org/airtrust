@@ -8,6 +8,7 @@ import { processarNotificacoesSgso, enqueueSlaAlerts } from './sgso-notificacoes
 import { createStructuredConsole } from '../utils/logger';
 import { processarEventosParaModulo } from '../shared/handlers';
 import { CANCELLED_STATUS_VALUES, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
+import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import {
   ensureMatriculaCycle,
   hasActiveMatriculaCycle,
@@ -32,6 +33,8 @@ function isMatriculaUniqueConstraintError(error: unknown) {
 export const LMS_RENOVACAO_EAD_JANELA_DIAS = 30;
 
 export function buildQualificacoesEadRenovacaoAutomaticaQuery() {
+  const vencExpr = getQualificacoesVencimentoExpr();
+  const vencExprQh2 = getQualificacoesVencimentoExpr('qh2', 'qt');
   return `SELECT DISTINCT
            qh.id AS qualificacao_historico_id,
            qh.funcionario_id,
@@ -85,18 +88,9 @@ export function buildQualificacoesEadRenovacaoAutomaticaQuery() {
                   qh2.qualificacao_id = qt.id
                   OR UPPER(TRIM(COALESCE(qh2.qualificacao_codigo, ''))) = UPPER(TRIM(COALESCE(qt.codigo, '')))
                 )
-                AND date(COALESCE(
-                  qh2.data_vencimento,
-                  date(qh2.data_conclusao, '+' || COALESCE(qh2.validade_meses, qt.validade, 12) || ' months')
-                )) > date(COALESCE(
-                  qh.data_vencimento,
-                  date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-                ))
+                AND date(${vencExprQh2}) > date(${vencExpr})
            )
-           AND date(COALESCE(
-             qh.data_vencimento,
-             date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-           )) <= date('now', '+' || ? || ' days')`;
+           AND date(${vencExpr}) <= date('now', '+' || ? || ' days')`;
 }
 
 async function registrarEventoSigvoosFalha(
@@ -780,21 +774,16 @@ export async function runScheduledJobs(
     if (diaSemanaHoje === 1) {
       try {
         console.log('[CRON] 📅 Alerta semanal de qualificações ≤90 dias...');
+        const vencExpr = getQualificacoesVencimentoExpr();
         const qualifs90 = await env.DB.prepare(
           `SELECT
                 f.nome AS funcionario_nome,
                 COALESCE(qh.qualificacao_codigo, qt.codigo) AS codigo,
                 qt.nome AS qualificacao_nome,
                 qt.categoria,
-                COALESCE(
-                  qh.data_vencimento,
-                  date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-                ) AS validade_fim,
+                ${vencExpr} AS validade_fim,
                 CAST(
-                  JULIANDAY(COALESCE(
-                    qh.data_vencimento,
-                    date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-                  )) - JULIANDAY('now') AS INTEGER
+                  JULIANDAY(${vencExpr}) - JULIANDAY('now') AS INTEGER
                 ) AS dias_restantes
              FROM qualificacoes_historico qh
              JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1
@@ -802,10 +791,7 @@ export async function runScheduledJobs(
              WHERE qh.deleted_at IS NULL
                AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
                AND CAST(
-                 JULIANDAY(COALESCE(
-                   qh.data_vencimento,
-                   date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-                 )) - JULIANDAY('now') AS INTEGER
+                 JULIANDAY(${vencExpr}) - JULIANDAY('now') AS INTEGER
                ) BETWEEN 1 AND 90
                AND qh.id IN (
                  SELECT MAX(sub.id) FROM qualificacoes_historico sub
