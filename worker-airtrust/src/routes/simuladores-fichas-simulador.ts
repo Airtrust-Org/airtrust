@@ -24,10 +24,15 @@ const app = new Hono<{ Bindings: Env }>();
 app.get('/fichas-simulador/:id/manobras', async (c) => {
   try {
     const id = c.req.param('id');
+    const empresaId = getEmpresaId(c);
     const m = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao_manobras WHERE ficha_id=? AND deleted_at IS NULL ORDER BY ordem',
+      `SELECT fsm.*
+       FROM fichas_sessao_manobras fsm
+       JOIN fichas_sessao fs ON fs.id = fsm.ficha_id AND fs.deleted_at IS NULL
+       WHERE fsm.ficha_id = ? AND fs.empresa_id = ? AND fsm.deleted_at IS NULL
+       ORDER BY fsm.ordem`,
     )
-      .bind(id)
+      .bind(id, empresaId)
       .all();
     return c.json({ success: true, data: m.results });
   } catch (e: any) {
