@@ -22,6 +22,8 @@ export function clearLocalStorage(): void {
   let cleared = 0;
 
   for (const key of allKeys) {
+    // Preservar chaves auth escopadas (airtrust:*) durante limpeza geral
+    if (key.startsWith('airtrust:')) continue;
     if (!keysToKeep.includes(key)) {
       localStorage.removeItem(key);
       cleared++;
