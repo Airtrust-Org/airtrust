@@ -17,6 +17,7 @@ type ModalLicencaProps = {
   mode: 'create' | 'edit';
   licencaId?: number;
   defaultFuncionarioId?: number;
+  defaultFuncionarioNome?: string;
   aberto: boolean;
   onFechar: () => void;
   onSalvar: () => void;
@@ -56,10 +57,12 @@ export default function ModalLicenca({
   mode,
   licencaId,
   defaultFuncionarioId,
+  defaultFuncionarioNome,
   aberto,
   onFechar,
   onSalvar,
 }: ModalLicencaProps) {
+  const isContextual = Boolean(defaultFuncionarioId);
   const [funcionarios, setFuncionarios] = useState<FuncionarioOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,8 +147,16 @@ export default function ModalLicenca({
 
       const method = mode === 'create' ? 'POST' : 'PUT';
 
+      const funcionarioId = isContextual ? defaultFuncionarioId : Number(formData.funcionario_id);
+
+      if (!funcionarioId) {
+        setError('Funcionário é obrigatório');
+        setLoading(false);
+        return;
+      }
+
       const payload = {
-        funcionario_id: Number(formData.funcionario_id),
+        funcionario_id: funcionarioId,
         tipo: formData.tipo?.trim() || null,
         numero: formData.numero?.trim() || null,
         data_emissao: formData.data_emissao || null,
@@ -211,22 +222,31 @@ export default function ModalLicenca({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Funcionário */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Funcionário *</label>
-            <select
-              value={formData.funcionario_id}
-              onChange={(e) => setFormData((prev) => ({ ...prev, funcionario_id: e.target.value }))}
-              required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-            >
-              <option value="">Selecione...</option>
-              {funcionarios.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nome_completo} ({f.matricula})
-                </option>
-              ))}
-            </select>
-          </div>
+          {isContextual ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Funcionário</label>
+              <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                {defaultFuncionarioNome || `ID: ${defaultFuncionarioId}`}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Funcionário *</label>
+              <select
+                value={formData.funcionario_id}
+                onChange={(e) => setFormData((prev) => ({ ...prev, funcionario_id: e.target.value }))}
+                required
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              >
+                <option value="">Selecione...</option>
+                {funcionarios.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.nome_completo} ({f.matricula})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Tipo + Número */}
           <div className="grid gap-4 md:grid-cols-2">

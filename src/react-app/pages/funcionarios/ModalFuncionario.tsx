@@ -1888,6 +1888,7 @@ export default function ModalFuncionario({
           mode={licencaEditandoId ? 'edit' : 'create'}
           licencaId={licencaEditandoId}
           defaultFuncionarioId={funcionario.id}
+          defaultFuncionarioNome={funcionario.nome || funcionario.guerra || ''}
           aberto={modalLicencaAberto}
           onFechar={fecharModalLicenca}
           onSalvar={handleLicencaSalva}
