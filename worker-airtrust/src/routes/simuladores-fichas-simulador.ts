@@ -203,6 +203,12 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
 // Novo padrão operacional: 18 técnicas + 15 NOTECHS fixos.
 app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
   try {
+    const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
+    const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
+    if (!allowedRoles.includes(role)) {
+      return c.json({ success: false, error: 'Acesso negado' }, 403);
+    }
+
     const empresaId = getEmpresaId(c);
     const fid = c.req.param('id');
     const availability = await getFichaAvailabilityFromDb(c.env.DB, fid);
@@ -223,9 +229,9 @@ app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
     }
 
     const f = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(fid)
+      .bind(fid, empresaId)
       .first();
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
@@ -265,7 +271,27 @@ app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
 
 app.post('/fichas-simulador/:id/gerar-qualificacao', async (c) => {
   try {
-    const data = await gerarQualificacaoDaFicha(c.env.DB, c.req.param('id'));
+    const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
+    const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
+    if (!allowedRoles.includes(role)) {
+      return c.json({ success: false, error: 'Acesso negado' }, 403);
+    }
+
+    const empresaId = getEmpresaId(c);
+    const fid = c.req.param('id');
+
+    // ── Tenant guard: ficha deve pertencer à empresa do usuário ───────────
+    const fichaCheck = await c.env.DB.prepare(
+      'SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+    )
+      .bind(fid, empresaId)
+      .first();
+    if (!fichaCheck) {
+      return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
+    const data = await gerarQualificacaoDaFicha(c.env.DB, fid);
 
     return c.json(
       {
