@@ -24,12 +24,11 @@
     },
     "ignoreDeprecations": "6.0"
   },
-  "include": ["src/worker", "src/shared", "src/worker/types"],
+  "include": ["worker-airtrust/src"],
   "exclude": [
-    "src/worker/api/v2/ARCHIVE",
-    "src/worker/**/ARCHIVE/**",
-    "src/worker/**/*.test.ts",
-    "**/*.test.ts",
-    "**/*.spec.ts"
+    "worker-airtrust/src/__tests__",
+    "worker-airtrust/node_modules",
+    "worker-airtrust/dist",
+    "worker-airtrust/.wrangler"
   ]
 }
