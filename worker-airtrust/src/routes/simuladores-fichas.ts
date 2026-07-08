@@ -578,6 +578,25 @@ app.get('/fichas/:id', async (c) => {
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
 
+    // ── Verificar disponibilidade (ficha só no dia) ─────────────────────────
+    const availability = await getFichaAvailabilityFromDb(c.env.DB, id);
+    if (!availability.available) {
+      return c.json(
+        {
+          success: false,
+          code: availability.code,
+          error: availability.message,
+          details: {
+            ficha_id: Number(id),
+            session_starts_at: availability.sessionStartsAt,
+            timezone: availability.timezone,
+          },
+        },
+        409,
+      );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     if (access.mode === 'restricted') {
       const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
         c.env.DB,
@@ -829,6 +848,25 @@ app.post('/fichas/:id/pdf', async (c) => {
       .first<any>();
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+
+    // ── Verificar disponibilidade (ficha só no dia) ─────────────────────────
+    const availability = await getFichaAvailabilityFromDb(c.env.DB, fichaId);
+    if (!availability.available) {
+      return c.json(
+        {
+          success: false,
+          code: availability.code,
+          error: availability.message,
+          details: {
+            ficha_id: Number(fichaId),
+            session_starts_at: availability.sessionStartsAt,
+            timezone: availability.timezone,
+          },
+        },
+        409,
+      );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // ── Verificar acesso por setor ───────────────────────────────────────────
     if (access.mode === 'restricted') {
