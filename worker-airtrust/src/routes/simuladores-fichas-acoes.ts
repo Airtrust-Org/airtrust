@@ -481,6 +481,8 @@ app.post('/fichas/:id/assinar', async (c) => {
 app.post('/fichas/:id/arquivar', async (c) => {
   try {
     const ctx = c as unknown as { get: (k: string) => unknown };
+    const userId = String(ctx.get('userId') || '');
+    const role = String(ctx.get('userRole') || '');
     const empresaId = String(ctx.get('empresaId') || '');
     const fichaId = c.req.param('id');
 
@@ -520,6 +522,15 @@ app.post('/fichas/:id/arquivar', async (c) => {
     if (!['CONCLUIDA', 'APROVADO', 'NAO_APROVADO'].includes(String((ficha as any)?.status || ''))) {
       return c.json({ success: false, error: 'Ficha precisa estar finalizada para arquivar' }, 400);
     }
+
+    // ── Verificar permissão ────────────────────────────────────────────────
+    if (!isFullAccess(role)) {
+      const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
+      if (!funcId || String((ficha as any).instrutor_id) !== String(funcId)) {
+        return c.json({ success: false, error: 'Acesso negado' }, 403);
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     const manobras = await c.env.DB.prepare(
       `SELECT *

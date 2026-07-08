@@ -34,6 +34,12 @@ function parseHistoricoLimit(raw: string | undefined): number {
 // POST /historico-notas - Registrar nota no histórico
 app.post('/historico-notas', async (c) => {
   try {
+    const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
+    const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
+    if (!allowedRoles.includes(role)) {
+      return c.json({ success: false, error: 'Acesso negado' }, 403);
+    }
+
     const { empresaId } = getTenantContext(c);
     const body = await c.req.json();
     const {
