@@ -320,7 +320,7 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     await gerarPDFFichaCliente(dadosPDF);
 
     const allText = capturedTexts.join('\n');
-    expect(allText).toMatch(/REGUA DE AVALIACAO/i);
+    expect(allText).toMatch(/Régua NOTECHS/i);
     expect(allText).toMatch(/Descritores Completos/i);
     expect(addPageCalls.count).toBeGreaterThan(0);
   });

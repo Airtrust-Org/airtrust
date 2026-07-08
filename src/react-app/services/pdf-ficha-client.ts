@@ -675,19 +675,19 @@ export async function gerarPDFFichaCliente(
   //   header area:  ~12mm (logo + title + ficha info, compact)
   //   session box:  ~8mm + 1mm gap = 9mm
   //   table header: 5mm
-  //   18 técnicas × 5.5mm = 99mm
+  //   18 técnicas × 6.0mm = 108mm
   //   NOTECHS divider: 4mm
-  //   15 NOTECHS × 5.5mm = 82.5mm
+  //   15 NOTECHS × 6.0mm = 90mm
   //   observations: ~14mm
   //   signatures:   ~28mm
-  //   footer:       ~4mm
-  //   internal gaps: ~6mm
+  //   footer:       ~5mm
+  //   internal gaps: ~5mm
   //   ─────────────────
-  //   TOTAL:         ~263.5mm  →  ✅ fits in 277mm (13.5mm safety)
+  //   TOTAL:         ~277mm  →  ✅ fits in 277mm, signatures anchored
   //
   // NUNCA usar row scaling, paginação, ou altura variável.
   const TABLE_FONT = 6.5;
-  const ITEM_ROW_HEIGHT = 5.5; // mm — altura fixa UNIFORME para cada linha
+  const ITEM_ROW_HEIGHT = 6.0; // mm — altura fixa UNIFORME para cada linha
   const MAX_ITEM_LINES = 2;
   const MAX_OBS_LINES = 2;
   doc.setFont('helvetica', 'normal');
@@ -767,8 +767,8 @@ export async function gerarPDFFichaCliente(
     doc.setFontSize(TABLE_FONT);
     doc.setTextColor(COLORS.text);
 
-    // Texto sempre alinhado ao topo da linha (compacto, rowH=5.5mm)
-    const textTopY = currentY + 1.8;
+    // Texto centrado verticalmente na linha (rowH=6.0mm, 6.5pt≈2.3mm)
+    const textTopY = currentY + 2.5;
     const itemLineSpacing = 2.8;
 
     // Número — NOTECHS ganha prefixo "N" (numeração própria 1–15) para não
@@ -900,8 +900,9 @@ export async function gerarPDFFichaCliente(
       doc.setFontSize(6.5);
       doc.text(
         'NOTECHS — Non-Technical Skills / Habilidades Não Técnicas e Comportamentais',
-        margin + 2,
+        pageWidth / 2,
         currentY + NOTECHS_DIVIDER_H / 2 + 1,
+        { align: 'center' },
       );
       currentY += NOTECHS_DIVIDER_H;
     }
@@ -938,7 +939,8 @@ export async function gerarPDFFichaCliente(
   const FOOTER_GAP = 4;
 
   // Guard: se tabela + obs invadiu área de assinatura, cap currentY
-  // para evitar que jsPDF crie página extra por overflow.
+  // para evitar que jsPDF crie página extra por overflow. Caso contrário,
+  // sobe as assinaturas para perto do conteúdo (evita vão visual no pé).
   if (currentY > FOOTER_Y - FOOTER_GAP - 20) {
     currentY = FOOTER_Y - FOOTER_GAP - 20;
   }
