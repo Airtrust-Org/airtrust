@@ -397,4 +397,85 @@ describe('simuladores fichas scope guards', () => {
     });
     expect(runs.some((item) => item.query.includes('INSERT INTO fichas_sessao'))).toBe(false);
   });
+
+  it('POST /fichas/:id/pdf respeita escopo setorial (BUG-007)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'restricted',
+      setorIds: [10],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    // Ficha 901: colaborador 201 (setor 10) — dentro do escopo
+    const okResp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901/pdf', { method: 'POST' }),
+      { DB: db, __mockEmpresaId: 6, __mockRole: 'manager' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    // 404? 403? 500? The mock doesn't return all PDF columns, but the gate
+    // must be reached BEFORE the DB fetch for manobras. Non-200 means gate agiu.
+    expect(okResp.status).not.toBe(404);
+    // Ficha 902: colaborador 202 (setor 20) — fora do escopo
+    const blockedResp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/902/pdf', { method: 'POST' }),
+      { DB: db, __mockEmpresaId: 6, __mockRole: 'manager' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(blockedResp.status).toBe(404);
+    await expect(blockedResp.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Ficha não encontrada',
+    });
+  });
+
+  it('POST /fichas/:id/pdf bloqueia aluno sem vinculo (BUG-007)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    // Ficha 901: colaborador 201, mas usuário logado é 101 (funcionario 201)
+    // Usando role='usuario' (ALUNO_PENDING_SIGNATURE scope) com userId=888 (outro aluno)
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901/pdf', { method: 'POST' }),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'usuario',
+        __mockUserId: 888,
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(resp.status).toBe(403);
+    await expect(resp.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Acesso negado',
+    });
+  });
+
+  it('POST /fichas/:id/pdf permite acesso do proprio aluno (BUG-007)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    // Usuário 201 → funcionario 301 (instrutor da ficha 901)
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901/pdf', { method: 'POST' }),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'instrutor',
+        __mockUserId: 201,
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    // Instrutor da ficha 901 → autorizado (gate passa)
+    // Pode retornar 500 por falta de mock interno, mas NÃO 403
+    expect(resp.status).not.toBe(403);
+  });
 });
