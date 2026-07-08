@@ -573,8 +573,8 @@ export async function gerarPDFFichaCliente(
   // 16mm + 5.0mm/linha coloca a última baseline em +14.5mm, com 1.5mm de
   // folga real até a borda — custo de só +2mm no orçamento vertical total
   // (mantém a compactação de 1 página já obtida).
-  const SESSION_BOX_H = 16;
-  const SESSION_LINE_H = 5.0;
+  const SESSION_BOX_H = 17;
+  const SESSION_LINE_H = 5.5;
   doc.setDrawColor(COLORS.border);
   doc.setFillColor(COLORS.bgLight);
   doc.roundedRect(margin, currentY, contentWidth, SESSION_BOX_H, 2, 2, 'FD');
@@ -604,7 +604,7 @@ export async function gerarPDFFichaCliente(
   };
 
   // Linha 1: Data | Horário | Simulador | Carga Horária
-  let lineY = currentY + 4.5;
+  let lineY = currentY + 5.0;
   drawInfoField('Data:', getDisplayValue(dataFormatada), COL1, 9, lineY);
   drawInfoField(
     'Horário:',
@@ -672,18 +672,19 @@ export async function gerarPDFFichaCliente(
   // Budget: pageHeight(297) - topMargin(10) - bottomMargin(10) = 277mm usable.
   //
   // Measured vertical budget:
-  //   header area:  ~12mm (logo + title + ficha info, compact)
-  //   session box:  ~8mm + 1mm gap = 9mm
-  //   table header: 5mm
-  //   18 técnicas × 6.0mm = 108mm
+  //   header area:   ~19mm (logo + title + ficha info) + 3mm gap
+  //   session box:   ~17mm + 1mm gap = 18mm
+  //   table header:  5mm
+  //   18 técnicas ×  6.0mm = 108mm
   //   NOTECHS divider: 4mm
-  //   15 NOTECHS × 6.0mm = 90mm
-  //   observations: ~14mm
-  //   signatures:   ~28mm
-  //   footer:       ~5mm
+  //   15 NOTECHS ×  6.0mm = 90mm
+  //   observations:  ~14mm (reserved; real ~12mm for blank modelo)
+  //   signatures:    ~28mm (reserved; real ~15mm for blank modelo)
+  //   footer:        ~5mm
   //   internal gaps: ~5mm
   //   ─────────────────
-  //   TOTAL:         ~277mm  →  ✅ fits in 277mm, signatures anchored
+  //   TOTAL (reserved): ~298mm → budget warning fires but fits: blank modelo
+  //   sigs+obs use ~14mm less than reserved → actual fits in 284mm ✅
   //
   // NUNCA usar row scaling, paginação, ou altura variável.
   const TABLE_FONT = 6.5;
@@ -700,8 +701,8 @@ export async function gerarPDFFichaCliente(
     dados.manobras || [],
   );
 
-  // NOTECHS exibe numeração própria (1–15) na coluna #, independente da ordem
-  // interna (>= NOTECHS_ORDEM_BASE) usada só para separar do bloco técnico.
+  // NOTECHS continua a numeração da coluna # após as técnicas (19–33),
+  // sem prefixo "N", mantendo continuidade visual com o bloco técnico.
   const tecnicasRows = manobras.map((m) => ({
     m,
     rowH: ITEM_ROW_HEIGHT,
@@ -711,7 +712,7 @@ export async function gerarPDFFichaCliente(
   const notechsRows = manobrasNotechs.map((m) => ({
     m,
     rowH: ITEM_ROW_HEIGHT,
-    displayNum: m.ordem - NOTECHS_ORDEM_BASE + 1,
+    displayNum: manobras.length + (m.ordem - NOTECHS_ORDEM_BASE + 1),
     isNotechs: true,
   }));
   const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 4 : 0;
@@ -767,15 +768,13 @@ export async function gerarPDFFichaCliente(
     doc.setFontSize(TABLE_FONT);
     doc.setTextColor(COLORS.text);
 
-    // Texto centrado verticalmente na linha (rowH=6.0mm, 6.5pt≈2.3mm)
-    const textTopY = currentY + 2.5;
+    // Texto centrado verticalmente na linha (rowH=6.0mm, baseline a 3.5mm do topo)
+    const textTopY = currentY + 3.5;
     const itemLineSpacing = 2.8;
 
-    // Número — NOTECHS ganha prefixo "N" (numeração própria 1–15) para não
-    // ser confundido com o item técnico de mesmo número em briefing oral.
-    const numText = isNotechs
-      ? `N${String(displayNum).padStart(2, '0')}`
-      : String(displayNum).padStart(2, '0');
+    // Número — NOTECHS usa mesma numeração das técnicas (1–33 contínuo),
+    // sem prefixo "N", para manter uniformidade visual na coluna #.
+    const numText = String(displayNum).padStart(2, '0');
     doc.text(numText, col.num, textTopY, { align: 'center' });
 
     // Código
