@@ -2016,7 +2016,7 @@ frmsRoutes.put(
           {
             origem_modulo: 'frms',
             funcionario_id: funcionarioId,
-            empresa_id: empresaAtual,
+            empresa_id: empresaId,
             frms_score: estado.frms_score,
             jornada_id: id,
           },

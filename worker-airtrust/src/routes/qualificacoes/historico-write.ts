@@ -393,7 +393,7 @@ writeRouter.post(
           original.instrutor,
           cargaHorariaEfetiva,
           tipoTreinamento,
-          renovacaoResolvida.status,
+          renovacaoResolvida?.status ?? 'CONCLUIDA',
           tenantCtx.empresaId,
         )
         .run();

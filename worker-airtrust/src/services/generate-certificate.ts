@@ -589,9 +589,8 @@ export async function generateCertificateForHistorico(
       tabela: 'documentos',
       acao: 'INSERT',
       registro_id: documentoId,
-      dados_novos: { historico_id: historicoId, r2_key: r2Key, nome_arquivo: nomeArquivo },
-      userId: actorUserId,
-      empresaId: qualificacaoEmpresaId,
+      dados_novos: { historico_id: historicoId, r2_key: r2Key, nome_arquivo: nomeArquivo, empresa_id: qualificacaoEmpresaId },
+      usuario_id: actorUserId?.toString(),
     });
   } catch (auditErr) {
     console.error('[generate-certificate] Falha ao registrar auditoria:', auditErr);

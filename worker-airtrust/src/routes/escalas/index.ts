@@ -12,7 +12,7 @@
 // Import the original monolith (renamed to escalas-core.ts)
 import escalas from '../escalas-core';
 import { auth } from '../../middleware/auth';
-import { getEmpresaIdOptional, getEscalaVerificada } from '../escalas-shared';
+import { getEmpresaIdOptional, getEmpresaIdSafe, getEscalaVerificada } from '../escalas-shared';
 
 // ================================================================
 // MKT-04: GET /api/escalas/minha-escala

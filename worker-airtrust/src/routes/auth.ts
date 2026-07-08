@@ -1325,7 +1325,7 @@ authRoutes.post(
 authRoutes.post('/logout', async (c) => {
   const logger = createLogger(c, 'AuthRoutes.logout');
   try {
-    const body = await c.req.json<{ refreshToken?: string }>().catch(() => ({}));
+    const body = await c.req.json<{ refreshToken?: string }>().catch(() => ({ refreshToken: undefined }));
     const refreshToken = typeof body.refreshToken === 'string' ? body.refreshToken : null;
 
     const db = c.env.DB;
