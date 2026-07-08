@@ -403,7 +403,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -443,7 +443,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -484,7 +484,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -524,7 +524,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -547,7 +547,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -572,7 +572,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -671,7 +671,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as Record<string, unknown>;
       expect(body.code || body.error).toMatch(/INVALID_TENANT_CONTEXT/i);
     });
 

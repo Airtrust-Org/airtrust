@@ -49,15 +49,15 @@ export function mergeMonotonicMatriculaStatus(current: Nullable<string>, desired
 
 export function mergeMonotonicNumber(current: Nullable<number>, incoming: Nullable<number>) {
   const currentNumber =
-    current == null || current === '' ? null : Number(current);
+    current == null ? null : Number(current);
   const incomingNumber =
-    incoming == null || incoming === '' ? null : Number(incoming);
+    incoming == null ? null : Number(incoming);
 
   if (!Number.isFinite(incomingNumber)) {
-    return Number.isFinite(currentNumber) ? currentNumber : null;
+    return Number.isFinite(currentNumber) ? currentNumber! : null;
   }
-  if (!Number.isFinite(currentNumber)) return incomingNumber;
-  return Math.max(currentNumber, incomingNumber);
+  if (!Number.isFinite(currentNumber)) return incomingNumber!;
+  return Math.max(currentNumber!, incomingNumber!);
 }
 
 function normalizeScormToken(value: Nullable<string>) {
@@ -315,10 +315,12 @@ export function mergeScormRuntimeState(params: {
     Boolean(currentSuspendData) &&
     Boolean(incomingSuspendData) &&
     incomingSuspendData.length < currentSuspendData.length;
-  const mergedSuspendData =
-    blockedEmptySuspendData || blockedShorterSuspendData
-      ? currentSuspendData
-      : incomingSuspendData ?? currentSuspendData;
+  const mergedSuspendData: string | null = (() => {
+    if (blockedEmptySuspendData || blockedShorterSuspendData) {
+      return currentSuspendData;
+    }
+    return incomingSuspendData ?? currentSuspendData;
+  })();
 
   if (mergedCmi && mergedLocationValue) {
     writeScormLocationValue(mergedCmi, mergedLocationValue);
@@ -346,13 +348,13 @@ export function resolveScormScorePct(params: {
   scoreScaled?: Nullable<number>;
 }) {
   const scaled =
-    params.scoreScaled == null || params.scoreScaled === '' ? null : Number(params.scoreScaled);
+    params.scoreScaled == null ? null : Number(params.scoreScaled);
   if (scaled != null && Number.isFinite(scaled) && scaled >= 0) {
     return clampPct(scaled * 100);
   }
 
-  const raw = params.scoreRaw == null || params.scoreRaw === '' ? null : Number(params.scoreRaw);
-  const max = params.scoreMax == null || params.scoreMax === '' ? null : Number(params.scoreMax);
+  const raw = params.scoreRaw == null ? null : Number(params.scoreRaw);
+  const max = params.scoreMax == null ? null : Number(params.scoreMax);
   if (raw != null && max != null && Number.isFinite(raw) && Number.isFinite(max) && max > 0) {
     return clampPct((raw / max) * 100);
   }
@@ -395,7 +397,7 @@ export function buildScormCompletionDiagnostic(params: {
     scoreScaled: params.scoreScaled,
   });
   const masteryScore =
-    params.masteryScore == null || params.masteryScore === '' ? null : Number(params.masteryScore);
+    params.masteryScore == null ? null : Number(params.masteryScore);
   const hasMasteryScore = Number.isFinite(masteryScore) && Number(masteryScore) > 0;
   const masteryMet =
     !hasMasteryScore ||
