@@ -134,11 +134,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadEmpresas = useCallback(async (accessToken: string) => {
     try {
-      const response = await authFetch('/empresas', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
+      const response = await authFetch(
+        '/empresas',
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
         },
-      }, AUTH_EMPRESAS_TIMEOUT_MS);
+        AUTH_EMPRESAS_TIMEOUT_MS,
+      );
 
       if (!response.ok) return;
 

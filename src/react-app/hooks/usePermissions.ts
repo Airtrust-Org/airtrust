@@ -94,10 +94,7 @@ function toScope(userId: unknown, empresaId: unknown): AuthStorageScope | null {
  * Priority: scoped localStorage → builtin defaults.
  * Legacy global key `airtrust_perfis_custom` is NEVER used.
  */
-function resolveRolePermissions(
-  role: string,
-  scope: AuthStorageScope | null,
-): Set<string> | null {
+function resolveRolePermissions(role: string, scope: AuthStorageScope | null): Set<string> | null {
   // Limpar chave legada se existir (one-time migration)
   clearLegacyPerfisCache();
 
