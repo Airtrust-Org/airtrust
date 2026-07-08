@@ -39,6 +39,7 @@ import {
 } from '../services/employee-sector-access';
 import { buildAuditMetadata } from '../lib/audit/context';
 import { ensureCertificateForQualification } from '../services/ensure-certificate';
+import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -611,8 +612,7 @@ app.get('/minhas-ead', async (c) => {
         c.publicado,
         c.gerar_qualificacao_ao_concluir,
         CASE
-          WHEN qh.id IS NOT NULL AND qh.data_conclusao IS NOT NULL
-          THEN date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months')
+          WHEN qh.id IS NOT NULL THEN ${getQualificacoesVencimentoExpr()}
           ELSE NULL
         END AS data_vencimento_qualificacao,
         CASE WHEN qh.certificado_arquivo_id IS NOT NULL THEN 1 ELSE 0 END AS tem_certificado

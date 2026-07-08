@@ -56,6 +56,7 @@ import alocacoes from './escalas-alocacoes';
 import coberturaRoutes from './escalas-cobertura';
 import confirmacoes from './escalas-confirmacoes';
 import visaoMensalIntegrada from './escala-mensal-integrada';
+import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
 const escalas = new Hono<{ Bindings: Env }>();
 
@@ -232,15 +233,9 @@ escalas.get('/:id/alertas', auth(), async (c) => {
         f.guerra AS nome_guerra,
          'CMA_VENCENDO' AS tipo,
          CAST((
-           JULIANDAY(MAX(COALESCE(
-             qh.data_vencimento,
-             date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-           ))) - JULIANDAY('now')
+           JULIANDAY(MAX(${getQualificacoesVencimentoExpr()})) - JULIANDAY('now')
          ) AS INTEGER) AS dias_restantes,
-         MAX(COALESCE(
-           qh.data_vencimento,
-           date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-         )) AS cma_validade_fim
+         MAX(${getQualificacoesVencimentoExpr()}) AS cma_validade_fim
        FROM escala_tripulacoes et
        JOIN funcionarios f ON (f.id = et.pic_id OR f.id = et.sic_id)
        JOIN qualificacoes_historico qh ON qh.funcionario_id = f.id AND qh.deleted_at IS NULL

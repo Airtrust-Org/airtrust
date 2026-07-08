@@ -51,6 +51,7 @@ const app = new Hono<{ Bindings: Env }>();
 const TWILIO_STATUS_CALLBACK_PATH = '/api/alertas/whatsapp/status-callback';
 
 export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string) {
+  const vencimentoExprNew = getQualificacoesVencimentoExpr('qh_new', 'qt_new');
   return `SELECT
           qh.id,
           qh.funcionario_id,
@@ -101,7 +102,7 @@ export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string
                qh_new.data_vencimento,
                CASE
                  WHEN qh_new.data_conclusao IS NOT NULL
-                   THEN date(qh_new.data_conclusao, '+' || COALESCE(qh_new.validade_meses, qt_new.validade, 12) || ' months')
+                   THEN date(qh_new.data_conclusao, '+' || COALESCE(qh_new.validade_meses, qt_new.validade) || ' months')
                  ELSE NULL
                END
              )) > date(${vencimentoExpr})

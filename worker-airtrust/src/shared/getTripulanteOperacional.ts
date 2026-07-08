@@ -4,6 +4,7 @@ import {
   SESSION_STATUS,
   sqlStatusNotEqualsAny,
 } from '../lib/status/status-codes';
+import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
 export type StatusOperacional =
   | 'APTO'
@@ -99,18 +100,12 @@ WITH tripulante_operacional AS (
         AND qh.deleted_at IS NULL
         AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
         AND UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) = 'CMA'
-        AND COALESCE(
-          qh.data_vencimento,
-          date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-        ) >= date('now')
+        AND ${getQualificacoesVencimentoExpr()} >= date('now')
     ) THEN 1 ELSE 0 END AS cma_valido,
 
     CAST((
       JULIANDAY((
-        SELECT MAX(COALESCE(
-          qh2.data_vencimento,
-          date(qh2.data_conclusao, '+' || COALESCE(qh2.validade_meses, qt2.validade, 12) || ' months')
-        ))
+        SELECT MAX(${getQualificacoesVencimentoExpr('qh2', 'qt2')})
         FROM qualificacoes_historico qh2
         LEFT JOIN qualificacoes_tipos qt2 ON qt2.id = qh2.qualificacao_id AND qt2.deleted_at IS NULL
         WHERE qh2.funcionario_id = f.id
@@ -121,10 +116,7 @@ WITH tripulante_operacional AS (
     ) AS INTEGER) AS cma_dias_restantes,
 
     (
-      SELECT MAX(COALESCE(
-        qh3.data_vencimento,
-        date(qh3.data_conclusao, '+' || COALESCE(qh3.validade_meses, qt3.validade, 12) || ' months')
-      ))
+      SELECT MAX(${getQualificacoesVencimentoExpr('qh3', 'qt3')})
       FROM qualificacoes_historico qh3
       LEFT JOIN qualificacoes_tipos qt3 ON qt3.id = qh3.qualificacao_id AND qt3.deleted_at IS NULL
       WHERE qh3.funcionario_id = f.id
@@ -216,10 +208,7 @@ WITH tripulante_operacional AS (
           AND qh4.deleted_at IS NULL
           AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh4.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
           AND UPPER(COALESCE(qh4.qualificacao_codigo, qt4.codigo, '')) = 'CMA'
-          AND COALESCE(
-            qh4.data_vencimento,
-            date(qh4.data_conclusao, '+' || COALESCE(qh4.validade_meses, qt4.validade, 12) || ' months')
-          ) >= date('now')
+          AND ${getQualificacoesVencimentoExpr('qh4', 'qt4')} >= date('now')
       ) THEN 'BLOQUEADO_CMA'
       WHEN EXISTS (
         SELECT 1
@@ -231,10 +220,7 @@ WITH tripulante_operacional AS (
       ) THEN 'BLOQUEADO_FRMS'
       WHEN CAST((
         JULIANDAY((
-          SELECT MAX(COALESCE(
-            qh5.data_vencimento,
-            date(qh5.data_conclusao, '+' || COALESCE(qh5.validade_meses, qt5.validade, 12) || ' months')
-          ))
+          SELECT MAX(${getQualificacoesVencimentoExpr('qh5', 'qt5')})
           FROM qualificacoes_historico qh5
           LEFT JOIN qualificacoes_tipos qt5 ON qt5.id = qh5.qualificacao_id AND qt5.deleted_at IS NULL
           WHERE qh5.funcionario_id = f.id
