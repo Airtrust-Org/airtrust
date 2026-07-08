@@ -192,14 +192,17 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
         return;
       }
 
-      const res = await fetch(`${API_BASE_URL}/empresas/${empresaSelecionadaId}/usuarios?t=${Date.now()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
+      const res = await fetch(
+        `${API_BASE_URL}/empresas/${empresaSelecionadaId}/usuarios?t=${Date.now()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+          cache: 'no-store',
         },
-        cache: 'no-store',
-      });
+      );
       const data = await res.json();
       if (requestId !== latestLoadRequestRef.current) return;
 

@@ -12,6 +12,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useAuth } from '@/react-app/hooks/useAuth';
+import {
+  readScopedPerfis,
+  writeScopedPerfis,
+  clearLegacyPerfisCache,
+} from '@/react-app/utils/auth-storage';
 import {
   Users,
   UserPlus,
@@ -176,25 +183,27 @@ const ROLE_DEFAULTS: Record<string, string[] | null> = {
   ALUNO: ['self.ficha', 'self.escala'],
 };
 
-const LS_KEY = 'airtrust_perfis_custom';
 const GESTOR_BLOCKED_PERMISSIONS = new Set(['admin.config', 'admin.multiempresa']);
 
-function loadPerfisFromStorage(): Array<{ value: string; permissoes: string[] | null }> | null {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    /* ignore */
-  }
-  return null;
+/** Carrega perfis usando o novo helper escopado (legado global é ignorado) */
+function loadPerfisScoped(
+  empresaId: number | string | null | undefined,
+  userId: number | string | null | undefined,
+): Array<{ value: string; permissoes: string[] | null }> | null {
+  clearLegacyPerfisCache();
+  if (!empresaId || !userId) return null;
+  return readScopedPerfis({ empresaId, userId });
 }
 
-function savePerfisToStorage(perfis: Array<{ value: string; permissoes: string[] | null }>) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(perfis));
-  } catch {
-    /* ignore */
-  }
+/** Salva perfis usando o novo helper escopado */
+function savePerfisScoped(
+  empresaId: number | string | null | undefined,
+  userId: number | string | null | undefined,
+  perfis: Array<{ value: string; permissoes: string[] | null }>,
+): void {
+  if (!empresaId || !userId) return;
+  clearLegacyPerfisCache();
+  writeScopedPerfis({ empresaId, userId }, perfis);
 }
 
 function normalizePerfil(perfil: string | null | undefined): string {
@@ -204,11 +213,13 @@ function normalizePerfil(perfil: string | null | undefined): string {
   return normalized;
 }
 
-function roleHasPerm(perfil: string | null | undefined, perm: string): boolean {
+function roleHasPerm(
+  perfil: string | null | undefined,
+  perm: string,
+  stored: Array<{ value: string; permissoes: string[] | null }> | null,
+): boolean {
   const normalizedPerfil = normalizePerfil(perfil);
   if (normalizedPerfil === 'GESTOR' && GESTOR_BLOCKED_PERMISSIONS.has(perm)) return false;
-  // Check localStorage customizations first
-  const stored = loadPerfisFromStorage();
   if (stored) {
     const p = stored.find((x) => x.value.toUpperCase() === normalizedPerfil);
     if (p !== undefined) {
@@ -217,7 +228,7 @@ function roleHasPerm(perfil: string | null | undefined, perm: string): boolean {
     }
   }
   const defaults = ROLE_DEFAULTS[normalizedPerfil];
-  if (defaults === null) return true; // wildcard
+  if (defaults === null) return true;
   return defaults?.includes(perm) ?? false;
 }
 
@@ -257,6 +268,7 @@ async function apiFetch(path: string, init?: RequestInit) {
 export default function UsuariosPage() {
   const navigate = useNavigate();
   const { isAdmin, isGestor, can } = usePermissions();
+  const { user, empresaAtualId } = useAuth();
 
   // Verificar acesso
   if (!isAdmin && !isGestor && !can('admin.usuarios')) {
@@ -1149,7 +1161,8 @@ function ModalPermissoes({
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {activeGrupo?.items.map((perm) => {
                 const override = getOverride(perm);
-                const roleDefault = roleHasPerm(usuario.perfil, perm);
+                const storedPerfis = loadPerfisScoped(empresaAtualId, user?.id);
+                const roleDefault = roleHasPerm(usuario.perfil, perm, storedPerfis);
                 const hasOverride = override !== null;
 
                 return (
@@ -1354,8 +1367,8 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
         /* API not available, fall through */
       }
 
-      // Fallback: localStorage
-      const stored = loadPerfisFromStorage();
+      // Fallback: scoped localStorage
+      const stored = loadPerfisScoped(empresaAtualId, user?.id);
       if (stored && stored.length > 0) {
         const loaded: PerfilEditavel[] = stored.map((p) => {
           const colors = BUILTIN_COLORS[p.value.toUpperCase()] ?? CUSTOM_COLOR;
@@ -1467,7 +1480,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
       }));
 
       // Persist locally (always works, no backend required)
-      savePerfisToStorage(payload.map((p) => ({ value: p.value, permissoes: p.permissoes })));
+      savePerfisScoped(empresaAtualId, user?.id, payload.map((p) => ({ value: p.value, permissoes: p.permissoes })));
 
       // Attempt to also sync with API silently
       apiFetch('/admin/perfis', {
@@ -1736,7 +1749,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                 <button
                   onClick={() => {
                     // Restore last saved state (localStorage or defaults)
-                    const stored = loadPerfisFromStorage();
+                    const stored = loadPerfisScoped(empresaAtualId, user?.id);
                     if (stored && stored.length > 0) {
                       const restored = stored.map((p) => {
                         const colors = BUILTIN_COLORS[p.value.toUpperCase()] ?? CUSTOM_COLOR;
