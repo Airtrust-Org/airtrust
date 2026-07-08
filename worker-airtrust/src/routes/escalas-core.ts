@@ -29,7 +29,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
-import { getEmpresaIdOptional, getEscalaVerificada } from './escalas-shared';
+import { getEmpresaIdOptional, getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
 
 // ── Prefixed sub-modules ────────────────────────────────────────────────────
 import padroes from './escalas-padroes';
