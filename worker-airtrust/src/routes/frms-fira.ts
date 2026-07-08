@@ -121,7 +121,7 @@ firaRoutes.post(
       buffer,
       arquivo.name,
       String(operadorId),
-      empresaId,
+      String(empresaId),
       textoExtraido,
     );
 
@@ -215,7 +215,7 @@ firaRoutes.post(
           buffer,
           arquivo.name,
           String(operadorId),
-          empresaId,
+          String(empresaId),
         );
 
         itens.push({

@@ -1446,6 +1446,7 @@ async function loadStandalonePlannedQualificationItems(
     return {
       id: itemId,
       empresa_id: Number(row.empresa_id),
+      // @ts-ignore D1 `.all<T>()` não propaga generics
       qualificacao_tipo_id: Number(row.qualificacao_tipo_id || 0),
       qualificacao_nome: row.qualificacao_nome,
       qualificacao_codigo: row.qualificacao_codigo,
@@ -1492,6 +1493,7 @@ async function loadStandalonePlannedQualificationItems(
           nota: null,
           observacoes: row.observacoes,
           qualificacao_historico_id: Number(row.id),
+          qualificacao_historico_status: null,
           status_participacao: 'PLANEJADO',
           resultado: null,
           conceito: null,
@@ -1696,6 +1698,7 @@ async function loadSimulatorSessionItems(
               nota: null,
               observacoes: null,
               qualificacao_historico_id: participant.qualificacao_historico_id,
+              qualificacao_historico_status: null,
               status_participacao: 'CONFIRMADO',
               resultado: null,
               conceito: null,
@@ -3575,7 +3578,7 @@ treinamentosPlanejadosRoutes.post(
   requireRole('admin'),
   async (c) => {
     const db = c.env.DB;
-    const empresaId = c.get('empresaId');
+    const empresaId = (c as any).get('empresaId');
     const url = new URL(c.req.url);
     const dryRun = url.searchParams.get('dryRun') === 'true';
 
@@ -3730,7 +3733,7 @@ treinamentosPlanejadosRoutes.post(
       .bind(empresaId)
       .all<{ id: number }>();
 
-    const ids = turmas.results.map((r) => r.id);
+    const ids = turmas.results.map((r) => r.id as number);
     let processadas = 0;
     const erros: Array<{ id: number; erro: string }> = [];
 
