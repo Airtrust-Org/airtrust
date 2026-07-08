@@ -522,7 +522,7 @@ function resolveScormScorePct(params: {
   scoreScaled?: number | null;
 }): number | null {
   const scaled =
-    params.scoreScaled == null || params.scoreScaled === ''
+    params.scoreScaled == null
       ? null
       : Number(params.scoreScaled);
   if (scaled != null && Number.isFinite(scaled) && scaled >= 0 && scaled <= 1) {
@@ -530,9 +530,9 @@ function resolveScormScorePct(params: {
   }
 
   const raw =
-    params.scoreRaw == null || params.scoreRaw === '' ? null : Number(params.scoreRaw);
+    params.scoreRaw == null ? null : Number(params.scoreRaw);
   const max =
-    params.scoreMax == null || params.scoreMax === '' ? null : Number(params.scoreMax);
+    params.scoreMax == null ? null : Number(params.scoreMax);
   if (raw != null && max != null && Number.isFinite(raw) && Number.isFinite(max) && max > 0) {
     return clampPct((raw / max) * 100);
   }

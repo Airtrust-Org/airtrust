@@ -120,7 +120,7 @@ firaRoutes.post(
       c.env.BUCKET,
       buffer,
       arquivo.name,
-      operadorId,
+      String(operadorId),
       empresaId,
       textoExtraido,
     );
@@ -214,7 +214,7 @@ firaRoutes.post(
           c.env.BUCKET,
           buffer,
           arquivo.name,
-          operadorId,
+          String(operadorId),
           empresaId,
         );
 

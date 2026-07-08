@@ -113,7 +113,7 @@ app.post(
         nomeInstrutor: String(body?.nome_instrutor || '').trim(),
         cpfInstrutor: String(body?.cpf_instrutor || '').trim(),
         matriculaInstrutor: String(body?.matricula_instrutor || '').trim(),
-        actorUserId: ua.userId ?? undefined,
+        actorUserId: ua.usuario_id ? Number(ua.usuario_id) : undefined,
       });
 
       // 4. Soft-delete do documento anterior após geração bem-sucedida
@@ -143,8 +143,7 @@ app.post(
               substituido_por: generated.documentoId,
               motivo: 'force_regenerate via /gerar',
             },
-            userId: ua.userId ?? undefined,
-            empresaId,
+            usuario_id: ua.usuario_id ?? undefined,
           });
         } catch (cleanupErr) {
           console.error('[gerar] Aviso: falha ao marcar doc anterior como substituído:', cleanupErr);
