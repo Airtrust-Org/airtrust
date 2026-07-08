@@ -20,6 +20,7 @@ import {
 import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
+  getQualificacoesVencimentoExpr,
 } from '../utils/qualificacoes-alerta-config';
 import {
   buildRenewalSqlPredicates,
@@ -231,10 +232,10 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
         COALESCE(qh.tipo, qt.nome)                                         AS qualificacao_nome,
         COALESCE(qh.qualificacao_codigo, qt.codigo)                        AS qualificacao_codigo,
         COALESCE(qh.categoria, qt.categoria)                               AS categoria,
-        COALESCE(qh.validade_meses, qt.validade, 12)                       AS validade_meses,
+        COALESCE(qh.validade_meses, qt.validade)                       AS validade_meses,
         qt.vencimento_fim_mes                                              AS vencimento_fim_mes,
         qh.data_conclusao                                                  AS data_realizacao,
-        COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))
+        ${getQualificacoesVencimentoExpr()}
                                                                            AS data_vencimento_raw,
         qh.renovada,
         qh.status                                                          AS qualificacao_status,

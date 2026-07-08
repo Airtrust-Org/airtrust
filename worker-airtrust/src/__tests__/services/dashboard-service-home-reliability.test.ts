@@ -4,7 +4,7 @@ vi.mock('../../utils/qualificacoes-alerta-config', () => ({
   getQualificacoesAlertaDias: vi.fn(async () => 30),
   getTodayIsoSaoPaulo: vi.fn(() => '2026-05-26'),
   getQualificacoesVencimentoExpr: vi.fn(
-    () => `date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months')`,
+    () => `COALESCE(qh.data_vencimento, CASE WHEN qh.data_conclusao IS NOT NULL AND (qh.validade_meses IS NOT NULL OR qt.validade IS NOT NULL) THEN date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months') ELSE NULL END)`,
   ),
 }));
 

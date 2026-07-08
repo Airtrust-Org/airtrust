@@ -37,6 +37,7 @@ import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
+import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -634,13 +635,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
       WITH qualificacoes_ativas AS (
         SELECT
           qh.funcionario_id,
-          COALESCE(
-            date(qh.data_vencimento),
-            date(
-              qh.data_conclusao,
-              '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'
-            )
-          ) AS data_vencimento_calculada
+          ${getQualificacoesVencimentoExpr()} AS data_vencimento_calculada
         FROM qualificacoes_historico qh
         JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
         LEFT JOIN qualificacoes_tipos qt
