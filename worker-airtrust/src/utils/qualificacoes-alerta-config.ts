@@ -45,7 +45,8 @@ export function getQualificacoesVencimentoExpr(
     ${historicoAlias}.data_vencimento,
     CASE
       WHEN ${historicoAlias}.data_conclusao IS NOT NULL
-        THEN date(${historicoAlias}.data_conclusao, '+' || COALESCE(${historicoAlias}.validade_meses, ${tipoAlias}.validade, 12) || ' months')
+        AND (${historicoAlias}.validade_meses IS NOT NULL OR ${tipoAlias}.validade IS NOT NULL)
+        THEN date(${historicoAlias}.data_conclusao, '+' || COALESCE(${historicoAlias}.validade_meses, ${tipoAlias}.validade) || ' months')
       ELSE NULL
     END
   )`;
