@@ -2285,8 +2285,8 @@ describe('controle voos routes', () => {
 
     const response = await createApp().fetch(
       new Request('http://localhost/api/controle-voos/jornadas?data=2026-06-14'),
-      {},
       createEnv(db),
+      {} as ExecutionContext,
     );
 
     expect(response.status).toBe(401);

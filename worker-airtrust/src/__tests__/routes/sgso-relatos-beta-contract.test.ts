@@ -281,7 +281,7 @@ describe('sgso relatos beta contract', () => {
     );
 
     expect(response.status).toBe(201);
-    const json = await response.json();
+    const json = await response.json() as { success: boolean; data: { vinculado_escala: boolean; vinculado_frms: boolean } };
     expect(json.success).toBe(true);
     expect(json.data.vinculado_escala).toBe(true);
     expect(json.data.vinculado_frms).toBe(false);
