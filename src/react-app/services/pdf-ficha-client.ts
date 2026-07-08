@@ -641,25 +641,8 @@ export async function gerarPDFFichaCliente(
     lineY,
   );
 
-  // Avançar currentY: session box + gap (3mm)
+  // Avançar currentY: session box + gap (1mm)
   currentY += SESSION_BOX_H + 1;
-
-  // ========== LEGENDA IMPRESSA — TRIP. e NOTA ==========
-  // A ficha é um documento impresso usado isoladamente (briefing/cabine), sem
-  // acesso à legenda que só existe na UI (ModalAvaliarFicha.tsx). Sem isso o
-  // avaliador não sabe o que A/B/AB e a nota numérica significam.
-  const LEGEND_FONT = 5.8;
-  const LEGEND_H = 3.4;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(LEGEND_FONT);
-  doc.setTextColor(COLORS.textSecondary);
-  doc.text(
-    'TRIP.: A = Comandante  ·  B = Copiloto  ·  AB = Ambos      NOTA: 1–4 Insatisfatório  ·  5–7 Regular  ·  8–10 Excelente  ·  NR = Não Realizada',
-    margin,
-    currentY + 2.4,
-    { maxWidth: contentWidth },
-  );
-  currentY += LEGEND_H;
 
   // ── Table layout constants ────────────────────────────────────────────────
   const tableLayout = getFichaPdfTableLayout(margin);
@@ -926,11 +909,11 @@ export async function gerarPDFFichaCliente(
     doc.setTextColor(COLORS.textSecondary);
     const obsTxt =
       dados.observacoes_gerais ||
-      (isModoModelo ? 'Observações gerais: _________________________________________________' : '');
+      (isModoModelo ? 'Observações gerais: ________________________________' : '');
     // Limitada a 4 linhas (trunca com "…") para o box nunca crescer além do
     // espaço reservado (OBS_RESERVED) e invadir as caixas de assinatura, que
     // são posicionadas de baixo para cima de forma independente do texto aqui.
-    const obsLines = limitTextLines(doc.splitTextToSize(obsTxt, contentWidth - 6), 4);
+    const obsLines = limitTextLines(doc.splitTextToSize(obsTxt, contentWidth - 6), 2);
     const obsBoxH = Math.max(12, 4 + obsLines.length * 4);
 
     doc.setDrawColor(COLORS.border);
@@ -940,10 +923,15 @@ export async function gerarPDFFichaCliente(
     currentY += obsBoxH + 3;
   }
 
-  // ========== ASSINATURAS — ancoradas no fundo, proporcionais ==========
-  // Rodapé fixo no fundo. Assinaturas calculadas de baixo para cima.
-  const FOOTER_Y = pageHeight - FOOTER_H; // rodapé no fundo (fixo), com folga da borda física
-  const FOOTER_GAP = 4; // espaço entre assinaturas e rodapé
+  // ========== ASSINATURAS — ancoradas no fundo ==========
+  const FOOTER_Y = pageHeight - FOOTER_H;
+  const FOOTER_GAP = 4;
+
+  // Guard: se tabela + obs invadiu área de assinatura, cap currentY
+  // para evitar que jsPDF crie página extra por overflow.
+  if (currentY > FOOTER_Y - FOOTER_GAP - 20) {
+    currentY = FOOTER_Y - FOOTER_GAP - 20;
+  }
 
   const hasAnySignatureImg = !!(
     dados.assinatura_aluno_dataUrl || dados.assinatura_instrutor_dataUrl
