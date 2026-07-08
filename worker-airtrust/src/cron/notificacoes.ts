@@ -124,7 +124,7 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
 
         // Processar cada configuração para esta empresa
         for (const config of configs as unknown as NotificacaoConfig[]) {
-          const resultado = await processarConfiguracao(env, config, qualificacoesBase);
+          const resultado = await processarConfiguracao(env, empresa.id, config, qualificacoesBase);
           totalEnviadas += resultado.enviadas;
           totalErros += resultado.erros;
           porTipo[normalizeTipoCanal(config.tipo)] = {
@@ -217,6 +217,7 @@ async function carregarQualificacoesParaNotificar(env: Env, empresaId: number): 
 
 async function processarConfiguracao(
   env: Env,
+  empresaId: number,
   config: NotificacaoConfig,
   qualificacoes: QualificacaoParaNotificar[],
 ): Promise<{ enviadas: number; erros: number }> {
@@ -229,12 +230,13 @@ async function processarConfiguracao(
     `
       SELECT qualificacao_historico_id
       FROM notificacoes_log
-      WHERE config_id = ?
+      WHERE empresa_id = ?
+        AND config_id = ?
         AND status = 'enviada'
         AND enviado_em >= datetime('now', '-1 day')
     `,
   )
-    .bind(config.id)
+    .bind(empresaId, config.id)
     .all<{ qualificacao_historico_id: number }>();
 
   const qualificacoesJaNotificadas = new Set(
@@ -268,9 +270,16 @@ async function processarConfiguracao(
     }
 
     // Enviar notificação
-    const sucesso = await enviarNotificacao(env, config, qualificacao, diasAteVencimento, {
-      whatsAppTemplateCache,
-    });
+    const sucesso = await enviarNotificacao(
+      env,
+      empresaId,
+      config,
+      qualificacao,
+      diasAteVencimento,
+      {
+        whatsAppTemplateCache,
+      },
+    );
 
     if (sucesso) {
       qualificacoesJaNotificadas.add(Number(qualificacao.id));
@@ -356,6 +365,7 @@ function isCmaQualificacao(qualificacao: QualificacaoParaNotificar): boolean {
 
 async function enviarNotificacao(
   env: Env,
+  empresaId: number,
   config: NotificacaoConfig,
   qualificacao: QualificacaoParaNotificar,
   diasAteVencimento: number,
@@ -469,6 +479,7 @@ async function enviarNotificacao(
     await env.DB.prepare(
       `
       INSERT INTO notificacoes_log (
+        empresa_id,
         config_id,
         qualificacao_historico_id,
         funcionario_cpf,
@@ -478,10 +489,11 @@ async function enviarNotificacao(
         corpo,
         status,
         enviado_em
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'enviada', datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'enviada', datetime('now'))
     `,
     )
       .bind(
+        empresaId,
         config.id,
         qualificacao.id,
         qualificacao.funcionario_cpf,
@@ -510,16 +522,18 @@ async function enviarNotificacao(
     await env.DB.prepare(
       `
       INSERT INTO notificacoes_log (
+        empresa_id,
         config_id,
         qualificacao_historico_id,
         funcionario_cpf,
         tipo,
         status,
         erro_mensagem
-      ) VALUES (?, ?, ?, ?, 'erro', ?)
+      ) VALUES (?, ?, ?, ?, ?, 'erro', ?)
     `,
     )
       .bind(
+        empresaId,
         config.id,
         qualificacao.id,
         qualificacao.funcionario_cpf,
