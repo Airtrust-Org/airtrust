@@ -84,12 +84,33 @@ function createFichasDb() {
       tipo_sessao: 'PER',
       status: 'AGUARDANDO_ASSINATURA_ALUNO',
     },
+    {
+      id: 903,
+      empresa_id: 6,
+      agendamento_slot_id: 502,
+      colaborador_id_aluno: 201,
+      instrutor_id: 301,
+      tipo_sessao: 'PER',
+      status: 'AVALIACAO_PENDENTE',
+    },
   ];
+
+  /** Fichas com data no futuro (para testar availability gate) */
+  const futureFichas = new Set([903]);
 
   const db = {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          if (query.includes('COALESCE(sa.data, fs.data_sessao)') && query.includes('WHERE fs.id = ?')) {
+            // Availability query: return data_sessao based on ficha id
+            const fichaId = Number(args[0]);
+            if (futureFichas.has(fichaId)) {
+              return { data_sessao: '2099-12-31', hora_inicio: '08:00' };
+            }
+            return { data_sessao: '2026-06-21', hora_inicio: '08:00' };
+          }
+
           if (query.includes('SELECT f.id FROM usuarios u') && query.includes('JOIN funcionarios f')) {
             return { id: Number(args[0]) + 100 };
           }
@@ -133,7 +154,7 @@ function createFichasDb() {
               tipo_sessao: ficha.tipo_sessao,
               modo_compartilhado: 0,
               sessao_nome: 'Sessão Escopo',
-              data: '2026-06-21',
+              data: futureFichas.has(ficha.id) ? '2099-12-31' : '2026-06-21',
               horario_inicio: '08:00',
               horario_fim: '10:00',
               duracao_minutos: 120,
@@ -240,7 +261,7 @@ describe('simuladores fichas scope guards', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { success: boolean; data: Array<{ id: number }> };
     expect(body.success).toBe(true);
-    expect(body.data.map((row) => row.id)).toEqual([901]);
+    expect(body.data.map((row) => row.id)).toEqual([901, 903]);
   });
 
   it('GET /fichas retorna vazio em fail-closed quando gestor não possui setores', async () => {
@@ -477,5 +498,97 @@ describe('simuladores fichas scope guards', () => {
     // Instrutor da ficha 901 → autorizado (gate passa)
     // Pode retornar 500 por falta de mock interno, mas NÃO 403
     expect(resp.status).not.toBe(403);
+  });
+
+  it('GET /fichas/:id bloqueia ficha futura (availability gate)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    // Ficha 903: data futura (2099-12-31)
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/903'),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'admin',
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(resp.status).toBe(409);
+    const body = await resp.json();
+    expect(body.code).toBe('FICHA_NOT_AVAILABLE_YET');
+  });
+
+  it('POST /fichas/:id/pdf bloqueia ficha futura (availability gate)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/903/pdf', { method: 'POST' }),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'admin',
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(resp.status).toBe(409);
+    const body = await resp.json();
+    expect(body.code).toBe('FICHA_NOT_AVAILABLE_YET');
+  });
+
+  it('GET /fichas/:id permite ficha disponivel (availability gate)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    // Ficha 901: data passada (2026-06-21)
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901'),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'admin',
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    // 409 seria blocked, qualquer outro (incluindo 500 por falta de mock) = passou pelo gate
+    expect(resp.status).not.toBe(409);
+  });
+
+  it('POST /fichas/:id/pdf permite ficha disponivel (availability gate)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901/pdf', { method: 'POST' }),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'admin',
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    // 409 seria blocked, qualquer outro = passou pelo gate
+    expect(resp.status).not.toBe(409);
   });
 });
