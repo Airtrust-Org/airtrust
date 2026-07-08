@@ -512,17 +512,17 @@ export async function gerarPDFFichaCliente(
   doc.setTextColor(COLORS.primary);
   doc.setFontSize(10.5);
   doc.setFont('helvetica', 'bold');
-  doc.text('FICHA DE TREINAMENTO DE VOO', tituloX, headerTop + 5.0, { align: 'center' });
+  doc.text('FICHA DE TREINAMENTO DE VOO', tituloX, headerTop + 4.5, { align: 'center' });
 
   doc.setFontSize(6);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(COLORS.primary);
-  doc.text('SESSÃO', tituloX, headerTop + 8.5, { align: 'center' });
+  doc.text('SESSÃO', tituloX, headerTop + 7.5, { align: 'center' });
 
   doc.setFontSize(sessaoFontSize);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(COLORS.textSecondary);
-  doc.text(sessaoLine, tituloX, headerTop + 12.5, { align: 'center' });
+  doc.text(sessaoLine, tituloX, headerTop + 11.5, { align: 'center' });
 
   // Status badge (canto direito)
   const statusText = dados.status || 'PENDENTE';
@@ -543,8 +543,8 @@ export async function gerarPDFFichaCliente(
     { align: 'center' },
   );
 
-  // Gap após header — equilibrado com o gap entre session box e tabela
-  currentY = headerBottom + 4;
+  // Gap após header — 2mm igual ao gap abaixo da session box
+  currentY = headerBottom + 2;
 
   // ========== DADOS DA SESSÃO — 3 linhas ==========
   // Linha 1: Data | Horário | Simulador | Carga Horária
@@ -651,8 +651,8 @@ export async function gerarPDFFichaCliente(
     lineY,
   );
 
-  // Avançar currentY: session box + gap (1mm)
-  currentY += SESSION_BOX_H + 1;
+  // Avançar currentY: session box + gap (2mm, igual ao gap acima)
+  currentY += SESSION_BOX_H + 2;
 
   // ── Table layout constants ────────────────────────────────────────────────
   const tableLayout = getFichaPdfTableLayout(margin);
@@ -768,9 +768,13 @@ export async function gerarPDFFichaCliente(
     doc.setFontSize(TABLE_FONT);
     doc.setTextColor(COLORS.text);
 
-    // Texto centrado verticalmente na linha (rowH=6.0mm, baseline a 3.5mm do topo)
-    const textTopY = currentY + 3.5;
-    const itemLineSpacing = 2.8;
+    // Texto centrado verticalmente na linha (rowH=6.0mm).
+    // Para 1 linha: baseline a 3.5mm do topo (centro visual).
+    // Para 2 linhas: bloco centrado, baseline da 1ª linha a 2.5mm,
+    //   2ª linha a 5.3mm — ambas dentro dos 6.0mm.
+    const nomeLineCount = nomeLines.length;
+    const textTopY = currentY + (nomeLineCount === 1 ? 3.5 : 2.5);
+    const itemLineSpacing = nomeLineCount === 1 ? 2.8 : 2.8;
 
     // Número — NOTECHS usa mesma numeração das técnicas (1–33 contínuo),
     // sem prefixo "N", para manter uniformidade visual na coluna #.
