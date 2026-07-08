@@ -213,14 +213,14 @@ function createApp(db: D1Database) {
   app.onError((error, c) => {
     const status =
       typeof (error as { statusCode?: unknown }).statusCode === 'number'
-        ? Number((error as { statusCode: number }).statusCode)
+        ? Number((error as unknown as { statusCode: number }).statusCode)
         : 500;
     return c.json(
       {
         success: false,
-        error: error.message,
+        error: (error as { message?: string }).message ?? 'Erro interno',
       },
-      status,
+      status as 200 | 400 | 401 | 403 | 404 | 422 | 500,
     );
   });
   app.route('/', lmsMatriculasRoutes);

@@ -276,7 +276,7 @@ describe('FRMS escalas PUT/DELETE tenant isolation (BUG-003)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as Record<string, unknown>;
       expect(body.code || body.error).toMatch(/TENANT_ACCESS_DENIED/i);
     });
 
@@ -312,7 +312,7 @@ describe('FRMS escalas PUT/DELETE tenant isolation (BUG-003)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as Record<string, unknown>;
       expect(body.code || body.error).toMatch(/TENANT_ACCESS_DENIED/i);
     });
 

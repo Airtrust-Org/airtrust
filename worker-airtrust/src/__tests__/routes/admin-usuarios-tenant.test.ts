@@ -151,6 +151,7 @@ interface D1Result<T = unknown> {
 }
 
 interface D1PreparedStatement {
+  _sql: string;
   bind: (...args: unknown[]) => D1PreparedStatement;
   first: <T>() => Promise<T | null>;
   all: <T>() => Promise<D1Result<T>>;

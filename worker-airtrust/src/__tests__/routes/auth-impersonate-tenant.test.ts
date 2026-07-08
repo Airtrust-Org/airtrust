@@ -11,6 +11,13 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
+type ImpersonateBody = {
+  success: boolean;
+  data?: { accessToken?: string };
+  error?: string;
+  code?: string;
+};
+
 // ===== MOCKS =====
 
 // Collect audit calls so we can assert on them
@@ -315,7 +322,7 @@ describe('POST /api/auth/impersonate - tenant isolation (BUG-001)', () => {
     });
 
     expect(response.status).toBe(403);
-    const body = await response.json();
+    const body = await response.json() as ImpersonateBody;
     expect(body.success).toBe(false);
     expect(body.code || body.error).toMatch(/WRONG_TENANT|FORBIDDEN|CROSS_TENANT/i);
   });
@@ -340,9 +347,9 @@ describe('POST /api/auth/impersonate - tenant isolation (BUG-001)', () => {
     });
 
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await response.json() as ImpersonateBody;
     expect(body.success).toBe(true);
-    expect(body.data.accessToken).toBeTruthy();
+    expect(body.data?.accessToken).toBeTruthy();
   });
 
   it('Platform admin real impersonando usuário de outra empresa → permitido', async () => {
@@ -366,9 +373,9 @@ describe('POST /api/auth/impersonate - tenant isolation (BUG-001)', () => {
     });
 
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await response.json() as ImpersonateBody;
     expect(body.success).toBe(true);
-    expect(body.data.accessToken).toBeTruthy();
+    expect(body.data?.accessToken).toBeTruthy();
   });
 
   it('Usuário não-admin (GESTOR) tentando impersonar → 401 (unauthorized)', async () => {
@@ -391,7 +398,7 @@ describe('POST /api/auth/impersonate - tenant isolation (BUG-001)', () => {
     });
 
     expect(response.status).toBe(401);
-    const body = await response.json();
+    const body = await response.json() as ImpersonateBody;
     expect(body.success).toBe(false);
   });
 
@@ -415,7 +422,7 @@ describe('POST /api/auth/impersonate - tenant isolation (BUG-001)', () => {
     });
 
     expect(response.status).toBe(400);
-    const body = await response.json();
+    const body = await response.json() as ImpersonateBody;
     expect(body.code || body.error).toMatch(/SELF_IMPERSONATE/i);
   });
 
@@ -468,7 +475,7 @@ describe('POST /api/auth/impersonate - tenant isolation (BUG-001)', () => {
     });
 
     expect(response.status).toBe(403);
-    const body = await response.json();
+    const body = await response.json() as ImpersonateBody;
     expect(body.success).toBe(false);
     expect(body.code || body.error).toMatch(/INVALID_TENANT_CONTEXT/i);
   });

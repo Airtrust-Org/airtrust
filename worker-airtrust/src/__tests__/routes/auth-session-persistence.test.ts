@@ -397,11 +397,11 @@ describe('auth session persistence routes', () => {
       body: { email: 'admin@airtrust.com', senha: 'senha-segura' },
     });
 
-    const json = await response.json();
+    const json = await response.json() as Record<string, unknown>;
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.data.accessToken).toContain('access|1|10|jti-1|1800');
-    expect(json.data.refreshToken).toMatch(/^refresh-/);
+    expect((json.data as Record<string, unknown>).accessToken).toContain('access|1|10|jti-1|1800');
+    expect((json.data as Record<string, unknown>).refreshToken).toMatch(/^refresh-/);
     expect(refreshTokens).toHaveLength(1);
     expect(refreshTokens[0].expires_at).toContain('2026-09-27');
   });
@@ -414,7 +414,7 @@ describe('auth session persistence routes', () => {
       body: { email: 'admin@airtrust.com', senha: 'senha-errada' },
     });
 
-    const json = await response.json();
+    const json = await response.json() as Record<string, unknown>;
     expect(response.status).toBe(401);
     expect(json.success).toBe(false);
     expect(json.code).toBe('INVALID_CREDENTIALS');
@@ -441,7 +441,7 @@ describe('auth session persistence routes', () => {
       method: 'POST',
       body: { refreshToken: 'refresh-atual' },
     });
-    const refreshJson = await refreshResponse.json();
+    const refreshJson = await refreshResponse.json() as Record<string, unknown>;
 
     expect(refreshResponse.status).toBe(200);
     expect(refreshJson.success).toBe(true);
@@ -452,16 +452,16 @@ describe('auth session persistence routes', () => {
     const meResponse = await hit(db, '/api/auth/me', {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${refreshJson.data.accessToken}`,
+        Authorization: `Bearer ${(refreshJson.data as Record<string, unknown>).accessToken}`,
         'x-test-user-id': '1',
         'x-test-empresa-id': '10',
       },
     });
-    const meJson = await meResponse.json();
+    const meJson = await meResponse.json() as Record<string, unknown>;
 
     expect(meResponse.status).toBe(200);
     expect(meJson.success).toBe(true);
-    expect(meJson.data.email).toBe('admin@airtrust.com');
+    expect((meJson.data as Record<string, unknown>).email).toBe('admin@airtrust.com');
   });
 
   it('retorna erro claro para refresh expirado', async () => {
@@ -485,7 +485,7 @@ describe('auth session persistence routes', () => {
       method: 'POST',
       body: { refreshToken: 'refresh-expirado' },
     });
-    const json = await response.json();
+    const json = await response.json() as Record<string, unknown>;
 
     expect(response.status).toBe(401);
     expect(json.code).toBe('REFRESH_TOKEN_EXPIRED');
@@ -513,7 +513,7 @@ describe('auth session persistence routes', () => {
       method: 'POST',
       body: { refreshToken: 'refresh-inativo' },
     });
-    const json = await response.json();
+    const json = await response.json() as Record<string, unknown>;
 
     expect(response.status).toBe(401);
     expect(json.code).toBe('USER_INACTIVE');
@@ -542,7 +542,7 @@ describe('auth session persistence routes', () => {
       body: { refreshToken: 'refresh-logout' },
       headers: { Authorization: 'Bearer access|1|10|jti-logout|1800' },
     });
-    const json = await response.json();
+    const json = await response.json() as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);

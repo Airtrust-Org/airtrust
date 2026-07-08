@@ -2,6 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
+type BackfillBody = {
+  success: boolean;
+  code?: string;
+  data: {
+    limit?: number;
+    processed?: number;
+    created?: number;
+    skipped?: number;
+    errors?: number;
+    remaining?: number;
+    next_cursor?: number;
+    results?: Array<{ historico_id: number; state: string; error?: string }>;
+  };
+};
+
 const { ensureCertificateForQualificationMock, recordLegacyAndCanonicalAuditMock } = vi.hoisted(
   () => ({
     ensureCertificateForQualificationMock: vi.fn(),
@@ -118,7 +133,7 @@ describe('qualificacoes certificados admin backfill apply', () => {
 
   it('retorna 403 sem header de autorização explícita', async () => {
     const response = await hit('/api/certificados/admin/backfill-apply');
-    const json = await response.json();
+    const json = await response.json() as BackfillBody;
 
     expect(response.status).toBe(403);
     expect(json.code).toBe('EXPLICIT_AUTHORIZATION_REQUIRED');
@@ -129,7 +144,7 @@ describe('qualificacoes certificados admin backfill apply', () => {
     const response = await hit('/api/certificados/admin/backfill-apply', {
       headers: { 'X-Backfill-Authorization': 'CONFIRM_BACKFILL_999' },
     });
-    const json = await response.json();
+    const json = await response.json() as BackfillBody;
 
     expect(response.status).toBe(403);
     expect(json.code).toBe('EXPLICIT_AUTHORIZATION_REQUIRED');
@@ -147,7 +162,7 @@ describe('qualificacoes certificados admin backfill apply', () => {
         headers: { 'X-Backfill-Authorization': 'CONFIRM_BACKFILL_6' },
       },
     );
-    const json = await response.json();
+    const json = await response.json() as BackfillBody;
 
     expect(response.status).toBe(200);
     expect(json.data.limit).toBe(10);
@@ -178,7 +193,7 @@ describe('qualificacoes certificados admin backfill apply', () => {
         headers: { 'X-Backfill-Authorization': 'CONFIRM_BACKFILL_6' },
       },
     );
-    const json = await response.json();
+    const json = await response.json() as BackfillBody;
 
     expect(response.status).toBe(200);
     expect(json.data.processed).toBe(2);

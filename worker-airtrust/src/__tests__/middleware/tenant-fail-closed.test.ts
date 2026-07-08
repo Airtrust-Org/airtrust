@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { errorHandler } from '../../middleware/error-handler';
 import { tenantMiddleware } from '../../middleware/tenant';
@@ -73,7 +74,7 @@ function buildApp(db: D1Database, params: { userId: number; empresaId: number; r
     c.set('userId', params.userId);
     c.set('empresaId', params.empresaId);
     c.set('userRole', params.role || 'admin');
-    await tenantMiddleware()(c, next);
+    await tenantMiddleware()(c as unknown as Context<{ Bindings: Env }>, next);
   });
   app.get('/probe', (c) => c.json({ success: true, tenant: c.get('tenantContext') }));
 
