@@ -438,6 +438,12 @@ app.get('/dashboard/:funcionarioId', async (c) => {
 // POST /sessoes/:id/checks/resultados - Save only explicit check results
 app.post('/sessoes/:id/checks/resultados', async (c) => {
   try {
+    const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
+    const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
+    if (!allowedRoles.includes(role)) {
+      return c.json({ success: false, error: 'Acesso negado' }, 403);
+    }
+
     const { empresaId } = getTenantContext(c);
     const sessao_id = c.req.param('id');
     const body = await c.req.json();
