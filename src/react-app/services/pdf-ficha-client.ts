@@ -573,7 +573,7 @@ export async function gerarPDFFichaCliente(
   // 16mm + 5.0mm/linha coloca a última baseline em +14.5mm, com 1.5mm de
   // folga real até a borda — custo de só +2mm no orçamento vertical total
   // (mantém a compactação de 1 página já obtida).
-  const SESSION_BOX_H = 17;
+  const SESSION_BOX_H = 18;
   const SESSION_LINE_H = 5.5;
   doc.setDrawColor(COLORS.border);
   doc.setFillColor(COLORS.bgLight);
@@ -604,7 +604,7 @@ export async function gerarPDFFichaCliente(
   };
 
   // Linha 1: Data | Horário | Simulador | Carga Horária
-  let lineY = currentY + 5.0;
+  let lineY = currentY + 5.5;
   drawInfoField('Data:', getDisplayValue(dataFormatada), COL1, 9, lineY);
   drawInfoField(
     'Horário:',
