@@ -22,6 +22,11 @@
  */
 
 import { useAuth } from './useAuth';
+import {
+  readScopedPerfis,
+  clearLegacyPerfisCache,
+  type AuthStorageScope,
+} from '@/react-app/utils/auth-storage';
 
 function normalizeRole(role?: string | null): string {
   const normalized = String(role || '')
@@ -77,38 +82,46 @@ const ROLE_DEFAULTS_BUILTIN: Record<string, string[] | null> = {
   USUARIO: ['self.ficha', 'self.escala'],
 };
 
-const LS_PERFIS_KEY = 'airtrust_perfis_custom';
 const GESTOR_BLOCKED_PERMISSIONS = new Set(['admin.config', 'admin.multiempresa']);
+
+function toScope(userId: unknown, empresaId: unknown): AuthStorageScope | null {
+  if (!userId || !empresaId) return null;
+  return { empresaId, userId };
+}
 
 /**
  * Resolve the effective permission set for a given role.
- * Priority: localStorage custom profiles → builtin defaults.
+ * Priority: scoped localStorage → builtin defaults.
+ * Legacy global key `airtrust_perfis_custom` is NEVER used.
  */
-function resolveRolePermissions(role: string): Set<string> | null {
-  try {
-    const raw = localStorage.getItem(LS_PERFIS_KEY);
-    if (raw) {
-      const stored: Array<{ value: string; permissoes: string[] | null }> = JSON.parse(raw);
-      const match = stored.find((p) => p.value.toUpperCase() === role.toUpperCase());
+function resolveRolePermissions(
+  role: string,
+  scope: AuthStorageScope | null,
+): Set<string> | null {
+  // Limpar chave legada se existir (one-time migration)
+  clearLegacyPerfisCache();
+
+  if (scope) {
+    const scoped = readScopedPerfis(scope);
+    if (scoped) {
+      const match = scoped.find((p) => p.value.toUpperCase() === role.toUpperCase());
       if (match !== undefined) {
-        if (match.permissoes === null) return new Set(['*']); // wildcard
+        if (match.permissoes === null) return new Set(['*']);
         return new Set(match.permissoes);
       }
     }
-  } catch {
-    /* ignore */
   }
 
   const builtin = ROLE_DEFAULTS_BUILTIN[role.toUpperCase()];
-  if (builtin === undefined) return new Set(); // unknown role
-  if (builtin === null) return new Set(['*']); // wildcard
+  if (builtin === undefined) return new Set();
+  if (builtin === null) return new Set(['*']);
   return new Set(builtin);
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function usePermissions() {
-  const { user } = useAuth();
+  const { user, empresaAtualId } = useAuth();
 
   const role = normalizeRole(user?.role);
   // permissions pode ser undefined em tokens emitidos antes da migration
@@ -122,8 +135,9 @@ export function usePermissions() {
     else if (o.startsWith('DENY:')) denies.add(o.slice(5));
   }
 
-  // Resolve role permissions (checks localStorage customizations first)
-  const rolePerms = resolveRolePermissions(role);
+  // Resolve role permissions (checks scoped localStorage first, legacy key ignored)
+  const scope = toScope(user?.id, empresaAtualId);
+  const rolePerms = resolveRolePermissions(role, scope);
   const isWildcard = rolePerms.has('*');
 
   /**
