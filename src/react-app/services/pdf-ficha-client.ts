@@ -543,8 +543,8 @@ export async function gerarPDFFichaCliente(
     { align: 'center' },
   );
 
-  // Gap compacto após header (era +8)
-  currentY = headerBottom + 3;
+  // Gap após header — equilibrado com o gap entre session box e tabela
+  currentY = headerBottom + 4;
 
   // ========== DADOS DA SESSÃO — 3 linhas ==========
   // Linha 1: Data | Horário | Simulador | Carga Horária
@@ -715,7 +715,7 @@ export async function gerarPDFFichaCliente(
     displayNum: manobras.length + (m.ordem - NOTECHS_ORDEM_BASE + 1),
     isNotechs: true,
   }));
-  const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 4 : 0;
+  const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 5 : 0;
 
   const allRows = [...tecnicasRows, ...notechsRows];
   const totalTableH =
