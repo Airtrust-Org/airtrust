@@ -59,6 +59,10 @@ export interface FichaPDFData {
   assinatura_instrutor_dataUrl?: string | null;
   logoUrl?: string; // URL do logo da empresa
   modoModelo?: boolean;
+  /** Template version: 'legacy' = pre-V6.2 (com régua), 'v6' = V6.2+ (sem régua).
+   *  Default (undefined) = legacy, para compatibilidade com chamadores existentes
+   *  que ainda não passam esse campo (fichas reais renderizadas hoje). */
+  templateVersion?: 'legacy' | 'v6';
   fileName?: string;
   manobras: Array<{
     ordem: number;
@@ -563,8 +567,14 @@ export async function gerarPDFFichaCliente(
   const COL2 = margin + 65;
   const COL3 = margin + 99;
   const COL4 = margin + 136;
-  const SESSION_BOX_H = 14; // compacto (era 20) para 1 página
-  const SESSION_LINE_H = 5.5;
+  // Com 14mm de altura e 5.5mm por linha, a 3a linha (Instrutor/ANAC) tinha
+  // baseline em +15.5mm — 1.5mm ABAIXO da própria borda da caixa, vazando
+  // pra fora dela (visível mesmo sem a legenda que existia ali antes).
+  // 16mm + 5.0mm/linha coloca a última baseline em +14.5mm, com 1.5mm de
+  // folga real até a borda — custo de só +2mm no orçamento vertical total
+  // (mantém a compactação de 1 página já obtida).
+  const SESSION_BOX_H = 16;
+  const SESSION_LINE_H = 5.0;
   doc.setDrawColor(COLORS.border);
   doc.setFillColor(COLORS.bgLight);
   doc.roundedRect(margin, currentY, contentWidth, SESSION_BOX_H, 2, 2, 'FD');
@@ -889,7 +899,7 @@ export async function gerarPDFFichaCliente(
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(6.5);
       doc.text(
-        'NOTECHS — Habilidades Não Técnicas (CRM)',
+        'NOTECHS — Non-Technical Skills / Habilidades Não Técnicas e Comportamentais',
         margin + 2,
         currentY + NOTECHS_DIVIDER_H / 2 + 1,
       );
@@ -1050,10 +1060,12 @@ export async function gerarPDFFichaCliente(
   );
 
   // ========== PÁGINA 2 (opcional) — Régua NOTECHS, descritores completos ==========
-  // Só é adicionada quando a ficha tem itens NOTECHS. Mantém a página 1 (A4
-  // principal) legível e compacta — os 60 descritores completos ficam aqui,
-  // fora do orçamento de altura da página principal.
-  if (manobrasNotechs.length > 0) {
+  // Só é adicionada para fichas LEGACY (pré-V6.2) com NOTECHS — templateVersion
+  // 'v6' (ficha-modelo e fichas reais V6.2) nunca mostra régua, pois os 15
+  // descritores completos já não fazem parte do padrão V6.2. Default
+  // (undefined) preserva o comportamento legado para chamadores que ainda não
+  // passam templateVersion.
+  if (manobrasNotechs.length > 0 && dados.templateVersion !== 'v6') {
     doc.addPage();
     let refY = margin;
     doc.setFont('helvetica', 'bold');
