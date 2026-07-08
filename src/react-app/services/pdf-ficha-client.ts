@@ -512,17 +512,17 @@ export async function gerarPDFFichaCliente(
   doc.setTextColor(COLORS.primary);
   doc.setFontSize(10.5);
   doc.setFont('helvetica', 'bold');
-  doc.text('FICHA DE TREINAMENTO DE VOO', tituloX, headerTop + 5.5, { align: 'center' });
+  doc.text('FICHA DE TREINAMENTO DE VOO', tituloX, headerTop + 5.0, { align: 'center' });
 
   doc.setFontSize(6);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(COLORS.primary);
-  doc.text('SESSÃO', tituloX, headerTop + 9.5, { align: 'center' });
+  doc.text('SESSÃO', tituloX, headerTop + 8.5, { align: 'center' });
 
   doc.setFontSize(sessaoFontSize);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(COLORS.textSecondary);
-  doc.text(sessaoLine, tituloX, headerTop + 13.5, { align: 'center' });
+  doc.text(sessaoLine, tituloX, headerTop + 12.5, { align: 'center' });
 
   // Status badge (canto direito)
   const statusText = dados.status || 'PENDENTE';
