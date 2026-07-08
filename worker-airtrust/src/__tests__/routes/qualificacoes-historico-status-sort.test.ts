@@ -195,7 +195,10 @@ describe('qualificacoes historico status sort contract', () => {
 
     const dataQuery = dataCall?.query || '';
     expect(dataQuery).toContain("WHEN UPPER(COALESCE(qh.status,'')) IN ('PLANEJADA','PLANEJADO') OR qh.data_conclusao IS NULL THEN 1");
-    expect(dataQuery).toContain("WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) < date('now') THEN 2");
+    expect(dataQuery).toContain("qh.validade_meses IS NOT NULL OR qt.validade IS NOT NULL");
+    expect(dataQuery).toContain("< date('now') THEN 2");
+    // Confirma que o fallback 12 NÃO está presente
+    expect(dataQuery).not.toContain("12) || ' months'");
     expect(dataQuery).toContain("ORDER BY (CASE");
     expect(dataQuery).toContain("END) ASC");
   });

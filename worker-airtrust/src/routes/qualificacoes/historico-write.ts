@@ -307,8 +307,9 @@ writeRouter.post(
         .run();
 
       // 2. Calcular nova data de vencimento
-      // Prioridade: hist_validade_meses > tipo_validade > default 12 meses
-      let validadeMeses = original.hist_validade_meses || original.tipo_validade || 12;
+      // Prioridade: hist_validade_meses > tipo_validade
+      // NULL = sem vencimento (não fabricar 12 meses)
+      let validadeMeses = original.hist_validade_meses || original.tipo_validade || null;
 
       // Regra CMA semestral: pilotos com mais de 60 anos têm validade de 6 meses
       const codigoCMACheck =
@@ -329,13 +330,18 @@ writeRouter.post(
         }
       }
 
-      const renovacaoResolvida = resolveParametrosRenovacaoQualificacao({
-        codigoQualificacao: codigoOriginal,
-        dataConclusao: novaDataRealizacao,
-        validadeMeses,
-      });
-      validadeMeses = renovacaoResolvida.validadeMeses;
-      const novaDataVencimento = renovacaoResolvida.dataVencimento;
+      const renovacaoResolvida = validadeMeses !== null
+        ? resolveParametrosRenovacaoQualificacao({
+            codigoQualificacao: codigoOriginal,
+            dataConclusao: novaDataRealizacao,
+            validadeMeses,
+          })
+        : null;
+      const novaDataVencimento = renovacaoResolvida?.dataVencimento ?? null;
+      const tipoTreinamento = renovacaoResolvida?.tipoTreinamento ?? 'RECORRENTE';
+      if (renovacaoResolvida) {
+        validadeMeses = renovacaoResolvida.validadeMeses;
+      }
 
       // 3. Criar novo registro com nova data
       // Copiar TODOS os dados do original, apenas alterando datas e observações
@@ -346,7 +352,6 @@ writeRouter.post(
       const novaObservacao = observacao
         ? `Renovação de #${id}. ${observacao}`
         : `Renovação automática de #${id} em ${new Date().toISOString().split('T')[0]}`;
-      const tipoTreinamento = renovacaoResolvida.tipoTreinamento;
       const cargaHorariaEfetiva = resolveCargaHorariaByTipo({
         tipoTreinamento,
         cargaInicial: original.tipo_carga_horaria_inicial,

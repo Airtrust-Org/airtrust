@@ -606,6 +606,7 @@ export async function getComplianceScore(
   try {
     const employeeScope = buildEmployeeScopeSql(access, 'f');
     const sessionScope = buildSessionScopeSql(access, 'simulador_agendamentos');
+    const vencimentoExpr = getQualificacoesVencimentoExpr();
     const [qualificacoes, simuladores, qualificacoesAnterior, lmsCompliance] = await Promise.all([
       // % de qualificações válidas (cálculo dinâmico de vencimento)
       db
@@ -613,7 +614,8 @@ export async function getComplianceScore(
           `SELECT
              COALESCE(
                SUM(CASE
-                 WHEN date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months') >= date('now') THEN 1
+                 WHEN ${vencimentoExpr} IS NULL THEN 1
+                 WHEN ${vencimentoExpr} >= date('now') THEN 1
                  ELSE 0
                END) * 100.0 /
                NULLIF(COUNT(*), 0),
@@ -621,7 +623,8 @@ export async function getComplianceScore(
              ) as percentual_qualificacoes_validas,
              COUNT(*) as total_qualificacoes,
              SUM(CASE
-               WHEN date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months') >= date('now') THEN 1
+               WHEN ${vencimentoExpr} IS NULL THEN 1
+               WHEN ${vencimentoExpr} >= date('now') THEN 1
                ELSE 0
              END) as qualificacoes_validas
            FROM qualificacoes_historico qh
@@ -670,7 +673,8 @@ export async function getComplianceScore(
           `SELECT
              COALESCE(
                SUM(CASE
-                 WHEN date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months') >= date('now', '-1 month') THEN 1
+                 WHEN ${vencimentoExpr} IS NULL THEN 1
+                 WHEN ${vencimentoExpr} >= date('now', '-1 month') THEN 1
                  ELSE 0
                END) * 100.0 /
                NULLIF(COUNT(*), 0),
