@@ -100,6 +100,31 @@ function isCompletedVerb(verbId: string): boolean {
   return verbId.endsWith('/completed');
 }
 
+/**
+ * Verifica se o score do statement xAPI atende ao mastery score do curso.
+ * Se o curso não tem scorm_mastery_score definido, qualquer nota é aceita.
+ * Se tem, a nota (raw/max ou scaled) deve ser >= mastery score.
+ */
+function meetsMasteryScore(
+  result: { score?: { raw?: number; max?: number; scaled?: number } } | undefined,
+  masteryScore: number | null | undefined,
+): boolean {
+  if (masteryScore == null || masteryScore <= 0) return true;
+
+  const scaled = result?.score?.scaled;
+  if (scaled != null) {
+    return scaled * 100 >= masteryScore;
+  }
+
+  const raw = result?.score?.raw;
+  const max = result?.score?.max;
+  if (raw != null && max != null && max > 0) {
+    return (raw / max) * 100 >= masteryScore;
+  }
+
+  return false;
+}
+
 // ── Schema de statement xAPI ─────────────────────────────────────────────────
 
 const XApiStatementSchema = z.object({
@@ -197,6 +222,7 @@ app.post('/xapi/statements', async (c) => {
         m.qualificacao_historico_id,
         c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
         c.titulo AS curso_titulo,
+        c.scorm_mastery_score,
         qt.codigo AS qualificacao_codigo,
         qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria,
@@ -219,6 +245,7 @@ app.post('/xapi/statements', async (c) => {
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
+      scorm_mastery_score: number | null;
       qualificacao_codigo: string | null;
       qualificacao_nome: string | null;
       qualificacao_categoria: string | null;
@@ -275,8 +302,12 @@ app.post('/xapi/statements', async (c) => {
   const completionExplicitlyFalse = stmt.result?.completion === false;
   const successExplicitlyFalse = stmt.result?.success === false;
 
+  // Validar mastery score: se o curso tem scorm_mastery_score, a nota deve atender
+  const masteryOk = meetsMasteryScore(stmt.result, matricula.scorm_mastery_score);
+
   const shouldConcluir =
     isCompletion &&
+    masteryOk &&
     (resultSuccess ||
       resultCompletion ||
       isPassedVerb(verbId) ||

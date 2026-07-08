@@ -263,4 +263,161 @@ describe('lms progresso xapi router', () => {
     expect(updateCall?.args[3]).toBe(92);
     expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
   });
+
+  it('blocks completion when score is below scorm_mastery_score (BUG-006)', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 10,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            empresa_id: 1,
+            progresso_pct: 50,
+            score_final: null,
+            qualificacao_historico_id: null,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 55,
+            curso_titulo: 'FDM - Flight Data Monitoring',
+            scorm_mastery_score: 70,
+            qualificacao_codigo: 'FDM',
+            qualificacao_nome: 'FDM',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      [
+        'INSERT INTO lms_xapi_statements',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 601 } }),
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+
+    // completed verb with score 50% — below mastery score 70
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@airtrust.online' },
+          verb: {
+            id: 'http://adlnet.gov/expapi/verbs/completed',
+            display: { 'en-US': 'completed' },
+          },
+          object: {
+            id: 'h5p:20',
+            objectType: 'Activity',
+          },
+          result: {
+            success: true,
+            completion: true,
+            score: { raw: 50, max: 100 },
+          },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.data.novo_status).not.toBe('CONCLUIDO');
+    expect(body.data.qualificacao_gerada).toBeNull();
+
+    // Qualification should NOT be generated
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+  });
+
+  it('allows completion when score meets scorm_mastery_score', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 10,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            empresa_id: 1,
+            progresso_pct: 80,
+            score_final: null,
+            qualificacao_historico_id: null,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 55,
+            curso_titulo: 'FDM - Flight Data Monitoring',
+            scorm_mastery_score: 70,
+            qualificacao_codigo: 'FDM',
+            qualificacao_nome: 'FDM',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      [
+        'INSERT INTO lms_xapi_statements',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 602 } }),
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+
+    // passed verb with score 85% — above mastery score 70
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@airtrust.online' },
+          verb: {
+            id: 'http://adlnet.gov/expapi/verbs/passed',
+            display: { 'en-US': 'passed' },
+          },
+          object: {
+            id: 'h5p:20',
+            objectType: 'Activity',
+          },
+          result: {
+            success: true,
+            score: { raw: 85, max: 100 },
+          },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        statement_id: 602,
+        matricula_id: 10,
+        novo_status: 'CONCLUIDO',
+      },
+    });
+
+    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
+  });
 });
