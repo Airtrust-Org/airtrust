@@ -313,6 +313,42 @@ describe('Tenant SQL Guardrail — Regression Prevention', () => {
   });
 });
 
+// ─── TEST: FIXES FROM 2026-07-08 AUDIT ────────────────────────────────────────
+// Cross-tenant write vulnerabilities found during the full-backend tenant audit:
+//   aeronaves.ts           — PUT/DELETE /:id updated aeronaves by id only
+//   escalas-padroes.ts     — DELETE /:id soft-deleted padroes_escala by id only
+//   escalas-restricoes.ts  — DELETE /:id soft-deleted restricoes_tripulacao by id only
+// All three had correctly-scoped GET/POST in the same file, but the mutating
+// endpoint was written without the empresa_id check. Fixed 2026-07-08.
+
+describe('Tenant SQL Guardrail — 2026-07-08 Audit Fixes (Regression Prevention)', () => {
+  it('aeronaves.ts PUT /:id scopes the UPDATE by empresa_id', () => {
+    const source = readRouteFile('aeronaves.ts');
+    expect(/UPDATE aeronaves SET \$\{fields\.join\(', '\)\} WHERE id = \? AND empresa_id = \?/.test(source)).toBe(
+      true,
+    );
+  });
+
+  it('aeronaves.ts DELETE /:id scopes the soft-delete by empresa_id', () => {
+    const source = readRouteFile('aeronaves.ts');
+    expect(
+      /UPDATE aeronaves SET deleted_at = datetime\("now"\) WHERE id = \? AND empresa_id = \?/.test(
+        source,
+      ),
+    ).toBe(true);
+  });
+
+  it('escalas-padroes.ts DELETE /:id scopes the soft-delete by empresa_id', () => {
+    const source = readRouteFile('escalas-padroes.ts');
+    expect(/WHERE id = \? AND empresa_id = \?/.test(source)).toBe(true);
+  });
+
+  it('escalas-restricoes.ts DELETE /:id scopes the soft-delete by empresa_id', () => {
+    const source = readRouteFile('escalas-restricoes.ts');
+    expect(/WHERE id = \? AND empresa_id = \?/.test(source)).toBe(true);
+  });
+});
+
 // ─── TEST: INDIRECT TENANT TABLES COVERAGE ────────────────────────────────────
 
 describe('Tenant SQL Guardrail — Indirect-Tenant Table Coverage', () => {
