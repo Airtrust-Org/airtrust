@@ -420,4 +420,237 @@ describe('lms progresso xapi router', () => {
 
     expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
   });
+
+  it('blocks completion on completed verb without score when mastery=70 (score required)', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 10,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            empresa_id: 1,
+            progresso_pct: 50,
+            score_final: null,
+            qualificacao_historico_id: null,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 55,
+            curso_titulo: 'FDM',
+            scorm_mastery_score: 70,
+            qualificacao_codigo: 'FDM',
+            qualificacao_nome: 'FDM',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      [
+        'INSERT INTO lms_xapi_statements',
+        { run: () => ({ meta: { changes: 1, last_row_id: 701 } }) },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@airtrust.online' },
+          verb: { id: 'http://adlnet.gov/expapi/verbs/completed', display: { 'en-US': 'completed' } },
+          object: { id: 'h5p:20', objectType: 'Activity' },
+          // No result.score — mastery score check should fail-closed
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    const body = await response.json();
+    expect(body.data.novo_status).not.toBe('CONCLUIDO');
+    expect(body.data.qualificacao_gerada).toBeNull();
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+  });
+
+  it('allows completion when score equals mastery (raw=70, max=100, mastery=70)', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 10, funcionario_id: 77, status: 'EM_ANDAMENTO',
+            empresa_id: 1, progresso_pct: 50, score_final: null,
+            qualificacao_historico_id: null, gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 55, curso_titulo: 'FDM',
+            scorm_mastery_score: 70, qualificacao_codigo: 'FDM',
+            qualificacao_nome: 'FDM', qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      ['INSERT INTO lms_xapi_statements', { run: () => ({ meta: { changes: 1, last_row_id: 702 } }) }],
+      ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@airtrust.online' },
+          verb: { id: 'http://adlnet.gov/expapi/verbs/passed', display: { 'en-US': 'passed' } },
+          object: { id: 'h5p:20', objectType: 'Activity' },
+          result: { success: true, score: { raw: 70, max: 100 } },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      success: true, data: { novo_status: 'CONCLUIDO' },
+    });
+    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalled();
+  });
+
+  it('allows completion when scaled=0.7 with mastery=70', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 10, funcionario_id: 77, status: 'EM_ANDAMENTO',
+            empresa_id: 1, progresso_pct: 50, score_final: null,
+            qualificacao_historico_id: null, gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 55, curso_titulo: 'FDM',
+            scorm_mastery_score: 70, qualificacao_codigo: 'FDM',
+            qualificacao_nome: 'FDM', qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      ['INSERT INTO lms_xapi_statements', { run: () => ({ meta: { changes: 1, last_row_id: 703 } }) }],
+      ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@airtrust.online' },
+          verb: { id: 'http://adlnet.gov/expapi/verbs/passed', display: { 'en-US': 'passed' } },
+          object: { id: 'h5p:20', objectType: 'Activity' },
+          result: { success: true, score: { scaled: 0.7 } },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      success: true, data: { novo_status: 'CONCLUIDO' },
+    });
+  });
+
+  it('allows completion when raw=7, max=10 (70%) with mastery=70', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 10, funcionario_id: 77, status: 'EM_ANDAMENTO',
+            empresa_id: 1, progresso_pct: 50, score_final: null,
+            qualificacao_historico_id: null, gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 55, curso_titulo: 'FDM',
+            scorm_mastery_score: 70, qualificacao_codigo: 'FDM',
+            qualificacao_nome: 'FDM', qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      ['INSERT INTO lms_xapi_statements', { run: () => ({ meta: { changes: 1, last_row_id: 704 } }) }],
+      ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@airtrust.online' },
+          verb: { id: 'http://adlnet.gov/expapi/verbs/passed', display: { 'en-US': 'passed' } },
+          object: { id: 'h5p:20', objectType: 'Activity' },
+          result: { success: true, score: { raw: 7, max: 10 } },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      success: true, data: { novo_status: 'CONCLUIDO' },
+    });
+  });
+
+  it('blocks completion when raw=6, max=10 (60%) below mastery=70', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 10, funcionario_id: 77, status: 'EM_ANDAMENTO',
+            empresa_id: 1, progresso_pct: 50, score_final: null,
+            qualificacao_historico_id: null, gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 55, curso_titulo: 'FDM',
+            scorm_mastery_score: 70, qualificacao_codigo: 'FDM',
+            qualificacao_nome: 'FDM', qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      ['INSERT INTO lms_xapi_statements', { run: () => ({ meta: { changes: 1, last_row_id: 705 } }) }],
+      ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@airtrust.online' },
+          verb: { id: 'http://adlnet.gov/expapi/verbs/passed', display: { 'en-US': 'passed' } },
+          object: { id: 'h5p:20', objectType: 'Activity' },
+          result: { success: true, score: { raw: 6, max: 10 } },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    const body = await response.json();
+    expect(body.data.novo_status).not.toBe('CONCLUIDO');
+    expect(body.data.qualificacao_gerada).toBeNull();
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+  });
 });
