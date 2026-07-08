@@ -8,6 +8,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 
+type ScormCommitBody = {
+  success: boolean;
+  data: {
+    ignoredDowngrade?: boolean;
+    status?: string;
+    progresso_pct?: number;
+    message?: string;
+  };
+};
+
 import type { Env } from '../../types';
 
 const {
@@ -139,7 +149,7 @@ describe('lms matriculas concluido guard', () => {
     }), { DB: db } as Env, {} as ExecutionContext);
 
     expect(response.status).toBe(200);
-    const json = await response.json();
+    const json = await response.json() as ScormCommitBody;
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBe(true);
     expect(json.data.status).toBe('CONCLUIDO');
@@ -163,7 +173,7 @@ describe('lms matriculas concluido guard', () => {
     }), { DB: db } as Env, {} as ExecutionContext);
 
     expect(response.status).toBe(200);
-    const json = await response.json();
+    const json = await response.json() as ScormCommitBody;
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBe(true);
     expect(json.data.status).toBe('CONCLUIDO');
@@ -183,7 +193,7 @@ describe('lms matriculas concluido guard', () => {
     }), { DB: db } as Env, {} as ExecutionContext);
 
     expect(response.status).toBe(200);
-    const json = await response.json();
+    const json = await response.json() as ScormCommitBody;
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBe(true);
     expect(json.data.status).toBe('CONCLUIDO');
@@ -214,7 +224,7 @@ describe('lms matriculas concluido guard', () => {
     }), { DB: db } as Env, {} as ExecutionContext);
 
     expect(response.status).toBe(200);
-    const json = await response.json();
+    const json = await response.json() as ScormCommitBody;
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBeFalsy();
   });

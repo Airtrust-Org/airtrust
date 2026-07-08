@@ -37,7 +37,7 @@ function createTestApp() {
       typeof error === 'object' && error && 'statusCode' in error
         ? Number((error as { statusCode?: number }).statusCode) || 500
         : 500;
-    return c.json({ success: false, error: error instanceof Error ? error.message : 'Erro interno' }, status);
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Erro interno' }, status as 200 | 400 | 401 | 403 | 404 | 409 | 422 | 500);
   });
   app.route('/cursos', lmsCursosRoutes);
   return app;
