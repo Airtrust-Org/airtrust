@@ -6,8 +6,10 @@ import { describe, expect, it } from 'vitest';
 const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const LARGE_FILE_LINE_CAPS = {
-  // Cap raised 2026-06-29: counted 3868 (pre-existing growth).
-  'routes/frms.ts': 3868,
+  // Cap raised 2026-07-08: counted 3913 (pre-existing drift to 3887 unrelated to
+  // this change, plus explicit empresaId guards added to close BUG-011 Stage 3
+  // domain-event masking — see fix/bug011-stage3-safe-typeguards-20260708).
+  'routes/frms.ts': 3913,
   // Cap raised 2026-06-30: counted 2884 (pre-existing growth).
   'services/sigvoos-frms.ts': 2884,
   // Cap raised 2026-06-30: counted 2921 (fmt/classif columns, hasColumn helper).
@@ -16,8 +18,9 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/escalas-alocacoes.ts': 2277,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
   'routes/escalas-evd.ts': 2162,
-  // Cap raised 2026-06-30: counted 3758 (categoria_id/formato_id filter params).
-  'routes/treinamentos-planejados.ts': 3758,
+  // Cap raised 2026-07-08: counted 3760 (qualificacao_historico_status added to
+  // satisfy ConsolidatedTrainingItem — BUG-011 Stage 3 fix, not a mask).
+  'routes/treinamentos-planejados.ts': 3760,
   // Acknowledged growth (pre-existing, logged 2026-06-30): certificate hooks + SCORM completions.
   'routes/lms-matriculas.ts': 3261,
   // Acknowledged growth (pre-existing, logged 2026-06-30): controle de voos CRUD + histórico.

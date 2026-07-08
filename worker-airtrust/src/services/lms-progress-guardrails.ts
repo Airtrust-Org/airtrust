@@ -311,10 +311,11 @@ export function mergeScormRuntimeState(params: {
   const currentSuspendData = normalizeScormText(params.currentSuspendData);
   const incomingSuspendData = normalizeScormText(params.incomingSuspendData);
   const blockedEmptySuspendData = Boolean(currentSuspendData) && !incomingSuspendData;
-  const blockedShorterSuspendData =
-    Boolean(currentSuspendData) &&
-    Boolean(incomingSuspendData) &&
-    incomingSuspendData!.length < currentSuspendData!.length;
+  const blockedShorterSuspendData = Boolean(
+    currentSuspendData &&
+      incomingSuspendData &&
+      incomingSuspendData.length < currentSuspendData.length,
+  );
   const mergedSuspendData: string | null = (() => {
     if (blockedEmptySuspendData || blockedShorterSuspendData) {
       return currentSuspendData ?? null;

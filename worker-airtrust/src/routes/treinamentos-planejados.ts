@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
@@ -144,7 +144,7 @@ async function detectTreinamentoSchemaCapabilities(
   return _capabilitiesCache;
 }
 
-const treinamentosPlanejadosRoutes = new Hono<{ Bindings: Env }>();
+const treinamentosPlanejadosRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 treinamentosPlanejadosRoutes.use('*', auth());
 
@@ -1446,7 +1446,6 @@ async function loadStandalonePlannedQualificationItems(
     return {
       id: itemId,
       empresa_id: Number(row.empresa_id),
-      // @ts-ignore D1 `.all<T>()` não propaga generics
       qualificacao_tipo_id: Number(row.qualificacao_tipo_id || 0),
       qualificacao_nome: row.qualificacao_nome,
       qualificacao_codigo: row.qualificacao_codigo,
@@ -3578,7 +3577,7 @@ treinamentosPlanejadosRoutes.post(
   requireRole('admin'),
   async (c) => {
     const db = c.env.DB;
-    const empresaId = (c as any).get('empresaId');
+    const empresaId = c.get('empresaId');
     const url = new URL(c.req.url);
     const dryRun = url.searchParams.get('dryRun') === 'true';
 
