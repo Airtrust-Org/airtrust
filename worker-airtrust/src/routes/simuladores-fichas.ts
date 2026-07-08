@@ -781,12 +781,19 @@ app.get('/fichas/:id', async (c) => {
 app.post('/fichas/:id/pdf', async (c) => {
   try {
     const fichaId = c.req.param('id');
+    const ctx = c as unknown as { get: (k: string) => unknown };
+    const userId = String(ctx.get('userId') || '');
+    const role = String(ctx.get('userRole') || '');
+    const empresaId = String(ctx.get('empresaId') || '');
     const tenantEmpresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
 
     const f = await c.env.DB.prepare(
       `SELECT 
         fs.id,
         fs.uuid,
+        fs.instrutor_id,
+        fs.colaborador_id_aluno,
         fs.status,
         fs.observacoes,
         fs.assinatura_aluno_timestamp,
@@ -822,6 +829,34 @@ app.post('/fichas/:id/pdf', async (c) => {
       .first<any>();
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+
+    // ── Verificar acesso por setor ───────────────────────────────────────────
+    if (access.mode === 'restricted') {
+      const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
+        c.env.DB,
+        tenantEmpresaId,
+        [Number(f.colaborador_id_aluno || 0)],
+        access.setorIds,
+      );
+      if (!allowedAlunoIds.has(Number(f.colaborador_id_aluno || 0))) {
+        return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+      }
+    }
+
+    // ── Verificar acesso por perfil ───────────────────────────────────────────
+    if (!isFullAccess(role)) {
+      const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
+      const scope = resolveFichaScope(role);
+      const authorized =
+        scope === 'ALUNO_PENDING_SIGNATURE'
+          ? String(f.colaborador_id_aluno) === String(funcId)
+          : scope === 'INSTRUTOR_OR_ALUNO'
+            ? String(f.instrutor_id) === String(funcId) ||
+              String(f.colaborador_id_aluno) === String(funcId)
+            : false;
+      if (!authorized) return c.json({ success: false, error: 'Acesso negado' }, 403);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     let logoBytes: Buffer | undefined;
     try {
