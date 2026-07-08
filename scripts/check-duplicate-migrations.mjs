@@ -51,6 +51,11 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
   '0347': ['0347_lms_cursos_content_filename.sql', '0347_lms_edapp_tenant_indexes.sql'],
   '0362': ['0362_fichas_edicao_pos_finalizacao.sql', '0362_frms_daily_fatigue_v01.sql'],
   '0367': ['0367_classificar_dificuldade_sk76_restantes.sql', '0367_sk76_reaquisicao_experiencia_recente.sql'],
+  '0420': [
+    '0420_notificacoes_log_add_empresa_id.sql',
+    '0420_notificacoes_log_add_empresa_id_preflight_audit.sql',
+    '0420_notificacoes_log_add_empresa_id_rollback.sql',
+  ],
 };
 
 const files = fs

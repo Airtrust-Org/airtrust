@@ -101,6 +101,10 @@ function createMockEnv() {
           const empresaId = args[0] as number | undefined;
           const visible = logs.filter((log) => log.empresa_id === empresaId);
 
+          if (query.includes("nl.tipo = 'WHATSAPP'")) {
+            return { results: visible.filter((log) => log.tipo === 'WHATSAPP') };
+          }
+
           if (query.includes('nl.id,')) {
             return { results: visible };
           }
@@ -223,6 +227,55 @@ describe('notificacoes /log tenant isolation', () => {
 
     expect(response.status).toBe(200);
     expect(body.data).toEqual([]);
+  });
+});
+
+describe('notificacoes /whatsapp/overview tenant isolation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('empresa A ve apenas recentLogs da empresa A no overview de WhatsApp', async () => {
+    const { env } = createMockEnv();
+
+    const response = await request(env, '/api/notificacoes/whatsapp/overview', 1);
+    const body = await response.json<{ data: { recentLogs: LogRow[] } }>();
+
+    expect(response.status).toBe(200);
+    expect(body.data.recentLogs.map((item) => item.id)).toEqual([]);
+  });
+
+  it('empresa B ve apenas seu proprio log WHATSAPP, nao o da empresa A', async () => {
+    const { env } = createMockEnv();
+
+    const response = await request(env, '/api/notificacoes/whatsapp/overview', 2);
+    const body = await response.json<{ data: { recentLogs: LogRow[] } }>();
+
+    expect(response.status).toBe(200);
+    expect(body.data.recentLogs.map((item) => item.id)).toEqual([2]);
+  });
+
+  it('query do overview inclui filtro empresa_id vinculado ao contexto do tenant', async () => {
+    const { env, calls } = createMockEnv();
+
+    await request(env, '/api/notificacoes/whatsapp/overview', 2);
+
+    const overviewQuery = calls.find(
+      (call) => call.method === 'all' && call.query.includes("nl.tipo = 'WHATSAPP'"),
+    );
+    expect(overviewQuery?.query).toContain('nl.empresa_id = ?');
+    expect(overviewQuery?.args[0]).toBe(2);
+  });
+
+  it('notificacoes_config do overview permanece global (sem filtro empresa_id)', async () => {
+    const { env, calls } = createMockEnv();
+
+    await request(env, '/api/notificacoes/whatsapp/overview', 1);
+
+    const configQuery = calls.find(
+      (call) => call.method === 'all' && call.query.includes('FROM notificacoes_config'),
+    );
+    expect(configQuery?.query).not.toContain('empresa_id');
   });
 });
 
