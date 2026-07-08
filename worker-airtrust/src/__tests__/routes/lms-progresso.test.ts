@@ -333,9 +333,9 @@ describe('lms progresso xapi router', () => {
     );
 
     expect(response.status).toBe(201);
-    const body = await response.json();
-    expect(body.data.novo_status).not.toBe('CONCLUIDO');
-    expect(body.data.qualificacao_gerada).toBeNull();
+    const body = await response.json() as Record<string, unknown>;
+    expect((body.data as Record<string, unknown>).novo_status).not.toBe('CONCLUIDO');
+    expect((body.data as Record<string, unknown>).qualificacao_gerada).toBeNull();
 
     // Qualification should NOT be generated
     expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
@@ -470,9 +470,9 @@ describe('lms progresso xapi router', () => {
       {} as ExecutionContext,
     );
 
-    const body = await response.json();
-    expect(body.data.novo_status).not.toBe('CONCLUIDO');
-    expect(body.data.qualificacao_gerada).toBeNull();
+    const body = await response.json() as Record<string, unknown>;
+    expect((body.data as Record<string, unknown>).novo_status).not.toBe('CONCLUIDO');
+    expect((body.data as Record<string, unknown>).qualificacao_gerada).toBeNull();
     expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
   });
 
@@ -648,9 +648,9 @@ describe('lms progresso xapi router', () => {
       {} as ExecutionContext,
     );
 
-    const body = await response.json();
-    expect(body.data.novo_status).not.toBe('CONCLUIDO');
-    expect(body.data.qualificacao_gerada).toBeNull();
+    const body = await response.json() as Record<string, unknown>;
+    expect((body.data as Record<string, unknown>).novo_status).not.toBe('CONCLUIDO');
+    expect((body.data as Record<string, unknown>).qualificacao_gerada).toBeNull();
     expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
   });
 });

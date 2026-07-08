@@ -529,7 +529,7 @@ describe('simuladores fichas scope guards', () => {
     );
 
     expect(resp.status).toBe(409);
-    const body = await resp.json();
+    const body = await resp.json() as Record<string, unknown>;
     expect(body.code).toBe('FICHA_NOT_AVAILABLE_YET');
   });
 
@@ -552,7 +552,7 @@ describe('simuladores fichas scope guards', () => {
     );
 
     expect(resp.status).toBe(409);
-    const body = await resp.json();
+    const body = await resp.json() as Record<string, unknown>;
     expect(body.code).toBe('FICHA_NOT_AVAILABLE_YET');
   });
 
@@ -708,7 +708,7 @@ describe('simuladores fichas scope guards', () => {
     // Bloqueado: 403 (role) ou 404 (tenant check — a query mock não cobre essa query)
     // Ambos significam que o gate impede a geração de qualificação
     expect(resp.status).toBeGreaterThanOrEqual(400);
-    const body = await resp.json();
+    const body = await resp.json() as Record<string, unknown>;
     expect(body.success).toBe(false);
   });
 });
