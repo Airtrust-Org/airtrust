@@ -719,7 +719,7 @@ opsRouter.get(
   auth(),
   requireControlledAdminOrSupportAccess({
     action: 'CERTIFICADOS_DRY_RUN_INVENTORY',
-    access: 'query',
+    access: 'read_only',
     entityType: 'certificados_admin_ops',
     module: 'qualificacoes_certificados',
   }),
@@ -786,7 +786,7 @@ opsRouter.post(
   auth(),
   requireControlledAdminOrSupportAccess({
     action: 'CERTIFICADOS_BACKFILL_DRY_RUN',
-    access: 'query',
+    access: 'read_only',
     entityType: 'certificados_admin_ops',
     module: 'qualificacoes_certificados',
   }),

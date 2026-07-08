@@ -876,7 +876,7 @@ authRoutes.post(
   '/login',
   rateLimiter({ ...rateLimitPresets.login, keyPrefix: 'auth-login' }),
   async (c) => {
-    const requestId = (c.get('requestId') as string) || crypto.randomUUID();
+    const requestId = ((c as any).get('requestId') as string) || crypto.randomUUID();
     c.header('X-Request-ID', requestId);
     const logger = createLogger(c, 'AuthRoutes.login');
     const logStep = (step: string, extra?: Record<string, unknown>) => {

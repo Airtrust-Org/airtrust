@@ -84,7 +84,7 @@ escalas.route('/', visaoMensalIntegrada);
 escalas.get('/minha-escala', auth(), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdOptional(c);
-  const userId = String(c.get('userId') || '');
+  const userId = String((c as any).get('userId') || '');
   const mes = Number(c.req.query('mes') || new Date().getMonth() + 1);
   const ano = Number(c.req.query('ano') || new Date().getFullYear());
 
