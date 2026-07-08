@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
-import { getEmpresaId } from '../middleware/tenant';
+import { getEmpresaId, isPlatformAdminContext } from '../middleware/tenant';
 import { processarNotificacoes } from '../cron/notificacoes';
 import { createLogger, toError } from '../utils/logger';
 import type { Env } from '../types';
@@ -143,6 +143,7 @@ app.post('/processar', auth(), requireRole('admin'), async (c) => {
 // =============================================
 app.get('/whatsapp/overview', auth(), async (c) => {
   try {
+    const empresaId = getEmpresaId(c);
     await seedLocalWhatsAppTemplateCatalog(c.env.DB);
 
     const templates = await listLocalWhatsAppTemplates(c.env.DB);
@@ -180,6 +181,10 @@ app.get('/whatsapp/overview', auth(), async (c) => {
       },
     );
 
+    // notificacoes_config é configuração global da plataforma (mesmo padrão de
+    // padroes_escala/restricoes_tripulacao/frms_configuracao_limites) — não há dado
+    // por empresa aqui, então a leitura permanece sem filtro de tenant. A escrita
+    // (PUT /config/:id) é restrita a platform-admin — ver comentário naquela rota.
     const whatsappConfigs = await c.env.DB.prepare(
       `SELECT id, ativo, dias_antes, urgencia, destinatarios, template, updated_at
          FROM notificacoes_config
@@ -188,6 +193,8 @@ app.get('/whatsapp/overview', auth(), async (c) => {
         ORDER BY dias_antes ASC`,
     ).all();
 
+    // notificacoes_log é dado da empresa (CPF/nome/corpo de mensagem do funcionário) —
+    // filtrado por empresa_id (migration 0420) para não vazar entre tenants.
     const recentLogs = await c.env.DB.prepare(
       `SELECT nl.id,
               nl.config_id,
@@ -206,9 +213,12 @@ app.get('/whatsapp/overview', auth(), async (c) => {
          LEFT JOIN qualificacoes_historico qh ON qh.id = nl.qualificacao_historico_id
          LEFT JOIN qualificacoes_tipos qt ON qt.codigo = qh.qualificacao_codigo
         WHERE nl.tipo = 'WHATSAPP'
+          AND nl.empresa_id = ?
         ORDER BY COALESCE(nl.enviado_em, nl.created_at) DESC
         LIMIT 15`,
-    ).all();
+    )
+      .bind(empresaId)
+      .all();
 
     return c.json({
       success: true,
@@ -247,8 +257,10 @@ app.get('/log', auth(), async (c) => {
       data_fim,
     } = c.req.query();
 
+    const empresaId = getEmpresaId(c);
+
     let query = `
-      SELECT 
+      SELECT
         nl.id,
         nl.config_id,
         nl.qualificacao_historico_id,
@@ -268,10 +280,10 @@ app.get('/log', auth(), async (c) => {
       LEFT JOIN funcionarios f ON nl.funcionario_cpf = f.cpf
       LEFT JOIN qualificacoes_historico qh ON nl.qualificacao_historico_id = qh.id
       LEFT JOIN qualificacoes_tipos qt ON qh.qualificacao_codigo = qt.codigo
-      WHERE 1=1
+      WHERE nl.empresa_id = ?
     `;
 
-    const params: (string | number)[] = [];
+    const params: (string | number)[] = [empresaId];
 
     if (status) {
       query += ` AND nl.status = ?`;
@@ -301,17 +313,20 @@ app.get('/log', auth(), async (c) => {
       .bind(...params)
       .all();
 
-    // Estatísticas
+    // Estatísticas (mesma empresa do request)
     const { results: stats } = await c.env.DB.prepare(
       `
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN status = 'enviada' THEN 1 ELSE 0 END) as enviadas,
         SUM(CASE WHEN status = 'erro' THEN 1 ELSE 0 END) as erros,
         SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as pendentes
       FROM notificacoes_log
+      WHERE empresa_id = ?
     `,
-    ).all();
+    )
+      .bind(empresaId)
+      .all();
 
     return c.json({
       success: true,
@@ -339,6 +354,8 @@ app.get('/log', auth(), async (c) => {
 // =============================================
 // GET /api/notificacoes/config
 // Listar configurações de notificações
+// notificacoes_config é global (plataforma inteira), não por empresa — ver nota
+// na rota PUT abaixo.
 // =============================================
 app.get('/config', auth(), async (c) => {
   try {
@@ -380,9 +397,29 @@ app.get('/config', auth(), async (c) => {
 // =============================================
 // PUT /api/notificacoes/config/:id
 // Atualizar configuração
+//
+// SECURITY (auditoria 2026-07-08): notificacoes_config não tem coluna empresa_id —
+// é configuração global da plataforma (regras de "avisar N dias antes", por tipo/
+// urgência), no mesmo espírito de padroes_escala/frms_configuracao_limites. Antes,
+// qualquer admin/manager de QUALQUER empresa podia alterar essa config compartilhada
+// por todos os tenants. Restrito a platform-admin até existir uma decisão de produto
+// sobre tornar isso customizável por empresa (o que exigiria empresa_id nesta tabela
+// e uma estratégia de fallback para quando a empresa não tiver override próprio).
 // =============================================
 app.put('/config/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
+    if (!isPlatformAdminContext(c as any)) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Apenas administradores da plataforma podem alterar esta configuração global de notificações.',
+          code: 'PLATFORM_ADMIN_REQUIRED',
+        },
+        403,
+      );
+    }
+
     const id = parseInt(c.req.param('id'));
     const input = await c.req.json();
 
