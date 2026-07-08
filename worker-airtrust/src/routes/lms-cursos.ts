@@ -29,6 +29,7 @@ import {
   syncLmsCourseFromQualificacaoTipo,
   syncQualificacaoTipoFromCurso,
 } from '../services/lms-ead-ssot';
+import { CANONICAL_TRAINING_CATEGORY } from '../services/lms-ead-ssot';
 import type { Env, AppEnv } from '../types';
 
 const app = new Hono<{ Bindings: Env }>();
