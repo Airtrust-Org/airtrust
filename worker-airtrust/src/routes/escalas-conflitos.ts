@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
+import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
 const conflitos = new Hono<{ Bindings: Env }>();
 
@@ -225,7 +226,7 @@ conflitos.get('/:id/conflitos', auth(), async (c) => {
               `SELECT DISTINCT
                  f.id as func_id, f.nome as func_nome,
                  qt.nome as qual_nome, qt.codigo as qual_codigo,
-                 date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months') as data_vencimento_calc
+                 ${getQualificacoesVencimentoExpr()} as data_vencimento_calc
                FROM qualificacoes_historico qh
                JOIN funcionarios f ON f.id = qh.funcionario_id
                JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
@@ -233,7 +234,7 @@ conflitos.get('/:id/conflitos', auth(), async (c) => {
                  AND qh.deleted_at IS NULL
                  AND qh.renovada = 0
                  AND qh.data_conclusao IS NOT NULL
-                 AND date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months') < date('now')`,
+                 AND ${getQualificacoesVencimentoExpr()} < date('now')`,
             )
             .bind(...tripIds)
             .all<{

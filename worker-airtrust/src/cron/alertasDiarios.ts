@@ -7,6 +7,7 @@ import {
   sqlStatusNotEqualsAny,
 } from '../lib/status/status-codes';
 import { publishDomainEvent } from '../shared/domainEvents';
+import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
 export async function alertasDiariosHandler(_event: ScheduledEvent, env: Env): Promise<void> {
   const empresas = await env.DB.prepare(
@@ -23,15 +24,9 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
     .prepare(
       `SELECT DISTINCT
           CAST(f.id AS TEXT) AS funcionario_id,
-          MAX(COALESCE(
-            qh.data_vencimento,
-            date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-          )) AS validade_fim,
+          MAX(${getQualificacoesVencimentoExpr()}) AS validade_fim,
           CAST(
-            JULIANDAY(MAX(COALESCE(
-              qh.data_vencimento,
-              date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-            ))) - JULIANDAY('now')
+            JULIANDAY(MAX(${getQualificacoesVencimentoExpr()})) - JULIANDAY('now')
             AS INTEGER
           ) AS dias
        FROM qualificacoes_historico qh
@@ -71,10 +66,7 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
          AND qh.deleted_at IS NULL
          AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
          AND UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) = 'CMA'
-         AND date(COALESCE(
-           qh.data_vencimento,
-           date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')
-         )) = date('now', '-1 day')`,
+         AND date(${getQualificacoesVencimentoExpr()}) = date('now', '-1 day')`,
     )
     .bind(Number(empresaId))
     .all<{ funcionario_id: string }>();
