@@ -6,6 +6,7 @@
 import type { Context } from 'hono';
 import type { Env } from '../../types';
 import { publishDomainEvent, type DomainEventTipo } from '../../shared/domainEvents';
+import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
 
 export function inferModeloCodigoFromQualificacao(
   codigo: string | null | undefined,
@@ -301,6 +302,9 @@ export const MODELO_AERONAVE_EXPR = `COALESCE(
   NULLIF(REPLACE(REPLACE(COALESCE(f.modelo_aeronave_id, ''), ',', ' / '), ' ', ''), '')
 )`;
 
+/** Expressão canônica de vencimento — NULL = sem vencimento, sem fallback 12 */
+const VENCIMENTO_SQL = getQualificacoesVencimentoExpr();
+
 export const SORTABLE_COLUMNS: Record<string, string> = {
   // PLANEJADA records created via integration have data_conclusao set (= data_prevista),
   // so we must check qh.status directly before falling through to date-based logic.
@@ -339,9 +343,9 @@ export const SORTABLE_COLUMNS: Record<string, string> = {
           )))
           AND (datetime(COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao, qh_newer.updated_at, qh_newer.created_at)) > datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) OR (datetime(COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao, qh_newer.updated_at, qh_newer.created_at)) = datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) AND qh_newer.id > qh.id))
       )) THEN 'RENOVADA'
-      WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) IS NULL THEN 'INDEFINIDA'
-      WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) < date('now') THEN 'VENCIDA'
-      WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) <= date('now','+30 days') THEN 'VENCENDO_30'
+      WHEN ${VENCIMENTO_SQL} IS NULL THEN 'INDEFINIDA'
+      WHEN ${VENCIMENTO_SQL} < date('now') THEN 'VENCIDA'
+      WHEN ${VENCIMENTO_SQL} <= date('now','+30 days') THEN 'VENCENDO_30'
       ELSE 'VALIDA'
     END
   )`,
@@ -356,10 +360,8 @@ export const SORTABLE_COLUMNS: Record<string, string> = {
   qualificacao_categoria: 'qt.categoria',
   data_realizacao: 'qh.data_conclusao',
   realizado: 'qh.data_conclusao',
-  data_vencimento:
-    "COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))",
-  vencimento:
-    "COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))",
+  data_vencimento: VENCIMENTO_SQL,
+  vencimento: VENCIMENTO_SQL,
   validade: 'qt.validade',
   created_at: 'qh.created_at',
   id: 'qh.id',
@@ -374,7 +376,7 @@ export function buildOrderByClause(orderBy: string, order: string): string {
     // Checking qh.status directly is critical: PLANEJADA records have data_conclusao set
     // (= data_prevista), so relying on data_conclusao IS NULL alone would misclassify them.
     // RENOVADA (rank 5): somente se existe sucessora real (NÃO é vigente operacional).
-    const vencimento = `COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))`;
+    const vencimento = VENCIMENTO_SQL;
     const rankExpr = `(CASE
       WHEN qh.deleted_at IS NOT NULL THEN 6
       WHEN UPPER(COALESCE(qh.status,'')) IN ('PLANEJADA','PLANEJADO') OR qh.data_conclusao IS NULL THEN 1
@@ -402,7 +404,7 @@ export function buildOrderByClause(orderBy: string, order: string): string {
        AND qh.data_conclusao IS NOT NULL
        AND date(qh.data_conclusao) <= date('now') THEN 0
       WHEN qh.data_conclusao IS NOT NULL
-       AND COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) < date('now') THEN 1
+       AND ${VENCIMENTO_SQL} < date('now') THEN 1
       ELSE 2
     END)`;
     return `${priorityBucket} ASC, ${column} ${direction}`;
