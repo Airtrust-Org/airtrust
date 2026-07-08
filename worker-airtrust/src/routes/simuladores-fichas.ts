@@ -1079,7 +1079,12 @@ app.post('/fichas/:id/pdf', async (c) => {
 app.put('/fichas/:id', async (c) => {
   try {
     const id = c.req.param('id');
+    const ctx = c as unknown as { get: (k: string) => unknown };
+    const userId = String(ctx.get('userId') || '');
+    const role = String(ctx.get('userRole') || '');
+    const empresaId = String(ctx.get('empresaId') || '');
     const tenantEmpresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
     const b = await c.req.json();
     const a = await c.env.DB.prepare(
       'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
@@ -1087,6 +1092,34 @@ app.put('/fichas/:id', async (c) => {
       .bind(id, tenantEmpresaId)
       .first();
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
+
+    // ── Verificar acesso por setor ───────────────────────────────────────
+    if (access.mode === 'restricted') {
+      const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
+        c.env.DB,
+        tenantEmpresaId,
+        [Number((a as any).colaborador_id_aluno || 0)],
+        access.setorIds,
+      );
+      if (!allowedAlunoIds.has(Number((a as any).colaborador_id_aluno || 0))) {
+        return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+      }
+    }
+
+    // ── Verificar acesso por perfil ──────────────────────────────────────
+    if (!isFullAccess(role)) {
+      const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
+      const scope = resolveFichaScope(role);
+      const authorized =
+        scope === 'ALUNO_PENDING_SIGNATURE'
+          ? String((a as any).colaborador_id_aluno) === String(funcId)
+          : scope === 'INSTRUTOR_OR_ALUNO'
+            ? String((a as any).instrutor_id) === String(funcId) ||
+              String((a as any).colaborador_id_aluno) === String(funcId)
+            : false;
+      if (!authorized) return c.json({ success: false, error: 'Acesso negado' }, 403);
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     const availability = await getFichaAvailabilityFromDb(c.env.DB, id);
     if (!availability.available) {
