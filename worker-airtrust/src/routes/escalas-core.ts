@@ -26,7 +26,7 @@
  */
 
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaIdOptional, getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
@@ -58,7 +58,7 @@ import confirmacoes from './escalas-confirmacoes';
 import visaoMensalIntegrada from './escala-mensal-integrada';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
-const escalas = new Hono<{ Bindings: Env }>();
+const escalas = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // ================================================================
 // PREFIXED SUB-MODULES
@@ -84,7 +84,7 @@ escalas.route('/', visaoMensalIntegrada);
 escalas.get('/minha-escala', auth(), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdOptional(c);
-  const userId = String((c as any).get('userId') || '');
+  const userId = String(c.get('userId') || '');
   const mes = Number(c.req.query('mes') || new Date().getMonth() + 1);
   const ano = Number(c.req.query('ano') || new Date().getFullYear());
 

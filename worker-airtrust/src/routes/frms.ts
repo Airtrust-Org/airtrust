@@ -1895,30 +1895,39 @@ frmsRoutes.post(
     const jornadaId = String(result.jornada?.id || '');
 
     if (result.bloqueado) {
-      try {
-        const estado = await getFrmsOperationalState(c.env.DB, String(parsed.data.tripulante_id));
-        await publishDomainEvent(c.env.DB, 'frms', 'FRMS_AVALIACAO_CRIADA', {
-          origem_modulo: 'frms',
-          funcionario_id: String(parsed.data.tripulante_id),
-          empresa_id: empresaId!,
-          frms_score: estado.frms_score,
-          status: estado.frms_status,
-          jornada_id: jornadaId,
-        });
-        if (estado.frms_status === 'critico') {
-          await publishDomainEvent(c.env.DB, 'frms', 'FRMS_STATUS_CRITICO', {
+      if (empresaId) {
+        try {
+          const estado = await getFrmsOperationalState(c.env.DB, String(parsed.data.tripulante_id));
+          await publishDomainEvent(c.env.DB, 'frms', 'FRMS_AVALIACAO_CRIADA', {
             origem_modulo: 'frms',
             funcionario_id: String(parsed.data.tripulante_id),
-            empresa_id: empresaId!,
+            empresa_id: empresaId,
             frms_score: estado.frms_score,
+            status: estado.frms_status,
+            jornada_id: jornadaId,
+          });
+          if (estado.frms_status === 'critico') {
+            await publishDomainEvent(c.env.DB, 'frms', 'FRMS_STATUS_CRITICO', {
+              origem_modulo: 'frms',
+              funcionario_id: String(parsed.data.tripulante_id),
+              empresa_id: empresaId,
+              frms_score: estado.frms_score,
+              jornada_id: jornadaId,
+            });
+          }
+        } catch (error) {
+          logDomainEventError(c, 'FRMS_AVALIACAO_CRIADA', error, {
+            funcionario_id: String(parsed.data.tripulante_id),
             jornada_id: jornadaId,
           });
         }
-      } catch (error) {
-        logDomainEventError(c, 'FRMS_AVALIACAO_CRIADA', error, {
-          funcionario_id: String(parsed.data.tripulante_id),
-          jornada_id: jornadaId,
-        });
+      } else {
+        logDomainEventError(
+          c,
+          'FRMS_AVALIACAO_CRIADA',
+          new Error('empresaId ausente no contexto — evento FRMS não publicado'),
+          { funcionario_id: String(parsed.data.tripulante_id), jornada_id: jornadaId },
+        );
       }
 
       await auditFrms(c, 'frms_jornada', 'INSERT', result.jornada?.id || 0, {
@@ -1931,30 +1940,39 @@ frmsRoutes.post(
       });
     }
 
-    try {
-      const estado = await getFrmsOperationalState(c.env.DB, String(parsed.data.tripulante_id));
-      await publishDomainEvent(c.env.DB, 'frms', 'FRMS_AVALIACAO_CRIADA', {
-        origem_modulo: 'frms',
-        funcionario_id: String(parsed.data.tripulante_id),
-        empresa_id: empresaId!,
-        frms_score: estado.frms_score,
-        status: estado.frms_status,
-        jornada_id: jornadaId,
-      });
-      if (estado.frms_status === 'critico') {
-        await publishDomainEvent(c.env.DB, 'frms', 'FRMS_STATUS_CRITICO', {
+    if (empresaId) {
+      try {
+        const estado = await getFrmsOperationalState(c.env.DB, String(parsed.data.tripulante_id));
+        await publishDomainEvent(c.env.DB, 'frms', 'FRMS_AVALIACAO_CRIADA', {
           origem_modulo: 'frms',
           funcionario_id: String(parsed.data.tripulante_id),
-          empresa_id: empresaId!,
+          empresa_id: empresaId,
           frms_score: estado.frms_score,
+          status: estado.frms_status,
+          jornada_id: jornadaId,
+        });
+        if (estado.frms_status === 'critico') {
+          await publishDomainEvent(c.env.DB, 'frms', 'FRMS_STATUS_CRITICO', {
+            origem_modulo: 'frms',
+            funcionario_id: String(parsed.data.tripulante_id),
+            empresa_id: empresaId,
+            frms_score: estado.frms_score,
+            jornada_id: jornadaId,
+          });
+        }
+      } catch (error) {
+        logDomainEventError(c, 'FRMS_STATUS_CRITICO', error, {
+          funcionario_id: String(parsed.data.tripulante_id),
           jornada_id: jornadaId,
         });
       }
-    } catch (error) {
-      logDomainEventError(c, 'FRMS_STATUS_CRITICO', error, {
-        funcionario_id: String(parsed.data.tripulante_id),
-        jornada_id: jornadaId,
-      });
+    } else {
+      logDomainEventError(
+        c,
+        'FRMS_STATUS_CRITICO',
+        new Error('empresaId ausente no contexto — evento FRMS não publicado'),
+        { funcionario_id: String(parsed.data.tripulante_id), jornada_id: jornadaId },
+      );
     }
 
     await auditFrms(c, 'frms_jornada', 'INSERT', result.jornada?.id || 0, { depois: parsed.data });
@@ -1999,12 +2017,12 @@ frmsRoutes.put(
         .bind(id)
         .first<{ tripulante_id: string | number }>();
       const funcionarioId = String(parsed.data.tripulante_id ?? jornada?.tripulante_id ?? '');
-      if (funcionarioId) {
+      if (funcionarioId && empresaId) {
         const estado = await getFrmsOperationalState(c.env.DB, funcionarioId);
         await publishDomainEvent(c.env.DB, 'frms', 'FRMS_AVALIACAO_CRIADA', {
           origem_modulo: 'frms',
           funcionario_id: funcionarioId,
-          empresa_id: empresaId!,
+          empresa_id: empresaId,
           frms_score: estado.frms_score,
           status: estado.frms_status,
           jornada_id: id,
@@ -2016,10 +2034,17 @@ frmsRoutes.put(
           {
             origem_modulo: 'frms',
             funcionario_id: funcionarioId,
-            empresa_id: empresaId!,
+            empresa_id: empresaId,
             frms_score: estado.frms_score,
             jornada_id: id,
           },
+        );
+      } else if (funcionarioId && !empresaId) {
+        logDomainEventError(
+          c,
+          'FRMS_STATUS_TRANSITION',
+          new Error('empresaId ausente no contexto — evento FRMS não publicado'),
+          { funcionario_id: funcionarioId, jornada_id: id },
         );
       }
     } catch (error) {
