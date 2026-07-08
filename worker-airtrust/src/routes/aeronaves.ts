@@ -163,6 +163,7 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
+  const empresaIdPut = getEmpresaIdSafe(c);
   const body = (await c.req.json()) as {
     modelo?: string;
     prefixo?: string;
@@ -176,12 +177,12 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   }
 
   try {
-    // Verifica se existe
+    // Verifica se existe E pertence à empresa do usuário autenticado
     const { results: existing } = await db
       .prepare(
-        'SELECT id, status, prefixo, modelo FROM aeronaves WHERE id = ? AND deleted_at IS NULL',
+        'SELECT id, status, prefixo, modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
-      .bind(id)
+      .bind(id, empresaIdPut)
       .all<{ id: number; status: string | null; prefixo: string | null; modelo: string | null }>();
 
     if (!existing || existing.length === 0) {
@@ -221,8 +222,9 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 
     fields.push('updated_at = datetime("now")');
     values.push(id);
+    values.push(empresaIdPut);
 
-    const query = `UPDATE aeronaves SET ${fields.join(', ')} WHERE id = ?`;
+    const query = `UPDATE aeronaves SET ${fields.join(', ')} WHERE id = ? AND empresa_id = ?`;
 
     await db
       .prepare(query)
@@ -281,8 +283,8 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 
     // Busca o registro atualizado
     const { results: updated } = await db
-      .prepare('SELECT * FROM aeronaves WHERE id = ? AND deleted_at IS NULL')
-      .bind(id)
+      .prepare('SELECT * FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(id, empresaIdPut)
       .all();
 
     const ua2 = extrairUsuarioAuditoria(c);
@@ -313,11 +315,12 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 aeronaves.delete('/:id', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
+  const empresaIdDelete = getEmpresaIdSafe(c);
 
   try {
     const { results: existing } = await db
-      .prepare('SELECT id FROM aeronaves WHERE id = ? AND deleted_at IS NULL')
-      .bind(id)
+      .prepare('SELECT id FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(id, empresaIdDelete)
       .all();
 
     if (!existing || existing.length === 0) {
@@ -326,8 +329,8 @@ aeronaves.delete('/:id', auth(), requireRole('admin'), async (c) => {
 
     // Soft delete
     await db
-      .prepare('UPDATE aeronaves SET deleted_at = datetime("now") WHERE id = ?')
-      .bind(id)
+      .prepare('UPDATE aeronaves SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ?')
+      .bind(id, empresaIdDelete)
       .run();
 
     const ua3 = extrairUsuarioAuditoria(c);

@@ -69,11 +69,26 @@ padroes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 padroes.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const { id } = c.req.param();
+  const empresaId = getEmpresaIdSafe(c);
   const now = new Date().toISOString();
   try {
+    // Só permite excluir padrões da própria empresa (nunca os globais com
+    // empresa_id NULL, nem os de outra empresa).
+    const existing = await db
+      .prepare(
+        `SELECT id FROM padroes_escala WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(id, empresaId)
+      .first();
+    if (!existing) {
+      return c.json({ success: false, error: 'Padrão de escala não encontrado' }, 404);
+    }
+
     await db
-      .prepare(`UPDATE padroes_escala SET deleted_at = ?, updated_at = ? WHERE id = ?`)
-      .bind(now, now, id)
+      .prepare(
+        `UPDATE padroes_escala SET deleted_at = ?, updated_at = ? WHERE id = ? AND empresa_id = ?`,
+      )
+      .bind(now, now, id, empresaId)
       .run();
     return c.json({ success: true });
   } catch (e) {
