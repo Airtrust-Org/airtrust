@@ -15,6 +15,11 @@ import {
   type NormalizedSharedSessionRequest,
   validateAndNormalizeSharedSessionRequest,
 } from './simuladores-shared-session-logic';
+import {
+  isProtectedFichaStatus,
+  isSharedSessionsEnabled,
+  overlaps,
+} from './simuladores-shared-session-helpers';
 import { buildOperationalFichaManobras } from '../constants/notechs';
 
 type ModeloSessaoMapRow = {
@@ -39,17 +44,6 @@ type SharedPersistenceContext = {
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
-
-function isSharedSessionsEnabled(env: Env): boolean {
-  return env.SIMULATOR_SHARED_SESSIONS_ENABLED === 'true';
-}
-
-function isProtectedFichaStatus(status: unknown): boolean {
-  const normalized = String(status || '')
-    .trim()
-    .toUpperCase();
-  return ['APROVADO', 'NAO_APROVADO', 'CONCLUIDA'].includes(normalized);
-}
 
 async function runStatement(db: D1Database, sql: string, ...args: unknown[]) {
   return db.prepare(sql).bind(...args).run();
@@ -223,10 +217,6 @@ async function assertEntityOwnership(
   }
 
   return modelosMap;
-}
-
-function overlaps(startA: number, endA: number, startB: number, endB: number): boolean {
-  return startA < endB && endA > startB;
 }
 
 async function findInstrutorConflict(
