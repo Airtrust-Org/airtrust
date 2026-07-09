@@ -23,6 +23,7 @@ import {
   firstStatement,
   allStatement,
   prepareStatement,
+  assertSharedFeature,
 } from './simuladores-shared-session-helpers';
 import { buildOperationalFichaManobras } from '../constants/notechs';
 
@@ -48,13 +49,6 @@ type SharedPersistenceContext = {
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
-
-async function assertSharedFeature(c: any) {
-  if (!isSharedSessionsEnabled(c.env)) {
-    return c.json({ success: false, error: 'Shared simulator sessions feature disabled' }, 404);
-  }
-  return null;
-}
 
 async function getSimuladorAgendamentosColumns(db: D1Database): Promise<Set<string>> {
   const tableInfo = await db.prepare('PRAGMA table_info(simulador_agendamentos)').all<{ name: string }>();
