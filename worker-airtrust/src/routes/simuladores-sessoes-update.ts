@@ -833,12 +833,11 @@ app.put('/sessoes/:id', async (c) => {
                 tripulante: string;
               };
               await c.env.DB.prepare(
-                `INSERT INTO fichas_sessao_manobras (ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante, resultado, observacoes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, '')`,
+                `INSERT INTO fichas_sessao_manobras (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, resultado, observacoes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, NULL, '')`,
               )
                 .bind(
                   fichaId,
-                  empresaId,
                   m.codigo,
                   m.nome || m.descricao || '',
                   m.descricao || '',

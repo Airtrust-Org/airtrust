@@ -349,12 +349,11 @@ async function insertFichaManobrasFromModelo(
     db
       .prepare(
         `INSERT INTO fichas_sessao_manobras
-           (ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         fichaId,
-        empresaId,
         manobra.codigo,
         manobra.nome,
         manobra.descricao || manobra.nome,
@@ -909,12 +908,11 @@ async function buildSharedSessionBatchPlan(
           db
             .prepare(
               `INSERT INTO fichas_sessao_manobras
-                 (ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante)
-               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
+                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
+               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
             )
             .bind(
               fichaUuid,
-              empresaId,
               manobra.codigo,
               manobra.nome,
               manobra.descricao || manobra.nome,
@@ -1253,10 +1251,9 @@ async function updateSharedSessionStructureTransactional(
             prepareStatement(
               db,
               `INSERT INTO fichas_sessao_manobras
-                 (ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante)
-               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
+                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
+               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
               fichaUuid,
-              empresaId,
               manobra.codigo,
               manobra.nome,
               manobra.descricao || manobra.nome,

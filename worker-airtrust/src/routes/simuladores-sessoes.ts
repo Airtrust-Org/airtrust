@@ -1196,11 +1196,10 @@ app.post('/sessoes', async (c) => {
           manobraStmts.push(
             c.env.DB.prepare(
               `INSERT INTO fichas_sessao_manobras (
-                ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                ficha_id, codigo, nome, descricao, categoria, ordem, tripulante
+              ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
             ).bind(
               ficha_id,
-              empresaId,
               m.codigo,
               m.nome || m.descricao,
               m.descricao,
