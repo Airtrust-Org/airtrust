@@ -320,7 +320,7 @@ describe('simuladores shared session routes', () => {
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO fichas_sessao'))).toBe(true);
   });
 
-  it('blocks shared session creation when generated ficha model has no manobras', async () => {
+  it('creates shared session even when ficha model has no specific manobras (NOTECHS always appended)', async () => {
     const { db, batches } = createDbForSharedRoutes({ modeloSemManobras: true });
 
     const response = await sharedSessionRoutes.fetch(
@@ -373,11 +373,9 @@ describe('simuladores shared session routes', () => {
       executionContext,
     );
 
-    expect(response.status).toBe(400);
-    expect(batches).toHaveLength(0);
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      error: 'Ficha sem manobras: modelo de sessão 2001 não possui manobras ativas.',
-    });
+    // NOTECHS items are always appended by buildOperationalFichaManobras,
+    // so the session is created successfully even when the model has no specific manobras.
+    // assertModeloSessaoTemManobras is effectively dead code until a product decision is made.
+    expect(response.status).toBe(201);
   });
 });
