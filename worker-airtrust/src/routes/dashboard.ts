@@ -75,13 +75,19 @@ app.get('/qualificacoes', async (c) => {
       activeRenewedQualificationPredicate,
     } = buildDashboardRenewalSqlPredicates();
 
-    // If renovacao_de column exists, extend the predicate
+    // If renovacao_de column exists, use the canonical rule for a renewed record
+    // (the older one), which is that there exists a newer valid record pointing to it.
+    // The legacy fallback (status='RENOVADA') is only used if renovacao_de doesn't exist.
     const effectiveRenewedPredicate = hasRenovacaoDe
-      ? `(${renewedQualificationPredicate} OR qh.renovacao_de IS NOT NULL)`
+      ? `(EXISTS (
+          SELECT 1 FROM qualificacoes_historico qh_renovadora 
+          WHERE qh_renovadora.deleted_at IS NULL 
+            AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)}) 
+            AND qh_renovadora.renovacao_de = qh.id
+        ))`
       : renewedQualificationPredicate;
-    const effectiveActiveRenewedPredicate = hasRenovacaoDe
-      ? `(qh.deleted_at IS NULL AND NOT (${sqlStatusEqualsAny(QUALIFICATION_STATUS_EXPR, CANCELLED_STATUS_VALUES)}) AND (${renewedQualificationPredicate} OR qh.renovacao_de IS NOT NULL))`
-      : activeRenewedQualificationPredicate;
+      
+    const effectiveActiveRenewedPredicate = `(qh.deleted_at IS NULL AND NOT (${sqlStatusEqualsAny(QUALIFICATION_STATUS_EXPR, CANCELLED_STATUS_VALUES)}) AND ${effectiveRenewedPredicate})`;
 
     const effectiveActivePlannedPredicate = `(qh.deleted_at IS NULL AND NOT (${effectiveRenewedPredicate}) AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny(QUALIFICATION_STATUS_EXPR, PLANNED_QUALIFICATION_STATUS_VALUES)}))`;
 
