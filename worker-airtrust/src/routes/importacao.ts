@@ -625,7 +625,6 @@ app.post('/validar-json/:entidade', async (c: Context) => {
     console.log(`[VALIDACAO] Total de linhas: ${rows.length}`);
     console.log(`[VALIDACAO] Entidade recebida: "${entidade}"`);
     console.log(`[VALIDACAO] Primeira linha keys:`, Object.keys(rows[0] || {}));
-    console.log(`[VALIDACAO] Primeira linha:`, rows[0]);
     console.log(
       `[VALIDACAO] Teste condição: ${entidade === 'qualificacoes_historico'} || ${
         entidade === 'historico'
@@ -844,7 +843,6 @@ app.post('/validar-json/:entidade', async (c: Context) => {
       `[importacao-refactored] Validando JSON: ${rows.length} linhas, entidade: ${entidade}`,
     );
     console.log(`[importacao-refactored] Headers originais primeira linha:`, Object.keys(rows[0]));
-    console.log(`[importacao-refactored] Valores primeira linha:`, rows[0]);
 
     // Remapear headers conforme entidade
     const remappedRows = rows.map((row) => {
@@ -856,7 +854,6 @@ app.post('/validar-json/:entidade', async (c: Context) => {
       if (rows.indexOf(row) === 0) {
         console.log('[importacao-refactored] Row original:', Object.keys(row));
         console.log('[importacao-refactored] Row remapeada:', Object.keys(remapped));
-        console.log('[importacao-refactored] Valores remapeados:', remapped);
       }
       return remapped;
     });
@@ -867,8 +864,7 @@ app.post('/validar-json/:entidade', async (c: Context) => {
 
     // DEBUG: Print dos erros encontrados
     if (errors.length > 0) {
-      console.log('[importacao-refactored] Primeiros 5 erros:', errors.slice(0, 5));
-      console.log('[importacao-refactored] Tipos de erro:', {
+      console.log('[importacao-refactored] Tipos de erro (resumo seguro):', {
         campos: errors.map((e) => e.field).filter((v, i, a) => a.indexOf(v) === i),
         mensagensUnicas: [...new Set(errors.map((e) => e.message))],
       });
@@ -981,7 +977,7 @@ app.post('/batch-historico-v3', async (c: Context) => {
         dataConclusao;
 
       if (!funcionarioCpf || !qualificacaoCodigo || !dataConclusao) {
-        console.error(`[BATCH-HISTORICO] Linha ${index + 2} inválida:`, row);
+        console.error(`[BATCH-HISTORICO] Linha ${index + 2} inválida. Keys presentes:`, Object.keys(row));
       }
 
       return {
@@ -1104,7 +1100,6 @@ app.post('/executar-json/:entidade', async (c: Context) => {
         return newRow;
       });
 
-      console.log('[EXECUTAR IMPORTACAO] Datas convertidas. Primeira linha:', processedRows[0]);
       console.log(
         '[EXECUTAR IMPORTACAO] Keys da primeira linha:',
         Object.keys(processedRows[0] || {}),
@@ -1124,11 +1119,10 @@ app.post('/executar-json/:entidade', async (c: Context) => {
         if (!funcionarioCpf || !qualificacaoCodigo || !dataConclusao) {
           console.error('[EXECUTAR IMPORTACAO] Linha inválida:', {
             index: index + 2,
-            cpf: funcionarioCpf,
-            codigo: qualificacaoCodigo,
-            conclusao: dataConclusao,
+            has_cpf: !!funcionarioCpf,
+            has_codigo: !!qualificacaoCodigo,
+            has_conclusao: !!dataConclusao,
             row_keys: Object.keys(row),
-            row_sample: row,
           });
           throw new Error(
             `Linha ${
@@ -1146,7 +1140,6 @@ app.post('/executar-json/:entidade', async (c: Context) => {
       });
 
       console.log('[EXECUTAR IMPORTACAO] Preparando batch de', batchRows.length, 'registros');
-      console.log('[EXECUTAR IMPORTACAO] Primeira batchRow:', batchRows[0]);
       debugLogs.push(`🔵 Chamando executarImportacaoHistoricoEmLotes com ${batchRows.length} rows`);
       return executarImportacaoHistoricoEmLotes(c, batchRows, mode, empresaId, debugLogs);
     }

@@ -138,14 +138,9 @@ export class FuncionarioImportacao {
 
         // DEBUG: Log primeira linha para verificar mapeamento
         if (i === 0) {
-          console.log('[DEBUG] Primeira linha:', {
-            Nome: row.Nome,
-            Guerra: row.Guerra,
-            Nascimento: row.Nascimento,
-            nascimento_convertido: nascimento,
-            CANAC: row.CANAC,
-            Admissao: row.Admissao,
-            admissao_convertido: admissao,
+          console.log('[DEBUG] Primeira linha processada com sucesso (dados omitidos por LGPD)', {
+            has_nome: !!row.Nome,
+            has_canac: !!row.CANAC,
             keys: Object.keys(row),
           });
         }
