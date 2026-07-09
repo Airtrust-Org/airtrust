@@ -57,6 +57,19 @@ const EXPECTED_DUPLICATE_PREFIXES = {
   '0347': ['0347_lms_cursos_content_filename.sql', '0347_lms_edapp_tenant_indexes.sql'],
   '0362': ['0362_fichas_edicao_pos_finalizacao.sql', '0362_frms_daily_fatigue_v01.sql'],
   '0367': ['0367_classificar_dificuldade_sk76_restantes.sql', '0367_sk76_reaquisicao_experiencia_recente.sql'],
+  '0418': [
+    '0418_notechs_codigos_categorizados.sql',
+    '0418_notechs_codigos_categorizados_rollback.sql',
+  ],
+  '0419': [
+    '0419_normalizar_nomes_modelos_sessao_ptbr.sql',
+    '0419_normalizar_nomes_modelos_sessao_ptbr_rollback.sql',
+  ],
+  '0420': [
+    '0420_notificacoes_log_add_empresa_id.sql',
+    '0420_notificacoes_log_add_empresa_id_preflight_audit.sql',
+    '0420_notificacoes_log_add_empresa_id_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -134,7 +147,7 @@ describe('migration governance', () => {
     const regularPrefixes = numericPrefixes.filter((prefix) => prefix !== '9999');
     const highPrefixes = files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file));
 
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(412);
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(420);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
