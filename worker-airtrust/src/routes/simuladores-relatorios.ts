@@ -26,7 +26,16 @@ app.get('/uso', async (c) => {
     const diSql = di || '2000-01-01';
     const dfSql = df || '2099-12-31';
 
+    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
+    const hasEmpresaId = (tableInfo.results || []).some(
+      (row: any) => String(row.name || '') === 'empresa_id',
+    );
+    const sEmpresaClause = hasEmpresaId ? ' AND s.empresa_id = ?' : '';
+
     // 1. Uso por simulador
+    const params: any[] = [empresaId, diSql, dfSql];
+    if (hasEmpresaId) params.push(empresaId);
+
     const porSimulador = await c.env.DB.prepare(
       `SELECT
         s.id as simulador_id,
@@ -39,12 +48,11 @@ app.get('/uso', async (c) => {
         AND sa.deleted_at IS NULL
         AND sa.empresa_id = ?
         AND sa.data BETWEEN ? AND ?
-      WHERE s.deleted_at IS NULL
-        AND s.empresa_id = ?
+      WHERE s.deleted_at IS NULL${sEmpresaClause}
       GROUP BY s.id, s.nome, s.tipo
       ORDER BY horas DESC`,
     )
-      .bind(empresaId, diSql, dfSql, empresaId)
+      .bind(...params)
       .all();
 
     // 2. Uso por tipo de sessão

@@ -352,16 +352,60 @@ describe('Tenant SQL Guardrail — 2026-07-08 Audit Fixes (Regression Prevention
 
 // ─── TEST: INDIRECT TENANT TABLES COVERAGE ────────────────────────────────────
 
-describe('Tenant SQL Guardrail — Indirect-Tenant Table Coverage', () => {
-  it('indirect-tenant tables are documented', () => {
-    // Just document which tables rely on FK indirection instead of direct empresa_id
-    // These are higher risk and need explicit JOIN validation
-    const docEntries = INDIRECT_TENANT_TABLES.map(
-      (t) =>
-        `${t}: no empresa_id column — scoped via FK to parent table (MUST join and filter)`,
-    );
+describe('Tenant SQL Guardrail — Schema Drift Prevention', () => {
+  it('no route queries tables without empresa_id using empresa_id directly', () => {
+    const driftViolations: string[] = [];
 
-    // This test always passes — it's documentation only
-    expect(docEntries.length).toBeGreaterThan(0);
+    // The tables known NOT to have empresa_id column:
+    const tablesWithoutEmpresaId = [
+      'simuladores',
+      'sessoes_participantes',
+      'fichas_sessao_manobras',
+      'historico_notas_manobras',
+      'qualificacoes_historico_reclass_queue',
+      'modelos_sessao_manobras',
+    ];
+
+    for (const rel of allRouteFiles()) {
+      const source = readRouteFile(rel);
+      const blocks = extractQueryBlocks(source);
+      for (const block of blocks) {
+        // Very basic conservative regex to catch direct usage
+        // Fails if "table_name ... empresa_id" appear in the same block without PRAGMA check
+        // We will allow it if PRAGMA table_info is used in the same file to conditionally add it
+        const hasPragmaInfo = source.includes('PRAGMA table_info');
+        if (hasPragmaInfo) continue;
+
+        for (const table of tablesWithoutEmpresaId) {
+          // If the block contains the table name AND 'empresa_id', it's a potential drift violation.
+          // Note: If the query joins multiple tables and one of them DOES have empresa_id,
+          // the SQL is valid, but only if they correctly prefix it (e.g. sa.empresa_id).
+          // To be safe and conservative, we fail if the block has BOTH the table without empresa_id
+          // AND an un-aliased or wrongly-aliased empresa_id.
+          
+          // Pattern 1: INSERT INTO <table_without_empresa_id> (... empresa_id ...)
+          const insertRegex = new RegExp('INSERT INTO \\s*' + table + '\\s*\\([^)]*empresa_id', 'i');
+          
+          // Pattern 2: table_alias.empresa_id where table_alias is mapped to the table
+          // e.g. FROM simuladores s ... s.empresa_id
+          const directRegex = new RegExp(table + '\\s+(as\\s+)?([a-z0-9_]+)[^;]*\\\\2\\.empresa_id', 'i');
+
+          if (insertRegex.test(block) || directRegex.test(block)) {
+            driftViolations.push(rel + ': references empresa_id directly on ' + table);
+          }
+        }
+      }
+    }
+
+    if (driftViolations.length > 0) {
+      throw new Error(
+        '[SCHEMA_DRIFT_CRITICAL] Tables without empresa_id are being queried using it directly:\\n' +
+          driftViolations.map((v) => '  - ' + v).join('\\n') +
+          '\\n  ACTION: Remove empresa_id from INSERTs, or use PRAGMA table_info to conditionally support it. Do not force tenant-scope on global tables.',
+      );
+    }
+
+    expect(driftViolations).toHaveLength(0);
   });
 });
+
