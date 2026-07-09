@@ -309,8 +309,13 @@ nextGen.post('/relprev/submissoes', async (c) => {
       201,
     );
   } catch (error) {
-    console.error('[SGSO NEXT] Erro ao criar submissão RELPREV:', error);
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao criar submissão RELPREV', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -341,7 +346,13 @@ nextGen.get('/relprev/submissoes', async (c) => {
 
     return c.json({ success: true, data: rows.results });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao listar submissões RELPREV', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -373,7 +384,13 @@ nextGen.get('/relprev/submissoes/:id', async (c) => {
     if (!row) return c.json({ success: false, error: 'Submissão não encontrada' }, 404);
     return c.json({ success: true, data: row });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao buscar submissão RELPREV', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -408,7 +425,13 @@ nextGen.get('/relprev/submissoes/:id/workflow', async (c) => {
       data: { eventos: eventos.results, notificacoes: notificacoes.results },
     });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao buscar workflow RELPREV', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -458,7 +481,13 @@ nextGen.get('/relprev/triagem/pendentes', async (c) => {
 
     return c.json({ success: true, data, meta: { total: data.length, now: nowTs } });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao buscar triagem pendente', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -626,7 +655,13 @@ nextGen.patch('/relprev/submissoes/:id/workflow', async (c) => {
       },
     });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       {
         success: false,
         error: 'Erro ao atualizar workflow do relato',
@@ -655,7 +690,13 @@ nextGen.get('/matriz-risco/perfis', async (c) => {
       .all<Record<string, unknown>>();
     return c.json({ success: true, data: rows.results });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao listar perfis de matriz', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -682,7 +723,13 @@ nextGen.get('/matriz-risco/perfis/:id', async (c) => {
       .all<Record<string, unknown>>();
     return c.json({ success: true, data: { ...perfil, celulas: celulas.results } });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao buscar perfil de matriz', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -714,7 +761,13 @@ nextGen.get('/bowtie/cenarios', async (c) => {
       .all<Record<string, unknown>>();
     return c.json({ success: true, data: rows.results });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao listar cenários Bowtie', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -866,8 +919,13 @@ nextGen.post('/bowtie/cenarios', async (c) => {
 
     return c.json({ success: true, data: { id: cenarioId, perigo_id: perigoId } }, 201);
   } catch (error) {
-    console.error('[SGSO NEXT] Erro ao criar cenário Bowtie:', error);
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao criar cenário Bowtie', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -932,7 +990,13 @@ nextGen.get('/bowtie/cenarios/:id', async (c) => {
       },
     });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao buscar cenário Bowtie', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -999,7 +1063,13 @@ nextGen.patch('/bowtie/barreiras/:id/status', async (c) => {
     );
     return c.json({ success: true, data: { id, status_saude: d.status_saude } });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao atualizar barreira', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -1080,7 +1150,13 @@ nextGen.get('/bowtie/cenarios/:id/risk-score', async (c) => {
       },
     });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao calcular risk score', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -1138,7 +1214,13 @@ nextGen.get('/hazard-register', async (c) => {
 
     return c.json({ success: true, data });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao listar Hazard Register', code: 'SGSO_NEXT_ERROR' },
       500,
     );

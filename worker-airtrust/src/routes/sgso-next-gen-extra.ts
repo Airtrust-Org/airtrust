@@ -90,7 +90,13 @@ extra.get('/frat/modelos', async (c) => {
 
     return c.json({ success: true, data });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao listar modelos FRAT', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -116,7 +122,13 @@ extra.get('/frat/avaliacoes', async (c) => {
       .all<Record<string, unknown>>();
     return c.json({ success: true, data: rows.results });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao listar avaliações FRAT', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -236,8 +248,13 @@ extra.post('/frat/avaliacoes', async (c) => {
           .bind(avaliacaoId, scored.level, empresaId, d.frms_fadiga_checkin_id)
           .run();
       } catch (linkErr) {
-        console.warn('[SGSO NEXT] FRAT bridge por checkin_id não aplicado:', linkErr);
-      }
+    const errType = linkErr instanceof Error ? linkErr.name : 'UnknownError';
+    const errMsg = linkErr instanceof Error ? linkErr.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+}
     } else if (d.tripulante_id && d.data_operacao) {
       try {
         await db
@@ -254,8 +271,13 @@ extra.post('/frat/avaliacoes', async (c) => {
           .bind(avaliacaoId, scored.level, empresaId, d.tripulante_id, d.data_operacao)
           .run();
       } catch (linkErr) {
-        console.warn('[SGSO NEXT] FRAT bridge check-in não aplicado:', linkErr);
-      }
+    const errType = linkErr instanceof Error ? linkErr.name : 'UnknownError';
+    const errMsg = linkErr instanceof Error ? linkErr.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+}
     }
 
     return c.json(
@@ -274,8 +296,13 @@ extra.post('/frat/avaliacoes', async (c) => {
       201,
     );
   } catch (error) {
-    console.error('[SGSO NEXT] Erro ao criar avaliação FRAT:', error);
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao criar avaliação FRAT', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -324,7 +351,13 @@ extra.get('/frat/avaliacoes/:id', async (c) => {
       data: { ...avaliacao, respostas: respostas.results, aprovacoes: aprovacoes.results },
     });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao buscar avaliação FRAT', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -383,7 +416,13 @@ extra.post('/frat/avaliacoes/:id/aprovacoes', async (c) => {
 
     return c.json({ success: true, data: { id, status: novoStatus } });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao aprovar avaliação FRAT', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -454,7 +493,13 @@ extra.patch('/frat/avaliacoes/:id/escalacao', async (c) => {
       data: { id, nivel_aprovacao_atual: body.nivel_destino },
     });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao escalar avaliação FRAT', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -627,7 +672,13 @@ extra.get('/compliance/rbac121/checklist', async (c) => {
       },
     });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao gerar checklist RBAC-121', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -651,7 +702,13 @@ extra.get('/moc/registros', async (c) => {
       .all<Record<string, unknown>>();
     return c.json({ success: true, data: rows.results });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao listar registros de MoC', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -685,7 +742,13 @@ extra.get('/moc/registros/:id', async (c) => {
 
     return c.json({ success: true, data: { ...registro, aprovacoes: aprovacoes.results } });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao buscar registro MoC', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -737,7 +800,13 @@ extra.post('/moc/registros', async (c) => {
     await insertAuditTrail(db, empresaId, 'SGSO_MOC', id, 'CRIADO', uid, d);
     return c.json({ success: true, data: { id, status: 'RASCUNHO' } }, 201);
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao criar registro MoC', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -809,7 +878,13 @@ extra.patch('/moc/registros/:id/workflow', async (c) => {
 
     return c.json({ success: true, data: { id, status: parsed.data.status } });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao atualizar workflow do MoC', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -832,7 +907,13 @@ extra.get('/licoes-aprendidas', async (c) => {
       .all<Record<string, unknown>>();
     return c.json({ success: true, data: rows.results });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao listar lições aprendidas', code: 'SGSO_NEXT_ERROR' },
       500,
     );
@@ -889,7 +970,13 @@ extra.post('/licoes-aprendidas/:id/publicar-edapp', async (c) => {
 
     return c.json({ success: true, data: publication });
   } catch (error) {
-    return c.json(
+    const errType = error instanceof Error ? error.name : 'UnknownError';
+    const errMsg = error instanceof Error ? error.message.substring(0, 150) : 'Sem mensagem';
+    const eId = typeof c !== 'undefined' ? String(((c as any).get('tenantContext') || {}).empresaId || 'unknown') : 'unknown';
+    const reqM = typeof c !== 'undefined' && c.req ? c.req.method : 'UNKNOWN';
+    const reqP = typeof c !== 'undefined' && c.req ? c.req.path : 'UNKNOWN';
+    console.error(`[sgso-next] [${reqM} ${reqP}] Falha operacional | Empresa: ${eId} | Tipo: ${errType} | Msg: ${errMsg}`);
+return c.json(
       { success: false, error: 'Erro ao publicar lição no EdApp', code: 'SGSO_NEXT_ERROR' },
       500,
     );
