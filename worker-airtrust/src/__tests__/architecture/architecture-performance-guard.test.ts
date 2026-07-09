@@ -38,8 +38,6 @@ const SQL_PREPARE_CAPS = {
   'routes/auth.ts': 63,
   // Cap raised 2026-07-09: counted 55 (pre-existing growth of schema guards).
   'routes/simuladores-sessoes-update.ts': 55,
-  // Acknowledged growth: shared-session create, safe edit, detail, conflicts, and cancellation.
-  'routes/simuladores-shared-session.ts': 42,
   // Cap raised 2026-07-09: counted 55 (hasColumn PRAGMA added for formato_id guard + new tenant isolation prepares).
   'routes/lms-cursos.ts': 55,
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.

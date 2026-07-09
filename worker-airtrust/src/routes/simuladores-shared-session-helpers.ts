@@ -14,3 +14,20 @@ export function isProtectedFichaStatus(status: unknown): boolean {
 export function overlaps(startA: number, endA: number, startB: number, endB: number): boolean {
   return startA < endB && endA > startB;
 }
+
+// Thin D1 statement wrappers — reduce boilerplate without hiding DB access.
+export async function runStatement(db: D1Database, sql: string, ...args: unknown[]) {
+  return db.prepare(sql).bind(...args).run();
+}
+
+export async function firstStatement<T>(db: D1Database, sql: string, ...args: unknown[]) {
+  return db.prepare(sql).bind(...args).first<T>();
+}
+
+export async function allStatement<T>(db: D1Database, sql: string, ...args: unknown[]) {
+  return db.prepare(sql).bind(...args).all<T>();
+}
+
+export function prepareStatement(db: D1Database, sql: string, ...args: unknown[]) {
+  return db.prepare(sql).bind(...args);
+}

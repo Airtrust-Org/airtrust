@@ -270,6 +270,7 @@ describe('Tenant SQL Guardrail — Regression Prevention', () => {
       'sgso-next-gen-helpers.ts',
       'qualificacoes-certificados-helpers.ts',
       'simuladores-shared.ts',
+      'simuladores-shared-session-helpers.ts',
       'simuladores-fichas-helpers.ts',
       'qualificacoes/historico-helpers.ts',
       'qualificacoes/shared.ts',

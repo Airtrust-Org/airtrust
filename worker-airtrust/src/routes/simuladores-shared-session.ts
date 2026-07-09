@@ -19,6 +19,10 @@ import {
   isProtectedFichaStatus,
   isSharedSessionsEnabled,
   overlaps,
+  runStatement,
+  firstStatement,
+  allStatement,
+  prepareStatement,
 } from './simuladores-shared-session-helpers';
 import { buildOperationalFichaManobras } from '../constants/notechs';
 
@@ -44,22 +48,6 @@ type SharedPersistenceContext = {
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
-
-async function runStatement(db: D1Database, sql: string, ...args: unknown[]) {
-  return db.prepare(sql).bind(...args).run();
-}
-
-async function firstStatement<T>(db: D1Database, sql: string, ...args: unknown[]) {
-  return db.prepare(sql).bind(...args).first<T>();
-}
-
-async function allStatement<T>(db: D1Database, sql: string, ...args: unknown[]) {
-  return db.prepare(sql).bind(...args).all<T>();
-}
-
-function prepareStatement(db: D1Database, sql: string, ...args: unknown[]) {
-  return db.prepare(sql).bind(...args);
-}
 
 async function assertSharedFeature(c: any) {
   if (!isSharedSessionsEnabled(c.env)) {
