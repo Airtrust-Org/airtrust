@@ -1313,6 +1313,61 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
       return ['1', 'SIM', 'S', 'TRUE', 'YES', 'Y'].includes(normalized) ? 1 : 0;
     };
 
+    const modeloCodigosSet = new Set<string>();
+    const manobraCodigosSet = new Set<string>();
+    for (const row of dados) {
+      const mc = normalizeCode((row as any).modelo_codigo);
+      if (mc) modeloCodigosSet.add(mc);
+      const manc = normalizeCode((row as any).manobra_codigo);
+      if (manc) manobraCodigosSet.add(manc);
+    }
+    const modeloCodigos = [...modeloCodigosSet];
+    const manobraCodigos = [...manobraCodigosSet];
+
+    const modelosMap = new Map<string, any>();
+    if (modeloCodigos.length > 0) {
+      for (let i = 0; i < modeloCodigos.length; i += 100) {
+        const chunk = modeloCodigos.slice(i, i + 100);
+        const placeholders = chunk.map(() => '?').join(',');
+        const rows = await c.env.DB.prepare(
+          `SELECT id, codigo, nome FROM modelos_sessao WHERE deleted_at IS NULL AND empresa_id = ? AND UPPER(TRIM(codigo)) IN (${placeholders})`
+        ).bind(empresaId, ...chunk).all();
+        for (const row of rows.results || []) {
+          modelosMap.set(String(row.codigo).toUpperCase().trim(), row);
+        }
+      }
+    }
+
+    const manobrasMap = new Map<string, any>();
+    if (manobraCodigos.length > 0) {
+      for (let i = 0; i < manobraCodigos.length; i += 100) {
+        const chunk = manobraCodigos.slice(i, i + 100);
+        const placeholders = chunk.map(() => '?').join(',');
+        const rows = await c.env.DB.prepare(
+          `SELECT id, codigo, nome FROM manobras WHERE deleted_at IS NULL AND empresa_id = ? AND UPPER(TRIM(codigo)) IN (${placeholders})`
+        ).bind(empresaId, ...chunk).all();
+        for (const row of rows.results || []) {
+          manobrasMap.set(String(row.codigo).toUpperCase().trim(), row);
+        }
+      }
+    }
+
+    const relacoesMap = new Map<string, any>();
+    if (modelosMap.size > 0) {
+      const mIds = [...modelosMap.values()].map(m => m.id);
+      for (let i = 0; i < mIds.length; i += 100) {
+        const chunk = mIds.slice(i, i + 100);
+        const placeholders = chunk.map(() => '?').join(',');
+        const rows = await c.env.DB.prepare(
+          `SELECT id, modelo_id, manobra_id, deleted_at FROM modelos_sessao_manobras WHERE modelo_id IN (${placeholders}) ORDER BY id DESC`
+        ).bind(...chunk).all();
+        for (const row of rows.results || []) {
+          const key = `${row.modelo_id}_${row.manobra_id}`;
+          if (!relacoesMap.has(key)) relacoesMap.set(key, row);
+        }
+      }
+    }
+
     for (let index = 0; index < dados.length; index++) {
       const linha = index + 2;
       const row = dados[index] as Record<string, unknown>;
@@ -1339,14 +1394,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
         continue;
       }
 
-      let modelo = await c.env.DB.prepare(
-        `SELECT id, codigo, nome
-         FROM modelos_sessao
-         WHERE UPPER(TRIM(codigo)) = ? AND deleted_at IS NULL AND empresa_id = ?
-         LIMIT 1`,
-      )
-        .bind(modeloCodigo, empresaId)
-        .first<any>();
+      let modelo = modelosMap.get(modeloCodigo);
 
       if (!modelo) {
         if (!autoCriar) {
@@ -1384,6 +1432,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
           codigo: modeloCodigo,
           nome: modeloNome,
         };
+        modelosMap.set(modeloCodigo, modelo);
         resultado.resumo.modelos_auto_criados++;
         resultado.detalhes.modelos_criados.push({
           codigo: modeloCodigo,
@@ -1392,14 +1441,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
         });
       }
 
-      let manobra = await c.env.DB.prepare(
-        `SELECT id, codigo, nome
-         FROM manobras
-         WHERE UPPER(TRIM(codigo)) = ? AND deleted_at IS NULL AND empresa_id = ?
-         LIMIT 1`,
-      )
-        .bind(manobraCodigo, empresaId)
-        .first<any>();
+      let manobra = manobrasMap.get(manobraCodigo);
 
       if (!manobra) {
         if (!autoCriar) {
@@ -1437,6 +1479,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
           codigo: manobraCodigo,
           nome: manobraNome,
         };
+        manobrasMap.set(manobraCodigo, manobra);
         resultado.resumo.manobras_auto_criadas++;
         resultado.detalhes.manobras_criadas.push({
           codigo: manobraCodigo,
@@ -1445,14 +1488,9 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
         });
       }
 
-      const relacaoAtiva = await c.env.DB.prepare(
-        `SELECT id
-         FROM modelos_sessao_manobras
-         WHERE modelo_id = ? AND manobra_id = ? AND deleted_at IS NULL
-         LIMIT 1`,
-      )
-        .bind(modelo.id, manobra.id)
-        .first<{ id: number }>();
+      const relacaoKey = `${modelo.id}_${manobra.id}`;
+      const cachedRelacao = relacoesMap.get(relacaoKey);
+      const relacaoAtiva = cachedRelacao && cachedRelacao.deleted_at === null ? cachedRelacao : null;
 
       const observacoesValidation = validateModeloSessaoObservacoesInput(row.observacoes);
       if (!observacoesValidation.ok) {
@@ -1481,15 +1519,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
         continue;
       }
 
-      const relacaoSoftDeleted = await c.env.DB.prepare(
-        `SELECT id
-         FROM modelos_sessao_manobras
-         WHERE modelo_id = ? AND manobra_id = ? AND deleted_at IS NOT NULL
-         ORDER BY id DESC
-         LIMIT 1`,
-      )
-        .bind(modelo.id, manobra.id)
-        .first<{ id: number }>();
+      const relacaoSoftDeleted = cachedRelacao && cachedRelacao.deleted_at !== null ? cachedRelacao : null;
 
       if (relacaoSoftDeleted) {
         await c.env.DB.prepare(

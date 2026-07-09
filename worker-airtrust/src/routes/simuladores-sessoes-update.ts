@@ -823,20 +823,21 @@ app.put('/sessoes/:id', async (c) => {
             const manobras = buildOperationalFichaManobras(
               ((manobrasModelo.results || []) as unknown) as FichaManobraBase[],
             );
-            for (const man of manobras) {
-              const m = man as {
-                codigo: string;
-                nome: string;
-                descricao: string;
-                categoria: string;
-                ordem: number;
-                tripulante: string;
-              };
-              await c.env.DB.prepare(
+            if (manobras.length > 0) {
+              const insertManobrasStmt = c.env.DB.prepare(
                 `INSERT INTO fichas_sessao_manobras (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, resultado, observacoes)
                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL, '')`,
-              )
-                .bind(
+              );
+              const statements = manobras.map((man) => {
+                const m = man as {
+                  codigo: string;
+                  nome: string;
+                  descricao: string;
+                  categoria: string;
+                  ordem: number;
+                  tripulante: string;
+                };
+                return insertManobrasStmt.bind(
                   fichaId,
                   m.codigo,
                   m.nome || m.descricao || '',
@@ -844,8 +845,13 @@ app.put('/sessoes/:id', async (c) => {
                   m.categoria || 'GERAL',
                   m.ordem,
                   m.tripulante || 'AB',
-                )
-                .run();
+                );
+              });
+              
+              // Executar em lotes de 100 para respeitar limites do D1
+              for (let i = 0; i < statements.length; i += 100) {
+                await c.env.DB.batch(statements.slice(i, i + 100));
+              }
             }
           }
         }
