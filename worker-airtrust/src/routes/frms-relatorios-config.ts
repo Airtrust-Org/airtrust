@@ -38,6 +38,7 @@ import {
   auditFrms,
   assertTripulanteEmpresa,
   resolveFuncionarioId,
+  requirePlatformAdmin,
 } from './frms-shared';
 
 const frmsRelatoriosConfig = new Hono<{ Bindings: Env; Variables: { userId?: string } }>();
@@ -153,8 +154,10 @@ frmsRelatoriosConfig.get(
  */
 frmsRelatoriosConfig.put(
   '/configuracoes',
-  requireRole('admin'),
   safe(async (c) => {
+    const denied = await requirePlatformAdmin(c);
+    if (denied) return denied;
+
     const body = await c.req.json();
     const schema = z.object({
       configs: z.array(
@@ -185,8 +188,10 @@ frmsRelatoriosConfig.put(
  */
 frmsRelatoriosConfig.post(
   '/configuracoes/restaurar',
-  requireRole('admin'),
   safe(async (c) => {
+    const denied = await requirePlatformAdmin(c);
+    if (denied) return denied;
+
     await restaurarConfiguracoesPadrao(c.env.DB);
     const limites = await carregarLimites(c.env.DB);
 
@@ -223,8 +228,10 @@ frmsRelatoriosConfig.get(
  */
 frmsRelatoriosConfig.put(
   '/configuracoes/notificacoes',
-  requireRole('admin'),
   safe(async (c) => {
+    const denied = await requirePlatformAdmin(c);
+    if (denied) return denied;
+
     const schema = z.object({
       cargo: z.string().min(1),
       nivel_minimo: z.enum(['AVISO', 'ATENCAO', 'CRITICO', 'VIOLACAO']),

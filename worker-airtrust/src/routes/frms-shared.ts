@@ -6,6 +6,7 @@
 import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
+import { resolvePlatformAccessState, isPlatformAdminAccess } from '../lib/rbac/platform-access';
 import { registrarAuditoria } from '../utils/auditoria';
 import { createLogger, toError } from '../utils/logger';
 
@@ -50,6 +51,22 @@ export function getEmpresaIdSafe(c: FrmsAppContext): number | undefined {
   } catch {
     return undefined;
   }
+}
+
+export async function requirePlatformAdmin(c: FrmsAppContext): Promise<Response | null> {
+  const userId = c.get('userId');
+  const state = await resolvePlatformAccessState(c.env.DB, userId);
+  if (!isPlatformAdminAccess(state)) {
+    return c.json(
+      {
+        success: false,
+        error: 'Apenas administradores da plataforma podem alterar configurações globais.',
+        code: 'PLATFORM_ADMIN_REQUIRED',
+      },
+      403,
+    );
+  }
+  return null;
 }
 
 /** Audit helper — fire-and-forget, nunca falha a operação principal */
