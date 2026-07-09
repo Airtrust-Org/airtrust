@@ -579,18 +579,60 @@ describe('treinamentos planejados router', () => {
   });
 
   it('bloqueia concluir turma sem participantes pelo endpoint de edicao', async () => {
+    const trainingRow = {
+      id: 31,
+      empresa_id: 6,
+      qualificacao_tipo_id: 9,
+      qualificacao_nome: 'Qual A',
+      qualificacao_codigo: 'QA',
+      data_prevista: '2026-06-20',
+      hora_inicio: '08:00',
+      hora_fim: '12:00',
+      status: 'PLANEJADO',
+      instrutor_id: null,
+      instrutor_nome: null,
+      instrutor_guerra: null,
+      local: null,
+      carga_horaria_prevista: null,
+      titulo: null,
+      descricao: null,
+      observacoes: null,
+      created_by: null,
+      created_at: '2026-06-20',
+      updated_at: '2026-06-20',
+      codigo_turma: null,
+      modalidade: 'TEORICO',
+      data_inicio: '2026-06-20',
+      data_fim: '2026-06-23',
+      base: null,
+      sala: null,
+      equipamento_descricao: null,
+      limite_participantes: null,
+      convocados_total: 0,
+      confirmados_total: 0,
+      presentes_total: 0,
+    };
+
     const { db, calls } = createMockDb([
       [
-        'SELECT id, qualificacao_tipo_id, data_prevista, data_inicio, data_fim, status',
+        'SELECT id, qualificacao_tipo_id FROM treinamentos_planejados WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
         {
           first: () => ({
             id: 31,
             qualificacao_tipo_id: 9,
-            data_prevista: '2026-06-20',
-            data_inicio: '2026-06-20',
-            data_fim: '2026-06-23',
-            status: 'PLANEJADO',
           }),
+        },
+      ],
+      [
+        'FROM treinamentos_planejados t',
+        {
+          all: () => ({ results: [trainingRow] }),
+        },
+      ],
+      [
+        'FROM treinamentos_participantes tp',
+        {
+          all: () => ({ results: [] }),
         },
       ],
       [
@@ -619,24 +661,71 @@ describe('treinamentos planejados router', () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       success: false,
-      error: 'Não é permitido concluir turma sem participantes vinculados',
+      error: 'Não é permitido concluir turma sem participantes vinculados.',
     });
     expect(calls.some((call) => call.query.includes('UPDATE treinamentos_planejados'))).toBe(false);
     expect(syncTreinamentoPlanejadoIntegrationMock).not.toHaveBeenCalled();
   });
 
   it('bloqueia concluir turma com periodo futuro pelo endpoint de edicao', async () => {
+    const futureTrainingRow = {
+      id: 31,
+      empresa_id: 6,
+      qualificacao_tipo_id: 9,
+      qualificacao_nome: 'Qual B',
+      qualificacao_codigo: 'QB',
+      data_prevista: '2999-01-02',
+      hora_inicio: '08:00',
+      hora_fim: '12:00',
+      status: 'PLANEJADO',
+      instrutor_id: null,
+      instrutor_nome: null,
+      instrutor_guerra: null,
+      local: null,
+      carga_horaria_prevista: null,
+      titulo: null,
+      descricao: null,
+      observacoes: null,
+      created_by: null,
+      created_at: '2999-01-02',
+      updated_at: '2999-01-02',
+      codigo_turma: null,
+      modalidade: 'TEORICO',
+      data_inicio: '2999-01-02',
+      data_fim: '2999-01-03',
+      base: null,
+      sala: null,
+      equipamento_descricao: null,
+      limite_participantes: null,
+      convocados_total: 2,
+      confirmados_total: 0,
+      presentes_total: 0,
+    };
+
     const { db, calls } = createMockDb([
       [
-        'SELECT id, qualificacao_tipo_id, data_prevista, data_inicio, data_fim, status',
+        'SELECT id, qualificacao_tipo_id FROM treinamentos_planejados WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
         {
           first: () => ({
             id: 31,
             qualificacao_tipo_id: 9,
-            data_prevista: '2999-01-02',
-            data_inicio: '2999-01-02',
-            data_fim: '2999-01-03',
-            status: 'PLANEJADO',
+          }),
+        },
+      ],
+      [
+        'FROM treinamentos_planejados t',
+        {
+          all: () => ({ results: [futureTrainingRow] }),
+        },
+      ],
+      [
+        'FROM treinamentos_participantes tp',
+        {
+          all: () => ({
+            results: [
+              { treinamento_id: 31, funcionario_id: 1, funcionario_nome: 'Foo', funcionario_guerra: 'Foo', funcionario_matricula: '001', funcionario_email: null, funcionario_setor: null, funcionario_funcao: null, confirmado: 1, presente: 0, aprovado: null, nota: null, observacoes: null, qualificacao_historico_id: null, qualificacao_historico_status: null, status_participacao: null, resultado: null, conceito: null, data_conclusao_efetiva: null, concluido_em: null },
+              { treinamento_id: 31, funcionario_id: 2, funcionario_nome: 'Bar', funcionario_guerra: 'Bar', funcionario_matricula: '002', funcionario_email: null, funcionario_setor: null, funcionario_funcao: null, confirmado: 0, presente: 0, aprovado: null, nota: null, observacoes: null, qualificacao_historico_id: null, qualificacao_historico_status: null, status_participacao: null, resultado: null, conceito: null, data_conclusao_efetiva: null, concluido_em: null },
+            ],
           }),
         },
       ],
@@ -666,7 +755,7 @@ describe('treinamentos planejados router', () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       success: false,
-      error: 'Não é permitido concluir turma com período futuro',
+      error: 'Turma concluída não pode ter período futuro.',
     });
     expect(calls.some((call) => call.query.includes('UPDATE treinamentos_planejados'))).toBe(false);
     expect(syncTreinamentoPlanejadoIntegrationMock).not.toHaveBeenCalled();
