@@ -254,8 +254,8 @@ app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
     const manobras = buildOperationalFichaManobras(m.results as any[]);
     const insertStmts = manobras.map((ma: any) =>
       c.env.DB.prepare(
-        'INSERT INTO fichas_sessao_manobras(ficha_id,empresa_id,codigo,nome,descricao,categoria,ordem,tripulante)VALUES(?,?,?,?,?,?,?,?)',
-      ).bind(fid, empresaId, ma.codigo, ma.nome, ma.descricao, ma.categoria, ma.ordem, ma.tripulante || 'AB'),
+        'INSERT INTO fichas_sessao_manobras(ficha_id,codigo,nome,descricao,categoria,ordem,tripulante)VALUES(?,?,?,?,?,?,?)',
+      ).bind(fid, ma.codigo, ma.nome, ma.descricao, ma.categoria, ma.ordem, ma.tripulante || 'AB'),
     );
     await c.env.DB.batch(insertStmts);
     return c.json({
