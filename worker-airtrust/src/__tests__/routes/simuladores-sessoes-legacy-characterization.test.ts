@@ -76,11 +76,7 @@ function createDbForLegacyCharacterization() {
             return { total: totalFuncionarios };
           }
 
-          if (
-            query.includes('SELECT id') &&
-            query.includes('FROM simuladores') &&
-            query.includes('empresa_id = ?')
-          ) {
+          if (query.includes('SELECT id') && query.includes('FROM simuladores')) {
             return { id: 10 };
           }
 
@@ -116,6 +112,19 @@ function createDbForLegacyCharacterization() {
                 { name: 'aeronave_id' },
                 { name: 'tipo_dispositivo' },
                 { name: 'empresa_id' },
+              ],
+            };
+          }
+
+          if (query === 'PRAGMA table_info(simuladores)') {
+            // Production schema: `simuladores` has no empresa_id column.
+            return {
+              results: [
+                { name: 'id' },
+                { name: 'nome' },
+                { name: 'modelo' },
+                { name: 'tipo' },
+                { name: 'deleted_at' },
               ],
             };
           }

@@ -129,12 +129,11 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
 
         await c.env.DB.prepare(
           `INSERT INTO fichas_sessao_manobras(
-             ficha_id, empresa_id, codigo, descricao, categoria, ordem, resultado, observacoes
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+             ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
           .bind(
             fichaId,
-            empresaId,
             codigo,
             descricao,
             categoria,
@@ -152,12 +151,11 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
       } else {
         await c.env.DB.prepare(
           `INSERT INTO fichas_sessao_manobras(
-             ficha_id, empresa_id, codigo, descricao, categoria, ordem, resultado, observacoes
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+             ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
           .bind(
             fichaId,
-            empresaId,
             `ORD-${ordem}`,
             `Manobra ordem ${ordem}`,
             'GERAL',
