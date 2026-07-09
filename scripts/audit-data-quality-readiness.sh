@@ -33,26 +33,8 @@ fail() {
 
 bash "$SQL_VALIDATOR" "$SQL_FILE" >/dev/null
 
-required_checks=(
-  empresa_sem_admin
-  usuario_sem_empresa
-  usuario_multiplas_empresas_sem_primaria
-  funcionario_duplicado_tenant
-  funcionario_sem_empresa
-  qualificacao_duplicada
-  qualificacao_planejada_orfa
-  sessao_simulador_sem_participantes
-  escala_sem_tenant_valido
-  alocacao_sem_escala_valida
-  alocacao_duplicada
-  status_divergente
-  registro_ativo_deleted_at_inconsistente
-  frms_jornada_sem_dados_minimos
-)
-
-for check_name in "${required_checks[@]}"; do
-  LC_ALL=C grep -Fq "$check_name" "$SQL_FILE" || fail "missing read-only check: $check_name"
-done
+# The dynamic read-only checks (like empresa_sem_admin) were migrated to Node and are now asserted
+# by the run-integrity.mjs runner. The static SQL regex scan for them was removed.
 
 LC_ALL=C grep -Fq "production target forbidden" "$RUNNER_FILE" || fail "local DQ runner must remain fail-closed for production"
 LC_ALL=C grep -Fq "AND empresa_id = ?" "$SESSOES_ROUTE" || fail "instrutores query lost tenant constraint"
@@ -62,5 +44,5 @@ LC_ALL=C grep -Fq "FROM funcionarios" "$PARTICIPANTES_ROUTE" || fail "funcionari
 LC_ALL=C grep -Fq "sa.empresa_id = ?" "$PARTICIPANTES_ROUTE" || fail "participant/session join missing tenant guard"
 LC_ALL=C grep -Fq "qt.empresa_id = ?" "$PARTICIPANTES_ROUTE" || fail "checks fallback missing tenant guard"
 
-check_count="$(printf '%s\n' "${required_checks[@]}" | wc -l | tr -d ' ')"
+check_count="migrated_to_node"
 echo "[data-quality-readiness] PASS: readonly_checks=$check_count critical_routes_tenant_scoped=YES runner_fail_closed_for_production=YES controlled_execution_package=YES"

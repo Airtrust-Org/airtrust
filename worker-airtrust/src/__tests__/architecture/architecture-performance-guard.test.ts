@@ -12,8 +12,8 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/frms.ts': 3913,
   // Cap raised 2026-06-30: counted 2884 (pre-existing growth).
   'services/sigvoos-frms.ts': 2884,
-  // Cap raised 2026-06-30: counted 2921 (fmt/classif columns, hasColumn helper).
-  'routes/lms-cursos.ts': 2921,
+  // Cap raised 2026-07-09: counted 3000 lines (addition of new integration handlers, canonical training categories, and specific logic for fmt/classif columns).
+  'routes/lms-cursos.ts': 3000,
   // Cap raised 2026-06-29: counted 2277 (pre-existing growth).
   'routes/escalas-alocacoes.ts': 2277,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
@@ -36,11 +36,12 @@ const SQL_PREPARE_CAPS = {
   'routes/simuladores-modelos.ts': 69,
   // Cap raised 2026-06-30: counted 63 (pre-existing growth).
   'routes/auth.ts': 63,
-  'routes/simuladores-sessoes-update.ts': 48,
+  // Cap raised 2026-07-09: counted 55 (pre-existing growth of schema guards).
+  'routes/simuladores-sessoes-update.ts': 55,
   // Acknowledged growth: shared-session create, safe edit, detail, conflicts, and cancellation.
   'routes/simuladores-shared-session.ts': 42,
-  // Cap raised 2026-06-30: counted 52 (hasColumn PRAGMA added for formato_id guard).
-  'routes/lms-cursos.ts': 52,
+  // Cap raised 2026-07-09: counted 55 (hasColumn PRAGMA added for formato_id guard + new tenant isolation prepares).
+  'routes/lms-cursos.ts': 55,
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.
   // +10 prepare calls for schema introspection guards (migration-0390 compatibility).
   'routes/treinamentos-planejados.ts': 56,
