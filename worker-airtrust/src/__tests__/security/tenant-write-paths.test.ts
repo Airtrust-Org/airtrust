@@ -93,6 +93,7 @@ describe('tenant-aware write paths', () => {
     const sessoes = compact('routes/simuladores-sessoes.ts');
     const sessoesUpdate = compact('routes/simuladores-sessoes-update.ts');
     const fichas = compact('routes/simuladores-fichas.ts');
+    const modelos = compact('routes/simuladores-modelos.ts');
 
     expect(frms).toMatch(/INSERT INTO frms_jornada .* empresa_id/i);
     expect(frms).toMatch(/INSERT OR IGNORE INTO frms_jornada .* empresa_id/i);
@@ -105,8 +106,10 @@ describe('tenant-aware write paths', () => {
     expect(fichas).toMatch(/INSERT INTO fichas_sessao.*empresa_id/i);
     expect(fichas).toContain('Aluno ou instrutor fora do tenant');
     expect(fichas).toContain('WHERE id=? AND empresa_id = ? AND deleted_at IS NULL');
-    expect(fichas).toContain('SELECT id FROM modelos_sessao WHERE codigo = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1');
-    expect(fichas).toContain('SELECT id FROM modelos_sessao WHERE nome = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1');
-    expect(fichas).toContain('AND ts.empresa_id = ?');
+
+    // Assert that the migrated query relevant checks inside simuladores-modelos.ts remain tenant-scoped
+    expect(modelos).toContain('SELECT id FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?');
+    expect(modelos).toContain('SELECT id FROM modelos_sessao WHERE codigo = ? AND deleted_at IS NULL AND empresa_id = ?');
+    expect(modelos).toContain('AND ts.empresa_id = ?');
   });
 });
