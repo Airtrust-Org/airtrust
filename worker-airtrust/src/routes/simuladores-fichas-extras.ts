@@ -95,18 +95,18 @@ app.post('/historico-notas', async (c) => {
 
     const existente = await c.env.DB.prepare(
       `SELECT id FROM historico_notas_manobras
-       WHERE ficha_id = ? AND codigo_manobra = ? AND empresa_id = ? AND deleted_at IS NULL`,
+       WHERE ficha_id = ? AND codigo_manobra = ? AND deleted_at IS NULL`,
     )
-      .bind(ficha_id, codigo_manobra, empresaId)
+      .bind(ficha_id, codigo_manobra)
       .first();
 
     if (existente) {
       await c.env.DB.prepare(
         `UPDATE historico_notas_manobras
          SET nota = ?, observacoes = ?, updated_at = datetime('now')
-         WHERE id = ? AND empresa_id = ?`,
+         WHERE id = ?`,
       )
-        .bind(nota, observacoes || '', existente.id, empresaId)
+        .bind(nota, observacoes || '', existente.id)
         .run();
 
       return c.json({
@@ -118,8 +118,8 @@ app.post('/historico-notas', async (c) => {
     const result = await c.env.DB.prepare(
       `INSERT INTO historico_notas_manobras (
         funcionario_id, ficha_id, codigo_manobra, descricao_manobra, categoria_manobra,
-        nota, observacoes, data_sessao, tipo_sessao, tipo_aeronave, instrutor_id, empresa_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        nota, observacoes, data_sessao, tipo_sessao, tipo_aeronave, instrutor_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         funcionario_id,
@@ -133,7 +133,6 @@ app.post('/historico-notas', async (c) => {
         tipo_sessao || '',
         tipo_aeronave || '',
         instrutor_id || null,
-        empresaId,
       )
       .run();
 
@@ -143,14 +142,15 @@ app.post('/historico-notas', async (c) => {
     let alertaGerado = false;
     if (typeof nota === 'number' && nota < 7.0) {
       const ultimaNotaAnterior = await c.env.DB.prepare(
-        `SELECT id, nota, data_sessao, ficha_id
-         FROM historico_notas_manobras
-         WHERE funcionario_id = ?
-           AND codigo_manobra = ?
-           AND id != ?
-           AND empresa_id = ?
-           AND deleted_at IS NULL
-         ORDER BY data_sessao DESC, id DESC
+        `SELECT hnm.id, hnm.nota, hnm.data_sessao, hnm.ficha_id
+         FROM historico_notas_manobras hnm
+         INNER JOIN funcionarios f ON hnm.funcionario_id = f.id
+         WHERE hnm.funcionario_id = ?
+           AND hnm.codigo_manobra = ?
+           AND hnm.id != ?
+           AND f.empresa_id = ?
+           AND hnm.deleted_at IS NULL
+         ORDER BY hnm.data_sessao DESC, hnm.id DESC
          LIMIT 1`,
       )
         .bind(funcionario_id, codigo_manobra, historico_id, empresaId)
@@ -248,11 +248,11 @@ app.get('/historico-notas/ultima/:funcionarioId/:codigoManobra', async (c) => {
         f.nome as aluno_nome,
         i.nome as instrutor_nome
        FROM historico_notas_manobras hnm
-       LEFT JOIN funcionarios f ON hnm.funcionario_id = f.id
+       INNER JOIN funcionarios f ON hnm.funcionario_id = f.id
        LEFT JOIN funcionarios i ON hnm.instrutor_id = i.id
        WHERE hnm.funcionario_id = ?
          AND hnm.codigo_manobra = ?
-         AND hnm.empresa_id = ?
+         AND f.empresa_id = ?
          AND hnm.deleted_at IS NULL
        ORDER BY hnm.data_sessao DESC, hnm.id DESC
        LIMIT 1`,
@@ -293,9 +293,10 @@ app.get('/historico-notas/:funcionarioId', async (c) => {
         hnm.*,
         i.nome as instrutor_nome
        FROM historico_notas_manobras hnm
+       INNER JOIN funcionarios f ON hnm.funcionario_id = f.id
        LEFT JOIN funcionarios i ON hnm.instrutor_id = i.id
        WHERE hnm.funcionario_id = ?
-         AND hnm.empresa_id = ?
+         AND f.empresa_id = ?
          AND hnm.deleted_at IS NULL
        ORDER BY hnm.data_sessao DESC, hnm.id DESC
        LIMIT ?`,
