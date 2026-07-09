@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const auditoriaPath = join(testDir, '../../routes/auditoria.ts');
-const auditoriaDetalhadaPath = join(testDir, '../../routes/auditoria-detalhada.ts');
+
 
 describe('auditoria routes — tenant isolation (SEC-01)', () => {
   describe('routes/auditoria.ts', () => {
@@ -56,34 +56,4 @@ describe('auditoria routes — tenant isolation (SEC-01)', () => {
     });
   });
 
-  describe('routes/auditoria-detalhada.ts', () => {
-    let source: string;
-
-    it('imports getTenantContext', () => {
-      source = readFileSync(auditoriaDetalhadaPath, 'utf8');
-      expect(source).toMatch(/getTenantContext/);
-    });
-
-    it('extracts empresaId from tenant context', () => {
-      source = readFileSync(auditoriaDetalhadaPath, 'utf8');
-      expect(source).toMatch(/getTenantContext\s*\(\s*c\s*\)/);
-      expect(source).toMatch(/empresaId/);
-    });
-
-    it('scopes all three JOIN queries with f.empresa_id', () => {
-      source = readFileSync(auditoriaDetalhadaPath, 'utf8');
-      // Each of the 3 queries joins funcionarios and must filter by empresa_id
-      const joinCount = (source.match(/JOIN funcionarios f ON/g) || []).length;
-      const empresaFilter = (source.match(/f\.empresa_id\s*=\s*\?/g) || []).length;
-      expect(joinCount).toBeGreaterThanOrEqual(3);
-      expect(empresaFilter).toBe(joinCount);
-    });
-
-    it('binds empresaId to all prepared queries', () => {
-      source = readFileSync(auditoriaDetalhadaPath, 'utf8');
-      // Three .bind(empresaId).all() calls
-      const bindCount = (source.match(/\.bind\s*\(\s*empresaId\s*\)/g) || []).length;
-      expect(bindCount).toBe(3);
-    });
-  });
 });

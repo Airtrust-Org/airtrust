@@ -27,19 +27,6 @@ export async function softDelete(db: D1Database, table: string, id: number): Pro
   return await db.prepare(query).bind(id).run();
 }
 
-/**
- * Restaura registro deletado (soft delete)
- * Define deleted_at como NULL
- */
-export async function restoreDeleted(db: D1Database, table: string, id: number): Promise<D1Result> {
-  const query = `
-    UPDATE ${table} 
-    SET deleted_at = NULL, updated_at = datetime('now')
-    WHERE id = ?
-  `;
-
-  return await db.prepare(query).bind(id).run();
-}
 
 // ===== PAGINATION =====
 
@@ -188,29 +175,3 @@ export function buildOrderBy(
   return `${sanitizedColumn} ${sanitizedDirection}`;
 }
 
-// ===== TIMESTAMPS =====
-
-/**
- * Adiciona timestamps automáticos em INSERT
- */
-export function withTimestamps<T extends Record<string, unknown>>(
-  data: T,
-): T & { created_at: string; updated_at: string } {
-  return {
-    ...data,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-}
-
-/**
- * Atualiza updated_at timestamp
- */
-export function updateTimestamp<T extends Record<string, unknown>>(
-  data: T,
-): T & { updated_at: string } {
-  return {
-    ...data,
-    updated_at: new Date().toISOString(),
-  };
-}
