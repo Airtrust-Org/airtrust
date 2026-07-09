@@ -185,6 +185,9 @@ crud.get('/', auth(), async (c) => {
       .all();
     return c.json({ success: true, data: result.results });
   } catch (e) {
+    const errType = e instanceof Error ? e.name : 'UnknownError';
+    const errMsg = e instanceof Error ? e.message.substring(0, 150) : 'Sem mensagem';
+    console.error(`[escalas-crud] [GET /] Falha ao listar escalas | Empresa: ${empresaId} | Tipo: ${errType} | Msg: ${errMsg}`);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -251,6 +254,9 @@ crud.get('/:id', auth(), async (c) => {
       },
     });
   } catch (e) {
+    const errType = e instanceof Error ? e.name : 'UnknownError';
+    const errMsg = e instanceof Error ? e.message.substring(0, 150) : 'Sem mensagem';
+    console.error(`[escalas-crud] [GET /:id] Falha ao buscar escala | Empresa: ${empresaId} | Tipo: ${errType} | Msg: ${errMsg}`);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -321,6 +327,9 @@ crud.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 
     return c.json({ success: true, data: { id } }, 201);
   } catch (e) {
+    const errType = e instanceof Error ? e.name : 'UnknownError';
+    const errMsg = e instanceof Error ? e.message.substring(0, 150) : 'Sem mensagem';
+    console.error(`[escalas-crud] [POST /] Falha ao criar escala | Empresa: ${empresaId} | Tipo: ${errType} | Msg: ${errMsg}`);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -377,6 +386,9 @@ crud.post('/gerar-ano', auth(), requireRole('admin', 'manager'), async (c) => {
     }
     return c.json({ success: true, data: { criados, ano } });
   } catch (e) {
+    const errType = e instanceof Error ? e.name : 'UnknownError';
+    const errMsg = e instanceof Error ? e.message.substring(0, 150) : 'Sem mensagem';
+    console.error(`[escalas-crud] [POST /gerar-ano] Falha ao gerar ano | Empresa: ${empresaId} | Tipo: ${errType} | Msg: ${errMsg}`);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -430,6 +442,9 @@ crud.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     });
     return c.json({ success: true });
   } catch (e) {
+    const errType = e instanceof Error ? e.name : 'UnknownError';
+    const errMsg = e instanceof Error ? e.message.substring(0, 150) : 'Sem mensagem';
+    console.error(`[escalas-crud] [PUT /:id] Falha ao atualizar escala | Empresa: ${empresaId} | Tipo: ${errType} | Msg: ${errMsg}`);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -470,6 +485,9 @@ crud.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     });
     return c.json({ success: true });
   } catch (e) {
+    const errType = e instanceof Error ? e.name : 'UnknownError';
+    const errMsg = e instanceof Error ? e.message.substring(0, 150) : 'Sem mensagem';
+    console.error(`[escalas-crud] [DELETE /:id] Falha ao deletar escala | Empresa: ${empresaId} | Tipo: ${errType} | Msg: ${errMsg}`);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
