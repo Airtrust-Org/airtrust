@@ -30,7 +30,7 @@ describe('dashboardService repository contract', () => {
 
     const result = await getTaxaConclusaoMensal(db, 8);
 
-    expect(getTaxaConclusaoMensalMetricRowsMock).toHaveBeenCalledWith(db, 8);
+    expect(getTaxaConclusaoMensalMetricRowsMock).toHaveBeenCalledWith(db, 8, undefined);
     expect(result).toEqual({
       meses: ['Jan', 'Fev'],
       taxas: [89, 90],
@@ -55,7 +55,7 @@ describe('dashboardService repository contract', () => {
 
     const result = await getUtilizacaoSimuladores(db, 14);
 
-    expect(getUtilizacaoSimuladoresMetricRowsMock).toHaveBeenCalledWith(db, 14);
+    expect(getUtilizacaoSimuladoresMetricRowsMock).toHaveBeenCalledWith(db, 14, undefined);
     expect(result).toEqual({
       simuladores: [
         {

@@ -243,10 +243,8 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(body.data.renovadas).toBe(160);
 
     const statsQuery = calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
-    expect(statsQuery).toContain('COALESCE(qh.renovada, 0) = 1');
-    expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
-    expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADO'");
     expect(statsQuery).toContain('qh_renovadora.renovacao_de = qh.id');
+    expect(statsQuery).toContain('qh_newer.id > qh.id');
   });
 
   it('mantem SQL valido quando a coluna renovacao_de ainda nao existe no D1 local', async () => {
@@ -263,8 +261,7 @@ describe('qualificacoes historico renovadas contract', () => {
     const statsQuery =
       calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
     expect(statsQuery).not.toContain('qh.renovacao_de');
-    expect(statsQuery).toContain('COALESCE(qh.renovada, 0) = 1');
-    expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
+    expect(statsQuery).toContain('qh_newer.id > qh.id');
   });
 
   it('filtra e serializa renovadas pelo registro anterior que recebeu renovacao posterior', async () => {
@@ -291,7 +288,7 @@ describe('qualificacoes historico renovadas contract', () => {
     const statsQuery =
       calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
     expect(statsQuery).toContain('qh_renovadora.renovacao_de = qh.id');
-    expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
+    expect(statsQuery).toContain('qh_newer.id > qh.id');
   });
 
   it('tem_renovacao_posterior da linha usa o mesmo guard de vigencia operacional do contador (regressao AW139/Altemir)', async () => {
