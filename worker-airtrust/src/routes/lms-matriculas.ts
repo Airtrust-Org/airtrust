@@ -237,8 +237,8 @@ async function sendMatriculaEmail(
 
     if (sent) {
       console.log(
-        '[lms-matricula] Email enviado para',
-        funcionario.email,
+        '[lms-matricula] Email enviado para o funcionario',
+        params.funcionarioId,
         'curso',
         params.cursoId,
       );
