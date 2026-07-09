@@ -134,8 +134,12 @@ describe('simuladores fichas simulador observacoes guard', () => {
 
     const insert = runs.find((item) => item.query.includes('INSERT INTO fichas_sessao_manobras('));
     expect(insert).toBeDefined();
-    expect(insert?.args[2]).toBe('A139-CKL-01');
-    expect(insert?.args[3]).toBe('Normal checklist');
+    // Bind order is (ficha_id, codigo, descricao, categoria, ordem, resultado,
+    // observacoes) — empresa_id was removed: fichas_sessao_manobras has no
+    // such column in production (schema-compat hotfix).
+    expect(insert?.query).not.toContain('empresa_id');
+    expect(insert?.args[1]).toBe('A139-CKL-01');
+    expect(insert?.args[2]).toBe('Normal checklist');
   });
 
   it('quando a ficha ja tem a linha materializada, nao recalcula nem reinsere a manobra', async () => {

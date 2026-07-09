@@ -783,15 +783,19 @@ app.post('/sessoes', async (c) => {
     // ─────────────────────────────────────────────────────────────────────────
 
     if (tipoDispositivo === 'SIMULADOR' && simulador_id) {
+      // simuladores não possui empresa_id em produção (drift de schema já
+      // tratado dinamicamente em simuladores-equipamentos.ts); detectar
+      // a coluna em vez de assumir sua existência.
+      const simuladoresTableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
+      const simuladoresHasEmpresaId = (simuladoresTableInfo.results || []).some(
+        (row: any) => String(row.name || '') === 'empresa_id',
+      );
       const simulador = await c.env.DB.prepare(
-        `SELECT id
-           FROM simuladores
-          WHERE id = ?
-            AND empresa_id = ?
-            AND deleted_at IS NULL
-          LIMIT 1`,
+        simuladoresHasEmpresaId
+          ? 'SELECT id FROM simuladores WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1'
+          : 'SELECT id FROM simuladores WHERE id = ? AND deleted_at IS NULL LIMIT 1',
       )
-        .bind(simulador_id, empresaId)
+        .bind(...(simuladoresHasEmpresaId ? [simulador_id, empresaId] : [simulador_id]))
         .first<{ id: number }>();
 
       if (!simulador?.id) {
