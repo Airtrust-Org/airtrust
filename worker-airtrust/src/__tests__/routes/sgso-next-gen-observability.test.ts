@@ -6,7 +6,7 @@ vi.mock('../../middleware/auth', () => ({
     c.set('userId', 'mock-user-id');
     c.set('userRole', 'admin');
     c.set('empresaId', 123);
-    c.set('tenantContext', { empresaId: 123, role: 'admin' });
+    c.set('tenantContext', { empresaId: 123, role: 'admin', empresaCodigo: 'TEST', empresaNome: 'Test', plano: 'pro', permissions: [] });
     await next();
   },
 }));
@@ -18,19 +18,19 @@ vi.mock('../../middleware/rbac', () => ({
 }));
 
 import sgsoNextGen from '../../routes/sgso-next-gen';
-import type { Env } from '../../types';
+import type { Env, AppEnv } from '../../types';
 
 describe('SGSO Next Gen Observability', () => {
-  let app: Hono<{ Bindings: Env }>;
+  let app: Hono<AppEnv>;
   const originalConsoleError = console.error;
   const mockConsoleError = vi.fn();
 
   beforeEach(() => {
     console.error = mockConsoleError;
-    app = new Hono<{ Bindings: Env }>();
+    app = new Hono<AppEnv>();
 
     app.use('*', async (c, next) => {
-      c.set('tenantContext', { empresaId: 123, role: 'admin' });
+      c.set('tenantContext', { empresaId: 123, role: 'admin', empresaCodigo: 'TEST', empresaNome: 'Test', plano: 'pro', permissions: [] });
       
       // DB mock that always throws D1 error
       const mockDB = {
@@ -59,7 +59,7 @@ describe('SGSO Next Gen Observability', () => {
 
     expect(res.status).toBe(500);
 
-    const body = await res.json();
+    const body: any = await res.json();
     expect(body.success).toBe(false);
 
     expect(mockConsoleError).toHaveBeenCalledTimes(1);
@@ -76,7 +76,7 @@ describe('SGSO Next Gen Observability', () => {
 
     expect(res.status).toBe(500);
 
-    const body = await res.json();
+    const body: any = await res.json();
     expect(body.success).toBe(false);
 
     expect(mockConsoleError).toHaveBeenCalledTimes(1);

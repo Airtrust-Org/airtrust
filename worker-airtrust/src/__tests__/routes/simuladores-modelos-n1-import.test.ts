@@ -6,7 +6,7 @@ vi.mock('../../middleware/auth', () => ({
     c.set('userId', 'mock-user-id');
     c.set('userRole', 'admin');
     c.set('empresaId', 123);
-    c.set('tenantContext', { empresaId: 123, role: 'admin' });
+    c.set('tenantContext', { empresaId: 123, role: 'admin', empresaCodigo: 'TEST', empresaNome: 'Test', plano: 'pro', permissions: [] });
     await next();
   },
 }));
@@ -18,14 +18,14 @@ vi.mock('../../middleware/rbac', () => ({
 }));
 
 import modelosApp from '../../routes/simuladores-modelos';
-import type { Env } from '../../types';
+import type { Env, AppEnv } from '../../types';
 
 describe('Simuladores Modelos N+1 Characterization', () => {
-  let app: Hono<{ Bindings: Env }>;
+  let app: Hono<AppEnv>;
   let prepareSpy: any;
 
   beforeEach(() => {
-    app = new Hono<{ Bindings: Env }>();
+    app = new Hono<AppEnv>();
 
     prepareSpy = vi.fn().mockImplementation((query: string) => {
       const q = query.toUpperCase();
@@ -45,7 +45,7 @@ describe('Simuladores Modelos N+1 Characterization', () => {
     });
 
     app.use('*', async (c, next) => {
-      c.set('tenantContext', { empresaId: 123, role: 'admin' });
+      c.set('tenantContext', { empresaId: 123, role: 'admin', empresaCodigo: 'TEST', empresaNome: 'Test', plano: 'pro', permissions: [] });
       c.env = { DB: { prepare: prepareSpy } as any } as Env;
       await next();
     });
@@ -70,7 +70,7 @@ describe('Simuladores Modelos N+1 Characterization', () => {
       body: JSON.stringify({ dados, auto_criar: false }),
     });
 
-    const body = await res.json();
+    const body: any = await res.json();
     expect(res.status).toBe(207);
     expect(body.sucesso).toBe(false);
 

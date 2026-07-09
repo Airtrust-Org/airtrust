@@ -6,7 +6,7 @@ vi.mock('../../middleware/auth', () => ({
     c.set('userId', 'mock-user-id');
     c.set('userRole', 'admin');
     c.set('empresaId', 123);
-    c.set('tenantContext', { empresaId: 123, role: 'admin' });
+    c.set('tenantContext', { empresaId: 123, role: 'admin', empresaCodigo: 'TEST', empresaNome: 'Test', plano: 'pro', permissions: [] });
     await next();
   },
 }));
@@ -18,14 +18,14 @@ vi.mock('../../middleware/rbac', () => ({
 }));
 
 import sessoesUpdateApp from '../../routes/simuladores-sessoes-update';
-import type { Env } from '../../types';
+import type { Env, AppEnv } from '../../types';
 
 describe('Simuladores Sessoes Update N+1 Characterization', () => {
-  let app: Hono<{ Bindings: Env }>;
+  let app: Hono<AppEnv>;
   let prepareSpy: any;
 
   beforeEach(() => {
-    app = new Hono<{ Bindings: Env }>();
+    app = new Hono<AppEnv>();
 
     prepareSpy = vi.fn().mockImplementation((query: string) => {
       const q = query.toUpperCase();
@@ -67,7 +67,7 @@ describe('Simuladores Sessoes Update N+1 Characterization', () => {
     });
 
     app.use('*', async (c, next) => {
-      c.set('tenantContext', { empresaId: 123, role: 'admin' });
+      c.set('tenantContext', { empresaId: 123, role: 'admin', empresaCodigo: 'TEST', empresaNome: 'Test', plano: 'pro', permissions: [] });
       const dbMock: any = { prepare: prepareSpy, batch: vi.fn().mockResolvedValue([]) };
       c.env = { DB: dbMock } as Env;
       await next();
