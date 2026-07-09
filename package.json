@@ -155,7 +155,7 @@
     "guard:auth-boundaries": "bash scripts/guard-auth-boundaries.sh",
     "guard:tracked-secrets": "bash scripts/check-tracked-secrets.sh",
     "check:demo-data": "bash scripts/ci-demo-data-check.sh && bash scripts/production-audit-check.sh",
-    "lint:api-base": "chmod +x scripts/lint-api-base.sh && ./scripts/lint-api-base.sh",
+    "lint:api-base": "bash scripts/guard-tenant-mutations.sh && chmod +x scripts/lint-api-base.sh && ./scripts/lint-api-base.sh",
     "guard:empresa-default1": "bash scripts/guard-no-new-empresa-default1.sh",
     "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:operational-sql-sources"
   }
