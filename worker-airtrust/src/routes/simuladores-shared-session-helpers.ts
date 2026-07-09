@@ -31,3 +31,10 @@ export async function allStatement<T>(db: D1Database, sql: string, ...args: unkn
 export function prepareStatement(db: D1Database, sql: string, ...args: unknown[]) {
   return db.prepare(sql).bind(...args);
 }
+
+export async function assertSharedFeature(c: any) {
+  if (!isSharedSessionsEnabled(c.env)) {
+    return c.json({ success: false, error: 'Shared simulator sessions feature disabled' }, 404);
+  }
+  return null;
+}
