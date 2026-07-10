@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
-const qualificacoesSource = readFileSync(resolve(currentDir, '../Qualificacoes.tsx'), 'utf8');
+const qualificacoesSource = readFileSync(resolve(currentDir, '../Qualificacoes.tsx'), 'utf8') + readFileSync(resolve(currentDir, '../qualificacoes/hooks/useQualificacoesFiltros.ts'), 'utf8');
 const treinamentosSource = readFileSync(
   resolve(currentDir, '../TreinamentosPlanejadosPage.tsx'),
   'utf8',

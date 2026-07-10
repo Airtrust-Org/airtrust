@@ -110,6 +110,7 @@ import {
   historicoActionDangerButtonClass,
   QUALIFICACOES_PREFS_KEY,
 } from './qualificacoes/qualificacoes.constants';
+import { useQualificacoesFiltros } from './qualificacoes/hooks/useQualificacoesFiltros';
 import {
   normalizeCategoriaKey,
   getCategoriaCorDisplay,
@@ -135,10 +136,6 @@ import type { QualificacoesPrefs, QualificacoesModelosPrefs } from './qualificac
 export default function Qualificacoes() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const initialPrefs = useMemo(
-    () => readUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {}),
-    [],
-  );
 
   const [searchParams] = useSearchParams();
   const highlightedHistoricoId = useMemo(() => {
@@ -147,136 +144,52 @@ export default function Qualificacoes() {
     const parsedId = Number(rawId);
     return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
   }, [searchParams]);
-  const VALID_TABS = ['historico', 'planejados', 'tipos', 'categorias'] as const;
-  const VALID_PLANNED_VIEWS = ['lista', 'calendario', 'turmas'] as const;
 
-  // Migrate legacy preference: 'turmas' was briefly used as a main tab value in
-  // a previous deploy. Map it back to 'planejados' + plannedView='turmas'.
-  const rawStoredTab = initialPrefs.activeTab as string | undefined;
-  const rawStoredView = initialPrefs.plannedView as string | undefined;
-  const migratedTab: (typeof VALID_TABS)[number] =
-    rawStoredTab === 'turmas'
-      ? 'planejados'
-      : VALID_TABS.includes(rawStoredTab as (typeof VALID_TABS)[number])
-        ? (rawStoredTab as (typeof VALID_TABS)[number])
-        : 'historico';
-  // Legacy main tab "turmas" maps to Planejadas > Turmas. Turmas is a visible
-  // management sub-tab again, so stored plannedView="turmas" must be preserved.
-  const migratedPlannedView: (typeof VALID_PLANNED_VIEWS)[number] =
-    rawStoredTab === 'turmas'
-      ? 'turmas'
-      : VALID_PLANNED_VIEWS.includes(rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
-        ? (rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
-        : 'lista';
-
-  const [activeTab, setActiveTab] = useState<(typeof VALID_TABS)[number]>(migratedTab);
-  const [plannedView, setPlannedView] =
-    useState<(typeof VALID_PLANNED_VIEWS)[number]>(migratedPlannedView);
-  const [autoOpenTurmasModal, setAutoOpenTurmasModal] = useState(false);
-  const [limit, setLimit] = useState(initialPrefs.limit ?? 50); // Paginação: 50 registros por página
-  const [page, setPage] = useState(1); // Página atual
-  const [searchTerm, setSearchTerm] = useState(''); // Termo de busca
-  const [debouncedSearch, setDebouncedSearch] = useState(''); // Busca com debounce para API
-
-  // Estado de ordenação server-side
-  const [sortConfig, setSortConfig] = useState<SortConfig>({
-    column: initialPrefs.sortColumn ?? 'data_vencimento',
-    direction: initialPrefs.sortDirection ?? 'asc',
-  });
-
-  // Debounce do searchTerm para evitar muitas requisições
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      setPage(1); // Reset para página 1 ao buscar
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
-  // Hook de aeronaves
   const { aeronaves: aeronavesConfig } = useAeronavesConfig();
-  const [aeronaveFilter, setAeronaveFilter] = useState(initialPrefs.aeronaveFilter ?? '');
-  const [categoriaFilter, setCategoriaFilter] = useState(initialPrefs.categoriaFilter ?? '');
-  const [setorFilter, setSetorFilter] = useState<string[]>(initialPrefs.setorFilter ?? []);
-  const [categoriasSetorFilter, setCategoriasSetorFilter] = useState<string[]>(
-    initialPrefs.categoriasSetorFilter ?? [],
-  );
 
-  // Estado para filtrar por status - renovadas e apagadas ficam ocultas por padrao.
-  // Planejadas = individual planned qualification records in qualificacoes_historico.
-  // Turmas planejadas are in the Planejados tab (treinamentos_planejados).
-  const [statusFiltro, setStatusFiltro] = useState<Set<string>>(
-    new Set(
-      highlightedHistoricoId
-        ? ALL_STATUS_VALUES
-        : ['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA'],
-    ),
-  );
-
-  const getDefaultHistoricoStatusSet = useCallback(
-    () =>
-      new Set(
-        highlightedHistoricoId
-          ? ALL_STATUS_VALUES
-          : ['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA'],
-      ),
-    [highlightedHistoricoId],
-  );
-
-  const applySingleStatusFromChip = useCallback((status: string) => {
-    setActiveTab('historico');
-    setPage(1);
-    setStatusFiltro(new Set([status]));
-  }, []);
-
-  const resetStatusFromChip = useCallback(() => {
-    setActiveTab('historico');
-    setPage(1);
-    setStatusFiltro(getDefaultHistoricoStatusSet());
-  }, [getDefaultHistoricoStatusSet]);
-
-  const isOnlyStatusSelected = useCallback(
-    (status: string) => statusFiltro.size === 1 && statusFiltro.has(status),
-    [statusFiltro],
-  );
-
-  const isHistoricoTab = activeTab === 'historico';
-  const isPlanejadosTab = activeTab === 'planejados';
-  const usesHistoricoDataset = isHistoricoTab;
-
-  // Filtros por categoria_id e formato_id no Histórico (pós-migration 0412)
-  const [historicoCategoriaId, setHistoricoCategoriaId] = useState<number | null>(null);
-  const [historicoFormatoId, setHistoricoFormatoId] = useState<number | null>(null);
-
-  useEffect(() => {
-    writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
-      activeTab,
-      plannedView,
-      limit,
-      searchTerm,
-      sortColumn: sortConfig.column,
-      sortDirection: sortConfig.direction,
-      aeronaveFilter,
-      categoriaFilter,
-      statusFiltro: [...statusFiltro],
-      setorFilter,
-      categoriasSetorFilter,
-    });
-  }, [
+  const {
     activeTab,
+    setActiveTab,
     plannedView,
+    setPlannedView,
     limit,
+    setLimit,
+    page,
+    setPage,
     searchTerm,
-    sortConfig.column,
-    sortConfig.direction,
+    setSearchTerm,
+    debouncedSearch,
+    setDebouncedSearch,
+    sortConfig,
+    setSortConfig,
     aeronaveFilter,
+    setAeronaveFilter,
     categoriaFilter,
-    statusFiltro,
+    setCategoriaFilter,
     setorFilter,
+    setSetorFilter,
     categoriasSetorFilter,
-  ]);
+    setCategoriasSetorFilter,
+    statusFiltro,
+    setStatusFiltro,
+    getDefaultHistoricoStatusSet,
+    applySingleStatusFromChip,
+    resetStatusFromChip,
+    isOnlyStatusSelected,
+    isHistoricoTab,
+    isPlanejadosTab,
+    usesHistoricoDataset,
+    historicoCategoriaId,
+    setHistoricoCategoriaId,
+    historicoFormatoId,
+    setHistoricoFormatoId,
+    effectiveHistoricoStatusFiltro,
+    isDefaultStatusFilter,
+  } = useQualificacoesFiltros(highlightedHistoricoId);
 
-  const effectiveHistoricoStatusFiltro = useMemo(() => [...statusFiltro], [statusFiltro]);
+  const [autoOpenTurmasModal, setAutoOpenTurmasModal] = useState(false);
+
+
 
   const {
     historico,
@@ -1294,12 +1207,7 @@ export default function Qualificacoes() {
     );
   }, [planejadosHistorico]);
 
-  const isDefaultStatusFilter = useMemo(
-    () =>
-      statusFiltro.size === ALL_STATUS_VALUES.length &&
-      ALL_STATUS_VALUES.every((status) => statusFiltro.has(status)),
-    [statusFiltro],
-  );
+
 
   const shouldUseLocalHistoricoHeaderStats = Boolean(
     debouncedSearch.trim() ||
