@@ -1333,7 +1333,10 @@ export default function Qualificacoes() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!showConfirmDelete) return;
+    if (!showConfirmDelete || showConfirmDelete.id <= 0) {
+      showToast.error('Qualificação inválida para deleção');
+      return false;
+    }
 
     const { id, nome } = showConfirmDelete;
     setDeletandoId(id);

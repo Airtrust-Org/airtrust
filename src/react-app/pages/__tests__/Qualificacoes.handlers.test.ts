@@ -156,9 +156,14 @@ async function handleCancelarPuro(
 }
 
 async function handleConfirmDeletePuro(
-  item: { id: number; nome: string },
+  item: { id: number; nome: string } | null | undefined,
   deps: MutationDeps & { carregarHistorico: typeof carregarHistoricoMock },
 ): Promise<boolean> {
+  if (!item || item.id <= 0) {
+    deps.showToast.error('Qualificação inválida para deleção');
+    return false;
+  }
+
   const { id, nome } = item;
 
   try {
@@ -440,18 +445,23 @@ describe('handleConfirmDelete — comportamental', () => {
     expect(carregarHistoricoMock).not.toHaveBeenCalled();
   });
 
-  it('não dispara rede se item não informado (id 0 é case-limite)', async () => {
-    // Garantir que o handler não é invocado com item inválido sem verificação
-    const result = await handleConfirmDeletePuro(
-      { id: 0, nome: '' },
-      makeDepsDelete(),
-    );
-    // O handler atual não guarda esse guarda; mas fetchWithAuth foi chamado com id=0 — documentamos o comportamento
-    expect(fetchWithAuthMock).toHaveBeenCalledWith(
-      expect.stringContaining('/historico/0'),
-      expect.any(Object),
-    );
-    // Isso é uma lacuna de guarda que deve ser coberta na extração do hook
-    expect(typeof result).toBe('boolean');
+  it('não dispara rede se item ausente', async () => {
+    const result = await handleConfirmDeletePuro(undefined, makeDepsDelete());
+
+    expect(result).toBe(false);
+    expect(fetchWithAuthMock).not.toHaveBeenCalled();
+    expect(showToastMock.error).toHaveBeenCalledWith('Qualificação inválida para deleção');
+    expect(carregarHistoricoMock).not.toHaveBeenCalled();
+  });
+
+  it('não dispara rede se id for 0 ou negativo', async () => {
+    const resultZero = await handleConfirmDeletePuro({ id: 0, nome: '' }, makeDepsDelete());
+    const resultNegativo = await handleConfirmDeletePuro({ id: -1, nome: '' }, makeDepsDelete());
+
+    expect(resultZero).toBe(false);
+    expect(resultNegativo).toBe(false);
+    expect(fetchWithAuthMock).not.toHaveBeenCalled();
+    expect(showToastMock.error).toHaveBeenCalledWith('Qualificação inválida para deleção');
+    expect(carregarHistoricoMock).not.toHaveBeenCalled();
   });
 });
