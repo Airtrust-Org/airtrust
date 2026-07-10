@@ -124,6 +124,10 @@ describe('Qualificacoes mutations — caracterização de contrato', () => {
   describe('4. handleConfirmDelete', () => {
     const chunk = chunkAfter(src, 'const handleConfirmDelete = async (', 70);
 
+    it('bloqueia item ausente ou id inválido antes de chamar a rede', () => {
+      expect(chunk).toMatch(/!showConfirmDelete\s*\|\|\s*showConfirmDelete\.id\s*<=\s*0/);
+    });
+
     it('usa DELETE', () => {
       expect(chunk).toMatch(/method:\s*['"]DELETE['"]/);
     });
