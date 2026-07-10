@@ -120,6 +120,9 @@ import {
 } from './qualificacoes/qualificacoes.helpers';
 import { QualificacaoStatusBadge } from './qualificacoes/components/QualificacaoStatusBadge';
 import { QualificacaoInfoCard } from './qualificacoes/components/QualificacaoInfoCard';
+import { QualificacaoEmptyState } from './qualificacoes/components/QualificacaoEmptyState';
+import { QualificacaoChip } from './qualificacoes/components/QualificacaoChip';
+import { QualificacaoAlert } from './qualificacoes/components/QualificacaoAlert';
 import type { QualificacoesPrefs, QualificacoesModelosPrefs } from './qualificacoes/qualificacoes.types';
 
 
@@ -3113,45 +3116,45 @@ export default function Qualificacoes() {
               }}
               pageSizeOptions={[50, 100]}
               emptyState={
-                <div className="text-center py-12">
-                  <ShieldCheck className="mx-auto mb-4 text-slate-300" size={60} />
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                    Nenhuma qualificação encontrada
-                  </h3>
-                  <p className="text-sm text-slate-600 mb-4">
-                    {historicoTotal > 0 || (historico as HistoricoItem[]).length > 0
+                <QualificacaoEmptyState
+                  icon={ShieldCheck}
+                  title="Nenhuma qualificação encontrada"
+                  description={
+                    historicoTotal > 0 || (historico as HistoricoItem[]).length > 0
                       ? 'Os filtros atuais esconderam os registros carregados.'
-                      : 'Comece adicionando a primeira qualificação ao sistema'}
-                  </p>
-                  {historicoTotal > 0 || (historico as HistoricoItem[]).length > 0 ? (
-                    <button
-                      onClick={() =>
-                        setStatusFiltro(
-                          new Set([
-                            'VALIDA',
-                            'VENCIDA',
-                            'VENCENDO_30',
-                            'RENOVADA',
-                            'PLANEJADA',
-                            'CANCELADA',
-                          ]),
-                        )
-                      }
-                      className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-                    >
-                      <ListFilter className="w-4 h-4" />
-                      <span>Mostrar todos os status</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleNew}
-                      className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Adicionar Qualificação</span>
-                    </button>
-                  )}
-                </div>
+                      : 'Comece adicionando a primeira qualificação ao sistema'
+                  }
+                  action={
+                    historicoTotal > 0 || (historico as HistoricoItem[]).length > 0 ? (
+                      <button
+                        onClick={() =>
+                          setStatusFiltro(
+                            new Set([
+                              'VALIDA',
+                              'VENCIDA',
+                              'VENCENDO_30',
+                              'RENOVADA',
+                              'PLANEJADA',
+                              'CANCELADA',
+                            ]),
+                          )
+                        }
+                        className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                      >
+                        <ListFilter className="w-4 h-4" />
+                        <span>Mostrar todos os status</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleNew}
+                        className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Adicionar Qualificação</span>
+                      </button>
+                    )
+                  }
+                />
               }
             />
           )}
@@ -3448,24 +3451,22 @@ export default function Qualificacoes() {
                   onColumnConfigOpenChange={(open) => setColumnConfigOpen(open ? 'tipos' : null)}
                   showInternalColumnConfigButton={false}
                   emptyState={
-                    <div className="text-center py-12">
-                      <Tag className="mx-auto mb-4 text-slate-300" size={60} />
-                      <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                        Nenhum modelo cadastrado
-                      </h3>
-                      <p className="text-sm text-slate-600 mb-6">
-                        Configure os modelos de qualificações disponíveis no sistema
-                      </p>
-                      {canManageTipos && (
-                        <button
+                    <QualificacaoEmptyState
+                      icon={Tag}
+                      title="Nenhum modelo cadastrado"
+                      description="Configure os modelos de qualificações disponíveis no sistema"
+                      action={
+                        canManageTipos && (
+                          <button
                           onClick={() => setShowTipoModal(true)}
                           className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700"
                         >
                           <Plus className="w-4 h-4" />
                           <span>Novo Modelo</span>
                         </button>
-                      )}
-                    </div>
+                        )
+                      }
+                    />
                   }
                 />
               )}
@@ -3659,17 +3660,11 @@ export default function Qualificacoes() {
               )}
 
               {activeClassifSubTab === 'categorias' && categorias.length === 0 && (
-                <div className="text-center py-12">
-                  <FolderOpen
-                    className="mx-auto mb-4 text-slate-300"
-                    size={60}
-                    aria-hidden="true"
-                  />
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                    Nenhuma categoria encontrada
-                  </h3>
-                  <p className="text-sm text-slate-600">Crie a primeira categoria</p>
-                </div>
+                <QualificacaoEmptyState
+                  icon={FolderOpen}
+                  title="Nenhuma categoria encontrada"
+                  description="Crie a primeira categoria"
+                />
               )}
             </div>
           )}
@@ -4343,7 +4338,7 @@ export default function Qualificacoes() {
               {escopoEnvioConvocacaoPlanejada === 'turma' &&
                 (convocacaoPlanejadaPreview.ausentes_email.length > 0 ||
                   convocacaoPlanejadaPreview.invalidos_email.length > 0) && (
-                  <label className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <label className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={ignorarSemEmailConvocacaoPlanejada}
@@ -4358,14 +4353,12 @@ export default function Qualificacoes() {
 
               {escopoEnvioConvocacaoPlanejada === 'funcionario' &&
                 participanteConvocacaoSelecionado?.status !== 'ready' && (
-                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                    O funcionário selecionado está sem e-mail válido para envio individual.
-                  </div>
+                  <QualificacaoAlert variant="rose">O funcionário selecionado está sem e-mail válido para envio individual.</QualificacaoAlert>
                 )}
 
               {escopoEnvioConvocacaoPlanejada === 'turma' &&
                 convocacaoPlanejadaPreview.ultima_convocacao_em && (
-                  <label className="flex items-start gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                  <label className="flex items-start gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={confirmarReenvioConvocacaoPlanejada}
@@ -4379,11 +4372,11 @@ export default function Qualificacoes() {
                 )}
 
               {convocacaoPlanejadaPreview.avisos.length > 0 && (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <QualificacaoAlert variant="slate">
                   {convocacaoPlanejadaPreview.avisos.map((aviso) => (
                     <p key={aviso}>{aviso}</p>
                   ))}
-                </div>
+                </QualificacaoAlert>
               )}
 
               <div className="flex justify-end gap-3">
@@ -4677,13 +4670,9 @@ export default function Qualificacoes() {
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700 ring-1 ring-purple-200">
-                  Planejada
-                </span>
+                <QualificacaoChip color="purple">Planejada</QualificacaoChip>
                 {planejadaSelecionada.qualificacao_codigo && (
-                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                    {planejadaSelecionada.qualificacao_codigo}
-                  </span>
+                  <QualificacaoChip color="slate">{planejadaSelecionada.qualificacao_codigo}</QualificacaoChip>
                 )}
                 {(planejadaSelecionada as HistoricoItem & { tipo_treinamento?: string | null })
                   .tipo_treinamento && (
