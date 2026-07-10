@@ -58,15 +58,25 @@ interface ParticipantState {
 interface SegmentAssignment {
   pfId: number | null;
   pmId: number | null;
-  curricularId: number | null;
+  curricularIds: number[];
+  finalidadeCodigo: SharedSegmentPurpose;
 }
 
 interface SegmentState {
   inicio: string;
   fim: string;
   atribuicaoFuncionarioId: number | null;
+  atribuicaoFuncionarioIds: number[];
+  finalidadeCodigo: SharedSegmentPurpose;
+  finalidadeTitulo: string;
   funcoes: Array<{ funcionario_id: number; funcao: 'PF' | 'PM' }>;
 }
+
+type SharedSegmentPurpose =
+  | 'SOP_NORMAL'
+  | 'SOP_ANORMAL_EMERGENCIA'
+  | 'ATUACAO_EXAMINADOR'
+  | 'OUTRO';
 
 interface SharedSessionFormProps {
   onClose: () => void;
@@ -109,6 +119,9 @@ interface SharedDetailSegment {
   inicio: string;
   fim: string;
   atribuicao_curricular_id?: number | null;
+  atribuicao_funcionario_ids?: number[];
+  finalidade_codigo?: SharedSegmentPurpose | null;
+  finalidade_titulo?: string | null;
   funcoes?: Array<{ funcionario_id: number; funcao: 'PF' | 'PM' }>;
 }
 
@@ -128,8 +141,29 @@ const EMPTY_PARTICIPANT: ParticipantState = {
 const EMPTY_SEGMENT: SegmentAssignment = {
   pfId: null,
   pmId: null,
-  curricularId: null,
+  curricularIds: [],
+  finalidadeCodigo: 'OUTRO',
 };
+
+const SEGMENT_PURPOSE_OPTIONS: Array<{ value: SharedSegmentPurpose; label: string }> = [
+  { value: 'SOP_NORMAL', label: 'SOP normal' },
+  { value: 'SOP_ANORMAL_EMERGENCIA', label: 'SOP anormal/emergencia' },
+  { value: 'ATUACAO_EXAMINADOR', label: 'Atuacao examinador' },
+  { value: 'OUTRO', label: 'Outro' },
+];
+
+const SEGMENT_PURPOSE_LABELS = SEGMENT_PURPOSE_OPTIONS.reduce<Record<SharedSegmentPurpose, string>>(
+  (acc, option) => {
+    acc[option.value] = option.label;
+    return acc;
+  },
+  {
+    SOP_NORMAL: 'SOP normal',
+    SOP_ANORMAL_EMERGENCIA: 'SOP anormal/emergencia',
+    ATUACAO_EXAMINADOR: 'Atuacao examinador',
+    OUTRO: 'Outro',
+  },
+);
 
 const STEP_LABELS: Record<SharedSessionStep, string> = {
   tripulacao: '1. Tripulação',
@@ -279,7 +313,10 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       {
         inicio: horarioInicio,
         fim: effectiveSplitTime,
-        atribuicaoFuncionarioId: segmentAssignments[0].curricularId,
+        atribuicaoFuncionarioId: segmentAssignments[0].curricularIds[0] || null,
+        atribuicaoFuncionarioIds: segmentAssignments[0].curricularIds,
+        finalidadeCodigo: segmentAssignments[0].finalidadeCodigo,
+        finalidadeTitulo: SEGMENT_PURPOSE_LABELS[segmentAssignments[0].finalidadeCodigo],
         funcoes: [
           { funcionario_id: segmentAssignments[0].pfId || 0, funcao: 'PF' },
           { funcionario_id: segmentAssignments[0].pmId || 0, funcao: 'PM' },
@@ -288,7 +325,10 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       {
         inicio: effectiveSplitTime,
         fim: horarioFim,
-        atribuicaoFuncionarioId: segmentAssignments[1].curricularId,
+        atribuicaoFuncionarioId: segmentAssignments[1].curricularIds[0] || null,
+        atribuicaoFuncionarioIds: segmentAssignments[1].curricularIds,
+        finalidadeCodigo: segmentAssignments[1].finalidadeCodigo,
+        finalidadeTitulo: SEGMENT_PURPOSE_LABELS[segmentAssignments[1].finalidadeCodigo],
         funcoes: [
           { funcionario_id: segmentAssignments[1].pfId || 0, funcao: 'PF' },
           { funcionario_id: segmentAssignments[1].pmId || 0, funcao: 'PM' },
@@ -313,8 +353,8 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       if (assignment.pfId && assignment.pfId === assignment.pmId) {
         errors.push(`${label}: PF e PM devem ser pessoas diferentes.`);
       }
-      if (!assignment.curricularId) {
-        errors.push(`${label}: selecione o conteúdo curricular.`);
+      if (assignment.curricularIds.length === 0) {
+        errors.push(`${label}: selecione ao menos um currículo atendido.`);
       }
     });
     return errors;
@@ -445,12 +485,14 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       {
         pfId: validParticipantIds[0],
         pmId: validParticipantIds[1],
-        curricularId: validCurricularIds[0],
+        curricularIds: validCurricularIds,
+        finalidadeCodigo: 'SOP_NORMAL',
       },
       {
         pfId: validParticipantIds[1],
         pmId: validParticipantIds[0],
-        curricularId: validCurricularIds[1] || validCurricularIds[0],
+        curricularIds: validCurricularIds,
+        finalidadeCodigo: 'SOP_ANORMAL_EMERGENCIA',
       },
     ];
     setSegmentAssignments((previous) => {
@@ -461,9 +503,10 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         pmId: validParticipantIds.includes(Number(assignment.pmId))
           ? assignment.pmId
           : defaults[index].pmId,
-        curricularId: validCurricularIds.includes(Number(assignment.curricularId))
-          ? assignment.curricularId
-          : defaults[index].curricularId,
+        curricularIds: assignment.curricularIds.filter((id) => validCurricularIds.includes(Number(id))).length > 0
+          ? assignment.curricularIds.filter((id) => validCurricularIds.includes(Number(id)))
+          : defaults[index].curricularIds,
+        finalidadeCodigo: assignment.finalidadeCodigo || defaults[index].finalidadeCodigo,
       })) as [SegmentAssignment, SegmentAssignment];
       return arraysEqual(previous, normalized) ? previous : normalized;
     });
@@ -547,13 +590,21 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         const restoredSegments = detailSegments.slice(0, 2).map((segment) => {
           const pf = (segment.funcoes || []).find((role) => role.funcao === 'PF');
           const pm = (segment.funcoes || []).find((role) => role.funcao === 'PM');
-          const curricular = (detail.atribuicoes || []).find(
+          const explicitCurricularIds = (segment.atribuicao_funcionario_ids || [])
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0);
+          const legacyCurricular = (detail.atribuicoes || []).find(
             (assignment) => Number(assignment.id) === Number(segment.atribuicao_curricular_id),
           );
           return {
             pfId: pf?.funcionario_id || null,
             pmId: pm?.funcionario_id || null,
-            curricularId: curricular?.funcionario_id || null,
+            curricularIds: explicitCurricularIds.length > 0
+              ? explicitCurricularIds
+              : legacyCurricular?.funcionario_id
+                ? [Number(legacyCurricular.funcionario_id)]
+                : [],
+            finalidadeCodigo: segment.finalidade_codigo || 'OUTRO',
           };
         });
         if (restoredSegments.length === 2) {
@@ -595,7 +646,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             if (role.funcao === 'PF') pf += duration;
             if (role.funcao === 'PM') pm += duration;
           }
-          if (segment.atribuicaoFuncionarioId === funcionarioId) curricular += duration;
+          if (segment.atribuicaoFuncionarioIds.includes(funcionarioId)) curricular += duration;
         }
         // Garantia defensiva: o total nunca pode exceder a duração da reserva
         const reservaDuracao = horarioInicio && horarioFim
@@ -673,6 +724,9 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           inicio: segment.inicio,
           fim: segment.fim,
           atribuicao_funcionario_id: segment.atribuicaoFuncionarioId,
+          atribuicao_funcionario_ids: segment.atribuicaoFuncionarioIds,
+          finalidade_codigo: segment.finalidadeCodigo,
+          finalidade_titulo: segment.finalidadeTitulo,
           funcoes: segment.funcoes,
         })),
       };
@@ -907,12 +961,11 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {segments.map((segment, index) => {
-          const curricularParticipant = participants.find(
-            (participant) => participant.funcionario?.id === segmentAssignments[index].curricularId,
+          const curricularParticipants = participants.filter(
+            (participant) =>
+              participant.funcionario &&
+              segmentAssignments[index].curricularIds.includes(participant.funcionario.id),
           );
-          const curricularModel = curricularParticipant?.modeloSessaoId
-            ? modelById.get(curricularParticipant.modeloSessaoId)
-            : null;
           return (
             <div key={index} className="rounded-lg border border-slate-200 bg-white p-4">
               <div className="mb-3 flex items-center justify-between">
@@ -959,32 +1012,68 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
                   </select>
                 </label>
                 <label className="text-xs font-medium text-slate-600">
-                  Conteúdo curricular
+                  Finalidade do segmento
                   <select
-                    aria-label={`Conteúdo curricular do segmento ${index + 1}`}
-                    value={segmentAssignments[index].curricularId ?? ''}
+                    aria-label={`Finalidade do segmento ${index + 1}`}
+                    value={segmentAssignments[index].finalidadeCodigo}
                     onChange={(event) => setSegmentAssignments((previous) => {
                       const next: [SegmentAssignment, SegmentAssignment] = [...previous];
-                      next[index] = { ...next[index], curricularId: Number(event.target.value) || null };
+                      next[index] = {
+                        ...next[index],
+                        finalidadeCodigo: event.target.value as SharedSegmentPurpose,
+                      };
                       return next;
                     })}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
                   >
-                    <option value="">Selecione o conteúdo</option>
+                    {SEGMENT_PURPOSE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="rounded-lg border border-slate-200 px-3 py-2">
+                  <p className="text-xs font-medium text-slate-600">Currículos atendidos</p>
+                  <div className="mt-2 space-y-2">
                     {participants
                       .filter((participant) => participant.cumpreTreinamento && participant.funcionario)
                       .map((participant) => {
+                        const funcionarioId = participant.funcionario!.id;
                         const model = participant.modeloSessaoId ? modelById.get(participant.modeloSessaoId) : null;
+                        const checked = segmentAssignments[index].curricularIds.includes(funcionarioId);
                         return (
-                          <option key={participant.funcionario!.id} value={participant.funcionario!.id}>
-                            {participant.funcionario!.nome} — {model?.codigo || 'Modelo pendente'}
-                          </option>
+                          <label key={funcionarioId} className="flex cursor-pointer items-start gap-2 text-xs text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) => setSegmentAssignments((previous) => {
+                                const next: [SegmentAssignment, SegmentAssignment] = [...previous];
+                                const currentIds = new Set(next[index].curricularIds);
+                                if (event.target.checked) currentIds.add(funcionarioId);
+                                else currentIds.delete(funcionarioId);
+                                next[index] = {
+                                  ...next[index],
+                                  curricularIds: Array.from(currentIds).sort((left, right) => left - right),
+                                };
+                                return next;
+                              })}
+                              className="mt-0.5 rounded"
+                            />
+                            <span>
+                              {participant.funcionario!.nome}
+                              <span className="block text-slate-500">{model?.codigo || 'Modelo pendente'}</span>
+                            </span>
+                          </label>
                         );
                       })}
-                  </select>
-                </label>
+                  </div>
+                </div>
                 <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  Conteúdo: {curricularParticipant?.funcionario?.nome || 'Pendente'} — {curricularModel?.codigo || 'Modelo pendente'}
+                  Currículos: {curricularParticipants.length > 0
+                    ? curricularParticipants.map((participant) => {
+                      const model = participant.modeloSessaoId ? modelById.get(participant.modeloSessaoId) : null;
+                      return `${participant.funcionario!.nome} - ${model?.codigo || 'Modelo pendente'}`;
+                    }).join('; ')
+                    : 'Pendente'}
                 </p>
               </div>
             </div>
@@ -1007,13 +1096,13 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             <table className="min-w-full divide-y divide-slate-200 text-xs">
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
-                  {['Piloto', 'Condição', 'Modelo de Sessão', 'Total', 'PF', 'PM', 'Ficha', 'Qualificação'].map((header) => (
+                  {['Piloto', 'Condição', 'Modelo de Sessão', 'Total', 'PF', 'PM', 'Curricular', 'Ficha', 'Qualificação'].map((header) => (
                     <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
-                {summary.map(({ participant, total, pf, pm, model }) => (
+                {summary.map(({ participant, total, pf, pm, curricular, model }) => (
                   <tr key={participant.funcionario!.id}>
                     <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{participant.funcionario!.nome}</td>
                     <td className="whitespace-nowrap px-3 py-2">{participant.cumpreTreinamento ? 'Curricular' : 'Apoio'}</td>
@@ -1021,6 +1110,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
                     <td className="whitespace-nowrap px-3 py-2">{formatMinutes(total)}</td>
                     <td className="whitespace-nowrap px-3 py-2">{formatMinutes(pf)}</td>
                     <td className="whitespace-nowrap px-3 py-2">{formatMinutes(pm)}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{formatMinutes(curricular)}</td>
                     <td className="whitespace-nowrap px-3 py-2">{participant.cumpreTreinamento ? 'Sim' : 'Não'}</td>
                     <td className="whitespace-nowrap px-3 py-2">
                       {participant.cumpreTreinamento

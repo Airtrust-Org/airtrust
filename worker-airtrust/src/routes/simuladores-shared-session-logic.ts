@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 type SharedRole = 'PF' | 'PM';
 
+export const SHARED_SEGMENT_PURPOSE_CODES = [
+  'SOP_NORMAL',
+  'SOP_ANORMAL_EMERGENCIA',
+  'ATUACAO_EXAMINADOR',
+  'OUTRO',
+] as const;
+
+export type SharedSegmentPurpose = (typeof SHARED_SEGMENT_PURPOSE_CODES)[number];
+
 export const sharedSessionParticipantSchema = z.object({
   funcionario_id: z.coerce.number().int().positive(),
   cumpre_treinamento: z.coerce.boolean().default(false),
@@ -19,6 +28,9 @@ export const sharedSessionSegmentSchema = z.object({
   inicio: z.string().regex(/^\d{2}:\d{2}$/),
   fim: z.string().regex(/^\d{2}:\d{2}$/),
   atribuicao_funcionario_id: z.coerce.number().int().positive().nullable().optional(),
+  atribuicao_funcionario_ids: z.array(z.coerce.number().int().positive()).optional().default([]),
+  finalidade_codigo: z.enum(SHARED_SEGMENT_PURPOSE_CODES).optional().default('OUTRO'),
+  finalidade_titulo: z.string().trim().max(120).nullable().optional(),
   funcoes: z.array(sharedSessionSegmentRoleSchema).min(2),
 });
 
@@ -87,6 +99,9 @@ export type NormalizedSharedSessionRequest = Omit<
       inicio_min: number;
       fim_min: number;
       duracao_minutos: number;
+      atribuicao_funcionario_ids: number[];
+      finalidade_codigo: SharedSegmentPurpose;
+      finalidade_titulo: string | null;
     }
   >;
   resumo_participantes: SharedSessionSummary[];
@@ -104,6 +119,7 @@ export function calculateSharedSessionParticipantSummaries(
   segmentos: Array<{
     duracao_minutos: number;
     atribuicao_funcionario_id?: number | null;
+    atribuicao_funcionario_ids?: number[] | null;
     funcoes: Array<{ funcionario_id: number; funcao: SharedRole }>;
   }>,
 ): SharedSessionSummary[] {
@@ -136,8 +152,22 @@ export function calculateSharedSessionParticipantSummaries(
       }
     }
 
-    if (segmento.atribuicao_funcionario_id) {
-      const summary = map.get(segmento.atribuicao_funcionario_id);
+    const explicitCurricularIds = Array.from(
+      new Set(
+        (segmento.atribuicao_funcionario_ids || [])
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0),
+      ),
+    );
+    const curricularIds =
+      explicitCurricularIds.length > 0
+        ? explicitCurricularIds
+        : segmento.atribuicao_funcionario_id
+          ? [Number(segmento.atribuicao_funcionario_id)]
+          : [];
+
+    for (const funcionarioId of curricularIds) {
+      const summary = map.get(funcionarioId);
       if (summary) {
         summary.curricular_minutos += segmento.duracao_minutos;
       }
@@ -227,19 +257,40 @@ export function validateAndNormalizeSharedSessionRequest(
         throw new Error(`Segmento ${index + 1} precisa ter exatamente um PM`);
       }
 
-      if (segmento.atribuicao_funcionario_id) {
+      const explicitCurricularIds = Array.from(
+        new Set(
+          (segmento.atribuicao_funcionario_ids || [])
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0),
+        ),
+      );
+      const curricularIds =
+        explicitCurricularIds.length > 0
+          ? explicitCurricularIds
+          : segmento.atribuicao_funcionario_id
+            ? [Number(segmento.atribuicao_funcionario_id)]
+            : [];
+
+      if (curricularIds.length === 0) {
+        throw new Error(`Segmento ${index + 1} precisa atender ao menos um currículo`);
+      }
+
+      for (const funcionarioId of curricularIds) {
         const participante = participantes.find(
-          (item) => item.funcionario_id === segmento.atribuicao_funcionario_id,
+          (item) => item.funcionario_id === funcionarioId,
         );
         if (!participante?.cumpre_treinamento) {
           throw new Error(
-            `Segmento ${index + 1} referencia atribuição curricular inválida para ${segmento.atribuicao_funcionario_id}`,
+            `Segmento ${index + 1} referencia atribuição curricular inválida para ${funcionarioId}`,
           );
         }
       }
 
       return {
         ...segmento,
+        atribuicao_funcionario_ids: curricularIds,
+        finalidade_codigo: segmento.finalidade_codigo || 'OUTRO',
+        finalidade_titulo: segmento.finalidade_titulo || null,
         ordem: index + 1,
         inicio_min: inicioMin,
         fim_min: fimMin,

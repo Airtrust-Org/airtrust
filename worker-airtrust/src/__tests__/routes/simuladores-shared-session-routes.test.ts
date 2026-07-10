@@ -91,6 +91,19 @@ function createDbForSharedRoutes(options?: { modeloSemManobras?: boolean }) {
             };
           }
 
+          if (query.includes('FROM simulador_atribuicoes_curriculares sac') && query.includes('sac.id = ?')) {
+            return {
+              id: Number(args[0]),
+              agendamento_id: Number(args[1]),
+              participante_id: 701,
+              funcionario_id: 101,
+            };
+          }
+
+          if (query.includes('FROM fichas_sessao') && query.includes('atribuicao_curricular_id = ?')) {
+            return null;
+          }
+
           return null;
         },
         all: async () => {
@@ -229,6 +242,8 @@ describe('simuladores shared session routes', () => {
               inicio: '07:00',
               fim: '08:00',
               atribuicao_funcionario_id: 101,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'SOP_NORMAL',
               funcoes: [
                 { funcionario_id: 101, funcao: 'PF' },
                 { funcionario_id: 102, funcao: 'PM' },
@@ -238,6 +253,8 @@ describe('simuladores shared session routes', () => {
               inicio: '08:00',
               fim: '09:00',
               atribuicao_funcionario_id: 102,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
               funcoes: [
                 { funcionario_id: 102, funcao: 'PF' },
                 { funcionario_id: 101, funcao: 'PM' },
@@ -290,6 +307,8 @@ describe('simuladores shared session routes', () => {
               inicio: '07:00',
               fim: '08:00',
               atribuicao_funcionario_id: 101,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'SOP_NORMAL',
               funcoes: [
                 { funcionario_id: 101, funcao: 'PF' },
                 { funcionario_id: 102, funcao: 'PM' },
@@ -299,6 +318,8 @@ describe('simuladores shared session routes', () => {
               inicio: '08:00',
               fim: '09:00',
               atribuicao_funcionario_id: 102,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
               funcoes: [
                 { funcionario_id: 102, funcao: 'PF' },
                 { funcionario_id: 101, funcao: 'PM' },
@@ -316,8 +337,101 @@ describe('simuladores shared session routes', () => {
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_agendamentos'))).toBe(true);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'))).toBe(true);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_agendamento_segmentos'))).toBe(true);
+    expect(batches[0].filter((item) => item.query.startsWith('INSERT INTO simulador_segmento_atribuicoes'))).toHaveLength(4);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_segmento_participantes'))).toBe(true);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO fichas_sessao'))).toBe(true);
+  });
+
+  it('rejects a shared session when the supervisor instructor is a curricular trainee', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 101,
+          participantes: [
+            {
+              funcionario_id: 101,
+              cumpre_treinamento: true,
+              modelo_sessao_id: 2001,
+              gera_ficha: true,
+            },
+            {
+              funcionario_id: 102,
+              cumpre_treinamento: true,
+              modelo_sessao_id: 2002,
+              gera_ficha: true,
+            },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '08:00',
+              atribuicao_funcionario_ids: [101, 102],
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              atribuicao_funcionario_ids: [101, 102],
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(400);
+    expect(batches).toHaveLength(0);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Instrutor supervisor não pode ser o próprio treinando curricular',
+    });
+  });
+
+  it('cancels one curricular assignment without deleting the other segment-curriculum relations', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901/atribuicoes/501/cancelar', {
+        method: 'POST',
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(batches).toHaveLength(1);
+    expect(
+      batches[0].some(
+        (item) =>
+          item.query.startsWith('UPDATE simulador_segmento_atribuicoes') &&
+          item.query.includes('WHERE atribuicao_curricular_id = ?') &&
+          item.args[0] === 501 &&
+          item.args[1] === 6,
+      ),
+    ).toBe(true);
+    expect(
+      batches[0].some(
+        (item) =>
+          item.query.startsWith('UPDATE simulador_segmento_atribuicoes') &&
+          !item.query.includes('WHERE atribuicao_curricular_id = ?'),
+      ),
+    ).toBe(false);
   });
 
   it('creates shared session even when ficha model has no specific manobras (NOTECHS always appended)', async () => {
