@@ -1333,77 +1333,17 @@ export default function Qualificacoes() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!showConfirmDelete || showConfirmDelete.id <= 0) {
-      showToast.error('Qualificação inválida para deleção');
-      return false;
+    const item = showConfirmDelete;
+    if (item?.id && item.id > 0) {
+      setDeletandoId(item.id);
     }
 
-    const { id, nome } = showConfirmDelete;
-    setDeletandoId(id);
-
     try {
-      logger.info('[Deletar] Iniciando deleção da qualificação:', id);
-
-      const apiUrl = API_BASE_URL;
-      setDeletandoId(null); // Keep fallback if error? No, just remove token check.
-
-      const url = `${apiUrl}/qualificacoes/historico/${id}`;
-      logger.info('[Deletar] URL:', url);
-
-      const response = await fetchWithAuth(url, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      logger.info('[Deletar] Response status:', response.status);
-      const json = await response.json();
-
-      if (json.success) {
-        showToast.success(`"${nome}" deletada com sucesso!`);
+      const deletou = await handleConfirmDeleteMutation(item);
+      if (deletou) {
         setShowConfirmDelete(null);
-
-        // Recarregar dados
-        await carregarHistorico();
-        // Recarregar stats também
-        const statsResponse = await fetchWithAuth(
-          `${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`,
-          {
-            headers: token
-              ? {
-                  'Cache-Control': 'no-cache',
-                  Pragma: 'no-cache',
-                }
-              : {},
-          },
-        );
-        if (statsResponse.ok) {
-          const json = await statsResponse.json();
-          const data = json.data || json;
-          setDashboardStats({
-            total: data.total_ativas || 0,
-            validas: data.validas || 0,
-            vencendo: data.a_vencer_30_dias || 0,
-            vencidas: data.vencidas || 0,
-            renovadas: data.renovadas || 0,
-            planejadas: data.planejadas || 0,
-          });
-        }
-      } else {
-        const error = await response.json();
-        console.error('[Deletar] Erro na resposta:', error);
-
-        // Mensagem específica para erro 403 (permissão negada)
-        if (response.status === 403) {
-          showToast.error('Permissão negada. Apenas administradores podem deletar qualificações.');
-        } else {
-          showToast.error(error.error || 'Erro ao deletar qualificação');
-        }
       }
-    } catch (error) {
-      console.error('[Deletar] Erro ao deletar:', error);
-      showToast.error('Erro ao deletar qualificação');
+      return deletou;
     } finally {
       setDeletandoId(null);
     }
@@ -1474,6 +1414,7 @@ export default function Qualificacoes() {
     handleConfirmar: handleConfirmarMutation,
     handleCancelar: handleCancelarMutation,
     handleReagendarPlanejada: handleReagendarPlanejadaMutation,
+    handleConfirmDeleteMutation,
   } = useQualificacoesMutations({
     API_BASE_URL,
     fetchWithAuth,

@@ -3,6 +3,11 @@ interface HistoricoMutationItem {
   funcionario_id?: number;
 }
 
+interface ConfirmDeleteMutationItem {
+  id: number;
+  nome: string;
+}
+
 interface QualificacoesMutationsDeps {
   API_BASE_URL: string;
   fetchWithAuth: (
@@ -137,9 +142,54 @@ export function useQualificacoesMutations(deps: QualificacoesMutationsDeps) {
     }
   };
 
+  const handleConfirmDeleteMutation = async (
+    item: ConfirmDeleteMutationItem | null | undefined,
+  ): Promise<boolean> => {
+    if (!item || item.id <= 0) {
+      deps.showToast.error('Qualificação inválida para deleção');
+      return false;
+    }
+
+    const { id, nome } = item;
+
+    try {
+      const response = await deps.fetchWithAuth(
+        `${deps.API_BASE_URL}/qualificacoes/historico/${id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      const json = await response.json();
+
+      if (json.success) {
+        deps.showToast.success(`"${nome}" deletada com sucesso!`);
+        await deps.recarregarHistoricoEStats();
+        return true;
+      }
+
+      if (response.status === 403) {
+        deps.showToast.error(
+          'Permissão negada. Apenas administradores podem deletar qualificações.',
+        );
+      } else {
+        deps.showToast.error(json.error || 'Erro ao deletar qualificação');
+      }
+    } catch (error) {
+      console.error('Erro ao deletar qualificação:', error);
+      deps.showToast.error('Erro ao deletar qualificação');
+    }
+
+    return false;
+  };
+
   return {
     handleConfirmar,
     handleCancelar,
     handleReagendarPlanejada,
+    handleConfirmDeleteMutation,
   };
 }

@@ -122,26 +122,32 @@ describe('Qualificacoes mutations — caracterização de contrato', () => {
 
   // ─── 4. deleção ──────────────────────────────────────────────────────────────
   describe('4. handleConfirmDelete', () => {
-    const chunk = chunkAfter(src, 'const handleConfirmDelete = async (', 70);
+    const componentChunk = chunkAfter(src, 'const handleConfirmDelete = async () => {', 30);
+    const hookChunk = chunkAfter(srcMutationsHook, 'const handleConfirmDeleteMutation = async (', 90);
 
-    it('bloqueia item ausente ou id inválido antes de chamar a rede', () => {
-      expect(chunk).toMatch(/!showConfirmDelete\s*\|\|\s*showConfirmDelete\.id\s*<=\s*0/);
+    it('mantém a guarda para item ausente ou id inválido na mutation', () => {
+      expect(hookChunk).toMatch(/!item\s*\|\|\s*item\.id\s*<=\s*0/);
+    });
+
+    it('o componente delega a deleção para a mutation e mantém o modal local', () => {
+      expect(componentChunk).toMatch(/handleConfirmDeleteMutation\(item\)/);
+      expect(componentChunk).toMatch(/setShowConfirmDelete\(null\)/);
     });
 
     it('usa DELETE', () => {
-      expect(chunk).toMatch(/method:\s*['"]DELETE['"]/);
+      expect(hookChunk).toMatch(/method:\s*['"]DELETE['"]/);
     });
 
     it('URL aponta para /qualificacoes/historico/:id', () => {
-      expect(chunk).toMatch(/qualificacoes\/historico/);
+      expect(hookChunk).toMatch(/qualificacoes\/historico/);
     });
 
     it('mostra toast de sucesso após deletar', () => {
-      expect(chunk).toMatch(/showToast\.success/);
+      expect(hookChunk).toMatch(/showToast\.success/);
     });
 
     it('refetcha/invalida após sucesso', () => {
-      expect(chunk).toMatch(/carregarHistorico|recarregar|invalidateQueries|refetch/);
+      expect(hookChunk).toMatch(/carregarHistorico|recarregar|invalidateQueries|refetch/);
     });
   });
 
