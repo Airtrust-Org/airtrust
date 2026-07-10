@@ -119,6 +119,7 @@ import {
   getStatusLabel,
 } from './qualificacoes/qualificacoes.helpers';
 import { QualificacaoStatusBadge } from './qualificacoes/components/QualificacaoStatusBadge';
+import { QualificacaoInfoCard } from './qualificacoes/components/QualificacaoInfoCard';
 import type { QualificacoesPrefs, QualificacoesModelosPrefs } from './qualificacoes/qualificacoes.types';
 
 
@@ -4712,76 +4713,48 @@ export default function Qualificacoes() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  Funcionario
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {planejadaSelecionada.funcionario_nome || '-'}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  Qualificacao
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {planejadaSelecionada.qualificacao_nome || '-'}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  Data planejada
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {(() => {
-                    const dataAtual =
-                      (planejadaSelecionada as HistoricoItem & { data_realizacao?: string })
-                        .data_realizacao || planejadaSelecionada.data_conclusao;
-                    return dataAtual
-                      ? parseDateLocal(dataAtual)?.toLocaleDateString('pt-BR') || dataAtual
-                      : '-';
-                  })()}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  Vencimento
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {planejadaSelecionada.data_vencimento
-                    ? parseDateLocal(planejadaSelecionada.data_vencimento)?.toLocaleDateString(
-                        'pt-BR',
-                      ) || planejadaSelecionada.data_vencimento
-                    : '-'}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  Instrutor
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {planejadaSelecionada.instrutor || '-'}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  Registro
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  #{planejadaSelecionada.id}
-                </p>
-              </div>
+              <QualificacaoInfoCard 
+                label="Funcionario" 
+                value={planejadaSelecionada.funcionario_nome || '-'} 
+              />
+              <QualificacaoInfoCard 
+                label="Qualificacao" 
+                value={planejadaSelecionada.qualificacao_nome || '-'} 
+              />
+              <QualificacaoInfoCard 
+                label="Data planejada" 
+                value={(() => {
+                  const dataAtual =
+                    (planejadaSelecionada as HistoricoItem & { data_realizacao?: string })
+                      .data_realizacao || planejadaSelecionada.data_conclusao;
+                  return dataAtual
+                    ? parseDateLocal(dataAtual)?.toLocaleDateString('pt-BR') || dataAtual
+                    : '-';
+                })()} 
+              />
+              <QualificacaoInfoCard 
+                label="Vencimento" 
+                value={planejadaSelecionada.data_vencimento
+                  ? parseDateLocal(planejadaSelecionada.data_vencimento)?.toLocaleDateString(
+                      'pt-BR',
+                    ) || planejadaSelecionada.data_vencimento
+                  : '-'} 
+              />
+              <QualificacaoInfoCard 
+                label="Instrutor" 
+                value={planejadaSelecionada.instrutor || '-'} 
+              />
+              <QualificacaoInfoCard 
+                label="Registro" 
+                value={`#${planejadaSelecionada.id}`} 
+              />
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                Observacoes
-              </p>
-              <p className="mt-2 text-sm text-slate-700">
-                {planejadaSelecionada.observacoes ||
-                  'Sem observacoes adicionais neste planejamento.'}
-              </p>
-            </div>
+            <QualificacaoInfoCard 
+              label="Observacoes" 
+              value={planejadaSelecionada.observacoes || 'Sem observacoes adicionais neste planejamento.'} 
+              valueClassName="text-slate-700"
+            />
 
             <FormField label="Nova data planejada">
               <TextInput
