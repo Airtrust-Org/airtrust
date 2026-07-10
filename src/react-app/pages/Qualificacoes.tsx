@@ -111,6 +111,7 @@ import {
   QUALIFICACOES_PREFS_KEY,
 } from './qualificacoes/qualificacoes.constants';
 import { useQualificacoesFiltros } from './qualificacoes/hooks/useQualificacoesFiltros';
+import { useQualificacoesMutations } from './qualificacoes/hooks/useQualificacoesMutations';
 import {
   normalizeCategoriaKey,
   getCategoriaCorDisplay,
@@ -1304,52 +1305,6 @@ export default function Qualificacoes() {
     setShowRenovarModal(true);
   };
 
-  // Confirmar qualificação planejada como concluída
-  const handleConfirmar = async (
-    row: HistoricoItem,
-    renovarAnterior = true,
-    pedirConfirmacao = true,
-  ) => {
-    if (
-      pedirConfirmacao &&
-      !(await confirmDialog('Confirmar que esta qualificação foi realizada conforme planejado?'))
-    ) {
-      return false;
-    }
-
-    try {
-      const response = await fetchWithAuth(
-        `${API_BASE_URL}/qualificacoes/historico/${row.id}/confirmar`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ renovar_anterior: renovarAnterior }),
-        },
-      );
-
-      if (response.ok) {
-        showToast.success('Qualificação confirmada com sucesso!');
-        emitirEventoModulo({
-          modulo: 'qualificacoes',
-          tipo: 'QUALIFICACAO_ATUALIZADA',
-          funcionarioIds: row.funcionario_id ? [row.funcionario_id] : undefined,
-        });
-        await recarregarHistoricoEStats();
-        return true;
-      } else {
-        const error = await response.json();
-        showToast.error(error.error || 'Erro ao confirmar qualificação');
-      }
-    } catch (error) {
-      console.error('Erro ao confirmar:', error);
-      showToast.error('Erro ao confirmar qualificação');
-    }
-
-    return false;
-  };
-
   // Destacar qualificações planejadas com data já ultrapassada
   const isPlanejadaVencida = (item: HistoricoItem): boolean => {
     const status = String(
@@ -1367,90 +1322,6 @@ export default function Qualificacoes() {
   };
 
   // Ícone inline replace do modal — operador vê a linha colorida + ícone na tabela, não modal interruptivo
-
-  // Cancelar qualificação planejada
-  const handleCancelar = async (row: HistoricoItem) => {
-    if (
-      !(await confirmDialog(
-        'Cancelar esta qualificação planejada? Esta ação não pode ser desfeita.',
-      ))
-    )
-      return;
-
-    try {
-      const response = await fetchWithAuth(
-        `${API_BASE_URL}/qualificacoes/historico/${row.id}/cancelar`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-
-      if (response.ok) {
-        showToast.success('Qualificação cancelada com sucesso!');
-        emitirEventoModulo({
-          modulo: 'qualificacoes',
-          tipo: 'QUALIFICACAO_ATUALIZADA',
-          funcionarioIds: row.funcionario_id ? [row.funcionario_id] : undefined,
-        });
-        await recarregarHistoricoEStats();
-        return true;
-      } else {
-        const error = await response.json();
-        showToast.error(error.error || 'Erro ao cancelar qualificação');
-      }
-    } catch (error) {
-      console.error('Erro ao cancelar:', error);
-      showToast.error('Erro ao cancelar qualificação');
-    }
-
-    return false;
-  };
-
-  const handleReagendarPlanejada = async (row: HistoricoItem, novaData: string) => {
-    if (!novaData) {
-      showToast.error('Informe a nova data planejada');
-      return false;
-    }
-
-    try {
-      setSalvandoPlanejadaId(row.id);
-
-      const response = await fetchWithAuth(
-        `${API_BASE_URL}/qualificacoes/historico/${row.id}/reagendar`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ nova_data_planejada: novaData }),
-        },
-      );
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        showToast.error(error.error || 'Erro ao reagendar qualificação');
-        return false;
-      }
-
-      showToast.success('Qualificação reagendada com sucesso!');
-      emitirEventoModulo({
-        modulo: 'qualificacoes',
-        tipo: 'QUALIFICACAO_ATUALIZADA',
-        funcionarioIds: row.funcionario_id ? [row.funcionario_id] : undefined,
-      });
-      await recarregarHistoricoEStats();
-      return true;
-    } catch (error) {
-      console.error('Erro ao reagendar qualificação:', error);
-      showToast.error('Erro ao reagendar qualificação');
-      return false;
-    } finally {
-      setSalvandoPlanejadaId(null);
-    }
-  };
 
   // ModalRenovarQualificacao cuidará do POST e do loading; aqui apenas controlamos abertura/fechamento
 
@@ -1595,6 +1466,55 @@ export default function Qualificacoes() {
       planejadas: data.planejadas || 0,
     });
   }, [carregarHistorico]);
+
+  const {
+    handleConfirmar: handleConfirmarMutation,
+    handleCancelar: handleCancelarMutation,
+    handleReagendarPlanejada: handleReagendarPlanejadaMutation,
+  } = useQualificacoesMutations({
+    API_BASE_URL,
+    fetchWithAuth,
+    showToast,
+    emitirEventoModulo,
+    recarregarHistoricoEStats,
+  });
+
+  const handleConfirmar = async (
+    row: HistoricoItem,
+    renovarAnterior = true,
+    pedirConfirmacao = true,
+  ) => {
+    if (
+      pedirConfirmacao &&
+      !(await confirmDialog('Confirmar que esta qualificação foi realizada conforme planejado?'))
+    ) {
+      return false;
+    }
+
+    return handleConfirmarMutation(row, renovarAnterior);
+  };
+
+  const handleCancelar = async (row: HistoricoItem) => {
+    if (
+      !(await confirmDialog(
+        'Cancelar esta qualificação planejada? Esta ação não pode ser desfeita.',
+      ))
+    ) {
+      return false;
+    }
+
+    return handleCancelarMutation(row);
+  };
+
+  const handleReagendarPlanejada = async (row: HistoricoItem, novaData: string) => {
+    setSalvandoPlanejadaId(row.id);
+
+    try {
+      return await handleReagendarPlanejadaMutation(row, novaData);
+    } finally {
+      setSalvandoPlanejadaId(null);
+    }
+  };
 
   const fecharModalPlanejada = () => {
     setShowPlanejadaModal(false);

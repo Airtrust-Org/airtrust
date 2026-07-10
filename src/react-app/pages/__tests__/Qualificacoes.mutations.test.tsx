@@ -24,6 +24,10 @@ import { describe, it, expect } from 'vitest';
 const src = readFileSync('src/react-app/pages/Qualificacoes.tsx', 'utf-8');
 const srcRenovar = readFileSync('src/react-app/components/modals/ModalRenovarQualificacao.tsx', 'utf-8');
 const srcFiltros = readFileSync('src/react-app/pages/qualificacoes/hooks/useQualificacoesFiltros.ts', 'utf-8');
+const srcMutationsHook = readFileSync(
+  'src/react-app/pages/qualificacoes/hooks/useQualificacoesMutations.ts',
+  'utf-8',
+);
 
 /** Extrai um trecho de `source` a partir da linha que contém `anchor` */
 function chunkAfter(source: string, anchor: string, lines = 60): string {
@@ -64,7 +68,7 @@ describe('Qualificacoes mutations — caracterização de contrato', () => {
 
   // ─── 2. confirmar planejada ───────────────────────────────────────────────────
   describe('2. handleConfirmar (planejada → concluída)', () => {
-    const chunk = chunkAfter(src, 'const handleConfirmar = async (', 70);
+    const chunk = chunkAfter(srcMutationsHook, 'const handleConfirmar = async (', 70);
 
     it('usa POST para confirmar', () => {
       expect(chunk).toMatch(/method:\s*['"]POST['"]/);
@@ -89,7 +93,7 @@ describe('Qualificacoes mutations — caracterização de contrato', () => {
 
   // ─── 3. reagendar planejada ───────────────────────────────────────────────────
   describe('3. handleReagendarPlanejada', () => {
-    const chunk = chunkAfter(src, 'const handleReagendarPlanejada = async (', 70);
+    const chunk = chunkAfter(srcMutationsHook, 'const handleReagendarPlanejada = async (', 70);
 
     it('usa PATCH', () => {
       expect(chunk).toMatch(/method:\s*['"]PATCH['"]/);
@@ -139,7 +143,7 @@ describe('Qualificacoes mutations — caracterização de contrato', () => {
 
   // ─── 5. cancelamento ─────────────────────────────────────────────────────────
   describe('5. handleCancelar', () => {
-    const chunk = chunkAfter(src, 'const handleCancelar = async (', 70);
+    const chunk = chunkAfter(srcMutationsHook, 'const handleCancelar = async (', 70);
 
     it('usa PATCH (conforme código real)', () => {
       expect(chunk).toMatch(/method:\s*['"]PATCH['"]/);
@@ -161,12 +165,14 @@ describe('Qualificacoes mutations — caracterização de contrato', () => {
   // ─── 6. headers e autenticação ───────────────────────────────────────────────
   describe('6. Headers e autenticação', () => {
     it('mutations em Qualificacoes.tsx enviam Content-Type application/json', () => {
-      const count = (src.match(/'Content-Type':\s*'application\/json'/g) || []).length;
+      const count =
+        (src.match(/'Content-Type':\s*'application\/json'/g) || []).length +
+        (srcMutationsHook.match(/'Content-Type':\s*'application\/json'/g) || []).length;
       expect(count).toBeGreaterThanOrEqual(4);
     });
 
-    it('Qualificacoes.tsx usa fetchWithAuth para mutations (não fetch puro)', () => {
-      expect(src).toMatch(/fetchWithAuth\(/);
+    it('mutations usam fetchWithAuth (não fetch puro)', () => {
+      expect(srcMutationsHook).toMatch(/fetchWithAuth\(/);
     });
 
     it('ModalRenovarQualificacao usa fetch + Bearer token para renovação', () => {
@@ -177,13 +183,18 @@ describe('Qualificacoes mutations — caracterização de contrato', () => {
   // ─── 7. invalidação / refetch ─────────────────────────────────────────────────
   describe('7. Invalidação e refetch após mutations', () => {
     it('emite eventos moduloBus em mutations principais', () => {
-      const qualCount = (src.match(/emitirEventoModulo\(/g) || []).length;
+      const qualCount =
+        (src.match(/emitirEventoModulo\(/g) || []).length +
+        (srcMutationsHook.match(/emitirEventoModulo\(/g) || []).length;
       const renovarCount = (srcRenovar.match(/emitirEventoModulo\(/g) || []).length;
       expect(qualCount + renovarCount).toBeGreaterThanOrEqual(4);
     });
 
     it('carregarHistorico/recarregar é chamado após mutations para refetch', () => {
-      const count = (src.match(/carregarHistorico\(\)|recarregarHistoricoEStats\(\)/g) || []).length;
+      const count =
+        (src.match(/carregarHistorico\(\)|recarregarHistoricoEStats\(\)/g) || []).length +
+        (srcMutationsHook.match(/carregarHistorico\(\)|recarregarHistoricoEStats\(\)/g) || [])
+          .length;
       expect(count).toBeGreaterThanOrEqual(4);
     });
   });
