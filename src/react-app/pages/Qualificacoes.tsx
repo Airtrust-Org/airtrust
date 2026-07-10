@@ -120,6 +120,8 @@ import {
 } from './qualificacoes/qualificacoes.helpers';
 import { QualificacaoStatusBadge } from './qualificacoes/components/QualificacaoStatusBadge';
 import { QualificacaoInfoCard } from './qualificacoes/components/QualificacaoInfoCard';
+import { QualificacaoSectionBox } from './qualificacoes/components/QualificacaoSectionBox';
+import { QualificacaoDataPoint } from './qualificacoes/components/QualificacaoDataPoint';
 import { QualificacaoEmptyState } from './qualificacoes/components/QualificacaoEmptyState';
 import { QualificacaoChip } from './qualificacoes/components/QualificacaoChip';
 import { QualificacaoAlert } from './qualificacoes/components/QualificacaoAlert';
@@ -4094,15 +4096,14 @@ export default function Qualificacoes() {
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    Gestores em CC
-                  </p>
+              <QualificacaoSectionBox
+                title="Gestores em CC"
+                titleRight={
                   <span className="text-xs text-slate-500">
                     {gestoresCcSelecionadosIds.length} selecionado(s)
                   </span>
-                </div>
+                }
+              >
 
                 {carregandoGestoresCc ? (
                   <p className="mt-2 text-sm text-slate-500">Carregando gestores em cópia...</p>
@@ -4160,17 +4161,14 @@ export default function Qualificacoes() {
                     </div>
                   </>
                 )}
-              </div>
+              </QualificacaoSectionBox>
 
               {treinamentosPlanejadosConvocacaoQuery.isLoading ? (
                 <p className="text-sm text-slate-500">Carregando turmas planejadas...</p>
               ) : turmasPlanejadasDisponiveis.length === 0 ? (
                 <>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                      Escopo do envio
-                    </p>
-                    <div className="mt-2 space-y-2 text-sm text-slate-700">
+                  <QualificacaoSectionBox title="Escopo do envio">
+                    <div className="space-y-2 text-sm text-slate-700">
                       <label className="flex items-center gap-2">
                         <input
                           type="radio"
@@ -4192,7 +4190,7 @@ export default function Qualificacoes() {
                           'o participante da linha'}
                       </label>
                     </div>
-                  </div>
+                  </QualificacaoSectionBox>
 
                   <div className="flex justify-end gap-3">
                     <Button variant="secondary" onClick={fecharModalConvocacaoPlanejada}>
@@ -4208,11 +4206,8 @@ export default function Qualificacoes() {
                 </>
               ) : (
                 <div className="space-y-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                      Escopo do envio
-                    </p>
-                    <div className="mt-2 space-y-2 text-sm text-slate-700">
+                  <QualificacaoSectionBox title="Escopo do envio">
+                    <div className="space-y-2 text-sm text-slate-700">
                       <label className="flex items-center gap-2">
                         <input
                           type="radio"
@@ -4234,7 +4229,7 @@ export default function Qualificacoes() {
                           'o funcionário da linha'}
                       </label>
                     </div>
-                  </div>
+                  </QualificacaoSectionBox>
 
                   {turmasPlanejadasDisponiveis.map((turma) => (
                     <label
@@ -4291,17 +4286,14 @@ export default function Qualificacoes() {
           ) : (
             <>
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Turma
-                  </p>
-                  <p className="mt-2 font-semibold text-slate-900">
+                <QualificacaoSectionBox variant="slate" title="Turma">
+                  <p className="font-semibold text-slate-900">
                     {convocacaoPlanejadaPreview.treinamento_nome}
                   </p>
                   <p className="mt-1 text-sm text-slate-600">
                     {convocacaoPlanejadaPreview.modalidade}
                   </p>
-                </div>
+                </QualificacaoSectionBox>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                     Envio
@@ -4835,18 +4827,8 @@ export default function Qualificacoes() {
           {qualificacaoParaRenovar && (
             <div className="rounded-lg bg-slate-50 p-4 space-y-2">
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs font-medium text-slate-600 uppercase">Funcionário</p>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {qualificacaoParaRenovar.funcionario_nome}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-600 uppercase">Qualificação</p>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {qualificacaoParaRenovar.qualificacao_nome}
-                  </p>
-                </div>
+                <QualificacaoDataPoint label="Funcionário" value={qualificacaoParaRenovar.funcionario_nome} />
+                <QualificacaoDataPoint label="Qualificação" value={qualificacaoParaRenovar.qualificacao_nome} />
               </div>
               <div className="flex justify-between items-start pt-2 border-t border-slate-200">
                 <div>
