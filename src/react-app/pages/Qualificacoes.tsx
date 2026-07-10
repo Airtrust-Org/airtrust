@@ -46,7 +46,7 @@ import {
 } from '@/react-app/hooks/useTreinamentosPlanejados';
 import { lmsKeys } from '@/react-app/hooks/useLms';
 import { useAeronavesConfig } from '@/react-app/hooks/useAeronavesConfig';
-import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { API_BASE_URL, getAccessToken, fetchWithAuth } from '@/react-app/config/api';
 import { clearApiCacheByPattern, useApi } from '@/react-app/hooks/useApi';
 import { DataTable, Column, SortConfig } from '@/components/ui/DataTable';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
@@ -95,9 +95,7 @@ import {
   getPlanejamentoRelacionamentoKey as getPlanejamentoRelacionamentoKeyBase,
 } from '@/react-app/pages/qualificacoes/historicoStatusUtils';
 import { FormatosTab, type Formato } from '@/react-app/pages/qualificacoes/FormatosTab';
-import {
-  resolveClassificationTagAppearance,
-} from '@/react-app/pages/qualificacoes/classificacaoColors';
+import { resolveClassificationTagAppearance } from '@/react-app/pages/qualificacoes/classificacaoColors';
 import {
   buildTipoPayload,
   buildTipoSaveSuccessMessage,
@@ -238,7 +236,8 @@ export default function Qualificacoes() {
         : 'lista';
 
   const [activeTab, setActiveTab] = useState<(typeof VALID_TABS)[number]>(migratedTab);
-  const [plannedView, setPlannedView] = useState<(typeof VALID_PLANNED_VIEWS)[number]>(migratedPlannedView);
+  const [plannedView, setPlannedView] =
+    useState<(typeof VALID_PLANNED_VIEWS)[number]>(migratedPlannedView);
   const [autoOpenTurmasModal, setAutoOpenTurmasModal] = useState(false);
   const [limit, setLimit] = useState(initialPrefs.limit ?? 50); // Paginação: 50 registros por página
   const [page, setPage] = useState(1); // Página atual
@@ -265,7 +264,9 @@ export default function Qualificacoes() {
   const [aeronaveFilter, setAeronaveFilter] = useState(initialPrefs.aeronaveFilter ?? '');
   const [categoriaFilter, setCategoriaFilter] = useState(initialPrefs.categoriaFilter ?? '');
   const [setorFilter, setSetorFilter] = useState<string[]>(initialPrefs.setorFilter ?? []);
-  const [categoriasSetorFilter, setCategoriasSetorFilter] = useState<string[]>(initialPrefs.categoriasSetorFilter ?? []);
+  const [categoriasSetorFilter, setCategoriasSetorFilter] = useState<string[]>(
+    initialPrefs.categoriasSetorFilter ?? [],
+  );
 
   // Estado para filtrar por status - renovadas e apagadas ficam ocultas por padrao.
   // Planejadas = individual planned qualification records in qualificacoes_historico.
@@ -341,10 +342,7 @@ export default function Qualificacoes() {
     categoriasSetorFilter,
   ]);
 
-  const effectiveHistoricoStatusFiltro = useMemo(
-    () => [...statusFiltro],
-    [statusFiltro],
-  );
+  const effectiveHistoricoStatusFiltro = useMemo(() => [...statusFiltro], [statusFiltro]);
 
   const {
     historico,
@@ -374,9 +372,7 @@ export default function Qualificacoes() {
   const shouldLoadPlannedRelatedHistorico = useMemo(
     () =>
       isHistoricoTab &&
-      (historico as HistoricoItem[]).some(
-        (item) => getHistoricoDisplayStatus(item) === 'VENCIDA',
-      ),
+      (historico as HistoricoItem[]).some((item) => getHistoricoDisplayStatus(item) === 'VENCIDA'),
     [historico, isHistoricoTab],
   );
 
@@ -475,15 +471,15 @@ export default function Qualificacoes() {
       setLoadingStats(true);
       const token = getAccessToken();
       // Cache busting
-      const response = await fetch(`${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`, {
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`,
-              'Cache-Control': 'no-cache',
-              Pragma: 'no-cache',
-            }
-          : {},
-      });
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`,
+        {
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        },
+      );
       if (!response.ok) throw new Error('Erro ao carregar stats');
       const json = await response.json();
       const data = json.data || json;
@@ -510,7 +506,9 @@ export default function Qualificacoes() {
   const stats = historicoStats;
 
   const [showModal, setShowModal] = useState(false);
-  const canManageTipos = ['ADMINISTRADOR', 'ADMIN'].includes(String(user?.role || '').toUpperCase());
+  const canManageTipos = ['ADMINISTRADOR', 'ADMIN'].includes(
+    String(user?.role || '').toUpperCase(),
+  );
   const defaultModelosPrefs = useMemo<QualificacoesModelosPrefs>(
     () => ({
       searchTerm: '',
@@ -627,7 +625,10 @@ export default function Qualificacoes() {
     refetch: refetchTipos,
     error: tiposError,
   } = useQualificacaoTipos(activeTab === 'tipos' || showTurmaPlanejadaModal, 200, {
-    categoriaId: activeTab === 'tipos' && categoriaFilter ? parseInt(categoriaFilter, 10) || undefined : undefined,
+    categoriaId:
+      activeTab === 'tipos' && categoriaFilter
+        ? parseInt(categoriaFilter, 10) || undefined
+        : undefined,
     setorIds: activeTab === 'tipos' ? modelosPrefs.setorFilter : undefined,
     search: activeTab === 'tipos' ? searchTipos : undefined,
   });
@@ -671,7 +672,9 @@ export default function Qualificacoes() {
   const [novaCategoriaDesc, setNovaCategoriaDesc] = useState('');
 
   // Estado para Classificações (subtabs dentro da aba Categorias)
-  const [activeClassifSubTab, setActiveClassifSubTab] = useState<'categorias' | 'formatos'>('categorias');
+  const [activeClassifSubTab, setActiveClassifSubTab] = useState<'categorias' | 'formatos'>(
+    'categorias',
+  );
   const [formatos, setFormatos] = useState<Formato[]>([]);
   const [formatosLoading, setFormatosLoading] = useState(false);
   const [showFormatoModal, setShowFormatoModal] = useState(false);
@@ -728,11 +731,19 @@ export default function Qualificacoes() {
   // Estado para painel de configuração de colunas por aba
   const [columnConfigOpen, setColumnConfigOpen] = useState<'historico' | 'tipos' | null>(null);
   const [savingTipo, setSavingTipo] = useState(false);
-  const { data: setoresTiposData } = useApi<{ data?: Array<{ id: number; nome: string }> }>('/setores', {
-    enabled: activeTab === 'tipos' || activeTab === 'historico' || activeTab === 'planejados' || activeTab === 'categorias' || showTipoModal,
-    requireAuth: true,
-    bypassGetCache: true,
-  });
+  const { data: setoresTiposData } = useApi<{ data?: Array<{ id: number; nome: string }> }>(
+    '/setores',
+    {
+      enabled:
+        activeTab === 'tipos' ||
+        activeTab === 'historico' ||
+        activeTab === 'planejados' ||
+        activeTab === 'categorias' ||
+        showTipoModal,
+      requireAuth: true,
+      bypassGetCache: true,
+    },
+  );
 
   const setoresTipos = useMemo(() => {
     const payload = Array.isArray(setoresTiposData)
@@ -741,7 +752,9 @@ export default function Qualificacoes() {
         ? setoresTiposData.data
         : [];
 
-    return [...payload].sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
+    return [...payload].sort((a, b) =>
+      String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'),
+    );
   }, [setoresTiposData]);
 
   const setorOptionsTipos = useMemo<MultiSelectOption[]>(
@@ -756,7 +769,8 @@ export default function Qualificacoes() {
     if (!modelosPrefsReady) return;
     if (setoresTipos.length !== 1) return;
     const onlySetorId = String(setoresTipos[0].id);
-    if (modelosPrefs.setorFilter.length === 1 && modelosPrefs.setorFilter[0] === onlySetorId) return;
+    if (modelosPrefs.setorFilter.length === 1 && modelosPrefs.setorFilter[0] === onlySetorId)
+      return;
     setModelosPrefs((prev) => ({ ...prev, setorFilter: [onlySetorId] }));
   }, [modelosPrefs.setorFilter, modelosPrefsReady, setModelosPrefs, setoresTipos]);
 
@@ -895,7 +909,7 @@ export default function Qualificacoes() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(token ? {} : {}),
           },
           body: JSON.stringify({
             funcionario_id: funcionarioId,
@@ -931,7 +945,7 @@ export default function Qualificacoes() {
       // Invalidate consolidated training list so Turmas tab reflects new records immediately
       void queryClient.invalidateQueries({ queryKey: ['treinamentos-planejados'] });
       try {
-        const statsResponse = await fetch(
+        const statsResponse = await fetchWithAuth(
           `${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`,
         );
         if (statsResponse.ok) {
@@ -1028,9 +1042,7 @@ export default function Qualificacoes() {
     setFormatosLoading(true);
     try {
       const token = getAccessToken();
-      const resp = await fetch(`${API_BASE_URL}/qualificacoes/formatos`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const resp = await fetchWithAuth(`${API_BASE_URL}/qualificacoes/formatos`, {});
       const json = await resp.json().catch(() => ({ success: false, data: [] }));
       if (json.success) setFormatos(json.data || []);
     } catch {
@@ -1063,9 +1075,9 @@ export default function Qualificacoes() {
     if (!isEditing) body.codigo = novoFormatoCodigo.trim().toUpperCase();
     try {
       const token = getAccessToken();
-      const resp = await fetch(url, {
+      const resp = await fetchWithAuth(url, {
         method,
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       const json = await resp.json().catch(() => ({ success: false }));
@@ -1084,14 +1096,20 @@ export default function Qualificacoes() {
     } catch {
       showToast.error('Erro ao salvar formato');
     }
-  }, [editingFormato, novoFormatoNome, novoFormatoCodigo, novoFormatoDesc, novoFormatoCor, carregarFormatos]);
+  }, [
+    editingFormato,
+    novoFormatoNome,
+    novoFormatoCodigo,
+    novoFormatoDesc,
+    novoFormatoCor,
+    carregarFormatos,
+  ]);
 
   const handleExcluirFormato = useCallback(async (id: number) => {
     try {
       const token = getAccessToken();
-      const resp = await fetch(`${API_BASE_URL}/qualificacoes/formatos/${id}`, {
+      const resp = await fetchWithAuth(`${API_BASE_URL}/qualificacoes/formatos/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
       const json = await resp.json().catch(() => ({ success: false }));
       if (!resp.ok || !json.success) {
@@ -1252,9 +1270,7 @@ export default function Qualificacoes() {
 
   const filteredHistorico = useMemo(
     () =>
-      (historico as HistoricoItem[]).filter((item) =>
-        statusFiltro.has(getHistoricoStatus(item)),
-      ),
+      (historico as HistoricoItem[]).filter((item) => statusFiltro.has(getHistoricoStatus(item))),
     [getHistoricoStatus, historico, statusFiltro],
   );
 
@@ -1356,7 +1372,11 @@ export default function Qualificacoes() {
   );
 
   const shouldUseLocalHistoricoHeaderStats = Boolean(
-    debouncedSearch.trim() || aeronaveFilter || categoriaFilter || setorFilter.length > 0 || !isDefaultStatusFilter,
+    debouncedSearch.trim() ||
+    aeronaveFilter ||
+    categoriaFilter ||
+    setorFilter.length > 0 ||
+    !isDefaultStatusFilter,
   );
 
   const localHistoricoStats = useMemo(
@@ -1466,14 +1486,16 @@ export default function Qualificacoes() {
         return false;
       }
 
-      const response = await fetch(`${API_BASE_URL}/qualificacoes/historico/${row.id}/confirmar`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/qualificacoes/historico/${row.id}/confirmar`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ renovar_anterior: renovarAnterior }),
         },
-        body: JSON.stringify({ renovar_anterior: renovarAnterior }),
-      });
+      );
 
       if (response.ok) {
         showToast.success('Qualificação confirmada com sucesso!');
@@ -1530,13 +1552,15 @@ export default function Qualificacoes() {
         return false;
       }
 
-      const response = await fetch(`${API_BASE_URL}/qualificacoes/historico/${row.id}/cancelar`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/qualificacoes/historico/${row.id}/cancelar`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
         },
-      });
+      );
 
       if (response.ok) {
         showToast.success('Qualificação cancelada com sucesso!');
@@ -1574,14 +1598,16 @@ export default function Qualificacoes() {
 
       setSalvandoPlanejadaId(row.id);
 
-      const response = await fetch(`${API_BASE_URL}/qualificacoes/historico/${row.id}/reagendar`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/qualificacoes/historico/${row.id}/reagendar`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ nova_data_planejada: novaData }),
         },
-        body: JSON.stringify({ nova_data_planejada: novaData }),
-      });
+      );
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
@@ -1638,11 +1664,10 @@ export default function Qualificacoes() {
       const url = `${apiUrl}/qualificacoes/historico/${id}`;
       logger.info('[Deletar] URL:', url);
 
-      const response = await fetch(url, {
+      const response = await fetchWithAuth(url, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -1656,12 +1681,11 @@ export default function Qualificacoes() {
         // Recarregar dados
         await carregarHistorico();
         // Recarregar stats também
-        const statsResponse = await fetch(
+        const statsResponse = await fetchWithAuth(
           `${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`,
           {
             headers: token
               ? {
-                  Authorization: `Bearer ${token}`,
                   'Cache-Control': 'no-cache',
                   Pragma: 'no-cache',
                 }
@@ -1735,15 +1759,15 @@ export default function Qualificacoes() {
     async (token?: string | null) => {
       await carregarHistorico();
 
-      const statsResponse = await fetch(`${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`, {
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`,
-              'Cache-Control': 'no-cache',
-              Pragma: 'no-cache',
-            }
-          : {},
-      });
+      const statsResponse = await fetchWithAuth(
+        `${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`,
+        {
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        },
+      );
 
       if (!statsResponse.ok) {
         throw new Error('Erro ao carregar stats');
@@ -1859,11 +1883,7 @@ export default function Qualificacoes() {
     try {
       const token = getAccessToken();
       const response = await apiFetch('/api/notificacoes/convocacoes/gestores', {
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : undefined,
+        headers: token ? {} : undefined,
       });
 
       const json = (await response.json().catch(() => ({}))) as {
@@ -2061,7 +2081,7 @@ export default function Qualificacoes() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(token ? {} : {}),
         },
         body: JSON.stringify({
           turma_funcionario_ids: turmaFuncionarioIds,
@@ -2131,464 +2151,464 @@ export default function Qualificacoes() {
 
   const historicoColumns = useMemo<Column<HistoricoItem>[]>(
     () => [
-    {
-      id: 'acoes',
-      label: 'Ações',
-      accessor: (row) => row.id,
-      sortable: false,
-      visible: true,
-      width: '200px',
-      minWidth: '200px',
-      render: (value, row) => {
-        const item = row as HistoricoItem & {
-          qualificacao_status?: string;
-          data_realizacao?: string;
-          data_conclusao?: string;
-          categoria?: string;
-          qualificacao_categoria?: string;
-          data_vencimento?: string;
-        };
-        const status = item.qualificacao_status || 'CONCLUIDA';
-        const isPlanejada = status === 'PLANEJADA';
-        const isCancelada = status === 'CANCELADA';
+      {
+        id: 'acoes',
+        label: 'Ações',
+        accessor: (row) => row.id,
+        sortable: false,
+        visible: true,
+        width: '200px',
+        minWidth: '200px',
+        render: (value, row) => {
+          const item = row as HistoricoItem & {
+            qualificacao_status?: string;
+            data_realizacao?: string;
+            data_conclusao?: string;
+            categoria?: string;
+            qualificacao_categoria?: string;
+            data_vencimento?: string;
+          };
+          const status = item.qualificacao_status || 'CONCLUIDA';
+          const isPlanejada = status === 'PLANEJADA';
+          const isCancelada = status === 'CANCELADA';
 
-        // Verificar se a data planejada já passou (para mostrar botão de confirmar)
-        const dataRealizacao = item.data_realizacao || item.data_conclusao;
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-        const dataPlanejada = parseDateLocal(dataRealizacao);
-        const dataPlanejadaPassou = Boolean(dataPlanejada && dataPlanejada <= hoje);
+          // Verificar se a data planejada já passou (para mostrar botão de confirmar)
+          const dataRealizacao = item.data_realizacao || item.data_conclusao;
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+          const dataPlanejada = parseDateLocal(dataRealizacao);
+          const dataPlanejadaPassou = Boolean(dataPlanejada && dataPlanejada <= hoje);
 
-        // Verificar se é EAD ou CMA vencido ou vencendo
-        const categoria = (item.categoria || item.qualificacao_categoria || '').toUpperCase();
-        const nomeQualificacao = (item.qualificacao_nome || '').toUpperCase();
-        const isCMA =
-          categoria === 'CMA' ||
-          categoria === 'EXAME' ||
-          nomeQualificacao.includes('MÉDICO') ||
-          nomeQualificacao.includes('MEDICO');
-        const isEAD = categoria === 'EAD' || categoria === 'TREINAMENTO EAD';
-        const isEADouCMA = isEAD || isCMA;
+          // Verificar se é EAD ou CMA vencido ou vencendo
+          const categoria = (item.categoria || item.qualificacao_categoria || '').toUpperCase();
+          const nomeQualificacao = (item.qualificacao_nome || '').toUpperCase();
+          const isCMA =
+            categoria === 'CMA' ||
+            categoria === 'EXAME' ||
+            nomeQualificacao.includes('MÉDICO') ||
+            nomeQualificacao.includes('MEDICO');
+          const isEAD = categoria === 'EAD' || categoria === 'TREINAMENTO EAD';
+          const isEADouCMA = isEAD || isCMA;
 
-        const statusHistorico = getHistoricoStatus(item);
-        const isVencida = statusHistorico === 'VENCIDA';
-        const isVencendo = statusHistorico === 'VENCENDO_30';
-        const mostrarAlertaEAD =
-          isEADouCMA && (isVencida || isVencendo) && !isPlanejada && !isCancelada;
+          const statusHistorico = getHistoricoStatus(item);
+          const isVencida = statusHistorico === 'VENCIDA';
+          const isVencendo = statusHistorico === 'VENCENDO_30';
+          const mostrarAlertaEAD =
+            isEADouCMA && (isVencida || isVencendo) && !isPlanejada && !isCancelada;
 
-        return (
-          <div className="flex items-center gap-1">
-            {isPlanejada && (
-              <button
-                type="button"
-                onClick={() => handleCancelar(item)}
-                title="Excluir qualificação planejada"
-                className={historicoActionDangerButtonClass}
-              >
-                <Trash2 className="w-4 h-4 text-red-600" />
-              </button>
-            )}
+          return (
+            <div className="flex items-center gap-1">
+              {isPlanejada && (
+                <button
+                  type="button"
+                  onClick={() => handleCancelar(item)}
+                  title="Excluir qualificação planejada"
+                  className={historicoActionDangerButtonClass}
+                >
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                </button>
+              )}
 
-            {!isPlanejada && (
-              <button
-                type="button"
-                onClick={() => handleDeletear(item)}
-                title="Deletar qualificação"
-                className={historicoActionDangerButtonClass}
-              >
-                <Trash2 className="w-4 h-4 text-red-600" />
-              </button>
-            )}
+              {!isPlanejada && (
+                <button
+                  type="button"
+                  onClick={() => handleDeletear(item)}
+                  title="Deletar qualificação"
+                  className={historicoActionDangerButtonClass}
+                >
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                </button>
+              )}
 
-            {!isCancelada && (
-              <button
-                type="button"
-                onClick={() => handleEdit(item)}
-                title="Editar qualificação"
-                className={historicoActionButtonClass}
-              >
-                <Edit2 className="w-4 h-4 text-indigo-600" />
-              </button>
-            )}
+              {!isCancelada && (
+                <button
+                  type="button"
+                  onClick={() => handleEdit(item)}
+                  title="Editar qualificação"
+                  className={historicoActionButtonClass}
+                >
+                  <Edit2 className="w-4 h-4 text-indigo-600" />
+                </button>
+              )}
 
-            {!isPlanejada && !isCancelada && (
-              <button
-                type="button"
-                onClick={() => handleRenovar(item)}
-                title="Renovar qualificação"
-                className={historicoActionButtonClass}
-              >
-                <RefreshCw className="w-4 h-4 text-violet-600" />
-              </button>
-            )}
+              {!isPlanejada && !isCancelada && (
+                <button
+                  type="button"
+                  onClick={() => handleRenovar(item)}
+                  title="Renovar qualificação"
+                  className={historicoActionButtonClass}
+                >
+                  <RefreshCw className="w-4 h-4 text-violet-600" />
+                </button>
+              )}
 
-            {isPlanejada && dataPlanejadaPassou && (
-              <button
-                type="button"
-                onClick={() => abrirModalPlanejada(item)}
-                title="Informar se o treinamento planejado foi realizado"
-                className={`${historicoActionButtonClass} animate-pulse`}
-              >
-                <CheckCircle2 className="w-4 h-4 text-amber-500" />
-              </button>
-            )}
+              {isPlanejada && dataPlanejadaPassou && (
+                <button
+                  type="button"
+                  onClick={() => abrirModalPlanejada(item)}
+                  title="Informar se o treinamento planejado foi realizado"
+                  className={`${historicoActionButtonClass} animate-pulse`}
+                >
+                  <CheckCircle2 className="w-4 h-4 text-amber-500" />
+                </button>
+              )}
 
-            {isPlanejada && !dataPlanejadaPassou && (
-              <button
-                type="button"
-                onClick={() => abrirModalPlanejada(item)}
-                title="Reagendar qualificação planejada"
-                className={historicoActionButtonClass}
-              >
-                <RotateCcw className="w-4 h-4 text-sky-600" />
-              </button>
-            )}
+              {isPlanejada && !dataPlanejadaPassou && (
+                <button
+                  type="button"
+                  onClick={() => abrirModalPlanejada(item)}
+                  title="Reagendar qualificação planejada"
+                  className={historicoActionButtonClass}
+                >
+                  <RotateCcw className="w-4 h-4 text-sky-600" />
+                </button>
+              )}
 
-            {isPlanejada && (
-              <button
-                type="button"
-                onClick={() => abrirModalConvocacaoPlanejada(item)}
-                title="Selecionar turma planejada para enviar convocação"
-                className={historicoActionButtonClass}
-              >
-                <Mail className="w-4 h-4 text-emerald-600" />
-              </button>
-            )}
+              {isPlanejada && (
+                <button
+                  type="button"
+                  onClick={() => abrirModalConvocacaoPlanejada(item)}
+                  title="Selecionar turma planejada para enviar convocação"
+                  className={historicoActionButtonClass}
+                >
+                  <Mail className="w-4 h-4 text-emerald-600" />
+                </button>
+              )}
 
-            {!isCancelada && !isPlanejada && (
-              <button
-                type="button"
-                onClick={async () => {
-                  setHistoricoSelecionado(item);
-                  setShowCertModal(true);
-                }}
-                title={
-                  hasArchivedCertificate(item)
-                    ? 'Certificado arquivado ✓'
-                    : 'Clique para gerenciar certificado'
-                }
-                className={historicoActionButtonClass}
-              >
-                <Award
-                  className={`w-4 h-4 ${hasArchivedCertificate(item) ? 'text-emerald-600' : 'text-slate-500'}`}
-                />
-              </button>
-            )}
+              {!isCancelada && !isPlanejada && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setHistoricoSelecionado(item);
+                    setShowCertModal(true);
+                  }}
+                  title={
+                    hasArchivedCertificate(item)
+                      ? 'Certificado arquivado ✓'
+                      : 'Clique para gerenciar certificado'
+                  }
+                  className={historicoActionButtonClass}
+                >
+                  <Award
+                    className={`w-4 h-4 ${hasArchivedCertificate(item) ? 'text-emerald-600' : 'text-slate-500'}`}
+                  />
+                </button>
+              )}
 
-            {mostrarAlertaEAD && (
-              <button
-                type="button"
-                onClick={async () => {
-                  setAlertaEADModal({
-                    isOpen: true,
-                    qualificacao: item,
-                  });
-                }}
-                title="Enviar alerta de treinamento vencido"
-                className={historicoActionButtonClass}
-              >
-                <BellRing className="w-4 h-4 text-amber-500" />
-              </button>
-            )}
-          </div>
-        );
+              {mostrarAlertaEAD && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setAlertaEADModal({
+                      isOpen: true,
+                      qualificacao: item,
+                    });
+                  }}
+                  title="Enviar alerta de treinamento vencido"
+                  className={historicoActionButtonClass}
+                >
+                  <BellRing className="w-4 h-4 text-amber-500" />
+                </button>
+              )}
+            </div>
+          );
+        },
       },
-    },
-    {
-      id: 'status',
-      label: 'Status',
-      accessor: (row) => row.status,
-      sortable: true,
-      visible: true,
-      width: '115px',
-      render: (value, row) => {
-        const item = row as HistoricoItem & { qualificacao_status?: string };
+      {
+        id: 'status',
+        label: 'Status',
+        accessor: (row) => row.status,
+        sortable: true,
+        visible: true,
+        width: '115px',
+        render: (value, row) => {
+          const item = row as HistoricoItem & { qualificacao_status?: string };
 
-        // Priorizar qualificacao_status do banco (PLANEJADA, CONCLUIDA, CANCELADA)
-        const qualificacaoStatus = item.qualificacao_status?.toUpperCase();
+          // Priorizar qualificacao_status do banco (PLANEJADA, CONCLUIDA, CANCELADA)
+          const qualificacaoStatus = item.qualificacao_status?.toUpperCase();
 
-        // Se é PLANEJADA ou CANCELADA, usar diretamente
-        if (qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'CANCELADA') {
+          // Se é PLANEJADA ou CANCELADA, usar diretamente
+          if (qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'CANCELADA') {
+            return (
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(
+                  qualificacaoStatus,
+                )}`}
+              >
+                <span className={`h-2 w-2 rounded-full ${getStatusDotColor(qualificacaoStatus)}`} />
+                {getStatusLabel(qualificacaoStatus)}
+              </span>
+            );
+          }
+
+          // Para CONCLUIDA, usar a lógica de status derivado (VALIDA, VENCIDA, etc.)
+          const statusHistorico = getHistoricoStatus(item);
+          const ehRenovada = statusHistorico === 'RENOVADA';
+          const status = statusHistorico;
+          return (
+            <div className="flex flex-col items-start gap-1">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                  ehRenovada ? 'bg-blue-600/10 text-blue-600' : getStatusColor(status)
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    ehRenovada ? 'bg-primary' : getStatusDotColor(status)
+                  }`}
+                />
+                {ehRenovada ? 'Renovada' : getStatusLabel(status)}
+              </span>
+            </div>
+          );
+        },
+      },
+      {
+        id: 'funcionario',
+        label: 'Funcionário',
+        accessor: (row) => row.funcionario_nome,
+        sortable: true,
+        visible: true,
+        width: '200px',
+        render: (value, row) => {
+          const nome = String(value ?? '');
+          return (
+            <div className="flex min-w-0 flex-col">
+              <FuncionarioLink
+                funcionarioId={row.funcionario_id}
+                nome={nome}
+                className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900"
+              />
+              {row.funcionario_codigo_anac && (
+                <span
+                  className="line-clamp-1 whitespace-normal break-words text-xs font-normal text-slate-500"
+                  title="Código CANAC"
+                >
+                  CANAC: {row.funcionario_codigo_anac}
+                </span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'qualificacao',
+        label: 'Qualificação',
+        accessor: (row) =>
+          row.qualificacao_nome || row.qualificacao_desc || row.qualificacao_codigo || '-',
+        sortable: true,
+        visible: true,
+        width: '250px',
+        render: (value) => (
+          <span className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900">
+            {String(value ?? '')}
+          </span>
+        ),
+      },
+      {
+        id: 'tipo_treinamento',
+        label: 'Modalidade',
+        accessor: (row) => {
+          return getTipoTreinamentoDisplay(
+            (row as { tipo_treinamento?: string | null }).tipo_treinamento || null,
+            Number(
+              (row as { validade_meses?: number | null; qualificacao_validade?: number | null })
+                .validade_meses ??
+                (row as { qualificacao_validade?: number | null }).qualificacao_validade ??
+                0,
+            ),
+          ).value;
+        },
+        sortable: true,
+        visible: true,
+        width: '105px',
+        render: (value) => {
+          const display = getTipoTreinamentoDisplay(String(value || ''));
           return (
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(
-                qualificacaoStatus,
-              )}`}
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${display.className}`}
             >
-              <span className={`h-2 w-2 rounded-full ${getStatusDotColor(qualificacaoStatus)}`} />
-              {getStatusLabel(qualificacaoStatus)}
+              {display.label}
             </span>
           );
-        }
-
-        // Para CONCLUIDA, usar a lógica de status derivado (VALIDA, VENCIDA, etc.)
-        const statusHistorico = getHistoricoStatus(item);
-        const ehRenovada = statusHistorico === 'RENOVADA';
-        const status = statusHistorico;
-        return (
-          <div className="flex flex-col items-start gap-1">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                ehRenovada ? 'bg-blue-600/10 text-blue-600' : getStatusColor(status)
-              }`}
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  ehRenovada ? 'bg-primary' : getStatusDotColor(status)
-                }`}
-              />
-              {ehRenovada ? 'Renovada' : getStatusLabel(status)}
-            </span>
-          </div>
-        );
+        },
       },
-    },
-    {
-      id: 'funcionario',
-      label: 'Funcionário',
-      accessor: (row) => row.funcionario_nome,
-      sortable: true,
-      visible: true,
-      width: '200px',
-      render: (value, row) => {
-        const nome = String(value ?? '');
-        return (
-          <div className="flex min-w-0 flex-col">
-            <FuncionarioLink
-              funcionarioId={row.funcionario_id}
-              nome={nome}
-              className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900"
-            />
-            {row.funcionario_codigo_anac && (
-              <span
-                className="line-clamp-1 whitespace-normal break-words text-xs font-normal text-slate-500"
-                title="Código CANAC"
-              >
-                CANAC: {row.funcionario_codigo_anac}
-              </span>
-            )}
-          </div>
-        );
+      {
+        id: 'codigo',
+        label: 'Código',
+        accessor: (row) =>
+          (row as HistoricoItem & { codigo_legacy?: string }).qualificacao_codigo ||
+          (row as HistoricoItem & { codigo_legacy?: string }).codigo ||
+          (row as HistoricoItem & { codigo_legacy?: string }).codigo_legacy ||
+          '-',
+        sortable: true,
+        visible: true,
+        width: '90px',
+        render: (value, row) => {
+          const r = row as HistoricoItem & { codigo_legacy?: string };
+          const display =
+            String(value || r.qualificacao_codigo || r.codigo || r.codigo_legacy || '-') || '-';
+          return <span className="text-sm font-normal text-slate-900">{display}</span>;
+        },
       },
-    },
-    {
-      id: 'qualificacao',
-      label: 'Qualificação',
-      accessor: (row) =>
-        row.qualificacao_nome || row.qualificacao_desc || row.qualificacao_codigo || '-',
-      sortable: true,
-      visible: true,
-      width: '250px',
-      render: (value) => (
-        <span className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900">
-          {String(value ?? '')}
-        </span>
-      ),
-    },
-    {
-      id: 'tipo_treinamento',
-      label: 'Modalidade',
-      accessor: (row) => {
-        return getTipoTreinamentoDisplay(
-          (row as { tipo_treinamento?: string | null }).tipo_treinamento || null,
-          Number(
-            (row as { validade_meses?: number | null; qualificacao_validade?: number | null })
-              .validade_meses ??
-              (row as { qualificacao_validade?: number | null }).qualificacao_validade ??
-              0,
-          ),
-        ).value;
+      {
+        id: 'aeronave',
+        label: 'Equipamento',
+        accessor: (row) => (row as any).modelo_aeronave || '-',
+        sortable: true,
+        visible: true,
+        width: '115px',
+        render: (value) => (
+          <span className="text-sm font-normal text-slate-900">{String(value ?? '-')}</span>
+        ),
       },
-      sortable: true,
-      visible: true,
-      width: '105px',
-      render: (value) => {
-        const display = getTipoTreinamentoDisplay(String(value || ''));
-        return (
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${display.className}`}
-          >
-            {display.label}
-          </span>
-        );
-      },
-    },
-    {
-      id: 'codigo',
-      label: 'Código',
-      accessor: (row) =>
-        (row as HistoricoItem & { codigo_legacy?: string }).qualificacao_codigo ||
-        (row as HistoricoItem & { codigo_legacy?: string }).codigo ||
-        (row as HistoricoItem & { codigo_legacy?: string }).codigo_legacy ||
-        '-',
-      sortable: true,
-      visible: true,
-      width: '90px',
-      render: (value, row) => {
-        const r = row as HistoricoItem & { codigo_legacy?: string };
-        const display =
-          String(value || r.qualificacao_codigo || r.codigo || r.codigo_legacy || '-') || '-';
-        return <span className="text-sm font-normal text-slate-900">{display}</span>;
-      },
-    },
-    {
-      id: 'aeronave',
-      label: 'Equipamento',
-      accessor: (row) => (row as any).modelo_aeronave || '-',
-      sortable: true,
-      visible: true,
-      width: '115px',
-      render: (value) => (
-        <span className="text-sm font-normal text-slate-900">{String(value ?? '-')}</span>
-      ),
-    },
-    {
-      id: 'categoria',
-      label: 'Categoria',
-      accessor: (row) => row.qualificacao_categoria || row.categoria || '-',
-      sortable: true,
-      visible: true,
-      width: '145px',
-      render: (value, row) => {
-        const categoriaName = String(value ?? '');
-        const corDireta = (row as any).categoria_cor;
-        const categoriaByName = !corDireta
-          ? categoriasMap.get(normalizeCategoriaKey(categoriaName))
-          : undefined;
-        const categoriaById =
-          !corDireta && (row as { categoria_id?: number }).categoria_id
-            ? categorias.find((c) => c.id === (row as { categoria_id?: number }).categoria_id)
+      {
+        id: 'categoria',
+        label: 'Categoria',
+        accessor: (row) => row.qualificacao_categoria || row.categoria || '-',
+        sortable: true,
+        visible: true,
+        width: '145px',
+        render: (value, row) => {
+          const categoriaName = String(value ?? '');
+          const corDireta = (row as any).categoria_cor;
+          const categoriaByName = !corDireta
+            ? categoriasMap.get(normalizeCategoriaKey(categoriaName))
             : undefined;
+          const categoriaById =
+            !corDireta && (row as { categoria_id?: number }).categoria_id
+              ? categorias.find((c) => c.id === (row as { categoria_id?: number }).categoria_id)
+              : undefined;
 
-        const corFinal = getCategoriaCorDisplay(
-          categoriaName,
-          corDireta || categoriaByName?.cor || categoriaById?.cor,
-        );
-        const appearance = resolveClassificationTagAppearance({
-          variant: 'category',
-          label: categoriaName,
-          color: corFinal ?? null,
-        });
+          const corFinal = getCategoriaCorDisplay(
+            categoriaName,
+            corDireta || categoriaByName?.cor || categoriaById?.cor,
+          );
+          const appearance = resolveClassificationTagAppearance({
+            variant: 'category',
+            label: categoriaName,
+            color: corFinal ?? null,
+          });
 
-        return (
-          <span
-            key={`cat-${(row as any).id}-${value}-${corFinal || 'default'}`}
-            className={appearance.className}
-            style={appearance.style}
-          >
-            {categoriaName}
-          </span>
-        );
-      },
-    },
-    {
-      id: 'realizado',
-      label: 'Realizado',
-      accessor: (row) => {
-        const d = row.data_realizacao || row.data_conclusao || row.data_emissao;
-        return d ? parseDateLocal(d) : '';
-      },
-      sortable: true,
-      visible: true,
-      width: '135px',
-      render: (value, row) => {
-        if (!value || value === '-')
-          return <span className="text-sm font-normal text-slate-400">-</span>;
-        const data = value as Date;
-        const qualificacaoStatus = String(
-          (row as unknown as { qualificacao_status?: string | null }).qualificacao_status || '',
-        ).toUpperCase();
-        const isPlanejada = qualificacaoStatus === 'PLANEJADA';
-        const validadeMeses =
-          (
-            row as unknown as {
-              validade_meses?: number;
-              validade?: number;
-              qualificacao_validade?: number;
-            }
-          ).validade_meses ??
-          (
-            row as unknown as {
-              validade_meses?: number;
-              validade?: number;
-              qualificacao_validade?: number;
-            }
-          ).validade ??
-          (
-            row as unknown as {
-              validade_meses?: number;
-              validade?: number;
-              qualificacao_validade?: number;
-            }
-          ).qualificacao_validade ??
-          null;
-        return (
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-900">
-              {data.toLocaleDateString('pt-BR')}
+          return (
+            <span
+              key={`cat-${(row as any).id}-${value}-${corFinal || 'default'}`}
+              className={appearance.className}
+              style={appearance.style}
+            >
+              {categoriaName}
             </span>
-            <span className="text-xs font-normal text-slate-500">
-              {isPlanejada
-                ? 'Data planejada'
-                : validadeMeses
-                  ? `Valid. ${validadeMeses} meses.`
-                  : 'Valid. -'}
-            </span>
-          </div>
-        );
+          );
+        },
       },
-    },
-    {
-      id: 'vencimento',
-      label: 'Vencimento',
-      accessor: (row) => {
-        const d = row.data_vencimento || row.data_validade;
-        return d ? parseDateLocal(d) : '';
-      },
-      sortable: true,
-      visible: true,
-      width: '155px',
-      render: (value, row) => {
-        const item = row as HistoricoItem & { qualificacao_status?: string };
-        const rawStatus = String(item.qualificacao_status || item.status || '').toUpperCase();
-        if (!value || value === '-') {
-          if (rawStatus === 'CONCLUIDA' || rawStatus === 'CONCLUIDO') {
-            return <span className="text-sm font-medium text-emerald-700">Sem vencimento</span>;
-          }
-          return <span className="text-sm font-normal text-slate-400">-</span>;
-        }
-        const dataVenc = value as Date;
-        const hoje = new Date();
-        const diasRestantes = Math.floor(
-          (dataVenc.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
-        );
-        const planejadaRelacionada = getPlanejadaRelacionada(row as HistoricoItem);
-        return (
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-900">
-              {dataVenc.toLocaleDateString('pt-BR')}
-            </span>
-            {diasRestantes >= 0 ? (
-              <span className="text-xs font-normal text-slate-500">
-                {diasRestantes === 0 ? 'Hoje' : `${diasRestantes} dias`}
+      {
+        id: 'realizado',
+        label: 'Realizado',
+        accessor: (row) => {
+          const d = row.data_realizacao || row.data_conclusao || row.data_emissao;
+          return d ? parseDateLocal(d) : '';
+        },
+        sortable: true,
+        visible: true,
+        width: '135px',
+        render: (value, row) => {
+          if (!value || value === '-')
+            return <span className="text-sm font-normal text-slate-400">-</span>;
+          const data = value as Date;
+          const qualificacaoStatus = String(
+            (row as unknown as { qualificacao_status?: string | null }).qualificacao_status || '',
+          ).toUpperCase();
+          const isPlanejada = qualificacaoStatus === 'PLANEJADA';
+          const validadeMeses =
+            (
+              row as unknown as {
+                validade_meses?: number;
+                validade?: number;
+                qualificacao_validade?: number;
+              }
+            ).validade_meses ??
+            (
+              row as unknown as {
+                validade_meses?: number;
+                validade?: number;
+                qualificacao_validade?: number;
+              }
+            ).validade ??
+            (
+              row as unknown as {
+                validade_meses?: number;
+                validade?: number;
+                qualificacao_validade?: number;
+              }
+            ).qualificacao_validade ??
+            null;
+          return (
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-slate-900">
+                {data.toLocaleDateString('pt-BR')}
               </span>
-            ) : (
-              // Mostrar "vencida há xxx dias" APENAS se NÃO for renovada
-              getHistoricoStatus(row as HistoricoItem) !== 'RENOVADA' && (
-                <>
-                  <span className="text-xs font-medium text-danger-600">
-                    Vencida há {Math.abs(diasRestantes)} dias
-                  </span>
-                  {planejadaRelacionada && (
-                    <span className="text-[11px] font-medium text-purple-600">Já planejada</span>
-                  )}
-                </>
-              )
-            )}
-          </div>
-        );
+              <span className="text-xs font-normal text-slate-500">
+                {isPlanejada
+                  ? 'Data planejada'
+                  : validadeMeses
+                    ? `Valid. ${validadeMeses} meses.`
+                    : 'Valid. -'}
+              </span>
+            </div>
+          );
+        },
       },
-    },
+      {
+        id: 'vencimento',
+        label: 'Vencimento',
+        accessor: (row) => {
+          const d = row.data_vencimento || row.data_validade;
+          return d ? parseDateLocal(d) : '';
+        },
+        sortable: true,
+        visible: true,
+        width: '155px',
+        render: (value, row) => {
+          const item = row as HistoricoItem & { qualificacao_status?: string };
+          const rawStatus = String(item.qualificacao_status || item.status || '').toUpperCase();
+          if (!value || value === '-') {
+            if (rawStatus === 'CONCLUIDA' || rawStatus === 'CONCLUIDO') {
+              return <span className="text-sm font-medium text-emerald-700">Sem vencimento</span>;
+            }
+            return <span className="text-sm font-normal text-slate-400">-</span>;
+          }
+          const dataVenc = value as Date;
+          const hoje = new Date();
+          const diasRestantes = Math.floor(
+            (dataVenc.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
+          );
+          const planejadaRelacionada = getPlanejadaRelacionada(row as HistoricoItem);
+          return (
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-slate-900">
+                {dataVenc.toLocaleDateString('pt-BR')}
+              </span>
+              {diasRestantes >= 0 ? (
+                <span className="text-xs font-normal text-slate-500">
+                  {diasRestantes === 0 ? 'Hoje' : `${diasRestantes} dias`}
+                </span>
+              ) : (
+                // Mostrar "vencida há xxx dias" APENAS se NÃO for renovada
+                getHistoricoStatus(row as HistoricoItem) !== 'RENOVADA' && (
+                  <>
+                    <span className="text-xs font-medium text-danger-600">
+                      Vencida há {Math.abs(diasRestantes)} dias
+                    </span>
+                    {planejadaRelacionada && (
+                      <span className="text-[11px] font-medium text-purple-600">Já planejada</span>
+                    )}
+                  </>
+                )
+              )}
+            </div>
+          );
+        },
+      },
     ],
     [
       abrirModalConvocacaoPlanejada,
@@ -2637,7 +2657,11 @@ export default function Qualificacoes() {
         <div className="border-b border-slate-200 dark:border-slate-800">
           {/* Row 1: Tabs + primary action button */}
           <div className="flex items-center justify-between px-4 pt-2">
-            <div role="tablist" aria-label="Seções de qualificações" className="flex min-w-0 items-center">
+            <div
+              role="tablist"
+              aria-label="Seções de qualificações"
+              className="flex min-w-0 items-center"
+            >
               <button
                 role="tab"
                 aria-selected={activeTab === 'historico'}
@@ -2724,7 +2748,10 @@ export default function Qualificacoes() {
             )}
             {isPlanejadosTab && plannedView !== 'turmas' && (
               <button
-                onClick={() => { setPlannedView('turmas'); setAutoOpenTurmasModal(true); }}
+                onClick={() => {
+                  setPlannedView('turmas');
+                  setAutoOpenTurmasModal(true);
+                }}
                 className="flex items-center gap-1.5 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 cursor-pointer"
               >
                 <Plus className="w-4 h-4" /> Nova turma
@@ -2732,7 +2759,12 @@ export default function Qualificacoes() {
             )}
             {activeTab === 'categorias' && (
               <button
-                onClick={async () => { setEditingCategoria(null); setNovaCategoriaNome(''); setNovaCategoriaDesc(''); setShowCategoriaModal(true); }}
+                onClick={async () => {
+                  setEditingCategoria(null);
+                  setNovaCategoriaNome('');
+                  setNovaCategoriaDesc('');
+                  setShowCategoriaModal(true);
+                }}
                 className="flex items-center gap-1.5 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 cursor-pointer"
               >
                 <Plus className="w-4 h-4" /> Nova Categoria
@@ -2741,125 +2773,159 @@ export default function Qualificacoes() {
           </div>
 
           {/* Row 2: Search + filters bar */}
-	          <div className="flex flex-wrap items-center gap-2 px-4 pb-2.5">
-	            {(usesHistoricoDataset || activeTab === 'tipos') && (
-	              <div className="relative flex-1 min-w-[200px] max-w-md">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2.5">
+            {(usesHistoricoDataset || activeTab === 'tipos') && (
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <Search
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={14}
+                />
                 <input
                   type="text"
-                  placeholder={activeTab === 'tipos' ? "Buscar modelos..." : "Buscar por nome, código, qualificação..."}
+                  placeholder={
+                    activeTab === 'tipos'
+                      ? 'Buscar modelos...'
+                      : 'Buscar por nome, código, qualificação...'
+                  }
                   value={activeTab === 'tipos' ? searchTipos : searchTerm}
-                  onChange={(e) => activeTab === 'tipos' ? setSearchTipos(e.target.value) : setSearchTerm(e.target.value)}
+                  onChange={(e) =>
+                    activeTab === 'tipos'
+                      ? setSearchTipos(e.target.value)
+                      : setSearchTerm(e.target.value)
+                  }
                   className="w-full rounded-md border border-slate-300 pl-8 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
-	                />
-	              </div>
-	            )}
-	            {activeTab === 'tipos' && (
-	              <>
-	                <select
-	                  value={categoriaFilter}
-	                  onChange={(e) => setCategoriaFilter(e.target.value)}
-	                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
-	                >
-	                  <option value="">Categoria</option>
-	                  {categorias
-	                    .slice()
-	                    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-	                    .map((cat) => (
-	                      <option key={cat.id ?? cat.nome} value={cat.id != null ? String(cat.id) : cat.nome}>
-	                        {cat.nome}
-	                      </option>
-	                    ))}
-	                </select>
-	                {setoresTipos.length === 1 ? (
-	                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
-	                    {setoresTipos[0].nome}
-	                  </div>
-	                ) : (
-	                  <MultiSelect
-	                    options={setorOptionsTipos}
-	                    selected={modelosPrefs.setorFilter}
-	                    onChange={(selected) =>
-	                      setModelosPrefs((prev) => ({ ...prev, setorFilter: selected }))
-	                    }
-	                    placeholder="Todos os setores"
-	                    allLabel="Todos os setores"
-	                    className="min-w-[220px]"
-	                  />
-	                )}
-	                {(searchTipos.trim() || modelosPrefs.setorFilter.length > 0 || categoriaFilter) && (
-	                  <button
-	                    type="button"
-	                    onClick={() => {
-	                      setSearchTipos('');
-	                      setCategoriaFilter('');
-	                      setModelosPrefs((prev) => ({ ...prev, setorFilter: [] }));
-	                    }}
-	                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-	                  >
-	                    Limpar filtros
-	                  </button>
-	                )}
-	              </>
-	            )}
-	            {activeTab === 'categorias' && (
-	              <>
-	                {setoresTipos.length === 1 ? (
-	                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
-	                    {setoresTipos[0].nome}
-	                  </div>
-	                ) : setoresTipos.length > 1 ? (
-	                  <MultiSelect
-	                    options={setorOptionsTipos}
-	                    selected={categoriasSetorFilter}
-	                    onChange={setCategoriasSetorFilter}
-	                    placeholder="Todos os setores"
-	                    allLabel="Todos os setores"
-	                    className="min-w-[180px]"
-	                  />
-	                ) : null}
-	                {categoriasSetorFilter.length > 0 && setoresTipos.length > 1 && (
-	                  <button
-	                    type="button"
-	                    onClick={() => setCategoriasSetorFilter([])}
-	                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-	                  >
-	                    Limpar filtro
-	                  </button>
-	                )}
-	              </>
-	            )}
-	            {usesHistoricoDataset && (
-	              <>
+                />
+              </div>
+            )}
+            {activeTab === 'tipos' && (
+              <>
+                <select
+                  value={categoriaFilter}
+                  onChange={(e) => setCategoriaFilter(e.target.value)}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
+                >
+                  <option value="">Categoria</option>
+                  {categorias
+                    .slice()
+                    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+                    .map((cat) => (
+                      <option
+                        key={cat.id ?? cat.nome}
+                        value={cat.id != null ? String(cat.id) : cat.nome}
+                      >
+                        {cat.nome}
+                      </option>
+                    ))}
+                </select>
+                {setoresTipos.length === 1 ? (
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
+                    {setoresTipos[0].nome}
+                  </div>
+                ) : (
+                  <MultiSelect
+                    options={setorOptionsTipos}
+                    selected={modelosPrefs.setorFilter}
+                    onChange={(selected) =>
+                      setModelosPrefs((prev) => ({ ...prev, setorFilter: selected }))
+                    }
+                    placeholder="Todos os setores"
+                    allLabel="Todos os setores"
+                    className="min-w-[220px]"
+                  />
+                )}
+                {(searchTipos.trim() || modelosPrefs.setorFilter.length > 0 || categoriaFilter) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchTipos('');
+                      setCategoriaFilter('');
+                      setModelosPrefs((prev) => ({ ...prev, setorFilter: [] }));
+                    }}
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </>
+            )}
+            {activeTab === 'categorias' && (
+              <>
+                {setoresTipos.length === 1 ? (
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
+                    {setoresTipos[0].nome}
+                  </div>
+                ) : setoresTipos.length > 1 ? (
+                  <MultiSelect
+                    options={setorOptionsTipos}
+                    selected={categoriasSetorFilter}
+                    onChange={setCategoriasSetorFilter}
+                    placeholder="Todos os setores"
+                    allLabel="Todos os setores"
+                    className="min-w-[180px]"
+                  />
+                ) : null}
+                {categoriasSetorFilter.length > 0 && setoresTipos.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setCategoriasSetorFilter([])}
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Limpar filtro
+                  </button>
+                )}
+              </>
+            )}
+            {usesHistoricoDataset && (
+              <>
                 <select
                   value={aeronaveFilter}
-                  onChange={(e) => { setAeronaveFilter(e.target.value); setPage(1); }}
+                  onChange={(e) => {
+                    setAeronaveFilter(e.target.value);
+                    setPage(1);
+                  }}
                   className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
                 >
                   <option value="">Equipamento</option>
                   {aeronavesConfig.map((a) => (
-                    <option key={a.id} value={a.id}>{a.modelo || a.codigo || (a as { nome?: string }).nome || String(a.id)}</option>
+                    <option key={a.id} value={a.id}>
+                      {a.modelo || a.codigo || (a as { nome?: string }).nome || String(a.id)}
+                    </option>
                   ))}
                 </select>
                 <select
                   value={categoriaFilter}
-                  onChange={(e) => { setCategoriaFilter(e.target.value); setPage(1); }}
+                  onChange={(e) => {
+                    setCategoriaFilter(e.target.value);
+                    setPage(1);
+                  }}
                   className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
                 >
                   <option value="">Categoria</option>
-                  {categorias.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map((cat) => (
-                    <option key={cat.id ?? cat.nome} value={cat.nome}>{cat.nome}</option>
-                  ))}
+                  {categorias
+                    .slice()
+                    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+                    .map((cat) => (
+                      <option key={cat.id ?? cat.nome} value={cat.nome}>
+                        {cat.nome}
+                      </option>
+                    ))}
                 </select>
                 <select
                   value={historicoFormatoId ?? ''}
-                  onChange={(e) => { setHistoricoFormatoId(e.target.value ? Number(e.target.value) : null); setPage(1); }}
+                  onChange={(e) => {
+                    setHistoricoFormatoId(e.target.value ? Number(e.target.value) : null);
+                    setPage(1);
+                  }}
                   className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
                 >
                   <option value="">Formato</option>
-                  {formatos.filter((f) => f.ativo).map((f) => (
-                    <option key={f.id} value={f.id}>{f.nome}</option>
-                  ))}
+                  {formatos
+                    .filter((f) => f.ativo)
+                    .map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.nome}
+                      </option>
+                    ))}
                 </select>
                 {setorOptionsHistorico.length === 1 ? (
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
@@ -2869,38 +2935,82 @@ export default function Qualificacoes() {
                   <MultiSelect
                     options={setorOptionsHistorico}
                     selected={setorFilter}
-                    onChange={(selected) => { setSetorFilter(selected); setPage(1); }}
+                    onChange={(selected) => {
+                      setSetorFilter(selected);
+                      setPage(1);
+                    }}
                     placeholder="Todos os setores"
                     allLabel="Todos os setores"
                     className="min-w-[180px]"
                   />
                 ) : null}
                 <div className="relative">
-                  <button type="button" onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                    className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer">
-                    <ListFilter className="w-3.5 h-3.5" />Status ({statusFiltro.size}/6)
+                  <button
+                    type="button"
+                    onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                    className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    <ListFilter className="w-3.5 h-3.5" />
+                    Status ({statusFiltro.size}/6)
                   </button>
                   {statusDropdownOpen && (
                     <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-lg border border-slate-200 shadow-lg p-3 min-w-[200px]">
                       <div className="text-xs font-medium text-slate-500 mb-2">Exibir status:</div>
                       {[
                         { key: 'VALIDA', label: 'Válidas', color: 'text-green-600' },
-                        { key: 'VENCENDO_30', label: 'Vencendo (30 dias)', color: 'text-amber-600' },
+                        {
+                          key: 'VENCENDO_30',
+                          label: 'Vencendo (30 dias)',
+                          color: 'text-amber-600',
+                        },
                         { key: 'VENCIDA', label: 'Vencidas', color: 'text-red-600' },
                         { key: 'RENOVADA', label: 'Renovadas', color: 'text-blue-600' },
                         { key: 'PLANEJADA', label: 'Planejadas', color: 'text-purple-600' },
                         { key: 'CANCELADA', label: 'Canceladas', color: 'text-slate-500' },
                       ].map(({ key, label, color }) => (
-                        <label key={key} className="flex items-center gap-2 py-1 cursor-pointer select-none hover:bg-slate-50 px-1 rounded">
-                          <input type="checkbox" checked={statusFiltro.has(key)}
-                            onChange={(e) => { const s = new Set(statusFiltro); e.target.checked ? s.add(key) : s.delete(key); setStatusFiltro(s); }}
-                            className="w-4 h-4 rounded border-slate-300" />
+                        <label
+                          key={key}
+                          className="flex items-center gap-2 py-1 cursor-pointer select-none hover:bg-slate-50 px-1 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={statusFiltro.has(key)}
+                            onChange={(e) => {
+                              const s = new Set(statusFiltro);
+                              e.target.checked ? s.add(key) : s.delete(key);
+                              setStatusFiltro(s);
+                            }}
+                            className="w-4 h-4 rounded border-slate-300"
+                          />
                           <span className={`text-sm ${color}`}>{label}</span>
                         </label>
                       ))}
                       <div className="border-t border-slate-200 mt-2 pt-2 flex gap-2">
-                        <button type="button" onClick={() => setStatusFiltro(new Set(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','PLANEJADA','CANCELADA']))} className="text-xs text-blue-600 hover:underline">Todos</button>
-                        <button type="button" onClick={() => setStatusFiltro(new Set())} className="text-xs text-slate-500 hover:underline">Limpar</button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setStatusFiltro(
+                              new Set([
+                                'VALIDA',
+                                'VENCIDA',
+                                'VENCENDO_30',
+                                'RENOVADA',
+                                'PLANEJADA',
+                                'CANCELADA',
+                              ]),
+                            )
+                          }
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          Todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusFiltro(new Set())}
+                          className="text-xs text-slate-500 hover:underline"
+                        >
+                          Limpar
+                        </button>
                       </div>
                     </div>
                   )}
@@ -3228,7 +3338,8 @@ export default function Qualificacoes() {
                                       (row as { conteudo_programatico?: string | null })
                                         .conteudo_programatico ?? null,
                                     carga_horaria:
-                                      (row as { carga_horaria?: number | null }).carga_horaria ?? null,
+                                      (row as { carga_horaria?: number | null }).carga_horaria ??
+                                      null,
                                     carga_horaria_inicial:
                                       (row as { carga_horaria_inicial?: number | null })
                                         .carga_horaria_inicial ?? null,
@@ -3236,14 +3347,17 @@ export default function Qualificacoes() {
                                       (row as { carga_horaria_recorrente?: number | null })
                                         .carga_horaria_recorrente ?? null,
                                     vencimento_fim_mes: (row as any).vencimento_fim_mes ?? 0,
-                                    is_check: (row as { is_check?: number | boolean | null }).is_check
+                                    is_check: (row as { is_check?: number | boolean | null })
+                                      .is_check
                                       ? 1
                                       : 0,
-                                    setores: (row as { setores?: Array<{ id: number; nome: string }> }).setores ?? [],
-                                    setor_ids:
-                                      ((row as { setores?: Array<{ id: number; nome: string }> }).setores ?? []).map(
-                                        (setor) => Number(setor.id),
-                                      ),
+                                    setores:
+                                      (row as { setores?: Array<{ id: number; nome: string }> })
+                                        .setores ?? [],
+                                    setor_ids: (
+                                      (row as { setores?: Array<{ id: number; nome: string }> })
+                                        .setores ?? []
+                                    ).map((setor) => Number(setor.id)),
                                     created_at: row.created_at,
                                     updated_at: row.updated_at ?? null,
                                   });
@@ -3366,7 +3480,8 @@ export default function Qualificacoes() {
                         const nome = String(value ?? '');
                         const cor = (row as any).formato_cor as string | undefined;
                         const codigo = (row as any).formato_codigo as string | undefined;
-                        if (!nome || nome === '-') return <span className="text-sm font-normal text-slate-400">-</span>;
+                        if (!nome || nome === '-')
+                          return <span className="text-sm font-normal text-slate-400">-</span>;
                         const appearance = resolveClassificationTagAppearance({
                           variant: 'format',
                           label: nome,
@@ -3391,7 +3506,10 @@ export default function Qualificacoes() {
                           ? (value as Array<{ id: number; nome: string }>)
                           : [];
 
-                        if (setores.length === 0 || (row as { is_transversal?: boolean }).is_transversal) {
+                        if (
+                          setores.length === 0 ||
+                          (row as { is_transversal?: boolean }).is_transversal
+                        ) {
                           return (
                             <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
                               Transversal
@@ -3489,7 +3607,10 @@ export default function Qualificacoes() {
                   Categorias
                 </button>
                 <button
-                  onClick={() => { setActiveClassifSubTab('formatos'); carregarFormatos(); }}
+                  onClick={() => {
+                    setActiveClassifSubTab('formatos');
+                    carregarFormatos();
+                  }}
                   className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-all cursor-pointer ${activeClassifSubTab === 'formatos' ? 'border-primary text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                 >
                   Formatos
@@ -3500,8 +3621,9 @@ export default function Qualificacoes() {
               <div className="mx-4 mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 flex items-start gap-2 text-sm text-blue-800">
                 <Info size={16} className="mt-0.5 flex-shrink-0" />
                 <span>
-                  <strong>Modelos</strong> (tipos de qualificação) permanece como aba principal própria.{' '}
-                  A integração como terceira subtab dentro de Classificações (Categorias | Formatos | Modelos) está planejada para fase posterior.
+                  <strong>Modelos</strong> (tipos de qualificação) permanece como aba principal
+                  própria. A integração como terceira subtab dentro de Classificações (Categorias |
+                  Formatos | Modelos) está planejada para fase posterior.
                 </span>
               </div>
 
@@ -3551,117 +3673,123 @@ export default function Qualificacoes() {
                 </div>
               )}
 
-              {activeClassifSubTab === 'categorias' && <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <table className="w-full">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-24">
-                        Ações
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-32">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                        Categoria
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                        Conteúdo
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white">
-                    {categorias.map((cat) => (
-                      <tr key={cat.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={async () => {
-                                if (
-                                  !(await confirmDialog(
-                                    'Tem certeza que deseja deletar esta categoria?',
-                                  ))
-                                )
-                                  return;
-                                try {
-                                  const token = getAccessToken();
-                                  const apiUrl = API_BASE_URL;
-                                  const response = await fetch(`${apiUrl}/categorias/${cat.id}`, {
-                                    method: 'DELETE',
-                                    headers: {
-                                      Authorization: `Bearer ${token}`,
-                                    },
-                                  });
-                                  if (response.ok) {
-                                    showToast.success('Categoria deletada com sucesso!');
-                                    setCategorias(categorias.filter((c) => c.id !== cat.id));
-                                  } else {
-                                    const errorData = await response.json().catch(() => ({}));
-                                    if (response.status === 403) {
-                                      showToast.error(
-                                        'Permissão negada. Apenas administradores podem deletar categorias.',
-                                      );
-                                    } else {
-                                      showToast.error(
-                                        errorData.error || 'Erro ao deletar categoria',
-                                      );
-                                    }
-                                  }
-                                } catch (error) {
-                                  console.error('Erro ao deletar categoria:', error);
-                                  showToast.error('Erro ao deletar categoria');
-                                }
-                              }}
-                              className={historicoActionDangerButtonClass}
-                              title="Deletar"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-600" />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                setEditingCategoria(cat);
-                                setNovaCategoriaNome(cat.nome);
-                                setNovaCategoriaDesc(cat.descricao || '');
-                                setShowCategoriaModal(true);
-                              }}
-                              className={historicoActionButtonClass}
-                              title="Editar"
-                            >
-                              <Pencil className="w-4 h-4 text-indigo-600" />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-success-600/10 text-success-600">
-                            <span className="h-2 w-2 rounded-full bg-success-600" />
-                            ATIVO
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className="h-3 w-3 rounded-full flex-shrink-0"
-                              style={{
-                                backgroundColor:
-                                  getCategoriaCorDisplay(cat.nome, cat.cor) || '#9ca3af',
-                              }}
-                            />
-                            <span className="font-medium text-slate-900">{cat.nome}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-slate-600 line-clamp-2">
-                            {cat.descricao || '-'}
-                          </span>
-                        </td>
+              {activeClassifSubTab === 'categorias' && (
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-24">
+                          Ações
+                        </th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-32">
+                          Status
+                        </th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                          Categoria
+                        </th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                          Conteúdo
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>}
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 bg-white">
+                      {categorias.map((cat) => (
+                        <tr key={cat.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (
+                                    !(await confirmDialog(
+                                      'Tem certeza que deseja deletar esta categoria?',
+                                    ))
+                                  )
+                                    return;
+                                  try {
+                                    const token = getAccessToken();
+                                    const apiUrl = API_BASE_URL;
+                                    const response = await fetchWithAuth(
+                                      `${apiUrl}/categorias/${cat.id}`,
+                                      {
+                                        method: 'DELETE',
+                                      },
+                                    );
+                                    if (response.ok) {
+                                      showToast.success('Categoria deletada com sucesso!');
+                                      setCategorias(categorias.filter((c) => c.id !== cat.id));
+                                    } else {
+                                      const errorData = await response.json().catch(() => ({}));
+                                      if (response.status === 403) {
+                                        showToast.error(
+                                          'Permissão negada. Apenas administradores podem deletar categorias.',
+                                        );
+                                      } else {
+                                        showToast.error(
+                                          errorData.error || 'Erro ao deletar categoria',
+                                        );
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.error('Erro ao deletar categoria:', error);
+                                    showToast.error('Erro ao deletar categoria');
+                                  }
+                                }}
+                                className={historicoActionDangerButtonClass}
+                                title="Deletar"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-600" />
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  setEditingCategoria(cat);
+                                  setNovaCategoriaNome(cat.nome);
+                                  setNovaCategoriaDesc(cat.descricao || '');
+                                  setShowCategoriaModal(true);
+                                }}
+                                className={historicoActionButtonClass}
+                                title="Editar"
+                              >
+                                <Pencil className="w-4 h-4 text-indigo-600" />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-success-600/10 text-success-600">
+                              <span className="h-2 w-2 rounded-full bg-success-600" />
+                              ATIVO
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="h-3 w-3 rounded-full flex-shrink-0"
+                                style={{
+                                  backgroundColor:
+                                    getCategoriaCorDisplay(cat.nome, cat.cor) || '#9ca3af',
+                                }}
+                              />
+                              <span className="font-medium text-slate-900">{cat.nome}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-slate-600 line-clamp-2">
+                              {cat.descricao || '-'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {activeClassifSubTab === 'categorias' && categorias.length === 0 && (
                 <div className="text-center py-12">
-                  <FolderOpen className="mx-auto mb-4 text-slate-300" size={60} aria-hidden="true" />
+                  <FolderOpen
+                    className="mx-auto mb-4 text-slate-300"
+                    size={60}
+                    aria-hidden="true"
+                  />
                   <h3 className="text-lg font-semibold text-slate-900 mb-2">
                     Nenhuma categoria encontrada
                   </h3>
@@ -3840,11 +3968,10 @@ export default function Qualificacoes() {
                     ? `${apiUrl}/categorias/${editingCategoria.id}`
                     : `${apiUrl}/categorias`;
 
-                  const response = await fetch(url, {
+                  const response = await fetchWithAuth(url, {
                     method,
                     headers: {
                       'Content-Type': 'application/json',
-                      Authorization: `Bearer ${token}`,
                     },
                     body: JSON.stringify({
                       nome: novaCategoriaNome,
@@ -3861,11 +3988,7 @@ export default function Qualificacoes() {
                     setNovaCategoriaNome('');
                     setNovaCategoriaDesc('');
                     // Recarregar categorias
-                    const categoriasResponse = await fetch(`${apiUrl}/categorias`, {
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                      },
-                    });
+                    const categoriasResponse = await fetchWithAuth(`${apiUrl}/categorias`, {});
                     if (categoriasResponse.ok) {
                       const data = await categoriasResponse.json();
                       setCategorias(data.data || []);
@@ -3914,7 +4037,9 @@ export default function Qualificacoes() {
               <TextInput
                 placeholder="Ex: EAD, PRESENCIAL, SIMULADOR (maiúsculo, sem espaços)"
                 value={novoFormatoCodigo}
-                onChange={(e) => setNovoFormatoCodigo(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'))}
+                onChange={(e) =>
+                  setNovoFormatoCodigo(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'))
+                }
               />
             </FormField>
           )}
@@ -4001,7 +4126,7 @@ export default function Qualificacoes() {
             await carregarHistorico();
             // Recarregar stats também
             try {
-              const statsResponse = await fetch(`${API_BASE_URL}/dashboard/qualificacoes`);
+              const statsResponse = await fetchWithAuth(`${API_BASE_URL}/dashboard/qualificacoes`);
               if (statsResponse.ok) {
                 const json = await statsResponse.json();
                 const data = json.data || json;
@@ -4056,7 +4181,7 @@ export default function Qualificacoes() {
             await carregarHistorico();
             // Recarregar stats também
             try {
-              const statsResponse = await fetch(`${API_BASE_URL}/dashboard/qualificacoes`);
+              const statsResponse = await fetchWithAuth(`${API_BASE_URL}/dashboard/qualificacoes`);
               if (statsResponse.ok) {
                 const json = await statsResponse.json();
                 const data = json.data || json;
@@ -4499,11 +4624,7 @@ export default function Qualificacoes() {
                 onChange={(e) =>
                   setTurmaPlanejadaTipoTreinamento(
                     e.target.value as
-                      | 'INICIAL'
-                      | 'RECORRENTE'
-                      | 'SEMESTRAL'
-                      | 'UPGRADE'
-                      | 'ESPECIFICO',
+                      'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO',
                   )
                 }
                 options={[
@@ -4675,9 +4796,9 @@ export default function Qualificacoes() {
                 })()}
               </div>
             )}
-	          </div>
-	        }
-	      >
+          </div>
+        }
+      >
         {planejadaSelecionada && (
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -4840,7 +4961,7 @@ export default function Qualificacoes() {
             await carregarHistorico();
             // Recarregar stats também
             try {
-              const statsResponse = await fetch(`${API_BASE_URL}/dashboard/qualificacoes`);
+              const statsResponse = await fetchWithAuth(`${API_BASE_URL}/dashboard/qualificacoes`);
               if (statsResponse.ok) {
                 const json = await statsResponse.json();
                 const data = json.data || json;
@@ -5045,11 +5166,10 @@ export default function Qualificacoes() {
                 const abortController = new AbortController();
                 const fetchTimeoutId = setTimeout(() => abortController.abort(), SAVE_TIMEOUT_MS);
 
-                const response = await fetch(url, {
+                const response = await fetchWithAuth(url, {
                   method,
                   headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
                   },
                   body: JSON.stringify(payload),
                   signal: abortController.signal,
@@ -5064,9 +5184,9 @@ export default function Qualificacoes() {
                 );
 
                 if (response.ok) {
-                  const responseJson = (await response.json().catch(() => null)) as
-                    | { data?: TipoUpdateResponseData }
-                    | null;
+                  const responseJson = (await response.json().catch(() => null)) as {
+                    data?: TipoUpdateResponseData;
+                  } | null;
                   const savedTipoId = String(responseJson?.data?.id || editingTipo.id || '').trim();
 
                   if (!savedTipoId) {
@@ -5074,13 +5194,12 @@ export default function Qualificacoes() {
                     return;
                   }
 
-                  const setoresResponse = await fetch(
+                  const setoresResponse = await fetchWithAuth(
                     `${apiUrl}/qualificacoes/tipos/${savedTipoId}/setores`,
                     {
                       method: 'PUT',
                       headers: {
                         'Content-Type': 'application/json',
-                        Authorization: `Bearer ${token}`,
                       },
                       body: JSON.stringify({
                         setor_ids: (editingTipo.setor_ids || [])
@@ -5097,10 +5216,15 @@ export default function Qualificacoes() {
                     return;
                   }
 
-                  getTipoRelatedCachePatterns().forEach((pattern) => clearApiCacheByPattern(pattern));
+                  getTipoRelatedCachePatterns().forEach((pattern) =>
+                    clearApiCacheByPattern(pattern),
+                  );
                   clearApiCacheByPattern('/api/lms/cursos');
                   clearApiCacheByPattern('/api/lms/stats');
-                  await queryClient.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
+                  await queryClient.invalidateQueries({
+                    queryKey: ['lms', 'cursos'],
+                    exact: false,
+                  });
                   await queryClient.invalidateQueries({ queryKey: lmsKeys.adminStats() });
                   showToast.success(buildTipoSaveSuccessMessage(responseJson?.data, isEdit));
 
@@ -5136,7 +5260,10 @@ export default function Qualificacoes() {
                       return next;
                     });
                   } catch (e) {
-                    logger.warn('[Qualificacoes] refetchTipos falhou — usando optimistic update', e);
+                    logger.warn(
+                      '[Qualificacoes] refetchTipos falhou — usando optimistic update',
+                      e,
+                    );
                     showToast.warning(
                       'Dados salvos, mas histórico ou indicadores podem ainda estar desatualizados.',
                     );
@@ -5317,7 +5444,9 @@ export default function Qualificacoes() {
                       prev
                         ? {
                             ...prev,
-                            setor_ids: selected.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0),
+                            setor_ids: selected
+                              .map((value) => Number(value))
+                              .filter((value) => Number.isInteger(value) && value > 0),
                           }
                         : prev,
                     )
@@ -5352,7 +5481,8 @@ export default function Qualificacoes() {
               }
             />
             <p className="mt-1 text-xs text-slate-500">
-              Em meses. Deixe vazio para qualificação sem vencimento (indeterminada). Use um valor positivo (ex: 12, 24, 36).
+              Em meses. Deixe vazio para qualificação sem vencimento (indeterminada). Use um valor
+              positivo (ex: 12, 24, 36).
             </p>
           </FormField>
 
