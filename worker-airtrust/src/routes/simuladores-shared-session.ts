@@ -148,12 +148,13 @@ async function assertEntityOwnership(
       `SELECT id
        FROM simuladores
        WHERE id = ?
+         AND empresa_id = ?
          AND deleted_at IS NULL`,
     )
-    .bind(payload.simulador_id)
+    .bind(payload.simulador_id, empresaId)
     .first();
   if (!simulador) {
-    throw new Error('Simulador não encontrado');
+    throw new Error('Simulador fora do tenant');
   }
 
   const modeloIds = payload.participantes
@@ -165,7 +166,7 @@ async function assertEntityOwnership(
     throw new Error('Modelo de sessão fora do tenant');
   }
 
-  const simuladorModelo = normalizeModeloAeronave(await getSimuladorModeloAeronave(db, payload.simulador_id));
+  const simuladorModelo = normalizeModeloAeronave(await getSimuladorModeloAeronave(db, payload.simulador_id, empresaId));
   for (const participante of payload.participantes) {
     if (!participante.cumpre_treinamento) {
       continue;
@@ -738,7 +739,7 @@ async function buildSharedSessionBatchPlan(
   const tipoDispositivoSupported = columns.has('tipo_dispositivo');
   const aeronaveIdSupported = columns.has('aeronave_id');
   const sessaoUuid = crypto.randomUUID();
-  const simulatorModel = await getSimuladorModeloAeronave(db, payload.simulador_id);
+  const simulatorModel = await getSimuladorModeloAeronave(db, payload.simulador_id, empresaId);
 
   const primaryParticipant = payload.participantes[0];
   const primaryAssignment = payload.participantes.find((item) => item.cumpre_treinamento) || primaryParticipant;
@@ -1167,7 +1168,7 @@ async function updateSharedSessionStructureTransactional(
   const primaryModel = primaryAssignment.modelo_sessao_id
     ? modelosMap.get(Number(primaryAssignment.modelo_sessao_id))
     : null;
-  const simulatorModel = await getSimuladorModeloAeronave(db, payload.simulador_id);
+  const simulatorModel = await getSimuladorModeloAeronave(db, payload.simulador_id, empresaId);
   const durationMinutes = payload.segmentos.reduce(
     (sum, segmento) => sum + Number(segmento.duracao_minutos || 0),
     0,
@@ -1619,7 +1620,7 @@ async function createSharedSessionStructure(
           participant.funcionario_id,
           payload.instrutor_id,
           modelo?.codigo || primaryModel?.codigo || 'SHARED',
-          await getSimuladorModeloAeronave(db, payload.simulador_id),
+          await getSimuladorModeloAeronave(db, payload.simulador_id, empresaId),
           payload.data,
           participant.modelo_sessao_id,
           empresaId,

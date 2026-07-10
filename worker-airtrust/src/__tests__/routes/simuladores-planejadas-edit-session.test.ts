@@ -45,11 +45,18 @@ type HistoricoRow = {
   updated_at: string;
 };
 
+type RequisitoRow = {
+  requisito_modelo_sessao_id: number;
+  requisito_qualificacao_tipo_id: number | null;
+};
+
 type MockState = {
   participantes: ParticipanteRow[];
   fichas: FichaRow[];
   modelos: Record<number, ModeloState>;
   historico: HistoricoRow[];
+  requisitos?: Record<number, RequisitoRow[]>;
+  requisitosMode?: 'ok' | 'missing_table' | 'sql_error';
 };
 
 function createMockDb(state: MockState): D1Database {
@@ -73,6 +80,17 @@ function createMockDb(state: MockState): D1Database {
         bind(...args: unknown[]) {
           return {
             async all() {
+              if (sql.includes('FROM modelos_sessao_requisitos msr')) {
+                if (state.requisitosMode === 'missing_table') {
+                  throw new Error('no such table: modelos_sessao_requisitos');
+                }
+                if (state.requisitosMode === 'sql_error') {
+                  throw new Error('db exploded');
+                }
+                const modeloId = Number(args[1]);
+                return { results: state.requisitos?.[modeloId] || [] };
+              }
+
               if (sql.includes('SELECT DISTINCT funcionario_id') && sql.includes('FROM sessoes_participantes')) {
                 const sessaoId = Number(args[0]);
                 const rows = state.participantes
@@ -94,7 +112,7 @@ function createMockDb(state: MockState): D1Database {
 
             async first<T>() {
               if (sql.includes('FROM modelos_sessao ms') && sql.includes('WHERE ms.id = ?')) {
-                const modeloId = Number(args[0]);
+                const modeloId = Number(args.length > 1 ? args[1] : args[0]);
                 return (state.modelos[modeloId] || null) as T | null;
               }
 
@@ -135,6 +153,25 @@ function createMockDb(state: MockState): D1Database {
                     h.data_conclusao === dataConclusao,
                 );
                 return ((row && { id: row.id, status: row.status, sessao_id: row.sessao_id }) || null) as T | null;
+              }
+
+              if (
+                sql.includes('FROM qualificacoes_historico') &&
+                sql.includes('qualificacao_id = ?') &&
+                sql.includes('LIMIT 1')
+              ) {
+                const funcionarioId = Number(args[0]);
+                const empresaId = Number(args[1]);
+                const qualificacaoId = Number(args[2]);
+                const row = state.historico.find(
+                  (h) =>
+                    h.deleted_at === null &&
+                    h.funcionario_id === funcionarioId &&
+                    h.empresa_id === empresaId &&
+                    h.qualificacao_id === qualificacaoId &&
+                    ['CONCLUIDA', 'CONCLUIDO', 'VALIDA', 'RENOVADA'].includes(h.status),
+                );
+                return ((row && { id: row.id }) || null) as T | null;
               }
 
               return null as T | null;
@@ -217,6 +254,8 @@ function baseState(): MockState {
       },
     },
     historico: [],
+    requisitos: {},
+    requisitosMode: 'ok',
   };
 }
 
@@ -422,5 +461,119 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
     expect(result.puladas).toBe(0);
     expect(result.conflitosUniques).toBe(1);
     expect(state.historico.filter((h) => h.deleted_at === null && h.status === 'PLANEJADA')).toHaveLength(0);
+  });
+
+  it('gera quando o requisito configurado está satisfeito e não duplica na segunda execução', async () => {
+    const state = baseState();
+    state.participantes.push({ sessao_id: 93, funcionario_id: 19, deleted_at: null });
+    state.requisitos![78] = [{ requisito_modelo_sessao_id: 55, requisito_qualificacao_tipo_id: 910 }];
+    state.historico.push({
+      id: 7101,
+      funcionario_id: 19,
+      qualificacao_id: 910,
+      qualificacao_codigo: 'PRE-910',
+      categoria: 'TREINAMENTO DE VOO',
+      data_conclusao: '2026-01-01',
+      validade_meses: 12,
+      status: 'CONCLUIDA',
+      renovada: 0,
+      carga_horaria: 60,
+      tipo_treinamento: 'RECORRENTE',
+      empresa_id: 6,
+      sessao_id: null,
+      deleted_at: null,
+      created_at: 'old',
+      updated_at: 'old',
+    });
+
+    const db = createMockDb(state);
+    const participantes = await listarParticipantesDaSessaoParaQualificacao(db, 93);
+
+    const first = await criarQualificacoesPlanejadas(db, {
+      sessaoId: 93,
+      modeloId: 78,
+      tipoSessao: 'PER',
+      data: '2099-06-01',
+      participantes,
+      empresaId: 6,
+    });
+    const second = await criarQualificacoesPlanejadas(db, {
+      sessaoId: 93,
+      modeloId: 78,
+      tipoSessao: 'PER',
+      data: '2099-06-01',
+      participantes,
+      empresaId: 6,
+    });
+
+    expect(first.criadas).toBe(1);
+    expect(first.puladas).toBe(0);
+    expect(second.criadas).toBe(0);
+    expect(second.puladas).toBe(1);
+    expect(state.historico.filter((h) => h.deleted_at === null && h.status === 'PLANEJADA')).toHaveLength(1);
+  });
+
+  it('não gera quando o requisito configurado não está satisfeito', async () => {
+    const state = baseState();
+    state.participantes.push({ sessao_id: 94, funcionario_id: 19, deleted_at: null });
+    state.requisitos![78] = [{ requisito_modelo_sessao_id: 55, requisito_qualificacao_tipo_id: 910 }];
+
+    const db = createMockDb(state);
+    const participantes = await listarParticipantesDaSessaoParaQualificacao(db, 94);
+
+    const result = await criarQualificacoesPlanejadas(db, {
+      sessaoId: 94,
+      modeloId: 78,
+      tipoSessao: 'PER',
+      data: '2099-06-01',
+      participantes,
+      empresaId: 6,
+    });
+
+    expect(result.criadas).toBe(0);
+    expect(result.puladas).toBe(1);
+    expect(result.conflitosUniques).toBe(0);
+    expect(state.historico.filter((h) => h.deleted_at === null && h.status === 'PLANEJADA')).toHaveLength(0);
+  });
+
+  it('mantém fallback compatível quando a tabela de requisitos não existe em sessão legada lida por fichas', async () => {
+    const state = baseState();
+    state.requisitosMode = 'missing_table';
+    state.fichas.push({ agendamento_slot_id: 95, colaborador_id_aluno: 19, deleted_at: null });
+    const db = createMockDb(state);
+    const participantes = await listarParticipantesDaSessaoParaQualificacao(db, 95);
+
+    const result = await criarQualificacoesPlanejadas(db, {
+      sessaoId: 95,
+      modeloId: 78,
+      tipoSessao: 'PER',
+      data: '2099-06-01',
+      participantes,
+      empresaId: 6,
+    });
+
+    expect(participantes).toEqual([{ funcionario_id: 19 }]);
+    expect(result.criadas).toBe(1);
+    expect(result.puladas).toBe(0);
+    expect(state.historico.filter((h) => h.deleted_at === null && h.status === 'PLANEJADA')).toHaveLength(1);
+  });
+
+  it('propaga erro SQL diferente de tabela ausente ao carregar requisitos', async () => {
+    const state = baseState();
+    state.participantes.push({ sessao_id: 96, funcionario_id: 19, deleted_at: null });
+    state.requisitosMode = 'sql_error';
+    const db = createMockDb(state);
+    const participantes = await listarParticipantesDaSessaoParaQualificacao(db, 96);
+
+    await expect(
+      criarQualificacoesPlanejadas(db, {
+        sessaoId: 96,
+        modeloId: 78,
+        tipoSessao: 'PER',
+        data: '2099-06-01',
+        participantes,
+        empresaId: 6,
+      }),
+    ).rejects.toThrow('db exploded');
   });
 });

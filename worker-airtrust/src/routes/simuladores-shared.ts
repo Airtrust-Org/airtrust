@@ -189,19 +189,21 @@ export async function listarTiposCheckPorIds(
 export async function getSimuladorModeloAeronave(
   db: D1Database,
   simuladorId: string | number | null | undefined,
+  empresaId?: number,
 ): Promise<string> {
   if (simuladorId == null) {
     return '';
   }
 
+  const scopedFilter = empresaId ? ' AND empresa_id = ?' : '';
   const simulador = await db
     .prepare(
       `SELECT COALESCE(aeronave_codigo, codigo_aeronave, tipo, modelo, '') AS modelo_aeronave
        FROM simuladores
-       WHERE id = ? AND deleted_at IS NULL
+       WHERE id = ? AND deleted_at IS NULL${scopedFilter}
        LIMIT 1`,
     )
-    .bind(simuladorId)
+    .bind(simuladorId, ...(empresaId ? [empresaId] : []))
     .first<{ modelo_aeronave: string | null }>();
 
   return normalizeModeloAeronave(simulador?.modelo_aeronave);
@@ -537,10 +539,15 @@ export async function criarQualificacoesPlanejadas(
               qt.categoria AS qual_categoria,
               qt.validade  AS qual_validade
        FROM modelos_sessao ms
-       LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id AND qt.deleted_at IS NULL
-       WHERE ms.id = ? AND ms.deleted_at IS NULL`,
+       LEFT JOIN qualificacoes_tipos qt
+         ON ms.qualificacao_tipo_id = qt.id
+        AND qt.deleted_at IS NULL
+        AND qt.empresa_id = ?
+       WHERE ms.id = ?
+         AND ms.empresa_id = ?
+         AND ms.deleted_at IS NULL`,
     )
-    .bind(params.modeloId)
+    .bind(params.empresaId, params.modeloId, params.empresaId)
     .first<{
       gera_qualificacao: number;
       qualificacao_tipo_id: number | null;
@@ -700,7 +707,7 @@ async function carregarRequisitosModeloSessao(
       )
       .bind(empresaId, modeloId, empresaId);
     if (typeof (statement as any).all !== 'function') {
-      return [];
+      throw new Error('modelos_sessao_requisitos query sem suporte a all()');
     }
     const rows = await statement.all<{
       requisito_modelo_sessao_id: number;
@@ -709,7 +716,7 @@ async function carregarRequisitosModeloSessao(
 
     return rows.results || [];
   } catch (error: any) {
-    if (String(error?.message || '').includes('modelos_sessao_requisitos')) {
+    if (String(error?.message || '').includes('no such table: modelos_sessao_requisitos')) {
       return [];
     }
     throw error;
