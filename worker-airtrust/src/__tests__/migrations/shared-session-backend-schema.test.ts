@@ -24,6 +24,13 @@ function migrationSql(): string {
   );
 }
 
+function migration421Sql(): string {
+  return readFileSync(
+    join(__dirname, '../../../migrations/0421_shared_session_segment_curricula.sql'),
+    'utf8',
+  );
+}
+
 function setupDb(): string {
   const dir = mkdtempSync(join(tmpdir(), 'airtrust-shared-session-0405-'));
   const dbPath = join(dir, 'shared-session.db');
@@ -209,6 +216,56 @@ describe('0405 shared session backend schema', () => {
         ),
       ).toBe(1);
 
+      expect(runSqlite(dbPath, 'PRAGMA integrity_check;')).toBe('ok');
+      expect(runSqlite(dbPath, 'SELECT COUNT(*) FROM pragma_foreign_key_check();')).toBe('0');
+    } finally {
+      rmSync(join(dbPath, '..'), { recursive: true, force: true });
+    }
+  });
+
+  it('adds explicit segment-curriculum relations and controlled segment purpose metadata', () => {
+    const dbPath = setupDb();
+
+    try {
+      runSqlite(dbPath, migrationSql());
+      runSqlite(dbPath, migration421Sql());
+
+      expect(
+        Number(
+          runSqlite(
+            dbPath,
+            `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'simulador_segmento_atribuicoes';`,
+          ),
+        ),
+      ).toBe(1);
+      expect(
+        runSqlite(
+          dbPath,
+          `SELECT name FROM pragma_table_info('simulador_agendamento_segmentos') WHERE name = 'finalidade_codigo';`,
+        ),
+      ).toBe('finalidade_codigo');
+      expect(
+        runSqlite(
+          dbPath,
+          `SELECT name FROM pragma_table_info('simulador_agendamento_segmentos') WHERE name = 'finalidade_titulo';`,
+        ),
+      ).toBe('finalidade_titulo');
+      expect(
+        Number(
+          runSqlite(
+            dbPath,
+            `SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_sim_segmento_atribuicoes_ativa';`,
+          ),
+        ),
+      ).toBe(1);
+      expect(
+        Number(
+          runSqlite(
+            dbPath,
+            `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_requisitos';`,
+          ),
+        ),
+      ).toBe(1);
       expect(runSqlite(dbPath, 'PRAGMA integrity_check;')).toBe('ok');
       expect(runSqlite(dbPath, 'SELECT COUNT(*) FROM pragma_foreign_key_check();')).toBe('0');
     } finally {

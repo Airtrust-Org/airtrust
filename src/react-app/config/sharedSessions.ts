@@ -96,6 +96,9 @@ export interface SharedSessionSegment {
   inicio: string; // HH:MM
   fim: string; // HH:MM
   atribuicao_funcionario_id?: number | null;
+  atribuicao_funcionario_ids?: number[];
+  finalidade_codigo?: 'SOP_NORMAL' | 'SOP_ANORMAL_EMERGENCIA' | 'ATUACAO_EXAMINADOR' | 'OUTRO';
+  finalidade_titulo?: string | null;
   funcoes: SharedSessionSegmentRole[];
 }
 

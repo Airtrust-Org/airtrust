@@ -43,6 +43,7 @@ type SharedPersistenceContext = {
   participanteIds: number[];
   atribuicaoIds: number[];
   segmentoIds: number[];
+  segmentoAtribuicaoIds: number[];
   segmentoParticipanteIds: number[];
   fichaIds: number[];
 };
@@ -131,6 +132,15 @@ async function assertEntityOwnership(
     .first();
   if (!instrutor) {
     throw new Error('Instrutor fora do tenant');
+  }
+  if (
+    payload.participantes.some(
+      (participante) =>
+        participante.cumpre_treinamento &&
+        Number(participante.funcionario_id) === Number(payload.instrutor_id),
+    )
+  ) {
+    throw new Error('Instrutor supervisor não pode ser o próprio treinando curricular');
   }
 
   const simulador = await db
@@ -349,8 +359,8 @@ async function insertFichaManobrasFromModelo(
     db
       .prepare(
         `INSERT INTO fichas_sessao_manobras
-           (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         fichaId,
@@ -360,6 +370,7 @@ async function insertFichaManobrasFromModelo(
         manobra.categoria || 'GERAL',
         manobra.ordem,
         manobra.tripulante || 'AB',
+        empresaId,
       ),
   );
 
@@ -371,6 +382,11 @@ async function insertFichaManobrasFromModelo(
 }
 
 async function cleanupFailedSharedCreate(db: D1Database, sessaoId: number) {
+  await runStatement(
+    db,
+    'DELETE FROM simulador_segmento_atribuicoes WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ?)',
+    sessaoId,
+  );
   await runStatement(
     db,
     'DELETE FROM simulador_segmento_participantes WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ?)',
@@ -445,11 +461,12 @@ async function loadSharedDetail(
        INNER JOIN funcionarios f
          ON f.id = sp.funcionario_id
         AND f.deleted_at IS NULL
+        AND f.empresa_id = ?
        WHERE sp.sessao_id = ?
          AND sp.deleted_at IS NULL
        ORDER BY sp.id`,
     )
-    .bind(sessaoId)
+    .bind(empresaId, sessaoId)
     .all<any>();
 
   const atribuicoes = await db
@@ -466,14 +483,17 @@ async function loadSharedDetail(
        INNER JOIN funcionarios f
          ON f.id = sp.funcionario_id
         AND f.deleted_at IS NULL
+        AND f.empresa_id = ?
        LEFT JOIN modelos_sessao ms
          ON ms.id = sac.modelo_sessao_id
         AND ms.deleted_at IS NULL
+        AND ms.empresa_id = ?
        WHERE sac.agendamento_id = ?
+         AND sac.empresa_id = ?
          AND sac.deleted_at IS NULL
        ORDER BY sac.id`,
     )
-    .bind(sessaoId)
+    .bind(empresaId, empresaId, sessaoId, empresaId)
     .all<any>();
 
   const segmentos = await allStatement<any>(
@@ -488,16 +508,45 @@ async function loadSharedDetail(
          fim,
          duracao_minutos,
          atribuicao_curricular_id,
+         finalidade_codigo,
+         finalidade_titulo,
          status,
          created_at,
          updated_at,
          deleted_at
        FROM simulador_agendamento_segmentos
        WHERE agendamento_id = ?
+         AND empresa_id = ?
          AND deleted_at IS NULL
        ORDER BY ordem ASC`,
     sessaoId,
+    empresaId,
   );
+
+  const segmentoAtribuicoes = await db
+    .prepare(
+      `SELECT ssa.*,
+              sac.participante_id,
+              sp.funcionario_id
+       FROM simulador_segmento_atribuicoes ssa
+       INNER JOIN simulador_agendamento_segmentos seg
+         ON seg.id = ssa.segmento_id
+        AND seg.deleted_at IS NULL
+        AND seg.empresa_id = ?
+       INNER JOIN simulador_atribuicoes_curriculares sac
+         ON sac.id = ssa.atribuicao_curricular_id
+        AND sac.deleted_at IS NULL
+        AND sac.empresa_id = ?
+       INNER JOIN sessoes_participantes sp
+         ON sp.id = sac.participante_id
+        AND sp.deleted_at IS NULL
+       WHERE seg.agendamento_id = ?
+         AND ssa.empresa_id = ?
+         AND ssa.deleted_at IS NULL
+       ORDER BY ssa.segmento_id, ssa.id`,
+    )
+    .bind(empresaId, empresaId, sessaoId, empresaId)
+    .all<any>();
 
   const segmentoParticipantes = await db
     .prepare(
@@ -511,12 +560,14 @@ async function loadSharedDetail(
          SELECT id
          FROM simulador_agendamento_segmentos
          WHERE agendamento_id = ?
+           AND empresa_id = ?
            AND deleted_at IS NULL
        )
+         AND ssp.empresa_id = ?
          AND ssp.deleted_at IS NULL
        ORDER BY ssp.segmento_id, ssp.id`,
     )
-    .bind(sessaoId)
+    .bind(sessaoId, empresaId, empresaId)
     .all<any>();
 
   const fichas = await db
@@ -527,11 +578,13 @@ async function loadSharedDetail(
        INNER JOIN funcionarios f
          ON f.id = fs.colaborador_id_aluno
         AND f.deleted_at IS NULL
+        AND f.empresa_id = ?
        WHERE fs.agendamento_slot_id = ?
+         AND fs.empresa_id = ?
          AND fs.deleted_at IS NULL
        ORDER BY fs.id`,
     )
-    .bind(sessaoId)
+    .bind(empresaId, sessaoId, empresaId)
     .all<any>();
 
   const resevaDuracao = Number(sessao.duracao_minutos || 0);
@@ -563,6 +616,9 @@ async function loadSharedDetail(
     }),
     rawSegmentos.map((segmento) => ({
       duracao_minutos: Number(segmento.duracao_minutos || 0),
+      atribuicao_funcionario_ids: (segmentoAtribuicoes.results || [])
+        .filter((item) => Number(item.segmento_id) === Number(segmento.id))
+        .map((item) => Number(item.funcionario_id)),
       atribuicao_funcionario_id:
         (atribuicoes.results || []).find((item) => Number(item.id) === Number(segmento.atribuicao_curricular_id))
           ?.funcionario_id ?? null,
@@ -591,6 +647,12 @@ async function loadSharedDetail(
     atribuicoes: atribuicoes.results || [],
     segmentos: (segmentos.results || []).map((segmento) => ({
       ...segmento,
+      atribuicoes_curriculares: (segmentoAtribuicoes.results || []).filter(
+        (item) => Number(item.segmento_id) === Number(segmento.id),
+      ),
+      atribuicao_funcionario_ids: (segmentoAtribuicoes.results || [])
+        .filter((item) => Number(item.segmento_id) === Number(segmento.id))
+        .map((item) => Number(item.funcionario_id)),
       funcoes: (segmentoParticipantes.results || []).filter(
         (item) => Number(item.segmento_id) === Number(segmento.id),
       ),
@@ -690,6 +752,7 @@ async function buildSharedSessionBatchPlan(
     participanteIds: [],
     atribuicaoIds: [],
     segmentoIds: [],
+    segmentoAtribuicaoIds: [],
     segmentoParticipanteIds: [],
     fichaIds: [],
   };
@@ -699,6 +762,13 @@ async function buildSharedSessionBatchPlan(
   const sessionIdBinds = existingSessaoId ? [Number(existingSessaoId)] : [sessaoUuid];
 
   if (existingSessaoId) {
+    statements.push(
+      prepareStatement(
+        db,
+        "UPDATE simulador_segmento_atribuicoes SET deleted_at = datetime('now'), updated_at = datetime('now'), status = 'CANCELADA' WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ? AND deleted_at IS NULL) AND deleted_at IS NULL",
+        existingSessaoId,
+      ),
+    );
     statements.push(
       prepareStatement(
         db,
@@ -908,8 +978,8 @@ async function buildSharedSessionBatchPlan(
           db
             .prepare(
               `INSERT INTO fichas_sessao_manobras
-                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
-               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
+                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
+               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
             )
             .bind(
               fichaUuid,
@@ -919,6 +989,7 @@ async function buildSharedSessionBatchPlan(
               manobra.categoria || 'GERAL',
               manobra.ordem,
               manobra.tripulante || 'AB',
+              empresaId,
             ),
         );
       }
@@ -928,36 +999,15 @@ async function buildSharedSessionBatchPlan(
   for (const segmento of payload.segmentos) {
     const segmentoUuid = crypto.randomUUID();
     persistence.segmentoIds.push(persistence.segmentoIds.length + 1);
+    const legacyFuncionarioId = segmento.atribuicao_funcionario_ids[0] || null;
 
-    statements.push(
-      db
-        .prepare(
-          `INSERT INTO simulador_agendamento_segmentos
-             (uuid, empresa_id, agendamento_id, ordem, inicio, fim, duracao_minutos, atribuicao_curricular_id, status)
-           VALUES (?, ?, ${sessionIdExpr}, ?, ?, ?, ?, ?, 'ATIVO')`,
-        )
-        .bind(
-          segmentoUuid,
-          empresaId,
-          ...sessionIdBinds,
-          segmento.ordem,
-          segmento.inicio,
-          segmento.fim,
-          segmento.duracao_minutos,
-          segmento.atribuicao_funcionario_id
-            ? `(SELECT id FROM simulador_atribuicoes_curriculares WHERE uuid = '${assignmentUuidByFuncionario.get(segmento.atribuicao_funcionario_id) || ''}')`
-            : null,
-        ),
-    );
-
-    if (segmento.atribuicao_funcionario_id) {
-      statements.pop();
+    if (legacyFuncionarioId) {
       statements.push(
         db
           .prepare(
             `INSERT INTO simulador_agendamento_segmentos
-               (uuid, empresa_id, agendamento_id, ordem, inicio, fim, duracao_minutos, atribuicao_curricular_id, status)
-             VALUES (?, ?, ${sessionIdExpr}, ?, ?, ?, ?, (SELECT id FROM simulador_atribuicoes_curriculares WHERE uuid = ?), 'ATIVO')`,
+               (uuid, empresa_id, agendamento_id, ordem, inicio, fim, duracao_minutos, atribuicao_curricular_id, finalidade_codigo, finalidade_titulo, status)
+             VALUES (?, ?, ${sessionIdExpr}, ?, ?, ?, ?, (SELECT id FROM simulador_atribuicoes_curriculares WHERE uuid = ?), ?, ?, 'ATIVO')`,
           )
           .bind(
             segmentoUuid,
@@ -967,17 +1017,53 @@ async function buildSharedSessionBatchPlan(
             segmento.inicio,
             segmento.fim,
             segmento.duracao_minutos,
-            assignmentUuidByFuncionario.get(segmento.atribuicao_funcionario_id) || null,
+            assignmentUuidByFuncionario.get(legacyFuncionarioId) || null,
+            segmento.finalidade_codigo,
+            segmento.finalidade_titulo,
           ),
+      );
+    } else {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO simulador_agendamento_segmentos
+               (uuid, empresa_id, agendamento_id, ordem, inicio, fim, duracao_minutos, atribuicao_curricular_id, finalidade_codigo, finalidade_titulo, status)
+             VALUES (?, ?, ${sessionIdExpr}, ?, ?, ?, ?, NULL, ?, ?, 'ATIVO')`,
+          )
+          .bind(
+            segmentoUuid,
+            empresaId,
+            ...sessionIdBinds,
+            segmento.ordem,
+            segmento.inicio,
+            segmento.fim,
+            segmento.duracao_minutos,
+            segmento.finalidade_codigo,
+            segmento.finalidade_titulo,
+          ),
+      );
+    }
+
+    for (const funcionarioId of segmento.atribuicao_funcionario_ids) {
+      const assignmentUuid = assignmentUuidByFuncionario.get(funcionarioId);
+      if (!assignmentUuid) continue;
+      persistence.segmentoAtribuicaoIds.push(persistence.segmentoAtribuicaoIds.length + 1);
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO simulador_segmento_atribuicoes
+               (uuid, empresa_id, segmento_id, atribuicao_curricular_id, status)
+             VALUES (?, ?, (SELECT id FROM simulador_agendamento_segmentos WHERE uuid = ?), (SELECT id FROM simulador_atribuicoes_curriculares WHERE uuid = ?), 'PLANEJADA')`,
+          )
+          .bind(crypto.randomUUID(), empresaId, segmentoUuid, assignmentUuid),
       );
     }
 
     for (const funcao of segmento.funcoes) {
       persistence.segmentoParticipanteIds.push(persistence.segmentoParticipanteIds.length + 1);
-      const assignmentUuid =
-        segmento.atribuicao_funcionario_id === funcao.funcionario_id
-          ? assignmentUuidByFuncionario.get(funcao.funcionario_id) || null
-          : null;
+      const assignmentUuid = segmento.atribuicao_funcionario_ids.includes(funcao.funcionario_id)
+        ? assignmentUuidByFuncionario.get(funcao.funcionario_id) || null
+        : null;
 
       if (assignmentUuid) {
         statements.push(
@@ -1251,8 +1337,8 @@ async function updateSharedSessionStructureTransactional(
             prepareStatement(
               db,
               `INSERT INTO fichas_sessao_manobras
-                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
-               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
+                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
+               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
               fichaUuid,
               manobra.codigo,
               manobra.nome,
@@ -1260,6 +1346,7 @@ async function updateSharedSessionStructureTransactional(
               manobra.categoria || 'GERAL',
               manobra.ordem,
               manobra.tripulante || 'AB',
+              empresaId,
             ),
           );
         }
@@ -1462,6 +1549,7 @@ async function createSharedSessionStructure(
     participanteIds: [],
     atribuicaoIds: [],
     segmentoIds: [],
+    segmentoAtribuicaoIds: [],
     segmentoParticipanteIds: [],
     fichaIds: [],
   };
@@ -1608,6 +1696,11 @@ async function createSharedSessionStructure(
 async function markPreviousSharedStructureDeleted(db: D1Database, sessaoId: number) {
   await runStatement(
     db,
+    "UPDATE simulador_segmento_atribuicoes SET deleted_at = datetime('now'), updated_at = datetime('now'), status = 'CANCELADA' WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ? AND deleted_at IS NULL) AND deleted_at IS NULL",
+    sessaoId,
+  );
+  await runStatement(
+    db,
     "UPDATE simulador_segmento_participantes SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ? AND deleted_at IS NULL) AND deleted_at IS NULL",
     sessaoId,
   );
@@ -1700,7 +1793,7 @@ app.post('/sessoes/compartilhada', async (c) => {
     );
   } catch (error: any) {
     const message = String(error?.message || 'Erro ao criar sessão compartilhada');
-    const status = /tenant|conflito|precisa|segmento|cobertura|função|ficha/i.test(message) ? 400 : 500;
+    const status = /tenant|conflito|precisa|segmento|cobertura|função|ficha|instrutor/i.test(message) ? 400 : 500;
     return c.json({ success: false, error: message }, status);
   }
 });
@@ -1781,7 +1874,7 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
     return c.json({ success: true, data: detail });
   } catch (error: any) {
     const message = String(error?.message || 'Erro ao editar sessão compartilhada');
-    return c.json({ success: false, error: message }, /conflito|segmento|ficha|tenant/i.test(message) ? 400 : 500);
+    return c.json({ success: false, error: message }, /conflito|segmento|ficha|tenant|instrutor/i.test(message) ? 400 : 500);
   }
 });
 
@@ -1818,10 +1911,11 @@ app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', async 
         `SELECT id, status
          FROM fichas_sessao
          WHERE atribuicao_curricular_id = ?
+           AND empresa_id = ?
            AND deleted_at IS NULL
          LIMIT 1`,
       )
-      .bind(atribuicaoId)
+      .bind(atribuicaoId, empresaId)
       .first<any>();
 
     if (ficha && isProtectedFichaStatus(ficha.status)) {
@@ -1838,9 +1932,10 @@ app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', async 
            SET status = 'CANCELADA',
                deleted_at = datetime('now'),
                updated_at = datetime('now')
-           WHERE id = ?`,
+           WHERE id = ?
+             AND empresa_id = ?`,
         )
-        .bind(atribuicaoId),
+        .bind(atribuicaoId, empresaId),
       c.env.DB
         .prepare(
           `UPDATE simulador_agendamento_segmentos
@@ -1848,27 +1943,41 @@ app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', async 
                updated_at = datetime('now')
            WHERE agendamento_id = ?
              AND atribuicao_curricular_id = ?
+             AND empresa_id = ?
              AND deleted_at IS NULL`,
         )
-        .bind(sessaoId, atribuicaoId),
+        .bind(sessaoId, atribuicaoId, empresaId),
       c.env.DB
         .prepare(
           `UPDATE simulador_segmento_participantes
            SET atribuicao_curricular_id = NULL,
                updated_at = datetime('now')
            WHERE atribuicao_curricular_id = ?
+             AND empresa_id = ?
              AND deleted_at IS NULL`,
         )
-        .bind(atribuicaoId),
+        .bind(atribuicaoId, empresaId),
+      c.env.DB
+        .prepare(
+          `UPDATE simulador_segmento_atribuicoes
+           SET status = 'CANCELADA',
+               deleted_at = datetime('now'),
+               updated_at = datetime('now')
+           WHERE atribuicao_curricular_id = ?
+             AND empresa_id = ?
+             AND deleted_at IS NULL`,
+        )
+        .bind(atribuicaoId, empresaId),
       c.env.DB
         .prepare(
           `UPDATE fichas_sessao
            SET deleted_at = datetime('now'),
                updated_at = datetime('now')
            WHERE atribuicao_curricular_id = ?
+             AND empresa_id = ?
              AND deleted_at IS NULL`,
         )
-        .bind(atribuicaoId),
+        .bind(atribuicaoId, empresaId),
       c.env.DB
         .prepare(
           `UPDATE qualificacoes_historico
@@ -1876,10 +1985,11 @@ app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', async 
                updated_at = datetime('now')
            WHERE sessao_id = ?
              AND funcionario_id = ?
+             AND empresa_id = ?
              AND deleted_at IS NULL
              AND COALESCE(status, 'PLANEJADA') = 'PLANEJADA'`,
         )
-        .bind(sessaoId, atribuicao.funcionario_id),
+        .bind(sessaoId, atribuicao.funcionario_id, empresaId),
     ]);
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, sessaoId);
