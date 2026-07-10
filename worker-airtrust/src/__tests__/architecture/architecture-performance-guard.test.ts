@@ -30,7 +30,7 @@ const LARGE_FILE_LINE_CAPS = {
   // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.
   'routes/lms-assets.ts': 2400,
   // Acknowledged growth 2026-07-10: shared simulator sessions gained explicit segment-curriculum relations.
-  'routes/simuladores-shared-session.ts': 2003,
+  'routes/simuladores-shared-session.ts': 2004,
 } as const;
 
 const SQL_PREPARE_CAPS = {
