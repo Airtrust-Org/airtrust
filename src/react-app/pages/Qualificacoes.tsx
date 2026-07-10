@@ -118,6 +118,7 @@ import {
   getStatusDotColor,
   getStatusLabel,
 } from './qualificacoes/qualificacoes.helpers';
+import { QualificacaoStatusBadge } from './qualificacoes/components/QualificacaoStatusBadge';
 import type { QualificacoesPrefs, QualificacoesModelosPrefs } from './qualificacoes/qualificacoes.types';
 
 
@@ -2223,16 +2224,7 @@ export default function Qualificacoes() {
 
           // Se é PLANEJADA ou CANCELADA, usar diretamente
           if (qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'CANCELADA') {
-            return (
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(
-                  qualificacaoStatus,
-                )}`}
-              >
-                <span className={`h-2 w-2 rounded-full ${getStatusDotColor(qualificacaoStatus)}`} />
-                {getStatusLabel(qualificacaoStatus)}
-              </span>
-            );
+            return <QualificacaoStatusBadge status={qualificacaoStatus} />;
           }
 
           // Para CONCLUIDA, usar a lógica de status derivado (VALIDA, VENCIDA, etc.)
@@ -2241,18 +2233,7 @@ export default function Qualificacoes() {
           const status = statusHistorico;
           return (
             <div className="flex flex-col items-start gap-1">
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                  ehRenovada ? 'bg-blue-600/10 text-blue-600' : getStatusColor(status)
-                }`}
-              >
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    ehRenovada ? 'bg-primary' : getStatusDotColor(status)
-                  }`}
-                />
-                {ehRenovada ? 'Renovada' : getStatusLabel(status)}
-              </span>
+              <QualificacaoStatusBadge status={status} isRenovada={ehRenovada} />
             </div>
           );
         },
