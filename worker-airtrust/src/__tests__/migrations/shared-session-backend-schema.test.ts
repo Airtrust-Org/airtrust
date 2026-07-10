@@ -31,6 +31,13 @@ function migration421Sql(): string {
   );
 }
 
+function migration422Sql(): string {
+  return readFileSync(
+    join(__dirname, '../../../migrations/0422_modelos_sessao_requisitos.sql'),
+    'utf8',
+  );
+}
+
 function setupDb(): string {
   const dir = mkdtempSync(join(tmpdir(), 'airtrust-shared-session-0405-'));
   const dbPath = join(dir, 'shared-session.db');
@@ -234,10 +241,10 @@ describe('0405 shared session backend schema', () => {
         Number(
           runSqlite(
             dbPath,
-            `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'simulador_segmento_atribuicoes';`,
+            `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_requisitos';`,
           ),
         ),
-      ).toBe(1);
+      ).toBe(0);
       expect(
         runSqlite(
           dbPath,
@@ -262,10 +269,100 @@ describe('0405 shared session backend schema', () => {
         Number(
           runSqlite(
             dbPath,
+            `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'simulador_segmento_atribuicoes';`,
+          ),
+        ),
+      ).toBe(1);
+      runSqlite(
+        dbPath,
+        `
+          PRAGMA foreign_keys = ON;
+          INSERT INTO empresas (id, nome) VALUES (7, 'Outro tenant');
+          INSERT INTO sessoes_participantes (
+            id, uuid, sessao_id, funcionario_id, funcao, status, deleted_at
+          ) VALUES (
+            8001, 'participante-x-tenant', 1, 101, 'SIC', 'ATIVO', NULL
+          );
+          INSERT INTO simulador_agendamento_segmentos (
+            id, uuid, empresa_id, agendamento_id, ordem, inicio, fim, duracao_minutos, status
+          ) VALUES (
+            9001, 'segmento-x-tenant', 7, 1, 99, '10:00', '11:00', 60, 'ATIVO'
+          );
+          INSERT INTO simulador_atribuicoes_curriculares (
+            id, uuid, empresa_id, agendamento_id, participante_id, treinamento_planejado_id, modelo_sessao_id, gera_ficha, status
+          ) VALUES (
+            9101, 'atribuicao-x-tenant', 7, 1, 8001, NULL, NULL, 0, 'ATIVA'
+          );
+        `,
+      );
+      expect(() =>
+        runSqlite(
+          dbPath,
+          `
+            PRAGMA foreign_keys = ON;
+            INSERT INTO simulador_segmento_atribuicoes (
+              uuid, empresa_id, segmento_id, atribuicao_curricular_id, status
+            ) VALUES (
+              'segmento-atribuicao-invalido', 6, 9001, 9101, 'PLANEJADA'
+            );
+          `,
+        ),
+      ).toThrow(/FOREIGN KEY constraint failed/);
+      expect(runSqlite(dbPath, 'PRAGMA integrity_check;')).toBe('ok');
+      expect(runSqlite(dbPath, 'SELECT COUNT(*) FROM pragma_foreign_key_check();')).toBe('0');
+    } finally {
+      rmSync(join(dbPath, '..'), { recursive: true, force: true });
+    }
+  });
+
+  it('adds explicit model requirements in a separate additive migration', () => {
+    const dbPath = setupDb();
+
+    try {
+      runSqlite(dbPath, migrationSql());
+      runSqlite(dbPath, migration421Sql());
+      runSqlite(dbPath, migration422Sql());
+
+      expect(
+        Number(
+          runSqlite(
+            dbPath,
             `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_requisitos';`,
           ),
         ),
       ).toBe(1);
+      expect(
+        Number(
+          runSqlite(
+            dbPath,
+            `SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_modelos_sessao_requisitos_ativo';`,
+          ),
+        ),
+      ).toBe(1);
+      runSqlite(
+        dbPath,
+        `
+          PRAGMA foreign_keys = ON;
+          INSERT INTO empresas (id, nome) VALUES (7, 'Outro tenant');
+          INSERT INTO modelos_sessao (id, codigo, nome, empresa_id, deleted_at)
+          VALUES (2001, 'MS-6', 'Modelo 6', 6, NULL);
+          INSERT INTO modelos_sessao (id, codigo, nome, empresa_id, deleted_at)
+          VALUES (2002, 'MS-7', 'Modelo 7', 7, NULL);
+        `,
+      );
+      expect(() =>
+        runSqlite(
+          dbPath,
+          `
+            PRAGMA foreign_keys = ON;
+            INSERT INTO modelos_sessao_requisitos (
+              uuid, empresa_id, modelo_sessao_id, requisito_modelo_sessao_id, tipo_requisito, obrigatorio
+            ) VALUES (
+              'requisito-x-tenant', 6, 2001, 2002, 'ETAPA_ANTERIOR', 1
+            );
+          `,
+        ),
+      ).toThrow(/FOREIGN KEY constraint failed/);
       expect(runSqlite(dbPath, 'PRAGMA integrity_check;')).toBe('ok');
       expect(runSqlite(dbPath, 'SELECT COUNT(*) FROM pragma_foreign_key_check();')).toBe('0');
     } finally {

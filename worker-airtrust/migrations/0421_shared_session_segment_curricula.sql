@@ -5,6 +5,18 @@
 --   e simulador_segmento_participantes.atribuicao_curricular_id;
 -- - não converte sessões/fichas históricas;
 -- - permite leitura nova por relações ativas e fallback legado quando não houver relação.
+-- Rollback manual local:
+-- - criar tabela _simulador_agendamento_segmentos_new sem finalidade_codigo/finalidade_titulo;
+-- - copiar dados de simulador_agendamento_segmentos para _simulador_agendamento_segmentos_new;
+-- - DROP TABLE simulador_agendamento_segmentos;
+-- - ALTER TABLE _simulador_agendamento_segmentos_new RENAME TO simulador_agendamento_segmentos;
+-- - DROP INDEX IF EXISTS idx_sim_segmento_atribuicoes_ativa;
+-- - DROP INDEX IF EXISTS idx_sim_segmento_atribuicoes_atribuicao;
+-- - DROP INDEX IF EXISTS idx_sim_segmento_atribuicoes_segmento;
+-- - DROP INDEX IF EXISTS idx_sim_segmento_atribuicoes_empresa;
+-- - DROP INDEX IF EXISTS uq_sim_agendamento_segmentos_id_empresa;
+-- - DROP INDEX IF EXISTS uq_sim_atribuicoes_curriculares_id_empresa;
+-- - DROP TABLE IF EXISTS simulador_segmento_atribuicoes;
 
 ALTER TABLE simulador_agendamento_segmentos
   ADD COLUMN finalidade_codigo TEXT NOT NULL DEFAULT 'OUTRO'
@@ -12,6 +24,12 @@ ALTER TABLE simulador_agendamento_segmentos
 
 ALTER TABLE simulador_agendamento_segmentos
   ADD COLUMN finalidade_titulo TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sim_agendamento_segmentos_id_empresa
+  ON simulador_agendamento_segmentos(id, empresa_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sim_atribuicoes_curriculares_id_empresa
+  ON simulador_atribuicoes_curriculares(id, empresa_id);
 
 CREATE TABLE IF NOT EXISTS simulador_segmento_atribuicoes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,8 +44,8 @@ CREATE TABLE IF NOT EXISTS simulador_segmento_atribuicoes (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
   deleted_at TEXT,
   FOREIGN KEY (empresa_id) REFERENCES empresas(id),
-  FOREIGN KEY (segmento_id) REFERENCES simulador_agendamento_segmentos(id),
-  FOREIGN KEY (atribuicao_curricular_id) REFERENCES simulador_atribuicoes_curriculares(id)
+  FOREIGN KEY (segmento_id, empresa_id) REFERENCES simulador_agendamento_segmentos(id, empresa_id),
+  FOREIGN KEY (atribuicao_curricular_id, empresa_id) REFERENCES simulador_atribuicoes_curriculares(id, empresa_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_sim_segmento_atribuicoes_empresa
@@ -41,36 +59,4 @@ CREATE INDEX IF NOT EXISTS idx_sim_segmento_atribuicoes_atribuicao
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sim_segmento_atribuicoes_ativa
   ON simulador_segmento_atribuicoes(segmento_id, atribuicao_curricular_id)
-  WHERE deleted_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS modelos_sessao_requisitos (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uuid TEXT NOT NULL UNIQUE,
-  empresa_id INTEGER NOT NULL,
-  modelo_sessao_id INTEGER NOT NULL,
-  requisito_modelo_sessao_id INTEGER NOT NULL,
-  tipo_requisito TEXT NOT NULL DEFAULT 'ETAPA_ANTERIOR'
-    CHECK(tipo_requisito IN ('ETAPA_ANTERIOR', 'OBSERVACAO', 'OUTRO')),
-  obrigatorio INTEGER NOT NULL DEFAULT 1 CHECK(obrigatorio IN (0, 1)),
-  ordem INTEGER,
-  observacao TEXT,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  deleted_at TEXT,
-  FOREIGN KEY (empresa_id) REFERENCES empresas(id),
-  FOREIGN KEY (modelo_sessao_id) REFERENCES modelos_sessao(id),
-  FOREIGN KEY (requisito_modelo_sessao_id) REFERENCES modelos_sessao(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_modelos_sessao_requisitos_empresa
-  ON modelos_sessao_requisitos(empresa_id);
-
-CREATE INDEX IF NOT EXISTS idx_modelos_sessao_requisitos_modelo
-  ON modelos_sessao_requisitos(modelo_sessao_id);
-
-CREATE INDEX IF NOT EXISTS idx_modelos_sessao_requisitos_requisito
-  ON modelos_sessao_requisitos(requisito_modelo_sessao_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_modelos_sessao_requisitos_ativo
-  ON modelos_sessao_requisitos(modelo_sessao_id, requisito_modelo_sessao_id, tipo_requisito)
   WHERE deleted_at IS NULL;
