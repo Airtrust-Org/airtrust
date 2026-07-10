@@ -34,7 +34,7 @@ vi.mock('@/react-app/utils/pdfPreview', () => ({
   }) => {
     const { mkdir, writeFile } = await import('node:fs/promises');
     const { resolve } = await import('node:path');
-    const outDir = resolve(process.cwd(), 'docs/analysis/matriz-v6-pdf-previews-20260703');
+    const outDir = '/tmp/airtrust-test-output/matriz-v6-pdf-previews-20260703';
     await mkdir(outDir, { recursive: true });
     const res = await opts.fetcher();
     const buf = Buffer.from(await res.arrayBuffer());
@@ -46,7 +46,7 @@ import { gerarPDFFichaCliente } from '@/react-app/services/pdf-ficha-client';
 import { buildFichaModeloPdfData } from '@/react-app/pages/simuladores/fichas/fichaModeloPdf';
 import { loadSimuladoresMatrizV6Data } from '../../scripts/maintenance/lib/simuladores-matriz-v6-data.mjs';
 
-const OUT_DIR = path.resolve(process.cwd(), 'docs/analysis/matriz-v6-pdf-previews-20260703');
+const OUT_DIR = '/tmp/airtrust-test-output/matriz-v6-pdf-previews-20260703';
 
 const PREVIEWS = [
   { code: 'SK76-I-01/12', fileName: 'S76_SK76_INICIAL_01_12_20260703.pdf', simulador: 'SK76' },

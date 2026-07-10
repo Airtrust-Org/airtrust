@@ -21,7 +21,7 @@ import {
   FICHA_AVALIACAO_NOTAS,
 } from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
 
-const OUT = path.resolve(process.cwd(), 'docs/analysis/notechs-previews-20260702');
+const OUT = '/tmp/airtrust-test-output/notechs-previews-20260702';
 
 // ══════════════════════════════════════════════════════════════════════
 // Cores e constantes EXATAS do gerador real gerarPDFFichaCliente
