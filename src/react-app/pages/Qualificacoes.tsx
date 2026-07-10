@@ -469,7 +469,6 @@ export default function Qualificacoes() {
   const carregarStats = useCallback(async () => {
     try {
       setLoadingStats(true);
-      const token = getAccessToken();
       // Cache busting
       const response = await fetchWithAuth(
         `${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`,
@@ -909,7 +908,7 @@ export default function Qualificacoes() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? {} : {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             funcionario_id: funcionarioId,
@@ -1041,7 +1040,6 @@ export default function Qualificacoes() {
   const carregarFormatos = useCallback(async () => {
     setFormatosLoading(true);
     try {
-      const token = getAccessToken();
       const resp = await fetchWithAuth(`${API_BASE_URL}/qualificacoes/formatos`, {});
       const json = await resp.json().catch(() => ({ success: false, data: [] }));
       if (json.success) setFormatos(json.data || []);
@@ -1074,7 +1072,6 @@ export default function Qualificacoes() {
     };
     if (!isEditing) body.codigo = novoFormatoCodigo.trim().toUpperCase();
     try {
-      const token = getAccessToken();
       const resp = await fetchWithAuth(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -1107,7 +1104,6 @@ export default function Qualificacoes() {
 
   const handleExcluirFormato = useCallback(async (id: number) => {
     try {
-      const token = getAccessToken();
       const resp = await fetchWithAuth(`${API_BASE_URL}/qualificacoes/formatos/${id}`, {
         method: 'DELETE',
       });
@@ -1480,12 +1476,6 @@ export default function Qualificacoes() {
     }
 
     try {
-      const token = getAccessToken();
-      if (!token) {
-        showToast.error('Token não encontrado. Faça login novamente.');
-        return false;
-      }
-
       const response = await fetchWithAuth(
         `${API_BASE_URL}/qualificacoes/historico/${row.id}/confirmar`,
         {
@@ -1504,7 +1494,7 @@ export default function Qualificacoes() {
           tipo: 'QUALIFICACAO_ATUALIZADA',
           funcionarioIds: row.funcionario_id ? [row.funcionario_id] : undefined,
         });
-        await recarregarHistoricoEStats(token);
+        await recarregarHistoricoEStats();
         return true;
       } else {
         const error = await response.json();
@@ -1546,12 +1536,6 @@ export default function Qualificacoes() {
       return;
 
     try {
-      const token = getAccessToken();
-      if (!token) {
-        showToast.error('Token não encontrado. Faça login novamente.');
-        return false;
-      }
-
       const response = await fetchWithAuth(
         `${API_BASE_URL}/qualificacoes/historico/${row.id}/cancelar`,
         {
@@ -1569,7 +1553,7 @@ export default function Qualificacoes() {
           tipo: 'QUALIFICACAO_ATUALIZADA',
           funcionarioIds: row.funcionario_id ? [row.funcionario_id] : undefined,
         });
-        await recarregarHistoricoEStats(token);
+        await recarregarHistoricoEStats();
         return true;
       } else {
         const error = await response.json();
@@ -1590,12 +1574,6 @@ export default function Qualificacoes() {
     }
 
     try {
-      const token = getAccessToken();
-      if (!token) {
-        showToast.error('Token não encontrado. Faça login novamente.');
-        return false;
-      }
-
       setSalvandoPlanejadaId(row.id);
 
       const response = await fetchWithAuth(
@@ -1621,7 +1599,7 @@ export default function Qualificacoes() {
         tipo: 'QUALIFICACAO_ATUALIZADA',
         funcionarioIds: row.funcionario_id ? [row.funcionario_id] : undefined,
       });
-      await recarregarHistoricoEStats(token);
+      await recarregarHistoricoEStats();
       return true;
     } catch (error) {
       console.error('Erro ao reagendar qualificação:', error);
@@ -1651,15 +1629,7 @@ export default function Qualificacoes() {
       logger.info('[Deletar] Iniciando deleção da qualificação:', id);
 
       const apiUrl = API_BASE_URL;
-      const token = getAccessToken();
-
-      logger.info('[Deletar] Token presente:', !!token);
-
-      if (!token) {
-        showToast.error('Token não encontrado. Faça login novamente.');
-        setDeletandoId(null);
-        return;
-      }
+      setDeletandoId(null); // Keep fallback if error? No, just remove token check.
 
       const url = `${apiUrl}/qualificacoes/historico/${id}`;
       logger.info('[Deletar] URL:', url);
@@ -1755,37 +1725,34 @@ export default function Qualificacoes() {
     return formatDateInputValue(sugerida);
   };
 
-  const recarregarHistoricoEStats = useCallback(
-    async (token?: string | null) => {
-      await carregarHistorico();
+  const recarregarHistoricoEStats = useCallback(async () => {
+    await carregarHistorico();
 
-      const statsResponse = await fetchWithAuth(
-        `${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`,
-        {
-          headers: {
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-          },
+    const statsResponse = await fetchWithAuth(
+      `${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`,
+      {
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
         },
-      );
+      },
+    );
 
-      if (!statsResponse.ok) {
-        throw new Error('Erro ao carregar stats');
-      }
+    if (!statsResponse.ok) {
+      throw new Error('Erro ao carregar stats');
+    }
 
-      const json = await statsResponse.json();
-      const data = json.data || json;
-      setDashboardStats({
-        total: data.total_ativas || 0,
-        validas: data.validas || 0,
-        vencendo: data.a_vencer_30_dias || 0,
-        vencidas: data.vencidas || 0,
-        renovadas: data.renovadas || 0,
-        planejadas: data.planejadas || 0,
-      });
-    },
-    [carregarHistorico],
-  );
+    const json = await statsResponse.json();
+    const data = json.data || json;
+    setDashboardStats({
+      total: data.total_ativas || 0,
+      validas: data.validas || 0,
+      vencendo: data.a_vencer_30_dias || 0,
+      vencidas: data.vencidas || 0,
+      renovadas: data.renovadas || 0,
+      planejadas: data.planejadas || 0,
+    });
+  }, [carregarHistorico]);
 
   const fecharModalPlanejada = () => {
     setShowPlanejadaModal(false);
@@ -1883,7 +1850,7 @@ export default function Qualificacoes() {
     try {
       const token = getAccessToken();
       const response = await apiFetch('/api/notificacoes/convocacoes/gestores', {
-        headers: token ? {} : undefined,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
       const json = (await response.json().catch(() => ({}))) as {
@@ -2081,7 +2048,7 @@ export default function Qualificacoes() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? {} : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           turma_funcionario_ids: turmaFuncionarioIds,
@@ -3706,7 +3673,6 @@ export default function Qualificacoes() {
                                   )
                                     return;
                                   try {
-                                    const token = getAccessToken();
                                     const apiUrl = API_BASE_URL;
                                     const response = await fetchWithAuth(
                                       `${apiUrl}/categorias/${cat.id}`,
@@ -3960,7 +3926,6 @@ export default function Qualificacoes() {
                 }
 
                 try {
-                  const token = getAccessToken();
                   const apiUrl = API_BASE_URL;
 
                   const method = editingCategoria ? 'PUT' : 'POST';

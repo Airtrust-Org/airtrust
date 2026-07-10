@@ -379,12 +379,8 @@ describe('Qualificacoes — Planejadas history restore (PR #206)', () => {
   });
 
   it('botao_todos_com_planejadas — "Todos" button includes PLANEJADA (6 statuses)', () => {
-    expect(qualificacoesSource).toContain(
-      "new Set(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','PLANEJADA','CANCELADA'])",
-    );
-    expect(qualificacoesSource).not.toContain(
-      "new Set(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','CANCELADA'])",
-    );
+    expect(qualificacoesSource.replace(/\s/g, '')).toContain("newSet(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','PLANEJADA','CANCELADA'");
+    expect(qualificacoesSource.replace(/\s/g, '')).not.toContain("newSet(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','CANCELADA'");
   });
 
   it('filtro_padrao_com_planejadas — default status filter includes PLANEJADA', () => {
@@ -400,9 +396,7 @@ describe('Qualificacoes — Planejadas history restore (PR #206)', () => {
   });
 
   it('empty_state_mostrar_todos_com_planejadas — empty state "Mostrar todos" button includes PLANEJADA', () => {
-    expect(qualificacoesSource).toContain(
-      "'VALIDA',\n                            'VENCIDA',\n                            'VENCENDO_30',\n                            'RENOVADA',\n                            'PLANEJADA',\n                            'CANCELADA'",
-    );
+    expect(qualificacoesSource.replace(/\s/g, '')).toContain("'VALIDA','VENCIDA','VENCENDO_30','RENOVADA','PLANEJADA','CANCELADA'");
   });
 
   it('planejados_lista_presenca_intacta — attendance list PDF generation remains available', () => {
