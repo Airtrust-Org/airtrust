@@ -1,0 +1,219 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { describe, expect, it } from 'vitest';
+
+const ROOT = join(__dirname, '../../../..');
+
+function readWorkflow(): string {
+  return readFileSync(join(ROOT, '.github/workflows/deploy-staging.yml'), 'utf8');
+}
+
+function runScript(cmd: string, args: string[], env: Record<string, string> = {}) {
+  return spawnSync(cmd, args, {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
+}
+
+/** Strips comment-only lines so assertions check executable logic, not doc prose. */
+function stripComments(source: string): string {
+  return source
+    .split('\n')
+    .filter((line) => !/^\s*(#|\/\/)/.test(line))
+    .join('\n');
+}
+
+describe('deploy-staging.yml — static guards', () => {
+  const workflow = readWorkflow();
+
+  it('only triggers on workflow_dispatch — never push/pull_request/schedule', () => {
+    const onBlock = workflow.slice(workflow.indexOf('\non:'), workflow.indexOf('\nconcurrency:'));
+    expect(onBlock).toContain('workflow_dispatch');
+    expect(onBlock).not.toMatch(/^\s*push:/m);
+    expect(onBlock).not.toMatch(/^\s*pull_request:/m);
+    expect(onBlock).not.toMatch(/^\s*schedule:/m);
+  });
+
+  it('uses a staging confirmation phrase distinct from the production one', () => {
+    expect(workflow).toContain('STAGING_CONFIRMATION: AIRTRUST_STAGING');
+    expect(workflow).toContain('confirmation must be exactly ${STAGING_CONFIRMATION}');
+    // The env var value itself (not documentation prose) must never equal the
+    // production confirmation phrase used by deploy-airtrust.yml.
+    const envLine = workflow.match(/STAGING_CONFIRMATION:\s*(\S+)/);
+    expect(envLine?.[1]).toBe('AIRTRUST_STAGING');
+    expect(envLine?.[1]).not.toBe('AIRTRUST_PRODUCTION');
+  });
+
+  it('hard-blocks the production database ID and host', () => {
+    expect(workflow).toContain('BLOCKED_PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae');
+    expect(workflow).toContain('BLOCKED_PRODUCTION_HOST: api.airtrust.online');
+    expect(workflow).toContain('production-target-guard');
+  });
+
+  it('requires branch main and forbids any other ref', () => {
+    expect(workflow).toContain("refs/heads/main");
+    expect(workflow).toContain('only runs from refs/heads/main');
+  });
+
+  it('never applies the full migration chain — only allowlisted, one-at-a-time files', () => {
+    expect(workflow).not.toMatch(/d1\s+migrations\s+apply/);
+    expect(workflow).toContain('apply-approved-migrations.sh');
+  });
+
+  it('requires a verified backup and green preflight before any migration apply', () => {
+    const applyJob = workflow.slice(
+      workflow.indexOf('apply-migrations:'),
+      workflow.indexOf('deploy-worker:'),
+    );
+    expect(applyJob).toContain('needs: [guard, production-target-guard, backup, preflight]');
+    expect(applyJob).toContain("needs.backup.outputs.backup_ok == 'true'");
+    expect(applyJob).toContain("needs.preflight.outputs.preflight_ok == 'true'");
+  });
+
+  it('never deploys frontend to the production Pages branch', () => {
+    expect(workflow).toContain('PAGES_STAGING_BRANCH: staging');
+    expect(workflow).not.toMatch(/--branch=production/);
+  });
+
+  it('uses the staging GitHub environment for every write-capable job', () => {
+    const jobNames = ['backup', 'preflight', 'apply-migrations', 'deploy-worker', 'deploy-frontend', 'smoke'];
+    const jobBoundaries = jobNames
+      .map((name) => ({ name, index: workflow.indexOf(`\n  ${name}:`) }))
+      .sort((a, b) => a.index - b.index);
+
+    for (let i = 0; i < jobBoundaries.length; i++) {
+      const { name, index } = jobBoundaries[i];
+      expect(index, `job "${name}" not found in workflow`).toBeGreaterThan(-1);
+      const end = i + 1 < jobBoundaries.length ? jobBoundaries[i + 1].index : workflow.length;
+      const slice = workflow.slice(index, end);
+      expect(slice, `${name} must declare environment: staging`).toMatch(/environment:\s*staging/);
+    }
+  });
+
+  it('smoke only runs after deploy/migration succeed or are skipped, never after failure', () => {
+    const smokeJob = workflow.slice(workflow.indexOf('smoke:'), workflow.indexOf('summary:'));
+    expect(smokeJob).toContain('!failure()');
+    expect(smokeJob).toContain('!cancelled()');
+  });
+
+  it('records SHA, run ID, actor, deployment IDs, and rollback target in the summary', () => {
+    const summaryJob = workflow.slice(workflow.indexOf('summary:'));
+    for (const token of ['github.sha', 'github.run_id', 'github.actor', 'worker_version_id', 'rollback target']) {
+      expect(summaryJob).toContain(token);
+    }
+  });
+});
+
+describe('scripts/staging/backup-d1-staging.sh — guards', () => {
+  it('dry-run against the allowed staging DB succeeds without --apply', () => {
+    const result = runScript('bash', ['scripts/staging/backup-d1-staging.sh']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('DRY-RUN');
+  });
+
+  it('refuses the production database name outright', () => {
+    const result = runScript('bash', ['scripts/staging/backup-d1-staging.sh', '--apply'], {
+      STAGING_D1_NAME: 'airtrust-db',
+      STAGING_D1_ID: '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae',
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toMatch(/bloqueio|produção/);
+  });
+
+  it('refuses --apply without the confirmation env var, even against staging', () => {
+    const result = runScript('bash', ['scripts/staging/backup-d1-staging.sh', '--apply']);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('CONFIRM_STAGING_BACKUP');
+  });
+});
+
+describe('scripts/staging/seed-qa-examiner-training.mjs — guards', () => {
+  it('dry-run succeeds and never writes', () => {
+    const result = runScript('node', ['scripts/staging/seed-qa-examiner-training.mjs']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('DRY_RUN');
+    expect(result.stdout).toContain('qa_examiner_training');
+  });
+
+  it('is idempotent across two dry-run invocations (same fixture identity every time)', () => {
+    const first = runScript('node', ['scripts/staging/seed-qa-examiner-training.mjs']);
+    const second = runScript('node', ['scripts/staging/seed-qa-examiner-training.mjs']);
+    expect(first.stdout).toBe(second.stdout);
+  });
+
+  it('refuses any database other than the allowlisted staging DB', () => {
+    const result = runScript('node', ['scripts/staging/seed-qa-examiner-training.mjs'], {
+      STAGING_D1_NAME: 'airtrust-db',
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toMatch(/bloqueado|produção/);
+  });
+
+  it('refuses --apply without the confirmation env var', () => {
+    const result = runScript('node', [
+      'scripts/staging/seed-qa-examiner-training.mjs',
+      '--apply',
+    ], { QA_EXAMINER_ADMIN_PASSWORD: 'not-a-real-secret-fixture-only' });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('CONFIRM_STAGING_QA_SEED');
+  });
+
+  it('never references Costa do Sol as a fixture identity value', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/seed-qa-examiner-training.mjs'), 'utf8');
+    const executable = stripComments(source);
+    expect(executable).not.toMatch(/costa do sol/i);
+    expect(source).toContain('AirTrust Staging Examiner QA');
+  });
+});
+
+describe('scripts/staging/apply-approved-migrations.sh — guards', () => {
+  it('refuses a migration not in the allowlist', () => {
+    const result = runScript('bash', [
+      'scripts/staging/apply-approved-migrations.sh',
+      '--migration=0001_something.sql',
+    ]);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('não está na allowlist');
+  });
+
+  it('refuses to run without --migration', () => {
+    const result = runScript('bash', ['scripts/staging/apply-approved-migrations.sh']);
+    expect(result.status).not.toBe(0);
+  });
+
+  it('refuses the allowlisted migration without a verified backup file', () => {
+    const result = runScript('bash', [
+      'scripts/staging/apply-approved-migrations.sh',
+      '--migration=0424_examiner_universal_training_fichas.sql',
+    ]);
+    expect(result.status).not.toBe(0);
+    expect((result.stdout + result.stderr).toLowerCase()).toContain('backup');
+  });
+
+  it('never invokes `wrangler d1 migrations apply` (would replay the whole chain)', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/apply-approved-migrations.sh'), 'utf8');
+    const executable = stripComments(source);
+    expect(executable).not.toMatch(/d1\s+migrations\s+apply/);
+  });
+});
+
+describe('scripts/staging/migration-ledger-preflight.mjs — guards', () => {
+  it('refuses any target other than the allowlisted staging DB', () => {
+    const result = runScript('node', ['scripts/staging/migration-ledger-preflight.mjs'], {
+      STAGING_D1_NAME: 'airtrust-db',
+      STAGING_D1_ID: '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae',
+    });
+    expect(result.status).not.toBe(0);
+  });
+
+  it('is read-only — no wrangler write subcommand appears in the script', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/migration-ledger-preflight.mjs'), 'utf8');
+    const executable = stripComments(source);
+    expect(executable).not.toMatch(/d1\s+(migrations\s+apply|create|delete)/);
+    expect(executable).not.toContain('INSERT INTO');
+    expect(executable).not.toContain('UPDATE ');
+    expect(executable).not.toContain('DELETE FROM');
+  });
+});
