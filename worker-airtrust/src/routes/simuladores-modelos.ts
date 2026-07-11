@@ -608,7 +608,13 @@ app.get('/modelos-sessao', async (c) => {
     }
 
     if (modeloAeronaveNormalizado) {
-      query += ` AND ${buildModeloAeronaveSqlMatchExpression(modeloAeronaveExpr)} = ?`;
+      // A model with no aircraft column set at all (modelo_aeronave/codigo_aeronave/
+      // tipo_aeronave all NULL/empty) is universal — applicable to any equipment,
+      // mirroring the write-time acceptance rule in assertEntityOwnership (which
+      // never rejects a universal model for equipment incompatibility). Without
+      // this OR clause, universal models like EXA-V01..V04 would silently vanish
+      // from every equipment-filtered listing.
+      query += ` AND (${buildModeloAeronaveSqlMatchExpression(modeloAeronaveExpr)} = ? OR ${modeloAeronaveExpr} = '')`;
       params.push(modeloAeronaveNormalizado);
     }
 

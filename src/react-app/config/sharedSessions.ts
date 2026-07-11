@@ -9,6 +9,7 @@
  */
 
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { isSameStatus } from '@/react-app/types/simuladores';
 
 let _cachedEnabled: boolean | null = null;
 let _cacheTs = 0;
@@ -142,6 +143,30 @@ export async function updateSharedSession(
   return res.json();
 }
 
+/**
+ * Converts an existing PLANNED, evidence-free simple session into a shared
+ * session in place. Distinct from updateSharedSession: that call targets
+ * PUT /sessoes/compartilhada/:id, which 404s for a session that isn't shared
+ * yet (it has no rows in the segment/atribuicao tables). The backend is the
+ * sole authority on eligibility — this call can still fail with 409 if the
+ * session gained evidence (started, ficha signed, etc.) between the frontend
+ * eligibility check and the save.
+ */
+export async function convertSimpleSessionToShared(
+  id: number,
+  payload: SharedSessionPayload,
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  const res = await fetch(`${API_BASE_URL}/simuladores/sessoes/${id}/converter-compartilhada`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken()}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 export async function getSharedSession(
   id: number,
 ): Promise<{ success: boolean; data?: any; error?: string }> {
@@ -149,6 +174,61 @@ export async function getSharedSession(
     headers: { Authorization: `Bearer ${getAccessToken()}` },
   });
   return res.json();
+}
+
+export interface SimpleSessionEvidenceCheck {
+  status?: string | null;
+  fichas?: Array<{
+    status?: string | null;
+    assinatura_aluno_timestamp?: string | null;
+    assinatura_instrutor_timestamp?: string | null;
+    assinatura_tripulante?: number | boolean | null;
+    assinatura_instrutor?: number | boolean | null;
+    resultado_final?: string | null;
+  }> | null;
+}
+
+/**
+ * Frontend mirror of the backend's assertSimpleSessionConvertible — used
+ * only to disable the conversion toggle with an objective reason before the
+ * user tries. The backend re-checks this at save time and remains the sole
+ * authority; this is UX, not the security boundary.
+ */
+export function evaluateSharedConversionEligibility(
+  sessao: SimpleSessionEvidenceCheck | null | undefined,
+): { eligible: boolean; reason: string | null } {
+  if (!sessao) {
+    return { eligible: false, reason: 'Não foi possível confirmar se esta sessão pode ser convertida.' };
+  }
+
+  // Canonical vocabulary is AGENDADO/EM_ANDAMENTO/CONCLUIDO/CANCELADO (see
+  // isSameStatus in types/simuladores.ts, which already normalizes legacy
+  // casing and masculine/feminine variants). Only AGENDADO (planned, no
+  // evidence yet) is convertible.
+  const blockingStatuses = ['EM_ANDAMENTO', 'CONCLUIDO', 'CANCELADO', 'REALIZADO'];
+  if (blockingStatuses.some((blocked) => isSameStatus(sessao.status || undefined, blocked))) {
+    return { eligible: false, reason: 'Sessão já iniciada ou concluída não pode ser convertida.' };
+  }
+
+  const fichas = Array.isArray(sessao.fichas) ? sessao.fichas : [];
+  const hasEvidence = fichas.some((ficha) => {
+    if (ficha.assinatura_aluno_timestamp || ficha.assinatura_instrutor_timestamp) return true;
+    if (Number(ficha.assinatura_tripulante) === 1 || Number(ficha.assinatura_instrutor) === 1) return true;
+    const resultado = String(ficha.resultado_final || '').trim().toUpperCase();
+    if (resultado && resultado !== 'PENDENTE') return true;
+    const fichaStatus = String(ficha.status || '').trim().toUpperCase();
+    if (fichaStatus && fichaStatus !== 'AVALIACAO_PENDENTE' && fichaStatus !== 'ABERTA') return true;
+    return false;
+  });
+
+  if (hasEvidence) {
+    return {
+      eligible: false,
+      reason: 'Esta sessão já possui ficha com evidência de execução e não pode ser convertida.',
+    };
+  }
+
+  return { eligible: true, reason: null };
 }
 
 export async function cancelSharedAssignment(

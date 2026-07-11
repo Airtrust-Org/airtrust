@@ -11,11 +11,20 @@ import { toast } from 'sonner';
 import { FuncionarioCombobox } from '@/react-app/components/simuladores/FuncionarioCombobox';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import {
+  convertSimpleSessionToShared,
   createSharedSession,
   getSharedSession,
   updateSharedSession,
   type SharedSessionPayload,
 } from '@/react-app/config/sharedSessions';
+import {
+  EXAMINER_PRACTICAL_TRAINING_PROGRAM,
+  findProgramByCodigo,
+  SHARED_SESSION_PROGRAM_GENERICO,
+  SHARED_SESSION_PROGRAMS,
+  type SharedSessionProgramId,
+} from '@/react-app/config/sharedSessionPrograms';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 export type SharedSessionStep = 'tripulacao' | 'segmentos';
 
@@ -82,6 +91,19 @@ interface SharedSessionFormProps {
   observacoes: string;
   funcionarios: Funcionario[];
   editSessionId?: number | null;
+  /**
+   * Present only when converting an existing PLANNED simple session into a
+   * shared one (modo_compartilhado: false -> true). Mutually exclusive with
+   * editSessionId: there is no shared detail to GET yet, so the form seeds
+   * its first participant/segment from the simple session's own data instead
+   * of fetching, and submits via PUT /sessoes/:id/converter-compartilhada
+   * rather than POST/PUT /sessoes/compartilhada.
+   */
+  conversionSeed?: {
+    sessaoId: number;
+    participanteId: number | null;
+    modeloSessaoId: number | null;
+  } | null;
   activeStep?: SharedSessionStep;
   onActiveStepChange?: (step: SharedSessionStep) => void;
   hideFooter?: boolean;
@@ -152,6 +174,23 @@ const STEP_LABELS: Record<SharedSessionStep, string> = {
   segmentos: '2. Segmentos',
 };
 
+/**
+ * Canonical identifiers for the examiner practical-training curriculum,
+ * sourced from sharedSessionPrograms.ts (the single versioned catalog of
+ * program -> codigo mappings). Detection is by `codigo`, never by
+ * title/substring — these are stable curricular codes (see migration
+ * 0424_examiner_universal_training_fichas), universal across aircraft
+ * (modelo_aeronave NULL). Importantly, the *panel* below only appears when
+ * the user has explicitly selected this program (or it's already reflected
+ * by persisted/seeded segment data) — never merely because these models
+ * exist in the tenant's catalog.
+ */
+const EXAMINER_EVENT_1_CODES = EXAMINER_PRACTICAL_TRAINING_PROGRAM.evento1Codigos;
+const EXAMINER_EVENT_2_CODES = EXAMINER_PRACTICAL_TRAINING_PROGRAM.evento2Codigos;
+const EXAMINER_MODEL_CODES = new Set([...EXAMINER_EVENT_1_CODES, ...EXAMINER_EVENT_2_CODES]);
+const EXAMINER_SEGMENT_MINUTES = 60;
+const EXAMINER_RESERVATION_MINUTES = EXAMINER_SEGMENT_MINUTES * 2;
+
 function timeToMinutes(value: string): number {
   if (!/^\d{2}:\d{2}$/.test(value)) return Number.NaN;
   const [hours, minutes] = value.split(':').map(Number);
@@ -181,6 +220,10 @@ function formatModelOption(model: ModeloSessao): string {
   return details.length > 0 ? `${title} (${details.join(' | ')})` : title;
 }
 
+function normalizeCodigo(codigo: string | null | undefined): string {
+  return String(codigo || '').trim().toUpperCase();
+}
+
 const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormProps>(function SharedSessionForm({
   onClose,
   onSuccess,
@@ -196,6 +239,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   observacoes,
   funcionarios,
   editSessionId,
+  conversionSeed,
   activeStep: controlledActiveStep,
   onActiveStepChange,
   hideFooter = false,
@@ -221,7 +265,8 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     { ...EMPTY_SEGMENT },
   ]);
   const [loading, setLoading] = useState(false);
-  const [hydrating, setHydrating] = useState(Boolean(editSessionId));
+  const [hydrating, setHydrating] = useState(Boolean(editSessionId) || Boolean(conversionSeed));
+  const [conversionSeeded, setConversionSeeded] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [attemptedSteps, setAttemptedSteps] = useState<Set<SharedSessionStep>>(new Set());
   const [stepMessage, setStepMessage] = useState<string | null>(null);
@@ -229,6 +274,12 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const [loadingModelos, setLoadingModelos] = useState(false);
   const [modelosErro, setModelosErro] = useState<string | null>(null);
   const [hasProtectedFicha, setHasProtectedFicha] = useState(false);
+  // null = "not yet explicitly chosen by the user" — the effective program
+  // (see effectiveProgramId below) then follows whatever is already
+  // reflected by the segments (hydrated or seeded), defaulting to generic.
+  // Once the user touches the selector, their choice is authoritative and
+  // no longer overridden by segment contents.
+  const [userSelectedProgramId, setUserSelectedProgramId] = useState<SharedSessionProgramId | null>(null);
 
   const participantIds = useMemo(
     () => participants.map((participant) => participant.funcionario?.id ?? null) as [number | null, number | null],
@@ -418,8 +469,43 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     });
   }, [participantIds]);
 
+  // Seeds the first participant/segment from the simple session being
+  // converted — runs once (conversionSeeded guard) so it never re-applies
+  // and clobbers edits the user already made in this modal session.
   useEffect(() => {
-    if (!editSessionId) {
+    if (!conversionSeed || conversionSeeded) return;
+    setConversionSeeded(true);
+
+    if (conversionSeed.participanteId) {
+      const known = funcionarios.find((item) => Number(item.id) === Number(conversionSeed.participanteId));
+      if (known) {
+        setParticipants((previous) => {
+          const next: [ParticipantState, ParticipantState] = [...previous];
+          next[0] = { funcionario: known };
+          return next;
+        });
+      }
+    }
+
+    if (conversionSeed.modeloSessaoId || conversionSeed.participanteId) {
+      const curricularIds = conversionSeed.participanteId ? [conversionSeed.participanteId] : [];
+      setSegmentAssignments((previous) => {
+        const next: [SegmentAssignment, SegmentAssignment] = [...previous];
+        next[0] = { ...next[0], modeloSessaoId: conversionSeed.modeloSessaoId, curricularIds };
+        // Segment 2 keeps the same trainee by default (matches "preservar
+        // participante" from the simple session) but no modelo — the user
+        // picks one when they add the second segment's curriculum, exactly
+        // as the reservation-split UI already prompts for.
+        next[1] = { ...next[1], curricularIds };
+        return next;
+      });
+    }
+
+    setHydrating(false);
+  }, [conversionSeed, conversionSeeded, funcionarios]);
+
+  useEffect(() => {
+    if (!editSessionId || conversionSeed) {
       setHydrating(false);
       return;
     }
@@ -505,6 +591,140 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     }
     return map;
   }, [modelos]);
+
+  const examinerModelByCode = useMemo(() => {
+    const map = new Map<string, ModeloSessao>();
+    for (const model of modelos) {
+      const codigo = String(model.codigo || '').trim().toUpperCase();
+      if (
+        (EXAMINER_EVENT_1_CODES as readonly string[]).includes(codigo) ||
+        (EXAMINER_EVENT_2_CODES as readonly string[]).includes(codigo)
+      ) {
+        map.set(codigo, model);
+      }
+    }
+    return map;
+  }, [modelos]);
+
+  const examinerEvent1Available =
+    examinerModelByCode.has(EXAMINER_EVENT_1_CODES[0]) && examinerModelByCode.has(EXAMINER_EVENT_1_CODES[1]);
+  const examinerEvent2Available =
+    examinerModelByCode.has(EXAMINER_EVENT_2_CODES[0]) && examinerModelByCode.has(EXAMINER_EVENT_2_CODES[1]);
+
+  // Pure reflection of what the current segments already carry — never used
+  // to *decide* the program on its own, only to (a) hydrate the program
+  // selector when opening an existing/converting session whose segments
+  // already are examiner segments, and (b) know which of a segment's two
+  // slots is still safe to clear on an explicit program switch-away.
+  const appliedExaminerEvent = useMemo(() => {
+    const codes = segmentAssignments
+      .map((segment) => (segment.modeloSessaoId ? modelById.get(segment.modeloSessaoId)?.codigo : null))
+      .map((codigo) => String(codigo || '').trim().toUpperCase());
+    if (codes.includes(EXAMINER_EVENT_1_CODES[0]) || codes.includes(EXAMINER_EVENT_1_CODES[1])) return 1;
+    if (codes.includes(EXAMINER_EVENT_2_CODES[0]) || codes.includes(EXAMINER_EVENT_2_CODES[1])) return 2;
+    return null;
+  }, [modelById, segmentAssignments]);
+
+  // The program actually in effect: the user's explicit choice once made,
+  // otherwise whatever the segments already reflect (existing/seeded
+  // examiner segments), otherwise generic. Catalog availability
+  // (examinerEvent1Available/2Available) never feeds into this — a tenant
+  // having EXA-V01..V04 does not, by itself, select this program.
+  const effectiveProgramId: SharedSessionProgramId =
+    userSelectedProgramId ??
+    (appliedExaminerEvent ? EXAMINER_PRACTICAL_TRAINING_PROGRAM.id : SHARED_SESSION_PROGRAM_GENERICO);
+  const examinerTemplateVisible = effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id;
+  const visibleModelos = useMemo(() => {
+    const selectedModelIds = new Set(
+      segmentAssignments
+        .map((segment) => Number(segment.modeloSessaoId || 0))
+        .filter((modelId) => modelId > 0),
+    );
+
+    return modelos.filter((model) => {
+      if (selectedModelIds.has(Number(model.id))) return true;
+
+      const isExaminerModel = EXAMINER_MODEL_CODES.has(normalizeCodigo(model.codigo));
+      return effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id
+        ? isExaminerModel
+        : !isExaminerModel;
+    });
+  }, [effectiveProgramId, modelos, segmentAssignments]);
+
+  const handleProgramSelect = useCallback(
+    async (nextProgramId: SharedSessionProgramId) => {
+      if (nextProgramId === effectiveProgramId) {
+        setUserSelectedProgramId(nextProgramId);
+        return;
+      }
+
+      if (effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id && nextProgramId !== EXAMINER_PRACTICAL_TRAINING_PROGRAM.id) {
+        const unpersistedExaminerSegmentIndexes = segmentAssignments
+          .map((segment, index) => ({ segment, index }))
+          .filter(({ segment }) => !segment.id && findProgramByCodigo(modelById.get(segment.modeloSessaoId ?? -1)?.codigo));
+
+        if (unpersistedExaminerSegmentIndexes.length > 0) {
+          const confirmed = await confirmDialog(
+            'Trocar o programa remove os segmentos do treinamento de examinador ainda não salvos deste agendamento. Segmentos já salvos não são afetados. Continuar?',
+            { title: 'Trocar programa da sessão', confirmText: 'Trocar e remover', cancelText: 'Manter examinador' },
+          );
+          if (!confirmed) return;
+
+          setSegmentAssignments((previous) => {
+            const next = [...previous] as [SegmentAssignment, SegmentAssignment];
+            for (const { index } of unpersistedExaminerSegmentIndexes) {
+              next[index] = { ...next[index], modeloSessaoId: null, curricularIds: [], finalidadeCodigo: 'OUTRO' };
+            }
+            return next;
+          });
+        }
+      }
+
+      setUserSelectedProgramId(nextProgramId);
+    },
+    [effectiveProgramId, modelById, segmentAssignments],
+  );
+
+  const reservationMinutes =
+    reservationReady && horarioInicio && horarioFim
+      ? timeToMinutes(horarioFim) - timeToMinutes(horarioInicio)
+      : 0;
+  const examinerReservationMatches = reservationMinutes === EXAMINER_RESERVATION_MINUTES;
+
+  const applyExaminerTemplate = useCallback(
+    (event: 1 | 2) => {
+      const codes = event === 1 ? EXAMINER_EVENT_1_CODES : EXAMINER_EVENT_2_CODES;
+      const firstModel = examinerModelByCode.get(codes[0]);
+      const secondModel = examinerModelByCode.get(codes[1]);
+      if (!firstModel || !secondModel || !reservationReady || !examinerReservationMatches) return;
+
+      const split = minutesToTime(timeToMinutes(horarioInicio) + EXAMINER_SEGMENT_MINUTES);
+      setSplitTime(split);
+
+      const traineeId =
+        segmentAssignments[0].curricularIds[0] ??
+        segmentAssignments[1].curricularIds[0] ??
+        participants[0].funcionario?.id ??
+        null;
+      const traineeIds = traineeId ? [traineeId] : [];
+
+      setSegmentAssignments([
+        {
+          ...segmentAssignments[0],
+          modeloSessaoId: firstModel.id,
+          finalidadeCodigo: 'ATUACAO_EXAMINADOR',
+          curricularIds: traineeIds,
+        },
+        {
+          ...segmentAssignments[1],
+          modeloSessaoId: secondModel.id,
+          finalidadeCodigo: 'ATUACAO_EXAMINADOR',
+          curricularIds: traineeIds,
+        },
+      ]);
+    },
+    [examinerModelByCode, examinerReservationMatches, horarioInicio, participants, reservationReady, segmentAssignments],
+  );
 
   const summary = useMemo(() => {
     return participants
@@ -633,12 +853,20 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         })),
       };
 
-      const result = editSessionId
-        ? await updateSharedSession(editSessionId, payload)
-        : await createSharedSession(payload);
+      const result = conversionSeed
+        ? await convertSimpleSessionToShared(conversionSeed.sessaoId, payload)
+        : editSessionId
+          ? await updateSharedSession(editSessionId, payload)
+          : await createSharedSession(payload);
 
       if (!result.success) throw new Error(result.error || 'Erro ao salvar sessão compartilhada.');
-      toast.success(editSessionId ? 'Sessão compartilhada atualizada.' : 'Sessão compartilhada criada.');
+      toast.success(
+        conversionSeed
+          ? 'Sessão convertida em compartilhada.'
+          : editSessionId
+            ? 'Sessão compartilhada atualizada.'
+            : 'Sessão compartilhada criada.',
+      );
       onSuccess();
       onClose();
     } catch (error) {
@@ -648,19 +876,24 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     }
   };
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      triggerPrimaryAction: () => {
-        if (activeStep === 'tripulacao') {
-          requestStep('segmentos');
-          return;
-        }
-        void handleSubmit();
-      },
-    }),
-    [activeStep, requestStep],
-  );
+  // No deps array (intentional): re-exposes on every render so
+  // triggerPrimaryAction always calls the current handleSubmit/requestStep
+  // closures. A restricted deps array here previously froze the exposed
+  // handle at whatever segment/crew state existed when the user first
+  // reached the "segmentos" step — activeStep and requestStep's identity
+  // don't change as the user fills in segment fields, so any edit made
+  // after that point was silently validated against stale data when this
+  // form is driven externally via hideFooter (its only real integration —
+  // ModalNovaSessao's own footer button is the sole submit path).
+  useImperativeHandle(ref, () => ({
+    triggerPrimaryAction: () => {
+      if (activeStep === 'tripulacao') {
+        requestStep('segmentos');
+        return;
+      }
+      void handleSubmit();
+    },
+  }));
 
   useEffect(() => {
     onStateChange?.({ activeStep, loading });
@@ -710,7 +943,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             selected={participant.funcionario}
             placeholder={`Buscar piloto ${index + 1}...`}
             required
-            disabled={Boolean(editSessionId)}
+            disabled={Boolean(editSessionId) || (Boolean(conversionSeed) && index === 0)}
           />
         </div>
       ))}
@@ -752,6 +985,89 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         />
         <p className="mt-1 text-xs text-slate-500">Reserva: {horarioInicio} até {horarioFim}</p>
       </div>
+
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <label className="mb-1 block text-xs font-medium text-slate-600">Programa desta sessão</label>
+        <select
+          aria-label="Programa desta sessão"
+          value={effectiveProgramId}
+          onChange={(event) => void handleProgramSelect(event.target.value as SharedSessionProgramId)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value={SHARED_SESSION_PROGRAM_GENERICO}>Genérico</option>
+          {SHARED_SESSION_PROGRAMS.map((program) => (
+            <option key={program.id} value={program.id}>{program.label}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-slate-500">
+          A estrutura de segmentos do treinamento de examinador só aparece quando este programa é
+          selecionado — a existência dos modelos EXA-V0X no tenant não a mostra sozinha.
+        </p>
+      </div>
+
+      {examinerTemplateVisible && (
+        <div
+          className="rounded-lg border border-indigo-200 bg-indigo-50 p-4"
+          data-testid="examiner-template-panel"
+        >
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-indigo-900">Treinamento prático de examinador</p>
+            {appliedExaminerEvent && (
+              <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-medium text-white">
+                Evento {appliedExaminerEvent} de 2 aplicado
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-indigo-700">
+            Cada agendamento físico representa um evento. Aplique a estrutura de 60 minutos por
+            segmento no evento correspondente — o segundo evento é configurado em um agendamento
+            separado.
+          </p>
+          {!examinerEvent1Available && !examinerEvent2Available && (
+            <p className="mt-2 text-xs text-amber-800" role="status">
+              Os modelos EXA-V01..V04 não estão disponíveis neste tenant. A estrutura de examinador
+              não pode ser aplicada até que esses modelos existam no catálogo.
+            </p>
+          )}
+          {!examinerReservationMatches && (
+            <p className="mt-2 text-xs text-amber-800">
+              A reserva precisa ter exatamente {EXAMINER_RESERVATION_MINUTES} minutos (2 × {EXAMINER_SEGMENT_MINUTES} min) para aplicar a estrutura do examinador.
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => applyExaminerTemplate(1)}
+              disabled={!examinerEvent1Available || !examinerReservationMatches}
+              title={
+                !examinerEvent1Available
+                  ? 'EXA-V01/EXA-V02 não disponíveis neste tenant'
+                  : !examinerReservationMatches
+                    ? `Reserva precisa ter exatamente ${EXAMINER_RESERVATION_MINUTES} minutos`
+                    : undefined
+              }
+              className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-medium text-indigo-800 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Aplicar Evento 1 de 2 (EXA-V01 + EXA-V02)
+            </button>
+            <button
+              type="button"
+              onClick={() => applyExaminerTemplate(2)}
+              disabled={!examinerEvent2Available || !examinerReservationMatches}
+              title={
+                !examinerEvent2Available
+                  ? 'EXA-V03/EXA-V04 não disponíveis neste tenant'
+                  : !examinerReservationMatches
+                    ? `Reserva precisa ter exatamente ${EXAMINER_RESERVATION_MINUTES} minutos`
+                    : undefined
+              }
+              className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-medium text-indigo-800 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Aplicar Evento 2 de 2 (EXA-V03 + EXA-V04)
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {segments.map((segment, index) => (
@@ -826,7 +1142,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
                         ? 'Carregando modelos...'
                         : 'Selecione o modelo do segmento'}
                   </option>
-                  {modelos.map((model) => (
+                  {visibleModelos.map((model) => (
                     <option key={model.id} value={model.id}>{formatModelOption(model)}</option>
                   ))}
                 </select>
@@ -929,7 +1245,13 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             Voltar para Tripulação
           </button>
           <button type="button" onClick={handleSubmit} disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-            {loading ? 'Salvando...' : editSessionId ? 'Salvar sessão compartilhada' : 'Criar sessão compartilhada'}
+            {loading
+              ? 'Salvando...'
+              : conversionSeed
+                ? 'Converter em sessão compartilhada'
+                : editSessionId
+                  ? 'Salvar sessão compartilhada'
+                  : 'Criar sessão compartilhada'}
           </button>
         </div>
       )}
@@ -941,11 +1263,21 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-indigo-900">
           <Users className="h-4 w-4" />
-          {editSessionId ? 'Editar sessão compartilhada' : 'Configuração compartilhada'}
+          {conversionSeed
+            ? 'Converter em sessão compartilhada'
+            : editSessionId
+              ? 'Editar sessão compartilhada'
+              : 'Configuração compartilhada'}
         </div>
         <p className="mt-1 text-xs text-indigo-700">
           Uma reserva, dois pilotos e vínculos curriculares independentes por segmento.
         </p>
+        {conversionSeed && (
+          <p className="mt-1 text-xs text-indigo-700">
+            O piloto 1 e o equipamento/horário/observações da sessão original são preservados. A
+            conversão só é gravada ao salvar — cancelar não altera a sessão original.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="list" aria-label="Etapas da sessão compartilhada">
