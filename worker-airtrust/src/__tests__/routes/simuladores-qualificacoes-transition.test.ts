@@ -87,7 +87,7 @@ function createMockDb(state: MockState): D1Database {
 
             async first<T>() {
               if (sql.includes('FROM modelos_sessao ms') && sql.includes('WHERE ms.id = ?')) {
-                const modeloId = Number(args[0]);
+                const modeloId = Number(args.length > 1 ? args[1] : args[0]);
                 return (state.modelos[modeloId] || null) as T | null;
               }
 

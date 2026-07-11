@@ -6,6 +6,109 @@ import {
 } from '../../routes/simuladores-shared-session-logic';
 
 describe('simuladores shared session logic', () => {
+  it('credits both curricula explicitly when both segments attend both assignments', () => {
+    const normalized = validateAndNormalizeSharedSessionRequest({
+      data: '2026-06-15',
+      hora_inicio: '07:00',
+      hora_fim: '09:00',
+      simulador_id: 10,
+      instrutor_id: 20,
+      participantes: [
+        {
+          funcionario_id: 101,
+          cumpre_treinamento: true,
+          treinamento_planejado_id: 1001,
+          modelo_sessao_id: 2001,
+          gera_ficha: true,
+        },
+        {
+          funcionario_id: 102,
+          cumpre_treinamento: true,
+          treinamento_planejado_id: 1002,
+          modelo_sessao_id: 2002,
+          gera_ficha: true,
+        },
+      ],
+      segmentos: [
+        {
+          inicio: '07:00',
+          fim: '08:00',
+          atribuicao_funcionario_id: 101,
+          atribuicao_funcionario_ids: [101, 102],
+          finalidade_codigo: 'SOP_NORMAL',
+          funcoes: [
+            { funcionario_id: 101, funcao: 'PF' },
+            { funcionario_id: 102, funcao: 'PM' },
+          ],
+        },
+        {
+          inicio: '08:00',
+          fim: '09:00',
+          atribuicao_funcionario_id: 102,
+          atribuicao_funcionario_ids: [101, 102],
+          finalidade_codigo: 'ATUACAO_EXAMINADOR',
+          funcoes: [
+            { funcionario_id: 102, funcao: 'PF' },
+            { funcionario_id: 101, funcao: 'PM' },
+          ],
+        },
+      ],
+    });
+
+    expect(normalized.segmentos.map((segmento) => segmento.atribuicao_funcionario_ids)).toEqual([
+      [101, 102],
+      [101, 102],
+    ]);
+    expect(normalized.resumo_participantes.map((summary) => summary.curricular_minutos)).toEqual([
+      120,
+      120,
+    ]);
+  });
+
+  it('uses explicit curricular relations instead of mixing with the legacy scalar', () => {
+    const summaries = calculateSharedSessionParticipantSummaries(
+      [
+        { funcionario_id: 101, cumpre_treinamento: true, gera_ficha: true },
+        { funcionario_id: 102, cumpre_treinamento: true, gera_ficha: true },
+      ],
+      [
+        {
+          duracao_minutos: 60,
+          atribuicao_funcionario_id: 101,
+          atribuicao_funcionario_ids: [102],
+          funcoes: [
+            { funcionario_id: 101, funcao: 'PF' },
+            { funcionario_id: 102, funcao: 'PM' },
+          ],
+        },
+      ],
+    );
+
+    expect(summaries.find((summary) => summary.funcionario_id === 101)?.curricular_minutos).toBe(0);
+    expect(summaries.find((summary) => summary.funcionario_id === 102)?.curricular_minutos).toBe(60);
+  });
+
+  it('deduplicates explicit curricular ids so a segment cannot double count minutes', () => {
+    const summaries = calculateSharedSessionParticipantSummaries(
+      [
+        { funcionario_id: 101, cumpre_treinamento: true, gera_ficha: true },
+        { funcionario_id: 102, cumpre_treinamento: true, gera_ficha: true },
+      ],
+      [
+        {
+          duracao_minutos: 60,
+          atribuicao_funcionario_ids: [101, 101, 102],
+          funcoes: [
+            { funcionario_id: 101, funcao: 'PF' },
+            { funcionario_id: 102, funcao: 'PM' },
+          ],
+        },
+      ],
+    );
+
+    expect(summaries.map((summary) => summary.curricular_minutos)).toEqual([60, 60]);
+  });
+
   it('calculates 60 PF + 60 PM for both pilots in the two-training scenario', () => {
     const normalized = validateAndNormalizeSharedSessionRequest({
       data: '2026-06-15',

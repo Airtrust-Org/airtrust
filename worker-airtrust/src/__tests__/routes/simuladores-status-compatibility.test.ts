@@ -47,9 +47,14 @@ function createMockDb(state: MockState): D1Database {
       return {
         bind(...args: unknown[]) {
           return {
+            async all() {
+              return { results: [] };
+            },
+
             async first<T>() {
               if (sql.includes('FROM modelos_sessao ms') && sql.includes('WHERE ms.id = ?')) {
-                return (state.modelos[Number(args[0])] || null) as T | null;
+                const modeloId = Number(args.length > 1 ? args[1] : args[0]);
+                return (state.modelos[modeloId] || null) as T | null;
               }
 
               if (sql.includes('WHERE sessao_id = ?') && sql.includes('funcionario_id = ?')) {

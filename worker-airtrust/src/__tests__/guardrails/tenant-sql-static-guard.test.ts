@@ -271,6 +271,7 @@ describe('Tenant SQL Guardrail — Regression Prevention', () => {
       'qualificacoes-certificados-helpers.ts',
       'simuladores-shared.ts',
       'simuladores-shared-session-helpers.ts',
+      'simuladores-shared-session-fichas.ts',
       'simuladores-fichas-helpers.ts',
       'qualificacoes/historico-helpers.ts',
       'qualificacoes/shared.ts',
@@ -360,7 +361,14 @@ describe('Tenant SQL Guardrail — Schema Drift Prevention', () => {
     const tablesWithoutEmpresaId = [
       'simuladores',
       'sessoes_participantes',
-      'fichas_sessao_manobras',
+      // 'fichas_sessao_manobras' removed 2026-07-10: migration 0150 added a
+      // real, backfilled, indexed empresa_id column to this table
+      // (idx_fichas_manobras_empresa) — direct usage is not schema drift.
+      // It was previously masked here only because the query happened to
+      // share a file with an unrelated PRAGMA table_info() call, which
+      // blanket-exempts the whole file from this check (see hasPragmaInfo
+      // below) — splitting the file into focused modules exposed the
+      // pre-existing false positive.
       'historico_notas_manobras',
       'qualificacoes_historico_reclass_queue',
       'modelos_sessao_manobras',
