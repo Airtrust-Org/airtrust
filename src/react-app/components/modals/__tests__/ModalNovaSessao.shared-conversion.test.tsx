@@ -66,6 +66,20 @@ const MODELOS_PER = {
     { id: 45, codigo: 'S76-P-C1/VFR', nome: 'PERIÓDICO C1/VFR', tipo_sessao_id: 9, modelo_aeronave: 'SK76' },
   ],
 };
+const MODELOS_PER_AND_EXAMINER = {
+  success: true,
+  data: [
+    ...MODELOS_PER.data,
+    { id: 501, codigo: 'EXA-V01', nome: 'Treinamento Prático de Examinador — SOP Normal', tipo_sessao_id: 23, modelo_aeronave: null },
+    { id: 502, codigo: 'EXA-V02', nome: 'Treinamento Prático de Examinador — SOP Anormal', tipo_sessao_id: 23, modelo_aeronave: null },
+    { id: 503, codigo: 'EXA-V03', nome: 'Treinamento Prático de Examinador — Emergência', tipo_sessao_id: 23, modelo_aeronave: null },
+    { id: 504, codigo: 'EXA-V04', nome: 'Treinamento Prático de Examinador — Integrada', tipo_sessao_id: 23, modelo_aeronave: null },
+  ],
+};
+const MODELOS_EXAMINER_ONLY = {
+  success: true,
+  data: MODELOS_PER_AND_EXAMINER.data.filter((m) => m.codigo.startsWith('EXA-V')),
+};
 
 function buildDetailFichas(evidence: 'none' | 'protected' | 'signed') {
   if (evidence === 'none') return [];
@@ -77,12 +91,18 @@ function buildFetchMock(options: {
   modoCompartilhado?: boolean;
   fichaEvidence?: 'none' | 'protected' | 'signed';
   status?: string;
+  modelos?: typeof MODELOS_PER;
+  templateId?: number;
+  temaSessao?: string;
 } = {}) {
   const modoCompartilhado = options.modoCompartilhado ?? false;
   const fichaEvidence = options.fichaEvidence ?? 'none';
   // Real production sessions store 'AGENDADO' (masculine canonical
   // vocabulary), never 'ATIVA' — see isSameStatus in types/simuladores.ts.
   const status = options.status ?? 'AGENDADO';
+  const modelosResponse = options.modelos ?? MODELOS_PER;
+  const templateId = options.templateId ?? 45;
+  const temaSessao = options.temaSessao ?? 'PERIÓDICO C1/VFR';
 
   function jsonResponse(body: unknown): Promise<Response> {
     return Promise.resolve({ ok: true, status: 200, json: async () => body } as Response);
@@ -114,10 +134,10 @@ function buildFetchMock(options: {
           tipo_sessao: 'PER',
           tipo_sessao_id: 9,
           tipo_sessao_codigo: 'PER',
-          template_id: 45,
+          template_id: templateId,
           status,
           observacoes: null,
-          nome: 'PERIÓDICO C1/VFR',
+          nome: temaSessao,
           modo_compartilhado: modoCompartilhado ? 1 : 0,
           simulador_modelo: 'SK76',
           simulador_aeronave_codigo: 'SK76',
@@ -130,7 +150,7 @@ function buildFetchMock(options: {
     if (url.includes('/funcionarios?examinador=true')) return jsonResponse({ success: true, data: [] });
     if (url.includes('/funcionarios?')) return jsonResponse(FUNCIONARIOS);
     if (url.endsWith('/funcionarios')) return jsonResponse(FUNCIONARIOS);
-    if (url.includes('/simuladores/modelos-sessao?')) return jsonResponse(MODELOS_PER);
+    if (url.includes('/simuladores/modelos-sessao?')) return jsonResponse(modelosResponse);
     if (url.endsWith('/simuladores')) return jsonResponse(SIMULADORES);
     return jsonResponse({ success: true, data: [] });
   });
@@ -138,7 +158,7 @@ function buildFetchMock(options: {
   return fetchMock;
 }
 
-function renderEditModal() {
+function renderEditModal(overrides: { templateId?: number; temaSessao?: string } = {}) {
   return render(
     <ModalNovaSessao
       isOpen
@@ -147,7 +167,7 @@ function renderEditModal() {
       sessao={{
         id: 9001,
         modo_compartilhado: 0,
-        template_id: 45,
+        template_id: overrides.templateId ?? 45,
         simulador_id: 16,
         data: '2026-07-20',
         horario_inicio: '08:00',
@@ -156,7 +176,7 @@ function renderEditModal() {
         tipo_sessao: 'PER',
         tipo_sessao_id: 9,
         tipo_sessao_codigo: 'PER',
-        tema_sessao: 'PERIÓDICO C1/VFR',
+        tema_sessao: overrides.temaSessao ?? 'PERIÓDICO C1/VFR',
         participantes: [{ funcionario_id: 68, funcao: 'PIC' }],
         fichas: [],
       }}
@@ -234,5 +254,58 @@ describe('ModalNovaSessao — edição com conversão simples -> compartilhada',
 
     // Piloto 2 ainda não foi definido: continua como campo de busca livre.
     expect(screen.getByPlaceholderText(/Buscar piloto 2/i)).not.toBeDisabled();
+  });
+
+  it('convertendo um treinamento comum, o painel de examinador não aparece mesmo com EXA-V01..V04 no catálogo do tenant', async () => {
+    vi.stubGlobal(
+      'fetch',
+      buildFetchMock({ modoCompartilhado: false, fichaEvidence: 'none', modelos: MODELOS_PER_AND_EXAMINER }),
+    );
+    const user = userEvent.setup();
+    renderEditModal();
+
+    const toggle = await screen.findByRole('button', { name: /Sessão compartilhada/i });
+    await waitFor(() => expect(toggle).not.toBeDisabled());
+    await user.click(toggle);
+    await screen.findByText(/Converter em sessão compartilhada/i);
+
+    await user.type(screen.getByPlaceholderText(/Buscar piloto 2/i), 'Alexandre');
+    await user.click(await screen.findByText('Alexandre'));
+
+    await user.click(await screen.findByRole('button', { name: /Continuar para Segmentos/i }));
+    await screen.findByLabelText('Modelo do segmento 1');
+
+    expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('GENERICO');
+    expect(screen.queryByTestId('examiner-template-panel')).not.toBeInTheDocument();
+  });
+
+  it('convertendo uma sessão cujo modelo original é EXA-V01, o painel de examinador aparece refletindo o programa já selecionado', async () => {
+    vi.stubGlobal(
+      'fetch',
+      buildFetchMock({
+        modoCompartilhado: false,
+        fichaEvidence: 'none',
+        modelos: MODELOS_EXAMINER_ONLY,
+        templateId: 501,
+        temaSessao: 'Treinamento Prático de Examinador — SOP Normal',
+      }),
+    );
+    const user = userEvent.setup();
+    renderEditModal({ templateId: 501, temaSessao: 'Treinamento Prático de Examinador — SOP Normal' });
+
+    const toggle = await screen.findByRole('button', { name: /Sessão compartilhada/i });
+    await waitFor(() => expect(toggle).not.toBeDisabled());
+    await user.click(toggle);
+    await screen.findByText(/Converter em sessão compartilhada/i);
+
+    const pilotoDois = screen.getByPlaceholderText(/Buscar piloto 2/i);
+    await user.type(pilotoDois, 'Alexandre');
+    await user.click(await screen.findByText('Alexandre'));
+
+    await user.click(await screen.findByRole('button', { name: /Continuar para Segmentos/i }));
+    await screen.findByLabelText('Modelo do segmento 1');
+
+    expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('TREINAMENTO_PRATICO_EXAMINADOR');
+    expect(await screen.findByTestId('examiner-template-panel')).toBeInTheDocument();
   });
 });

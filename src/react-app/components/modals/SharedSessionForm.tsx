@@ -17,6 +17,14 @@ import {
   updateSharedSession,
   type SharedSessionPayload,
 } from '@/react-app/config/sharedSessions';
+import {
+  EXAMINER_PRACTICAL_TRAINING_PROGRAM,
+  findProgramByCodigo,
+  SHARED_SESSION_PROGRAM_GENERICO,
+  SHARED_SESSION_PROGRAMS,
+  type SharedSessionProgramId,
+} from '@/react-app/config/sharedSessionPrograms';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 export type SharedSessionStep = 'tripulacao' | 'segmentos';
 
@@ -167,15 +175,18 @@ const STEP_LABELS: Record<SharedSessionStep, string> = {
 };
 
 /**
- * Canonical identifiers for the examiner practical-training curriculum.
- * Detection is by `codigo`, never by title/substring — these are stable
- * curricular codes (see migration 0424_examiner_universal_training_fichas),
- * universal across aircraft (modelo_aeronave NULL). A tenant without these
- * models in its catalog simply never sees the template action below; nothing
- * is fabricated.
+ * Canonical identifiers for the examiner practical-training curriculum,
+ * sourced from sharedSessionPrograms.ts (the single versioned catalog of
+ * program -> codigo mappings). Detection is by `codigo`, never by
+ * title/substring — these are stable curricular codes (see migration
+ * 0424_examiner_universal_training_fichas), universal across aircraft
+ * (modelo_aeronave NULL). Importantly, the *panel* below only appears when
+ * the user has explicitly selected this program (or it's already reflected
+ * by persisted/seeded segment data) — never merely because these models
+ * exist in the tenant's catalog.
  */
-const EXAMINER_EVENT_1_CODES = ['EXA-V01', 'EXA-V02'] as const;
-const EXAMINER_EVENT_2_CODES = ['EXA-V03', 'EXA-V04'] as const;
+const EXAMINER_EVENT_1_CODES = EXAMINER_PRACTICAL_TRAINING_PROGRAM.evento1Codigos;
+const EXAMINER_EVENT_2_CODES = EXAMINER_PRACTICAL_TRAINING_PROGRAM.evento2Codigos;
 const EXAMINER_SEGMENT_MINUTES = 60;
 const EXAMINER_RESERVATION_MINUTES = EXAMINER_SEGMENT_MINUTES * 2;
 
@@ -258,6 +269,12 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const [loadingModelos, setLoadingModelos] = useState(false);
   const [modelosErro, setModelosErro] = useState<string | null>(null);
   const [hasProtectedFicha, setHasProtectedFicha] = useState(false);
+  // null = "not yet explicitly chosen by the user" — the effective program
+  // (see effectiveProgramId below) then follows whatever is already
+  // reflected by the segments (hydrated or seeded), defaulting to generic.
+  // Once the user touches the selector, their choice is authoritative and
+  // no longer overridden by segment contents.
+  const [userSelectedProgramId, setUserSelectedProgramId] = useState<SharedSessionProgramId | null>(null);
 
   const participantIds = useMemo(
     () => participants.map((participant) => participant.funcionario?.id ?? null) as [number | null, number | null],
@@ -588,7 +605,12 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     examinerModelByCode.has(EXAMINER_EVENT_1_CODES[0]) && examinerModelByCode.has(EXAMINER_EVENT_1_CODES[1]);
   const examinerEvent2Available =
     examinerModelByCode.has(EXAMINER_EVENT_2_CODES[0]) && examinerModelByCode.has(EXAMINER_EVENT_2_CODES[1]);
-  const examinerTemplateVisible = examinerEvent1Available || examinerEvent2Available;
+
+  // Pure reflection of what the current segments already carry — never used
+  // to *decide* the program on its own, only to (a) hydrate the program
+  // selector when opening an existing/converting session whose segments
+  // already are examiner segments, and (b) know which of a segment's two
+  // slots is still safe to clear on an explicit program switch-away.
   const appliedExaminerEvent = useMemo(() => {
     const codes = segmentAssignments
       .map((segment) => (segment.modeloSessaoId ? modelById.get(segment.modeloSessaoId)?.codigo : null))
@@ -597,6 +619,51 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     if (codes.includes(EXAMINER_EVENT_2_CODES[0]) || codes.includes(EXAMINER_EVENT_2_CODES[1])) return 2;
     return null;
   }, [modelById, segmentAssignments]);
+
+  // The program actually in effect: the user's explicit choice once made,
+  // otherwise whatever the segments already reflect (existing/seeded
+  // examiner segments), otherwise generic. Catalog availability
+  // (examinerEvent1Available/2Available) never feeds into this — a tenant
+  // having EXA-V01..V04 does not, by itself, select this program.
+  const effectiveProgramId: SharedSessionProgramId =
+    userSelectedProgramId ??
+    (appliedExaminerEvent ? EXAMINER_PRACTICAL_TRAINING_PROGRAM.id : SHARED_SESSION_PROGRAM_GENERICO);
+  const examinerTemplateVisible = effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id;
+
+  const handleProgramSelect = useCallback(
+    async (nextProgramId: SharedSessionProgramId) => {
+      if (nextProgramId === effectiveProgramId) {
+        setUserSelectedProgramId(nextProgramId);
+        return;
+      }
+
+      if (effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id && nextProgramId !== EXAMINER_PRACTICAL_TRAINING_PROGRAM.id) {
+        const unpersistedExaminerSegmentIndexes = segmentAssignments
+          .map((segment, index) => ({ segment, index }))
+          .filter(({ segment }) => !segment.id && findProgramByCodigo(modelById.get(segment.modeloSessaoId ?? -1)?.codigo));
+
+        if (unpersistedExaminerSegmentIndexes.length > 0) {
+          const confirmed = await confirmDialog(
+            'Trocar o programa remove os segmentos do treinamento de examinador ainda não salvos deste agendamento. Segmentos já salvos não são afetados. Continuar?',
+            { title: 'Trocar programa da sessão', confirmText: 'Trocar e remover', cancelText: 'Manter examinador' },
+          );
+          if (!confirmed) return;
+
+          setSegmentAssignments((previous) => {
+            const next = [...previous] as [SegmentAssignment, SegmentAssignment];
+            for (const { index } of unpersistedExaminerSegmentIndexes) {
+              next[index] = { ...next[index], modeloSessaoId: null, curricularIds: [], finalidadeCodigo: 'OUTRO' };
+            }
+            return next;
+          });
+        }
+      }
+
+      setUserSelectedProgramId(nextProgramId);
+    },
+    [effectiveProgramId, modelById, segmentAssignments],
+  );
+
   const reservationMinutes =
     reservationReady && horarioInicio && horarioFim
       ? timeToMinutes(horarioFim) - timeToMinutes(horarioInicio)
@@ -898,6 +965,25 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         <p className="mt-1 text-xs text-slate-500">Reserva: {horarioInicio} até {horarioFim}</p>
       </div>
 
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <label className="mb-1 block text-xs font-medium text-slate-600">Programa desta sessão</label>
+        <select
+          aria-label="Programa desta sessão"
+          value={effectiveProgramId}
+          onChange={(event) => void handleProgramSelect(event.target.value as SharedSessionProgramId)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value={SHARED_SESSION_PROGRAM_GENERICO}>Genérico</option>
+          {SHARED_SESSION_PROGRAMS.map((program) => (
+            <option key={program.id} value={program.id}>{program.label}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-slate-500">
+          A estrutura de segmentos do treinamento de examinador só aparece quando este programa é
+          selecionado — a existência dos modelos EXA-V0X no tenant não a mostra sozinha.
+        </p>
+      </div>
+
       {examinerTemplateVisible && (
         <div
           className="rounded-lg border border-indigo-200 bg-indigo-50 p-4"
@@ -916,6 +1002,12 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             segmento no evento correspondente — o segundo evento é configurado em um agendamento
             separado.
           </p>
+          {!examinerEvent1Available && !examinerEvent2Available && (
+            <p className="mt-2 text-xs text-amber-800" role="status">
+              Os modelos EXA-V01..V04 não estão disponíveis neste tenant. A estrutura de examinador
+              não pode ser aplicada até que esses modelos existam no catálogo.
+            </p>
+          )}
           {!examinerReservationMatches && (
             <p className="mt-2 text-xs text-amber-800">
               A reserva precisa ter exatamente {EXAMINER_RESERVATION_MINUTES} minutos (2 × {EXAMINER_SEGMENT_MINUTES} min) para aplicar a estrutura do examinador.
