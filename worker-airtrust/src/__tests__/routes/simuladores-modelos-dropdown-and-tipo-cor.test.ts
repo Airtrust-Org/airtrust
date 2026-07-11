@@ -172,6 +172,24 @@ describe('simuladores modelos dropdown + tipo cor', () => {
     expect(state.lastModelosBinds).toContain('SK76');
   });
 
+  it('filtro por modelo_aeronave inclui modelos universais (modelo_aeronave NULL) via OR, não só o equipamento exato', async () => {
+    // Regression guard: a plain `= ?` match on modelo_aeronave silently
+    // excludes universal models (EXA-V01..V04, modelo_aeronave NULL) from
+    // every equipment-filtered listing — including SharedSessionForm's own
+    // fetchModelos(), which always sends modelo_aeronave. The query must OR
+    // in the "no aircraft column set at all" case.
+    const { db, state } = createDbMock();
+    await simuladoresModelosRoutes.fetch(
+      new Request(
+        'http://localhost/modelos-sessao?tipo=SIMULADOR&modelo_aeronave=AW139',
+      ),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(state.lastModelosQuery).toMatch(/= \? OR .*= ''/);
+  });
+
   it('retorna modelos para SK76 + INI com filtros canônicos', async () => {
     const { db, state } = createDbMock();
     const response = await simuladoresModelosRoutes.fetch(
