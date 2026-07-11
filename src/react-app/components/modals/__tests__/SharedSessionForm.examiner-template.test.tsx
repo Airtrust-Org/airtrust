@@ -4,8 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Covers section 7-10 of the shared-session brief: the EXA-V01..V04 template
-// action must be invisible for ordinary courses, must appear only when the
-// canonical examiner models exist for the tenant/equipment, must require an
+// action must be invisible for ordinary courses EVEN WHEN the underlying
+// EXA-V0x models exist in the tenant's catalog (e.g. after migration 0424) —
+// it must appear only when the user explicitly selects the canonical
+// "Treinamento Prático de Examinador" program, must require an
 // exactly-120-minute reservation, and must produce exactly two 60-minute
 // segments tagged with the correct EXA-V0X codigo — never fabricated data,
 // never leaking into a generic session's payload.
@@ -47,6 +49,11 @@ vi.mock('@/react-app/components/simuladores/FuncionarioCombobox', () => ({
       {props.selected && <span>{props.selected.nome}</span>}
     </div>
   ),
+}));
+
+const mockConfirmDialog = vi.fn(async () => true);
+vi.mock('@/react-app/utils/confirmDialog', () => ({
+  confirmDialog: (...args: any[]) => mockConfirmDialog(...args),
 }));
 
 vi.mock('sonner', () => ({
@@ -110,9 +117,15 @@ async function goToSegments() {
   await screen.findByTestId('shared-step-segmentos');
 }
 
+async function selectProgram(label: string) {
+  const select = await screen.findByLabelText('Programa desta sessão');
+  await userEvent.selectOptions(select, label);
+}
+
 describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockConfirmDialog.mockResolvedValue(true);
     mockCreateSharedSession.mockResolvedValue({ success: true, data: { sessao: { id: 999 } } });
     mockUpdateSharedSession.mockResolvedValue({ success: true, data: { sessao: { id: 999 } } });
     mockGetSharedSession.mockResolvedValue({ success: true, data: null });
@@ -132,17 +145,36 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
 
     await screen.findByLabelText('Modelo do segmento 1');
     expect(screen.queryByTestId('examiner-template-panel')).not.toBeInTheDocument();
-    expect(screen.queryByText(/EXA-V0/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Aplicar Evento/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Evento \d de 2 aplicado/i)).not.toBeInTheDocument();
   });
 
-  it('shows the examiner template panel when EXA-V01..V04 exist for the tenant, disabled until the reservation is exactly 120 minutes', async () => {
+  it('does NOT show the template merely because EXA-V01..V04 exist for the tenant — an ordinary course stays selected by default', async () => {
+    // Regression guard: catalog existence (e.g. after migration 0424) must
+    // never be sufficient on its own. Default program is "Genérico".
     mockModelosResponse(EXAMINER_MODELOS);
-    // 90-minute reservation: template must be visible (models exist) but disabled.
+    render(<SharedSessionForm {...(BASE_PROPS() as any)} />);
+
+    await selectPilot(0, 'Ramos');
+    await selectPilot(1, 'Dieter');
+    await goToSegments();
+    await screen.findByLabelText('Modelo do segmento 1');
+
+    expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('GENERICO');
+    expect(screen.queryByTestId('examiner-template-panel')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Aplicar Evento/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the examiner template panel once the user explicitly selects the examiner program, disabled until the reservation is exactly 120 minutes', async () => {
+    mockModelosResponse(EXAMINER_MODELOS);
+    // 90-minute reservation: template must be visible (program selected) but disabled.
     render(<SharedSessionForm {...(BASE_PROPS({ horarioInicio: '08:00', horarioFim: '09:30' }) as any)} />);
 
     await selectPilot(0, 'Ramos');
     await selectPilot(1, 'Dieter');
     await goToSegments();
+    await screen.findByLabelText('Modelo do segmento 1');
+    await selectProgram('Treinamento Prático de Examinador');
     await screen.findByTestId('examiner-template-panel');
 
     expect(screen.getByText(/precisa ter exatamente 120 minutos/i)).toBeInTheDocument();
@@ -150,13 +182,33 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     expect(screen.getByRole('button', { name: /Aplicar Evento 2 de 2/i })).toBeDisabled();
   });
 
-  it('applies Evento 1 de 2 (EXA-V01 + EXA-V02): exactly two 60-minute segments, same trainee, submitted with correct codes', async () => {
+  it('shows the panel disabled with a clear reason when the examiner program is selected but the tenant lacks EXA-V01..V04', async () => {
+    mockModelosResponse(GENERIC_MODELOS);
+    render(<SharedSessionForm {...(BASE_PROPS({ horarioInicio: '08:00', horarioFim: '10:00' }) as any)} />);
+
+    await selectPilot(0, 'Ramos');
+    await selectPilot(1, 'Dieter');
+    await goToSegments();
+    await screen.findByLabelText('Modelo do segmento 1');
+    await selectProgram('Treinamento Prático de Examinador');
+    await screen.findByTestId('examiner-template-panel');
+
+    expect(
+      screen.getByText(/modelos EXA-V01\.\.V04 não estão disponíveis neste tenant/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Aplicar Evento 2 de 2/i })).toBeDisabled();
+  });
+
+  it('applies Evento 1 de 2 (EXA-V01 + EXA-V02) only: exactly two 60-minute segments, same trainee, submitted with correct codes', async () => {
     mockModelosResponse(EXAMINER_MODELOS);
     render(<SharedSessionForm {...(BASE_PROPS({ horarioInicio: '08:00', horarioFim: '10:00' }) as any)} />);
 
     await selectPilot(0, 'Ramos');
     await selectPilot(1, 'Dieter');
     await goToSegments();
+    await screen.findByLabelText('Modelo do segmento 1');
+    await selectProgram('Treinamento Prático de Examinador');
     await screen.findByTestId('examiner-template-panel');
 
     await userEvent.click(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i }));
@@ -183,6 +235,27 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     expect(payload.segmentos[1].inicio).toBe('09:00');
     expect(payload.segmentos[1].fim).toBe('10:00');
     expect(payload.segmentos[1].modelo_sessao_id).toBe(502);
+    // Evento 1 never touches V03/V04.
+    expect(payload.segmentos.map((s: any) => s.modelo_sessao_id)).not.toContain(503);
+    expect(payload.segmentos.map((s: any) => s.modelo_sessao_id)).not.toContain(504);
+  });
+
+  it('applies Evento 2 de 2 (EXA-V03 + EXA-V04) only', async () => {
+    mockModelosResponse(EXAMINER_MODELOS);
+    render(<SharedSessionForm {...(BASE_PROPS({ horarioInicio: '08:00', horarioFim: '10:00' }) as any)} />);
+
+    await selectPilot(0, 'Ramos');
+    await selectPilot(1, 'Dieter');
+    await goToSegments();
+    await screen.findByLabelText('Modelo do segmento 1');
+    await selectProgram('Treinamento Prático de Examinador');
+    await screen.findByTestId('examiner-template-panel');
+
+    await userEvent.click(screen.getByRole('button', { name: /Aplicar Evento 2 de 2/i }));
+
+    expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue('503');
+    expect(screen.getByLabelText('Modelo do segmento 2')).toHaveValue('504');
+    expect(screen.getByText(/Evento 2 de 2 aplicado/i)).toBeInTheDocument();
   });
 
   it('does not offer Evento 2 when only EXA-V01/V02 exist for the tenant (partial catalog)', async () => {
@@ -192,10 +265,68 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     await selectPilot(0, 'Ramos');
     await selectPilot(1, 'Dieter');
     await goToSegments();
+    await screen.findByLabelText('Modelo do segmento 1');
+    await selectProgram('Treinamento Prático de Examinador');
     await screen.findByTestId('examiner-template-panel');
 
     expect(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: /Aplicar Evento 2 de 2/i })).toBeDisabled();
+  });
+
+  it('a common course never receives EXA segments automatically, even with the catalog present', async () => {
+    mockModelosResponse([...GENERIC_MODELOS, ...EXAMINER_MODELOS]);
+    render(<SharedSessionForm {...(BASE_PROPS({ horarioInicio: '08:00', horarioFim: '10:00' }) as any)} />);
+
+    await selectPilot(0, 'Ramos');
+    await selectPilot(1, 'Dieter');
+    await goToSegments();
+    const modeloSelect1 = await screen.findByLabelText('Modelo do segmento 1');
+    await userEvent.selectOptions(modeloSelect1, '63');
+
+    expect(screen.queryByTestId('examiner-template-panel')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue('63');
+  });
+
+  it('switching from examiner back to a common course asks for confirmation and clears only unsaved EXA segments', async () => {
+    mockModelosResponse(EXAMINER_MODELOS);
+    render(<SharedSessionForm {...(BASE_PROPS({ horarioInicio: '08:00', horarioFim: '10:00' }) as any)} />);
+
+    await selectPilot(0, 'Ramos');
+    await selectPilot(1, 'Dieter');
+    await goToSegments();
+    await screen.findByLabelText('Modelo do segmento 1');
+    await selectProgram('Treinamento Prático de Examinador');
+    await screen.findByTestId('examiner-template-panel');
+    await userEvent.click(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i }));
+    expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue('501');
+
+    mockConfirmDialog.mockResolvedValueOnce(true);
+    await selectProgram('Genérico');
+
+    await waitFor(() => expect(mockConfirmDialog).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('examiner-template-panel')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue(''));
+    expect(screen.getByLabelText('Modelo do segmento 2')).toHaveValue('');
+  });
+
+  it('declining the confirmation keeps the examiner program and segments untouched', async () => {
+    mockModelosResponse(EXAMINER_MODELOS);
+    render(<SharedSessionForm {...(BASE_PROPS({ horarioInicio: '08:00', horarioFim: '10:00' }) as any)} />);
+
+    await selectPilot(0, 'Ramos');
+    await selectPilot(1, 'Dieter');
+    await goToSegments();
+    await screen.findByLabelText('Modelo do segmento 1');
+    await selectProgram('Treinamento Prático de Examinador');
+    await screen.findByTestId('examiner-template-panel');
+    await userEvent.click(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i }));
+
+    mockConfirmDialog.mockResolvedValueOnce(false);
+    await selectProgram('Genérico');
+
+    await waitFor(() => expect(mockConfirmDialog).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('examiner-template-panel')).toBeInTheDocument();
+    expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue('501');
   });
 
   it('reopening an already-converted examiner segment (hydrated) shows the applied-event badge without re-triggering the template', async () => {
@@ -239,7 +370,10 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     await waitFor(() => expect(mockGetSharedSession).toHaveBeenCalledWith(9901));
     await goToSegments();
 
+    // The program selector reflects the already-persisted state without any
+    // click on "Aplicar Evento" — the template itself is never re-triggered.
     expect(await screen.findByText(/Evento 1 de 2 aplicado/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('TREINAMENTO_PRATICO_EXAMINADOR');
     expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue('501');
     expect(screen.getByLabelText('Modelo do segmento 2')).toHaveValue('502');
   });
