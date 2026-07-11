@@ -14,7 +14,7 @@
  * - ✅ Destinatários automáticos (participantes + instrutor)
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Plus, Trash2, Mail, MessageCircle, FileText, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
@@ -36,7 +36,7 @@ import {
   resolveEditModeloSelection,
 } from './modalNovaSessaoRules';
 import { enviarNotificacaoSessao, montarResumoCanal } from '@/react-app/utils/sessaoNotificacoes';
-import { isSharedSessionsEnabled } from '@/react-app/config/sharedSessions';
+import { evaluateSharedConversionEligibility, isSharedSessionsEnabled } from '@/react-app/config/sharedSessions';
 import SharedSessionForm, {
   type SharedSessionFormHandle,
   type SharedSessionFormState,
@@ -235,6 +235,31 @@ export default function ModalNovaSessao({
   });
   const sharedFormRef = useRef<SharedSessionFormHandle | null>(null);
 
+  // The session's modo_compartilhado as originally loaded (before any local
+  // toggle clicks). Comparing it against the live `modoCompartilhado` state
+  // is how we distinguish "editing an already-shared session" (locked, no
+  // reverse conversion offered) from "converting a still-simple session"
+  // (offered, backend-gated) without needing extra state to track intent.
+  const originalModoCompartilhado = Boolean(sessao?.modo_compartilhado);
+  const isConvertingToShared = isEditMode && modoCompartilhado && !originalModoCompartilhado;
+
+  const conversionEligibility = useMemo(() => {
+    if (!isEditMode || originalModoCompartilhado || editHydrating) {
+      return { eligible: false, reason: null as string | null };
+    }
+    if (tipoDispositivo !== 'SIMULADOR') {
+      return { eligible: false, reason: 'Sessões compartilhadas exigem equipamento do tipo simulador.' };
+    }
+    // Only sessaoDetalhe (GET /sessoes/:id) carries ficha status/signature
+    // fields and the agendamento's own status — the calendar-snapshot
+    // `sessao` prop only has ficha ids. Without a real detail fetch we
+    // cannot safely confirm eligibility, so we deliberately pass nothing
+    // and let evaluateSharedConversionEligibility return its "unknown" case
+    // rather than risk a false "eligible" from incomplete data.
+    const detalheParaAvaliar = sessaoDetalhe && !sessaoDetalhe._fallback ? sessaoDetalhe : null;
+    return evaluateSharedConversionEligibility(detalheParaAvaliar as { status?: string; fichas?: unknown[] } | null);
+  }, [isEditMode, originalModoCompartilhado, editHydrating, tipoDispositivo, sessaoDetalhe]);
+
   const {
     hasFap07Selecionada,
     hasFap13Selecionada,
@@ -311,6 +336,11 @@ export default function ModalNovaSessao({
         // Em criação: pré-preencher com data de hoje
         setData(new Date().toISOString().split('T')[0]);
         setEditHydrating(false);
+        // Reabrir para criar uma nova sessão nunca deve preservar a
+        // modalidade compartilhada de um uso anterior do modal.
+        setModoCompartilhado(false);
+        setSharedSessionStep('tripulacao');
+        setSharedFormState({ activeStep: 'tripulacao', loading: false });
       }
 
       // Em criação: auto +2h; em edição: preservar valor existente
@@ -1805,8 +1835,11 @@ export default function ModalNovaSessao({
 
         {/* ========== FORM ========== */}
         <div className="p-4 sm:p-6 space-y-6">
-          {/* MODALITY TOGGLE — only in create mode, only when feature is enabled */}
-          {!isEditMode && sharedSessionsEnabled && !editHydrating && (
+          {/* MODALITY TOGGLE — create mode: always available. Edit mode: only
+              for a still-simple session (an already-shared session keeps its
+              modality locked — no reverse conversion), and only when the
+              session is safely convertible (planned, no evidence). */}
+          {(!isEditMode || !originalModoCompartilhado) && sharedSessionsEnabled && !editHydrating && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Modalidade da sessão
@@ -1836,17 +1869,21 @@ export default function ModalNovaSessao({
                       handleTipoDispositivoChange('SIMULADOR');
                     }
                   }}
-                  disabled={loading}
+                  disabled={loading || (isEditMode && !conversionEligibility.eligible)}
+                  title={isEditMode && !conversionEligibility.eligible ? conversionEligibility.reason || undefined : undefined}
                   className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-all flex items-center justify-center gap-1 ${
                     modoCompartilhado
                       ? 'bg-indigo-600 text-white border-indigo-600'
                       : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                  }`}
+                  } ${isEditMode && !conversionEligibility.eligible ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <Users className="w-4 h-4" />
                   Sessão compartilhada
                 </button>
               </div>
+              {isEditMode && !modoCompartilhado && !conversionEligibility.eligible && conversionEligibility.reason && (
+                <p className="mt-1 text-xs text-amber-700">{conversionEligibility.reason}</p>
+              )}
             </div>
           )}
 
@@ -2393,7 +2430,16 @@ export default function ModalNovaSessao({
               temaSessao={temaSessao}
               observacoes={observacoes}
               funcionarios={funcionarios}
-              editSessionId={isEditMode ? sessao?.id : null}
+              editSessionId={isConvertingToShared ? null : isEditMode ? sessao?.id : null}
+              conversionSeed={
+                isConvertingToShared && sessao?.id
+                  ? {
+                      sessaoId: sessao.id,
+                      participanteId: participantes[0]?.funcionario_id ?? null,
+                      modeloSessaoId,
+                    }
+                  : null
+              }
               activeStep={sharedSessionStep}
               onActiveStepChange={setSharedSessionStep}
               hideFooter
