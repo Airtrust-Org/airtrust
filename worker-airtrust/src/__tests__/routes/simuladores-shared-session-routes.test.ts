@@ -369,6 +369,54 @@ describe('simuladores shared session routes', () => {
     expect(response.status).toBe(404);
   });
 
+  it('surfaces a batch failure as an error response instead of a false 201, relying on D1 batch atomicity for no partial writes', async () => {
+    // db.batch() on Cloudflare D1 executes its statements as a single atomic
+    // unit at the platform level (all-or-nothing) — this repo does not layer
+    // its own two-phase commit on top of it. What we can and do verify here is
+    // the contract this code controls: if the platform batch call itself
+    // rejects, the route must report failure, not silently return 201 with a
+    // sessaoId that was never actually persisted.
+    const { db } = createDbForSharedRoutes();
+    (db.batch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('D1_ERROR: batch aborted'));
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [
+            { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+            { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '09:00',
+              atribuicao_funcionario_id: 101,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'SOP_NORMAL',
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    const body = (await response.json()) as { success: boolean };
+    expect(response.status).toBe(500);
+    expect(body.success).toBe(false);
+  });
+
   it('rejects an external simulator conflict before writing any shared rows', async () => {
     const { db, batches } = createDbForSharedRoutes();
     mockConflict = { id: 88, hora_inicio: '07:00', hora_fim: '09:00' };
@@ -569,6 +617,181 @@ describe('simuladores shared session routes', () => {
     expect(batches[0].filter((item) => item.query.startsWith('INSERT INTO simulador_segmento_atribuicoes'))).toHaveLength(4);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_segmento_participantes'))).toBe(true);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO fichas_sessao'))).toBe(true);
+  });
+
+  it('gives the same physical participant two curricula across two segments, one assignment and one ficha each', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '08:00',
+          hora_fim: '10:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              inicio: '09:00',
+              fim: '10:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(201);
+    expect(batches).toHaveLength(1);
+
+    const atribuicaoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+    );
+    // One physical participant (101), one agendamento, two distinct modelo_sessao_id
+    // values → two separate curricular assignments, not a merged/duplicated one.
+    expect(atribuicaoInserts).toHaveLength(2);
+    expect(atribuicaoInserts.every((item) => Number(item.args.at(-1)) === 60)).toBe(true);
+
+    const segmentoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_agendamento_segmentos'),
+    );
+    expect(segmentoInserts).toHaveLength(2);
+
+    const segmentoAtribuicaoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_segmento_atribuicoes'),
+    );
+    expect(segmentoAtribuicaoInserts).toHaveLength(2);
+
+    const fichaInserts = batches[0].filter((item) => item.query.startsWith('INSERT INTO fichas_sessao\n'));
+    expect(fichaInserts).toHaveLength(2);
+
+    const participanteInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO sessoes_participantes'),
+    );
+    // Exactly one physical participant row per person, not per curriculum.
+    expect(participanteInserts).toHaveLength(2);
+  });
+
+  it('reconciling the same shared session again does not duplicate assignments, fichas, or minutes', async () => {
+    const { db: createDb, batches: createBatches } = createDbForSharedRoutes();
+
+    const buildRequest = () =>
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '08:00',
+          hora_fim: '10:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              inicio: '09:00',
+              fim: '10:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      });
+
+    await sharedSessionRoutes.fetch(
+      buildRequest(),
+      { DB: createDb, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(createBatches).toHaveLength(1);
+    const firstAttempt = createBatches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+    ).length;
+
+    // Reconciling (PUT) the already-persisted structure with the same desired
+    // state must not add a second copy of any assignment, link, or ficha —
+    // the update path upserts against the loaded current state instead of
+    // re-inserting blindly.
+    const { db: updateDb, batches: updateBatches } = createDbForSharedRoutes();
+    const putResponse = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              id: 801,
+              inicio: '07:00',
+              fim: '08:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              id: 802,
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 102, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+                { funcionario_id: 101, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: updateDb, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(putResponse.status).toBe(200);
+    expect(updateBatches).toHaveLength(1);
+    // The reconciled batch reuses the two existing assignments (501/502 from
+    // the shared mock's loaded state) rather than inserting two more on top
+    // of the first attempt's inserts.
+    const secondAttemptNewAssignments = updateBatches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+    ).length;
+    expect(secondAttemptNewAssignments).toBe(0);
+    expect(firstAttempt).toBe(2);
   });
 
   it('allows the instructor to also be a non-curricular participant in the shared session', async () => {
@@ -786,25 +1009,33 @@ describe('simuladores shared session routes', () => {
     expect(
       statements.some(
         (item) =>
-          item.query.startsWith('UPDATE simulador_segmento_atribuicoes SET deleted_at') &&
-          item.args[0] === 9901,
+          item.query.startsWith("UPDATE simulador_agendamento_segmentos SET status = 'CANCELADO'") &&
+          Number(item.args[0]) === 801,
       ),
     ).toBe(true);
     expect(
       statements.some(
         (item) =>
-          item.query.startsWith('UPDATE simulador_atribuicoes_curriculares SET deleted_at') &&
-          item.args[0] === 9901,
+          item.query.startsWith("UPDATE simulador_atribuicoes_curriculares SET status = 'CANCELADA'") &&
+          Number(item.args[0]) === 501,
+      ),
+    ).toBe(true);
+    expect(
+      statements.some(
+        (item) =>
+          item.query.includes('UPDATE simulador_atribuicoes_curriculares') &&
+          item.query.includes('carga_horaria_total_minutos') &&
+          Number(item.args[item.args.length - 2]) === 502,
       ),
     ).toBe(true);
 
     const assignmentInserts = statements.filter((item) =>
       item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
     );
-    expect(assignmentInserts).toHaveLength(2);
-    expect(assignmentInserts.map((item) => Number(item.args[item.args.length - 1]))).toEqual([60, 120]);
-    expect(assignmentInserts.map((item) => Number(item.args[item.args.length - 2]))).toEqual([1, 1]);
-    expect(assignmentInserts.map((item) => Number(item.args[item.args.length - 3]))).toEqual([2003, 2002]);
+    expect(assignmentInserts).toHaveLength(1);
+    expect(Number(assignmentInserts[0]?.args[assignmentInserts[0].args.length - 1])).toBe(60);
+    expect(Number(assignmentInserts[0]?.args[assignmentInserts[0].args.length - 2])).toBe(1);
+    expect(Number(assignmentInserts[0]?.args[assignmentInserts[0].args.length - 3])).toBe(2003);
 
     const relationInserts = statements.filter((item) =>
       item.query.startsWith('INSERT INTO simulador_segmento_atribuicoes'),
