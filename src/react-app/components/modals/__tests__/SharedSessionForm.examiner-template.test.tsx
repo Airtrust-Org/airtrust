@@ -122,6 +122,13 @@ async function selectProgram(label: string) {
   await userEvent.selectOptions(select, label);
 }
 
+function getModelCodesFromSelect(index: 1 | 2) {
+  return Array.from(screen.getByLabelText(`Modelo do segmento ${index}`).querySelectorAll('option'))
+    .map((option) => option.textContent || '')
+    .filter((label) => label.includes(' - '))
+    .map((label) => label.split(' - ')[0]);
+}
+
 describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -163,6 +170,24 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('GENERICO');
     expect(screen.queryByTestId('examiner-template-panel')).not.toBeInTheDocument();
     expect(screen.queryByText(/Aplicar Evento/i)).not.toBeInTheDocument();
+    expect(getModelCodesFromSelect(1)).toEqual([]);
+  });
+
+  it('hides EXA-V01..V04 from the generic dropdown even when they exist in the tenant catalog', async () => {
+    mockModelosResponse([...GENERIC_MODELOS, ...EXAMINER_MODELOS]);
+    render(<SharedSessionForm {...(BASE_PROPS() as any)} />);
+
+    await selectPilot(0, 'Ramos');
+    await selectPilot(1, 'Dieter');
+    await goToSegments();
+    await screen.findByLabelText('Modelo do segmento 1');
+
+    expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('GENERICO');
+    expect(getModelCodesFromSelect(1)).toEqual(['SK76-I-01/12']);
+    expect(getModelCodesFromSelect(1)).not.toContain('EXA-V01');
+    expect(getModelCodesFromSelect(1)).not.toContain('EXA-V02');
+    expect(getModelCodesFromSelect(1)).not.toContain('EXA-V03');
+    expect(getModelCodesFromSelect(1)).not.toContain('EXA-V04');
   });
 
   it('shows the examiner template panel once the user explicitly selects the examiner program, disabled until the reservation is exactly 120 minutes', async () => {
@@ -180,6 +205,7 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     expect(screen.getByText(/precisa ter exatamente 120 minutos/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Aplicar Evento 2 de 2/i })).toBeDisabled();
+    expect(getModelCodesFromSelect(1)).toEqual(['EXA-V01', 'EXA-V02', 'EXA-V03', 'EXA-V04']);
   });
 
   it('shows the panel disabled with a clear reason when the examiner program is selected but the tenant lacks EXA-V01..V04', async () => {
@@ -376,5 +402,6 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('TREINAMENTO_PRATICO_EXAMINADOR');
     expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue('501');
     expect(screen.getByLabelText('Modelo do segmento 2')).toHaveValue('502');
+    expect(getModelCodesFromSelect(1)).toEqual(['EXA-V01', 'EXA-V02', 'EXA-V03', 'EXA-V04']);
   });
 });

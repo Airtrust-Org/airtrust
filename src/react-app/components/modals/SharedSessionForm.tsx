@@ -187,6 +187,7 @@ const STEP_LABELS: Record<SharedSessionStep, string> = {
  */
 const EXAMINER_EVENT_1_CODES = EXAMINER_PRACTICAL_TRAINING_PROGRAM.evento1Codigos;
 const EXAMINER_EVENT_2_CODES = EXAMINER_PRACTICAL_TRAINING_PROGRAM.evento2Codigos;
+const EXAMINER_MODEL_CODES = new Set([...EXAMINER_EVENT_1_CODES, ...EXAMINER_EVENT_2_CODES]);
 const EXAMINER_SEGMENT_MINUTES = 60;
 const EXAMINER_RESERVATION_MINUTES = EXAMINER_SEGMENT_MINUTES * 2;
 
@@ -217,6 +218,10 @@ function formatModelOption(model: ModeloSessao): string {
     model.sequencia || model.grupo,
   ].filter(Boolean);
   return details.length > 0 ? `${title} (${details.join(' | ')})` : title;
+}
+
+function normalizeCodigo(codigo: string | null | undefined): string {
+  return String(codigo || '').trim().toUpperCase();
 }
 
 const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormProps>(function SharedSessionForm({
@@ -629,6 +634,22 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     userSelectedProgramId ??
     (appliedExaminerEvent ? EXAMINER_PRACTICAL_TRAINING_PROGRAM.id : SHARED_SESSION_PROGRAM_GENERICO);
   const examinerTemplateVisible = effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id;
+  const visibleModelos = useMemo(() => {
+    const selectedModelIds = new Set(
+      segmentAssignments
+        .map((segment) => Number(segment.modeloSessaoId || 0))
+        .filter((modelId) => modelId > 0),
+    );
+
+    return modelos.filter((model) => {
+      if (selectedModelIds.has(Number(model.id))) return true;
+
+      const isExaminerModel = EXAMINER_MODEL_CODES.has(normalizeCodigo(model.codigo));
+      return effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id
+        ? isExaminerModel
+        : !isExaminerModel;
+    });
+  }, [effectiveProgramId, modelos, segmentAssignments]);
 
   const handleProgramSelect = useCallback(
     async (nextProgramId: SharedSessionProgramId) => {
@@ -1121,7 +1142,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
                         ? 'Carregando modelos...'
                         : 'Selecione o modelo do segmento'}
                   </option>
-                  {modelos.map((model) => (
+                  {visibleModelos.map((model) => (
                     <option key={model.id} value={model.id}>{formatModelOption(model)}</option>
                   ))}
                 </select>
