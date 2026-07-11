@@ -45,7 +45,8 @@ function createDbWithoutSimuladoresEmpresaId() {
 
       const first = async () => {
         if (query.includes('SELECT COUNT(DISTINCT id) AS total') && query.includes('FROM funcionarios')) {
-          return { total: 1 };
+          // instrutor (41) + participante (42): 2 distinct funcionários no tenant.
+          return { total: 2 };
         }
         if (query.includes('COALESCE(is_instrutor, 0) as is_instrutor')) {
           return { is_instrutor: 1 };
@@ -111,7 +112,7 @@ describe('POST /sessoes — compat com schema de produção (simuladores sem emp
           instrutor_id: 41,
           tipo_sessao: 'PER',
           tipo_aeronave: 'AW139',
-          participantes: [{ funcionario_id: 41 }],
+          participantes: [{ funcionario_id: 42 }],
         }),
       }),
       { DB: db, __mockEmpresaId: 6 } as unknown as Env,
