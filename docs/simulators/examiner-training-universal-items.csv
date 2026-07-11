@@ -1,0 +1,133 @@
+modelo_codigo,tipo_item,posicao_ficha,codigo,nome,descricao
+EXA-V01,TECNICO,1,EXA-V01-01,Planejamento da sessão,"Planejar a sessão conforme objetivo, programa e padrão aplicável."
+EXA-V01,TECNICO,2,EXA-V01-02,Sequência do cenário,Definir sequência coerente e executável para a avaliação.
+EXA-V01,TECNICO,3,EXA-V01-03,Condições de início,"Confirmar condições operacionais, documentais e técnicas para iniciar."
+EXA-V01,TECNICO,4,EXA-V01-04,Briefing do exame,"Conduzir briefing claro, completo e proporcional ao cenário."
+EXA-V01,TECNICO,5,EXA-V01-05,Funções e responsabilidades,"Definir papéis, responsabilidades e limites de atuação."
+EXA-V01,TECNICO,6,EXA-V01-06,Transferência de controles,Estabelecer procedimentos para transferência e assunção dos controles.
+EXA-V01,TECNICO,7,EXA-V01-07,Configuração do dispositivo,Preparar o dispositivo de treinamento para o cenário planejado.
+EXA-V01,TECNICO,8,EXA-V01-08,Condução conforme SOP,Conduzir o cenário de acordo com o SOP aplicável.
+EXA-V01,TECNICO,9,EXA-V01-09,Observação sem interferência,Observar o desempenho sem fornecer orientação indevida.
+EXA-V01,TECNICO,10,EXA-V01-10,Vigilância da operação,Manter monitoramento contínuo da segurança e da execução.
+EXA-V01,TECNICO,11,EXA-V01-11,Identificação de desvios,Reconhecer desvios em relação aos padrões estabelecidos.
+EXA-V01,TECNICO,12,EXA-V01-12,Procedimentos normais,Avaliar a execução dos procedimentos normais aplicáveis.
+EXA-V01,TECNICO,13,EXA-V01-13,Listas aplicáveis,Avaliar a utilização correta das listas e da ECL aplicável.
+EXA-V01,TECNICO,14,EXA-V01-14,Coordenação da tripulação,"Avaliar coordenação, comunicação e distribuição de tarefas."
+EXA-V01,TECNICO,15,EXA-V01-15,Gerenciamento do tempo,"Controlar duração, sequência e progressão da sessão."
+EXA-V01,TECNICO,16,EXA-V01-16,Critérios de avaliação,"Aplicar critérios de forma uniforme, objetiva e rastreável."
+EXA-V01,TECNICO,17,EXA-V01-17,Debriefing da sessão,Conduzir debriefing baseado nas evidências observadas.
+EXA-V01,TECNICO,18,EXA-V01-18,Registro interno,Preencher corretamente a ficha interna de treinamento.
+EXA-V01,NOTECHS,19,NOTECHS-COO-01,Formação e Manutenção da Equipe,Team Building and Maintaining
+EXA-V01,NOTECHS,20,NOTECHS-COO-02,Consideração pelos Outros,Considering Others
+EXA-V01,NOTECHS,21,NOTECHS-COO-03,Apoio aos Outros,Supporting Others
+EXA-V01,NOTECHS,22,NOTECHS-COO-04,Resolução de Conflitos,Conflict Solving
+EXA-V01,NOTECHS,23,NOTECHS-LID-05,Uso da Autoridade e Assertividade,Use of Authority and Assertiveness
+EXA-V01,NOTECHS,24,NOTECHS-LID-06,Manutenção de Padrões,Maintaining Standards
+EXA-V01,NOTECHS,25,NOTECHS-LID-07,Planejamento e Coordenação,Planning and Coordination
+EXA-V01,NOTECHS,26,NOTECHS-LID-08,Gerenciamento da Carga de Trabalho,Workload Management
+EXA-V01,NOTECHS,27,NOTECHS-CSA-09,Consciência dos Sistemas da Aeronave,Aircraft Systems Awareness
+EXA-V01,NOTECHS,28,NOTECHS-CSA-10,Consciência do Ambiente Externo,Awareness of External Environment
+EXA-V01,NOTECHS,29,NOTECHS-CSA-11,Consciência do Tempo,Awareness of Time
+EXA-V01,NOTECHS,30,NOTECHS-TMD-12,Definição e Diagnóstico do Problema,Problem Definition and Diagnosis
+EXA-V01,NOTECHS,31,NOTECHS-TMD-13,Geração de Opções,Option Generation
+EXA-V01,NOTECHS,32,NOTECHS-TMD-14,Avaliação de Risco e Seleção de Opção,Risk Assessment and Option Selection
+EXA-V01,NOTECHS,33,NOTECHS-TMD-15,Revisão do Resultado,Outcome Review
+EXA-V02,TECNICO,1,EXA-V02-01,Planejamento da anormalidade,Planejar condição anormal adequada ao objetivo da sessão.
+EXA-V02,TECNICO,2,EXA-V02-02,Seleção da condição,"Selecionar condição compatível com nível, equipamento e tempo disponível."
+EXA-V02,TECNICO,3,EXA-V02-03,Avaliação dos riscos,Identificar riscos e estabelecer limites para o cenário.
+EXA-V02,TECNICO,4,EXA-V02-04,Configuração do dispositivo,Configurar corretamente o dispositivo para a condição planejada.
+EXA-V02,TECNICO,5,EXA-V02-05,Briefing específico,"Apresentar objetivos, limites e medidas de segurança da sessão."
+EXA-V02,TECNICO,6,EXA-V02-06,Inserção da condição,Inserir a condição no momento e contexto planejados.
+EXA-V02,TECNICO,7,EXA-V02-07,Reconhecimento da condição,Avaliar se a condição foi identificada adequadamente.
+EXA-V02,TECNICO,8,EXA-V02-08,Aplicação da ECL,"Avaliar seleção, sequência e execução da ECL aplicável."
+EXA-V02,TECNICO,9,EXA-V02-09,Sequência dos procedimentos,Avaliar a ordem e a disciplina na execução dos procedimentos.
+EXA-V02,TECNICO,10,EXA-V02-10,Gerenciamento dos sistemas,Avaliar o gerenciamento dos sistemas afetados.
+EXA-V02,TECNICO,11,EXA-V02-11,Distribuição de tarefas,Avaliar a divisão adequada de funções entre os tripulantes.
+EXA-V02,TECNICO,12,EXA-V02-12,Tomada de decisão,"Avaliar decisões, prioridades e alternativas adotadas."
+EXA-V02,TECNICO,13,EXA-V02-13,Ausência de coaching,Manter postura de examinador sem instrução durante a avaliação.
+EXA-V02,TECNICO,14,EXA-V02-14,Treinamento insuficiente,Identificar indícios de treinamento inadequado ou insuficiente.
+EXA-V02,TECNICO,15,EXA-V02-15,Desvios de segurança,Reconhecer condutas ou condições que afetem a segurança.
+EXA-V02,TECNICO,16,EXA-V02-16,Continuação ou interrupção,"Decidir justificadamente entre continuar, repetir ou interromper."
+EXA-V02,TECNICO,17,EXA-V02-17,Debriefing da sessão,Apresentar análise objetiva baseada nas evidências observadas.
+EXA-V02,TECNICO,18,EXA-V02-18,Registro das evidências,"Registrar desvios, decisões e resultados na ficha interna."
+EXA-V02,NOTECHS,19,NOTECHS-COO-01,Formação e Manutenção da Equipe,Team Building and Maintaining
+EXA-V02,NOTECHS,20,NOTECHS-COO-02,Consideração pelos Outros,Considering Others
+EXA-V02,NOTECHS,21,NOTECHS-COO-03,Apoio aos Outros,Supporting Others
+EXA-V02,NOTECHS,22,NOTECHS-COO-04,Resolução de Conflitos,Conflict Solving
+EXA-V02,NOTECHS,23,NOTECHS-LID-05,Uso da Autoridade e Assertividade,Use of Authority and Assertiveness
+EXA-V02,NOTECHS,24,NOTECHS-LID-06,Manutenção de Padrões,Maintaining Standards
+EXA-V02,NOTECHS,25,NOTECHS-LID-07,Planejamento e Coordenação,Planning and Coordination
+EXA-V02,NOTECHS,26,NOTECHS-LID-08,Gerenciamento da Carga de Trabalho,Workload Management
+EXA-V02,NOTECHS,27,NOTECHS-CSA-09,Consciência dos Sistemas da Aeronave,Aircraft Systems Awareness
+EXA-V02,NOTECHS,28,NOTECHS-CSA-10,Consciência do Ambiente Externo,Awareness of External Environment
+EXA-V02,NOTECHS,29,NOTECHS-CSA-11,Consciência do Tempo,Awareness of Time
+EXA-V02,NOTECHS,30,NOTECHS-TMD-12,Definição e Diagnóstico do Problema,Problem Definition and Diagnosis
+EXA-V02,NOTECHS,31,NOTECHS-TMD-13,Geração de Opções,Option Generation
+EXA-V02,NOTECHS,32,NOTECHS-TMD-14,Avaliação de Risco e Seleção de Opção,Risk Assessment and Option Selection
+EXA-V02,NOTECHS,33,NOTECHS-TMD-15,Revisão do Resultado,Outcome Review
+EXA-V03,TECNICO,1,EXA-V03-01,Planejamento da emergência,Planejar cenário de emergência compatível com o objetivo.
+EXA-V03,TECNICO,2,EXA-V03-02,Seleção da emergência,Selecionar emergência adequada ao nível e ao tempo disponível.
+EXA-V03,TECNICO,3,EXA-V03-03,Riscos e limites,"Definir riscos, limites e condições de encerramento."
+EXA-V03,TECNICO,4,EXA-V03-04,Preparação do IOS,Configurar o IOS para a execução segura do cenário.
+EXA-V03,TECNICO,5,EXA-V03-05,Briefing de segurança,"Definir responsabilidades, limites e medidas de intervenção."
+EXA-V03,TECNICO,6,EXA-V03-06,Inserção da emergência,Inserir a emergência de forma segura e controlada.
+EXA-V03,TECNICO,7,EXA-V03-07,Ações imediatas,Avaliar reconhecimento e ações iniciais do examinando.
+EXA-V03,TECNICO,8,EXA-V03-08,Aplicação da ECL,Avaliar seleção e execução da ECL aplicável.
+EXA-V03,TECNICO,9,EXA-V03-09,Prioridades operacionais,Avaliar definição e manutenção das prioridades operacionais.
+EXA-V03,TECNICO,10,EXA-V03-10,Controle da aeronave,Avaliar manutenção do controle e estabilidade da operação.
+EXA-V03,TECNICO,11,EXA-V03-11,Coordenação PF/PM,"Avaliar coordenação, distribuição de tarefas e cross-check."
+EXA-V03,TECNICO,12,EXA-V03-12,Comunicação na emergência,"Avaliar clareza, oportunidade e disciplina das comunicações."
+EXA-V03,TECNICO,13,EXA-V03-13,Vigilância do examinador,Manter consciência contínua da evolução e dos riscos.
+EXA-V03,TECNICO,14,EXA-V03-14,Necessidade de intervenção,Reconhecer corretamente quando a intervenção se torna necessária.
+EXA-V03,TECNICO,15,EXA-V03-15,Momento da intervenção,Avaliar consequências de intervenção tardia ou inadequada.
+EXA-V03,TECNICO,16,EXA-V03-16,Assunção dos controles,Intervir e assumir os controles conforme o assento aplicável.
+EXA-V03,TECNICO,17,EXA-V03-17,Recuperação do cenário,Restabelecer condições seguras e encerrar adequadamente.
+EXA-V03,TECNICO,18,EXA-V03-18,Debriefing e registro,Debrifar e registrar as evidências relevantes da sessão.
+EXA-V03,NOTECHS,19,NOTECHS-COO-01,Formação e Manutenção da Equipe,Team Building and Maintaining
+EXA-V03,NOTECHS,20,NOTECHS-COO-02,Consideração pelos Outros,Considering Others
+EXA-V03,NOTECHS,21,NOTECHS-COO-03,Apoio aos Outros,Supporting Others
+EXA-V03,NOTECHS,22,NOTECHS-COO-04,Resolução de Conflitos,Conflict Solving
+EXA-V03,NOTECHS,23,NOTECHS-LID-05,Uso da Autoridade e Assertividade,Use of Authority and Assertiveness
+EXA-V03,NOTECHS,24,NOTECHS-LID-06,Manutenção de Padrões,Maintaining Standards
+EXA-V03,NOTECHS,25,NOTECHS-LID-07,Planejamento e Coordenação,Planning and Coordination
+EXA-V03,NOTECHS,26,NOTECHS-LID-08,Gerenciamento da Carga de Trabalho,Workload Management
+EXA-V03,NOTECHS,27,NOTECHS-CSA-09,Consciência dos Sistemas da Aeronave,Aircraft Systems Awareness
+EXA-V03,NOTECHS,28,NOTECHS-CSA-10,Consciência do Ambiente Externo,Awareness of External Environment
+EXA-V03,NOTECHS,29,NOTECHS-CSA-11,Consciência do Tempo,Awareness of Time
+EXA-V03,NOTECHS,30,NOTECHS-TMD-12,Definição e Diagnóstico do Problema,Problem Definition and Diagnosis
+EXA-V03,NOTECHS,31,NOTECHS-TMD-13,Geração de Opções,Option Generation
+EXA-V03,NOTECHS,32,NOTECHS-TMD-14,Avaliação de Risco e Seleção de Opção,Risk Assessment and Option Selection
+EXA-V03,NOTECHS,33,NOTECHS-TMD-15,Revisão do Resultado,Outcome Review
+EXA-V04,TECNICO,1,EXA-V04-01,Planejamento do exame,Planejar integralmente a avaliação prática.
+EXA-V04,TECNICO,2,EXA-V04-02,Seleção dos eventos,Selecionar eventos coerentes com os objetivos e padrões.
+EXA-V04,TECNICO,3,EXA-V04-03,Preparação do cenário,"Preparar dispositivo, condições e sequência do exame."
+EXA-V04,TECNICO,4,EXA-V04-04,Briefing do exame,Conduzir briefing completo e objetivo.
+EXA-V04,TECNICO,5,EXA-V04-05,Responsabilidades e controles,Definir funções e procedimentos de transferência dos controles.
+EXA-V04,TECNICO,6,EXA-V04-06,Condução organizada,Conduzir o exame de forma ordenada e eficiente.
+EXA-V04,TECNICO,7,EXA-V04-07,Observação sem coaching,Avaliar sem orientar indevidamente o examinando.
+EXA-V04,TECNICO,8,EXA-V04-08,Sequência e tempo,"Gerenciar progressão, duração e cobertura da avaliação."
+EXA-V04,TECNICO,9,EXA-V04-09,Desempenho técnico,Avaliar objetivamente o desempenho técnico observado.
+EXA-V04,TECNICO,10,EXA-V04-10,Aplicação dos padrões,Aplicar os mesmos critérios de forma consistente.
+EXA-V04,TECNICO,11,EXA-V04-11,Treinamento insuficiente,Identificar deficiências relacionadas a treinamento inadequado.
+EXA-V04,TECNICO,12,EXA-V04-12,Condições que afetam segurança,Reconhecer comportamentos ou condições que afetem a segurança.
+EXA-V04,TECNICO,13,EXA-V04-13,Decisão sobre o exame,"Decidir entre continuar, repetir, interromper ou encerrar."
+EXA-V04,TECNICO,14,EXA-V04-14,Medidas de segurança,Aplicar medidas de segurança conforme o assento ocupado.
+EXA-V04,TECNICO,15,EXA-V04-15,Resultado interno,Determinar o resultado interno conforme o padrão da empresa.
+EXA-V04,TECNICO,16,EXA-V04-16,Fundamentação do resultado,Justificar o resultado com evidências observáveis.
+EXA-V04,TECNICO,17,EXA-V04-17,Debriefing final,Conduzir debriefing estruturado e objetivo.
+EXA-V04,TECNICO,18,EXA-V04-18,Encerramento da ficha,Concluir os registros e assinaturas internas aplicáveis.
+EXA-V04,NOTECHS,19,NOTECHS-COO-01,Formação e Manutenção da Equipe,Team Building and Maintaining
+EXA-V04,NOTECHS,20,NOTECHS-COO-02,Consideração pelos Outros,Considering Others
+EXA-V04,NOTECHS,21,NOTECHS-COO-03,Apoio aos Outros,Supporting Others
+EXA-V04,NOTECHS,22,NOTECHS-COO-04,Resolução de Conflitos,Conflict Solving
+EXA-V04,NOTECHS,23,NOTECHS-LID-05,Uso da Autoridade e Assertividade,Use of Authority and Assertiveness
+EXA-V04,NOTECHS,24,NOTECHS-LID-06,Manutenção de Padrões,Maintaining Standards
+EXA-V04,NOTECHS,25,NOTECHS-LID-07,Planejamento e Coordenação,Planning and Coordination
+EXA-V04,NOTECHS,26,NOTECHS-LID-08,Gerenciamento da Carga de Trabalho,Workload Management
+EXA-V04,NOTECHS,27,NOTECHS-CSA-09,Consciência dos Sistemas da Aeronave,Aircraft Systems Awareness
+EXA-V04,NOTECHS,28,NOTECHS-CSA-10,Consciência do Ambiente Externo,Awareness of External Environment
+EXA-V04,NOTECHS,29,NOTECHS-CSA-11,Consciência do Tempo,Awareness of Time
+EXA-V04,NOTECHS,30,NOTECHS-TMD-12,Definição e Diagnóstico do Problema,Problem Definition and Diagnosis
+EXA-V04,NOTECHS,31,NOTECHS-TMD-13,Geração de Opções,Option Generation
+EXA-V04,NOTECHS,32,NOTECHS-TMD-14,Avaliação de Risco e Seleção de Opção,Risk Assessment and Option Selection
+EXA-V04,NOTECHS,33,NOTECHS-TMD-15,Revisão do Resultado,Outcome Review

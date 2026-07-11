@@ -29,6 +29,7 @@ import {
   normalizeChecksSessao,
   getFuncId,
   criarQualificacoesPlanejadas,
+  instrutorEstaEntreParticipantes,
 } from './simuladores-shared';
 import participantesRoutes from './simuladores-sessoes-participantes';
 import sessoesUpdateRoutes from './simuladores-sessoes-update';
@@ -723,6 +724,18 @@ app.post('/sessoes', async (c) => {
     if (!participantes || participantes.length === 0) {
       return c.json({ success: false, error: 'Adicione pelo menos 1 participante' }, 400);
     }
+
+    // ── Bloqueio de autoavaliação: instrutor não pode ser participante ──────
+    if (instrutorEstaEntreParticipantes(instrutor_id, participantes)) {
+      return c.json(
+        {
+          success: false,
+          error: 'O instrutor da sessão não pode constar como participante avaliado',
+        },
+        400,
+      );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const funcionarioIdsSessao = Array.from(
       new Set(

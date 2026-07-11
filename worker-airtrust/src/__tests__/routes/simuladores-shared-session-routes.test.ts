@@ -46,6 +46,7 @@ function createDbForSharedRoutes(options?: {
   missingSharedSession?: boolean;
   concludedFicha?: boolean;
   historicalLegacyOnly?: boolean;
+  examinerModelos?: boolean;
 }) {
   const batches: Array<Array<QueryRun>> = [];
 
@@ -138,33 +139,48 @@ function createDbForSharedRoutes(options?: {
                 .map((value) => Number(value))
                 .filter((value) => Number.isInteger(value) && value >= 1000),
             );
+            const allModelos = options?.examinerModelos
+              ? [
+                  { id: 2001, codigo: 'EXA-V01', nome: 'Treinamento Prático de Examinador — SOP Normal e Condução Inicial' },
+                  { id: 2002, codigo: 'EXA-V02', nome: 'Treinamento Prático de Examinador — SOP Anormal e Avaliação' },
+                  { id: 2003, codigo: 'EXA-V03', nome: 'Treinamento Prático de Examinador — Emergência, Intervenção e Segurança' },
+                  { id: 2004, codigo: 'EXA-V04', nome: 'Treinamento Prático de Examinador — Atuação Integrada' },
+                ].map((modelo) => ({
+                  ...modelo,
+                  tipo_sessao_codigo: 'EXA',
+                  gera_qualificacao: 0,
+                  qualificacao_tipo_id: null,
+                }))
+              : [
+                  {
+                    id: 2001,
+                    codigo: 'PER',
+                    nome: 'Modelo A',
+                    tipo_sessao_codigo: 'PER',
+                    gera_qualificacao: 0,
+                    qualificacao_tipo_id: null,
+                  },
+                  {
+                    id: 2002,
+                    codigo: 'PER',
+                    nome: 'Modelo B',
+                    tipo_sessao_codigo: 'PER',
+                    gera_qualificacao: 0,
+                    qualificacao_tipo_id: null,
+                  },
+                  {
+                    id: 2003,
+                    codigo: 'PER',
+                    nome: 'Modelo C',
+                    tipo_sessao_codigo: 'PER',
+                    gera_qualificacao: 0,
+                    qualificacao_tipo_id: null,
+                  },
+                ];
             return {
-              results: [
-                {
-                  id: 2001,
-                  codigo: 'PER',
-                  nome: 'Modelo A',
-                  tipo_sessao_codigo: 'PER',
-                  gera_qualificacao: 0,
-                  qualificacao_tipo_id: null,
-                },
-                {
-                  id: 2002,
-                  codigo: 'PER',
-                  nome: 'Modelo B',
-                  tipo_sessao_codigo: 'PER',
-                  gera_qualificacao: 0,
-                  qualificacao_tipo_id: null,
-                },
-                {
-                  id: 2003,
-                  codigo: 'PER',
-                  nome: 'Modelo C',
-                  tipo_sessao_codigo: 'PER',
-                  gera_qualificacao: 0,
-                  qualificacao_tipo_id: null,
-                },
-              ].filter((modelo) => requestedIds.size === 0 || requestedIds.has(modelo.id)),
+              results: allModelos.filter(
+                (modelo) => requestedIds.size === 0 || requestedIds.has(modelo.id),
+              ),
             };
           }
 
@@ -544,11 +560,14 @@ describe('simuladores shared session routes', () => {
       executionContext,
     );
 
-    expect(response.status).toBe(400);
+    // Cross-tenant ownership failures must never leak which entity or tenant
+    // was involved — 404 generic, not 400 with the literal "fora do tenant"
+    // message (that would confirm the record exists in another tenant).
+    expect(response.status).toBe(404);
     expect(batches).toHaveLength(0);
     await expect(response.json()).resolves.toMatchObject({
       success: false,
-      error: 'Simulador fora do tenant',
+      error: 'Registro não encontrado',
     });
   });
 
@@ -1190,5 +1209,177 @@ describe('simuladores shared session routes', () => {
     // so the session is created successfully even when the model has no specific manobras.
     // assertModeloSessaoTemManobras is effectively dead code until a product decision is made.
     expect(response.status).toBe(201);
+  });
+});
+
+describe('examiner universal training (EXA-V01..V04) — 2 physical reservations x 2 segments = 4 fichas', () => {
+  // Reuses the same shared-session transactional mechanism and mock harness
+  // proven generically above (lines ~625 and ~696): two segments per
+  // reservation, one curricular assignment + one ficha per segment, no
+  // duplication on reconciliation. This block only adds the examiner-specific
+  // wiring (EXA-V01..V04 modelo codes) rather than re-testing the mechanism
+  // from scratch. Cancellation-of-one-segment isolation is already proven
+  // generically at the "cancels one curricular assignment..." test above —
+  // the mechanism does not depend on which modelo_sessao_id is involved.
+  const executionContext = {
+    waitUntil: vi.fn(),
+  } as unknown as ExecutionContext;
+  const mesmoParticipante = 101;
+  const instrutor = 201;
+
+  it('reservation 1 (08:00-10:00): EXA-V01 + EXA-V02, one ficha each, 60 min, no duplication', async () => {
+    const { db, batches } = createDbForSharedRoutes({ examinerModelos: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-07-20',
+          hora_inicio: '08:00',
+          hora_fim: '10:00',
+          simulador_id: 10,
+          instrutor_id: instrutor,
+          participantes: [{ funcionario_id: mesmoParticipante }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              finalidade_titulo: 'EXA-V01',
+              participantes: [
+                {
+                  funcionario_id: mesmoParticipante,
+                  funcao: 'PF',
+                  cumpre_treinamento: true,
+                  modelo_sessao_id: 2001, // EXA-V01
+                  gera_ficha: true,
+                },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              inicio: '09:00',
+              fim: '10:00',
+              finalidade_codigo: 'SOP_ANORMAL_EMERGENCIA',
+              finalidade_titulo: 'EXA-V02',
+              participantes: [
+                {
+                  funcionario_id: mesmoParticipante,
+                  funcao: 'PF',
+                  cumpre_treinamento: true,
+                  modelo_sessao_id: 2002, // EXA-V02
+                  gera_ficha: true,
+                },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(201);
+
+    const atribuicaoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+    );
+    expect(atribuicaoInserts).toHaveLength(2);
+    // No duplicated minutes: exactly 60 per curricular assignment, never 120.
+    expect(atribuicaoInserts.every((item) => Number(item.args.at(-1)) === 60)).toBe(true);
+
+    const segmentoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_agendamento_segmentos'),
+    );
+    expect(segmentoInserts).toHaveLength(2);
+
+    const segmentoAtribuicaoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_segmento_atribuicoes'),
+    );
+    expect(segmentoAtribuicaoInserts).toHaveLength(2);
+
+    const fichaInserts = batches[0].filter((item) => item.query.startsWith('INSERT INTO fichas_sessao\n'));
+    expect(fichaInserts).toHaveLength(2);
+    // Ficha tipo_sessao carries the modelo codigo (EXA-V01/EXA-V02), proving
+    // each ficha is tied to its own distinct examiner-training curriculum.
+    const tipoSessaoValues = fichaInserts.map((item) => item.args[4]);
+    expect(tipoSessaoValues.sort()).toEqual(['EXA-V01', 'EXA-V02']);
+  });
+
+  it('reservation 2 (08:00-10:00): EXA-V03 + EXA-V04, same participant, independent from reservation 1', async () => {
+    const { db, batches } = createDbForSharedRoutes({ examinerModelos: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-07-21',
+          hora_inicio: '08:00',
+          hora_fim: '10:00',
+          simulador_id: 10,
+          instrutor_id: instrutor,
+          participantes: [{ funcionario_id: mesmoParticipante }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'SOP_ANORMAL_EMERGENCIA',
+              finalidade_titulo: 'EXA-V03',
+              participantes: [
+                {
+                  funcionario_id: mesmoParticipante,
+                  funcao: 'PF',
+                  cumpre_treinamento: true,
+                  modelo_sessao_id: 2003, // EXA-V03
+                  gera_ficha: true,
+                },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              inicio: '09:00',
+              fim: '10:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              finalidade_titulo: 'EXA-V04',
+              participantes: [
+                {
+                  funcionario_id: mesmoParticipante,
+                  funcao: 'PF',
+                  cumpre_treinamento: true,
+                  modelo_sessao_id: 2004, // EXA-V04
+                  gera_ficha: true,
+                },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(201);
+
+    const atribuicaoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+    );
+    expect(atribuicaoInserts).toHaveLength(2);
+    expect(atribuicaoInserts.every((item) => Number(item.args.at(-1)) === 60)).toBe(true);
+
+    const fichaInserts = batches[0].filter((item) => item.query.startsWith('INSERT INTO fichas_sessao\n'));
+    expect(fichaInserts).toHaveLength(2);
+    const tipoSessaoValues = fichaInserts.map((item) => item.args[4]);
+    expect(tipoSessaoValues.sort()).toEqual(['EXA-V03', 'EXA-V04']);
+
+    // Across both physical reservations: 2 agendamentos, 4 segmentos, 4
+    // atribuições curriculares, 4 segmento_atribuicoes, 4 fichas — never a
+    // single "240 minutes" conclusion replacing the four independent ones.
+    // (Reservation 1's counts are asserted in the preceding test; each
+    // reservation uses its own isolated mock DB/batch, exactly like two
+    // separate physical bookings would in production.)
   });
 });
