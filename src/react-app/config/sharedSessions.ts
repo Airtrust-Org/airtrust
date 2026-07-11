@@ -81,22 +81,24 @@ export function _resetCacheForTesting(): void {
 
 export interface SharedSessionParticipant {
   funcionario_id: number;
-  cumpre_treinamento: boolean;
-  treinamento_planejado_id?: number | null;
-  modelo_sessao_id?: number | null;
-  gera_ficha: boolean;
 }
 
-export interface SharedSessionSegmentRole {
+export interface SharedSessionSegmentParticipant {
   funcionario_id: number;
   funcao: 'PF' | 'PM';
+  cumpre_treinamento: boolean;
+  gera_ficha?: boolean;
+  treinamento_planejado_id?: number | null;
 }
 
 export interface SharedSessionSegment {
+  id?: number | null;
   inicio: string; // HH:MM
   fim: string; // HH:MM
-  atribuicao_funcionario_id?: number | null;
-  funcoes: SharedSessionSegmentRole[];
+  modelo_sessao_id?: number | null;
+  finalidade_codigo?: 'SOP_NORMAL' | 'SOP_ANORMAL_EMERGENCIA' | 'ATUACAO_EXAMINADOR' | 'OUTRO';
+  finalidade_titulo?: string | null;
+  participantes: SharedSessionSegmentParticipant[];
 }
 
 export interface SharedSessionPayload {

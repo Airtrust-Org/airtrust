@@ -189,19 +189,21 @@ export async function listarTiposCheckPorIds(
 export async function getSimuladorModeloAeronave(
   db: D1Database,
   simuladorId: string | number | null | undefined,
+  empresaId?: number,
 ): Promise<string> {
   if (simuladorId == null) {
     return '';
   }
 
+  const scopedFilter = empresaId ? ' AND empresa_id = ?' : '';
   const simulador = await db
     .prepare(
       `SELECT COALESCE(aeronave_codigo, codigo_aeronave, tipo, modelo, '') AS modelo_aeronave
        FROM simuladores
-       WHERE id = ? AND deleted_at IS NULL
+       WHERE id = ? AND deleted_at IS NULL${scopedFilter}
        LIMIT 1`,
     )
-    .bind(simuladorId)
+    .bind(simuladorId, ...(empresaId ? [empresaId] : []))
     .first<{ modelo_aeronave: string | null }>();
 
   return normalizeModeloAeronave(simulador?.modelo_aeronave);
@@ -537,10 +539,15 @@ export async function criarQualificacoesPlanejadas(
               qt.categoria AS qual_categoria,
               qt.validade  AS qual_validade
        FROM modelos_sessao ms
-       LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id AND qt.deleted_at IS NULL
-       WHERE ms.id = ? AND ms.deleted_at IS NULL`,
+       LEFT JOIN qualificacoes_tipos qt
+         ON ms.qualificacao_tipo_id = qt.id
+        AND qt.deleted_at IS NULL
+        AND qt.empresa_id = ?
+       WHERE ms.id = ?
+         AND ms.empresa_id = ?
+         AND ms.deleted_at IS NULL`,
     )
-    .bind(params.modeloId)
+    .bind(params.empresaId, params.modeloId, params.empresaId)
     .first<{
       gera_qualificacao: number;
       qualificacao_tipo_id: number | null;
@@ -553,6 +560,8 @@ export async function criarQualificacoesPlanejadas(
   if (!modelo || !modelo.gera_qualificacao || !modelo.qualificacao_tipo_id || !modelo.qual_codigo) {
     return { criadas: 0, puladas: 0, conflitosUniques: 0, bloqueadasDataPassada: 0 };
   }
+
+  const requisitos = await carregarRequisitosModeloSessao(db, params.modeloId, params.empresaId);
 
   // Mapear tipo_sessao → tipo_treinamento (CHECK constraint: INICIAL, RECORRENTE, SEMESTRAL, UPGRADE, ESPECIFICO)
   const TIPO_TREINAMENTO_MAP: Record<string, string> = {
@@ -575,6 +584,18 @@ export async function criarQualificacoesPlanejadas(
     if (dataSessao && dataSessao < hojeIso) {
       bloqueadasDataPassada++;
       continue;
+    }
+
+    if (requisitos.length > 0) {
+      const requisitosAtendidos = await funcionarioAtendeRequisitosModelo(db, {
+        empresaId: params.empresaId,
+        funcionarioId: part.funcionario_id,
+        requisitos,
+      });
+      if (!requisitosAtendidos) {
+        puladas++;
+        continue;
+      }
     }
 
     // Check 1: already has a planejada linked to this session
@@ -660,6 +681,83 @@ export async function criarQualificacoesPlanejadas(
   }
 
   return { criadas, puladas, conflitosUniques, bloqueadasDataPassada };
+}
+
+async function carregarRequisitosModeloSessao(
+  db: D1Database,
+  modeloId: number,
+  empresaId: number,
+): Promise<Array<{ requisito_modelo_sessao_id: number; requisito_qualificacao_tipo_id: number | null }>> {
+  try {
+    const statement = db
+      .prepare(
+        `SELECT
+           msr.requisito_modelo_sessao_id,
+           ms_req.qualificacao_tipo_id AS requisito_qualificacao_tipo_id
+         FROM modelos_sessao_requisitos msr
+         INNER JOIN modelos_sessao ms_req
+           ON ms_req.id = msr.requisito_modelo_sessao_id
+          AND ms_req.deleted_at IS NULL
+          AND ms_req.empresa_id = ?
+         WHERE msr.modelo_sessao_id = ?
+           AND msr.empresa_id = ?
+           AND msr.obrigatorio = 1
+           AND msr.deleted_at IS NULL
+         ORDER BY COALESCE(msr.ordem, msr.id), msr.id`,
+      )
+      .bind(empresaId, modeloId, empresaId);
+    if (typeof (statement as any).all !== 'function') {
+      throw new Error('modelos_sessao_requisitos query sem suporte a all()');
+    }
+    const rows = await statement.all<{
+      requisito_modelo_sessao_id: number;
+      requisito_qualificacao_tipo_id: number | null;
+    }>();
+
+    return rows.results || [];
+  } catch (error: any) {
+    if (String(error?.message || '').includes('no such table: modelos_sessao_requisitos')) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function funcionarioAtendeRequisitosModelo(
+  db: D1Database,
+  params: {
+    empresaId: number;
+    funcionarioId: number;
+    requisitos: Array<{ requisito_modelo_sessao_id: number; requisito_qualificacao_tipo_id: number | null }>;
+  },
+): Promise<boolean> {
+  for (const requisito of params.requisitos) {
+    if (!requisito.requisito_qualificacao_tipo_id) {
+      return false;
+    }
+    const historico = await db
+      .prepare(
+        `SELECT id
+         FROM qualificacoes_historico
+         WHERE funcionario_id = ?
+           AND empresa_id = ?
+           AND qualificacao_id = ?
+           AND deleted_at IS NULL
+           AND ${sqlStatusEqualsAny('status', [
+             QUALIFICACAO_STATUS.CONCLUIDA,
+             QUALIFICACAO_STATUS.CONCLUIDO_LEGACY,
+             QUALIFICACAO_STATUS.VALIDA,
+             QUALIFICACAO_STATUS.RENOVADA,
+           ])}
+         LIMIT 1`,
+      )
+      .bind(params.funcionarioId, params.empresaId, requisito.requisito_qualificacao_tipo_id)
+      .first<{ id: number }>();
+    if (!historico) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export async function sincronizarQualificacoesDaSessaoConcluida(

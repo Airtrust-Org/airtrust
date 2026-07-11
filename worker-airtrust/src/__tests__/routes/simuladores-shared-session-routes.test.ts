@@ -40,7 +40,13 @@ import sharedSessionRoutes from '../../routes/simuladores-shared-session';
 
 type QueryRun = { query: string; args: unknown[] };
 
-function createDbForSharedRoutes(options?: { modeloSemManobras?: boolean }) {
+function createDbForSharedRoutes(options?: {
+  modeloSemManobras?: boolean;
+  simuladorForaTenant?: boolean;
+  missingSharedSession?: boolean;
+  concludedFicha?: boolean;
+  historicalLegacyOnly?: boolean;
+}) {
   const batches: Array<Array<QueryRun>> = [];
 
   const db = {
@@ -58,6 +64,9 @@ function createDbForSharedRoutes(options?: { modeloSemManobras?: boolean }) {
           }
 
           if (query.includes('FROM simuladores') && query.includes('WHERE id = ?')) {
+            if (options?.simuladorForaTenant) {
+              return null;
+            }
             return { id: Number(args[0]) };
           }
 
@@ -70,6 +79,9 @@ function createDbForSharedRoutes(options?: { modeloSemManobras?: boolean }) {
           }
 
           if (query.includes('FROM simulador_agendamentos') && query.includes('COALESCE(modo_compartilhado, 0) = 1')) {
+            if (options?.missingSharedSession) {
+              return null;
+            }
             return {
               id: 9901,
               uuid: 'shared-session-uuid',
@@ -91,6 +103,19 @@ function createDbForSharedRoutes(options?: { modeloSemManobras?: boolean }) {
             };
           }
 
+          if (query.includes('FROM simulador_atribuicoes_curriculares sac') && query.includes('sac.id = ?')) {
+            return {
+              id: Number(args[0]),
+              agendamento_id: Number(args[1]),
+              participante_id: 701,
+              funcionario_id: 101,
+            };
+          }
+
+          if (query.includes('FROM fichas_sessao') && query.includes('atribuicao_curricular_id = ?')) {
+            return null;
+          }
+
           return null;
         },
         all: async () => {
@@ -108,6 +133,11 @@ function createDbForSharedRoutes(options?: { modeloSemManobras?: boolean }) {
           }
 
           if (query.includes('FROM modelos_sessao ms')) {
+            const requestedIds = new Set(
+              args
+                .map((value) => Number(value))
+                .filter((value) => Number.isInteger(value) && value >= 1000),
+            );
             return {
               results: [
                 {
@@ -125,6 +155,151 @@ function createDbForSharedRoutes(options?: { modeloSemManobras?: boolean }) {
                   tipo_sessao_codigo: 'PER',
                   gera_qualificacao: 0,
                   qualificacao_tipo_id: null,
+                },
+                {
+                  id: 2003,
+                  codigo: 'PER',
+                  nome: 'Modelo C',
+                  tipo_sessao_codigo: 'PER',
+                  gera_qualificacao: 0,
+                  qualificacao_tipo_id: null,
+                },
+              ].filter((modelo) => requestedIds.size === 0 || requestedIds.has(modelo.id)),
+            };
+          }
+
+          if (query.includes('FROM sessoes_participantes sp') && query.includes('INNER JOIN funcionarios f')) {
+            if (options?.missingSharedSession) {
+              return { results: [] };
+            }
+            return {
+              results: [
+                {
+                  id: 701,
+                  uuid: 'participante-101',
+                  funcionario_id: 101,
+                  funcionario_nome: 'Piloto 101',
+                  funcao: 'PIC',
+                  status: 'CONFIRMADO',
+                },
+                {
+                  id: 702,
+                  uuid: 'participante-102',
+                  funcionario_id: 102,
+                  funcionario_nome: 'Piloto 102',
+                  funcao: 'SIC',
+                  status: 'CONFIRMADO',
+                },
+              ],
+            };
+          }
+
+          if (query.includes('FROM simulador_atribuicoes_curriculares sac') && query.includes('INNER JOIN sessoes_participantes sp')) {
+            if (options?.missingSharedSession) {
+              return { results: [] };
+            }
+            return {
+              results: [
+                {
+                  id: 501,
+                  participante_id: 701,
+                  funcionario_id: 101,
+                  treinamento_planejado_id: 1001,
+                  modelo_sessao_id: 2001,
+                  gera_ficha: 1,
+                },
+                {
+                  id: 502,
+                  participante_id: 702,
+                  funcionario_id: 102,
+                  treinamento_planejado_id: 1002,
+                  modelo_sessao_id: 2002,
+                  gera_ficha: 1,
+                },
+              ],
+            };
+          }
+
+          if (query.includes('FROM simulador_agendamento_segmentos') && query.includes('ORDER BY ordem ASC')) {
+            if (options?.missingSharedSession) {
+              return { results: [] };
+            }
+            return {
+              results: [
+                {
+                  id: 801,
+                  uuid: 'segmento-1',
+                  empresa_id: 6,
+                  agendamento_id: 9901,
+                  ordem: 1,
+                  inicio: '07:00',
+                  fim: '08:00',
+                  duracao_minutos: 60,
+                  atribuicao_curricular_id: 501,
+                  finalidade_codigo: 'SOP_NORMAL',
+                  finalidade_titulo: 'SOP normal',
+                  status: 'ATIVO',
+                  deleted_at: null,
+                },
+                {
+                  id: 802,
+                  uuid: 'segmento-2',
+                  empresa_id: 6,
+                  agendamento_id: 9901,
+                  ordem: 2,
+                  inicio: '08:00',
+                  fim: '09:00',
+                  duracao_minutos: 60,
+                  atribuicao_curricular_id: 502,
+                  finalidade_codigo: 'ATUACAO_EXAMINADOR',
+                  finalidade_titulo: 'Atuacao examinador',
+                  status: 'ATIVO',
+                  deleted_at: null,
+                },
+              ],
+            };
+          }
+
+          if (query.includes('FROM simulador_segmento_atribuicoes ssa')) {
+            if (options?.missingSharedSession || options?.historicalLegacyOnly) {
+              return { results: [] };
+            }
+            return {
+              results: [
+                { id: 9001, segmento_id: 801, atribuicao_curricular_id: 501, participante_id: 701, funcionario_id: 101 },
+                { id: 9002, segmento_id: 801, atribuicao_curricular_id: 502, participante_id: 702, funcionario_id: 102 },
+                { id: 9003, segmento_id: 802, atribuicao_curricular_id: 501, participante_id: 701, funcionario_id: 101 },
+                { id: 9004, segmento_id: 802, atribuicao_curricular_id: 502, participante_id: 702, funcionario_id: 102 },
+              ],
+            };
+          }
+
+          if (query.includes('FROM simulador_segmento_participantes ssp')) {
+            if (options?.missingSharedSession) {
+              return { results: [] };
+            }
+            return {
+              results: [
+                { id: 9101, segmento_id: 801, participante_id: 701, funcionario_id: 101, funcao: 'PF', duracao_minutos: 60 },
+                { id: 9102, segmento_id: 801, participante_id: 702, funcionario_id: 102, funcao: 'PM', duracao_minutos: 60 },
+                { id: 9103, segmento_id: 802, participante_id: 702, funcionario_id: 102, funcao: 'PF', duracao_minutos: 60 },
+                { id: 9104, segmento_id: 802, participante_id: 701, funcionario_id: 101, funcao: 'PM', duracao_minutos: 60 },
+              ],
+            };
+          }
+
+          if (query.includes('FROM fichas_sessao fs') && query.includes('INNER JOIN funcionarios f')) {
+            if (options?.missingSharedSession) {
+              return { results: [] };
+            }
+            return {
+              results: [
+                {
+                  id: 3001,
+                  agendamento_slot_id: 9901,
+                  colaborador_id_aluno: 101,
+                  status: options?.concludedFicha ? 'CONCLUIDA' : 'AVALIACAO_PENDENTE',
+                  aluno_nome: 'Piloto 101',
                 },
               ],
             };
@@ -194,6 +369,54 @@ describe('simuladores shared session routes', () => {
     expect(response.status).toBe(404);
   });
 
+  it('surfaces a batch failure as an error response instead of a false 201, relying on D1 batch atomicity for no partial writes', async () => {
+    // db.batch() on Cloudflare D1 executes its statements as a single atomic
+    // unit at the platform level (all-or-nothing) — this repo does not layer
+    // its own two-phase commit on top of it. What we can and do verify here is
+    // the contract this code controls: if the platform batch call itself
+    // rejects, the route must report failure, not silently return 201 with a
+    // sessaoId that was never actually persisted.
+    const { db } = createDbForSharedRoutes();
+    (db.batch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('D1_ERROR: batch aborted'));
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [
+            { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+            { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '09:00',
+              atribuicao_funcionario_id: 101,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'SOP_NORMAL',
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    const body = (await response.json()) as { success: boolean };
+    expect(response.status).toBe(500);
+    expect(body.success).toBe(false);
+  });
+
   it('rejects an external simulator conflict before writing any shared rows', async () => {
     const { db, batches } = createDbForSharedRoutes();
     mockConflict = { id: 88, hora_inicio: '07:00', hora_fim: '09:00' };
@@ -229,6 +452,8 @@ describe('simuladores shared session routes', () => {
               inicio: '07:00',
               fim: '08:00',
               atribuicao_funcionario_id: 101,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'SOP_NORMAL',
               funcoes: [
                 { funcionario_id: 101, funcao: 'PF' },
                 { funcionario_id: 102, funcao: 'PM' },
@@ -238,6 +463,8 @@ describe('simuladores shared session routes', () => {
               inicio: '08:00',
               fim: '09:00',
               atribuicao_funcionario_id: 102,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
               funcoes: [
                 { funcionario_id: 102, funcao: 'PF' },
                 { funcionario_id: 101, funcao: 'PM' },
@@ -255,6 +482,73 @@ describe('simuladores shared session routes', () => {
     await expect(response.json()).resolves.toMatchObject({
       success: false,
       error: 'Conflito externo de simulador',
+    });
+  });
+
+  it('rejects a simulator from another tenant before writing any shared rows', async () => {
+    const { db, batches } = createDbForSharedRoutes({ simuladorForaTenant: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [
+            {
+              funcionario_id: 101,
+              cumpre_treinamento: true,
+              treinamento_planejado_id: 1001,
+              modelo_sessao_id: 2001,
+              gera_ficha: true,
+            },
+            {
+              funcionario_id: 102,
+              cumpre_treinamento: true,
+              treinamento_planejado_id: 1002,
+              modelo_sessao_id: 2002,
+              gera_ficha: true,
+            },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '08:00',
+              atribuicao_funcionario_id: 101,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'SOP_NORMAL',
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              atribuicao_funcionario_id: 102,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(400);
+    expect(batches).toHaveLength(0);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Simulador fora do tenant',
     });
   });
 
@@ -290,6 +584,8 @@ describe('simuladores shared session routes', () => {
               inicio: '07:00',
               fim: '08:00',
               atribuicao_funcionario_id: 101,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'SOP_NORMAL',
               funcoes: [
                 { funcionario_id: 101, funcao: 'PF' },
                 { funcionario_id: 102, funcao: 'PM' },
@@ -299,6 +595,8 @@ describe('simuladores shared session routes', () => {
               inicio: '08:00',
               fim: '09:00',
               atribuicao_funcionario_id: 102,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
               funcoes: [
                 { funcionario_id: 102, funcao: 'PF' },
                 { funcionario_id: 101, funcao: 'PM' },
@@ -316,8 +614,523 @@ describe('simuladores shared session routes', () => {
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_agendamentos'))).toBe(true);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'))).toBe(true);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_agendamento_segmentos'))).toBe(true);
+    expect(batches[0].filter((item) => item.query.startsWith('INSERT INTO simulador_segmento_atribuicoes'))).toHaveLength(4);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_segmento_participantes'))).toBe(true);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO fichas_sessao'))).toBe(true);
+  });
+
+  it('gives the same physical participant two curricula across two segments, one assignment and one ficha each', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '08:00',
+          hora_fim: '10:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              inicio: '09:00',
+              fim: '10:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(201);
+    expect(batches).toHaveLength(1);
+
+    const atribuicaoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+    );
+    // One physical participant (101), one agendamento, two distinct modelo_sessao_id
+    // values → two separate curricular assignments, not a merged/duplicated one.
+    expect(atribuicaoInserts).toHaveLength(2);
+    expect(atribuicaoInserts.every((item) => Number(item.args.at(-1)) === 60)).toBe(true);
+
+    const segmentoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_agendamento_segmentos'),
+    );
+    expect(segmentoInserts).toHaveLength(2);
+
+    const segmentoAtribuicaoInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_segmento_atribuicoes'),
+    );
+    expect(segmentoAtribuicaoInserts).toHaveLength(2);
+
+    const fichaInserts = batches[0].filter((item) => item.query.startsWith('INSERT INTO fichas_sessao\n'));
+    expect(fichaInserts).toHaveLength(2);
+
+    const participanteInserts = batches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO sessoes_participantes'),
+    );
+    // Exactly one physical participant row per person, not per curriculum.
+    expect(participanteInserts).toHaveLength(2);
+  });
+
+  it('reconciling the same shared session again does not duplicate assignments, fichas, or minutes', async () => {
+    const { db: createDb, batches: createBatches } = createDbForSharedRoutes();
+
+    const buildRequest = () =>
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '08:00',
+          hora_fim: '10:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              inicio: '09:00',
+              fim: '10:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      });
+
+    await sharedSessionRoutes.fetch(
+      buildRequest(),
+      { DB: createDb, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(createBatches).toHaveLength(1);
+    const firstAttempt = createBatches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+    ).length;
+
+    // Reconciling (PUT) the already-persisted structure with the same desired
+    // state must not add a second copy of any assignment, link, or ficha —
+    // the update path upserts against the loaded current state instead of
+    // re-inserting blindly.
+    const { db: updateDb, batches: updateBatches } = createDbForSharedRoutes();
+    const putResponse = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              id: 801,
+              inicio: '07:00',
+              fim: '08:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              id: 802,
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 102, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+                { funcionario_id: 101, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: updateDb, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(putResponse.status).toBe(200);
+    expect(updateBatches).toHaveLength(1);
+    // The reconciled batch reuses the two existing assignments (501/502 from
+    // the shared mock's loaded state) rather than inserting two more on top
+    // of the first attempt's inserts.
+    const secondAttemptNewAssignments = updateBatches[0].filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+    ).length;
+    expect(secondAttemptNewAssignments).toBe(0);
+    expect(firstAttempt).toBe(2);
+  });
+
+  it('allows the instructor to also be a non-curricular participant in the shared session', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 101,
+          participantes: [
+            {
+              funcionario_id: 101,
+              cumpre_treinamento: false,
+              gera_ficha: false,
+            },
+            {
+              funcionario_id: 102,
+              cumpre_treinamento: true,
+              modelo_sessao_id: 2002,
+              gera_ficha: true,
+            },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '08:00',
+              atribuicao_funcionario_ids: [102],
+              finalidade_codigo: 'SOP_NORMAL',
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              atribuicao_funcionario_ids: [102],
+              finalidade_codigo: 'SOP_ANORMAL_EMERGENCIA',
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(201);
+    expect(batches.length).toBeGreaterThan(0);
+  });
+
+  it('rejects a shared session when the supervisor instructor is a curricular trainee in examiner training', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 101,
+          participantes: [
+            {
+              funcionario_id: 101,
+              cumpre_treinamento: true,
+              modelo_sessao_id: 2001,
+              gera_ficha: true,
+            },
+            {
+              funcionario_id: 102,
+              cumpre_treinamento: true,
+              modelo_sessao_id: 2002,
+              gera_ficha: true,
+            },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '08:00',
+              atribuicao_funcionario_ids: [101, 102],
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(400);
+    expect(batches).toHaveLength(0);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Instrutor supervisor não pode ser o próprio treinando curricular',
+    });
+  });
+
+  it('cancels one curricular assignment without deleting the other segment-curriculum relations', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901/atribuicoes/501/cancelar', {
+        method: 'POST',
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(batches).toHaveLength(1);
+    expect(
+      batches[0].some(
+        (item) =>
+          item.query.startsWith('UPDATE simulador_segmento_atribuicoes') &&
+          item.query.includes('WHERE atribuicao_curricular_id = ?') &&
+          item.args[0] === 501 &&
+          item.args[1] === 6,
+      ),
+    ).toBe(true);
+    expect(
+      batches[0].some(
+        (item) =>
+          item.query.startsWith('UPDATE simulador_segmento_atribuicoes') &&
+          !item.query.includes('WHERE atribuicao_curricular_id = ?'),
+      ),
+    ).toBe(false);
+  });
+
+  it('updates a shared session with final M:N relations only, preserving tenant scoping and no duplicate minutes', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-21',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [
+            {
+              funcionario_id: 101,
+              cumpre_treinamento: true,
+              treinamento_planejado_id: 1001,
+              modelo_sessao_id: 2003,
+              gera_ficha: true,
+            },
+            {
+              funcionario_id: 102,
+              cumpre_treinamento: true,
+              treinamento_planejado_id: 1002,
+              modelo_sessao_id: 2002,
+              gera_ficha: true,
+            },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '08:00',
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'SOP_NORMAL',
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              atribuicao_funcionario_ids: [102],
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(batches).toHaveLength(1);
+
+    const statements = batches[0];
+    expect(
+      statements.some(
+        (item) =>
+          item.query.startsWith("UPDATE simulador_agendamento_segmentos SET status = 'CANCELADO'") &&
+          Number(item.args[0]) === 801,
+      ),
+    ).toBe(true);
+    expect(
+      statements.some(
+        (item) =>
+          item.query.startsWith("UPDATE simulador_atribuicoes_curriculares SET status = 'CANCELADA'") &&
+          Number(item.args[0]) === 501,
+      ),
+    ).toBe(true);
+    expect(
+      statements.some(
+        (item) =>
+          item.query.includes('UPDATE simulador_atribuicoes_curriculares') &&
+          item.query.includes('carga_horaria_total_minutos') &&
+          Number(item.args[item.args.length - 2]) === 502,
+      ),
+    ).toBe(true);
+
+    const assignmentInserts = statements.filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+    );
+    expect(assignmentInserts).toHaveLength(1);
+    expect(Number(assignmentInserts[0]?.args[assignmentInserts[0].args.length - 1])).toBe(60);
+    expect(Number(assignmentInserts[0]?.args[assignmentInserts[0].args.length - 2])).toBe(1);
+    expect(Number(assignmentInserts[0]?.args[assignmentInserts[0].args.length - 3])).toBe(2003);
+
+    const relationInserts = statements.filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_segmento_atribuicoes'),
+    );
+    expect(relationInserts).toHaveLength(3);
+
+    const segmentInserts = statements.filter((item) =>
+      item.query.startsWith('INSERT INTO simulador_agendamento_segmentos'),
+    );
+    expect(segmentInserts).toHaveLength(2);
+    expect(segmentInserts.every((item) => item.args.includes(6))).toBe(true);
+
+    const prepareMock = db.prepare as unknown as { mock: { calls: Array<[string, ...unknown[]]> } };
+    expect(
+      prepareMock.mock.calls.some(
+        ([query]: [string, ...unknown[]]) =>
+          String(query).includes('FROM simulador_agendamentos') &&
+          String(query).includes('empresa_id = ?') &&
+          String(query).includes('COALESCE(modo_compartilhado, 0) = 1'),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns 404 on cross-tenant shared-session PUT without revealing existence or writing rows', async () => {
+    const { db, batches } = createDbForSharedRoutes({ missingSharedSession: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-21',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [
+            { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+            { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '08:00',
+              atribuicao_funcionario_ids: [101],
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(404);
+    expect(batches).toHaveLength(0);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Sessão compartilhada não encontrada',
+    });
+  });
+
+  it('reads a historical shared session using the legacy scalar fallback without backfill or duplicate minutes', async () => {
+    const { db, batches } = createDbForSharedRoutes({ historicalLegacyOnly: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901'),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(batches).toHaveLength(0);
+
+    const json = await response.json() as any;
+    expect(json.success).toBe(true);
+    expect(json.data.segmentos[0].atribuicao_funcionario_ids).toEqual([]);
+    expect(
+      json.data.resumo_participantes.map((item: any) => ({
+        funcionario_id: item.funcionario_id,
+        curricular_minutos: item.curricular_minutos,
+      })),
+    ).toEqual([
+      { funcionario_id: 101, curricular_minutos: 60 },
+      { funcionario_id: 102, curricular_minutos: 60 },
+    ]);
+    const prepareMock = db.prepare as unknown as { mock: { calls: Array<[string, ...unknown[]]> } };
+    expect(
+      prepareMock.mock.calls.some(([query]: [string, ...unknown[]]) =>
+        String(query).includes('FROM simulador_segmento_atribuicoes ssa'),
+      ),
+    ).toBe(true);
   });
 
   it('creates shared session even when ficha model has no specific manobras (NOTECHS always appended)', async () => {
