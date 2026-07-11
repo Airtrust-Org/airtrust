@@ -25,6 +25,11 @@ name = "airtrust-api-development"
 [env.development.vars]
 ENVIRONMENT = "development"
 # DEV auth bypass local deve ficar apenas em worker-airtrust/.dev.vars, nunca em arquivo rastreado.
+# Feature flag: shared simulator sessions (paridade com produção; sem esta
+# var o toggle "Sessão compartilhada" fica invisível na UI mesmo com o
+# frontend/backend já implementados e testados — ver worker-airtrust/src/index.ts
+# capabilities route e src/react-app/config/sharedSessions.ts).
+SIMULATOR_SHARED_SESSIONS_ENABLED = "true"
 
 [[env.development.r2_buckets]]
 binding = "BUCKET"
@@ -49,6 +54,11 @@ ENVIRONMENT = "staging"
 CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
+# Feature flag: shared simulator sessions (paridade com produção; ausente
+# aqui fazia /api/capabilities retornar simulador_shared_sessions=false em
+# staging, escondendo o toggle "Sessão compartilhada" já implementado e
+# testado em ModalNovaSessao/SharedSessionForm).
+SIMULATOR_SHARED_SESSIONS_ENABLED = "true"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env staging
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env staging
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env staging
