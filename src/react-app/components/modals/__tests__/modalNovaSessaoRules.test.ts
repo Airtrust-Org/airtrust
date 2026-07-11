@@ -287,5 +287,24 @@ describe('modalNovaSessaoRules', () => {
 
       expect(result.map((modelo) => modelo.codigo)).toEqual(['GLOBAL-EXA-01']);
     });
+
+    // GLOBAL-EXA-01 mirrors the real EXA-V01..V04 shape exactly:
+    // tipo_sessao_codigo 'EXA', modelo_aeronave NULL. This proves
+    // tipo_aeronave/modelo_aeronave = NULL means "applicable to any
+    // aircraft" — never hidden, invalid, or unavailable in the selector —
+    // for AW139, SK76, and any future/third aircraft, not just one.
+    it.each(['AW139', 'SK76', 'BELL-429'])(
+      'mantem o modelo universal de examinador visivel para equipamento %s (nunca oculto/indisponivel)',
+      (equipamento) => {
+        const result = filterModelosSessaoForModal({
+          modelos,
+          tipoSessao: { codigo: 'EXA', nome: 'Examinador' },
+          equipamento,
+          tipoDispositivo: 'SIMULADOR',
+        });
+
+        expect(result.map((modelo) => modelo.codigo)).toEqual(['GLOBAL-EXA-01']);
+      },
+    );
   });
 });

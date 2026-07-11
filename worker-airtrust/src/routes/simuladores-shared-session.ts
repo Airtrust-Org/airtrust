@@ -2,7 +2,11 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
-import { audit, criarQualificacoesPlanejadas } from './simuladores-shared';
+import {
+  audit,
+  criarQualificacoesPlanejadas,
+  crossTenantSafeResponseStatusAndMessage,
+} from './simuladores-shared';
 import { validateAndNormalizeSharedSessionRequest } from './simuladores-shared-session-logic';
 import { assertSharedFeature } from './simuladores-shared-session-helpers';
 import { assertEntityOwnership, assertNoExternalConflicts } from './simuladores-shared-session-validation';
@@ -77,8 +81,13 @@ app.post('/sessoes/compartilhada', async (c) => {
       201,
     );
   } catch (error: any) {
-    const message = String(error?.message || 'Erro ao criar sessão compartilhada');
-    const status = /tenant|conflito|precisa|segmento|cobertura|função|ficha|instrutor/i.test(message) ? 400 : 500;
+    const rawMessage = String(error?.message || 'Erro ao criar sessão compartilhada');
+    const fallbackStatus = /tenant|conflito|precisa|segmento|cobertura|função|ficha|instrutor/i.test(
+      rawMessage,
+    )
+      ? 400
+      : 500;
+    const { status, message } = crossTenantSafeResponseStatusAndMessage(rawMessage, fallbackStatus);
     return c.json({ success: false, error: message }, status);
   }
 });
@@ -152,8 +161,10 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
     const detail = await loadSharedDetail(c.env.DB, empresaId, id);
     return c.json({ success: true, data: detail });
   } catch (error: any) {
-    const message = String(error?.message || 'Erro ao editar sessão compartilhada');
-    return c.json({ success: false, error: message }, /conflito|segmento|ficha|tenant|instrutor/i.test(message) ? 400 : 500);
+    const rawMessage = String(error?.message || 'Erro ao editar sessão compartilhada');
+    const fallbackStatus = /conflito|segmento|ficha|tenant|instrutor/i.test(rawMessage) ? 400 : 500;
+    const { status, message } = crossTenantSafeResponseStatusAndMessage(rawMessage, fallbackStatus);
+    return c.json({ success: false, error: message }, status);
   }
 });
 

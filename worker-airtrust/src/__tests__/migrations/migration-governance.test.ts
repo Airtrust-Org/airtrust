@@ -81,6 +81,7 @@ const EXPECTED_NON_STANDARD_FILES = [
 const EXPECTED_CREATE_TEMP_TABLE_FILES = [
   '0062_consolidate_ssot_preserve_data.sql',
   '0091_restore_diversidade_qualificacoes.sql',
+  '0424_examiner_universal_training_fichas.sql',
 ] as const;
 
 const EXPECTED_FOREIGN_KEYS_OFF_FILES = [
@@ -147,7 +148,7 @@ describe('migration governance', () => {
     const regularPrefixes = numericPrefixes.filter((prefix) => prefix !== '9999');
     const highPrefixes = files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file));
 
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(423);
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(424);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
