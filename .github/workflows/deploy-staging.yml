@@ -40,6 +40,9 @@ concurrency:
   group: deploy-airtrust-staging
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: '24'
   STAGING_CONFIRMATION: AIRTRUST_STAGING
@@ -62,35 +65,51 @@ jobs:
     steps:
       - name: Validate staging dispatch inputs
         shell: bash
+        env:
+          GIT_REF: ${{ github.ref }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_REASON: ${{ inputs.release_reason }}
+          DEPLOY_WORKER: ${{ inputs.deploy_worker }}
+          DEPLOY_FRONTEND: ${{ inputs.deploy_frontend }}
+          APPLY_MIGRATIONS: ${{ inputs.apply_migrations }}
+          APPROVED_MIGRATIONS: ${{ inputs.approved_migrations }}
+          RUN_SMOKE: ${{ inputs.run_smoke }}
         run: |
           set -euo pipefail
 
-          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
-            echo "Deploy Staging only runs from refs/heads/main. Current ref: ${{ github.ref }}" >&2
+          # Every input above is passed via `env:` and referenced as a shell
+          # variable ($VAR), never spliced with ${{ }} into this script body —
+          # GitHub Actions renders ${{ }} expressions into the YAML-generated
+          # script BEFORE bash parses it, so interpolating a free-text
+          # workflow_dispatch input (release_reason, approved_migrations,
+          # confirmation) directly here would be a script-injection hole.
+
+          if [[ "$GIT_REF" != "refs/heads/main" ]]; then
+            echo "Deploy Staging only runs from refs/heads/main. Current ref: $GIT_REF" >&2
             exit 1
           fi
 
-          if [[ "${{ inputs.confirmation }}" != "${STAGING_CONFIRMATION}" ]]; then
+          if [[ "$CONFIRMATION" != "${STAGING_CONFIRMATION}" ]]; then
             echo "confirmation must be exactly ${STAGING_CONFIRMATION} (not AIRTRUST_PRODUCTION — production confirmation is never valid here)." >&2
             exit 1
           fi
 
-          if [[ -z "${{ inputs.release_reason }}" ]]; then
+          if [[ -z "$RELEASE_REASON" ]]; then
             echo "release_reason is required." >&2
             exit 1
           fi
 
-          if [[ "${{ inputs.deploy_worker }}" != "true" && "${{ inputs.deploy_frontend }}" != "true" && "${{ inputs.apply_migrations }}" != "true" ]]; then
+          if [[ "$DEPLOY_WORKER" != "true" && "$DEPLOY_FRONTEND" != "true" && "$APPLY_MIGRATIONS" != "true" ]]; then
             echo "Select at least one action: deploy_worker, deploy_frontend, or apply_migrations." >&2
             exit 1
           fi
 
-          if [[ "${{ inputs.apply_migrations }}" == "true" && -z "${{ inputs.approved_migrations }}" ]]; then
+          if [[ "$APPLY_MIGRATIONS" == "true" && -z "$APPROVED_MIGRATIONS" ]]; then
             echo "apply_migrations=true requires approved_migrations to name the exact migration file(s)." >&2
             exit 1
           fi
 
-          if [[ "${{ inputs.run_smoke }}" == "true" && "${{ inputs.deploy_worker }}" != "true" && "${{ inputs.apply_migrations }}" != "true" ]]; then
+          if [[ "$RUN_SMOKE" == "true" && "$DEPLOY_WORKER" != "true" && "$APPLY_MIGRATIONS" != "true" ]]; then
             echo "run_smoke=true requires deploy_worker or apply_migrations (nothing to smoke otherwise)." >&2
             exit 1
           fi
@@ -107,19 +126,31 @@ jobs:
 
       - name: Record release metadata
         shell: bash
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_ACTOR: ${{ github.actor }}
+          RELEASE_BUILD_TIME: ${{ steps.version.outputs.build_time }}
+          RELEASE_REASON: ${{ inputs.release_reason }}
+          DEPLOY_WORKER: ${{ inputs.deploy_worker }}
+          DEPLOY_FRONTEND: ${{ inputs.deploy_frontend }}
+          APPLY_MIGRATIONS: ${{ inputs.apply_migrations }}
+          APPROVED_MIGRATIONS: ${{ inputs.approved_migrations }}
+          RUN_SMOKE: ${{ inputs.run_smoke }}
         run: |
+          set -euo pipefail
           {
             echo "## Staging release request"
             echo ""
-            echo "- SHA: \`${{ github.sha }}\`"
-            echo "- run_id: \`${{ github.run_id }}\`"
-            echo "- actor: \`${{ github.actor }}\`"
-            echo "- timestamp_utc: \`${{ steps.version.outputs.build_time }}\`"
-            echo "- reason: ${{ inputs.release_reason }}"
-            echo "- deploy_worker: ${{ inputs.deploy_worker }}"
-            echo "- deploy_frontend: ${{ inputs.deploy_frontend }}"
-            echo "- apply_migrations: ${{ inputs.apply_migrations }} (${{ inputs.approved_migrations }})"
-            echo "- run_smoke: ${{ inputs.run_smoke }}"
+            echo "- SHA: \`$RELEASE_SHA\`"
+            echo "- run_id: \`$RELEASE_RUN_ID\`"
+            echo "- actor: \`$RELEASE_ACTOR\`"
+            echo "- timestamp_utc: \`$RELEASE_BUILD_TIME\`"
+            echo "- reason: $RELEASE_REASON"
+            echo "- deploy_worker: $DEPLOY_WORKER"
+            echo "- deploy_frontend: $DEPLOY_FRONTEND"
+            echo "- apply_migrations: $APPLY_MIGRATIONS ($APPROVED_MIGRATIONS)"
+            echo "- run_smoke: $RUN_SMOKE"
           } >> "$GITHUB_STEP_SUMMARY"
 
   production-target-guard:
@@ -210,10 +241,15 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CONFIRM_STAGING_MIGRATION: AIRTRUST_STAGING_MIGRATION_APPLY
+          APPROVED_MIGRATIONS: ${{ inputs.approved_migrations }}
         run: |
           set -euo pipefail
           npm --prefix worker-airtrust ci
-          for migration in ${{ inputs.approved_migrations }}; do
+          # $APPROVED_MIGRATIONS is passed via env: above, never spliced with
+          # ${{ }} into this script — word-splitting a trusted env var is
+          # safe; interpolating a free-text workflow_dispatch input directly
+          # into a `run:` body is a script-injection hole (fixed here).
+          for migration in $APPROVED_MIGRATIONS; do
             bash scripts/staging/backup-d1-staging.sh --apply --out-dir="$RUNNER_TEMP/staging-backups"
             latest_backup="$(ls -t "$RUNNER_TEMP"/staging-backups/*.sql | head -n1)"
             bash scripts/staging/apply-approved-migrations.sh --migration="$migration" --backup-file="$latest_backup" --apply
@@ -393,16 +429,22 @@ jobs:
     steps:
       - name: Write summary
         shell: bash
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_ACTOR: ${{ github.actor }}
+          APPROVED_MIGRATIONS: ${{ inputs.approved_migrations }}
         run: |
+          set -euo pipefail
           {
             echo "## Staging release outcome"
             echo ""
-            echo "- SHA: \`${{ github.sha }}\`"
-            echo "- run_id: \`${{ github.run_id }}\`"
-            echo "- actor: \`${{ github.actor }}\`"
+            echo "- SHA: \`$RELEASE_SHA\`"
+            echo "- run_id: \`$RELEASE_RUN_ID\`"
+            echo "- actor: \`$RELEASE_ACTOR\`"
             echo "- Worker deployment ID: \`${{ needs.deploy-worker.outputs.worker_version_id || 'not-deployed' }}\`"
             echo "- Database: \`${{ env.ALLOWED_STAGING_DB_NAME }}\` / \`${{ env.ALLOWED_STAGING_DB_ID }}\`"
-            echo "- Migrations requested: \`${{ inputs.approved_migrations }}\`"
+            echo "- Migrations requested: \`$APPROVED_MIGRATIONS\`"
             echo "- backup: ${{ needs.backup.result }}"
             echo "- preflight: ${{ needs.preflight.result }}"
             echo "- apply-migrations: ${{ needs.apply-migrations.result }}"
