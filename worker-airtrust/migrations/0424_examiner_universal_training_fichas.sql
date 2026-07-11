@@ -24,9 +24,17 @@
 --   codigo, so it stays correct if that lineage ever changes.
 --
 --   If CRED-EXA does not exist in a given database (fresh/empty install),
---   every INSERT below is a deliberate no-op: the CROSS JOIN against the
---   CRED-EXA lookup yields zero rows rather than guessing a tenant or
---   falling back to empresa_id = 1 or 6.
+--   this migration REFUSES to proceed: the hard guard immediately below
+--   raises a CHECK constraint failure and aborts before any INSERT runs.
+--   A silent zero-rows "success" is exactly the failure mode this guard
+--   exists to prevent — this migration must never report success while
+--   creating none of EXA-V01..V04. It never falls back to empresa_id = 1
+--   or 6 either; the only two outcomes are "all four models created for
+--   CRED-EXA's tenant" or "migration fails loudly".
+--
+-- "Universal" here means universal across aircraft model within a tenant
+-- (tipo_aeronave = NULL), never global across tenants — modelos_sessao.
+-- empresa_id stays NOT NULL for every row this migration creates.
 --
 -- Aditiva por desenho:
 -- - não converte, altera ou faz backfill de fichas/sessões históricas;
@@ -54,10 +62,11 @@
 --   operational_decision:
 --     Seed é aditivo, idempotente (guardado por NOT EXISTS) e nunca
 --     hardcoda empresa_id — deriva sempre por SELECT a partir do modelo
---     CRED-EXA já existente. Se CRED-EXA não existir em algum ambiente,
---     todo INSERT é no-op (nenhuma linha inserida), em vez de recair em
---     empresa_id = 1 ou 6 por padrão. Não altera CRED-EXA, FAP13-CRED-*,
---     nem qualquer sessão/ficha histórica.
+--     CRED-EXA já existente. Se CRED-EXA não existir em algum ambiente, a
+--     Seção 0 (guard obrigatório) faz a migration FALHAR explicitamente
+--     antes de qualquer INSERT — nunca um sucesso silencioso com zero
+--     modelos criados, e nunca um fallback para empresa_id = 1 ou 6. Não
+--     altera CRED-EXA, FAP13-CRED-*, nem qualquer sessão/ficha histórica.
 --   dry_run_required:
 --     Antes de aplicar em qualquer ambiente:
 --       1. Rodar em SQLite descartável (cadeia completa de migrations até
@@ -67,8 +76,9 @@
 --       2. Confirmar PRAGMA integrity_check = ok e
 --          PRAGMA foreign_key_check sem violações novas.
 --       3. Confirmar que rodar a migration 2x não duplica nenhuma linha.
---       4. Confirmar que, sem uma linha CRED-EXA presente, a migration não
---          insere nenhuma linha (nem em empresa_id 1 nem 6).
+--       4. Confirmar que, sem uma linha CRED-EXA presente, a migration
+--          FALHA explicitamente (exit code != 0, CHECK constraint) — nunca
+--          "sucede" silenciosamente com zero modelos criados.
 --     Cobertura automatizada equivalente em
 --     worker-airtrust/src/__tests__/migrations/examiner-universal-training-fichas.test.ts.
 --   rollback_plan_required:
@@ -76,6 +86,34 @@
 --     catálogo curricular (modelos_sessao/manobras/vínculos/requisitos),
 --     sem histórico de avaliação envolvido — nenhuma ficha_sessao é criada
 --     ou alterada por esta migration.
+
+-- ===========================================================================
+-- 0. GUARD OBRIGATÓRIO — falha explícita se o tenant-base não existir
+--
+-- Esta migration nunca deve "suceder" criando zero modelos. Se não houver
+-- uma linha CRED-EXA ativa em modelos_sessao (a âncora auditável de tenant,
+-- ver cabeçalho acima), o INSERT abaixo viola a CHECK constraint e aborta
+-- a execução do arquivo inteiro ANTES de qualquer INSERT nas seções 1-4.
+-- O nome da tabela/coluna aparece na mensagem de erro do SQLite/D1, tornando
+-- a causa raiz óbvia para quem está aplicando a migration manualmente.
+-- ===========================================================================
+
+CREATE TEMP TABLE IF NOT EXISTS _migration_0424_requires_existing_cred_exa_tenant_anchor (
+  cred_exa_tenant_anchor_present INTEGER NOT NULL
+    CHECK (cred_exa_tenant_anchor_present = 1)
+);
+
+INSERT INTO _migration_0424_requires_existing_cred_exa_tenant_anchor (
+  cred_exa_tenant_anchor_present
+)
+SELECT CASE
+  WHEN EXISTS (
+    SELECT 1 FROM modelos_sessao WHERE codigo = 'CRED-EXA' AND deleted_at IS NULL
+  ) THEN 1
+  ELSE 0
+END;
+
+DROP TABLE _migration_0424_requires_existing_cred_exa_tenant_anchor;
 
 -- ===========================================================================
 -- 1. MODELOS_SESSAO — 4 fichas universais

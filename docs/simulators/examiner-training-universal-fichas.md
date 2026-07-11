@@ -78,9 +78,19 @@ Essa cadeia é auditável no próprio histórico versionado do repositório:
 Ou seja: **não adivinhamos** que é a empresa 6 — o próprio histórico de
 migrations comprometido no repositório documenta essa linhagem para todo o
 catálogo de simuladores, do qual `CRED-EXA` faz parte. Se, em algum ambiente,
-`CRED-EXA` não existir (base vazia/nova), a migration é um no-op deliberado:
-cada `INSERT` depende de um `CROSS JOIN` contra essa âncora, então zero linhas
-são inseridas em vez de recair em `empresa_id = 1` ou `= 6` por padrão.
+`CRED-EXA` não existir (base vazia/nova), a migration **falha explicitamente**:
+uma guard obrigatória (Seção 0 do arquivo) viola uma `CHECK` constraint e
+aborta a execução inteira antes de qualquer `INSERT`, com uma mensagem de
+erro (`CHECK constraint failed: cred_exa_tenant_anchor_present = 1`) que
+identifica exatamente a causa. Um "sucesso" silencioso com zero modelos
+criados nunca é uma saída possível — os dois únicos resultados são "os
+quatro modelos foram criados para o tenant do CRED-EXA" ou "a migration
+falhou, exit code != 0". Nunca há fallback para `empresa_id = 1` ou `= 6`.
+
+"Universal" aqui significa universal **por modelo de aeronave dentro do
+tenant** (`tipo_aeronave = NULL`), nunca global entre tenants — todo modelo,
+manobra e ficha criados por esta migration continuam com `empresa_id`
+`NOT NULL`, exatamente como qualquer outro dado tenant-specific do sistema.
 
 ## Organização das sessões (2 eventos físicos × 120 min = 4 fichas × 60 min)
 
