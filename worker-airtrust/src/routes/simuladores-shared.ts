@@ -363,6 +363,42 @@ export function isFullAccessRole(role: string): boolean {
   return ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'COMPLIANCE'].includes(role.toUpperCase());
 }
 
+/**
+ * Bloqueio de autoavaliação na criação/edição de sessões e fichas: o
+ * instrutor responsável pela sessão nunca pode também constar como
+ * participante avaliado na mesma sessão. Não se aplica às fichas especiais
+ * TRE-INST/CRED-EXA (fluxo próprio, inalterado, onde o avaliador é o campo
+ * `examinador_id`, distinto do instrutor sendo avaliado).
+ */
+export function instrutorEstaEntreParticipantes(
+  instrutorId: unknown,
+  participantes: Array<{ funcionario_id?: unknown } | null | undefined>,
+): boolean {
+  const instrutorNum = Number(instrutorId);
+  if (!Number.isFinite(instrutorNum) || instrutorNum <= 0) return false;
+  return (participantes || []).some((p) => Number(p?.funcionario_id) === instrutorNum);
+}
+
+/**
+ * Erros lançados por assertEntityOwnership (participante/instrutor/simulador/
+ * modelo/treinamento "fora do tenant") não devem vazar para o cliente — nem
+ * a existência do registro em outro tenant, nem qual entidade especificamente
+ * falhou. Mapeia para 404 genérico, igual a "não encontrado".
+ */
+export function isCrossTenantOwnershipMessage(message: string): boolean {
+  return /fora do tenant$/i.test(message.trim());
+}
+
+export function crossTenantSafeResponseStatusAndMessage(
+  message: string,
+  fallbackBusinessErrorStatus: 400 | 500,
+): { status: 404 | 400 | 500; message: string } {
+  if (isCrossTenantOwnershipMessage(message)) {
+    return { status: 404, message: 'Registro não encontrado' };
+  }
+  return { status: fallbackBusinessErrorStatus, message };
+}
+
 export async function resolveTemplateIdSessao(
   db: D1Database,
   params: {

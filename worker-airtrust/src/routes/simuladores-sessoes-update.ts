@@ -34,6 +34,7 @@ import {
   criarQualificacoesPlanejadas,
   listarParticipantesDaSessaoParaQualificacao,
   sincronizarQualificacoesDaSessaoConcluida,
+  instrutorEstaEntreParticipantes,
 } from './simuladores-shared';
 import { getTenantContext } from '../middleware/tenant';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
@@ -90,6 +91,28 @@ app.put('/sessoes/:id', async (c) => {
         if (!instrutorRow || Number(instrutorRow.is_instrutor) !== 1) {
           return c.json(
             { success: false, error: 'O funcionário selecionado como instrutor não possui o flag is_instrutor. Selecione um instrutor válido.' },
+            400,
+          );
+        }
+      }
+
+      // ── Bloqueio de autoavaliação: novo instrutor não pode já ser
+      // participante ativo da sessão (evita autoavaliação por reatribuição
+      // de instrutor quando participantes não são reenviados neste PUT). ──
+      if (b.participantes === undefined) {
+        const participantesAtuais = await c.env.DB.prepare(
+          'SELECT funcionario_id FROM sessoes_participantes WHERE sessao_id = ? AND deleted_at IS NULL',
+        )
+          .bind(id)
+          .all();
+        if (
+          instrutorEstaEntreParticipantes(b.instrutor_id, participantesAtuais.results || [])
+        ) {
+          return c.json(
+            {
+              success: false,
+              error: 'O instrutor da sessão não pode constar como participante avaliado',
+            },
             400,
           );
         }
@@ -683,6 +706,21 @@ app.put('/sessoes/:id', async (c) => {
 
       // IDs novos enviados pelo frontend
       const novosValidos = b.participantes.filter((p: any) => p.funcionario_id);
+
+      // ── Bloqueio de autoavaliação: instrutor não pode ser participante ────
+      const instrutorEfetivo =
+        b.instrutor_id !== undefined ? b.instrutor_id : (a as any)?.instrutor_id;
+      if (instrutorEstaEntreParticipantes(instrutorEfetivo, novosValidos)) {
+        return c.json(
+          {
+            success: false,
+            error: 'O instrutor da sessão não pode constar como participante avaliado',
+          },
+          400,
+        );
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
       const idsNovos = new Set(novosValidos.map((p: any) => Number(p.funcionario_id)));
       const assinaturaAntiga = (partAntigosRows.results || [])
         .map((p: any) => `${Number(p.funcionario_id)}:${String(p.funcao || '').toUpperCase()}`)

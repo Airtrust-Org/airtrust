@@ -381,6 +381,12 @@ app.post('/fichas', async (c) => {
     if (instrutorId !== null && (!Number.isInteger(instrutorId) || instrutorId <= 0)) {
       return c.json({ success: false, error: 'instrutor_id inválido' }, 400);
     }
+    if (instrutorId !== null && instrutorId === colaboradorId) {
+      return c.json(
+        { success: false, error: 'O instrutor não pode ser o mesmo funcionário avaliado (autoavaliação bloqueada)' },
+        400,
+      );
+    }
 
     const funcionarioIds = [colaboradorId, ...(instrutorId ? [instrutorId] : [])];
     const ownership = await c.env.DB.prepare(
