@@ -441,4 +441,57 @@ describe('ModalNovaSessao loading stability', () => {
       expect(optionLabels).not.toContain('S76-P-C1/IFR - SK76 - PERIÓDICO - 02/03 - CICLO 1: IFR');
     });
   });
+
+  it('troca_simples_para_compartilhada_oculta_campos_legados_e_mostra_shared_session_form', async () => {
+    const { fetchMock } = buildFetchMock({ capabilityEnabled: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    renderModal();
+
+    // Modalidade simples é o padrão: campos legados visíveis, form compartilhado ausente.
+    expect(screen.getByText(/3\. Tipo de Sessão\b/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Configuração compartilhada/i)).not.toBeInTheDocument();
+
+    await user.click(await screen.findByRole('button', { name: /Sessão compartilhada/i }));
+
+    // Ao trocar para compartilhada: campos legados (Tipo de Sessão) somem,
+    // SharedSessionForm (Configuração compartilhada) aparece.
+    await waitFor(() => {
+      expect(screen.queryByText(/3\. Tipo de Sessão\b/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/Configuração compartilhada/i)).toBeInTheDocument();
+    });
+
+    // Trocar de volta para simples restaura os campos legados e remove o form compartilhado.
+    await user.click(screen.getByRole('button', { name: /Sessão simples/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/3\. Tipo de Sessão\b/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Configuração compartilhada/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('fechar_e_reabrir_o_modal_nao_preserva_modalidade_compartilhada_residual', async () => {
+    const { fetchMock } = buildFetchMock({ capabilityEnabled: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    const { rerender } = render(<ModalNovaSessao isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: /Sessão compartilhada/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Configuração compartilhada/i)).toBeInTheDocument();
+    });
+
+    // Fecha o modal (isOpen=false) e reabre (isOpen=true) — simula fechar/reabrir pelo botão "Nova Sessão de Voo".
+    rerender(<ModalNovaSessao isOpen={false} onClose={vi.fn()} onSuccess={vi.fn()} />);
+    rerender(<ModalNovaSessao isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
+
+    // Reabertura deve voltar ao estado padrão (sessão simples), sem residual do modo
+    // compartilhado escolhido na sessão de uso anterior.
+    await waitFor(() => {
+      expect(screen.queryByText(/Configuração compartilhada/i)).not.toBeInTheDocument();
+    });
+    expect(await screen.findByText(/3\. Tipo de Sessão\b/i)).toBeInTheDocument();
+  });
 });
