@@ -96,9 +96,15 @@
 -- a execução do arquivo inteiro ANTES de qualquer INSERT nas seções 1-4.
 -- O nome da tabela/coluna aparece na mensagem de erro do SQLite/D1, tornando
 -- a causa raiz óbvia para quem está aplicando a migration manualmente.
+--
+-- Tabela real (não TEMP): o Cloudflare D1 remoto rejeita CREATE TEMP TABLE
+-- com "not authorized: SQLITE_AUTH" (confirmado empiricamente contra D1 de
+-- staging em 2026-07-11) — o autorizador do D1 não permite tabelas
+-- temporárias na execução remota, mesmo que sqlite3 local aceite
+-- normalmente. Usa-se uma tabela real, criada e removida no mesmo arquivo.
 -- ===========================================================================
 
-CREATE TEMP TABLE IF NOT EXISTS _migration_0424_requires_existing_cred_exa_tenant_anchor (
+CREATE TABLE IF NOT EXISTS _migration_0424_requires_existing_cred_exa_tenant_anchor (
   cred_exa_tenant_anchor_present INTEGER NOT NULL
     CHECK (cred_exa_tenant_anchor_present = 1)
 );
