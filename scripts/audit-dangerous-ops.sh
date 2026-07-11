@@ -90,6 +90,15 @@ self_protected_files=(
   "scripts/staging/seed-frms-sigvoos-comparable-from-cv.mjs"
   "scripts/staging/resolve-sigvoos-artificial-conflict-09999.mjs"
   "scripts/staging/reconcile-sigvoos-synthetic-staff-conflict-8899.mjs"
+  # Official staging release workflow (ops/official-staging-release-workflow):
+  # each of these hard-blocks production database IDs/names before any query,
+  # requires an explicit confirmation env var for --apply, defaults to
+  # dry-run, and is itself covered by
+  # worker-airtrust/src/__tests__/ops/staging-release-workflow.test.ts.
+  "scripts/staging/migration-ledger-preflight.mjs"
+  "scripts/staging/apply-approved-migrations.sh"
+  "scripts/staging/validate-0424-postconditions.sh"
+  "scripts/staging/seed-qa-examiner-training.mjs"
 )
 
 # Scripts legados já bloqueados com banner + exit 1 (verificação relaxada)
