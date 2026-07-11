@@ -299,7 +299,7 @@ describe('0424 examiner universal training fichas', () => {
     }
   });
 
-  it('is a safe no-op (never guesses empresa_id 1 or 6) when there is no auditable CRED-EXA tenant anchor', () => {
+  it('fails explicitly (never a silent zero-model success) when there is no auditable CRED-EXA tenant anchor', () => {
     const dir = mkdtempSync(join(tmpdir(), 'airtrust-examiner-universal-no-tenant-'));
     const dbPath = join(dir, 'no-tenant.db');
     try {
@@ -346,7 +346,11 @@ describe('0424 examiner universal training fichas', () => {
       runSqlite(dbPath, MIGRATION_423);
 
       // No CRED-EXA row anywhere in this database — no auditable tenant lineage.
-      runSqlite(dbPath, MIGRATION_424);
+      // The migration must abort loudly (non-zero exit, CHECK constraint
+      // violation) instead of silently succeeding with zero models created.
+      expect(() => runSqlite(dbPath, MIGRATION_424)).toThrow(
+        /CHECK constraint failed: cred_exa_tenant_anchor_present = 1/,
+      );
 
       expect(Number(runSqlite(dbPath, `SELECT COUNT(*) FROM modelos_sessao WHERE codigo LIKE 'EXA-V0%';`))).toBe(0);
       expect(Number(runSqlite(dbPath, `SELECT COUNT(*) FROM manobras WHERE codigo LIKE 'EXA-V0%-%';`))).toBe(0);
@@ -355,6 +359,21 @@ describe('0424 examiner universal training fichas', () => {
       expect(Number(runSqlite(dbPath, `SELECT COUNT(*) FROM modelos_sessao WHERE empresa_id IN (1, 6);`))).toBe(0);
 
       expect(runSqlite(dbPath, 'PRAGMA integrity_check;')).toBe('ok');
+    } finally {
+      rmSync(join(dbPath, '..'), { recursive: true, force: true });
+    }
+  });
+
+  it('succeeds and creates all 4 models when CRED-EXA exists, and remains idempotent across repeated runs with the guard active', () => {
+    const dbPath = setupDb();
+    try {
+      runSqlite(dbPath, MIGRATION_424);
+      runSqlite(dbPath, MIGRATION_424);
+      runSqlite(dbPath, MIGRATION_424);
+
+      expect(Number(runSqlite(dbPath, `SELECT COUNT(*) FROM modelos_sessao WHERE codigo LIKE 'EXA-V0%';`))).toBe(4);
+      expect(runSqlite(dbPath, 'PRAGMA integrity_check;')).toBe('ok');
+      expect(runSqlite(dbPath, 'SELECT COUNT(*) FROM pragma_foreign_key_check();')).toBe('0');
     } finally {
       rmSync(join(dbPath, '..'), { recursive: true, force: true });
     }

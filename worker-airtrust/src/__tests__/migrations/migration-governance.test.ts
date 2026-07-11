@@ -81,6 +81,7 @@ const EXPECTED_NON_STANDARD_FILES = [
 const EXPECTED_CREATE_TEMP_TABLE_FILES = [
   '0062_consolidate_ssot_preserve_data.sql',
   '0091_restore_diversidade_qualificacoes.sql',
+  '0424_examiner_universal_training_fichas.sql',
 ] as const;
 
 const EXPECTED_FOREIGN_KEYS_OFF_FILES = [
