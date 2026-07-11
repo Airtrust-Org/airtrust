@@ -6,7 +6,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { AlertTriangle, CheckCircle2, Clock, FileText, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { FuncionarioCombobox } from '@/react-app/components/simuladores/FuncionarioCombobox';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
@@ -50,26 +50,6 @@ interface ModeloSessao {
 
 interface ParticipantState {
   funcionario: Funcionario | null;
-  cumpreTreinamento: boolean;
-  modeloSessaoId: number | null;
-  geraFicha: boolean;
-}
-
-interface SegmentAssignment {
-  pfId: number | null;
-  pmId: number | null;
-  curricularIds: number[];
-  finalidadeCodigo: SharedSegmentPurpose;
-}
-
-interface SegmentState {
-  inicio: string;
-  fim: string;
-  atribuicaoFuncionarioId: number | null;
-  atribuicaoFuncionarioIds: number[];
-  finalidadeCodigo: SharedSegmentPurpose;
-  finalidadeTitulo: string;
-  funcoes: Array<{ funcionario_id: number; funcao: 'PF' | 'PM' }>;
 }
 
 type SharedSegmentPurpose =
@@ -77,6 +57,15 @@ type SharedSegmentPurpose =
   | 'SOP_ANORMAL_EMERGENCIA'
   | 'ATUACAO_EXAMINADOR'
   | 'OUTRO';
+
+interface SegmentAssignment {
+  id?: number | null;
+  pfId: number | null;
+  pmId: number | null;
+  curricularIds: number[];
+  modeloSessaoId: number | null;
+  finalidadeCodigo: SharedSegmentPurpose;
+}
 
 interface SharedSessionFormProps {
   onClose: () => void;
@@ -99,15 +88,6 @@ interface SharedSessionFormProps {
   onStateChange?: (state: SharedSessionFormState) => void;
 }
 
-interface SharedDetailAssignment {
-  id: number;
-  funcionario_id: number;
-  modelo_sessao_id?: number | null;
-  modelo_codigo?: string | null;
-  modelo_nome?: string | null;
-  gera_ficha?: number | boolean;
-}
-
 interface SharedDetailParticipant {
   funcionario_id: number;
   funcionario_nome?: string;
@@ -116,32 +96,34 @@ interface SharedDetailParticipant {
 }
 
 interface SharedDetailSegment {
+  id?: number;
   inicio: string;
   fim: string;
-  atribuicao_curricular_id?: number | null;
-  atribuicao_funcionario_ids?: number[];
+  modelo_sessao_id?: number | null;
   finalidade_codigo?: SharedSegmentPurpose | null;
-  finalidade_titulo?: string | null;
-  funcoes?: Array<{ funcionario_id: number; funcao: 'PF' | 'PM' }>;
+  participantes?: Array<{
+    funcionario_id: number;
+    funcao: 'PF' | 'PM';
+    cumpre_treinamento?: boolean;
+  }>;
 }
 
 interface SharedDetail {
   participantes?: SharedDetailParticipant[];
-  atribuicoes?: SharedDetailAssignment[];
   segmentos?: SharedDetailSegment[];
+  fichas?: Array<{ id: number; status: string; colaborador_id_aluno?: number }>;
 }
 
 const EMPTY_PARTICIPANT: ParticipantState = {
   funcionario: null,
-  cumpreTreinamento: true,
-  modeloSessaoId: null,
-  geraFicha: true,
 };
 
 const EMPTY_SEGMENT: SegmentAssignment = {
+  id: null,
   pfId: null,
   pmId: null,
   curricularIds: [],
+  modeloSessaoId: null,
   finalidadeCodigo: 'OUTRO',
 };
 
@@ -188,19 +170,15 @@ function formatMinutes(value: number): string {
   return `${Math.floor(value / 60)}h${String(value % 60).padStart(2, '0')}`;
 }
 
-function arraysEqual(left: SegmentAssignment[], right: SegmentAssignment[]): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
 function formatModelOption(model: ModeloSessao): string {
-  const title = [model.codigo, model.nome].filter(Boolean).join(' — ');
+  const title = [model.codigo, model.nome].filter(Boolean).join(' - ');
   const details = [
     model.tipo_sessao_codigo || model.tipo_sessao_nome || model.tipo,
     model.modelo_aeronave,
     model.duracao_estimada ? `${model.duracao_estimada} min` : null,
     model.sequencia || model.grupo,
   ].filter(Boolean);
-  return details.length > 0 ? `${title} (${details.join(' · ')})` : title;
+  return details.length > 0 ? `${title} (${details.join(' | ')})` : title;
 }
 
 const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormProps>(function SharedSessionForm({
@@ -247,12 +225,15 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const [submitted, setSubmitted] = useState(false);
   const [attemptedSteps, setAttemptedSteps] = useState<Set<SharedSessionStep>>(new Set());
   const [stepMessage, setStepMessage] = useState<string | null>(null);
-  const [loadingModelos, setLoadingModelos] = useState<[boolean, boolean]>([false, false]);
-  const [modelos, setModelos] = useState<[ModeloSessao[], ModeloSessao[]]>([[], []]);
-  const [modelosErro, setModelosErro] = useState<[string | null, string | null]>([null, null]);
-  const [fichaConcluida, setFichaConcluida] = useState<[boolean, boolean]>([false, false]);
+  const [modelos, setModelos] = useState<ModeloSessao[]>([]);
+  const [loadingModelos, setLoadingModelos] = useState(false);
+  const [modelosErro, setModelosErro] = useState<string | null>(null);
+  const [hasProtectedFicha, setHasProtectedFicha] = useState(false);
 
-  const participantIds = participants.map((participant) => participant.funcionario?.id ?? null);
+  const participantIds = useMemo(
+    () => participants.map((participant) => participant.funcionario?.id ?? null) as [number | null, number | null],
+    [participants],
+  );
 
   const reservationErrors = useMemo(() => {
     const errors: string[] = [];
@@ -276,17 +257,12 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const participantErrors = useMemo(() => {
     const errors: string[] = [];
     participants.forEach((participant, index) => {
-      const label = `Piloto ${index + 1}`;
-      if (!participant.funcionario) errors.push(`${label}: selecione o piloto.`);
-      if (participant.cumpreTreinamento && !participant.modeloSessaoId) {
-        errors.push(`${label}: selecione o modelo de sessão.`);
+      if (!participant.funcionario) {
+        errors.push(`Piloto ${index + 1}: selecione o piloto.`);
       }
     });
     if (participantIds[0] && participantIds[0] === participantIds[1]) {
       errors.push('Os dois pilotos devem ser pessoas diferentes.');
-    }
-    if (!participants.some((participant) => participant.cumpreTreinamento)) {
-      errors.push('Pelo menos um piloto deve ser curricular.');
     }
     return errors;
   }, [participantIds, participants]);
@@ -302,36 +278,35 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
 
   const effectiveSplitTime = splitTime || defaultSplitTime;
 
-  const segments = useMemo((): SegmentState[] => {
+  const segments = useMemo(() => {
     if (!crewReady || !effectiveSplitTime) return [];
     const split = timeToMinutes(effectiveSplitTime);
     const start = timeToMinutes(horarioInicio);
     const end = timeToMinutes(horarioFim);
-    // Nunca constrói segmentos com split inválido (fora da janela ou invertido)
     if (split <= start || split >= end) return [];
     return [
       {
+        id: segmentAssignments[0].id || undefined,
         inicio: horarioInicio,
         fim: effectiveSplitTime,
-        atribuicaoFuncionarioId: segmentAssignments[0].curricularIds[0] || null,
-        atribuicaoFuncionarioIds: segmentAssignments[0].curricularIds,
+        modeloSessaoId: segmentAssignments[0].modeloSessaoId,
+        curricularIds: segmentAssignments[0].curricularIds,
         finalidadeCodigo: segmentAssignments[0].finalidadeCodigo,
-        finalidadeTitulo: SEGMENT_PURPOSE_LABELS[segmentAssignments[0].finalidadeCodigo],
-        funcoes: [
-          { funcionario_id: segmentAssignments[0].pfId || 0, funcao: 'PF' },
-          { funcionario_id: segmentAssignments[0].pmId || 0, funcao: 'PM' },
+        participantes: [
+          { funcionario_id: segmentAssignments[0].pfId || 0, funcao: 'PF' as const },
+          { funcionario_id: segmentAssignments[0].pmId || 0, funcao: 'PM' as const },
         ].filter((role) => role.funcionario_id > 0),
       },
       {
+        id: segmentAssignments[1].id || undefined,
         inicio: effectiveSplitTime,
         fim: horarioFim,
-        atribuicaoFuncionarioId: segmentAssignments[1].curricularIds[0] || null,
-        atribuicaoFuncionarioIds: segmentAssignments[1].curricularIds,
+        modeloSessaoId: segmentAssignments[1].modeloSessaoId,
+        curricularIds: segmentAssignments[1].curricularIds,
         finalidadeCodigo: segmentAssignments[1].finalidadeCodigo,
-        finalidadeTitulo: SEGMENT_PURPOSE_LABELS[segmentAssignments[1].finalidadeCodigo],
-        funcoes: [
-          { funcionario_id: segmentAssignments[1].pfId || 0, funcao: 'PF' },
-          { funcionario_id: segmentAssignments[1].pmId || 0, funcao: 'PM' },
+        participantes: [
+          { funcionario_id: segmentAssignments[1].pfId || 0, funcao: 'PF' as const },
+          { funcionario_id: segmentAssignments[1].pmId || 0, funcao: 'PM' as const },
         ].filter((role) => role.funcionario_id > 0),
       },
     ];
@@ -346,15 +321,18 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     if (!effectiveSplitTime || split <= start || split >= end) {
       errors.push('A divisão deve ficar dentro do período da reserva.');
     }
-    segmentAssignments.forEach((assignment, index) => {
+    segmentAssignments.forEach((segment, index) => {
       const label = `Segmento ${index + 1}`;
-      if (!assignment.pfId) errors.push(`${label}: selecione o PF.`);
-      if (!assignment.pmId) errors.push(`${label}: selecione o PM.`);
-      if (assignment.pfId && assignment.pfId === assignment.pmId) {
+      if (!segment.pfId) errors.push(`${label}: selecione o PF.`);
+      if (!segment.pmId) errors.push(`${label}: selecione o PM.`);
+      if (segment.pfId && segment.pfId === segment.pmId) {
         errors.push(`${label}: PF e PM devem ser pessoas diferentes.`);
       }
-      if (assignment.curricularIds.length === 0) {
+      if (segment.curricularIds.length === 0) {
         errors.push(`${label}: selecione ao menos um currículo atendido.`);
+      }
+      if (segment.curricularIds.length > 0 && !segment.modeloSessaoId) {
+        errors.push(`${label}: selecione o modelo de sessão do segmento.`);
       }
     });
     return errors;
@@ -362,9 +340,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
 
   const allErrors = [...reservationErrors, ...participantErrors, ...segmentErrors];
 
-  // Revalida o splitTime sempre que o início ou fim da reserva forem alterados.
-  // Se o split atual ficar fora da janela, limpa o estado para que o
-  // defaultSplitTime (ponto médio) assuma automaticamente.
   useEffect(() => {
     if (!splitTime) return;
     const splitMin = timeToMinutes(splitTime);
@@ -373,237 +348,138 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     if (!horarioInicio || !horarioFim || splitMin <= startMin || splitMin >= endMin) {
       setSplitTime('');
     }
-  }, [horarioInicio, horarioFim]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [horarioInicio, horarioFim, splitTime]);
 
-  const clearModelos = useCallback((index: 0 | 1) => {
-    setModelos((previous) => {
-      const next: [ModeloSessao[], ModeloSessao[]] = [...previous];
-      next[index] = [];
-      return next;
-    });
-    setModelosErro((previous) => {
-      const next: [string | null, string | null] = [...previous];
-      next[index] = null;
-      return next;
-    });
-  }, []);
+  const fetchModelos = useCallback(async () => {
+    setModelos([]);
+    setModelosErro(null);
+    if (!simuladorModelo || !simuladorId) return;
 
-  const fetchModelos = useCallback(
-    async (index: 0 | 1, selectedModelId: number | null = null) => {
-      clearModelos(index);
-      if (!simuladorModelo || !simuladorId) return;
-
-      setLoadingModelos((previous) => {
-        const next: [boolean, boolean] = [...previous];
-        next[index] = true;
-        return next;
+    setLoadingModelos(true);
+    try {
+      const params = new URLSearchParams({
+        limit: '200',
+        tipo: 'SIMULADOR',
+        modelo_aeronave: simuladorModelo,
       });
-      try {
-        const params = new URLSearchParams({
-          limit: '200',
-          tipo: 'SIMULADOR',
-          modelo_aeronave: simuladorModelo,
-        });
-        const response = await fetch(`${API_BASE_URL}/simuladores/modelos-sessao?${params}`, {
-          headers: { Authorization: `Bearer ${getAccessToken()}` },
-        });
-        if (!response.ok) throw new Error(`Erro ao carregar modelos (${response.status})`);
-        const body = await response.json();
-        const items = Array.isArray(body?.data) ? body.data : [];
-        setModelos((previous) => {
-          const next: [ModeloSessao[], ModeloSessao[]] = [...previous];
-          next[index] = items;
-          return next;
-        });
-        setParticipants((previous) => {
-          const next: [ParticipantState, ParticipantState] = [...previous];
-          const currentModel = selectedModelId || next[index].modeloSessaoId;
-          if (
-            currentModel &&
-            !items.some((model: ModeloSessao) => Number(model.id) === Number(currentModel))
-          ) {
-            next[index] = { ...next[index], modeloSessaoId: null };
-          }
-          return next;
-        });
-      } catch (error) {
-        setModelosErro((previous) => {
-          const next: [string | null, string | null] = [...previous];
-          next[index] = error instanceof Error ? error.message : 'Erro ao carregar modelos.';
-          return next;
-        });
-      } finally {
-        setLoadingModelos((previous) => {
-          const next: [boolean, boolean] = [...previous];
-          next[index] = false;
-          return next;
-        });
-      }
-    },
-    [clearModelos, simuladorId, simuladorModelo],
-  );
-
-  const updateParticipant = useCallback(
-    (index: 0 | 1, updates: Partial<ParticipantState>) => {
-      setParticipants((previous) => {
-        const next: [ParticipantState, ParticipantState] = [...previous];
-        next[index] = { ...next[index], ...updates };
-        if ('cumpreTreinamento' in updates) {
-          next[index].geraFicha = Boolean(updates.cumpreTreinamento);
-          if (!updates.cumpreTreinamento) {
-            next[index].modeloSessaoId = null;
-          }
-        }
-        return next;
+      const response = await fetch(`${API_BASE_URL}/simuladores/modelos-sessao?${params}`, {
+        headers: { Authorization: `Bearer ${getAccessToken()}` },
       });
-    },
-    [],
-  );
+      if (!response.ok) throw new Error(`Erro ao carregar modelos (${response.status})`);
+      const body = await response.json();
+      setModelos(Array.isArray(body?.data) ? body.data : []);
+    } catch (error) {
+      setModelosErro(error instanceof Error ? error.message : 'Erro ao carregar modelos.');
+    } finally {
+      setLoadingModelos(false);
+    }
+  }, [simuladorId, simuladorModelo]);
 
   useEffect(() => {
-    participants.forEach((participant, index) => {
-      const participantIndex = index as 0 | 1;
-      if (participant.funcionario && participant.cumpreTreinamento && reservationReady) {
-        void fetchModelos(participantIndex, participant.modeloSessaoId);
-      } else if (!reservationReady || !participant.cumpreTreinamento) {
-        clearModelos(participantIndex);
-      }
-    });
-    // Revalidate lists when the selected simulator/equipment changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reservationReady, simuladorId, simuladorModelo]);
+    if (reservationReady) {
+      void fetchModelos();
+    } else {
+      setModelos([]);
+      setModelosErro(null);
+    }
+  }, [fetchModelos, reservationReady]);
 
   useEffect(() => {
-    const validParticipantIds = participants
-      .map((participant) => participant.funcionario?.id ?? null)
-      .filter((id): id is number => Boolean(id));
-    const validCurricularIds = participants
-      .filter((participant) => participant.funcionario && participant.cumpreTreinamento)
-      .map((participant) => participant.funcionario!.id);
-    if (validParticipantIds.length !== 2 || validCurricularIds.length === 0) return;
-    const defaults: [SegmentAssignment, SegmentAssignment] = [
-      {
-        pfId: validParticipantIds[0],
-        pmId: validParticipantIds[1],
-        curricularIds: validCurricularIds,
-        finalidadeCodigo: 'SOP_NORMAL',
-      },
-      {
-        pfId: validParticipantIds[1],
-        pmId: validParticipantIds[0],
-        curricularIds: validCurricularIds,
-        finalidadeCodigo: 'SOP_ANORMAL_EMERGENCIA',
-      },
-    ];
+    const validParticipantIds = participantIds.filter((id): id is number => Boolean(id));
+    if (validParticipantIds.length !== 2) return;
     setSegmentAssignments((previous) => {
-      const normalized = previous.map((assignment, index) => ({
-        pfId: validParticipantIds.includes(Number(assignment.pfId))
-          ? assignment.pfId
-          : defaults[index].pfId,
-        pmId: validParticipantIds.includes(Number(assignment.pmId))
-          ? assignment.pmId
-          : defaults[index].pmId,
-        curricularIds: assignment.curricularIds.filter((id) => validCurricularIds.includes(Number(id))).length > 0
-          ? assignment.curricularIds.filter((id) => validCurricularIds.includes(Number(id)))
-          : defaults[index].curricularIds,
-        finalidadeCodigo: assignment.finalidadeCodigo || defaults[index].finalidadeCodigo,
+      const next: [SegmentAssignment, SegmentAssignment] = previous.map((segment, index) => ({
+        ...segment,
+        pfId: validParticipantIds.includes(Number(segment.pfId))
+          ? segment.pfId
+          : index === 0
+            ? validParticipantIds[0]
+            : validParticipantIds[1],
+        pmId: validParticipantIds.includes(Number(segment.pmId))
+          ? segment.pmId
+          : index === 0
+            ? validParticipantIds[1]
+            : validParticipantIds[0],
+        curricularIds: segment.curricularIds.filter((id) => validParticipantIds.includes(Number(id))),
       })) as [SegmentAssignment, SegmentAssignment];
-      return arraysEqual(previous, normalized) ? previous : normalized;
+      const unchanged = next.every((segment, index) => {
+        const current = previous[index];
+        return (
+          current.pfId === segment.pfId &&
+          current.pmId === segment.pmId &&
+          current.modeloSessaoId === segment.modeloSessaoId &&
+          current.finalidadeCodigo === segment.finalidadeCodigo &&
+          current.id === segment.id &&
+          current.curricularIds.length === segment.curricularIds.length &&
+          current.curricularIds.every((value, arrayIndex) => value === segment.curricularIds[arrayIndex])
+        );
+      });
+      return unchanged ? previous : next;
     });
-  }, [participants]);
+  }, [participantIds]);
 
   useEffect(() => {
     if (!editSessionId) {
       setHydrating(false);
       return;
     }
+
     let mounted = true;
     void (async () => {
       try {
         const result = await getSharedSession(editSessionId);
         if (!mounted) return;
         if (!result.success || !result.data) throw new Error(result.error || 'Sessão não encontrada.');
-        const detail = result.data as SharedDetail & { fichas?: Array<{ id: number; status: string; colaborador_id_aluno?: number }> };
-        const restored: [ParticipantState, ParticipantState] = [
+        const detail = result.data as SharedDetail;
+        const restoredParticipants: [ParticipantState, ParticipantState] = [
           { ...EMPTY_PARTICIPANT },
           { ...EMPTY_PARTICIPANT },
         ];
-        const restoredModelos: [ModeloSessao[], ModeloSessao[]] = [[], []];
+
         for (const participant of detail.participantes || []) {
           const index = participant.funcao === 'SIC' ? 1 : 0;
-          const assignment = (detail.atribuicoes || []).find(
-            (item) => Number(item.funcionario_id) === Number(participant.funcionario_id),
-          );
-          const known = funcionarios.find(
-            (item) => Number(item.id) === Number(participant.funcionario_id),
-          );
-          restored[index] = {
+          const known = funcionarios.find((item) => Number(item.id) === Number(participant.funcionario_id));
+          restoredParticipants[index] = {
             funcionario: known || {
               id: Number(participant.funcionario_id),
               nome: participant.funcionario_nome || `Funcionário ${participant.funcionario_id}`,
               matricula: participant.matricula || '',
             },
-            cumpreTreinamento: Boolean(assignment),
-            modeloSessaoId: assignment?.modelo_sessao_id || null,
-            geraFicha: Boolean(assignment?.gera_ficha),
           };
-          if (assignment?.modelo_sessao_id) {
-            restoredModelos[index] = [
-              {
-                id: Number(assignment.modelo_sessao_id),
-                codigo: assignment.modelo_codigo || `Modelo #${assignment.modelo_sessao_id}`,
-                nome: assignment.modelo_nome || 'Modelo de sessão',
-              },
-            ];
-          }
         }
-        setParticipants(restored);
-        setModelos(restoredModelos);
+
+        setParticipants(restoredParticipants);
+
         const protectedStatuses = new Set(['APROVADO', 'NAO_APROVADO', 'CONCLUIDA']);
-        setFichaConcluida([
-          (detail.fichas || []).some(
-            (ficha: any) => Number(ficha.colaborador_id_aluno) === restored[0].funcionario?.id && protectedStatuses.has(String(ficha.status || '').trim().toUpperCase()),
+        setHasProtectedFicha(
+          (detail.fichas || []).some((ficha) =>
+            protectedStatuses.has(String(ficha.status || '').trim().toUpperCase()),
           ),
-          (detail.fichas || []).some(
-            (ficha: any) => Number(ficha.colaborador_id_aluno) === restored[1].funcionario?.id && protectedStatuses.has(String(ficha.status || '').trim().toUpperCase()),
-          ),
-        ]);
-        restored.forEach((participant, index) => {
-          if (participant.funcionario && participant.cumpreTreinamento && reservationReady) {
-            void fetchModelos(index as 0 | 1, participant.modeloSessaoId);
-          }
-        });
+        );
+
         const detailSegments = detail.segmentos || [];
         if (detailSegments.length >= 2) {
           const hydratedSplit = String(detailSegments[0].fim || '').slice(0, 5);
-          const reservaInicio = String(detail.sessao?.hora_inicio || detail.sessao?.horario_inicio || '').slice(0, 5);
-          const reservaFim = String(detail.sessao?.hora_fim || detail.sessao?.horario_fim || '').slice(0, 5);
           const splitMin = timeToMinutes(hydratedSplit);
-          const startMin = timeToMinutes(reservaInicio);
-          const endMin = timeToMinutes(reservaFim);
+          const startMin = timeToMinutes(horarioInicio);
+          const endMin = timeToMinutes(horarioFim);
           if (hydratedSplit && splitMin > startMin && splitMin < endMin) {
             setSplitTime(hydratedSplit);
           }
-          // Se o split carregado estiver fora da reserva atual, deixa vazio
-          // para que o defaultSplitTime (ponto médio) assuma automaticamente.
         }
+
         const restoredSegments = detailSegments.slice(0, 2).map((segment) => {
-          const pf = (segment.funcoes || []).find((role) => role.funcao === 'PF');
-          const pm = (segment.funcoes || []).find((role) => role.funcao === 'PM');
-          const explicitCurricularIds = (segment.atribuicao_funcionario_ids || [])
-            .map((id) => Number(id))
-            .filter((id) => Number.isInteger(id) && id > 0);
-          const legacyCurricular = (detail.atribuicoes || []).find(
-            (assignment) => Number(assignment.id) === Number(segment.atribuicao_curricular_id),
-          );
+          const pf = (segment.participantes || []).find((item) => item.funcao === 'PF');
+          const pm = (segment.participantes || []).find((item) => item.funcao === 'PM');
           return {
+            id: Number(segment.id || 0) || null,
             pfId: pf?.funcionario_id || null,
             pmId: pm?.funcionario_id || null,
-            curricularIds: explicitCurricularIds.length > 0
-              ? explicitCurricularIds
-              : legacyCurricular?.funcionario_id
-                ? [Number(legacyCurricular.funcionario_id)]
-                : [],
+            curricularIds: (segment.participantes || [])
+              .filter((item) => Boolean(item.cumpre_treinamento))
+              .map((item) => Number(item.funcionario_id))
+              .sort((left, right) => left - right),
+            modeloSessaoId: Number(segment.modelo_sessao_id || 0) || null,
             finalidadeCodigo: segment.finalidade_codigo || 'OUTRO',
           };
         });
@@ -616,14 +492,15 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         if (mounted) setHydrating(false);
       }
     })();
+
     return () => {
       mounted = false;
     };
-  }, [editSessionId, fetchModelos, funcionarios, reservationReady]);
+  }, [editSessionId, funcionarios, horarioFim, horarioInicio]);
 
   const modelById = useMemo(() => {
     const map = new Map<number, ModeloSessao>();
-    for (const model of modelos.flat()) {
+    for (const model of modelos) {
       map.set(Number(model.id), model);
     }
     return map;
@@ -638,25 +515,31 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         let pf = 0;
         let pm = 0;
         let curricular = 0;
+        const models = new Set<string>();
         for (const segment of segments) {
           const duration = Math.max(0, timeToMinutes(segment.fim) - timeToMinutes(segment.inicio));
-          for (const role of segment.funcoes) {
+          for (const role of segment.participantes) {
             if (role.funcionario_id !== funcionarioId) continue;
             total += duration;
             if (role.funcao === 'PF') pf += duration;
             if (role.funcao === 'PM') pm += duration;
           }
-          if (segment.atribuicaoFuncionarioIds.includes(funcionarioId)) curricular += duration;
+          if (segment.curricularIds.includes(funcionarioId)) {
+            curricular += duration;
+            const model = segment.modeloSessaoId ? modelById.get(segment.modeloSessaoId) : null;
+            if (model?.codigo) models.add(model.codigo);
+          }
         }
-        // Garantia defensiva: o total nunca pode exceder a duração da reserva
-        const reservaDuracao = horarioInicio && horarioFim
-          ? Math.max(0, timeToMinutes(horarioFim) - timeToMinutes(horarioInicio))
-          : 0;
-        if (total > reservaDuracao) total = reservaDuracao;
-        const model = participant.modeloSessaoId ? modelById.get(participant.modeloSessaoId) : null;
-        return { participant, total, pf, pm, curricular, model };
+        return {
+          participant,
+          total,
+          pf,
+          pm,
+          curricular,
+          modelos: Array.from(models),
+        };
       });
-  }, [modelById, participants, segments, horarioInicio, horarioFim]);
+  }, [modelById, participants, segments]);
 
   const markAttempted = useCallback((step: SharedSessionStep) => {
     setAttemptedSteps((previous) => {
@@ -687,13 +570,29 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       if (!crewReady) {
         markAttempted('tripulacao');
         setActiveStep('tripulacao');
-        setStepMessage('Defina a tripulação e os modelos de sessão antes de configurar os segmentos.');
+        setStepMessage('Defina a tripulação antes de configurar os segmentos.');
         return;
       }
       setActiveStep('segmentos');
     },
     [crewReady, markAttempted, reservationReady, setActiveStep],
   );
+
+  const updateParticipant = useCallback((index: 0 | 1, funcionario: Funcionario | null) => {
+    setParticipants((previous) => {
+      const next: [ParticipantState, ParticipantState] = [...previous];
+      next[index] = { funcionario };
+      return next;
+    });
+  }, []);
+
+  const updateSegment = useCallback((index: 0 | 1, updates: Partial<SegmentAssignment>) => {
+    setSegmentAssignments((previous) => {
+      const next: [SegmentAssignment, SegmentAssignment] = [...previous];
+      next[index] = { ...next[index], ...updates };
+      return next;
+    });
+  }, []);
 
   const handleSubmit = async () => {
     setSubmitted(true);
@@ -704,6 +603,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       else setActiveStep('segmentos');
       return;
     }
+
     setLoading(true);
     try {
       const payload: SharedSessionPayload = {
@@ -716,23 +616,27 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         observacoes: observacoes || undefined,
         participantes: participants.map((participant) => ({
           funcionario_id: participant.funcionario!.id,
-          cumpre_treinamento: participant.cumpreTreinamento,
-          modelo_sessao_id: participant.cumpreTreinamento ? participant.modeloSessaoId : null,
-          gera_ficha: participant.cumpreTreinamento,
         })),
         segmentos: segments.map((segment) => ({
+          id: segment.id || undefined,
           inicio: segment.inicio,
           fim: segment.fim,
-          atribuicao_funcionario_id: segment.atribuicaoFuncionarioId,
-          atribuicao_funcionario_ids: segment.atribuicaoFuncionarioIds,
+          modelo_sessao_id: segment.modeloSessaoId,
           finalidade_codigo: segment.finalidadeCodigo,
-          finalidade_titulo: segment.finalidadeTitulo,
-          funcoes: segment.funcoes,
+          finalidade_titulo: SEGMENT_PURPOSE_LABELS[segment.finalidadeCodigo],
+          participantes: segment.participantes.map((role) => ({
+            funcionario_id: role.funcionario_id,
+            funcao: role.funcao,
+            cumpre_treinamento: segment.curricularIds.includes(role.funcionario_id),
+            gera_ficha: segment.curricularIds.includes(role.funcionario_id),
+          })),
         })),
       };
+
       const result = editSessionId
         ? await updateSharedSession(editSessionId, payload)
         : await createSharedSession(payload);
+
       if (!result.success) throw new Error(result.error || 'Erro ao salvar sessão compartilhada.');
       toast.success(editSessionId ? 'Sessão compartilhada atualizada.' : 'Sessão compartilhada criada.');
       onSuccess();
@@ -755,7 +659,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         void handleSubmit();
       },
     }),
-    [activeStep, handleSubmit, requestStep],
+    [activeStep, requestStep],
   );
 
   useEffect(() => {
@@ -775,12 +679,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     return crewReady && segmentErrors.length === 0 ? 'completed' : showSegmentErrors ? 'error' : 'idle';
   };
 
-  const renderErrorList = (errors: string[]) => (
-    <ul className="mt-2 list-disc pl-5 text-xs">
-      {errors.map((error) => <li key={error}>{error}</li>)}
-    </ul>
-  );
-
   const renderReservationSummary = () => (
     <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="shared-reservation-summary">
       <h3 className="text-sm font-semibold text-slate-800">Dados da reserva</h3>
@@ -792,11 +690,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         <div><span className="font-medium">Fim:</span> {horarioFim || '—'}</div>
         <div><span className="font-medium">Instrutor:</span> {instrutorNome || (instrutorId ? `#${instrutorId}` : '—')}</div>
       </div>
-      {!reservationReady && (
-        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          Complete os dados da reserva acima para configurar a tripulação.
-        </div>
-      )}
     </div>
   );
 
@@ -804,120 +697,23 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     <div className="space-y-3" data-testid="shared-step-tripulacao">
       <div>
         <h3 className="text-sm font-semibold text-slate-800">Tripulação</h3>
-        <p className="text-xs text-slate-500">Defina quem é curricular e selecione o Modelo de Sessão de cada piloto curricular.</p>
+        <p className="text-xs text-slate-500">Defina os dois participantes físicos da reserva. O vínculo curricular será configurado em cada segmento.</p>
       </div>
-      {participants.map((participant, index) => {
-        const participantIndex = index as 0 | 1;
-        const needsEquipment = !simuladorModelo || !simuladorId;
-        return (
-          <div key={index} className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Piloto {index + 1}</p>
-                <p className="text-xs text-slate-500">{index === 0 ? 'PIC na reserva' : 'SIC na reserva'}</p>
-              </div>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                participant.cumpreTreinamento
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-amber-100 text-amber-800'
-              }`}>
-                {participant.cumpreTreinamento ? 'Curricular' : 'Apoio'}
-              </span>
-            </div>
-            <FuncionarioCombobox
-              onSelect={(selected) => {
-                updateParticipant(participantIndex, {
-                  funcionario: selected as Funcionario | null,
-                  modeloSessaoId: null,
-                });
-                clearModelos(participantIndex);
-                if (selected && participant.cumpreTreinamento && reservationReady) {
-                  void fetchModelos(participantIndex);
-                }
-              }}
-              selected={participant.funcionario}
-              placeholder={`Buscar piloto ${index + 1}...`}
-              required
-              disabled={Boolean(editSessionId)}
-            />
-            {participant.funcionario && (
-              <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
-                <label className={`flex items-start gap-2 text-sm text-slate-700 ${fichaConcluida[index] ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
-                  <input
-                    type="checkbox"
-                    checked={participant.cumpreTreinamento}
-                    disabled={fichaConcluida[index]}
-                    aria-disabled={fichaConcluida[index]}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      updateParticipant(participantIndex, { cumpreTreinamento: checked });
-                      if (checked && reservationReady) void fetchModelos(participantIndex);
-                      else clearModelos(participantIndex);
-                    }}
-                    className="mt-0.5 rounded"
-                  />
-                  <span>
-                    Cumpre treinamento nesta reserva
-                    {fichaConcluida[index] ? (
-                      <span className="block text-xs text-red-600 font-medium">
-                        A ficha deste piloto já foi concluída. A condição curricular não pode mais ser alterada.
-                      </span>
-                    ) : (
-                      <span className="block text-xs text-slate-500">
-                        Desmarque para apoio operacional sem ficha e sem progressão curricular.
-                      </span>
-                    )}
-                  </span>
-                </label>
-
-                {participant.cumpreTreinamento && (
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600">Modelo de Sessão</label>
-                    <select
-                      aria-label={`Modelo de sessão do piloto ${index + 1}`}
-                      value={participant.modeloSessaoId ?? ''}
-                      onChange={(event) => updateParticipant(participantIndex, { modeloSessaoId: Number(event.target.value) || null })}
-                      disabled={loadingModelos[index] || needsEquipment}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    >
-                      <option value="">
-                        {needsEquipment
-                          ? 'Selecione o equipamento para carregar os modelos'
-                          : loadingModelos[index]
-                            ? 'Carregando modelos...'
-                            : 'Selecione o modelo de sessão'}
-                      </option>
-                      {modelos[index].map((model) => (
-                        <option key={model.id} value={model.id}>{formatModelOption(model)}</option>
-                      ))}
-                    </select>
-                    {!needsEquipment && !loadingModelos[index] && !modelosErro[index] && modelos[index].length === 0 && (
-                      <p className="mt-1 text-xs text-amber-700">Nenhum modelo compatível.</p>
-                    )}
-                    {modelosErro[index] && (
-                      <p className="mt-1 text-xs text-red-700">
-                        {modelosErro[index]}{' '}
-                        <button type="button" className="underline" onClick={() => void fetchModelos(participantIndex, participant.modeloSessaoId)}>
-                          Tentar novamente
-                        </button>
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <p className={`flex items-center gap-1 text-xs ${participant.cumpreTreinamento ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  {participant.cumpreTreinamento ? <FileText className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-                  {participant.cumpreTreinamento
-                    ? (participant.modeloSessaoId && modelById.get(participant.modeloSessaoId)?.gera_qualificacao === 1
-                      ? 'Gera ficha e qualificação.'
-                      : 'Gera ficha. Este modelo não gera qualificação.')
-                    : 'Apoio: não gera ficha nem qualificação. As horas PF/PM continuam registradas.'}
-                </p>
-              </div>
-            )}
+      {participants.map((participant, index) => (
+        <div key={index} className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-slate-900">Piloto {index + 1}</p>
+            <p className="text-xs text-slate-500">{index === 0 ? 'PIC na reserva' : 'SIC na reserva'}</p>
           </div>
-        );
-      })}
+          <FuncionarioCombobox
+            onSelect={(selected) => updateParticipant(index as 0 | 1, selected as Funcionario | null)}
+            selected={participant.funcionario}
+            placeholder={`Buscar piloto ${index + 1}...`}
+            required
+            disabled={Boolean(editSessionId)}
+          />
+        </div>
+      ))}
       {showParticipantErrors && participantErrors.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
           {participantErrors.map((error) => <p key={error}>{error}</p>)}
@@ -940,8 +736,9 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     <div className="space-y-3" data-testid="shared-step-segmentos">
       <div>
         <h3 className="text-sm font-semibold text-slate-800">Segmentos operacionais</h3>
-        <p className="text-xs text-slate-500">Ajuste a divisão e confirme PF, PM e conteúdo curricular de cada período.</p>
+        <p className="text-xs text-slate-500">Cada segmento define PF, PM, modelo curricular e quais participantes cumprem aquele currículo.</p>
       </div>
+
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
         <label className="mb-1 block text-xs font-medium text-slate-600">Horário de divisão</label>
         <input
@@ -954,132 +751,128 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
         />
         <p className="mt-1 text-xs text-slate-500">Reserva: {horarioInicio} até {horarioFim}</p>
-        {showSegmentErrors && segmentErrors.some((error) => error.startsWith('A divisão')) && (
-          <p className="mt-1 text-xs text-red-700">A divisão deve ficar estritamente entre início e fim.</p>
-        )}
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {segments.map((segment, index) => {
-          const curricularParticipants = participants.filter(
-            (participant) =>
-              participant.funcionario &&
-              segmentAssignments[index].curricularIds.includes(participant.funcionario.id),
-          );
-          return (
-            <div key={index} className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-900">Segmento {index + 1}</p>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
-                  {segment.inicio} - {segment.fim}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                <label className="text-xs font-medium text-slate-600">
-                  PF
-                  <select
-                    aria-label={`PF do segmento ${index + 1}`}
-                    value={segmentAssignments[index].pfId ?? ''}
-                    onChange={(event) => setSegmentAssignments((previous) => {
-                      const next: [SegmentAssignment, SegmentAssignment] = [...previous];
-                      next[index] = { ...next[index], pfId: Number(event.target.value) || null };
-                      return next;
-                    })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  >
-                    <option value="">Selecione o PF</option>
-                    {participants.map((participant) => participant.funcionario && (
-                      <option key={participant.funcionario.id} value={participant.funcionario.id}>{participant.funcionario.nome}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="text-xs font-medium text-slate-600">
-                  PM
-                  <select
-                    aria-label={`PM do segmento ${index + 1}`}
-                    value={segmentAssignments[index].pmId ?? ''}
-                    onChange={(event) => setSegmentAssignments((previous) => {
-                      const next: [SegmentAssignment, SegmentAssignment] = [...previous];
-                      next[index] = { ...next[index], pmId: Number(event.target.value) || null };
-                      return next;
-                    })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  >
-                    <option value="">Selecione o PM</option>
-                    {participants.map((participant) => participant.funcionario && (
-                      <option key={participant.funcionario.id} value={participant.funcionario.id}>{participant.funcionario.nome}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="text-xs font-medium text-slate-600">
-                  Finalidade do segmento
-                  <select
-                    aria-label={`Finalidade do segmento ${index + 1}`}
-                    value={segmentAssignments[index].finalidadeCodigo}
-                    onChange={(event) => setSegmentAssignments((previous) => {
-                      const next: [SegmentAssignment, SegmentAssignment] = [...previous];
-                      next[index] = {
-                        ...next[index],
-                        finalidadeCodigo: event.target.value as SharedSegmentPurpose,
-                      };
-                      return next;
-                    })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  >
-                    {SEGMENT_PURPOSE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <div className="rounded-lg border border-slate-200 px-3 py-2">
-                  <p className="text-xs font-medium text-slate-600">Currículos atendidos</p>
-                  <div className="mt-2 space-y-2">
-                    {participants
-                      .filter((participant) => participant.cumpreTreinamento && participant.funcionario)
-                      .map((participant) => {
-                        const funcionarioId = participant.funcionario!.id;
-                        const model = participant.modeloSessaoId ? modelById.get(participant.modeloSessaoId) : null;
-                        const checked = segmentAssignments[index].curricularIds.includes(funcionarioId);
-                        return (
-                          <label key={funcionarioId} className="flex cursor-pointer items-start gap-2 text-xs text-slate-700">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(event) => setSegmentAssignments((previous) => {
-                                const next: [SegmentAssignment, SegmentAssignment] = [...previous];
-                                const currentIds = new Set(next[index].curricularIds);
-                                if (event.target.checked) currentIds.add(funcionarioId);
-                                else currentIds.delete(funcionarioId);
-                                next[index] = {
-                                  ...next[index],
-                                  curricularIds: Array.from(currentIds).sort((left, right) => left - right),
-                                };
-                                return next;
-                              })}
-                              className="mt-0.5 rounded"
-                            />
-                            <span>
-                              {participant.funcionario!.nome}
-                              <span className="block text-slate-500">{model?.codigo || 'Modelo pendente'}</span>
-                            </span>
-                          </label>
-                        );
-                      })}
-                  </div>
+        {segments.map((segment, index) => (
+          <div key={index} className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-900">Segmento {index + 1}</p>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                {segment.inicio} - {segment.fim}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <label className="text-xs font-medium text-slate-600">
+                PF
+                <select
+                  aria-label={`PF do segmento ${index + 1}`}
+                  value={segmentAssignments[index].pfId ?? ''}
+                  onChange={(event) => updateSegment(index as 0 | 1, { pfId: Number(event.target.value) || null })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Selecione o PF</option>
+                  {participants.map((participant) => participant.funcionario && (
+                    <option key={participant.funcionario.id} value={participant.funcionario.id}>{participant.funcionario.nome}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-slate-600">
+                PM
+                <select
+                  aria-label={`PM do segmento ${index + 1}`}
+                  value={segmentAssignments[index].pmId ?? ''}
+                  onChange={(event) => updateSegment(index as 0 | 1, { pmId: Number(event.target.value) || null })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Selecione o PM</option>
+                  {participants.map((participant) => participant.funcionario && (
+                    <option key={participant.funcionario.id} value={participant.funcionario.id}>{participant.funcionario.nome}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-slate-600">
+                Finalidade do segmento
+                <select
+                  aria-label={`Finalidade do segmento ${index + 1}`}
+                  value={segmentAssignments[index].finalidadeCodigo}
+                  onChange={(event) => updateSegment(index as 0 | 1, {
+                    finalidadeCodigo: event.target.value as SharedSegmentPurpose,
+                  })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  {SEGMENT_PURPOSE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-slate-600">
+                Modelo de sessão do segmento
+                <select
+                  aria-label={`Modelo do segmento ${index + 1}`}
+                  value={segmentAssignments[index].modeloSessaoId ?? ''}
+                  onChange={(event) => updateSegment(index as 0 | 1, { modeloSessaoId: Number(event.target.value) || null })}
+                  disabled={loadingModelos || !simuladorModelo || !simuladorId}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">
+                    {!simuladorModelo || !simuladorId
+                      ? 'Selecione o equipamento para carregar os modelos'
+                      : loadingModelos
+                        ? 'Carregando modelos...'
+                        : 'Selecione o modelo do segmento'}
+                  </option>
+                  {modelos.map((model) => (
+                    <option key={model.id} value={model.id}>{formatModelOption(model)}</option>
+                  ))}
+                </select>
+                {modelosErro && (
+                  <p className="mt-1 text-xs text-red-700">
+                    {modelosErro}{' '}
+                    <button type="button" className="underline" onClick={() => void fetchModelos()}>
+                      Tentar novamente
+                    </button>
+                  </p>
+                )}
+              </label>
+
+              <div className="rounded-lg border border-slate-200 px-3 py-2">
+                <p className="text-xs font-medium text-slate-600">Currículos atendidos neste segmento</p>
+                <div className="mt-2 space-y-2">
+                  {participants.map((participant) => {
+                    if (!participant.funcionario) return null;
+                    const funcionarioId = participant.funcionario.id;
+                    const checked = segmentAssignments[index].curricularIds.includes(funcionarioId);
+                    return (
+                      <label key={funcionarioId} className="flex cursor-pointer items-start gap-2 text-xs text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            const currentIds = new Set(segmentAssignments[index].curricularIds);
+                            if (event.target.checked) currentIds.add(funcionarioId);
+                            else currentIds.delete(funcionarioId);
+                            updateSegment(index as 0 | 1, {
+                              curricularIds: Array.from(currentIds).sort((left, right) => left - right),
+                            });
+                          }}
+                          className="mt-0.5 rounded"
+                        />
+                        <span>{participant.funcionario.nome}</span>
+                      </label>
+                    );
+                  })}
                 </div>
-                <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  Currículos: {curricularParticipants.length > 0
-                    ? curricularParticipants.map((participant) => {
-                      const model = participant.modeloSessaoId ? modelById.get(participant.modeloSessaoId) : null;
-                      return `${participant.funcionario!.nome} - ${model?.codigo || 'Modelo pendente'}`;
-                    }).join('; ')
-                    : 'Pendente'}
-                </p>
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
+
       {showSegmentErrors && segmentErrors.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
           {segmentErrors.map((error) => <p key={error}>{error}</p>)}
@@ -1096,29 +889,20 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             <table className="min-w-full divide-y divide-slate-200 text-xs">
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
-                  {['Piloto', 'Condição', 'Modelo de Sessão', 'Total', 'PF', 'PM', 'Curricular', 'Ficha', 'Qualificação'].map((header) => (
+                  {['Piloto', 'Total', 'PF', 'PM', 'Curricular', 'Modelos curriculares'].map((header) => (
                     <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
-                {summary.map(({ participant, total, pf, pm, curricular, model }) => (
+                {summary.map(({ participant, total, pf, pm, curricular, modelos }) => (
                   <tr key={participant.funcionario!.id}>
                     <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{participant.funcionario!.nome}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{participant.cumpreTreinamento ? 'Curricular' : 'Apoio'}</td>
-                    <td className="max-w-56 px-3 py-2">{participant.cumpreTreinamento ? model?.codigo || 'Pendente' : '—'}</td>
                     <td className="whitespace-nowrap px-3 py-2">{formatMinutes(total)}</td>
                     <td className="whitespace-nowrap px-3 py-2">{formatMinutes(pf)}</td>
                     <td className="whitespace-nowrap px-3 py-2">{formatMinutes(pm)}</td>
                     <td className="whitespace-nowrap px-3 py-2">{formatMinutes(curricular)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{participant.cumpreTreinamento ? 'Sim' : 'Não'}</td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {participant.cumpreTreinamento
-                        ? model?.gera_qualificacao === 1
-                          ? 'Sim'
-                          : 'Não'
-                        : '—'}
-                    </td>
+                    <td className="px-3 py-2">{modelos.length > 0 ? modelos.join(', ') : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1160,7 +944,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           {editSessionId ? 'Editar sessão compartilhada' : 'Configuração compartilhada'}
         </div>
         <p className="mt-1 text-xs text-indigo-700">
-          Uma reserva, dois pilotos e atribuições operacionais independentes por segmento.
+          Uma reserva, dois pilotos e vínculos curriculares independentes por segmento.
         </p>
       </div>
 
@@ -1200,14 +984,19 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         </div>
       )}
 
-      {editSessionId && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800">
-          Edição segura: fichas concluídas bloqueiam mudanças curriculares. Antes da conclusão, modelos, segmentos, PF e PM podem ser ajustados.
+      {hasProtectedFicha && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+          <div className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" />
+            Existem fichas concluídas nesta sessão.
+          </div>
+          <p className="mt-1">
+            O backend preserva segmentos concluídos e pode bloquear alterações incompatíveis com esse histórico.
+          </p>
         </div>
       )}
 
       {renderReservationSummary()}
-
       {activeStep === 'tripulacao' && renderCrewStep()}
       {activeStep === 'segmentos' && renderSegmentsStep()}
     </section>
