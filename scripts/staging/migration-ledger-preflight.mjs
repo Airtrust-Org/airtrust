@@ -30,6 +30,30 @@ const BLOCKED_DB_IDS = [
   'a72fb05b-0912-4ad9-9686-e7948c8b09eb', // development
 ];
 
+function parseScopeArg(argv, files) {
+  const scopeArg = argv.find((arg) => arg.startsWith('--scope='));
+  if (!scopeArg) return null;
+
+  const requested = scopeArg
+    .slice('--scope='.length)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (requested.length === 0) {
+    throw new Error('--scope= foi informado sem códigos de migration.');
+  }
+
+  const scopedFiles = [];
+  for (const token of requested) {
+    const match = files.find((file) => file === token || file.startsWith(`${token}_`));
+    if (!match) {
+      throw new Error(`Migration fora da scope local/versionada: ${token}`);
+    }
+    scopedFiles.push(match);
+  }
+  return [...new Set(scopedFiles)];
+}
+
 function assertStagingTarget(dbName, dbId) {
   const name = String(dbName || '').trim();
   const id = String(dbId || '').trim();
@@ -93,6 +117,8 @@ function classify({ registered, expectedTables, existingTables }) {
 }
 
 async function main() {
+  const files = listVersionedMigrations();
+  const scopeFiles = parseScopeArg(process.argv.slice(2), files);
   const dbName = process.env.STAGING_D1_NAME || ALLOWED_STAGING_DB_NAME;
   const dbId = process.env.STAGING_D1_ID || ALLOWED_STAGING_DB_ID;
   assertStagingTarget(dbName, dbId);
@@ -106,7 +132,6 @@ async function main() {
   );
   const existingTables = new Set(tableRows.map((r) => r.name));
 
-  const files = listVersionedMigrations();
   const report = [];
 
   for (const file of files) {
@@ -121,6 +146,11 @@ async function main() {
     acc[r.state] = (acc[r.state] || 0) + 1;
     return acc;
   }, {});
+  const scopeDetails = scopeFiles ? report.filter((item) => scopeFiles.includes(item.file)) : report;
+  const scopeSummary = scopeDetails.reduce((acc, r) => {
+    acc[r.state] = (acc[r.state] || 0) + 1;
+    return acc;
+  }, {});
 
   const output = {
     target: { dbName, dbId },
@@ -128,6 +158,8 @@ async function main() {
     totalVersionedMigrations: files.length,
     ledgerEntryCount: ledgerNames.size,
     summary,
+    scope: scopeFiles,
+    scopeSummary,
     ambiguousOrUnregisteredApplied: report.filter((r) =>
       ['ambigua', 'aplicada_mas_nao_registrada', 'registrada_mas_nao_aplicada'].includes(r.state),
     ),
@@ -136,16 +168,18 @@ async function main() {
 
   console.log(JSON.stringify(output, null, 2));
 
-  if (summary.ambigua > 0 || summary.registrada_mas_nao_aplicada > 0) {
+  const scopeHasAmbiguous = scopeDetails.some((item) => item.state === 'ambigua');
+  const scopeHasRegisteredButMissing = scopeDetails.some((item) => item.state === 'registrada_mas_nao_aplicada');
+  if (scopeHasAmbiguous || scopeHasRegisteredButMissing) {
     console.error(
-      'PREFLIGHT_RED: estado ambíguo ou "registrada mas não aplicada" encontrado. ' +
+      'PREFLIGHT_RED: estado ambíguo ou "registrada mas não aplicada" encontrado na scope avaliada. ' +
         'Não aplicar migrations em cadeia — revisão humana obrigatória antes de qualquer escrita no ledger.',
     );
     process.exitCode = 1;
     return;
   }
 
-  console.log('PREFLIGHT_OK: nenhum estado ambíguo encontrado (read-only, nada foi alterado).');
+  console.log('PREFLIGHT_OK: nenhum estado ambíguo encontrado na scope avaliada (read-only, nada foi alterado).');
 }
 
 main().catch((err) => {
