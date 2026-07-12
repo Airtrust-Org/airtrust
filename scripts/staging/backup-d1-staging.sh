@@ -67,9 +67,20 @@ if [[ "${CONFIRM_STAGING_BACKUP:-}" != "$CONFIRMATION_PHRASE" ]]; then
   exit 1
 fi
 
+# Restrict permissions on everything this script creates from here on — the
+# dump may contain synthetic-only or pre-existing staging data (see header).
+umask 077
+
 mkdir -p "$out_dir"
 timestamp_utc="$(date -u +"%Y%m%dT%H%M%SZ")"
-out_file="$out_dir/staging-backup-${timestamp_utc}.sql"
+# Second-resolution timestamps are guessable; add a random suffix so the
+# output path can't be pre-created as a symlink by another local process
+# before wrangler writes to it (the file itself doesn't exist until wrangler
+# creates it, so this only narrows the race window, matching the guarantee
+# `mktemp`-style naming provides without requiring the file to be
+# pre-created empty).
+random_suffix="$(od -An -N4 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || echo "$$")"
+out_file="$out_dir/staging-backup-${timestamp_utc}-${random_suffix}.sql"
 checksum_file="${out_file}.sha256"
 
 echo "Exportando $db_name (remote) para $out_file ..."
