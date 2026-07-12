@@ -90,15 +90,28 @@ async function main() {
   }
 
   // B. Sessão simples: criar, editar, reabrir, cancelar sem efeito.
+  // NOTE: POST /sessoes (worker-airtrust/src/routes/simuladores-sessoes.ts)
+  // requires horario_inicio/horario_fim (never hora_inicio/hora_fim — those
+  // field names return a 400 immediately) plus simulador_id, instrutor_id and
+  // a non-empty participantes array. An earlier version of this script used
+  // the wrong field names and omitted these required fields, which produced
+  // a guaranteed 400 here that silently cascaded into C/D/G being skipped
+  // while still counting as passing in the final ok-check — fixed.
   let simpleSessionId = null;
   {
     const created = await authFetch(baseUrl, token, '/api/simuladores/sessoes', {
       method: 'POST',
       body: JSON.stringify({
         data: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-        hora_inicio: '08:00',
-        hora_fim: '09:00',
+        horario_inicio: '08:00',
+        horario_fim: '09:00',
         tipo_sessao: 'PER',
+        simulador_id: simuladorId,
+        instrutor_id: instrutorId,
+        participantes: [
+          { funcionario_id: participante1Id, funcao: 'PF' },
+          { funcionario_id: participante2Id, funcao: 'PM' },
+        ],
         observacoes: 'QA smoke — sessão simples (rollback via seed --rollback)',
       }),
     });
@@ -195,14 +208,27 @@ async function main() {
     report.scenarios.D_idempotent_reconversion = { ok: false, skipped: 'no simple session id from B' };
   }
 
-  // E. Programa genérico: painel EXA ausente, EXA-V01..04 ocultos (checado via listagem de modelos).
+  // E. Programa genérico: painel EXA ausente, EXA-V01..04 ocultos.
+  // NOT AUTOMATABLE VIA THIS API-LEVEL SMOKE: GET /api/simuladores/modelos-sessao
+  // (worker-airtrust/src/routes/simuladores-modelos.ts) has no server-side
+  // program/capability filter — EXA-V0x visibility outside the examiner
+  // program is enforced entirely in the frontend (commit f3f60eed
+  // "fix(simulators): hide examiner models outside examiner program").
+  // Asserting hidden-from-the-API here would be asserting a guarantee the
+  // backend never makes, producing a false negative on every run. This gate
+  // is covered instead by
+  // src/react-app/components/modals/__tests__/SharedSessionForm.examiner-template.test.tsx
+  // (frontend unit test) — recorded here as semiautomated/not-applicable at
+  // the API layer, not silently marked ok:true.
   {
     const modelos = await authFetch(baseUrl, token, '/api/simuladores/modelos-sessao');
     const codes = (modelos.json?.data ?? []).map((m) => m.codigo);
-    const examinerCodesVisible = codes.some((c) => /^EXA-V0[1-4]$/.test(c));
+    const examinerCodesVisibleInApi = codes.some((c) => /^EXA-V0[1-4]$/.test(c));
     report.scenarios.E_generic_program_hides_examiner = {
-      ok: !examinerCodesVisible,
-      note: 'EXA-V01..04 devem estar ausentes na listagem padrão fora do programa de examinador',
+      ok: null,
+      semiautomated: true,
+      note: 'filtro é frontend-only (não há guarantee no backend); ver SharedSessionForm.examiner-template.test.tsx',
+      examinerCodesVisibleInApi,
     };
   }
 
@@ -286,16 +312,21 @@ async function main() {
   // I. PDF: existência e tamanho não-vazio (conteúdo detalhado — 33 itens/18+15/ECL/sem
   //    QRH/FAP — já coberto por testes automatizados locais; aqui confirmamos apenas
   //    que o endpoint remoto responde com um PDF não vazio para a sessão criada em F).
+  // NOTE: GET /api/simuladores/fichas (simuladores-fichas.ts) accepts only
+  // `status`/`tipo_sessao` query params — there is NO `sessao_id` filter.
+  // Fichas link back to their session via the `agendamento_slot_id` column
+  // (confirmed: `fichas_sessao.agendamento_slot_id` joins
+  // `simulador_agendamentos.id`). Filtering must happen client-side on that
+  // field, never by guessing an unsupported query param (which would
+  // silently return the caller's whole/unscoped ficha list and could pick
+  // the WRONG ficha's PDF — a false ok:true).
   {
     const pdfStatus = report.scenarios.F_examiner_program_event2?.ok && event2SessionId
       ? await (async () => {
-          const fichasList = await authFetch(
-            baseUrl,
-            token,
-            `/api/simuladores/fichas?sessao_id=${event2SessionId}`,
-          );
-          const fichaId = (fichasList.json?.data ?? [])[0]?.id ?? null;
-          if (!fichaId) return { status: null, bytes: 0, note: 'nenhuma ficha encontrada para a sessão' };
+          const fichasList = await authFetch(baseUrl, token, '/api/simuladores/fichas');
+          const fichaId =
+            (fichasList.json?.data ?? []).find((f) => f.agendamento_slot_id === event2SessionId)?.id ?? null;
+          if (!fichaId) return { status: null, bytes: 0, note: 'nenhuma ficha com agendamento_slot_id correspondente à sessão' };
           const res = await fetch(`${baseUrl}/api/simuladores/fichas/${fichaId}/pdf`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
