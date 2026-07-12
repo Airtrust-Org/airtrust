@@ -177,7 +177,7 @@ jobs:
   backup:
     name: Backup Staging D1 (verified, required before any migration)
     needs: [guard, production-target-guard]
-    if: ${{ inputs.apply_migrations == 'true' }}
+    if: ${{ inputs.apply_migrations }}
     runs-on: ubuntu-latest
     environment: staging
     outputs:
@@ -203,7 +203,7 @@ jobs:
   preflight:
     name: Ledger Preflight (read-only, required before any migration)
     needs: [guard, production-target-guard, backup]
-    if: ${{ inputs.apply_migrations == 'true' }}
+    if: ${{ inputs.apply_migrations }}
     runs-on: ubuntu-latest
     environment: staging
     outputs:
@@ -228,7 +228,7 @@ jobs:
   apply-migrations:
     name: Apply Approved Migrations (one at a time, allowlisted)
     needs: [guard, production-target-guard, backup, preflight]
-    if: ${{ inputs.apply_migrations == 'true' && needs.backup.outputs.backup_ok == 'true' && needs.preflight.outputs.preflight_ok == 'true' }}
+    if: ${{ inputs.apply_migrations && needs.backup.outputs.backup_ok == 'true' && needs.preflight.outputs.preflight_ok == 'true' }}
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -259,7 +259,7 @@ jobs:
   deploy-worker:
     name: Deploy Staging Worker
     needs: [guard, production-target-guard]
-    if: ${{ inputs.deploy_worker == 'true' && !failure() }}
+    if: ${{ inputs.deploy_worker && !failure() }}
     runs-on: ubuntu-latest
     environment: staging
     outputs:
@@ -352,7 +352,7 @@ jobs:
   deploy-frontend:
     name: Deploy Staging Frontend (Pages preview, staging branch)
     needs: [guard, production-target-guard]
-    if: ${{ inputs.deploy_frontend == 'true' && !failure() }}
+    if: ${{ inputs.deploy_frontend && !failure() }}
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -397,7 +397,7 @@ jobs:
     needs: [guard, production-target-guard, apply-migrations, deploy-worker]
     if: >-
       ${{
-        inputs.run_smoke == 'true' &&
+        inputs.run_smoke &&
         !failure() &&
         !cancelled() &&
         (needs.apply-migrations.result == 'success' || needs.apply-migrations.result == 'skipped') &&
