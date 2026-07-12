@@ -68,9 +68,19 @@ DELETE FROM manobras WHERE codigo LIKE 'EXA-V01-%' OR codigo LIKE 'EXA-V02-%' OR
 DELETE FROM modelos_sessao WHERE codigo IN ('EXA-V01','EXA-V02','EXA-V03','EXA-V04');
 ```
 
-Só executar se não houver ficha real vinculada a esses modelos (checar antes
-via `scripts/staging/migration-ledger-preflight.mjs` + `SELECT` manual em
-`fichas_sessao`).
+Critério exato, executar antes de qualquer `DELETE` acima — a contagem deve
+retornar `0`:
+
+```sql
+SELECT COUNT(*) FROM fichas_sessao fs
+JOIN modelos_sessao ms ON ms.id = fs.template_id
+WHERE ms.codigo IN ('EXA-V01','EXA-V02','EXA-V03','EXA-V04')
+  AND fs.deleted_at IS NULL;
+```
+
+Se o resultado for diferente de `0`, **não executar a compensação** — há
+ficha real vinculada a esses modelos; parar e escalar para revisão humana em
+vez de perder histórico de avaliação.
 
 ### Restauração de backup completo
 

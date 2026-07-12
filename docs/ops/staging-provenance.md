@@ -26,7 +26,7 @@ runbook — usado apenas para desenvolvimento local contra recurso remoto de dev
 
 `worker-airtrust/src/routes/system.ts` (`getCanonicalVersion`) resolve, nesta
 ordem: `APP_VERSION` → `CF_DEPLOYMENT_ID` → `'dev-local'`. Valores placeholder
-rastreados no git (`managed-by-script`, `__build_version__`, vazio, `null`,
+rastreados no git (`managed-by-script`, `__build_version__`, `__app_version__`, vazio, `null`,
 `undefined`, `unknown`) são explicitamente rejeitados por
 `sanitizeDeployMetadata` e tratados como ausentes — nunca aceitos como versão
 real. `/api/version` retorna `{ version, environment, builtAt, deploymentId }`
@@ -53,6 +53,17 @@ deploy nunca inclui `--branch=production`). O build é stampado com
 já usado pelo deploy de produção) e configurado para apontar para a API de
 staging via `VITE_DEV_PROXY_TARGET=https://airtrust-api-staging.airtrust.workers.dev`.
 
+**Importante — isto é uma garantia de CI, não estrutural.** A separação entre
+o preview de staging e `airtrust.online` (branch `production`) é imposta por
+`PAGES_STAGING_BRANCH: staging` (um valor de `env:` no arquivo do workflow) e
+por um passo de asserção dentro do próprio `deploy-staging.yml` — não por uma
+restrição do lado do Cloudflare Pages que torne `--branch=production`
+impossível de alcançar a partir deste workflow. Uma edição futura e descuidada
+de `deploy-staging.yml` que altere `PAGES_STAGING_BRANCH` ou remova a
+asserção poderia, em tese, reintroduzir o risco. Qualquer alteração nesse
+trecho do workflow deve ser tratada com o mesmo rigor de revisão de uma
+mudança em `deploy-airtrust.yml`.
+
 Se, no futuro, um projeto Pages dedicado for provisionado, o único ajuste
 necessário é o valor de `PAGES_PROJECT_NAME` no workflow — nenhuma mudança de
 lógica. Esta execução **não provisiona** nenhum recurso Cloudflare novo; o
@@ -60,8 +71,9 @@ projeto Pages `airtrust` já existe e é reaproveitado apenas via uma branch
 não-produção.
 
 Rollback do frontend: como é um deployment de preview (não a branch
-`production`), a mitigação é simplesmente publicar um novo preview a partir
-de um SHA anterior — nunca afeta `airtrust.online`.
+`production`), a mitigação é publicar um novo preview a partir de um SHA
+anterior — não afeta `airtrust.online` enquanto o guard acima descrito
+permanecer intacto no workflow.
 
 ## Rollback do Worker
 
