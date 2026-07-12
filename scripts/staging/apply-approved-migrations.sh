@@ -13,9 +13,13 @@
 # — migrations are forward-only; compensatory DELETEs are documented there,
 # never improvised by this script.
 set -euo pipefail
+umask 077
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+
+PREFLIGHT_OUTPUT="$(mktemp -t airtrust-migration-preflight.XXXXXXXX)"
+trap 'rm -f "$PREFLIGHT_OUTPUT"' EXIT
 
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
@@ -79,9 +83,9 @@ fi
 echo "BACKUP_VERIFIED=$backup_file"
 
 echo "Rodando preflight de ledger (read-only)..."
-if ! node scripts/staging/migration-ledger-preflight.mjs > /tmp/airtrust-migration-preflight.json; then
+if ! node scripts/staging/migration-ledger-preflight.mjs > "$PREFLIGHT_OUTPUT"; then
   echo "ERROR: preflight retornou estado ambíguo/vermelho. Aplicação recusada — revisão humana necessária." >&2
-  cat /tmp/airtrust-migration-preflight.json >&2
+  cat "$PREFLIGHT_OUTPUT" >&2
   exit 1
 fi
 echo "PREFLIGHT_OK"
@@ -105,8 +109,8 @@ if [[ "$db_name" != "$ALLOWED_DB_NAME" || "$db_id" != "$ALLOWED_DB_ID" ]]; then
 fi
 
 echo "Aplicando $migration_arg em $db_name (uma migration, uma única invocação --remote)..."
-( cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --file="migrations/$migration_arg" )
-apply_status=$?
+apply_status=0
+( cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --file="migrations/$migration_arg" ) || apply_status=$?
 
 if [[ $apply_status -ne 0 ]]; then
   echo "MIGRATION_FAILED (esperado se esta for uma tentativa deliberada sem CRED-EXA; ver runbook)." >&2
@@ -115,7 +119,7 @@ fi
 
 echo "Validando pós-condições de $migration_arg..."
 if [[ "$migration_arg" == "0424_examiner_universal_training_fichas.sql" ]]; then
-  bash "$ROOT/scripts/staging/validate-0424-postconditions.sh" "$db_name"
+  bash "$ROOT/scripts/staging/validate-0424-postconditions.sh" --target="$db_name"
 fi
 
 echo "MIGRATION_APPLIED_AND_VALIDATED=$migration_arg"

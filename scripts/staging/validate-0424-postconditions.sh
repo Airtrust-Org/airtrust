@@ -10,7 +10,25 @@
 set -euo pipefail
 
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
-db_name="${1:-$ALLOWED_DB_NAME}"
+
+# No default target: a script that silently falls back to a real (even
+# non-production) database on a bare invocation is exactly the kind of
+# accidental-execution bug this project has been burned by before. The
+# caller (apply-approved-migrations.sh) always passes --target= explicitly;
+# a bare `bash validate-0424-postconditions.sh` with no arguments must fail
+# closed, never reach for a default.
+db_name=""
+for arg in "$@"; do
+  case "$arg" in
+    --target=*) db_name="${arg#*=}" ;;
+    *) echo "ERROR: argumento desconhecido: $arg (use --target=<db_name>)" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -z "$db_name" ]]; then
+  echo "ERROR: --target=<db_name> é obrigatório — nenhum default é usado, mesmo para leitura." >&2
+  exit 1
+fi
 
 if [[ "$db_name" != "$ALLOWED_DB_NAME" ]]; then
   echo "ERROR: validação de pós-condições só roda contra $ALLOWED_DB_NAME. Recebido: $db_name" >&2
