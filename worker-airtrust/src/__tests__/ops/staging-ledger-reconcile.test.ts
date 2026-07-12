@@ -196,11 +196,13 @@ describe('reconcile-approved-migration-ledger', () => {
     ]);
   });
 
-  it('builds an idempotent ledger registration transaction for 0421–0423', async () => {
+  it('builds idempotent remote-safe ledger registration SQL for 0421–0423', async () => {
     const dbPath = setupDb();
     const lib = await loadLib();
     const sql = lib.buildLedgerInsertSql(['id', 'name', 'applied_at'], lib.APPROVED_LEDGER_RECONCILIATIONS);
 
+    expect(sql).not.toContain('BEGIN;');
+    expect(sql).not.toContain('COMMIT;');
     runSqlite(dbPath, sql);
     runSqlite(dbPath, sql);
 

@@ -491,7 +491,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM d1_migrations WHERE name = '${migration.file}'
 );`;
   });
-  return `BEGIN;\n${statements.join('\n')}\nCOMMIT;\n`;
+  return `${statements.join('\n')}\n`;
 }
 
 export function verifyApprovedMigrationFiles() {
