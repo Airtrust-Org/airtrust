@@ -78,8 +78,9 @@ jobs:
           set -euo pipefail
 
           # Every input above is passed via `env:` and referenced as a shell
-          # variable ($VAR), never spliced with ${{ }} into this script body —
-          # GitHub Actions renders ${{ }} expressions into the YAML-generated
+          # variable ($VAR), never spliced with workflow expressions into this
+          # script body — GitHub Actions renders expressions into the
+          # YAML-generated
           # script BEFORE bash parses it, so interpolating a free-text
           # workflow_dispatch input (release_reason, approved_migrations,
           # confirmation) directly here would be a script-injection hole.
@@ -246,7 +247,7 @@ jobs:
           set -euo pipefail
           npm --prefix worker-airtrust ci
           # $APPROVED_MIGRATIONS is passed via env: above, never spliced with
-          # ${{ }} into this script — word-splitting a trusted env var is
+          # workflow expressions into this script — word-splitting a trusted env var is
           # safe; interpolating a free-text workflow_dispatch input directly
           # into a `run:` body is a script-injection hole (fixed here).
           for migration in $APPROVED_MIGRATIONS; do
