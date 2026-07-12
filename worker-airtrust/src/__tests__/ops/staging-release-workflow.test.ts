@@ -216,6 +216,40 @@ describe('scripts/staging/migration-ledger-preflight.mjs — guards', () => {
     expect(executable).not.toContain('UPDATE ');
     expect(executable).not.toContain('DELETE FROM');
   });
+
+  it('supports a narrow release scope without widening to arbitrary filenames', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/migration-ledger-preflight.mjs'), 'utf8');
+    expect(source).toContain('--scope=');
+    expect(source).toContain("file.startsWith(`${token}_`)");
+  });
+});
+
+describe('scripts/staging/reconcile-approved-migration-ledger.mjs — guards', () => {
+  it('requires an exact confirmation phrase for --apply', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'), 'utf8');
+    expect(source).toContain('AIRTRUST_STAGING_LEDGER_RECONCILIATION');
+  });
+
+  it('hard-blocks non-staging database targets through the shared allowlist', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'), 'utf8');
+    expect(source).toContain('airtrust-db-staging-baseline-20260701');
+    expect(source).toContain('7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae');
+  });
+
+  it('closes the allowlist to 0421, 0422, and 0423 only', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'), 'utf8');
+    expect(source).toContain('0421_shared_session_segment_curricula.sql');
+    expect(source).toContain('0422_modelos_sessao_requisitos.sql');
+    expect(source).toContain('0423_shared_session_multi_curricula_per_participant.sql');
+    expect(source).not.toContain('0424_examiner_universal_training_fichas.sql');
+  });
+
+  it('uses only explicit ledger INSERT statements and never migrations apply', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'), 'utf8');
+    const executable = stripComments(source);
+    expect(executable).toContain('INSERT INTO d1_migrations');
+    expect(executable).not.toMatch(/d1\s+migrations\s+apply/);
+  });
 });
 
 describe('scripts/staging/validate-0424-postconditions.sh — fails closed with no target', () => {

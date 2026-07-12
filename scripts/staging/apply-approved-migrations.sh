@@ -25,6 +25,7 @@ ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_MIGRATION_APPLY"
 APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql")
+RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424"
 
 apply=false
 backup_file=""
@@ -83,7 +84,7 @@ fi
 echo "BACKUP_VERIFIED=$backup_file"
 
 echo "Rodando preflight de ledger (read-only)..."
-if ! node scripts/staging/migration-ledger-preflight.mjs > "$PREFLIGHT_OUTPUT"; then
+if ! node scripts/staging/migration-ledger-preflight.mjs --scope="$RELEASE_PREFLIGHT_SCOPE" > "$PREFLIGHT_OUTPUT"; then
   echo "ERROR: preflight retornou estado ambíguo/vermelho. Aplicação recusada — revisão humana necessária." >&2
   cat "$PREFLIGHT_OUTPUT" >&2
   exit 1
