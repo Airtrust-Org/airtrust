@@ -217,3 +217,86 @@ describe('scripts/staging/migration-ledger-preflight.mjs — guards', () => {
     expect(executable).not.toContain('DELETE FROM');
   });
 });
+
+describe('scripts/staging/validate-0424-postconditions.sh — fails closed with no target', () => {
+  it('refuses to run with no arguments — no silent default to the real staging DB', () => {
+    const result = runScript('bash', ['scripts/staging/validate-0424-postconditions.sh']);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('--target=');
+    // Regression guard: the script must never fall back to a hardcoded
+    // ALLOWED_DB_NAME when no --target is given (this exact bug caused an
+    // unauthorized live read against real staging D1 during PR #284 review).
+    const source = readFileSync(join(ROOT, 'scripts/staging/validate-0424-postconditions.sh'), 'utf8');
+    expect(source).not.toMatch(/db_name="\$\{1:-\$ALLOWED_DB_NAME\}"/);
+  });
+
+  it('refuses a non-allowlisted --target', () => {
+    const result = runScript('bash', [
+      'scripts/staging/validate-0424-postconditions.sh',
+      '--target=airtrust-db',
+    ]);
+    expect(result.status).not.toBe(0);
+  });
+});
+
+describe('deploy-staging.yml — no free-text workflow_dispatch input spliced directly into a run: body', () => {
+  it('every `run:` step block references inputs/github context only via env:, never via ${{ }} inline', () => {
+    const workflow = readWorkflow();
+    // Split into step blocks and, for each `run: |` body, confirm it contains
+    // no `${{ inputs.` or `${{ github.` — those values must arrive as $VAR
+    // through an `env:` block instead (GitHub Actions renders ${{ }} into the
+    // generated shell script before bash parses it — splicing free-text
+    // workflow_dispatch input there is a script-injection hole).
+    const runBlocks = [...workflow.matchAll(/run:\s*\|\n([\s\S]*?)(?=\n\s{0,10}- name:|\n\s{0,8}[a-z-]+:\n|$)/g)].map(
+      (m) => m[1],
+    );
+    expect(runBlocks.length).toBeGreaterThan(5);
+    for (const block of runBlocks) {
+      expect(block).not.toMatch(/\$\{\{\s*inputs\./);
+      expect(block).not.toMatch(/\$\{\{\s*github\./);
+    }
+  });
+
+  it('declares a minimal top-level permissions block', () => {
+    const workflow = readWorkflow();
+    expect(workflow).toMatch(/^permissions:\s*\n\s*contents:\s*read/m);
+  });
+});
+
+describe('scripts/staging/smoke-examiner-training.mjs — matches the real POST /sessoes contract', () => {
+  it('uses horario_inicio/horario_fim (never hora_inicio/hora_fim) for the simple-session create call', () => {
+    // worker-airtrust/src/routes/simuladores-sessoes.ts destructures
+    // horario_inicio/horario_fim, not hora_inicio/hora_fim — the wrong field
+    // names produce a guaranteed 400 on every real run (found in PR #284
+    // review) and were silently masking scenarios C/D/G as skipped-not-failed.
+    const source = readFileSync(join(ROOT, 'scripts/staging/smoke-examiner-training.mjs'), 'utf8');
+    const bIndex = source.indexOf("'/api/simuladores/sessoes'");
+    const bBlock = source.slice(bIndex, bIndex + 500);
+    expect(bBlock).toContain('horario_inicio');
+    expect(bBlock).toContain('horario_fim');
+    expect(bBlock).not.toMatch(/[^_]hora_inicio/);
+    expect(bBlock).toContain('simulador_id');
+    expect(bBlock).toContain('instrutor_id');
+    expect(bBlock).toContain('participantes');
+  });
+
+  it('resolves the PDF ficha via agendamento_slot_id, never a nonexistent sessao_id query param', () => {
+    // GET /api/simuladores/fichas only accepts status/tipo_sessao query
+    // params (worker-airtrust/src/routes/simuladores-fichas.ts) — there is no
+    // sessao_id filter. Guessing one would silently return an unscoped list
+    // and could pick the wrong ficha's PDF (false ok:true).
+    const source = readFileSync(join(ROOT, 'scripts/staging/smoke-examiner-training.mjs'), 'utf8');
+    expect(source).not.toContain('fichas?sessao_id=');
+    expect(source).toContain('agendamento_slot_id');
+  });
+
+  it('does not assert a server-side EXA-model filter that the backend never enforces', () => {
+    // GET /api/simuladores/modelos-sessao has no program/capability filter —
+    // EXA-V0x visibility outside the examiner program is frontend-only.
+    const source = readFileSync(join(ROOT, 'scripts/staging/smoke-examiner-training.mjs'), 'utf8');
+    const eIndex = source.indexOf('E_generic_program_hides_examiner');
+    const eBlock = source.slice(Math.max(0, eIndex - 400), eIndex + 200);
+    expect(eBlock).toMatch(/ok:\s*null/);
+    expect(eBlock).toContain('semiautomated');
+  });
+});
