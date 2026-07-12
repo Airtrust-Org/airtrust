@@ -46,6 +46,8 @@ const PARTICIPANTE2_NOME = 'QA Participante Bravo';
 const AERONAVE_CODIGO = 'QA-AC-01';
 const SIMULADOR_CODIGO = 'QA-SIM-01';
 const CRED_EXA_CODIGO = 'CRED-EXA';
+const SETOR_CODIGO = 'QA-SETOR-EXA';
+const SETOR_NOME = 'Setor QA Examinador';
 
 function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
@@ -74,6 +76,24 @@ WHERE NOT EXISTS (SELECT 1 FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)} AND
 UPDATE empresas SET nome = ${e(EMPRESA_NOME)}, ativo = 1, deleted_at = NULL, updated_at = datetime('now')
 WHERE codigo = ${e(EMPRESA_CODIGO)};
 
+-- SETOR QA sintético para satisfazer o trigger trg_funcionarios_setor_required_insert.
+INSERT INTO setores (codigo, nome, descricao, responsavel, ativo, created_at, updated_at, deleted_at, empresa_id)
+SELECT ${e(SETOR_CODIGO)}, ${e(SETOR_NOME)}, 'Setor sintético para fixture QA de staging.', ${e(ADMIN_NOME)}, 1, datetime('now'), datetime('now'), NULL, emp.id
+FROM empresas emp
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+  AND NOT EXISTS (
+    SELECT 1
+    FROM setores s
+    WHERE s.codigo = ${e(SETOR_CODIGO)}
+      AND s.empresa_id = emp.id
+      AND s.deleted_at IS NULL
+  );
+
+UPDATE setores
+SET nome = ${e(SETOR_NOME)}, descricao = 'Setor sintético para fixture QA de staging.', responsavel = ${e(ADMIN_NOME)}, ativo = 1, deleted_at = NULL, updated_at = datetime('now')
+WHERE codigo = ${e(SETOR_CODIGO)}
+  AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)});
+
 -- ADMIN QA
 INSERT INTO usuarios (email, password_hash, nome, perfil, funcionario_id, deleted_at, created_at, updated_at, active)
 SELECT ${e(adminEmail)}, ${e(adminPasswordHash)}, ${e(ADMIN_NOME)}, 'ADMINISTRADOR', NULL, NULL, datetime('now'), datetime('now'), 1
@@ -89,22 +109,58 @@ WHERE u.email = ${e(adminEmail)}
   AND NOT EXISTS (SELECT 1 FROM usuarios_empresas ue WHERE ue.usuario_id = u.id AND ue.empresa_id = emp.id);
 
 -- INSTRUTOR QA (funcionário, sem CPF/e-mail real)
-INSERT INTO funcionarios (nome, matricula, cargo, status, is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at)
-SELECT ${e(INSTRUTOR_NOME)}, ${e(INSTRUTOR_CODIGO)}, 'Instrutor Examinador QA', 'ATIVO', 1, 1, 1, emp.id, datetime('now'), datetime('now'), NULL
-FROM empresas emp WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+INSERT INTO funcionarios (nome, matricula, cargo, setor, setor_id, status, is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at)
+SELECT ${e(INSTRUTOR_NOME)}, ${e(INSTRUTOR_CODIGO)}, 'Instrutor Examinador QA', ${e(SETOR_NOME)}, s.id, 'ATIVO', 1, 1, 1, emp.id, datetime('now'), datetime('now'), NULL
+FROM empresas emp
+JOIN setores s ON s.empresa_id = emp.id AND s.codigo = ${e(SETOR_CODIGO)} AND s.deleted_at IS NULL
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE matricula = ${e(INSTRUTOR_CODIGO)} AND deleted_at IS NULL);
 
+UPDATE funcionarios
+SET nome = ${e(INSTRUTOR_NOME)}, cargo = 'Instrutor Examinador QA', setor = ${e(SETOR_NOME)}, setor_id = (
+  SELECT s.id FROM setores s
+  JOIN empresas emp ON emp.id = s.empresa_id
+  WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+    AND s.codigo = ${e(SETOR_CODIGO)}
+    AND s.deleted_at IS NULL
+), status = 'ATIVO', is_instrutor = 1, is_examinador = 1, ativo = 1, deleted_at = NULL, updated_at = datetime('now')
+WHERE matricula = ${e(INSTRUTOR_CODIGO)};
+
 -- PARTICIPANTE QA 1
-INSERT INTO funcionarios (nome, matricula, cargo, status, is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at)
-SELECT ${e(PARTICIPANTE1_NOME)}, ${e(PARTICIPANTE1_CODIGO)}, 'Participante QA', 'ATIVO', 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL
-FROM empresas emp WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+INSERT INTO funcionarios (nome, matricula, cargo, setor, setor_id, status, is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at)
+SELECT ${e(PARTICIPANTE1_NOME)}, ${e(PARTICIPANTE1_CODIGO)}, 'Participante QA', ${e(SETOR_NOME)}, s.id, 'ATIVO', 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL
+FROM empresas emp
+JOIN setores s ON s.empresa_id = emp.id AND s.codigo = ${e(SETOR_CODIGO)} AND s.deleted_at IS NULL
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE matricula = ${e(PARTICIPANTE1_CODIGO)} AND deleted_at IS NULL);
 
+UPDATE funcionarios
+SET nome = ${e(PARTICIPANTE1_NOME)}, cargo = 'Participante QA', setor = ${e(SETOR_NOME)}, setor_id = (
+  SELECT s.id FROM setores s
+  JOIN empresas emp ON emp.id = s.empresa_id
+  WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+    AND s.codigo = ${e(SETOR_CODIGO)}
+    AND s.deleted_at IS NULL
+), status = 'ATIVO', is_instrutor = 0, is_examinador = 0, ativo = 1, deleted_at = NULL, updated_at = datetime('now')
+WHERE matricula = ${e(PARTICIPANTE1_CODIGO)};
+
 -- PARTICIPANTE QA 2
-INSERT INTO funcionarios (nome, matricula, cargo, status, is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at)
-SELECT ${e(PARTICIPANTE2_NOME)}, ${e(PARTICIPANTE2_CODIGO)}, 'Participante QA', 'ATIVO', 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL
-FROM empresas emp WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+INSERT INTO funcionarios (nome, matricula, cargo, setor, setor_id, status, is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at)
+SELECT ${e(PARTICIPANTE2_NOME)}, ${e(PARTICIPANTE2_CODIGO)}, 'Participante QA', ${e(SETOR_NOME)}, s.id, 'ATIVO', 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL
+FROM empresas emp
+JOIN setores s ON s.empresa_id = emp.id AND s.codigo = ${e(SETOR_CODIGO)} AND s.deleted_at IS NULL
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE matricula = ${e(PARTICIPANTE2_CODIGO)} AND deleted_at IS NULL);
+
+UPDATE funcionarios
+SET nome = ${e(PARTICIPANTE2_NOME)}, cargo = 'Participante QA', setor = ${e(SETOR_NOME)}, setor_id = (
+  SELECT s.id FROM setores s
+  JOIN empresas emp ON emp.id = s.empresa_id
+  WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+    AND s.codigo = ${e(SETOR_CODIGO)}
+    AND s.deleted_at IS NULL
+), status = 'ATIVO', is_instrutor = 0, is_examinador = 0, ativo = 1, deleted_at = NULL, updated_at = datetime('now')
+WHERE matricula = ${e(PARTICIPANTE2_CODIGO)};
 
 -- AERONAVE/EQUIPAMENTO QA
 INSERT INTO aeronaves (codigo, modelo, fabricante, status, empresa_id, created_at, updated_at, deleted_at)
