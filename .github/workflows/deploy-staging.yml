@@ -306,13 +306,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -q "name = \"${ALLOWED_STAGING_WORKER_NAME}\"" worker-airtrust/wrangler.staging.toml
-          grep -q "database_name = \"${ALLOWED_STAGING_DB_NAME}\"" worker-airtrust/wrangler.staging.toml
-          grep -q "database_id = \"${ALLOWED_STAGING_DB_ID}\"" worker-airtrust/wrangler.staging.toml
-          if grep -q "${BLOCKED_PRODUCTION_DB_ID}" worker-airtrust/wrangler.staging.toml; then
-            echo "Patched config references the production database ID. Aborting." >&2
-            exit 1
-          fi
+          python3 scripts/staging/assert-staging-worker-targets.py \
+            --config worker-airtrust/wrangler.staging.toml \
+            --allowed-worker-name "${ALLOWED_STAGING_WORKER_NAME}" \
+            --blocked-production-worker-name "airtrust-api-production" \
+            --allowed-db-name "${ALLOWED_STAGING_DB_NAME}" \
+            --allowed-db-id "${ALLOWED_STAGING_DB_ID}" \
+            --blocked-production-db-id "${BLOCKED_PRODUCTION_DB_ID}" \
+            --allowed-bucket-name "airtrust-storage-staging" \
+            --blocked-production-bucket-name "airtrust-storage" \
+            --blocked-production-host "${BLOCKED_PRODUCTION_HOST}"
 
       - name: Deploy Worker (staging)
         shell: bash

@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '../../../..');
@@ -77,6 +78,12 @@ describe('deploy-staging.yml — static guards', () => {
     expect(workflow).not.toMatch(/--branch=production/);
   });
 
+  it('validates staging worker targets with a structural parser instead of grepping the whole TOML file', () => {
+    expect(workflow).toContain('python3 scripts/staging/assert-staging-worker-targets.py');
+    expect(workflow).not.toContain('grep -q "name = \\"${ALLOWED_STAGING_WORKER_NAME}\\"" worker-airtrust/wrangler.staging.toml');
+    expect(workflow).not.toContain('grep -q "database_id = \\"${ALLOWED_STAGING_DB_ID}\\"" worker-airtrust/wrangler.staging.toml');
+  });
+
   it('uses the staging GitHub environment for every write-capable job', () => {
     const jobNames = ['backup', 'preflight', 'apply-migrations', 'deploy-worker', 'deploy-frontend', 'smoke'];
     const jobBoundaries = jobNames
@@ -103,6 +110,234 @@ describe('deploy-staging.yml — static guards', () => {
     for (const token of ['github.sha', 'github.run_id', 'github.actor', 'worker_version_id', 'rollback target']) {
       expect(summaryJob).toContain(token);
     }
+  });
+});
+
+describe('scripts/staging/assert-staging-worker-targets.py — resolved target guards', () => {
+  const allowedArgs = [
+    'scripts/staging/assert-staging-worker-targets.py',
+    '--allowed-worker-name=airtrust-api-staging',
+    '--blocked-production-worker-name=airtrust-api-production',
+    '--allowed-db-name=airtrust-db-staging-baseline-20260701',
+    '--allowed-db-id=bf9963f4-eb12-439b-a830-20bbf577ac22',
+    '--blocked-production-db-id=7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae',
+    '--allowed-bucket-name=airtrust-storage-staging',
+    '--blocked-production-bucket-name=airtrust-storage',
+    '--blocked-production-host=api.airtrust.online',
+  ];
+
+  function runGuard(config: string) {
+    const dir = mkdtempSync(join(tmpdir(), 'airtrust-staging-guard-'));
+    const configPath = join(dir, 'wrangler.toml');
+    writeFileSync(configPath, config, 'utf8');
+    try {
+      return runScript('python3', [...allowedArgs, `--config=${configPath}`]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('passes when the file contains [env.production] but the resolved target is env.staging', () => {
+    const result = runGuard(`
+name = "airtrust-api"
+
+[env.staging]
+name = "airtrust-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-staging-baseline-20260701"
+database_id = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+
+[[env.staging.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-staging"
+preview_bucket_name = "airtrust-storage-staging"
+
+[env.production]
+name = "airtrust-api-production"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db"
+database_id = "7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
+
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage"
+preview_bucket_name = "airtrust-storage"
+`);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Staging deployment target validated');
+  });
+
+  it('passes for an already resolved staging-only config', () => {
+    const result = runGuard(`
+name = "airtrust-api-staging"
+
+[vars]
+ENVIRONMENT = "staging"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-staging-baseline-20260701"
+database_id = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-staging"
+preview_bucket_name = "airtrust-storage-staging"
+`);
+    expect(result.status).toBe(0);
+  });
+
+  it('fails when the effective staging DB points at production', () => {
+    const result = runGuard(`
+[env.staging]
+name = "airtrust-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-staging-baseline-20260701"
+database_id = "7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
+
+[[env.staging.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-staging"
+preview_bucket_name = "airtrust-storage-staging"
+`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('production database ID');
+  });
+
+  it('fails when the effective worker target is production', () => {
+    const result = runGuard(`
+[env.staging]
+name = "airtrust-api-production"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-staging-baseline-20260701"
+database_id = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+
+[[env.staging.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-staging"
+preview_bucket_name = "airtrust-storage-staging"
+`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('worker name resolves to production');
+  });
+
+  it('fails when the effective staging config targets the production API host', () => {
+    const result = runGuard(`
+[env.staging]
+name = "airtrust-api-staging"
+routes = [{ pattern = "api.airtrust.online/*", zone_name = "airtrust.online" }]
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-staging-baseline-20260701"
+database_id = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+
+[[env.staging.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-staging"
+preview_bucket_name = "airtrust-storage-staging"
+`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('production API host');
+  });
+
+  it('fails closed when staging is missing or undefined', () => {
+    const result = runGuard(`
+[env.production]
+name = "airtrust-api-production"
+`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('[env.staging] is missing or empty');
+  });
+
+  it('cannot be bypassed by staging-looking comments', () => {
+    const result = runGuard(`
+# [env.staging]
+# name = "airtrust-api-staging"
+# [env.staging.vars]
+# ENVIRONMENT = "staging"
+# [[env.staging.d1_databases]]
+# binding = "DB"
+# database_name = "airtrust-db-staging-baseline-20260701"
+# database_id = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+# [[env.staging.r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "airtrust-storage-staging"
+# preview_bucket_name = "airtrust-storage-staging"
+
+[env.production]
+name = "airtrust-api-production"
+`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('[env.staging] is missing or empty');
+  });
+
+  it('cannot be bypassed by a staging-looking unused env.production block', () => {
+    const result = runGuard(`
+[env.staging]
+name = "airtrust-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "production"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db"
+database_id = "7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
+
+[[env.staging.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage"
+preview_bucket_name = "airtrust-storage"
+
+[env.production]
+name = "airtrust-api-staging"
+
+[env.production.vars]
+ENVIRONMENT = "staging"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-staging-baseline-20260701"
+database_id = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-staging"
+preview_bucket_name = "airtrust-storage-staging"
+`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('vars.ENVIRONMENT resolves to production');
+  });
+
+  it('keeps the allowlist narrow instead of matching any staging-like string', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/assert-staging-worker-targets.py'), 'utf8');
+    expect(source).toContain('blocked_production_worker_name');
+    expect(source).toContain('production database ID');
+    expect(source).not.toMatch(/contains\(['"]staging['"]\)/);
   });
 });
 
