@@ -166,6 +166,14 @@ describe('scripts/staging/seed-qa-examiner-training.mjs — guards', () => {
     expect(executable).not.toMatch(/costa do sol/i);
     expect(source).toContain('AirTrust Staging Examiner QA');
   });
+
+  it('creates a QA setor fixture and binds seeded funcionarios to setor_id', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/seed-qa-examiner-training.mjs'), 'utf8');
+    const executable = stripComments(source);
+    expect(executable).toContain('INSERT INTO setores');
+    expect(executable).toContain('QA-SETOR-EXA');
+    expect(executable).toContain('setor_id');
+  });
 });
 
 describe('scripts/staging/apply-approved-migrations.sh — guards', () => {
