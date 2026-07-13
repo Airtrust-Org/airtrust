@@ -1,0 +1,4 @@
+
+> mocha-app@0.0.0 typecheck:worker
+> cd worker-airtrust && npx tsc --noEmit
+

@@ -1,0 +1,54 @@
+codigo_sessao;veredito;pronto_para_implementacao;motivo;acao
+A139-I-01/12;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-I-02/12;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+A139-I-03/12;REDESENHO;NAO;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);BLOQUEAR_TEMPORARIAMENTE
+A139-I-04/12;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+A139-I-05/12;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+A139-I-06/12;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+A139-I-07/12;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+A139-I-08/12;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-I-09/12;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-I-10/12;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-I-11/12;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+A139-I-12/12;REDESENHO;NAO;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);BLOQUEAR_TEMPORARIAMENTE
+A139-NOT-01;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+A139-NOT-02;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+A139-P-01/04-C1;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-P-01/04-C2;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-P-01/04-C3;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-P-02/04-C1;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-P-02/04-C2;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-P-02/04-C3;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+A139-P-03/04-OFFSHOR;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+A139-P-04/04-CHECK;AJUSTE_PONTUAL;NAO;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);BLOQUEAR_TEMPORARIAMENTE
+A139-REQ-01;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+A139-S-01/02;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+A139-S-02/02;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+EXA-01/02;EVIDENCIA_INSUFICIENTE;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+EXA-02/02;EVIDENCIA_INSUFICIENTE;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+PILOT-MODELO-001;BLOQUEIO_PONTUAL;NAO;nenhuma -- stub sem conteudo;EXCLUIR_DO_ESCOPO
+S76-NOT-01;AJUSTE_PONTUAL;SIM;OPS-NOT-X1 (posicao 7) substituido por S76-LOFT-33 (mesma posicao, mesmos 18 itens, mesma duracao) — resolve tag cross-fleet e item sub-especificado. Nota de adaptacao onshore/helideck a registrar em observacoes do vinculo, nao bloqueante.;IMPLEMENTAR
+S76-NOT-02;REDESENHO;SIM;OPS-NOT-X1 (posicao 6) substituido por S76-LOFT-33 (mesma posicao, mesmos 18 itens, S76-LOFT-34 intocado). Risco MEDIO (6 sessoes reais + 1 qualificacao emitida, 0 checks formais) exige nota de rastreabilidade/changelog concreta na implementacao, nao bloqueia.;IMPLEMENTAR
+S76-P-01/04-C1;MANTER_JUSTIFICADO;SIM;correcao documental explicita (descricao);IMPLEMENTAR
+S76-P-01/04-C2;MANTER_JUSTIFICADO;SIM;correcao documental explicita (descricao);IMPLEMENTAR
+S76-P-01/04-C3;MANTER_JUSTIFICADO;SIM;correcao documental explicita (descricao);IMPLEMENTAR
+S76-P-02/04-C1;MANTER_JUSTIFICADO;SIM;correcao documental explicita (descricao);IMPLEMENTAR
+S76-P-02/04-C2;MANTER_JUSTIFICADO;SIM;correcao documental explicita (descricao);IMPLEMENTAR
+S76-P-02/04-C3;MANTER_JUSTIFICADO;SIM;correcao documental explicita (descricao);IMPLEMENTAR
+S76-REQ-01;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+SK76-I-01/12;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+SK76-I-02/12;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+SK76-I-03/12;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+SK76-I-04/12;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+SK76-I-05/12;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+SK76-I-06/12;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+SK76-I-07/12;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+SK76-I-08/12;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+SK76-I-09/12;MANTER_JUSTIFICADO;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
+SK76-I-10/12;AJUSTE_PONTUAL;SIM;ajuste de nome/descricao/duracao ou pequena adicao/substituicao (ver 01A/01B);IMPLEMENTAR
+SK76-I-11/12;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+SK76-I-12/12;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+SK76-P-CHECK;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+SK76-S-01/02;REDESENHO;SIM;"OPS-NOT-X1 (posicao 8) removido por redundancia confirmada com S76-LOFT-23/33 ja adicionados pela composicao Sonnet anterior; S76-ILS-00 reintroduzido (posicao 17) para preservar 18 itens e cobertura instrumental. Nunca usada (risco BAIXO).";IMPLEMENTAR
+SK76-S-02/02;REDESENHO;SIM;composicao tecnica redesenhada (ver 12_MATRIZ e 01A/01B/04/05/08);IMPLEMENTAR
+TRE-INST;EVIDENCIA_INSUFICIENTE;NAO;nenhuma;PRESERVAR_SEM_ALTERACAO
