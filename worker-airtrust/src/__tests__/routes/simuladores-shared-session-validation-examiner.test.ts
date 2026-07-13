@@ -16,53 +16,69 @@ function buildDb(options: {
   empresaId: number;
   simuladorAeronave?: string | null;
 }) {
+  // Default: simuladores table has empresa_id (tenant-scoped schema).
+  // Set hasEmpresaId to false to simulate global schema (no empresa_id column).
+  const hasEmpresaId = (options as any).hasEmpresaId !== false;
+
   return {
-    prepare: vi.fn((query: string) => ({
-      bind: (...args: unknown[]) => ({
-        first: async () => {
-          if (query.includes('COUNT(DISTINCT id) AS total') && query.includes('FROM funcionarios')) {
-            // participant-ownership count: exactly 1 distinct participant, always in-tenant here
-            return { total: 1 };
-          }
-          if (query.includes('COALESCE(aeronave_codigo, codigo_aeronave, tipo, modelo') && query.includes('FROM simuladores')) {
-            // getSimuladorModeloAeronave: the simulator's own aircraft model
-            // (AW139, SK76, or any future one) — irrelevant to whether a
-            // universal (tipo_aeronave/modelo_aeronave = NULL) modelo is
-            // accepted, since the compatibility check only fires when the
-            // modelo itself pins a specific aircraft.
-            return { modelo_aeronave: options.simuladorAeronave ?? null };
-          }
-          if (query.includes('FROM funcionarios') && query.includes('WHERE id = ?')) {
-            // instrutor single-row ownership check
-            return { id: args[0] };
-          }
-          if (query.includes('FROM simuladores')) {
-            return { id: args[0] };
-          }
-          return null;
-        },
-        all: async () => {
-          if (query.includes('FROM modelos_sessao ms')) {
-            return {
-              results: [
-                {
-                  id: options.modeloId,
-                  codigo: options.modeloCodigo,
-                  nome: options.modeloCodigo,
-                  ativo: 1,
-                  tipo: 'RECORRENTE',
-                  modelo_aeronave: null,
-                  tipo_sessao_codigo: 'EXA',
-                  gera_qualificacao: 0,
-                  qualificacao_tipo_id: null,
-                },
-              ],
-            };
-          }
-          return { results: [] };
-        },
-      }),
-    })),
+    prepare: vi.fn((query: string) => {
+      // Direct .all() — used by simuladoresHasEmpresaId (PRAGMA without .bind())
+      const directAll = async () => {
+        if (query.includes('PRAGMA table_info(simuladores)')) {
+          return {
+            results: hasEmpresaId
+              ? [{ name: 'id' }, { name: 'nome' }, { name: 'modelo' }, { name: 'empresa_id' }, { name: 'deleted_at' }]
+              : [{ name: 'id' }, { name: 'nome' }, { name: 'modelo' }, { name: 'deleted_at' }],
+          };
+        }
+        return { results: [] };
+      };
+
+      return {
+        all: directAll,
+        first: async () => null,
+        bind: (...args: unknown[]) => ({
+          first: async () => {
+            if (query.includes('COUNT(DISTINCT id) AS total') && query.includes('FROM funcionarios')) {
+              // participant-ownership count: exactly 1 distinct participant, always in-tenant here
+              return { total: 1 };
+            }
+            if (query.includes('COALESCE(aeronave_codigo, codigo_aeronave, tipo, modelo') && query.includes('FROM simuladores')) {
+              // getSimuladorModeloAeronave: the simulator's own aircraft model
+              return { modelo_aeronave: options.simuladorAeronave ?? null };
+            }
+            if (query.includes('FROM funcionarios') && query.includes('WHERE id = ?')) {
+              // instrutor single-row ownership check
+              return { id: args[0] };
+            }
+            if (query.includes('FROM simuladores')) {
+              return { id: args[0] };
+            }
+            return null;
+          },
+          all: async () => {
+            if (query.includes('FROM modelos_sessao ms')) {
+              return {
+                results: [
+                  {
+                    id: options.modeloId,
+                    codigo: options.modeloCodigo,
+                    nome: options.modeloCodigo,
+                    ativo: 1,
+                    tipo: 'RECORRENTE',
+                    modelo_aeronave: null,
+                    tipo_sessao_codigo: 'EXA',
+                    gera_qualificacao: 0,
+                    qualificacao_tipo_id: null,
+                  },
+                ],
+              };
+            }
+            return { results: [] };
+          },
+        }),
+      };
+    }),
   } as unknown as D1Database;
 }
 
