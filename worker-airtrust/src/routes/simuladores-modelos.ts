@@ -21,7 +21,6 @@ import {
   audit,
   filtrarChecksCompativeisComModelo,
   listarTiposCheckPorIds,
-  modelosSessaoManobrasHasTripulante,
   normalizeModeloAeronave,
 } from './simuladores-shared';
 
@@ -730,15 +729,13 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
-    const hasTripulante = await modelosSessaoManobrasHasTripulante(c.env.DB);
-    const tripulanteSql = hasTripulante ? "COALESCE(msm.tripulante, 'AB')" : "'AB'";
     const result = await c.env.DB.prepare(
       `SELECT 
         msm.id,
         msm.ordem,
         msm.obrigatoria,
         msm.observacoes,
-        ${tripulanteSql} as tripulante,
+        COALESCE(msm.tripulante, 'AB') as tripulante,
         m.id as manobra_id,
         m.codigo as manobra_codigo,
         m.nome as manobra_nome,
