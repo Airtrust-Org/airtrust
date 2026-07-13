@@ -63,7 +63,7 @@ const FUNCIONARIOS = {
 const MODELOS_PER = {
   success: true,
   data: [
-    { id: 45, codigo: 'S76-P-01/04-C1', nome: 'SK76 - PERIÓDICO - 01/04 - CICLO 1: VFR', tipo_sessao_id: 9, modelo_aeronave: 'SK76' },
+    { id: 45, codigo: 'S76-P-01/04-C1', nome: 'Ciclo 1 / VFR-emergências', tipo_sessao_id: 9, modelo_aeronave: 'SK76' },
   ],
 };
 const MODELOS_PER_AND_EXAMINER = {
