@@ -1060,7 +1060,7 @@ app.post('/sessoes', async (c) => {
               instrutor_id,
               examinador_id || instrutor_id,
               especial.modelo,
-              tipo_aeronave,
+              tipo_aeronave || null,
               data,
               tplMap.get(especial.modelo) ?? null,
               empresaId,
@@ -1135,7 +1135,7 @@ app.post('/sessoes', async (c) => {
           part.funcionario_id,
           instrutor_id,
           tipo_sessao,
-          tipo_aeronave,
+          tipo_aeronave || null,
           data,
           empresaId,
         )
@@ -1167,7 +1167,7 @@ app.post('/sessoes', async (c) => {
              AND ms.empresa_id = ?
            LIMIT 1`,
         )
-          .bind(empresaId, tipo_sessao, tipo_aeronave, empresaId)
+          .bind(empresaId, tipo_sessao, tipo_aeronave || null, empresaId)
           .first();
 
         if (modeloEncontrado) {

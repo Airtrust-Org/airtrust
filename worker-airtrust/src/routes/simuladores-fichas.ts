@@ -33,6 +33,7 @@ import {
   getNotechsStatus,
   isFichaStatusFinalizado,
 } from '../constants/notechs';
+import { getExaminerEventSessionDefinition } from '../../../src/shared/simuladores/examiner-event-sessions';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
 import {
   gerarQualificacaoDaFicha,
@@ -691,16 +692,24 @@ app.get('/fichas/:id', async (c) => {
 
     if (f.atribuicao_curricular_id) {
       const horasCompartilhadas = await c.env.DB.prepare(
-        `SELECT
+        `WITH assignment_segments AS (
+           SELECT DISTINCT ssa.segmento_id
+           FROM simulador_segmento_atribuicoes ssa
+           INNER JOIN simulador_agendamento_segmentos sas
+             ON sas.id = ssa.segmento_id
+            AND sas.deleted_at IS NULL
+           WHERE ssa.atribuicao_curricular_id = ?
+             AND ssa.empresa_id = ?
+             AND ssa.deleted_at IS NULL
+             AND sas.agendamento_id = ?
+         )
+         SELECT
            COALESCE(SUM(ssp.duracao_minutos), 0) AS total_minutos,
            COALESCE(SUM(CASE WHEN ssp.funcao = 'PF' THEN ssp.duracao_minutos ELSE 0 END), 0) AS pf_minutos,
            COALESCE(SUM(CASE WHEN ssp.funcao = 'PM' THEN ssp.duracao_minutos ELSE 0 END), 0) AS pm_minutos
          FROM simulador_segmento_participantes ssp
-         INNER JOIN simulador_agendamento_segmentos sas
-           ON sas.id = ssp.segmento_id
-          AND sas.deleted_at IS NULL
-         WHERE sas.agendamento_id = ?
-           AND ssp.deleted_at IS NULL
+         WHERE ssp.deleted_at IS NULL
+           AND ssp.segmento_id IN (SELECT segmento_id FROM assignment_segments)
            AND ssp.participante_id IN (
              SELECT id
              FROM sessoes_participantes
@@ -709,7 +718,13 @@ app.get('/fichas/:id', async (c) => {
                AND deleted_at IS NULL
            )`,
       )
-        .bind(f.agendamento_slot_id, f.agendamento_slot_id, f.colaborador_id_aluno)
+        .bind(
+          f.atribuicao_curricular_id,
+          tenantEmpresaId,
+          f.agendamento_slot_id,
+          f.agendamento_slot_id,
+          f.colaborador_id_aluno,
+        )
         .first<{ total_minutos: number; pf_minutos: number; pm_minutos: number }>()
         .catch(() => null);
 
@@ -724,14 +739,19 @@ app.get('/fichas/:id', async (c) => {
     const carga_horaria_pf = (cargaPfMinutos / 60).toFixed(1);
     const carga_horaria_pm = (cargaPmMinutos / 60).toFixed(1);
 
-    const fichaTipoCodigo = String(f.ficha_tipo_sessao || f.tipo_sessao || '').toUpperCase();
+    const fichaTipoCodigo = String(
+      f.template_codigo || f.ficha_tipo_sessao || f.tipo_sessao || '',
+    ).toUpperCase();
     const isFichaEspecial = fichaTipoCodigo === 'CRED-EXA' || fichaTipoCodigo === 'TRE-INST';
+    const examinerDefinition = getExaminerEventSessionDefinition(fichaTipoCodigo);
     const nomeModeloResolvido = f.template_tema || f.ficha_modelo_nome || null;
 
     // Para fichas especiais, o nome do modelo salvo no banco é a fonte de verdade.
-    let sessao_titulo = isFichaEspecial
-      ? nomeModeloResolvido || f.sessao_nome || 'Sessão de Treinamento'
-      : f.sessao_nome || nomeModeloResolvido || 'Sessão de Treinamento';
+    let sessao_titulo = examinerDefinition
+      ? examinerDefinition.fullTitle
+      : isFichaEspecial
+        ? nomeModeloResolvido || f.sessao_nome || 'Sessão de Treinamento'
+        : f.sessao_nome || nomeModeloResolvido || 'Sessão de Treinamento';
     if (!sessao_titulo || sessao_titulo === 'Sessão de Treinamento') {
       const partes = [f.tipo_sessao];
       if (f.template_codigo) partes.push(f.template_codigo);
@@ -742,6 +762,7 @@ app.get('/fichas/:id', async (c) => {
     const ficha = {
       id: f.id,
       uuid: f.uuid,
+      sessao_codigo: f.template_codigo || f.ficha_tipo_sessao || null,
       sessao_titulo,
       tipo_sessao: f.tipo_sessao || f.ficha_tipo_sessao || '',
       tripulante_nome: f.tripulante_nome,
@@ -981,10 +1002,14 @@ app.post('/fichas/:id/pdf', async (c) => {
       .bind(fichaId)
       .all();
 
-    const carga_horaria_total = f.duracao_minutos
-      ? `${(f.duracao_minutos / 60).toFixed(1)}h`
-      : 'N/A';
-    const sessao_titulo = `${f.tipo_sessao} - ${f.simulador_nome}`;
+    const sessaoCodigo = String(f.template_codigo || f.tipo_sessao || '').toUpperCase();
+    const examinerDefinition = getExaminerEventSessionDefinition(sessaoCodigo);
+    const carga_horaria_total = examinerDefinition
+      ? `${examinerDefinition.durationMinutes} minutos`
+      : f.duracao_minutos
+        ? `${(f.duracao_minutos / 60).toFixed(1)}h`
+        : 'N/A';
+    const sessao_titulo = examinerDefinition?.fullTitle || `${f.tipo_sessao} - ${f.simulador_nome}`;
     const dataSessaoFonte = f.sessao_data || f.ficha_data_sessao;
     const dataSessaoIso = extractIsoDateOnly(dataSessaoFonte);
     const dataSessaoPtBr = formatIsoDateOnlyPtBr(dataSessaoFonte);
@@ -998,7 +1023,10 @@ app.post('/fichas/:id/pdf', async (c) => {
 
     const dadosPDF = {
       fichaId: f.id.toString(),
+      sessao_codigo: sessaoCodigo || undefined,
       sessao_titulo,
+      sessao_titulo_linha1: examinerDefinition?.headerTitle,
+      sessao_titulo_linha2: examinerDefinition?.headerSubtitle,
       tripulante_nome: f.tripulante_nome,
       tripulante_codigo_anac: f.tripulante_codigo_anac || 'N/A',
       tripulante_funcao: f.tripulante_funcao || 'ALUNO',

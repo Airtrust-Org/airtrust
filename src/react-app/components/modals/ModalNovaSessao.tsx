@@ -1097,6 +1097,7 @@ export default function ModalNovaSessao({
 
     if (includeFilters) {
       const tipoSessaoObj = tiposSessao.find((item) => item.id === tipoSessaoIdParam);
+      params.set('ativo', '1');
       params.set('tipo_sessao_id', String(tipoSessaoIdParam));
       if (tipoSessaoObj?.codigo) params.set('tipo_sessao_codigo', tipoSessaoObj.codigo);
       if (tipoSessaoObj?.nome) params.set('tipo_sessao_nome', tipoSessaoObj.nome);

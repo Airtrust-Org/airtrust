@@ -530,6 +530,7 @@ app.get('/modelos-sessao', async (c) => {
       .toUpperCase();
     const tipoSessaoNome = String(c.req.query('tipo_sessao_nome') || '').trim().toUpperCase();
     const tipo = c.req.query('tipo'); // SIMULADOR | AERONAVE
+    const ativo = c.req.query('ativo');
     const qualificacaoTipoIdRaw = c.req.query('qualificacao_tipo_id');
     const qualificacaoTipoId = qualificacaoTipoIdRaw
       ? Number(qualificacaoTipoIdRaw)
@@ -625,6 +626,12 @@ app.get('/modelos-sessao', async (c) => {
       } else {
         query += ' AND 1 = 0';
       }
+    }
+
+    if (ativo === '1') {
+      query += ' AND COALESCE(ms.ativo, 1) = 1';
+    } else if (ativo === '0') {
+      query += ' AND COALESCE(ms.ativo, 1) = 0';
     }
 
     query += ' ORDER BY ms.codigo';

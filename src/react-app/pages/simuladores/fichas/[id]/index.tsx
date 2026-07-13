@@ -48,6 +48,10 @@ import {
   gerarPDFFichaCliente,
   type FichaPDFData,
 } from '@/react-app/services/pdf-ficha-client';
+import {
+  getExaminerEventSessionDefinition,
+  splitExaminerTechnicalBlocks,
+} from '@/shared/simuladores/examiner-event-sessions';
 import { openPreviewWindow } from '@/react-app/utils/pdfPreview';
 import AssinaturaModal from '@/react-app/components/AssinaturaModal';
 import ModalNotechsReferencia from '../components/ModalNotechsReferencia';
@@ -76,6 +80,7 @@ interface CheckSessao {
 
 interface FichaDetalhada {
   id: number;
+  sessao_codigo?: string | null;
   participante_nome: string;
   participante_funcao: string;
   instrutor_id?: number | null;
@@ -359,6 +364,7 @@ export default function FichaDetalhe() {
             : '';
           const normalizada = {
             ...apiData,
+            sessao_codigo: apiData.sessao_codigo || null,
             participante_nome: apiData.tripulante_nome,
             participante_funcao: apiData.tripulante_funcao || 'PIC',
             sessao_modelo: apiData.sessao_titulo,
@@ -959,7 +965,11 @@ export default function FichaDetalhe() {
   const { tecnicas: manobrasTecnicas, notechs: manobrasNotechs } = splitManobrasNotechs(
     ficha?.manobras || [],
   );
-  // Dividir manobras técnicas em duas colunas para preservar legibilidade A4.
+  const examinerDefinition = getExaminerEventSessionDefinition(ficha?.sessao_codigo);
+  const examinerTechnicalBlocks = splitExaminerTechnicalBlocks(
+    ficha?.sessao_codigo,
+    manobrasTecnicas,
+  );
   const manobrasEsquerda = manobrasTecnicas.filter((m) => m.ordem >= 1 && m.ordem <= 11);
   const manobrasDireita = manobrasTecnicas.filter((m) => m.ordem >= 12 && m.ordem <= 22);
   const fichaFinalizada = STATUS_FICHA_FINALIZADA.has(normalizarPerfil(ficha?.status));
@@ -980,7 +990,12 @@ export default function FichaDetalhe() {
     <AppLayout>
       <PageHeader
         className="mb-6"
-        title={ficha?.sessao_modelo || ficha?.sessao_titulo || `Ficha #${ficha?.id || ''}`}
+        title={
+          examinerDefinition?.headerTitle ||
+          ficha?.sessao_modelo ||
+          ficha?.sessao_titulo ||
+          `Ficha #${ficha?.id || ''}`
+        }
       />
       <div className="space-y-4">
         {loading ? (
@@ -1075,25 +1090,41 @@ export default function FichaDetalhe() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div>
-                  <p className="text-xs text-slate-500 uppercase">Participante</p>
+                  <p className="text-xs text-slate-500 uppercase">Participante Avaliado</p>
                   <p className="text-sm font-semibold text-slate-900">{ficha.participante_nome}</p>
                   <span className="text-xs px-2 py-0.5 rounded bg-primary-100 text-primary-700">
                     {ficha.participante_funcao}
                   </span>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 uppercase">Instrutor</p>
+                  <p className="text-xs text-slate-500 uppercase">Instrutor Supervisor</p>
                   <p className="text-sm font-semibold text-slate-900">{ficha.instrutor_nome}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 uppercase">Simulador</p>
+                  <p className="text-xs text-slate-500 uppercase">Equipamento Utilizado</p>
                   <p className="text-sm font-semibold text-slate-900">{ficha.simulador_codigo}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase">Sessão/Modelo</p>
-                  <p className="text-sm font-semibold text-slate-900">{ficha.sessao_modelo}</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {examinerDefinition?.fullTitle || ficha.sessao_modelo}
+                  </p>
+                  {examinerDefinition ? (
+                    <p className="mt-1 text-xs text-slate-500">{ficha.sessao_codigo}</p>
+                  ) : null}
                 </div>
               </div>
+              {examinerDefinition ? (
+                <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {examinerDefinition.headerTitle}
+                  </p>
+                  <p className="text-sm text-slate-700">{examinerDefinition.headerSubtitle}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Duração curricular: {examinerDefinition.durationMinutes} minutos
+                  </p>
+                </div>
+              ) : null}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <p className="text-xs text-slate-500 uppercase">Data</p>
@@ -1110,7 +1141,9 @@ export default function FichaDetalhe() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 uppercase">Carga Horária</p>
+                  <p className="text-xs text-slate-500 uppercase">
+                    {examinerDefinition ? 'Duração Curricular' : 'Carga Horária'}
+                  </p>
                   <p className="text-sm font-semibold text-slate-900">
                     {(() => {
                       const tipoSessao = (ficha.tipo_sessao || '').toUpperCase();
@@ -1136,8 +1169,83 @@ export default function FichaDetalhe() {
               </div>
             </div>
             <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
-              {/* Grade de 22 Manobras (11 + 11) */}
               <h3 className="text-lg font-bold text-slate-900 mb-4">Avaliação de Manobras</h3>
+              {examinerTechnicalBlocks ? (
+                <div className="space-y-4">
+                  {examinerTechnicalBlocks.map((block) => (
+                    <div key={block.definition.id} className="rounded-lg border border-slate-200">
+                      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {block.definition.title}
+                        </p>
+                      </div>
+                      <div className="space-y-3 p-4">
+                        {block.items.map((manobra) => (
+                          <div
+                            key={manobra.id}
+                            className={`flex items-center gap-3 rounded-md border p-3 ${
+                              manobra.tripulante === 'A'
+                                ? 'border-blue-200 bg-blue-50'
+                                : manobra.tripulante === 'B'
+                                  ? 'border-orange-200 bg-orange-50'
+                                  : 'border-slate-200'
+                            }`}
+                          >
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm">
+                              {manobra.ordem}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900 truncate">
+                                {manobra.nome || manobra.descricao}
+                              </p>
+                              <p className="text-xs text-slate-500">{manobra.codigo}</p>
+                              {!isEditMode && manobra.observacoes?.trim() ? (
+                                <p className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-600">
+                                  {manobra.observacoes}
+                                </p>
+                              ) : null}
+                            </div>
+                            <span
+                              className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                manobra.tripulante === 'A'
+                                  ? 'bg-blue-100 text-blue-700 border-blue-300'
+                                  : manobra.tripulante === 'B'
+                                    ? 'bg-orange-100 text-orange-700 border-orange-300'
+                                    : 'bg-purple-100 text-purple-700 border-purple-300'
+                              }`}
+                            >
+                              {manobra.tripulante || 'AB'}
+                            </span>
+                            {isEditMode ? (
+                              <select
+                                value={getNotaSelectValue(manobra.nota)}
+                                onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
+                                className={`w-24 rounded-md border px-2 py-1 text-sm ${
+                                  manobra.nota === null
+                                    ? 'border-slate-300 bg-white text-slate-700'
+                                    : getNotaBadgeClass(manobra.nota)
+                                }`}
+                              >
+                                <option value="">Selecione</option>
+                                <option value="NR">NR</option>
+                                {Array.from({ length: 10 }, (_, i) => i + 1).map((nota) => (
+                                  <option key={nota} value={String(nota)}>
+                                    {nota}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className={getNotaBadgeClass(manobra.nota)}>
+                                {getNotaLabel(manobra.nota)}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Coluna Esquerda (1-11) */}
                 <div className="space-y-3">
@@ -1275,6 +1383,7 @@ export default function FichaDetalhe() {
                   ))}
                 </div>
               </div>
+              )}
             </div>
             {manobrasNotechs.length > 0 && (
               <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
@@ -2036,7 +2145,10 @@ export default function FichaDetalhe() {
                       // Preparar dados para o PDF
                       const dadosPDF: FichaPDFData = {
                         fichaId: ficha.id,
+                        sessao_codigo: ficha.sessao_codigo || undefined,
                         sessao_titulo: ficha.sessao_modelo || 'Sessão de Treinamento',
+                        sessao_titulo_linha1: examinerDefinition?.headerTitle,
+                        sessao_titulo_linha2: examinerDefinition?.headerSubtitle,
                         tripulante_nome: ficha.participante_nome,
                         tripulante_funcao: ficha.participante_funcao,
                         tripulante_codigo_anac: ficha.tripulante_codigo_anac || '',

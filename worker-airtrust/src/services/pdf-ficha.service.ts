@@ -19,6 +19,10 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import {
+  getExaminerEventSessionDefinition,
+  splitExaminerTechnicalBlocks,
+} from '../../../src/shared/simuladores/examiner-event-sessions';
 
 // ── Sanitização de metadados internos (mesma lógica de src/shared/simuladores/modelos-sessao-observacoes.ts) ──
 const INTERNAL_METADATA_LEAK_RE = new RegExp(
@@ -67,7 +71,10 @@ const REGULATORY_DISCLAIMER =
 
 interface FichaPDFData {
   fichaId: string;
+  sessao_codigo?: string;
   sessao_titulo: string;
+  sessao_titulo_linha1?: string;
+  sessao_titulo_linha2?: string;
   tripulante_nome: string;
   tripulante_codigo_anac: string;
   tripulante_funcao: string;
@@ -220,8 +227,17 @@ function drawHeader(
   topY: number,
   contentWidth: number,
 ): void {
+  const examinerDefinition = getExaminerEventSessionDefinition(dados.sessao_codigo);
   const titleY = topY - 4;
-  drawText(page, 'FICHA DE TREINAMENTO DE VOO', PAGE.margin, titleY, fontBold, 10, COLOR.text);
+  drawText(
+    page,
+    dados.sessao_titulo_linha1 || examinerDefinition?.headerTitle || 'FICHA DE TREINAMENTO DE VOO',
+    PAGE.margin,
+    titleY,
+    fontBold,
+    10,
+    COLOR.text,
+  );
 
   const badgeText = dados.status === 'PENDENTE' ? 'PENDENTE' : 'ASSINADO';
   const badgeColor = dados.status === 'PENDENTE' ? COLOR.danger : COLOR.success;
@@ -239,7 +255,9 @@ function drawHeader(
   });
   drawTextCentered(page, badgeText, badgeX, badgeY + 6, badgeWidth, fontBold, 9, COLOR.white);
 
-  const subtitleLines = wrapText(dados.sessao_titulo, fontRegular, 8, contentWidth);
+  const subtitleSource =
+    dados.sessao_titulo_linha2 || examinerDefinition?.headerSubtitle || dados.sessao_titulo;
+  const subtitleLines = wrapText(subtitleSource, fontRegular, 8, contentWidth);
   drawWrappedText(
     page,
     subtitleLines,
@@ -250,6 +268,17 @@ function drawHeader(
     10,
     COLOR.textSecondary,
   );
+  if (examinerDefinition) {
+    drawText(
+      page,
+      `Duração curricular: ${examinerDefinition.durationMinutes} minutos`,
+      PAGE.margin,
+      titleY - 30,
+      fontRegular,
+      7,
+      COLOR.textSecondary,
+    );
+  }
 }
 
 function drawInfoSection(
@@ -260,6 +289,7 @@ function drawInfoSection(
   startY: number,
   contentWidth: number,
 ): number {
+  const examinerDefinition = getExaminerEventSessionDefinition(dados.sessao_codigo);
   const colGap = 16;
   const colWidth = (contentWidth - colGap) / 2;
   const leftX = PAGE.margin;
@@ -272,7 +302,7 @@ function drawInfoSection(
     page,
     fontRegular,
     fontBold,
-    'TRIPULANTE',
+    examinerDefinition ? 'PARTICIPANTE AVALIADO' : 'TRIPULANTE',
     dados.tripulante_nome,
     leftX,
     leftY,
@@ -303,7 +333,7 @@ function drawInfoSection(
     page,
     fontRegular,
     fontBold,
-    'INSTRUTOR',
+    examinerDefinition ? 'INSTRUTOR SUPERVISOR' : 'INSTRUTOR',
     dados.instrutor_nome,
     leftX,
     leftY,
@@ -345,7 +375,7 @@ function drawInfoSection(
     page,
     fontRegular,
     fontBold,
-    'SIMULADOR',
+    examinerDefinition ? 'EQUIPAMENTO UTILIZADO' : 'SIMULADOR',
     dados.simulador,
     rightX,
     rightY,
@@ -356,7 +386,7 @@ function drawInfoSection(
     page,
     fontRegular,
     fontBold,
-    'CARGA HORÁRIA TOTAL',
+    examinerDefinition ? 'DURAÇÃO CURRICULAR' : 'CARGA HORÁRIA TOTAL',
     dados.carga_horaria_total,
     rightX,
     rightY,
@@ -412,6 +442,7 @@ function drawManobrasSection(
   const tecnicas = dados.manobras.filter(
     (m) => (m.categoria || '').toUpperCase() !== NOTECHS_CATEGORIA,
   );
+  const examinerBlocks = splitExaminerTechnicalBlocks(dados.sessao_codigo, tecnicas);
   const notechs = dados.manobras.filter(
     (m) => (m.categoria || '').toUpperCase() === NOTECHS_CATEGORIA,
   );
@@ -456,10 +487,30 @@ function drawManobrasSection(
   const hasNotechs = notechs.length > 0;
 
   let notecsRowIdx = 0;
+  let activeTechnicalBlockIndex = 0;
+  let nextTechnicalBlock =
+    examinerBlocks && examinerBlocks.length > 0 ? examinerBlocks[activeTechnicalBlockIndex] : null;
 
   // Draw all rows
   for (let ri = 0; ri < allRows.length; ri++) {
     const row = allRows[ri];
+    if (
+      row.tipo === 'tecnica' &&
+      nextTechnicalBlock &&
+      row.idx === nextTechnicalBlock.definition.startOrder
+    ) {
+      page.drawRectangle({
+        x: margin,
+        y: currentY - 8,
+        width: contentWidth,
+        height: 8,
+        color: rgb(0.9, 0.94, 0.96),
+      });
+      drawText(page, nextTechnicalBlock.definition.title, margin + 3, currentY - 5.2, fontBold, 6, COLOR.text);
+      currentY -= 9;
+      activeTechnicalBlockIndex += 1;
+      nextTechnicalBlock = examinerBlocks?.[activeTechnicalBlockIndex] || null;
+    }
     const isNotechsStart =
       row.tipo === 'notechs' && (ri === 0 || allRows[ri - 1].tipo === 'tecnica');
 

@@ -2,7 +2,7 @@
  * Canonical, versioned catalog of shared-session "programs" that unlock a
  * dedicated segment template.
  *
- * Why this file exists: the underlying curricular models (e.g. EXA-V01..V04)
+ * Why this file exists: the underlying curricular models (e.g. EXA-E01..E02)
  * are tenant catalog data — after migration 0424 they exist permanently for
  * Costa do Sol. Their mere existence must never be what triggers a
  * program-specific UI; the user must explicitly select the program for the
@@ -13,7 +13,7 @@
  *
  * Detection is by `codigo` only — never by nome/title, substring match,
  * modelo_aeronave, or the presence/absence of rows in modelos_sessao. A
- * tenant without EXA-V01..V04 in its catalog can still *select* this
+ * tenant without EXA-E01..E02 in its catalog can still *select* this
  * program (the UI then explains the models aren't available); a tenant
  * with the full catalog does not get the program pre-selected just because
  * the rows exist.
@@ -35,8 +35,8 @@ export const SHARED_SESSION_PROGRAM_GENERICO: SharedSessionProgramId = 'GENERICO
 export const EXAMINER_PRACTICAL_TRAINING_PROGRAM: SharedSessionProgramDefinition = {
   id: 'TREINAMENTO_PRATICO_EXAMINADOR',
   label: 'Treinamento Prático de Examinador',
-  evento1Codigos: ['EXA-V01', 'EXA-V02'],
-  evento2Codigos: ['EXA-V03', 'EXA-V04'],
+  evento1Codigos: ['EXA-E01', 'EXA-V01', 'EXA-V02'],
+  evento2Codigos: ['EXA-E02', 'EXA-V03', 'EXA-V04'],
 };
 
 /** Every non-generic program a shared session can explicitly declare. */
