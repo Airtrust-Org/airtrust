@@ -244,7 +244,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
   const carregarManobras = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/simuladores/manobras`, {
+      const res = await fetch(`${API_BASE_URL}/simuladores/cadastro/manobras`, {
         headers: _authH(),
       });
       const data = await res.json();

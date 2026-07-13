@@ -253,7 +253,7 @@ describe('ModalNovaSessao — edição com conversão simples -> compartilhada',
     expect(removerSelecao).toBeDisabled();
 
     // Piloto 2 ainda não foi definido: continua como campo de busca livre.
-    expect(screen.getByPlaceholderText(/Buscar piloto 2/i)).not.toBeDisabled();
+    expect(screen.getByPlaceholderText(/Buscar tripulante 2/i)).not.toBeDisabled();
   });
 
   it('convertendo um treinamento comum, o painel de examinador não aparece mesmo com EXA-V01..V04 no catálogo do tenant', async () => {
@@ -269,14 +269,18 @@ describe('ModalNovaSessao — edição com conversão simples -> compartilhada',
     await user.click(toggle);
     await screen.findByText(/Converter em sessão compartilhada/i);
 
-    await user.type(screen.getByPlaceholderText(/Buscar piloto 2/i), 'Alexandre');
+    await user.type(screen.getByPlaceholderText(/Buscar tripulante 2/i), 'Alexandre');
     await user.click(await screen.findByText('Alexandre'));
 
-    await user.click(await screen.findByRole('button', { name: /Continuar para Segmentos/i }));
-    await screen.findByLabelText('Modelo do segmento 1');
+    const modelosFicha = screen.getAllByLabelText('Modelo da ficha');
+    expect(modelosFicha[0]).toHaveValue('45');
+    await user.selectOptions(modelosFicha[1], '45');
 
-    expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('GENERICO');
-    expect(screen.queryByTestId('examiner-template-panel')).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /Continuar para Segmentos/i }));
+    await screen.findByTestId('shared-step-segmentos');
+
+    expect(screen.queryByLabelText('Programa desta sessão')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('PF do período 1')).toBeInTheDocument();
   });
 
   it('convertendo uma sessão cujo modelo original é EXA-V01, o painel de examinador aparece refletindo o programa já selecionado', async () => {
@@ -298,14 +302,18 @@ describe('ModalNovaSessao — edição com conversão simples -> compartilhada',
     await user.click(toggle);
     await screen.findByText(/Converter em sessão compartilhada/i);
 
-    const pilotoDois = screen.getByPlaceholderText(/Buscar piloto 2/i);
+    const pilotoDois = screen.getByPlaceholderText(/Buscar tripulante 2/i);
     await user.type(pilotoDois, 'Alexandre');
     await user.click(await screen.findByText('Alexandre'));
 
-    await user.click(await screen.findByRole('button', { name: /Continuar para Segmentos/i }));
-    await screen.findByLabelText('Modelo do segmento 1');
+    const modelosFicha = screen.getAllByLabelText('Modelo da ficha');
+    expect(modelosFicha[0]).toHaveValue('501');
+    await user.selectOptions(modelosFicha[1], '501');
 
-    expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('TREINAMENTO_PRATICO_EXAMINADOR');
-    expect(await screen.findByTestId('examiner-template-panel')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /Continuar para Segmentos/i }));
+    await screen.findByTestId('shared-step-segmentos');
+
+    expect(screen.queryByLabelText('Programa desta sessão')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('PF do período 1')).toBeInTheDocument();
   });
 });
