@@ -749,14 +749,14 @@ app.put('/sessoes/:id', async (c) => {
 
       // Soft-delete todos os participantes antigos
       await c.env.DB.prepare(
-        `UPDATE sessoes_participantes
+        `UPDATE sessoes_participantes AS sp
             SET deleted_at=datetime('now')
-          WHERE sessao_id=?
-            AND deleted_at IS NULL
+          WHERE sp.sessao_id=?
+            AND sp.deleted_at IS NULL
             AND EXISTS (
               SELECT 1
                 FROM simulador_agendamentos sa
-               WHERE sa.id = sessoes_participantes.sessao_id
+               WHERE sa.id = sp.sessao_id
                  AND sa.empresa_id = ?
                  AND sa.deleted_at IS NULL
             )`,
@@ -1135,13 +1135,13 @@ app.delete('/sessoes/:id', async (c) => {
 
     // Soft delete dos participantes
     await c.env.DB.prepare(
-      `UPDATE sessoes_participantes
+      `UPDATE sessoes_participantes AS sp
           SET deleted_at=datetime('now')
-        WHERE sessao_id=?
+        WHERE sp.sessao_id=?
           AND EXISTS (
             SELECT 1
               FROM simulador_agendamentos sa
-             WHERE sa.id = sessoes_participantes.sessao_id
+             WHERE sa.id = sp.sessao_id
                AND sa.empresa_id = ?
           )`,
     )
