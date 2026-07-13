@@ -2,6 +2,7 @@ import {
   findSessaoConflict,
   getSimuladorModeloAeronave,
   normalizeModeloAeronave,
+  simuladoresHasEmpresaId,
   timeToMinutes,
 } from './simuladores-shared';
 import type { NormalizedSharedSessionRequest } from './simuladores-shared-session-logic';
@@ -109,18 +110,28 @@ export async function assertEntityOwnership(
     throw new Error('Instrutor supervisor não pode ser o próprio treinando curricular');
   }
 
-  const simulador = await db
-    .prepare(
-      `SELECT id
+  const hasEmpresaId = await simuladoresHasEmpresaId(db);
+
+  const simuladorSql = hasEmpresaId
+    ? `SELECT id
        FROM simuladores
        WHERE id = ?
          AND empresa_id = ?
-         AND deleted_at IS NULL`,
+         AND deleted_at IS NULL`
+    : `SELECT id
+       FROM simuladores
+       WHERE id = ?
+         AND deleted_at IS NULL`;
+
+  const simulador = await db
+    .prepare(simuladorSql)
+    .bind(
+      payload.simulador_id,
+      ...(hasEmpresaId ? [empresaId] : []),
     )
-    .bind(payload.simulador_id, empresaId)
     .first();
   if (!simulador) {
-    throw new Error('Simulador fora do tenant');
+    throw new Error(hasEmpresaId ? 'Simulador fora do tenant' : 'Simulador não encontrado');
   }
 
   const modeloIds = payload.atribuicoes_planejadas
