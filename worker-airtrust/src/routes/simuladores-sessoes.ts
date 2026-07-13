@@ -23,6 +23,7 @@ import {
   filtrarChecksCompativeisComModelo,
   getSimuladorModeloAeronave,
   listarTiposCheckPorIds,
+  modelosSessaoManobrasHasTripulante,
   normalizeModeloAeronave,
   isFullAccessRole,
   resolveTemplateIdSessao,
@@ -1176,6 +1177,8 @@ app.post('/sessoes', async (c) => {
       }
 
       if (modeloId) {
+        const hasTripulante = await modelosSessaoManobrasHasTripulante(c.env.DB);
+        const tripulanteSql = hasTripulante ? "COALESCE(msm.tripulante, 'AB')" : "'AB'";
         const manobrasModelo = await c.env.DB.prepare(
           `SELECT
             m.codigo,
@@ -1185,7 +1188,7 @@ app.post('/sessoes', async (c) => {
             m.categoria,
             msm.ordem,
             msm.observacoes,
-            COALESCE(msm.tripulante, 'AB') as tripulante
+            ${tripulanteSql} as tripulante
            FROM modelos_sessao_manobras msm
            INNER JOIN manobras m ON m.id = msm.manobra_id
            WHERE msm.modelo_id = ?
