@@ -21,7 +21,7 @@ const EXPECTED_MODELS = [
   'SK76-I-01/12',
   'SK76-I-12/12',
   'SK76-P-CHECK',
-  'S76-P-C3/IFR',
+  'S76-P-02/04-C3',
   'TRE-INST',
 ];
 
@@ -128,9 +128,9 @@ describe('simuladores matriz v6.2 data', () => {
       ['A139-P-C1/IFR', 'Ciclo 1 / IFR-emergências'],
       ['A139-P-C2/IFR', 'Ciclo 2 / IFR-emergências'],
       ['A139-P-C3/IFR', 'Ciclo 3 / IFR-emergências'],
-      ['S76-P-C1/IFR', 'Ciclo 1 / IFR-emergências'],
-      ['S76-P-C2/IFR', 'Ciclo 2 / IFR-emergências'],
-      ['S76-P-C3/IFR', 'Ciclo 3 / IFR-emergências'],
+      ['S76-P-02/04-C1', 'Ciclo 1 / IFR-emergências'],
+      ['S76-P-02/04-C2', 'Ciclo 2 / IFR-emergências'],
+      ['S76-P-02/04-C3', 'Ciclo 3 / IFR-emergências'],
     ]);
 
     for (const [modelCode, modelName] of expectedNames.entries()) {
@@ -164,7 +164,7 @@ describe('simuladores matriz v6.2 data', () => {
   it('marca sessoes de check como avaliativas, sem contaminar sessoes de treino puro', () => {
     const data = loadSimuladoresMatrizV6Data();
     const checkCodes = ['A139-I-12/12', 'A139-P-LOFT/CHECK', 'SK76-I-12/12', 'SK76-P-CHECK'];
-    const trainCodes = ['A139-I-11/12', 'A139-P-LOFT/OFFSHORE', 'SK76-I-11/12', 'S76-P-C1/VFR'];
+    const trainCodes = ['A139-I-11/12', 'A139-P-LOFT/OFFSHORE', 'SK76-I-11/12', 'S76-P-01/04-C1'];  // replaced S76-P-C1/VFR
 
     for (const modelCode of checkCodes) {
       const model = data.models.find((item) => item.modelCode === modelCode);
