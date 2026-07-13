@@ -430,7 +430,7 @@ Exceções aceitas:
 
 # 6. AW139 — Treinamento Periódico
 
-## A139-P-C1/VFR — Ciclo 1 / VFR-emergências
+## A139-P-01/04-C1 — Ciclo 1 / VFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -453,7 +453,7 @@ Exceções aceitas:
 | 17 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
 | 18 | WAR-GEN-11 | Dual DC GEN failure | Elétrico |
 
-## A139-P-C1/IFR — Ciclo 1 / IFR-emergências
+## A139-P-02/04-C1 — Ciclo 1 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -524,7 +524,7 @@ Exceções aceitas:
 | 17 | LOFT-CHK-18 | Aproximação ILS — final e decisão na DA | Aproximação IFR |
 | 18 | LOFT-CHK-19 | Pouso no alternado e procedimentos pós-voo | Pouso / pós-voo |
 
-## A139-P-C2/VFR — Ciclo 2 / VFR-emergências
+## A139-P-01/04-C2 — Ciclo 2 / VFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -547,7 +547,7 @@ Exceções aceitas:
 | 17 | WAR-TMP-30 | MGB oil temp high | Transmissão |
 | 18 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
 
-## A139-P-C2/IFR — Ciclo 2 / IFR-emergências
+## A139-P-02/04-C2 — Ciclo 2 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -570,7 +570,7 @@ Exceções aceitas:
 | 17 | OPS-APP-X1 | Precision approach | Aproximação |
 | 18 | OPS-APP-X3 | Missed approach | Arremetida |
 
-## A139-P-C3/VFR — Ciclo 3 / VFR-emergências
+## A139-P-01/04-C3 — Ciclo 3 / VFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -593,7 +593,7 @@ Exceções aceitas:
 | 17 | WAR-TRC-X1 | Tail rotor binding | Rotor de cauda |
 | 18 | CAU-MGP-105 | MGB chip detected | Transmissão |
 
-## A139-P-C3/IFR — Ciclo 3 / IFR-emergências
+## A139-P-02/04-C3 — Ciclo 3 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
