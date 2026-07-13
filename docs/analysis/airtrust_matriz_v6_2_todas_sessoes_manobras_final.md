@@ -87,7 +87,7 @@ Exceções aceitas:
 13. `A139-I-03/12` e `A139-I-04/12` permanecem em sistemas/anormalidades/automação; IFR básico começa em `A139-I-05/12`.
 14. `SK76-I-03/12` e `SK76-I-04/12` permanecem em sistemas/anormalidades/automação; IFR básico começa em `SK76-I-05/12`.
 15. Fechamento do target 51: `A139-NOT-01`, `A139-NOT-02`, `A139-REQ-01`, `A139-S-01/02`, `A139-S-02/02`, `S76-NOT-01`, `S76-NOT-02`, `S76-REQ-01`, `SK76-S-01/02` e `SK76-S-02/02` deixam de ser "sessões fora dos PDFs enviados" (§9, redação original) e passam a integrar o loader, preservando os `18` itens técnicos já documentados operacionalmente em `docs/MODELOS_SESSAO_MANOBRAS.md`, sem inventar código novo. Os `15` NOTECHS continuam fora das `18` técnicas para esses modelos, pelo mesmo mecanismo global já usado pelos demais `41` (constante compartilhada, não vínculo por modelo).
-16. `SK76-S-02/02` estava fora do target quando a decisão 11 foi escrita; agora que entra no loader, a decisão 11 é aplicada: `S76-LGE-44` é substituído por `S76-LGB-47` (código já existente e já usado em `S76-P-C2/VFR`).
+16. `SK76-S-02/02` estava fora do target quando a decisão 11 foi escrita; agora que entra no loader, a decisão 11 é aplicada: `S76-LGE-44` é substituído por `S76-LGB-47` (código já existente e já usado em `S76-P-01/04-C2`).
 17. `S76-NOT-02`: a sequência operacional original encerrava em `S76-DIT-71` → `S76-FLU-01` → `S76-EST-01`. Isso conflita com a regra de terminal único (`S76-FLU-01` já é o encerramento de ditching/evacuação; nenhum item pode vir depois). `S76-EST-01` foi removido do fim da sequência e `76-FALFF` (já usado em `S76-NOT-01`) foi inserido no bloco elétrico para preservar as `18` técnicas sem introduzir código novo.
 
 ---
@@ -1054,7 +1054,7 @@ Exceções aceitas:
 
 # 8. SK76/S76 — Treinamento Periódico
 
-## S76-P-C1/VFR — Ciclo 1 / VFR-emergências
+## S76-P-01/04-C1 — Ciclo 1 / VFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1077,7 +1077,7 @@ Exceções aceitas:
 | 17 | S76-FFL-32 | Luz de Cautela do Filtro de Combustível | Combustível |
 | 18 | S76-FFM-32 | Fluxo de Combustível fora do Normal — decisão de retorno e encerramento | Combustível / decisão operacional |
 
-## S76-P-C1/IFR — Ciclo 1 / IFR-emergências
+## S76-P-02/04-C1 — Ciclo 1 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1125,7 +1125,7 @@ Exceções aceitas:
 | 17 | LOFT-CHK-18 | Aproximação ILS — final e decisão na DA | Aproximação IFR |
 | 18 | LOFT-CHK-19 | Pouso no alternado e procedimentos pós-voo | Pouso / pós-voo |
 
-## S76-P-C2/VFR — Ciclo 2 / VFR-emergências
+## S76-P-01/04-C2 — Ciclo 2 / VFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1148,7 +1148,7 @@ Exceções aceitas:
 | 17 | S76-AUT-70 | Autorrotação | Autorrotação |
 | 18 | S76-DIT-71 | Ditching com Potência | Ditching |
 
-## S76-P-C2/IFR — Ciclo 2 / IFR-emergências
+## S76-P-02/04-C2 — Ciclo 2 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1171,7 +1171,7 @@ Exceções aceitas:
 | 17 | S76-WSH-54 | Luz de Cautela Windshield Hot | Windshield |
 | 18 | S76-RNV-00 | Aproximação RNAV (GPS) | Aproximação |
 
-## S76-P-C3/VFR — Ciclo 3 / VFR-emergências
+## S76-P-01/04-C3 — Ciclo 3 / VFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1194,7 +1194,7 @@ Exceções aceitas:
 | 17 | S76-TDM-41 | Dano no Rotor de Cauda | Rotor de cauda |
 | 18 | S76-FCD-67 | Emperramento do Amortecedor de Comando | Comandos |
 
-## S76-P-C3/IFR — Ciclo 3 / IFR-emergências
+## S76-P-02/04-C3 — Ciclo 3 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1347,7 +1347,7 @@ Exceções aceitas:
 > **Critério de encerramento:** pouso após arremetida e reaproximação, seguido de encerramento pós-voo.
 > **Observação técnica:** as 18 linhas abaixo são itens técnicos avaliáveis dentro do cenário LOFT; a condução continua sendo por cenário, não por manobras soltas.
 > **Observação NOTECHS:** NOTECHS são avaliados fora das 18 técnicas, pelo mecanismo global da matriz.
-> Sessão avaliativa (`carater=avaliativo` em metadados internos; não exibir na ficha final). Corrigido pela decisão 16 (§4): `S76-LGE-44` substituído por `S76-LGB-47` (código já existente, já usado em `S76-P-C2/VFR`).
+> Sessão avaliativa (`carater=avaliativo` em metadados internos; não exibir na ficha final). Corrigido pela decisão 16 (§4): `S76-LGE-44` substituído por `S76-LGB-47` (código já existente, já usado em `S76-P-01/04-C2`).
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
