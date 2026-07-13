@@ -15,7 +15,7 @@ const ACCEPTANCE_MATRIX = path.join(ROOT, 'docs', 'analysis', 'matriz-v6-2-accep
 const EXPECTED_MODELS = [
   'A139-I-01/12',
   'A139-I-12/12',
-  'A139-P-C1/VFR',
+  'A139-P-01/04-C1',
   'A139-P-LOFT/CHECK',
   'CRED-EXA',
   'SK76-I-01/12',
@@ -125,9 +125,9 @@ describe('simuladores matriz v6.2 data', () => {
   it('renomeia os 6 ciclos IFR para IFR-emergencias quando nao ha conteudo noturno-offshore real', () => {
     const data = loadSimuladoresMatrizV6Data();
     const expectedNames = new Map([
-      ['A139-P-C1/IFR', 'Ciclo 1 / IFR-emergências'],
-      ['A139-P-C2/IFR', 'Ciclo 2 / IFR-emergências'],
-      ['A139-P-C3/IFR', 'Ciclo 3 / IFR-emergências'],
+      ['A139-P-02/04-C1', 'Ciclo 1 / IFR-emergências'],
+      ['A139-P-02/04-C2', 'Ciclo 2 / IFR-emergências'],
+      ['A139-P-02/04-C3', 'Ciclo 3 / IFR-emergências'],
       ['S76-P-02/04-C1', 'Ciclo 1 / IFR-emergências'],
       ['S76-P-02/04-C2', 'Ciclo 2 / IFR-emergências'],
       ['S76-P-02/04-C3', 'Ciclo 3 / IFR-emergências'],

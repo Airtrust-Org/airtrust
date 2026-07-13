@@ -234,8 +234,8 @@ describe('matriz v6.2 — guardrails especificos do documento final', () => {
     expect((gear?.ordem ?? 99) < (auto?.ordem ?? 0)).toBe(true);
   });
 
-  it('A139-P-C2/IFR reordena landing gear emergency antes do bloco final de aproximacao IFR', () => {
-    const model = data.models.find((item) => item.modelCode === 'A139-P-C2/IFR');
+  it('A139-P-02/04-C2 reordena landing gear emergency antes do bloco final de aproximacao IFR', () => {
+    const model = data.models.find((item) => item.modelCode === 'A139-P-02/04-C2');
     expect(model).toBeDefined();
 
     const gear = model?.rows.find((row) => row.codigo === 'WAR-GER-27');
