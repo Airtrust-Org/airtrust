@@ -1,4 +1,4 @@
-import { getSimuladorModeloAeronave } from './simuladores-shared';
+import { fichasSessaoManobrasHasEmpresaId, getSimuladorModeloAeronave } from './simuladores-shared';
 import { createSharedAssignmentKey } from './simuladores-shared-session-logic';
 import type { NormalizedSharedSessionRequest } from './simuladores-shared-session-logic';
 import { isProtectedFichaStatus, prepareStatement } from './simuladores-shared-session-helpers';
@@ -302,13 +302,18 @@ async function buildSharedSessionCreatePlan(
 
     const manobras = await loadFichaManobrasForModelo(db, Number(assignmentPlan.modelo_sessao_id));
     assertModeloSessaoTemManobras(Number(assignmentPlan.modelo_sessao_id), manobras);
+    const hasFichaEmpresaId = await fichasSessaoManobrasHasEmpresaId(db);
     for (const manobra of manobras) {
       statements.push(
         db
           .prepare(
-            `INSERT INTO fichas_sessao_manobras
-               (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
-             VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
+            hasFichaEmpresaId
+              ? `INSERT INTO fichas_sessao_manobras
+                   (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
+                 VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`
+              : `INSERT INTO fichas_sessao_manobras
+                   (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
+                 VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             fichaUuid,
@@ -318,7 +323,7 @@ async function buildSharedSessionCreatePlan(
             manobra.categoria || 'GERAL',
             manobra.ordem,
             manobra.tripulante || 'AB',
-            empresaId,
+            ...(hasFichaEmpresaId ? [empresaId] : []),
           ),
       );
     }
