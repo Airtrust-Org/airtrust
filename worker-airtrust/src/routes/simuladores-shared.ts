@@ -235,30 +235,6 @@ export async function fichasSessaoManobrasHasEmpresaId(db: D1Database): Promise<
   return has;
 }
 
-/**
- * Checks whether the modelos_sessao_manobras table has a tripulante column.
- * Some local/dev schemas still predate this column.
- */
-const modelosSessaoManobrasHasTripulanteCache = new WeakMap<D1Database, boolean>();
-
-export async function modelosSessaoManobrasHasTripulante(db: D1Database): Promise<boolean> {
-  const cached = modelosSessaoManobrasHasTripulanteCache.get(db);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const result = await db
-    .prepare('PRAGMA table_info(modelos_sessao_manobras)')
-    .all<{ name: string }>();
-
-  const has = (result.results || []).some(
-    (row) => String(row.name || '') === 'tripulante',
-  );
-
-  modelosSessaoManobrasHasTripulanteCache.set(db, has);
-  return has;
-}
-
 export async function getSimuladorModeloAeronave(
   db: D1Database,
   simuladorId: string | number | null | undefined,

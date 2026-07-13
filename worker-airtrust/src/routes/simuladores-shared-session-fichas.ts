@@ -1,5 +1,4 @@
 import { buildOperationalFichaManobras } from '../constants/notechs';
-import { modelosSessaoManobrasHasTripulante } from './simuladores-shared';
 
 export async function loadFichaManobrasForModelo(
   db: D1Database,
@@ -14,8 +13,6 @@ export async function loadFichaManobrasForModelo(
     tripulante: string | null;
   }>
 > {
-  const hasTripulante = await modelosSessaoManobrasHasTripulante(db);
-  const tripulanteSql = hasTripulante ? "COALESCE(msm.tripulante, 'AB')" : "'AB'";
   const manobras = await db
     .prepare(
       `SELECT
@@ -25,7 +22,7 @@ export async function loadFichaManobrasForModelo(
          m.categoria,
          msm.ordem,
          msm.observacoes,
-         ${tripulanteSql} AS tripulante
+         COALESCE(msm.tripulante, 'AB') AS tripulante
        FROM modelos_sessao_manobras msm
        INNER JOIN manobras m
          ON m.id = msm.manobra_id
