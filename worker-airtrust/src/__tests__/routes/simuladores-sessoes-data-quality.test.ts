@@ -314,7 +314,7 @@ function createSimuladoresDb() {
 
           if (
             normalized.includes(
-              "UPDATE sessoes_participantes SET funcao=?,presente=?,updated_at=datetime('now') WHERE id=? AND sessao_id=? AND deleted_at IS NULL",
+              "UPDATE sessoes_participantes AS sp SET funcao=?,presente=?,updated_at=datetime('now') WHERE sp.id=? AND sp.sessao_id=? AND sp.deleted_at IS NULL",
             )
           ) {
             const [funcao, presente, participanteId, sessaoId] = binds as [string, number, string, string];
@@ -331,7 +331,7 @@ function createSimuladoresDb() {
 
           if (
             normalized.includes(
-              "UPDATE sessoes_participantes SET deleted_at=datetime('now') WHERE id=? AND sessao_id=? AND deleted_at IS NULL",
+              "UPDATE sessoes_participantes AS sp SET deleted_at=datetime('now') WHERE sp.id=? AND sp.sessao_id=? AND sp.deleted_at IS NULL",
             )
           ) {
             const [participanteId, sessaoId] = binds as [string, string];

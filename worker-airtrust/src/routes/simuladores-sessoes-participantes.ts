@@ -176,17 +176,17 @@ app.put('/participantes/:id', async (c) => {
     const a = await getParticipanteScoped(c.env.DB, id, empresaId);
     if (!a) return c.json({ success: false, error: 'Não encontrado' }, 404);
     await c.env.DB.prepare(
-      `UPDATE sessoes_participantes
+      `UPDATE sessoes_participantes AS sp
           SET funcao=?,
               presente=?,
               updated_at=datetime('now')
-        WHERE id=?
-          AND sessao_id=?
-          AND deleted_at IS NULL
+        WHERE sp.id=?
+          AND sp.sessao_id=?
+          AND sp.deleted_at IS NULL
           AND EXISTS (
             SELECT 1
               FROM simulador_agendamentos sa
-             WHERE sa.id = sessoes_participantes.sessao_id
+             WHERE sa.id = sp.sessao_id
                AND sa.empresa_id = ?
                AND sa.deleted_at IS NULL
           )`,
@@ -218,15 +218,15 @@ app.delete('/participantes/:id', async (c) => {
     if (!participante) return c.json({ success: false, error: 'Participante não encontrado' }, 404);
 
     await c.env.DB.prepare(
-      `UPDATE sessoes_participantes
+      `UPDATE sessoes_participantes AS sp
           SET deleted_at=datetime('now')
-        WHERE id=?
-          AND sessao_id=?
-          AND deleted_at IS NULL
+        WHERE sp.id=?
+          AND sp.sessao_id=?
+          AND sp.deleted_at IS NULL
           AND EXISTS (
             SELECT 1
               FROM simulador_agendamentos sa
-             WHERE sa.id = sessoes_participantes.sessao_id
+             WHERE sa.id = sp.sessao_id
                AND sa.empresa_id = ?
                AND sa.deleted_at IS NULL
           )`,
