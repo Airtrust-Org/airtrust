@@ -1,0 +1,879 @@
+{
+  "generated_at": "2026-07-13T21:38:36.235Z",
+  "started_at": "2026-07-13T21:38:33.546Z",
+  "ended_at": "2026-07-13T21:38:36.235Z",
+  "git_head": "56241da2f70553767dc36bcb01d97c326bc6998c",
+  "worker_url": "http://localhost:8788",
+  "frontend_url": "http://localhost:3001",
+  "synthetic_user": "admin@airtrust.com",
+  "routes_visited": [
+    "http://localhost:3001/login",
+    "http://localhost:3001/funcionarios",
+    "http://localhost:3001/simuladores/cadastros/modelos-sessao"
+  ],
+  "ui_presence": {
+    "S76-NOT-01": 1,
+    "S76-NOT-02": 1,
+    "SK76-S-01/02": 1,
+    "A139-I-04/12": 1,
+    "A139-I-05/12": 1,
+    "A139-I-07/12": 1,
+    "A139-I-11/12": 1,
+    "SK76-I-11/12": 1,
+    "SK76-I-12/12": 1,
+    "SK76-P-CHECK": 1
+  },
+  "sessions": [
+    {
+      "codigo": "A139-I-04/12",
+      "nome": "AFCS Normal, Automacao e Degradacoes",
+      "descricao": "Engajamento e monitoramento do AFCS/FD, uso de automacao (FMA), progressao de degradacoes de AFCS (AP OFF, AP failure, MISTRIM, SAS degraded, AFCS degraded) e primeira exposicao a controle IFR manual.",
+      "duracao": 120,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "A139-MOD-01"
+        },
+        {
+          "ordem": 2,
+          "codigo": "A139-FMA-02"
+        },
+        {
+          "ordem": 3,
+          "codigo": "OPS-NAV-X2"
+        },
+        {
+          "ordem": 4,
+          "codigo": "CAU-APO-38"
+        },
+        {
+          "ordem": 5,
+          "codigo": "FLY-BAS-X2"
+        },
+        {
+          "ordem": 6,
+          "codigo": "CAU-APF-37"
+        },
+        {
+          "ordem": 7,
+          "codigo": "CAU-MIS-40"
+        },
+        {
+          "ordem": 8,
+          "codigo": "CAU-SAS-41"
+        },
+        {
+          "ordem": 9,
+          "codigo": "CAU-AFD-41"
+        },
+        {
+          "ordem": 10,
+          "codigo": "A139-CKL-02"
+        },
+        {
+          "ordem": 11,
+          "codigo": "WAR-STA-X1"
+        },
+        {
+          "ordem": 12,
+          "codigo": "OPS-NRM-X1"
+        },
+        {
+          "ordem": 13,
+          "codigo": "OPS-NRM-X2"
+        },
+        {
+          "ordem": 14,
+          "codigo": "FLY-BAS-X3"
+        },
+        {
+          "ordem": 15,
+          "codigo": "FLY-BAS-X1"
+        },
+        {
+          "ordem": 16,
+          "codigo": "WAR-OUT-15"
+        },
+        {
+          "ordem": 17,
+          "codigo": "FLY-BAS-17"
+        },
+        {
+          "ordem": 18,
+          "codigo": "CAU-FLO-73"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    },
+    {
+      "codigo": "A139-I-05/12",
+      "nome": "IFR/PBN - Navegacao e Aproximacoes",
+      "descricao": "Navegacao IFR com FMS e meios convencionais, SID/STAR, holding, aproximacao RNP, e progressao completa de aproximacoes (nao-precisao, precisao, grande angulo, arremetida).",
+      "duracao": 120,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "A139-CKL-01"
+        },
+        {
+          "ordem": 2,
+          "codigo": "OPS-NAV-X1"
+        },
+        {
+          "ordem": 3,
+          "codigo": "OPS-NAV-X4"
+        },
+        {
+          "ordem": 4,
+          "codigo": "OPS-NAV-X2"
+        },
+        {
+          "ordem": 5,
+          "codigo": "FLY-BAS-X2"
+        },
+        {
+          "ordem": 6,
+          "codigo": "A139-SCN-02"
+        },
+        {
+          "ordem": 7,
+          "codigo": "A139-VMA-01"
+        },
+        {
+          "ordem": 8,
+          "codigo": "A139-ORI-01"
+        },
+        {
+          "ordem": 9,
+          "codigo": "CAU-AHR-47"
+        },
+        {
+          "ordem": 10,
+          "codigo": "CAU-GPS-52"
+        },
+        {
+          "ordem": 11,
+          "codigo": "CAU-FMS-51"
+        },
+        {
+          "ordem": 12,
+          "codigo": "FLY-BAS-X4"
+        },
+        {
+          "ordem": 13,
+          "codigo": "OPS-NAV-X3"
+        },
+        {
+          "ordem": 14,
+          "codigo": "A139-RNP-01"
+        },
+        {
+          "ordem": 15,
+          "codigo": "OPS-APP-X2"
+        },
+        {
+          "ordem": 16,
+          "codigo": "OPS-APP-X1"
+        },
+        {
+          "ordem": 17,
+          "codigo": "OPS-APP-X4"
+        },
+        {
+          "ordem": 18,
+          "codigo": "OPS-APP-X3"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    },
+    {
+      "codigo": "A139-I-07/12",
+      "nome": "Avionicos - Falhas de Display e Air Data",
+      "descricao": "Falhas de display e sistemas de referencia (ADS, AHRS, PFD, MFD, EICAS, ADC), consolidacao com aproximacoes de precisao/nao-precisao e emergencias de powerplant recorrentes.",
+      "duracao": 120,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "CAU-ADS-46"
+        },
+        {
+          "ordem": 2,
+          "codigo": "CAU-AHR-47"
+        },
+        {
+          "ordem": 3,
+          "codigo": "CAU-DUD-46"
+        },
+        {
+          "ordem": 4,
+          "codigo": "CAU-PFD-45"
+        },
+        {
+          "ordem": 5,
+          "codigo": "CAU-MFD-45"
+        },
+        {
+          "ordem": 6,
+          "codigo": "CAU-EIC-45"
+        },
+        {
+          "ordem": 7,
+          "codigo": "CAU-ADC-48"
+        },
+        {
+          "ordem": 8,
+          "codigo": "FLY-BAS-X4"
+        },
+        {
+          "ordem": 9,
+          "codigo": "OPS-APP-X1"
+        },
+        {
+          "ordem": 10,
+          "codigo": "OPS-APP-X2"
+        },
+        {
+          "ordem": 11,
+          "codigo": "WAR-STA-X1"
+        },
+        {
+          "ordem": 12,
+          "codigo": "WAR-OUT-15"
+        },
+        {
+          "ordem": 13,
+          "codigo": "FLY-BAS-17"
+        },
+        {
+          "ordem": 14,
+          "codigo": "CAU-HOT-65"
+        },
+        {
+          "ordem": 15,
+          "codigo": "WAR-LOW-29"
+        },
+        {
+          "ordem": 16,
+          "codigo": "WAR-HIG-29"
+        },
+        {
+          "ordem": 17,
+          "codigo": "CAU-FLO-73"
+        },
+        {
+          "ordem": 18,
+          "codigo": "OPS-NRM-X2"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    },
+    {
+      "codigo": "A139-I-11/12",
+      "nome": "LOFT - Pratica de Cenario Integrado",
+      "descricao": "Treinamento LOFT em cenario integrado IFR: briefing de missao, planejamento, execucao completa com falha em rota, e pouso no alternado. Foco em pratica e repeticao de trechos, nao avaliacao formal.",
+      "duracao": 120,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "LOFT-CHK-04"
+        },
+        {
+          "ordem": 2,
+          "codigo": "LOFT-CHK-01"
+        },
+        {
+          "ordem": 3,
+          "codigo": "LOFT-CHK-02"
+        },
+        {
+          "ordem": 4,
+          "codigo": "LOFT-CHK-03"
+        },
+        {
+          "ordem": 5,
+          "codigo": "LOFT-CHK-05"
+        },
+        {
+          "ordem": 6,
+          "codigo": "LOFT-CHK-06"
+        },
+        {
+          "ordem": 7,
+          "codigo": "LOFT-CHK-07"
+        },
+        {
+          "ordem": 8,
+          "codigo": "LOFT-CHK-08"
+        },
+        {
+          "ordem": 9,
+          "codigo": "LOFT-CHK-09"
+        },
+        {
+          "ordem": 10,
+          "codigo": "LOFT-CHK-10"
+        },
+        {
+          "ordem": 11,
+          "codigo": "LOFT-CHK-11"
+        },
+        {
+          "ordem": 12,
+          "codigo": "LOFT-CHK-12"
+        },
+        {
+          "ordem": 13,
+          "codigo": "LOFT-CHK-13"
+        },
+        {
+          "ordem": 14,
+          "codigo": "LOFT-CHK-14"
+        },
+        {
+          "ordem": 15,
+          "codigo": "LOFT-CHK-15"
+        },
+        {
+          "ordem": 16,
+          "codigo": "LOFT-CHK-17"
+        },
+        {
+          "ordem": 17,
+          "codigo": "LOFT-CHK-18"
+        },
+        {
+          "ordem": 18,
+          "codigo": "LOFT-CHK-19"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    },
+    {
+      "codigo": "S76-NOT-01",
+      "nome": "Treinamento Noturno Onshore",
+      "descricao": "Treinamento noturno onshore para SK76. Cobre briefing noturno, inspeção e acionamento, configuração de cockpit, hover, circuito padrão, aproximações, autorotação noturna, Black Hole Effect e CRM.",
+      "duracao": 90,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "S76-CKL-01"
+        },
+        {
+          "ordem": 2,
+          "codigo": "S76-NVF-00"
+        },
+        {
+          "ordem": 3,
+          "codigo": "S76-HOV-00"
+        },
+        {
+          "ordem": 4,
+          "codigo": "S76-DNR-01"
+        },
+        {
+          "ordem": 5,
+          "codigo": "S76-SUB-01"
+        },
+        {
+          "ordem": 6,
+          "codigo": "S76-NDL-00"
+        },
+        {
+          "ordem": 7,
+          "codigo": "S76-LOFT-33"
+        },
+        {
+          "ordem": 8,
+          "codigo": "76-FALGC"
+        },
+        {
+          "ordem": 9,
+          "codigo": "76-FALFF"
+        },
+        {
+          "ordem": 10,
+          "codigo": "76-FLWNR"
+        },
+        {
+          "ordem": 11,
+          "codigo": "76-MOTCZ"
+        },
+        {
+          "ordem": 12,
+          "codigo": "S76-CKL-03"
+        },
+        {
+          "ordem": 13,
+          "codigo": "S76-OEI-01"
+        },
+        {
+          "ordem": 14,
+          "codigo": "S76-APN-01"
+        },
+        {
+          "ordem": 15,
+          "codigo": "S76-ARN-01"
+        },
+        {
+          "ordem": 16,
+          "codigo": "S76-AUT-70"
+        },
+        {
+          "ordem": 17,
+          "codigo": "S76-PNO-01"
+        },
+        {
+          "ordem": 18,
+          "codigo": "S76-EST-01"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    },
+    {
+      "codigo": "S76-NOT-02",
+      "nome": "Treinamento Noturno Offshore",
+      "descricao": "Treinamento noturno offshore: decolagem/pouso helideck, OEI em plataforma, ditching, aproximacao offshore, pouso sem iluminacao de helideck (falha de iluminacao), CRM maritimo.",
+      "duracao": 90,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "S76-CKL-01"
+        },
+        {
+          "ordem": 2,
+          "codigo": "S76-TDP-00"
+        },
+        {
+          "ordem": 3,
+          "codigo": "S76-HOV-00"
+        },
+        {
+          "ordem": 4,
+          "codigo": "S76-NVF-00"
+        },
+        {
+          "ordem": 5,
+          "codigo": "S76-PWR-01"
+        },
+        {
+          "ordem": 6,
+          "codigo": "S76-LOFT-33"
+        },
+        {
+          "ordem": 7,
+          "codigo": "S76-LOFT-34"
+        },
+        {
+          "ordem": 8,
+          "codigo": "76-MOTCZ"
+        },
+        {
+          "ordem": 9,
+          "codigo": "S76-CKL-03"
+        },
+        {
+          "ordem": 10,
+          "codigo": "S76-OEI-01"
+        },
+        {
+          "ordem": 11,
+          "codigo": "S76-XFD-20"
+        },
+        {
+          "ordem": 12,
+          "codigo": "76-FALGC"
+        },
+        {
+          "ordem": 13,
+          "codigo": "S76-LDP-00"
+        },
+        {
+          "ordem": 14,
+          "codigo": "S76-APO-01"
+        },
+        {
+          "ordem": 15,
+          "codigo": "S76-ARO-01"
+        },
+        {
+          "ordem": 16,
+          "codigo": "76-AUTAG"
+        },
+        {
+          "ordem": 17,
+          "codigo": "S76-DIT-71"
+        },
+        {
+          "ordem": 18,
+          "codigo": "S76-FLU-01"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    },
+    {
+      "codigo": "SK76-I-11/12",
+      "nome": "LOFT",
+      "descricao": "LOFT do curso inicial: voo orientado por linha com cenario de missao SK76 real, integrando IFR/navegacao, falhas de powerplant, eletrico, hidraulico e MGB ja ensinadas nas sessoes 01-10, mais fogo de motor e ditching. Falhas inseridas no contexto de missao. Catalogo 100% SK76-nativo (76-*), sem conteudo AW139.",
+      "duracao": 120,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "76-PRGGP"
+        },
+        {
+          "ordem": 2,
+          "codigo": "76-DECSI"
+        },
+        {
+          "ordem": 3,
+          "codigo": "76-APXPR"
+        },
+        {
+          "ordem": 4,
+          "codigo": "76-APXNP"
+        },
+        {
+          "ordem": 5,
+          "codigo": "76-ARRIF"
+        },
+        {
+          "ordem": 6,
+          "codigo": "76-MOTCZ"
+        },
+        {
+          "ordem": 7,
+          "codigo": "76-APXOI"
+        },
+        {
+          "ordem": 8,
+          "codigo": "76-POUMO"
+        },
+        {
+          "ordem": 9,
+          "codigo": "76-FALGC"
+        },
+        {
+          "ordem": 10,
+          "codigo": "76-FALPA"
+        },
+        {
+          "ordem": 11,
+          "codigo": "76-FALFD"
+        },
+        {
+          "ordem": 12,
+          "codigo": "76-HIDPB"
+        },
+        {
+          "ordem": 13,
+          "codigo": "76-INCMO"
+        },
+        {
+          "ordem": 14,
+          "codigo": "76-MGBSF"
+        },
+        {
+          "ordem": 15,
+          "codigo": "76-POUAB"
+        },
+        {
+          "ordem": 16,
+          "codigo": "76-AUTAG"
+        },
+        {
+          "ordem": 17,
+          "codigo": "76-APXAL"
+        },
+        {
+          "ordem": 18,
+          "codigo": "76-MOTHV"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    },
+    {
+      "codigo": "SK76-I-12/12",
+      "nome": "LOFT e Check",
+      "descricao": "Verificacao de proficiencia final do curso inicial SK76: falhas duplas de motor, aproximacoes IFR completas (precisao, nao precisao, perdida, OEI), fogo/fumaca, MGB, piloto automatico e geradores. Catalogo 100% SK76-nativo (76-*), sem conteudo AW139.",
+      "duracao": 120,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "76-POUAB"
+        },
+        {
+          "ordem": 2,
+          "codigo": "76-POUMO"
+        },
+        {
+          "ordem": 3,
+          "codigo": "76-AUTAG"
+        },
+        {
+          "ordem": 4,
+          "codigo": "76-MOTCA"
+        },
+        {
+          "ordem": 5,
+          "codigo": "76-MOTCB"
+        },
+        {
+          "ordem": 6,
+          "codigo": "76-MOTCZ"
+        },
+        {
+          "ordem": 7,
+          "codigo": "76-MOTAP"
+        },
+        {
+          "ordem": 8,
+          "codigo": "76-DUAHV"
+        },
+        {
+          "ordem": 9,
+          "codigo": "76-DUADC"
+        },
+        {
+          "ordem": 10,
+          "codigo": "76-DUACZ"
+        },
+        {
+          "ordem": 11,
+          "codigo": "76-APXPR"
+        },
+        {
+          "ordem": 12,
+          "codigo": "76-APXNP"
+        },
+        {
+          "ordem": 13,
+          "codigo": "76-APXOI"
+        },
+        {
+          "ordem": 14,
+          "codigo": "76-APXPI"
+        },
+        {
+          "ordem": 15,
+          "codigo": "76-FALPA"
+        },
+        {
+          "ordem": 16,
+          "codigo": "76-FALGD"
+        },
+        {
+          "ordem": 17,
+          "codigo": "S76-CKL-06"
+        },
+        {
+          "ordem": 18,
+          "codigo": "76-MGBSF"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    },
+    {
+      "codigo": "SK76-P-CHECK",
+      "nome": "LOFT e Check de Tipo/IFR",
+      "descricao": "Check periodico de tipo/IFR do SK76: performance, avionica Primus 701, hover check, potencia OEI, acoes de memoria, QRH, aproximacao ILS e debriefing formal. Catalogo SK76-nativo (S76-LOFT), sem conteudo AW139.",
+      "duracao": 120,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "S76-LOFT-01"
+        },
+        {
+          "ordem": 2,
+          "codigo": "S76-LOFT-02"
+        },
+        {
+          "ordem": 3,
+          "codigo": "S76-LOFT-03"
+        },
+        {
+          "ordem": 4,
+          "codigo": "S76-LOFT-04"
+        },
+        {
+          "ordem": 5,
+          "codigo": "S76-LOFT-05"
+        },
+        {
+          "ordem": 6,
+          "codigo": "S76-LOFT-06"
+        },
+        {
+          "ordem": 7,
+          "codigo": "S76-LOFT-07"
+        },
+        {
+          "ordem": 8,
+          "codigo": "S76-LOFT-08"
+        },
+        {
+          "ordem": 9,
+          "codigo": "S76-LOFT-09"
+        },
+        {
+          "ordem": 10,
+          "codigo": "S76-LOFT-10"
+        },
+        {
+          "ordem": 11,
+          "codigo": "S76-LOFT-11"
+        },
+        {
+          "ordem": 12,
+          "codigo": "S76-LOFT-13"
+        },
+        {
+          "ordem": 13,
+          "codigo": "S76-LOFT-14"
+        },
+        {
+          "ordem": 14,
+          "codigo": "S76-LOFT-15"
+        },
+        {
+          "ordem": 15,
+          "codigo": "S76-LOFT-16"
+        },
+        {
+          "ordem": 16,
+          "codigo": "S76-LOFT-17"
+        },
+        {
+          "ordem": 17,
+          "codigo": "S76-ILS-00"
+        },
+        {
+          "ordem": 18,
+          "codigo": "S76-LOFT-22"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    },
+    {
+      "codigo": "SK76-S-01/02",
+      "nome": "Semestral 01/02: LOFT e Operação Noturna",
+      "descricao": "LOFT noturno SK76-nativo: briefing de ilusoes/Black Hole, procedimentos normais VFR noturnos, circuito completo noturno com variacao de vento, correcao e recuperacao de Black Hole Effect, base/final noturna com referencias externas degradadas.",
+      "duracao": 120,
+      "total": 18,
+      "itens": [
+        {
+          "ordem": 1,
+          "codigo": "S76-CKL-01"
+        },
+        {
+          "ordem": 2,
+          "codigo": "S76-NVF-00"
+        },
+        {
+          "ordem": 3,
+          "codigo": "S76-HOV-00"
+        },
+        {
+          "ordem": 4,
+          "codigo": "S76-DNR-01"
+        },
+        {
+          "ordem": 5,
+          "codigo": "S76-SUB-01"
+        },
+        {
+          "ordem": 6,
+          "codigo": "S76-PWR-01"
+        },
+        {
+          "ordem": 7,
+          "codigo": "S76-NDL-00"
+        },
+        {
+          "ordem": 8,
+          "codigo": "S76-LOFT-23"
+        },
+        {
+          "ordem": 9,
+          "codigo": "S76-LOFT-31"
+        },
+        {
+          "ordem": 10,
+          "codigo": "76-MOTCZ"
+        },
+        {
+          "ordem": 11,
+          "codigo": "S76-LOFT-33"
+        },
+        {
+          "ordem": 12,
+          "codigo": "S76-OEI-01"
+        },
+        {
+          "ordem": 13,
+          "codigo": "S76-LOFT-28"
+        },
+        {
+          "ordem": 14,
+          "codigo": "S76-ILS-00"
+        },
+        {
+          "ordem": 15,
+          "codigo": "S76-ARN-01"
+        },
+        {
+          "ordem": 16,
+          "codigo": "S76-APN-01"
+        },
+        {
+          "ordem": 17,
+          "codigo": "S76-PNO-01"
+        },
+        {
+          "ordem": 18,
+          "codigo": "S76-EST-01"
+        }
+      ],
+      "sequential": true,
+      "duplicateFree": true,
+      "overlayRule": true
+    }
+  ],
+  "console_errors": [
+    "Erro ao carregar funções: TypeError: Failed to fetch\n    at loadFuncoes (http://localhost:3001/src/react-app/pages/Funcionarios.tsx:152:32)\n    at http://localhost:3001/src/react-app/pages/Funcionarios.tsx:161:5\n    at react-stack-bottom-frame (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:16242:20)\n    at runWithFiberInDEV (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:726:18)\n    at commitHookEffectListMount (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:7767:122)\n    at commitHookPassiveMountEffects (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:7825:60)\n    at commitPassiveMountOnFiber (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9182:29)\n    at recursivelyTraversePassiveMountEffects (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9163:13)\n    at commitPassiveMountOnFiber (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9176:13)\n    at recursivelyTraversePassiveMountEffects (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9163:13)",
+    "Erro ao carregar setores: TypeError: Failed to fetch\n    at loadSetores (http://localhost:3001/src/react-app/pages/Funcionarios.tsx:168:32)\n    at http://localhost:3001/src/react-app/pages/Funcionarios.tsx:176:5\n    at react-stack-bottom-frame (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:16242:20)\n    at runWithFiberInDEV (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:726:18)\n    at commitHookEffectListMount (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:7767:122)\n    at commitHookPassiveMountEffects (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:7825:60)\n    at commitPassiveMountOnFiber (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9182:29)\n    at recursivelyTraversePassiveMountEffects (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9163:13)\n    at commitPassiveMountOnFiber (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9176:13)\n    at recursivelyTraversePassiveMountEffects (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9163:13)",
+    "Erro ao carregar modelos de aeronave: TypeError: Failed to fetch\n    at loadModelosAeronave (http://localhost:3001/src/react-app/pages/Funcionarios.tsx:133:30)\n    at http://localhost:3001/src/react-app/pages/Funcionarios.tsx:145:5\n    at react-stack-bottom-frame (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:16242:20)\n    at runWithFiberInDEV (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:726:18)\n    at commitHookEffectListMount (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:7767:122)\n    at commitHookPassiveMountEffects (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:7825:60)\n    at commitPassiveMountOnFiber (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9182:29)\n    at recursivelyTraversePassiveMountEffects (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9163:13)\n    at commitPassiveMountOnFiber (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9176:13)\n    at recursivelyTraversePassiveMountEffects (http://localhost:3001/node_modules/.vite/deps/react-dom_client.js?v=d621bb74:9163:13)"
+  ],
+  "network_errors": [],
+  "screenshots": [
+    "/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/docs/analysis/composicao-curricular-implementation-sonnet-20260713/frontend-screenshots/01-login.png",
+    "/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/docs/analysis/composicao-curricular-implementation-sonnet-20260713/frontend-screenshots/02-funcionarios.png",
+    "/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/docs/analysis/composicao-curricular-implementation-sonnet-20260713/frontend-screenshots/03-modelos-sessao.png"
+  ]
+}
