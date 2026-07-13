@@ -211,6 +211,30 @@ export async function simuladoresHasEmpresaId(db: D1Database): Promise<boolean> 
   return has;
 }
 
+/**
+ * Checks whether the fichas_sessao_manobras table has an empresa_id column.
+ * Caches the result per D1Database instance.
+ */
+const fichasSessaoManobrasHasEmpresaIdCache = new WeakMap<D1Database, boolean>();
+
+export async function fichasSessaoManobrasHasEmpresaId(db: D1Database): Promise<boolean> {
+  const cached = fichasSessaoManobrasHasEmpresaIdCache.get(db);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const result = await db
+    .prepare('PRAGMA table_info(fichas_sessao_manobras)')
+    .all<{ name: string }>();
+
+  const has = (result.results || []).some(
+    (row) => String(row.name || '') === 'empresa_id',
+  );
+
+  fichasSessaoManobrasHasEmpresaIdCache.set(db, has);
+  return has;
+}
+
 export async function getSimuladorModeloAeronave(
   db: D1Database,
   simuladorId: string | number | null | undefined,
