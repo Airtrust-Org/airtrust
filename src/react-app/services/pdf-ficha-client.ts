@@ -385,8 +385,8 @@ export async function gerarPDFFichaCliente(
   const examinerDefinition = getExaminerEventSessionDefinition(dados.sessao_codigo);
   // ── Geometria base do header (compacto) ───────────────────────────────────
   const headerTop = 4;
-  const headerHeight = examinerDefinition ? 18 : 15; // compacto (era 19) para caber 33 itens em 1 página
-  const headerBottom = headerTop + headerHeight; // = 23
+  const headerHeight = 15; // compacto para liberar espaço (era 19)
+  const headerBottom = headerTop + headerHeight; // = 19
   const headerCenterX = pageWidth / 2;
   const headerGap = 1;
   // Col1: logo — box mais justo para liberar largura útil à coluna central
@@ -503,15 +503,29 @@ export async function gerarPDFFichaCliente(
   // Título e sessão reservando espaço fixo entre logo e badge
   const tituloX = headerCenterX;
   const sessaoNome = dados.sessao_titulo || dados.simulador || 'Sessão de Treinamento';
-  const headerLine1 = dados.sessao_titulo_linha1 || examinerDefinition?.headerTitle || 'SESSÃO';
-  const headerLine2 =
-    dados.sessao_titulo_linha2 || examinerDefinition?.headerSubtitle || sessaoNome;
+  let title1 = dados.sessao_titulo_linha1 || examinerDefinition?.headerTitle;
+  let title2 = dados.sessao_titulo_linha2 || examinerDefinition?.headerSubtitle;
+
+  if (!title1 && !title2 && dados.sessao_titulo) {
+    if (dados.sessao_titulo.includes(' - ')) {
+      const parts = dados.sessao_titulo.split(' - ');
+      title1 = parts[0].trim();
+      title2 = parts.slice(1).join(' - ').trim();
+    } else {
+      title1 = dados.sessao_titulo;
+      title2 = '';
+    }
+  } else {
+    title1 = title1 || dados.sessao_titulo || 'SESSÃO';
+    title2 = title2 || '';
+  }
+
   const SESSAO_FONT_BASE = 8;
   const SESSAO_FONT_MIN = 6;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(SESSAO_FONT_BASE);
-  const sessaoNaturalWidth = doc.getTextWidth(sessaoNome);
+  const sessaoNaturalWidth = doc.getTextWidth(title2 || ' ');
   const sessaoScaleFactor =
     sessaoNaturalWidth > headerText.width ? headerText.width / sessaoNaturalWidth : 1;
   const sessaoFontSize =
@@ -520,28 +534,23 @@ export async function gerarPDFFichaCliente(
       : SESSAO_FONT_BASE;
 
   doc.setFontSize(sessaoFontSize);
-  const sessaoLine = limitTextLines(doc.splitTextToSize(headerLine2, headerText.width), 1);
+  const sessaoLine = limitTextLines(doc.splitTextToSize(title2, headerText.width), 1);
 
   doc.setTextColor(COLORS.primary);
   doc.setFontSize(10.5);
   doc.setFont('helvetica', 'bold');
-  doc.text(headerLine1, tituloX, headerTop + 4.5, { align: 'center' });
+  doc.text(title1, tituloX, headerTop + 4.5, { align: 'center' });
 
   doc.setFontSize(6.5);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(COLORS.primary);
-  doc.text(examinerDefinition ? headerLine2 : 'SESSÃO', tituloX, headerTop + 8.5, { align: 'center' });
 
   doc.setFontSize(sessaoFontSize);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(COLORS.textSecondary);
-  if (examinerDefinition) {
-    doc.setFontSize(6.2);
-    doc.text(`Duração curricular: ${examinerDefinition.durationMinutes} minutos`, tituloX, headerTop + 12.7, {
-      align: 'center',
-    });
-  } else {
-    doc.text(sessaoLine, tituloX, headerTop + 11.5, { align: 'center' });
+  
+  if (title2) {
+    doc.text(sessaoLine, tituloX, headerTop + 10, { align: 'center' });
   }
 
   // Status badge (canto direito)
@@ -803,7 +812,7 @@ export async function gerarPDFFichaCliente(
   // margem não-imprimível física da maioria das impressoras (~4-5mm).
   const FOOTER_H = 5;
   const SIG_RESERVED = 28;
-  const OBS_RESERVED = 14;
+  const OBS_RESERVED = 18;
   const availableBottomY = pageHeight - FOOTER_H - SIG_RESERVED - 2 - OBS_RESERVED - 2;
 
   // Single-page budget assertion (dev warning only)
@@ -1017,11 +1026,9 @@ export async function gerarPDFFichaCliente(
     const obsTxt =
       dados.observacoes_gerais ||
       (isModoModelo ? 'Observações gerais: ________________________________' : '');
-    // Limitada a 4 linhas (trunca com "…") para o box nunca crescer além do
-    // espaço reservado (OBS_RESERVED) e invadir as caixas de assinatura, que
-    // são posicionadas de baixo para cima de forma independente do texto aqui.
-    const obsLines = limitTextLines(doc.splitTextToSize(obsTxt, contentWidth - 6), 2);
-    const obsBoxH = Math.max(12, 4 + obsLines.length * 4);
+    // Limitada a 6 linhas para expandir o espaço salvo do cabeçalho
+    const obsLines = limitTextLines(doc.splitTextToSize(obsTxt, contentWidth - 6), 6);
+    const obsBoxH = Math.max(18, 6 + obsLines.length * 4);
 
     doc.setDrawColor(COLORS.border);
     doc.setFillColor(COLORS.bgLight);

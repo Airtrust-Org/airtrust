@@ -140,7 +140,7 @@ export async function gerarPDFFicha(dados: FichaPDFData): Promise<Buffer> {
   }
 
   drawHeader(page, fontRegular, fontBold, dados, currentY, contentWidth);
-  currentY -= dados.logoBytes?.length ? 72 : 48;
+  currentY -= dados.logoBytes?.length ? 54 : 32;
 
   drawDivider(page, currentY);
   currentY -= 14;
@@ -229,9 +229,26 @@ function drawHeader(
 ): void {
   const examinerDefinition = getExaminerEventSessionDefinition(dados.sessao_codigo);
   const titleY = topY - 4;
+  let title1 = dados.sessao_titulo_linha1 || examinerDefinition?.headerTitle;
+  let title2 = dados.sessao_titulo_linha2 || examinerDefinition?.headerSubtitle;
+
+  if (!title1 && !title2 && dados.sessao_titulo) {
+    if (dados.sessao_titulo.includes(' - ')) {
+      const parts = dados.sessao_titulo.split(' - ');
+      title1 = parts[0].trim();
+      title2 = parts.slice(1).join(' - ').trim();
+    } else {
+      title1 = dados.sessao_titulo;
+      title2 = '';
+    }
+  } else {
+    title1 = title1 || dados.sessao_titulo || 'FICHA DE TREINAMENTO DE VOO';
+    title2 = title2 || '';
+  }
+
   drawText(
     page,
-    dados.sessao_titulo_linha1 || examinerDefinition?.headerTitle || 'FICHA DE TREINAMENTO DE VOO',
+    title1,
     PAGE.margin,
     titleY,
     fontBold,
@@ -255,27 +272,16 @@ function drawHeader(
   });
   drawTextCentered(page, badgeText, badgeX, badgeY + 6, badgeWidth, fontBold, 9, COLOR.white);
 
-  const subtitleSource =
-    dados.sessao_titulo_linha2 || examinerDefinition?.headerSubtitle || dados.sessao_titulo;
-  const subtitleLines = wrapText(subtitleSource, fontRegular, 8, contentWidth);
-  drawWrappedText(
-    page,
-    subtitleLines,
-    PAGE.margin,
-    titleY - 18,
-    fontRegular,
-    8,
-    10,
-    COLOR.textSecondary,
-  );
-  if (examinerDefinition) {
-    drawText(
+  if (title2) {
+    const subtitleLines = wrapText(title2, fontRegular, 8, contentWidth);
+    drawWrappedText(
       page,
-      `Duração curricular: ${examinerDefinition.durationMinutes} minutos`,
+      subtitleLines,
       PAGE.margin,
-      titleY - 30,
+      titleY - 14,
       fontRegular,
-      7,
+      8,
+      10,
       COLOR.textSecondary,
     );
   }
@@ -714,7 +720,7 @@ function drawObservacoesSection(
   drawText(page, 'OBSERVAÇÕES', PAGE.margin, startY, fontBold, 7, COLOR.text);
 
   const boxTop = startY - 10;
-  const boxHeight = 50;
+  const boxHeight = 65;
   page.drawRectangle({
     x: PAGE.margin,
     y: boxTop - boxHeight,
@@ -730,7 +736,7 @@ function drawObservacoesSection(
     fontRegular,
     6,
     contentWidth - 10,
-  ).slice(0, 6);
+  ).slice(0, 8);
   drawWrappedText(page, textLines, PAGE.margin + 5, boxTop - 8, fontRegular, 6, 8, COLOR.text);
 
   return boxTop - boxHeight;
