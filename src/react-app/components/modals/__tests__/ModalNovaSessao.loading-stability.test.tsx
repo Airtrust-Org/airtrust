@@ -137,7 +137,7 @@ function buildFetchMock(options: TestOptions = {}) {
       {
         id: 45,
         codigo: 'S76-P-01/04-C1',
-        nome: 'SK76 - PERIÓDICO - 01/04 - CICLO 1: VFR',
+        nome: 'Ciclo 1 / VFR-emergências',
         tipo_sessao_id: 9,
         tipo: 'Treinamento Inicial',
         modelo_aeronave: 'SK76',
@@ -145,7 +145,7 @@ function buildFetchMock(options: TestOptions = {}) {
       {
         id: 46,
         codigo: 'S76-P-02/04-C1',
-        nome: 'SK76 - PERIÓDICO - 02/04 - CICLO 1: IFR',
+        nome: 'Ciclo 1 / IFR-emergências',
         tipo_sessao_id: 9,
         tipo: 'Treinamento Inicial',
         modelo_aeronave: 'SK76',
@@ -361,7 +361,7 @@ describe('ModalNovaSessao loading stability', () => {
     await waitFor(() => {
       const modeloSelect = screen.getAllByRole('combobox')[3] as HTMLSelectElement;
       const optionLabels = Array.from(modeloSelect.options).map((option) => option.textContent);
-      expect(optionLabels).toContain('S76-P-01/04-C1 - SK76 - PERIÓDICO - 01/04 - CICLO 1: VFR');
+      expect(optionLabels).toContain('S76-P-01/04-C1 - Ciclo 1 / VFR-emergências');
       expect(optionLabels.some((label) => label?.includes('INICIAL'))).toBe(false);
     });
 
@@ -437,8 +437,8 @@ describe('ModalNovaSessao loading stability', () => {
       expect(optionLabels).toContain(
         'SK76-I-01/12 - SK76 - INICIAL - 01/12 - FAMILIARIZAÇÃO VFR',
       );
-      expect(optionLabels).not.toContain('S76-P-01/04-C1 - SK76 - PERIÓDICO - 01/04 - CICLO 1: VFR');
-      expect(optionLabels).not.toContain('S76-P-02/04-C1 - SK76 - PERIÓDICO - 02/04 - CICLO 1: IFR');
+      expect(optionLabels).not.toContain('S76-P-01/04-C1 - Ciclo 1 / VFR-emergências');
+      expect(optionLabels).not.toContain('S76-P-02/04-C1 - Ciclo 1 / IFR-emergências');
     });
   });
 
