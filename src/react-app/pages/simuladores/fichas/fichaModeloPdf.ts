@@ -7,6 +7,7 @@
  * src/react-app/pages/simuladores/fichas/index.tsx.
  */
 import type { FichaPDFData } from '@/react-app/services/pdf-ficha-client';
+import { getExaminerEventSessionDefinition } from '@/shared/simuladores/examiner-event-sessions';
 import { resolveModeloSessaoObservacoesOverride } from '@/shared/simuladores/modelos-sessao-observacoes';
 import { NOTECHS_ITENS } from './notechs';
 
@@ -50,7 +51,8 @@ export function buildFichaModeloPdfData(
   manobras: ModeloSessaoManobra[],
   logoUrl?: string,
 ): FichaPDFData {
-  const sessaoTitulo = [modelo.codigo, modelo.nome].filter(Boolean).join(' - ');
+  const examinerDefinition = getExaminerEventSessionDefinition(modelo.codigo);
+  const sessaoTitulo = examinerDefinition?.fullTitle || [modelo.codigo, modelo.nome].filter(Boolean).join(' - ');
   const tecnicasPreview = [...manobras]
     .sort((a, b) => a.ordem - b.ordem)
     .slice(0, FICHA_MODELO_TECNICAS_PREVIEW_LIMIT);
@@ -66,7 +68,10 @@ export function buildFichaModeloPdfData(
 
   return {
     fichaId: `modelo-${modelo.id}`,
+    sessao_codigo: modelo.codigo,
     sessao_titulo: sessaoTitulo,
+    sessao_titulo_linha1: examinerDefinition?.headerTitle,
+    sessao_titulo_linha2: examinerDefinition?.headerSubtitle,
     tripulante_nome: '',
     tripulante_codigo_anac: '',
     tripulante_funcao: '',
@@ -76,7 +81,7 @@ export function buildFichaModeloPdfData(
     horario_inicio: '',
     horario_fim: '',
     simulador: modelo.modelo_aeronave || '',
-    carga_horaria_total: '',
+    carga_horaria_total: examinerDefinition ? '120 minutos' : '',
     carga_horaria_pf: '',
     carga_horaria_pm: '',
     status: 'MODELO',

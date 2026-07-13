@@ -179,7 +179,7 @@ const STEP_LABELS: Record<SharedSessionStep, string> = {
  * sourced from sharedSessionPrograms.ts (the single versioned catalog of
  * program -> codigo mappings). Detection is by `codigo`, never by
  * title/substring — these are stable curricular codes (see migration
- * 0424_examiner_universal_training_fichas), universal across aircraft
+ * 0424/0425 examiner training migrations, universal across aircraft
  * (modelo_aeronave NULL). Importantly, the *panel* below only appears when
  * the user has explicitly selected this program (or it's already reflected
  * by persisted/seeded segment data) — never merely because these models
@@ -411,6 +411,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       const params = new URLSearchParams({
         limit: '200',
         tipo: 'SIMULADOR',
+        ativo: '1',
         modelo_aeronave: simuladorModelo,
       });
       const response = await fetch(`${API_BASE_URL}/simuladores/modelos-sessao?${params}`, {
@@ -606,10 +607,8 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     return map;
   }, [modelos]);
 
-  const examinerEvent1Available =
-    examinerModelByCode.has(EXAMINER_EVENT_1_CODES[0]) && examinerModelByCode.has(EXAMINER_EVENT_1_CODES[1]);
-  const examinerEvent2Available =
-    examinerModelByCode.has(EXAMINER_EVENT_2_CODES[0]) && examinerModelByCode.has(EXAMINER_EVENT_2_CODES[1]);
+  const examinerEvent1Available = EXAMINER_EVENT_1_CODES.some((codigo) => examinerModelByCode.has(codigo));
+  const examinerEvent2Available = EXAMINER_EVENT_2_CODES.some((codigo) => examinerModelByCode.has(codigo));
 
   // Pure reflection of what the current segments already carry — never used
   // to *decide* the program on its own, only to (a) hydrate the program
@@ -694,9 +693,10 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const applyExaminerTemplate = useCallback(
     (event: 1 | 2) => {
       const codes = event === 1 ? EXAMINER_EVENT_1_CODES : EXAMINER_EVENT_2_CODES;
-      const firstModel = examinerModelByCode.get(codes[0]);
-      const secondModel = examinerModelByCode.get(codes[1]);
-      if (!firstModel || !secondModel || !reservationReady || !examinerReservationMatches) return;
+      const selectedModel = codes
+        .map((codigo) => examinerModelByCode.get(codigo))
+        .find(Boolean);
+      if (!selectedModel || !reservationReady || !examinerReservationMatches) return;
 
       const split = minutesToTime(timeToMinutes(horarioInicio) + EXAMINER_SEGMENT_MINUTES);
       setSplitTime(split);
@@ -711,13 +711,13 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       setSegmentAssignments([
         {
           ...segmentAssignments[0],
-          modeloSessaoId: firstModel.id,
-          finalidadeCodigo: 'ATUACAO_EXAMINADOR',
+          modeloSessaoId: selectedModel.id,
+          finalidadeCodigo: event === 1 ? 'SOP_NORMAL' : 'SOP_ANORMAL_EMERGENCIA',
           curricularIds: traineeIds,
         },
         {
           ...segmentAssignments[1],
-          modeloSessaoId: secondModel.id,
+          modeloSessaoId: selectedModel.id,
           finalidadeCodigo: 'ATUACAO_EXAMINADOR',
           curricularIds: traineeIds,
         },
@@ -1001,7 +1001,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         </select>
         <p className="mt-1 text-xs text-slate-500">
           A estrutura de segmentos do treinamento de examinador só aparece quando este programa é
-          selecionado — a existência dos modelos EXA-V0X no tenant não a mostra sozinha.
+          selecionado — a existência dos modelos EXA-E01/EXA-E02 no tenant não a mostra sozinha.
         </p>
       </div>
 
@@ -1019,13 +1019,12 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             )}
           </div>
           <p className="mt-1 text-xs text-indigo-700">
-            Cada agendamento físico representa um evento. Aplique a estrutura de 60 minutos por
-            segmento no evento correspondente — o segundo evento é configurado em um agendamento
-            separado.
+            Cada agendamento físico representa um evento de 120 minutos. A distribuição PF/PM
+            continua segmentada operacionalmente, mas o currículo e a ficha cobrem toda a reserva.
           </p>
           {!examinerEvent1Available && !examinerEvent2Available && (
             <p className="mt-2 text-xs text-amber-800" role="status">
-              Os modelos EXA-V01..V04 não estão disponíveis neste tenant. A estrutura de examinador
+              Os modelos EXA-E01/EXA-E02 não estão disponíveis neste tenant. A estrutura de examinador
               não pode ser aplicada até que esses modelos existam no catálogo.
             </p>
           )}
@@ -1041,14 +1040,14 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
               disabled={!examinerEvent1Available || !examinerReservationMatches}
               title={
                 !examinerEvent1Available
-                  ? 'EXA-V01/EXA-V02 não disponíveis neste tenant'
+                  ? 'EXA-E01 não disponível neste tenant'
                   : !examinerReservationMatches
                     ? `Reserva precisa ter exatamente ${EXAMINER_RESERVATION_MINUTES} minutos`
                     : undefined
               }
               className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-medium text-indigo-800 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Aplicar Evento 1 de 2 (EXA-V01 + EXA-V02)
+              Aplicar EXA-E01 · Examinador 1/2
             </button>
             <button
               type="button"
@@ -1056,15 +1055,27 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
               disabled={!examinerEvent2Available || !examinerReservationMatches}
               title={
                 !examinerEvent2Available
-                  ? 'EXA-V03/EXA-V04 não disponíveis neste tenant'
+                  ? 'EXA-E02 não disponível neste tenant'
                   : !examinerReservationMatches
                     ? `Reserva precisa ter exatamente ${EXAMINER_RESERVATION_MINUTES} minutos`
                     : undefined
               }
               className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-medium text-indigo-800 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Aplicar Evento 2 de 2 (EXA-V03 + EXA-V04)
+              Aplicar EXA-E02 · Examinador 2/2
             </button>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-indigo-800 md:grid-cols-2">
+            <div className="rounded-md border border-indigo-200 bg-white/70 px-3 py-2">
+              <p className="font-semibold">EXA-E01</p>
+              <p>Treinamento Prático de Examinador 1/2</p>
+              <p>SOP Normal e Condução Inicial / SOP Anormal e Avaliação</p>
+            </div>
+            <div className="rounded-md border border-indigo-200 bg-white/70 px-3 py-2">
+              <p className="font-semibold">EXA-E02</p>
+              <p>Treinamento Prático de Examinador 2/2</p>
+              <p>Emergência, Intervenção e Segurança / Atuação Integrada do Examinador</p>
+            </div>
           </div>
         </div>
       )}

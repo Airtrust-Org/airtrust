@@ -24,8 +24,8 @@ trap 'rm -f "$PREFLIGHT_OUTPUT"' EXIT
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_MIGRATION_APPLY"
-APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql")
-RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424"
+APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql")
+RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425"
 
 apply=false
 backup_file=""

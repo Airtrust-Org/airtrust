@@ -34,10 +34,17 @@ import {
   getNotechsDescritores,
   splitManobrasNotechs,
 } from '../pages/simuladores/fichas/notechs';
+import {
+  getExaminerEventSessionDefinition,
+  splitExaminerTechnicalBlocks,
+} from '@/shared/simuladores/examiner-event-sessions';
 
 export interface FichaPDFData {
   fichaId: string | number;
+  sessao_codigo?: string;
   sessao_titulo: string;
+  sessao_titulo_linha1?: string;
+  sessao_titulo_linha2?: string;
   tripulante_nome: string;
   tripulante_codigo_anac?: string;
   tripulante_funcao: string;
@@ -375,9 +382,10 @@ export async function gerarPDFFichaCliente(
   const contentWidth = pageWidth - 2 * margin;
   let currentY = margin;
   const isModoModelo = dados.modoModelo === true;
+  const examinerDefinition = getExaminerEventSessionDefinition(dados.sessao_codigo);
   // ── Geometria base do header (compacto) ───────────────────────────────────
   const headerTop = 4;
-  const headerHeight = 15; // compacto (era 19) para caber 33 itens em 1 página
+  const headerHeight = examinerDefinition ? 18 : 15; // compacto (era 19) para caber 33 itens em 1 página
   const headerBottom = headerTop + headerHeight; // = 23
   const headerCenterX = pageWidth / 2;
   const headerGap = 1;
@@ -495,6 +503,9 @@ export async function gerarPDFFichaCliente(
   // Título e sessão reservando espaço fixo entre logo e badge
   const tituloX = headerCenterX;
   const sessaoNome = dados.sessao_titulo || dados.simulador || 'Sessão de Treinamento';
+  const headerLine1 = dados.sessao_titulo_linha1 || examinerDefinition?.headerTitle || 'SESSÃO';
+  const headerLine2 =
+    dados.sessao_titulo_linha2 || examinerDefinition?.headerSubtitle || sessaoNome;
   const SESSAO_FONT_BASE = 8;
   const SESSAO_FONT_MIN = 6;
 
@@ -509,22 +520,29 @@ export async function gerarPDFFichaCliente(
       : SESSAO_FONT_BASE;
 
   doc.setFontSize(sessaoFontSize);
-  const sessaoLine = limitTextLines(doc.splitTextToSize(sessaoNome, headerText.width), 1);
+  const sessaoLine = limitTextLines(doc.splitTextToSize(headerLine2, headerText.width), 1);
 
   doc.setTextColor(COLORS.primary);
   doc.setFontSize(10.5);
   doc.setFont('helvetica', 'bold');
-  doc.text('FICHA DE TREINAMENTO DE VOO', tituloX, headerTop + 4.5, { align: 'center' });
+  doc.text(headerLine1, tituloX, headerTop + 4.5, { align: 'center' });
 
-  doc.setFontSize(6);
+  doc.setFontSize(6.5);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(COLORS.primary);
-  doc.text('SESSÃO', tituloX, headerTop + 7.5, { align: 'center' });
+  doc.text(examinerDefinition ? headerLine2 : 'SESSÃO', tituloX, headerTop + 8.5, { align: 'center' });
 
   doc.setFontSize(sessaoFontSize);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(COLORS.textSecondary);
-  doc.text(sessaoLine, tituloX, headerTop + 11.5, { align: 'center' });
+  if (examinerDefinition) {
+    doc.setFontSize(6.2);
+    doc.text(`Duração curricular: ${examinerDefinition.durationMinutes} minutos`, tituloX, headerTop + 12.7, {
+      align: 'center',
+    });
+  } else {
+    doc.text(sessaoLine, tituloX, headerTop + 11.5, { align: 'center' });
+  }
 
   // Status badge (canto direito)
   const statusText = dados.status || 'PENDENTE';
@@ -575,7 +593,7 @@ export async function gerarPDFFichaCliente(
   // 16mm + 5.0mm/linha coloca a última baseline em +14.5mm, com 1.5mm de
   // folga real até a borda — custo de só +2mm no orçamento vertical total
   // (mantém a compactação de 1 página já obtida).
-  const SESSION_BOX_H = 18;
+  const SESSION_BOX_H = examinerDefinition ? 20.5 : 18;
   const SESSION_LINE_H = 5.5;
   doc.setDrawColor(COLORS.border);
   doc.setFillColor(COLORS.bgLight);
@@ -605,34 +623,61 @@ export async function gerarPDFFichaCliente(
     doc.text(value, x + labelW, y);
   };
 
-  // Linha 1: Data | Horário | Simulador | Carga Horária
+  // Linha 1: Código | Data | Horário | Duração curricular
   let lineY = currentY + 5.5;
-  drawInfoField('Data:', getDisplayValue(dataFormatada), COL1, 9, lineY);
-  drawInfoField(
-    'Horário:',
-    getDisplayValue(
-      [dados.horario_inicio, dados.horario_fim].filter(Boolean).join(' – '),
-      '__:__ – __:__',
-    ),
-    COL2,
-    14,
-    lineY,
-  );
-  drawInfoField('Simulador:', getDisplayValue(dados.simulador), COL3, 16, lineY);
-  drawInfoField('Carga Horária:', getDisplayValue(cargaShort), COL4, 19, lineY);
+  if (examinerDefinition) {
+    drawInfoField('Código:', getDisplayValue(dados.sessao_codigo), COL1, 11, lineY);
+    drawInfoField('Data:', getDisplayValue(dataFormatada), COL2, 9, lineY);
+    drawInfoField(
+      'Horário:',
+      getDisplayValue(
+        [dados.horario_inicio, dados.horario_fim].filter(Boolean).join(' – '),
+        '__:__ – __:__',
+      ),
+      COL3,
+      14,
+      lineY,
+    );
+    drawInfoField('Duração:', getDisplayValue(dados.carga_horaria_total, '120 minutos'), COL4, 15, lineY);
+  } else {
+    drawInfoField('Data:', getDisplayValue(dataFormatada), COL1, 9, lineY);
+    drawInfoField(
+      'Horário:',
+      getDisplayValue(
+        [dados.horario_inicio, dados.horario_fim].filter(Boolean).join(' – '),
+        '__:__ – __:__',
+      ),
+      COL2,
+      14,
+      lineY,
+    );
+    drawInfoField('Simulador:', getDisplayValue(dados.simulador), COL3, 16, lineY);
+    drawInfoField('Carga Horária:', getDisplayValue(cargaShort), COL4, 19, lineY);
+  }
 
-  // Linha 2: Tripulante | ANAC | Função | PF / PM
+  // Linha 2: Participante avaliado | Função | Equipamento utilizado | PF / PM
   lineY += SESSION_LINE_H;
-  drawInfoField('Tripulante:', getDisplayValue(dados.tripulante_nome), COL1, 18, lineY);
   drawInfoField(
-    'ANAC:',
-    getDisplayValue(dados.tripulante_codigo_anac, '____________'),
-    COL2,
-    9,
+    examinerDefinition ? 'Participante:' : 'Tripulante:',
+    getDisplayValue(dados.tripulante_nome),
+    COL1,
+    examinerDefinition ? 20 : 18,
     lineY,
   );
-  drawInfoField('Função:', getDisplayValue(dados.tripulante_funcao, '______'), COL3, 12, lineY);
-  if (dados.carga_horaria_pf || dados.carga_horaria_pm) {
+  if (examinerDefinition) {
+    drawInfoField('Função:', getDisplayValue(dados.tripulante_funcao, '______'), COL2, 12, lineY);
+    drawInfoField('Equipamento:', getDisplayValue(dados.simulador), COL3, 18, lineY);
+  } else {
+    drawInfoField(
+      'ANAC:',
+      getDisplayValue(dados.tripulante_codigo_anac, '____________'),
+      COL2,
+      9,
+      lineY,
+    );
+    drawInfoField('Função:', getDisplayValue(dados.tripulante_funcao, '______'), COL3, 12, lineY);
+  }
+  if (!examinerDefinition && (dados.carga_horaria_pf || dados.carga_horaria_pm)) {
     drawInfoField(
       'PF / PM:',
       `${getDisplayValue(dados.carga_horaria_pf, '0')}h / ${getDisplayValue(dados.carga_horaria_pm, '0')}h`,
@@ -642,16 +687,39 @@ export async function gerarPDFFichaCliente(
     );
   }
 
-  // Linha 3: Instrutor | ANAC
+  // Linha 3: Instrutor supervisor | ANAC
   lineY += SESSION_LINE_H;
-  drawInfoField('Instrutor:', getDisplayValue(dados.instrutor_nome), COL1, 16, lineY);
   drawInfoField(
-    'ANAC:',
-    getDisplayValue(dados.instrutor_codigo_anac, '____________'),
-    COL2,
-    9,
+    examinerDefinition ? 'Supervisor:' : 'Instrutor:',
+    getDisplayValue(dados.instrutor_nome),
+    COL1,
+    examinerDefinition ? 18 : 16,
     lineY,
   );
+  if (examinerDefinition) {
+    drawInfoField(
+      'ANAC:',
+      getDisplayValue(dados.tripulante_codigo_anac, '____________'),
+      COL2,
+      9,
+      lineY,
+    );
+    drawInfoField(
+      'Supervisor ANAC:',
+      getDisplayValue(dados.instrutor_codigo_anac, '____________'),
+      COL3,
+      23,
+      lineY,
+    );
+  } else {
+    drawInfoField(
+      'ANAC:',
+      getDisplayValue(dados.instrutor_codigo_anac, '____________'),
+      COL2,
+      9,
+      lineY,
+    );
+  }
 
   // Avançar currentY: session box + gap (2mm, igual ao gap acima)
   currentY += SESSION_BOX_H + 2;
@@ -705,6 +773,7 @@ export async function gerarPDFFichaCliente(
 
   // NOTECHS continua a numeração da coluna # após as técnicas (19–33),
   // sem prefixo "N", mantendo continuidade visual com o bloco técnico.
+  const examinerBlocks = splitExaminerTechnicalBlocks(dados.sessao_codigo, manobras);
   const tecnicasRows = manobras.map((m) => ({
     m,
     rowH: ITEM_ROW_HEIGHT,
@@ -717,11 +786,14 @@ export async function gerarPDFFichaCliente(
     displayNum: manobras.length + (m.ordem - NOTECHS_ORDEM_BASE + 1),
     isNotechs: true,
   }));
+  const TECHNICAL_BLOCK_DIVIDER_H = examinerBlocks ? 5 : 0;
   const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 5 : 0;
 
   const allRows = [...tecnicasRows, ...notechsRows];
   const totalTableH =
-    allRows.length * ITEM_ROW_HEIGHT + NOTECHS_DIVIDER_H;
+    allRows.length * ITEM_ROW_HEIGHT +
+    NOTECHS_DIVIDER_H +
+    (examinerBlocks ? TECHNICAL_BLOCK_DIVIDER_H * examinerBlocks.length : 0);
 
   // Layout de baixo para cima — single page (sem paginação para ficha-modelo):
   //   rodapé: 4mm no fundo
@@ -894,8 +966,27 @@ export async function gerarPDFFichaCliente(
 
   const tecnicasCount = manobras.length;
   let rowIndex = 0;
+  let activeTechnicalBlockIndex = 0;
+  let nextTechnicalBlock =
+    examinerBlocks && examinerBlocks.length > 0 ? examinerBlocks[activeTechnicalBlockIndex] : null;
 
   for (const row of precomputedRows) {
+    if (
+      !row.isNotechs &&
+      nextTechnicalBlock &&
+      row.m.ordem === nextTechnicalBlock.definition.startOrder
+    ) {
+      doc.setFillColor('#E6EEF3');
+      doc.rect(margin, currentY, contentWidth, TECHNICAL_BLOCK_DIVIDER_H, 'F');
+      doc.setTextColor(COLORS.text);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.text(nextTechnicalBlock.definition.title, margin + 3, currentY + 3.3);
+      currentY += TECHNICAL_BLOCK_DIVIDER_H;
+      activeTechnicalBlockIndex += 1;
+      nextTechnicalBlock = examinerBlocks?.[activeTechnicalBlockIndex] || null;
+    }
+
     // Inserir NOTECHS divider antes do primeiro NOTECHS
     if (rowIndex === tecnicasCount && manobrasNotechs.length > 0) {
       doc.setFillColor(COLORS.sectionBar);

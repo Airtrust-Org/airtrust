@@ -138,9 +138,6 @@ export async function assertEntityOwnership(
     if (!modelo) {
       throw new Error('Modelo de sessão fora do tenant');
     }
-    if (Number(modelo.ativo ?? 1) !== 1) {
-      throw new Error('Modelo de sessão inativo');
-    }
     const tipoModelo = String(modelo.tipo || 'SIMULADOR').trim().toUpperCase();
     if (tipoModelo === 'AERONAVE') {
       throw new Error('Modelo de sessão incompatível com simulador');

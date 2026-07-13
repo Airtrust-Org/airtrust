@@ -152,7 +152,7 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
 
     await screen.findByLabelText('Modelo do segmento 1');
     expect(screen.queryByTestId('examiner-template-panel')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Aplicar Evento/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Aplicar EXA-E0/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Evento \d de 2 aplicado/i)).not.toBeInTheDocument();
   });
 
@@ -169,7 +169,7 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
 
     expect(screen.getByLabelText('Programa desta sessão')).toHaveValue('GENERICO');
     expect(screen.queryByTestId('examiner-template-panel')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Aplicar Evento/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Aplicar EXA-E0/i)).not.toBeInTheDocument();
     expect(getModelCodesFromSelect(1)).toEqual([]);
   });
 
@@ -203,8 +203,8 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     await screen.findByTestId('examiner-template-panel');
 
     expect(screen.getByText(/precisa ter exatamente 120 minutos/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Aplicar Evento 2 de 2/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Aplicar EXA-E01/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Aplicar EXA-E02/i })).toBeDisabled();
     expect(getModelCodesFromSelect(1)).toEqual(['EXA-V01', 'EXA-V02', 'EXA-V03', 'EXA-V04']);
   });
 
@@ -220,13 +220,13 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     await screen.findByTestId('examiner-template-panel');
 
     expect(
-      screen.getByText(/modelos EXA-V01\.\.V04 não estão disponíveis neste tenant/i),
+      screen.getByText(/modelos EXA-E01\/EXA-E02 não estão disponíveis neste tenant/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Aplicar Evento 2 de 2/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Aplicar EXA-E01/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Aplicar EXA-E02/i })).toBeDisabled();
   });
 
-  it('applies Evento 1 de 2 (EXA-V01 + EXA-V02) only: exactly two 60-minute segments, same trainee, submitted with correct codes', async () => {
+  it('applies Evento 1 de 2 on the full 120-minute reservation, keeping the same curricular model across the two operational segments', async () => {
     mockModelosResponse(EXAMINER_MODELOS);
     render(<SharedSessionForm {...(BASE_PROPS({ horarioInicio: '08:00', horarioFim: '10:00' }) as any)} />);
 
@@ -237,11 +237,11 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     await selectProgram('Treinamento Prático de Examinador');
     await screen.findByTestId('examiner-template-panel');
 
-    await userEvent.click(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Aplicar EXA-E01/i }));
 
     expect(screen.getByLabelText('Horário de divisão dos segmentos')).toHaveValue('09:00');
     expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue('501');
-    expect(screen.getByLabelText('Modelo do segmento 2')).toHaveValue('502');
+    expect(screen.getByLabelText('Modelo do segmento 2')).toHaveValue('501');
     expect(screen.getByText(/Evento 1 de 2 aplicado/i)).toBeInTheDocument();
 
     // Mark Ramos as the curricular trainee in both segments (required before submit).
@@ -260,13 +260,13 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     expect(payload.segmentos[0].modelo_sessao_id).toBe(501);
     expect(payload.segmentos[1].inicio).toBe('09:00');
     expect(payload.segmentos[1].fim).toBe('10:00');
-    expect(payload.segmentos[1].modelo_sessao_id).toBe(502);
-    // Evento 1 never touches V03/V04.
+    expect(payload.segmentos[1].modelo_sessao_id).toBe(501);
+    // Evento 1 never touches the event-2 legacy models.
     expect(payload.segmentos.map((s: any) => s.modelo_sessao_id)).not.toContain(503);
     expect(payload.segmentos.map((s: any) => s.modelo_sessao_id)).not.toContain(504);
   });
 
-  it('applies Evento 2 de 2 (EXA-V03 + EXA-V04) only', async () => {
+  it('applies Evento 2 de 2 on the full 120-minute reservation, keeping the same curricular model across the two operational segments', async () => {
     mockModelosResponse(EXAMINER_MODELOS);
     render(<SharedSessionForm {...(BASE_PROPS({ horarioInicio: '08:00', horarioFim: '10:00' }) as any)} />);
 
@@ -277,10 +277,10 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     await selectProgram('Treinamento Prático de Examinador');
     await screen.findByTestId('examiner-template-panel');
 
-    await userEvent.click(screen.getByRole('button', { name: /Aplicar Evento 2 de 2/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Aplicar EXA-E02/i }));
 
     expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue('503');
-    expect(screen.getByLabelText('Modelo do segmento 2')).toHaveValue('504');
+    expect(screen.getByLabelText('Modelo do segmento 2')).toHaveValue('503');
     expect(screen.getByText(/Evento 2 de 2 aplicado/i)).toBeInTheDocument();
   });
 
@@ -295,8 +295,8 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     await selectProgram('Treinamento Prático de Examinador');
     await screen.findByTestId('examiner-template-panel');
 
-    expect(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: /Aplicar Evento 2 de 2/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Aplicar EXA-E01/i })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /Aplicar EXA-E02/i })).toBeDisabled();
   });
 
   it('a common course never receives EXA segments automatically, even with the catalog present', async () => {
@@ -323,7 +323,7 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     await screen.findByLabelText('Modelo do segmento 1');
     await selectProgram('Treinamento Prático de Examinador');
     await screen.findByTestId('examiner-template-panel');
-    await userEvent.click(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Aplicar EXA-E01/i }));
     expect(screen.getByLabelText('Modelo do segmento 1')).toHaveValue('501');
 
     mockConfirmDialog.mockResolvedValueOnce(true);
@@ -345,7 +345,7 @@ describe('SharedSessionForm — examiner template (EXA-V01..V04)', () => {
     await screen.findByLabelText('Modelo do segmento 1');
     await selectProgram('Treinamento Prático de Examinador');
     await screen.findByTestId('examiner-template-panel');
-    await userEvent.click(screen.getByRole('button', { name: /Aplicar Evento 1 de 2/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Aplicar EXA-E01/i }));
 
     mockConfirmDialog.mockResolvedValueOnce(false);
     await selectProgram('Genérico');

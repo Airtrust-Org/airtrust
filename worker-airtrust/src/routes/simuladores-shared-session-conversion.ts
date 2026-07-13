@@ -339,56 +339,6 @@ export async function convertSimpleSessionToSharedTransactional(
             participanteCurricular.gera_ficha ? 1 : 0,
           ),
       );
-
-      if (participanteCurricular.gera_ficha && participanteCurricular.modelo_sessao_id) {
-        const fichaUuid = crypto.randomUUID();
-        const modelo = modelosMap.get(Number(participanteCurricular.modelo_sessao_id));
-
-        statements.push(
-          db
-            .prepare(
-              `INSERT INTO fichas_sessao
-                 (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id, atribuicao_curricular_id, segmento_atribuicao_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?, (SELECT id FROM simulador_atribuicoes_curriculares WHERE uuid = ?), (SELECT id FROM simulador_segmento_atribuicoes WHERE uuid = ?))`,
-            )
-            .bind(
-              fichaUuid,
-              sessaoId,
-              participanteCurricular.funcionario_id,
-              payload.instrutor_id,
-              modelo?.codigo || primaryModel?.codigo || 'SHARED',
-              simulatorModel,
-              payload.data,
-              participanteCurricular.modelo_sessao_id,
-              empresaId,
-              assignmentUuid,
-              segmentoAtribuicaoUuid,
-            ),
-        );
-
-        const manobras = await loadFichaManobrasForModelo(db, Number(participanteCurricular.modelo_sessao_id));
-        assertModeloSessaoTemManobras(Number(participanteCurricular.modelo_sessao_id), manobras);
-        for (const manobra of manobras) {
-          statements.push(
-            db
-              .prepare(
-                `INSERT INTO fichas_sessao_manobras
-                   (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
-                 VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
-              )
-              .bind(
-                fichaUuid,
-                manobra.codigo,
-                manobra.nome,
-                manobra.descricao || manobra.nome,
-                manobra.categoria || 'GERAL',
-                manobra.ordem,
-                manobra.tripulante || 'AB',
-                empresaId,
-              ),
-          );
-        }
-      }
     }
 
     for (const funcao of segmento.participantes) {
@@ -413,6 +363,59 @@ export async function convertSimpleSessionToSharedTransactional(
             funcao.funcao,
             segmento.duracao_minutos,
             ...(assignmentUuid ? [assignmentUuid] : []),
+          ),
+      );
+    }
+  }
+
+  for (const assignmentPlan of payload.atribuicoes_planejadas) {
+    if (!assignmentPlan.gera_ficha || !assignmentPlan.modelo_sessao_id) {
+      continue;
+    }
+
+    const fichaUuid = crypto.randomUUID();
+    const modelo = modelosMap.get(Number(assignmentPlan.modelo_sessao_id));
+
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO fichas_sessao
+             (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id, atribuicao_curricular_id, segmento_atribuicao_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?, (SELECT id FROM simulador_atribuicoes_curriculares WHERE uuid = ?), NULL)`,
+        )
+        .bind(
+          fichaUuid,
+          sessaoId,
+          assignmentPlan.funcionario_id,
+          payload.instrutor_id,
+          modelo?.codigo || primaryModel?.codigo || 'SHARED',
+          simulatorModel,
+          payload.data,
+          assignmentPlan.modelo_sessao_id,
+          empresaId,
+          assignmentUuidByKey.get(assignmentPlan.assignment_key),
+        ),
+    );
+
+    const manobras = await loadFichaManobrasForModelo(db, Number(assignmentPlan.modelo_sessao_id));
+    assertModeloSessaoTemManobras(Number(assignmentPlan.modelo_sessao_id), manobras);
+    for (const manobra of manobras) {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO fichas_sessao_manobras
+               (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
+             VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            fichaUuid,
+            manobra.codigo,
+            manobra.nome,
+            manobra.descricao || manobra.nome,
+            manobra.categoria || 'GERAL',
+            manobra.ordem,
+            manobra.tripulante || 'AB',
+            empresaId,
           ),
       );
     }

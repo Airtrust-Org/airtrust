@@ -15,9 +15,10 @@ describe('simuladores fichas shared-hours contract', () => {
     expect(routeSource).toContain("GROUP_CONCAT(participante_nome, ' / ')");
     expect(routeSource).toContain('tripulacao_nomes: f.tripulacao_nomes || null');
     expect(routeSource).toContain('if (f.atribuicao_curricular_id)');
+    expect(routeSource).toContain('WITH assignment_segments AS');
+    expect(routeSource).toContain('FROM simulador_segmento_atribuicoes ssa');
     expect(routeSource).toContain("CASE WHEN ssp.funcao = 'PF'");
     expect(routeSource).toContain("CASE WHEN ssp.funcao = 'PM'");
-    expect(routeSource).toContain('sas.deleted_at IS NULL');
     expect(routeSource).toContain('ssp.deleted_at IS NULL');
   });
 });

@@ -122,6 +122,30 @@ describe('fichaModeloPdf', () => {
     expect(fileName).toBe('FICHA-MODELO-AW139-REC-RECORRENTE-AVANCADO.pdf');
   });
 
+  it('preenche cabeçalho canônico e duração de 120 minutos para EXA-E01', () => {
+    const dados = buildFichaModeloPdfData(
+      {
+        id: 41,
+        codigo: 'EXA-E01',
+        nome: 'Treinamento Prático de Examinador 1/2 — SOP Normal e Condução Inicial / SOP Anormal e Avaliação',
+      },
+      Array.from({ length: 18 }, (_, index) => ({
+        ordem: index + 1,
+        manobra_codigo: `EXA-E01-${String(index + 1).padStart(2, '0')}`,
+        manobra_nome: `Item ${index + 1}`,
+        manobra_descricao: `Descrição ${index + 1}`,
+        tripulante: 'AB',
+      })),
+    );
+
+    expect(dados.sessao_codigo).toBe('EXA-E01');
+    expect(dados.sessao_titulo_linha1).toBe('Treinamento Prático de Examinador 1/2');
+    expect(dados.sessao_titulo_linha2).toBe(
+      'SOP Normal e Condução Inicial / SOP Anormal e Avaliação',
+    );
+    expect(dados.carga_horaria_total).toBe('120 minutos');
+  });
+
   it('reserva coluna Trip. no layout impresso sem invadir a nota', () => {
     const layout = getFichaPdfTableLayout(15);
     const headers = getFichaPdfTableHeaders();

@@ -26,6 +26,7 @@ const MIGRATION_421 = migrationSqlNamed('0421_shared_session_segment_curricula.s
 const MIGRATION_422 = migrationSqlNamed('0422_modelos_sessao_requisitos.sql');
 const MIGRATION_423 = migrationSqlNamed('0423_shared_session_multi_curricula_per_participant.sql');
 const MIGRATION_424 = migrationSqlNamed('0424_examiner_universal_training_fichas.sql');
+const MIGRATION_425 = migrationSqlNamed('0425_examiner_event_models_and_assignment_owned_fichas.sql');
 
 const TECNICOS = [
   'EXA-V01-01', 'EXA-V01-02', 'EXA-V01-03', 'EXA-V01-04', 'EXA-V01-05', 'EXA-V01-06',
@@ -395,6 +396,87 @@ describe('0424 examiner universal training fichas', () => {
       );
       expect(after).toBe(before);
       expect(Number(runSqlite(dbPath, `SELECT COUNT(*) FROM manobras WHERE codigo LIKE 'EXA-CGE-%' OR codigo LIKE 'EXA-NTS-%' OR codigo LIKE 'EXA-CND-%' OR codigo LIKE 'EXA-ETH-%';`))).toBe(0);
+    } finally {
+      rmSync(join(dbPath, '..'), { recursive: true, force: true });
+    }
+  });
+});
+
+describe('0425 examiner event models and assignment-owned fichas', () => {
+  it('creates EXA-E01 and EXA-E02, marks EXA-V01..V04 inactive, and keeps 18 técnicos per new model', () => {
+    const dbPath = setupDb();
+    try {
+      runSqlite(dbPath, MIGRATION_424);
+      runSqlite(dbPath, MIGRATION_425);
+
+      const legacyStatuses = runSqlite(
+        dbPath,
+        `SELECT codigo, ativo
+         FROM modelos_sessao
+         WHERE codigo IN ('EXA-V01','EXA-V02','EXA-V03','EXA-V04')
+         ORDER BY codigo;`,
+      );
+      expect(legacyStatuses.split('\n')).toEqual([
+        'EXA-V01|0',
+        'EXA-V02|0',
+        'EXA-V03|0',
+        'EXA-V04|0',
+      ]);
+
+      const novos = runSqlite(
+        dbPath,
+        `SELECT codigo, nome, duracao_estimada, ativo
+         FROM modelos_sessao
+         WHERE codigo IN ('EXA-E01','EXA-E02')
+         ORDER BY codigo;`,
+      );
+      expect(novos.split('\n')).toEqual([
+        'EXA-E01|Treinamento Prático de Examinador 1/2 — SOP Normal e Condução Inicial / SOP Anormal e Avaliação|120|1',
+        'EXA-E02|Treinamento Prático de Examinador 2/2 — Emergência, Intervenção e Segurança / Atuação Integrada do Examinador|120|1',
+      ]);
+
+      expect(
+        Number(runSqlite(dbPath, `SELECT COUNT(*) FROM manobras WHERE codigo LIKE 'EXA-E01-%' AND empresa_id = 6;`)),
+      ).toBe(18);
+      expect(
+        Number(runSqlite(dbPath, `SELECT COUNT(*) FROM manobras WHERE codigo LIKE 'EXA-E02-%' AND empresa_id = 6;`)),
+      ).toBe(18);
+      expect(
+        Number(
+          runSqlite(
+            dbPath,
+            `SELECT COUNT(*) FROM modelos_sessao_manobras msm
+             JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+             WHERE ms.codigo = 'EXA-E01';`,
+          ),
+        ),
+      ).toBe(18);
+      expect(
+        Number(
+          runSqlite(
+            dbPath,
+            `SELECT COUNT(*) FROM modelos_sessao_manobras msm
+             JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+             WHERE ms.codigo = 'EXA-E02';`,
+          ),
+        ),
+      ).toBe(18);
+
+      const requisito = runSqlite(
+        dbPath,
+        `SELECT m1.codigo, m2.codigo
+         FROM modelos_sessao_requisitos r
+         JOIN modelos_sessao m1 ON m1.id = r.modelo_sessao_id
+         JOIN modelos_sessao m2 ON m2.id = r.requisito_modelo_sessao_id
+         WHERE m1.codigo = 'EXA-E02';`,
+      );
+      expect(requisito).toBe('EXA-E02|EXA-E01');
+
+      const indexExists = runSqlite(
+        dbPath,
+        `SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'uq_fichas_sessao_empresa_atribuicao_curricular_ativa';`,
+      );
+      expect(indexExists).toBe('1');
     } finally {
       rmSync(join(dbPath, '..'), { recursive: true, force: true });
     }

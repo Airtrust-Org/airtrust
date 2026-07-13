@@ -223,56 +223,6 @@ async function buildSharedSessionCreatePlan(
           ),
       );
 
-      if (participanteCurricular.gera_ficha && participanteCurricular.modelo_sessao_id) {
-        const fichaUuid = crypto.randomUUID();
-        persistence.fichaIds.push(persistence.fichaIds.length + 1);
-        const modelo = modelosMap.get(Number(participanteCurricular.modelo_sessao_id));
-
-        statements.push(
-          db
-            .prepare(
-              `INSERT INTO fichas_sessao
-                 (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id, atribuicao_curricular_id, segmento_atribuicao_id)
-               VALUES (?, ${sessionIdExpr}, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?, (SELECT id FROM simulador_atribuicoes_curriculares WHERE uuid = ?), (SELECT id FROM simulador_segmento_atribuicoes WHERE uuid = ?))`,
-            )
-            .bind(
-              fichaUuid,
-              ...sessionIdBinds,
-              participanteCurricular.funcionario_id,
-              payload.instrutor_id,
-              modelo?.codigo || primaryModel?.codigo || 'SHARED',
-              simulatorModel,
-              payload.data,
-              participanteCurricular.modelo_sessao_id,
-              empresaId,
-              assignmentUuid,
-              segmentoAtribuicaoUuid,
-            ),
-        );
-
-        const manobras = await loadFichaManobrasForModelo(db, Number(participanteCurricular.modelo_sessao_id));
-        assertModeloSessaoTemManobras(Number(participanteCurricular.modelo_sessao_id), manobras);
-        for (const manobra of manobras) {
-          statements.push(
-            db
-              .prepare(
-                `INSERT INTO fichas_sessao_manobras
-                   (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
-                 VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
-              )
-              .bind(
-                fichaUuid,
-                manobra.codigo,
-                manobra.nome,
-                manobra.descricao || manobra.nome,
-                manobra.categoria || 'GERAL',
-                manobra.ordem,
-                manobra.tripulante || 'AB',
-                empresaId,
-              ),
-          );
-        }
-      }
     }
 
     for (const funcao of segmento.participantes) {
@@ -317,6 +267,60 @@ async function buildSharedSessionCreatePlan(
             ),
         );
       }
+    }
+  }
+
+  for (const assignmentPlan of payload.atribuicoes_planejadas) {
+    if (!assignmentPlan.gera_ficha || !assignmentPlan.modelo_sessao_id) {
+      continue;
+    }
+
+    const fichaUuid = crypto.randomUUID();
+    const modelo = modelosMap.get(Number(assignmentPlan.modelo_sessao_id));
+    persistence.fichaIds.push(persistence.fichaIds.length + 1);
+
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO fichas_sessao
+             (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id, atribuicao_curricular_id, segmento_atribuicao_id)
+           VALUES (?, ${sessionIdExpr}, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?, (SELECT id FROM simulador_atribuicoes_curriculares WHERE uuid = ?), NULL)`,
+        )
+        .bind(
+          fichaUuid,
+          ...sessionIdBinds,
+          assignmentPlan.funcionario_id,
+          payload.instrutor_id,
+          modelo?.codigo || primaryModel?.codigo || 'SHARED',
+          simulatorModel,
+          payload.data,
+          assignmentPlan.modelo_sessao_id,
+          empresaId,
+          assignmentUuidByKey.get(assignmentPlan.assignment_key),
+        ),
+    );
+
+    const manobras = await loadFichaManobrasForModelo(db, Number(assignmentPlan.modelo_sessao_id));
+    assertModeloSessaoTemManobras(Number(assignmentPlan.modelo_sessao_id), manobras);
+    for (const manobra of manobras) {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO fichas_sessao_manobras
+               (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
+             VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            fichaUuid,
+            manobra.codigo,
+            manobra.nome,
+            manobra.descricao || manobra.nome,
+            manobra.categoria || 'GERAL',
+            manobra.ordem,
+            manobra.tripulante || 'AB',
+            empresaId,
+          ),
+      );
     }
   }
 
@@ -413,9 +417,17 @@ function buildSharedCurrentState(current: LoadedSharedDetail) {
   }
 
   const fichasByLinkId = new Map<number, any[]>();
+  const fichasByAssignmentId = new Map<number, any[]>();
   const protectedLegacyAssignmentIds = new Set<number>();
 
   for (const ficha of current.fichas || []) {
+    const atribuicaoCurricularId = Number((ficha as any).atribuicao_curricular_id || 0);
+    if (atribuicaoCurricularId > 0) {
+      const currentItems = fichasByAssignmentId.get(atribuicaoCurricularId) || [];
+      currentItems.push(ficha);
+      fichasByAssignmentId.set(atribuicaoCurricularId, currentItems);
+    }
+
     const segmentoAtribuicaoId = Number((ficha as any).segmento_atribuicao_id || 0);
     if (segmentoAtribuicaoId > 0) {
       const currentItems = fichasByLinkId.get(segmentoAtribuicaoId) || [];
@@ -439,6 +451,7 @@ function buildSharedCurrentState(current: LoadedSharedDetail) {
     segmentParticipantByKey,
     linkByKey,
     fichasByLinkId,
+    fichasByAssignmentId,
     protectedLegacyAssignmentIds,
   };
 }
@@ -605,6 +618,7 @@ export async function updateSharedSessionStructureTransactional(
 
   const desiredAssignmentKeys = new Set(payload.atribuicoes_planejadas.map((item) => item.assignment_key));
   const newAssignmentUuidByKey = new Map<string, string>();
+  const processedFichaAssignments = new Set<string>();
 
   for (const assignmentPlan of payload.atribuicoes_planejadas) {
     const existingAssignment = state.assignmentByKey.get(assignmentPlan.assignment_key);
@@ -957,9 +971,19 @@ export async function updateSharedSessionStructureTransactional(
         );
       }
 
-      const existingFichas = existingLink
-        ? state.fichasByLinkId.get(Number(existingLink.id)) || []
-        : [];
+      const assignmentKey = participanteCurricular.assignment_key;
+      if (!assignmentKey || processedFichaAssignments.has(assignmentKey)) {
+        continue;
+      }
+      processedFichaAssignments.add(assignmentKey);
+
+      const assignmentId =
+        existingAssignment?.id ||
+        null;
+      const existingFichas =
+        assignmentId && assignmentId > 0
+          ? state.fichasByAssignmentId.get(Number(assignmentId)) || []
+          : [];
       const activeFicha = existingFichas[0] || null;
 
       if (participanteCurricular.gera_ficha && participanteCurricular.modelo_sessao_id) {
@@ -975,6 +999,7 @@ export async function updateSharedSessionStructureTransactional(
                      tipo_aeronave = ?,
                      data_sessao = ?,
                      template_id = ?,
+                     segmento_atribuicao_id = NULL,
                      deleted_at = NULL,
                      updated_at = datetime('now')
                  WHERE id = ?
@@ -996,7 +1021,7 @@ export async function updateSharedSessionStructureTransactional(
               db,
               `INSERT INTO fichas_sessao
                  (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id, atribuicao_curricular_id, segmento_atribuicao_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?, ${assignmentExpr}, ${linkIdExpr})`,
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?, ${assignmentExpr}, NULL)`,
               fichaUuid,
               sessaoId,
               participanteCurricular.funcionario_id,
@@ -1007,7 +1032,6 @@ export async function updateSharedSessionStructureTransactional(
               participanteCurricular.modelo_sessao_id,
               empresaId,
               ...assignmentBinds,
-              ...linkIdBinds,
             ),
           );
 
@@ -1062,12 +1086,6 @@ export async function updateSharedSessionStructureTransactional(
           prepareStatement(
             db,
             "UPDATE simulador_segmento_atribuicoes SET status = 'CANCELADA', deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
-            Number(currentLink.id),
-            empresaId,
-          ),
-          prepareStatement(
-            db,
-            "UPDATE fichas_sessao SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE segmento_atribuicao_id = ? AND empresa_id = ? AND deleted_at IS NULL AND UPPER(COALESCE(status, 'AVALIACAO_PENDENTE')) NOT IN ('APROVADO', 'NAO_APROVADO', 'CONCLUIDA')",
             Number(currentLink.id),
             empresaId,
           ),
