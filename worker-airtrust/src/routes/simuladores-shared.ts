@@ -186,6 +186,31 @@ export async function listarTiposCheckPorIds(
   return result.results || [];
 }
 
+/**
+ * Checks whether the simuladores table has an empresa_id column.
+ * The table may be global (no empresa_id) or tenant-scoped (with empresa_id).
+ * Caches the result per D1Database instance to avoid repeated PRAGMA calls.
+ */
+const simuladoresHasEmpresaIdCache = new WeakMap<D1Database, boolean>();
+
+export async function simuladoresHasEmpresaId(db: D1Database): Promise<boolean> {
+  const cached = simuladoresHasEmpresaIdCache.get(db);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const result = await db
+    .prepare('PRAGMA table_info(simuladores)')
+    .all<{ name: string }>();
+
+  const has = (result.results || []).some(
+    (row) => String(row.name || '') === 'empresa_id',
+  );
+
+  simuladoresHasEmpresaIdCache.set(db, has);
+  return has;
+}
+
 export async function getSimuladorModeloAeronave(
   db: D1Database,
   simuladorId: string | number | null | undefined,
@@ -195,7 +220,8 @@ export async function getSimuladorModeloAeronave(
     return '';
   }
 
-  const scopedFilter = empresaId ? ' AND empresa_id = ?' : '';
+  const hasEmpresaId = empresaId != null && await simuladoresHasEmpresaId(db);
+  const scopedFilter = hasEmpresaId ? ' AND empresa_id = ?' : '';
   const simulador = await db
     .prepare(
       `SELECT COALESCE(aeronave_codigo, codigo_aeronave, tipo, modelo, '') AS modelo_aeronave
@@ -203,7 +229,7 @@ export async function getSimuladorModeloAeronave(
        WHERE id = ? AND deleted_at IS NULL${scopedFilter}
        LIMIT 1`,
     )
-    .bind(simuladorId, ...(empresaId ? [empresaId] : []))
+    .bind(simuladorId, ...(hasEmpresaId ? [empresaId] : []))
     .first<{ modelo_aeronave: string | null }>();
 
   return normalizeModeloAeronave(simulador?.modelo_aeronave);

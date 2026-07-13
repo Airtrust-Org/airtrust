@@ -51,11 +51,28 @@ function createDbForSharedRoutes(options?: {
   const batches: Array<Array<QueryRun>> = [];
 
   const db = {
-    prepare: vi.fn((query: string) => ({
-      bind: (...args: unknown[]) => ({
-        statement: { query },
-        args,
-        first: async () => {
+    prepare: vi.fn((query: string) => {
+      // Direct .all() — used by simuladoresHasEmpresaId (PRAGMA without .bind())
+      const directAll = async () => {
+        if (query === 'PRAGMA table_info(simuladores)') {
+          // Default: simuladores IS tenant-scoped (has empresa_id)
+          if (options?.simuladorForaTenant) {
+            // Even when testing cross-tenant rejection, the column still exists
+            // — it's the VALUE that differs, not the schema.
+            return { results: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'deleted_at' }] };
+          }
+          return { results: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'deleted_at' }] };
+        }
+        return { results: [] };
+      };
+
+      return {
+        all: directAll,
+        first: async () => null,
+        bind: (...args: unknown[]) => ({
+          statement: { query },
+          args,
+          first: async () => {
           if (query === 'SELECT id FROM simulador_agendamentos WHERE uuid = ? LIMIT 1') {
             return { id: 9901 };
           }
@@ -342,10 +359,8 @@ function createDbForSharedRoutes(options?: {
         },
         run: async () => ({ meta: { changes: 1, last_row_id: 9901 } }),
       }),
-      first: async () => null,
-      all: async () => ({ results: [] }),
-      run: async () => ({ meta: { changes: 1, last_row_id: 9901 } }),
-    })),
+    };
+    }),
     batch: vi.fn(async (statements: Array<{ run?: () => Promise<any>; statement?: { query?: string }; args?: unknown[] }>) => {
       batches.push(
         statements.map((statement) => ({
