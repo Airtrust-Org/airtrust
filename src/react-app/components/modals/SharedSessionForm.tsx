@@ -17,14 +17,6 @@ import {
   updateSharedSession,
   type SharedSessionPayload,
 } from '@/react-app/config/sharedSessions';
-import {
-  EXAMINER_PRACTICAL_TRAINING_PROGRAM,
-  findProgramByCodigo,
-  SHARED_SESSION_PROGRAM_GENERICO,
-  SHARED_SESSION_PROGRAMS,
-  type SharedSessionProgramId,
-} from '@/react-app/config/sharedSessionPrograms';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 export type SharedSessionStep = 'tripulacao' | 'segmentos';
 
@@ -59,21 +51,16 @@ interface ModeloSessao {
 
 interface ParticipantState {
   funcionario: Funcionario | null;
+  cumpre_treinamento: boolean;
+  treinamento_planejado_id: number | null;
+  modelo_sessao_id: number | null;
+  gera_ficha: boolean;
 }
-
-type SharedSegmentPurpose =
-  | 'SOP_NORMAL'
-  | 'SOP_ANORMAL_EMERGENCIA'
-  | 'ATUACAO_EXAMINADOR'
-  | 'OUTRO';
 
 interface SegmentAssignment {
   id?: number | null;
   pfId: number | null;
   pmId: number | null;
-  curricularIds: number[];
-  modeloSessaoId: number | null;
-  finalidadeCodigo: SharedSegmentPurpose;
 }
 
 interface SharedSessionFormProps {
@@ -91,14 +78,6 @@ interface SharedSessionFormProps {
   observacoes: string;
   funcionarios: Funcionario[];
   editSessionId?: number | null;
-  /**
-   * Present only when converting an existing PLANNED simple session into a
-   * shared one (modo_compartilhado: false -> true). Mutually exclusive with
-   * editSessionId: there is no shared detail to GET yet, so the form seeds
-   * its first participant/segment from the simple session's own data instead
-   * of fetching, and submits via PUT /sessoes/:id/converter-compartilhada
-   * rather than POST/PUT /sessoes/compartilhada.
-   */
   conversionSeed?: {
     sessaoId: number;
     participanteId: number | null;
@@ -122,7 +101,6 @@ interface SharedDetailSegment {
   inicio: string;
   fim: string;
   modelo_sessao_id?: number | null;
-  finalidade_codigo?: SharedSegmentPurpose | null;
   participantes?: Array<{
     funcionario_id: number;
     funcao: 'PF' | 'PM';
@@ -138,58 +116,22 @@ interface SharedDetail {
 
 const EMPTY_PARTICIPANT: ParticipantState = {
   funcionario: null,
+  cumpre_treinamento: true,
+  treinamento_planejado_id: null,
+  modelo_sessao_id: null,
+  gera_ficha: true,
 };
 
 const EMPTY_SEGMENT: SegmentAssignment = {
   id: null,
   pfId: null,
   pmId: null,
-  curricularIds: [],
-  modeloSessaoId: null,
-  finalidadeCodigo: 'OUTRO',
 };
-
-const SEGMENT_PURPOSE_OPTIONS: Array<{ value: SharedSegmentPurpose; label: string }> = [
-  { value: 'SOP_NORMAL', label: 'SOP normal' },
-  { value: 'SOP_ANORMAL_EMERGENCIA', label: 'SOP anormal/emergencia' },
-  { value: 'ATUACAO_EXAMINADOR', label: 'Atuacao examinador' },
-  { value: 'OUTRO', label: 'Outro' },
-];
-
-const SEGMENT_PURPOSE_LABELS = SEGMENT_PURPOSE_OPTIONS.reduce<Record<SharedSegmentPurpose, string>>(
-  (acc, option) => {
-    acc[option.value] = option.label;
-    return acc;
-  },
-  {
-    SOP_NORMAL: 'SOP normal',
-    SOP_ANORMAL_EMERGENCIA: 'SOP anormal/emergencia',
-    ATUACAO_EXAMINADOR: 'Atuacao examinador',
-    OUTRO: 'Outro',
-  },
-);
 
 const STEP_LABELS: Record<SharedSessionStep, string> = {
-  tripulacao: '1. Tripulação',
-  segmentos: '2. Segmentos',
+  tripulacao: '1. Tripulação e Fichas',
+  segmentos: '2. Distribuição PF/PM',
 };
-
-/**
- * Canonical identifiers for the examiner practical-training curriculum,
- * sourced from sharedSessionPrograms.ts (the single versioned catalog of
- * program -> codigo mappings). Detection is by `codigo`, never by
- * title/substring — these are stable curricular codes (see migration
- * 0424/0425 examiner training migrations, universal across aircraft
- * (modelo_aeronave NULL). Importantly, the *panel* below only appears when
- * the user has explicitly selected this program (or it's already reflected
- * by persisted/seeded segment data) — never merely because these models
- * exist in the tenant's catalog.
- */
-const EXAMINER_EVENT_1_CODES = EXAMINER_PRACTICAL_TRAINING_PROGRAM.evento1Codigos;
-const EXAMINER_EVENT_2_CODES = EXAMINER_PRACTICAL_TRAINING_PROGRAM.evento2Codigos;
-const EXAMINER_MODEL_CODES = new Set([...EXAMINER_EVENT_1_CODES, ...EXAMINER_EVENT_2_CODES]);
-const EXAMINER_SEGMENT_MINUTES = 60;
-const EXAMINER_RESERVATION_MINUTES = EXAMINER_SEGMENT_MINUTES * 2;
 
 function timeToMinutes(value: string): number {
   if (!/^\d{2}:\d{2}$/.test(value)) return Number.NaN;
@@ -218,10 +160,6 @@ function formatModelOption(model: ModeloSessao): string {
     model.sequencia || model.grupo,
   ].filter(Boolean);
   return details.length > 0 ? `${title} (${details.join(' | ')})` : title;
-}
-
-function normalizeCodigo(codigo: string | null | undefined): string {
-  return String(codigo || '').trim().toUpperCase();
 }
 
 const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormProps>(function SharedSessionForm({
@@ -274,12 +212,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const [loadingModelos, setLoadingModelos] = useState(false);
   const [modelosErro, setModelosErro] = useState<string | null>(null);
   const [hasProtectedFicha, setHasProtectedFicha] = useState(false);
-  // null = "not yet explicitly chosen by the user" — the effective program
-  // (see effectiveProgramId below) then follows whatever is already
-  // reflected by the segments (hydrated or seeded), defaulting to generic.
-  // Once the user touches the selector, their choice is authoritative and
-  // no longer overridden by segment contents.
-  const [userSelectedProgramId, setUserSelectedProgramId] = useState<SharedSessionProgramId | null>(null);
 
   const participantIds = useMemo(
     () => participants.map((participant) => participant.funcionario?.id ?? null) as [number | null, number | null],
@@ -309,11 +241,14 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     const errors: string[] = [];
     participants.forEach((participant, index) => {
       if (!participant.funcionario) {
-        errors.push(`Piloto ${index + 1}: selecione o piloto.`);
+        errors.push(`Tripulante ${index + 1}: selecione o tripulante.`);
+      }
+      if (participant.cumpre_treinamento && !participant.modelo_sessao_id) {
+        errors.push(`Tripulante ${index + 1}: selecione o modelo da ficha.`);
       }
     });
     if (participantIds[0] && participantIds[0] === participantIds[1]) {
-      errors.push('Os dois pilotos devem ser pessoas diferentes.');
+      errors.push('Os dois tripulantes devem ser pessoas diferentes.');
     }
     return errors;
   }, [participantIds, participants]);
@@ -340,9 +275,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         id: segmentAssignments[0].id || undefined,
         inicio: horarioInicio,
         fim: effectiveSplitTime,
-        modeloSessaoId: segmentAssignments[0].modeloSessaoId,
-        curricularIds: segmentAssignments[0].curricularIds,
-        finalidadeCodigo: segmentAssignments[0].finalidadeCodigo,
         participantes: [
           { funcionario_id: segmentAssignments[0].pfId || 0, funcao: 'PF' as const },
           { funcionario_id: segmentAssignments[0].pmId || 0, funcao: 'PM' as const },
@@ -352,9 +284,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         id: segmentAssignments[1].id || undefined,
         inicio: effectiveSplitTime,
         fim: horarioFim,
-        modeloSessaoId: segmentAssignments[1].modeloSessaoId,
-        curricularIds: segmentAssignments[1].curricularIds,
-        finalidadeCodigo: segmentAssignments[1].finalidadeCodigo,
         participantes: [
           { funcionario_id: segmentAssignments[1].pfId || 0, funcao: 'PF' as const },
           { funcionario_id: segmentAssignments[1].pmId || 0, funcao: 'PM' as const },
@@ -370,20 +299,14 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     const start = timeToMinutes(horarioInicio);
     const end = timeToMinutes(horarioFim);
     if (!effectiveSplitTime || split <= start || split >= end) {
-      errors.push('A divisão deve ficar dentro do período da reserva.');
+      errors.push('O horário da troca deve ficar dentro do período da reserva.');
     }
     segmentAssignments.forEach((segment, index) => {
-      const label = `Segmento ${index + 1}`;
+      const label = `Período ${index + 1}`;
       if (!segment.pfId) errors.push(`${label}: selecione o PF.`);
       if (!segment.pmId) errors.push(`${label}: selecione o PM.`);
       if (segment.pfId && segment.pfId === segment.pmId) {
         errors.push(`${label}: PF e PM devem ser pessoas diferentes.`);
-      }
-      if (segment.curricularIds.length === 0) {
-        errors.push(`${label}: selecione ao menos um currículo atendido.`);
-      }
-      if (segment.curricularIds.length > 0 && !segment.modeloSessaoId) {
-        errors.push(`${label}: selecione o modelo de sessão do segmento.`);
       }
     });
     return errors;
@@ -452,27 +375,19 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           : index === 0
             ? validParticipantIds[1]
             : validParticipantIds[0],
-        curricularIds: segment.curricularIds.filter((id) => validParticipantIds.includes(Number(id))),
       })) as [SegmentAssignment, SegmentAssignment];
       const unchanged = next.every((segment, index) => {
         const current = previous[index];
         return (
           current.pfId === segment.pfId &&
           current.pmId === segment.pmId &&
-          current.modeloSessaoId === segment.modeloSessaoId &&
-          current.finalidadeCodigo === segment.finalidadeCodigo &&
-          current.id === segment.id &&
-          current.curricularIds.length === segment.curricularIds.length &&
-          current.curricularIds.every((value, arrayIndex) => value === segment.curricularIds[arrayIndex])
+          current.id === segment.id
         );
       });
       return unchanged ? previous : next;
     });
   }, [participantIds]);
 
-  // Seeds the first participant/segment from the simple session being
-  // converted — runs once (conversionSeeded guard) so it never re-applies
-  // and clobbers edits the user already made in this modal session.
   useEffect(() => {
     if (!conversionSeed || conversionSeeded) return;
     setConversionSeeded(true);
@@ -482,26 +397,11 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       if (known) {
         setParticipants((previous) => {
           const next: [ParticipantState, ParticipantState] = [...previous];
-          next[0] = { funcionario: known };
+          next[0] = { ...next[0], funcionario: known, modelo_sessao_id: conversionSeed.modeloSessaoId || null };
           return next;
         });
       }
     }
-
-    if (conversionSeed.modeloSessaoId || conversionSeed.participanteId) {
-      const curricularIds = conversionSeed.participanteId ? [conversionSeed.participanteId] : [];
-      setSegmentAssignments((previous) => {
-        const next: [SegmentAssignment, SegmentAssignment] = [...previous];
-        next[0] = { ...next[0], modeloSessaoId: conversionSeed.modeloSessaoId, curricularIds };
-        // Segment 2 keeps the same trainee by default (matches "preservar
-        // participante" from the simple session) but no modelo — the user
-        // picks one when they add the second segment's curriculum, exactly
-        // as the reservation-split UI already prompts for.
-        next[1] = { ...next[1], curricularIds };
-        return next;
-      });
-    }
-
     setHydrating(false);
   }, [conversionSeed, conversionSeeded, funcionarios]);
 
@@ -526,12 +426,32 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         for (const participant of detail.participantes || []) {
           const index = participant.funcao === 'SIC' ? 1 : 0;
           const known = funcionarios.find((item) => Number(item.id) === Number(participant.funcionario_id));
+          
+          let cumpre = false;
+          let modeloId = null;
+          let geraFicha = false;
+          
+          for (const seg of detail.segmentos || []) {
+             const p = (seg.participantes || []).find(x => Number(x.funcionario_id) === Number(participant.funcionario_id));
+             if (p?.cumpre_treinamento) {
+               cumpre = true;
+               geraFicha = true;
+               if (seg.modelo_sessao_id) {
+                 modeloId = seg.modelo_sessao_id;
+               }
+             }
+          }
+
           restoredParticipants[index] = {
             funcionario: known || {
               id: Number(participant.funcionario_id),
               nome: participant.funcionario_nome || `Funcionário ${participant.funcionario_id}`,
               matricula: participant.matricula || '',
             },
+            cumpre_treinamento: cumpre,
+            modelo_sessao_id: modeloId,
+            gera_ficha: geraFicha,
+            treinamento_planejado_id: null,
           };
         }
 
@@ -562,12 +482,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             id: Number(segment.id || 0) || null,
             pfId: pf?.funcionario_id || null,
             pmId: pm?.funcionario_id || null,
-            curricularIds: (segment.participantes || [])
-              .filter((item) => Boolean(item.cumpre_treinamento))
-              .map((item) => Number(item.funcionario_id))
-              .sort((left, right) => left - right),
-            modeloSessaoId: Number(segment.modelo_sessao_id || 0) || null,
-            finalidadeCodigo: segment.finalidade_codigo || 'OUTRO',
           };
         });
         if (restoredSegments.length === 2) {
@@ -593,139 +507,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     return map;
   }, [modelos]);
 
-  const examinerModelByCode = useMemo(() => {
-    const map = new Map<string, ModeloSessao>();
-    for (const model of modelos) {
-      const codigo = String(model.codigo || '').trim().toUpperCase();
-      if (
-        (EXAMINER_EVENT_1_CODES as readonly string[]).includes(codigo) ||
-        (EXAMINER_EVENT_2_CODES as readonly string[]).includes(codigo)
-      ) {
-        map.set(codigo, model);
-      }
-    }
-    return map;
-  }, [modelos]);
-
-  const examinerEvent1Available = EXAMINER_EVENT_1_CODES.some((codigo) => examinerModelByCode.has(codigo));
-  const examinerEvent2Available = EXAMINER_EVENT_2_CODES.some((codigo) => examinerModelByCode.has(codigo));
-
-  // Pure reflection of what the current segments already carry — never used
-  // to *decide* the program on its own, only to (a) hydrate the program
-  // selector when opening an existing/converting session whose segments
-  // already are examiner segments, and (b) know which of a segment's two
-  // slots is still safe to clear on an explicit program switch-away.
-  const appliedExaminerEvent = useMemo(() => {
-    const codes = segmentAssignments
-      .map((segment) => (segment.modeloSessaoId ? modelById.get(segment.modeloSessaoId)?.codigo : null))
-      .map((codigo) => String(codigo || '').trim().toUpperCase());
-    if (codes.includes(EXAMINER_EVENT_1_CODES[0]) || codes.includes(EXAMINER_EVENT_1_CODES[1])) return 1;
-    if (codes.includes(EXAMINER_EVENT_2_CODES[0]) || codes.includes(EXAMINER_EVENT_2_CODES[1])) return 2;
-    return null;
-  }, [modelById, segmentAssignments]);
-
-  // The program actually in effect: the user's explicit choice once made,
-  // otherwise whatever the segments already reflect (existing/seeded
-  // examiner segments), otherwise generic. Catalog availability
-  // (examinerEvent1Available/2Available) never feeds into this — a tenant
-  // having EXA-V01..V04 does not, by itself, select this program.
-  const effectiveProgramId: SharedSessionProgramId =
-    userSelectedProgramId ??
-    (appliedExaminerEvent ? EXAMINER_PRACTICAL_TRAINING_PROGRAM.id : SHARED_SESSION_PROGRAM_GENERICO);
-  const examinerTemplateVisible = effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id;
-  const visibleModelos = useMemo(() => {
-    const selectedModelIds = new Set(
-      segmentAssignments
-        .map((segment) => Number(segment.modeloSessaoId || 0))
-        .filter((modelId) => modelId > 0),
-    );
-
-    return modelos.filter((model) => {
-      if (selectedModelIds.has(Number(model.id))) return true;
-
-      const isExaminerModel = EXAMINER_MODEL_CODES.has(normalizeCodigo(model.codigo));
-      return effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id
-        ? isExaminerModel
-        : !isExaminerModel;
-    });
-  }, [effectiveProgramId, modelos, segmentAssignments]);
-
-  const handleProgramSelect = useCallback(
-    async (nextProgramId: SharedSessionProgramId) => {
-      if (nextProgramId === effectiveProgramId) {
-        setUserSelectedProgramId(nextProgramId);
-        return;
-      }
-
-      if (effectiveProgramId === EXAMINER_PRACTICAL_TRAINING_PROGRAM.id && nextProgramId !== EXAMINER_PRACTICAL_TRAINING_PROGRAM.id) {
-        const unpersistedExaminerSegmentIndexes = segmentAssignments
-          .map((segment, index) => ({ segment, index }))
-          .filter(({ segment }) => !segment.id && findProgramByCodigo(modelById.get(segment.modeloSessaoId ?? -1)?.codigo));
-
-        if (unpersistedExaminerSegmentIndexes.length > 0) {
-          const confirmed = await confirmDialog(
-            'Trocar o programa remove os segmentos do treinamento de examinador ainda não salvos deste agendamento. Segmentos já salvos não são afetados. Continuar?',
-            { title: 'Trocar programa da sessão', confirmText: 'Trocar e remover', cancelText: 'Manter examinador' },
-          );
-          if (!confirmed) return;
-
-          setSegmentAssignments((previous) => {
-            const next = [...previous] as [SegmentAssignment, SegmentAssignment];
-            for (const { index } of unpersistedExaminerSegmentIndexes) {
-              next[index] = { ...next[index], modeloSessaoId: null, curricularIds: [], finalidadeCodigo: 'OUTRO' };
-            }
-            return next;
-          });
-        }
-      }
-
-      setUserSelectedProgramId(nextProgramId);
-    },
-    [effectiveProgramId, modelById, segmentAssignments],
-  );
-
-  const reservationMinutes =
-    reservationReady && horarioInicio && horarioFim
-      ? timeToMinutes(horarioFim) - timeToMinutes(horarioInicio)
-      : 0;
-  const examinerReservationMatches = reservationMinutes === EXAMINER_RESERVATION_MINUTES;
-
-  const applyExaminerTemplate = useCallback(
-    (event: 1 | 2) => {
-      const codes = event === 1 ? EXAMINER_EVENT_1_CODES : EXAMINER_EVENT_2_CODES;
-      const selectedModel = codes
-        .map((codigo) => examinerModelByCode.get(codigo))
-        .find(Boolean);
-      if (!selectedModel || !reservationReady || !examinerReservationMatches) return;
-
-      const split = minutesToTime(timeToMinutes(horarioInicio) + EXAMINER_SEGMENT_MINUTES);
-      setSplitTime(split);
-
-      const traineeId =
-        segmentAssignments[0].curricularIds[0] ??
-        segmentAssignments[1].curricularIds[0] ??
-        participants[0].funcionario?.id ??
-        null;
-      const traineeIds = traineeId ? [traineeId] : [];
-
-      setSegmentAssignments([
-        {
-          ...segmentAssignments[0],
-          modeloSessaoId: selectedModel.id,
-          finalidadeCodigo: event === 1 ? 'SOP_NORMAL' : 'SOP_ANORMAL_EMERGENCIA',
-          curricularIds: traineeIds,
-        },
-        {
-          ...segmentAssignments[1],
-          modeloSessaoId: selectedModel.id,
-          finalidadeCodigo: 'ATUACAO_EXAMINADOR',
-          curricularIds: traineeIds,
-        },
-      ]);
-    },
-    [examinerModelByCode, examinerReservationMatches, horarioInicio, participants, reservationReady, segmentAssignments],
-  );
-
   const summary = useMemo(() => {
     return participants
       .filter((participant) => participant.funcionario)
@@ -736,6 +517,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         let pm = 0;
         let curricular = 0;
         const models = new Set<string>();
+        
         for (const segment of segments) {
           const duration = Math.max(0, timeToMinutes(segment.fim) - timeToMinutes(segment.inicio));
           for (const role of segment.participantes) {
@@ -744,12 +526,14 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             if (role.funcao === 'PF') pf += duration;
             if (role.funcao === 'PM') pm += duration;
           }
-          if (segment.curricularIds.includes(funcionarioId)) {
-            curricular += duration;
-            const model = segment.modeloSessaoId ? modelById.get(segment.modeloSessaoId) : null;
-            if (model?.codigo) models.add(model.codigo);
-          }
         }
+        
+        if (participant.cumpre_treinamento) {
+          curricular = total;
+          const model = participant.modelo_sessao_id ? modelById.get(participant.modelo_sessao_id) : null;
+          if (model?.codigo) models.add(model.codigo);
+        }
+
         return {
           participant,
           total,
@@ -761,47 +545,10 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       });
   }, [modelById, participants, segments]);
 
-  const markAttempted = useCallback((step: SharedSessionStep) => {
-    setAttemptedSteps((previous) => {
-      const next = new Set(previous);
-      next.add(step);
-      return next;
-    });
-  }, []);
-
-  const requestStep = useCallback(
-    (step: SharedSessionStep) => {
-      setStepMessage(null);
-      if (step === 'tripulacao') {
-        if (!reservationReady) {
-          markAttempted('tripulacao');
-          setStepMessage('Complete os dados da reserva para configurar a tripulação.');
-          return;
-        }
-        setActiveStep('tripulacao');
-        return;
-      }
-      if (!reservationReady) {
-        markAttempted('tripulacao');
-        setActiveStep('tripulacao');
-        setStepMessage('Complete os dados da reserva para configurar a tripulação.');
-        return;
-      }
-      if (!crewReady) {
-        markAttempted('tripulacao');
-        setActiveStep('tripulacao');
-        setStepMessage('Defina a tripulação antes de configurar os segmentos.');
-        return;
-      }
-      setActiveStep('segmentos');
-    },
-    [crewReady, markAttempted, reservationReady, setActiveStep],
-  );
-
-  const updateParticipant = useCallback((index: 0 | 1, funcionario: Funcionario | null) => {
+  const updateParticipant = useCallback((index: 0 | 1, updates: Partial<ParticipantState>) => {
     setParticipants((previous) => {
       const next: [ParticipantState, ParticipantState] = [...previous];
-      next[index] = { funcionario };
+      next[index] = { ...next[index], ...updates };
       return next;
     });
   }, []);
@@ -836,20 +583,23 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         observacoes: observacoes || undefined,
         participantes: participants.map((participant) => ({
           funcionario_id: participant.funcionario!.id,
+          cumpre_treinamento: participant.cumpre_treinamento,
+          treinamento_planejado_id: participant.treinamento_planejado_id,
+          modelo_sessao_id: participant.modelo_sessao_id,
+          gera_ficha: participant.gera_ficha,
         })),
         segmentos: segments.map((segment) => ({
           id: segment.id || undefined,
           inicio: segment.inicio,
           fim: segment.fim,
-          modelo_sessao_id: segment.modeloSessaoId,
-          finalidade_codigo: segment.finalidadeCodigo,
-          finalidade_titulo: SEGMENT_PURPOSE_LABELS[segment.finalidadeCodigo],
-          participantes: segment.participantes.map((role) => ({
+          funcoes: segment.participantes.map((role) => ({
             funcionario_id: role.funcionario_id,
             funcao: role.funcao,
-            cumpre_treinamento: segment.curricularIds.includes(role.funcionario_id),
-            gera_ficha: segment.curricularIds.includes(role.funcionario_id),
           })),
+          atribuicao_funcionario_ids: participants
+             .filter(p => p.cumpre_treinamento)
+             .map(p => p.funcionario!.id),
+          finalidade_codigo: 'OUTRO',
         })),
       };
 
@@ -876,15 +626,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     }
   };
 
-  // No deps array (intentional): re-exposes on every render so
-  // triggerPrimaryAction always calls the current handleSubmit/requestStep
-  // closures. A restricted deps array here previously froze the exposed
-  // handle at whatever segment/crew state existed when the user first
-  // reached the "segmentos" step — activeStep and requestStep's identity
-  // don't change as the user fills in segment fields, so any edit made
-  // after that point was silently validated against stale data when this
-  // form is driven externally via hideFooter (its only real integration —
-  // ModalNovaSessao's own footer button is the sole submit path).
   useImperativeHandle(ref, () => ({
     triggerPrimaryAction: () => {
       if (activeStep === 'tripulacao') {
@@ -898,6 +639,43 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   useEffect(() => {
     onStateChange?.({ activeStep, loading });
   }, [activeStep, loading, onStateChange]);
+
+  const markAttempted = useCallback((step: SharedSessionStep) => {
+    setAttemptedSteps((previous) => {
+      const next = new Set(previous);
+      next.add(step);
+      return next;
+    });
+  }, []);
+
+  const requestStep = useCallback(
+    (step: SharedSessionStep) => {
+      setStepMessage(null);
+      if (step === 'tripulacao') {
+        if (!reservationReady) {
+          markAttempted('tripulacao');
+          setStepMessage('Complete os dados da reserva para configurar a tripulação.');
+          return;
+        }
+        setActiveStep('tripulacao');
+        return;
+      }
+      if (!reservationReady) {
+        markAttempted('tripulacao');
+        setActiveStep('tripulacao');
+        setStepMessage('Complete os dados da reserva para configurar a tripulação.');
+        return;
+      }
+      if (!crewReady) {
+        markAttempted('tripulacao');
+        setActiveStep('tripulacao');
+        setStepMessage('Defina a tripulação e seus currículos antes de configurar a distribuição operacional.');
+        return;
+      }
+      setActiveStep('segmentos');
+    },
+    [crewReady, markAttempted, reservationReady, setActiveStep],
+  );
 
   if (hydrating) {
     return <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-500">Carregando dados da sessão compartilhada...</div>;
@@ -929,22 +707,84 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const renderCrewStep = () => (
     <div className="space-y-3" data-testid="shared-step-tripulacao">
       <div>
-        <h3 className="text-sm font-semibold text-slate-800">Tripulação</h3>
-        <p className="text-xs text-slate-500">Defina os dois participantes físicos da reserva. O vínculo curricular será configurado em cada segmento.</p>
+        <h3 className="text-sm font-semibold text-slate-800">Tripulação e Currículos</h3>
+        <p className="text-xs text-slate-500">Cada tripulante recebe um modelo de sessão, que abrange todo o tempo da reserva.</p>
       </div>
       {participants.map((participant, index) => (
         <div key={index} className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="mb-3">
-            <p className="text-sm font-semibold text-slate-900">Piloto {index + 1}</p>
-            <p className="text-xs text-slate-500">{index === 0 ? 'PIC na reserva' : 'SIC na reserva'}</p>
+            <p className="text-sm font-semibold text-slate-900">Tripulante {index + 1}</p>
           </div>
           <FuncionarioCombobox
-            onSelect={(selected) => updateParticipant(index as 0 | 1, selected as Funcionario | null)}
+            onSelect={(selected) => updateParticipant(index as 0 | 1, { funcionario: selected as Funcionario | null })}
             selected={participant.funcionario}
-            placeholder={`Buscar piloto ${index + 1}...`}
+            placeholder={`Buscar tripulante ${index + 1}...`}
             required
             disabled={Boolean(editSessionId) || (Boolean(conversionSeed) && index === 0)}
           />
+
+          {participant.funcionario && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-medium text-slate-600">
+                Cumpre treinamento
+                <select
+                  value={participant.cumpre_treinamento ? 'sim' : 'nao'}
+                  onChange={(e) => {
+                     const cumpre = e.target.value === 'sim';
+                     updateParticipant(index as 0 | 1, { 
+                       cumpre_treinamento: cumpre, 
+                       gera_ficha: cumpre ? participant.gera_ficha : false, 
+                       modelo_sessao_id: cumpre ? participant.modelo_sessao_id : null 
+                     });
+                  }}
+                  disabled={hasProtectedFicha}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="sim">Sim</option>
+                  <option value="nao">Não, atua apenas como apoio</option>
+                </select>
+              </label>
+
+              {participant.cumpre_treinamento && (
+                <>
+                  <label className="text-xs font-medium text-slate-600 sm:col-span-2">
+                    Modelo da ficha
+                    <select
+                      value={participant.modelo_sessao_id || ''}
+                      onChange={(e) => updateParticipant(index as 0 | 1, { modelo_sessao_id: Number(e.target.value) || null })}
+                      disabled={loadingModelos || !simuladorModelo || !simuladorId || hasProtectedFicha}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    >
+                      <option value="">Selecione o modelo</option>
+                      {modelos.map(model => (
+                        <option key={model.id} value={model.id}>{formatModelOption(model)}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <div className="text-xs text-slate-600">
+                      <span className="font-medium">Período curricular:</span>{' '}
+                      {reservationReady ? `${horarioInicio} às ${horarioFim}` : '—'}
+                      <span className="mx-2">•</span>
+                      <span className="font-medium">Carga:</span>{' '}
+                      {reservationReady ? formatMinutes(timeToMinutes(horarioFim) - timeToMinutes(horarioInicio)) : '—'}
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={participant.gera_ficha}
+                        onChange={(e) => updateParticipant(index as 0 | 1, { gera_ficha: e.target.checked })}
+                        disabled={hasProtectedFicha}
+                        className="rounded"
+                      />
+                      Gera ficha
+                    </label>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       ))}
       {showParticipantErrors && participantErrors.length > 0 && (
@@ -968,14 +808,14 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const renderSegmentsStep = () => (
     <div className="space-y-3" data-testid="shared-step-segmentos">
       <div>
-        <h3 className="text-sm font-semibold text-slate-800">Segmentos operacionais</h3>
-        <p className="text-xs text-slate-500">Cada segmento define PF, PM, modelo curricular e quais participantes cumprem aquele currículo.</p>
+        <h3 className="text-sm font-semibold text-slate-800">Distribuição Operacional PF/PM</h3>
+        <p className="text-xs text-slate-500">Defina o momento da troca entre PF e PM. A carga curricular das fichas não será dividida, ela abrangerá todo o período.</p>
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <label className="mb-1 block text-xs font-medium text-slate-600">Horário de divisão</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600">Horário da troca (divisão PF/PM)</label>
         <input
-          aria-label="Horário de divisão dos segmentos"
+          aria-label="Horário da troca"
           type="time"
           value={effectiveSplitTime}
           min={horarioInicio}
@@ -986,105 +826,11 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         <p className="mt-1 text-xs text-slate-500">Reserva: {horarioInicio} até {horarioFim}</p>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <label className="mb-1 block text-xs font-medium text-slate-600">Programa desta sessão</label>
-        <select
-          aria-label="Programa desta sessão"
-          value={effectiveProgramId}
-          onChange={(event) => void handleProgramSelect(event.target.value as SharedSessionProgramId)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-        >
-          <option value={SHARED_SESSION_PROGRAM_GENERICO}>Genérico</option>
-          {SHARED_SESSION_PROGRAMS.map((program) => (
-            <option key={program.id} value={program.id}>{program.label}</option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-slate-500">
-          A estrutura de segmentos do treinamento de examinador só aparece quando este programa é
-          selecionado — a existência dos modelos EXA-E01/EXA-E02 no tenant não a mostra sozinha.
-        </p>
-      </div>
-
-      {examinerTemplateVisible && (
-        <div
-          className="rounded-lg border border-indigo-200 bg-indigo-50 p-4"
-          data-testid="examiner-template-panel"
-        >
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-indigo-900">Treinamento prático de examinador</p>
-            {appliedExaminerEvent && (
-              <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-medium text-white">
-                Evento {appliedExaminerEvent} de 2 aplicado
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-xs text-indigo-700">
-            Cada agendamento físico representa um evento de 120 minutos. A distribuição PF/PM
-            continua segmentada operacionalmente, mas o currículo e a ficha cobrem toda a reserva.
-          </p>
-          {!examinerEvent1Available && !examinerEvent2Available && (
-            <p className="mt-2 text-xs text-amber-800" role="status">
-              Os modelos EXA-E01/EXA-E02 não estão disponíveis neste tenant. A estrutura de examinador
-              não pode ser aplicada até que esses modelos existam no catálogo.
-            </p>
-          )}
-          {!examinerReservationMatches && (
-            <p className="mt-2 text-xs text-amber-800">
-              A reserva precisa ter exatamente {EXAMINER_RESERVATION_MINUTES} minutos (2 × {EXAMINER_SEGMENT_MINUTES} min) para aplicar a estrutura do examinador.
-            </p>
-          )}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => applyExaminerTemplate(1)}
-              disabled={!examinerEvent1Available || !examinerReservationMatches}
-              title={
-                !examinerEvent1Available
-                  ? 'EXA-E01 não disponível neste tenant'
-                  : !examinerReservationMatches
-                    ? `Reserva precisa ter exatamente ${EXAMINER_RESERVATION_MINUTES} minutos`
-                    : undefined
-              }
-              className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-medium text-indigo-800 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Aplicar EXA-E01 · Examinador 1/2
-            </button>
-            <button
-              type="button"
-              onClick={() => applyExaminerTemplate(2)}
-              disabled={!examinerEvent2Available || !examinerReservationMatches}
-              title={
-                !examinerEvent2Available
-                  ? 'EXA-E02 não disponível neste tenant'
-                  : !examinerReservationMatches
-                    ? `Reserva precisa ter exatamente ${EXAMINER_RESERVATION_MINUTES} minutos`
-                    : undefined
-              }
-              className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-medium text-indigo-800 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Aplicar EXA-E02 · Examinador 2/2
-            </button>
-          </div>
-          <div className="mt-3 grid gap-2 text-xs text-indigo-800 md:grid-cols-2">
-            <div className="rounded-md border border-indigo-200 bg-white/70 px-3 py-2">
-              <p className="font-semibold">EXA-E01</p>
-              <p>Treinamento Prático de Examinador 1/2</p>
-              <p>SOP Normal e Condução Inicial / SOP Anormal e Avaliação</p>
-            </div>
-            <div className="rounded-md border border-indigo-200 bg-white/70 px-3 py-2">
-              <p className="font-semibold">EXA-E02</p>
-              <p>Treinamento Prático de Examinador 2/2</p>
-              <p>Emergência, Intervenção e Segurança / Atuação Integrada do Examinador</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {segments.map((segment, index) => (
           <div key={index} className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-900">Segmento {index + 1}</p>
+              <p className="text-sm font-semibold text-slate-900">Período {index + 1}</p>
               <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
                 {segment.inicio} - {segment.fim}
               </span>
@@ -1094,7 +840,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
               <label className="text-xs font-medium text-slate-600">
                 PF
                 <select
-                  aria-label={`PF do segmento ${index + 1}`}
+                  aria-label={`PF do período ${index + 1}`}
                   value={segmentAssignments[index].pfId ?? ''}
                   onChange={(event) => updateSegment(index as 0 | 1, { pfId: Number(event.target.value) || null })}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1109,7 +855,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
               <label className="text-xs font-medium text-slate-600">
                 PM
                 <select
-                  aria-label={`PM do segmento ${index + 1}`}
+                  aria-label={`PM do período ${index + 1}`}
                   value={segmentAssignments[index].pmId ?? ''}
                   onChange={(event) => updateSegment(index as 0 | 1, { pmId: Number(event.target.value) || null })}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1120,81 +866,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
                   ))}
                 </select>
               </label>
-
-              <label className="text-xs font-medium text-slate-600">
-                Finalidade do segmento
-                <select
-                  aria-label={`Finalidade do segmento ${index + 1}`}
-                  value={segmentAssignments[index].finalidadeCodigo}
-                  onChange={(event) => updateSegment(index as 0 | 1, {
-                    finalidadeCodigo: event.target.value as SharedSegmentPurpose,
-                  })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  {SEGMENT_PURPOSE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-xs font-medium text-slate-600">
-                Modelo de sessão do segmento
-                <select
-                  aria-label={`Modelo do segmento ${index + 1}`}
-                  value={segmentAssignments[index].modeloSessaoId ?? ''}
-                  onChange={(event) => updateSegment(index as 0 | 1, { modeloSessaoId: Number(event.target.value) || null })}
-                  disabled={loadingModelos || !simuladorModelo || !simuladorId}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">
-                    {!simuladorModelo || !simuladorId
-                      ? 'Selecione o equipamento para carregar os modelos'
-                      : loadingModelos
-                        ? 'Carregando modelos...'
-                        : 'Selecione o modelo do segmento'}
-                  </option>
-                  {visibleModelos.map((model) => (
-                    <option key={model.id} value={model.id}>{formatModelOption(model)}</option>
-                  ))}
-                </select>
-                {modelosErro && (
-                  <p className="mt-1 text-xs text-red-700">
-                    {modelosErro}{' '}
-                    <button type="button" className="underline" onClick={() => void fetchModelos()}>
-                      Tentar novamente
-                    </button>
-                  </p>
-                )}
-              </label>
-
-              <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs font-medium text-slate-600">Currículos atendidos neste segmento</p>
-                <div className="mt-2 space-y-2">
-                  {participants.map((participant) => {
-                    if (!participant.funcionario) return null;
-                    const funcionarioId = participant.funcionario.id;
-                    const checked = segmentAssignments[index].curricularIds.includes(funcionarioId);
-                    return (
-                      <label key={funcionarioId} className="flex cursor-pointer items-start gap-2 text-xs text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) => {
-                            const currentIds = new Set(segmentAssignments[index].curricularIds);
-                            if (event.target.checked) currentIds.add(funcionarioId);
-                            else currentIds.delete(funcionarioId);
-                            updateSegment(index as 0 | 1, {
-                              curricularIds: Array.from(currentIds).sort((left, right) => left - right),
-                            });
-                          }}
-                          className="mt-0.5 rounded"
-                        />
-                        <span>{participant.funcionario.nome}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
           </div>
         ))}
@@ -1207,18 +878,21 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       )}
 
       {summary.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2 pt-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
             <Clock className="h-4 w-4" />
-            Resumo por piloto
+            Resumo final
           </h3>
           <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-xs">
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
-                  {['Piloto', 'Total', 'PF', 'PM', 'Curricular', 'Modelos curriculares'].map((header) => (
-                    <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>
-                  ))}
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">Tripulante</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">Total</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">PF</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">PM</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">Curricular</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">Modelo da ficha</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
@@ -1244,7 +918,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             <p className="mr-auto text-xs text-red-700">{allErrors.length} pendência(s) precisam ser corrigidas antes de salvar.</p>
           )}
           <button type="button" onClick={() => requestStep('tripulacao')} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-            Voltar para Tripulação
+            Voltar para Tripulação e Fichas
           </button>
         </div>
       ) : (
@@ -1253,7 +927,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             <p className="mr-auto text-xs text-red-700">{allErrors.length} pendência(s) precisam ser corrigidas antes de salvar.</p>
           )}
           <button type="button" onClick={() => requestStep('tripulacao')} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-            Voltar para Tripulação
+            Voltar para Tripulação e Fichas
           </button>
           <button type="button" onClick={handleSubmit} disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
             {loading
@@ -1281,11 +955,11 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
               : 'Configuração compartilhada'}
         </div>
         <p className="mt-1 text-xs text-indigo-700">
-          Uma reserva, dois pilotos e vínculos curriculares independentes por segmento.
+          Uma reserva, dois tripulantes e vínculos curriculares cobrindo todo o período da sessão.
         </p>
         {conversionSeed && (
           <p className="mt-1 text-xs text-indigo-700">
-            O piloto 1 e o equipamento/horário/observações da sessão original são preservados. A
+            O tripulante 1 e o equipamento/horário/observações da sessão original são preservados. A
             conversão só é gravada ao salvar — cancelar não altera a sessão original.
           </p>
         )}
@@ -1334,7 +1008,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             Existem fichas concluídas nesta sessão.
           </div>
           <p className="mt-1">
-            O backend preserva segmentos concluídos e pode bloquear alterações incompatíveis com esse histórico.
+            O sistema bloqueia alterações na estrutura de segmentos se houver conflito com o histórico já preenchido e assinado.
           </p>
         </div>
       )}
