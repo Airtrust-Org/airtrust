@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
@@ -78,6 +78,20 @@ interface ModelosSessaoPageProps {
   embedded?: boolean;
 }
 
+type SortField = 'codigo' | 'nome' | 'dispositivo' | 'tipo' | 'modelo' | 'duracao' | 'manobras';
+type SortDirection = 'asc' | 'desc';
+type SortableColumn = { field: SortField; label: string };
+
+const SORTABLE_COLUMNS: SortableColumn[] = [
+  { field: 'codigo', label: 'Código' },
+  { field: 'nome', label: 'Nome' },
+  { field: 'dispositivo', label: 'Dispositivo' },
+  { field: 'tipo', label: 'Tipo' },
+  { field: 'modelo', label: 'Modelo' },
+  { field: 'duracao', label: 'Duração' },
+  { field: 'manobras', label: 'Manobras' },
+];
+
 export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosSessaoPageProps) {
   const [modelos, setModelos] = useState<ModeloSessao[]>([]);
   const [tiposSessao, setTiposSessao] = useState<TipoSessao[]>([]);
@@ -109,8 +123,51 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
   const [filtroTipoSessao, setFiltroTipoSessao] = useState<number | null>(null);
   const [filtroTipoDispositivo, setFiltroTipoDispositivo] = useState<TipoDispositivo | null>(null);
   const [filtroModeloAeronave, setFiltroModeloAeronave] = useState<string | null>(null);
-  const [ordenacao, setOrdenacao] = useState<'nome' | 'tipo' | 'aeronave'>('nome');
   const [carregandoDetalhesModelo, setCarregandoDetalhesModelo] = useState(false);
+
+  const SORT_STORAGE_KEY = `airtrust:modelos-sessao:${embedded ? 'embedded' : 'full'}:sort`;
+
+  const getStoredSort = useCallback((): { field: SortField; direction: SortDirection } => {
+    try {
+      const stored = localStorage.getItem(SORT_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object' && 'field' in parsed && 'direction' in parsed) {
+          return parsed as { field: SortField; direction: SortDirection };
+        }
+      }
+    } catch {}
+    return { field: 'codigo', direction: 'asc' };
+  }, [SORT_STORAGE_KEY]);
+
+  const [sortField, setSortFieldState] = useState<SortField>(() => getStoredSort().field);
+  const [sortDirection, setSortDirectionState] = useState<SortDirection>(() => getStoredSort().direction);
+
+  const setSortField = (field: SortField) => {
+    setSortFieldState(field);
+    const dir = getStoredSort().direction;
+    try { localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field, direction: dir })); } catch {}
+  };
+
+  const setSortDirection = (direction: SortDirection) => {
+    setSortDirectionState(direction);
+    try { localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field: sortField, direction })); } catch {}
+  };
+
+  const setSort = (field: SortField, direction: SortDirection) => {
+    setSortFieldState(field);
+    setSortDirectionState(direction);
+    try { localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field, direction })); } catch {}
+  };
+
+  const handleSortClick = (field: SortField) => {
+    if (field === sortField) {
+      const newDir = sortDirection === 'asc' ? 'desc' : 'asc';
+      setSort(field, newDir);
+    } else {
+      setSort(field, 'asc');
+    }
+  };
 
   useEffect(() => {
     carregarDados();
@@ -476,21 +533,57 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       (m.nome || m.descricao || '').toLowerCase().includes(filtroManobra.toLowerCase()),
   );
 
-  const modelosFiltrados = modelos
-    .filter((m) => {
+  const sortCollator = useMemo(() => new Intl.Collator('pt-BR', { sensitivity: 'base' }), []);
+  const codeCollator = useMemo(() => new Intl.Collator('pt-BR', { numeric: true }), []);
+
+  const modelosFiltrados = useMemo(() => {
+    const filtrados = modelos.filter((m) => {
       if (filtroTipoSessao && m.tipo_sessao_id !== filtroTipoSessao) return false;
       if (filtroTipoDispositivo && (m.tipo || 'SIMULADOR') !== filtroTipoDispositivo) return false;
       if (filtroModeloAeronave && m.modelo_aeronave !== filtroModeloAeronave) return false;
       return true;
-    })
-    .sort((a, b) => {
-      if (ordenacao === 'nome') return a.nome.localeCompare(b.nome);
-      if (ordenacao === 'tipo')
-        return (a.tipo_sessao_nome || '').localeCompare(b.tipo_sessao_nome || '');
-      if (ordenacao === 'aeronave')
-        return (a.modelo_aeronave || '').localeCompare(b.modelo_aeronave || '');
-      return 0;
     });
+
+    return [...filtrados].sort((a, b) => {
+      const dir = sortDirection === 'asc' ? 1 : -1;
+      let cmp = 0;
+
+      switch (sortField) {
+        case 'codigo':
+          cmp = codeCollator.compare(a.codigo, b.codigo);
+          break;
+        case 'nome':
+          cmp = sortCollator.compare(a.nome, b.nome);
+          break;
+        case 'dispositivo':
+          cmp = sortCollator.compare(
+            a.tipo || 'SIMULADOR',
+            b.tipo || 'SIMULADOR',
+          );
+          break;
+        case 'tipo':
+          cmp = sortCollator.compare(
+            a.tipo_sessao_nome || '',
+            b.tipo_sessao_nome || '',
+          );
+          break;
+        case 'modelo':
+          cmp = sortCollator.compare(
+            a.modelo_aeronave || '',
+            b.modelo_aeronave || '',
+          );
+          break;
+        case 'duracao':
+          cmp = (a.duracao_estimada || 120) - (b.duracao_estimada || 120);
+          break;
+        case 'manobras':
+          cmp = (a.total_manobras || 0) - (b.total_manobras || 0);
+          break;
+      }
+
+      return cmp * dir;
+    });
+  }, [modelos, filtroTipoSessao, filtroTipoDispositivo, filtroModeloAeronave, sortField, sortDirection, sortCollator, codeCollator]);
 
   if (loading) {
     return (
@@ -538,7 +631,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
       {/* Filtros e Ordenação */}
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Dispositivo</label>
             <select
@@ -586,19 +679,6 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Ordenar por</label>
-            <select
-              value={ordenacao}
-              onChange={(e) => setOrdenacao(e.target.value as 'nome' | 'tipo' | 'aeronave')}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
-            >
-              <option value="nome">Nome do Modelo</option>
-              <option value="tipo">Tipo de Sessão</option>
-              <option value="aeronave">Equipamento</option>
-            </select>
-          </div>
-
           <div className="flex items-end">
             <Button
               variant="secondary"
@@ -606,7 +686,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                 setFiltroTipoSessao(null);
                 setFiltroTipoDispositivo(null);
                 setFiltroModeloAeronave(null);
-                setOrdenacao('nome');
+                setSort('codigo', 'asc');
               }}
               className="w-full"
             >
@@ -625,27 +705,38 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                Código
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                Nome
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase min-w-[120px]">
-                Dispositivo
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                Tipo
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                Modelo
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                Duração
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                Manobras
-              </th>
+              {SORTABLE_COLUMNS.map(({ field, label }) => {
+                const isActive = sortField === field;
+                const ariaSort: 'ascending' | 'descending' | 'none' = isActive
+                  ? (sortDirection === 'asc' ? 'ascending' : 'descending')
+                  : 'none';
+                return (
+                  <th
+                    key={field}
+                    aria-sort={ariaSort}
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleSortClick(field)}
+                      className={`inline-flex items-center gap-1 transition-colors ${
+                        isActive
+                          ? 'text-blue-600 dark:text-blue-400'
+                          : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      {label}
+                      {isActive ? (
+                        sortDirection === 'asc' ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        )
+                      ) : null}
+                    </button>
+                  </th>
+                );
+              })}
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Ações
               </th>
