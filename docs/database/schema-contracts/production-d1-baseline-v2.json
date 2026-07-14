@@ -1,0 +1,194 @@
+{
+  "baseline_id": "production-d1-baseline-v2-20260714",
+  "baseline_date": "2026-07-14",
+  "source_commit": "6d4fe1e8d3ca3b761a23c3c78662a273d1b85f97",
+  "source_worker_sha": "6d4fe1e8d3ca3b761a23c3c78662a273d1b85f97",
+  "schema_hash": "f3a1a2fa2ef07c50660d4c8180bd2bd9dcb98e5423317f7c20ea6d4c9ba787d7",
+  "scoped_tables": [
+    "simuladores",
+    "simulador_agendamentos",
+    "sessoes_participantes",
+    "simulador_atribuicoes_curriculares",
+    "simulador_agendamento_segmentos",
+    "simulador_segmento_atribuicoes",
+    "simulador_segmento_participantes",
+    "modelos_sessao",
+    "modelos_sessao_manobras",
+    "fichas_sessao",
+    "fichas_sessao_manobras",
+    "fichas_sessao_instrutor_meta",
+    "d1_migrations"
+  ],
+  "tables": {
+    "simuladores": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "nome": { "type": "TEXT" },
+        "modelo": { "type": "TEXT" },
+        "tipo": { "type": "TEXT" },
+        "codigo_aeronave": { "type": "TEXT" },
+        "aeronave_codigo": { "type": "TEXT" },
+        "deleted_at": { "type": "TEXT" }
+      },
+      "relevant_indexes": [
+        "idx_simuladores_codigo_aeronave",
+        "idx_simuladores_aeronave_codigo",
+        "idx_simuladores_status_deleted_v2"
+      ]
+    },
+    "simulador_agendamentos": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "uuid": { "type": "TEXT" },
+        "funcionario_id": { "type": "INTEGER" },
+        "instrutor_id": { "type": "INTEGER" },
+        "empresa_id": { "type": "INTEGER" },
+        "tipo_dispositivo": { "type": "TEXT" },
+        "modo_compartilhado": { "type": "INTEGER" }
+      },
+      "relevant_indexes": [
+        "idx_simulador_agendamentos_empresa",
+        "idx_simulador_agendamentos_simulador_data",
+        "idx_agendamentos_uuid"
+      ]
+    },
+    "sessoes_participantes": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "uuid": { "type": "TEXT" },
+        "sessao_id": { "type": "INTEGER" },
+        "funcionario_id": { "type": "INTEGER" },
+        "status": { "type": "TEXT" }
+      },
+      "relevant_indexes": [
+        "idx_participantes_sessao_id",
+        "idx_participantes_funcionario_id"
+      ]
+    },
+    "simulador_atribuicoes_curriculares": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "uuid": { "type": "TEXT" },
+        "empresa_id": { "type": "INTEGER" },
+        "agendamento_id": { "type": "INTEGER" },
+        "participante_id": { "type": "INTEGER" },
+        "modelo_sessao_id": { "type": "INTEGER" },
+        "status": { "type": "TEXT" }
+      },
+      "relevant_indexes": [
+        "idx_sim_atribuicoes_ativas_por_participante_modelo",
+        "idx_sim_atribuicoes_agendamento"
+      ]
+    },
+    "simulador_agendamento_segmentos": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "uuid": { "type": "TEXT" },
+        "empresa_id": { "type": "INTEGER" },
+        "agendamento_id": { "type": "INTEGER" },
+        "ordem": { "type": "INTEGER" }
+      }
+    },
+    "simulador_segmento_atribuicoes": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "uuid": { "type": "TEXT" },
+        "segmento_id": { "type": "INTEGER" },
+        "atribuicao_curricular_id": { "type": "INTEGER" },
+        "empresa_id": { "type": "INTEGER" }
+      }
+    },
+    "simulador_segmento_participantes": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "uuid": { "type": "TEXT" },
+        "segmento_id": { "type": "INTEGER" },
+        "participante_id": { "type": "INTEGER" },
+        "empresa_id": { "type": "INTEGER" }
+      }
+    },
+    "modelos_sessao": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "codigo": { "type": "TEXT" },
+        "nome": { "type": "TEXT" },
+        "tipo_sessao_id": { "type": "INTEGER" },
+        "empresa_id": { "type": "INTEGER" },
+        "modelo_aeronave": { "type": "TEXT" }
+      }
+    },
+    "modelos_sessao_manobras": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "modelo_id": { "type": "INTEGER" },
+        "manobra_id": { "type": "INTEGER" },
+        "ordem": { "type": "INTEGER" },
+        "tripulante": { "type": "TEXT" }
+      }
+    },
+    "fichas_sessao": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "uuid": { "type": "TEXT" },
+        "agendamento_slot_id": { "type": "INTEGER" },
+        "colaborador_id_aluno": { "type": "INTEGER" },
+        "instrutor_id": { "type": "INTEGER" },
+        "template_id": { "type": "INTEGER" },
+        "empresa_id": { "type": "INTEGER" },
+        "status": { "type": "TEXT" },
+        "resultado_final": { "type": "TEXT" },
+        "atribuicao_curricular_id": { "type": "INTEGER" },
+        "segmento_atribuicao_id": { "type": "INTEGER" }
+      },
+      "relevant_indexes": [
+        "uq_fichas_sessao_empresa_atribuicao_curricular_ativa",
+        "idx_fichas_sessao_segmento_atribuicao_ativa",
+        "idx_fichas_sessao_agendamento"
+      ]
+    },
+    "fichas_sessao_manobras": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "ficha_id": { "type": "INTEGER" },
+        "codigo": { "type": "TEXT" },
+        "ordem": { "type": "INTEGER" },
+        "resultado": { "type": "TEXT" },
+        "tripulante": { "type": "TEXT" }
+      },
+      "relevant_indexes": [
+        "idx_fichas_sessao_manobras_ficha_ordem"
+      ]
+    },
+    "fichas_sessao_instrutor_meta": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "ficha_id": { "type": "INTEGER" },
+        "empresa_id": { "type": "INTEGER" },
+        "equipamento_utilizado": { "type": "TEXT" },
+        "dispositivo_identificacao": { "type": "TEXT" },
+        "assento_instrucao_utilizado": { "type": "TEXT" }
+      },
+      "relevant_indexes": [
+        "idx_fichas_sessao_instrutor_meta_empresa"
+      ]
+    },
+    "d1_migrations": {
+      "required_columns": {
+        "id": { "type": "INTEGER" },
+        "name": { "type": "TEXT" },
+        "applied_at": { "type": "TIMESTAMP" }
+      }
+    }
+  },
+  "prohibited_assumptions": [
+    "simuladores.empresa_id sempre existe",
+    "simuladores.modelo_aeronave existe",
+    "sessoes_participantes.empresa_id existe",
+    "modelos_sessao.tipo_sessao_codigo existe",
+    "migration presente no repositorio significa migration aplicada"
+  ],
+  "out_of_contract_tables": [
+    "airtrust_schema_baselines_v2",
+    "airtrust_schema_changes_v2"
+  ]
+}

@@ -1,6 +1,6 @@
 # AirTrust — Inventário de Dívida Técnica
 
-> **Versão do documento:** 1.0 | **Data:** 2026-06-12 | **HEAD:** `5be104893`
+> **Versão do documento:** 1.1 | **Data:** 2026-07-14 | **HEAD:** `6d4fe1e8d`
 
 ---
 
@@ -33,6 +33,7 @@ em 2026-06-12. Os itens são classificados por severidade e risco de runtime.
 | Migrations duplicadas | 30 números | 🟡 MÉDIO |
 | Código morto | 2 | 🟢 BAIXO |
 | Problemas de config | 2 | 🔴 CRÍTICO |
+| Drift de schema | 2 | 🔴 CRÍTICO |
 | Problemas de build | 2 | 🟢 BAIXO |
 | Problemas de RBAC | 1 | 🟡 MÉDIO |
 | Problemas de auditoria | 2 | 🟡 MÉDIO |
@@ -213,6 +214,35 @@ Mas não bloqueia.
 `.env.local` está no `.gitignore` mas não há validação de que as variáveis não
 apontam para produção. Um desenvolvedor pode acidentalmente configurar o proxy
 para produção e fazer alterações não intencionais.
+
+### 5.3 SCHEMA-DRIFT-001 — Drift entre produção, ledger e documentação
+
+**Severidade**: 🔴 CRÍTICO
+
+Produção auditada em 2026-07-14 diverge materialmente de `d1_migrations` e da documentação:
+
+- `0408`, `0410`, `0411`, `0412`, `0415`, `0420`, `0425` e `0428` aparecem aplicadas fora do ledger;
+- `0429` está parcialmente aplicada fora do ledger;
+- `simuladores` não possui `empresa_id`;
+- `sessoes_participantes` não possui `empresa_id`;
+- `modelos_sessao` usa `tipo_sessao_id`, não `tipo_sessao_codigo`.
+
+Mitigação adotada:
+- baseline formal versionado;
+- contrato de schema V2;
+- freeze de migrations históricas em produção.
+
+### 5.4 SCHEMA-LEDGER-V2-001 — Governança V2 ainda depende de disciplina operacional
+
+**Severidade**: 🟡 MÉDIO
+
+O ledger V2 resolve o replay cego do chain histórico, mas depende de:
+
+- hashes corretos de arquivo e plano;
+- execução de um único arquivo por vez;
+- validação obrigatória do contrato antes e depois da aplicação.
+
+Sem esse fluxo, o projeto volta a acumular drift fora de governança.
 
 ---
 

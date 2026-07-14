@@ -1,6 +1,6 @@
 # AirTrust — Deployment & DevOps
 
-> **Versão do documento:** 1.0 | **Data:** 2026-06-12 | **HEAD:** `5be104893`
+> **Versão do documento:** 1.1 | **Data:** 2026-07-14 | **HEAD:** `6d4fe1e8d`
 >
 > ⚠️ **[DOCUMENTO INTERNO]** Este documento descreve a arquitetura de deploy.
 > Não é um manual operacional executável. Nenhum comando aqui autoriza deploy,
@@ -28,7 +28,7 @@
 O deploy do AirTrust segue um pipeline de 4 estágios:
 
 ```
-[1. Pre-flight Checks] → [2. Build] → [3. Deploy Worker + Migrations] → [4. Deploy Pages] → [5. Validação]
+[1. Pre-flight Checks] → [2. Build] → [3. Deploy Worker ou Deploy Pages] → [4. Validação]
 ```
 
 ### Diagrama de deploy
@@ -39,11 +39,7 @@ graph TD
     B --> |"Verifica branch, clean state, HEAD==origin/main"| C{npm run build}
     C --> D[remove-duplicate-build-assets.sh]
     D --> E[stamp-build-version.sh]
-    E --> F{Gate de migrations}
-    F --> |"Gate ativo (dupla confirmação)"| G[wrangler d1 migrations apply --remote]
-    F --> |"Gate inativo"| H[Skip migrations]
-    G --> I[deploy-worker-only.sh]
-    H --> I
+    E --> I[deploy-worker-only.sh]
     I --> J[wrangler pages deploy dist/client]
     J --> K[Health check: GET /api/health]
     K --> L[Pages check: GET main.airtrust.pages.dev]
@@ -72,11 +68,9 @@ npm run deploy
 3. **Gera BUILD_TIME**: UTC ISO timestamp
 4. **Cria wrangler.toml temporário**: Node.js script que injeta `APP_VERSION` e `APP_BUILD_TIME`
    no template `wrangler.deploy.toml`
-5. **Gate de migrations em produção**: O script verifica duas variáveis de ambiente
-   com valores exatos (dupla confirmação). Se ambas estiverem presentes com os valores
-   corretos, executa o apply de migrations em produção. Os nomes e valores das variáveis
-   não são documentados aqui — ver seção 5.2 e consultar `scripts/deploy-worker-only.sh`
-   diretamente.
+5. **Bloqueio de migrations históricas em produção**: o workflow `deploy-airtrust.yml`
+   falha explicitamente com `LEGACY_MIGRATION_RUNNER_DISABLED_USE_SCHEMA_V2` quando
+   `run_migrations=true`.
 6. **Deploy do Worker**: `wrangler deploy --env production`
 7. **Limpeza**: Remove o arquivo `.toml` temporário (trap EXIT)
 
@@ -162,7 +156,8 @@ npm run deploy:all
 | Workflow | Trigger | Ações |
 |---|---|---|
 | **ci.yml** | PR, push | Build + lint + LMS smoke test |
-| **deploy.yml** | Push to `main` | Test → build → migrations → deploy worker → deploy pages → validate |
+| **deploy-airtrust.yml** | Manual | Test → build → deploy worker/pages → validate |
+| **apply-schema-change-v2.yml** | Manual | Valida contrato → aplica 1 arquivo SQL V2 → registra ledger V2 |
 | **deploy-pages.yml** | Push to branches | Build + deploy Pages |
 | **lint.yml** | PR, push | ESLint + Prettier check |
 | **demo-data-prevention.yml** | PR to main/master/prod | Demo data check + lint + build + PR comment |
@@ -209,21 +204,22 @@ jobs:
 | Gate | Descrição |
 |---|---|
 | **Pre-flight** | Branch=main, clean state, HEAD=origin/main |
-| **Migrations gate** | Dupla confirmação: `AIRTRUST_ALLOW_PROD_MIGRATIONS_APPLY=YES` + texto exato de confirmação |
+| **Legacy migrations block** | `deploy-airtrust.yml` encerra com `LEGACY_MIGRATION_RUNNER_DISABLED_USE_SCHEMA_V2` |
 | **APP_VERSION gate** | APP_VERSION só pode ser definido externamente com `AIRTRUST_ALLOW_APP_VERSION_OVERRIDE=1` |
 | **Secrets guard** | `check-tracked-secrets.sh` antes de cada deploy |
 | **Demo data guard** | `ci-demo-data-check.sh` no CI |
 | **Auth boundary guard** | `guard-auth-boundaries.sh` verifica ordem de rotas |
 
-### 5.2 Dupla confirmação para migrations
+### 5.2 Governança de schema V2
 
 > **[INTERNO — não executável deste documento]**
 >
-> O script `deploy-worker-only.sh` exige dupla confirmação via variáveis de ambiente
-> com valores exatos (definidos no script). Ambas as variáveis devem estar presentes
-> com os valores corretos para que migrations sejam aplicadas em produção.
-> Os valores exatos não são documentados aqui — consultar o script diretamente e o
-> runbook operacional interno.
+> Produção não usa mais `wrangler d1 migrations apply --remote`.
+> O fluxo vigente é:
+> 1. validar o contrato em modo read-only;
+> 2. aplicar somente o bootstrap V2 ou um arquivo único em `worker-airtrust/schema-v2/`;
+> 3. registrar a aplicação em `airtrust_schema_baselines_v2` ou `airtrust_schema_changes_v2`;
+> 4. revalidar o contrato.
 
 ### 5.3 Wrangler config temporário
 
@@ -255,9 +251,19 @@ trap "rm -f $TMP_WRANGLER" EXIT
 > autorizado. Consultar o runbook operacional interno (`docs/LOCAL_PROD_CLONE.md`
 > e os scripts de gate) antes de qualquer ação.
 
-### 6.1 Fluxo seguro (com gate)
+### 6.1 Fluxo seguro atual
 
-O script `deploy-worker-only.sh` encapsula o gate de dupla confirmação.
+- baseline real auditado e congelado em `docs/database/schema-contracts/production-d1-baseline-v2.json`;
+- bootstrap inicial só cria `airtrust_schema_baselines_v2` e `airtrust_schema_changes_v2`;
+- mudanças futuras entram como arquivo único em `worker-airtrust/schema-v2/changes/`;
+- aplicação manual somente por `apply-schema-change-v2.yml`, com `expected_sha`, `file_hash`, `plan_hash`, `confirm_production=AIRTRUST_PRODUCTION` e validação pré/pós do contrato read-only.
+
+### 6.2 Proibições
+
+- proibido rodar `wrangler d1 migrations apply --remote` em produção;
+- proibido alterar `d1_migrations` para reconciliar drift histórico;
+- proibido aplicar múltiplos arquivos SQL numa única execução de change V2;
+- proibido deployar Worker ou Pages como parte da governança de schema V2.
 Migrations só são aplicadas se as variáveis de gate corretas estiverem presentes.
 Não executar `wrangler d1 migrations apply` diretamente sem passar pelo gate.
 

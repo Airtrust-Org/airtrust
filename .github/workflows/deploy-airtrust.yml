@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
       run_migrations:
-        description: 'Apply production D1 migrations before Worker deploy'
+        description: 'Legacy input retained only to hard-block historical production migrations'
         required: true
         type: boolean
         default: false
@@ -31,7 +31,7 @@ on:
         required: true
         type: string
       migration_confirmation:
-        description: 'Type AIRTRUST_MIGRATIONS_APPROVED when run_migrations=true'
+        description: 'Legacy input ignored because historical production migrations are disabled'
         required: false
         type: string
 
@@ -42,7 +42,6 @@ concurrency:
 env:
   NODE_VERSION: '24'
   PRODUCTION_CONFIRMATION: AIRTRUST_PRODUCTION
-  MIGRATION_CONFIRMATION: AIRTRUST_MIGRATIONS_APPROVED
   PAGES_PROJECT_NAME: airtrust
   PAGES_BRANCH: production
   WORKER_VERSION_ENDPOINT: https://api.airtrust.online/api/version
@@ -99,14 +98,8 @@ jobs:
           fi
 
           if [[ "${{ inputs.run_migrations }}" == "true" ]]; then
-            if [[ "${{ inputs.migration_confirmation }}" != "${MIGRATION_CONFIRMATION}" ]]; then
-              echo "migration_confirmation must be ${MIGRATION_CONFIRMATION} when run_migrations=true." >&2
-              exit 1
-            fi
-            if [[ ${#reason} -lt 20 ]]; then
-              echo "reason must document the migration plan in practical detail." >&2
-              exit 1
-            fi
+            echo "LEGACY_MIGRATION_RUNNER_DISABLED_USE_SCHEMA_V2" >&2
+            exit 1
           fi
 
       - name: Compute release version
@@ -185,18 +178,6 @@ jobs:
 
       - name: Install worker dependencies
         run: npm --prefix worker-airtrust ci
-
-      - name: Apply D1 migrations
-        if: ${{ inputs.run_migrations }}
-        working-directory: worker-airtrust
-        shell: bash
-        env:
-          CLOUDFLARE_WORKER_TOKEN_EFFECTIVE: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          set -euo pipefail
-          npx wrangler d1 migrations apply airtrust-db --env production --remote
 
       - name: Prepare worker config
         shell: bash
