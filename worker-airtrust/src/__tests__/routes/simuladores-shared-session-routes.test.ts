@@ -1,16 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
+let mockAuthenticated = true;
+let mockUserRole = 'admin';
+
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
+    if (!mockAuthenticated) {
+      return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
+    }
     c.set('userId', 1);
-    c.set('userRole', 'admin');
+    c.set('userRole', mockUserRole);
     c.set('empresaId', 6);
     c.set('tenantContext', {
       empresaId: 6,
       empresaCodigo: 'tenant-6',
       empresaNome: 'Tenant 6',
-      role: 'admin',
+      role: mockUserRole,
       plano: 'pro',
       permissions: ['read', 'write'],
     });
@@ -37,6 +43,14 @@ vi.mock('../../routes/simuladores-shared', async () => {
 });
 
 import sharedSessionRoutes from '../../routes/simuladores-shared-session';
+import { errorHandler } from '../../middleware/error-handler';
+
+// requireRole() throws an ApiError that the production app converts to a
+// JSON response via the global app.onError(errorHandler) registered once in
+// index.ts. These tests call the sub-router's .fetch() directly, bypassing
+// that global handler, so it must be registered here too — otherwise a
+// thrown 403 surfaces as an unhandled 500 in the test harness only.
+sharedSessionRoutes.onError(errorHandler);
 
 type QueryRun = { query: string; args: unknown[] };
 
@@ -47,6 +61,7 @@ function createDbForSharedRoutes(options?: {
   concludedFicha?: boolean;
   historicalLegacyOnly?: boolean;
   examinerModelos?: boolean;
+  fichaGenerationFails?: boolean;
 }) {
   const batches: Array<Array<QueryRun>> = [];
 
@@ -128,6 +143,31 @@ function createDbForSharedRoutes(options?: {
               participante_id: 701,
               funcionario_id: 101,
             };
+          }
+
+          // Ficha-generator's own tenant-scoped session lookup (distinct
+          // column list from the broader shared-detail query above) — the
+          // Phase 3 backfill call needs this to succeed, mirroring that
+          // Phase 1's transactional batch already created/persisted the
+          // session by the time Phase 3 runs.
+          if (query.startsWith('SELECT id, data, instrutor_id, simulador_id')) {
+            if (options?.missingSharedSession || options?.fichaGenerationFails) {
+              return null;
+            }
+            return { id: 9901, data: '2026-06-20', instrutor_id: 201, simulador_id: 10 };
+          }
+
+          // Ficha-generator's canonical existing-ficha check (agendamento
+          // slot + colaborador + template + atribuicao). Reports "already
+          // exists" so Phase 3 skips rather than duplicating what Phase 1's
+          // transactional batch already inserted.
+          if (
+            query.includes('FROM fichas_sessao') &&
+            query.includes('agendamento_slot_id = ?') &&
+            query.includes('colaborador_id_aluno = ?') &&
+            query.includes('template_id = ?')
+          ) {
+            return { id: 3001 };
           }
 
           if (query.includes('FROM fichas_sessao') && query.includes('atribuicao_curricular_id = ?')) {
@@ -382,6 +422,8 @@ describe('simuladores shared session routes', () => {
 
   beforeEach(() => {
     mockConflict = null;
+    mockAuthenticated = true;
+    mockUserRole = 'admin';
   });
 
   it('returns 404 when the shared-session feature flag is disabled', async () => {
@@ -1224,6 +1266,123 @@ describe('simuladores shared session routes', () => {
     // so the session is created successfully even when the model has no specific manobras.
     // assertModeloSessaoTemManobras is effectively dead code until a product decision is made.
     expect(response.status).toBe(201);
+  });
+
+  it('does not return success:true when post-creation ficha generation fails', async () => {
+    const { db } = createDbForSharedRoutes({ fichaGenerationFails: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [
+            { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+            { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002, gera_ficha: true },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '09:00',
+              atribuicao_funcionario_id: 101,
+              atribuicao_funcionario_ids: [101, 102],
+              finalidade_codigo: 'SOP_NORMAL',
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    // The session structure (phase 1/2) still gets persisted — this only
+    // proves the response never lies about ficha generation having
+    // succeeded. Session 109/110 in production are exactly this case: rows
+    // existed, but success:true was returned despite zero fichas.
+    expect(response.status).not.toBe(201);
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    const body = (await response.json()) as { success: boolean; error?: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/pendente de reparo/i);
+  });
+});
+
+describe('POST /sessoes/compartilhada/:id/gerar-fichas — RBAC', () => {
+  const executionContext = {
+    waitUntil: vi.fn(),
+  } as unknown as ExecutionContext;
+
+  beforeEach(() => {
+    mockConflict = null;
+    mockAuthenticated = true;
+    mockUserRole = 'admin';
+  });
+
+  it('returns 401 when the caller is not authenticated', async () => {
+    mockAuthenticated = false;
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901/gerar-fichas', { method: 'POST' }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(401);
+    expect(batches).toHaveLength(0);
+  });
+
+  it('returns 403 when the caller is authenticated but not an admin', async () => {
+    mockUserRole = 'instructor';
+    const { db, batches } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901/gerar-fichas', { method: 'POST' }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(403);
+    expect(batches).toHaveLength(0);
+  });
+
+  it('allows an authorized admin to run the repair endpoint', async () => {
+    mockUserRole = 'admin';
+    const { db } = createDbForSharedRoutes();
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901/gerar-fichas', { method: 'POST' }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean };
+    expect(body.success).toBe(true);
+  });
+
+  it('does not return success:true when the session is not found in the caller tenant', async () => {
+    mockUserRole = 'admin';
+    const { db } = createDbForSharedRoutes({ missingSharedSession: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901/gerar-fichas', { method: 'POST' }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).not.toBe(200);
+    const body = (await response.json()) as { success: boolean };
+    expect(body.success).toBe(false);
   });
 });
 

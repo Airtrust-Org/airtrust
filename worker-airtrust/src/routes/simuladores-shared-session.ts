@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import {
   audit,
@@ -73,6 +74,12 @@ app.post('/sessoes/compartilhada', async (c) => {
     }).catch(() => undefined);
 
     // Phase 3: Gerar fichas (idempotente, pós-batch, por atribuição).
+    // O gerador é fail-closed: cada atribuição elegível (gera_ficha=1) só é
+    // contada em created/skipped depois de sua ficha (com os itens do
+    // modelo) existir de fato — se qualquer atribuição obrigatória falhar,
+    // a chamada lança e nada abaixo é alcançado. Por isso a resposta NUNCA
+    // declara sucesso pleno quando a geração falha: a sessão já foi
+    // persistida (fase 1/2), mas fica registrada como pendente de reparo.
     let fichasGeradas = 0;
     let fichasExistentes = 0;
     try {
@@ -80,7 +87,25 @@ app.post('/sessoes/compartilhada', async (c) => {
       fichasGeradas = fichasResult.created;
       fichasExistentes = fichasResult.skipped;
     } catch (fichaError: any) {
-      console.error('[SHARED] Erro ao gerar fichas pós-criação:', String(fichaError?.message || 'erro desconhecido'));
+      const fichaErrorMessage = String(fichaError?.message || 'erro desconhecido');
+      await audit(c.env.DB, {
+        tabela: 'fichas_sessao',
+        acao: 'GERACAO_FICHAS_SHARED_FALHOU',
+        registro_id: created.sessaoId,
+        dados_novos: { empresaId, sessaoId: created.sessaoId, error: fichaErrorMessage },
+      }).catch(() => undefined);
+
+      return c.json(
+        {
+          success: false,
+          error:
+            'Sessão compartilhada criada (id ' +
+            created.sessaoId +
+            '), mas a geração de fichas falhou e ficou pendente de reparo: ' +
+            fichaErrorMessage,
+        },
+        502,
+      );
     }
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, created.sessaoId);
@@ -329,9 +354,9 @@ app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', async 
  * POST /simuladores/sessoes/compartilhada/:id/gerar-fichas
  * Repara fichas ausentes para uma sessão compartilhada existente.
  * Idempotente — pode ser chamado repetidamente sem duplicar.
- * Requer role admin.
+ * Restrito a admin — enforced via requireRole, não apenas por comentário.
  */
-app.post('/sessoes/compartilhada/:id/gerar-fichas', async (c) => {
+app.post('/sessoes/compartilhada/:id/gerar-fichas', requireRole('admin'), async (c) => {
   const denied = await assertSharedFeature(c);
   if (denied) return denied;
 
@@ -351,7 +376,9 @@ app.post('/sessoes/compartilhada/:id/gerar-fichas', async (c) => {
       },
     });
   } catch (error: any) {
-    return c.json({ success: false, error: String(error?.message || 'Erro interno') }, 500);
+    const rawMessage = String(error?.message || 'Erro interno ao gerar fichas');
+    const { status, message } = crossTenantSafeResponseStatusAndMessage(rawMessage, 500);
+    return c.json({ success: false, error: message }, status);
   }
 });
 
