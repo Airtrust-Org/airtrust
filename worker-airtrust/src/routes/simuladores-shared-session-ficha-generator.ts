@@ -5,11 +5,18 @@
  * Cada atribuição com gera_ficha=1 e modelo_sessao_id válido gera exatamente
  * uma ficha com suas manobras.
  *
- * Idempotência: verifica ficha existente pela combinação canônica
- * (agendamento_slot_id, colaborador_id_aluno, template_id, atribuicao_curricular_id).
+ * Fail-closed: todas as atribuições são validadas (participante, modelo,
+ * manobras) ANTES de qualquer INSERT ser enfileirado. Se qualquer atribuição
+ * obrigatória falhar, a função lança e nenhum INSERT é executado — nunca
+ * ficha parcial.
+ *
+ * Idempotência: usa UUID pré-gerado por ficha e INSERT ... SELECT ... WHERE
+ * NOT EXISTS contra a combinação canônica (empresa_id, agendamento_slot_id,
+ * colaborador_id_aluno, template_id, atribuicao_curricular_id, deleted_at IS
+ * NULL) — não depende de um SELECT prévio seguido de INSERT separado, nem de
+ * "últimos registros da sessão" para resolver os IDs criados.
  */
 
-import { createSharedAssignmentKey } from './simuladores-shared-session-logic';
 import { assertModeloSessaoTemManobras, loadFichaManobrasForModelo } from './simuladores-shared-session-fichas';
 import { fichasSessaoManobrasHasEmpresaId } from './simuladores-shared';
 
@@ -25,22 +32,42 @@ export interface GenerateFichasResult {
     atribuicao_curricular_id: number;
     funcionario_id: number;
     modelo_sessao_id: number;
-    ficha_id: number | null;
-    action: 'created' | 'skipped' | 'error';
-    error?: string;
+    ficha_id: number;
+    action: 'created' | 'skipped';
   }>;
+}
+
+interface AtribuicaoRow {
+  id: number;
+  participante_id: number;
+  modelo_sessao_id: number;
+  gera_ficha: number;
+  funcionario_id: number;
+  modelo_codigo: string;
+  modelo_nome: string;
+  tipo_sessao_codigo: string | null;
+}
+
+interface FichaPlan {
+  atribuicao: AtribuicaoRow;
+  fichaUuid: string;
+  manobras: Awaited<ReturnType<typeof loadFichaManobrasForModelo>>;
 }
 
 /**
  * Gera fichas para TODAS as atribuições de uma sessão compartilhada que
  * ainda não possuem ficha. Idempotente — pode ser reexecutada.
+ *
+ * Fail-closed: se qualquer atribuição obrigatória falhar validação (modelo
+ * sem manobras, por exemplo), a função lança antes de tocar o banco — nenhum
+ * INSERT é executado para a sessão inteira nessa chamada.
  */
 export async function generateFichasForSharedSession(
   db: D1Database,
   empresaId: number,
   sessaoId: number,
 ): Promise<GenerateFichasResult> {
-  // 1. Buscar a sessão
+  // 1. Buscar a sessão — escopo obrigatório de tenant.
   const sessao = await db
     .prepare(
       `SELECT id, data, instrutor_id, simulador_id
@@ -54,10 +81,11 @@ export async function generateFichasForSharedSession(
     throw new Error(`Sessão compartilhada ${sessaoId} não encontrada na empresa ${empresaId}`);
   }
 
-  // 2. Buscar modelo da aeronave do simulador
+  // 2. Buscar modelo da aeronave do simulador — escopo obrigatório de tenant.
   const simulatorModel = await getSimuladorModelo(db, empresaId, sessao.simulador_id);
 
-  // 3. Buscar atribuições que devem gerar ficha
+  // 3. Buscar atribuições que devem gerar ficha — todas as tabelas do join
+  //    (sac, sp, ms) já são filtradas por empresa_id.
   const atribuicoes = await db
     .prepare(
       `SELECT sac.id,
@@ -71,11 +99,12 @@ export async function generateFichasForSharedSession(
        FROM simulador_atribuicoes_curriculares sac
        INNER JOIN sessoes_participantes sp
          ON sp.id = sac.participante_id
+        AND sp.empresa_id = ?
         AND sp.deleted_at IS NULL
        INNER JOIN modelos_sessao ms
          ON ms.id = sac.modelo_sessao_id
-        AND ms.deleted_at IS NULL
         AND ms.empresa_id = ?
+        AND ms.deleted_at IS NULL
        WHERE sac.agendamento_id = ?
          AND sac.empresa_id = ?
          AND sac.deleted_at IS NULL
@@ -83,19 +112,9 @@ export async function generateFichasForSharedSession(
          AND sac.modelo_sessao_id IS NOT NULL
        ORDER BY sac.id`,
     )
-    .bind(empresaId, sessaoId, empresaId)
-    .all<{
-      id: number;
-      participante_id: number;
-      modelo_sessao_id: number;
-      gera_ficha: number;
-      funcionario_id: number;
-      modelo_codigo: string;
-      modelo_nome: string;
-      tipo_sessao_codigo: string | null;
-    }>();
+    .bind(empresaId, empresaId, sessaoId, empresaId)
+    .all<AtribuicaoRow>();
 
-  // 4. Verificar se já existe ficha para cada atribuição
   const result: GenerateFichasResult = {
     created: 0,
     skipped: 0,
@@ -104,21 +123,24 @@ export async function generateFichasForSharedSession(
   };
 
   const hasFichaEmpresaId = await fichasSessaoManobrasHasEmpresaId(db);
-  const statements: D1PreparedStatement[] = [];
+
+  // 4. Fase de validação — carrega tudo e valida ANTES de qualquer INSERT.
+  //    Qualquer falha aqui joga fora da função sem ter enfileirado nada.
+  const toCreate: FichaPlan[] = [];
 
   for (const atribuicao of atribuicoes.results) {
-    // Verificar se já existe ficha vinculada a esta atribuição
     const existingFicha = await db
       .prepare(
         `SELECT id FROM fichas_sessao
-         WHERE agendamento_slot_id = ?
+         WHERE empresa_id = ?
+           AND agendamento_slot_id = ?
            AND colaborador_id_aluno = ?
            AND template_id = ?
            AND atribuicao_curricular_id = ?
            AND deleted_at IS NULL
          LIMIT 1`,
       )
-      .bind(sessaoId, atribuicao.funcionario_id, atribuicao.modelo_sessao_id, atribuicao.id)
+      .bind(empresaId, sessaoId, atribuicao.funcionario_id, atribuicao.modelo_sessao_id, atribuicao.id)
       .first<{ id: number }>();
 
     if (existingFicha) {
@@ -134,128 +156,174 @@ export async function generateFichasForSharedSession(
       continue;
     }
 
-    // Criar ficha
-    try {
-      const fichaUuid = crypto.randomUUID();
+    // Fail-closed: manobras carregadas e validadas antes de qualquer INSERT
+    // ser enfileirado. Se faltar manobra obrigatória, lança e aborta a
+    // geração inteira desta sessão — nenhuma ficha parcial.
+    const manobras = await loadFichaManobrasForModelo(db, Number(atribuicao.modelo_sessao_id));
+    assertModeloSessaoTemManobras(Number(atribuicao.modelo_sessao_id), manobras);
 
+    toCreate.push({
+      atribuicao,
+      fichaUuid: crypto.randomUUID(),
+      manobras,
+    });
+  }
+
+  if (toCreate.length === 0) {
+    return result;
+  }
+
+  // 5. Fase de escrita — plano completo já validado; um único batch atômico
+  //    para todas as fichas + manobras ausentes desta sessão.
+  const statements: D1PreparedStatement[] = [];
+
+  for (const plan of toCreate) {
+    const { atribuicao, fichaUuid, manobras } = plan;
+
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO fichas_sessao
+             (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
+              tipo_sessao, tipo_aeronave, data_sessao, status,
+              template_id, empresa_id, atribuicao_curricular_id, segmento_atribuicao_id)
+           SELECT ?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?, ?, NULL
+           WHERE NOT EXISTS (
+             SELECT 1 FROM fichas_sessao
+             WHERE empresa_id = ?
+               AND agendamento_slot_id = ?
+               AND colaborador_id_aluno = ?
+               AND template_id = ?
+               AND atribuicao_curricular_id = ?
+               AND deleted_at IS NULL
+           )`,
+        )
+        .bind(
+          fichaUuid,
+          sessaoId,
+          atribuicao.funcionario_id,
+          sessao.instrutor_id,
+          atribuicao.modelo_codigo || 'SHARED',
+          simulatorModel,
+          sessao.data,
+          atribuicao.modelo_sessao_id,
+          empresaId,
+          atribuicao.id,
+          empresaId,
+          sessaoId,
+          atribuicao.funcionario_id,
+          atribuicao.modelo_sessao_id,
+          atribuicao.id,
+        ),
+    );
+
+    for (const manobra of manobras) {
       statements.push(
         db
           .prepare(
-            `INSERT INTO fichas_sessao
-               (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
-                tipo_sessao, tipo_aeronave, data_sessao, status,
-                template_id, empresa_id, atribuicao_curricular_id, segmento_atribuicao_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?, ?, NULL)`,
+            hasFichaEmpresaId
+              ? `INSERT INTO fichas_sessao_manobras
+                   (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
+                 SELECT fs.id, ?, ?, ?, ?, ?, ?, ?
+                 FROM fichas_sessao fs
+                 WHERE fs.uuid = ? AND fs.empresa_id = ?`
+              : `INSERT INTO fichas_sessao_manobras
+                   (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
+                 SELECT fs.id, ?, ?, ?, ?, ?, ?
+                 FROM fichas_sessao fs
+                 WHERE fs.uuid = ? AND fs.empresa_id = ?`,
           )
           .bind(
+            manobra.codigo,
+            manobra.nome,
+            manobra.descricao || manobra.nome,
+            manobra.categoria || 'GERAL',
+            manobra.ordem,
+            manobra.tripulante || 'AB',
+            ...(hasFichaEmpresaId ? [empresaId] : []),
             fichaUuid,
-            sessaoId,
-            atribuicao.funcionario_id,
-            sessao.instrutor_id,
-            atribuicao.modelo_codigo || 'SHARED',
-            simulatorModel,
-            sessao.data,
-            atribuicao.modelo_sessao_id,
             empresaId,
-            atribuicao.id,
           ),
       );
-
-      // Carregar e inserir manobras
-      const manobras = await loadFichaManobrasForModelo(db, Number(atribuicao.modelo_sessao_id));
-      assertModeloSessaoTemManobras(Number(atribuicao.modelo_sessao_id), manobras);
-
-      for (const manobra of manobras) {
-        statements.push(
-          db
-            .prepare(
-              hasFichaEmpresaId
-                ? `INSERT INTO fichas_sessao_manobras
-                     (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, empresa_id)
-                   VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`
-                : `INSERT INTO fichas_sessao_manobras
-                     (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
-                   VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
-            )
-            .bind(
-              fichaUuid,
-              manobra.codigo,
-              manobra.nome,
-              manobra.descricao || manobra.nome,
-              manobra.categoria || 'GERAL',
-              manobra.ordem,
-              manobra.tripulante || 'AB',
-              ...(hasFichaEmpresaId ? [empresaId] : []),
-            ),
-        );
-      }
-
-      result.created++;
-      // fichaIds will be resolved after batch
-      result.fichaIds.push(-1); // placeholder, resolved after batch
-      result.details.push({
-        atribuicao_curricular_id: atribuicao.id,
-        funcionario_id: atribuicao.funcionario_id,
-        modelo_sessao_id: atribuicao.modelo_sessao_id,
-        ficha_id: null, // resolved after batch
-        action: 'created',
-      });
-    } catch (error: any) {
-      result.details.push({
-        atribuicao_curricular_id: atribuicao.id,
-        funcionario_id: atribuicao.funcionario_id,
-        modelo_sessao_id: atribuicao.modelo_sessao_id,
-        ficha_id: null,
-        action: 'error',
-        error: String(error?.message || 'Erro desconhecido'),
-      });
     }
   }
 
-  // 5. Executar batch
-  if (statements.length > 0) {
-    await db.batch(statements);
+  // Batch único e atômico — se rejeitar, nenhuma statement é aplicada
+  // (garantia de plataforma do D1); a exceção propaga sem catch local.
+  await db.batch(statements);
 
-    // Resolver IDs das fichas criadas
-    const newFichas = await db
+  // 6. Resolver IDs das fichas por UUID específico da atribuição — nunca por
+  //    "últimos registros da sessão" (ORDER BY id DESC LIMIT n), o que
+  //    poderia atribuir fichas de outra escrita concorrente à atribuição
+  //    errada.
+  for (const plan of toCreate) {
+    const created = await db
       .prepare(
-        `SELECT fs.id, fs.atribuicao_curricular_id
-         FROM fichas_sessao fs
-         WHERE fs.agendamento_slot_id = ?
-           AND fs.empresa_id = ?
-           AND fs.deleted_at IS NULL
-         ORDER BY fs.id DESC
-         LIMIT ?`,
+        `SELECT id FROM fichas_sessao WHERE uuid = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
       )
-      .bind(sessaoId, empresaId, result.created)
-      .all<{ id: number; atribuicao_curricular_id: number }>();
+      .bind(plan.fichaUuid, empresaId)
+      .first<{ id: number }>();
 
-    // Atualizar fichaIds e details com IDs reais
-    const newFichaIds: number[] = [];
-    for (const ficha of newFichas.results) {
-      newFichaIds.push(ficha.id);
+    if (created) {
+      result.created++;
+      result.fichaIds.push(created.id);
+      result.details.push({
+        atribuicao_curricular_id: plan.atribuicao.id,
+        funcionario_id: plan.atribuicao.funcionario_id,
+        modelo_sessao_id: plan.atribuicao.modelo_sessao_id,
+        ficha_id: created.id,
+        action: 'created',
+      });
+      continue;
     }
-    // Substituir placeholders
-    result.fichaIds = [
-      ...result.fichaIds.filter(id => id !== -1),
-      ...newFichaIds,
-    ];
 
-    for (const detail of result.details) {
-      if (detail.action === 'created' && detail.atribuicao_curricular_id) {
-        const match = newFichas.results.find(
-          f => f.atribuicao_curricular_id === detail.atribuicao_curricular_id,
-        );
-        if (match) detail.ficha_id = match.id;
-      }
+    // A INSERT ... WHERE NOT EXISTS não criou linha com este UUID: outra
+    // escrita concorrente já satisfez a mesma chave canônica primeiro.
+    // Resolve pela chave canônica (não por UUID, não por "últimos
+    // registros") e trata como idempotência bem-sucedida.
+    const existing = await db
+      .prepare(
+        `SELECT id FROM fichas_sessao
+         WHERE empresa_id = ?
+           AND agendamento_slot_id = ?
+           AND colaborador_id_aluno = ?
+           AND template_id = ?
+           AND atribuicao_curricular_id = ?
+           AND deleted_at IS NULL
+         LIMIT 1`,
+      )
+      .bind(
+        empresaId,
+        sessaoId,
+        plan.atribuicao.funcionario_id,
+        plan.atribuicao.modelo_sessao_id,
+        plan.atribuicao.id,
+      )
+      .first<{ id: number }>();
+
+    if (!existing) {
+      throw new Error(
+        `Falha ao resolver ficha após batch para atribuição ${plan.atribuicao.id} na sessão ${sessaoId}`,
+      );
     }
+
+    result.skipped++;
+    result.fichaIds.push(existing.id);
+    result.details.push({
+      atribuicao_curricular_id: plan.atribuicao.id,
+      funcionario_id: plan.atribuicao.funcionario_id,
+      modelo_sessao_id: plan.atribuicao.modelo_sessao_id,
+      ficha_id: existing.id,
+      action: 'skipped',
+    });
   }
 
   return result;
 }
 
 /**
- * Resolve o modelo da aeronave associado ao simulador.
+ * Resolve o modelo da aeronave associado ao simulador — escopo obrigatório
+ * de tenant.
  */
 async function getSimuladorModelo(
   db: D1Database,
@@ -266,10 +334,10 @@ async function getSimuladorModelo(
     .prepare(
       `SELECT s.modelo_aeronave, s.nome
        FROM simuladores s
-       WHERE s.id = ? AND s.deleted_at IS NULL
+       WHERE s.id = ? AND s.empresa_id = ? AND s.deleted_at IS NULL
        LIMIT 1`,
     )
-    .bind(simuladorId)
+    .bind(simuladorId, empresaId)
     .first<{ modelo_aeronave: string | null; nome: string | null }>();
 
   return row?.modelo_aeronave || row?.nome || 'SIMULADOR';
