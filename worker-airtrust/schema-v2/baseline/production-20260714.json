@@ -1,0 +1,14 @@
+{
+  "baseline_id": "production-d1-baseline-v2-20260714",
+  "baseline_date": "2026-07-14",
+  "schema_hash": "f3a1a2fa2ef07c50660d4c8180bd2bd9dcb98e5423317f7c20ea6d4c9ba787d7",
+  "source_commit": "6d4fe1e8d3ca3b761a23c3c78662a273d1b85f97",
+  "source_worker_sha": "6d4fe1e8d3ca3b761a23c3c78662a273d1b85f97",
+  "plan_hash": "1dfc77817c1569e0c72aa34db85af37a36e0f6e29468217db565f7566775fbe7",
+  "contract_path": "docs/database/schema-contracts/production-d1-baseline-v2.json",
+  "snapshot_path": "docs/database/production-schema-snapshot-20260714/structural-snapshot.json",
+  "notes": [
+    "Baseline formal do schema real de producao auditado em modo read-only.",
+    "Nenhuma tabela funcional e alterada por este artefato."
+  ]
+}

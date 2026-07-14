@@ -1,6 +1,6 @@
 # AirTrust — Esquema de Banco de Dados
 
-> **Versão:** 1.0 | **Data:** 2026-06-12 | **HEAD:** `5be104893`
+> **Versão:** 1.1 | **Data:** 2026-07-14 | **HEAD:** `6d4fe1e8d`
 > **Banco:** Cloudflare D1 (SQLite) | **Migrations:** 378 arquivos
 
 ## 1. Visão Geral
@@ -133,7 +133,11 @@ erDiagram
 
 ### Simuladores
 `simuladores`, `simulador_sessoes`, `simulador_agendamentos`, `fichas_sessao`,
-`fichas_sessao_edicoes`, `modelos_sessao`, `manobras`, `modelos_aeronave`
+`fichas_sessao_edicoes`, `modelos_sessao`, `manobras`, `modelos_aeronave`,
+`sessoes_participantes`, `simulador_atribuicoes_curriculares`,
+`simulador_agendamento_segmentos`, `simulador_segmento_atribuicoes`,
+`simulador_segmento_participantes`, `modelos_sessao_requisitos`,
+`fichas_sessao_instrutor_meta`
 
 ### SGSO
 `sgso_relatos`, `sgso_auditorias`, `sgso_nao_conformidades`, `sgso_acoes`,
@@ -152,38 +156,48 @@ erDiagram
 
 Ordem de aplicação: **alfabética** pelo nome do arquivo.
 
-### Migrations Recentes (0351–0398)
+### Migrations Recentes (0408–0429)
 
 | # | Descrição |
 |---|---|
-| 0351 | FRMS origem SIGVOOS |
-| 0352 | SIGVOOS pendências |
-| 0353 | Sono fixo 8h + colunas sono |
-| 0354 | — |
-| 0355 | password_reset_tokens |
-| 0356 | frms_justificativas |
-| 0357 | FRMS AI cache |
-| 0358 | HV 28d fix + 365 |
-| 0361 | Fonte cálculo competência |
-| 0362 | Daily fatigue v01 |
-| 0367 (2×) ⚠️ | SK76 classificação + reaquisição |
-| 0379–0383 | SK76 offshore + semestral + noturno |
-| 0384 | FRMS read-ack storage |
-| 0385 | Audit events v2 |
-| 0386 | Solicitações → planejados link |
-| 0387 | SIGVOOS base tables |
-| 0388 | Documentos canonical schema |
-| 0389 | Platform roles foundation |
-| 0390 | Training class management |
-| 0391 | FIRA histórico audit labels |
-| 0392 | Tenant: notificações_sistema |
-| 0393 | Tenant: licenças |
-| 0394 | Tenant: catálogos F5 |
-| 0395 | Platform admin backfill |
-| 0396 | Hardening wave 1 |
-| 0397 | Hardening wave 2 |
-| 0398 | Reconcile wave 1/2 |
-| 9999 | Modelo_sessao_id (sempre último) |
+| 0408 | LMS cursos ↔ setores |
+| 0409 | Backfill LMS cursos ↔ setores |
+| 0410 | Controle de voos N1 schema |
+| 0411 | Integração SIGVOOS schema |
+| 0412 | Classificação de qualificações |
+| 0413 | NOTECHS categoria por item |
+| 0414 | `manobras.referencias_json` |
+| 0415 | `qualificacoes_historico_v.tipo_treinamento` |
+| 0416 | Reconcile do ledger D1 |
+| 0417 | `tripulante` em `modelos_sessao_manobras` |
+| 0418 | NOTECHS categorizados |
+| 0419 | Normalização PT-BR de modelos |
+| 0420 | `notificacoes_log.empresa_id` |
+| 0421 | Sessões compartilhadas por segmento |
+| 0422 | `modelos_sessao_requisitos` |
+| 0423 | Multi-currículo por participante |
+| 0424 | Fichas universais de examinador |
+| 0425 | Event models com atribuição curricular |
+| 0426 | SK76 nomenclatura periódica |
+| 0427 | SK76 caixa mista |
+| 0428 | AW139 códigos periódicos |
+| 0429 | Modelos de instrutor e metadados canônicos |
+
+## 4.1 Baseline formal de produção
+
+Desde 2026-07-14 o schema de produção passa a ser governado por:
+
+- snapshot read-only versionado em [docs/database/production-schema-snapshot-20260714/README.md](/Users/filipedaumas/SAAS/Airtrust-worktrees/schema-baseline-v2-20260714/docs/database/production-schema-snapshot-20260714/README.md);
+- contrato versionado em [docs/database/schema-contracts/production-d1-baseline-v2.json](/Users/filipedaumas/SAAS/Airtrust-worktrees/schema-baseline-v2-20260714/docs/database/schema-contracts/production-d1-baseline-v2.json);
+- ledger V2 em `worker-airtrust/schema-v2/`.
+
+Regras operacionais:
+
+- `COMPARACAO_ESTATICA_NAO_EXECUTADA`: o corpus histórico de migrations não foi replayado localmente para gerar este baseline;
+- `simuladores` deve ser tratado como catálogo compartilhado, não como tabela tenant-scoped;
+- `sessoes_participantes` não tem `empresa_id`;
+- `modelos_sessao` usa `tipo_sessao_id`, não `tipo_sessao_codigo`;
+- presença do arquivo `.sql` no repositório não comprova aplicação em `d1_migrations`.
 
 ## 5. Migrations com Número Duplicado
 
@@ -215,7 +229,11 @@ Banco local: `.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite`
 
 ## 8. Índices
 
-Padrão em todas as tabelas: `empresa_id`, `deleted_at`, composite `(empresa_id, deleted_at)`.
+Padrão predominante: `empresa_id`, `deleted_at`, composite `(empresa_id, deleted_at)`.
+
+Exceções confirmadas no baseline de produção:
+- `simuladores` não possui `empresa_id`;
+- `sessoes_participantes` não possui `empresa_id`.
 
 Específicos por performance:
 - `qualificacoes_historico`: `(funcionario_id, deleted_at)`, `(qualificacao_id, deleted_at)`

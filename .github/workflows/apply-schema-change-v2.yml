@@ -1,0 +1,170 @@
+name: Apply Schema Change V2
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact main SHA expected for this production schema apply
+        required: true
+        type: string
+      baseline_id:
+        description: Active baseline ID that must already exist
+        required: true
+        type: string
+      change_id:
+        description: Unique schema change ID
+        required: true
+        type: string
+      file_path:
+        description: Single SQL file under worker-airtrust/schema-v2/
+        required: true
+        type: string
+      file_hash:
+        description: SHA-256 of the SQL file
+        required: true
+        type: string
+      plan_hash:
+        description: SHA-256 of the reviewed execution plan
+        required: true
+        type: string
+      confirm_production:
+        description: Type AIRTRUST_PRODUCTION to continue
+        required: true
+        type: string
+
+concurrency:
+  group: apply-schema-change-v2-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PRODUCTION_CONFIRMATION: AIRTRUST_PRODUCTION
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+            echo "Apply Schema Change V2 only runs from refs/heads/main." >&2
+            exit 1
+          fi
+          if [[ "${{ inputs.confirm_production }}" != "${PRODUCTION_CONFIRMATION}" ]]; then
+            echo "confirm_production must be ${PRODUCTION_CONFIRMATION}." >&2
+            exit 1
+          fi
+          if [[ "${{ inputs.expected_sha }}" != "${{ github.sha }}" ]]; then
+            echo "expected_sha does not match github.sha." >&2
+            exit 1
+          fi
+          if [[ "${{ inputs.file_path }}" != worker-airtrust/schema-v2/* ]]; then
+            echo "file_path must remain under worker-airtrust/schema-v2/." >&2
+            exit 1
+          fi
+          if [[ "${{ inputs.file_path }}" != *.sql ]]; then
+            echo "file_path must reference exactly one SQL file." >&2
+            exit 1
+          fi
+
+  apply:
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Verify file hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_hash="$(shasum -a 256 "${{ inputs.file_path }}" | awk '{print $1}')"
+          if [[ "$actual_hash" != "${{ inputs.file_hash }}" ]]; then
+            echo "file_hash mismatch." >&2
+            exit 1
+          fi
+
+      - name: Validate current schema contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts \
+            --contract docs/database/schema-contracts/production-d1-baseline-v2.json \
+            --production > schema-check.json
+          status="$(node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('schema-check.json','utf8'));console.log(d.status)")"
+          if [[ "$status" != "PASS" ]]; then
+            echo "Current schema contract must be PASS before applying a change." >&2
+            exit 1
+          fi
+
+      - name: Verify baseline exists and change not already applied
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_WORKER_TOKEN_EFFECTIVE: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          baseline_rows="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command "SELECT COUNT(*) AS total FROM airtrust_schema_baselines_v2 WHERE baseline_id = '${{ inputs.baseline_id }}' AND status = 'ACTIVE';")"
+          change_rows="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id = '${{ inputs.change_id }}';")"
+          baseline_total="$(printf '%s' "$baseline_rows" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d)[0].results[0].total));")"
+          change_total="$(printf '%s' "$change_rows" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d)[0].results[0].total));")"
+          [[ "$baseline_total" == "1" ]] || { echo "baseline must exist and be active." >&2; exit 1; }
+          [[ "$change_total" == "0" ]] || { echo "change not already applied." >&2; exit 1; }
+
+      - name: Backup current governance snapshot
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_WORKER_TOKEN_EFFECTIVE: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/schema-v2-backup"
+          npx wrangler d1 execute airtrust-db --env production --remote --json --command "SELECT * FROM airtrust_schema_baselines_v2 ORDER BY id;" > "$RUNNER_TEMP/schema-v2-backup/baselines.json"
+          npx wrangler d1 execute airtrust-db --env production --remote --json --command "SELECT * FROM airtrust_schema_changes_v2 ORDER BY id;" > "$RUNNER_TEMP/schema-v2-backup/changes.json"
+
+      - name: Apply one schema file
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_WORKER_TOKEN_EFFECTIVE: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute airtrust-db --env production --remote --file "../${{ inputs.file_path }}"
+          npx wrangler d1 execute airtrust-db --env production --remote --command "INSERT INTO airtrust_schema_changes_v2 (change_id, baseline_id, file_path, file_hash, plan_hash, github_sha) VALUES ('${{ inputs.change_id }}', '${{ inputs.baseline_id }}', '${{ inputs.file_path }}', '${{ inputs.file_hash }}', '${{ inputs.plan_hash }}', '${{ github.sha }}');"
+
+      - name: Post-validate contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts \
+            --contract docs/database/schema-contracts/production-d1-baseline-v2.json \
+            --production > schema-post-check.json
+          status="$(node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('schema-post-check.json','utf8'));console.log(d.status)")"
+          if [[ "$status" != "PASS" ]]; then
+            echo "Post-apply contract validation failed." >&2
+            exit 1
+          fi
