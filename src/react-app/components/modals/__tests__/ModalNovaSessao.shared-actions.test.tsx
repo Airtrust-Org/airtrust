@@ -393,4 +393,79 @@ describe('ModalNovaSessao shared actions', () => {
       expect(screen.getByRole('button', { name: 'Fichas (3)' })).toBeInTheDocument();
     });
   });
+
+  it('usa fichas do detalhe da sessão quando snapshot do calendário está vazio', async () => {
+    // Regression: calendar snapshot may have empty fichas for shared sessions,
+    // but GET /sessoes/:id returns the full list. Counter must use detail.
+    // We verify: with empty snapshot + detail having 2 fichas → counter shows 2.
+    
+    // The buildFetchMock already returns a detail response for
+    // /simuladores/sessoes/\d+$ without fichas. We need to patch
+    // the mock to return fichas in the detail response for THIS test.
+    const origFetch = globalThis.fetch;
+    const patchedFetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      // Intercept GET /sessoes/101 (not /checks, /fichas, /participantes)
+      if (/\/simuladores\/sessoes\/101$/.test(url)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              success: true,
+              sessao: {
+                id: 101,
+                data: '2026-06-22',
+                hora_inicio: '07:00',
+                hora_fim: '09:00',
+                instrutor_id: 6,
+                simulador_id: 16,
+                tipo_sessao_id: 14,
+                tipo_sessao_codigo: 'INI',
+                modo_compartilhado: 1,
+                alunos: [{ id: 3, funcao: 'PIC' }, { id: 7, funcao: 'SIC' }],
+                fichas: [
+                  { id: 801, status: 'PENDENTE' },
+                  { id: 802, status: 'PENDENTE' },
+                ],
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return (origFetch as Function)(input);
+    });
+    vi.stubGlobal('fetch', patchedFetch);
+
+    const sessaoSemFichas = { ...baseSharedSession, fichas: [] };
+    renderModal(sessaoSemFichas);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Fichas (2)' })).toBeInTheDocument();
+    });
+
+    vi.stubGlobal('fetch', origFetch);
+  });
+
+  it('exibe badge de sessão compartilhada para sessão existente com modo_compartilhado=1', async () => {
+    mockGetSharedSession.mockResolvedValueOnce(buildSharedDetail());
+    renderModal(baseSharedSession);
+
+    await waitFor(() => {
+      expect(screen.getByText('Sessão Compartilhada')).toBeInTheDocument();
+    });
+  });
+
+  it('não oculta sessão compartilhada existente quando feature flag falha', async () => {
+    // Override isSharedSessionsEnabled to fail
+    const { isSharedSessionsEnabled: orig } = await import('@/react-app/config/sharedSessions');
+    vi.mocked(orig).mockResolvedValueOnce(false);
+
+    mockGetSharedSession.mockResolvedValueOnce(buildSharedDetail());
+    renderModal(baseSharedSession);
+
+    // Session should still be identifiable as shared (badge) and form should hydrate
+    await waitFor(() => {
+      expect(screen.getByText('Sessão Compartilhada')).toBeInTheDocument();
+    });
+  });
 });

@@ -1776,6 +1776,17 @@ export default function ModalNovaSessao({
     onVerFichas?.(sessao.id);
   }
 
+  // Fichas visíveis: fonte autoritativa com fallback.
+  // GET /sessoes/:id retorna todas as fichas vinculadas em sessaoDetalhe.fichas.
+  // O snapshot do calendário (sessao?.fichas) pode vir vazio para sessões
+  // compartilhadas. Usamos o detalhe como fonte primária.
+  const fichasVisiveis: Array<{ id: number; status?: string }> =
+    (sessaoDetalhe && !sessaoDetalhe._fallback ? sessaoDetalhe.fichas : null) ??
+    sessao?.fichas ??
+    [];
+
+  const fichasCount = fichasVisiveis.length;
+
   if (!isOpen) return null;
 
   const showSharedReservationFields = true; // Always show — reservation data always visible
@@ -2400,6 +2411,20 @@ export default function ModalNovaSessao({
 
           {showSharedReservationFields && (
           <div>
+          {/* Badge de sessão compartilhada existente */}
+          {isEditMode && originalModoCompartilhado && (
+            <div className="mb-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Users size={16} className="text-indigo-600" />
+                <span className="text-sm font-semibold text-indigo-700">
+                  Sessão Compartilhada
+                </span>
+              </div>
+              <p className="text-xs text-indigo-500 mt-1">
+                Esta sessão possui múltiplos segmentos e atribuições curriculares por tripulante.
+              </p>
+            </div>
+          )}
           {/* 7. OBSERVAÇÕES (OPCIONAL) */}
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Observações (opcional)
@@ -2475,7 +2500,7 @@ export default function ModalNovaSessao({
               >
                 <FileText size={14} />
                 Fichas
-                {sessao?.fichas && sessao.fichas.length > 0 ? ` (${sessao.fichas.length})` : ''}
+                {fichasCount > 0 ? ` (${fichasCount})` : ''}
               </button>
               {showDeleteAction && (
                 <button
