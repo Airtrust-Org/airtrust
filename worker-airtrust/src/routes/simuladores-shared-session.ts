@@ -22,6 +22,7 @@ import {
   convertSimpleSessionToSharedTransactional,
   loadSimpleSessionForConversion,
 } from './simuladores-shared-session-conversion';
+import { generateFichasForSharedSession } from './simuladores-shared-session-ficha-generator';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -71,6 +72,17 @@ app.post('/sessoes/compartilhada', async (c) => {
       dados_novos: payload,
     }).catch(() => undefined);
 
+    // Phase 3: Gerar fichas (idempotente, pós-batch, por atribuição).
+    let fichasGeradas = 0;
+    let fichasExistentes = 0;
+    try {
+      const fichasResult = await generateFichasForSharedSession(c.env.DB, empresaId, created.sessaoId);
+      fichasGeradas = fichasResult.created;
+      fichasExistentes = fichasResult.skipped;
+    } catch (fichaError: any) {
+      console.error('[SHARED] Erro ao gerar fichas pós-criação:', String(fichaError?.message || 'erro desconhecido'));
+    }
+
     const detail = await loadSharedDetail(c.env.DB, empresaId, created.sessaoId);
     return c.json(
       {
@@ -78,7 +90,8 @@ app.post('/sessoes/compartilhada', async (c) => {
         data: detail,
         resumo: {
           sessao_id: created.sessaoId,
-          fichas_criadas: created.persistence.fichaIds.length,
+          fichas_criadas: fichasGeradas,
+          fichas_existentes: fichasExistentes,
           atribuicoes_criadas: created.persistence.atribuicaoIds.length,
           segmentos_criados: created.persistence.segmentoIds.length,
           horas_participantes: payload.resumo_participantes,
@@ -307,6 +320,36 @@ app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', async 
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, sessaoId);
     return c.json({ success: true, data: detail });
+  } catch (error: any) {
+    return c.json({ success: false, error: String(error?.message || 'Erro interno') }, 500);
+  }
+});
+
+/**
+ * POST /simuladores/sessoes/compartilhada/:id/gerar-fichas
+ * Repara fichas ausentes para uma sessão compartilhada existente.
+ * Idempotente — pode ser chamado repetidamente sem duplicar.
+ * Requer role admin.
+ */
+app.post('/sessoes/compartilhada/:id/gerar-fichas', async (c) => {
+  const denied = await assertSharedFeature(c);
+  if (denied) return denied;
+
+  try {
+    const { empresaId } = getTenantContext(c);
+    const sessaoId = Number(c.req.param('id'));
+    const result = await generateFichasForSharedSession(c.env.DB, empresaId, sessaoId);
+
+    return c.json({
+      success: true,
+      data: {
+        sessao_id: sessaoId,
+        fichas_criadas: result.created,
+        fichas_existentes: result.skipped,
+        total: result.created + result.skipped,
+        detalhes: result.details,
+      },
+    });
   } catch (error: any) {
     return c.json({ success: false, error: String(error?.message || 'Erro interno') }, 500);
   }
