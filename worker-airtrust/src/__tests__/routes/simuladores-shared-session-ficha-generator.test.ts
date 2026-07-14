@@ -49,7 +49,11 @@ interface AgendamentoRow {
 interface SimuladorRow {
   id: number;
   empresa_id: number;
-  modelo_aeronave: string | null;
+  modelo_aeronave?: string | null;
+  aeronave_codigo?: string | null;
+  codigo_aeronave?: string | null;
+  modelo?: string | null;
+  tipo?: string | null;
   nome: string | null;
   deleted_at: string | null;
 }
@@ -175,7 +179,13 @@ function createFakeDb(state: FakeState, options?: { forceBatchFailure?: boolean 
             if (query.includes('FROM simuladores s')) {
               const [id, empresaId] = args as [number, number];
               const row = state.simuladores.find((s) => s.id === id && s.empresa_id === empresaId && !s.deleted_at);
-              return row ? { modelo_aeronave: row.modelo_aeronave, nome: row.nome } : null;
+              return row
+                ? {
+                    modelo_aeronave:
+                      row.aeronave_codigo || row.codigo_aeronave || row.tipo || row.modelo || row.modelo_aeronave || '',
+                    nome: row.nome,
+                  }
+                : null;
             }
 
             if (query.includes('FROM fichas_sessao') && query.includes('agendamento_slot_id = ?')) {
@@ -394,7 +404,7 @@ function seedSimulador(state: FakeState, overrides: Partial<SimuladorRow> = {}):
   const row: SimuladorRow = {
     id: 10,
     empresa_id: EMPRESA_6,
-    modelo_aeronave: 'AW139',
+    codigo_aeronave: 'AW139',
     nome: 'SIM-01',
     deleted_at: null,
     ...overrides,
@@ -472,6 +482,31 @@ describe('generateFichasForSharedSession', () => {
 
     expect(result.created).toBe(2);
     expect(state.fichas).toHaveLength(2);
+  });
+
+  it('uses legacy simuladores columns when modelo_aeronave is absent', async () => {
+    seedSession(state, { id: 901, simulador_id: 901 });
+    seedSimulador(state, {
+      id: 901,
+      modelo_aeronave: null,
+      codigo_aeronave: 'S76',
+      nome: 'SIM-LEGACY',
+    });
+    seedAtribuicao(state, {
+      id: 901,
+      agendamento_id: 901,
+      funcionario_id: 901,
+      modelo_sessao_id: 2901,
+      modelo_codigo: 'LEG-01',
+      modelo_nome: 'Modelo legado',
+      tipo_sessao_codigo: 'LEG',
+    });
+
+    const db = createFakeDb(state);
+    const result = await generateFichasForSharedSession(db, EMPRESA_6, 901);
+
+    expect(result.created).toBe(1);
+    expect(state.fichas.at(-1)?.tipo_aeronave).toBe('S76');
   });
 
   it('reexecution creates zero new fichas and zero new items', async () => {
@@ -571,14 +606,14 @@ describe('generateFichasForSharedSession', () => {
   it('isolates tenant 6 from tenant 8: same numeric ids, no cross-tenant read or write', async () => {
     // Tenant 6's real session/simulator/assignment.
     seedSession(state, { id: 200, empresa_id: EMPRESA_6, simulador_id: 10 });
-    seedSimulador(state, { id: 10, empresa_id: EMPRESA_6, modelo_aeronave: 'AW139' });
+    seedSimulador(state, { id: 10, empresa_id: EMPRESA_6, codigo_aeronave: 'AW139', modelo_aeronave: 'AW139' });
     seedAtribuicao(state, { id: 501, agendamento_id: 200, empresa_id: EMPRESA_6, funcionario_id: 101, modelo_sessao_id: 2001, modelo_empresa_id: EMPRESA_6, participante_empresa_id: EMPRESA_6 });
 
     // Tenant 8's session/simulator/assignment reusing the exact same
     // numeric ids (200 / 10 / 501 / 101 / 2001) — nothing here should ever
     // be visible to a call scoped to empresa 6.
     seedSession(state, { id: 200, empresa_id: EMPRESA_8, simulador_id: 10 });
-    seedSimulador(state, { id: 10, empresa_id: EMPRESA_8, modelo_aeronave: 'H225' });
+    seedSimulador(state, { id: 10, empresa_id: EMPRESA_8, codigo_aeronave: 'H225', modelo_aeronave: 'H225' });
     seedAtribuicao(state, { id: 501, agendamento_id: 200, empresa_id: EMPRESA_8, funcionario_id: 101, modelo_sessao_id: 2001, modelo_empresa_id: EMPRESA_8, participante_empresa_id: EMPRESA_8 });
 
     const db = createFakeDb(state);
