@@ -202,8 +202,8 @@ describe('SharedSessionForm rendered', () => {
             fim: '09:00',
             modelo_sessao_id: 63,
             participantes: [
-              { funcionario_id: 3, funcao: 'PF', cumpre_treinamento: true },
-              { funcionario_id: 7, funcao: 'PM', cumpre_treinamento: false },
+              { funcionario_id: 3, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 63 },
+              { funcionario_id: 7, funcao: 'PM', cumpre_treinamento: false, modelo_sessao_id: null },
             ],
           },
           {
@@ -212,8 +212,8 @@ describe('SharedSessionForm rendered', () => {
             fim: '10:00',
             modelo_sessao_id: 64,
             participantes: [
-              { funcionario_id: 7, funcao: 'PF', cumpre_treinamento: true },
-              { funcionario_id: 3, funcao: 'PM', cumpre_treinamento: false },
+              { funcionario_id: 7, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 64 },
+              { funcionario_id: 3, funcao: 'PM', cumpre_treinamento: false, modelo_sessao_id: null },
             ],
           },
         ],
@@ -239,5 +239,100 @@ describe('SharedSessionForm rendered', () => {
     expect(BASE_PROPS.onClose).toHaveBeenCalledTimes(1);
     expect(mockCreateSharedSession).not.toHaveBeenCalled();
     expect(mockUpdateSharedSession).not.toHaveBeenCalled();
+  });
+
+  it('hidrata modelos por participante quando segmento tem 2 modelos distintos (regressão)', async () => {
+    // Regression: when a segment has 2 different modelos (one per participant),
+    // seg.modelo_sessao_id is null but seg.participantes[].modelo_sessao_id has the value.
+    // The old code used seg.modelo_sessao_id → modelos appeared empty.
+    mockGetSharedSession.mockResolvedValueOnce({
+      success: true,
+      data: {
+        participantes: [
+          { funcionario_id: 3, funcionario_nome: 'Ramos', funcao: 'PIC' },
+          { funcionario_id: 7, funcionario_nome: 'Dieter', funcao: 'SIC' },
+        ],
+        segmentos: [
+          {
+            id: 11,
+            inicio: '09:00',
+            fim: '10:00',
+            modelo_sessao_id: null, // 2 modelos → null (regression trigger)
+            participantes: [
+              { funcionario_id: 3, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 63 },
+              { funcionario_id: 7, funcao: 'PM', cumpre_treinamento: true, modelo_sessao_id: 64 },
+            ],
+          },
+          {
+            id: 12,
+            inicio: '10:00',
+            fim: '11:00',
+            modelo_sessao_id: null,
+            participantes: [
+              { funcionario_id: 7, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 64 },
+              { funcionario_id: 3, funcao: 'PM', cumpre_treinamento: true, modelo_sessao_id: 63 },
+            ],
+          },
+        ],
+      },
+    });
+
+    renderForm({ editSessionId: 9902 });
+
+    await waitFor(() => expect(mockGetSharedSession).toHaveBeenCalledWith(9902));
+
+    const selects = await screen.findAllByLabelText('Modelo da ficha');
+    // Ramos (func 3, PIC) → modelo 63
+    expect(selects[0]).toHaveValue('63');
+    // Dieter (func 7, SIC) → modelo 64
+    expect(selects[1]).toHaveValue('64');
+  });
+
+  it('resolve modelo via fallback detail.atribuicoes quando segmentos não tem participantes.modelo_sessao_id', async () => {
+    mockGetSharedSession.mockResolvedValueOnce({
+      success: true,
+      data: {
+        participantes: [
+          { funcionario_id: 3, funcionario_nome: 'Ramos', funcao: 'PIC' },
+          { funcionario_id: 7, funcionario_nome: 'Dieter', funcao: 'SIC' },
+        ],
+        atribuicoes: [
+          { funcionario_id: 3, modelo_sessao_id: 63, gera_ficha: 1 },
+          { funcionario_id: 7, modelo_sessao_id: 64, gera_ficha: 1 },
+        ],
+        segmentos: [
+          {
+            id: 11,
+            inicio: '09:00',
+            fim: '10:00',
+            modelo_sessao_id: null,
+            participantes: [
+              { funcionario_id: 3, funcao: 'PF', cumpre_treinamento: true },
+              { funcionario_id: 7, funcao: 'PM', cumpre_treinamento: true },
+            ],
+          },
+        ],
+      },
+    });
+
+    renderForm({ editSessionId: 9903 });
+
+    await waitFor(() => expect(mockGetSharedSession).toHaveBeenCalledWith(9903));
+
+    const selects = await screen.findAllByLabelText('Modelo da ficha');
+    expect(selects[0]).toHaveValue('63');
+    expect(selects[1]).toHaveValue('64');
+  });
+
+  it('exibe estado de erro quando hidratação falha para sessão existente', async () => {
+    mockGetSharedSession.mockRejectedValueOnce(new Error('Falha de rede'));
+
+    renderForm({ editSessionId: 9904 });
+
+    await waitFor(() => {
+      expect(screen.getByText('Erro ao carregar a sessão')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Tentar novamente')).toBeInTheDocument();
+    expect(screen.getByText('Fechar')).toBeInTheDocument();
   });
 });

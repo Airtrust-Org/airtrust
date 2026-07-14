@@ -105,12 +105,23 @@ interface SharedDetailSegment {
     funcionario_id: number;
     funcao: 'PF' | 'PM';
     cumpre_treinamento?: boolean;
+    modelo_sessao_id?: number | null;
+    gera_ficha?: boolean;
   }>;
+}
+
+interface SharedDetailAtribuicao {
+  id?: number;
+  funcionario_id?: number;
+  participante_id?: number;
+  modelo_sessao_id?: number | null;
+  gera_ficha?: number | boolean;
 }
 
 interface SharedDetail {
   participantes?: SharedDetailParticipant[];
   segmentos?: SharedDetailSegment[];
+  atribuicoes?: SharedDetailAtribuicao[];
   fichas?: Array<{ id: number; status: string; colaborador_id_aluno?: number }>;
 }
 
@@ -204,6 +215,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   ]);
   const [loading, setLoading] = useState(false);
   const [hydrating, setHydrating] = useState(Boolean(editSessionId) || Boolean(conversionSeed));
+  const [hydrationError, setHydrationError] = useState<string | null>(null);
   const [conversionSeeded, setConversionSeeded] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [attemptedSteps, setAttemptedSteps] = useState<Set<SharedSessionStep>>(new Set());
@@ -428,7 +440,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           const known = funcionarios.find((item) => Number(item.id) === Number(participant.funcionario_id));
           
           let cumpre = false;
-          let modeloId = null;
+          let modeloId: number | null = null;
           let geraFicha = false;
           
           for (const seg of detail.segmentos || []) {
@@ -436,10 +448,24 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
              if (p?.cumpre_treinamento) {
                cumpre = true;
                geraFicha = true;
-               if (seg.modelo_sessao_id) {
-                 modeloId = seg.modelo_sessao_id;
+               // Usa modelo_sessao_id do participante (resolvido por segmentoAtribuicoes),
+               // NÃO seg.modelo_sessao_id que é null quando há 2 modelos distintos no mesmo segmento.
+               if (p.modelo_sessao_id) {
+                 modeloId = Number(p.modelo_sessao_id);
                }
              }
+          }
+
+          // Fallback: resolve modelo_sessao_id via atribuicoes diretas (top-level do detail)
+          if (!modeloId) {
+            const atribuicao = (detail.atribuicoes || []).find(
+              (a: any) => Number(a.funcionario_id) === Number(participant.funcionario_id)
+            );
+            if (atribuicao?.modelo_sessao_id) {
+              modeloId = Number(atribuicao.modelo_sessao_id);
+              cumpre = true;
+              geraFicha = atribuicao.gera_ficha === 1 || atribuicao.gera_ficha === true;
+            }
           }
 
           restoredParticipants[index] = {
@@ -487,7 +513,9 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         if (restoredSegments.length === 2) {
           setSegmentAssignments(restoredSegments as [SegmentAssignment, SegmentAssignment]);
         }
+        setHydrationError(null);
       } catch (error) {
+        setHydrationError(error instanceof Error ? error.message : 'Erro ao carregar sessão compartilhada.');
         toast.error(error instanceof Error ? error.message : 'Erro ao carregar sessão compartilhada.');
       } finally {
         if (mounted) setHydrating(false);
@@ -564,6 +592,13 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const handleSubmit = async () => {
     setSubmitted(true);
     setAttemptedSteps(new Set(['tripulacao', 'segmentos']));
+
+    // Proteção: bloqueia salvamento se a hidratação falhou para sessão existente
+    if (editSessionId && hydrationError) {
+      toast.error('Não foi possível carregar completamente as atribuições e fichas desta sessão. Nenhuma alteração foi realizada.');
+      return;
+    }
+
     if (allErrors.length > 0) {
       toast.error(allErrors[0]);
       if (participantErrors.length > 0) setActiveStep('tripulacao');
@@ -679,6 +714,41 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
 
   if (hydrating) {
     return <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-500">Carregando dados da sessão compartilhada...</div>;
+  }
+
+  if (editSessionId && hydrationError) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle size={16} className="text-amber-600" />
+          <span className="text-sm font-semibold text-amber-700">Erro ao carregar a sessão</span>
+        </div>
+        <p className="text-xs text-amber-600 mb-3">
+          Não foi possível carregar completamente as atribuições e fichas desta sessão. Nenhuma alteração foi realizada.
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+            onClick={() => {
+              setHydrating(true);
+              setHydrationError(null);
+              // Re-trigger hydration by forcing re-render via state key
+              setParticipants([{ ...EMPTY_PARTICIPANT }, { ...EMPTY_PARTICIPANT }]);
+            }}
+          >
+            Tentar novamente
+          </button>
+          <button
+            type="button"
+            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+            onClick={onClose}
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const showParticipantErrors = submitted || attemptedSteps.has('tripulacao');
