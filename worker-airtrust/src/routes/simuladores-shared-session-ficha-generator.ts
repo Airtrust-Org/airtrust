@@ -332,7 +332,8 @@ async function getSimuladorModelo(
 ): Promise<string> {
   const row = await db
     .prepare(
-      `SELECT s.modelo_aeronave, s.nome
+      `SELECT COALESCE(s.aeronave_codigo, s.codigo_aeronave, s.tipo, s.modelo, '') AS modelo_aeronave,
+              s.nome
        FROM simuladores s
        WHERE s.id = ? AND s.empresa_id = ? AND s.deleted_at IS NULL
        LIMIT 1`,
