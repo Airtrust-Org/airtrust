@@ -20,9 +20,10 @@
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import {
-  getExaminerEventSessionDefinition,
-  splitExaminerTechnicalBlocks,
-} from '../../../src/shared/simuladores/examiner-event-sessions';
+  getSpecialEventSessionDefinition,
+  splitSpecialTechnicalBlocks,
+} from '../../../src/shared/simuladores/special-event-sessions';
+import { buildFichaHeaderRows } from '../../../src/shared/simuladores/ficha-header';
 
 // ── Sanitização de metadados internos (mesma lógica de src/shared/simuladores/modelos-sessao-observacoes.ts) ──
 const INTERNAL_METADATA_LEAK_RE = new RegExp(
@@ -84,6 +85,10 @@ interface FichaPDFData {
   horario_inicio: string;
   horario_fim: string;
   simulador: string;
+  simulador_modelo?: string;
+  equipamento_utilizado?: string;
+  dispositivo_identificacao?: string;
+  assento_instrucao_utilizado?: string;
   carga_horaria_total: string;
   status: string;
   observacoes_gerais: string;
@@ -227,10 +232,10 @@ function drawHeader(
   topY: number,
   contentWidth: number,
 ): void {
-  const examinerDefinition = getExaminerEventSessionDefinition(dados.sessao_codigo);
+  const specialDefinition = getSpecialEventSessionDefinition(dados.sessao_codigo);
   const titleY = topY - 4;
-  let title1 = dados.sessao_titulo_linha1 || examinerDefinition?.headerTitle;
-  let title2 = dados.sessao_titulo_linha2 || examinerDefinition?.headerSubtitle;
+  let title1 = dados.sessao_titulo_linha1 || specialDefinition?.headerTitle;
+  let title2 = dados.sessao_titulo_linha2 || specialDefinition?.headerSubtitle;
 
   if (!title1 && !title2 && dados.sessao_titulo) {
     if (dados.sessao_titulo.includes(' - ')) {
@@ -295,111 +300,119 @@ function drawInfoSection(
   startY: number,
   contentWidth: number,
 ): number {
-  const examinerDefinition = getExaminerEventSessionDefinition(dados.sessao_codigo);
-  const colGap = 16;
-  const colWidth = (contentWidth - colGap) / 2;
-  const leftX = PAGE.margin;
-  const rightX = leftX + colWidth + colGap;
+  const rows = buildFichaHeaderRows({
+    sessaoCodigo: dados.sessao_codigo,
+    data: dados.data,
+    horarioInicio: dados.horario_inicio,
+    horarioFim: dados.horario_fim,
+    cargaHorariaTotal: dados.carga_horaria_total,
+    tripulanteNome: dados.tripulante_nome,
+    tripulanteCodigoAnac: dados.tripulante_codigo_anac,
+    tripulanteFuncao: dados.tripulante_funcao,
+    instrutorNome: dados.instrutor_nome,
+    instrutorCodigoAnac: dados.instrutor_codigo_anac,
+    simuladorDisplayName: dados.simulador,
+    simuladorModelo: dados.simulador_modelo,
+    equipamentoUtilizado: dados.equipamento_utilizado,
+    dispositivoIdentificacao: dados.dispositivo_identificacao,
+    assentoInstrucaoUtilizado: dados.assento_instrucao_utilizado,
+  });
 
-  let leftY = startY;
-  let rightY = startY;
+  const boxTop = startY - 2;
+  const rowHeight = 18;
+  const boxHeight = rows.length * rowHeight + 10;
+  page.drawRectangle({
+    x: PAGE.margin,
+    y: boxTop - boxHeight,
+    width: contentWidth,
+    height: boxHeight,
+    color: COLOR.bgLight,
+    borderColor: COLOR.border,
+    borderWidth: 0.5,
+  });
 
-  leftY = drawLabelValue(
-    page,
-    fontRegular,
-    fontBold,
-    examinerDefinition ? 'PARTICIPANTE AVALIADO' : 'TRIPULANTE',
-    dados.tripulante_nome,
-    leftX,
-    leftY,
-    colWidth,
-  );
-  leftY = drawSmallText(
-    page,
-    fontRegular,
-    `ANAC: ${dados.tripulante_codigo_anac}`,
-    leftX,
-    leftY - 2,
-    7,
-    COLOR.textSecondary,
-  );
-  leftY -= 10;
-  leftY = drawLabelValue(
-    page,
-    fontRegular,
-    fontBold,
-    'FUNÇÃO',
-    dados.tripulante_funcao || 'ALUNO',
-    leftX,
-    leftY,
-    colWidth,
-  );
-  leftY -= 2;
-  leftY = drawLabelValue(
-    page,
-    fontRegular,
-    fontBold,
-    examinerDefinition ? 'INSTRUTOR SUPERVISOR' : 'INSTRUTOR',
-    dados.instrutor_nome,
-    leftX,
-    leftY,
-    colWidth,
-  );
-  leftY = drawSmallText(
-    page,
-    fontRegular,
-    `ANAC: ${dados.instrutor_codigo_anac}`,
-    leftX,
-    leftY - 2,
-    7,
-    COLOR.textSecondary,
-  );
+  const FIELD_WEIGHT_BY_LABEL: Record<string, number> = {
+    ANAC: 0.8,
+    Assento: 1.2,
+    'Carga Horária': 1.4,
+    Data: 0.95,
+    'Dispositivo/Matrícula': 1.75,
+    Função: 1.0,
+    Horário: 1.25,
+    Instrutor: 1.7,
+    'Instrutor-aluno': 2.15,
+    'Instrutor supervisor': 2.2,
+    'Modelo/Equipamento': 1.55,
+    PF: 0.75,
+    PM: 0.75,
+    Simulador: 2.2,
+    Tripulante: 2.0,
+  };
 
-  rightY = drawLabelValue(
-    page,
-    fontRegular,
-    fontBold,
-    'DATA',
-    dados.data,
-    rightX,
-    rightY,
-    colWidth,
-  );
-  rightY -= 2;
-  rightY = drawLabelValue(
-    page,
-    fontRegular,
-    fontBold,
-    'HORÁRIOS',
-    `${dados.horario_inicio} / ${dados.horario_fim}`,
-    rightX,
-    rightY,
-    colWidth,
-  );
-  rightY -= 2;
-  rightY = drawLabelValue(
-    page,
-    fontRegular,
-    fontBold,
-    examinerDefinition ? 'EQUIPAMENTO UTILIZADO' : 'SIMULADOR',
-    dados.simulador,
-    rightX,
-    rightY,
-    colWidth,
-  );
-  rightY -= 2;
-  rightY = drawLabelValue(
-    page,
-    fontRegular,
-    fontBold,
-    examinerDefinition ? 'DURAÇÃO CURRICULAR' : 'CARGA HORÁRIA TOTAL',
-    dados.carga_horaria_total,
-    rightX,
-    rightY,
-    colWidth,
-  );
+  const getFieldBoxes = (row: typeof rows[number]) => {
+    const horizontalPadding = 6;
+    const gap = 8;
+    const innerWidth = contentWidth - horizontalPadding * 2;
+    const totalGap = gap * Math.max(0, row.length - 1);
+    const availableWidth = innerWidth - totalGap;
+    const weights = row.map((field) => FIELD_WEIGHT_BY_LABEL[field.label] || 1);
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || row.length;
 
-  return Math.min(leftY, rightY) - 10;
+    let currentX = PAGE.margin + horizontalPadding;
+    return row.map((field, index) => {
+      const isLast = index === row.length - 1;
+      const width = isLast
+        ? PAGE.margin + horizontalPadding + innerWidth - currentX
+        : (availableWidth * weights[index]) / totalWeight;
+      const box = { x: currentX, width };
+      currentX += width + gap;
+      return box;
+    });
+  };
+
+  const fitTextToWidth = (text: string, maxWidth: number, font: PDFFont, size: number) => {
+    const safeText = String(text || '').trim() || '________________';
+    if (maxWidth <= 12) return '...';
+    if (font.widthOfTextAtSize(safeText, size) <= maxWidth) return safeText;
+
+    const ellipsis = '...';
+    let truncated = safeText;
+    while (
+      truncated.length > 1 &&
+      font.widthOfTextAtSize(`${truncated}${ellipsis}`, size) > maxWidth
+    ) {
+      truncated = truncated.slice(0, -1).trimEnd();
+    }
+    return truncated ? `${truncated}${ellipsis}` : ellipsis;
+  };
+
+  let currentRowTop = boxTop - 14;
+  for (const row of rows) {
+    const fieldBoxes = getFieldBoxes(row);
+    row.forEach((field, index) => {
+      const box =
+        fieldBoxes[index] || fieldBoxes.at(-1) || { x: PAGE.margin + 6, width: contentWidth - 12 };
+      const labelText = `${field.label}:`;
+      const labelSize = 6.5;
+      const valueSize = 7;
+      const labelWidth = fontBold.widthOfTextAtSize(labelText, labelSize);
+      const valueX = box.x + labelWidth + 4;
+      const valueWidth = Math.max(14, box.width - labelWidth - 5);
+      drawText(page, labelText, box.x, currentRowTop, fontBold, labelSize, COLOR.textSecondary);
+      drawText(
+        page,
+        fitTextToWidth(field.value, valueWidth, fontRegular, valueSize),
+        valueX,
+        currentRowTop,
+        fontRegular,
+        valueSize,
+        COLOR.text,
+      );
+    });
+    currentRowTop -= rowHeight;
+  }
+
+  return boxTop - boxHeight - 8;
 }
 
 function drawManobrasSection(
@@ -410,6 +423,7 @@ function drawManobrasSection(
   startY: number,
   contentWidth: number,
 ): number {
+  const specialDefinition = getSpecialEventSessionDefinition(dados.sessao_codigo);
   const TABLE_HEADER_H = 14;
   const ROW_H_BASE = 11;
   const LINE_SPACING = 6.5;
@@ -439,7 +453,15 @@ function drawManobrasSection(
   const headerTextY = headerY - 10;
   drawText(page, '#', colNum.x, headerTextY, fontBold, 7, COLOR.white);
   drawText(page, 'CÓDIGO', colCodigo.x, headerTextY, fontBold, 7, COLOR.white);
-  drawText(page, 'TRIP.', colTrip.x, headerTextY, fontBold, 7, COLOR.white);
+  drawText(
+    page,
+    specialDefinition?.hideTripulanteBadge ? '' : 'TRIP.',
+    colTrip.x,
+    headerTextY,
+    fontBold,
+    7,
+    COLOR.white,
+  );
   drawText(page, 'ITENS', colItens.x, headerTextY, fontBold, 7, COLOR.white);
   drawText(page, 'OBSERVAÇÕES', colObs.x, headerTextY, fontBold, 7, COLOR.white);
   drawTextCentered(page, 'NOTA', colNota.x, headerTextY, colNota.w, fontBold, 7, COLOR.white);
@@ -448,7 +470,7 @@ function drawManobrasSection(
   const tecnicas = dados.manobras.filter(
     (m) => (m.categoria || '').toUpperCase() !== NOTECHS_CATEGORIA,
   );
-  const examinerBlocks = splitExaminerTechnicalBlocks(dados.sessao_codigo, tecnicas);
+  const specialBlocks = splitSpecialTechnicalBlocks(dados.sessao_codigo, tecnicas);
   const notechs = dados.manobras.filter(
     (m) => (m.categoria || '').toUpperCase() === NOTECHS_CATEGORIA,
   );
@@ -490,12 +512,10 @@ function drawManobrasSection(
 
   // Add NOTECHS divider row
   let currentY = headerY - TABLE_HEADER_H;
-  const hasNotechs = notechs.length > 0;
-
   let notecsRowIdx = 0;
   let activeTechnicalBlockIndex = 0;
   let nextTechnicalBlock =
-    examinerBlocks && examinerBlocks.length > 0 ? examinerBlocks[activeTechnicalBlockIndex] : null;
+    specialBlocks && specialBlocks.length > 0 ? specialBlocks[activeTechnicalBlockIndex] : null;
 
   // Draw all rows
   for (let ri = 0; ri < allRows.length; ri++) {
@@ -515,7 +535,7 @@ function drawManobrasSection(
       drawText(page, nextTechnicalBlock.definition.title, margin + 3, currentY - 5.2, fontBold, 6, COLOR.text);
       currentY -= 9;
       activeTechnicalBlockIndex += 1;
-      nextTechnicalBlock = examinerBlocks?.[activeTechnicalBlockIndex] || null;
+      nextTechnicalBlock = specialBlocks?.[activeTechnicalBlockIndex] || null;
     }
     const isNotechsStart =
       row.tipo === 'notechs' && (ri === 0 || allRows[ri - 1].tipo === 'tecnica');
@@ -601,29 +621,31 @@ function drawManobrasSection(
     );
 
     // Tripulante badge
-    const tripBadgeW = 8;
-    const tripBadgeH = 5;
-    const tripBadgeX = colTrip.x + (colTrip.w - tripBadgeW) / 2;
-    const tripBadgeY = currentY - ROW_H_BASE + 2;
-    const tripColor =
-      row.tripulante === 'A' ? COLOR.tripA : row.tripulante === 'B' ? COLOR.tripB : COLOR.border;
-    page.drawRectangle({
-      x: tripBadgeX,
-      y: tripBadgeY,
-      width: tripBadgeW,
-      height: tripBadgeH,
-      color: tripColor,
-    });
-    drawTextCentered(
-      page,
-      row.tripulante,
-      tripBadgeX,
-      tripBadgeY + 1.2,
-      tripBadgeW,
-      fontBold,
-      5,
-      COLOR.text,
-    );
+    if (!specialDefinition?.hideTripulanteBadge) {
+      const tripBadgeW = 8;
+      const tripBadgeH = 5;
+      const tripBadgeX = colTrip.x + (colTrip.w - tripBadgeW) / 2;
+      const tripBadgeY = currentY - ROW_H_BASE + 2;
+      const tripColor =
+        row.tripulante === 'A' ? COLOR.tripA : row.tripulante === 'B' ? COLOR.tripB : COLOR.border;
+      page.drawRectangle({
+        x: tripBadgeX,
+        y: tripBadgeY,
+        width: tripBadgeW,
+        height: tripBadgeH,
+        color: tripColor,
+      });
+      drawTextCentered(
+        page,
+        row.tripulante,
+        tripBadgeX,
+        tripBadgeY + 1.2,
+        tripBadgeW,
+        fontBold,
+        5,
+        COLOR.text,
+      );
+    }
 
     // Item name (with word wrap)
     const nomeLines = wrapText(row.nome, fontRegular, TABLE_FONT, colItens.w);
@@ -870,35 +892,6 @@ function drawFooter(
     6,
     COLOR.textSecondary,
   );
-}
-
-function drawLabelValue(
-  page: PDFPage,
-  fontRegular: PDFFont,
-  fontBold: PDFFont,
-  label: string,
-  value: string,
-  x: number,
-  startY: number,
-  width: number,
-): number {
-  drawText(page, label, x, startY, fontBold, 7, COLOR.textSecondary);
-  const lines = wrapText(value || '-', fontRegular, 8, width);
-  drawWrappedText(page, lines, x, startY - 11, fontRegular, 8, 10, COLOR.text);
-  return startY - 12 - lines.length * 10;
-}
-
-function drawSmallText(
-  page: PDFPage,
-  fontRegular: PDFFont,
-  text: string,
-  x: number,
-  y: number,
-  size: number,
-  color: ReturnType<typeof rgb>,
-): number {
-  drawText(page, text, x, y, fontRegular, size, color);
-  return y - size - 2;
 }
 
 function drawDivider(page: PDFPage, y: number): void {

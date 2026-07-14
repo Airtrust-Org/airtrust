@@ -25,7 +25,6 @@ import {
   deveGerarQualificacaoAoAssinar,
   isFichaDoFluxoDeCheckComQualificacao,
 } from '../qualificacaoFlow';
-import { Badge } from '../../components/SimuladoresLayout';
 import {
   ArrowLeft,
   Award,
@@ -49,9 +48,13 @@ import {
   type FichaPDFData,
 } from '@/react-app/services/pdf-ficha-client';
 import {
-  getExaminerEventSessionDefinition,
-  splitExaminerTechnicalBlocks,
-} from '@/shared/simuladores/examiner-event-sessions';
+  getSpecialEventSessionDefinition,
+  splitSpecialTechnicalBlocks,
+} from '@/shared/simuladores/special-event-sessions';
+import {
+  getInstructionSeatLabel,
+  INSTRUCTION_SEAT_VALUES,
+} from '@/shared/simuladores/ficha-header';
 import { openPreviewWindow } from '@/react-app/utils/pdfPreview';
 import AssinaturaModal from '@/react-app/components/AssinaturaModal';
 import ModalNotechsReferencia from '../components/ModalNotechsReferencia';
@@ -86,6 +89,11 @@ interface FichaDetalhada {
   instrutor_id?: number | null;
   instrutor_nome: string;
   simulador_codigo: string;
+  simulador_nome?: string;
+  simulador_modelo?: string;
+  equipamento_utilizado?: string | null;
+  dispositivo_identificacao?: string | null;
+  assento_instrucao_utilizado?: string | null;
   sessao_modelo: string;
   sessao_titulo?: string;
   data_hora: string;
@@ -368,7 +376,13 @@ export default function FichaDetalhe() {
             participante_nome: apiData.tripulante_nome,
             participante_funcao: apiData.tripulante_funcao || 'PIC',
             sessao_modelo: apiData.sessao_titulo,
+            simulador_nome: apiData.simulador_nome || '',
+            simulador_modelo: apiData.simulador_modelo || '',
             simulador_codigo: apiData.simulador_nome || apiData.simulador || '',
+            equipamento_utilizado: apiData.equipamento_utilizado || apiData.simulador_modelo || null,
+            dispositivo_identificacao:
+              apiData.dispositivo_identificacao || apiData.simulador_nome || apiData.simulador || null,
+            assento_instrucao_utilizado: apiData.assento_instrucao_utilizado || null,
             data_hora: dataHora,
             nota_geral: apiData.nota_final,
             manobras: Array.isArray(apiData?.manobras)
@@ -527,6 +541,9 @@ export default function FichaDetalhe() {
           status: ficha.status,
           recalculate_status: true,
           observacoes: ficha.observacoes_gerais,
+          equipamento_utilizado: ficha.equipamento_utilizado,
+          dispositivo_identificacao: ficha.dispositivo_identificacao,
+          assento_instrucao_utilizado: ficha.assento_instrucao_utilizado,
           manobras: ficha.manobras.map((m) => ({
             ordem: m.ordem,
             resultado: m.nota === -1 ? 'NR' : m.nota,
@@ -965,8 +982,8 @@ export default function FichaDetalhe() {
   const { tecnicas: manobrasTecnicas, notechs: manobrasNotechs } = splitManobrasNotechs(
     ficha?.manobras || [],
   );
-  const examinerDefinition = getExaminerEventSessionDefinition(ficha?.sessao_codigo);
-  const examinerTechnicalBlocks = splitExaminerTechnicalBlocks(
+  const specialDefinition = getSpecialEventSessionDefinition(ficha?.sessao_codigo);
+  const specialTechnicalBlocks = splitSpecialTechnicalBlocks(
     ficha?.sessao_codigo,
     manobrasTecnicas,
   );
@@ -984,14 +1001,12 @@ export default function FichaDetalhe() {
     fichaFinalizada &&
     usuarioEhInstrutorDaFicha &&
     !edicoes.some((edicao) => edicao.status === 'PENDENTE');
-  const edicoesPendentes = edicoes.filter((edicao) => edicao.status === 'PENDENTE');
-
   return (
     <AppLayout>
       <PageHeader
         className="mb-6"
         title={
-          examinerDefinition?.headerTitle ||
+          specialDefinition?.headerTitle ||
           ficha?.sessao_modelo ||
           ficha?.sessao_titulo ||
           `Ficha #${ficha?.id || ''}`
@@ -1090,39 +1105,114 @@ export default function FichaDetalhe() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div>
-                  <p className="text-xs text-slate-500 uppercase">Participante Avaliado</p>
+                  <p className="text-xs text-slate-500 uppercase">
+                    {specialDefinition?.participantLabel || 'Participante Avaliado'}
+                  </p>
                   <p className="text-sm font-semibold text-slate-900">{ficha.participante_nome}</p>
                   <span className="text-xs px-2 py-0.5 rounded bg-primary-100 text-primary-700">
                     {ficha.participante_funcao}
                   </span>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 uppercase">Instrutor Supervisor</p>
+                  <p className="text-xs text-slate-500 uppercase">
+                    {specialDefinition?.supervisorLabel || 'Instrutor Supervisor'}
+                  </p>
                   <p className="text-sm font-semibold text-slate-900">{ficha.instrutor_nome}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 uppercase">Equipamento Utilizado</p>
-                  <p className="text-sm font-semibold text-slate-900">{ficha.simulador_codigo}</p>
+                  <p className="text-xs text-slate-500 uppercase">Modelo/Equipamento</p>
+                  {isEditMode && specialDefinition?.kind === 'instructor' ? (
+                    <input
+                      value={ficha.equipamento_utilizado || ''}
+                      onChange={(e) =>
+                        setFicha((prev) =>
+                          prev ? { ...prev, equipamento_utilizado: e.target.value } : prev,
+                        )
+                      }
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-900">
+                      {ficha.equipamento_utilizado || ficha.simulador_modelo || ficha.simulador_codigo}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase">Sessão/Modelo</p>
                   <p className="text-sm font-semibold text-slate-900">
-                    {examinerDefinition?.fullTitle || ficha.sessao_modelo}
+                    {specialDefinition?.fullTitle || ficha.sessao_modelo}
                   </p>
-                  {examinerDefinition ? (
+                  {specialDefinition ? (
                     <p className="mt-1 text-xs text-slate-500">{ficha.sessao_codigo}</p>
                   ) : null}
                 </div>
               </div>
-              {examinerDefinition ? (
+              {specialDefinition ? (
                 <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-sm font-semibold text-slate-900">
-                    {examinerDefinition.headerTitle}
+                    {specialDefinition.headerTitle}
                   </p>
-                  <p className="text-sm text-slate-700">{examinerDefinition.headerSubtitle}</p>
+                  <p className="text-sm text-slate-700">{specialDefinition.headerSubtitle}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Duração curricular: {examinerDefinition.durationMinutes} minutos
+                    Duração curricular: {specialDefinition.durationMinutes} minutos
                   </p>
+                  {specialDefinition.kind === 'instructor' ? (
+                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div>
+                        <p className="text-xs uppercase text-slate-500">Simulador</p>
+                        <p className="text-sm font-medium text-slate-900">
+                          {ficha.simulador_codigo || '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase text-slate-500">Dispositivo/Matrícula</p>
+                        {isEditMode ? (
+                          <input
+                            value={ficha.dispositivo_identificacao || ''}
+                            onChange={(e) =>
+                              setFicha((prev) =>
+                                prev
+                                  ? { ...prev, dispositivo_identificacao: e.target.value }
+                                  : prev,
+                              )
+                            }
+                            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                          />
+                        ) : (
+                          <p className="text-sm font-medium text-slate-900">
+                            {ficha.dispositivo_identificacao || '—'}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase text-slate-500">Assento de Instrução</p>
+                        {isEditMode ? (
+                          <select
+                            value={ficha.assento_instrucao_utilizado || ''}
+                            onChange={(e) =>
+                              setFicha((prev) =>
+                                prev
+                                  ? { ...prev, assento_instrucao_utilizado: e.target.value }
+                                  : prev,
+                              )
+                            }
+                            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                          >
+                            <option value="">Selecione</option>
+                            {INSTRUCTION_SEAT_VALUES.map((seat) => (
+                              <option key={seat} value={seat}>
+                                {getInstructionSeatLabel(seat)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-sm font-medium text-slate-900">
+                            {getInstructionSeatLabel(ficha.assento_instrucao_utilizado) || '—'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1142,22 +1232,12 @@ export default function FichaDetalhe() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase">
-                    {examinerDefinition ? 'Duração Curricular' : 'Carga Horária'}
+                    {specialDefinition ? 'Duração Curricular' : 'Carga Horária'}
                   </p>
                   <p className="text-sm font-semibold text-slate-900">
-                    {(() => {
-                      const tipoSessao = (ficha.tipo_sessao || '').toUpperCase();
-                      const isInstrExam =
-                        tipoSessao.includes('INSTRUTOR') ||
-                        tipoSessao.includes('EXAMINADOR') ||
-                        tipoSessao.includes('CHECK');
-                      const total =
-                        ficha.carga_horaria_total || `${ficha.carga_horaria_pf || '0.0'}h`;
-                      if (isInstrExam) return total;
-                      const pf = ficha.carga_horaria_pf || '0.0';
-                      const pm = ficha.carga_horaria_pm || '0.0';
-                      return `${total} (PF: ${pf}h / PM: ${pm}h)`;
-                    })()}
+                    {specialDefinition
+                      ? ficha.carga_horaria_total
+                      : `${ficha.carga_horaria_total || '—'} (PF: ${ficha.carga_horaria_pf || '00:00'} / PM: ${ficha.carga_horaria_pm || '00:00'})`}
                   </p>
                 </div>
                 <div>
@@ -1170,9 +1250,9 @@ export default function FichaDetalhe() {
             </div>
             <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Avaliação de Manobras</h3>
-              {examinerTechnicalBlocks ? (
+              {specialTechnicalBlocks ? (
                 <div className="space-y-4">
-                  {examinerTechnicalBlocks.map((block) => (
+                  {specialTechnicalBlocks.map((block) => (
                     <div key={block.definition.id} className="rounded-lg border border-slate-200">
                       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
                         <p className="text-sm font-semibold text-slate-900">
@@ -1205,17 +1285,19 @@ export default function FichaDetalhe() {
                                 </p>
                               ) : null}
                             </div>
-                            <span
-                              className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                                manobra.tripulante === 'A'
-                                  ? 'bg-blue-100 text-blue-700 border-blue-300'
-                                  : manobra.tripulante === 'B'
-                                    ? 'bg-orange-100 text-orange-700 border-orange-300'
-                                    : 'bg-purple-100 text-purple-700 border-purple-300'
-                              }`}
-                            >
-                              {manobra.tripulante || 'AB'}
-                            </span>
+                            {!specialDefinition?.hideTripulanteBadge ? (
+                              <span
+                                className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                  manobra.tripulante === 'A'
+                                    ? 'bg-blue-100 text-blue-700 border-blue-300'
+                                    : manobra.tripulante === 'B'
+                                      ? 'bg-orange-100 text-orange-700 border-orange-300'
+                                      : 'bg-purple-100 text-purple-700 border-purple-300'
+                                }`}
+                              >
+                                {manobra.tripulante || 'AB'}
+                              </span>
+                            ) : null}
                             {isEditMode ? (
                               <select
                                 value={getNotaSelectValue(manobra.nota)}
@@ -2147,8 +2229,8 @@ export default function FichaDetalhe() {
                         fichaId: ficha.id,
                         sessao_codigo: ficha.sessao_codigo || undefined,
                         sessao_titulo: ficha.sessao_modelo || 'Sessão de Treinamento',
-                        sessao_titulo_linha1: examinerDefinition?.headerTitle,
-                        sessao_titulo_linha2: examinerDefinition?.headerSubtitle,
+                        sessao_titulo_linha1: specialDefinition?.headerTitle,
+                        sessao_titulo_linha2: specialDefinition?.headerSubtitle,
                         tripulante_nome: ficha.participante_nome,
                         tripulante_funcao: ficha.participante_funcao,
                         tripulante_codigo_anac: ficha.tripulante_codigo_anac || '',
@@ -2167,9 +2249,18 @@ export default function FichaDetalhe() {
                         horario_fim:
                           ficha.horario_fim && ficha.horario_fim !== 'N/A' ? ficha.horario_fim : '',
                         simulador: ficha.simulador_codigo,
-                        carga_horaria_total: cargaHorariaTotalStr,
-                        carga_horaria_pf: showOperationalHoursPDF ? formatarHoras(cargaPF) : '',
-                        carga_horaria_pm: showOperationalHoursPDF ? formatarHoras(cargaPM) : '',
+                        simulador_nome: ficha.simulador_nome,
+                        simulador_modelo: ficha.simulador_modelo,
+                        equipamento_utilizado: ficha.equipamento_utilizado || undefined,
+                        dispositivo_identificacao: ficha.dispositivo_identificacao || undefined,
+                        assento_instrucao_utilizado: ficha.assento_instrucao_utilizado || undefined,
+                        carga_horaria_total: ficha.carga_horaria_total || cargaHorariaTotalStr,
+                        carga_horaria_pf: showOperationalHoursPDF
+                          ? String(ficha.carga_horaria_pf || '')
+                          : '',
+                        carga_horaria_pm: showOperationalHoursPDF
+                          ? String(ficha.carga_horaria_pm || '')
+                          : '',
                         tripulacao_nomes: isSharedPDF ? ficha.tripulacao_nomes || '' : '',
                         status: ficha.status,
                         observacoes_gerais: ficha.observacoes_gerais || '',

@@ -18,6 +18,8 @@ function readSource(relativePath: string): string {
 const FICHA_MODELO_FLOW = 'src/react-app/pages/simuladores/fichas/index.tsx';
 const WORKER_FICHA_ROUTE = 'worker-airtrust/src/routes/simuladores-fichas.ts';
 const APP_ROUTES = 'src/react-app/App.tsx';
+const CLIENT_RENDERER = 'src/react-app/services/pdf-ficha-client.ts';
+const WORKER_RENDERER = 'worker-airtrust/src/services/pdf-ficha.service.ts';
 
 const ORPHAN_FILES = [
   'src/react-app/pages/FichaVoo.tsx',
@@ -43,6 +45,14 @@ describe('ficha PDF — fonte única de renderer (V6.2)', () => {
     // instrutor — estrutura que impede servir um modelo em branco.
     expect(source).toMatch(/FROM fichas_sessao/);
     expect(source).toMatch(/INNER JOIN funcionarios/);
+  });
+
+  it('renderizadores client e backend compartilham o helper canônico do cabeçalho', () => {
+    const clientSource = readSource(CLIENT_RENDERER);
+    const workerSource = readSource(WORKER_RENDERER);
+
+    expect(clientSource).toContain('buildFichaHeaderRows');
+    expect(workerSource).toContain('buildFichaHeaderRows');
   });
 
   it('App.tsx não referencia nenhum dos arquivos órfãos de ficha', () => {

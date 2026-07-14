@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
       
       - name: Install dependencies
@@ -28,10 +28,21 @@ jobs:
       - name: Generate coverage with threshold (30%+)
         run: npm run test:coverage
         continue-on-error: false
+
+      - name: Detect coverage artifact
+        id: coverage_artifact
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f coverage/coverage-final.json ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
       
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        if: always()
+        uses: codecov/codecov-action@v5
+        if: ${{ always() && steps.coverage_artifact.outputs.present == 'true' }}
         with:
           files: ./coverage/coverage-final.json
           flags: unittests

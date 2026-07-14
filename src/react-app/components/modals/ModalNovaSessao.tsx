@@ -221,8 +221,8 @@ export default function ModalNovaSessao({
   const [instrutorId, setInstrutorId] = useState<number | null>(null);
   const [examinadorId, setExaminadorId] = useState<number | null>(null);
   const [checksSelecionados, setChecksSelecionados] = useState<number[]>([]);
-  // Fichas especiais: podem ser acionadas pelos checks FAP07/FAP13 ou manualmente
-  const [gerarFichaInstrutor, setGerarFichaInstrutor] = useState(false);
+  const [, setGerarFichaInstrutor] = useState(false);
+  // Fichas especiais: somente credenciamento de examinador continua gerado neste fluxo.
   const [gerarFichaExaminador, setGerarFichaExaminador] = useState(false);
   const [observacoes, setObservacoes] = useState<string>('');
   const [participantes, setParticipantes] = useState<Participante[]>(participantesIniciais());
@@ -261,14 +261,12 @@ export default function ModalNovaSessao({
   }, [isEditMode, originalModoCompartilhado, editHydrating, tipoDispositivo, sessaoDetalhe]);
 
   const {
-    hasFap07Selecionada,
     hasFap13Selecionada,
-    gerarFichaInstrutorEfetivo,
     gerarFichaExaminadorEfetivo,
   } = deriveSpecialFichaFlags({
     checksSelecionados,
     tiposCheck,
-    gerarFichaInstrutorManual: gerarFichaInstrutor,
+    gerarFichaInstrutorManual: false,
     gerarFichaExaminadorManual: gerarFichaExaminador,
   });
 
@@ -1455,7 +1453,6 @@ export default function ModalNovaSessao({
 
       if (nextState) {
         setChecksSelecionados(nextState.checksSelecionados);
-        setGerarFichaInstrutor(nextState.gerarFichaInstrutor);
         setGerarFichaExaminador(nextState.gerarFichaExaminador);
       }
     }
@@ -1609,8 +1606,7 @@ export default function ModalNovaSessao({
               examinador_id: null,
               checks: [],
             }),
-        // Fichas especiais: flags independentes (também auto-setados por FAP07/FAP13)
-        gerar_ficha_instrutor: gerarFichaInstrutorEfetivo,
+        // Fichas especiais: apenas examinador permanece disponível neste fluxo.
         gerar_ficha_examinador: gerarFichaExaminadorEfetivo,
         ...(isEditMode ? { resetar_fluxo_fichas: true } : {}),
       };
@@ -2305,21 +2301,6 @@ export default function ModalNovaSessao({
                 sessão como avaliado.
               </p>
               <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={gerarFichaInstrutorEfetivo}
-                    onChange={(e) => setGerarFichaInstrutor(e.target.checked)}
-                    disabled={hasFap07Selecionada}
-                    className="h-4 w-4 rounded border-blue-400 text-blue-600 focus:ring-primary/30"
-                  />
-                  <span className="text-sm text-blue-900">
-                    <strong>Treinamento de Instrutor de Voo</strong>
-                    <span className="block text-xs text-blue-600">
-                      Gera ficha modelo "TREINAMENTO DE INSTRUTOR DE VOO" — auto-ativado com FAP 07
-                    </span>
-                  </span>
-                </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"

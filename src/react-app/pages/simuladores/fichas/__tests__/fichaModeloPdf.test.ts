@@ -146,6 +146,30 @@ describe('fichaModeloPdf', () => {
     expect(dados.carga_horaria_total).toBe('120 minutos');
   });
 
+  it('preenche cabeçalho canônico e duração de 120 minutos para INST-E01', () => {
+    const dados = buildFichaModeloPdfData(
+      {
+        id: 42,
+        codigo: 'INST-E01',
+        nome: 'Treinamento Prático de Instrutor 1/2',
+      },
+      Array.from({ length: 18 }, (_, index) => ({
+        ordem: index + 1,
+        manobra_codigo: `INST-E01-${String(index + 1).padStart(2, '0')}`,
+        manobra_nome: `Item ${index + 1}`,
+        manobra_descricao: `Descrição ${index + 1}`,
+        tripulante: 'AB',
+      })),
+    );
+
+    expect(dados.sessao_codigo).toBe('INST-E01');
+    expect(dados.sessao_titulo_linha1).toBe('Treinamento Prático de Instrutor 1/2');
+    expect(dados.sessao_titulo_linha2).toBe(
+      'Procedimentos Normais e Técnica de Instrução / Procedimentos Anormais e Gerenciamento do Erro',
+    );
+    expect(dados.carga_horaria_total).toBe('120 minutos');
+  });
+
   it('reserva coluna Trip. no layout impresso sem invadir a nota', () => {
     const layout = getFichaPdfTableLayout(15);
     const headers = getFichaPdfTableHeaders();
