@@ -72,7 +72,6 @@ interface AtribuicaoRow {
   modelo_deleted_at: string | null;
   modelo_codigo: string;
   modelo_nome: string;
-  tipo_sessao_codigo: string | null;
   gera_ficha: number;
   deleted_at: string | null;
 }
@@ -255,7 +254,6 @@ function createFakeDb(state: FakeState, options?: { forceBatchFailure?: boolean 
                   funcionario_id: a.funcionario_id,
                   modelo_codigo: a.modelo_codigo,
                   modelo_nome: a.modelo_nome,
-                  tipo_sessao_codigo: a.tipo_sessao_codigo,
                 })),
               };
             }
@@ -435,7 +433,6 @@ function seedAtribuicao(state: FakeState, overrides: Partial<AtribuicaoRow>): At
     modelo_deleted_at: null,
     modelo_codigo: 'PER',
     modelo_nome: 'Modelo A',
-    tipo_sessao_codigo: 'PER',
     gera_ficha: 1,
     deleted_at: null,
     ...overrides,

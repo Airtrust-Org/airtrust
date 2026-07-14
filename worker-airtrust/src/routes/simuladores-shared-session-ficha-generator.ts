@@ -45,7 +45,6 @@ interface AtribuicaoRow {
   funcionario_id: number;
   modelo_codigo: string;
   modelo_nome: string;
-  tipo_sessao_codigo: string | null;
 }
 
 interface FichaPlan {
@@ -98,8 +97,7 @@ export async function generateFichasForSharedSession(
               sac.gera_ficha,
               sp.funcionario_id,
               ms.codigo AS modelo_codigo,
-              ms.nome AS modelo_nome,
-              ms.tipo_sessao_codigo
+              ms.nome AS modelo_nome
        FROM simulador_atribuicoes_curriculares sac
        INNER JOIN sessoes_participantes sp
          ON sp.id = sac.participante_id
