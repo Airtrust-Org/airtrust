@@ -35,9 +35,10 @@ import {
   splitManobrasNotechs,
 } from '../pages/simuladores/fichas/notechs';
 import {
-  getExaminerEventSessionDefinition,
-  splitExaminerTechnicalBlocks,
-} from '@/shared/simuladores/examiner-event-sessions';
+  getSpecialEventSessionDefinition,
+  splitSpecialTechnicalBlocks,
+} from '@/shared/simuladores/special-event-sessions';
+import { buildFichaHeaderRows } from '@/shared/simuladores/ficha-header';
 
 export interface FichaPDFData {
   fichaId: string | number;
@@ -54,10 +55,15 @@ export interface FichaPDFData {
   horario_inicio: string;
   horario_fim: string;
   simulador: string;
+  simulador_nome?: string;
+  simulador_modelo?: string;
   carga_horaria_total?: string;
   carga_horaria_pf?: string;
   carga_horaria_pm?: string;
   tripulacao_nomes?: string;
+  equipamento_utilizado?: string;
+  dispositivo_identificacao?: string;
+  assento_instrucao_utilizado?: string;
   status: string;
   observacoes_gerais?: string;
   assinatura_aluno_timestamp?: string | null;
@@ -258,72 +264,6 @@ function limitTextLines(lines: string[], maxLines: number): string[] {
 }
 
 /**
- * Carrega uma imagem de URL e retorna como base64
- * Suporta URLs da API com autenticação e URLs externas
- */
-async function loadImageAsBase64(url: string): Promise<string | null> {
-  try {
-    console.log('🎨 [PDF-FICHA] loadImageAsBase64 chamado com URL:', url);
-
-    if (!url) {
-      console.log('⚠️ [PDF-FICHA] URL vazia');
-      return null;
-    }
-
-    // Preparar headers - adicionar token para URLs da API
-    const headers: HeadersInit = {};
-    const token = getAccessToken();
-
-    // Se for URL da API (relativa ou do domínio airtrust), adicionar token
-    if (url.startsWith('/api/') || url.startsWith('/') || url.includes('airtrust.workers.dev')) {
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-        console.log('🔐 [PDF-FICHA] Token adicionado ao header');
-      } else {
-        console.warn('⚠️ [PDF-FICHA] Token não encontrado no localStorage');
-      }
-    }
-
-    console.log('📡 [PDF-FICHA] Fazendo fetch para:', url);
-    // Usar apiFetch para garantir URL correta do worker em produção
-    const response = await apiFetch(url, {
-      mode: 'cors',
-      credentials: 'omit', // Não enviar cookies para evitar problemas de CORS
-      headers,
-    });
-
-    console.log(`📊 [PDF-FICHA] Response status: ${response.status}`);
-
-    if (!response.ok) {
-      console.warn(
-        `❌ [PDF-FICHA] Erro ao carregar imagem: ${response.status} ${response.statusText}`,
-      );
-      return null;
-    }
-
-    const blob = await response.blob();
-    console.log(`📦 [PDF-FICHA] Blob recebido: ${blob.size} bytes, type: ${blob.type}`);
-
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        console.log(`✅ [PDF-FICHA] Base64 gerado com sucesso: ${result.substring(0, 50)}...`);
-        resolve(result);
-      };
-      reader.onerror = () => {
-        console.warn('❌ [PDF-FICHA] Erro ao converter imagem para base64');
-        resolve(null);
-      };
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    console.warn('❌ [PDF-FICHA] Erro ao carregar imagem:', error);
-    return null;
-  }
-}
-
-/**
  * Converte uma data (dd/mm/yyyy, yyyy-mm-dd ou ISO) para formato DDMMAAAA usado no nome do arquivo.
  */
 function dateToFilenamePart(data: string): string {
@@ -335,7 +275,7 @@ function dateToFilenamePart(data: string): string {
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(data);
   if (iso) return `${iso[3]}${iso[2]}${iso[1]}`;
   // fallback: remover separadores, pegar 8 chars
-  return data.replace(/[/\-]/g, '').substring(0, 8);
+  return data.replace(/[/-]/g, '').substring(0, 8);
 }
 
 /**
@@ -382,7 +322,7 @@ export async function gerarPDFFichaCliente(
   const contentWidth = pageWidth - 2 * margin;
   let currentY = margin;
   const isModoModelo = dados.modoModelo === true;
-  const examinerDefinition = getExaminerEventSessionDefinition(dados.sessao_codigo);
+  const specialDefinition = getSpecialEventSessionDefinition(dados.sessao_codigo);
   // ── Geometria base do header (compacto) ───────────────────────────────────
   const headerTop = 4;
   const headerHeight = 15; // compacto para liberar espaço (era 19)
@@ -502,9 +442,8 @@ export async function gerarPDFFichaCliente(
 
   // Título e sessão reservando espaço fixo entre logo e badge
   const tituloX = headerCenterX;
-  const sessaoNome = dados.sessao_titulo || dados.simulador || 'Sessão de Treinamento';
-  let title1 = dados.sessao_titulo_linha1 || examinerDefinition?.headerTitle;
-  let title2 = dados.sessao_titulo_linha2 || examinerDefinition?.headerSubtitle;
+  let title1 = dados.sessao_titulo_linha1 || specialDefinition?.headerTitle;
+  let title2 = dados.sessao_titulo_linha2 || specialDefinition?.headerSubtitle;
 
   if (!title1 && !title2 && dados.sessao_titulo) {
     if (dados.sessao_titulo.includes(' - ')) {
@@ -574,163 +513,114 @@ export async function gerarPDFFichaCliente(
 
   // Gap após header — 2mm igual ao gap abaixo da session box
   currentY = headerBottom + 2;
+  const dataFormatada = formatarData(dados.data);
+  const headerRows = buildFichaHeaderRows({
+    sessaoCodigo: dados.sessao_codigo,
+    data: dataFormatada,
+    horarioInicio: dados.horario_inicio,
+    horarioFim: dados.horario_fim,
+    cargaHorariaTotal: dados.carga_horaria_total,
+    cargaHorariaPf: dados.carga_horaria_pf,
+    cargaHorariaPm: dados.carga_horaria_pm,
+    tripulanteNome: dados.tripulante_nome,
+    tripulanteCodigoAnac: dados.tripulante_codigo_anac,
+    tripulanteFuncao: dados.tripulante_funcao,
+    instrutorNome: dados.instrutor_nome,
+    instrutorCodigoAnac: dados.instrutor_codigo_anac,
+    simuladorDisplayName: dados.simulador,
+    simuladorModelo: dados.simulador_modelo,
+    equipamentoUtilizado: dados.equipamento_utilizado,
+    dispositivoIdentificacao: dados.dispositivo_identificacao,
+    assentoInstrucaoUtilizado: dados.assento_instrucao_utilizado,
+  });
 
-  // ========== DADOS DA SESSÃO — 3 linhas ==========
-  // Linha 1: Data | Horário | Simulador | Carga Horária
-  // Linha 2: Tripulante | ANAC | Função | PF / PM
-  // Linha 3: Instrutor | ANAC
-  // "Tripulação" foi removida do cabeçalho (linha 4 antiga) para liberar
-  // espaço vertical em favor da tabela NOTECHS de linha única (ver pedido do
-  // owner de 2026-07-02).
-  //
-  // Grade de colunas COMPARTILHADA entre as 3 linhas (mesmo X em todas as
-  // linhas que têm aquele campo), para eliminar o desalinhamento visual:
-  //   COL1 (Data / Tripulante / Instrutor)  — margin+3
-  //   COL2 (Horário / ANAC / ANAC)          — margin+65 (espaço suficiente à
-  //     esquerda para nomes longos de tripulante/instrutor na COL1)
-  //   COL3 (Simulador / Função)             — margin+99
-  //   COL4 (Carga Horária / PF-PM)          — margin+136
-  // Larguras calibradas via jsPDF.getTextWidth() com os piores casos reais
-  // (nomes/valores mais longos das fixtures) para não haver overlap.
-  const COL1 = margin + 3;
-  const COL2 = margin + 65;
-  const COL3 = margin + 99;
-  const COL4 = margin + 136;
-  // Com 14mm de altura e 5.5mm por linha, a 3a linha (Instrutor/ANAC) tinha
-  // baseline em +15.5mm — 1.5mm ABAIXO da própria borda da caixa, vazando
-  // pra fora dela (visível mesmo sem a legenda que existia ali antes).
-  // 16mm + 5.0mm/linha coloca a última baseline em +14.5mm, com 1.5mm de
-  // folga real até a borda — custo de só +2mm no orçamento vertical total
-  // (mantém a compactação de 1 página já obtida).
-  const SESSION_BOX_H = examinerDefinition ? 20.5 : 18;
-  const SESSION_LINE_H = 5.5;
+  const rowCount = headerRows.length;
+  const SESSION_BOX_H = rowCount === 3 ? 21 : 18;
+  const SESSION_LINE_H = 6;
   doc.setDrawColor(COLORS.border);
   doc.setFillColor(COLORS.bgLight);
   doc.roundedRect(margin, currentY, contentWidth, SESSION_BOX_H, 2, 2, 'FD');
 
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(COLORS.textSecondary);
-
-  const dataFormatada = formatarData(dados.data);
-  // Valor curto para carga (só o total, sem o detalhe PF/PM que ocupa muito espaço).
-  // Sem dado real, fica vazio (em vez de "0h") para cair no placeholder em
-  // branco do getDisplayValue, igual aos demais campos do modelo.
-  const cargaShort = dados.carga_horaria_total
-    ? dados.carga_horaria_total.split('(')[0].trim()
-    : dados.carga_horaria_pf
-      ? `${dados.carga_horaria_pf}h`
-      : '';
-
-  // drawInfoField: posiciona label (bold) + value (normal) com espaçamento mínimo
-  const drawInfoField = (label: string, value: string, x: number, labelW: number, y: number) => {
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(COLORS.text);
-    doc.text(label, x, y);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(COLORS.textSecondary);
-    doc.text(value, x + labelW, y);
+  const FIELD_WEIGHT_BY_LABEL: Record<string, number> = {
+    ANAC: 0.8,
+    Assento: 1.2,
+    'Carga Horária': 1.4,
+    Data: 0.95,
+    'Dispositivo/Matrícula': 1.75,
+    Função: 1.0,
+    Horário: 1.25,
+    Instrutor: 1.7,
+    'Instrutor-aluno': 2.15,
+    'Instrutor supervisor': 2.2,
+    'Modelo/Equipamento': 1.55,
+    PF: 0.75,
+    PM: 0.75,
+    Simulador: 2.2,
+    Tripulante: 2.0,
   };
 
-  // Linha 1: Código | Data | Horário | Duração curricular
-  let lineY = currentY + 5.5;
-  if (examinerDefinition) {
-    drawInfoField('Código:', getDisplayValue(dados.sessao_codigo), COL1, 11, lineY);
-    drawInfoField('Data:', getDisplayValue(dataFormatada), COL2, 9, lineY);
-    drawInfoField(
-      'Horário:',
-      getDisplayValue(
-        [dados.horario_inicio, dados.horario_fim].filter(Boolean).join(' – '),
-        '__:__ – __:__',
-      ),
-      COL3,
-      14,
-      lineY,
-    );
-    drawInfoField('Duração:', getDisplayValue(dados.carga_horaria_total, '120 minutos'), COL4, 15, lineY);
-  } else {
-    drawInfoField('Data:', getDisplayValue(dataFormatada), COL1, 9, lineY);
-    drawInfoField(
-      'Horário:',
-      getDisplayValue(
-        [dados.horario_inicio, dados.horario_fim].filter(Boolean).join(' – '),
-        '__:__ – __:__',
-      ),
-      COL2,
-      14,
-      lineY,
-    );
-    drawInfoField('Simulador:', getDisplayValue(dados.simulador), COL3, 16, lineY);
-    drawInfoField('Carga Horária:', getDisplayValue(cargaShort), COL4, 19, lineY);
+  const getFieldBoxes = (row: typeof headerRows[number]) => {
+    const horizontalPadding = 3;
+    const gap = 3;
+    const innerWidth = contentWidth - horizontalPadding * 2;
+    const totalGap = gap * Math.max(0, row.length - 1);
+    const availableWidth = innerWidth - totalGap;
+    const weights = row.map((field) => FIELD_WEIGHT_BY_LABEL[field.label] || 1);
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || row.length;
+
+    let currentX = margin + horizontalPadding;
+    return row.map((field, index) => {
+      const isLast = index === row.length - 1;
+      const width = isLast
+        ? margin + horizontalPadding + innerWidth - currentX
+        : (availableWidth * weights[index]) / totalWeight;
+      const box = { x: currentX, width };
+      currentX += width + gap;
+      return box;
+    });
+  };
+
+  const fitTextToWidth = (text: string, maxWidth: number, fontSize: number) => {
+    const safeText = getDisplayValue(text);
+    if (maxWidth <= 8) return '...';
+    doc.setFontSize(fontSize);
+    if (doc.getTextWidth(safeText) <= maxWidth) return safeText;
+
+    const ellipsis = '...';
+    let truncated = safeText;
+    while (truncated.length > 1 && doc.getTextWidth(`${truncated}${ellipsis}`) > maxWidth) {
+      truncated = truncated.slice(0, -1).trimEnd();
+    }
+    return truncated ? `${truncated}${ellipsis}` : ellipsis;
+  };
+
+  const drawInfoField = (label: string, value: string, x: number, y: number, fieldWidth: number) => {
+    const labelFontSize = 7;
+    const valueFontSize = 7;
+    const labelGap = 1.6;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(labelFontSize);
+    doc.setTextColor(COLORS.text);
+    doc.text(`${label}:`, x, y);
+    const labelWidth = doc.getTextWidth(`${label}:`);
+    const valueX = x + labelWidth + labelGap;
+    const valueWidth = Math.max(10, fieldWidth - labelWidth - labelGap - 1);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(COLORS.textSecondary);
+    doc.setFontSize(valueFontSize);
+    doc.text(fitTextToWidth(value, valueWidth, valueFontSize), valueX, y);
+  };
+
+  let lineY = currentY + 5.2;
+  for (const row of headerRows) {
+    const fieldBoxes = getFieldBoxes(row);
+    row.forEach((field, index) => {
+      const box = fieldBoxes[index] || fieldBoxes.at(-1) || { x: margin + 3, width: contentWidth - 6 };
+      drawInfoField(field.label, field.value, box.x, lineY, box.width);
+    });
+    lineY += SESSION_LINE_H;
   }
 
-  // Linha 2: Participante avaliado | Função | Equipamento utilizado | PF / PM
-  lineY += SESSION_LINE_H;
-  drawInfoField(
-    examinerDefinition ? 'Participante:' : 'Tripulante:',
-    getDisplayValue(dados.tripulante_nome),
-    COL1,
-    examinerDefinition ? 20 : 18,
-    lineY,
-  );
-  if (examinerDefinition) {
-    drawInfoField('Função:', getDisplayValue(dados.tripulante_funcao, '______'), COL2, 12, lineY);
-    drawInfoField('Equipamento:', getDisplayValue(dados.simulador), COL3, 18, lineY);
-  } else {
-    drawInfoField(
-      'ANAC:',
-      getDisplayValue(dados.tripulante_codigo_anac, '____________'),
-      COL2,
-      9,
-      lineY,
-    );
-    drawInfoField('Função:', getDisplayValue(dados.tripulante_funcao, '______'), COL3, 12, lineY);
-  }
-  if (!examinerDefinition && (dados.carga_horaria_pf || dados.carga_horaria_pm)) {
-    drawInfoField(
-      'PF / PM:',
-      `${getDisplayValue(dados.carga_horaria_pf, '0')}h / ${getDisplayValue(dados.carga_horaria_pm, '0')}h`,
-      COL4,
-      15,
-      lineY,
-    );
-  }
-
-  // Linha 3: Instrutor supervisor | ANAC
-  lineY += SESSION_LINE_H;
-  drawInfoField(
-    examinerDefinition ? 'Supervisor:' : 'Instrutor:',
-    getDisplayValue(dados.instrutor_nome),
-    COL1,
-    examinerDefinition ? 18 : 16,
-    lineY,
-  );
-  if (examinerDefinition) {
-    drawInfoField(
-      'ANAC:',
-      getDisplayValue(dados.tripulante_codigo_anac, '____________'),
-      COL2,
-      9,
-      lineY,
-    );
-    drawInfoField(
-      'Supervisor ANAC:',
-      getDisplayValue(dados.instrutor_codigo_anac, '____________'),
-      COL3,
-      23,
-      lineY,
-    );
-  } else {
-    drawInfoField(
-      'ANAC:',
-      getDisplayValue(dados.instrutor_codigo_anac, '____________'),
-      COL2,
-      9,
-      lineY,
-    );
-  }
-
-  // Avançar currentY: session box + gap (2mm, igual ao gap acima)
   currentY += SESSION_BOX_H + 2;
 
   // ── Table layout constants ────────────────────────────────────────────────
@@ -743,8 +633,9 @@ export async function gerarPDFFichaCliente(
   const NOTA_BADGE_H = tableLayout.notaBadgeHeight;
   const TABLE_HEADER_H = 5;
 
-  const [numLabel, codigoLabel, tripLabel, itensLabel, obsLabel, notaLabel] =
+  const [numLabel, codigoLabel, tripLabelBase, itensLabel, obsLabel, notaLabel] =
     getFichaPdfTableHeaders();
+  const tripLabel = specialDefinition?.hideTripulanteBadge ? '' : tripLabelBase;
 
   // ── Layout budget — single page A4, no pagination ─────────────────────────
   // V6.2 ficha-modelo MUST fit in 1 A4 page (297mm) with margins.
@@ -782,7 +673,7 @@ export async function gerarPDFFichaCliente(
 
   // NOTECHS continua a numeração da coluna # após as técnicas (19–33),
   // sem prefixo "N", mantendo continuidade visual com o bloco técnico.
-  const examinerBlocks = splitExaminerTechnicalBlocks(dados.sessao_codigo, manobras);
+  const specialBlocks = splitSpecialTechnicalBlocks(dados.sessao_codigo, manobras);
   const tecnicasRows = manobras.map((m) => ({
     m,
     rowH: ITEM_ROW_HEIGHT,
@@ -795,14 +686,14 @@ export async function gerarPDFFichaCliente(
     displayNum: manobras.length + (m.ordem - NOTECHS_ORDEM_BASE + 1),
     isNotechs: true,
   }));
-  const TECHNICAL_BLOCK_DIVIDER_H = examinerBlocks ? 5 : 0;
+  const TECHNICAL_BLOCK_DIVIDER_H = specialBlocks ? 5 : 0;
   const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 5 : 0;
 
   const allRows = [...tecnicasRows, ...notechsRows];
   const totalTableH =
     allRows.length * ITEM_ROW_HEIGHT +
     NOTECHS_DIVIDER_H +
-    (examinerBlocks ? TECHNICAL_BLOCK_DIVIDER_H * examinerBlocks.length : 0);
+    (specialBlocks ? TECHNICAL_BLOCK_DIVIDER_H * specialBlocks.length : 0);
 
   // Layout de baixo para cima — single page (sem paginação para ficha-modelo):
   //   rodapé: 4mm no fundo
@@ -813,8 +704,6 @@ export async function gerarPDFFichaCliente(
   const FOOTER_H = 5;
   const SIG_RESERVED = 28;
   const OBS_RESERVED = 18;
-  const availableBottomY = pageHeight - FOOTER_H - SIG_RESERVED - 2 - OBS_RESERVED - 2;
-
   // Single-page budget assertion (dev warning only)
   const totalRequiredH =
     currentY + TABLE_HEADER_H + totalTableH + 2 + OBS_RESERVED + 2 + SIG_RESERVED + FOOTER_H;
@@ -825,13 +714,13 @@ export async function gerarPDFFichaCliente(
   }
 
   // Pré-calcular nomeLines/obsLines para TODAS as linhas (sem row scaling)
-  const precomputedRows = allRows.map(({ m, rowH, displayNum, isNotechs }) => {
+  const precomputedRows = allRows.map(({ m, rowH, displayNum }) => {
     const nomeTxt = (m.nome || '').trim();
     const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), MAX_ITEM_LINES);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
       obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), MAX_OBS_LINES) : [];
-    return { m, nomeLines, obsLines, rowH, displayNum, isNotechs };
+    return { m, nomeLines, obsLines, rowH, displayNum };
   });
 
   // Desenha uma linha da tabela (já com nomeLines/obsLines/rowH resolvidos) —
@@ -839,7 +728,7 @@ export async function gerarPDFFichaCliente(
   // logo abaixo: mesmas colunas (#, CÓDIGO, TRIP., ITENS, OBSERVAÇÕES, NOTA),
   // mesma fonte, mesmo zebrado.
   const drawTableRow = (
-    { m, nomeLines, obsLines, rowH, displayNum, isNotechs }: (typeof precomputedRows)[number],
+    { m, nomeLines, obsLines, rowH, displayNum }: (typeof precomputedRows)[number],
     isEven: boolean,
   ) => {
     if (isEven) {
@@ -872,22 +761,24 @@ export async function gerarPDFFichaCliente(
     doc.text((m.codigo || '').substring(0, 20), col.codigo, textTopY);
 
     // Tripulante (A/B/AB)
-    const tripulante = m.tripulante || 'AB';
-    const tripBadge = getTripulanteBadgeColors(tripulante);
-    const tripBadgeW = 8;
-    const tripBadgeH = 4;
-    const tripBadgeX = col.tripulante - tripBadgeW / 2;
-    const tripBadgeY = currentY + (rowH - tripBadgeH) / 2;
-    const tripBadgeTextY = tripBadgeY + tripBadgeH - 1.2;
-    doc.setFillColor(tripBadge.fill);
-    doc.roundedRect(tripBadgeX, tripBadgeY, tripBadgeW, tripBadgeH, 1, 1, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(Math.max(4.5, TABLE_FONT - 0.5));
-    doc.setTextColor(tripBadge.text);
-    doc.text(tripulante, col.tripulante, tripBadgeTextY, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(TABLE_FONT);
-    doc.setTextColor(COLORS.text);
+    if (!specialDefinition?.hideTripulanteBadge) {
+      const tripulante = m.tripulante || 'AB';
+      const tripBadge = getTripulanteBadgeColors(tripulante);
+      const tripBadgeW = 8;
+      const tripBadgeH = 4;
+      const tripBadgeX = col.tripulante - tripBadgeW / 2;
+      const tripBadgeY = currentY + (rowH - tripBadgeH) / 2;
+      const tripBadgeTextY = tripBadgeY + tripBadgeH - 1.2;
+      doc.setFillColor(tripBadge.fill);
+      doc.roundedRect(tripBadgeX, tripBadgeY, tripBadgeW, tripBadgeH, 1, 1, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(Math.max(4.5, TABLE_FONT - 0.5));
+      doc.setTextColor(tripBadge.text);
+      doc.text(tripulante, col.tripulante, tripBadgeTextY, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(TABLE_FONT);
+      doc.setTextColor(COLORS.text);
+    }
 
     // Nome (1 linha máx)
     for (let li = 0; li < nomeLines.length; li++) {
@@ -977,7 +868,7 @@ export async function gerarPDFFichaCliente(
   let rowIndex = 0;
   let activeTechnicalBlockIndex = 0;
   let nextTechnicalBlock =
-    examinerBlocks && examinerBlocks.length > 0 ? examinerBlocks[activeTechnicalBlockIndex] : null;
+    specialBlocks && specialBlocks.length > 0 ? specialBlocks[activeTechnicalBlockIndex] : null;
 
   for (const row of precomputedRows) {
     if (
@@ -993,7 +884,7 @@ export async function gerarPDFFichaCliente(
       doc.text(nextTechnicalBlock.definition.title, margin + 3, currentY + 3.3);
       currentY += TECHNICAL_BLOCK_DIVIDER_H;
       activeTechnicalBlockIndex += 1;
-      nextTechnicalBlock = examinerBlocks?.[activeTechnicalBlockIndex] || null;
+      nextTechnicalBlock = specialBlocks?.[activeTechnicalBlockIndex] || null;
     }
 
     // Inserir NOTECHS divider antes do primeiro NOTECHS

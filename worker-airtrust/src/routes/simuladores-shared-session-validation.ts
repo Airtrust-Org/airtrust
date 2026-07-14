@@ -7,6 +7,7 @@ import {
 } from './simuladores-shared';
 import type { NormalizedSharedSessionRequest } from './simuladores-shared-session-logic';
 import { overlaps } from './simuladores-shared-session-helpers';
+import { normalizeSpecialEventSessionCode } from '../../../src/shared/simuladores/special-event-sessions';
 
 export type ModeloSessaoMapRow = {
   id: number;
@@ -156,6 +157,10 @@ export async function assertEntityOwnership(
     const modeloAeronave = normalizeModeloAeronave(modelo.modelo_aeronave);
     if (modeloAeronave && simuladorModelo && modeloAeronave !== simuladorModelo) {
       throw new Error('Modelo de sessão incompatível com equipamento');
+    }
+    const specialCode = normalizeSpecialEventSessionCode(modelo.codigo);
+    if (specialCode?.startsWith('INST-') && !['AW139', 'SK76'].includes(simuladorModelo)) {
+      throw new Error('Treinamento prático de instrutor disponível apenas para AW139 e S76');
     }
   }
 

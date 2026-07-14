@@ -75,9 +75,15 @@ describe('ficha pdf — ITENS nunca trunca, quebra em ate 2 linhas', () => {
     await gerarPDFFichaCliente(buildDados([LONG_ITEM_NAME]));
 
     const texts = capturedTextsHolder.texts;
-    expect(texts.some((t) => t.includes('...'))).toBe(false);
-
     const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
+    const itemRelatedTexts = texts.filter((text) =>
+      ['Padronização', 'representatividade', 'autoridade', 'rubricas'].some((fragment) =>
+        text.includes(fragment),
+      ),
+    );
+
+    expect(itemRelatedTexts.length).toBeGreaterThan(0);
+    expect(itemRelatedTexts.some((t) => t.includes('...'))).toBe(false);
     expect(normalize(texts.join(' '))).toContain(normalize(LONG_ITEM_NAME));
 
     // A largura real da coluna ITENS deve quebrar esse nome em no maximo 2 linhas.

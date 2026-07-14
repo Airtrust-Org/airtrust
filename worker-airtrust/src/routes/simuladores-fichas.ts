@@ -33,7 +33,15 @@ import {
   getNotechsStatus,
   isFichaStatusFinalizado,
 } from '../constants/notechs';
-import { getExaminerEventSessionDefinition } from '../../../src/shared/simuladores/examiner-event-sessions';
+import { getSpecialEventSessionDefinition } from '../../../src/shared/simuladores/special-event-sessions';
+import {
+  buildSimulatorDisplayName,
+  formatMinutesAsHHMM,
+  getInstructionSeatLabel,
+  isInstructorSpecialSession,
+  normalizeInstructionSeatValue,
+  resolveOperationalHours,
+} from '../../../src/shared/simuladores/ficha-header';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
 import {
   gerarQualificacaoDaFicha,
@@ -49,6 +57,18 @@ import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 const app = new Hono<{ Bindings: Env }>();
 // Todos os endpoints de fichas requerem autenticação
 app.use('*', auth());
+
+const FICHA_INSTRUCTOR_META_SELECT = `
+  fsi.equipamento_utilizado AS equipamento_utilizado,
+  fsi.dispositivo_identificacao AS dispositivo_identificacao,
+  fsi.assento_instrucao_utilizado AS assento_instrucao_utilizado
+`;
+
+const FICHA_INSTRUCTOR_META_JOIN = `
+  LEFT JOIN fichas_sessao_instrutor_meta fsi
+    ON fsi.ficha_id = fs.id
+   AND fsi.empresa_id = fs.empresa_id
+`;
 
 // ─── Helper: busca funcionario_id do usuário autenticado ───────────────────
 async function getFuncionarioId(
@@ -75,6 +95,24 @@ function isFullAccess(role: string): boolean {
   return resolveFichaScope(role) === 'FULL_ACCESS';
 }
 
+async function getFichaWithInstructorMeta(
+  db: D1Database,
+  fichaId: string | number,
+  empresaId: string | number,
+) {
+  return db
+    .prepare(
+      `SELECT
+        fs.*,
+        ${FICHA_INSTRUCTOR_META_SELECT}
+      FROM fichas_sessao fs
+      ${FICHA_INSTRUCTOR_META_JOIN}
+      WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`,
+    )
+    .bind(String(fichaId), String(empresaId))
+    .first();
+}
+
 function uniquePositiveIds(values: unknown[]): number[] {
   return Array.from(
     new Set(
@@ -83,6 +121,31 @@ function uniquePositiveIds(values: unknown[]): number[] {
         .filter((value) => Number.isInteger(value) && value > 0),
     ),
   );
+}
+
+function getInstructorFichaMissingFields(record: {
+  tipo_sessao?: string | null;
+  equipamento_utilizado?: string | null;
+  dispositivo_identificacao?: string | null;
+  assento_instrucao_utilizado?: string | null;
+  tripulante_nome?: string | null;
+  instrutor_nome?: string | null;
+}): string[] {
+  if (!isInstructorSpecialSession(record.tipo_sessao)) {
+    return [];
+  }
+
+  const missing: string[] = [];
+  if (!String(record.equipamento_utilizado || '').trim()) missing.push('equipamento utilizado');
+  if (!String(record.dispositivo_identificacao || '').trim()) {
+    missing.push('identificação do dispositivo/matrícula');
+  }
+  if (!normalizeInstructionSeatValue(record.assento_instrucao_utilizado)) {
+    missing.push('assento de instrução utilizado');
+  }
+  if (!String(record.tripulante_nome || '').trim()) missing.push('instrutor-aluno');
+  if (!String(record.instrutor_nome || '').trim()) missing.push('instrutor supervisor');
+  return missing;
 }
 
 async function getAllowedFuncionariosBySetorScope(
@@ -504,6 +567,9 @@ app.get('/fichas/:id', async (c) => {
         fs.aprovado,
         fs.nota_final,
         fs.resultado_final,
+        fs.carga_horaria_pf,
+        fs.carga_horaria_pm,
+        ${FICHA_INSTRUCTOR_META_SELECT},
         fs.observacoes,
         fs.data_sessao,
         fs.assinatura_aluno_timestamp,
@@ -537,6 +603,7 @@ app.get('/fichas/:id', async (c) => {
         COALESCE(s.nome, ae.prefixo, ae.modelo, 'N/A') as simulador_nome,
         COALESCE(s.modelo, ae.modelo, 'N/A') as simulador_modelo,
         COALESCE(s.tipo, sa.tipo_dispositivo, 'N/A') as simulador_tipo,
+        COALESCE(s.aeronave_codigo, s.codigo_aeronave, NULL) as simulador_codigo,
         tpl.codigo as template_codigo,
         tpl.nome as template_tema,
         fex.nome as examinador_nome,
@@ -557,6 +624,12 @@ app.get('/fichas/:id', async (c) => {
         ) as tripulacao_nomes,
         (
           SELECT COUNT(1)
+          FROM sessoes_participantes participante_sessao
+          WHERE participante_sessao.sessao_id = sa.id
+            AND participante_sessao.deleted_at IS NULL
+        ) as participantes_count,
+        (
+          SELECT COUNT(1)
           FROM fichas_sessao_edicoes fe
           WHERE fe.ficha_id = fs.id
             AND fe.status = 'PENDENTE'
@@ -569,6 +642,7 @@ app.get('/fichas/:id', async (c) => {
        AND sa.empresa_id = fs.empresa_id
       INNER JOIN funcionarios ft ON fs.colaborador_id_aluno = ft.id AND ft.deleted_at IS NULL
       INNER JOIN funcionarios fi ON fs.instrutor_id = fi.id AND fi.deleted_at IS NULL
+      ${FICHA_INSTRUCTOR_META_JOIN}
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
       LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
       LEFT JOIN sessoes_participantes sp ON sp.sessao_id = sa.id
@@ -686,9 +760,9 @@ app.get('/fichas/:id', async (c) => {
       );
     }
 
-    let duracaoTotalMinutos = Number(f.duracao_minutos || 0);
-    let cargaPfMinutos = duracaoTotalMinutos > 0 ? duracaoTotalMinutos / 2 : 0;
-    let cargaPmMinutos = duracaoTotalMinutos > 0 ? duracaoTotalMinutos / 2 : 0;
+    let segmentTotalMinutos = 0;
+    let segmentPfMinutos = 0;
+    let segmentPmMinutos = 0;
 
     if (f.atribuicao_curricular_id) {
       const horasCompartilhadas = await c.env.DB.prepare(
@@ -729,26 +803,48 @@ app.get('/fichas/:id', async (c) => {
         .catch(() => null);
 
       if (horasCompartilhadas) {
-        duracaoTotalMinutos = Number(horasCompartilhadas.total_minutos || 0);
-        cargaPfMinutos = Number(horasCompartilhadas.pf_minutos || 0);
-        cargaPmMinutos = Number(horasCompartilhadas.pm_minutos || 0);
+        segmentTotalMinutos = Number(horasCompartilhadas.total_minutos || 0);
+        segmentPfMinutos = Number(horasCompartilhadas.pf_minutos || 0);
+        segmentPmMinutos = Number(horasCompartilhadas.pm_minutos || 0);
       }
     }
 
-    const carga_horaria_total = duracaoTotalMinutos ? `${(duracaoTotalMinutos / 60).toFixed(1)}h` : 'N/A';
-    const carga_horaria_pf = (cargaPfMinutos / 60).toFixed(1);
-    const carga_horaria_pm = (cargaPmMinutos / 60).toFixed(1);
+    const hours = resolveOperationalHours({
+      segmentTotalMinutes: segmentTotalMinutos,
+      segmentPfMinutes: segmentPfMinutos,
+      segmentPmMinutes: segmentPmMinutos,
+      canonicalPfHours: (f as any).carga_horaria_pf,
+      canonicalPmHours: (f as any).carga_horaria_pm,
+      fallbackTotalMinutes: Number(f.duracao_minutos || 0),
+      participantCount: Number(f.participantes_count || 0),
+    });
 
     const fichaTipoCodigo = String(
       f.template_codigo || f.ficha_tipo_sessao || f.tipo_sessao || '',
     ).toUpperCase();
     const isFichaEspecial = fichaTipoCodigo === 'CRED-EXA' || fichaTipoCodigo === 'TRE-INST';
-    const examinerDefinition = getExaminerEventSessionDefinition(fichaTipoCodigo);
+    const specialDefinition = getSpecialEventSessionDefinition(fichaTipoCodigo);
     const nomeModeloResolvido = f.template_tema || f.ficha_modelo_nome || null;
+    const simuladorDisplay = buildSimulatorDisplayName({
+      simulatorCode: f.simulador_codigo,
+      simulatorName: f.simulador_nome,
+      simulatorModel: f.simulador_modelo,
+    });
+    const equipamentoUtilizado = String(
+      f.equipamento_utilizado || f.simulador_modelo || '',
+    ).trim();
+    const dispositivoIdentificacao = String(
+      f.dispositivo_identificacao || simuladorDisplay || '',
+    ).trim();
+    const assentoInstrucaoUtilizado = getInstructionSeatLabel(f.assento_instrucao_utilizado);
+    const duracaoTotalMinutos = specialDefinition?.durationMinutes || hours.totalMinutes;
+    const carga_horaria_total = formatMinutesAsHHMM(duracaoTotalMinutos);
+    const carga_horaria_pf = specialDefinition ? '' : formatMinutesAsHHMM(hours.pfMinutes, '00:00');
+    const carga_horaria_pm = specialDefinition ? '' : formatMinutesAsHHMM(hours.pmMinutes, '00:00');
 
     // Para fichas especiais, o nome do modelo salvo no banco é a fonte de verdade.
-    let sessao_titulo = examinerDefinition
-      ? examinerDefinition.fullTitle
+    let sessao_titulo = specialDefinition
+      ? specialDefinition.fullTitle
       : isFichaEspecial
         ? nomeModeloResolvido || f.sessao_nome || 'Sessão de Treinamento'
         : f.sessao_nome || nomeModeloResolvido || 'Sessão de Treinamento';
@@ -776,10 +872,14 @@ app.get('/fichas/:id', async (c) => {
       data: f.data || f.data_sessao,
       horario_inicio: f.horario_inicio || 'N/A',
       horario_fim: f.horario_fim || 'N/A',
-      simulador: `${f.simulador_nome} (${f.simulador_modelo})`,
+      simulador: simuladorDisplay,
+      simulador_codigo: f.simulador_codigo || null,
       simulador_nome: f.simulador_nome,
       simulador_modelo: f.simulador_modelo,
       simulador_tipo: f.simulador_tipo,
+      equipamento_utilizado: equipamentoUtilizado || null,
+      dispositivo_identificacao: dispositivoIdentificacao || null,
+      assento_instrucao_utilizado: assentoInstrucaoUtilizado || null,
       carga_horaria_total,
       carga_horaria_pf,
       carga_horaria_pm,
@@ -844,6 +944,7 @@ app.post('/fichas/:id/pdf', async (c) => {
         fs.observacoes,
         fs.assinatura_aluno_timestamp,
         fs.assinatura_instrutor_timestamp,
+        ${FICHA_INSTRUCTOR_META_SELECT},
         fs.colaborador_id_aluno,
         fs.data_sessao as ficha_data_sessao,
         fs.created_at as ficha_created_at,
@@ -858,11 +959,13 @@ app.post('/fichas/:id/pdf', async (c) => {
         fi.nome as instrutor_nome,
         fi.codigo_anac as instrutor_codigo_anac,
         COALESCE(s.nome, ae.prefixo, ae.modelo, 'N/A') as simulador_nome,
-        COALESCE(s.modelo, ae.modelo, 'N/A') as simulador_modelo
+        COALESCE(s.modelo, ae.modelo, 'N/A') as simulador_modelo,
+        COALESCE(s.aeronave_codigo, s.codigo_aeronave, NULL) as simulador_codigo
       FROM fichas_sessao fs
       INNER JOIN simulador_agendamentos sa ON fs.agendamento_slot_id = sa.id AND sa.deleted_at IS NULL
       INNER JOIN funcionarios ft ON fs.colaborador_id_aluno = ft.id AND ft.deleted_at IS NULL
       INNER JOIN funcionarios fi ON fs.instrutor_id = fi.id AND fi.deleted_at IS NULL
+      ${FICHA_INSTRUCTOR_META_JOIN}
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
       LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
       LEFT JOIN sessoes_participantes sp ON sp.sessao_id = sa.id
@@ -1002,14 +1105,17 @@ app.post('/fichas/:id/pdf', async (c) => {
       .bind(fichaId)
       .all();
 
-    const sessaoCodigo = String(f.template_codigo || f.tipo_sessao || '').toUpperCase();
-    const examinerDefinition = getExaminerEventSessionDefinition(sessaoCodigo);
-    const carga_horaria_total = examinerDefinition
-      ? `${examinerDefinition.durationMinutes} minutos`
-      : f.duracao_minutos
-        ? `${(f.duracao_minutos / 60).toFixed(1)}h`
-        : 'N/A';
-    const sessao_titulo = examinerDefinition?.fullTitle || `${f.tipo_sessao} - ${f.simulador_nome}`;
+    const sessaoCodigo = String(f.tipo_sessao || '').toUpperCase();
+    const specialDefinition = getSpecialEventSessionDefinition(sessaoCodigo);
+    const simuladorDisplay = buildSimulatorDisplayName({
+      simulatorCode: f.simulador_codigo,
+      simulatorName: f.simulador_nome,
+      simulatorModel: f.simulador_modelo,
+    });
+    const sessao_titulo = specialDefinition?.fullTitle || `${f.tipo_sessao} - ${simuladorDisplay}`;
+    const carga_horaria_total = formatMinutesAsHHMM(
+      specialDefinition?.durationMinutes || Number(f.duracao_minutos || 0),
+    );
     const dataSessaoFonte = f.sessao_data || f.ficha_data_sessao;
     const dataSessaoIso = extractIsoDateOnly(dataSessaoFonte);
     const dataSessaoPtBr = formatIsoDateOnlyPtBr(dataSessaoFonte);
@@ -1025,8 +1131,8 @@ app.post('/fichas/:id/pdf', async (c) => {
       fichaId: f.id.toString(),
       sessao_codigo: sessaoCodigo || undefined,
       sessao_titulo,
-      sessao_titulo_linha1: examinerDefinition?.headerTitle,
-      sessao_titulo_linha2: examinerDefinition?.headerSubtitle,
+      sessao_titulo_linha1: specialDefinition?.headerTitle,
+      sessao_titulo_linha2: specialDefinition?.headerSubtitle,
       tripulante_nome: f.tripulante_nome,
       tripulante_codigo_anac: f.tripulante_codigo_anac || 'N/A',
       tripulante_funcao: f.tripulante_funcao || 'ALUNO',
@@ -1035,8 +1141,15 @@ app.post('/fichas/:id/pdf', async (c) => {
       data: dataSessaoPtBr,
       horario_inicio: f.horario_inicio || 'N/A',
       horario_fim: f.horario_fim || 'N/A',
-      simulador: `${f.simulador_nome} (${f.simulador_modelo})`,
+      simulador: simuladorDisplay,
+      simulador_nome: f.simulador_nome,
+      simulador_modelo: f.simulador_modelo,
+      equipamento_utilizado: f.equipamento_utilizado || f.simulador_modelo || undefined,
+      dispositivo_identificacao: f.dispositivo_identificacao || simuladorDisplay,
+      assento_instrucao_utilizado: getInstructionSeatLabel(f.assento_instrucao_utilizado) || undefined,
       carga_horaria_total,
+      carga_horaria_pf: specialDefinition ? '' : undefined,
+      carga_horaria_pm: specialDefinition ? '' : undefined,
       status: f.status,
       observacoes_gerais: f.observacoes || '',
       assinatura_aluno_timestamp: f.assinatura_aluno_timestamp,
@@ -1120,11 +1233,7 @@ app.put('/fichas/:id', async (c) => {
     const tenantEmpresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
     const b = await c.req.json();
-    const a = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-      .bind(id, tenantEmpresaId)
-      .first();
+    const a = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId);
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
     // ── Verificar acesso por setor ───────────────────────────────────────
@@ -1229,6 +1338,18 @@ app.put('/fichas/:id', async (c) => {
 
     // 2) Determine new status
     let newStatus = b.status || a.status;
+    const equipamentoUtilizado =
+      b.equipamento_utilizado !== undefined
+        ? String(b.equipamento_utilizado || '').trim() || null
+        : ((a as any).equipamento_utilizado ?? null);
+    const dispositivoIdentificacao =
+      b.dispositivo_identificacao !== undefined
+        ? String(b.dispositivo_identificacao || '').trim() || null
+        : ((a as any).dispositivo_identificacao ?? null);
+    const assentoInstrucaoCanonico =
+      b.assento_instrucao_utilizado !== undefined
+        ? normalizeInstructionSeatValue(b.assento_instrucao_utilizado)
+        : normalizeInstructionSeatValue((a as any).assento_instrucao_utilizado);
 
     // 3) Recalculate status if requested
     if (b.recalculate_status === true) {
@@ -1274,17 +1395,71 @@ app.put('/fichas/:id', async (c) => {
       }
     }
 
+    if (
+      ['AGUARDANDO_ASSINATURA_ALUNO', 'AGUARDANDO_ASSINATURA_INSTRUTOR', 'APROVADO', 'NAO_APROVADO'].includes(
+        String(newStatus),
+      )
+    ) {
+      const missingFields = getInstructorFichaMissingFields({
+        tipo_sessao: (a as any).tipo_sessao,
+        equipamento_utilizado: equipamentoUtilizado,
+        dispositivo_identificacao: dispositivoIdentificacao,
+        assento_instrucao_utilizado: assentoInstrucaoCanonico,
+        tripulante_nome: 'ok',
+        instrutor_nome: 'ok',
+      });
+      if (missingFields.length > 0) {
+        return c.json(
+          {
+            success: false,
+            code: 'INSTRUCTOR_FICHA_REQUIRED_FIELDS',
+            error: `Preencha os campos obrigatórios da ficha de instrutor: ${missingFields.join(', ')}`,
+            details: { missingFields },
+          },
+          400,
+        );
+      }
+    }
+
     // 4) Update header
     await c.env.DB.prepare(
       "UPDATE fichas_sessao SET status=?,observacoes=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?",
     )
-      .bind(newStatus, b.observacoes !== undefined ? b.observacoes : a.observacoes, id, tenantEmpresaId)
+      .bind(
+        newStatus,
+        b.observacoes !== undefined ? b.observacoes : a.observacoes,
+        id,
+        tenantEmpresaId,
+      )
       .run();
-    const u = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
+
+    await c.env.DB.prepare(
+      `INSERT INTO fichas_sessao_instrutor_meta (
+         ficha_id,
+         empresa_id,
+         equipamento_utilizado,
+         dispositivo_identificacao,
+         assento_instrucao_utilizado,
+         created_at,
+         updated_at
+       ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+       ON CONFLICT(ficha_id) DO UPDATE SET
+         empresa_id = excluded.empresa_id,
+         equipamento_utilizado = excluded.equipamento_utilizado,
+         dispositivo_identificacao = excluded.dispositivo_identificacao,
+         assento_instrucao_utilizado = excluded.assento_instrucao_utilizado,
+         updated_at = datetime('now')`,
     )
-      .bind(id, tenantEmpresaId)
-      .first();
+      .bind(
+        id,
+        tenantEmpresaId,
+        equipamentoUtilizado,
+        dispositivoIdentificacao,
+        assentoInstrucaoCanonico,
+      )
+      .run();
+
+    const u = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId);
     await audit(c.env.DB, {
       tabela: 'fichas_sessao',
       acao: 'UPDATE',

@@ -252,8 +252,8 @@ app.put('/sessoes/:id', async (c) => {
     // FICHAS ESPECIAIS: TREINAMENTO DE INSTRUTOR / CREDENCIAMENTO DE EXAMINADOR
     // Executado independentemente do bloco shouldUpdateCheckFields.
     // Condições (OR):
-    //   1. Flag explícita no body: gerar_ficha_instrutor / gerar_ficha_examinador
-    //   2. Codes FAP07 / FAP13 presentes nos checks atuais da sessão
+    //   1. Flag explícita no body: gerar_ficha_examinador
+    //   2. Codes FAP13 presentes nos checks atuais da sessão
     // ─────────────────────────────────────────────────────────────────────────
     {
       const instrutorEspecial =
@@ -274,7 +274,7 @@ app.put('/sessoes/:id', async (c) => {
         // Buscar template_ids dos modelos especiais
         const tplRes = await c.env.DB.prepare(
           `SELECT id, codigo FROM modelos_sessao
-           WHERE codigo IN ('TRE-INST','CRED-EXA') AND deleted_at IS NULL`,
+           WHERE codigo IN ('CRED-EXA') AND deleted_at IS NULL`,
         ).all();
         const tplMap = new Map(
           (tplRes.results || []).map((r: any) => [String(r.codigo), r.id as number]),
@@ -298,11 +298,6 @@ app.put('/sessoes/:id', async (c) => {
             : ((a as any).examinador_id ?? null);
 
         const fichasEsp = [
-          {
-            modelo: 'TRE-INST',
-            ativo:
-              b.gerar_ficha_instrutor === true || codsAtuais.some((c) => c.startsWith('FAP07')),
-          },
           {
             modelo: 'CRED-EXA',
             ativo:

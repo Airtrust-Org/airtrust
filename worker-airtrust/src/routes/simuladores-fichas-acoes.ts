@@ -17,8 +17,24 @@ import {
   type ResultadoGeracaoQualificacao,
 } from './simuladores-fichas-helpers';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
+import {
+  isInstructorSpecialSession,
+  normalizeInstructionSeatValue,
+} from '../../../src/shared/simuladores/ficha-header';
 
 const app = new Hono<{ Bindings: Env }>();
+
+const FICHA_INSTRUCTOR_META_SELECT = `
+  fsi.equipamento_utilizado AS equipamento_utilizado,
+  fsi.dispositivo_identificacao AS dispositivo_identificacao,
+  fsi.assento_instrucao_utilizado AS assento_instrucao_utilizado
+`;
+
+const FICHA_INSTRUCTOR_META_JOIN = `
+  LEFT JOIN fichas_sessao_instrutor_meta fsi
+    ON fsi.ficha_id = fs.id
+   AND fsi.empresa_id = fs.empresa_id
+`;
 
 // ─── Helper: sanitize string for file names ────────────────────────────────
 function sanitizeForFilename(str: string, maxLen: number): string {
@@ -29,6 +45,22 @@ function sanitizeForFilename(str: string, maxLen: number): string {
     .replace(/\s+/g, '_')
     .toUpperCase()
     .substring(0, maxLen);
+}
+
+function getInstructorSignatureBlockers(ficha: Record<string, unknown>): string[] {
+  if (!isInstructorSpecialSession(String(ficha.tipo_sessao || ''))) {
+    return [];
+  }
+
+  const missing: string[] = [];
+  if (!String(ficha.equipamento_utilizado || '').trim()) missing.push('equipamento utilizado');
+  if (!String(ficha.dispositivo_identificacao || '').trim()) {
+    missing.push('identificação do dispositivo/matrícula');
+  }
+  if (!normalizeInstructionSeatValue(String(ficha.assento_instrucao_utilizado || ''))) {
+    missing.push('assento de instrução utilizado');
+  }
+  return missing;
 }
 
 /**
@@ -145,6 +177,24 @@ function isFullAccess(role: string): boolean {
   return ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'COMPLIANCE'].includes(role.toUpperCase());
 }
 
+async function getFichaWithInstructorMeta(
+  db: D1Database,
+  fichaId: string | number,
+  empresaId: string | number,
+) {
+  return db
+    .prepare(
+      `SELECT
+        fs.*,
+        ${FICHA_INSTRUCTOR_META_SELECT}
+      FROM fichas_sessao fs
+      ${FICHA_INSTRUCTOR_META_JOIN}
+      WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`,
+    )
+    .bind(String(fichaId), String(empresaId))
+    .first();
+}
+
 // ─── Helper: busca user_id + nome de um funcionário ───────────────────────
 async function getFuncionarioUserInfo(
   db: D1Database,
@@ -239,11 +289,7 @@ app.post('/fichas/:id/assinar', async (c) => {
 
     const gerarQualificacao = b.gerar_qualificacao === true;
 
-    const f = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-      .bind(id, empresaId)
-      .first();
+    const f = await getFichaWithInstructorMeta(c.env.DB, id, empresaId);
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
     const availability = await getFichaAvailabilityFromDb(c.env.DB, id);
@@ -278,6 +324,19 @@ app.post('/fichas/:id/assinar', async (c) => {
             'Ficha sem manobras. Corrija o cadastro do modelo antes de assinar esta ficha.',
         },
         409,
+      );
+    }
+
+    const signatureBlockers = getInstructorSignatureBlockers(f as Record<string, unknown>);
+    if (signatureBlockers.length > 0) {
+      return c.json(
+        {
+          success: false,
+          code: 'INSTRUCTOR_FICHA_REQUIRED_FIELDS',
+          error: `Preencha os campos obrigatórios da ficha de instrutor: ${signatureBlockers.join(', ')}`,
+          details: { missingFields: signatureBlockers },
+        },
+        400,
       );
     }
 
@@ -444,11 +503,7 @@ app.post('/fichas/:id/assinar', async (c) => {
       await arquivarFichaAutomaticamente(c.env.DB, id);
     }
 
-    const fa = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-      .bind(id, empresaId)
-      .first();
+    const fa = await getFichaWithInstructorMeta(c.env.DB, id, empresaId);
     await audit(c.env.DB, {
       tabela: 'fichas_sessao',
       acao: 'UPDATE',

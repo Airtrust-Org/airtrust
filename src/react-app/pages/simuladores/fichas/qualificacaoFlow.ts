@@ -3,7 +3,7 @@ export type FichaQualificacaoFlow = {
   tipo_sessao?: string | null;
 };
 
-const TIPOS_FICHA_ESPECIAL_CHECK = new Set(['TRE-INST', 'CRED-EXA']);
+const TIPOS_FICHA_ESPECIAL_CHECK = new Set(['TRE-INST', 'CRED-EXA', 'INST-E01', 'INST-E02']);
 
 export function isFichaDoFluxoDeCheckComQualificacao(
   ficha?: FichaQualificacaoFlow | null,

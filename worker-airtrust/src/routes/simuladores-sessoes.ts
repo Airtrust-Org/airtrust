@@ -1010,7 +1010,6 @@ app.post('/sessoes', async (c) => {
         await c.env.DB.batch(sessaoCheckStmts);
       }
 
-      // FAP07 → ficha especial "TREINAMENTO DE INSTRUTOR DE VOO" (avaliado = instrutor da sessão)
       // FAP13 → ficha especial "CREDENCIAMENTO DE EXAMINADOR"    (avaliado = instrutor da sessão)
       if (instrutor_id) {
         const checkCodResults = await c.env.DB.prepare(
@@ -1025,10 +1024,6 @@ app.post('/sessoes', async (c) => {
         );
         const fichasEspeciais = [
           {
-            modelo: 'TRE-INST',
-            ativo: codigos.some((cod) => cod.startsWith('FAP07')),
-          },
-          {
             modelo: 'CRED-EXA',
             ativo: codigos.some((cod) => cod.startsWith('FAP13')),
           },
@@ -1036,7 +1031,7 @@ app.post('/sessoes', async (c) => {
 
         const tplRes = await c.env.DB.prepare(
           `SELECT id, codigo FROM modelos_sessao
-           WHERE codigo IN ('TRE-INST','CRED-EXA') AND deleted_at IS NULL`,
+           WHERE codigo IN ('CRED-EXA') AND deleted_at IS NULL`,
         ).all();
         const tplMap = new Map(
           (tplRes.results || []).map((r: any) => [String(r.codigo), r.id as number]),
@@ -1044,7 +1039,7 @@ app.post('/sessoes', async (c) => {
 
         for (const especial of fichasEspeciais) {
           if (!especial.ativo) continue;
-          // Fichas especiais TRE-INST e CRED-EXA: o instrutor da sessão é o
+          // Ficha especial CRED-EXA: o instrutor da sessão é o
           // aluno (sendo treinado/credenciado) e o examinador atua como
           // instrutor-avaliador. Esta é a ÚNICA exceção onde examinador_id
           // pode ser usado como instrutor_id em uma ficha.

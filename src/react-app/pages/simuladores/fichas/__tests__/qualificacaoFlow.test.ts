@@ -17,6 +17,9 @@ describe('qualificacaoFlow', () => {
     expect(
       isFichaDoFluxoDeCheckComQualificacao({ is_check: false, tipo_sessao: 'cred-exa' }),
     ).toBe(true);
+    expect(
+      isFichaDoFluxoDeCheckComQualificacao({ is_check: 0, tipo_sessao: 'inst-e01' }),
+    ).toBe(true);
   });
 
   it('nao marca sessao comum como fluxo de check', () => {
@@ -27,6 +30,7 @@ describe('qualificacaoFlow', () => {
 
   it('gera qualificacao na assinatura apenas quando aprovado dentro do fluxo de check', () => {
     expect(deveGerarQualificacaoAoAssinar({ tipo_sessao: 'TRE-INST' }, true)).toBe(true);
+    expect(deveGerarQualificacaoAoAssinar({ tipo_sessao: 'INST-E02' }, true)).toBe(true);
     expect(deveGerarQualificacaoAoAssinar({ is_check: 1 }, false)).toBe(false);
     expect(deveGerarQualificacaoAoAssinar({ tipo_sessao: 'RECORRENTE' }, true)).toBe(false);
   });
