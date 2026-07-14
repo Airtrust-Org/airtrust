@@ -18,7 +18,7 @@
  */
 
 import { assertModeloSessaoTemManobras, loadFichaManobrasForModelo } from './simuladores-shared-session-fichas';
-import { fichasSessaoManobrasHasEmpresaId } from './simuladores-shared';
+import { fichasSessaoManobrasHasEmpresaId, getSimuladorModeloAeronave } from './simuladores-shared';
 
 export interface GenerateFichasResult {
   /** Quantas fichas novas foram criadas */
@@ -81,11 +81,15 @@ export async function generateFichasForSharedSession(
     throw new Error(`Sessão compartilhada ${sessaoId} não encontrada na empresa ${empresaId}`);
   }
 
-  // 2. Buscar modelo da aeronave do simulador — escopo obrigatório de tenant.
-  const simulatorModel = await getSimuladorModelo(db, empresaId, sessao.simulador_id);
+  // 2. Buscar modelo da aeronave do simulador — usa o helper canônico
+  //    (dinamicamente tenant-scoped: simuladores só tem empresa_id em alguns
+  //    ambientes) em vez de reimplementar a mesma lógica aqui.
+  const simulatorModel = await getSimuladorModeloAeronave(db, sessao.simulador_id, empresaId);
 
-  // 3. Buscar atribuições que devem gerar ficha — todas as tabelas do join
-  //    (sac, sp, ms) já são filtradas por empresa_id.
+  // 3. Buscar atribuições que devem gerar ficha — sac e ms são filtradas por
+  //    empresa_id; sessoes_participantes não tem coluna empresa_id em
+  //    produção, mas sp é alcançada apenas via FK interna de sac (já
+  //    tenant-scoped), não por entrada do usuário.
   const atribuicoes = await db
     .prepare(
       `SELECT sac.id,
@@ -99,7 +103,6 @@ export async function generateFichasForSharedSession(
        FROM simulador_atribuicoes_curriculares sac
        INNER JOIN sessoes_participantes sp
          ON sp.id = sac.participante_id
-        AND sp.empresa_id = ?
         AND sp.deleted_at IS NULL
        INNER JOIN modelos_sessao ms
          ON ms.id = sac.modelo_sessao_id
@@ -112,7 +115,7 @@ export async function generateFichasForSharedSession(
          AND sac.modelo_sessao_id IS NOT NULL
        ORDER BY sac.id`,
     )
-    .bind(empresaId, empresaId, sessaoId, empresaId)
+    .bind(empresaId, sessaoId, empresaId)
     .all<AtribuicaoRow>();
 
   const result: GenerateFichasResult = {
@@ -320,28 +323,3 @@ export async function generateFichasForSharedSession(
 
   return result;
 }
-
-/**
- * Resolve o modelo da aeronave associado ao simulador — escopo obrigatório
- * de tenant.
- */
-async function getSimuladorModelo(
-  db: D1Database,
-  empresaId: number,
-  simuladorId: number,
-): Promise<string> {
-  const row = await db
-    .prepare(
-      `SELECT COALESCE(s.aeronave_codigo, s.codigo_aeronave, s.tipo, s.modelo, '') AS modelo_aeronave,
-              s.nome
-       FROM simuladores s
-       WHERE s.id = ? AND s.empresa_id = ? AND s.deleted_at IS NULL
-       LIMIT 1`,
-    )
-    .bind(simuladorId, empresaId)
-    .first<{ modelo_aeronave: string | null; nome: string | null }>();
-
-  return row?.modelo_aeronave || row?.nome || 'SIMULADOR';
-}
-
-export { getSimuladorModelo };

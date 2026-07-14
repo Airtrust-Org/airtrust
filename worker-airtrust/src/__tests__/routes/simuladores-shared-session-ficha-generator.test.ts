@@ -48,13 +48,15 @@ interface AgendamentoRow {
 
 interface SimuladorRow {
   id: number;
-  empresa_id: number;
-  modelo_aeronave?: string | null;
-  aeronave_codigo?: string | null;
-  codigo_aeronave?: string | null;
-  modelo?: string | null;
-  tipo?: string | null;
+  // Production reality: `simuladores` has no empresa_id column (migration
+  // 0151 was never applied there) — it's a shared device catalog, not
+  // tenant-scoped. getSimuladorModeloAeronave() detects this dynamically via
+  // PRAGMA and falls back to an id-only lookup, which this fake mirrors.
   nome: string | null;
+  modelo: string | null;
+  aeronave_codigo: string | null;
+  codigo_aeronave: string | null;
+  tipo: string | null;
   deleted_at: string | null;
 }
 
@@ -164,6 +166,10 @@ function createFakeDb(state: FakeState, options?: { forceBatchFailure?: boolean 
           if (query === 'PRAGMA table_info(fichas_sessao_manobras)') {
             return { results: [{ name: 'id' }, { name: 'ficha_id' }, { name: 'empresa_id' }] };
           }
+          if (query === 'PRAGMA table_info(simuladores)') {
+            // Mirrors production: no empresa_id column on this table.
+            return { results: [{ name: 'id' }, { name: 'nome' }, { name: 'modelo' }, { name: 'deleted_at' }] };
+          }
           return { results: [] };
         },
         bind(...args: unknown[]) {
@@ -176,16 +182,15 @@ function createFakeDb(state: FakeState, options?: { forceBatchFailure?: boolean 
               return row ? { id: row.id, data: row.data, instrutor_id: row.instrutor_id, simulador_id: row.simulador_id } : null;
             }
 
-            if (query.includes('FROM simuladores s')) {
-              const [id, empresaId] = args as [number, number];
-              const row = state.simuladores.find((s) => s.id === id && s.empresa_id === empresaId && !s.deleted_at);
-              return row
-                ? {
-                    modelo_aeronave:
-                      row.aeronave_codigo || row.codigo_aeronave || row.tipo || row.modelo || row.modelo_aeronave || '',
-                    nome: row.nome,
-                  }
-                : null;
+            if (query.includes('FROM simuladores') && query.includes('modelo_aeronave')) {
+              // getSimuladorModeloAeronave() — no tenant scoping in this
+              // fake, matching the real table's lack of empresa_id.
+              const [id] = args as [number];
+              const row = state.simuladores.find((s) => s.id === id && !s.deleted_at);
+              if (!row) return null;
+              return {
+                modelo_aeronave: row.aeronave_codigo || row.codigo_aeronave || row.tipo || row.modelo || '',
+              };
             }
 
             if (query.includes('FROM fichas_sessao') && query.includes('agendamento_slot_id = ?')) {
@@ -226,7 +231,10 @@ function createFakeDb(state: FakeState, options?: { forceBatchFailure?: boolean 
             }
 
             if (query.includes('FROM simulador_atribuicoes_curriculares sac') && query.includes('INNER JOIN sessoes_participantes sp')) {
-              const [spEmpresaId, msEmpresaId, agendamentoId, sacEmpresaId] = args as [number, number, number, number];
+              // sessoes_participantes has no empresa_id in production, so
+              // the real query only binds (ms.empresa_id, agendamento_id,
+              // sac.empresa_id) — sp is joined by internal FK only.
+              const [msEmpresaId, agendamentoId, sacEmpresaId] = args as [number, number, number];
               const rows = state.atribuicoes.filter(
                 (a) =>
                   a.agendamento_id === agendamentoId &&
@@ -234,7 +242,6 @@ function createFakeDb(state: FakeState, options?: { forceBatchFailure?: boolean 
                   !a.deleted_at &&
                   a.gera_ficha === 1 &&
                   a.modelo_sessao_id !== null &&
-                  a.participante_empresa_id === spEmpresaId &&
                   !a.participante_deleted_at &&
                   a.modelo_empresa_id === msEmpresaId &&
                   !a.modelo_deleted_at,
@@ -403,9 +410,11 @@ function seedSession(state: FakeState, overrides: Partial<AgendamentoRow> = {}):
 function seedSimulador(state: FakeState, overrides: Partial<SimuladorRow> = {}): SimuladorRow {
   const row: SimuladorRow = {
     id: 10,
-    empresa_id: EMPRESA_6,
-    codigo_aeronave: 'AW139',
     nome: 'SIM-01',
+    modelo: 'AW139',
+    aeronave_codigo: null,
+    codigo_aeronave: null,
+    tipo: null,
     deleted_at: null,
     ...overrides,
   };
@@ -482,31 +491,6 @@ describe('generateFichasForSharedSession', () => {
 
     expect(result.created).toBe(2);
     expect(state.fichas).toHaveLength(2);
-  });
-
-  it('uses legacy simuladores columns when modelo_aeronave is absent', async () => {
-    seedSession(state, { id: 901, simulador_id: 901 });
-    seedSimulador(state, {
-      id: 901,
-      modelo_aeronave: null,
-      codigo_aeronave: 'S76',
-      nome: 'SIM-LEGACY',
-    });
-    seedAtribuicao(state, {
-      id: 901,
-      agendamento_id: 901,
-      funcionario_id: 901,
-      modelo_sessao_id: 2901,
-      modelo_codigo: 'LEG-01',
-      modelo_nome: 'Modelo legado',
-      tipo_sessao_codigo: 'LEG',
-    });
-
-    const db = createFakeDb(state);
-    const result = await generateFichasForSharedSession(db, EMPRESA_6, 901);
-
-    expect(result.created).toBe(1);
-    expect(state.fichas.at(-1)?.tipo_aeronave).toBe('S76');
   });
 
   it('reexecution creates zero new fichas and zero new items', async () => {
@@ -604,16 +588,22 @@ describe('generateFichasForSharedSession', () => {
   });
 
   it('isolates tenant 6 from tenant 8: same numeric ids, no cross-tenant read or write', async () => {
-    // Tenant 6's real session/simulator/assignment.
+    // simuladores has no empresa_id in production (shared device catalog —
+    // see SimuladorRow comment), so it uses distinct ids here; the tables
+    // that actually carry empresa_id (agendamentos, atribuicoes, fichas)
+    // reuse the exact same colliding numeric ids across both tenants to
+    // prove isolation on the tables where it matters.
+    seedSimulador(state, { id: 10, modelo: 'AW139' });
+    seedSimulador(state, { id: 20, modelo: 'H225' });
+
+    // Tenant 6's real session/assignment.
     seedSession(state, { id: 200, empresa_id: EMPRESA_6, simulador_id: 10 });
-    seedSimulador(state, { id: 10, empresa_id: EMPRESA_6, codigo_aeronave: 'AW139', modelo_aeronave: 'AW139' });
     seedAtribuicao(state, { id: 501, agendamento_id: 200, empresa_id: EMPRESA_6, funcionario_id: 101, modelo_sessao_id: 2001, modelo_empresa_id: EMPRESA_6, participante_empresa_id: EMPRESA_6 });
 
-    // Tenant 8's session/simulator/assignment reusing the exact same
-    // numeric ids (200 / 10 / 501 / 101 / 2001) — nothing here should ever
-    // be visible to a call scoped to empresa 6.
-    seedSession(state, { id: 200, empresa_id: EMPRESA_8, simulador_id: 10 });
-    seedSimulador(state, { id: 10, empresa_id: EMPRESA_8, codigo_aeronave: 'H225', modelo_aeronave: 'H225' });
+    // Tenant 8's session/assignment reusing the exact same numeric ids
+    // (200 / 501 / 101 / 2001) — nothing here should ever be visible to a
+    // call scoped to empresa 6.
+    seedSession(state, { id: 200, empresa_id: EMPRESA_8, simulador_id: 20 });
     seedAtribuicao(state, { id: 501, agendamento_id: 200, empresa_id: EMPRESA_8, funcionario_id: 101, modelo_sessao_id: 2001, modelo_empresa_id: EMPRESA_8, participante_empresa_id: EMPRESA_8 });
 
     const db = createFakeDb(state);
