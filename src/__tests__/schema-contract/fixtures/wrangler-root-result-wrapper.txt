@@ -1,0 +1,17 @@
+{
+  "result": [
+    {
+      "results": [
+        {
+          "name": "idx_demo",
+          "unique": 0,
+          "partial": 0
+        }
+      ],
+      "success": true,
+      "meta": {
+        "served_by": "v3-prod"
+      }
+    }
+  ]
+}

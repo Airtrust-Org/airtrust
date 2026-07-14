@@ -80,6 +80,20 @@ export interface SnapshotCommandResult<T> {
   error?: string;
 }
 
+interface WranglerMeta {
+  [key: string]: unknown;
+}
+
+interface WranglerCommandEnvelope {
+  success?: boolean;
+  results?: unknown[];
+  result?: unknown[];
+  error?: string;
+  errors?: unknown[];
+  messages?: unknown[];
+  meta?: WranglerMeta;
+}
+
 export interface SnapshotTable {
   table_info: SnapshotCommandResult<SnapshotTableInfoRow>;
   index_list: SnapshotCommandResult<SnapshotIndexListRow>;
@@ -108,6 +122,13 @@ export interface CheckSchemaResult {
 
 const MUTATING_SQL_PATTERN =
   /\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|REPLACE|TRUNCATE|VACUUM|ATTACH|DETACH|BEGIN|COMMIT|ROLLBACK)\b|PRAGMA\s+[A-Za-z0-9_]+\s*=/i;
+const JSON_DOCUMENT_START = /[[{]/g;
+const ALLOWED_REMOTE_QUERY_PATTERNS = [
+  /^PRAGMA\s+table_info\([A-Za-z0-9_]+\);?$/i,
+  /^PRAGMA\s+index_list\([A-Za-z0-9_]+\);?$/i,
+  /^PRAGMA\s+foreign_key_list\([A-Za-z0-9_]+\);?$/i,
+  /^SELECT\s+type,\s*name,\s*tbl_name,\s*sql\s+FROM\s+sqlite_master\s+WHERE\s+type\s*=\s*'table'\s+AND\s+name\s*=\s*'[A-Za-z0-9_]+'\s*;?$/i,
+];
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -139,6 +160,14 @@ export function assertReadOnlySql(sql: string): void {
   }
 }
 
+export function assertAllowedRemoteSchemaSql(sql: string): void {
+  assertReadOnlySql(sql);
+  const normalized = sql.trim().replace(/\s+/g, ' ');
+  if (!ALLOWED_REMOTE_QUERY_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    throw new Error(`SQL remoto fora da allowlist de inspeção de schema: ${sql}`);
+  }
+}
+
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map((item) => stableStringify(item)).join(',')}]`;
@@ -158,6 +187,169 @@ function stableStringify(value: unknown): string {
 
 function loadJson<T>(filePath: string): T {
   return JSON.parse(readFileSync(filePath, 'utf8')) as T;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function findJsonDocumentBounds(source: string, startIndex: number): { start: number; end: number } | null {
+  const opener = source[startIndex];
+  const closer = opener === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === opener) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closer) {
+      depth -= 1;
+      if (depth === 0) {
+        return { start: startIndex, end: index + 1 };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function extractSingleJsonDocument(source: string): unknown {
+  const trimmed = source.trim();
+  if (!trimmed) {
+    throw new Error('Saida do Wrangler vazia.');
+  }
+
+  const candidates: Array<{ parsed: unknown; start: number; end: number }> = [];
+  let cursor = 0;
+  while (cursor < source.length) {
+    JSON_DOCUMENT_START.lastIndex = cursor;
+    const match = JSON_DOCUMENT_START.exec(source);
+    const start = match?.index ?? -1;
+    if (start < 0) {
+      break;
+    }
+
+    const bounds = findJsonDocumentBounds(source, start);
+    if (!bounds) {
+      cursor = start + 1;
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(source.slice(bounds.start, bounds.end)) as unknown;
+      candidates.push({ parsed, start: bounds.start, end: bounds.end });
+      cursor = bounds.end;
+    } catch {
+      cursor = start + 1;
+    }
+  }
+
+  if (candidates.length === 0) {
+    throw new Error('Nenhum bloco JSON valido encontrado na saida do Wrangler.');
+  }
+
+  const uniqueCandidates = candidates.filter(
+    (candidate, index, all) =>
+      all.findIndex(
+        (other) =>
+          other.start === candidate.start &&
+          other.end === candidate.end &&
+          stableStringify(other.parsed) === stableStringify(candidate.parsed),
+      ) === index,
+  );
+
+  if (uniqueCandidates.length !== 1) {
+    throw new Error('Saida do Wrangler ambigua: mais de um bloco JSON valido encontrado.');
+  }
+
+  return uniqueCandidates[0].parsed;
+}
+
+function normalizeWranglerEnvelope<T>(entry: unknown): SnapshotCommandResult<T> {
+  if (!isPlainObject(entry)) {
+    throw new Error('Envelope do Wrangler invalido: esperado objeto.');
+  }
+
+  if (entry.success === false) {
+    const errorMessage =
+      typeof entry.error === 'string'
+        ? entry.error
+        : Array.isArray(entry.errors) && entry.errors.length > 0
+          ? stableStringify(entry.errors)
+          : 'Wrangler retornou erro remoto.';
+    throw new Error(errorMessage);
+  }
+
+  const resultsValue = Array.isArray(entry.results)
+    ? entry.results
+    : Array.isArray(entry.result)
+      ? entry.result
+      : undefined;
+
+  if (!resultsValue) {
+    throw new Error('Envelope do Wrangler invalido: results/result ausente ou nao-array.');
+  }
+
+  return {
+    ok: entry.success !== false,
+    results: resultsValue as T[],
+    error: typeof entry.error === 'string' ? entry.error : undefined,
+  };
+}
+
+function isEnvelopeLike(value: unknown): value is WranglerCommandEnvelope {
+  return (
+    isPlainObject(value) &&
+    ('success' in value || 'results' in value || 'result' in value || 'error' in value || 'errors' in value)
+  );
+}
+
+export function normalizeWranglerExecutePayload<T>(payload: unknown): SnapshotCommandResult<T>[] {
+  if (Array.isArray(payload)) {
+    return payload.map((entry) => normalizeWranglerEnvelope<T>(entry));
+  }
+
+  if (isPlainObject(payload)) {
+    if (Array.isArray(payload.result) && payload.result.every((entry) => isEnvelopeLike(entry))) {
+      return payload.result.map((entry) => normalizeWranglerEnvelope<T>(entry));
+    }
+
+    if (Array.isArray(payload.results) && payload.results.every((entry) => isEnvelopeLike(entry))) {
+      return payload.results.map((entry) => normalizeWranglerEnvelope<T>(entry));
+    }
+
+    if (Array.isArray(payload.results) || Array.isArray(payload.result) || payload.success === false) {
+      return [normalizeWranglerEnvelope<T>(payload)];
+    }
+  }
+
+  throw new Error('Payload do Wrangler invalido: raiz deve ser array ou objeto compatível.');
+}
+
+export function parseWranglerExecuteOutput<T>(output: string): SnapshotCommandResult<T>[] {
+  const payload = extractSingleJsonDocument(output);
+  return normalizeWranglerExecutePayload<T>(payload);
 }
 
 function normalizeTableForHash(tableName: string, snapshotTable: SnapshotTable) {
@@ -347,13 +539,13 @@ function evaluateContract(contract: SchemaContract, snapshot: StructuralSnapshot
   };
 }
 
-function execWranglerJson(workerDir: string, args: string[]): unknown {
+function execWranglerJson<T>(workerDir: string, args: string[]): SnapshotCommandResult<T>[] {
   const output = execFileSync('npx', args, {
     cwd: workerDir,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  return JSON.parse(output) as unknown;
+  return parseWranglerExecuteOutput<T>(output);
 }
 
 function sanitizeTableName(tableName: string): string {
@@ -364,8 +556,19 @@ function sanitizeTableName(tableName: string): string {
 }
 
 function runRemoteQuery(workerDir: string, dbName: string, envName: string, sql: string) {
-  assertReadOnlySql(sql);
-  return execWranglerJson(workerDir, ['wrangler', 'd1', 'execute', dbName, '--env', envName, '--remote', '--json', '--command', sql]) as SnapshotCommandResult<Record<string, unknown>>[];
+  assertAllowedRemoteSchemaSql(sql);
+  return execWranglerJson<Record<string, unknown>>(workerDir, [
+    'wrangler',
+    'd1',
+    'execute',
+    dbName,
+    '--env',
+    envName,
+    '--remote',
+    '--json',
+    '--command',
+    sql,
+  ]);
 }
 
 function readRemoteTable(workerDir: string, dbName: string, envName: string, tableName: string): SnapshotTable {

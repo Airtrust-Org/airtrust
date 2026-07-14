@@ -1,0 +1,19 @@
+▲ [WARNING] Using remote database
+The command may take some time.
+
+[
+  {
+    "results": [
+      {
+        "type": "table",
+        "name": "d1_migrations",
+        "tbl_name": "d1_migrations",
+        "sql": "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY)"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod"
+    }
+  }
+]

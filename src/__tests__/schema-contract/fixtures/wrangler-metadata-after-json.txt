@@ -1,0 +1,17 @@
+[
+  {
+    "results": [
+      {
+        "id": 1,
+        "name": "d1_migrations"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod"
+    }
+  }
+]
+
+Completed in 0.20s
+Rows read: 1
