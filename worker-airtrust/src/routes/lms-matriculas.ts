@@ -14,6 +14,7 @@ import { hasRole, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { createLmsQualificationOnCompletion } from '../services/lms-qualification';
+import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
   ensureMatriculaCycle,
   hasActiveMatriculaCycle,
@@ -798,7 +799,7 @@ app.get('/:id', async (c) => {
       SELECT m.*, c.titulo, c.tipo_conteudo, c.scorm_versao, c.scorm_launch_file, c.scorm_package_r2_prefix,
           c.scorm_mastery_score, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
           qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
-          qt.validade AS qualificacao_validade, h.id AS h5p_conteudo_id,
+          qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
         f.nome AS funcionario_nome
       FROM lms_matriculas m
       JOIN lms_cursos c ON c.id = m.curso_id
@@ -1367,7 +1368,8 @@ app.post('/scorm/commit', async (c) => {
         c.scorm_mastery_score, c.gerar_qualificacao_ao_concluir,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
-        qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade
+        qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
+        qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
       FROM lms_matriculas m
       JOIN lms_cursos c ON c.id = m.curso_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
@@ -1391,6 +1393,7 @@ app.post('/scorm/commit', async (c) => {
       qualificacao_nome: string | null;
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
+      qualificacao_vencimento_fim_mes: VencimentoMode | null;
     }>();
   const scormAtual = await db
     .prepare(
@@ -1682,9 +1685,13 @@ app.post('/scorm/commit', async (c) => {
   await syncMatriculaCycleFromMatricula(db, { matriculaId: d.matricula_id });
 
   // Gerar qualificação automática se concluído com sucesso
+  // GUARD: Se a matrícula já estava CONCLUÍDA antes deste commit SCORM,
+  // a qualificação e certificado já foram gerados. Pular para evitar duplicatas.
   let qualificacaoGerada: Record<string, unknown> | null = null;
   if (
     sucesso &&
+    statusAnterior !== 'CONCLUIDO' &&
+    !matricula.qualificacao_historico_id &&
     matricula.gerar_qualificacao_ao_concluir === 1 &&
     matricula.qualificacao_tipo_id &&
     dataConclusao
@@ -1701,6 +1708,7 @@ app.post('/scorm/commit', async (c) => {
         qualificacaoNome: matricula.qualificacao_nome ?? matricula.curso_titulo,
         qualificacaoCategoria: matricula.qualificacao_categoria,
         validade: matricula.qualificacao_validade,
+        vencimentoFimMes: matricula.qualificacao_vencimento_fim_mes,
         dataConclusao,
         existingHistoricoId: matricula.qualificacao_historico_id,
       });
@@ -1818,7 +1826,8 @@ app.post('/:id/finalizar', async (c) => {
               c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score,
               c.titulo AS curso_titulo,
               qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
-              qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade
+              qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
+              qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
          FROM lms_matriculas m
          JOIN lms_cursos c ON c.id = m.curso_id
          LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
@@ -1841,6 +1850,7 @@ app.post('/:id/finalizar', async (c) => {
       qualificacao_nome: string | null;
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
+      qualificacao_vencimento_fim_mes: VencimentoMode | null;
     }>();
 
   const scormAtual = await db
@@ -1949,6 +1959,7 @@ app.post('/:id/finalizar', async (c) => {
         qualificacaoNome: matricula.qualificacao_nome ?? matricula.curso_titulo,
         qualificacaoCategoria: matricula.qualificacao_categoria,
         validade: matricula.qualificacao_validade,
+        vencimentoFimMes: matricula.qualificacao_vencimento_fim_mes,
         dataConclusao,
         existingHistoricoId: matricula.qualificacao_historico_id,
       });
@@ -2032,7 +2043,8 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
               c.tipo_conteudo, c.scorm_mastery_score,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
-              qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade
+              qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
+              qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
          FROM lms_matriculas m
          JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
          LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.deleted_at IS NULL
@@ -2054,6 +2066,7 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
       qualificacao_codigo: string | null;
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
+      qualificacao_vencimento_fim_mes: VencimentoMode | null;
     }>();
   if (!existing) throw new ApiError('Matrícula não encontrada', 404);
 
@@ -2158,6 +2171,7 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
       qualificacaoNome: existing.qualificacao_nome ?? existing.curso_titulo,
       qualificacaoCategoria: existing.qualificacao_categoria,
       validade: existing.qualificacao_validade,
+      vencimentoFimMes: existing.qualificacao_vencimento_fim_mes,
       dataConclusao,
       existingHistoricoId: existing.qualificacao_historico_id,
     });
