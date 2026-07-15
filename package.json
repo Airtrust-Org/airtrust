@@ -112,7 +112,8 @@
     "deploy:all": "chmod +x scripts/build-and-deploy.sh && ./scripts/build-and-deploy.sh",
     "ops:guard": "bash scripts/audit-dangerous-ops.sh",
     "guard:duplicate-migrations": "node scripts/check-duplicate-migrations.mjs",
-    "guard:migrations": "npm run guard:duplicate-migrations",
+    "guard:no-go-migrations": "node scripts/check-no-go-migrations.mjs",
+    "guard:migrations": "npm run guard:duplicate-migrations && npm run guard:no-go-migrations",
     "guard:operational-sql-sources": "node scripts/check-operational-sql-sources.mjs",
     "validate:data-quality-sql": "bash scripts/validation/validate-data-quality-sql.sh",
     "data-quality:local": "bash scripts/validation/run-data-quality-local.sh",
@@ -157,6 +158,6 @@
     "check:demo-data": "bash scripts/ci-demo-data-check.sh && bash scripts/production-audit-check.sh",
     "lint:api-base": "bash scripts/guard-tenant-mutations.sh && chmod +x scripts/lint-api-base.sh && ./scripts/lint-api-base.sh",
     "guard:empresa-default1": "bash scripts/guard-no-new-empresa-default1.sh",
-    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:operational-sql-sources"
+    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources"
   }
 }

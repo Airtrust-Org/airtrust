@@ -2,6 +2,18 @@
 -- Estratégia: rename temp → delete → rename final (evita conflitos UNIQUE)
 -- Data: 2026-07-14
 -- Deletadas: 114 | Renomeadas: 370
+--
+-- NO_GO_MIGRATION_PRODUCAO
+-- Motivo: usa IDs de produção da empresa 6 capturados em 2026-07-14; auditoria
+-- read-only de 2026-07-15 confirmou que os 114 soft-deletes e as 370 renomeações
+-- (manobras + fichas_sessao_manobras + historico_notas_manobras) já refletem o
+-- estado final em produção — mas fora do ledger de migrations (d1_migrations não
+-- tem entrada para 0430-0435). Reexecutar este arquivo hoje é um no-op seguro
+-- (os WHERE ... AND deleted_at IS NULL / WHERE id = X AND codigo = '_TMP_X'
+-- não encontram linhas), mas isso pode deixar de ser verdade se o catálogo
+-- mudar antes de alguém rodar isto às cegas. Liberação requer: (1) reconciliar
+-- os IDs contra o catálogo canônico atual, (2) remover este marcador em PR
+-- revisado dedicado, nunca via override em runtime.
 
 -- ============================================================
 -- PASSO 0: Renomear TODAS para código temporário (evita conflito UNIQUE)

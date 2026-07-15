@@ -23,6 +23,8 @@ jobs:
         env:
           CI: true
           VITE_API_URL: http://127.0.0.1:8787
+      - name: Run migration NO_GO guard tests
+        run: node --test scripts/__tests__/migration-no-go-guard.test.mjs
       - name: Inventory legacy ESLint baseline
         run: npx eslint "./src/**/*.{js,jsx,ts,tsx}" --max-warnings=0 || true
       - name: Inventory legacy Prettier baseline
