@@ -518,7 +518,7 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
                 font-size: 14px;
                 font-weight: bold;
               ">Entendi ✓</button>
-            `;
+            `);
             
             document.body.appendChild(instrucoesModal);
             
