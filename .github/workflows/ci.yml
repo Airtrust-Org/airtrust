@@ -33,6 +33,30 @@ jobs:
       - name: Build
         run: npm run build
 
+  worker-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: cd worker-airtrust && npm ci
+
+      - name: Worker typecheck
+        run: cd worker-airtrust && npx tsc --noEmit
+
+      - name: Worker unit tests
+        run: cd worker-airtrust && npx vitest run
+
   lms-smoke:
     runs-on: ubuntu-latest
     steps:
