@@ -51,7 +51,7 @@ export async function createLmsQualificationOnCompletion(params: LmsQualificatio
 
   const validadeMeses =
     typeof params.validade === 'number' && params.validade > 0 ? params.validade : null;
-  const vencimentoFimMes = params.vencimentoFimMes === 0 ? 0 : 1;
+  const vencimentoFimMes = (params.vencimentoFimMes ?? 0) === 1 ? 1 : 0;
   const dataVencimento =
     validadeMeses != null
       ? calcularDataVencimento(params.dataConclusao, validadeMeses, vencimentoFimMes)
