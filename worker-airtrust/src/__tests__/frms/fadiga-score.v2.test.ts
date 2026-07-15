@@ -208,6 +208,125 @@ describe('calcularScoreFadiga (modelo VERDE/AMARELO/LARANJA/VERMELHO)', () => {
     expect(semQualidade.score_fadiga).toBeLessThan(qualidadeRegular.score_fadiga);
   });
 
+  it('KSS 1 continua representando maior alerta e KSS 9 maior sonolência', () => {
+    const maisAlerta = calcularScoreFadiga(
+      {
+        kss_score: 1,
+        horas_sono: 7,
+        qualidade_sono: 4,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    const maisSonolento = calcularScoreFadiga(
+      {
+        kss_score: 9,
+        horas_sono: 7,
+        qualidade_sono: 4,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    expect(maisAlerta.componentes.kss_norm).toBe(0);
+    expect(maisSonolento.componentes.kss_norm).toBe(1);
+    expect(maisSonolento.score_fadiga).toBeGreaterThan(maisAlerta.score_fadiga);
+  });
+
+  it('qualidade 5 continua sendo melhor e qualidade 1 continua sendo pior', () => {
+    const melhorQualidade = calcularScoreFadiga(
+      {
+        kss_score: 4,
+        horas_sono: 7,
+        qualidade_sono: 5,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    const piorQualidade = calcularScoreFadiga(
+      {
+        kss_score: 4,
+        horas_sono: 7,
+        qualidade_sono: 1,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    expect(melhorQualidade.componentes.qualidade_norm).toBe(0);
+    expect(piorQualidade.componentes.qualidade_norm).toBe(1);
+    expect(piorQualidade.score_fadiga).toBeGreaterThan(melhorQualidade.score_fadiga);
+  });
+
+  it('menos horas de sono nunca reduzem o score nas oito opções discretas do formulário', () => {
+    const horasOrdenadas = [9.5, 9, 8, 7, 6, 5, 4, 3.5];
+    const scores = horasOrdenadas.map((horas_sono) =>
+      calcularScoreFadiga(
+        {
+          kss_score: 3,
+          horas_sono,
+          qualidade_sono: 4,
+          sintomas_json: null,
+          apto: 1,
+          meds_ult_12h: 0,
+          alcool_ult_12h: 0,
+        },
+        cfg,
+      ).score_fadiga,
+    );
+
+    expect(scores).toEqual([9, 9, 9, 13, 18, 24, 29, 34]);
+    for (let i = 1; i < scores.length; i += 1) {
+      expect(scores[i]).toBeGreaterThanOrEqual(scores[i - 1]);
+    }
+  });
+
+  it('mantém o mesmo score para a mesma resposta semântica das escalas do formulário', () => {
+    const respostaAntes = calcularScoreFadiga(
+      {
+        kss_score: 3,
+        horas_sono: 7,
+        qualidade_sono: 4,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    const respostaDepois = calcularScoreFadiga(
+      {
+        kss_score: 3,
+        horas_sono: 7,
+        qualidade_sono: 4,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    expect(respostaDepois.score_fadiga).toBe(respostaAntes.score_fadiga);
+    expect(respostaDepois.nivel_fadiga).toBe(respostaAntes.nivel_fadiga);
+    expect(respostaDepois.status_operacional).toBe(respostaAntes.status_operacional);
+  });
+
   it('medicação sonolenta e sintomas informados aumentam o score', () => {
     const base = calcularScoreFadiga(
       {

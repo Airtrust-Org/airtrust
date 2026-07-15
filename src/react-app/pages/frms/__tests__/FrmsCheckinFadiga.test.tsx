@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsCheckinFadiga, {
   isFadigaCheckinSubmitReady,
@@ -24,12 +25,12 @@ const usePermissionsMock = vi.fn();
 let submitPending = false;
 
 vi.mock('react-router-dom', () => ({
-  Link: ({ to, children }: { to: string; children: any }) => <a href={to}>{children}</a>,
+  Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
   useNavigate: () => navigateMock,
 }));
 
 vi.mock('@/react-app/components/AppLayout', () => ({
-  default: ({ children }: { children: any }) => <div>{children}</div>,
+  default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock('@/react-app/components/PageHeader', () => ({
@@ -70,7 +71,7 @@ describe('FrmsCheckinFadiga helpers', () => {
   it('permite submissao com aptidao sim sem observacao', () => {
     expect(
       isFadigaCheckinSubmitReady({
-        sonoOpcao: 'ate8',
+        sonoOpcao: 'h8',
         wakeTime: '05:30',
         qualidadeSono: 4,
         kssScore: 3,
@@ -85,7 +86,7 @@ describe('FrmsCheckinFadiga helpers', () => {
   it('exige observacao quando aptidao nao ou coordenacao', () => {
     expect(
       isFadigaCheckinSubmitReady({
-        sonoOpcao: 'ate8',
+        sonoOpcao: 'h8',
         wakeTime: '05:30',
         qualidadeSono: 4,
         kssScore: 3,
@@ -98,7 +99,7 @@ describe('FrmsCheckinFadiga helpers', () => {
 
     expect(
       isFadigaCheckinSubmitReady({
-        sonoOpcao: 'ate8',
+        sonoOpcao: 'h8',
         wakeTime: '05:30',
         qualidadeSono: 4,
         kssScore: 3,
@@ -207,8 +208,13 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
   });
 
   it('não converte resposta individual ou shape inesperado em lista vazia', () => {
+    const individualPayload = {
+      date: '2026-06-05',
+      funcionario_id: 41,
+    } as unknown as Parameters<typeof normalizeFadigaPainelPayload>[0];
+
     expect(() =>
-      normalizeFadigaPainelPayload({ date: '2026-06-05', funcionario_id: 41 } as any, '2026-06-05'),
+      normalizeFadigaPainelPayload(individualPayload, '2026-06-05'),
     ).toThrow(/escopo individual/i);
 
     expect(() => normalizeFadigaPainelPayload({ date: '2026-06-05' }, '2026-06-05')).toThrow(
@@ -241,7 +247,7 @@ describe('FrmsCheckinFadiga UI', () => {
   });
 
   function preencherFormularioValido() {
-    fireEvent.click(screen.getByRole('radio', { name: '6-8h' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
@@ -266,14 +272,97 @@ describe('FrmsCheckinFadiga UI', () => {
   it('renderiza qualidade do sono com niveis e descritores claros', () => {
     render(<FrmsCheckinFadiga />);
 
-    expect(screen.getByLabelText('Qualidade 1 - Muito ruim')).toBeInTheDocument();
-    expect(screen.getByLabelText('Qualidade 2 - Ruim')).toBeInTheDocument();
-    expect(screen.getByLabelText('Qualidade 3 - Regular')).toBeInTheDocument();
+    expect(screen.getByLabelText('Qualidade 5 - Excelente')).toBeInTheDocument();
     expect(screen.getByLabelText('Qualidade 4 - Boa')).toBeInTheDocument();
-    expect(screen.getByLabelText('Qualidade 5 - Muito boa')).toBeInTheDocument();
+    expect(screen.getByLabelText('Qualidade 3 - Regular')).toBeInTheDocument();
+    expect(screen.getByLabelText('Qualidade 2 - Ruim')).toBeInTheDocument();
+    expect(screen.getByLabelText('Qualidade 1 - Péssima')).toBeInTheDocument();
+    expect(screen.getByText('Dormi muito bem; acordei descansado e recuperado.')).toBeInTheDocument();
+  });
+
+  it('renderiza as escalas graduais da melhor condição para a pior', () => {
+    render(<FrmsCheckinFadiga />);
+
+    const sonoFieldset = screen.getAllByText('Horas de sono nas últimas 24h')[1]?.closest('fieldset');
+    expect(sonoFieldset).toBeTruthy();
+    expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
+      'mais9',
+      'h9',
+      'h8',
+      'h7',
+      'h6',
+      'h5',
+      'h4',
+      'menos4',
+    ]);
+    expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual([
+      'Mais de 9 horas',
+      '9 horas',
+      '8 horas',
+      '7 horas',
+      '6 horas',
+      '5 horas',
+      '4 horas',
+      'Menos de 4 horas',
+    ]);
+
+    const qualidadeFieldset = screen.getAllByText('Qualidade do sono')[1]?.closest('fieldset');
+    expect(qualidadeFieldset).toBeTruthy();
+    expect(within(qualidadeFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
+      '5',
+      '4',
+      '3',
+      '2',
+      '1',
+    ]);
+
+    const kssFieldset = screen.getByText('Escala KSS (1-9)').closest('fieldset');
+    expect(kssFieldset).toBeTruthy();
+    expect(within(kssFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+      '8',
+      '9',
+    ]);
+    expect(screen.getByLabelText('KSS 1: Extremamente alerta')).toBeInTheDocument();
     expect(
-      screen.getByText('Dormi muito mal; acordei várias vezes ou quase não descansei.'),
+      screen.getByLabelText('KSS 9: Extremamente sonolento, com grande esforço para permanecer acordado'),
     ).toBeInTheDocument();
+
+    expect(within(sonoFieldset as HTMLElement).getAllByRole('radio')).toHaveLength(8);
+  });
+
+  it('mantem a ordem semântica original da pergunta de aptidão, sem tratar coordenação como escala ordinal', () => {
+    render(<FrmsCheckinFadiga />);
+
+    const aptidaoFieldset = screen.getByText('Você se sente em condição segura para iniciar a jornada?').closest('fieldset');
+    expect(aptidaoFieldset).toBeTruthy();
+    expect(within(aptidaoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
+      'sim',
+      'nao',
+      'coord',
+    ]);
+    expect(within(aptidaoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual([
+      'Sim, consigo iniciar a jornada com segurança',
+      'Não, preciso revisão com a coordenação',
+      'Preciso falar com a coordenação',
+    ]);
+  });
+
+  it('mantem o fluxo utilizável em viewport de celular', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 375 });
+    window.dispatchEvent(new Event('resize'));
+
+    render(<FrmsCheckinFadiga />);
+
+    expect(screen.getByRole('radio', { name: 'Mais de 9 horas' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '8 horas' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toHaveClass('w-full');
   });
 
   it('remove sintomas redundantes da UI', () => {
@@ -288,7 +377,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('envia payload minimo valido e compativel com null em meds/alcool', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '6-8h' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
@@ -309,7 +398,7 @@ describe('FrmsCheckinFadiga UI', () => {
     const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
 
     expect(payload.kss_score).toBe(3);
-    expect(payload.horas_sono_24h).toBe(7);
+    expect(payload.horas_sono_24h).toBe(8);
     expect(payload.qualidade_sono).toBe(4);
     expect(payload.wake_time).toBe('05:30');
     expect(payload.hora_acordou).toBe('05:30');
@@ -321,6 +410,72 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(payload).not.toHaveProperty('sintomas');
     expect(payload).not.toHaveProperty('horas_sono_48h');
     expect(payload.motivo_inaptidao).toBeUndefined();
+  });
+
+  it('envia o valor canônico correto para cada alternativa visual de sono', async () => {
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
+    fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
+    fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
+    fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
+    const submitButton = screen.getByRole('button', { name: 'Confirmar Check-in Diário' });
+
+    const casos = [
+      ['Mais de 9 horas', 9.5],
+      ['9 horas', 9],
+      ['8 horas', 8],
+      ['7 horas', 7],
+      ['6 horas', 6],
+      ['5 horas', 5],
+      ['4 horas', 4],
+      ['Menos de 4 horas', 3.5],
+    ] as const;
+
+    for (const [label, horas] of casos) {
+      mutateAsyncMock.mockClear();
+      fireEvent.click(screen.getByRole('radio', { name: label }));
+      fireEvent.click(submitButton);
+
+      await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+      const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+      expect(payload.horas_sono_24h).toBe(horas);
+    }
+  });
+
+  it('preserva os valores internos de qualidade do sono e KSS no payload', async () => {
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Mais de 9 horas' }));
+    fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
+    fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
+    const submitButton = screen.getByRole('button', { name: 'Confirmar Check-in Diário' });
+
+    const casos = [
+      ['Qualidade 5 - Excelente', 'KSS 1: Extremamente alerta', 5, 1],
+      [
+        'Qualidade 1 - Péssima',
+        'KSS 9: Extremamente sonolento, com grande esforço para permanecer acordado',
+        1,
+        9,
+      ],
+    ] as const;
+
+    for (const [qualidadeLabel, kssLabel, qualidadeEsperada, kssEsperado] of casos) {
+      mutateAsyncMock.mockClear();
+      fireEvent.click(screen.getByLabelText(qualidadeLabel));
+      fireEvent.click(screen.getByLabelText(kssLabel));
+      fireEvent.click(submitButton);
+
+      await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+      const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+      expect(payload.qualidade_sono).toBe(qualidadeEsperada);
+      expect(payload.kss_score).toBe(kssEsperado);
+    }
   });
 
   it('sucesso de instrutor fecha formulario e volta para home correta', async () => {
@@ -368,7 +523,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('mantem observacao obrigatoria para resposta nao apto', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '4-5h' }));
+    fireEvent.click(screen.getByRole('radio', { name: '5 horas' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 3 - Regular'));
     fireEvent.click(screen.getByLabelText('KSS 6: Alguns sinais de sonolência'));
@@ -426,7 +581,7 @@ describe('FrmsCheckinFadiga UI', () => {
 
     expect(screen.getByRole('status')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('radio', { name: '6-8h' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
@@ -441,7 +596,7 @@ describe('FrmsCheckinFadiga UI', () => {
     render(<FrmsCheckinFadiga />);
 
     // fieldset provides group semantics; native radio names create the radio group
-    expect(screen.getByRole('radio', { name: '6-8h' })).toHaveAttribute('name', 'sono-24h');
+    expect(screen.getByRole('radio', { name: '8 horas' })).toHaveAttribute('name', 'sono-24h');
     expect(screen.getByLabelText('Qualidade 3 - Regular')).toHaveAttribute('name', 'qualidade-sono');
     expect(screen.getByLabelText('KSS 5: Nem alerta nem sonolento')).toHaveAttribute('name', 'kss');
   });
@@ -455,7 +610,7 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(qualidadeLabel).toHaveClass('block');
     expect(qualidadeLabel).toHaveClass('w-full');
 
-    const kssInput = screen.getByLabelText('KSS 8: Sonolento, com esforço para ficar acordado');
+    const kssInput = screen.getByLabelText('KSS 8: Sonolento, com esforço para permanecer acordado');
     const kssLabel = kssInput.closest('label');
     expect(kssLabel).toBeTruthy();
     expect(kssLabel).toHaveClass('block');
@@ -490,7 +645,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('bloqueia envio quando horario e invalido e mostra mensagem clara', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '6-8h' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
     const wakeInput = screen.getByLabelText('Hora em que acordou');
     fireEvent.change(wakeInput, { target: { value: '2400' } });
     fireEvent.blur(wakeInput);
@@ -510,7 +665,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('submete 0630 como 06:30', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '6-8h' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0630' } });
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle,
   CheckCircle2,
   History,
   Users,
@@ -23,6 +22,8 @@ import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { toast } from 'sonner';
 import { resolveFadigaPostSavePath } from './frmsPostSaveNavigation';
+
+/* eslint-disable react-refresh/only-export-components */
 
 function getTodayLocalKey(): string {
   const now = new Date();
@@ -63,53 +64,68 @@ function statusOperacionalLabel(value: unknown): string {
   return STATUS_OPERACIONAL_LABEL[key] || key;
 }
 
-type SonoOpcao = 'menos4' | 'ate5' | 'ate6' | 'ate8' | 'mais8';
+type SonoOpcao = 'mais9' | 'h9' | 'h8' | 'h7' | 'h6' | 'h5' | 'h4' | 'menos4';
 
-const SONO_OPCOES: { key: SonoOpcao; label: string; horas: number; risco?: 'critico' | 'atencao' }[] = [
-  { key: 'menos4', label: '< 4h', horas: 3.5, risco: 'critico' },
-  { key: 'ate5', label: '4-5h', horas: 4.5, risco: 'atencao' },
-  { key: 'ate6', label: '5-6h', horas: 5.5 },
-  { key: 'ate8', label: '6-8h', horas: 7 },
-  { key: 'mais8', label: '> 8h', horas: 8.5 },
+type EscalaSeveridade = 'melhor' | 'boa' | 'intermediaria' | 'atencao' | 'critica';
+
+const SONO_OPCOES: {
+  key: SonoOpcao;
+  label: string;
+  horas: number;
+  severidade: EscalaSeveridade;
+}[] = [
+  { key: 'mais9', label: 'Mais de 9 horas', horas: 9.5, severidade: 'melhor' },
+  { key: 'h9', label: '9 horas', horas: 9, severidade: 'melhor' },
+  { key: 'h8', label: '8 horas', horas: 8, severidade: 'boa' },
+  { key: 'h7', label: '7 horas', horas: 7, severidade: 'intermediaria' },
+  { key: 'h6', label: '6 horas', horas: 6, severidade: 'atencao' },
+  { key: 'h5', label: '5 horas', horas: 5, severidade: 'critica' },
+  { key: 'h4', label: '4 horas', horas: 4, severidade: 'critica' },
+  { key: 'menos4', label: 'Menos de 4 horas', horas: 3.5, severidade: 'critica' },
 ];
 
 const KSS_OPCOES = [
   { value: 1, hint: 'Extremamente alerta' },
   { value: 2, hint: 'Muito alerta' },
   { value: 3, hint: 'Alerta' },
-  { value: 4, hint: 'Mais alerta que sonolento' },
+  { value: 4, hint: 'Mais alerta do que sonolento' },
   { value: 5, hint: 'Nem alerta nem sonolento' },
   { value: 6, hint: 'Alguns sinais de sonolência' },
-  { value: 7, hint: 'Sonolento, sem esforço para ficar acordado' },
-  { value: 8, hint: 'Sonolento, com esforço para ficar acordado' },
-  { value: 9, hint: 'Muito sonolento' },
+  { value: 7, hint: 'Sonolento, mas sem esforço para permanecer acordado' },
+  { value: 8, hint: 'Sonolento, com esforço para permanecer acordado' },
+  { value: 9, hint: 'Extremamente sonolento, com grande esforço para permanecer acordado' },
 ];
 
 const QUALIDADE_SONO_OPCOES = [
   {
-    value: 1,
-    title: 'Muito ruim',
-    description: 'Dormi muito mal; acordei várias vezes ou quase não descansei.',
-  },
-  {
-    value: 2,
-    title: 'Ruim',
-    description: 'Dormi mal; descanso insuficiente.',
-  },
-  {
-    value: 3,
-    title: 'Regular',
-    description: 'Dormi razoavelmente; descanso mediano.',
+    value: 5,
+    title: 'Excelente',
+    description: 'Dormi muito bem; acordei descansado e recuperado.',
+    severidade: 'melhor' as const,
   },
   {
     value: 4,
     title: 'Boa',
     description: 'Dormi bem; acordei relativamente descansado.',
+    severidade: 'boa' as const,
   },
   {
-    value: 5,
-    title: 'Muito boa',
-    description: 'Dormi muito bem; acordei descansado.',
+    value: 3,
+    title: 'Regular',
+    description: 'Dormi razoavelmente; descanso mediano.',
+    severidade: 'intermediaria' as const,
+  },
+  {
+    value: 2,
+    title: 'Ruim',
+    description: 'Dormi mal; descanso insuficiente.',
+    severidade: 'atencao' as const,
+  },
+  {
+    value: 1,
+    title: 'Péssima',
+    description: 'Dormi muito mal; acordei várias vezes ou quase não descansei.',
+    severidade: 'critica' as const,
   },
 ];
 
@@ -157,6 +173,21 @@ function fitChoiceToPayload(choice: FitForDutyChoice): boolean | null {
   if (choice === 'sim') return true;
   if (choice === 'nao' || choice === 'coord') return false;
   return null;
+}
+
+function selectedScaleClasses(severidade: EscalaSeveridade): string {
+  switch (severidade) {
+    case 'melhor':
+      return 'border-emerald-500 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200';
+    case 'boa':
+      return 'border-lime-500 bg-lime-50 text-lime-800 ring-1 ring-lime-200';
+    case 'intermediaria':
+      return 'border-amber-500 bg-amber-50 text-amber-800 ring-1 ring-amber-200';
+    case 'atencao':
+      return 'border-orange-500 bg-orange-50 text-orange-800 ring-1 ring-orange-200';
+    case 'critica':
+      return 'border-red-500 bg-red-50 text-red-800 ring-1 ring-red-200';
+  }
 }
 
 export function isFadigaCheckinSubmitReady(input: {
@@ -604,7 +635,7 @@ export default function FrmsCheckinFadiga() {
                     <legend className="mb-2 text-sm font-medium text-slate-700">
                       Horas de sono nas últimas 24h
                     </legend>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
                       {SONO_OPCOES.map((op) => {
                         const selected = sonoOpcao === op.key;
                         return (
@@ -612,11 +643,7 @@ export default function FrmsCheckinFadiga() {
                             key={op.key}
                             className={`relative flex min-h-11 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                               selected
-                                ? op.risco === 'critico'
-                                  ? 'border-red-400 bg-red-100 text-red-700'
-                                  : op.risco === 'atencao'
-                                    ? 'border-amber-400 bg-amber-100 text-amber-700'
-                                    : 'border-blue-400 bg-blue-100 text-blue-700'
+                                ? selectedScaleClasses(op.severidade)
                                 : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                             }`}
                           >
@@ -679,7 +706,7 @@ export default function FrmsCheckinFadiga() {
                               key={op.value}
                               className={`relative block w-full min-h-11 rounded-xl border px-3 py-2 text-left cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                                 selected
-                                  ? 'border-blue-500 bg-blue-50 text-blue-800 ring-1 ring-blue-200'
+                                  ? selectedScaleClasses(op.severidade)
                                   : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                               }`}
                             >
@@ -718,16 +745,22 @@ export default function FrmsCheckinFadiga() {
                   <div className="space-y-2">
                     {KSS_OPCOES.map((op) => {
                       const selected = kssScore === op.value;
+                      const severidade: EscalaSeveridade =
+                        op.value <= 2
+                          ? 'melhor'
+                          : op.value <= 4
+                            ? 'boa'
+                            : op.value <= 6
+                              ? 'intermediaria'
+                              : op.value <= 7
+                                ? 'atencao'
+                                : 'critica';
                       return (
                         <label
                           key={op.value}
                           className={`relative block w-full min-h-11 rounded-xl border px-4 py-3 text-left cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                             selected
-                              ? op.value >= 8
-                                ? 'border-red-400 bg-red-50 ring-1 ring-red-200'
-                                : op.value >= 7
-                                  ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-200'
-                                  : 'border-blue-500 bg-blue-50 ring-1 ring-blue-200'
+                              ? selectedScaleClasses(severidade)
                               : 'border-slate-200 bg-white hover:border-slate-300'
                           }`}
                         >
@@ -740,11 +773,7 @@ export default function FrmsCheckinFadiga() {
                             className={HIDDEN_RADIO_INPUT_CLASS}
                             aria-label={`KSS ${op.value}: ${op.hint}`}
                           />
-                          <span className={`block text-sm font-semibold ${
-                            selected
-                              ? op.value >= 8 ? 'text-red-800' : op.value >= 7 ? 'text-amber-800' : 'text-blue-800'
-                              : 'text-slate-800'
-                          }`}>
+                          <span className={`block text-sm font-semibold ${selected ? '' : 'text-slate-800'}`}>
                             {op.value} - {op.hint}
                           </span>
                         </label>
