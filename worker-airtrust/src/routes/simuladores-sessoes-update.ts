@@ -126,7 +126,7 @@ app.put('/sessoes/:id', async (c) => {
       (await getSimuladorModeloAeronave(c.env.DB, (a as any).simulador_id));
     let checksNormalizados: number[] = [];
     try {
-      checksNormalizados = await normalizeChecksSessao(c.env.DB, b.checks, modeloAeronaveSessao);
+      checksNormalizados = await normalizeChecksSessao(c.env.DB, b.checks, modeloAeronaveSessao, empresaId);
     } catch (error: any) {
       return c.json({ success: false, error: 'Checks inválidos' }, 400);
     }
@@ -274,8 +274,10 @@ app.put('/sessoes/:id', async (c) => {
         // Buscar template_ids dos modelos especiais
         const tplRes = await c.env.DB.prepare(
           `SELECT id, codigo FROM modelos_sessao
-           WHERE codigo IN ('CRED-EXA') AND deleted_at IS NULL`,
-        ).all();
+           WHERE codigo IN ('CRED-EXA') AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+          .bind(empresaId)
+          .all();
         const tplMap = new Map(
           (tplRes.results || []).map((r: any) => [String(r.codigo), r.id as number]),
         );

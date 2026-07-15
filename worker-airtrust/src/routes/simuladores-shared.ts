@@ -462,7 +462,16 @@ export async function resolveTemplateIdSessao(
 ): Promise<number | null> {
   const explicit = Number(params.templateId || params.modeloSessaoId);
   if (Number.isInteger(explicit) && explicit > 0) {
-    return explicit;
+    const explicitRow = await db
+      .prepare(`SELECT id FROM modelos_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+      .bind(explicit, params.empresaId)
+      .first<{ id: number }>();
+    // Fail-open by design: an explicit id that doesn't belong to this tenant
+    // or is archived falls through to the by-name resolution below instead
+    // of trusting client-supplied cross-tenant input.
+    if (explicitRow?.id) {
+      return explicit;
+    }
   }
 
   const temaSessao = String(params.temaSessao || '').trim();
@@ -507,6 +516,7 @@ export async function normalizeChecksSessao(
   db: D1Database,
   checkIds: unknown,
   modeloAeronave: unknown,
+  empresaId?: number,
 ): Promise<number[]> {
   const idsUnicos = Array.isArray(checkIds)
     ? Array.from(
@@ -520,7 +530,7 @@ export async function normalizeChecksSessao(
     return [];
   }
 
-  const checksEncontrados = await listarTiposCheckPorIds(db, idsUnicos);
+  const checksEncontrados = await listarTiposCheckPorIds(db, idsUnicos, empresaId);
   if (checksEncontrados.length !== idsUnicos.length) {
     const idsValidos = new Set(checksEncontrados.map((check) => Number(check.id)));
     const idsInvalidos = idsUnicos.filter((id) => !idsValidos.has(id));
