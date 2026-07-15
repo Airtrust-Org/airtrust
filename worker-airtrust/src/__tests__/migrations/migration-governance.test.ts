@@ -148,7 +148,9 @@ describe('migration governance', () => {
     const regularPrefixes = numericPrefixes.filter((prefix) => prefix !== '9999');
     const highPrefixes = files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file));
 
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(425);
+    // Ratchet raised 2026-07-15: 0426-0435 landed via PRs #320/#325/#326
+    // (SK76/AW139 nomenclature, maneuver catalog cleanup, PTO Rev.10 names).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(435);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
