@@ -78,7 +78,12 @@ describe('Wave 2 — empresa_id hardening', () => {
         matricula TEXT,
         cargo TEXT,
         email TEXT,
-        codigo_anac TEXT
+        codigo_anac TEXT,
+        guerra TEXT,
+        funcao TEXT,
+        aeronave TEXT,
+        modelo_aeronave_id TEXT,
+        ativo INTEGER DEFAULT 1
       );
 
       CREATE TABLE qualificacoes_tipos (
@@ -96,7 +101,9 @@ describe('Wave 2 — empresa_id hardening', () => {
         empresa_id INTEGER,
         deleted_at TEXT,
         tipo_sessao TEXT,
-        nome TEXT
+        nome TEXT,
+        data TEXT,
+        status TEXT
       );
 
       CREATE TABLE lms_matriculas (
