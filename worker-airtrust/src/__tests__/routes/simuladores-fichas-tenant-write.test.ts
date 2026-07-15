@@ -68,6 +68,32 @@ function createDbMock(options?: {
           if (query.includes('SELECT COUNT(DISTINCT id) AS total') && query.includes('FROM funcionarios')) {
             return { total: options?.invalidTenantLink ? 1 : 2 };
           }
+          // getFichaWithInstructorMeta() (introduced in PR #307, simuladores-fichas.ts
+          // and simuladores-fichas-acoes.ts) joins fichas_sessao_instrutor_meta instead
+          // of the plain SELECT below. Match on the stable tenant-scoped WHERE clause
+          // rather than the whole SQL text, since column/JOIN formatting is expected
+          // to keep evolving independently of this fixture.
+          if (
+            query.includes('FROM fichas_sessao fs') &&
+            query.includes('WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL')
+          ) {
+            return {
+              id: 901,
+              uuid: 'fs-901',
+              colaborador_id_aluno: 10,
+              instrutor_id: 11,
+              tipo_sessao: 'PER',
+              status: 'AGUARDANDO_ASSINATURA_ALUNO',
+              empresa_id: Number(args[1] || 6),
+              deleted_at: null,
+              equipamento_utilizado: null,
+              dispositivo_identificacao: null,
+              assento_instrucao_utilizado: null,
+              assinatura_aluno_timestamp: null,
+              assinatura_instrutor_timestamp: null,
+              resultado_final: null,
+            };
+          }
           if (query.includes('SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL')) {
             return {
               id: 901,
