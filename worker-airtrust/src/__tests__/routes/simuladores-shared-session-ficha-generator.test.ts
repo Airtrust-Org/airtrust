@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const MODELO_SEM_MANOBRAS = 9999;
+const cryptoApi = globalThis as typeof globalThis & {
+  crypto: Crypto & { randomUUID: () => string };
+};
 
 vi.mock('../../routes/simuladores-shared-session-fichas', async () => {
   const actual = await vi.importActual<typeof import('../../routes/simuladores-shared-session-fichas')>(
@@ -151,13 +154,19 @@ function restoreState(target: FakeState, snapshot: FakeState) {
 
 type Exec = () => Promise<unknown>;
 
+interface FakeDbOptions {
+  forceBatchFailure?: boolean;
+  beforeBatchExec?: (batchNumber: number) => Promise<void> | void;
+}
+
 /**
  * Minimal, purpose-built D1 fake for this module's exact known queries —
  * not a general SQL engine. Stateful across calls within a test so
  * idempotency / reexecution / cross-tenant isolation can be asserted for
  * real, unlike a stateless per-call mock.
  */
-function createFakeDb(state: FakeState, options?: { forceBatchFailure?: boolean }) {
+function createFakeDb(state: FakeState, options?: FakeDbOptions) {
+  let batchCount = 0;
   const db = {
     prepare(query: string) {
       const prepared = {
@@ -372,6 +381,10 @@ function createFakeDb(state: FakeState, options?: { forceBatchFailure?: boolean 
     batch: async (statements: Array<{ __exec: Exec }>) => {
       const snapshot = cloneState(state);
       try {
+        batchCount += 1;
+        if (options?.beforeBatchExec) {
+          await options.beforeBatchExec(batchCount);
+        }
         const results = [];
         for (const statement of statements) {
           results.push(await statement.__exec());
@@ -541,6 +554,88 @@ describe('generateFichasForSharedSession', () => {
     expect(state.fichas.some((f) => f.atribuicao_curricular_id === 502)).toBe(true);
   });
 
+  it('creates a new active ficha when the previous one for the same canonical key is soft-deleted', async () => {
+    seedSession(state);
+    seedSimulador(state);
+    const atribuicao = seedAtribuicao(state, { id: 501, funcionario_id: 101, modelo_sessao_id: 2001 });
+
+    state.fichas.push({
+      id: 900,
+      uuid: 'soft-deleted-uuid',
+      agendamento_slot_id: 109,
+      colaborador_id_aluno: atribuicao.funcionario_id,
+      instrutor_id: 501,
+      tipo_sessao: 'PER',
+      tipo_aeronave: 'AW139',
+      data_sessao: '2026-07-10',
+      status: 'CANCELADA',
+      template_id: atribuicao.modelo_sessao_id!,
+      empresa_id: EMPRESA_6,
+      atribuicao_curricular_id: atribuicao.id,
+      segmento_atribuicao_id: null,
+      deleted_at: '2026-07-14T10:00:00Z',
+    });
+
+    const randomUuidSpy = vi
+      .spyOn(cryptoApi.crypto, 'randomUUID')
+      .mockReturnValueOnce('new-active-uuid');
+
+    try {
+      const result = await generateFichasForSharedSession(createFakeDb(state), EMPRESA_6, 109);
+
+      expect(result.created).toBe(1);
+      expect(result.skipped).toBe(0);
+      expect(state.fichas).toHaveLength(2);
+
+      const activeFichas = state.fichas.filter(
+        (f) =>
+          f.empresa_id === EMPRESA_6 &&
+          f.agendamento_slot_id === 109 &&
+          f.colaborador_id_aluno === atribuicao.funcionario_id &&
+          f.template_id === atribuicao.modelo_sessao_id &&
+          f.atribuicao_curricular_id === atribuicao.id &&
+          !f.deleted_at,
+      );
+
+      expect(activeFichas).toHaveLength(1);
+      expect(activeFichas[0]?.uuid).toBe('new-active-uuid');
+      expect(activeFichas[0]?.uuid).not.toBe('soft-deleted-uuid');
+    } finally {
+      randomUuidSpy.mockRestore();
+    }
+  });
+
+  it('does not treat a soft-deleted ficha as an active match on reexecution', async () => {
+    seedSession(state);
+    seedSimulador(state);
+    const atribuicao = seedAtribuicao(state, { id: 501, funcionario_id: 101, modelo_sessao_id: 2001 });
+
+    state.fichas.push({
+      id: 900,
+      uuid: 'old-soft-deleted-uuid',
+      agendamento_slot_id: 109,
+      colaborador_id_aluno: atribuicao.funcionario_id,
+      instrutor_id: 501,
+      tipo_sessao: 'PER',
+      tipo_aeronave: 'AW139',
+      data_sessao: '2026-07-10',
+      status: 'CANCELADA',
+      template_id: atribuicao.modelo_sessao_id!,
+      empresa_id: EMPRESA_6,
+      atribuicao_curricular_id: atribuicao.id,
+      segmento_atribuicao_id: null,
+      deleted_at: '2026-07-14T10:00:00Z',
+    });
+
+    const result = await generateFichasForSharedSession(createFakeDb(state), EMPRESA_6, 109);
+
+    expect(result.created).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(
+      result.details.find((detail) => detail.atribuicao_curricular_id === atribuicao.id)?.ficha_id,
+    ).not.toBe(900);
+  });
+
   it('generates no fichas when gera_ficha = 0', async () => {
     seedSession(state);
     seedSimulador(state);
@@ -582,6 +677,54 @@ describe('generateFichasForSharedSession', () => {
     await expect(generateFichasForSharedSession(db, EMPRESA_6, 109)).rejects.toThrow('simulated D1 write failure');
     expect(state.fichas).toHaveLength(0);
     expect(state.fichaManobras).toHaveLength(0);
+  });
+
+  it('keeps only one active ficha after two concurrent executions for the same canonical key', async () => {
+    seedSession(state);
+    seedSimulador(state);
+    seedAtribuicao(state, { id: 501, funcionario_id: 101, modelo_sessao_id: 2001 });
+
+    const gate: { release: null | (() => void) } = { release: null };
+    let enteredBatches = 0;
+    const batchGate = new Promise<void>((resolve) => {
+      gate.release = resolve;
+    });
+
+    const db = createFakeDb(state, {
+      beforeBatchExec: async () => {
+        enteredBatches += 1;
+        if (enteredBatches === 1) {
+          await batchGate;
+        }
+      },
+    });
+
+    const firstRun = generateFichasForSharedSession(db, EMPRESA_6, 109);
+    const secondRun = generateFichasForSharedSession(db, EMPRESA_6, 109);
+    while (enteredBatches < 2) {
+      await Promise.resolve();
+    }
+    const release = gate.release;
+    if (!release) {
+      throw new Error('batch gate not initialized');
+    }
+    release();
+
+    const [firstResult, secondResult] = await Promise.all([firstRun, secondRun]);
+
+    const activeFichas = state.fichas.filter(
+      (f) =>
+        f.empresa_id === EMPRESA_6 &&
+        f.agendamento_slot_id === 109 &&
+        f.colaborador_id_aluno === 101 &&
+        f.template_id === 2001 &&
+        f.atribuicao_curricular_id === 501 &&
+        !f.deleted_at,
+    );
+
+    expect(activeFichas).toHaveLength(1);
+    expect(firstResult.created + secondResult.created).toBe(1);
+    expect(firstResult.skipped + secondResult.skipped).toBe(1);
   });
 
   it('isolates tenant 6 from tenant 8: same numeric ids, no cross-tenant read or write', async () => {
