@@ -97,7 +97,7 @@
     "start": "concurrently --names \"worker,vite\" --prefix-colors \"cyan,green\" \"npm run dev:worker:local\" \"npm run dev\"",
     "prebuild": "echo '\n⚠️  BANCO DE PRODUÇÃO ATIVO — alterações afetam usuários reais!\n'",
     "build": "PATH=/opt/homebrew/opt/node@22/bin:$PATH vite build && bash scripts/remove-duplicate-build-assets.sh",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "typecheck:worker": "cd worker-airtrust && npx tsc --noEmit",
     "build:clean": "rm -rf dist node_modules/.vite .vite && PATH=/opt/homebrew/opt/node@22/bin:$PATH vite build && bash scripts/remove-duplicate-build-assets.sh",
     "preview": "npm run build && vite preview --port 3000 --host",

@@ -142,11 +142,9 @@ export const Header: React.FC = () => {
             )}
           </svg>
         </button>
-      </div>
-
     </header>
 
-      {/* Mobile Menu Overlay */}
+    {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <>
           {/* Backdrop */}
