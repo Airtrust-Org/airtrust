@@ -117,9 +117,17 @@ Migrations are numbered sequentially (`0001_...sql` through `038x_...sql`). The 
 # Local
 wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.dev.toml --local --file=worker-airtrust/migrations/XXXX_name.sql
 
-# Remote (requires explicit authorization)
-npx wrangler d1 execute airtrust-db --env production --remote --file=worker-airtrust/migrations/XXXX_name.sql
+# Remote (requires explicit authorization) — use the reviewed wrapper, not raw wrangler.
+# It enforces clean main/origin parity and unconditionally refuses any migration
+# marked NO_GO_MIGRATION_PRODUCAO inside the SQL file (see scripts/apply-migration-production.sh).
+AIRTRUST_ALLOW_PROD_DB_WRITE=YES \
+AIRTRUST_CONFIRM_PROD_DB_WRITE="I understand this may modify production data" \
+bash scripts/apply-migration-production.sh worker-airtrust/migrations/XXXX_name.sql
 ```
+
+If a migration file contains a `-- NO_GO_MIGRATION_PRODUCAO` comment, it cannot be applied to
+production through this wrapper under any flag. Lifting the block requires removing the marker
+in a reviewed PR — never a runtime override.
 
 If a schema change is needed but migration hasn't been authorized, implement the feature using existing schema and document the limitation.
 
