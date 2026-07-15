@@ -23,6 +23,56 @@ describe('frms-fadiga-checkin schema', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('aceita todos os novos valores discretos de sono sem quebrar o contrato', () => {
+    const novosValores = [9.5, 9, 8, 7, 6, 5, 4, 3.5];
+
+    for (const horas_sono_24h of novosValores) {
+      const parsed = CheckinCreateSchema.safeParse({
+        reference_date: '2026-05-29',
+        data_checkin: '2026-05-29',
+        wake_time: '05:30',
+        hora_acordou: '05:30',
+        horas_sono_24h,
+        qualidade_sono: 5,
+        kss_score: 1,
+        subjective_fatigue_level: 1,
+        sleepiness_level: 1,
+        fit_for_duty: true,
+        meds_ult_12h: null,
+        alcool_ult_12h: null,
+        aceite_termos: true,
+        aceite_privacidade: true,
+      });
+
+      expect(parsed.success).toBe(true);
+    }
+  });
+
+  it('continua aceitando valores históricos de sono já registrados', () => {
+    const valoresHistoricos = [8.5, 7, 5.5, 4.5, 3.5];
+
+    for (const horas_sono_24h of valoresHistoricos) {
+      const parsed = CheckinCreateSchema.safeParse({
+        reference_date: '2026-05-29',
+        data_checkin: '2026-05-29',
+        wake_time: '05:30',
+        hora_acordou: '05:30',
+        horas_sono_24h,
+        qualidade_sono: 4,
+        kss_score: 3,
+        subjective_fatigue_level: 3,
+        sleepiness_level: 3,
+        fit_for_duty: true,
+        meds_ult_12h: null,
+        alcool_ult_12h: null,
+        aceite_termos: true,
+        aceite_privacidade: true,
+      });
+
+      expect(parsed.success).toBe(true);
+    }
+  });
+
   it('rejeita inaptidao sem motivo', () => {
     const parsed = CheckinCreateSchema.safeParse({
       data_checkin: '2026-05-29',
