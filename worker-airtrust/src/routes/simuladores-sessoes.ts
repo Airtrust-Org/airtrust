@@ -704,7 +704,7 @@ app.post('/sessoes', async (c) => {
     });
     let checksNormalizados: number[] = [];
     try {
-      checksNormalizados = await normalizeChecksSessao(c.env.DB, checks, modeloAeronaveSessao);
+      checksNormalizados = await normalizeChecksSessao(c.env.DB, checks, modeloAeronaveSessao, empresaId);
     } catch (error: any) {
       return c.json({ success: false, error: 'Checks inválidos' }, 400);
     }
@@ -1031,8 +1031,10 @@ app.post('/sessoes', async (c) => {
 
         const tplRes = await c.env.DB.prepare(
           `SELECT id, codigo FROM modelos_sessao
-           WHERE codigo IN ('CRED-EXA') AND deleted_at IS NULL`,
-        ).all();
+           WHERE codigo IN ('CRED-EXA') AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+          .bind(empresaId)
+          .all();
         const tplMap = new Map(
           (tplRes.results || []).map((r: any) => [String(r.codigo), r.id as number]),
         );
