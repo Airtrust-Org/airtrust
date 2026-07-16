@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+
 mode="${AIRTRUST_CONTROLLED_MODE:-}"
 target="${AIRTRUST_CONTROLLED_TARGET:-}"
 approval="${AIRTRUST_CONTROLLED_APPROVAL:-}"
@@ -98,6 +101,50 @@ target_looks_like_production() {
   printf '%s' "$evidence" | LC_ALL=C grep -Eiq '(^|[^a-z])(prod|production|live)([^a-z]|$)'
 }
 
+# Defense in depth: this gate must not be usable as an alternate path to apply
+# a migration explicitly marked NO_GO_MIGRATION_PRODUCAO (or any other file
+# under worker-airtrust/migrations/) that the ledger flags as blocked. This
+# consults the SAME single source of truth as apply-migration-production.sh
+# (scripts/migration-no-go-lib.mjs), regardless of which "mode" is declared.
+check_safe_command_for_no_go_migrations() {
+  [[ -n "$safe_command" ]] || return 0
+
+  local token candidate resolved verdict found_any=0
+
+  while IFS= read -r token; do
+    [[ -n "$token" ]] || continue
+    found_any=1
+
+    if [[ "$token" == worker-airtrust/migrations/* || "$token" == /* ]]; then
+      candidate="$token"
+    else
+      candidate="worker-airtrust/migrations/$token"
+    fi
+
+    if [[ "$candidate" == /* ]]; then
+      resolved="$candidate"
+    else
+      resolved="$repo_root/$candidate"
+    fi
+
+    if [[ ! -f "$resolved" ]]; then
+      # Referenced migration file does not exist in this worktree — cannot
+      # confirm it is safe. Fail closed rather than silently allowing it.
+      add_reason "referenced_migration_file_not_found:$token"
+      continue
+    fi
+
+    verdict="$(node "$repo_root/scripts/check-single-migration-no-go.mjs" "$resolved" 2>/dev/null || echo "CHECK_FAILED")"
+    if [[ "$verdict" == "BLOCKED" ]]; then
+      add_reason "no_go_migration_referenced:$token"
+    elif [[ "$verdict" != "OK" ]]; then
+      add_reason "no_go_migration_check_failed:$token"
+    fi
+  done < <(printf '%s' "$safe_command" | grep -Eo '([A-Za-z0-9_./-]*/)?[0-9]{4}_[A-Za-z0-9_-]+\.sql' || true)
+
+  return 0
+}
+
 [[ -n "$mode" ]] || add_reason "mode_not_declared"
 
 if [[ -z "$target" ]]; then
@@ -120,6 +167,8 @@ else
   if command_contains_remote_d1 && [[ "$allow_remote_d1" != "YES" ]]; then
     add_reason "remote_d1_not_authorized"
   fi
+
+  check_safe_command_for_no_go_migrations
 fi
 
 [[ "$safe_command_reviewed" == "YES" ]] || add_reason "safe_command_not_reviewed"
