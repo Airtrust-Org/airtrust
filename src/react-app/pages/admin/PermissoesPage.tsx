@@ -59,13 +59,13 @@ export default function PermissoesPage() {
     try {
       const res = await fetchWithAuth('/api/admin/perfis/permissoes');
       if (!res.ok) {
-        const err = await res.json<{ error?: string }>().catch(() => ({}));
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(err?.error ?? `Erro ${res.status}`);
       }
-      const json = await res.json<{ success: boolean; data: PermissaoRow[] }>();
+      const json = (await res.json()) as { success: boolean; data: PermissaoRow[] };
       const map = new Map<PermKey, boolean>();
       for (const p of json.data ?? []) {
-        const key: PermKey = `${p.perfil}:${p.modulo}:${p.acao}`;
+        const key = `${p.perfil}:${p.modulo}:${p.acao}` as PermKey;
         map.set(key, p.permitido === 1);
       }
       setPermissoes(map);
@@ -84,7 +84,7 @@ export default function PermissoesPage() {
 
   // ─── Alternar permissão localmente ─────────────────────────────────────
   const toggle = (perfil: Perfil, modulo: Modulo, acao: Acao) => {
-    const key: PermKey = `${perfil}:${modulo}:${acao}`;
+    const key = `${perfil}:${modulo}:${acao}` as PermKey;
     setPermissoes((prev) => {
       const next = new Map(prev);
       // Se não existe entrada, assume true como padrão (a maioria é permitida)
@@ -103,7 +103,7 @@ export default function PermissoesPage() {
   }
 
   function getPermissao(perfil: Perfil, modulo: Modulo, acao: Acao): boolean {
-    const key: PermKey = `${perfil}:${modulo}:${acao}`;
+    const key = `${perfil}:${modulo}:${acao}` as PermKey;
     return permissoes.has(key) ? permissoes.get(key)! : getDefault(perfil, modulo, acao);
   }
 
@@ -132,7 +132,7 @@ export default function PermissoesPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json<{ error?: string }>().catch(() => ({}));
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(err?.error ?? `Erro ${res.status}`);
       }
 

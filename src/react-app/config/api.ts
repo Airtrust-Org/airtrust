@@ -332,7 +332,7 @@ export async function fetchWithAuth(
   url: string,
   options: RequestInit = {},
   retry: boolean = false,
-): Promise<Response> {
+): Promise<any> {
   const token = getAccessToken();
   const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
 

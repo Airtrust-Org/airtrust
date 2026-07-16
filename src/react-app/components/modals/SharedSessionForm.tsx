@@ -33,6 +33,8 @@ interface Funcionario {
   id: number;
   nome: string;
   matricula: string;
+  funcao?: string;
+  status?: string;
 }
 
 interface ModeloSessao {
@@ -469,11 +471,11 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           }
 
           restoredParticipants[index] = {
-            funcionario: known || {
+            funcionario: known || ({
               id: Number(participant.funcionario_id),
               nome: participant.funcionario_nome || `Funcionário ${participant.funcionario_id}`,
               matricula: participant.matricula || '',
-            },
+            } as Funcionario),
             cumpre_treinamento: cumpre,
             modelo_sessao_id: modeloId,
             gera_ficha: geraFicha,
@@ -627,13 +629,11 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           id: segment.id || undefined,
           inicio: segment.inicio,
           fim: segment.fim,
-          funcoes: segment.participantes.map((role) => ({
+          participantes: segment.participantes.map((role) => ({
             funcionario_id: role.funcionario_id,
             funcao: role.funcao,
+            cumpre_treinamento: participants.find(p => p.funcionario?.id === role.funcionario_id)?.cumpre_treinamento || false
           })),
-          atribuicao_funcionario_ids: participants
-             .filter(p => p.cumpre_treinamento)
-             .map(p => p.funcionario!.id),
           finalidade_codigo: 'OUTRO',
         })),
       };
@@ -787,7 +787,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           </div>
           <FuncionarioCombobox
             onSelect={(selected) => updateParticipant(index as 0 | 1, { funcionario: selected as Funcionario | null })}
-            selected={participant.funcionario}
+            selected={participant.funcionario as any}
             placeholder={`Buscar tripulante ${index + 1}...`}
             required
             disabled={Boolean(editSessionId) || (Boolean(conversionSeed) && index === 0)}

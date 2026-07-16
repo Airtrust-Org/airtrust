@@ -1,9 +1,9 @@
-export * from './Button';
-export * from './LoadingSpinner';
+export * from '../UI/Button';
+export { Spinner as LoadingSpinner } from '../UI/Spinner';
 export * from './ErrorMessage';
-export * from './Badge';
-export * from './Card';
-export * from './DataTable';
+export * from '../UI/Badge';
+export * from '../UI/Card';
+export * from '../UI/DataTable';
 export * from '../modals/BaseModal';
 export * from './Breadcrumbs';
 export * from './WizardModal';

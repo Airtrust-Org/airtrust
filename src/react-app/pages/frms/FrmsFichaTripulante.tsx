@@ -344,6 +344,11 @@ export default function FrmsFichaTripulante() {
     rolling: FrmsAcumuloRolling | null;
     mensal: Record<string, number> | null;
     limites: Record<string, number> | null;
+    effectiveness?: {
+      effectiveness_pct: number;
+      effectiveness_nivel: string;
+      effectiveness_componentes: unknown;
+    };
   } | null;
   const alertasMes: FrmsAlertaRow[] = (alertasMesRaw as FrmsAlertaRow[] | null) ?? [];
   const rolling = acumulo?.rolling;
