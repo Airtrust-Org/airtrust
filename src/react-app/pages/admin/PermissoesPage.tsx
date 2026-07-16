@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { ShieldCheck, Save, RefreshCw } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { fetchWithAuth } from '@/react-app/config/api';
+import { parseErrorPayload, parseJsonResponse } from '@/react-app/lib/parseJsonResponse';
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -45,6 +46,32 @@ const PERFIS: { value: Perfil; label: string; color: string }[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Validação runtime do payload (fronteira da API — nunca confiar em `any`)
+// ---------------------------------------------------------------------------
+function isPermissaoRow(value: unknown): value is PermissaoRow {
+  if (typeof value !== 'object' || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.perfil === 'string' &&
+    typeof row.modulo === 'string' &&
+    typeof row.acao === 'string' &&
+    (row.permitido === 0 || row.permitido === 1)
+  );
+}
+
+function isPermissoesResponse(
+  data: unknown,
+): data is { success: boolean; data: PermissaoRow[] } {
+  if (typeof data !== 'object' || data === null) return false;
+  const body = data as Record<string, unknown>;
+  return (
+    typeof body.success === 'boolean' &&
+    Array.isArray(body.data) &&
+    body.data.every(isPermissaoRow)
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Página
 // ---------------------------------------------------------------------------
 export default function PermissoesPage() {
@@ -59,10 +86,10 @@ export default function PermissoesPage() {
     try {
       const res = await fetchWithAuth('/api/admin/perfis/permissoes');
       if (!res.ok) {
-        const err = await res.json<{ error?: string }>().catch(() => ({}));
-        throw new Error(err?.error ?? `Erro ${res.status}`);
+        const err = await parseErrorPayload(res);
+        throw new Error(err.error ?? `Erro ${res.status}`);
       }
-      const json = await res.json<{ success: boolean; data: PermissaoRow[] }>();
+      const json = await parseJsonResponse(res, isPermissoesResponse);
       const map = new Map<PermKey, boolean>();
       for (const p of json.data ?? []) {
         const key: PermKey = `${p.perfil}:${p.modulo}:${p.acao}`;
@@ -132,8 +159,8 @@ export default function PermissoesPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json<{ error?: string }>().catch(() => ({}));
-        throw new Error(err?.error ?? `Erro ${res.status}`);
+        const err = await parseErrorPayload(res);
+        throw new Error(err.error ?? `Erro ${res.status}`);
       }
 
       toast.success('Permissões salvas com sucesso');
