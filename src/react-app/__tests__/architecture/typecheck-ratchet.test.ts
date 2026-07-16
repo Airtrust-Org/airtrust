@@ -14,6 +14,13 @@ import { describe, expect, it } from 'vitest';
  * This test freezes that baseline so it can only shrink, never grow silently:
  * new files with errors, or existing files exceeding their baseline count,
  * fail CI. Fixing a file's errors to zero requires removing its entry below.
+ *
+ * 2026-07-16 (Ciclo 2 — fundação de tipos): fixed the true root causes behind
+ * every error in usePermissions.ts, UsuariosPage.tsx, ManagerAlertCenter.tsx,
+ * PermissoesPage.tsx, CardMeusEAD.tsx, lmsService.ts and PDFSystem.tsx
+ * (auth/RBAC/tenant contracts and untyped `res.json<T>()` API boundary
+ * calls). Those seven files now typecheck clean and were removed from the
+ * baseline below, dropping the total from 344 to 318 errors.
  */
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
@@ -22,11 +29,9 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/components/FuncionarioCard.tsx': 5,
   'src/react-app/components/HomeRouter.tsx': 1,
   'src/react-app/components/OptimizedMainSidebar.tsx': 2,
-  'src/react-app/components/PDFSystem.tsx': 1,
   'src/react-app/components/VersionBadge.tsx': 1,
   'src/react-app/components/admin/FuncoesManagement.tsx': 4,
   'src/react-app/components/dashboard/AlertWidget.tsx': 2,
-  'src/react-app/components/dashboard/CardMeusEAD.tsx': 1,
   'src/react-app/components/dashboard/EnhancedMetricCard.tsx': 2,
   'src/react-app/components/forms/AgendamentoForm.tsx': 1,
   'src/react-app/components/funcionarios/FuncionarioForm.tsx': 4,
@@ -48,7 +53,6 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/hooks/qualificacoes/useTiposQualificacao.ts': 6,
   'src/react-app/hooks/useDataLayer.ts': 1,
   'src/react-app/hooks/useFormValidation.ts': 2,
-  'src/react-app/hooks/usePermissions.ts': 4,
   'src/react-app/hooks/useQualificacoesExt.ts': 1,
   'src/react-app/hooks/useSimuladores.ts': 5,
   'src/react-app/hooks/useTreinamentosPlanejados.ts': 3,
@@ -65,8 +69,6 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/pages/Qualificacoes.tsx': 8,
   'src/react-app/pages/ReclassificacaoQualificacoes.tsx': 5,
   'src/react-app/pages/TreinamentosPlanejadosPage.tsx': 1,
-  'src/react-app/pages/admin/PermissoesPage.tsx': 4,
-  'src/react-app/pages/admin/UsuariosPage.tsx': 10,
   'src/react-app/pages/controle-voos/ControleVoosRdvDetalhe.tsx': 5,
   'src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx': 1,
   'src/react-app/pages/escalas/EscalaPageContext.tsx': 2,
@@ -96,7 +98,6 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/pages/funcionarios/FuncionariosDashboard.tsx': 1,
   'src/react-app/pages/funcionarios/FuncionariosWrapper.tsx': 1,
   'src/react-app/pages/funcionarios/ListaDocumentos.tsx': 3,
-  'src/react-app/pages/funcionarios/ManagerAlertCenter.tsx': 5,
   'src/react-app/pages/funcionarios/ModalFuncionario.tsx': 3,
   'src/react-app/pages/funcionarios/PerfilFuncionario.tsx': 1,
   'src/react-app/pages/lms/LmsCatalogo.tsx': 3,
@@ -126,7 +127,6 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/services/agendamentos.service.ts': 8,
   'src/react-app/services/funcionarios.service.ts': 6,
   'src/react-app/services/index.ts': 1,
-  'src/react-app/services/lmsService.ts': 1,
   'src/react-app/services/pdf-ficha-client.ts': 1,
   'src/react-app/styles/DESIGN_SYSTEM_GUIDE.tsx': 1,
   'src/react-app/utils/api-cache.ts': 1,
