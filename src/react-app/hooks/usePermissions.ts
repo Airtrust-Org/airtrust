@@ -84,7 +84,7 @@ const ROLE_DEFAULTS_BUILTIN: Record<string, string[] | null> = {
 
 const GESTOR_BLOCKED_PERMISSIONS = new Set(['admin.config', 'admin.multiempresa']);
 
-function toScope(userId: string | number | undefined | null, empresaId: string | number | undefined | null): AuthStorageScope | null {
+function toScope(userId: unknown, empresaId: unknown): AuthStorageScope | null {
   if (!userId || !empresaId) return null;
   return { empresaId, userId };
 }
@@ -94,7 +94,7 @@ function toScope(userId: string | number | undefined | null, empresaId: string |
  * Priority: scoped localStorage → builtin defaults.
  * Legacy global key `airtrust_perfis_custom` is NEVER used.
  */
-function resolveRolePermissions(role: string, scope: AuthStorageScope | null): Set<string> {
+function resolveRolePermissions(role: string, scope: AuthStorageScope | null): Set<string> | null {
   // Limpar chave legada se existir (one-time migration)
   clearLegacyPerfisCache();
 

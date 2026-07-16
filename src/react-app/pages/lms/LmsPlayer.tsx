@@ -250,8 +250,8 @@ export default function LmsPlayer() {
       completionState !== 'idle' &&
       completionDiagnostic &&
       completionDiagnostic.code !== 'SCORM_NONE' &&
-      (completionDiagnostic.status as string) !== 'accepted' &&
-      (completionDiagnostic.status as string) !== 'candidate'
+      completionDiagnostic.status !== 'accepted' &&
+      completionDiagnostic.status !== 'candidate'
     ) {
       showCompletionToast(
         'error',

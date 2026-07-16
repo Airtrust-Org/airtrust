@@ -74,10 +74,10 @@ export default function FrmsFadigaHistorico() {
   const { data, loading, refetch } = useFrmsFadigaHistorico(filtros);
   const baseRows = Array.isArray(data)
     ? data
-    : Array.isArray((data as any)?.data)
-      ? (data as any).data || []
-      : Array.isArray((data as any)?.data?.data)
-        ? (data as any).data.data || []
+    : Array.isArray((data as { data?: unknown } | null)?.data)
+      ? ((data as { data?: unknown }).data as unknown[]) || []
+      : Array.isArray((data as { data?: { data?: unknown } } | null)?.data?.data)
+        ? ((((data as { data?: { data?: unknown } }).data?.data as unknown[]) || []) as unknown[])
         : [];
 
   const rows = baseRows as FrmsFadigaCheckinRow[];

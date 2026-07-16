@@ -211,8 +211,7 @@ export default function FrmsFadigaAcumulada() {
   const resumo = frotaRaw?.data?.resumo;
 
   const { data: individualRaw } = useApi<IndividualResponse>(
-    expandedTrip ? `/api/frms/fadiga-acumulada?mes=${mes}&tripulante_id=${expandedTrip}` : '',
-    { enabled: !!expandedTrip }
+    expandedTrip ? `/api/frms/fadiga-acumulada?mes=${mes}&tripulante_id=${expandedTrip}` : null,
   );
   const evolucao = individualRaw?.data?.evolucao || [];
 

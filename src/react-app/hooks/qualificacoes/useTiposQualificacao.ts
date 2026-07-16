@@ -6,7 +6,8 @@ export function useTiposQualificacao() {
     queryKey: ['tipos-qualificacao'],
     queryFn: async () => {
       const res = await listarTiposQualificacao();
-      return res || [];
+      if (!res.success) throw new Error(res.error || 'Falha ao carregar tipos');
+      return res.data || [];
     },
     staleTime: 1000 * 60 * 10, // 10min — static reference data
   });

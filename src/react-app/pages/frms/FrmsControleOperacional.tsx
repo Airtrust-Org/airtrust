@@ -560,7 +560,7 @@ export default function FrmsControleOperacional() {
       tripulante_query: '',
       base: '',
       aeronave: '',
-      status: '' as const,
+      status: '',
     };
     setDraft(nextFilters);
     setAppliedFilters(nextFilters);
@@ -628,12 +628,12 @@ export default function FrmsControleOperacional() {
               || `${formatDisplayDate(appliedFilters.data_inicio)} → ${formatDisplayDate(appliedFilters.data_fim)}`}
           </p>
           <p className="mt-1 text-xs text-slate-600">
-            {fortnightSummary.monitoredCount > 0
-              ? `${fortnightSummary.monitoredCount} tripulantes operacionais · `
+            {fortnightSummary.totalMonitored > 0
+              ? `${fortnightSummary.totalMonitored} tripulantes operacionais · `
               : ''}
             {fortnightSummary.periodStatusLabel}
-            {fortnightSummary.incompleteCount > 0
-              ? ` · ${fortnightSummary.incompleteCount} check-ins pendentes`
+            {fortnightSummary.pendingCheckins > 0
+              ? ` · ${fortnightSummary.pendingCheckins} check-ins pendentes`
               : ''}
           </p>
         </section>

@@ -1,17 +1,14 @@
 import z from 'zod';
-
+import { Habilitacao as HabilitacaoCore } from '../worker/types/index';
 
 /**
  * Tipos compartilhados entre Frontend e Backend
  */
 
-export interface Habilitacao {
-  id: number;
-  nome: string;
-  codigo?: string;
-  descricao?: string;
-  ativa?: boolean;
-}
+// ============= HABILITAÇÕES =============
+// Re-exportar do core (src/worker/types/index.ts)
+export type Habilitacao = HabilitacaoCore;
+
 // ============= QUALIFICAÇÕES =============
 export interface Qualificacao {
   id: number;

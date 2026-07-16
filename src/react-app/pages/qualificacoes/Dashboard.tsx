@@ -9,6 +9,7 @@ import {
 } from '@/react-app/utils/qualificacoesUtils';
 import { Card, CardContent, Button, EmptyState, Badge } from '@/react-app/components/UI';
 import DashboardGraficos from './DashboardGraficos';
+import DashboardCharts from '@/react-app/components/qualificacoes/DashboardCharts';
 import ImportarQualificacoes from './ImportarQualificacoes';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 
@@ -133,7 +134,7 @@ const Dashboard = () => {
       {/* Gráficos Avançados */}
       {mostrarGraficos && (
         <div className="space-y-4">
-          <DashboardGraficos exames={exames} checks={checks} />
+          <DashboardCharts exames={exames} checks={checks} />
         </div>
       )}
 
