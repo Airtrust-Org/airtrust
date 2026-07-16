@@ -1117,6 +1117,26 @@ export async function updateSharedSessionStructureTransactional(
         currentAssignment.id,
         empresaId,
       ),
+      // Mirrors cancelSharedAssignment's cleanup: a participant who stops
+      // fulfilling training in this session (assignment_key no longer
+      // desired) must not keep an active PLANEJADA qualification derived
+      // from it. (sessao_id, funcionario_id) is the same identity
+      // criarQualificacoesPlanejadas' own idempotency check uses — a session
+      // produces at most one active PLANEJADA row per participant.
+      prepareStatement(
+        db,
+        `UPDATE qualificacoes_historico
+         SET deleted_at = datetime('now'),
+             updated_at = datetime('now')
+         WHERE sessao_id = ?
+           AND funcionario_id = ?
+           AND empresa_id = ?
+           AND deleted_at IS NULL
+           AND COALESCE(status, 'PLANEJADA') = 'PLANEJADA'`,
+        sessaoId,
+        currentAssignment.funcionario_id,
+        empresaId,
+      ),
     );
   }
 
