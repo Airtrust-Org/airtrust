@@ -227,7 +227,7 @@ export default function LmsPlayerH5p() {
                 id: stmt.object?.id ?? `h5p:${h5pId}`,
                 objectType: stmt.object?.objectType ?? 'Activity',
               },
-              result: stmt.result as any,
+              result: stmt.result as PostXapiStatementResult | undefined,
               context: stmt.context,
               timestamp: stmt.timestamp ?? new Date().toISOString(),
             };
@@ -252,7 +252,7 @@ export default function LmsPlayerH5p() {
 
         // H5P.externalDispatcher is available after instance init
         const checkDispatcher = () => {
-          if (win.H5P?.externalDispatcher?.on) {
+          if (win.H5P?.externalDispatcher) {
             win.H5P.externalDispatcher.on('xAPI', onXapiEvent);
           } else {
             dispatcherPollTimer = window.setTimeout(checkDispatcher, 300);

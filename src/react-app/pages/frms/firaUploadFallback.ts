@@ -731,7 +731,7 @@ async function extractPdfTextPages(
 ): Promise<string[]> {
   onStatusChange?.(`Extraindo texto digital de ${file.name}...`);
 
-  const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfJsModule;
+  const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as PdfJsModule;
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
     import.meta.url,
@@ -794,12 +794,12 @@ async function ocrPdfPages(
   file: File,
   onStatusChange?: (message: string | null) => void,
 ): Promise<string[]> {
-  const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfJsModule;
+  const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as PdfJsModule;
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
     import.meta.url,
   ).toString();
-  const Tesseract = (await import('tesseract.js')) as unknown as TesseractModule;
+  const Tesseract = (await import('tesseract.js')) as TesseractModule;
 
   const buffer = await file.arrayBuffer();
   const loadingTask = pdfjs.getDocument({

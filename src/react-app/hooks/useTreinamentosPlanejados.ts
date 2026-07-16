@@ -414,7 +414,7 @@ export function useTreinamentosPlanejados(filters: TreinamentoPlanejadoFiltros =
   return useQuery({
     queryKey: KEYS.list(filters),
     queryFn: () =>
-      request<TreinamentosPlanejadosListResponse>(`/planejados${buildQueryString(filters as Record<string, unknown>)}`),
+      request<TreinamentosPlanejadosListResponse>(`/planejados${buildQueryString(filters)}`),
     staleTime: 60 * 1000,
   });
 }
@@ -426,7 +426,7 @@ export function useTreinamentosPlanejadosCalendario(
     queryKey: KEYS.calendario(filters),
     queryFn: () =>
       request<TreinamentosPlanejadosCalendarioResponse>(
-        `/planejados/calendario${buildQueryString(filters as Record<string, unknown>)}`,
+        `/planejados/calendario${buildQueryString(filters)}`,
       ),
     staleTime: 60 * 1000,
   });
@@ -437,7 +437,7 @@ export function useTreinamentosPlanejadosAuditoria(filters: TreinamentoPlanejado
     queryKey: KEYS.auditoria(filters),
     queryFn: () =>
       request<TreinamentosPlanejadosAuditoriaResponse>(
-        `/planejados/auditoria${buildQueryString(filters as Record<string, unknown>)}`,
+        `/planejados/auditoria${buildQueryString(filters)}`,
       ),
     staleTime: 60 * 1000,
   });

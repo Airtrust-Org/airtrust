@@ -39,8 +39,8 @@ type RdvFormState = {
 };
 
 function formatRdvNumero(dataVoo: string, prefixo: string) {
-  const compactDate = dataVoo.replace(/-/g, '');
-  const compactPrefix = prefixo.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const compactDate = dataVoo.replaceAll('-', '');
+  const compactPrefix = prefixo.replaceAll(/[^A-Za-z0-9]/g, '').toUpperCase();
   return `RDV-${compactDate}-${compactPrefix}`;
 }
 
@@ -168,7 +168,7 @@ export default function ControleVoosRdvDetalhe() {
   function updateField<K extends keyof RdvFormState>(field: K, value: RdvFormState[K]) {
     setSaveError(null);
     setFormState((current) => ({
-      ...(current ?? buildFormState(voo!, rdv ?? null)),
+      ...(current ?? buildFormState(voo, rdv ?? null)),
       [field]: value,
     }));
   }
@@ -186,7 +186,6 @@ export default function ControleVoosRdvDetalhe() {
   }
 
   function validateBeforeSave() {
-    if (!voo) return 'Voo não carregado.';
     const expectedNumero = formatRdvNumero(form.data_voo || voo.data_programacao, voo.prefixo);
     const normalizedNumero = normalizeRdvNumero(form.numero);
 

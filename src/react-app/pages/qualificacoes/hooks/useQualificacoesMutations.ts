@@ -11,15 +11,21 @@ interface ConfirmDeleteMutationItem {
 interface QualificacoesMutationsDeps {
   API_BASE_URL: string;
   fetchWithAuth: (
-    url: string,
-    options?: RequestInit,
-    retry?: boolean
-  ) => Promise<Response>;
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<{
+    ok: boolean;
+    json: () => Promise<any>;
+  }>;
   showToast: {
     success: (message: string) => void;
     error: (message: string) => void;
   };
-  emitirEventoModulo: (payload: any) => void;
+  emitirEventoModulo: (payload: {
+    modulo: string;
+    tipo: string;
+    funcionarioIds?: number[];
+  }) => void;
   recarregarHistoricoEStats: () => Promise<void>;
 }
 

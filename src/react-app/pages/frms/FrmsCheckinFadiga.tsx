@@ -309,7 +309,7 @@ function PainelGestorTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((r) => (
+                {rows.map((r: Record<string, unknown>) => (
                   <tr key={String(r.id)} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium text-slate-800">
                       <Link

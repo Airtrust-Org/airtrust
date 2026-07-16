@@ -368,7 +368,7 @@ export default function Qualificacoes() {
     preferences: modelosPrefs,
     setPreferences: setModelosPrefs,
     ready: modelosPrefsReady,
-  } = useTablePreferences<QualificacoesModelosPrefs & Record<string, unknown>>(
+  } = useTablePreferences<QualificacoesModelosPrefs>(
     'table.qualificacoes.modelos',
     defaultModelosPrefs,
   );
@@ -489,7 +489,7 @@ export default function Qualificacoes() {
   // Cache de atualizações otimistas de tipos — garante que a tabela mostre
   // o valor salvo IMEDIATAMENTE, antes mesmo do refetch completar.
   // Chave: String(id do tipo), Valor: campos atualizados.
-  const [tipoUpdates, setTipoUpdates] = useState<Record<string, Partial<TipoQualificacao>>>({});
+  const [tipoUpdates, setTipoUpdates] = useState<Record<string, Partial<QualificacaoTipoDTO>>>({});
 
   const modelosPrefsHydratedRef = useRef(false);
 
@@ -1016,14 +1016,14 @@ export default function Qualificacoes() {
       setCertificadoOverrides((prev) => ({ ...prev, [historicoId]: temCertificados }));
       setHistoricoSelecionado((prev) =>
         prev && prev.id === historicoId
-          ? ({
+          ? {
               ...prev,
               tem_certificado: temCertificados ? 1 : 0,
-              certificado_url: temCertificados ? prev.certificado_url || 'ativo' : undefined,
+              certificado_url: temCertificados ? prev.certificado_url || 'ativo' : null,
               certificado_arquivo_id: temCertificados
                 ? (prev.certificado_arquivo_id ?? prev.id)
-                : undefined,
-            } as unknown as HistoricoItem)
+                : null,
+            }
           : prev,
       );
     },
@@ -4020,7 +4020,7 @@ export default function Qualificacoes() {
                           {turma.titulo?.trim() || turma.qualificacao_nome || 'Turma planejada'}
                         </p>
                         <p className="mt-1 text-sm text-slate-600">
-                          {new Date(turma.data_prevista + 'T12:00:00').toLocaleDateString('pt-BR')} ·{' '}
+                          {formatDateLabel(turma.data_prevista)} ·{' '}
                           {turma.hora_inicio || 'Horário a definir'}
                           {turma.local ? ` · ${turma.local}` : ''}
                         </p>
@@ -4821,7 +4821,7 @@ export default function Qualificacoes() {
                   // antes mesmo do refetch concluir. Isso corrige o bug de "validade antiga
                   // na tabela e no modal ao reabrir".
                   const tipoIdStr = String(editingTipo.id);
-                  const optimisticUpdate: Partial<TipoQualificacao> = {};
+                  const optimisticUpdate: Partial<QualificacaoTipoDTO> = {};
                   // Sempre propagar validade, incluindo null (limpar vencimento).
                   optimisticUpdate.validade = editingTipo.validade ?? null;
                   // Outros campos que podem ter mudado e afetam a visualização da tabela
@@ -5208,7 +5208,7 @@ export default function Qualificacoes() {
       <ConfirmDeleteModal
         isOpen={!!showConfirmDelete}
         onClose={() => setShowConfirmDelete(null)}
-        onConfirm={() => { void handleConfirmDelete(); }}
+        onConfirm={handleConfirmDelete}
         message="Tem certeza que deseja deletar esta qualificação?"
         itemName={showConfirmDelete?.nome || ''}
         loading={deletandoId !== null}

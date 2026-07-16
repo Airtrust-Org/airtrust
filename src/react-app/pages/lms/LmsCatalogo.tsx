@@ -1827,14 +1827,14 @@ export default function LmsCatalogo() {
             cursoId,
             tipoConteudo: form.tipo_conteudo as 'scorm' | 'h5p',
             file: assets.contentFile,
-            skipPurge: (assets as any).skipPurge,
+            skipPurge: assets.skipPurge,
             onProgress: setUploadProgress,
             onStatus: setUploadStatus,
           });
 
           nextCourseSnapshot = {
             ...nextCourseSnapshot,
-            tipo_conteudo: form.tipo_conteudo as TipoConteudo,
+            tipo_conteudo: form.tipo_conteudo,
             conteudo_arquivo_nome: assets.contentFile.name,
             scorm_package_r2_prefix:
               upload.prefix ?? nextCourseSnapshot.scorm_package_r2_prefix ?? null,
@@ -1999,7 +1999,7 @@ export default function LmsCatalogo() {
                   >
                     <option value="all">Todas as categorias</option>
                     {categories.map((c) => (
-                      <option key={c ?? 'null'} value={c ?? ''}>
+                      <option key={c} value={c}>
                         {c}
                       </option>
                     ))}

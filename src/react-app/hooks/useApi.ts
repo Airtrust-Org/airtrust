@@ -384,7 +384,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
   };
 }
 
-export function useApiMutation<T = any>() {
+export function useApiMutation<T>() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { logout, refreshToken, token: authToken } = useAuth();

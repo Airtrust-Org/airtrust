@@ -520,7 +520,7 @@ export default function LmsRelatorios() {
                           >
                             <td className="px-6 py-4">
                               <div className="font-medium text-slate-900 dark:text-slate-100">
-                                <FuncionarioLink funcionarioId={row.funcionario_id} nome={row.funcionario_nome} />
+                                <FuncionarioLink id={row.funcionario_id} nome={row.funcionario_nome} />
                               </div>
                               <div className="text-xs text-slate-500 dark:text-slate-400">
                                 {row.funcao ?? 'Sem função'}

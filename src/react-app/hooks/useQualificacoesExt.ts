@@ -241,11 +241,11 @@ export function useQualificacoesHistorico(
       if (statusNormalizados.has(statusPersistido)) {
         return {
           ...h,
-          qualificacao_status: statusPersistido || undefined,
+          qualificacao_status: statusPersistido || null,
           tem_certificado: temCertificadoAtivo ? 1 : 0,
-          certificado_url: temCertificadoAtivo ? h.certificado_url || undefined : undefined,
+          certificado_url: temCertificadoAtivo ? h.certificado_url : null,
           status: statusPersistido,
-        } as unknown as HistoricoQualificacao;
+        };
       }
 
       // Fallback para bases antigas sem status derivado no backend.
@@ -261,11 +261,11 @@ export function useQualificacoesHistorico(
           statusPersistido === 'CONCLUIDA' || statusPersistido === 'CONCLUIDO';
         return {
           ...h,
-          qualificacao_status: isCompletionStatus ? statusPersistido : statusPersistido || undefined,
+          qualificacao_status: isCompletionStatus ? statusPersistido : statusPersistido || null,
           tem_certificado: temCertificadoAtivo ? 1 : 0,
-          certificado_url: temCertificadoAtivo ? h.certificado_url || undefined : undefined,
+          certificado_url: temCertificadoAtivo ? h.certificado_url : null,
           status: isCompletionStatus ? statusPersistido : 'INDETERMINADA',
-        } as unknown as HistoricoQualificacao;
+        };
       }
       const dataVenc = String(h.data_vencimento || '')
         .trim()
@@ -273,11 +273,11 @@ export function useQualificacoesHistorico(
       if (!dataVenc || dataVenc.length !== 10) {
         return {
           ...h,
-          qualificacao_status: statusPersistido || undefined,
+          qualificacao_status: statusPersistido || null,
           tem_certificado: temCertificadoAtivo ? 1 : 0,
-          certificado_url: temCertificadoAtivo ? h.certificado_url || undefined : undefined,
+          certificado_url: temCertificadoAtivo ? h.certificado_url : null,
           status: 'INDETERMINADA',
-        } as unknown as HistoricoQualificacao;
+        };
       }
       let status: string;
       if (dataVenc < today) status = 'VENCIDA';
@@ -286,11 +286,11 @@ export function useQualificacoesHistorico(
 
       return {
         ...h,
-        qualificacao_status: statusPersistido || undefined,
+        qualificacao_status: statusPersistido || null,
         tem_certificado: temCertificadoAtivo ? 1 : 0,
-        certificado_url: temCertificadoAtivo ? h.certificado_url || undefined : undefined,
+        certificado_url: temCertificadoAtivo ? h.certificado_url : null,
         status,
-      } as unknown as HistoricoQualificacao;
+      };
     });
   }, [historicoRaw]);
 
