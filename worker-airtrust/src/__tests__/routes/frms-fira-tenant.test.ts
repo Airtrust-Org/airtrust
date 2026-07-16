@@ -99,11 +99,11 @@ vi.mock('../../lib/frms/fira-service', () => ({
     return { id: 'preview-1', empresa_id: empresaId };
   },
   processarUploadFirasPorPagina: async (
-    _db: any, _bucket: any, _files: any[],
-    _operadorId: number, empresaId: string,
+    _db: any, _bucket: any, _buffer: any, _arquivoNome: string,
+    _operadorId: string, empresaId: string, _textosPaginas: string[],
   ) => {
     capturedEmpresaId = empresaId;
-    return [{ id: 'preview-1', empresa_id: empresaId }];
+    return { id: 'preview-1', empresa_id: empresaId };
   },
   confirmarImportacaoFira: async () => ({}),
   buscarHistoricoFira: async () => [],
@@ -211,7 +211,81 @@ async function uploadFiraRequest(opts: {
   );
 }
 
+async function uploadFiraMultipaginaRequest(opts: {
+  userId: number;
+  empresaId: number;
+  role?: string;
+  db?: D1Database;
+}) {
+  const { userId, empresaId, role = 'admin', db = createDb() } = opts;
+
+  const app = createApp();
+  const headers: Record<string, string> = {
+    Authorization: 'Bearer test-token',
+    'x-test-user-id': String(userId),
+    'x-test-user-role': role,
+    'x-test-empresa-id': String(empresaId),
+  };
+
+  const formData = new FormData();
+  formData.append('arquivo', new Blob(['fake-pdf'], { type: 'application/pdf' }), 'test.pdf');
+  formData.append('textos_paginas', JSON.stringify(['pagina 1 texto']));
+
+  return app.fetch(
+    new Request('http://localhost/api/frms/importacao/fira/upload-multipagina', {
+      method: 'POST',
+      headers,
+      body: formData,
+    }),
+    createEnv(db),
+    {} as ExecutionContext,
+  );
+}
+
 // ===== TESTS =====
+
+describe('FIRA upload-multipagina tenant isolation (BUG-004)', () => {
+  beforeEach(() => {
+    capturedEmpresaId = null;
+  });
+
+  it('Upload multipágina com operador sem funcionário → usa tenant do JWT, não empresa 1', async () => {
+    // Antes do fix, ausência de operadorRow.empresa_id caía em fallback empresa_id='1'.
+    const response = await uploadFiraMultipaginaRequest({
+      userId: 10,
+      empresaId: 5,
+      db: createDb({ operadorTemEmpresa: false }),
+    });
+
+    expect(String(capturedEmpresaId)).toBe('5');
+    expect(capturedEmpresaId).not.toBe('1');
+    expect(response.status).toBe(200);
+  });
+
+  it('Upload multipágina com tenant válido → usa empresa_id do tenant, não do operadorRow', async () => {
+    const response = await uploadFiraMultipaginaRequest({
+      userId: 10,
+      empresaId: 7,
+      db: createDb({ operadorTemEmpresa: true }),
+    });
+
+    // Mesmo com operadorRow.empresa_id = '3', deve usar tenant empresaId = 7.
+    expect(String(capturedEmpresaId)).toBe('7');
+    expect(String(capturedEmpresaId)).not.toBe('3');
+    expect(response.status).toBe(200);
+  });
+
+  it('Upload multipágina sem tenant válido → 403 (fail-closed), nunca empresa 1', async () => {
+    const response = await uploadFiraMultipaginaRequest({
+      userId: 10,
+      empresaId: 0,
+      db: createDb({ operadorTemEmpresa: false }),
+    });
+
+    expect(response.status).not.toBe(200);
+    expect(capturedEmpresaId).toBeNull();
+  });
+});
 
 describe('FIRA upload tenant isolation (BUG-004)', () => {
   beforeEach(() => {
