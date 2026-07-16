@@ -258,12 +258,15 @@ firaRoutes.post(
   safe(async (c) => {
     const operadorId = await resolveFuncionarioId(c);
 
-    const operadorRow = await c.env.DB.prepare(
-      `SELECT empresa_id FROM funcionarios WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
-    )
-      .bind(operadorId)
-      .first<{ empresa_id: string }>();
-    const empresaId = operadorRow?.empresa_id ? String(operadorRow.empresa_id) : '1';
+    // SECURITY: usar tenant do contexto (JWT), não derivar de operadorRow.
+    // FAIL-CLOSED: sem tenant válido, bloqueia a operação.
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Contexto de empresa inválido', code: 'INVALID_TENANT_CONTEXT' },
+        403,
+      );
+    }
 
     const formData = await c.req.formData();
     const arquivo = formData.get('arquivo') as File | null;
@@ -322,8 +325,8 @@ firaRoutes.post(
       c.env.BUCKET,
       buffer,
       arquivo.name,
-      operadorId,
-      empresaId,
+      String(operadorId),
+      String(empresaId),
       textosPaginas,
     );
 
