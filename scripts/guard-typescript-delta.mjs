@@ -43,15 +43,36 @@ function refExists(ref, cwd) {
   }
 }
 
+function isShallowRepo(cwd) {
+  try {
+    return git(['rev-parse', '--is-shallow-repository'], cwd).trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
 function ensureBaseRefFetched(baseRef, cwd) {
+  // CI checkouts are frequently shallow (default actions/checkout depth=1)
+  // and only fetch the single PR/push commit — the base branch is not
+  // guaranteed to be present, AND merge-base cannot succeed even once the
+  // base branch ref exists if HEAD itself has no reachable parents. Both
+  // must be addressed, or a missing/short history would silently make the
+  // guard unable to compute any diff (never acceptable for a security gate).
+  if (isShallowRepo(cwd)) {
+    try {
+      git(['fetch', '--quiet', '--unshallow', 'origin'], cwd);
+    } catch {
+      // Best effort — some CI checkouts already fetched enough depth, or a
+      // partial unshallow may still leave enough history for merge-base
+      // below to succeed. If not, the explicit branch fetch retry follows.
+    }
+  }
+
   if (refExists(baseRef, cwd)) return;
-  // CI checkouts are frequently shallow and only fetch the PR/push commit —
-  // the base branch itself is not guaranteed to be present locally. Fetch it
-  // on demand rather than silently skipping the guard (a missing base ref
-  // must never be treated as "no violations").
+
   const branchName = baseRef.startsWith('origin/') ? baseRef.slice('origin/'.length) : baseRef;
   try {
-    git(['fetch', '--quiet', '--depth=500', 'origin', branchName], cwd);
+    git(['fetch', '--quiet', 'origin', `+refs/heads/${branchName}:refs/remotes/origin/${branchName}`], cwd);
   } catch {
     // Best effort — if this also fails (e.g. no network, no such branch),
     // resolveMergeBase()/runGuard() below will surface a clear error instead
