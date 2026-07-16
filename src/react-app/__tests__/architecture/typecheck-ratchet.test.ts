@@ -21,6 +21,13 @@ import { describe, expect, it } from 'vitest';
  * (auth/RBAC/tenant contracts and untyped `res.json<T>()` API boundary
  * calls). Those seven files now typecheck clean and were removed from the
  * baseline below, dropping the total from 344 to 318 errors.
+ *
+ * 2026-07-16 (Ciclo 3 — FRMS/Controle de Voos): fixed root causes in
+ * FrmsDayExplanationPanel.tsx (non-generic `useFrmsMutation` silently
+ * dropping the mutation response type), FrmsFadigaHistorico.tsx (unsafe
+ * `null` casts when narrowing the API envelope) and
+ * ControleVoosRdvDetalhe.tsx (`String.prototype.replaceAll`, unavailable
+ * under the configured `lib` target). Dropped the total from 318 to 310.
  */
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
@@ -69,7 +76,7 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/pages/Qualificacoes.tsx': 8,
   'src/react-app/pages/ReclassificacaoQualificacoes.tsx': 5,
   'src/react-app/pages/TreinamentosPlanejadosPage.tsx': 1,
-  'src/react-app/pages/controle-voos/ControleVoosRdvDetalhe.tsx': 5,
+  'src/react-app/pages/controle-voos/ControleVoosRdvDetalhe.tsx': 3,
   'src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx': 1,
   'src/react-app/pages/escalas/EscalaPageContext.tsx': 2,
   'src/react-app/pages/escalas/MinhaEscalaPage.tsx': 2,
@@ -91,9 +98,7 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/pages/frms/FrmsCheckinFadiga.tsx': 1,
   'src/react-app/pages/frms/FrmsControleOperacional.tsx': 6,
   'src/react-app/pages/frms/FrmsFadigaAcumulada.tsx': 1,
-  'src/react-app/pages/frms/FrmsFadigaHistorico.tsx': 2,
   'src/react-app/pages/frms/FrmsFichaTripulante.tsx': 5,
-  'src/react-app/pages/frms/components/FrmsDayExplanationPanel.tsx': 4,
   'src/react-app/pages/frms/firaUploadFallback.ts': 3,
   'src/react-app/pages/funcionarios/FuncionariosDashboard.tsx': 1,
   'src/react-app/pages/funcionarios/FuncionariosWrapper.tsx': 1,

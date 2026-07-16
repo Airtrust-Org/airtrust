@@ -39,8 +39,8 @@ type RdvFormState = {
 };
 
 function formatRdvNumero(dataVoo: string, prefixo: string) {
-  const compactDate = dataVoo.replaceAll('-', '');
-  const compactPrefix = prefixo.replaceAll(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const compactDate = dataVoo.split('-').join('');
+  const compactPrefix = prefixo.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   return `RDV-${compactDate}-${compactPrefix}`;
 }
 
