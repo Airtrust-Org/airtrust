@@ -159,6 +159,7 @@
     "lint:api-base": "bash scripts/guard-tenant-mutations.sh && chmod +x scripts/lint-api-base.sh && ./scripts/lint-api-base.sh",
     "guard:empresa-default1": "bash scripts/guard-no-new-empresa-default1.sh",
     "guard:typescript-delta": "node scripts/guard-typescript-delta.mjs",
-    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta"
+    "guard:frms-no-direct-sigvoos": "node scripts/guard-frms-no-direct-sigvoos.cjs",
+    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta && npm run guard:frms-no-direct-sigvoos"
   }
 }
