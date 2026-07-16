@@ -990,6 +990,111 @@ describe('simuladores shared session routes', () => {
     });
   });
 
+  it('demoting a participant from aluno to apoio cancels their ficha and PLANEJADA qualification, leaving the other participant untouched', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const buildDemotionRequest = () =>
+      new Request('http://localhost/sessoes/compartilhada/9901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              id: 801,
+              inicio: '07:00',
+              fim: '08:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              id: 802,
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      });
+
+    const response = await sharedSessionRoutes.fetch(
+      buildDemotionRequest(),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(batches).toHaveLength(1);
+    const statements = batches[0];
+
+    // 102's only assignment (502, modelo 2002) disappears entirely once both
+    // segments mark them as apoio — it must be cancelled...
+    expect(
+      statements.some(
+        (item) =>
+          item.query.startsWith("UPDATE simulador_atribuicoes_curriculares SET status = 'CANCELADA'") &&
+          Number(item.args[0]) === 502,
+      ),
+    ).toBe(true);
+    // ...its ficha deleted...
+    expect(
+      statements.some(
+        (item) =>
+          item.query.startsWith('UPDATE fichas_sessao') &&
+          item.query.includes('atribuicao_curricular_id = ?') &&
+          Number(item.args[0]) === 502,
+      ),
+    ).toBe(true);
+    // ...and — the bug this test guards against — the PLANEJADA qualification
+    // derived from this session for funcionario 102 must be cancelled too,
+    // not left active in the Histórico.
+    const qualificacaoCleanup = statements.filter((item) =>
+      item.query.includes('UPDATE qualificacoes_historico'),
+    );
+    expect(qualificacaoCleanup).toHaveLength(1);
+    expect(qualificacaoCleanup[0].args).toEqual([9901, 102, 6]);
+
+    // 101 keeps fulfilling training on the same assignment (501, modelo
+    // 2001) in both segments — nothing about their assignment, ficha, or
+    // qualification may be touched by 102's demotion.
+    expect(
+      statements.some(
+        (item) =>
+          item.query.startsWith("UPDATE simulador_atribuicoes_curriculares SET status = 'CANCELADA'") &&
+          Number(item.args[0]) === 501,
+      ),
+    ).toBe(false);
+    expect(qualificacaoCleanup.some((item) => Number(item.args[1]) === 101)).toBe(false);
+
+    // Saving the same demoted configuration again must not duplicate or
+    // error — the guard SQL (deleted_at IS NULL) makes the second pass a
+    // no-op against a real database, and the route itself must not throw.
+    const { db: resaveDb, batches: resaveBatches } = createDbForSharedRoutes();
+    const secondResponse = await sharedSessionRoutes.fetch(
+      buildDemotionRequest(),
+      { DB: resaveDb, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+    expect(secondResponse.status).toBe(200);
+    expect(resaveBatches).toHaveLength(1);
+    const resaveQualificacaoCleanup = resaveBatches[0].filter((item) =>
+      item.query.includes('UPDATE qualificacoes_historico'),
+    );
+    expect(resaveQualificacaoCleanup).toHaveLength(1);
+  });
+
   it('cancels one curricular assignment without deleting the other segment-curriculum relations', async () => {
     const { db, batches } = createDbForSharedRoutes();
 
@@ -1104,6 +1209,15 @@ describe('simuladores shared session routes', () => {
           Number(item.args[item.args.length - 2]) === 502,
       ),
     ).toBe(true);
+    // Assignment 501 (funcionario 101, modelo 2001) is cancelled because 101
+    // moved to modelo 2003 in this same edit — the stale PLANEJADA
+    // qualification derived from that abandoned assignment must be cancelled
+    // in the same batch, not left dangling in the Histórico.
+    const qualificacaoCleanup = statements.filter((item) =>
+      item.query.includes('UPDATE qualificacoes_historico'),
+    );
+    expect(qualificacaoCleanup).toHaveLength(1);
+    expect(qualificacaoCleanup[0].args).toEqual([9901, 101, 6]);
 
     const assignmentInserts = statements.filter((item) =>
       item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
