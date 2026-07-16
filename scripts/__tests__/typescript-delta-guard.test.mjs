@@ -253,6 +253,66 @@ test('end-to-end: runGuard flags a newly committed ts-errors.json inventory file
   }
 });
 
+test('end-to-end: runGuard auto-fetches a base ref missing from a shallow-like clone', () => {
+  // Regression test for a real CI failure: some workflow checkouts never
+  // fetch `origin/main` locally (only the pushed/PR commit), which made the
+  // guard crash instead of failing closed. This simulates that by cloning
+  // from a "remote" repo and deleting the local base branch before running.
+  const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-delta-guard-remote-'));
+  const cloneDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-delta-guard-clone-'));
+  const runIn = (dir, args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
+  try {
+    runIn(remoteDir, ['init', '-q', '--bare']);
+
+    const seedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-delta-guard-seed-'));
+    runIn(seedDir, ['init', '-q']);
+    runIn(seedDir, ['config', 'user.email', 'guard-test@example.com']);
+    runIn(seedDir, ['config', 'user.name', 'Guard Test']);
+    fs.mkdirSync(path.join(seedDir, 'src', 'react-app', 'hooks'), { recursive: true });
+    fs.writeFileSync(
+      path.join(seedDir, 'src', 'react-app', 'hooks', 'useApi.ts'),
+      'export function useApi(): Promise<Response> {\n  return fetch("/");\n}\n',
+    );
+    runIn(seedDir, ['add', '-A']);
+    runIn(seedDir, ['commit', '-q', '-m', 'base']);
+    runIn(seedDir, ['branch', '-M', 'main']);
+    runIn(seedDir, ['remote', 'add', 'origin', remoteDir]);
+    runIn(seedDir, ['push', '-q', 'origin', 'main']);
+
+    execFileSync('git', ['clone', '-q', '--depth=1', remoteDir, cloneDir], { encoding: 'utf8' });
+    runIn(cloneDir, ['config', 'user.email', 'guard-test@example.com']);
+    runIn(cloneDir, ['config', 'user.name', 'Guard Test']);
+    runIn(cloneDir, ['checkout', '-q', '-b', 'feature/unsafe']);
+    fs.writeFileSync(
+      path.join(cloneDir, 'src', 'react-app', 'hooks', 'useApi.ts'),
+      'export function useApi(): Promise<any> {\n  return fetch("/");\n}\n',
+    );
+    runIn(cloneDir, ['add', '-A']);
+    runIn(cloneDir, ['commit', '-q', '-m', 'unsafe change']);
+
+    // Simulate a CI checkout that never materializes a local `origin/main`
+    // ref (e.g. actions/checkout with a bare/detached fetch of only the PR
+    // commit): delete the remote-tracking ref so it must be re-fetched.
+    runIn(cloneDir, ['update-ref', '-d', 'refs/remotes/origin/main']);
+    let hadOriginMainBeforeFetch = true;
+    try {
+      execFileSync('git', ['rev-parse', '--verify', '--quiet', 'origin/main^{commit}'], {
+        cwd: cloneDir,
+        encoding: 'utf8',
+      });
+    } catch {
+      hadOriginMainBeforeFetch = false;
+    }
+    assert.equal(hadOriginMainBeforeFetch, false);
+
+    const { violations } = runGuard({ cwd: cloneDir, baseRef: 'origin/main' });
+    assert.ok(violations.some((v) => v.ruleId === 'promise-any'));
+  } finally {
+    fs.rmSync(remoteDir, { recursive: true, force: true });
+    fs.rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
+
 test('end-to-end: runGuard ignores changes confined to test files', () => {
   const { dir, run } = initTempRepo();
   try {
