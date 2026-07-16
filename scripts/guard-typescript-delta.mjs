@@ -34,15 +34,34 @@ function git(args, cwd) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 1024 * 1024 * 64 });
 }
 
-function resolveMergeBase(baseRef, cwd) {
+function refExists(ref, cwd) {
   try {
-    return git(['merge-base', baseRef, 'HEAD'], cwd).trim();
+    git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], cwd);
+    return true;
   } catch {
-    // Base ref may not be fetched locally (e.g. shallow clone). Fall back to
-    // the ref itself; worst case this widens the diff slightly, which is a
-    // safe direction for a guard (never a silent skip).
-    return baseRef;
+    return false;
   }
+}
+
+function ensureBaseRefFetched(baseRef, cwd) {
+  if (refExists(baseRef, cwd)) return;
+  // CI checkouts are frequently shallow and only fetch the PR/push commit —
+  // the base branch itself is not guaranteed to be present locally. Fetch it
+  // on demand rather than silently skipping the guard (a missing base ref
+  // must never be treated as "no violations").
+  const branchName = baseRef.startsWith('origin/') ? baseRef.slice('origin/'.length) : baseRef;
+  try {
+    git(['fetch', '--quiet', '--depth=500', 'origin', branchName], cwd);
+  } catch {
+    // Best effort — if this also fails (e.g. no network, no such branch),
+    // resolveMergeBase()/runGuard() below will surface a clear error instead
+    // of silently passing.
+  }
+}
+
+function resolveMergeBase(baseRef, cwd) {
+  ensureBaseRefFetched(baseRef, cwd);
+  return git(['merge-base', baseRef, 'HEAD'], cwd).trim();
 }
 
 export function runGuard({ cwd = process.cwd(), baseRef } = {}) {
