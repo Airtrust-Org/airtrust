@@ -279,7 +279,9 @@ test('end-to-end: runGuard auto-fetches a base ref missing from a shallow-like c
     runIn(seedDir, ['remote', 'add', 'origin', remoteDir]);
     runIn(seedDir, ['push', '-q', 'origin', 'main']);
 
-    execFileSync('git', ['clone', '-q', '--depth=1', remoteDir, cloneDir], { encoding: 'utf8' });
+    execFileSync('git', ['clone', '-q', '--depth=1', '--branch', 'main', remoteDir, cloneDir], {
+      encoding: 'utf8',
+    });
     runIn(cloneDir, ['config', 'user.email', 'guard-test@example.com']);
     runIn(cloneDir, ['config', 'user.name', 'Guard Test']);
     runIn(cloneDir, ['checkout', '-q', '-b', 'feature/unsafe']);
