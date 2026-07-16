@@ -676,7 +676,7 @@ function StatCard({
   value,
   helper,
 }: {
-  icon: JSX.Element;
+  icon: React.ReactNode;
   label: string;
   value: string | number;
   helper: string;

@@ -120,6 +120,7 @@ export default function LmsPreviewPlayer() {
     setIframeLoaded(false);
 
     async function loadAsset() {
+      if (!curso) return;
       try {
         if (previewType === 'pptx' && canUseOfficePptxViewer()) {
           try {

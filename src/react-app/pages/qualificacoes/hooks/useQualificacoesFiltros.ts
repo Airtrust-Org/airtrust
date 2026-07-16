@@ -5,7 +5,10 @@ import {
   ALL_STATUS_VALUES,
   QUALIFICACOES_PREFS_KEY,
 } from '../qualificacoes.constants';
-import type { SortConfig } from '@/react-app/utils/types';
+export interface SortConfig {
+  column: string | null;
+  direction: 'asc' | 'desc';
+}
 
 export const VALID_TABS = ['historico', 'planejados', 'tipos', 'categorias'] as const;
 export const VALID_PLANNED_VIEWS = ['lista', 'calendario', 'turmas'] as const;

@@ -75,7 +75,7 @@ const QualificacoesFilters = memo(function QualificacoesFilters({
           <option value="">Todos os equipamentos</option>
           {aeronaves.map((aeronave) => (
             <option key={aeronave.id} value={aeronave.id}>
-              {aeronave.modelo} {aeronave.prefixo ? `- ${aeronave.prefixo}` : ''}
+              {aeronave.nome} {aeronave.codigo ? `- ${aeronave.codigo}` : ''}
             </option>
           ))}
         </select>

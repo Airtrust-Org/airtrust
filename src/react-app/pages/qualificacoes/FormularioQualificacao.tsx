@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { Upload, FileText, X } from 'lucide-react';
 import SeletorFuncionario from '../../components/SeletorFuncionario';
-import { toast } from 'sonner';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
 
 interface FormularioQualificacaoProps {

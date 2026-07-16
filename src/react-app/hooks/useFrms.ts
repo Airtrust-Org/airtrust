@@ -624,8 +624,8 @@ export function useFrmsNotificacoesCount() {
   });
 }
 
-export function useFrmsMutation() {
-  return useApiMutation();
+export function useFrmsMutation<T = unknown>() {
+  return useApiMutation<T>();
 }
 
 export interface FrmsNotificacaoConfigRow {
