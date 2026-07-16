@@ -47,7 +47,6 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import AppLayout from '@/react-app/components/AppLayout';
-import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
@@ -1003,6 +1002,7 @@ function ModalPermissoes({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { user, empresaAtualId } = useAuth();
   const [permissoes, setPermissoes] = useState<PermissaoOverride[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1331,6 +1331,7 @@ function buildDefaultPerfisEditaveis(): PerfilEditavel[] {
 }
 
 function ModalPerfis({ onClose }: { onClose: () => void }) {
+  const { user, empresaAtualId } = useAuth();
   const [perfis, setPerfis] = useState<PerfilEditavel[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
