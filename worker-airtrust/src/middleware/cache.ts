@@ -9,11 +9,28 @@ import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 
 /**
+ * Allowlist explícita de rotas JSON que podem ser cacheadas publicamente.
+ *
+ * Estas rotas NUNCA retornam dados de tenant, de usuário autenticado ou
+ * qualquer informação operacional — apenas metadados estáticos da API.
+ * Qualquer outra rota JSON usa o default seguro (private, no-store).
+ */
+const PUBLIC_CACHEABLE_JSON_PATHS = new Set<string>([
+  '/api/health',
+  '/api/version',
+  '/api/capabilities',
+]);
+
+const CACHEABLE_METHODS = new Set(['GET', 'HEAD']);
+
+/**
  * Middleware de controle de cache
  *
  * Estratégias:
  * - HTML: no-cache (sempre buscar versão mais recente)
- * - JSON/API: cache de 5 minutos (performance)
+ * - JSON/API: default seguro "private, no-store" (nunca cache público de
+ *   respostas autenticadas/tenant-scoped); allowlist explícita permite
+ *   cache curto para rotas públicas comprovadamente estáticas.
  * - Assets estáticos: cache de 1 ano com immutable (fingerprinted)
  */
 export function cacheControl(): MiddlewareHandler<{ Bindings: Env }> {
@@ -44,15 +61,30 @@ export function cacheControl(): MiddlewareHandler<{ Bindings: Env }> {
       return;
     }
 
-    // 2. JSON/API - Cache curto (5 minutos)
-    // Balance entre performance e atualização de dados
+    // 2. JSON/API
+    // 🚫 Respeitar Cache-Control já definido explicitamente pelo endpoint
     if (contentType.includes('application/json')) {
-      // 🚫 Respeitar Cache-Control já definido no endpoint
       const existingCache = c.res.headers.get('Cache-Control');
-      if (!existingCache || existingCache === '') {
-        c.header('Cache-Control', 'public, max-age=300, s-maxage=300');
-        c.header('Vary', 'Authorization'); // Cache separado por usuário
+      if (existingCache && existingCache !== '') {
+        return;
       }
+
+      const isCacheableMethod = CACHEABLE_METHODS.has(c.req.method);
+      const isExplicitlyPublicPath = PUBLIC_CACHEABLE_JSON_PATHS.has(path);
+      const isSuccessResponse = c.res.status >= 200 && c.res.status < 300;
+
+      if (isCacheableMethod && isExplicitlyPublicPath && isSuccessResponse) {
+        c.header('Cache-Control', 'public, max-age=60, s-maxage=60');
+        return;
+      }
+
+      // Default seguro: nenhuma resposta JSON fora da allowlist é cacheável
+      // por intermediários/CDN. Cobre rotas autenticadas, tenant-scoped,
+      // mutações (POST/PUT/PATCH/DELETE) e respostas de erro (401/403/404/500).
+      c.header('Cache-Control', 'private, no-store, max-age=0');
+      c.header('CDN-Cache-Control', 'no-store');
+      c.header('Cloudflare-CDN-Cache-Control', 'no-store');
+      c.header('Pragma', 'no-cache');
       return;
     }
 
@@ -69,7 +101,10 @@ export function cacheControl(): MiddlewareHandler<{ Bindings: Env }> {
       return;
     }
 
-    // 4. Padrão - Cache moderado (1 hora)
-    c.header('Cache-Control', 'public, max-age=3600');
+    // 4. Padrão - conteúdo não identificado. Default seguro: não cachear
+    // por intermediários, pois pode carregar dados operacionais/tenant-scoped.
+    c.header('Cache-Control', 'private, no-store, max-age=0');
+    c.header('CDN-Cache-Control', 'no-store');
+    c.header('Cloudflare-CDN-Cache-Control', 'no-store');
   };
 }
