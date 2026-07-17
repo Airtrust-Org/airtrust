@@ -17,6 +17,10 @@ import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { rateLimiter } from '../middleware/rate-limit';
+import {
+  localMaintenanceGate,
+  localMaintenanceMutationNotFound,
+} from '../middleware/local-maintenance';
 import { enviarEmailAlert } from '../cron/notificacoes';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { getFrmsOperationalState } from '../shared/getTripulanteOperacional';
@@ -88,6 +92,14 @@ import {
 } from './frms-shared';
 
 const frmsRoutes = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
+
+// Must precede every maintenance handler: direct router tests and the full
+// application both fail closed before parsing a request body or touching D1.
+frmsRoutes.use('/maintenance/*', async (c, next) => {
+  const denied = await localMaintenanceGate(c.env, c.req.raw.headers);
+  if (denied) return denied;
+  return next();
+});
 
 const FortnightCoverageMaintenanceQuerySchema = z.object({
   empresa_id: z.coerce.number().int().positive(),
@@ -1264,39 +1276,6 @@ async function secureCompare(a: string, b: string): Promise<boolean> {
   return crypto.subtle.timingSafeEqual(aHash, bHash);
 }
 
-async function isLocalMaintenanceRequest(
-  c: FrmsAppContext,
-): Promise<boolean> {
-  const maintenanceSecret = c.env.MAINTENANCE_SECRET;
-  const providedHeader = c.req.header('x-maintenance-secret');
-  if (maintenanceSecret && providedHeader && (await secureCompare(providedHeader, maintenanceSecret))) {
-    return true;
-  }
-  const url = new URL(c.req.url);
-  const hostname = url.hostname.toLowerCase();
-  const hostHeader = (c.req.header('host') || '').toLowerCase();
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostHeader.startsWith('localhost:') ||
-    hostHeader.startsWith('127.0.0.1:') ||
-    hostHeader === 'localhost' ||
-    hostHeader === '127.0.0.1' ||
-    c.env.ENABLE_DEV_AUTH_BYPASS === 'true'
-  );
-}
-
-async function hasValidMaintenanceSecret(
-  c: FrmsAppContext,
-): Promise<boolean> {
-  const maintenanceSecret = c.env.MAINTENANCE_SECRET;
-  if (!maintenanceSecret) return false;
-  const headerToken =
-    c.req.header('x-airtrust-maintenance') ?? c.req.header('x-maintenance-secret');
-  if (!headerToken) return false;
-  return secureCompare(headerToken, maintenanceSecret);
-}
-
 function diffDaysInclusive(dataInicio: string, dataFim: string): number {
   const start = Date.parse(`${dataInicio}T00:00:00Z`);
   const end = Date.parse(`${dataFim}T00:00:00Z`);
@@ -1333,16 +1312,6 @@ function assertMaintenanceWindow(
 frmsRoutes.get(
   '/maintenance/fortnight-coverage',
   safe(async (c) => {
-    if (!c.env.MAINTENANCE_SECRET) {
-      return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
-    }
-    if (!(await isLocalMaintenanceRequest(c))) {
-      return c.json({ success: false, error: 'Rota disponível apenas em localhost.' }, 403);
-    }
-    if (!(await hasValidMaintenanceSecret(c))) {
-      return c.json({ success: false, error: 'Token de manutenção inválido.' }, 403);
-    }
-
     const parsed = FortnightCoverageMaintenanceQuerySchema.safeParse({
       empresa_id: c.req.query('empresa_id'),
       data_inicio: c.req.query('data_inicio'),
@@ -1385,16 +1354,6 @@ frmsRoutes.get(
 frmsRoutes.get(
   '/maintenance/fortnight-materialization-preview',
   safe(async (c) => {
-    if (!c.env.MAINTENANCE_SECRET) {
-      return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
-    }
-    if (!(await isLocalMaintenanceRequest(c))) {
-      return c.json({ success: false, error: 'Rota disponível apenas em localhost.' }, 403);
-    }
-    if (!(await hasValidMaintenanceSecret(c))) {
-      return c.json({ success: false, error: 'Token de manutenção inválido.' }, 403);
-    }
-
     const parsed = FortnightCoverageMaintenanceQuerySchema.safeParse({
       empresa_id: c.req.query('empresa_id'),
       data_inicio: c.req.query('data_inicio'),
@@ -1434,177 +1393,13 @@ frmsRoutes.get(
   }),
 );
 
-frmsRoutes.post(
+for (const path of [
   '/maintenance/fortnight-materialization-apply',
-  safe(async (c) => {
-    if (!c.env.MAINTENANCE_SECRET) {
-      return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
-    }
-    if (!(await isLocalMaintenanceRequest(c))) {
-      return c.json({ success: false, error: 'Rota disponível apenas em localhost.' }, 403);
-    }
-    if (!(await hasValidMaintenanceSecret(c))) {
-      return c.json({ success: false, error: 'Token de manutenção inválido.' }, 403);
-    }
-
-    const body = await c.req.json().catch(() => ({}));
-    const parsed = FortnightMaterializationApplySchema.safeParse(body);
-    if (!parsed.success) {
-      return c.json(
-        {
-          success: false,
-          error: 'Parâmetros inválidos.',
-          details: parsed.error.flatten(),
-        },
-        400,
-      );
-    }
-
-    if (parsed.data.confirm !== FRMS_FORTNIGHT_MATERIALIZATION_CONFIRM_TOKEN) {
-      return c.json({ success: false, error: 'Confirmação explícita inválida.' }, 400);
-    }
-
-    const invalidWindow = assertMaintenanceWindow(
-      parsed.data.data_inicio,
-      parsed.data.data_fim,
-      FRMS_FORTNIGHT_MATERIALIZATION_APPLY_MAX_WINDOW_DAYS,
-      `Janela máxima de ${FRMS_FORTNIGHT_MATERIALIZATION_APPLY_MAX_WINDOW_DAYS} dias para apply.`,
-    );
-    if (invalidWindow) return invalidWindow;
-
-    const result = await applyFortnightBaseMaterialization(c.env.DB, {
-      empresaId: parsed.data.empresa_id,
-      dataInicio: parsed.data.data_inicio,
-      dataFim: parsed.data.data_fim,
-      origem: normalizeQueryFilters(parsed.data.origem, 'SIGVOOS'),
-      status: normalizeQueryFilters(parsed.data.status, 'ES'),
-    });
-
-    console.info('[frms-maintenance] fortnight materialization apply', {
-      empresaId: parsed.data.empresa_id,
-      dataInicio: parsed.data.data_inicio,
-      dataFim: parsed.data.data_fim,
-      updated: result.updated,
-      unchangedAfterGuard: result.unchanged_after_guard,
-    });
-
-    return c.json({ success: true, data: result });
-  }),
-);
-
-frmsRoutes.post(
   '/maintenance/reprocessar-lote',
-  safe(async (c) => {
-    if (!c.env.MAINTENANCE_SECRET) {
-      return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
-    }
-    if (!(await isLocalMaintenanceRequest(c))) {
-      return c.json({ success: false, error: 'Rota disponível apenas em localhost.' }, 403);
-    }
-    if (!(await hasValidMaintenanceSecret(c))) {
-      return c.json({ success: false, error: 'Token de manutenção inválido.' }, 403);
-    }
-
-    const body = await c.req.json().catch(() => ({}));
-    const tripulanteIds = Array.isArray(body?.tripulante_ids)
-      ? [
-          ...new Set(
-            body.tripulante_ids
-              .map((value: unknown) => Number(value))
-              .filter((value: number) => Number.isFinite(value) && value > 0),
-          ),
-        ]
-      : [];
-
-    if (tripulanteIds.length === 0) {
-      return c.json({ success: false, error: 'tripulante_ids é obrigatório.' }, 400);
-    }
-
-    const limites = await carregarLimites(c.env.DB);
-    const resultados: Array<{ tripulante_id: number; jornadas: number }> = [];
-
-    for (const tripulanteId of tripulanteIds) {
-      const id = Number(tripulanteId);
-      const jornadas = await reprocessarTripulanteCompleto(c.env.DB, id, limites);
-      resultados.push({ tripulante_id: id, jornadas });
-    }
-
-    return c.json({ success: true, data: { tripulantes: resultados } });
-  }),
-);
-
-frmsRoutes.post(
   '/maintenance/reprocessar-faixa',
-  safe(async (c) => {
-    if (!c.env.MAINTENANCE_SECRET) {
-      return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
-    }
-    if (!(await isLocalMaintenanceRequest(c))) {
-      return c.json({ success: false, error: 'Rota disponível apenas em localhost.' }, 403);
-    }
-    if (!(await hasValidMaintenanceSecret(c))) {
-      return c.json({ success: false, error: 'Token de manutenção inválido.' }, 403);
-    }
-
-    const body = await c.req.json().catch(() => ({}));
-    const tripulanteId = Number(body?.tripulante_id);
-    const dataInicio = typeof body?.data_inicio === 'string' ? body.data_inicio : null;
-    const limite = Math.max(1, Math.min(10, Number(body?.limite || 5)));
-
-    if (!tripulanteId || !dataInicio || !/^\d{4}-\d{2}-\d{2}$/.test(dataInicio)) {
-      return c.json(
-        { success: false, error: 'tripulante_id e data_inicio são obrigatórios.' },
-        400,
-      );
-    }
-
-    const limites = await carregarLimites(c.env.DB);
-    const jornadas = await c.env.DB.prepare(
-      `SELECT ${FRMS_JORNADA_SELECT_COLUMNS}
-           FROM frms_jornada
-          WHERE tripulante_id = ?
-            AND data >= ?
-            AND deleted_at IS NULL
-          ORDER BY data ASC
-          LIMIT ?`,
-    )
-      .bind(String(tripulanteId), dataInicio, limite)
-      .all();
-
-    const lista = jornadas.results || [];
-    for (const jornada of lista) {
-      await recalcularPipeline(c.env.DB, jornada as never, limites);
-    }
-
-    const ultimoProcessado =
-      lista.length > 0
-        ? String((lista[lista.length - 1] as { data?: string }).data || dataInicio)
-        : null;
-
-    const restante = ultimoProcessado
-      ? await c.env.DB.prepare(
-          `SELECT COUNT(*) AS total
-               FROM frms_jornada
-              WHERE tripulante_id = ?
-                AND data > ?
-                AND deleted_at IS NULL`,
-        )
-          .bind(String(tripulanteId), ultimoProcessado)
-          .first<{ total: number }>()
-      : { total: 0 };
-
-    return c.json({
-      success: true,
-      data: {
-        tripulante_id: tripulanteId,
-        processadas: lista.length,
-        ultimo_processado: ultimoProcessado,
-        restantes: Number(restante?.total || 0),
-        proxima_data: ultimoProcessado,
-      },
-    });
-  }),
-);
+]) {
+  frmsRoutes.post(path, () => localMaintenanceMutationNotFound());
+}
 
 // FRMS: auth obrigatória (módulo flight-safety-critical RBAC 117)
 frmsRoutes.use('*', auth());
