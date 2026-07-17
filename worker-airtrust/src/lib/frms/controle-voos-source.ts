@@ -27,17 +27,21 @@ import {
 
 /** Origens de dados operacionais reconhecidas pelo Controle de Voos. */
 export type ControleVoosRecordOrigin = 'CONTROLE_VOOS';
+export type ControleVoosOperationalStatus =
+  | 'PLANEJADO'
+  | 'CONFIRMADO'
+  | 'REALIZADO'
+  | 'CANCELADO'
+  | 'EXCLUIDO'
+  | 'CORRIGIDO'
+  | 'DUPLICADO'
+  | 'DESCONHECIDO';
 
 /**
  * Contrato canônico dos dados operacionais que o Controle de Voos oferece ao FRMS.
  *
- * Campos com lacuna confirmada hoje (ver `CONTROLE_VOOS_FRMS_KNOWN_GAPS` — não
- * inventar paridade, documentar e seguir):
- * - `statusCancelamentoConfirmado`: `listControleVoosJornadas` (o read-model
- *   canônico reaproveitado aqui) não seleciona `cv_voos.status`, logo não é
- *   possível hoje distinguir com certeza um voo cancelado a partir deste
- *   contrato. Consumidores NÃO devem assumir que os registros retornados
- *   excluem voos cancelados.
+ * Campos ainda parcialmente lacunares são expostos explicitamente como
+ * indisponíveis/`null`, em vez de receber fallback silencioso.
  */
 export interface ControleVoosOperationalRecord {
   empresaId: number;
@@ -45,24 +49,28 @@ export interface ControleVoosOperationalRecord {
   identificadorInterno: string;
   /** Identificador externo de proveniência (id do flight report no SIGVOOS), quando disponível. */
   identificadorExterno: string | null;
+  /** Identificador externo estável do tripulante quando existir dos dois lados. */
+  identificadorExternoTripulante: string | null;
   origem: ControleVoosRecordOrigin;
   /** Como o dado chegou ao Controle de Voos (importado do SIGVOOS, manual, ou editado). */
   origemDados: ControleVoosJornadaOrigemDados;
   tripulanteId: number;
   /** Data operacional no formato YYYY-MM-DD. */
   dataOperacional: string;
-  /** Horários no formato HH:MM (hora local), quando disponíveis. Não são timestamps ISO completos. */
+  /** Horários locais normalizados HH:MM, sem inferir UTC quando o timezone não existe no schema. */
   horaDecolagem: string | null;
   horaPouso: string | null;
-  /** Fuso horário de referência dos horários armazenados (ver lacuna: não há coluna de timezone explícita). */
-  timezone: 'America/Sao_Paulo';
+  timezone: string | null;
+  timezoneFonte: 'EXPLICITO' | 'INDISPONIVEL';
   vooId: number;
   etapaId: number | null;
   aeronaveIdentificador: string | null;
   origemIcao: string | null;
   destinoIcao: string | null;
-  /** Nunca `true` com certeza absoluta — ver lacuna de cancelamento no cabeçalho deste arquivo. */
-  statusCancelamentoConfirmado: false;
+  statusOperacional: ControleVoosOperationalStatus;
+  statusOperacionalRaw: string | null;
+  cancelado: boolean;
+  corrigido: boolean;
   minutosVoo: number;
   /** `last_sync_at` do read-model — usado para detectar mudanças retroativas / idempotência. */
   atualizadoEm: string | null;
@@ -75,10 +83,27 @@ export interface ControleVoosOperationalRecord {
  * Não inventar paridade: estes pontos permanecem como lacuna até resolução futura.
  */
 export const CONTROLE_VOOS_FRMS_KNOWN_GAPS: readonly string[] = [
-  'Cancelamento: listControleVoosJornadas não seleciona cv_voos.status; não há como confirmar, a partir deste contrato, que um voo cancelado foi excluído. Risco: comparação em shadow-mode pode contar minutos de voos cancelados como se fossem válidos.',
-  'Matrícula do tripulante: o read-model expõe apenas `nome` (PII), não `matricula`; o contrato do FRMS aqui deliberadamente NÃO expõe nome (ver função de mapeamento) para evitar PII em logs de shadow-mode, mas também não oferece um identificador estável alternativo além de `tripulante_id`.',
-  'Timezone explícito: os horários (`engine_start`, `takeoff_time`, etc.) são strings HH:MM sem coluna de fuso horário própria; assume-se America/Sao_Paulo por convenção do restante do domínio FRMS, não por garantia de schema.',
+  'Timezone explícito: os horários (`engine_start`, `takeoff_time`, etc.) continuam sem coluna IANA própria no schema CV/SIGVOOS atual; o contrato agora expõe `timezone=null` e falha de forma conservadora no comparador em vez de presumir America/Sao_Paulo.',
+  'Matrícula do tripulante permanece fora do contrato CV -> FRMS por não ser necessária à identidade canônica e por risco de PII. Quando houver chave externa estável, usa-se `sigvoos_staff_id`.',
 ];
+
+function normalizeStatus(value: string | null): string | null {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized || null;
+}
+
+function mapOperationalStatus(item: ControleVoosJornadaItem): ControleVoosOperationalStatus {
+  const raw = normalizeStatus(item.voo_status);
+  if (!raw) return 'DESCONHECIDO';
+  if (raw.includes('cancel')) return 'CANCELADO';
+  if (raw.includes('exclu')) return 'EXCLUIDO';
+  if (raw.includes('duplic')) return 'DUPLICADO';
+  if (raw.includes('corrig')) return 'CORRIGIDO';
+  if (raw === 'planejado') return 'PLANEJADO';
+  if (raw.includes('confirm') || raw.includes('liberado_operacionalmente')) return 'CONFIRMADO';
+  if (raw.includes('realiz') || raw.includes('conclu') || raw.includes('fechado')) return 'REALIZADO';
+  return 'DESCONHECIDO';
+}
 
 function minutosEntre(horaInicio: string | null, horaFim: string | null): number {
   if (!horaInicio || !horaFim) return 0;
@@ -97,23 +122,30 @@ function mapJornadaItemToOperationalRecord(
   item: ControleVoosJornadaItem,
   empresaId: number,
 ): ControleVoosOperationalRecord {
+  const statusOperacional = mapOperationalStatus(item);
+  const timezone = item.timezone_iana;
   return {
     empresaId,
     identificadorInterno: item.jornada_id,
     identificadorExterno: item.external_id_sigvoos != null ? String(item.external_id_sigvoos) : null,
+    identificadorExternoTripulante: item.sigvoos_staff_id != null ? String(item.sigvoos_staff_id) : null,
     origem: 'CONTROLE_VOOS',
     origemDados: item.origem_dados,
     tripulanteId: item.tripulante_id,
     dataOperacional: item.data_operacional,
     horaDecolagem: item.takeoff_time,
     horaPouso: item.landing_time,
-    timezone: 'America/Sao_Paulo',
+    timezone,
+    timezoneFonte: timezone ? 'EXPLICITO' : 'INDISPONIVEL',
     vooId: item.voo_id,
     etapaId: item.etapa_id,
     aeronaveIdentificador: item.aeronave,
     origemIcao: item.origem_icao,
     destinoIcao: item.destino_icao,
-    statusCancelamentoConfirmado: false,
+    statusOperacional,
+    statusOperacionalRaw: item.voo_status,
+    cancelado: statusOperacional === 'CANCELADO',
+    corrigido: statusOperacional === 'CORRIGIDO',
     minutosVoo: minutosEntre(item.takeoff_time, item.landing_time),
     atualizadoEm: item.last_sync_at,
   };

@@ -22,8 +22,10 @@ export interface ControleVoosJornadaItem {
   jornada_id: string;
   voo_id: number;
   etapa_id: number | null;
+  voo_status: string | null;
   external_id_sigvoos: number | null;
   sigvoos_leg_number: number | null;
+  sigvoos_staff_id: number | null;
   data_operacional: string;
   tripulante_id: number;
   nome: string | null;
@@ -46,6 +48,7 @@ export interface ControleVoosJornadaItem {
   pax: number | null;
   fuel_start: number | null;
   fuel_end: number | null;
+  timezone_iana: string | null;
   origem_dados: ControleVoosJornadaOrigemDados;
   qualidade_dado: ControleVoosJornadaQualidadeDado;
   estado_conflito: ControleVoosJornadaEstadoConflito;
@@ -71,8 +74,10 @@ type JornadaRow = {
   tripulante_record_id: number;
   voo_id: number;
   etapa_id: number | null;
+  voo_status: string | null;
   external_id_sigvoos: number | null;
   sigvoos_leg_number: number | null;
+  sigvoos_staff_id: number | null;
   data_operacional: string;
   tripulante_id: number;
   nome: string | null;
@@ -95,6 +100,7 @@ type JornadaRow = {
   pax: number | null;
   fuel_start: number | null;
   fuel_end: number | null;
+  timezone_iana: string | null;
   origem_importacao: string | null;
   etapa_origem_dados: string | null;
   campos_editados_json: string | null;
@@ -243,8 +249,10 @@ function mapRow(row: JornadaRow): ControleVoosJornadaItem {
     jornada_id: buildJornadaId(row.voo_id, row.etapa_id, row.tripulante_record_id),
     voo_id: row.voo_id,
     etapa_id: row.etapa_id,
+    voo_status: row.voo_status,
     external_id_sigvoos: row.external_id_sigvoos,
     sigvoos_leg_number: row.sigvoos_leg_number,
+    sigvoos_staff_id: row.sigvoos_staff_id,
     data_operacional: row.data_operacional,
     tripulante_id: row.tripulante_id,
     nome: row.nome,
@@ -267,6 +275,7 @@ function mapRow(row: JornadaRow): ControleVoosJornadaItem {
     pax: row.pax ?? fallback.pax,
     fuel_start: row.fuel_start ?? fallback.fuel_start,
     fuel_end: row.fuel_end ?? fallback.fuel_end,
+    timezone_iana: row.timezone_iana,
     origem_dados: resolveOrigemDados(row),
     qualidade_dado: qualidadeDado,
     estado_conflito: estadoConflito,
@@ -287,8 +296,10 @@ export async function listControleVoosJornadas(
         t.id AS tripulante_record_id,
         v.id AS voo_id,
         e.id AS etapa_id,
+        v.status AS voo_status,
         v.sigvoos_flight_report_id AS external_id_sigvoos,
         e.sigvoos_leg_number AS sigvoos_leg_number,
+        t.sigvoos_staff_id AS sigvoos_staff_id,
         v.data_programacao AS data_operacional,
         t.funcionario_id AS tripulante_id,
         f.nome AS nome,
@@ -311,6 +322,7 @@ export async function listControleVoosJornadas(
         e.pax AS pax,
         e.combustivel_inicio AS fuel_start,
         e.combustivel_fim AS fuel_end,
+        NULL AS timezone_iana,
         v.origem_importacao AS origem_importacao,
         e.origem_dados AS etapa_origem_dados,
         v.campos_editados_json AS campos_editados_json,
