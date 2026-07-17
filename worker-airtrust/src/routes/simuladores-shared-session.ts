@@ -24,9 +24,146 @@ import {
   loadSimpleSessionForConversion,
 } from './simuladores-shared-session-conversion';
 import { generateFichasForSharedSession } from './simuladores-shared-session-ficha-generator';
+import {
+  sendSimulatorSessionEmailNotifications,
+  shouldNotifySimulatorSessionUpdate,
+} from '../services/simuladores-session-notifications';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
+
+type NotificationParticipantLike = {
+  funcionario_id?: unknown;
+  funcao?: unknown;
+  cumpre_treinamento?: unknown;
+  gera_ficha?: unknown;
+  modelo_sessao_id?: unknown;
+};
+
+type NotificationSegmentLike = {
+  ordem?: unknown;
+  inicio?: unknown;
+  fim?: unknown;
+  participantes?: unknown;
+};
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function buildSharedNotificationParticipantSignature(
+  source:
+    | LoadedSharedDetail
+    | ReturnType<typeof validateAndNormalizeSharedSessionRequest>,
+): string {
+  const isCurrent = 'sessao' in source;
+
+  const participants = isCurrent
+    ? asArray<NotificationParticipantLike>(source.participantes).map((participante, index) => ({
+        ordem: index,
+        funcionario_id: Number(participante.funcionario_id),
+        funcao_sessao: String(participante.funcao || '').toUpperCase(),
+      }))
+    : source.participantes.map((participante, index) => ({
+        ordem: index,
+        funcionario_id: Number(participante.funcionario_id),
+        funcao_sessao: index === 0 ? 'PIC' : 'SIC',
+      }));
+
+  const segments = asArray<NotificationSegmentLike>(source.segmentos).map((segmento, index) => ({
+    ordem: Number(segmento.ordem || index + 1),
+    inicio: String(segmento.inicio || ''),
+    fim: String(segmento.fim || ''),
+    participantes: asArray<NotificationParticipantLike>(segmento.participantes)
+      .map((participante) => ({
+        funcionario_id: Number(participante.funcionario_id),
+        funcao: String(participante.funcao || '').toUpperCase(),
+        cumpre_treinamento: Boolean(participante.cumpre_treinamento),
+        gera_ficha: Boolean(participante.gera_ficha),
+        modelo_sessao_id: Number(participante.modelo_sessao_id || 0) || null,
+      }))
+      .sort((left, right) => left.funcionario_id - right.funcionario_id),
+  }));
+
+  return JSON.stringify({
+    participants,
+    segments,
+  });
+}
+
+function buildSharedNotificationSessionSnapshot(
+  source: LoadedSharedDetail | ReturnType<typeof validateAndNormalizeSharedSessionRequest>,
+  fallbackStatus: string | null | undefined,
+  fallbackTemplateId: number | null,
+  fallbackTipoSessao: string | null,
+) {
+  if ('sessao' in source) {
+    return {
+      data: source.sessao.data,
+      hora_inicio: source.sessao.hora_inicio,
+      hora_fim: source.sessao.hora_fim,
+      simulador_id: source.sessao.simulador_id,
+      aeronave_id: null,
+      tipo_dispositivo: source.sessao.tipo_dispositivo,
+      instrutor_id: source.sessao.instrutor_id,
+      examinador_id: null,
+      tipo_sessao: source.sessao.tipo_sessao,
+      template_id: source.sessao.template_id,
+      status: source.sessao.status,
+      observacoes: source.sessao.observacoes,
+      nome: source.sessao.nome,
+    };
+  }
+
+  return {
+    data: source.data,
+    hora_inicio: source.hora_inicio,
+    hora_fim: source.hora_fim,
+    simulador_id: source.simulador_id,
+    aeronave_id: null,
+    tipo_dispositivo: null,
+    instrutor_id: source.instrutor_id,
+    examinador_id: null,
+    tipo_sessao: fallbackTipoSessao,
+    template_id: fallbackTemplateId,
+    status: fallbackStatus || 'AGENDADO',
+    observacoes: source.observacoes || null,
+    nome: source.tema_sessao || 'Sessão compartilhada',
+  };
+}
+
+function scheduleSharedSessionNotification(
+  c: { executionCtx?: ExecutionContext; env: Env },
+  sessaoId: number,
+  empresaId: number,
+  reason: 'created' | 'updated',
+) {
+  c.executionCtx?.waitUntil(
+    sendSimulatorSessionEmailNotifications(c.env, c.env.DB, sessaoId, {
+      reason,
+      empresaId,
+    })
+      .then((results) => {
+        const sent = results.filter((item) => item.status === 'sent').length;
+        const skipped = results.filter((item) => item.status === 'skipped').length;
+        const failed = results.filter((item) => item.status === 'failed').length;
+        console.log('[simuladores/shared] session email notification queued', {
+          sessao_id: sessaoId,
+          sent,
+          skipped,
+          failed,
+          reason,
+        });
+      })
+      .catch((error) => {
+        console.error('[simuladores/shared] session email notification failed', error);
+      }),
+  );
+}
 
 app.post('/sessoes/compartilhada', async (c) => {
   const denied = await assertSharedFeature(c);
@@ -58,10 +195,11 @@ app.post('/sessoes/compartilhada', async (c) => {
           });
         }
       }
-    } catch (qualError: any) {
+    } catch (qualError: unknown) {
+      const qualErrorMessage = getErrorMessage(qualError, 'erro desconhecido');
       await cleanupFailedSharedCreate(c.env.DB, created.sessaoId).catch(() => {});
       return c.json(
-        { success: false, error: 'Falha ao criar qualificacoes planejadas: ' + String(qualError?.message || 'erro desconhecido') + '. Sessao revertida.' },
+        { success: false, error: 'Falha ao criar qualificacoes planejadas: ' + qualErrorMessage + '. Sessao revertida.' },
         500,
       );
     }
@@ -86,8 +224,8 @@ app.post('/sessoes/compartilhada', async (c) => {
       const fichasResult = await generateFichasForSharedSession(c.env.DB, empresaId, created.sessaoId);
       fichasGeradas = fichasResult.created;
       fichasExistentes = fichasResult.skipped;
-    } catch (fichaError: any) {
-      const fichaErrorMessage = String(fichaError?.message || 'erro desconhecido');
+    } catch (fichaError: unknown) {
+      const fichaErrorMessage = getErrorMessage(fichaError, 'erro desconhecido');
       await audit(c.env.DB, {
         tabela: 'fichas_sessao',
         acao: 'GERACAO_FICHAS_SHARED_FALHOU',
@@ -109,6 +247,7 @@ app.post('/sessoes/compartilhada', async (c) => {
     }
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, created.sessaoId);
+    scheduleSharedSessionNotification(c, created.sessaoId, empresaId, 'created');
     return c.json(
       {
         success: true,
@@ -124,8 +263,8 @@ app.post('/sessoes/compartilhada', async (c) => {
       },
       201,
     );
-  } catch (error: any) {
-    const rawMessage = String(error?.message || 'Erro ao criar sessão compartilhada');
+  } catch (error: unknown) {
+    const rawMessage = getErrorMessage(error, 'Erro ao criar sessão compartilhada');
     const fallbackStatus = /tenant|conflito|precisa|segmento|cobertura|função|ficha|instrutor/i.test(
       rawMessage,
     )
@@ -148,8 +287,8 @@ app.get('/sessoes/compartilhada/:id', async (c) => {
       return c.json({ success: false, error: 'Sessão compartilhada não encontrada' }, 404);
     }
     return c.json({ success: true, data: detail });
-  } catch (error: any) {
-    return c.json({ success: false, error: String(error?.message || 'Erro interno') }, 500);
+  } catch (error: unknown) {
+    return c.json({ success: false, error: getErrorMessage(error, 'Erro interno') }, 500);
   }
 });
 
@@ -168,6 +307,23 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
     const payload = validateAndNormalizeSharedSessionRequest(await c.req.json());
     const modelosMap = await assertEntityOwnership(c.env.DB, empresaId, payload);
     await assertNoExternalConflicts(c.env.DB, empresaId, payload, id);
+    const beforeSnapshot = buildSharedNotificationSessionSnapshot(
+      current as LoadedSharedDetail,
+      current.sessao.status,
+      Number(current.sessao.template_id || 0) || null,
+      String(current.sessao.tipo_sessao || '').trim() || null,
+    );
+    const afterSnapshot = buildSharedNotificationSessionSnapshot(
+      payload,
+      current.sessao.status,
+      Number((payload.atribuicoes_planejadas[0]?.modelo_sessao_id as number | null | undefined) || 0) || null,
+      payload.atribuicoes_planejadas[0]?.modelo_sessao_id
+        ? String(modelosMap.get(Number(payload.atribuicoes_planejadas[0].modelo_sessao_id))?.tipo_sessao_codigo || modelosMap.get(Number(payload.atribuicoes_planejadas[0].modelo_sessao_id))?.codigo || 'SHARED')
+        : 'SHARED',
+    );
+    const participantsChanged =
+      buildSharedNotificationParticipantSignature(current as LoadedSharedDetail) !==
+      buildSharedNotificationParticipantSignature(payload);
 
     await updateSharedSessionStructureTransactional(c.env.DB, empresaId, id, payload, modelosMap, current as LoadedSharedDetail);
 
@@ -187,10 +343,35 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
           });
         }
       }
-    } catch (qualError: any) {
+    } catch (qualError: unknown) {
+      const qualErrorMessage = getErrorMessage(qualError, 'erro desconhecido');
       return c.json(
-        { success: false, error: 'Falha ao recriar qualificacoes planejadas: ' + String(qualError?.message || 'erro desconhecido') },
+        { success: false, error: 'Falha ao recriar qualificacoes planejadas: ' + qualErrorMessage },
         500,
+      );
+    }
+
+    try {
+      await generateFichasForSharedSession(c.env.DB, empresaId, id);
+    } catch (fichaError: unknown) {
+      const fichaErrorMessage = getErrorMessage(fichaError, 'erro desconhecido');
+      await audit(c.env.DB, {
+        tabela: 'fichas_sessao',
+        acao: 'GERACAO_FICHAS_SHARED_FALHOU',
+        registro_id: id,
+        dados_novos: { empresaId, sessaoId: id, error: fichaErrorMessage, origem: 'update' },
+      }).catch(() => undefined);
+
+      return c.json(
+        {
+          success: false,
+          error:
+            'Sessão compartilhada atualizada (id ' +
+            id +
+            '), mas a geração canônica de fichas falhou e ficou pendente de reparo: ' +
+            fichaErrorMessage,
+        },
+        502,
       );
     }
 
@@ -202,10 +383,14 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
       dados_novos: payload,
     }).catch(() => undefined);
 
+    if (shouldNotifySimulatorSessionUpdate(beforeSnapshot, afterSnapshot, participantsChanged)) {
+      scheduleSharedSessionNotification(c, id, empresaId, 'updated');
+    }
+
     const detail = await loadSharedDetail(c.env.DB, empresaId, id);
     return c.json({ success: true, data: detail });
-  } catch (error: any) {
-    const rawMessage = String(error?.message || 'Erro ao editar sessão compartilhada');
+  } catch (error: unknown) {
+    const rawMessage = getErrorMessage(error, 'Erro ao editar sessão compartilhada');
     const fallbackStatus = /conflito|segmento|ficha|tenant|instrutor/i.test(rawMessage) ? 400 : 500;
     const { status, message } = crossTenantSafeResponseStatusAndMessage(rawMessage, fallbackStatus);
     return c.json({ success: false, error: message }, status);
@@ -235,6 +420,7 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
     await assertNoExternalConflicts(c.env.DB, empresaId, payload, id);
 
     let newParticipantFuncionarioIds: number[] = [];
+    let shouldNotifyAfterConversion = true;
 
     if (Number(simpleSession.modo_compartilhado) === 1) {
       // Idempotent retry: this session was already converted (e.g. a client
@@ -252,6 +438,28 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
         payload,
         modelosMap,
         current as LoadedSharedDetail,
+      );
+      const beforeSnapshot = buildSharedNotificationSessionSnapshot(
+        current as LoadedSharedDetail,
+        current.sessao.status,
+        Number(current.sessao.template_id || 0) || null,
+        String(current.sessao.tipo_sessao || '').trim() || null,
+      );
+      const afterSnapshot = buildSharedNotificationSessionSnapshot(
+        payload,
+        current.sessao.status,
+        Number((payload.atribuicoes_planejadas[0]?.modelo_sessao_id as number | null | undefined) || 0) || null,
+        payload.atribuicoes_planejadas[0]?.modelo_sessao_id
+          ? String(modelosMap.get(Number(payload.atribuicoes_planejadas[0].modelo_sessao_id))?.tipo_sessao_codigo || modelosMap.get(Number(payload.atribuicoes_planejadas[0].modelo_sessao_id))?.codigo || 'SHARED')
+          : 'SHARED',
+      );
+      const participantsChanged =
+        buildSharedNotificationParticipantSignature(current as LoadedSharedDetail) !==
+        buildSharedNotificationParticipantSignature(payload);
+      shouldNotifyAfterConversion = shouldNotifySimulatorSessionUpdate(
+        beforeSnapshot,
+        afterSnapshot,
+        participantsChanged,
       );
     } else {
       await assertSimpleSessionConvertible(c.env.DB, empresaId, simpleSession);
@@ -279,17 +487,47 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
           });
         }
       }
-    } catch (qualError: any) {
+    } catch (qualError: unknown) {
+      const qualErrorMessage = getErrorMessage(qualError, 'erro desconhecido');
       await cleanupFailedSharedConversion(c.env.DB, id, newParticipantFuncionarioIds).catch(() => {});
       return c.json(
         {
           success: false,
           error:
             'Falha ao criar qualificacoes planejadas: ' +
-            String(qualError?.message || 'erro desconhecido') +
+            qualErrorMessage +
             '. Conversão revertida.',
         },
         500,
+      );
+    }
+
+    try {
+      await generateFichasForSharedSession(c.env.DB, empresaId, id);
+    } catch (fichaError: unknown) {
+      const fichaErrorMessage = getErrorMessage(fichaError, 'erro desconhecido');
+      await audit(c.env.DB, {
+        tabela: 'fichas_sessao',
+        acao: 'GERACAO_FICHAS_SHARED_FALHOU',
+        registro_id: id,
+        dados_novos: {
+          empresaId,
+          sessaoId: id,
+          error: fichaErrorMessage,
+          origem: Number(simpleSession.modo_compartilhado) === 1 ? 'convert-idempotent-retry' : 'convert',
+        },
+      }).catch(() => undefined);
+
+      return c.json(
+        {
+          success: false,
+          error:
+            'Sessão compartilhada conciliada (id ' +
+            id +
+            '), mas a geração canônica de fichas falhou e ficou pendente de reparo: ' +
+            fichaErrorMessage,
+        },
+        502,
       );
     }
 
@@ -301,10 +539,14 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
       dados_novos: payload,
     }).catch(() => undefined);
 
+    if (shouldNotifyAfterConversion) {
+      scheduleSharedSessionNotification(c, id, empresaId, 'updated');
+    }
+
     const detail = await loadSharedDetail(c.env.DB, empresaId, id);
     return c.json({ success: true, data: detail });
-  } catch (error: any) {
-    const rawMessage = String(error?.message || 'Erro ao converter sessão em compartilhada');
+  } catch (error: unknown) {
+    const rawMessage = getErrorMessage(error, 'Erro ao converter sessão em compartilhada');
 
     // Evidence/status blockers get their own 409 (conflict with existing
     // state) rather than the generic 400/500 split used for validation and
@@ -345,8 +587,8 @@ app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', async 
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, sessaoId);
     return c.json({ success: true, data: detail });
-  } catch (error: any) {
-    return c.json({ success: false, error: String(error?.message || 'Erro interno') }, 500);
+  } catch (error: unknown) {
+    return c.json({ success: false, error: getErrorMessage(error, 'Erro interno') }, 500);
   }
 });
 
@@ -375,8 +617,8 @@ app.post('/sessoes/compartilhada/:id/gerar-fichas', requireRole('admin'), async 
         detalhes: result.details,
       },
     });
-  } catch (error: any) {
-    const rawMessage = String(error?.message || 'Erro interno ao gerar fichas');
+  } catch (error: unknown) {
+    const rawMessage = getErrorMessage(error, 'Erro interno ao gerar fichas');
     const { status, message } = crossTenantSafeResponseStatusAndMessage(rawMessage, 500);
     return c.json({ success: false, error: message }, status);
   }
