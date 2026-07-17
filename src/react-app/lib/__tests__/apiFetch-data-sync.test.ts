@@ -53,4 +53,53 @@ describe('apiFetch data-change notifications', () => {
     expect(callback).not.toHaveBeenCalled();
     cleanup();
   });
+
+  it('authenticated requests with Authorization header skip fallback retry and cache', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
+
+    installGlobalApiFetch();
+
+    const response = await apiFetch('/api/funcionarios/123', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(response?.ok).toBe(true);
+    // Authenticated GET: hasAuthorizationHeader=true causes cache bypass
+    // and no fallback retry attempted in performFetchWithFallback
+    expect(fetchMock.mock.calls.length).toBe(1);
+  });
+
+  it('authenticated mutation requests do not persist origin override on fallback', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
+
+    installGlobalApiFetch();
+
+    const response = await apiFetch('/api/escalas/evd/1', {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(response?.ok).toBe(true);
+    // Authenticated mutation: hasAuthorizationHeader=true prevents fallback attempt
+    // therefore no origin override is persisted to sessionStorage
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem('API_ORIGIN_OVERRIDE')).toBeNull();
+  });
 });
