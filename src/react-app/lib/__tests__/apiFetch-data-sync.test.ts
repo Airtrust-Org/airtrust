@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { apiFetch, installGlobalApiFetch } from '../apiFetch';
 import { onDataChanged } from '../../utils/data-sync';
+
+async function loadApiFetchWithRemoteOrigin() {
+  vi.resetModules();
+  vi.stubEnv('VITE_API_URL', 'https://airtrust-api.airtrust.workers.dev/api');
+  return import('../apiFetch');
+}
 
 describe('apiFetch data-change notifications', () => {
   beforeEach(() => {
@@ -9,6 +16,8 @@ describe('apiFetch data-change notifications', () => {
     globalThis.__airtrust_inflightGetMap__ = undefined;
     globalThis.__airtrust_recentGetCache__ = undefined;
     globalThis.__airtrust_endpointBackoff__ = undefined;
+    window.sessionStorage.clear();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -101,5 +110,106 @@ describe('apiFetch data-change notifications', () => {
     // therefore no origin override is persisted to sessionStorage
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(window.sessionStorage.getItem('API_ORIGIN_OVERRIDE')).toBeNull();
+  });
+
+  it('returns the original 404 after one authenticated call and never stores an alternate origin', async () => {
+    vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+      .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+
+    const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
+      await loadApiFetchWithRemoteOrigin();
+    installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
+    const response = await configuredApiFetch('/api/health', {
+      headers: { authorization: 'Bearer token' },
+    });
+
+    expect(response.status).toBe(404);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem('API_ORIGIN_OVERRIDE')).toBeNull();
+  });
+
+  it('removes a persisted alternate origin before an authenticated Request is sent', async () => {
+    vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
+    window.sessionStorage.setItem('API_ORIGIN_OVERRIDE', 'https://airtrust-api-production.airtrust.workers.dev');
+    const fetchMock = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+
+    const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
+      await loadApiFetchWithRemoteOrigin();
+    installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
+    await configuredApiFetch(
+      new Request('http://localhost/api/health', {
+        headers: new Headers({ AUTHORIZATION: 'Bearer token' }),
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://airtrust-api.airtrust.workers.dev/api/health',
+      undefined,
+    );
+    expect(window.sessionStorage.getItem('API_ORIGIN_OVERRIDE')).toBeNull();
+  });
+
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('%s never falls back', async (method) => {
+    vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+      .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+
+    const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
+      await loadApiFetchWithRemoteOrigin();
+    installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
+    const response = await configuredApiFetch('/api/health', { method });
+
+    expect(response.status).toBe(404);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never falls back for an unauthenticated tenant-scoped GET', async () => {
+    vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+      .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+
+    const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
+      await loadApiFetchWithRemoteOrigin();
+    installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
+    const response = await configuredApiFetch('/api/escalas/1');
+
+    expect(response.status).toBe(404);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('permits the explicit local-development health fallback only', async () => {
+    vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+      .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+
+    const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
+      await loadApiFetchWithRemoteOrigin();
+    installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
+    const response = await configuredApiFetch('/api/health');
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(window.sessionStorage.getItem('API_ORIGIN_OVERRIDE')).toBe(
+      'https://airtrust-api-production.airtrust.workers.dev',
+    );
   });
 });
