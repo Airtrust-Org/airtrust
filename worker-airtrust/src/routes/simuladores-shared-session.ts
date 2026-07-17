@@ -32,6 +32,29 @@ import {
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 
+type NotificationParticipantLike = {
+  funcionario_id?: unknown;
+  funcao?: unknown;
+  cumpre_treinamento?: unknown;
+  gera_ficha?: unknown;
+  modelo_sessao_id?: unknown;
+};
+
+type NotificationSegmentLike = {
+  ordem?: unknown;
+  inicio?: unknown;
+  fim?: unknown;
+  participantes?: unknown;
+};
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function buildSharedNotificationParticipantSignature(
   source:
     | LoadedSharedDetail
@@ -40,7 +63,7 @@ function buildSharedNotificationParticipantSignature(
   const isCurrent = 'sessao' in source;
 
   const participants = isCurrent
-    ? (source.participantes || []).map((participante: any, index) => ({
+    ? asArray<NotificationParticipantLike>(source.participantes).map((participante, index) => ({
         ordem: index,
         funcionario_id: Number(participante.funcionario_id),
         funcao_sessao: String(participante.funcao || '').toUpperCase(),
@@ -51,12 +74,12 @@ function buildSharedNotificationParticipantSignature(
         funcao_sessao: index === 0 ? 'PIC' : 'SIC',
       }));
 
-  const segments = (isCurrent ? source.segmentos || [] : source.segmentos).map((segmento: any, index: number) => ({
+  const segments = asArray<NotificationSegmentLike>(source.segmentos).map((segmento, index) => ({
     ordem: Number(segmento.ordem || index + 1),
     inicio: String(segmento.inicio || ''),
     fim: String(segmento.fim || ''),
-    participantes: [...(segmento.participantes || [])]
-      .map((participante: any) => ({
+    participantes: asArray<NotificationParticipantLike>(segmento.participantes)
+      .map((participante) => ({
         funcionario_id: Number(participante.funcionario_id),
         funcao: String(participante.funcao || '').toUpperCase(),
         cumpre_treinamento: Boolean(participante.cumpre_treinamento),
@@ -172,10 +195,11 @@ app.post('/sessoes/compartilhada', async (c) => {
           });
         }
       }
-    } catch (qualError: any) {
+    } catch (qualError: unknown) {
+      const qualErrorMessage = getErrorMessage(qualError, 'erro desconhecido');
       await cleanupFailedSharedCreate(c.env.DB, created.sessaoId).catch(() => {});
       return c.json(
-        { success: false, error: 'Falha ao criar qualificacoes planejadas: ' + String(qualError?.message || 'erro desconhecido') + '. Sessao revertida.' },
+        { success: false, error: 'Falha ao criar qualificacoes planejadas: ' + qualErrorMessage + '. Sessao revertida.' },
         500,
       );
     }
@@ -200,8 +224,8 @@ app.post('/sessoes/compartilhada', async (c) => {
       const fichasResult = await generateFichasForSharedSession(c.env.DB, empresaId, created.sessaoId);
       fichasGeradas = fichasResult.created;
       fichasExistentes = fichasResult.skipped;
-    } catch (fichaError: any) {
-      const fichaErrorMessage = String(fichaError?.message || 'erro desconhecido');
+    } catch (fichaError: unknown) {
+      const fichaErrorMessage = getErrorMessage(fichaError, 'erro desconhecido');
       await audit(c.env.DB, {
         tabela: 'fichas_sessao',
         acao: 'GERACAO_FICHAS_SHARED_FALHOU',
@@ -239,8 +263,8 @@ app.post('/sessoes/compartilhada', async (c) => {
       },
       201,
     );
-  } catch (error: any) {
-    const rawMessage = String(error?.message || 'Erro ao criar sessão compartilhada');
+  } catch (error: unknown) {
+    const rawMessage = getErrorMessage(error, 'Erro ao criar sessão compartilhada');
     const fallbackStatus = /tenant|conflito|precisa|segmento|cobertura|função|ficha|instrutor/i.test(
       rawMessage,
     )
@@ -263,8 +287,8 @@ app.get('/sessoes/compartilhada/:id', async (c) => {
       return c.json({ success: false, error: 'Sessão compartilhada não encontrada' }, 404);
     }
     return c.json({ success: true, data: detail });
-  } catch (error: any) {
-    return c.json({ success: false, error: String(error?.message || 'Erro interno') }, 500);
+  } catch (error: unknown) {
+    return c.json({ success: false, error: getErrorMessage(error, 'Erro interno') }, 500);
   }
 });
 
@@ -319,17 +343,18 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
           });
         }
       }
-    } catch (qualError: any) {
+    } catch (qualError: unknown) {
+      const qualErrorMessage = getErrorMessage(qualError, 'erro desconhecido');
       return c.json(
-        { success: false, error: 'Falha ao recriar qualificacoes planejadas: ' + String(qualError?.message || 'erro desconhecido') },
+        { success: false, error: 'Falha ao recriar qualificacoes planejadas: ' + qualErrorMessage },
         500,
       );
     }
 
     try {
       await generateFichasForSharedSession(c.env.DB, empresaId, id);
-    } catch (fichaError: any) {
-      const fichaErrorMessage = String(fichaError?.message || 'erro desconhecido');
+    } catch (fichaError: unknown) {
+      const fichaErrorMessage = getErrorMessage(fichaError, 'erro desconhecido');
       await audit(c.env.DB, {
         tabela: 'fichas_sessao',
         acao: 'GERACAO_FICHAS_SHARED_FALHOU',
@@ -364,8 +389,8 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, id);
     return c.json({ success: true, data: detail });
-  } catch (error: any) {
-    const rawMessage = String(error?.message || 'Erro ao editar sessão compartilhada');
+  } catch (error: unknown) {
+    const rawMessage = getErrorMessage(error, 'Erro ao editar sessão compartilhada');
     const fallbackStatus = /conflito|segmento|ficha|tenant|instrutor/i.test(rawMessage) ? 400 : 500;
     const { status, message } = crossTenantSafeResponseStatusAndMessage(rawMessage, fallbackStatus);
     return c.json({ success: false, error: message }, status);
@@ -462,14 +487,15 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
           });
         }
       }
-    } catch (qualError: any) {
+    } catch (qualError: unknown) {
+      const qualErrorMessage = getErrorMessage(qualError, 'erro desconhecido');
       await cleanupFailedSharedConversion(c.env.DB, id, newParticipantFuncionarioIds).catch(() => {});
       return c.json(
         {
           success: false,
           error:
             'Falha ao criar qualificacoes planejadas: ' +
-            String(qualError?.message || 'erro desconhecido') +
+            qualErrorMessage +
             '. Conversão revertida.',
         },
         500,
@@ -478,8 +504,8 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
 
     try {
       await generateFichasForSharedSession(c.env.DB, empresaId, id);
-    } catch (fichaError: any) {
-      const fichaErrorMessage = String(fichaError?.message || 'erro desconhecido');
+    } catch (fichaError: unknown) {
+      const fichaErrorMessage = getErrorMessage(fichaError, 'erro desconhecido');
       await audit(c.env.DB, {
         tabela: 'fichas_sessao',
         acao: 'GERACAO_FICHAS_SHARED_FALHOU',
@@ -519,8 +545,8 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, id);
     return c.json({ success: true, data: detail });
-  } catch (error: any) {
-    const rawMessage = String(error?.message || 'Erro ao converter sessão em compartilhada');
+  } catch (error: unknown) {
+    const rawMessage = getErrorMessage(error, 'Erro ao converter sessão em compartilhada');
 
     // Evidence/status blockers get their own 409 (conflict with existing
     // state) rather than the generic 400/500 split used for validation and
@@ -561,8 +587,8 @@ app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', async 
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, sessaoId);
     return c.json({ success: true, data: detail });
-  } catch (error: any) {
-    return c.json({ success: false, error: String(error?.message || 'Erro interno') }, 500);
+  } catch (error: unknown) {
+    return c.json({ success: false, error: getErrorMessage(error, 'Erro interno') }, 500);
   }
 });
 
@@ -591,8 +617,8 @@ app.post('/sessoes/compartilhada/:id/gerar-fichas', requireRole('admin'), async 
         detalhes: result.details,
       },
     });
-  } catch (error: any) {
-    const rawMessage = String(error?.message || 'Erro interno ao gerar fichas');
+  } catch (error: unknown) {
+    const rawMessage = getErrorMessage(error, 'Erro interno ao gerar fichas');
     const { status, message } = crossTenantSafeResponseStatusAndMessage(rawMessage, 500);
     return c.json({ success: false, error: message }, status);
   }
