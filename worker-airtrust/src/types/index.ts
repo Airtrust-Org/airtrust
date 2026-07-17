@@ -76,6 +76,10 @@ export interface Env {
 
   // Maintenance routes secret (wrangler secret put MAINTENANCE_SECRET)
   MAINTENANCE_SECRET?: string;
+  // Local maintenance is explicitly opt-in and never enabled in remote environments.
+  ENABLE_LOCAL_MAINTENANCE?: string;
+  // Set exclusively by the local Worker runtime configuration.
+  LOCAL_MAINTENANCE_RUNTIME?: string;
 
   // Gate for historical one-off admin migration endpoints (never set in production/staging)
   ENABLE_MANUAL_MIGRATIONS?: string;
