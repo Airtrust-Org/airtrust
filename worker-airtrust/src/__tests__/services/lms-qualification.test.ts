@@ -145,13 +145,22 @@ describe('lms qualification completion', () => {
   });
 
   it('propaga o erro quando o INSERT falha por uma constraint diferente da corrida esperada', async () => {
+    let qualificationLookups = 0;
     const db = {
       prepare: vi.fn((query: string) => ({
         bind: (..._args: unknown[]) => ({
-          first: async () => null,
+          first: async () => {
+            if (query.includes('FROM qualificacoes_historico') && query.includes('AND data_conclusao = ?')) {
+              qualificationLookups += 1;
+              return qualificationLookups === 1 ? null : { id: 999 };
+            }
+            return null;
+          },
           run: async () => {
             if (query.includes('INSERT INTO qualificacoes_historico')) {
-              throw new Error('D1_ERROR: some other constraint violation');
+              throw new Error(
+                'D1_ERROR: UNIQUE constraint failed: qualificacoes_historico.funcionario_id, other_table.foreign_key',
+              );
             }
             return { meta: { changes: 1 } };
           },
@@ -175,6 +184,7 @@ describe('lms qualification completion', () => {
         dataConclusao: '2026-06-30',
         existingHistoricoId: null,
       }),
-    ).rejects.toThrow('some other constraint violation');
+    ).rejects.toThrow('other_table.foreign_key');
+    expect(qualificationLookups).toBe(1);
   });
 });
