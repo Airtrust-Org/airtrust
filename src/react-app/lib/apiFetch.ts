@@ -64,10 +64,27 @@ function isExplicitLocalFallbackEnabled(): boolean {
   return isLocalHost && isDevelopmentBuild && env.VITE_ALLOW_API_ORIGIN_FALLBACK === 'true';
 }
 
-function isTenantScopedApiPath(pathname: string): boolean {
-  return /^\/api\/(funcionarios|qualificacoes|escalas|evd|lms|simuladores|frms|sigvoos|empresas|treinamentos)(\/|$)/i.test(
-    pathname,
-  );
+const PUBLIC_FALLBACK_PATHS = new Set(['/api/health', '/api/version', '/api/capabilities']);
+
+function isSameOriginApiInput(rawInput: string): boolean {
+  try {
+    const url = new URL(rawInput, window.location.origin);
+    return url.origin === window.location.origin && url.pathname.startsWith('/api/');
+  } catch {
+    return false;
+  }
+}
+
+function isExplicitPublicFallbackPath(rawInput: string): boolean {
+  if (!isRelativeApiInput(rawInput) && !isSameOriginApiInput(rawInput)) {
+    return false;
+  }
+
+  try {
+    return PUBLIC_FALLBACK_PATHS.has(new URL(rawInput, window.location.origin).pathname);
+  } catch {
+    return false;
+  }
 }
 
 function isAuthenticatedRequest(
@@ -196,13 +213,11 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
     }
     const bypassGetCache = requestHeaders.get('X-AirTrust-Bypass-Cache') === '1';
     const authenticated = isAuthenticatedRequest(requestHeaders, input, init);
-    const rawCandidate = buildResolvedUrl(rawInput, defaultOrigin);
-    const tenantScoped = !!rawCandidate && isTenantScopedApiPath(rawCandidate.pathname);
     const canFallback =
       localFallbackEnabled &&
       !authenticated &&
       method === 'GET' &&
-      !tenantScoped &&
+      isExplicitPublicFallbackPath(rawInput) &&
       !!altOrigin;
     const override = safeSessionGet('API_ORIGIN_OVERRIDE');
     if (override && (!canFallback || !isTrustedApiOrigin(override, defaultOrigin, altOrigin))) {
@@ -219,11 +234,7 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
       const tryOnce = async (originToUse: string): Promise<Response> => {
         try {
           const candidate = new URL(rawInput, window.location.origin);
-          if (
-            candidate.pathname.startsWith('/api/') &&
-            (candidate.origin === window.location.origin ||
-              candidate.hostname === window.location.hostname)
-          ) {
+          if (candidate.origin === window.location.origin && candidate.pathname.startsWith('/api/')) {
             return await originalFetch(originToUse + candidate.pathname + candidate.search, init);
           }
           if (isRelativeApiInput(rawInput)) {
