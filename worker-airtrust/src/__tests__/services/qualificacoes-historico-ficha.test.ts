@@ -527,6 +527,109 @@ describe('upsertQualificacaoHistoricoDaFicha', () => {
     ).toBe(true);
   });
 
+  it('reutiliza sem regravar status quando o registro concorrente da corrida ja esta correto', async () => {
+    // DT-0002: o branch de corrida (UNIQUE constraint, dentro do catch) chama
+    // reconcileQualificacaoHistoricoExistente com 5 argumentos, omitindo o
+    // parametro `statusFinal`. Como esse parametro e opcional no TypeScript,
+    // o compilador nao acusa o erro, mas em runtime o `status` do registro
+    // concorrente e comparado contra `undefined` em vez do status realmente
+    // calculado, forcando um UPDATE desnecessario que grava `status=undefined`.
+    //
+    // A busca "front-door" (antes do INSERT) consome 2 chamadas de
+    // 'AND data_conclusao = ?' (modo 'strict' + fallback 'by-qualificacao-id').
+    // Para exercitar de fato o branch de corrida dentro do catch, as duas
+    // primeiras chamadas devem retornar null (registro ainda nao existe do
+    // ponto de vista do request atual) e o INSERT deve falhar por
+    // UNIQUE constraint; so entao, na nova consulta feita dentro do catch,
+    // o registro concorrente (inserido por outra requisicao) deve aparecer.
+    let consultasMesmaData = 0;
+    const { db, calls } = createMockDb([
+      ["PRAGMA table_info('qualificacoes_historico')", { all: () => ({ results: [] }) }],
+      [
+        'AND data_conclusao = ?',
+        {
+          first: () => {
+            consultasMesmaData += 1;
+            if (consultasMesmaData <= 3) return null;
+            return {
+              id: 6001,
+              qualificacao_id: 78,
+              qualificacao_codigo: 'FAP06-76',
+              data_conclusao: '2026-03-30',
+              data_vencimento: '2026-09-30',
+              observacoes: 'FAP gerada da ficha #100 (check aprovado)',
+              empresa_id: 1,
+              renovada: 0,
+              // Ja concluida com o mesmo status que upsert calcularia por
+              // padrao (QUALIFICACAO_STATUS.CONCLUIDA), ou seja, nada deveria
+              // mudar quando a corrida for reconciliada.
+              status: 'CONCLUIDA',
+            };
+          },
+        },
+      ],
+      ['AND id <> ?', { first: () => null }],
+      ['COALESCE(renovada,0)=0', { first: () => null }],
+      [
+        'INSERT INTO qualificacoes_historico(',
+        {
+          run: () => {
+            throw new Error(
+              'D1_ERROR: UNIQUE constraint failed: qualificacoes_historico.funcionario_id, qualificacoes_historico.qualificacao_codigo, qualificacoes_historico.data_conclusao',
+            );
+          },
+        },
+      ],
+      [
+        'SELECT * FROM qualificacoes_historico WHERE id=? AND deleted_at IS NULL',
+        {
+          first: () => ({
+            id: 6001,
+            qualificacao_codigo: 'FAP06-76',
+            data_conclusao: '2026-03-30',
+            data_vencimento: '2026-09-30',
+            observacoes: 'FAP gerada da ficha #100 (check aprovado)',
+            renovada: 0,
+            status: 'CONCLUIDA',
+          }),
+        },
+      ],
+      [
+        'SET qualificacao_id=?,',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const result = await upsertQualificacaoHistoricoDaFicha(db, {
+      fichaId: 100,
+      funcionarioId: 41,
+      qualificacaoId: 78,
+      qualificacaoCodigo: 'FAP06-76',
+      dataConclusao: '2026-03-30',
+      dataVencimento: '2026-09-30',
+      observacoes: 'FAP gerada da ficha #100 (check aprovado)',
+      empresaId: 1,
+      // status omitido de proposito: upsert calcula o default CONCLUIDA,
+      // que ja bate com o registro concorrente encontrado na corrida.
+    });
+
+    expect(result.action).toBe('reuse');
+    expect(result.id).toBe(6001);
+    expect(
+      calls.some((call) => call.method === 'run' && call.query.includes('SET qualificacao_id=?,')),
+    ).toBe(false);
+    expect(
+      calls.some(
+        (call) =>
+          call.method === 'run' &&
+          call.query.includes('SET qualificacao_id=?,') &&
+          call.args.includes(undefined),
+      ),
+    ).toBe(false);
+  });
+
   it('preenche renovacao_de quando a coluna existe e ha qualificacao anterior', async () => {
     const { db, calls } = createMockDb([
       [

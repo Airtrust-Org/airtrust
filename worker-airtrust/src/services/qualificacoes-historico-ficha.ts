@@ -429,6 +429,7 @@ export async function upsertQualificacaoHistoricoDaFicha(
       params,
       qualificacaoCodigo,
       marcadorRenovacao,
+      statusFinal,
     );
   }
 
