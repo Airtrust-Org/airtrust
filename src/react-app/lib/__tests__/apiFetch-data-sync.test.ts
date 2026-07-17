@@ -17,6 +17,7 @@ describe('apiFetch data-change notifications', () => {
     globalThis.__airtrust_recentGetCache__ = undefined;
     globalThis.__airtrust_endpointBackoff__ = undefined;
     window.sessionStorage.clear();
+    document.cookie = 'auth_token=; Max-Age=0; path=/';
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
@@ -144,7 +145,7 @@ describe('apiFetch data-change notifications', () => {
       await loadApiFetchWithRemoteOrigin();
     installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
     await configuredApiFetch(
-      new Request('http://localhost/api/health', {
+      new Request(`${window.location.origin}/api/health`, {
         headers: new Headers({ AUTHORIZATION: 'Bearer token' }),
       }),
     );
@@ -212,4 +213,56 @@ describe('apiFetch data-change notifications', () => {
       'https://airtrust-api-production.airtrust.workers.dev',
     );
   });
+
+  it.each([
+    ['cookie', () => { document.cookie = 'auth_token=test; path=/'; }],
+    ['storage', () => { window.sessionStorage.setItem('airtrust_token', 'test'); }],
+  ])('does not fall back when authentication is supplied by %s', async (_source, authenticate) => {
+    vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
+    authenticate();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+      .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
+      await loadApiFetchWithRemoteOrigin();
+    installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
+
+    expect((await configuredApiFetch('/api/health')).status).toBe(404);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fall back when credentials include cookies', async () => {
+    vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
+    const fetchMock = vi.fn().mockResolvedValue(new Response('not found', { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
+      await loadApiFetchWithRemoteOrigin();
+    installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
+
+    expect((await configuredApiFetch('/api/health', { credentials: 'include' })).status).toBe(404);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['/api/unknown', 'https://example.invalid/api/health'])(
+    'does not fall back for non-allowlisted or absolute external input %s',
+    async (input) => {
+      vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+        .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+      Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+      const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
+        await loadApiFetchWithRemoteOrigin();
+      installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
+
+      expect((await configuredApiFetch(input)).status).toBe(404);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 });
