@@ -1,18 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { timingSafeEqual as nodeTimingSafeEqual, webcrypto } from 'node:crypto';
 import type { Env } from '../../types';
-
-const subtleCrypto = webcrypto.subtle as unknown as SubtleCrypto & {
-  timingSafeEqual?: (a: ArrayBuffer, b: ArrayBuffer) => boolean;
-};
-
-if (!subtleCrypto.timingSafeEqual) {
-  Object.defineProperty(subtleCrypto, 'timingSafeEqual', {
-    value: (a: ArrayBuffer, b: ArrayBuffer) =>
-      nodeTimingSafeEqual(Buffer.from(a), Buffer.from(b)),
-    configurable: true,
-  });
-}
 
 const getCoverageMock = vi.fn();
 
@@ -47,42 +34,42 @@ function createDb() {
   } as unknown as D1Database;
 }
 
+function createLocalMaintenanceEnv(overrides: Partial<Env> = {}): Env {
+  return {
+    DB: createDb(),
+    ENVIRONMENT: 'development',
+    ENABLE_LOCAL_MAINTENANCE: 'true',
+    LOCAL_MAINTENANCE_RUNTIME: 'true',
+    MAINTENANCE_SECRET: 'segredo-correto',
+    ...overrides,
+  } as unknown as Env;
+}
+
 describe('GET /maintenance/fortnight-coverage', () => {
   beforeEach(() => {
     getCoverageMock.mockReset();
     vi.mocked(frmsDbService.reprocessarTripulanteCompleto).mockClear();
   });
 
-  it('falha fechado com 503 quando MAINTENANCE_SECRET nao esta configurado', async () => {
+  it('falha fechado com 404 quando MAINTENANCE_SECRET nao esta configurado', async () => {
     const response = await frmsRoutes.request(
       'http://localhost/maintenance/fortnight-coverage?data_inicio=2026-06-01&data_fim=2026-06-07',
       { method: 'GET' },
       { DB: createDb() } as unknown as Env,
     );
 
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      error: 'Maintenance endpoint not configured.',
-    });
+    expect(response.status).toBe(404);
     expect(getCoverageMock).not.toHaveBeenCalled();
   });
 
-  it('responde 403 sem secret valido', async () => {
+  it('responde 404 sem secret valido', async () => {
     const response = await frmsRoutes.request(
       'http://localhost/maintenance/fortnight-coverage?data_inicio=2026-06-01&data_fim=2026-06-07',
       { method: 'GET' },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
+      createLocalMaintenanceEnv(),
     );
 
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      error: 'Token de manutenção inválido.',
-    });
+    expect(response.status).toBe(404);
     expect(getCoverageMock).not.toHaveBeenCalled();
   });
 
@@ -119,10 +106,7 @@ describe('GET /maintenance/fortnight-coverage', () => {
           'x-airtrust-maintenance': 'segredo-correto',
         },
       },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
+      createLocalMaintenanceEnv(),
     );
 
     expect(response.status).toBe(200);
@@ -144,10 +128,7 @@ describe('GET /maintenance/fortnight-coverage', () => {
           'x-maintenance-secret': 'segredo-correto',
         },
       },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
+      createLocalMaintenanceEnv(),
     );
 
     expect(response.status).toBe(400);
@@ -210,10 +191,7 @@ describe('GET /maintenance/fortnight-coverage', () => {
           'x-maintenance-secret': 'segredo-correto',
         },
       },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
+      createLocalMaintenanceEnv(),
     );
 
     expect(response.status).toBe(200);

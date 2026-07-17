@@ -1,316 +1,118 @@
-import { describe, expect, it, vi } from 'vitest';
-import { timingSafeEqual as nodeTimingSafeEqual, webcrypto } from 'node:crypto';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
-const subtleCrypto = webcrypto.subtle as unknown as SubtleCrypto & {
-  timingSafeEqual?: (a: ArrayBuffer, b: ArrayBuffer) => boolean;
-};
-
-if (!subtleCrypto.timingSafeEqual) {
-  Object.defineProperty(subtleCrypto, 'timingSafeEqual', {
-    value: (a: ArrayBuffer, b: ArrayBuffer) =>
-      nodeTimingSafeEqual(Buffer.from(a), Buffer.from(b)),
-    configurable: true,
-  });
-}
-
-vi.mock('../../lib/frms/db-service', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/frms/db-service')>();
+vi.mock('../../lib/frms/fortnight-coverage', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/frms/fortnight-coverage')>();
   return {
     ...actual,
-    carregarLimites: vi.fn().mockResolvedValue({}),
-    reprocessarTripulanteCompleto: vi.fn().mockResolvedValue(3),
+    getFrmsFortnightCoverage: vi.fn().mockResolvedValue({ total: 0, items: [] }),
   };
 });
 
-vi.mock('../../services/sigvoos-frms', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../services/sigvoos-frms')>();
-  return {
-    ...actual,
-    syncSigvoosForFrms: vi.fn().mockResolvedValue({
-      totalImportados: 2,
-      totalErros: 0,
-      windows: [],
-    }),
-  };
-});
-
-vi.mock('../../lib/frms/fortnight-materialization', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/frms/fortnight-materialization')>();
-  return {
-    ...actual,
-    previewFortnightBaseMaterialization: vi.fn().mockResolvedValue({
-      dry_run: true,
-      atualizaveis: 5,
-      resumo: { candidatos_quinzena_base: 5 },
-    }),
-    applyFortnightBaseMaterialization: vi.fn().mockResolvedValue({
-      dry_run: false,
-      updated: 5,
-      unchanged_after_guard: 0,
-    }),
-  };
-});
-
-import * as frmsDbService from '../../lib/frms/db-service';
-import * as fortnightMaterialization from '../../lib/frms/fortnight-materialization';
-import * as sigvoosService from '../../services/sigvoos-frms';
+import * as coverage from '../../lib/frms/fortnight-coverage';
+import { app } from '../../index';
 import frmsRoutes from '../../routes/frms';
 import { sigvoosRouter } from '../../routes/integracoes_sigvoos';
+
+const secret = 'synthetic-maintenance-secret';
 
 function createDb() {
   return {
     prepare: vi.fn(() => ({
       bind: vi.fn().mockReturnThis(),
-      first: vi.fn().mockResolvedValue(null),
-      all: vi.fn().mockResolvedValue({ results: [] }),
-      run: vi.fn().mockResolvedValue({ success: true }),
+      first: vi.fn(),
+      all: vi.fn(),
+      run: vi.fn(),
     })),
   } as unknown as D1Database;
 }
 
-describe('maintenance guards', () => {
-  it('FRMS falha fechado com 503 quando MAINTENANCE_SECRET não está configurado', async () => {
-    const response = await frmsRoutes.request(
-      'http://localhost/maintenance/reprocessar-lote',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tripulante_ids: [11] }),
-      },
-      { DB: createDb() } as unknown as Env,
-    );
+export function createLocalMaintenanceEnv(overrides: Partial<Env> = {}): Env {
+  return {
+    DB: createDb(),
+    ENVIRONMENT: 'development',
+    ENABLE_LOCAL_MAINTENANCE: 'true',
+    LOCAL_MAINTENANCE_RUNTIME: 'true',
+    MAINTENANCE_SECRET: secret,
+    ...overrides,
+  } as unknown as Env;
+}
 
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      error: 'Maintenance endpoint not configured.',
-    });
-    expect(frmsDbService.reprocessarTripulanteCompleto).not.toHaveBeenCalled();
+export function createProductionMaintenanceEnv(overrides: Partial<Env> = {}): Env {
+  return {
+    DB: createDb(),
+    ENVIRONMENT: 'production',
+    ...overrides,
+  } as unknown as Env;
+}
+
+export function createStagingMaintenanceEnv(overrides: Partial<Env> = {}): Env {
+  return {
+    DB: createDb(),
+    ENVIRONMENT: 'staging',
+    ...overrides,
+  } as unknown as Env;
+}
+
+const coveragePath = '/maintenance/fortnight-coverage?empresa_id=6&data_inicio=2026-06-01&data_fim=2026-06-07';
+const appCoveragePath = `/api/frms${coveragePath}`;
+const validHeaders = { 'x-maintenance-secret': secret };
+
+beforeEach(() => {
+  vi.mocked(coverage.getFrmsFortnightCoverage).mockClear();
+});
+
+describe('local-only maintenance policy', () => {
+  it.each([
+    ['production', createProductionMaintenanceEnv()],
+    ['staging', createStagingMaintenanceEnv()],
+    ['production with every local flag', createProductionMaintenanceEnv({ ENABLE_LOCAL_MAINTENANCE: 'true', LOCAL_MAINTENANCE_RUNTIME: 'true', MAINTENANCE_SECRET: secret })],
+    ['development missing enable flag', createLocalMaintenanceEnv({ ENABLE_LOCAL_MAINTENANCE: undefined })],
+    ['development missing runtime marker', createLocalMaintenanceEnv({ LOCAL_MAINTENANCE_RUNTIME: undefined })],
+    ['development missing environment', createLocalMaintenanceEnv({ ENVIRONMENT: undefined })],
+  ])('%s is absent through the direct router before services or D1', async (_name, env) => {
+    const response = await frmsRoutes.request(`http://example.test${coveragePath}`, { headers: validHeaders }, env);
+    expect(response.status).toBe(404);
+    expect(coverage.getFrmsFortnightCoverage).not.toHaveBeenCalled();
+    expect((env.DB as unknown as { prepare: ReturnType<typeof vi.fn> }).prepare).not.toHaveBeenCalled();
   });
 
-  it('FRMS exige token válido mesmo em localhost', async () => {
-    const response = await frmsRoutes.request(
-      'http://localhost/maintenance/reprocessar-lote',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tripulante_ids: [11] }),
-      },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      error: 'Token de manutenção inválido.',
-    });
-    expect(frmsDbService.reprocessarTripulanteCompleto).not.toHaveBeenCalled();
+  it('does not trust Host, forwarded host, Origin, or ENABLE_DEV_AUTH_BYPASS', async () => {
+    const env = createProductionMaintenanceEnv({ ENABLE_DEV_AUTH_BYPASS: 'true', MAINTENANCE_SECRET: secret });
+    const response = await frmsRoutes.request(`http://localhost${coveragePath}`, {
+      headers: { ...validHeaders, Host: 'localhost', 'X-Forwarded-Host': 'localhost', Origin: 'http://localhost' },
+    }, env);
+    expect(response.status).toBe(404);
   });
 
-  it('FRMS permite reprocessamento controlado somente com secret válido', async () => {
-    const response = await frmsRoutes.request(
-      'http://localhost/maintenance/reprocessar-lote',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-maintenance-secret': 'segredo-correto',
-        },
-        body: JSON.stringify({ tripulante_ids: [11, 12] }),
-      },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      success: true,
-      data: {
-        tripulantes: [
-          { tripulante_id: 11, jornadas: 3 },
-          { tripulante_id: 12, jornadas: 3 },
-        ],
-      },
-    });
-    expect(frmsDbService.reprocessarTripulanteCompleto).toHaveBeenCalledTimes(2);
+  it('requires the synthetic secret only after the complete local runtime contract', async () => {
+    const missing = await frmsRoutes.request(`http://example.test${coveragePath}`, {}, createLocalMaintenanceEnv({ MAINTENANCE_SECRET: undefined }));
+    const wrong = await frmsRoutes.request(`http://example.test${coveragePath}`, { headers: { 'x-maintenance-secret': 'wrong' } }, createLocalMaintenanceEnv());
+    const allowed = await frmsRoutes.request(`http://example.test${coveragePath}`, { headers: validHeaders }, createLocalMaintenanceEnv());
+    expect(missing.status).toBe(404);
+    expect(wrong.status).toBe(404);
+    expect(allowed.status).toBe(200);
   });
 
-  it('SIGVOOS maintenance falha fechado sem secret válido e só libera fluxo controlado com token correto', async () => {
-    const forbiddenResponse = await sigvoosRouter.request(
-      'http://localhost/maintenance/sincronizar-frms',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: '2026-06-01', to: '2026-06-02' }),
-      },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
-    );
-
-    expect(forbiddenResponse.status).toBe(403);
-    await expect(forbiddenResponse.json()).resolves.toMatchObject({
-      success: false,
-      error: 'Token de manutencao invalido.',
-    });
-    expect(sigvoosService.syncSigvoosForFrms).not.toHaveBeenCalled();
-
-    const allowedResponse = await sigvoosRouter.request(
-      'http://localhost/maintenance/sincronizar-frms',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-airtrust-maintenance': 'segredo-correto',
-        },
-        body: JSON.stringify({ from: '2026-06-01', to: '2026-06-02' }),
-      },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
-    );
-
-    expect(allowedResponse.status).toBe(200);
-    await expect(allowedResponse.json()).resolves.toMatchObject({
-      success: true,
-      data: {
-        totalImportados: 2,
-        totalErros: 0,
-      },
-    });
-    expect(sigvoosService.syncSigvoosForFrms).toHaveBeenCalledWith(
-      expect.anything(),
-      1,
-      '0',
-      expect.objectContaining({ from: '2026-06-01', to: '2026-06-02' }),
-      expect.objectContaining({ MAINTENANCE_SECRET: 'segredo-correto' }),
-    );
+  it('enforces the same policy through the full app before body, rate limiting, DB, or services', async () => {
+    const env = createProductionMaintenanceEnv({ MAINTENANCE_SECRET: secret });
+    const response = await app.request(`http://remote.example${appCoveragePath}`, {
+      method: 'POST',
+      headers: { ...validHeaders, 'content-type': 'application/json' },
+      body: '{not-json',
+    }, env);
+    expect(response.status).toBe(404);
+    expect((env.DB as unknown as { prepare: ReturnType<typeof vi.fn> }).prepare).not.toHaveBeenCalled();
+    expect(coverage.getFrmsFortnightCoverage).not.toHaveBeenCalled();
   });
 
-  it('FRMS preview de materialização falha fechado sem token válido e só libera dry-run com secret', async () => {
-    const forbiddenResponse = await frmsRoutes.request(
-      'http://localhost/maintenance/fortnight-materialization-preview?empresa_id=6&data_inicio=2026-06-12&data_fim=2026-06-18',
-      {
-        method: 'GET',
-      },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
-    );
-
-    expect(forbiddenResponse.status).toBe(403);
-    await expect(forbiddenResponse.json()).resolves.toMatchObject({
-      success: false,
-      error: 'Token de manutenção inválido.',
-    });
-    expect(fortnightMaterialization.previewFortnightBaseMaterialization).not.toHaveBeenCalled();
-
-    const allowedResponse = await frmsRoutes.request(
-      'http://localhost/maintenance/fortnight-materialization-preview?empresa_id=6&data_inicio=2026-06-12&data_fim=2026-06-18',
-      {
-        method: 'GET',
-        headers: {
-          'x-maintenance-secret': 'segredo-correto',
-        },
-      },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
-    );
-
-    expect(allowedResponse.status).toBe(200);
-    await expect(allowedResponse.json()).resolves.toMatchObject({
-      success: true,
-      data: {
-        dry_run: true,
-        atualizaveis: 5,
-      },
-    });
-    expect(fortnightMaterialization.previewFortnightBaseMaterialization).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        empresaId: 6,
-        dataInicio: '2026-06-12',
-        dataFim: '2026-06-18',
-      }),
-    );
-  });
-
-  it('FRMS apply de materialização exige confirmação explícita antes de escrever', async () => {
-    const invalidConfirmResponse = await frmsRoutes.request(
-      'http://localhost/maintenance/fortnight-materialization-apply',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-maintenance-secret': 'segredo-correto',
-        },
-        body: JSON.stringify({
-          empresa_id: 6,
-          data_inicio: '2026-06-12',
-          data_fim: '2026-06-18',
-          confirm: 'WRONG',
-        }),
-      },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
-    );
-
-    expect(invalidConfirmResponse.status).toBe(400);
-    await expect(invalidConfirmResponse.json()).resolves.toMatchObject({
-      success: false,
-      error: 'Confirmação explícita inválida.',
-    });
-    expect(fortnightMaterialization.applyFortnightBaseMaterialization).not.toHaveBeenCalled();
-
-    const allowedResponse = await frmsRoutes.request(
-      'http://localhost/maintenance/fortnight-materialization-apply',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-airtrust-maintenance': 'segredo-correto',
-        },
-        body: JSON.stringify({
-          empresa_id: 6,
-          data_inicio: '2026-06-12',
-          data_fim: '2026-06-18',
-          confirm: 'APPLY_FORTNIGHT_BASE',
-        }),
-      },
-      {
-        DB: createDb(),
-        MAINTENANCE_SECRET: 'segredo-correto',
-      } as unknown as Env,
-    );
-
-    expect(allowedResponse.status).toBe(200);
-    await expect(allowedResponse.json()).resolves.toMatchObject({
-      success: true,
-      data: {
-        dry_run: false,
-        updated: 5,
-      },
-    });
-    expect(fortnightMaterialization.applyFortnightBaseMaterialization).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        empresaId: 6,
-        dataInicio: '2026-06-12',
-        dataFim: '2026-06-18',
-      }),
-    );
+  it('keeps mutation endpoints unavailable over HTTP, including SIGVOOS', async () => {
+    const env = createLocalMaintenanceEnv();
+    const [apply, reprocess, sync] = await Promise.all([
+      frmsRoutes.request('http://example.test/maintenance/fortnight-materialization-apply', { method: 'POST', headers: validHeaders, body: '{not-json' }, env),
+      frmsRoutes.request('http://example.test/maintenance/reprocessar-lote', { method: 'POST', headers: validHeaders, body: '{not-json' }, env),
+      sigvoosRouter.request('http://example.test/maintenance/sincronizar-frms', { method: 'POST', headers: validHeaders, body: '{not-json' }, env),
+    ]);
+    expect([apply.status, reprocess.status, sync.status]).toEqual([404, 404, 404]);
   });
 });
