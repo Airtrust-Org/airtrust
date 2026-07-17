@@ -20,6 +20,7 @@ import { useMinhasEAD, type LmsMatriculaEAD } from '@/react-app/hooks/useLms';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
+import { parseJsonResponse } from '@/react-app/lib/parseJsonResponse';
 import {
   getLmsRowCardBorderClasses,
   getLmsActionButtonClasses,
@@ -52,6 +53,21 @@ function statusLabel(s: LmsMatriculaEAD['status']) {
   return map[s] ?? s;
 }
 
+function isCertificadosResponse(
+  data: unknown,
+): data is { success: boolean; data: Array<{ r2_key: string; nome_arquivo: string }> } {
+  if (typeof data !== 'object' || data === null) return false;
+  const body = data as Record<string, unknown>;
+  if (typeof body.success !== 'boolean' || !Array.isArray(body.data)) return false;
+  return body.data.every(
+    (item) =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as Record<string, unknown>).r2_key === 'string' &&
+      typeof (item as Record<string, unknown>).nome_arquivo === 'string',
+  );
+}
+
 function StatusIcon({ status }: { status: LmsMatriculaEAD['status'] }) {
   if (status === 'CONCLUIDO') return <CheckCircle2 className="w-4 h-4 text-slate-400 shrink-0" />;
   if (status === 'EM_ANDAMENTO') return <Play className="w-4 h-4 text-amber-500 shrink-0" />;
@@ -74,10 +90,7 @@ function BotaoCertificado({ matricula }: { matricula: LmsMatriculaEAD }) {
       const res = await apiFetch(
         `${API_BASE_URL}/certificados/historico/${historicoId}/certificados`,
       );
-      const json = await res.json<{
-        success: boolean;
-        data: Array<{ r2_key: string; nome_arquivo: string }>;
-      }>();
+      const json = await parseJsonResponse(res, isCertificadosResponse);
       const certs = json.data ?? [];
       if (!certs.length) {
         toast.error('Nenhum certificado disponível para download.');

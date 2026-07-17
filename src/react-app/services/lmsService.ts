@@ -5,7 +5,7 @@
  * que não suportam React Query). Os hooks em `useLms.ts` wrappam estas funções
  * para adicionar cache, loading state e invalidação automática.
  */
-import apiFetch from '@/react-app/lib/apiFetch';
+import { apiFetch } from '@/react-app/lib/apiFetch';
 import type {
   LmsCurso,
   LmsMatricula,

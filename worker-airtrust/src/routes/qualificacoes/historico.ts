@@ -93,7 +93,7 @@ export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
     : '0 = 1';
   const operationalCurrentQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND COALESCE(qh.data_vencimento, qh.data_conclusao) IS NOT NULL AND NOT (${newerOperationalQualificationExistsPredicate}))`;
   const activeRenewedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND ${renewedQualificationPredicate} AND NOT (${operationalCurrentQualificationPredicate}))`;
-  const activePlannedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${renewedQualificationPredicate}) AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny(
+  const activePlannedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND NOT (${renewedQualificationPredicate}) AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny(
     QUALIFICATION_STATUS_EXPR,
     PLANNED_QUALIFICATION_STATUS_VALUES,
   )}))`;

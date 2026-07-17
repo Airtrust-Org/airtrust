@@ -1,5 +1,5 @@
 import { Printer, QrCode } from 'lucide-react';
-import { apiFetch } from '@/react-app/config/api';
+import { apiFetch } from '@/react-app/lib/apiFetch';
 
 interface PDFSystemProps {
   fichaData: any;

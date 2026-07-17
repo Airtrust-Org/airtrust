@@ -1,36 +1,21 @@
-#!/bin/bash
-# deploy-staging.sh - Deploy para ambiente STAGING (zero cache)
+#!/usr/bin/env bash
+# deploy-staging.sh — LEGACY PATH BLOCKED.
+# Use the provenance-safe Worker deploy or the official GitHub workflow instead.
+#
+# Official options:
+#   1) npm run deploy:staging:worker:safe
+#   2) .github/workflows/deploy-staging.yml (workflow_dispatch)
+#
+# This legacy script previously ran `wrangler deploy --env staging` without
+# injecting APP_VERSION, which published remote staging as version=dev-local.
 
-set -e
+set -euo pipefail
 
-echo "🚀 === DEPLOY STAGING (ZERO CACHE) ==="
-echo ""
-
-# 1. Build
-echo "📦 1/3 Building project..."
-npm run build
-echo "✅ Build complete"
-echo ""
-
-# 2. Deploy Worker (staging)
-echo "⚡ 2/3 Deploying Worker to staging..."
-cd worker-airtrust
-npx wrangler deploy --env staging
-cd ..
-echo "✅ Worker deployed to: https://airtrust-api-staging.workers.dev"
-echo ""
-
-# 3. Deploy Pages (main branch = staging)
-echo "🌐 3/3 Deploying Pages (staging)..."
-npx wrangler pages deploy dist/client --project-name=airtrust --branch=main
-echo "✅ Pages deployed to: https://main.airtrust.pages.dev"
-echo ""
-
-echo "🎉 STAGING DEPLOYMENT COMPLETE!"
-echo ""
-echo "📝 Staging URLs:"
-echo "   API: https://airtrust-api-staging.workers.dev"
-echo "   Web: https://main.airtrust.pages.dev"
-echo ""
-echo "⚡ Cache: ZERO (instant updates)"
-echo ""
+echo "❌ BLOCKED: scripts/deploy-staging.sh is retired." >&2
+echo "   It deployed staging without an auditable APP_VERSION stamp (dev-local)." >&2
+echo "   Use one of:" >&2
+echo "     AIRTRUST_ALLOW_STAGING_WORKER_DEPLOY=YES \\" >&2
+echo "     AIRTRUST_CONFIRM_STAGING_WORKER_DEPLOY='I understand this deploys the AirTrust staging worker' \\" >&2
+echo "     npm run deploy:staging:worker:safe" >&2
+echo "   or the official workflow Deploy Staging (Official)." >&2
+exit 1

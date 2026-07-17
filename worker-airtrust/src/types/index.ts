@@ -39,6 +39,9 @@ export interface Env {
   ENABLE_DEV_AUTH_BYPASS?: string; // 'true' apenas em development via .dev.vars
   USE_INTEGRATED_VIEW?: string; // 'true' habilita uso da view integrada
   USE_QUALIFICACOES_VIEW?: string; // deprecated (view removida); ignorado
+  // Migração arquitetural SIGVOOS→Controle de Voos→FRMS (shadow-mode, ver docs/frms-controle-voos-migracao.md)
+  // Default seguro (ausente/vazio) = desativado. 'all' = todas as empresas. Ou lista de ids separada por vírgula.
+  CONTROLE_VOOS_FRMS_SHADOW_MODE_TENANTS?: string;
 
   // CORS Origins (pode ser string separada por vírgula)
   CORS_ORIGINS?: string;

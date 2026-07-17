@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
+const sendSimulatorSessionEmailNotificationsMock = vi.hoisted(
+  () => vi.fn(async (..._args: unknown[]) => []),
+);
+
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
     c.set('userId', 1);
@@ -36,6 +40,36 @@ vi.mock('../../routes/simuladores-shared', async () => {
   };
 });
 
+vi.mock('../../services/simuladores-session-notifications', () => ({
+  loadSimulatorSessionNotificationData: vi.fn(async () => null),
+  sendSimulatorSessionEmailNotifications: (...args: unknown[]) =>
+    sendSimulatorSessionEmailNotificationsMock(
+      args[0],
+      args[1],
+      args[2],
+      args[3],
+    ),
+  shouldNotifySimulatorSessionUpdate: vi.fn((before: Record<string, unknown>, after: Record<string, unknown>, participantsChanged: boolean) => {
+    if (participantsChanged) return true;
+    const relevantFields = [
+      'data',
+      'hora_inicio',
+      'hora_fim',
+      'simulador_id',
+      'aeronave_id',
+      'tipo_dispositivo',
+      'instrutor_id',
+      'examinador_id',
+      'tipo_sessao',
+      'template_id',
+      'status',
+      'observacoes',
+      'nome',
+    ];
+    return relevantFields.some((field) => String(before[field] ?? '') !== String(after[field] ?? ''));
+  }),
+}));
+
 import sharedSessionRoutes from '../../routes/simuladores-shared-session';
 import {
   assertSimpleSessionConvertible,
@@ -56,6 +90,8 @@ function createDbForConversion(options?: {
   modoCompartilhado?: 0 | 1;
   fichaEvidence?: 'none' | 'protected' | 'student_signed' | 'resultado_registrado' | 'pending_no_evidence';
   modeloSemManobras?: boolean;
+  fichaGenerationFails?: boolean;
+  sharedStateMatchesPayload?: boolean;
 }) {
   const status = options?.status ?? 'AGENDADO';
   const modoCompartilhado = options?.modoCompartilhado ?? 0;
@@ -106,6 +142,13 @@ function createDbForConversion(options?: {
             };
           }
 
+          if (query.startsWith('SELECT id, data, instrutor_id, simulador_id')) {
+            if (options?.fichaGenerationFails) {
+              return null;
+            }
+            return { id: 9901, data: '2026-07-20', instrutor_id: 201, simulador_id: 10 };
+          }
+
           if (query.includes('FROM funcionarios') && query.includes('WHERE id = ?')) {
             return { id: Number(args[0]) };
           }
@@ -116,6 +159,15 @@ function createDbForConversion(options?: {
 
           if (query.includes('SELECT COUNT(DISTINCT id) AS total') && query.includes('FROM funcionarios')) {
             return { total: args.length > 0 ? Number(args.length - 1) : 0 };
+          }
+
+          if (
+            query.includes('FROM fichas_sessao') &&
+            query.includes('agendamento_slot_id = ?') &&
+            query.includes('colaborador_id_aluno = ?') &&
+            query.includes('template_id = ?')
+          ) {
+            return { id: 3001 };
           }
 
           return null;
@@ -232,6 +284,58 @@ function createDbForConversion(options?: {
               results: [
                 { id: 701, funcionario_id: 101, funcao: 'PIC', funcionario_nome: 'Piloto 101' },
                 { id: 702, funcionario_id: 102, funcao: 'SIC', funcionario_nome: 'Piloto 102' },
+              ],
+            };
+          }
+
+          if (query.includes('FROM simulador_atribuicoes_curriculares sac') && query.includes('INNER JOIN sessoes_participantes sp')) {
+            if (!options?.sharedStateMatchesPayload) return { results: [] };
+            return {
+              results: [
+                { id: 501, participante_id: 701, funcionario_id: 101, treinamento_planejado_id: null, modelo_sessao_id: 2001, gera_ficha: 1 },
+                { id: 502, participante_id: 702, funcionario_id: 102, treinamento_planejado_id: null, modelo_sessao_id: 2002, gera_ficha: 1 },
+              ],
+            };
+          }
+
+          if (query.includes('FROM simulador_agendamento_segmentos') && query.includes('ORDER BY ordem ASC')) {
+            if (!options?.sharedStateMatchesPayload) return { results: [] };
+            return {
+              results: [
+                { id: 801, uuid: 'segmento-1', empresa_id: 6, agendamento_id: 9901, ordem: 1, inicio: '07:00', fim: '08:00', duracao_minutos: 60, atribuicao_curricular_id: 501, finalidade_codigo: 'SOP_NORMAL', finalidade_titulo: 'SOP normal', status: 'ATIVO', deleted_at: null },
+                { id: 802, uuid: 'segmento-2', empresa_id: 6, agendamento_id: 9901, ordem: 2, inicio: '08:00', fim: '09:00', duracao_minutos: 60, atribuicao_curricular_id: 502, finalidade_codigo: 'SOP_NORMAL', finalidade_titulo: 'SOP normal', status: 'ATIVO', deleted_at: null },
+              ],
+            };
+          }
+
+          if (query.includes('FROM simulador_segmento_atribuicoes ssa')) {
+            if (!options?.sharedStateMatchesPayload) return { results: [] };
+            return {
+              results: [
+                { id: 9001, segmento_id: 801, atribuicao_curricular_id: 501, participante_id: 701, funcionario_id: 101, modelo_sessao_id: 2001, treinamento_planejado_id: null, gera_ficha: 1 },
+                { id: 9002, segmento_id: 802, atribuicao_curricular_id: 502, participante_id: 702, funcionario_id: 102, modelo_sessao_id: 2002, treinamento_planejado_id: null, gera_ficha: 1 },
+              ],
+            };
+          }
+
+          if (query.includes('FROM simulador_segmento_participantes ssp')) {
+            if (!options?.sharedStateMatchesPayload) return { results: [] };
+            return {
+              results: [
+                { id: 9101, segmento_id: 801, participante_id: 701, funcionario_id: 101, funcao: 'PF', duracao_minutos: 60 },
+                { id: 9102, segmento_id: 801, participante_id: 702, funcionario_id: 102, funcao: 'PM', duracao_minutos: 60 },
+                { id: 9103, segmento_id: 802, participante_id: 702, funcionario_id: 102, funcao: 'PF', duracao_minutos: 60 },
+                { id: 9104, segmento_id: 802, participante_id: 701, funcionario_id: 101, funcao: 'PM', duracao_minutos: 60 },
+              ],
+            };
+          }
+
+          if (query.includes('FROM fichas_sessao fs') && query.includes('INNER JOIN funcionarios f')) {
+            if (!options?.sharedStateMatchesPayload) return { results: [] };
+            return {
+              results: [
+                { id: 3001, agendamento_slot_id: 9901, colaborador_id_aluno: 101, status: 'AVALIACAO_PENDENTE', aluno_nome: 'Piloto 101' },
+                { id: 3002, agendamento_slot_id: 9901, colaborador_id_aluno: 102, status: 'AVALIACAO_PENDENTE', aluno_nome: 'Piloto 102' },
               ],
             };
           }
@@ -418,6 +522,9 @@ describe('assertSimpleSessionConvertible', () => {
 });
 
 describe('PUT /sessoes/:id/converter-compartilhada', () => {
+  beforeEach(() => {
+    sendSimulatorSessionEmailNotificationsMock.mockClear();
+  });
   const executionContext = { waitUntil: vi.fn() } as unknown as ExecutionContext;
 
   beforeEach(() => {
@@ -537,5 +644,70 @@ describe('PUT /sessoes/:id/converter-compartilhada', () => {
     expect(batches.length).toBe(1);
     const duplicateAgendamentoFlip = batches[0].filter((s) => s.query.includes('SET modo_compartilhado = 1'));
     expect(duplicateAgendamentoFlip.length).toBe(0);
+  });
+
+  it('does not resend simulator session email on idempotent retry when the shared session already matches the payload', async () => {
+    const { db, batches } = createDbForConversion({
+      modoCompartilhado: 1,
+      status: 'AGENDADO',
+      sharedStateMatchesPayload: true,
+    });
+    const response = await callConvert(db, conversionPayload());
+
+    expect(response.status).toBe(200);
+    expect(batches.length).toBe(1);
+    expect(sendSimulatorSessionEmailNotificationsMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces canonical ficha-generator failure on idempotent conversion retry instead of returning a false 200', async () => {
+    const { db, batches } = createDbForConversion({
+      modoCompartilhado: 1,
+      status: 'AGENDADO',
+      fichaGenerationFails: true,
+    });
+
+    const response = await callConvert(db, conversionPayload());
+
+    expect(response.status).toBe(502);
+    expect(batches.length).toBe(1);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('geração canônica de fichas falhou'),
+    });
+  });
+
+  it('allows a later idempotent retry to clear the pending repair after a previous 502 from the canonical generator', async () => {
+    const failed = createDbForConversion({
+      modoCompartilhado: 1,
+      status: 'AGENDADO',
+      fichaGenerationFails: true,
+    });
+    const failedResponse = await callConvert(failed.db, conversionPayload());
+
+    expect(failedResponse.status).toBe(502);
+    await expect(failedResponse.json()).resolves.toMatchObject({
+      success: false,
+      error: expect.stringMatching(/pendente de reparo/i),
+    });
+
+    sendSimulatorSessionEmailNotificationsMock.mockClear();
+
+    const recovered = createDbForConversion({
+      modoCompartilhado: 1,
+      status: 'AGENDADO',
+      sharedStateMatchesPayload: true,
+    });
+    const recoveredResponse = await callConvert(recovered.db, conversionPayload());
+    const recoveredJson = (await recoveredResponse.json()) as any;
+
+    expect(recoveredResponse.status).toBe(200);
+    expect(recoveredJson.success).toBe(true);
+    expect(sendSimulatorSessionEmailNotificationsMock).not.toHaveBeenCalled();
+    expect(recovered.batches).toHaveLength(1);
+    expect(
+      recovered.batches[0].filter((item) =>
+        item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),
+      ),
+    ).toHaveLength(0);
   });
 });

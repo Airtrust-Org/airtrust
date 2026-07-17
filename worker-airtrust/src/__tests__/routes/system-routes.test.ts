@@ -242,6 +242,36 @@ describe('system routes extraction', () => {
     expect(versionBody.data.version).toBe(healthBody.stats.version);
   });
 
+  it('nunca expõe dev-local em staging/production sem stamp — usa unversioned-remote', async () => {
+    const app = createSystemApp();
+
+    for (const environment of ['staging', 'production'] as const) {
+      const env = {
+        DB: createDbHealthyMock(),
+        ENVIRONMENT: environment,
+        APP_VERSION: 'managed-by-script',
+      } as unknown as Env;
+
+      const versionRes = await app.request('/api/version', {}, env);
+      const versionBody = (await versionRes.json()) as VersionBody;
+      expect(versionBody.data.version).toBe('unversioned-remote');
+      expect(versionBody.data.version).not.toBe('dev-local');
+      expect(versionBody.data.environment).toBe(environment);
+    }
+  });
+
+  it('mantém dev-local apenas quando ENVIRONMENT é local/ausente', async () => {
+    const app = createSystemApp();
+    const env = {
+      DB: createDbHealthyMock(),
+      ENVIRONMENT: 'development',
+    } as unknown as Env;
+
+    const versionRes = await app.request('/api/version', {}, env);
+    const versionBody = (await versionRes.json()) as VersionBody;
+    expect(versionBody.data.version).toBe('dev-local');
+  });
+
   it('mantém GET /api/status com status 200 e contrato atual', async () => {
     const app = createSystemApp();
     const response = await app.request(

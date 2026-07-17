@@ -16,10 +16,25 @@ export interface EmailPayload {
   htmlContent: string;
 }
 
-export async function sendEmail(env: Env, payload: EmailPayload): Promise<boolean> {
+export interface EmailSendResult {
+  ok: boolean;
+  providerMessageId?: string | null;
+  providerStatus?: number | null;
+  providerResponse?: string | null;
+}
+
+export async function sendEmailDetailed(
+  env: Env,
+  payload: EmailPayload,
+): Promise<EmailSendResult> {
   if (!env.BREVO_API_KEY || !env.BREVO_FROM_EMAIL) {
     console.warn('[email] BREVO not configured — skipping');
-    return false;
+    return {
+      ok: false,
+      providerMessageId: null,
+      providerStatus: null,
+      providerResponse: 'BREVO_NOT_CONFIGURED',
+    };
   }
 
   try {
@@ -44,13 +59,46 @@ export async function sendEmail(env: Env, payload: EmailPayload): Promise<boolea
     if (!response.ok) {
       const err = await response.text();
       console.error('[email] Brevo error:', response.status, err);
-      return false;
+      return {
+        ok: false,
+        providerMessageId: null,
+        providerStatus: response.status,
+        providerResponse: err,
+      };
+    }
+
+    let providerMessageId: string | null = null;
+    let providerResponse: string | null = null;
+    try {
+      const raw = await response.text();
+      providerResponse = raw || null;
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed.messageId === 'string') {
+        providerMessageId = parsed.messageId;
+      }
+    } catch {
+      providerResponse = null;
     }
 
     console.log('[email] Sent to', payload.to.map((t) => t.email).join(', '));
-    return true;
+    return {
+      ok: true,
+      providerMessageId,
+      providerStatus: response.status,
+      providerResponse,
+    };
   } catch (err) {
     console.error('[email] Failed to send:', err);
-    return false;
+    return {
+      ok: false,
+      providerMessageId: null,
+      providerStatus: null,
+      providerResponse: err instanceof Error ? err.message : 'EMAIL_SEND_EXCEPTION',
+    };
   }
+}
+
+export async function sendEmail(env: Env, payload: EmailPayload): Promise<boolean> {
+  const result = await sendEmailDetailed(env, payload);
+  return result.ok;
 }
