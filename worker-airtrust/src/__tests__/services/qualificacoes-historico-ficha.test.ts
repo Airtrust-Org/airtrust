@@ -120,6 +120,15 @@ describe('upsertQualificacaoHistoricoDaFicha', () => {
           call.method === 'run' && call.query.includes('INSERT INTO qualificacoes_historico'),
       ),
     ).toBe(false);
+    const sameDateLookup = calls.find(
+      (call) => call.method === 'first' && call.query.includes('AND data_conclusao = ?'),
+    );
+    expect(sameDateLookup?.args).toContain(1);
+    const reconcileUpdate = calls.find(
+      (call) => call.method === 'run' && call.query.includes('SET qualificacao_id=?,'),
+    );
+    expect(reconcileUpdate?.query).toContain('AND empresa_id=?');
+    expect(reconcileUpdate?.args.at(-1)).toBe(1);
   });
 
   it('realiza o G1-SEM pendente recalculando o vencimento em 6 meses', async () => {

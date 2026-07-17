@@ -43,6 +43,7 @@ type QualificacaoHistoricoRow = {
 
 type FindQualificacaoHistoricoParams = {
   funcionarioId: string | number;
+  empresaId: number | null;
   qualificacaoId: number | null;
   qualificacaoCodigo: string | null;
   dataConclusao: string;
@@ -100,10 +101,11 @@ const QUALIFICACAO_MATCH_SQL = `
 async function getQualificacaoHistoricoById(
   db: D1Database,
   id: number,
+  empresaId: number | null,
 ): Promise<Record<string, unknown> | null> {
   return db
-    .prepare('SELECT * FROM qualificacoes_historico WHERE id=? AND deleted_at IS NULL')
-    .bind(id)
+    .prepare('SELECT * FROM qualificacoes_historico WHERE id=? AND deleted_at IS NULL AND empresa_id=?')
+    .bind(id, empresaId)
     .first<Record<string, unknown>>();
 }
 
@@ -134,6 +136,7 @@ async function findQualificacaoHistoricoMesmaData(
       ? `SELECT id, qualificacao_id, qualificacao_codigo, data_conclusao, data_vencimento, observacoes, empresa_id, renovada, status
          FROM qualificacoes_historico
          WHERE funcionario_id = ?
+           AND empresa_id = ?
            AND deleted_at IS NULL
            AND qualificacao_id = ?
            AND data_conclusao = ?
@@ -143,6 +146,7 @@ async function findQualificacaoHistoricoMesmaData(
       : `SELECT id, qualificacao_id, qualificacao_codigo, data_conclusao, data_vencimento, observacoes, empresa_id, renovada, status
          FROM qualificacoes_historico
          WHERE ${QUALIFICACAO_MATCH_SQL}
+           AND empresa_id = ?
            AND data_conclusao = ?
          ORDER BY id DESC
          LIMIT 1`;
@@ -154,7 +158,7 @@ async function findQualificacaoHistoricoMesmaData(
 
     return db
       .prepare(query)
-      .bind(params.funcionarioId, params.qualificacaoId, params.dataConclusao)
+      .bind(params.funcionarioId, params.empresaId, params.qualificacaoId, params.dataConclusao)
       .first<QualificacaoHistoricoRow>();
   }
 
@@ -166,6 +170,7 @@ async function findQualificacaoHistoricoMesmaData(
       params.qualificacaoCodigo,
       params.qualificacaoCodigo,
       params.qualificacaoId,
+      params.empresaId,
       params.dataConclusao,
     )
     .first<QualificacaoHistoricoRow>();
@@ -233,7 +238,8 @@ async function reconcileQualificacaoHistoricoExistente(
              renovada=0,
              status=?,
              updated_at=datetime('now')
-         WHERE id=?`,
+         WHERE id=?
+           AND empresa_id=?`,
       )
       .bind(
         params.qualificacaoId,
@@ -244,20 +250,21 @@ async function reconcileQualificacaoHistoricoExistente(
         params.empresaId,
         statusFinal,
         mesmaData.id,
+        params.empresaId,
       )
       .run();
 
     return {
       id: mesmaData.id,
       action: 'update',
-      row: await getQualificacaoHistoricoById(db, mesmaData.id),
+      row: await getQualificacaoHistoricoById(db, mesmaData.id, params.empresaId),
     };
   }
 
   return {
     id: mesmaData.id,
     action: 'reuse',
-    row: await getQualificacaoHistoricoById(db, mesmaData.id),
+    row: await getQualificacaoHistoricoById(db, mesmaData.id, params.empresaId),
   };
 }
 
@@ -287,7 +294,7 @@ export async function upsertQualificacaoHistoricoDaFicha(
       return {
         id: realizacaoPendente.id,
         action: 'update',
-        row: await getQualificacaoHistoricoById(db, realizacaoPendente.id),
+        row: await getQualificacaoHistoricoById(db, realizacaoPendente.id, params.empresaId),
       };
     }
   }
@@ -296,6 +303,7 @@ export async function upsertQualificacaoHistoricoDaFicha(
   const hasRenovacaoDe = schemaColumns.has('renovacao_de');
   const findParams: FindQualificacaoHistoricoParams = {
     funcionarioId: params.funcionarioId,
+    empresaId: params.empresaId,
     qualificacaoId: params.qualificacaoId,
     qualificacaoCodigo,
     dataConclusao: params.dataConclusao,
@@ -311,6 +319,7 @@ export async function upsertQualificacaoHistoricoDaFicha(
             `SELECT id, observacoes
              FROM qualificacoes_historico
              WHERE ${QUALIFICACAO_MATCH_SQL}
+               AND empresa_id = ?
                AND id <> ?
                AND COALESCE(renovada,0)=0
                AND COALESCE(data_conclusao, '') <> ?
@@ -323,6 +332,7 @@ export async function upsertQualificacaoHistoricoDaFicha(
             qualificacaoCodigo,
             qualificacaoCodigo,
             params.qualificacaoId,
+            params.empresaId,
             mesmaData?.id ?? 0,
             params.dataConclusao,
           )
@@ -337,11 +347,13 @@ export async function upsertQualificacaoHistoricoDaFicha(
              deleted_at=NULL,
              updated_at=datetime('now'),
              observacoes=?
-         WHERE id=?`,
+         WHERE id=?
+           AND empresa_id=?`,
       )
       .bind(
         appendObservacaoIfMissing(anteriorAtiva.observacoes, marcadorRenovacao),
         anteriorAtiva.id,
+        params.empresaId,
       )
       .run();
   }
@@ -446,6 +458,6 @@ export async function upsertQualificacaoHistoricoDaFicha(
   return {
     id,
     action: 'insert',
-    row: await getQualificacaoHistoricoById(db, id),
+    row: await getQualificacaoHistoricoById(db, id, params.empresaId),
   };
 }
