@@ -29,15 +29,24 @@ function sanitizeDeployMetadata(value: string | undefined | null): string | null
  * Ordem de precedência:
  * 1. APP_VERSION (injetado pelo deploy script no wrangler.toml [vars])
  * 2. CF_DEPLOYMENT_ID (fallback Cloudflare)
- * 3. 'dev-local' (fallback seguro para desenvolvimento local)
+ * 3. Ambiente remoto (staging/production) sem stamp → 'unversioned-remote'
+ *    (nunca 'dev-local' em deploy remoto)
+ * 4. 'dev-local' (somente execução local / ENVIRONMENT ausente ou development)
  */
 export function getCanonicalVersion(env: Env): string {
   const raw = env as unknown as Record<string, string>;
-  return (
-    sanitizeDeployMetadata(raw.APP_VERSION) ||
-    sanitizeDeployMetadata(raw.CF_DEPLOYMENT_ID) ||
-    'dev-local'
-  );
+  const stamped =
+    sanitizeDeployMetadata(raw.APP_VERSION) || sanitizeDeployMetadata(raw.CF_DEPLOYMENT_ID);
+  if (stamped) return stamped;
+
+  const environment = String(raw.ENVIRONMENT || '')
+    .trim()
+    .toLowerCase();
+  if (environment === 'staging' || environment === 'production') {
+    return 'unversioned-remote';
+  }
+
+  return 'dev-local';
 }
 
 export function getCanonicalBuildTime(env: Env): string | null {
