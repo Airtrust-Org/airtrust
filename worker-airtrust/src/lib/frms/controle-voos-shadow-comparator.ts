@@ -20,7 +20,9 @@ export interface FrmsJornadaLegacyRow {
 export type ControleVoosShadowDivergenceType =
   | 'AUSENTE_NO_CONTROLE_VOOS'
   | 'AUSENTE_NO_LEGADO'
-  | 'DIVERGENCIA_MINUTOS_VOO';
+  | 'DIVERGENCIA_MINUTOS_VOO'
+  | 'STATUS_NAO_CONFIAVEL'
+  | 'TIMEZONE_INDISPONIVEL';
 
 export interface ControleVoosShadowDivergence {
   tripulanteId: number;
@@ -62,13 +64,21 @@ export function compareControleVoosWithLegacyJornada(
   legacyJornadaRows: FrmsJornadaLegacyRow[],
   periodo: { from: string; to: string },
 ): ControleVoosShadowComparisonSummary {
-  // Nota: `statusCancelamentoConfirmado` é sempre `false` no contrato atual (ver
-  // CONTROLE_VOOS_FRMS_KNOWN_GAPS) — não há como excluir voos cancelados aqui.
-  // Os minutos somados podem incluir voos cancelados até essa lacuna ser resolvida.
   const cvMinutosPorChave = new Map<string, number>();
+  const cvDivergenciasConservadorasPorChave = new Map<string, ControleVoosShadowDivergenceType>();
   for (const record of controleVoosRecords) {
     const key = buildKey(record.tripulanteId, record.dataOperacional);
     cvMinutosPorChave.set(key, (cvMinutosPorChave.get(key) ?? 0) + record.minutosVoo);
+    if (record.timezoneFonte === 'INDISPONIVEL' || record.timezone === null) {
+      cvDivergenciasConservadorasPorChave.set(key, 'TIMEZONE_INDISPONIVEL');
+      continue;
+    }
+    if (
+      record.statusOperacional === 'CANCELADO' ||
+      record.statusOperacional === 'DESCONHECIDO'
+    ) {
+      cvDivergenciasConservadorasPorChave.set(key, 'STATUS_NAO_CONFIAVEL');
+    }
   }
 
   const legacyChaves = new Set<string>();
@@ -80,6 +90,8 @@ export function compareControleVoosWithLegacyJornada(
     AUSENTE_NO_CONTROLE_VOOS: 0,
     AUSENTE_NO_LEGADO: 0,
     DIVERGENCIA_MINUTOS_VOO: 0,
+    STATUS_NAO_CONFIAVEL: 0,
+    TIMEZONE_INDISPONIVEL: 0,
   };
   const amostraDivergencias: ControleVoosShadowDivergence[] = [];
 
@@ -119,6 +131,18 @@ export function compareControleVoosWithLegacyJornada(
       continue;
     }
 
+    const tipoConservador = cvDivergenciasConservadorasPorChave.get(chave);
+    if (noLegado && noCv && tipoConservador) {
+      registrar({
+        tripulanteId,
+        data,
+        tipo: tipoConservador,
+        minutosVooLegado: null,
+        minutosVooControleVoos: cvMinutosPorChave.get(chave) ?? null,
+      });
+      continue;
+    }
+
     // Sem uma fonte confiável de minutos de voo do legado neste contrato (frms_jornada
     // não expõe minutos agregados diretamente), registramos apenas presença aqui.
     // A comparação de minutos por tipo DIVERGENCIA_MINUTOS_VOO fica reservada para quando
@@ -128,7 +152,9 @@ export function compareControleVoosWithLegacyJornada(
   const totalDivergencias =
     divergenciasPorTipo.AUSENTE_NO_CONTROLE_VOOS +
     divergenciasPorTipo.AUSENTE_NO_LEGADO +
-    divergenciasPorTipo.DIVERGENCIA_MINUTOS_VOO;
+    divergenciasPorTipo.DIVERGENCIA_MINUTOS_VOO +
+    divergenciasPorTipo.STATUS_NAO_CONFIAVEL +
+    divergenciasPorTipo.TIMEZONE_INDISPONIVEL;
 
   return {
     periodo,
