@@ -24,6 +24,15 @@ function appendObservacaoIfMissing(observacoes: string | null | undefined, marke
   return `${base}\n${marker}`;
 }
 
+function isConcurrentQualificationUniqueConstraint(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return (
+    message.includes('UNIQUE constraint failed') &&
+    message.includes('qualificacoes_historico.funcionario_id') &&
+    message.includes('qualificacoes_historico.data_conclusao')
+  );
+}
+
 async function linkMatriculaToHistorico(
   db: D1Database,
   matriculaId: number,
@@ -165,8 +174,7 @@ export async function createLmsQualificationOnCompletion(params: LmsQualificatio
 
     historicoId = Number(result.meta.last_row_id || 0);
   } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-    if (!message.includes('qualificacoes_historico.funcionario_id')) {
+    if (!isConcurrentQualificationUniqueConstraint(error)) {
       throw error;
     }
 
