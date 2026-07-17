@@ -203,6 +203,94 @@ describe('qualificacoes historico status sort contract', () => {
     expect(dataQuery).toContain("END) ASC");
   });
 
+  it('mantem a PLANEJADA ativa do treinando e exclui da API a PLANEJADA cancelada do apoio', async () => {
+    const { db, calls } = createMockDb();
+    const app = createApp(db);
+
+    (db.prepare as unknown as ReturnType<typeof vi.fn>).mockImplementation((query: string) => {
+      const bind = (...args: unknown[]) => ({
+        first: async () => {
+          calls.push({ query, args, method: 'first' });
+          if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
+            return { total: 1 };
+          }
+          return null;
+        },
+        all: async () => {
+          calls.push({ query, args, method: 'all' });
+
+          if (query.includes('PRAGMA table_info(qualificacoes_historico)')) {
+            return { results: [{ name: 'renovacao_de' }] };
+          }
+
+          if (query.includes('PRAGMA table_info(modelos_aeronave)')) {
+            return { results: [{ name: 'modelo' }] };
+          }
+
+          if (query.includes('LIMIT ? OFFSET ?')) {
+            return {
+              results: [
+                {
+                  id: 701,
+                  funcionario_id: 101,
+                  funcionario_nome: 'Treinando 101',
+                  tipo_id: 2001,
+                  tipo_nome: 'PER',
+                  tipo_codigo: 'PER',
+                  validade_meses: 12,
+                  data_realizacao: null,
+                  data_vencimento: '2026-08-20',
+                  renovada: 0,
+                  tem_renovacao_posterior: 0,
+                  renovacao_de: null,
+                  qualificacao_status: 'PLANEJADA',
+                },
+              ],
+            };
+          }
+
+          return { results: [] };
+        },
+        run: async () => {
+          calls.push({ query, args, method: 'run' });
+          return { meta: { changes: 0 } };
+        },
+      });
+
+      return {
+        bind,
+        first: () => bind().first(),
+        all: () => bind().all(),
+        run: () => bind().run(),
+      };
+    });
+
+    const response = await app.request('/historico?statuses=PLANEJADA&stats=false&limit=50&page=1');
+    const body = (await response.json()) as {
+      success: boolean;
+      data: Array<{ id: number; funcionario_id: number; status: string }>;
+      meta: { total: number };
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.meta.total).toBe(1);
+    expect(body.data).toEqual([
+      expect.objectContaining({ id: 701, funcionario_id: 101, status: 'PLANEJADA' }),
+    ]);
+
+    const totalQuery =
+      calls.find(
+        (call) =>
+          call.method === 'first' &&
+          call.query.includes('COUNT(*) as total') &&
+          !call.query.includes('SUM(CASE'),
+      )?.query || '';
+    expect(totalQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'PLANEJADA'");
+    expect(totalQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'CANCELADA'");
+    expect(totalQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'CANCELADO'");
+  });
+
   it('prioriza a validade atual do modelo no historico quando o registro esta vinculado ao tipo', async () => {
     const { db } = createMockDb();
     const app = createApp(db);

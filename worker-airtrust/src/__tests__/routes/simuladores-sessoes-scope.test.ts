@@ -60,6 +60,7 @@ vi.mock('../../utils/whatsapp-send', () => ({
 }));
 
 vi.mock('../../services/simuladores-session-notifications', () => ({
+  loadSimulatorSessionNotificationData: vi.fn(async () => null),
   sendSimulatorSessionEmailNotifications: vi.fn(async () => []),
   shouldNotifySimulatorSessionUpdate: vi.fn(() => false),
 }));

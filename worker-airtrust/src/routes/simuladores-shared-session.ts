@@ -24,9 +24,123 @@ import {
   loadSimpleSessionForConversion,
 } from './simuladores-shared-session-conversion';
 import { generateFichasForSharedSession } from './simuladores-shared-session-ficha-generator';
+import {
+  sendSimulatorSessionEmailNotifications,
+  shouldNotifySimulatorSessionUpdate,
+} from '../services/simuladores-session-notifications';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
+
+function buildSharedNotificationParticipantSignature(
+  source:
+    | LoadedSharedDetail
+    | ReturnType<typeof validateAndNormalizeSharedSessionRequest>,
+): string {
+  const isCurrent = 'sessao' in source;
+
+  const participants = isCurrent
+    ? (source.participantes || []).map((participante: any, index) => ({
+        ordem: index,
+        funcionario_id: Number(participante.funcionario_id),
+        funcao_sessao: String(participante.funcao || '').toUpperCase(),
+      }))
+    : source.participantes.map((participante, index) => ({
+        ordem: index,
+        funcionario_id: Number(participante.funcionario_id),
+        funcao_sessao: index === 0 ? 'PIC' : 'SIC',
+      }));
+
+  const segments = (isCurrent ? source.segmentos || [] : source.segmentos).map((segmento: any, index: number) => ({
+    ordem: Number(segmento.ordem || index + 1),
+    inicio: String(segmento.inicio || ''),
+    fim: String(segmento.fim || ''),
+    participantes: [...(segmento.participantes || [])]
+      .map((participante: any) => ({
+        funcionario_id: Number(participante.funcionario_id),
+        funcao: String(participante.funcao || '').toUpperCase(),
+        cumpre_treinamento: Boolean(participante.cumpre_treinamento),
+        gera_ficha: Boolean(participante.gera_ficha),
+        modelo_sessao_id: Number(participante.modelo_sessao_id || 0) || null,
+      }))
+      .sort((left, right) => left.funcionario_id - right.funcionario_id),
+  }));
+
+  return JSON.stringify({
+    participants,
+    segments,
+  });
+}
+
+function buildSharedNotificationSessionSnapshot(
+  source: LoadedSharedDetail | ReturnType<typeof validateAndNormalizeSharedSessionRequest>,
+  fallbackStatus: string | null | undefined,
+  fallbackTemplateId: number | null,
+  fallbackTipoSessao: string | null,
+) {
+  if ('sessao' in source) {
+    return {
+      data: source.sessao.data,
+      hora_inicio: source.sessao.hora_inicio,
+      hora_fim: source.sessao.hora_fim,
+      simulador_id: source.sessao.simulador_id,
+      aeronave_id: null,
+      tipo_dispositivo: source.sessao.tipo_dispositivo,
+      instrutor_id: source.sessao.instrutor_id,
+      examinador_id: null,
+      tipo_sessao: source.sessao.tipo_sessao,
+      template_id: source.sessao.template_id,
+      status: source.sessao.status,
+      observacoes: source.sessao.observacoes,
+      nome: source.sessao.nome,
+    };
+  }
+
+  return {
+    data: source.data,
+    hora_inicio: source.hora_inicio,
+    hora_fim: source.hora_fim,
+    simulador_id: source.simulador_id,
+    aeronave_id: null,
+    tipo_dispositivo: null,
+    instrutor_id: source.instrutor_id,
+    examinador_id: null,
+    tipo_sessao: fallbackTipoSessao,
+    template_id: fallbackTemplateId,
+    status: fallbackStatus || 'AGENDADO',
+    observacoes: source.observacoes || null,
+    nome: source.tema_sessao || 'Sessão compartilhada',
+  };
+}
+
+function scheduleSharedSessionNotification(
+  c: { executionCtx?: ExecutionContext; env: Env },
+  sessaoId: number,
+  empresaId: number,
+  reason: 'created' | 'updated',
+) {
+  c.executionCtx?.waitUntil(
+    sendSimulatorSessionEmailNotifications(c.env, c.env.DB, sessaoId, {
+      reason,
+      empresaId,
+    })
+      .then((results) => {
+        const sent = results.filter((item) => item.status === 'sent').length;
+        const skipped = results.filter((item) => item.status === 'skipped').length;
+        const failed = results.filter((item) => item.status === 'failed').length;
+        console.log('[simuladores/shared] session email notification queued', {
+          sessao_id: sessaoId,
+          sent,
+          skipped,
+          failed,
+          reason,
+        });
+      })
+      .catch((error) => {
+        console.error('[simuladores/shared] session email notification failed', error);
+      }),
+  );
+}
 
 app.post('/sessoes/compartilhada', async (c) => {
   const denied = await assertSharedFeature(c);
@@ -109,6 +223,7 @@ app.post('/sessoes/compartilhada', async (c) => {
     }
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, created.sessaoId);
+    scheduleSharedSessionNotification(c, created.sessaoId, empresaId, 'created');
     return c.json(
       {
         success: true,
@@ -168,6 +283,23 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
     const payload = validateAndNormalizeSharedSessionRequest(await c.req.json());
     const modelosMap = await assertEntityOwnership(c.env.DB, empresaId, payload);
     await assertNoExternalConflicts(c.env.DB, empresaId, payload, id);
+    const beforeSnapshot = buildSharedNotificationSessionSnapshot(
+      current as LoadedSharedDetail,
+      current.sessao.status,
+      Number(current.sessao.template_id || 0) || null,
+      String(current.sessao.tipo_sessao || '').trim() || null,
+    );
+    const afterSnapshot = buildSharedNotificationSessionSnapshot(
+      payload,
+      current.sessao.status,
+      Number((payload.atribuicoes_planejadas[0]?.modelo_sessao_id as number | null | undefined) || 0) || null,
+      payload.atribuicoes_planejadas[0]?.modelo_sessao_id
+        ? String(modelosMap.get(Number(payload.atribuicoes_planejadas[0].modelo_sessao_id))?.tipo_sessao_codigo || modelosMap.get(Number(payload.atribuicoes_planejadas[0].modelo_sessao_id))?.codigo || 'SHARED')
+        : 'SHARED',
+    );
+    const participantsChanged =
+      buildSharedNotificationParticipantSignature(current as LoadedSharedDetail) !==
+      buildSharedNotificationParticipantSignature(payload);
 
     await updateSharedSessionStructureTransactional(c.env.DB, empresaId, id, payload, modelosMap, current as LoadedSharedDetail);
 
@@ -194,6 +326,30 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
       );
     }
 
+    try {
+      await generateFichasForSharedSession(c.env.DB, empresaId, id);
+    } catch (fichaError: any) {
+      const fichaErrorMessage = String(fichaError?.message || 'erro desconhecido');
+      await audit(c.env.DB, {
+        tabela: 'fichas_sessao',
+        acao: 'GERACAO_FICHAS_SHARED_FALHOU',
+        registro_id: id,
+        dados_novos: { empresaId, sessaoId: id, error: fichaErrorMessage, origem: 'update' },
+      }).catch(() => undefined);
+
+      return c.json(
+        {
+          success: false,
+          error:
+            'Sessão compartilhada atualizada (id ' +
+            id +
+            '), mas a geração canônica de fichas falhou e ficou pendente de reparo: ' +
+            fichaErrorMessage,
+        },
+        502,
+      );
+    }
+
     await audit(c.env.DB, {
       tabela: 'simulador_agendamentos',
       acao: 'UPDATE_SHARED',
@@ -201,6 +357,10 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
       dados_anteriores: current.sessao,
       dados_novos: payload,
     }).catch(() => undefined);
+
+    if (shouldNotifySimulatorSessionUpdate(beforeSnapshot, afterSnapshot, participantsChanged)) {
+      scheduleSharedSessionNotification(c, id, empresaId, 'updated');
+    }
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, id);
     return c.json({ success: true, data: detail });
@@ -235,6 +395,7 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
     await assertNoExternalConflicts(c.env.DB, empresaId, payload, id);
 
     let newParticipantFuncionarioIds: number[] = [];
+    let shouldNotifyAfterConversion = true;
 
     if (Number(simpleSession.modo_compartilhado) === 1) {
       // Idempotent retry: this session was already converted (e.g. a client
@@ -252,6 +413,28 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
         payload,
         modelosMap,
         current as LoadedSharedDetail,
+      );
+      const beforeSnapshot = buildSharedNotificationSessionSnapshot(
+        current as LoadedSharedDetail,
+        current.sessao.status,
+        Number(current.sessao.template_id || 0) || null,
+        String(current.sessao.tipo_sessao || '').trim() || null,
+      );
+      const afterSnapshot = buildSharedNotificationSessionSnapshot(
+        payload,
+        current.sessao.status,
+        Number((payload.atribuicoes_planejadas[0]?.modelo_sessao_id as number | null | undefined) || 0) || null,
+        payload.atribuicoes_planejadas[0]?.modelo_sessao_id
+          ? String(modelosMap.get(Number(payload.atribuicoes_planejadas[0].modelo_sessao_id))?.tipo_sessao_codigo || modelosMap.get(Number(payload.atribuicoes_planejadas[0].modelo_sessao_id))?.codigo || 'SHARED')
+          : 'SHARED',
+      );
+      const participantsChanged =
+        buildSharedNotificationParticipantSignature(current as LoadedSharedDetail) !==
+        buildSharedNotificationParticipantSignature(payload);
+      shouldNotifyAfterConversion = shouldNotifySimulatorSessionUpdate(
+        beforeSnapshot,
+        afterSnapshot,
+        participantsChanged,
       );
     } else {
       await assertSimpleSessionConvertible(c.env.DB, empresaId, simpleSession);
@@ -293,6 +476,35 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
       );
     }
 
+    try {
+      await generateFichasForSharedSession(c.env.DB, empresaId, id);
+    } catch (fichaError: any) {
+      const fichaErrorMessage = String(fichaError?.message || 'erro desconhecido');
+      await audit(c.env.DB, {
+        tabela: 'fichas_sessao',
+        acao: 'GERACAO_FICHAS_SHARED_FALHOU',
+        registro_id: id,
+        dados_novos: {
+          empresaId,
+          sessaoId: id,
+          error: fichaErrorMessage,
+          origem: Number(simpleSession.modo_compartilhado) === 1 ? 'convert-idempotent-retry' : 'convert',
+        },
+      }).catch(() => undefined);
+
+      return c.json(
+        {
+          success: false,
+          error:
+            'Sessão compartilhada conciliada (id ' +
+            id +
+            '), mas a geração canônica de fichas falhou e ficou pendente de reparo: ' +
+            fichaErrorMessage,
+        },
+        502,
+      );
+    }
+
     await audit(c.env.DB, {
       tabela: 'simulador_agendamentos',
       acao: 'CONVERT_TO_SHARED',
@@ -300,6 +512,10 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
       dados_anteriores: simpleSession,
       dados_novos: payload,
     }).catch(() => undefined);
+
+    if (shouldNotifyAfterConversion) {
+      scheduleSharedSessionNotification(c, id, empresaId, 'updated');
+    }
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, id);
     return c.json({ success: true, data: detail });
