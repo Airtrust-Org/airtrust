@@ -55,6 +55,63 @@ function computeAltOrigin(origin: string): string | null {
   }
 }
 
+function isExplicitLocalFallbackEnabled(): boolean {
+  const env = import.meta.env as ImportMetaEnv & { VITE_ALLOW_API_ORIGIN_FALLBACK?: string };
+  const isDevelopmentBuild = env.DEV === true || env.MODE === 'development' || env.MODE === 'test';
+  const isLocalHost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  return isLocalHost && isDevelopmentBuild && env.VITE_ALLOW_API_ORIGIN_FALLBACK === 'true';
+}
+
+const PUBLIC_FALLBACK_PATHS = new Set(['/api/health', '/api/version', '/api/capabilities']);
+
+function isSameOriginApiInput(rawInput: string): boolean {
+  try {
+    const url = new URL(rawInput, window.location.origin);
+    return url.origin === window.location.origin && url.pathname.startsWith('/api/');
+  } catch {
+    return false;
+  }
+}
+
+function isExplicitPublicFallbackPath(rawInput: string): boolean {
+  if (!isRelativeApiInput(rawInput) && !isSameOriginApiInput(rawInput)) {
+    return false;
+  }
+
+  try {
+    return PUBLIC_FALLBACK_PATHS.has(new URL(rawInput, window.location.origin).pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isAuthenticatedRequest(
+  headers: Headers,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): boolean {
+  if (headers.has('Authorization')) return true;
+
+  const credentials = init?.credentials || (input instanceof Request ? input.credentials : undefined);
+  if (credentials === 'include') return true;
+
+  try {
+    if (
+      window.localStorage.getItem('airtrust_token') ||
+      window.sessionStorage.getItem('airtrust_token') ||
+      /(?:^|;\s*)auth_token=/.test(document.cookie)
+    ) {
+      return true;
+    }
+  } catch {
+    // Storage and cookies can be unavailable in privacy-restricted contexts.
+  }
+
+  return false;
+}
+
 function normalizeUrlForKey(rawUrl: string): string {
   try {
     const url = new URL(rawUrl);
@@ -124,15 +181,16 @@ function notifyMutationDataChange(method: string, pathname: string | null, respo
   if (scope) notifyDataChanged(scope);
 }
 
-export function installGlobalApiFetch(): void {
+export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
   if (typeof window === 'undefined' || globalThis.__airtrust_api_fetch_installed__) {
     return;
   }
 
   globalThis.__airtrust_api_fetch_installed__ = true;
   const originalFetch = window.fetch.bind(window);
-  const defaultOrigin = API_BASE_URL.replace(/\/api$/, '');
-  const altOrigin = computeAltOrigin(defaultOrigin);
+  const defaultOrigin = apiBaseUrl.replace(/\/api$/, '');
+  const localFallbackEnabled = isExplicitLocalFallbackEnabled();
+  const altOrigin = localFallbackEnabled ? computeAltOrigin(defaultOrigin) : null;
   const inflightGetMap =
     globalThis.__airtrust_inflightGetMap__ || new Map<string, Promise<Response>>();
   const recentGetCache =
@@ -144,25 +202,31 @@ export function installGlobalApiFetch(): void {
   globalThis.__airtrust_endpointBackoff__ = endpointBackoff;
 
   const apiFetchImpl: ApiFetchFn = async (input, init) => {
-    const override = safeSessionGet('API_ORIGIN_OVERRIDE');
-    const apiOrigin =
-      override && isTrustedApiOrigin(override, defaultOrigin, altOrigin) ? override : defaultOrigin;
-
-    if (override && apiOrigin === defaultOrigin && override !== defaultOrigin) {
-      safeSessionRemove('API_ORIGIN_OVERRIDE');
-    }
-
     const method = (
       (init?.method || (input instanceof Request ? input.method : 'GET')) as string
     ).toUpperCase();
     const rawInput =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    const requestHeaders = new Headers(
-      (init?.headers as HeadersInit | undefined) ||
-        (input instanceof Request ? (input.headers as HeadersInit) : undefined),
-    );
+    const requestHeaders = new Headers(input instanceof Request ? input.headers : undefined);
+    if (init?.headers) {
+      new Headers(init.headers).forEach((value, key) => requestHeaders.set(key, value));
+    }
     const bypassGetCache = requestHeaders.get('X-AirTrust-Bypass-Cache') === '1';
-    const hasAuthorizationHeader = requestHeaders.has('Authorization');
+    const authenticated = isAuthenticatedRequest(requestHeaders, input, init);
+    const canFallback =
+      localFallbackEnabled &&
+      !authenticated &&
+      method === 'GET' &&
+      isExplicitPublicFallbackPath(rawInput) &&
+      !!altOrigin;
+    const override = safeSessionGet('API_ORIGIN_OVERRIDE');
+    if (override && (!canFallback || !isTrustedApiOrigin(override, defaultOrigin, altOrigin))) {
+      safeSessionRemove('API_ORIGIN_OVERRIDE');
+    }
+    const apiOrigin =
+      canFallback && override && isTrustedApiOrigin(override, defaultOrigin, altOrigin)
+        ? override
+        : defaultOrigin;
 
     const performFetchWithFallback = async (): Promise<Response> => {
       let triedAlt = false;
@@ -170,10 +234,7 @@ export function installGlobalApiFetch(): void {
       const tryOnce = async (originToUse: string): Promise<Response> => {
         try {
           const candidate = new URL(rawInput, window.location.origin);
-          if (
-            candidate.origin === window.location.origin &&
-            candidate.pathname.startsWith('/api/')
-          ) {
+          if (candidate.origin === window.location.origin && candidate.pathname.startsWith('/api/')) {
             return await originalFetch(originToUse + candidate.pathname + candidate.search, init);
           }
           if (isRelativeApiInput(rawInput)) {
@@ -186,7 +247,13 @@ export function installGlobalApiFetch(): void {
       };
 
       const response = await tryOnce(apiOrigin);
-      if ((response.status === 404 || response.status === 0) && altOrigin && !triedAlt) {
+      // Authenticated requests must never silently retry against — and
+      // never persist an override to — a different backend origin. A
+      // transient 404 (partial deploy, drifted route) on an authenticated
+      // call should surface as-is, not cause this session to start sending
+      // subsequent authenticated requests (including mutations) to a
+      // different environment without the user's knowledge.
+      if ((response.status === 404 || response.status === 0) && canFallback && !triedAlt) {
         triedAlt = true;
         const altResponse = await tryOnce(altOrigin);
         if (altResponse.ok) {
@@ -210,7 +277,7 @@ export function installGlobalApiFetch(): void {
       !isApiRequest ||
       method !== 'GET' ||
       bypassGetCache ||
-      hasAuthorizationHeader
+      authenticated
     ) {
       const response = await performFetchWithFallback();
       notifyMutationDataChange(method, resolved?.pathname || null, response);
