@@ -20,6 +20,9 @@ import {
 } from '../services/sigvoos-frms';
 import { carregarLimites } from '../lib/frms/db-service-config';
 import { reprocessarTripulanteCompleto } from '../lib/frms/db-service';
+import { fetchControleVoosOperationalRecords } from '../lib/frms/controle-voos-source';
+import { compareControleVoosWithLegacyJornada, type FrmsJornadaLegacyRow } from '../lib/frms/controle-voos-shadow-comparator';
+import { isControleVoosShadowModeEnabledForEmpresa } from '../lib/frms/controle-voos-shadow-flag';
 
 function buildDailyNotificationId(parts: Array<string | number>) {
   return [...parts, new Date().toISOString().slice(0, 10)].join(':');
@@ -1017,6 +1020,36 @@ async function runSigvoosFrmsDailySync(
         String(result.totalImportacoes ?? 0),
         empresaId,
       );
+
+      // SHADOW-MODE (somente leitura/comparação): migração arquitetural
+      // SIGVOOS → Controle de Voos → FRMS (ver docs/frms-controle-voos-migracao.md).
+      // Desativado por padrão; não altera o caminho legado nem grava dados.
+      if (empresaId !== null && isControleVoosShadowModeEnabledForEmpresa(empresaId, env)) {
+        try {
+          const [cvRecords, legacyJornadaRows] = await Promise.all([
+            fetchControleVoosOperationalRecords(db, empresaId, window.from, window.to),
+            db
+              .prepare(
+                `SELECT tripulante_id, data, empresa_id
+                   FROM frms_jornada
+                  WHERE empresa_id = ? AND data BETWEEN ? AND ?`,
+              )
+              .bind(empresaId, window.from, window.to)
+              .all<FrmsJornadaLegacyRow>()
+              .then((r) => r.results ?? []),
+          ]);
+          const shadowSummary = compareControleVoosWithLegacyJornada(cvRecords, legacyJornadaRows, window);
+          console.log(
+            `[SIGVOOS_CRON] [SHADOW] Empresa ${empresaId}: legado=${shadowSummary.totalRegistrosLegado} controle_voos=${shadowSummary.totalRegistrosControleVoos} divergencias=${shadowSummary.totalDivergencias}`,
+            { divergenciasPorTipo: shadowSummary.divergenciasPorTipo },
+          );
+        } catch (shadowErr) {
+          console.warn(
+            `[SIGVOOS_CRON] [SHADOW] Empresa ${empresaId}: erro na comparação Controle de Voos (não afeta o caminho legado):`,
+            (shadowErr as Error).message,
+          );
+        }
+      }
 
       console.log(
         `[SIGVOOS_CRON] Empresa ${empresaId ?? 'global'}: ${result.totalImportacoes ?? 0} voos importados. Iniciando reprocessamento FRMS...`,

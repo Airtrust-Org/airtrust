@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowRight, BellRing, CheckCircle2, ShieldAlert } from '
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
-import { canAccessModule } from '@/react-app/lib/module-access';
+import { canAccessModule, type EmpresaModuleState } from '@/react-app/lib/module-access';
 import {
   useAlertasQuery,
   useFrmsAlertasQuery,
@@ -166,7 +166,7 @@ function ManagerAlertCenterContent({
   modulosAtivos,
   canViewSgso,
 }: {
-  modulosAtivos: unknown;
+  modulosAtivos: EmpresaModuleState;
   canViewSgso: boolean;
 }) {
   const enableFrms = canAccessModule('frms', modulosAtivos);

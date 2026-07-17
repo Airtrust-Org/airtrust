@@ -106,6 +106,7 @@
     "deploy:worker": "bash -lc 'eval \"$(bash scripts/generate-version.sh)\" && APP_VERSION=\"$APP_VERSION\" npm run build && APP_VERSION=\"$APP_VERSION\" APP_BUILD_TIME=\"$APP_BUILD_TIME\" npm run deploy:worker:only -- \"$APP_VERSION\"'",
     "deploy:worker:only": "bash scripts/deploy-worker-only.sh",
     "deploy:worker:safe": "bash scripts/deploy-worker-safe.sh",
+    "deploy:staging:worker:safe": "bash scripts/deploy-staging-worker-safe.sh",
     "repo:doctor": "node scripts/airtrust-repo-doctor.mjs",
     "release:status": "npm run repo:doctor",
     "release:worker:local-emergency": "bash scripts/release-worker-local-emergency.sh",
@@ -158,6 +159,9 @@
     "check:demo-data": "bash scripts/ci-demo-data-check.sh && bash scripts/production-audit-check.sh",
     "lint:api-base": "bash scripts/guard-tenant-mutations.sh && chmod +x scripts/lint-api-base.sh && ./scripts/lint-api-base.sh",
     "guard:empresa-default1": "bash scripts/guard-no-new-empresa-default1.sh",
-    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources"
+    "guard:typescript-delta": "node scripts/guard-typescript-delta.mjs",
+    "guard:frms-no-direct-sigvoos": "node scripts/guard-frms-no-direct-sigvoos.cjs",
+    "guard:staging-version-stamp": "node scripts/guard-staging-version-stamp.mjs",
+    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta && npm run guard:frms-no-direct-sigvoos && npm run guard:staging-version-stamp"
   }
 }

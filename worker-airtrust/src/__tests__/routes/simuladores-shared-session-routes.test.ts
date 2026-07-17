@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
+const sendSimulatorSessionEmailNotificationsMock = vi.hoisted(
+  () => vi.fn(async (..._args: unknown[]) => []),
+);
+
 let mockAuthenticated = true;
 let mockUserRole = 'admin';
 
@@ -42,6 +46,36 @@ vi.mock('../../routes/simuladores-shared', async () => {
   };
 });
 
+vi.mock('../../services/simuladores-session-notifications', () => ({
+  loadSimulatorSessionNotificationData: vi.fn(async () => null),
+  sendSimulatorSessionEmailNotifications: (...args: unknown[]) =>
+    sendSimulatorSessionEmailNotificationsMock(
+      args[0],
+      args[1],
+      args[2],
+      args[3],
+    ),
+  shouldNotifySimulatorSessionUpdate: vi.fn((before: Record<string, unknown>, after: Record<string, unknown>, participantsChanged: boolean) => {
+    if (participantsChanged) return true;
+    const relevantFields = [
+      'data',
+      'hora_inicio',
+      'hora_fim',
+      'simulador_id',
+      'aeronave_id',
+      'tipo_dispositivo',
+      'instrutor_id',
+      'examinador_id',
+      'tipo_sessao',
+      'template_id',
+      'status',
+      'observacoes',
+      'nome',
+    ];
+    return relevantFields.some((field) => String(before[field] ?? '') !== String(after[field] ?? ''));
+  }),
+}));
+
 import sharedSessionRoutes from '../../routes/simuladores-shared-session';
 import { errorHandler } from '../../middleware/error-handler';
 
@@ -62,6 +96,7 @@ function createDbForSharedRoutes(options?: {
   historicalLegacyOnly?: boolean;
   examinerModelos?: boolean;
   fichaGenerationFails?: boolean;
+  demotedParticipantAlreadyReconciled?: boolean;
 }) {
   const batches: Array<Array<QueryRun>> = [];
 
@@ -271,6 +306,20 @@ function createDbForSharedRoutes(options?: {
             if (options?.missingSharedSession) {
               return { results: [] };
             }
+            if (options?.demotedParticipantAlreadyReconciled) {
+              return {
+                results: [
+                  {
+                    id: 501,
+                    participante_id: 701,
+                    funcionario_id: 101,
+                    treinamento_planejado_id: 1001,
+                    modelo_sessao_id: 2001,
+                    gera_ficha: 1,
+                  },
+                ],
+              };
+            }
             return {
               results: [
                 {
@@ -337,12 +386,20 @@ function createDbForSharedRoutes(options?: {
             if (options?.missingSharedSession || options?.historicalLegacyOnly) {
               return { results: [] };
             }
+            if (options?.demotedParticipantAlreadyReconciled) {
+              return {
+                results: [
+                  { id: 9001, segmento_id: 801, atribuicao_curricular_id: 501, participante_id: 701, funcionario_id: 101, modelo_sessao_id: 2001, treinamento_planejado_id: 1001, gera_ficha: 1 },
+                  { id: 9003, segmento_id: 802, atribuicao_curricular_id: 501, participante_id: 701, funcionario_id: 101, modelo_sessao_id: 2001, treinamento_planejado_id: 1001, gera_ficha: 1 },
+                ],
+              };
+            }
             return {
               results: [
-                { id: 9001, segmento_id: 801, atribuicao_curricular_id: 501, participante_id: 701, funcionario_id: 101 },
-                { id: 9002, segmento_id: 801, atribuicao_curricular_id: 502, participante_id: 702, funcionario_id: 102 },
-                { id: 9003, segmento_id: 802, atribuicao_curricular_id: 501, participante_id: 701, funcionario_id: 101 },
-                { id: 9004, segmento_id: 802, atribuicao_curricular_id: 502, participante_id: 702, funcionario_id: 102 },
+                { id: 9001, segmento_id: 801, atribuicao_curricular_id: 501, participante_id: 701, funcionario_id: 101, modelo_sessao_id: 2001, treinamento_planejado_id: 1001, gera_ficha: 1 },
+                { id: 9002, segmento_id: 801, atribuicao_curricular_id: 502, participante_id: 702, funcionario_id: 102, modelo_sessao_id: 2002, treinamento_planejado_id: 1002, gera_ficha: 1 },
+                { id: 9003, segmento_id: 802, atribuicao_curricular_id: 501, participante_id: 701, funcionario_id: 101, modelo_sessao_id: 2001, treinamento_planejado_id: 1001, gera_ficha: 1 },
+                { id: 9004, segmento_id: 802, atribuicao_curricular_id: 502, participante_id: 702, funcionario_id: 102, modelo_sessao_id: 2002, treinamento_planejado_id: 1002, gera_ficha: 1 },
               ],
             };
           }
@@ -350,6 +407,16 @@ function createDbForSharedRoutes(options?: {
           if (query.includes('FROM simulador_segmento_participantes ssp')) {
             if (options?.missingSharedSession) {
               return { results: [] };
+            }
+            if (options?.demotedParticipantAlreadyReconciled) {
+              return {
+                results: [
+                  { id: 9101, segmento_id: 801, participante_id: 701, funcionario_id: 101, funcao: 'PF', duracao_minutos: 60 },
+                  { id: 9102, segmento_id: 801, participante_id: 702, funcionario_id: 102, funcao: 'PM', duracao_minutos: 60 },
+                  { id: 9103, segmento_id: 802, participante_id: 701, funcionario_id: 101, funcao: 'PF', duracao_minutos: 60 },
+                  { id: 9104, segmento_id: 802, participante_id: 702, funcionario_id: 102, funcao: 'PM', duracao_minutos: 60 },
+                ],
+              };
             }
             return {
               results: [
@@ -424,6 +491,7 @@ describe('simuladores shared session routes', () => {
     mockConflict = null;
     mockAuthenticated = true;
     mockUserRole = 'admin';
+    sendSimulatorSessionEmailNotificationsMock.mockClear();
   });
 
   it('returns 404 when the shared-session feature flag is disabled', async () => {
@@ -990,6 +1058,215 @@ describe('simuladores shared session routes', () => {
     });
   });
 
+  it('demoting a participant from aluno to apoio cancels their ficha and PLANEJADA qualification, leaving the other participant untouched', async () => {
+    const { db, batches } = createDbForSharedRoutes();
+
+    const buildDemotionRequest = () =>
+      new Request('http://localhost/sessoes/compartilhada/9901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              id: 801,
+              inicio: '07:00',
+              fim: '08:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              id: 802,
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      });
+
+    const response = await sharedSessionRoutes.fetch(
+      buildDemotionRequest(),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(batches).toHaveLength(1);
+    expect(sendSimulatorSessionEmailNotificationsMock).toHaveBeenCalledTimes(1);
+    expect(sendSimulatorSessionEmailNotificationsMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      9901,
+      { reason: 'updated', empresaId: 6 },
+    );
+    const statements = batches[0];
+
+    // 102's only assignment (502, modelo 2002) disappears entirely once both
+    // segments mark them as apoio — it must be cancelled...
+    expect(
+      statements.some(
+        (item) =>
+          item.query.startsWith("UPDATE simulador_atribuicoes_curriculares SET status = 'CANCELADA'") &&
+          Number(item.args[0]) === 502,
+      ),
+    ).toBe(true);
+    // ...its ficha deleted...
+    expect(
+      statements.some(
+        (item) =>
+          item.query.startsWith('UPDATE fichas_sessao') &&
+          item.query.includes('atribuicao_curricular_id = ?') &&
+          Number(item.args[0]) === 502,
+      ),
+    ).toBe(true);
+    // ...and — the bug this test guards against — the PLANEJADA qualification
+    // derived from this session for funcionario 102 must be cancelled too,
+    // not left active in the Histórico.
+    const qualificacaoCleanup = statements.filter((item) =>
+      item.query.includes('UPDATE qualificacoes_historico'),
+    );
+    expect(qualificacaoCleanup).toHaveLength(1);
+    expect(qualificacaoCleanup[0].args).toEqual([9901, 102, 6]);
+
+    // 101 keeps fulfilling training on the same assignment (501, modelo
+    // 2001) in both segments — nothing about their assignment, ficha, or
+    // qualification may be touched by 102's demotion.
+    expect(
+      statements.some(
+        (item) =>
+          item.query.startsWith("UPDATE simulador_atribuicoes_curriculares SET status = 'CANCELADA'") &&
+          Number(item.args[0]) === 501,
+      ),
+    ).toBe(false);
+    expect(qualificacaoCleanup.some((item) => Number(item.args[1]) === 101)).toBe(false);
+
+    // Saving the same demoted configuration again must not duplicate or
+    // error — the guard SQL (deleted_at IS NULL) makes the second pass a
+    // no-op against a real database, and the route itself must not throw.
+    const { db: resaveDb, batches: resaveBatches } = createDbForSharedRoutes();
+    const secondResponse = await sharedSessionRoutes.fetch(
+      buildDemotionRequest(),
+      { DB: resaveDb, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+    expect(secondResponse.status).toBe(200);
+    expect(resaveBatches).toHaveLength(1);
+    const resaveQualificacaoCleanup = resaveBatches[0].filter((item) =>
+      item.query.includes('UPDATE qualificacoes_historico'),
+    );
+    expect(resaveQualificacaoCleanup).toHaveLength(1);
+  });
+
+  it('does not resend shared-session email when the same demoted state is saved again without relevant changes', async () => {
+    const { db, batches } = createDbForSharedRoutes({ demotedParticipantAlreadyReconciled: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              id: 801,
+              inicio: '07:00',
+              fim: '08:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              id: 802,
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(batches).toHaveLength(1);
+    expect(sendSimulatorSessionEmailNotificationsMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces canonical ficha-generator failure after a shared-session update instead of returning a false 200', async () => {
+    const { db, batches } = createDbForSharedRoutes({ fichaGenerationFails: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada/9901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+          segmentos: [
+            {
+              id: 801,
+              inicio: '07:00',
+              fim: '08:00',
+              finalidade_codigo: 'SOP_NORMAL',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+            {
+              id: 802,
+              inicio: '08:00',
+              fim: '09:00',
+              finalidade_codigo: 'ATUACAO_EXAMINADOR',
+              participantes: [
+                { funcionario_id: 101, funcao: 'PF', cumpre_treinamento: true, modelo_sessao_id: 2001, gera_ficha: true },
+                { funcionario_id: 102, funcao: 'PM', cumpre_treinamento: false },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(502);
+    expect(batches).toHaveLength(1);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('geração canônica de fichas falhou'),
+    });
+  });
+
   it('cancels one curricular assignment without deleting the other segment-curriculum relations', async () => {
     const { db, batches } = createDbForSharedRoutes();
 
@@ -1104,6 +1381,15 @@ describe('simuladores shared session routes', () => {
           Number(item.args[item.args.length - 2]) === 502,
       ),
     ).toBe(true);
+    // Assignment 501 (funcionario 101, modelo 2001) is cancelled because 101
+    // moved to modelo 2003 in this same edit — the stale PLANEJADA
+    // qualification derived from that abandoned assignment must be cancelled
+    // in the same batch, not left dangling in the Histórico.
+    const qualificacaoCleanup = statements.filter((item) =>
+      item.query.includes('UPDATE qualificacoes_historico'),
+    );
+    expect(qualificacaoCleanup).toHaveLength(1);
+    expect(qualificacaoCleanup[0].args).toEqual([9901, 101, 6]);
 
     const assignmentInserts = statements.filter((item) =>
       item.query.startsWith('INSERT INTO simulador_atribuicoes_curriculares'),

@@ -51,6 +51,11 @@ name = "airtrust-api-staging"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
+# Placeholder tracked in git. Real APP_VERSION is injected by
+# scripts/deploy-staging-worker-safe.sh and .github/workflows/deploy-staging.yml.
+# Absent/unstamped remote staging must never publish as "dev-local".
+APP_VERSION = "managed-by-script"
+APP_BUILD_TIME = "managed-by-script"
 CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
