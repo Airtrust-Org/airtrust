@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { requireRole } from '../middleware/rbac';
+import { localMaintenanceGate, localMaintenanceMutationNotFound } from '../middleware/local-maintenance';
 import { getEmpresaIdSafe } from './escalas-shared';
 import {
   getSigvoosConfig,
@@ -29,27 +30,11 @@ async function secureCompare(a: string, b: string): Promise<boolean> {
   return crypto.subtle.timingSafeEqual(aHash, bHash);
 }
 
-async function isLocalMaintenanceRequest(
-  c: Context<{ Bindings: Env; Variables: { userId?: string } }>,
-): Promise<boolean> {
-  const maintenanceSecret = c.env.MAINTENANCE_SECRET;
-  const providedHeader = c.req.header('x-maintenance-secret');
-  if (maintenanceSecret && providedHeader && (await secureCompare(providedHeader, maintenanceSecret))) {
-    return true;
-  }
-  const url = new URL(c.req.url);
-  const hostname = url.hostname.toLowerCase();
-  const hostHeader = (c.req.header('host') || '').toLowerCase();
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostHeader.startsWith('localhost:') ||
-    hostHeader.startsWith('127.0.0.1:') ||
-    hostHeader === 'localhost' ||
-    hostHeader === '127.0.0.1' ||
-    c.env.ENABLE_DEV_AUTH_BYPASS === 'true'
-  );
-}
+sigvoosRouter.use('/maintenance/*', async (c, next) => {
+  const denied = await localMaintenanceGate(c.env, c.req.raw.headers);
+  if (denied) return denied;
+  return next();
+});
 
 sigvoosRouter.use('*', async (c, next) => {
   const pathname = new URL(c.req.url).pathname;
@@ -694,47 +679,6 @@ sigvoosRouter.post('/reconciliar-pendencias', async (c) => {
   });
 });
 
-sigvoosRouter.post('/maintenance/sincronizar-frms', async (c) => {
-  if (!(await isLocalMaintenanceRequest(c))) {
-    return c.json({ success: false, error: 'Rota disponivel apenas em localhost.' }, 403);
-  }
-
-  const maintenanceSecret = c.env.MAINTENANCE_SECRET;
-  if (!maintenanceSecret) {
-    return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
-  }
-  const providedToken =
-    c.req.header('x-airtrust-maintenance') ?? c.req.header('x-maintenance-secret') ?? '';
-  if (!providedToken || !(await secureCompare(providedToken, maintenanceSecret))) {
-    console.warn('[sigvoos-maintenance] Invalid secret attempt from', c.req.header('CF-Connecting-IP'));
-    return c.json({ success: false, error: 'Token de manutencao invalido.' }, 403);
-  }
-
-  const body = await c.req.json();
-  const parsed = MaintenanceSyncSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      {
-        success: false,
-        error: 'Dados invalidos',
-        code: 'VALIDATION_ERROR',
-        details: parsed.error.flatten(),
-      },
-      400,
-    );
-  }
-
-  const empresaId = parsed.data.empresaId ?? 1;
-  try {
-    const result = await syncSigvoosForFrms(c.env.DB, empresaId, '0', parsed.data, c.env);
-    return c.json({ success: true, data: result });
-  } catch (err) {
-    console.error('[sigvoos-maintenance] sync error:', err);
-    return c.json(
-      { success: false, error: 'Erro ao sincronizar SIGVOOS', code: 'SYNC_ERROR' },
-      500,
-    );
-  }
-});
+sigvoosRouter.post('/maintenance/sincronizar-frms', () => localMaintenanceMutationNotFound());
 
 export { sigvoosRouter };
