@@ -169,8 +169,10 @@ describe('controle-voos jornadas read model', () => {
     expect(result.items[0]).toMatchObject({
       voo_id: 601,
       etapa_id: 9001,
+      voo_status: 'planejado',
       external_id_sigvoos: 700101,
       sigvoos_leg_number: 1,
+      sigvoos_staff_id: 7001,
       tripulante_id: 1001,
       nome: 'Tripulante A',
       funcao: 'PIC',
@@ -181,6 +183,7 @@ describe('controle-voos jornadas read model', () => {
       pax: 10,
       fuel_start: 1086,
       fuel_end: 730,
+      timezone_iana: null,
       origem_dados: 'importado',
       qualidade_dado: 'completo',
     });
