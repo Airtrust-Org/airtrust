@@ -22,6 +22,7 @@ vi.mock('../../middleware/auth', () => ({
 }));
 
 let mockConflict: any = null;
+const sendSimulatorSessionEmailNotificationsMock = vi.hoisted(() => vi.fn(async () => []));
 
 vi.mock('../../routes/simuladores-shared', async () => {
   const actual = await vi.importActual('../../routes/simuladores-shared');
@@ -55,7 +56,32 @@ vi.mock('../../utils/whatsapp-send', () => ({
 }));
 
 vi.mock('../../services/simuladores-session-notifications', () => ({
-  sendSimulatorSessionEmailNotifications: vi.fn(async () => []),
+  loadSimulatorSessionNotificationData: vi.fn(async () => ({
+    session: {
+      id: 901,
+      data: '2026-06-20',
+      hora_inicio: '07:00',
+      hora_fim: '09:00',
+      tipo_sessao: 'PER',
+      tema_sessao: 'Sessão simples',
+      status: 'AGENDADO',
+      observacoes: null,
+      empresa_id: 6,
+      tipo_dispositivo: 'SIMULADOR',
+      simulador_nome: 'Sim 10',
+      simulador_modelo: 'AW139',
+      simulador_tipo: 'FSTD',
+      instrutor_id: 201,
+      instrutor_nome: 'Instrutor 201',
+      instrutor_email: 'instrutor201@example.com',
+      examinador_id: null,
+      examinador_nome: null,
+      examinador_email: null,
+    },
+    participants: [{ funcionario_id: 101, funcao: 'PIC', funcionario_nome: 'Aluno 101', funcionario_email: 'aluno101@example.com' }],
+  })),
+  sendSimulatorSessionEmailNotifications: (...args: unknown[]) =>
+    (sendSimulatorSessionEmailNotificationsMock as any)(args[0], args[1], args[2], args[3]),
   shouldNotifySimulatorSessionUpdate: vi.fn(() => false),
 }));
 
@@ -195,6 +221,7 @@ describe('simuladores sessões legacy characterization', () => {
 
   beforeEach(() => {
     mockConflict = null;
+    sendSimulatorSessionEmailNotificationsMock.mockClear();
   });
 
   it('keeps the simple POST /sessoes flow creating one parent, one participant, and one ficha', async () => {
@@ -270,5 +297,12 @@ describe('simuladores sessões legacy characterization', () => {
     expect(response.status).toBe(200);
     expect(runs.some((item) => item.query.includes("UPDATE simulador_agendamentos SET deleted_at=datetime('now')"))).toBe(true);
     expect(runs.some((item) => item.query.includes("UPDATE fichas_sessao SET deleted_at=datetime('now') WHERE agendamento_slot_id=?"))).toBe(true);
+    expect(sendSimulatorSessionEmailNotificationsMock).toHaveBeenCalledTimes(1);
+    expect(sendSimulatorSessionEmailNotificationsMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      db,
+      901,
+      expect.objectContaining({ reason: 'canceled', empresaId: 6 }),
+    );
   });
 });

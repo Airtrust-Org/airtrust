@@ -18,6 +18,7 @@ import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
 import {
+  loadSimulatorSessionNotificationData,
   sendSimulatorSessionEmailNotifications,
   shouldNotifySimulatorSessionUpdate,
 } from '../services/simuladores-session-notifications';
@@ -1107,6 +1108,7 @@ app.delete('/sessoes/:id', async (c) => {
 
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
+    const sessaoId = Number(id);
 
     // Buscar sessão
     const a = await c.env.DB.prepare(
@@ -1115,6 +1117,10 @@ app.delete('/sessoes/:id', async (c) => {
       .bind(id, empresaId)
       .first();
     if (!a) return c.json({ success: false, error: 'Sessão não encontrada' }, 404);
+
+    const notificationData = Number.isFinite(sessaoId)
+      ? await loadSimulatorSessionNotificationData(c.env.DB, sessaoId, empresaId)
+      : null;
 
     const participantes = await c.env.DB.prepare(
       'SELECT funcionario_id FROM sessoes_participantes WHERE sessao_id=? AND deleted_at IS NULL',
@@ -1214,6 +1220,30 @@ app.delete('/sessoes/:id', async (c) => {
         }),
       ),
     );
+
+    if (notificationData) {
+      c.executionCtx?.waitUntil(
+        sendSimulatorSessionEmailNotifications(c.env, c.env.DB, sessaoId, {
+          reason: 'canceled',
+          empresaId,
+          preloadedData: notificationData,
+        })
+          .then((results) => {
+            const sent = results.filter((item) => item.status === 'sent').length;
+            const skipped = results.filter((item) => item.status === 'skipped').length;
+            const failed = results.filter((item) => item.status === 'failed').length;
+            console.log('[simuladores] session cancellation email notification queued', {
+              sessao_id: sessaoId,
+              sent,
+              skipped,
+              failed,
+            });
+          })
+          .catch((error) => {
+            console.error('[simuladores] session cancellation email notification failed', error);
+          }),
+      );
+    }
 
     return c.json({
       success: true,
