@@ -186,7 +186,18 @@ export function installGlobalApiFetch(): void {
       };
 
       const response = await tryOnce(apiOrigin);
-      if ((response.status === 404 || response.status === 0) && altOrigin && !triedAlt) {
+      // Authenticated requests must never silently retry against — and
+      // never persist an override to — a different backend origin. A
+      // transient 404 (partial deploy, drifted route) on an authenticated
+      // call should surface as-is, not cause this session to start sending
+      // subsequent authenticated requests (including mutations) to a
+      // different environment without the user's knowledge.
+      if (
+        (response.status === 404 || response.status === 0) &&
+        altOrigin &&
+        !triedAlt &&
+        !hasAuthorizationHeader
+      ) {
         triedAlt = true;
         const altResponse = await tryOnce(altOrigin);
         if (altResponse.ok) {
