@@ -37,6 +37,14 @@ export interface Env {
   APP_BUILD_TIME?: string;
   // Cloudflare runtime-provided metadata for the exact Worker version.
   CF_VERSION_METADATA?: WorkerVersionMetadata;
+  // Provenance chain (source -> bundle -> manifest), injected by
+  // scripts/deploy-staging-worker-safe.sh / .github/workflows/deploy-staging.yml.
+  // These describe the pipeline's own build artifact, not a Cloudflare-side
+  // cryptographic attestation of runtime content — see getProvenanceChain().
+  AIRTRUST_SOURCE_SHA?: string;
+  AIRTRUST_SOURCE_TREE?: string;
+  AIRTRUST_WORKER_BUNDLE_SHA256?: string;
+  AIRTRUST_RELEASE_MANIFEST_SHA256?: string;
   // Dev helpers
   ENABLE_DEV_AUTH_BYPASS?: string; // 'true' apenas em development via .dev.vars
   USE_INTEGRATED_VIEW?: string; // 'true' habilita uso da view integrada

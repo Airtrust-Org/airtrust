@@ -4,6 +4,17 @@ set -euo pipefail
 
 # Worker-only staging deploy with mandatory provenance stamp.
 # Does NOT apply migrations, does NOT deploy Pages, does NOT touch production.
+#
+# Provenance chain closed here (2026-07-18 remediation):
+#   source commit (HEAD) -> unique bundle dir (mktemp -d, never reused)
+#   -> worker bundle SHA-256 -> release manifest -> manifest SHA-256
+#   -> injected into the deployed Worker itself (AIRTRUST_* vars), so every
+#   response can be traced back to the exact bundle that produced it.
+#
+# This never claims Cloudflare-side cryptographic proof of runtime content —
+# only that the manifest/hashes describe the bundle this script itself built
+# and handed to `wrangler deploy`. See docs/ops/STAGING_RUNTIME_FORENSICS_2026-07-18.md
+# for the exact evidence classification (pipeline-attested vs proven).
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKER_DIR="$ROOT_DIR/worker-airtrust"
@@ -17,6 +28,7 @@ HEAD_SHA="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 ORIGIN_MAIN_SHA="$(git -C "$ROOT_DIR" rev-parse origin/main)"
 STATUS_OUTPUT="$(git -C "$ROOT_DIR" status --porcelain)"
 HEAD_SHORT="$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
+SOURCE_TREE="$(git -C "$ROOT_DIR" rev-parse HEAD^{tree})"
 
 if [[ "${AIRTRUST_ALLOW_STAGING_WORKER_DEPLOY:-}" != "YES" ]]; then
   echo "❌ Staging worker deploy is blocked by default." >&2
@@ -70,10 +82,22 @@ case "$DEPLOY_VERSION" in
     ;;
 esac
 
+NODE_VERSION_STRING="$(node --version)"
+NPM_VERSION_STRING="$(npm --version)"
+WRANGLER_VERSION_STRING="$(cd "$WORKER_DIR" && npx wrangler --version 2>/dev/null | tail -1)"
+
+# Unique, never-reused output dir. A fixed/reusable bundle path is exactly
+# what let a stale bundle from an old deploy silently answer later requests
+# (2026-07-18 incident: worker-airtrust/.tmp-worker-bundle/ was tracked and
+# stale). This directory is created fresh every run and always removed by
+# the trap below, even on failure.
+BUNDLE_DIR="$(mktemp -d "$WORKER_DIR/.tmp-worker-bundle-XXXXXX")"
 TMP_WRANGLER="$(mktemp "$WORKER_DIR/wrangler.staging-safe.XXXXXX.toml")"
+MANIFEST_FILE="$(mktemp)"
 
 cleanup() {
-  rm -f "$TMP_WRANGLER"
+  rm -rf "$BUNDLE_DIR"
+  rm -f "$TMP_WRANGLER" "$MANIFEST_FILE"
 }
 trap cleanup EXIT
 
@@ -81,9 +105,64 @@ echo "🚀 Staging worker safe deploy (no migrations, no Pages)"
 echo "   Version: $DEPLOY_VERSION"
 echo "   Build time: $BUILD_TIME"
 echo "   HEAD: $HEAD_SHA"
+echo "   Source tree: $SOURCE_TREE"
+echo "   Bundle dir: $BUNDLE_DIR"
 
-node "$ROOT_DIR/scripts/lib/patch-wrangler-env-vars.mjs" "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" staging "$DEPLOY_VERSION" "$BUILD_TIME"
-grep -A14 '^\[env.staging.vars\]' "$TMP_WRANGLER" | grep -F "APP_VERSION = \"$DEPLOY_VERSION\"" >/dev/null || { echo 'staging stamp preflight failed' >&2; exit 1; }
+# 1. Bundle the current HEAD into the fresh, unique directory. This is the
+#    exact artifact that will be uploaded in the deploy step below.
+(
+  cd "$WORKER_DIR"
+  wrangler deploy --env staging --config wrangler.toml --dry-run --outdir "$BUNDLE_DIR"
+)
+
+WORKER_BUNDLE_FILE="$(find "$BUNDLE_DIR" -maxdepth 1 -name '*.js' | sort | head -n1)"
+if [[ -z "$WORKER_BUNDLE_FILE" ]]; then
+  echo "❌ No bundled Worker module found in $BUNDLE_DIR" >&2
+  exit 1
+fi
+WORKER_BUNDLE_SHA256="$(shasum -a 256 "$WORKER_BUNDLE_FILE" | awk '{print $1}')"
+
+# 2. Patch a single temporary wrangler config with APP_VERSION/BUILD_TIME and
+#    the source-side provenance chain (source SHA/tree, bundle hash). The
+#    manifest hash itself is computed afterwards, over the manifest below,
+#    then stamped in a second, minimal patch pass so the manifest never has
+#    to include its own hash.
+node "$ROOT_DIR/scripts/lib/patch-wrangler-env-vars.mjs" "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" staging "$DEPLOY_VERSION" "$BUILD_TIME" \
+  "$(node -e 'console.log(JSON.stringify({AIRTRUST_SOURCE_SHA: process.argv[1], AIRTRUST_SOURCE_TREE: process.argv[2], AIRTRUST_WORKER_BUNDLE_SHA256: process.argv[3]}))' "$HEAD_SHA" "$SOURCE_TREE" "$WORKER_BUNDLE_SHA256")"
+
+WRANGLER_CONFIG_SHA256="$(shasum -a 256 "$TMP_WRANGLER" | awk '{print $1}')"
+
+cat > "$MANIFEST_FILE" <<JSON
+{
+  "repository": "airtrustsystem-alt/airtrust",
+  "sourceSha": "$HEAD_SHA",
+  "sourceTree": "$SOURCE_TREE",
+  "environment": "staging",
+  "workerBundleSha256": "$WORKER_BUNDLE_SHA256",
+  "wranglerConfigSha256": "$WRANGLER_CONFIG_SHA256",
+  "nodeVersion": "$NODE_VERSION_STRING",
+  "npmVersion": "$NPM_VERSION_STRING",
+  "wranglerVersion": "$WRANGLER_VERSION_STRING",
+  "buildTimeUtc": "$BUILD_TIME",
+  "dirty": false
+}
+JSON
+RELEASE_MANIFEST_SHA256="$(shasum -a 256 "$MANIFEST_FILE" | awk '{print $1}')"
+
+echo "   Worker bundle SHA-256: $WORKER_BUNDLE_SHA256"
+echo "   Wrangler config SHA-256: $WRANGLER_CONFIG_SHA256"
+echo "   Release manifest SHA-256: $RELEASE_MANIFEST_SHA256"
+cat "$MANIFEST_FILE"
+
+# 3. Stamp the manifest hash into the same temp config (second, minimal
+#    patch pass — only this one field changes).
+node "$ROOT_DIR/scripts/lib/patch-wrangler-env-vars.mjs" "$TMP_WRANGLER" "$TMP_WRANGLER" staging "$DEPLOY_VERSION" "$BUILD_TIME" \
+  "$(node -e 'console.log(JSON.stringify({AIRTRUST_RELEASE_MANIFEST_SHA256: process.argv[1]}))' "$RELEASE_MANIFEST_SHA256")"
+
+grep -A20 '^\[env.staging.vars\]' "$TMP_WRANGLER" | grep -F "APP_VERSION = \"$DEPLOY_VERSION\"" >/dev/null || { echo 'staging stamp preflight failed' >&2; exit 1; }
+grep -A20 '^\[env.staging.vars\]' "$TMP_WRANGLER" | grep -F "AIRTRUST_SOURCE_SHA = \"$HEAD_SHA\"" >/dev/null || { echo 'source SHA stamp preflight failed' >&2; exit 1; }
+grep -A20 '^\[env.staging.vars\]' "$TMP_WRANGLER" | grep -F "AIRTRUST_WORKER_BUNDLE_SHA256 = \"$WORKER_BUNDLE_SHA256\"" >/dev/null || { echo 'bundle hash stamp preflight failed' >&2; exit 1; }
+grep -A20 '^\[env.staging.vars\]' "$TMP_WRANGLER" | grep -F "AIRTRUST_RELEASE_MANIFEST_SHA256 = \"$RELEASE_MANIFEST_SHA256\"" >/dev/null || { echo 'manifest hash stamp preflight failed' >&2; exit 1; }
 
 if ! grep -q "name = \"$ALLOWED_STAGING_WORKER_NAME\"" "$TMP_WRANGLER"; then
   echo "❌ Staging worker name mismatch in patched config" >&2
@@ -104,6 +183,9 @@ fi
 PREVIOUS_VERSION="$(curl -fsS "$VERSION_ENDPOINT" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -n1 || true)"
 echo "   Previous staging version: ${PREVIOUS_VERSION:-unknown}"
 
+# 4. Real deploy. Reuses the same TMP_WRANGLER config used to compute the
+#    hashes above — the config that gets hashed is the config that gets
+#    deployed, not a separately-generated copy.
 (
   cd "$WORKER_DIR"
   wrangler deploy --env staging --config "$TMP_WRANGLER"
@@ -113,7 +195,7 @@ echo "⏳ Waiting for version endpoint to refresh..."
 sleep 3
 
 BODY_FILE="$(mktemp)"
-trap 'rm -f "$TMP_WRANGLER" "$BODY_FILE"' EXIT
+trap 'cleanup; rm -f "$BODY_FILE"' EXIT
 curl -fsS "$VERSION_ENDPOINT" >"$BODY_FILE"
 
 if grep -qE '"version":"(dev-local|unversioned-remote|managed-by-script|latest|main|)"' "$BODY_FILE"; then
@@ -134,9 +216,24 @@ if ! grep -q '"environment":"staging"' "$BODY_FILE"; then
   exit 1
 fi
 
-echo "✅ Staging worker deployed with auditable version"
+if ! grep -q "\"sourceSha\":\"$HEAD_SHA\"" "$BODY_FILE"; then
+  echo "❌ Staging source SHA mismatch in /api/version response" >&2
+  cat "$BODY_FILE" >&2
+  exit 1
+fi
+
+if ! grep -q "\"workerBundleSha256\":\"$WORKER_BUNDLE_SHA256\"" "$BODY_FILE"; then
+  echo "❌ Staging worker bundle hash mismatch in /api/version response" >&2
+  cat "$BODY_FILE" >&2
+  exit 1
+fi
+
+echo "✅ Staging worker deployed with auditable version and closed provenance chain"
 echo "   Deployed: $DEPLOY_VERSION"
 echo "   Previous: ${PREVIOUS_VERSION:-unknown}"
+echo "   Source SHA: $HEAD_SHA"
+echo "   Worker bundle SHA-256: $WORKER_BUNDLE_SHA256"
+echo "   Release manifest SHA-256: $RELEASE_MANIFEST_SHA256"
 echo "   Rollback: redeploy previous SHA with this script from that commit,"
 echo "             or restore APP_VERSION via official Deploy Staging workflow."
 cat "$BODY_FILE"

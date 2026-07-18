@@ -59,6 +59,14 @@ ENVIRONMENT = "staging"
 # Absent/unstamped remote staging must never publish as "dev-local".
 APP_VERSION = "managed-by-script"
 APP_BUILD_TIME = "managed-by-script"
+# Provenance chain (source -> bundle -> manifest). Placeholders tracked in
+# git; real values are injected by scripts/deploy-staging-worker-safe.sh and
+# .github/workflows/deploy-staging.yml from the release manifest computed at
+# deploy time. Never hand-edit these for a real deploy.
+AIRTRUST_SOURCE_SHA = "managed-by-script"
+AIRTRUST_SOURCE_TREE = "managed-by-script"
+AIRTRUST_WORKER_BUNDLE_SHA256 = "managed-by-script"
+AIRTRUST_RELEASE_MANIFEST_SHA256 = "managed-by-script"
 CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
