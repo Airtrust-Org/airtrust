@@ -41,7 +41,7 @@ import { rateLimiter, rateLimitPresets } from './middleware/rate-limit';
 import { requireRole } from './middleware/rbac';
 import { getTenantContext, tenantMiddleware } from './middleware/tenant';
 import { domainEventProcessorMiddleware } from './middleware/domainEventProcessor';
-import { localMaintenanceNotFound } from './middleware/local-maintenance';
+import { isMaintenancePath, localMaintenanceNotFound } from './middleware/local-maintenance';
 
 // Cron
 import { runScheduledJobs } from './cron/scheduled-handler';
@@ -252,9 +252,7 @@ app.use('*', async (c, next) => {
 // Multi-tenant global guard (auth + tenant context), com exclusões explícitas de rotas públicas
 app.use('/api/*', async (c, next) => {
   const pathname = new URL(c.req.url).pathname;
-  const isLocalMaintenanceRoute =
-    pathname === '/api/integracoes/sigvoos/maintenance/sincronizar-frms' ||
-    pathname.startsWith('/api/frms/maintenance/');
+  const isLocalMaintenanceRoute = isMaintenancePath(pathname);
 
   // These operational routes are intentionally absent outside an explicitly
   // enabled local development runtime. Do not use request headers or hostnames
