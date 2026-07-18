@@ -79,6 +79,12 @@ readonly_remote_files=(
   "scripts/validate-data-consistency.sh"
   "scripts/validate-schema-parity.py"
   "scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh"
+  # Reviewed 2026-07-18 (AIRTRUST_PRODUCTION_READINESS_20260718): both scripts
+  # issue only SELECT/PRAGMA queries against sqlite_master/pragma_table_list/
+  # d1_migrations and write results to local files — no DDL/DML, no --file
+  # apply, no d1 migrations apply.
+  "scripts/export-d1-schema-only.sh"
+  "scripts/schema-v2/export-production-baseline-backup.sh"
 )
 
 # Scripts com proteção própria forte (env var obrigatória + confirmação)
@@ -99,6 +105,42 @@ self_protected_files=(
   "scripts/staging/apply-approved-migrations.sh"
   "scripts/staging/validate-0424-postconditions.sh"
   "scripts/staging/seed-qa-examiner-training.mjs"
+  # Reviewed 2026-07-18 (AIRTRUST_PRODUCTION_READINESS_20260718):
+  # - .github/workflows/apply-schema-change-v2.yml: manual workflow_dispatch
+  #   only, environment: production (GitHub environment protection), requires
+  #   exact confirm_production text + expected_sha match + file_hash match +
+  #   active-baseline check before any write, takes a governance backup
+  #   immediately before applying, and re-validates the schema contract after.
+  # - scripts/apply-migration-production.sh: hard-blocks any migration marked
+  #   NO_GO_MIGRATION_PRODUCAO with no override flag, requires
+  #   AIRTRUST_ALLOW_PROD_DB_WRITE=YES + an exact confirmation string, requires
+  #   a clean worktree on main with HEAD==origin/main. This is the reviewed
+  #   wrapper CLAUDE.md documents as the only sanctioned path to apply a
+  #   production migration.
+  # - scripts/schema-v2/apply-schema-bootstrap-v2.sh: requires
+  #   AIRTRUST_ALLOW_PROD_SCHEMA_BASELINE_V2=YES + an exact confirmation
+  #   string, verifies the schema contract hash before and after applying.
+  # - scripts/maintenance/recover-lms-emergencias-gerais.mjs: defaults to
+  #   dry-run; --apply requires --confirm-emergencias-gerais-recovery or
+  #   CONFIRM_EMERGENCIAS_GERAIS_RECOVERY=YES; not referenced by any npm
+  #   script, CI workflow, or other automation — manual CLI tool only.
+  # - scripts/seed-staging-smoke-user.mjs: validateD1Target() hard-rejects any
+  #   database name containing "prod"/"production" or matching a known
+  #   production/legacy-staging name, and only proceeds for the exact rebuilt
+  #   staging D1 name; --apply requires an explicit confirmation flag/env var.
+  # - scripts/staging/reconcile-approved-migration-ledger-lib.mjs:
+  #   assertAllowedStagingTarget() hard-rejects known production/dev DB
+  #   names/IDs and only proceeds for the exact staging D1 name+ID; its sole
+  #   consumer (scripts/staging/reconcile-approved-migration-ledger.mjs) calls
+  #   that assertion before any write and requires
+  #   CONFIRM_STAGING_LEDGER_RECONCILIATION to match exactly, against a
+  #   closed allowlist of 3 pre-approved migration files by SHA-256.
+  ".github/workflows/apply-schema-change-v2.yml"
+  "scripts/apply-migration-production.sh"
+  "scripts/schema-v2/apply-schema-bootstrap-v2.sh"
+  "scripts/maintenance/recover-lms-emergencias-gerais.mjs"
+  "scripts/seed-staging-smoke-user.mjs"
+  "scripts/staging/reconcile-approved-migration-ledger-lib.mjs"
 )
 
 # Scripts legados já bloqueados com banner + exit 1 (verificação relaxada)
@@ -233,6 +275,16 @@ while IFS= read -r file; do
       rg -q 'AIRTRUST_CONFIRM_PROD_MIGRATIONS_APPLY' "$file"; then
       continue
     fi
+  fi
+
+  # Reviewed 2026-07-18 (AIRTRUST_PRODUCTION_READINESS_20260718): false
+  # positive. This is a read-only inventory script (see its own --help text:
+  # "Does not run deploys, migrations, restore, or remote writes"); the
+  # matched string is an `rg -e 'd1 migrations apply .*--remote'` SEARCH
+  # PATTERN argument used to flag *other* risky scripts, not an invocation of
+  # that command itself.
+  if [[ "$file" == "scripts/audit-observability-dr-readiness.sh" ]]; then
+    continue
   fi
 
   hits="$(rg -n 'd1[[:space:]]+migrations[[:space:]]+apply|AIRTRUST_ALLOW_PROD_MIGRATIONS_APPLY|AIRTRUST_CONFIRM_PROD_MIGRATIONS_APPLY' "$file" || true)"
