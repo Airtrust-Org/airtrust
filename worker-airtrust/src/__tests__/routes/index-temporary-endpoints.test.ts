@@ -97,6 +97,24 @@ describe('index temporary production endpoints', () => {
     });
   });
 
+  it.each([
+    ['GET', '/api/frms/maintenance/fortnight-coverage'],
+    ['GET', '/api/frms/maintenance/fortnight-materialization-preview/'],
+    ['POST', '/api/frms/maintenance/reprocessar-lote'],
+    ['POST', '/api/integracoes/sigvoos/maintenance/sincronizar-frms'],
+    ['GET', '/api/unknown/maintenance/probe'],
+  ])('nega maintenance remoto antes de autenticação: %s %s', async (method, path) => {
+    const response = await app.request(
+      path,
+      { method },
+      { ...createHealthyEnv(), ENVIRONMENT: 'staging' },
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('Not Found');
+    expect(response.headers.get('X-AirTrust-App-Version')).toBe('test-index-temp');
+  });
+
   it('mantém alias principal /api/historico redirecionando sem depender do fix removido', async () => {
     const response = await app.request('/api/historico?limit=1', {}, createHealthyEnv());
 

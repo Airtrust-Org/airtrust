@@ -36,6 +36,7 @@ import { errorHandler } from './middleware/error-handler';
 import { auth } from './middleware/auth';
 import { cacheControl } from './middleware/cache';
 import { noCacheMiddleware } from './middleware/no-cache';
+import { provenanceHeadersMiddleware } from './middleware/provenance';
 import { requestIdMiddleware } from './middleware/requestId';
 import { rateLimiter, rateLimitPresets } from './middleware/rate-limit';
 import { requireRole } from './middleware/rbac';
@@ -138,20 +139,11 @@ import './shared/handlers';
 // ===== CRIAR APP HONO =====
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// ===== VERSION HEADER PARA CACHE-BUSTING =====
-// Versão será carregada dinamicamente do Cloudflare Workers
-const AIRTRUST_VERSION = '0.0.0-dev'; // Padrão para fallback
-
 // ===== MIDDLEWARES GLOBAIS =====
 
-// Version header - PRIMEIRO middleware (identifica versão do app)
-app.use('*', async (c, next) => {
-  // Tenta obter version ID do Cloudflare Workers context
-  const cf = c.req.raw.cf as Record<string, string | undefined> | undefined;
-  const versionId = cf?.['colo'] || AIRTRUST_VERSION; // Fallback para AIRTRUST_VERSION
-  c.header('X-AirTrust-Version', versionId);
-  await next();
-});
+// Applied after downstream handlers so 2xx, errors, and not-found responses
+// all identify the exact Worker version that produced them.
+app.use('*', provenanceHeadersMiddleware());
 
 // Request ID - PRIMEIRO middleware (rastreamento de requisições)
 app.use('*', requestIdMiddleware());

@@ -54,6 +54,19 @@ export function getCanonicalBuildTime(env: Env): string | null {
   return sanitizeDeployMetadata(raw.APP_BUILD_TIME);
 }
 
+export function getWorkerVersionMetadata(env: Env): {
+  id: string | null;
+  tag: string | null;
+  timestamp: string | null;
+} {
+  const metadata = env.CF_VERSION_METADATA;
+  return {
+    id: sanitizeDeployMetadata(metadata?.id),
+    tag: sanitizeDeployMetadata(metadata?.tag),
+    timestamp: sanitizeDeployMetadata(metadata?.timestamp),
+  };
+}
+
 /**
  * Aplica headers no-cache para impedir que o CDN do Cloudflare sirva
  * respostas stale com versão antiga após um deploy.
@@ -124,10 +137,13 @@ export function registerSystemRoutes(app: SystemApp) {
     }
 
     // 3. Métricas básicas — versão canónica partilhada com /api/version
+    const workerVersion = getWorkerVersionMetadata(c.env);
     const stats = {
       timestamp: new Date().toISOString(),
       environment: c.env.ENVIRONMENT || 'unknown',
       version: getCanonicalVersion(c.env),
+      workerVersionId: workerVersion.id,
+      deploymentTag: workerVersion.tag,
       region: c.req.header('CF-IPCountry') || 'unknown',
     };
 
@@ -165,6 +181,7 @@ export function registerSystemRoutes(app: SystemApp) {
 
     const environment = c.env.ENVIRONMENT || 'development';
     const deploymentId = getCanonicalVersion(c.env);
+    const workerVersion = getWorkerVersionMetadata(c.env);
 
     const builtAt =
       environment === 'development' ? new Date().toISOString() : getCanonicalBuildTime(c.env);
@@ -176,6 +193,9 @@ export function registerSystemRoutes(app: SystemApp) {
         environment,
         builtAt,
         deploymentId,
+        workerVersionId: workerVersion.id,
+        deploymentTag: workerVersion.tag,
+        workerVersionCreatedAt: workerVersion.timestamp,
       },
     });
   });
