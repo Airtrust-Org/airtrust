@@ -54,6 +54,43 @@ export function getCanonicalBuildTime(env: Env): string | null {
   return sanitizeDeployMetadata(raw.APP_BUILD_TIME);
 }
 
+export function getWorkerVersionMetadata(env: Env): {
+  id: string | null;
+  tag: string | null;
+  timestamp: string | null;
+} {
+  const metadata = env.CF_VERSION_METADATA;
+  return {
+    id: sanitizeDeployMetadata(metadata?.id),
+    tag: sanitizeDeployMetadata(metadata?.tag),
+    timestamp: sanitizeDeployMetadata(metadata?.timestamp),
+  };
+}
+
+/**
+ * Provenance chain computed by the deploy pipeline itself (source SHA/tree,
+ * worker bundle hash, release manifest hash). This is deliberately distinct
+ * from getWorkerVersionMetadata(): that one is Cloudflare's own runtime
+ * identity for the Worker Version; this one is what the pipeline that BUILT
+ * the bundle claims about it. Neither alone proves the other — together with
+ * repeated matching responses across probes, this is "pipeline-attested"
+ * evidence, not a Cloudflare-side cryptographic guarantee that the exact
+ * bytes it serves match this hash (see docs/ops/STAGING_RUNTIME_FORENSICS_2026-07-18.md).
+ */
+export function getProvenanceChain(env: Env): {
+  sourceSha: string | null;
+  sourceTree: string | null;
+  workerBundleSha256: string | null;
+  releaseManifestSha256: string | null;
+} {
+  return {
+    sourceSha: sanitizeDeployMetadata(env.AIRTRUST_SOURCE_SHA),
+    sourceTree: sanitizeDeployMetadata(env.AIRTRUST_SOURCE_TREE),
+    workerBundleSha256: sanitizeDeployMetadata(env.AIRTRUST_WORKER_BUNDLE_SHA256),
+    releaseManifestSha256: sanitizeDeployMetadata(env.AIRTRUST_RELEASE_MANIFEST_SHA256),
+  };
+}
+
 /**
  * Aplica headers no-cache para impedir que o CDN do Cloudflare sirva
  * respostas stale com versão antiga após um deploy.
@@ -124,10 +161,17 @@ export function registerSystemRoutes(app: SystemApp) {
     }
 
     // 3. Métricas básicas — versão canónica partilhada com /api/version
+    const workerVersion = getWorkerVersionMetadata(c.env);
+    const provenance = getProvenanceChain(c.env);
     const stats = {
       timestamp: new Date().toISOString(),
       environment: c.env.ENVIRONMENT || 'unknown',
       version: getCanonicalVersion(c.env),
+      workerVersionId: workerVersion.id,
+      deploymentTag: workerVersion.tag,
+      sourceSha: provenance.sourceSha,
+      workerBundleSha256: provenance.workerBundleSha256,
+      releaseManifestSha256: provenance.releaseManifestSha256,
       region: c.req.header('CF-IPCountry') || 'unknown',
     };
 
@@ -165,6 +209,8 @@ export function registerSystemRoutes(app: SystemApp) {
 
     const environment = c.env.ENVIRONMENT || 'development';
     const deploymentId = getCanonicalVersion(c.env);
+    const workerVersion = getWorkerVersionMetadata(c.env);
+    const provenance = getProvenanceChain(c.env);
 
     const builtAt =
       environment === 'development' ? new Date().toISOString() : getCanonicalBuildTime(c.env);
@@ -176,6 +222,13 @@ export function registerSystemRoutes(app: SystemApp) {
         environment,
         builtAt,
         deploymentId,
+        workerVersionId: workerVersion.id,
+        deploymentTag: workerVersion.tag,
+        workerVersionCreatedAt: workerVersion.timestamp,
+        sourceSha: provenance.sourceSha,
+        sourceTree: provenance.sourceTree,
+        workerBundleSha256: provenance.workerBundleSha256,
+        releaseManifestSha256: provenance.releaseManifestSha256,
       },
     });
   });

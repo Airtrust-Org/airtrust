@@ -1,1 +1,0 @@
-This folder contains the built output assets for the worker "airtrust-api-development" generated at 2026-05-01T19:07:36.640Z.
