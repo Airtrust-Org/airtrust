@@ -118,3 +118,72 @@ one of these three buckets:
   "hash matches what the pipeline that ran this deploy computed and
   published, and this was independently observed to be stable across N
   repeated probes."
+
+## Incident closure — real deploy evidence (2026-07-18, run 29655853340)
+
+This is the run that actually exercised the mechanism above against a live
+staging deploy, closing the incident with operational evidence rather than
+local/dry-run tests alone.
+
+### Release identity
+
+| Field | Value |
+|---|---|
+| Workflow run ID | `29655853340` |
+| Source SHA | `4915f050d0e0080d6202bab747441ae65689a7ae` |
+| Source tree | `4d0c4f770b7af4d88a554c43bf10d2bc8224cd66` |
+| APP_VERSION | `staging-2026-07-18T18:26:11Z-4915f05` |
+| Worker bundle SHA-256 | `08856f02a476f20bb2e58325684452222dd294b7578f946f74345e0f174b1b62` |
+| Release manifest SHA-256 | `f0aad6b27042f8deaa4ef4bdd4bb4e72b3990594a07b0f5afba1591fee2020be` |
+| Worker Version ID | `051068ea-2347-4c94-900b-06b9b46105ce` |
+
+The real (non-dry-run) `wrangler deploy` step re-bundled and captured its own
+output via `--outdir`; its hash was compared against the published
+`workerBundleSha256` and matched exactly (`Real deploy bundle hash matches
+published hash: 08856f02a4...`) — the anti-divergence check added earlier in
+this incident did not need to abort.
+
+### Probe results (proven, not pipeline-attested)
+
+10 rounds over 5m26s (`2026-07-18T18:31:05Z`–`18:36:31Z`), nonce +
+`Cache-Control: no-cache` + `Pragma: no-cache` on every request, 57
+probes/round (3 identity + 6 maintenance routes × 9 variants) = 570 total.
+
+- **540/540 maintenance-route probes returned exactly `404` / `"Not Found"`**
+  across every tested variant: no secret, invalid `X-AirTrust-Maintenance`,
+  invalid `X-Maintenance-Secret`, valid POST body, invalid JSON body,
+  trailing slash, double slash, percent-encoded `/maintenance/` segment.
+  Zero anomalies.
+- **570/570 responses carried identical runtime identity** — one
+  `x-airtrust-worker-version`, one `x-airtrust-source-sha`, one
+  `x-airtrust-source-tree`, one `x-airtrust-worker-bundle-sha256`, one
+  `x-airtrust-release-manifest-sha256` value across the entire run. 100% of
+  traffic was on the expected version; no concurrent version was observed.
+  570/570 `CF-Ray` values were unique (no cached responses).
+
+This promotes the gate/mount ordering fix from "proven by local test" to
+**proven against a real, currently-live staging deployment** — the strongest
+evidence this incident produces without a Cloudflare-side content API (see
+residual gap above, unchanged).
+
+### Separate, unrelated failure (does not affect this incident)
+
+The same workflow run's "Authenticated Staging Smoke" job failed — but only
+because the `STAGING_SMOKE_EMAIL` / `STAGING_SMOKE_PASSWORD` secrets were
+absent from the staging GitHub environment at the time. That job tests an
+authenticated login/business-data flow unrelated to the maintenance-route
+contract. Before failing on the missing credentials, `staging:doctor`
+already confirmed `HEALTH_OK status=200`, `VERSION_OK
+status=200 version=staging-2026-07-18T18:26:11Z-4915f05`, and five
+`NEGATIVE_OK` 401 checks on protected routes — all healthy signals. This
+failure must not be conflated with the maintenance-route incident closed
+above; it is tracked separately as a residual gap in
+`AIRTRUST_PRODUCTION_READINESS_20260718.md`.
+
+### Incident status
+
+**CLOSED for staging**, with the evidence above as the definitive record.
+Production readiness is a separate, later assessment — see
+`AIRTRUST_PRODUCTION_READINESS_20260718.md` (not committed to this
+repository) for the delta audit against the last known-good production
+commit and the GO/NO-GO verdict.
