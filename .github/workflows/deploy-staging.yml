@@ -264,6 +264,8 @@ jobs:
     environment: staging
     outputs:
       worker_version_id: ${{ steps.capture.outputs.worker_version_id }}
+      worker_bundle_sha256: ${{ steps.provenance.outputs.worker_bundle_sha256 }}
+      release_manifest_sha256: ${{ steps.provenance.outputs.release_manifest_sha256 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -302,6 +304,75 @@ jobs:
           fs.writeFileSync(outputPath, before + patchedBlock + after);
           NODE
 
+      - name: Compute and stamp bundle/manifest provenance
+        id: provenance
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Unique, never-reused output dir — a fixed/reusable bundle path is
+          # exactly what let a stale tracked bundle answer requests in the
+          # 2026-07-18 incident. Always created fresh and removed by the trap.
+          bundle_dir="$(mktemp -d ./.tmp-worker-bundle-XXXXXX)"
+          trap 'rm -rf "$bundle_dir"' EXIT
+
+          npx wrangler deploy --env staging --config wrangler.toml --dry-run --outdir "$bundle_dir"
+
+          bundle_file="$(find "$bundle_dir" -maxdepth 1 -name '*.js' | sort | head -n1)"
+          if [[ -z "$bundle_file" ]]; then
+            echo "No bundled Worker module found in $bundle_dir" >&2
+            exit 1
+          fi
+          bundle_sha256="$(shasum -a 256 "$bundle_file" | awk '{print $1}')"
+          source_sha="$SOURCE_SHA"
+          source_tree="$(git -C .. rev-parse HEAD^{tree})"
+
+          # First pass: stamp source SHA/tree + bundle hash. Config hash is
+          # computed over the result of this pass, then stamped in a second,
+          # minimal pass — the manifest never has to include its own hash.
+          node ../scripts/lib/patch-wrangler-env-vars.mjs \
+            wrangler.staging.toml wrangler.staging.toml staging \
+            "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" \
+            "$(node -e 'console.log(JSON.stringify({AIRTRUST_SOURCE_SHA: process.argv[1], AIRTRUST_SOURCE_TREE: process.argv[2], AIRTRUST_WORKER_BUNDLE_SHA256: process.argv[3]}))' "$source_sha" "$source_tree" "$bundle_sha256")"
+
+          config_sha256="$(shasum -a 256 wrangler.staging.toml | awk '{print $1}')"
+
+          manifest_file="$(mktemp)"
+          trap 'rm -rf "$bundle_dir" "$manifest_file"' EXIT
+          cat > "$manifest_file" <<JSON
+          {
+            "repository": "airtrustsystem-alt/airtrust",
+            "sourceSha": "$source_sha",
+            "sourceTree": "$source_tree",
+            "environment": "staging",
+            "workerBundleSha256": "$bundle_sha256",
+            "wranglerConfigSha256": "$config_sha256",
+            "nodeVersion": "$(node --version)",
+            "npmVersion": "$(npm --version)",
+            "wranglerVersion": "$(npx wrangler --version 2>/dev/null | tail -1)",
+            "buildTimeUtc": "${{ needs.guard.outputs.build_time }}",
+            "dirty": false
+          }
+          JSON
+          manifest_sha256="$(shasum -a 256 "$manifest_file" | awk '{print $1}')"
+
+          node ../scripts/lib/patch-wrangler-env-vars.mjs \
+            wrangler.staging.toml wrangler.staging.toml staging \
+            "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" \
+            "$(node -e 'console.log(JSON.stringify({AIRTRUST_RELEASE_MANIFEST_SHA256: process.argv[1]}))' "$manifest_sha256")"
+
+          echo "worker_bundle_sha256=$bundle_sha256" >> "$GITHUB_OUTPUT"
+          echo "release_manifest_sha256=$manifest_sha256" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release provenance"
+            echo "- source SHA: \`$source_sha\`"
+            echo "- source tree: \`$source_tree\`"
+            echo "- worker bundle SHA-256: \`$bundle_sha256\`"
+            echo "- release manifest SHA-256: \`$manifest_sha256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Assert staging config targets staging resources only
         shell: bash
         run: |
@@ -323,9 +394,29 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_BUNDLE_SHA256: ${{ steps.provenance.outputs.worker_bundle_sha256 }}
         run: |
           set -euo pipefail
-          npx wrangler deploy --env staging --config wrangler.staging.toml 2>&1 | tee "$RUNNER_TEMP/worker-deploy-staging.log"
+          real_bundle_dir="$(mktemp -d ./.tmp-worker-bundle-XXXXXX)"
+          trap 'rm -rf "$real_bundle_dir"' EXIT
+          npx wrangler deploy --env staging --config wrangler.staging.toml --outdir "$real_bundle_dir" 2>&1 | tee "$RUNNER_TEMP/worker-deploy-staging.log"
+
+          # Detection, not prevention: the vars (including the published
+          # bundle hash) are already uploaded by the time this runs. A
+          # mismatch means this deploy's published hash is unverified/wrong
+          # and the run must be treated as suspect (redeploy or roll back),
+          # not that the bad value never shipped.
+          real_bundle_file="$(find "$real_bundle_dir" -maxdepth 1 -name '*.js' | sort | head -n1)"
+          if [[ -z "$real_bundle_file" ]]; then
+            echo "No bundled Worker module captured from the real deploy." >&2
+            exit 1
+          fi
+          real_bundle_sha256="$(shasum -a 256 "$real_bundle_file" | awk '{print $1}')"
+          if [[ "$real_bundle_sha256" != "$EXPECTED_BUNDLE_SHA256" ]]; then
+            echo "Bundle hash mismatch: published ($EXPECTED_BUNDLE_SHA256) != real deploy ($real_bundle_sha256)" >&2
+            exit 1
+          fi
+          echo "Real deploy bundle hash matches published hash: $real_bundle_sha256"
 
       - name: Capture worker release metadata
         id: capture
@@ -337,6 +428,9 @@ jobs:
 
       - name: Smoke provenance (version endpoint must match SHA, never dev-local/latest/empty)
         shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          EXPECTED_BUNDLE_SHA256: ${{ steps.provenance.outputs.worker_bundle_sha256 }}
         run: |
           set -euo pipefail
           body="$(mktemp)"
@@ -351,6 +445,8 @@ jobs:
           grep -q "${{ needs.guard.outputs.app_version }}" "$body" || { echo "Provenance mismatch after deploy." >&2; exit 1; }
           grep -qE '"environment":"staging"' "$body" || { echo "Version endpoint did not report environment=staging." >&2; exit 1; }
           grep -qE '"version":"(dev-local|latest|main|)"' "$body" && { echo "Rejected placeholder version value." >&2; exit 1; } || true
+          grep -q "\"sourceSha\":\"$SOURCE_SHA\"" "$body" || { echo "Source SHA mismatch after deploy." >&2; exit 1; }
+          grep -q "\"workerBundleSha256\":\"$EXPECTED_BUNDLE_SHA256\"" "$body" || { echo "Worker bundle hash mismatch after deploy." >&2; exit 1; }
 
   deploy-frontend:
     name: Deploy Staging Frontend (Pages preview, staging branch)
@@ -447,6 +543,8 @@ jobs:
             echo "- run_id: \`$RELEASE_RUN_ID\`"
             echo "- actor: \`$RELEASE_ACTOR\`"
             echo "- Worker deployment ID: \`${{ needs.deploy-worker.outputs.worker_version_id || 'not-deployed' }}\`"
+            echo "- Worker bundle SHA-256: \`${{ needs.deploy-worker.outputs.worker_bundle_sha256 || 'not-deployed' }}\`"
+            echo "- Release manifest SHA-256: \`${{ needs.deploy-worker.outputs.release_manifest_sha256 || 'not-deployed' }}\`"
             echo "- Database: \`${{ env.ALLOWED_STAGING_DB_NAME }}\` / \`${{ env.ALLOWED_STAGING_DB_ID }}\`"
             echo "- Migrations requested: \`$APPROVED_MIGRATIONS\`"
             echo "- backup: ${{ needs.backup.result }}"

@@ -26,6 +26,13 @@ wrangler.toml.bak
 .wrangler-dry/
 worker-airtrust/.wrangler-dry-run/
 
+# Temporary Worker bundle output directories. These must always be created
+# with mktemp -d at deploy time and never committed — a stale tracked bundle
+# is exactly what caused the 2026-07-18 staging provenance incident.
+worker-airtrust/.tmp-worker-bundle/
+worker-airtrust/.tmp-worker-bundle-*/
+worker-airtrust/wrangler.*.tmp.toml
+
 # ========== DATABASE ==========
 *.db
 *.sqlite
