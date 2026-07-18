@@ -13,6 +13,15 @@ export function isLocalMaintenanceRuntime(env: Env): boolean {
   );
 }
 
+/** Canonical, fail-closed classification for every API maintenance path. */
+export function isMaintenancePath(pathname: string): boolean {
+  let decoded: string;
+  try { decoded = decodeURIComponent(pathname); } catch { return true; }
+  if (decoded !== pathname || /\/\//.test(pathname)) return true;
+  const segments = pathname.toLowerCase().replace(/\/+$/, '').split('/').filter(Boolean);
+  return segments[0] === 'api' && segments.includes('maintenance');
+}
+
 export function localMaintenanceNotFound(env: Env): Response | null {
   return isLocalMaintenanceRuntime(env) ? null : new Response('Not Found', { status: 404 });
 }
