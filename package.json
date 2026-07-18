@@ -164,6 +164,7 @@
     "guard:staging-version-stamp": "node scripts/guard-staging-version-stamp.mjs",
     "guard:local-maintenance-runtime": "node scripts/guard-local-maintenance-runtime.mjs",
     "guard:worker-bundle-provenance": "node scripts/guard-worker-bundle-provenance.mjs",
-    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta && npm run guard:frms-no-direct-sigvoos && npm run guard:staging-version-stamp && npm run guard:local-maintenance-runtime && npm run guard:worker-bundle-provenance"
+    "guard:cloudflare-secret-contract": "node scripts/ci/guard-cloudflare-secret-contract.mjs",
+    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta && npm run guard:frms-no-direct-sigvoos && npm run guard:staging-version-stamp && npm run guard:local-maintenance-runtime && npm run guard:worker-bundle-provenance && npm run guard:cloudflare-secret-contract"
   }
 }

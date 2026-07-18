@@ -48,9 +48,12 @@ if [[ "${AIRTRUST_ALLOW_APP_VERSION_OVERRIDE:-0}" == "1" && -n "${APP_VERSION:-}
 fi
 BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 TMP_WRANGLER="$(mktemp "$WORKER_DIR/wrangler.safe-deploy.XXXXXX.toml")"
+MANIFEST_FILE="$(mktemp)"
+PROV_BUNDLE_DIR=""
 
 cleanup() {
-  rm -f "$TMP_WRANGLER"
+  rm -f "$TMP_WRANGLER" "$MANIFEST_FILE"
+  [[ -n "$PROV_BUNDLE_DIR" ]] && rm -rf "$PROV_BUNDLE_DIR"
 }
 
 trap cleanup EXIT
@@ -64,10 +67,16 @@ else
   echo "   Ref state: branch $CURRENT_BRANCH"
 fi
 
-node "$ROOT_DIR/scripts/lib/patch-wrangler-env-vars.mjs" "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" production "$DEPLOY_VERSION" "$BUILD_TIME"
-grep -A12 '^\[env.production.vars\]' "$TMP_WRANGLER" | grep -F "APP_VERSION = \"$DEPLOY_VERSION\"" >/dev/null || { echo 'production stamp preflight failed' >&2; exit 1; }
+# Generate + register the full provenance chain and stamp every AIRTRUST_* hash
+# into the temp production config that will be deployed. See
+# scripts/lib/worker-provenance.sh and docs/ops/PRODUCTION_WORKER_PROVENANCE.md.
+# shellcheck source=scripts/lib/worker-provenance.sh
+source "$ROOT_DIR/scripts/lib/worker-provenance.sh"
+airtrust_generate_worker_provenance \
+  "$ROOT_DIR" "$WORKER_DIR" "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" \
+  "$DEPLOY_VERSION" "$BUILD_TIME" "$MANIFEST_FILE"
 
 (
   cd "$WORKER_DIR"
-  wrangler deploy --env production --config "$TMP_WRANGLER"
+  npx --no-install wrangler deploy --env production --config "$TMP_WRANGLER"
 )

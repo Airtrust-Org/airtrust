@@ -31,6 +31,12 @@ jobs:
         run: node --test scripts/__tests__/migration-no-go-guard.test.mjs
       - name: Run TypeScript delta guard tests
         run: node --test scripts/__tests__/typescript-delta-guard.test.mjs
+      - name: Run dangerous-ops guard (self-protected invariants)
+        run: npm run ops:guard
+      - name: Run self-protected invariant mutation tests
+        run: node --test scripts/__tests__/self-protected-invariants-guard.test.mjs
+      - name: Run hardened production post-deploy smoke tests
+        run: node --test scripts/__tests__/smoke-production-postdeploy.test.mjs
       - name: Inventory legacy ESLint baseline
         run: npx eslint "./src/**/*.{js,jsx,ts,tsx}" --max-warnings=0 || true
       - name: Inventory legacy Prettier baseline
