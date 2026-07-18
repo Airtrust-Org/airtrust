@@ -4,8 +4,9 @@ const STAMP = /^[A-Za-z0-9._:-]+$/;
 
 function sectionBounds(source, environment) {
   const header = `[env.${environment}.vars]`;
-  const start = source.indexOf(header);
-  if (start < 0 || source.indexOf(header, start + header.length) >= 0) throw new Error(`missing or duplicate ${header}`);
+  const matches = [...source.matchAll(new RegExp(`^\\[env\\.${environment}\\.vars\\]\\s*$`, 'gm'))];
+  if (matches.length !== 1) throw new Error(`missing or duplicate ${header}`);
+  const start = matches[0].index;
   const endMatch = /\n\[/.exec(source.slice(start + header.length));
   return [start, endMatch ? start + header.length + endMatch.index : source.length];
 }
@@ -18,7 +19,7 @@ export function patchWranglerEnvVars(source, { environment, appVersion, buildTim
   for (const key of ['APP_VERSION', 'APP_BUILD_TIME']) {
     if ((section.match(new RegExp(`^${key}\\s*=`, 'gm')) ?? []).length > 1) throw new Error(`duplicate ${key}`);
   }
-  if (!/^ENVIRONMENT\s*=\s*"(?:staging|production)"$/m.test(section)) throw new Error('malformed environment section');
+  if (!new RegExp(`^ENVIRONMENT\\s*=\\s*"${environment}"$`, 'm').test(section)) throw new Error('malformed environment section');
   let patched = section.replace(/^APP_VERSION\s*=\s*"[^"]*"$/m, `APP_VERSION = "${appVersion}"`);
   if (patched === section) throw new Error('missing APP_VERSION');
   patched = /^APP_BUILD_TIME\s*=\s*"[^"]*"$/m.test(patched)
