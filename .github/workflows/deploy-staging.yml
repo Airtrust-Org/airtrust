@@ -271,6 +271,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Install root dependencies (worker source imports shared/root modules, e.g. zod)
+        run: npm ci
       - name: Install worker dependencies
         run: npm --prefix worker-airtrust ci
 
