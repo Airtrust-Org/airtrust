@@ -22,6 +22,40 @@ test('staging stamps only staging and preserves production byte-for-byte', () =>
   assert.equal(section(result, 'production'), section(source, 'production'));
 });
 
+test('applies extraVars provenance stamps to the target environment only', () => {
+  const result = patchWranglerEnvVars(source, {
+    environment: 'staging',
+    appVersion: 'staging-abc1234',
+    buildTime: '2026-07-18T00:00:00Z',
+    extraVars: {
+      AIRTRUST_SOURCE_SHA: 'abc1234def5678900000000000000000000000',
+      AIRTRUST_WORKER_BUNDLE_SHA256: 'deadbeef',
+    },
+  });
+  assert.match(section(result, 'staging'), /AIRTRUST_SOURCE_SHA = "abc1234def5678900000000000000000000000"/);
+  assert.match(section(result, 'staging'), /AIRTRUST_WORKER_BUNDLE_SHA256 = "deadbeef"/);
+  assert.equal(section(result, 'production'), section(source, 'production'));
+});
+
+test('rejects unsafe extraVars keys and values', () => {
+  assert.throws(() =>
+    patchWranglerEnvVars(source, {
+      environment: 'staging',
+      appVersion: 'x',
+      buildTime: 'y',
+      extraVars: { 'not-a-valid-key': 'z' },
+    }),
+  );
+  assert.throws(() =>
+    patchWranglerEnvVars(source, {
+      environment: 'staging',
+      appVersion: 'x',
+      buildTime: 'y',
+      extraVars: { AIRTRUST_SOURCE_SHA: 'has spaces' },
+    }),
+  );
+});
+
 test('rejects wrong environment, ambiguous keys, comments, missing sections, and unsafe stamps', () => {
   assert.throws(() => patchWranglerEnvVars(source.replace('ENVIRONMENT = "production"', 'ENVIRONMENT = "staging"'), { environment: 'production', appVersion: 'x', buildTime: 'x' }));
   assert.throws(() => patchWranglerEnvVars(source.replace('[env.production.vars]', '# [env.production.vars]'), { environment: 'production', appVersion: 'x', buildTime: 'x' }));
