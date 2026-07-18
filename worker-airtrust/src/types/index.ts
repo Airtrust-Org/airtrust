@@ -35,6 +35,8 @@ export interface Env {
   // Versão / build
   APP_VERSION?: string;
   APP_BUILD_TIME?: string;
+  // Cloudflare runtime-provided metadata for the exact Worker version.
+  CF_VERSION_METADATA?: WorkerVersionMetadata;
   // Dev helpers
   ENABLE_DEV_AUTH_BYPASS?: string; // 'true' apenas em development via .dev.vars
   USE_INTEGRATED_VIEW?: string; // 'true' habilita uso da view integrada
