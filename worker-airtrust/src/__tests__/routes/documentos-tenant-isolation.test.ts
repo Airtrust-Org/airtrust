@@ -559,7 +559,11 @@ describe('documentos tenant isolation', () => {
     expect(runs).toHaveLength(2);
     expect(runs[0].args).toEqual([303, 601, 11, 1]);
     expect(runs[1].query).toContain('INSERT INTO audit_events_v2');
-    expect(JSON.stringify(runs)).not.toContain('404');
+    // Assert discrete SQL args — substring search on JSON.stringify(runs) is
+    // flaky because random audit UUIDs can contain digit sequences like "404".
+    for (const run of runs) {
+      expect(run.args).not.toContain(404);
+    }
     expect(bucket.get).not.toHaveBeenCalled();
     expect(bucket.put).not.toHaveBeenCalled();
     expect(bucket.delete).not.toHaveBeenCalled();
@@ -579,7 +583,11 @@ describe('documentos tenant isolation', () => {
     expect(runs).toHaveLength(2);
     expect(runs[0].args).toEqual([701, 1]);
     expect(runs[1].query).toContain('INSERT INTO audit_events_v2');
-    expect(JSON.stringify(runs)).not.toContain('502');
+    // Assert discrete SQL args — substring search on JSON.stringify(runs) is
+    // flaky because random audit UUIDs can contain digit sequences like "502".
+    for (const run of runs) {
+      expect(run.args).not.toContain(502);
+    }
     expect(bucket.get).not.toHaveBeenCalled();
     expect(bucket.put).not.toHaveBeenCalled();
     expect(bucket.delete).not.toHaveBeenCalled();

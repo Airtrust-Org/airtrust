@@ -160,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     outputs:
-      worker_version_id: ${{ steps.capture.outputs.worker_version_id }}
+      worker_version_id: ${{ steps.deploy.outputs.worker_version_id }}
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -181,92 +181,198 @@ jobs:
 
       - name: Prepare worker config
         shell: bash
+        # Section-aware stamp of the [env.production.vars] APP_VERSION/APP_BUILD_TIME.
+        # The previous inline node used a first-match /m regex over the whole
+        # wrangler.toml, which stamped the *staging* APP_VERSION line (it appears
+        # before production) and left production as "managed-by-script" ->
+        # "unversioned-remote" at runtime. patch-wrangler-env-vars.mjs is
+        # section-scoped and unit-tested (scripts/__tests__/patch-wrangler-env-vars.test.mjs),
+        # the same helper the staging deploy uses.
         run: |
           set -euo pipefail
-          node - "$PWD/worker-airtrust/wrangler.toml" "$PWD/worker-airtrust/wrangler.production.toml" "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" <<'NODE'
-          const fs = require('fs');
+          node scripts/lib/patch-wrangler-env-vars.mjs \
+            worker-airtrust/wrangler.toml \
+            worker-airtrust/wrangler.production.toml \
+            production \
+            "${{ needs.guard.outputs.app_version }}" \
+            "${{ needs.guard.outputs.build_time }}"
 
-          const [sourcePath, outputPath, version, buildTime] = process.argv.slice(2);
-          const source = fs.readFileSync(sourcePath, 'utf8');
-          let patched = source.replace(/^APP_VERSION = ".*"$/m, `APP_VERSION = "${version}"`);
-
-          if (patched === source) {
-            console.error('APP_VERSION entry not found in worker-airtrust/wrangler.toml');
-            process.exit(1);
-          }
-
-          if (/^APP_BUILD_TIME = ".*"$/m.test(patched)) {
-            patched = patched.replace(/^APP_BUILD_TIME = ".*"$/m, `APP_BUILD_TIME = "${buildTime}"`);
-          } else {
-            patched = patched.replace(
-              /^APP_VERSION = ".*"$/m,
-              `APP_VERSION = "${version}"\nAPP_BUILD_TIME = "${buildTime}"`,
-            );
-          }
-
-          fs.writeFileSync(outputPath, patched);
-          NODE
-
-      - name: Deploy Worker
+      - name: Compute and stamp bundle/manifest provenance
+        id: provenance
         shell: bash
         working-directory: worker-airtrust
+        # Provenance parity with staging: stamps the source SHA/tree, the Worker
+        # bundle SHA-256, and the release manifest SHA-256 into
+        # [env.production.vars] so /api/health and /api/version can surface them
+        # and the hardened post-deploy smoke can require them. Without this the
+        # provenance chain stays "managed-by-script" (== null at runtime) and the
+        # hardened smoke would (correctly) refuse to certify the deploy.
+        #
+        # The pre-deploy release manifest is finalized HERE (workerVersionId=null)
+        # and uploaded before the real deploy so evidence survives a later
+        # deploy/smoke failure.
         env:
-          CLOUDFLARE_WORKER_TOKEN_EFFECTIVE: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN != '' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          npx wrangler deploy --env production --config wrangler.production.toml 2>&1 | tee "$RUNNER_TEMP/worker-deploy.log"
+          # Unique, never-reused output dir — a fixed/reusable bundle path is
+          # exactly what let a stale tracked bundle answer requests in the
+          # 2026-07-18 incident. Always created fresh and removed by the trap.
+          bundle_dir="$(mktemp -d ./.tmp-worker-bundle-XXXXXX)"
+          trap 'rm -rf "$bundle_dir"' EXIT
 
-      - name: Capture worker release metadata
-        id: capture
-        shell: bash
-        run: |
-          set -euo pipefail
-          version_id="$(sed -n 's/.*Worker Version ID: //p' "$RUNNER_TEMP/worker-deploy.log" | tail -n1)"
-          echo "worker_version_id=${version_id:-unavailable}" >> "$GITHUB_OUTPUT"
+          npx --no-install wrangler deploy --env production --config wrangler.production.toml --dry-run --outdir "$bundle_dir"
 
-      - name: Smoke Worker
-        shell: bash
-        run: |
-          set -euo pipefail
-          version_body="$(mktemp)"
-          health_body="$(mktemp)"
-          protected_body="$(mktemp)"
-
-          # Health and auth checks are immediate — not subject to edge propagation
-          curl -fsS -o "$health_body" "$WORKER_HEALTH_ENDPOINT"
-          status="$(curl -sS -o "$protected_body" -w '%{http_code}' "$LMS_PROTECTED_ENDPOINT")"
-          if [[ "$status" != "401" ]]; then
-            echo "Protected LMS endpoint returned $status instead of 401." >&2
-            cat "$protected_body" >&2
+          bundle_file="$(find "$bundle_dir" -maxdepth 1 -name '*.js' | sort | head -n1)"
+          if [[ -z "$bundle_file" ]]; then
+            echo "No bundled Worker module found in $bundle_dir" >&2
+            exit 1
+          fi
+          bundle_sha256="$(shasum -a 256 "$bundle_file" | awk '{print $1}')"
+          source_sha="$SOURCE_SHA"
+          # Tree SHA is a distinct git object from the commit SHA. Never substitute
+          # github.sha here — that historical bug made sourceTree == sourceSha.
+          source_tree="$(git -C .. rev-parse 'HEAD^{tree}')"
+          if [[ "$source_tree" == "$source_sha" ]]; then
+            echo "source_tree unexpectedly equals source_sha; refusing ambiguous provenance" >&2
             exit 1
           fi
 
-          # Version check with retry: Cloudflare edge may serve stale Worker
-          # for several seconds after wrangler deploy reports success
-          max_retries=6
-          retry_delay=10
-          for i in $(seq 1 $max_retries); do
-            curl -fsS -o "$version_body" "$WORKER_VERSION_ENDPOINT"
-            if grep -q "${{ needs.guard.outputs.app_version }}" "$version_body"; then
-              echo "[Smoke] attempt ${i}/${max_retries}: version match OK"
-              break
-            fi
-            received="$(grep -o '"version":"[^"]*"' "$version_body" || echo 'unknown')"
-            echo "[Smoke] attempt ${i}/${max_retries}: version mismatch — received ${received}, expected ${{ needs.guard.outputs.app_version }}"
-            if [[ $i -eq $max_retries ]]; then
-              echo "APP_VERSION ${{ needs.guard.outputs.app_version }} not found after ${max_retries} attempts." >&2
-              cat "$version_body" >&2
-              exit 1
-            fi
-            sleep "$retry_delay"
-          done
+          # First pass: stamp source SHA/tree + bundle hash. Config hash is
+          # computed over the result of this pass, then stamped in a second,
+          # minimal pass — the manifest never has to include its own hash.
+          node ../scripts/lib/patch-wrangler-env-vars.mjs \
+            wrangler.production.toml wrangler.production.toml production \
+            "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" \
+            "$(node -e 'console.log(JSON.stringify({AIRTRUST_SOURCE_SHA: process.argv[1], AIRTRUST_SOURCE_TREE: process.argv[2], AIRTRUST_WORKER_BUNDLE_SHA256: process.argv[3]}))' "$source_sha" "$source_tree" "$bundle_sha256")"
 
-          cat "$version_body"
-          cat "$health_body"
+          config_pre_manifest_sha256="$(shasum -a 256 wrangler.production.toml | awk '{print $1}')"
+
+          manifest_file="../airtrust-production-release-manifest.json"
+          trap 'rm -rf "$bundle_dir"' EXIT
+          FIELDS="$(node -e 'console.log(JSON.stringify({
+            repository: "airtrustsystem-alt/airtrust",
+            environment: "production",
+            appVersion: process.argv[1],
+            sourceSha: process.argv[2],
+            sourceTree: process.argv[3],
+            workerBundleSha256: process.argv[4],
+            wranglerConfigPreManifestSha256: process.argv[5],
+            nodeVersion: process.argv[6],
+            npmVersion: process.argv[7],
+            wranglerVersion: process.argv[8],
+            buildTimeUtc: process.argv[9],
+            workerVersionId: null,
+            dirty: false
+          }))' "${{ needs.guard.outputs.app_version }}" "$source_sha" "$source_tree" "$bundle_sha256" "$config_pre_manifest_sha256" "$(node --version)" "$(npm --version)" "$(npx --no-install wrangler --version 2>/dev/null | tail -1)" "${{ needs.guard.outputs.build_time }}")"
+          manifest_sha256="$(node ../scripts/lib/build-release-manifest.mjs "$FIELDS" "$manifest_file" | sed -n 's/^RELEASE_MANIFEST_SHA256=//p')"
+
+          node ../scripts/lib/patch-wrangler-env-vars.mjs \
+            wrangler.production.toml wrangler.production.toml production \
+            "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" \
+            "$(node -e 'console.log(JSON.stringify({AIRTRUST_RELEASE_MANIFEST_SHA256: process.argv[1]}))' "$manifest_sha256")"
+
+          config_final_sha256="$(shasum -a 256 wrangler.production.toml | awk '{print $1}')"
+          if [[ "$config_final_sha256" == "$config_pre_manifest_sha256" ]]; then
+            echo "final config hash unexpectedly equals pre-manifest hash" >&2
+            exit 1
+          fi
+
+          echo "worker_bundle_sha256=$bundle_sha256" >> "$GITHUB_OUTPUT"
+          echo "release_manifest_sha256=$manifest_sha256" >> "$GITHUB_OUTPUT"
+          echo "config_pre_manifest_sha256=$config_pre_manifest_sha256" >> "$GITHUB_OUTPUT"
+          echo "config_final_sha256=$config_final_sha256" >> "$GITHUB_OUTPUT"
+          echo "source_tree=$source_tree" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release provenance"
+            echo "- source SHA: \`$source_sha\`"
+            echo "- source tree: \`$source_tree\`"
+            echo "- worker bundle SHA-256: \`$bundle_sha256\`"
+            echo "- wrangler config pre-manifest SHA-256: \`$config_pre_manifest_sha256\`"
+            echo "- release manifest SHA-256: \`$manifest_sha256\`"
+            echo "- wrangler config final SHA-256: \`$config_final_sha256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Evidence must exist before the real deploy so a later failure cannot
+      # erase the pre-deploy manifest. Job failure is preserved by later steps
+      # using if: always() without force-success.
+      - name: Upload release manifest (pre-deploy)
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: airtrust-production-release-manifest
+          path: airtrust-production-release-manifest.json
+          retention-days: 30
+
+      - name: Deploy Worker
+        id: deploy
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          real_bundle_dir="$(mktemp -d ./.tmp-worker-bundle-XXXXXX)"
+          echo "real_bundle_dir=$real_bundle_dir" >> "$GITHUB_OUTPUT"
+          npx --no-install wrangler deploy --env production --config wrangler.production.toml --outdir "$real_bundle_dir" 2>&1 | tee "$RUNNER_TEMP/worker-deploy.log"
+          version_id="$(sed -n 's/.*Worker Version ID: //p' "$RUNNER_TEMP/worker-deploy.log" | tail -n1)"
+          # Empty string (not a placeholder) when the log line is missing — the
+          # attestation maps empty to null. Never emit "unavailable".
+          echo "worker_version_id=${version_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Compare real deploy bundle hash
+        id: bundle_compare
+        if: ${{ steps.deploy.outcome == 'success' }}
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          EXPECTED_BUNDLE_SHA256: ${{ steps.provenance.outputs.worker_bundle_sha256 }}
+          REAL_BUNDLE_DIR: ${{ steps.deploy.outputs.real_bundle_dir }}
+        run: |
+          set -euo pipefail
+          trap 'rm -rf "$REAL_BUNDLE_DIR"' EXIT
+          # Detection, not prevention: the vars (including the published bundle
+          # hash) are already uploaded by the time this runs. A mismatch means
+          # this deploy's published hash is unverified/wrong and the run must be
+          # treated as suspect (redeploy or roll back), not that the bad value
+          # never shipped.
+          real_bundle_file="$(find "$REAL_BUNDLE_DIR" -maxdepth 1 -name '*.js' | sort | head -n1)"
+          if [[ -z "$real_bundle_file" ]]; then
+            echo "No bundled Worker module captured from the real deploy." >&2
+            exit 1
+          fi
+          real_bundle_sha256="$(shasum -a 256 "$real_bundle_file" | awk '{print $1}')"
+          if [[ "$real_bundle_sha256" != "$EXPECTED_BUNDLE_SHA256" ]]; then
+            echo "Bundle hash mismatch: published ($EXPECTED_BUNDLE_SHA256) != real deploy ($real_bundle_sha256)" >&2
+            exit 1
+          fi
+
+      - name: Smoke Worker (hardened post-deploy)
+        id: smoke
+        if: ${{ steps.bundle_compare.outcome == 'success' }}
+        shell: bash
+        # Fails the deploy (exit != 0) unless EVERY provenance/identity/security
+        # invariant holds: /api/health 200, environment=production, APP_VERSION
+        # == expected release (never a placeholder), non-empty workerVersionId,
+        # X-AirTrust-Worker-Version / X-AirTrust-Source-SHA headers present and
+        # matching, bundle + manifest hashes present, protected route -> 401,
+        # maintenance route -> 404 (not 403), and no localhost debug-route leak.
+        # Logic and negative-path proofs live in
+        # scripts/smoke-production-postdeploy.mjs (unit-tested in
+        # scripts/__tests__/smoke-production-postdeploy.test.mjs).
+        env:
+          PROD_API_BASE_URL: https://api.airtrust.online
+          EXPECTED_APP_VERSION: ${{ needs.guard.outputs.app_version }}
+          EXPECTED_SOURCE_SHA: ${{ github.sha }}
+          SMOKE_MAX_RETRIES: '6'
+          SMOKE_RETRY_DELAY_MS: '10000'
+        run: |
+          set -euo pipefail
+          node scripts/smoke-production-postdeploy.mjs
 
       - name: Write worker summary
+        if: ${{ always() }}
         shell: bash
         run: |
           {
@@ -274,9 +380,89 @@ jobs:
             echo ""
             echo "- commit: \`${{ github.sha }}\`"
             echo "- APP_VERSION: \`${{ needs.guard.outputs.app_version }}\`"
-            echo "- Worker Version ID: \`${{ steps.capture.outputs.worker_version_id || 'unavailable' }}\`"
+            echo "- Worker Version ID: \`${{ steps.deploy.outputs.worker_version_id || 'null' }}\`"
+            echo "- deploy outcome: \`${{ steps.deploy.outcome }}\`"
+            echo "- bundle compare outcome: \`${{ steps.bundle_compare.outcome }}\`"
+            echo "- smoke outcome: \`${{ steps.smoke.outcome }}\`"
             echo "- UTC: \`${{ needs.guard.outputs.release_utc }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Attestation must survive deploy/smoke failure. Booleans come from real
+      # step outcomes — never hardcoded true. A failed prior step still fails
+      # the job; this step does not mask that.
+      - name: Create release attestation
+        id: attestation
+        if: ${{ always() && steps.provenance.outcome == 'success' }}
+        shell: bash
+        env:
+          MANIFEST_SHA256: ${{ steps.provenance.outputs.release_manifest_sha256 }}
+          FINAL_CONFIG_SHA256: ${{ steps.provenance.outputs.config_final_sha256 }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_TREE: ${{ steps.provenance.outputs.source_tree }}
+          BUNDLE_SHA256: ${{ steps.provenance.outputs.worker_bundle_sha256 }}
+          APP_VERSION: ${{ needs.guard.outputs.app_version }}
+          WORKER_VERSION_ID: ${{ steps.deploy.outputs.worker_version_id }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          BUNDLE_COMPARE_OUTCOME: ${{ steps.bundle_compare.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        run: |
+          set -euo pipefail
+          # Recompute tree SHA in this step and refuse any env wiring that
+          # substituted the commit SHA (the bug that set SOURCE_TREE=github.sha).
+          tree_sha="$(git rev-parse 'HEAD^{tree}')"
+          if [[ -z "${SOURCE_TREE}" || "${SOURCE_TREE}" != "${tree_sha}" ]]; then
+            echo "SOURCE_TREE env ('${SOURCE_TREE}') != git rev-parse 'HEAD^{tree}' ('${tree_sha}')" >&2
+            exit 1
+          fi
+          if [[ "${SOURCE_TREE}" == "${SOURCE_SHA}" ]]; then
+            echo "SOURCE_TREE must not equal SOURCE_SHA (commit vs tree object)" >&2
+            exit 1
+          fi
+
+          FIELDS="$(node --input-type=module -e '
+            import { outcomeFlags } from "./scripts/lib/build-release-attestation.mjs";
+            const deploy = outcomeFlags(process.env.DEPLOY_OUTCOME);
+            const bundle = outcomeFlags(process.env.BUNDLE_COMPARE_OUTCOME);
+            const smoke = outcomeFlags(process.env.SMOKE_OUTCOME);
+            const workerVersionId = process.env.WORKER_VERSION_ID && process.env.WORKER_VERSION_ID.length > 0
+              ? process.env.WORKER_VERSION_ID
+              : null;
+            console.log(JSON.stringify({
+              repository: "airtrustsystem-alt/airtrust",
+              environment: "production",
+              appVersion: process.env.APP_VERSION,
+              sourceSha: process.env.SOURCE_SHA,
+              sourceTree: process.env.SOURCE_TREE,
+              workerBundleSha256: process.env.BUNDLE_SHA256,
+              wranglerConfigFinalSha256: process.env.FINAL_CONFIG_SHA256,
+              releaseManifestSha256: process.env.MANIFEST_SHA256,
+              workerVersionId,
+              deployAttempted: deploy.executed,
+              deploySucceeded: deploy.passed,
+              bundleComparisonExecuted: bundle.executed,
+              bundleComparisonPassed: bundle.passed,
+              smokeExecuted: smoke.executed,
+              smokePassed: smoke.passed,
+              timestampUtc: new Date().toISOString(),
+            }));
+          ')"
+          node scripts/lib/build-release-attestation.mjs "$FIELDS" airtrust-production-release-attestation.json
+
+      - name: Upload release attestation
+        if: ${{ always() && steps.attestation.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: airtrust-production-release-attestation
+          path: airtrust-production-release-attestation.json
+          retention-days: 30
+
+      - name: Cleanup real deploy bundle dir
+        if: ${{ always() && steps.deploy.outputs.real_bundle_dir != '' }}
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          REAL_BUNDLE_DIR: ${{ steps.deploy.outputs.real_bundle_dir }}
+        run: rm -rf "$REAL_BUNDLE_DIR"
 
   deploy-pages:
     name: Deploy Pages

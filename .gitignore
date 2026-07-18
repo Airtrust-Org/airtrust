@@ -32,6 +32,7 @@ worker-airtrust/.wrangler-dry-run/
 worker-airtrust/.tmp-worker-bundle/
 worker-airtrust/.tmp-worker-bundle-*/
 worker-airtrust/wrangler.*.tmp.toml
+worker-airtrust/.tmp-wrangler.production.harness-*.toml
 
 # ========== DATABASE ==========
 *.db

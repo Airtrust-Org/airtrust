@@ -36,15 +36,41 @@ if [[ "${AIRTRUST_ALLOW_APP_VERSION_OVERRIDE:-0}" == "1" && -n "${APP_VERSION:-}
 fi
 BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 TMP_WRANGLER="$(mktemp "$WORKER_DIR/wrangler.deploy.XXXXXX.toml")"
+MANIFEST_FILE="$(mktemp)"
+PROV_BUNDLE_DIR=""
 CONFIRM_MIGRATIONS_TEXT="I understand this applies production D1 migrations before worker deploy"
 
 cleanup() {
-  rm -f "$TMP_WRANGLER"
+  rm -f "$TMP_WRANGLER" "$MANIFEST_FILE"
+  [[ -n "$PROV_BUNDLE_DIR" ]] && rm -rf "$PROV_BUNDLE_DIR"
 }
 
 trap cleanup EXIT
 
-node "$ROOT_DIR/scripts/lib/patch-wrangler-env-vars.mjs" "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" production "$DEPLOY_VERSION" "$BUILD_TIME"
+# Generate + register the full provenance chain (source SHA/tree, worker bundle
+# SHA-256, wrangler config SHA-256, release manifest + its SHA-256) and stamp
+# every AIRTRUST_* hash into the temp production config that will be deployed.
+# See scripts/lib/worker-provenance.sh and docs/ops/PRODUCTION_WORKER_PROVENANCE.md.
+# shellcheck source=scripts/lib/worker-provenance.sh
+source "$ROOT_DIR/scripts/lib/worker-provenance.sh"
+airtrust_generate_worker_provenance \
+  "$ROOT_DIR" "$WORKER_DIR" "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" \
+  "$DEPLOY_VERSION" "$BUILD_TIME" "$MANIFEST_FILE"
+
+# Record the manifest in the CI job log as durable provenance evidence.
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  {
+    echo "## Production Worker provenance"
+    echo ""
+    echo "- APP_VERSION: \`$DEPLOY_VERSION\`"
+    echo "- Source SHA: \`$PROV_SOURCE_SHA\`"
+    echo "- Source tree: \`$PROV_SOURCE_TREE\`"
+    echo "- Worker bundle SHA-256: \`$PROV_WORKER_BUNDLE_SHA256\`"
+    echo "- Wrangler config pre-manifest SHA-256: \`$PROV_WRANGLER_CONFIG_PRE_MANIFEST_SHA256\`"
+    echo "- Release manifest SHA-256: \`$PROV_RELEASE_MANIFEST_SHA256\`"
+    echo "- Wrangler config final SHA-256: \`$PROV_WRANGLER_CONFIG_FINAL_SHA256\`"
+  } >> "$GITHUB_STEP_SUMMARY"
+fi
 
 (
   cd "$WORKER_DIR"
@@ -67,10 +93,10 @@ node "$ROOT_DIR/scripts/lib/patch-wrangler-env-vars.mjs" "$WORKER_DIR/wrangler.t
     exit 1
   fi
 
-  if ! wrangler d1 migrations apply airtrust-db --env production --remote; then
+  if ! npx --no-install wrangler d1 migrations apply airtrust-db --env production --remote; then
     echo "❌ FATAL: D1 migration failed. Aborting deployment to prevent schema mismatch." >&2
     exit 1
   fi
 
-  wrangler deploy --env production --config "$TMP_WRANGLER"
+  npx --no-install wrangler deploy --env production --config "$TMP_WRANGLER"
 )
