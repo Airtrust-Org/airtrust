@@ -37,6 +37,30 @@ test('applies extraVars provenance stamps to the target environment only', () =>
   assert.equal(section(result, 'production'), section(source, 'production'));
 });
 
+test('a second pass with the identical appVersion/buildTime (idempotent re-stamp) does not throw', () => {
+  // Regression test for a real CI failure: the deploy pipeline calls this
+  // twice in the same run (once for source/bundle hashes, once more to add
+  // the manifest hash afterward), passing the SAME appVersion/buildTime both
+  // times. A naive "did the string change?" check after replace() falsely
+  // reports "missing APP_VERSION" here, because replacing an already-correct
+  // value with itself produces byte-identical output.
+  const first = patchWranglerEnvVars(source, {
+    environment: 'staging',
+    appVersion: 'staging-idempotent-test',
+    buildTime: '2026-07-18T13:35:35Z',
+    extraVars: { AIRTRUST_SOURCE_SHA: 'abc1234' },
+  });
+  const second = patchWranglerEnvVars(first, {
+    environment: 'staging',
+    appVersion: 'staging-idempotent-test',
+    buildTime: '2026-07-18T13:35:35Z',
+    extraVars: { AIRTRUST_RELEASE_MANIFEST_SHA256: 'deadbeef' },
+  });
+  assert.match(section(second, 'staging'), /APP_VERSION = "staging-idempotent-test"/);
+  assert.match(section(second, 'staging'), /AIRTRUST_SOURCE_SHA = "abc1234"/);
+  assert.match(section(second, 'staging'), /AIRTRUST_RELEASE_MANIFEST_SHA256 = "deadbeef"/);
+});
+
 test('rejects unsafe extraVars keys and values', () => {
   assert.throws(() =>
     patchWranglerEnvVars(source, {

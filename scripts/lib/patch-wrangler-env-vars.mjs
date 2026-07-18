@@ -47,8 +47,13 @@ export function patchWranglerEnvVars(source, { environment, appVersion, buildTim
     if ((section.match(new RegExp(`^${key}\\s*=`, 'gm')) ?? []).length > 1) throw new Error(`duplicate ${key}`);
   }
   if (!new RegExp(`^ENVIRONMENT\\s*=\\s*"${environment}"$`, 'm').test(section)) throw new Error('malformed environment section');
+  // Checked via .test() on the ORIGINAL regex, not by comparing the string
+  // before/after replace(): an idempotent re-stamp (same appVersion applied
+  // twice, as happens when this script is called twice in the same deploy
+  // to add the manifest hash afterward) would otherwise produce byte-identical
+  // output and be mistaken for "no APP_VERSION line found".
+  if (!/^APP_VERSION\s*=\s*"[^"]*"$/m.test(section)) throw new Error('missing APP_VERSION');
   let patched = section.replace(/^APP_VERSION\s*=\s*"[^"]*"$/m, `APP_VERSION = "${appVersion}"`);
-  if (patched === section) throw new Error('missing APP_VERSION');
   patched = /^APP_BUILD_TIME\s*=\s*"[^"]*"$/m.test(patched)
     ? patched.replace(/^APP_BUILD_TIME\s*=\s*"[^"]*"$/m, `APP_BUILD_TIME = "${buildTime}"`)
     : patched.replace(/^APP_VERSION.*$/m, `$&\nAPP_BUILD_TIME = "${buildTime}"`);
