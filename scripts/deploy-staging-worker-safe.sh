@@ -185,11 +185,40 @@ echo "   Previous staging version: ${PREVIOUS_VERSION:-unknown}"
 
 # 4. Real deploy. Reuses the same TMP_WRANGLER config used to compute the
 #    hashes above — the config that gets hashed is the config that gets
-#    deployed, not a separately-generated copy.
+#    deployed, not a separately-generated copy. Also captures the bundle
+#    esbuild actually produced for THIS deploy (via --outdir alongside the
+#    real, non-dry-run deploy) and compares its hash to the earlier dry-run
+#    hash we already published in the vars. This is DETECTION, not
+#    prevention: the vars (including the published hash) were already
+#    uploaded by the time this comparison runs, so a mismatch here means
+#    "this deploy's published hash is unverified/wrong, treat it as
+#    suspect and redeploy or roll back" — not "the bad value never shipped".
+#    A guarantee would require bundling once, hashing, then deploying a
+#    second time with the verified hash; not done here to avoid a double
+#    network deploy on every release.
+REAL_BUNDLE_DIR="$(mktemp -d "$WORKER_DIR/.tmp-worker-bundle-XXXXXX")"
+cleanup() {
+  rm -rf "$BUNDLE_DIR" "$REAL_BUNDLE_DIR"
+  rm -f "$TMP_WRANGLER" "$MANIFEST_FILE"
+}
+trap cleanup EXIT
 (
   cd "$WORKER_DIR"
-  wrangler deploy --env staging --config "$TMP_WRANGLER"
+  wrangler deploy --env staging --config "$TMP_WRANGLER" --outdir "$REAL_BUNDLE_DIR"
 )
+
+REAL_BUNDLE_FILE="$(find "$REAL_BUNDLE_DIR" -maxdepth 1 -name '*.js' | sort | head -n1)"
+if [[ -z "$REAL_BUNDLE_FILE" ]]; then
+  echo "❌ No bundled Worker module captured from the real deploy in $REAL_BUNDLE_DIR" >&2
+  exit 1
+fi
+REAL_BUNDLE_SHA256="$(shasum -a 256 "$REAL_BUNDLE_FILE" | awk '{print $1}')"
+if [[ "$REAL_BUNDLE_SHA256" != "$WORKER_BUNDLE_SHA256" ]]; then
+  echo "❌ Bundle hash mismatch: dry-run bundle ($WORKER_BUNDLE_SHA256) != real deploy bundle ($REAL_BUNDLE_SHA256)" >&2
+  echo "   The published AIRTRUST_WORKER_BUNDLE_SHA256 does not describe what was actually deployed. Aborting." >&2
+  exit 1
+fi
+echo "   Real deploy bundle hash matches published hash: $REAL_BUNDLE_SHA256"
 
 echo "⏳ Waiting for version endpoint to refresh..."
 sleep 3
