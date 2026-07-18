@@ -82,46 +82,8 @@ echo "   Version: $DEPLOY_VERSION"
 echo "   Build time: $BUILD_TIME"
 echo "   HEAD: $HEAD_SHA"
 
-node - "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" "$DEPLOY_VERSION" "$BUILD_TIME" <<'NODE'
-const fs = require('fs');
-
-const [sourcePath, outputPath, version, buildTime] = process.argv.slice(2);
-const source = fs.readFileSync(sourcePath, 'utf8');
-
-const stagingVarsMatch = source.match(/\[env\.staging\.vars\][\s\S]*?(?=\n\[|\n\[\[|$)/);
-if (!stagingVarsMatch) {
-  console.error('[env.staging.vars] section not found in wrangler.toml');
-  process.exit(1);
-}
-
-const section = stagingVarsMatch[0];
-if (!/APP_VERSION = ".*"/.test(section)) {
-  console.error('APP_VERSION placeholder missing under [env.staging.vars]');
-  process.exit(1);
-}
-
-let patchedSection = section.replace(/^APP_VERSION = ".*"$/m, `APP_VERSION = "${version}"`);
-if (/^APP_BUILD_TIME = ".*"$/m.test(patchedSection)) {
-  patchedSection = patchedSection.replace(/^APP_BUILD_TIME = ".*"$/m, `APP_BUILD_TIME = "${buildTime}"`);
-} else {
-  patchedSection = patchedSection.replace(
-    /^APP_VERSION = ".*"$/m,
-    `APP_VERSION = "${version}"\nAPP_BUILD_TIME = "${buildTime}"`,
-  );
-}
-
-const patched = source.replace(section, patchedSection);
-if (!patched.includes(`name = "${'airtrust-api-staging'}"`)) {
-  console.error('Staging worker name guard failed');
-  process.exit(1);
-}
-if (!patched.includes('bf9963f4-eb12-439b-a830-20bbf577ac22')) {
-  console.error('Staging D1 id guard failed');
-  process.exit(1);
-}
-
-fs.writeFileSync(outputPath, patched);
-NODE
+node "$ROOT_DIR/scripts/lib/patch-wrangler-env-vars.mjs" "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" staging "$DEPLOY_VERSION" "$BUILD_TIME"
+grep -A14 '^\[env.staging.vars\]' "$TMP_WRANGLER" | grep -F "APP_VERSION = \"$DEPLOY_VERSION\"" >/dev/null || { echo 'staging stamp preflight failed' >&2; exit 1; }
 
 if ! grep -q "name = \"$ALLOWED_STAGING_WORKER_NAME\"" "$TMP_WRANGLER"; then
   echo "❌ Staging worker name mismatch in patched config" >&2

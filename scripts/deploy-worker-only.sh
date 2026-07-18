@@ -44,32 +44,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-node - "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" "$DEPLOY_VERSION" "$BUILD_TIME" <<'NODE'
-const fs = require('fs');
-
-const [sourcePath, outputPath, version, buildTime] = process.argv.slice(2);
-const source = fs.readFileSync(sourcePath, 'utf8');
-let patched = source.replace(
-  /^APP_VERSION = ".*"$/m,
-  `APP_VERSION = "${version}"`,
-);
-
-if (patched === source) {
-  console.error('APP_VERSION entry not found in wrangler.toml');
-  process.exit(1);
-}
-
-if (/^APP_BUILD_TIME = ".*"$/m.test(patched)) {
-  patched = patched.replace(/^APP_BUILD_TIME = ".*"$/m, `APP_BUILD_TIME = "${buildTime}"`);
-} else {
-  patched = patched.replace(
-    /^APP_VERSION = ".*"$/m,
-    `APP_VERSION = "${version}"\nAPP_BUILD_TIME = "${buildTime}"`,
-  );
-}
-
-fs.writeFileSync(outputPath, patched);
-NODE
+node "$ROOT_DIR/scripts/lib/patch-wrangler-env-vars.mjs" "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" production "$DEPLOY_VERSION" "$BUILD_TIME"
 
 (
   cd "$WORKER_DIR"
