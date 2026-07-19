@@ -20,6 +20,7 @@ import {
   listEligibleGestorUsers,
   SetorGestorValidationError,
   SetorGestorConflictError,
+  assertBulkReassignmentDoesNotStripLastSector,
 } from '../services/setores-gestores';
 
 const setoresGestores = new Hono<{ Bindings: Env }>();
@@ -329,6 +330,29 @@ setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin', 'manager'), 
     if (!Array.isArray(usuarioIds)) {
       throw new ApiError('usuario_ids deve ser um array', 400);
     }
+
+    // Gestores atualmente vinculados a este setor que NÃO estão na nova
+    // lista ficarão sem vínculo aqui — bloquear se for o último setor ativo
+    // de algum deles enquanto permanecerem gestores ativos.
+    const vinculosAtuais = await db
+      .prepare(
+        `SELECT usuario_id FROM setores_gestores
+           WHERE setor_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+             AND usuario_id IS NOT NULL`,
+      )
+      .bind(setorId, empresaId)
+      .all<{ usuario_id: number }>();
+
+    const usuarioIdsSendoRemovidos = (vinculosAtuais.results || [])
+      .map((row) => Number(row.usuario_id))
+      .filter((uid) => !usuarioIds.includes(uid));
+
+    await assertBulkReassignmentDoesNotStripLastSector(
+      db,
+      empresaId,
+      setorId,
+      usuarioIdsSendoRemovidos,
+    );
 
     // Delete existing assignments
     await db

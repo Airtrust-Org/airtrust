@@ -654,6 +654,7 @@ adminUsuariosRoutes.put('/:id', async (c) => {
 
   const updates: string[] = [];
   const binds: (string | number | null)[] = [];
+  const statementsAdicionais: D1PreparedStatement[] = [];
 
   if (body?.nome) {
     updates.push('nome = ?');
@@ -662,11 +663,13 @@ adminUsuariosRoutes.put('/:id', async (c) => {
   if (body?.perfil) {
     updates.push('perfil = ?');
     binds.push(body.perfil.toUpperCase());
-    // Sincronizar role em usuarios_empresas
-    await db
-      .prepare(`UPDATE usuarios_empresas SET role = ? WHERE usuario_id = ? AND empresa_id = ?`)
-      .bind(body.perfil.toUpperCase(), id, empresaId)
-      .run();
+    // Sincronizar role em usuarios_empresas na mesma transação da UPDATE
+    // de usuarios abaixo — não deixar perfil e role divergentes.
+    statementsAdicionais.push(
+      db
+        .prepare(`UPDATE usuarios_empresas SET role = ? WHERE usuario_id = ? AND empresa_id = ?`)
+        .bind(body.perfil.toUpperCase(), id, empresaId),
+    );
   }
   if (body?.funcionario_id !== undefined) {
     updates.push('funcionario_id = ?');
@@ -684,10 +687,11 @@ adminUsuariosRoutes.put('/:id', async (c) => {
   updates.push("updated_at = datetime('now')");
   binds.push(id);
 
-  if (setorStatementsParaGestor.length > 0) {
+  const todosOsStatements = [...statementsAdicionais, ...setorStatementsParaGestor];
+  if (todosOsStatements.length > 0) {
     await db.batch([
       db.prepare(`UPDATE usuarios SET ${updates.join(', ')} WHERE id = ?`).bind(...binds),
-      ...setorStatementsParaGestor,
+      ...todosOsStatements,
     ]);
   } else {
     await db

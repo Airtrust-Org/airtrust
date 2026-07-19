@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  assertBulkReassignmentDoesNotStripLastSector,
   assertSetoresValidosParaEmpresa,
   buildManagerSetorInsertStatements,
   deleteSetorGestor,
@@ -167,5 +168,65 @@ describe('bloqueio de remoção do último setor de um gestor ativo', () => {
     await expect(updateSetorGestor(db, 6, 7, { ativo: false })).rejects.toBeInstanceOf(
       SetorGestorConflictError,
     );
+  });
+
+  it('updateSetorGestor rejeita reatribuir usuario_id quando o gestor original perderia o último setor', async () => {
+    const { db } = createDb([
+      currentRow,
+      { match: 'SELECT active, perfil FROM usuarios', first: { active: 1, perfil: 'GESTOR' } },
+      { match: 'SELECT COUNT(*) as n FROM setores_gestores', first: { n: 0 } },
+    ]);
+
+    // Reatribuir esta linha para outro usuario_id (99) removeria o vínculo
+    // do usuario_id ORIGINAL (63) com este setor — mesma proteção do delete.
+    await expect(updateSetorGestor(db, 6, 7, { usuario_id: 99 })).rejects.toBeInstanceOf(
+      SetorGestorConflictError,
+    );
+  });
+
+  it('updateSetorGestor rejeita reatribuir setor_id quando o gestor perderia o último setor', async () => {
+    const { db } = createDb([
+      currentRow,
+      { match: 'SELECT active, perfil FROM usuarios', first: { active: 1, perfil: 'GESTOR' } },
+      { match: 'SELECT COUNT(*) as n FROM setores_gestores', first: { n: 0 } },
+    ]);
+
+    await expect(updateSetorGestor(db, 6, 7, { setor_id: 11 })).rejects.toBeInstanceOf(
+      SetorGestorConflictError,
+    );
+  });
+});
+
+describe('assertBulkReassignmentDoesNotStripLastSector (bulk-assign)', () => {
+  it('rejeita quando um gestor removido do setor ficaria sem nenhum setor ativo', async () => {
+    const { db } = createDb([
+      { match: 'SELECT active, perfil FROM usuarios', first: { active: 1, perfil: 'GESTOR' } },
+      { match: 'SELECT COUNT(*) as n FROM setores_gestores', first: { n: 0 } },
+    ]);
+
+    await expect(
+      assertBulkReassignmentDoesNotStripLastSector(db, 6, 10, [63]),
+    ).rejects.toBeInstanceOf(SetorGestorConflictError);
+  });
+
+  it('permite quando o gestor removido ainda tem outro setor ativo', async () => {
+    const { db } = createDb([
+      { match: 'SELECT active, perfil FROM usuarios', first: { active: 1, perfil: 'GESTOR' } },
+      { match: 'SELECT COUNT(*) as n FROM setores_gestores', first: { n: 1 } },
+    ]);
+
+    await expect(
+      assertBulkReassignmentDoesNotStripLastSector(db, 6, 10, [63]),
+    ).resolves.toBeUndefined();
+  });
+
+  it('não faz nada para usuário que não é mais gestor ativo', async () => {
+    const { db } = createDb([
+      { match: 'SELECT active, perfil FROM usuarios', first: { active: 0, perfil: 'GESTOR' } },
+    ]);
+
+    await expect(
+      assertBulkReassignmentDoesNotStripLastSector(db, 6, 10, [63]),
+    ).resolves.toBeUndefined();
   });
 });
