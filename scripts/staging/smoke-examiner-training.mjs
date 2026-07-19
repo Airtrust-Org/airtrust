@@ -81,13 +81,39 @@ export function isValidPdfResponse(pdfStatus) {
   );
 }
 
-export function pdfFixtureTimeWindow(random = Math.random()) {
-  const WINDOW_START_MINUTES = 6 * 60; // 06:00
-  const WINDOW_END_MINUTES = 22 * 60; // 22:00 — sessão de 60min sempre cabe antes disso
+function saoPauloNowMinutesOfDay(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SIMULADORES_OPERATIONAL_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type) => Number(parts.find((part) => part.type === type)?.value || '0');
+  return get('hour') * 60 + get('minute');
+}
+
+// O gate de disponibilidade (worker-airtrust/src/utils/ficha-availability.ts)
+// exige `agora >= data+hora_inicio da sessão`, não apenas "mesmo dia civil".
+// Sortear um hora_inicio mais tarde do que o horário atual em São Paulo produz
+// um 409 FICHA_NOT_AVAILABLE_YET legítimo (a sessão ainda não começou) — por
+// isso a janela é limitada ao horário atual menos uma margem de segurança,
+// nunca ao intervalo fixo 06:00–21:45 usado anteriormente.
+export function pdfFixtureTimeWindow(random = Math.random(), now = new Date()) {
+  const PREFERRED_WINDOW_START_MINUTES = 6 * 60; // 06:00, piso preferencial (não absoluto)
+  const SAFETY_BUFFER_MINUTES = 15; // margem contra corrida com o relógio do Worker
   const SLOT_MINUTES = 15;
-  const slotCount = Math.floor((WINDOW_END_MINUTES - WINDOW_START_MINUTES - 60) / SLOT_MINUTES);
+  // Nunca pode ficar no futuro em relação a "agora", mesmo de madrugada — por
+  // isso o piso preferencial de 06:00 cede quando "agora" ainda não chegou lá
+  // (ex.: smoke rodando às 03:00 América/São_Paulo não pode agendar 06:00).
+  const latestStartMinutes = Math.max(
+    0,
+    Math.min(saoPauloNowMinutesOfDay(now) - SAFETY_BUFFER_MINUTES, 21 * 60), // sessão de 60min cabe antes de 22:00
+  );
+  const windowStartMinutes = Math.min(PREFERRED_WINDOW_START_MINUTES, latestStartMinutes);
+  const windowEndMinutes = latestStartMinutes;
+  const slotCount = Math.max(1, Math.floor((windowEndMinutes - windowStartMinutes) / SLOT_MINUTES) + 1);
   const slot = Math.floor(random * slotCount);
-  const startMinutes = WINDOW_START_MINUTES + slot * SLOT_MINUTES;
+  const startMinutes = Math.min(windowStartMinutes + slot * SLOT_MINUTES, windowEndMinutes);
   const endMinutes = startMinutes + 60;
   const toHHMM = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
   return { hora_inicio: toHHMM(startMinutes), hora_fim: toHHMM(endMinutes) };
