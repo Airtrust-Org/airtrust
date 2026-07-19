@@ -286,7 +286,7 @@ async function main() {
         ],
       }),
     });
-    event2SessionId = created.json?.data?.id ?? created.json?.data?.sessaoId ?? null;
+    event2SessionId = created.json?.data?.sessao?.id ?? created.json?.resumo?.sessao_id ?? null;
     const segmentos = created.json?.data?.segmentos ?? [];
     const fapHits = segmentos.filter((s) => /FAP/i.test(JSON.stringify(s)));
     report.scenarios.F_examiner_program_event2 = {
