@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildFichaHeaderRows,
+  buildFichaHeaderTitle,
   buildSimulatorDisplayName,
   formatMinutesAsHHMM,
   getInstructionSeatLabel,
@@ -95,12 +96,12 @@ describe('ficha-header utils', () => {
         { label: 'Tripulante', value: 'Tripulante Teste' },
         { label: 'ANAC', value: '123456' },
         { label: 'Função', value: 'PF' },
-        { label: 'Modelo/Equipamento', value: 'AW139' },
       ],
       [
         { label: 'Instrutor', value: 'Instrutor Teste' },
         { label: 'ANAC', value: '654321' },
         { label: 'Simulador', value: 'SIM-AW139-01 — FFS AW139' },
+        { label: 'Modelo', value: 'AW139' },
       ],
     ]);
   });
@@ -127,7 +128,7 @@ describe('ficha-header utils', () => {
         { label: 'Data', value: '14/07/2026' },
         { label: 'Horário', value: '10:00 – 12:00' },
         { label: 'Carga Horária', value: '02:00' },
-        { label: 'Modelo/Equipamento', value: 'S76' },
+        { label: 'Modelo', value: 'S76' },
       ],
       [
         { label: 'Instrutor-aluno', value: 'Instrutor-aluno Teste' },
@@ -141,5 +142,53 @@ describe('ficha-header utils', () => {
         { label: 'Assento', value: 'Estação do instrutor' },
       ],
     ]);
+  });
+
+  it('uses the fixed title1 for regular sessions, keeping frontend/worker parity on the fallback', () => {
+    expect(buildFichaHeaderTitle({}).title1).toBe('FICHA DE TREINAMENTO DE VOO');
+    expect(
+      buildFichaHeaderTitle({ sessaoTitulo: 'Qualquer Sessão' }).title1,
+    ).toBe('FICHA DE TREINAMENTO DE VOO');
+  });
+
+  it('uses the special-event headerTitle as title1, keeping the training block identifiable (e.g. Examinador 1/2)', () => {
+    expect(buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01' }).title1).toBe(
+      'Treinamento Prático de Examinador 1/2',
+    );
+    expect(buildFichaHeaderTitle({ sessaoCodigo: 'INST-E02' }).title1).toBe(
+      'Treinamento Prático de Instrutor 2/2',
+    );
+  });
+
+  it('prefers an explicit sessaoTituloLinha1 over the special-event headerTitle for title1', () => {
+    expect(
+      buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01', sessaoTituloLinha1: 'Título Explícito' })
+        .title1,
+    ).toBe('Título Explícito');
+  });
+
+  it('prefers the special-event subtitle for title2 over raw session title fields', () => {
+    expect(
+      buildFichaHeaderTitle({
+        sessaoCodigo: 'EXA-E01',
+        sessaoTitulo: 'Deveria ser ignorado',
+      }).title2,
+    ).toBe('SOP Normal e Condução Inicial / SOP Anormal e Avaliação');
+  });
+
+  it('falls back to sessaoTituloLinha2, then sessaoTitulo when there is no special definition', () => {
+    expect(
+      buildFichaHeaderTitle({
+        sessaoTituloLinha2: 'Linha 2',
+        sessaoTitulo: 'Título Único',
+      }).title2,
+    ).toBe('Linha 2');
+
+    expect(buildFichaHeaderTitle({ sessaoTitulo: 'Título Único' }).title2).toBe('Título Único');
+  });
+
+  it('returns an empty title2 when no session data is available', () => {
+    expect(buildFichaHeaderTitle({}).title2).toBe('');
+    expect(buildFichaHeaderTitle({ sessaoCodigo: null }).title2).toBe('');
   });
 });
