@@ -144,51 +144,49 @@ describe('ficha-header utils', () => {
     ]);
   });
 
-  it('uses the fixed title1 for regular sessions, keeping frontend/worker parity on the fallback', () => {
+  it('always uses the fixed title1, for regular sessions and special (examiner/instructor) sessions alike', () => {
     expect(buildFichaHeaderTitle({}).title1).toBe('FICHA DE TREINAMENTO DE VOO');
     expect(
-      buildFichaHeaderTitle({ sessaoTitulo: 'Qualquer Sessão' }).title1,
-    ).toBe('FICHA DE TREINAMENTO DE VOO');
-  });
-
-  it('uses the special-event headerTitle as title1, keeping the training block identifiable (e.g. Examinador 1/2)', () => {
-    expect(buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01' }).title1).toBe(
-      'Treinamento Prático de Examinador 1/2',
-    );
-    expect(buildFichaHeaderTitle({ sessaoCodigo: 'INST-E02' }).title1).toBe(
-      'Treinamento Prático de Instrutor 2/2',
-    );
-  });
-
-  it('prefers an explicit sessaoTituloLinha1 over the special-event headerTitle for title1', () => {
-    expect(
-      buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01', sessaoTituloLinha1: 'Título Explícito' })
+      buildFichaHeaderTitle({ sessaoCodigo: 'A139-I-05/12', sessaoNome: 'IFR/PBN - Navegação e Aproximações' })
         .title1,
-    ).toBe('Título Explícito');
+    ).toBe('FICHA DE TREINAMENTO DE VOO');
+    expect(buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01' }).title1).toBe(
+      'FICHA DE TREINAMENTO DE VOO',
+    );
   });
 
-  it('prefers the special-event subtitle for title2 over raw session title fields', () => {
+  it('builds title2 as "<código> — <nome>" for a regular session', () => {
     expect(
       buildFichaHeaderTitle({
-        sessaoCodigo: 'EXA-E01',
-        sessaoTitulo: 'Deveria ser ignorado',
+        sessaoCodigo: 'A139-I-05/12',
+        sessaoNome: 'IFR/PBN - Navegação e Aproximações',
       }).title2,
-    ).toBe('SOP Normal e Condução Inicial / SOP Anormal e Avaliação');
+    ).toBe('A139-I-05/12 — IFR/PBN - Navegação e Aproximações');
   });
 
-  it('falls back to sessaoTituloLinha2, then sessaoTitulo when there is no special definition', () => {
+  it('preserves the specific code and name of a special (examiner/instructor) session in title2', () => {
+    expect(buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01' }).title2).toBe(
+      'EXA-E01 — Treinamento Prático de Examinador 1/2',
+    );
+    expect(buildFichaHeaderTitle({ sessaoCodigo: 'INST-E02' }).title2).toBe(
+      'INST-E02 — Treinamento Prático de Instrutor 2/2',
+    );
+  });
+
+  it('ignores sessaoNome for a special session — the session identity is not replaced by generic text', () => {
     expect(
-      buildFichaHeaderTitle({
-        sessaoTituloLinha2: 'Linha 2',
-        sessaoTitulo: 'Título Único',
-      }).title2,
-    ).toBe('Linha 2');
-
-    expect(buildFichaHeaderTitle({ sessaoTitulo: 'Título Único' }).title2).toBe('Título Único');
+      buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01', sessaoNome: 'Nome genérico qualquer' })
+        .title2,
+    ).toBe('EXA-E01 — Treinamento Prático de Examinador 1/2');
   });
 
-  it('returns an empty title2 when no session data is available', () => {
+  it('falls back to just the name or just the code when only one is available', () => {
+    expect(buildFichaHeaderTitle({ sessaoNome: 'Só o nome' }).title2).toBe('Só o nome');
+    expect(buildFichaHeaderTitle({ sessaoCodigo: 'SÓ-CODIGO' }).title2).toBe('SÓ-CODIGO');
+  });
+
+  it('returns an empty title2 when no session code or name is available', () => {
     expect(buildFichaHeaderTitle({}).title2).toBe('');
-    expect(buildFichaHeaderTitle({ sessaoCodigo: null }).title2).toBe('');
+    expect(buildFichaHeaderTitle({ sessaoCodigo: null, sessaoNome: null }).title2).toBe('');
   });
 });

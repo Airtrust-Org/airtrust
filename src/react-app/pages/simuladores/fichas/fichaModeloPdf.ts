@@ -71,6 +71,7 @@ export function buildFichaModeloPdfData(
     fichaId: `modelo-${modelo.id}`,
     sessao_codigo: modelo.codigo,
     sessao_titulo: sessaoTitulo,
+    sessao_nome: modelo.nome,
     sessao_titulo_linha1: specialDefinition?.headerTitle,
     sessao_titulo_linha2: specialDefinition?.headerSubtitle,
     tripulante_nome: '',
@@ -81,7 +82,12 @@ export function buildFichaModeloPdfData(
     data: '',
     horario_inicio: '',
     horario_fim: '',
-    simulador: modelo.modelo_aeronave || '',
+    // Ficha-modelo (curricular, sem sessão real agendada): não há dispositivo/
+    // simulador específico atribuído, então o campo Simulador fica em branco
+    // como os demais campos da ficha em branco. O modelo de aeronave da
+    // fixture vai para simulador_modelo, que alimenta o campo "Modelo".
+    simulador: '',
+    simulador_modelo: modelo.modelo_aeronave || undefined,
     carga_horaria_total: specialDefinition ? '120 minutos' : '',
     carga_horaria_pf: '',
     carga_horaria_pm: '',

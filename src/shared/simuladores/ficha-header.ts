@@ -108,9 +108,7 @@ function getModeloDisplayValue(params: BuildFichaHeaderRowsParams): string {
 
 export interface BuildFichaHeaderTitleParams {
   sessaoCodigo?: string | null;
-  sessaoTituloLinha1?: string | null;
-  sessaoTituloLinha2?: string | null;
-  sessaoTitulo?: string | null;
+  sessaoNome?: string | null;
 }
 
 export interface FichaHeaderTitle {
@@ -118,22 +116,21 @@ export interface FichaHeaderTitle {
   title2: string;
 }
 
+const FICHA_HEADER_TITLE_FIXO = 'FICHA DE TREINAMENTO DE VOO';
+
+// title1 é sempre o texto fixo abaixo — inclusive para sessões especiais
+// (examinador/instrutor). O código e o nome específicos da sessão (incluindo,
+// para sessões especiais, o headerTitle que as identifica, ex.: "Treinamento
+// Prático de Examinador 1/2") ficam em title2, no formato "<código> — <nome>".
 export function buildFichaHeaderTitle(params: BuildFichaHeaderTitleParams): FichaHeaderTitle {
   const specialDefinition = getSpecialEventSessionDefinition(params.sessaoCodigo);
 
-  // Sessões especiais (examinador/instrutor) identificam o treinamento e o
-  // bloco (ex.: "Treinamento Prático de Examinador 1/2") em title1; o fixo
-  // "FICHA DE TREINAMENTO DE VOO" só se aplica quando não há esse contexto.
-  const title1 =
-    params.sessaoTituloLinha1 || specialDefinition?.headerTitle || 'FICHA DE TREINAMENTO DE VOO';
+  const codigo = String(params.sessaoCodigo || '').trim();
+  const nome = String(specialDefinition?.headerTitle || params.sessaoNome || '').trim();
 
-  const title2 =
-    params.sessaoTituloLinha2 ||
-    specialDefinition?.headerSubtitle ||
-    params.sessaoTitulo ||
-    '';
+  const title2 = codigo && nome ? `${codigo} — ${nome}` : nome || codigo;
 
-  return { title1, title2 };
+  return { title1: FICHA_HEADER_TITLE_FIXO, title2 };
 }
 
 export function buildFichaHeaderRows(params: BuildFichaHeaderRowsParams): FichaHeaderRow[] {
