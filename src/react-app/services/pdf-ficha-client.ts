@@ -44,6 +44,8 @@ export interface FichaPDFData {
   fichaId: string | number;
   sessao_codigo?: string;
   sessao_titulo: string;
+  /** Nome descritivo da sessão (sem o código), usado na linha "<código> — <nome>" do cabeçalho do PDF. */
+  sessao_nome?: string;
   sessao_titulo_linha1?: string;
   sessao_titulo_linha2?: string;
   tripulante_nome: string;
@@ -444,9 +446,7 @@ export async function gerarPDFFichaCliente(
   const tituloX = headerCenterX;
   const { title1, title2 } = buildFichaHeaderTitle({
     sessaoCodigo: dados.sessao_codigo,
-    sessaoTituloLinha1: dados.sessao_titulo_linha1,
-    sessaoTituloLinha2: dados.sessao_titulo_linha2,
-    sessaoTitulo: dados.sessao_titulo,
+    sessaoNome: dados.sessao_nome,
   });
 
   const SESSAO_FONT_BASE = 8;

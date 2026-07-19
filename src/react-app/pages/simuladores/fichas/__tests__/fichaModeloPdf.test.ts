@@ -44,7 +44,11 @@ describe('fichaModeloPdf', () => {
     expect(dados.status).toBe('MODELO');
     expect(dados.tripulante_nome).toBe('');
     expect(dados.instrutor_nome).toBe('');
-    expect(dados.simulador).toBe('SK76');
+    // Ficha-modelo: sem dispositivo/simulador real atribuído (fica em branco,
+    // como os demais campos não preenchidos); o modelo de aeronave da fixture
+    // vai para simulador_modelo (campo "Modelo"), nunca para "Simulador".
+    expect(dados.simulador).toBe('');
+    expect(dados.simulador_modelo).toBe('SK76');
     expect(dados.logoUrl).toBe('/logo.png');
     expect(dados.manobras).toHaveLength(33);
     expect(dados.manobras[0].ordem).toBe(1);
@@ -168,6 +172,34 @@ describe('fichaModeloPdf', () => {
       'Procedimentos Normais e Técnica de Instrução / Procedimentos Anormais e Gerenciamento do Erro',
     );
     expect(dados.carga_horaria_total).toBe('120 minutos');
+  });
+
+  it('nunca confunde Modelo (aeronave) com Simulador (dispositivo), mesmo com valores propositalmente distintos', () => {
+    const dados = buildFichaModeloPdfData(
+      {
+        id: 77,
+        codigo: 'A139-I-05/12',
+        nome: 'IFR/PBN - Navegação e Aproximações',
+        modelo_aeronave: 'AW139',
+      },
+      [],
+    );
+
+    expect(dados.sessao_codigo).toBe('A139-I-05/12');
+    expect(dados.sessao_nome).toBe('IFR/PBN - Navegação e Aproximações');
+    expect(dados.simulador_modelo).toBe('AW139');
+    expect(dados.simulador).toBe('');
+    expect(dados.simulador).not.toBe(dados.simulador_modelo);
+  });
+
+  it('não usa o modelo da aeronave como fallback silencioso quando não há simulador atribuído', () => {
+    const dados = buildFichaModeloPdfData(
+      { id: 78, codigo: 'SEM-MODELO', nome: 'Sessão sem modelo de aeronave informado' },
+      [],
+    );
+
+    expect(dados.simulador).toBe('');
+    expect(dados.simulador_modelo).toBeUndefined();
   });
 
   it('reserva coluna Trip. no layout impresso sem invadir a nota', () => {
