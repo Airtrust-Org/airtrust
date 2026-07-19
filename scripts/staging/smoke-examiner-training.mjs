@@ -158,7 +158,7 @@ async function main() {
         inicio: '08:00',
         fim: '09:00',
         funcoes: [
-          { funcionario_id: participante1Id, funcao: 'PF' },
+          { funcionario_id: participante1Id, funcao: 'PF', cumpre_treinamento: true },
           { funcionario_id: participante2Id, funcao: 'PM' },
         ],
       },
@@ -168,7 +168,7 @@ async function main() {
         inicio: '09:00',
         fim: '10:00',
         funcoes: [
-          { funcionario_id: participante1Id, funcao: 'PF' },
+          { funcionario_id: participante1Id, funcao: 'PF', cumpre_treinamento: true },
           { funcionario_id: participante2Id, funcao: 'PM' },
         ],
       },
@@ -269,7 +269,7 @@ async function main() {
             inicio: '08:00',
             fim: '09:00',
             funcoes: [
-              { funcionario_id: participante1Id, funcao: 'PF' },
+              { funcionario_id: participante1Id, funcao: 'PF', cumpre_treinamento: true },
               { funcionario_id: participante2Id, funcao: 'PM' },
             ],
           },
@@ -279,7 +279,7 @@ async function main() {
             inicio: '09:00',
             fim: '10:00',
             funcoes: [
-              { funcionario_id: participante1Id, funcao: 'PF' },
+              { funcionario_id: participante1Id, funcao: 'PF', cumpre_treinamento: true },
               { funcionario_id: participante2Id, funcao: 'PM' },
             ],
           },
