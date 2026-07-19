@@ -682,17 +682,75 @@ export async function updateSharedSessionStructureTransactional(
     { existingId: number | null; uuid: string | null; segmento: NormalizedSharedSessionRequest['segmentos'][number] }
   >();
   const desiredExistingSegmentIds = new Set<number>();
-
   for (const segmento of payload.segmentos) {
-    const identity = Number(segmento.id || 0) > 0 ? `existing:${Number(segmento.id)}` : `new:${segmento.ordem}`;
     const existingId = Number(segmento.id || 0) > 0 ? Number(segmento.id) : null;
     if (existingId && !state.segmentById.has(existingId)) {
       throw new Error(`Segmento ${existingId} não pertence à sessão compartilhada`);
     }
-
     if (existingId) {
       desiredExistingSegmentIds.add(existingId);
     }
+  }
+
+  // Cancelar segmentos obsoletos ANTES de inserir os desejados: um retry
+  // idempotente (payload sem segmento.id, ex.: reenvio após timeout de rede)
+  // gera identity `new:<ordem>` para todos os segmentos, reaproveitando a
+  // mesma `ordem` dos segmentos antigos. `idx_sim_segmentos_ordem_ativa` é
+  // um índice único parcial em (agendamento_id, ordem) WHERE deleted_at IS
+  // NULL — se o INSERT dos novos rodar antes do soft-delete dos antigos, os
+  // dois ficam simultaneamente ativos com a mesma ordem e o D1_ERROR
+  // "UNIQUE constraint failed: simulador_agendamento_segmentos.agendamento_id,
+  // simulador_agendamento_segmentos.ordem" derruba o batch inteiro (400).
+  for (const segmentoAtual of current.segmentos || []) {
+    const segmentoId = Number(segmentoAtual.id);
+    if (desiredExistingSegmentIds.has(segmentoId)) {
+      continue;
+    }
+
+    const protectedSegment = (segmentoAtual.atribuicoes_curriculares || []).some(
+      (link: { id: number | string; status?: string | null }) => {
+        const fichas = state.fichasByLinkId.get(Number(link.id)) || [];
+        return (
+          String(link.status || '').toUpperCase() === 'CUMPRIDA' ||
+          fichas.some((ficha) => isProtectedFichaStatus((ficha as { status?: string | null }).status))
+        );
+      },
+    );
+    if (protectedSegment) {
+      continue;
+    }
+
+    statements.push(
+      prepareStatement(
+        db,
+        "UPDATE simulador_segmento_participantes SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE segmento_id = ? AND empresa_id = ? AND deleted_at IS NULL",
+        segmentoId,
+        empresaId,
+      ),
+      prepareStatement(
+        db,
+        "UPDATE simulador_segmento_atribuicoes SET status = 'CANCELADA', deleted_at = datetime('now'), updated_at = datetime('now') WHERE segmento_id = ? AND empresa_id = ? AND deleted_at IS NULL",
+        segmentoId,
+        empresaId,
+      ),
+      prepareStatement(
+        db,
+        "UPDATE fichas_sessao SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE segmento_atribuicao_id IN (SELECT id FROM simulador_segmento_atribuicoes WHERE segmento_id = ? AND empresa_id = ?) AND deleted_at IS NULL AND UPPER(COALESCE(status, 'AVALIACAO_PENDENTE')) NOT IN ('APROVADO', 'NAO_APROVADO', 'CONCLUIDA')",
+        segmentoId,
+        empresaId,
+      ),
+      prepareStatement(
+        db,
+        "UPDATE simulador_agendamento_segmentos SET status = 'CANCELADO', deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
+        segmentoId,
+        empresaId,
+      ),
+    );
+  }
+
+  for (const segmento of payload.segmentos) {
+    const identity = Number(segmento.id || 0) > 0 ? `existing:${Number(segmento.id)}` : `new:${segmento.ordem}`;
+    const existingId = Number(segmento.id || 0) > 0 ? Number(segmento.id) : null;
 
     const assignmentKey = segmento.curricular_assignment_keys[0] || null;
     const existingAssignment = assignmentKey ? state.assignmentByKey.get(assignmentKey) : null;
@@ -762,51 +820,6 @@ export async function updateSharedSessionStructureTransactional(
       ),
     );
     segmentRefByIdentity.set(identity, { existingId: null, uuid: segmentUuid, segmento });
-  }
-
-  for (const segmentoAtual of current.segmentos || []) {
-    const segmentoId = Number(segmentoAtual.id);
-    if (desiredExistingSegmentIds.has(segmentoId)) {
-      continue;
-    }
-
-    const protectedSegment = (segmentoAtual.atribuicoes_curriculares || []).some((link: any) => {
-      const fichas = state.fichasByLinkId.get(Number(link.id)) || [];
-      return (
-        String(link.status || '').toUpperCase() === 'CUMPRIDA' ||
-        fichas.some((ficha) => isProtectedFichaStatus((ficha as any).status))
-      );
-    });
-    if (protectedSegment) {
-      continue;
-    }
-
-    statements.push(
-      prepareStatement(
-        db,
-        "UPDATE simulador_segmento_participantes SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE segmento_id = ? AND empresa_id = ? AND deleted_at IS NULL",
-        segmentoId,
-        empresaId,
-      ),
-      prepareStatement(
-        db,
-        "UPDATE simulador_segmento_atribuicoes SET status = 'CANCELADA', deleted_at = datetime('now'), updated_at = datetime('now') WHERE segmento_id = ? AND empresa_id = ? AND deleted_at IS NULL",
-        segmentoId,
-        empresaId,
-      ),
-      prepareStatement(
-        db,
-        "UPDATE fichas_sessao SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE segmento_atribuicao_id IN (SELECT id FROM simulador_segmento_atribuicoes WHERE segmento_id = ? AND empresa_id = ?) AND deleted_at IS NULL AND UPPER(COALESCE(status, 'AVALIACAO_PENDENTE')) NOT IN ('APROVADO', 'NAO_APROVADO', 'CONCLUIDA')",
-        segmentoId,
-        empresaId,
-      ),
-      prepareStatement(
-        db,
-        "UPDATE simulador_agendamento_segmentos SET status = 'CANCELADO', deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
-        segmentoId,
-        empresaId,
-      ),
-    );
   }
 
   const desiredSegmentParticipantKeys = new Set<string>();
