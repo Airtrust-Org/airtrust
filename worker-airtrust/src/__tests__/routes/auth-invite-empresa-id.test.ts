@@ -52,9 +52,14 @@ function createAuthApp() {
   return app;
 }
 
-function createDb(initialInvites: MockInvite[], initialLinks: MockLink[] = []) {
+function createDb(
+  initialInvites: MockInvite[],
+  initialLinks: MockLink[] = [],
+  initialSetorLinks: Array<{ usuario_id: number; empresa_id: number }> = [],
+) {
   const invites = initialInvites.map((invite) => ({ ...invite }));
   const links = initialLinks.map((link) => ({ ...link }));
+  const setorLinks = initialSetorLinks.map((link) => ({ ...link }));
   const users = new Map<number, { password_hash: string | null; active: number }>();
 
   for (const invite of invites) {
@@ -86,6 +91,16 @@ function createDb(initialInvites: MockInvite[], initialLinks: MockLink[] = []) {
           if (sql.includes('SELECT CASE WHEN datetime(?) <= datetime')) {
             const expiresAt = String(statement.params[0] || '');
             return { expired: expiresAt <= '2000-01-01 00:00:00' ? 1 : 0 } as T;
+          }
+
+          if (sql.includes('FROM setores_gestores') && sql.includes('WHERE usuario_id = ?')) {
+            const [usuarioIdRaw, empresaIdRaw] = statement.params;
+            const hasSetor = setorLinks.some(
+              (link) =>
+                link.usuario_id === Number(usuarioIdRaw) &&
+                link.empresa_id === Number(empresaIdRaw),
+            );
+            return (hasSetor ? { id: 1 } : null) as T;
           }
 
           return null as T;
@@ -182,18 +197,23 @@ describe('auth invite accept empresa_id canonical link', () => {
   });
 
   it('accepts a personal Yahoo email invite using convite.empresa_id instead of email domain', async () => {
-    const state = createDb([
-      {
-        id: 1,
-        token: 'invite-yahoo',
-        usuario_id: 42,
-        empresa_id: 6,
-        email: 'pessoa@yahoo.com.br',
-        role: 'GESTOR',
-        expires_at: '2099-01-01 00:00:00',
-        used_at: null,
-      },
-    ]);
+    const state = createDb(
+      [
+        {
+          id: 1,
+          token: 'invite-yahoo',
+          usuario_id: 42,
+          empresa_id: 6,
+          email: 'pessoa@yahoo.com.br',
+          role: 'GESTOR',
+          expires_at: '2099-01-01 00:00:00',
+          used_at: null,
+        },
+      ],
+      [],
+      // Gestor exige setor já vinculado antes de aceitar o convite (fail-closed).
+      [{ usuario_id: 42, empresa_id: 6 }],
+    );
 
     const response = await acceptInvite(state.db, 'invite-yahoo');
     const json = await response.json<{ success: boolean }>();
@@ -249,6 +269,8 @@ describe('auth invite accept empresa_id canonical link', () => {
         },
       ],
       [{ usuario_id: 88, empresa_id: 6, role: 'ALUNO', is_primary: 1 }],
+      // Gestor exige setor já vinculado antes de aceitar o convite (fail-closed).
+      [{ usuario_id: 88, empresa_id: 6 }],
     );
 
     const response = await acceptInvite(state.db, 'invite-existing-link');
@@ -257,6 +279,30 @@ describe('auth invite accept empresa_id canonical link', () => {
     expect(state.links).toEqual([
       { usuario_id: 88, empresa_id: 6, role: 'GESTOR', is_primary: 1 },
     ]);
+  });
+
+  it('rejects accepting a manager invite when no sector has been assigned yet (fail-closed)', async () => {
+    const state = createDb([
+      {
+        id: 4,
+        token: 'invite-manager-no-sector',
+        usuario_id: 99,
+        empresa_id: 6,
+        email: 'gestor.sem.setor@voecostadosol.com.br',
+        role: 'GESTOR',
+        expires_at: '2099-01-01 00:00:00',
+        used_at: null,
+      },
+    ]);
+
+    const response = await acceptInvite(state.db, 'invite-manager-no-sector');
+    const json = await response.json<{ success: boolean; code: string }>();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.code).toBe('MANAGER_INVITE_MISSING_SECTOR');
+    expect(state.links).toEqual([]);
+    expect(state.users.get(99)).toEqual({ password_hash: null, active: 0 });
   });
 
   it('returns a friendly API error for an invalid token without echoing the token', async () => {
