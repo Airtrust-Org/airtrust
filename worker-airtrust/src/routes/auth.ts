@@ -428,6 +428,12 @@ async function persistRefreshToken(
   await enforceRefreshTokenLimit(db, payload.userId);
 }
 
+/**
+ * Insere um JTI na blocklist de tokens revogados. Fail-closed por padrão:
+ * qualquer erro de escrita é propagado (não engolido) — o chamador deve
+ * decidir se a falha é crítica o suficiente para impedir o logout de
+ * retornar sucesso. Ver chamadas em POST /api/auth/logout.
+ */
 async function blocklistAccessTokenJti(
   db: D1Database,
   accessTokenJti: string | null | undefined,
@@ -440,8 +446,7 @@ async function blocklistAccessTokenJti(
        VALUES (?, datetime('now', '+30 minutes'))`,
     )
     .bind(accessTokenJti)
-    .run()
-    .catch(() => null);
+    .run();
 }
 
 // Handler OPTIONS para todas as rotas de auth (preflight CORS)
@@ -1343,19 +1348,34 @@ authRoutes.post('/logout', async (c) => {
     }
 
     if (refreshToken) {
-      const tokenRow = await db
-        .prepare('SELECT access_token_jti FROM refresh_tokens WHERE token = ? AND revoked_at IS NULL')
-        .bind(refreshToken)
-        .first<{ access_token_jti: string | null }>()
-        .catch(() => null);
-
+      // Revogação crítica: falha aqui impede o logout de retornar sucesso
+      // (propaga para o catch externo -> 500), pois o refresh token
+      // continuaria utilizável.
       await db
         .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
         .bind(refreshToken)
         .run();
 
-      await blocklistAccessTokenJti(db, tokenRow?.access_token_jti);
+      // Defesa secundária, best-effort: blocklistar o access token jti
+      // associado ao refresh token revogado (coluna access_token_jti pode
+      // não existir em todos os ambientes — schema drift conhecido e fora
+      // do escopo desta correção, que não inclui migrations). A defesa
+      // PRIMÁRIA e crítica é o blocklistAccessTokenJti(currentAccessJti)
+      // abaixo, que usa o JTI extraído diretamente do header Authorization
+      // e não depende dessa coluna.
+      try {
+        const tokenRow = await db
+          .prepare('SELECT access_token_jti FROM refresh_tokens WHERE token = ?')
+          .bind(refreshToken)
+          .first<{ access_token_jti: string | null }>();
+        if (tokenRow?.access_token_jti) {
+          await blocklistAccessTokenJti(db, tokenRow.access_token_jti);
+        }
+      } catch (e) {
+        logger.warn('[AUTH] Blocklist secundária (via refresh token) indisponível', { error: toError(e).message });
+      }
     } else {
+      // Revogação crítica: falha aqui impede o logout de retornar sucesso.
       await db
         .prepare(
           `UPDATE refresh_tokens
@@ -1364,10 +1384,13 @@ authRoutes.post('/logout', async (c) => {
              AND revoked_at IS NULL`,
         )
         .bind(currentUserId)
-        .run()
-        .catch(() => null);
+        .run();
     }
 
+    // Revogação crítica e primária: usa o JTI extraído diretamente do JWT
+    // do header Authorization (sempre disponível quando o cliente envia o
+    // access token no logout). Falha aqui DEVE impedir o logout de
+    // retornar sucesso — não é engolida.
     await blocklistAccessTokenJti(db, currentAccessJti);
 
     return c.json({
