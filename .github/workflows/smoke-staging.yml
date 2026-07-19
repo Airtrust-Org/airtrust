@@ -20,6 +20,9 @@ jobs:
       STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
       STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
       CI: true
+      # This job never builds the frontend; satisfies guard:lint:api-base's
+      # CI-must-set-VITE_API_URL check the same way ci.yml/pr-check.yml/lint.yml do.
+      VITE_API_URL: http://127.0.0.1:8787
     steps:
       - name: Checkout
         uses: actions/checkout@v4
