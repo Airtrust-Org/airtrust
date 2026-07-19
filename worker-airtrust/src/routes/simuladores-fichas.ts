@@ -959,7 +959,8 @@ app.post('/fichas/:id/pdf', async (c) => {
         fi.codigo_anac as instrutor_codigo_anac,
         COALESCE(s.nome, ae.prefixo, ae.modelo, 'N/A') as simulador_nome,
         COALESCE(s.modelo, ae.modelo, 'N/A') as simulador_modelo,
-        COALESCE(s.aeronave_codigo, s.codigo_aeronave, NULL) as simulador_codigo
+        COALESCE(s.aeronave_codigo, s.codigo_aeronave, NULL) as simulador_codigo,
+        mss.nome as sessao_nome_modelo
       FROM fichas_sessao fs
       INNER JOIN simulador_agendamentos sa ON fs.agendamento_slot_id = sa.id AND sa.deleted_at IS NULL
       INNER JOIN funcionarios ft ON fs.colaborador_id_aluno = ft.id AND ft.deleted_at IS NULL
@@ -969,6 +970,7 @@ app.post('/fichas/:id/pdf', async (c) => {
       LEFT JOIN sessoes_participantes sp ON sp.sessao_id = sa.id
         AND sp.funcionario_id = ft.id
         AND sp.deleted_at IS NULL
+      LEFT JOIN modelos_sessao mss ON sa.tipo_sessao = mss.codigo AND mss.deleted_at IS NULL
       WHERE fs.id = ? AND fs.deleted_at IS NULL AND fs.empresa_id = ?
       `,
     )
@@ -1159,6 +1161,7 @@ app.post('/fichas/:id/pdf', async (c) => {
       fichaId: f.id.toString(),
       sessao_codigo: sessaoCodigo || undefined,
       sessao_titulo,
+      sessao_nome: f.sessao_nome_modelo || undefined,
       sessao_titulo_linha1: specialDefinition?.headerTitle,
       sessao_titulo_linha2: specialDefinition?.headerSubtitle,
       tripulante_nome: f.tripulante_nome,
