@@ -99,18 +99,44 @@ function joinScheduleRange(
     .join(' – ');
 }
 
-function getEquipmentDisplayValue(params: BuildFichaHeaderRowsParams): string {
+function getModeloDisplayValue(params: BuildFichaHeaderRowsParams): string {
   return (
-    String(params.equipamentoUtilizado || '').trim() ||
-    String(params.simuladorModelo || '').trim()
+    String(params.simuladorModelo || '').trim() ||
+    String(params.equipamentoUtilizado || '').trim()
   );
+}
+
+export interface BuildFichaHeaderTitleParams {
+  sessaoCodigo?: string | null;
+  sessaoTituloLinha1?: string | null;
+  sessaoTituloLinha2?: string | null;
+  sessaoTitulo?: string | null;
+}
+
+export interface FichaHeaderTitle {
+  title1: string;
+  title2: string;
+}
+
+export function buildFichaHeaderTitle(params: BuildFichaHeaderTitleParams): FichaHeaderTitle {
+  const specialDefinition = getSpecialEventSessionDefinition(params.sessaoCodigo);
+  const title1 = 'FICHA DE TREINAMENTO DE VOO';
+
+  let title2 = '';
+  if (specialDefinition) {
+    title2 = specialDefinition.headerSubtitle || specialDefinition.headerTitle || '';
+  }
+  if (!title2) {
+    title2 = params.sessaoTituloLinha2 || params.sessaoTituloLinha1 || params.sessaoTitulo || '';
+  }
+
+  return { title1, title2 };
 }
 
 export function buildFichaHeaderRows(params: BuildFichaHeaderRowsParams): FichaHeaderRow[] {
   const specialDefinition = getSpecialEventSessionDefinition(params.sessaoCodigo);
   const horario = joinScheduleRange(params.horarioInicio, params.horarioFim);
   const simulador = String(params.simuladorDisplayName || '').trim();
-  const equipamento = getEquipmentDisplayValue(params);
 
   if (specialDefinition?.kind === 'instructor') {
     return [
@@ -118,7 +144,7 @@ export function buildFichaHeaderRows(params: BuildFichaHeaderRowsParams): FichaH
         { label: 'Data', value: String(params.data || '').trim() },
         { label: 'Horário', value: horario },
         { label: 'Carga Horária', value: String(params.cargaHorariaTotal || '').trim() },
-        { label: 'Modelo/Equipamento', value: equipamento },
+        { label: 'Modelo', value: getModeloDisplayValue(params) },
       ],
       [
         {
@@ -158,12 +184,12 @@ export function buildFichaHeaderRows(params: BuildFichaHeaderRowsParams): FichaH
       { label: 'Tripulante', value: String(params.tripulanteNome || '').trim() },
       { label: 'ANAC', value: String(params.tripulanteCodigoAnac || '').trim() },
       { label: 'Função', value: String(params.tripulanteFuncao || '').trim() },
-      { label: 'Modelo/Equipamento', value: equipamento },
     ],
     [
       { label: 'Instrutor', value: String(params.instrutorNome || '').trim() },
       { label: 'ANAC', value: String(params.instrutorCodigoAnac || '').trim() },
       { label: 'Simulador', value: simulador },
+      { label: 'Modelo', value: getModeloDisplayValue(params) },
     ],
   ];
 }

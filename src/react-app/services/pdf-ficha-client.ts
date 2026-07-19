@@ -38,7 +38,7 @@ import {
   getSpecialEventSessionDefinition,
   splitSpecialTechnicalBlocks,
 } from '@/shared/simuladores/special-event-sessions';
-import { buildFichaHeaderRows } from '@/shared/simuladores/ficha-header';
+import { buildFichaHeaderRows, buildFichaHeaderTitle } from '@/shared/simuladores/ficha-header';
 
 export interface FichaPDFData {
   fichaId: string | number;
@@ -442,22 +442,12 @@ export async function gerarPDFFichaCliente(
 
   // Título e sessão reservando espaço fixo entre logo e badge
   const tituloX = headerCenterX;
-  let title1 = dados.sessao_titulo_linha1 || specialDefinition?.headerTitle;
-  let title2 = dados.sessao_titulo_linha2 || specialDefinition?.headerSubtitle;
-
-  if (!title1 && !title2 && dados.sessao_titulo) {
-    if (dados.sessao_titulo.includes(' - ')) {
-      const parts = dados.sessao_titulo.split(' - ');
-      title1 = parts[0].trim();
-      title2 = parts.slice(1).join(' - ').trim();
-    } else {
-      title1 = dados.sessao_titulo;
-      title2 = '';
-    }
-  } else {
-    title1 = title1 || dados.sessao_titulo || 'SESSÃO';
-    title2 = title2 || '';
-  }
+  const { title1, title2 } = buildFichaHeaderTitle({
+    sessaoCodigo: dados.sessao_codigo,
+    sessaoTituloLinha1: dados.sessao_titulo_linha1,
+    sessaoTituloLinha2: dados.sessao_titulo_linha2,
+    sessaoTitulo: dados.sessao_titulo,
+  });
 
   const SESSAO_FONT_BASE = 8;
   const SESSAO_FONT_MIN = 6;
@@ -552,11 +542,11 @@ export async function gerarPDFFichaCliente(
     Instrutor: 1.7,
     'Instrutor-aluno': 2.15,
     'Instrutor supervisor': 2.2,
-    'Modelo/Equipamento': 1.55,
+    'Modelo': 1.55,
     PF: 0.75,
     PM: 0.75,
     Simulador: 2.2,
-    Tripulante: 2.0,
+    Tripulante: 1.7,
   };
 
   const getFieldBoxes = (row: typeof headerRows[number]) => {
