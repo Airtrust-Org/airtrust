@@ -15,7 +15,7 @@ import type { Env, Variables, JwtPayload } from '../types';
 import { extractBearerToken, verifyJWT } from '../utils/security';
 import { getUsuariosSchema, hasUsuariosEmpresasTable } from '../utils/db-schema';
 import { normalizeAirtrustRole } from '../utils/role-resolution';
-import { unauthorized } from './error-handler';
+import { unauthorized, serviceUnavailable } from './error-handler';
 
 const USUARIOS_TABLE_SQL =
   "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'usuarios' LIMIT 1";
@@ -67,6 +67,87 @@ async function resolveEffectiveUserRole(
     .first<{ role: string | null; perfil: string | null }>();
 
   return normalizeRuntimeRole(roleRow?.role || roleRow?.perfil || fallback);
+}
+
+/**
+ * Verifica se um JTI está na blocklist de tokens revogados (logout).
+ * Fail-closed: qualquer erro de leitura é propagado (não engolido), para que
+ * o chamador decida como reagir — o caller MANDATÓRIO (auth()) deve tratar
+ * como falha de infraestrutura (503), nunca como "não bloqueado".
+ */
+async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
+  const row = await db
+    .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
+    .bind(jti)
+    .first();
+  return Boolean(row);
+}
+
+type UserSecurityState = {
+  found: boolean;
+  active: boolean;
+  role: string;
+  hasMembership: boolean;
+};
+
+/**
+ * Resolve o estado de segurança do usuário autenticado: se a conta ainda
+ * existe/está ativa, e se possui vínculo válido com o tenant carregado no
+ * JWT (quando o token carrega empresa_id). Ao contrário de
+ * resolveEffectiveUserRole, isto NUNCA cai em fallback silencioso para a
+ * role do JWT quando o vínculo de tenant esperado não existe — a ausência
+ * de vínculo é tratada como falha de autorização, não como "sem tenant".
+ */
+async function resolveUserSecurityState(
+  db: D1Database,
+  userId: string | number | undefined,
+  empresaId: string | number | undefined,
+  fallbackRole: unknown,
+): Promise<UserSecurityState> {
+  const fallback = normalizeRuntimeRole(fallbackRole);
+  const uid = typeof userId === 'string' ? Number(userId) : Number(userId || 0);
+  const eid = typeof empresaId === 'string' ? Number(empresaId) : Number(empresaId || 0);
+
+  if (!Number.isFinite(uid) || uid <= 0) {
+    return { found: false, active: false, role: fallback, hasMembership: false };
+  }
+
+  const { activeWhere } = await getUsuariosSchema(db);
+  const scoped = eid > 0 && (await hasUsuariosEmpresasTable(db));
+
+  const row = scoped
+    ? await db
+        .prepare(
+          `
+          SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
+          FROM usuarios u
+          LEFT JOIN usuarios_empresas ue
+            ON ue.usuario_id = u.id AND ue.empresa_id = ?
+          WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
+          LIMIT 1
+        `,
+        )
+        .bind(eid, uid)
+        .first<{ id: number; perfil: string | null; role: string | null }>()
+    : await db
+        .prepare(
+          `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
+        )
+        .bind(uid)
+        .first<{ id: number; perfil: string | null; role: string | null }>();
+
+  if (!row) {
+    return { found: false, active: false, role: fallback, hasMembership: false };
+  }
+
+  const hasMembership = scoped ? Boolean(row.role) : true;
+
+  return {
+    found: true,
+    active: true,
+    role: normalizeRuntimeRole(row.role || row.perfil || fallback),
+    hasMembership,
+  };
 }
 
 async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<number | null> {
@@ -297,33 +378,53 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       return unauthorized('Tipo de token inválido para esta rota', 'INVALID_TOKEN_TYPE');
     }
 
-    // Verificar se o JTI está na blocklist (token invalidado via logout)
+    // Verificar se o JTI está na blocklist (token invalidado via logout).
+    // Fail-closed: se a checagem em si falhar, a autenticação é recusada —
+    // nunca tratamos uma falha de leitura como "token não revogado".
     if (payload.jti) {
+      let blocked: boolean;
       try {
-        const blocked = await c.env.DB.prepare(
-          `SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`,
-        )
-          .bind(payload.jti)
-          .first();
-        if (blocked) {
-          return unauthorized('Token revogado. Faça login novamente.', 'TOKEN_REVOKED');
-        }
-      } catch {
-        // Se a tabela não existir ainda (migration pendente), não bloquear
+        blocked = await isJtiBlocklisted(c.env.DB, payload.jti);
+      } catch (e) {
+        console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
+        return serviceUnavailable(
+          'Não foi possível verificar a revogação do token. Tente novamente.',
+          'AUTH_REVOCATION_CHECK_UNAVAILABLE',
+        );
+      }
+      if (blocked) {
+        return unauthorized('Token revogado. Faça login novamente.', 'TOKEN_REVOKED');
       }
     }
 
-    const effectiveRole = await resolveEffectiveUserRole(
-      c.env.DB,
-      payload.sub,
-      payload.empresa_id,
-      payload.role ?? '',
-    );
+    // Confirmar que o usuário ainda existe, está ativo, e possui vínculo
+    // válido com o tenant carregado no JWT. Um JWT assinado válido de um
+    // usuário desativado ou sem vínculo com a empresa do token não pode
+    // continuar autenticando — a role do JWT nunca é usada como fallback
+    // quando esse vínculo esperado não existe.
+    let security: UserSecurityState;
+    try {
+      security = await resolveUserSecurityState(c.env.DB, payload.sub, payload.empresa_id, payload.role ?? '');
+    } catch (e) {
+      console.error('[AUTH] Falha ao verificar estado do usuário:', (e as Error).message);
+      return serviceUnavailable(
+        'Não foi possível verificar o status da conta. Tente novamente.',
+        'AUTH_USER_STATE_CHECK_UNAVAILABLE',
+      );
+    }
+
+    if (!security.found || !security.active) {
+      return unauthorized('Usuário inativo ou não encontrado. Faça login novamente.', 'USER_INACTIVE');
+    }
+
+    if (!security.hasMembership) {
+      return unauthorized('Usuário sem vínculo válido com o tenant do token.', 'TENANT_MEMBERSHIP_INVALID');
+    }
 
     c.set('userId', payload.sub);
     c.set('empresaId', payload.empresa_id ?? 0);
     c.set('userEmail', payload.email);
-    c.set('userRole', effectiveRole);
+    c.set('userRole', security.role);
     c.set('funcionarioId', payload.funcionario_id ?? null);
 
     await next();
@@ -368,19 +469,20 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
           if (payload) {
             // Token opcional também deve respeitar blocklist para evitar sessão "fantasma"
             // após logout/revogação em rotas que aceitam autenticação opcional.
+            // Fail-closed para a IDENTIDADE: se a checagem falhar, tratamos como
+            // "não autenticado" (não define userId/userRole) em vez de autenticar
+            // silenciosamente — mas optionalAuth nunca bloqueia a requisição em si.
             if (payload.jti) {
               try {
-                const blocked = await c.env.DB.prepare(
-                  `SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`,
-                )
-                  .bind(payload.jti)
-                  .first();
+                const blocked = await isJtiBlocklisted(c.env.DB, payload.jti);
                 if (blocked) {
                   await next();
                   return;
                 }
-              } catch {
-                // Se a tabela não existir ainda (migration pendente), mantém comportamento tolerante.
+              } catch (e) {
+                console.error('[OPTIONAL_AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
+                await next();
+                return;
               }
             }
 

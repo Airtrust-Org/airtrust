@@ -65,7 +65,7 @@ export const errorHandler: ErrorHandler<any> = (err, c) => {
         code: err.code,
         requestId,
       },
-      err.statusCode as 400 | 401 | 403 | 404 | 500,
+      err.statusCode as 400 | 401 | 403 | 404 | 500 | 503,
     );
   }
 
@@ -80,7 +80,7 @@ export const errorHandler: ErrorHandler<any> = (err, c) => {
         code: appErr.code,
         requestId,
       },
-      appErr.status as 400 | 401 | 403 | 404 | 500,
+      appErr.status as 400 | 401 | 403 | 404 | 500 | 503,
     );
   }
 
@@ -148,4 +148,14 @@ export function notFound(message: string = 'Recurso não encontrado', code?: str
  */
 export function internalError(message: string = 'Erro interno', code?: string): never {
   throw new ApiError(message, 500, code);
+}
+
+/**
+ * Helper para lançar erro 503 (Service Unavailable)
+ * Usado quando uma checagem de segurança obrigatória (ex: blocklist de
+ * tokens revogados) não pode ser executada — a falha deve impedir a
+ * autenticação (fail-closed), não permiti-la silenciosamente.
+ */
+export function serviceUnavailable(message: string = 'Serviço indisponível', code?: string): never {
+  throw new ApiError(message, 503, code);
 }
