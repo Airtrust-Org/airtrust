@@ -57,6 +57,34 @@ function validateD1Target(name) {
 const DEFAULT_EMPRESA_CODIGO = 'airtrust_smoke';
 const DEFAULT_EMPRESA_NOME = 'AirTrust Smoke Tenant';
 const DEFAULT_USUARIO_NOME = 'Smoke Staging Admin';
+const DEFAULT_PERFIL = 'ADMIN';
+const DEFAULT_TENANT_ROLE = 'admin';
+
+// worker-airtrust/migrations/0304_usuarios_perfis_e_permissoes.sql CHECK(perfil IN (...))
+const ALLOWED_PERFIL_VALUES = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'INSTRUTOR', 'ALUNO', 'COMPLIANCE', 'USUARIO'];
+// usuarios_empresas.role nao tem CHECK constraint, mas o app so reconhece estes valores
+// (middleware/tenant.ts normalizeTenantRole / ROLE_HIERARCHY); qualquer outro cai em 'viewer'.
+const ALLOWED_TENANT_ROLE_VALUES = ['admin', 'manager', 'editor', 'viewer'];
+
+function validatePerfil(value) {
+  const perfil = String(value || DEFAULT_PERFIL).trim().toUpperCase();
+  if (!ALLOWED_PERFIL_VALUES.includes(perfil)) {
+    throw new Error(
+      `STAGING_SMOKE_PERFIL invalido: "${perfil}". Valores permitidos: ${ALLOWED_PERFIL_VALUES.join(', ')}.`,
+    );
+  }
+  return perfil;
+}
+
+function validateTenantRole(value) {
+  const role = String(value || DEFAULT_TENANT_ROLE).trim().toLowerCase();
+  if (!ALLOWED_TENANT_ROLE_VALUES.includes(role)) {
+    throw new Error(
+      `STAGING_SMOKE_ROLE invalido: "${role}". Valores permitidos: ${ALLOWED_TENANT_ROLE_VALUES.join(', ')}.`,
+    );
+  }
+  return role;
+}
 
 async function main() {
   const args = new Set(process.argv.slice(2));
@@ -84,6 +112,8 @@ async function main() {
   const empresaCodigo = String(process.env.STAGING_SMOKE_EMPRESA_CODIGO || DEFAULT_EMPRESA_CODIGO).trim().toLowerCase();
   const empresaNome = String(process.env.STAGING_SMOKE_EMPRESA_NOME || DEFAULT_EMPRESA_NOME).trim();
   const usuarioNome = String(process.env.STAGING_SMOKE_USER_NOME || DEFAULT_USUARIO_NOME).trim();
+  const perfil = validatePerfil(process.env.STAGING_SMOKE_PERFIL);
+  const tenantRole = validateTenantRole(process.env.STAGING_SMOKE_ROLE);
 
   const missing = [];
   if (!email) missing.push('STAGING_SMOKE_EMAIL');
@@ -95,6 +125,8 @@ async function main() {
   log(`TARGET_DB=${dbName}`);
   log(`SMOKE_EMAIL=${maskEmail(email)}`);
   log(`MODE=${apply ? 'apply' : 'dry-run'}`);
+  log(`PERFIL=${perfil}`);
+  log(`TENANT_ROLE=${tenantRole}`);
 
   if (missing.length > 0) {
     log(`MISSING_ENV=${missing.join(',')}`);
@@ -126,6 +158,8 @@ async function main() {
     empresaCodigo,
     empresaNome,
     usuarioNome,
+    perfil,
+    tenantRole,
   });
 
   if (!apply) {
@@ -157,7 +191,7 @@ async function main() {
   }
 }
 
-function buildSeedSql({ email, passwordHash, empresaCodigo, empresaNome, usuarioNome }) {
+function buildSeedSql({ email, passwordHash, empresaCodigo, empresaNome, usuarioNome, perfil, tenantRole }) {
   const e = sqlString;
   // D1 não suporta BEGIN TRANSACTION/COMMIT — cada statement é
   // executado individualmente. A atomicidade é garantida pelo wrangler.
@@ -213,7 +247,7 @@ SELECT
   ${e(email)},
   ${e(passwordHash)},
   ${e(usuarioNome)},
-  'ADMIN',
+  ${e(perfil)},
   NULL,
   NULL,
   datetime('now'),
@@ -227,7 +261,7 @@ UPDATE usuarios
 SET
   password_hash = ${e(passwordHash)},
   nome = ${e(usuarioNome)},
-  perfil = 'ADMIN',
+  perfil = ${e(perfil)},
   deleted_at = NULL,
   active = 1,
   updated_at = datetime('now')
@@ -243,7 +277,7 @@ INSERT INTO usuarios_empresas (
 SELECT
   u.id,
   emp.id,
-  'admin',
+  ${e(tenantRole)},
   1,
   datetime('now')
 FROM usuarios u
@@ -258,7 +292,7 @@ WHERE u.email = ${e(email)}
 
 UPDATE usuarios_empresas
 SET
-  role = 'admin',
+  role = ${e(tenantRole)},
   is_primary = 1
 WHERE usuario_id = (SELECT id FROM usuarios WHERE email = ${e(email)} LIMIT 1)
   AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(empresaCodigo)} LIMIT 1);
