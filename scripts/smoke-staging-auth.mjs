@@ -6,11 +6,22 @@ import {
   buildReadOnlyEndpointSpecs,
   decodeJwtPayload,
   extractAccessToken,
+  extractRefreshToken,
   fetchJson,
   login,
+  logout,
   maskEmail,
   NEGATIVE_SMOKE_PATHS,
+  refreshTokens,
+  selectEmpresa,
 } from './smoke-auth-common.mjs';
+
+// empresaId sentinela: nao existe em nenhum ambiente real (fora do range
+// de sequencia autoincrement plausivel). Usado apenas para o teste
+// negativo de isolamento de tenant via /api/auth/select-empresa — nunca
+// deve corresponder a uma empresa real, e a rota rejeita (401) antes de
+// qualquer escrita quando o vinculo nao existe.
+const CROSS_TENANT_SENTINEL_EMPRESA_ID = 999999999;
 
 const DEFAULT_BASE_URL = 'https://airtrust-api-staging.airtrust.workers.dev';
 const REQUIRED_SECRET_VARS = ['STAGING_SMOKE_EMAIL', 'STAGING_SMOKE_PASSWORD'];
@@ -85,6 +96,69 @@ async function main() {
     Number(jwtClaims.empresa_id) > 0 && !Array.isArray(meData.empresas) && !('tenant_ids' in meData),
     'indicio de payload cross-tenant em auth/me',
   );
+
+  const refreshToken1 = extractRefreshToken(loginPayload);
+
+  // ── isolamento de tenant: empresaId sentinela nao vinculado ao usuario
+  const crossTenantResponse = await selectEmpresa(baseUrl, accessToken, CROSS_TENANT_SENTINEL_EMPRESA_ID);
+  assert(
+    crossTenantResponse.status === 401 || crossTenantResponse.status === 403,
+    `select-empresa com empresaId sentinela deveria retornar 401/403, retornou ${crossTenantResponse.status}`,
+  );
+  assert(
+    crossTenantResponse.json?.success !== true,
+    'select-empresa com empresaId sentinela retornou success=true (indicio de cross-tenant)',
+  );
+  log(`CROSS_TENANT_REJECTED status=${crossTenantResponse.status}`);
+
+  // ── refresh: rotaciona access+refresh token
+  const refreshResponse = await refreshTokens(baseUrl, refreshToken1);
+  assert(refreshResponse.status === 200, `refresh retornou ${refreshResponse.status}`);
+  assert(refreshResponse.json?.success === true, 'refresh sem success=true');
+  const accessToken2 = extractAccessToken(refreshResponse.json);
+  const refreshToken2 = extractRefreshToken(refreshResponse.json);
+  assert(accessToken2 !== accessToken, 'refresh nao emitiu um novo access token');
+  assert(refreshToken2 !== refreshToken1, 'refresh nao rotacionou o refresh token');
+  log('REFRESH_OK rotated=true');
+
+  // ── novo access token deve funcionar
+  const meAfterRefresh = await fetchJson(`${baseUrl}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${accessToken2}` },
+  });
+  assert(meAfterRefresh.status === 200, `auth/me com novo access token retornou ${meAfterRefresh.status}`);
+  log('NEW_ACCESS_TOKEN_OK status=200');
+
+  // ── refresh token antigo (ja rotacionado) deve ser rejeitado
+  const oldRefreshRetry = await refreshTokens(baseUrl, refreshToken1);
+  assert(
+    oldRefreshRetry.status === 401,
+    `refresh com refreshToken ja rotacionado deveria retornar 401, retornou ${oldRefreshRetry.status}`,
+  );
+  log('OLD_REFRESH_TOKEN_REJECTED status=401');
+
+  // ── logout: revoga access token atual (jti) e o refresh token atual
+  const logoutResponse = await logout(baseUrl, { accessToken: accessToken2, refreshToken: refreshToken2 });
+  assert(logoutResponse.status === 200, `logout retornou ${logoutResponse.status}`);
+  assert(logoutResponse.json?.success === true, 'logout sem success=true');
+  log('LOGOUT_OK status=200');
+
+  // ── access token pos-logout deve ser rejeitado (blocklist de jti)
+  const meAfterLogout = await fetchJson(`${baseUrl}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${accessToken2}` },
+  });
+  assert(
+    meAfterLogout.status === 401,
+    `auth/me com access token pos-logout deveria retornar 401, retornou ${meAfterLogout.status}`,
+  );
+  log('ACCESS_TOKEN_REVOKED_AFTER_LOGOUT status=401');
+
+  // ── refresh token pos-logout deve ser rejeitado (revoked_at setado)
+  const refreshAfterLogout = await refreshTokens(baseUrl, refreshToken2);
+  assert(
+    refreshAfterLogout.status === 401,
+    `refresh com refreshToken pos-logout deveria retornar 401, retornou ${refreshAfterLogout.status}`,
+  );
+  log('REFRESH_TOKEN_REVOKED_AFTER_LOGOUT status=401');
 
   log('AUTH_SMOKE_DONE');
 }
