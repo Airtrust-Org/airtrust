@@ -179,3 +179,43 @@ test('stderr nao contem a senha em claro (erro de env ausente)', () => {
   });
   assert.ok(!stderr.includes('another-secret-456'), 'stderr nao deve conter a senha em claro');
 });
+
+// ─────────────────────────────────────────────────────────────
+// STAGING_SMOKE_PERFIL / STAGING_SMOKE_ROLE (role minima configuravel)
+// ─────────────────────────────────────────────────────────────
+
+test('sem STAGING_SMOKE_PERFIL/ROLE, default preserva comportamento anterior (ADMIN/admin)', () => {
+  const { status, stdout } = runSeed({ STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701' });
+  assert.equal(status, 0);
+  assert.ok(stdout.includes('PERFIL=ADMIN'), `stdout deveria conter PERFIL=ADMIN: ${stdout}`);
+  assert.ok(stdout.includes('TENANT_ROLE=admin'), `stdout deveria conter TENANT_ROLE=admin: ${stdout}`);
+});
+
+test('STAGING_SMOKE_PERFIL=ALUNO e STAGING_SMOKE_ROLE=viewer sao aceitos', () => {
+  const { status, stdout } = runSeed({
+    STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701',
+    STAGING_SMOKE_PERFIL: 'ALUNO',
+    STAGING_SMOKE_ROLE: 'viewer',
+  });
+  assert.equal(status, 0);
+  assert.ok(stdout.includes('PERFIL=ALUNO'), `stdout deveria conter PERFIL=ALUNO: ${stdout}`);
+  assert.ok(stdout.includes('TENANT_ROLE=viewer'), `stdout deveria conter TENANT_ROLE=viewer: ${stdout}`);
+});
+
+test('STAGING_SMOKE_PERFIL invalido falha antes de gerar SQL', () => {
+  const { status, stderr } = runSeed({
+    STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701',
+    STAGING_SMOKE_PERFIL: 'SUPERUSER',
+  });
+  assert.notEqual(status, 0);
+  assert.ok(stderr.includes('STAGING_SMOKE_PERFIL invalido'), `stderr deveria rejeitar perfil invalido: ${stderr}`);
+});
+
+test('STAGING_SMOKE_ROLE invalido falha antes de gerar SQL', () => {
+  const { status, stderr } = runSeed({
+    STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701',
+    STAGING_SMOKE_ROLE: 'platform_admin',
+  });
+  assert.notEqual(status, 0);
+  assert.ok(stderr.includes('STAGING_SMOKE_ROLE invalido'), `stderr deveria rejeitar role invalido: ${stderr}`);
+});
