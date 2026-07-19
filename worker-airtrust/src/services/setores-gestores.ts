@@ -228,6 +228,58 @@ async function assertNaoRemoveUltimoSetorDeGestorAtivo(
   }
 }
 
+async function countActiveSetoresGestorExcludingSetor(
+  db: D1Database,
+  empresaId: number,
+  usuarioId: number,
+  excludeSetorId: number,
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) as n FROM setores_gestores
+         WHERE usuario_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL AND setor_id != ?`,
+    )
+    .bind(usuarioId, empresaId, excludeSetorId)
+    .first<{ n: number }>();
+
+  return Number(row?.n || 0);
+}
+
+/**
+ * Usada por operações de reatribuição em massa de um setor (ex.: bulk-assign)
+ * que removem TODOS os gestores atuais de um setor antes de recriar a lista.
+ * Para cada usuário sendo removido, garante que ele não fique com zero
+ * setores ativos enquanto permanecer um gestor ativo.
+ */
+export async function assertBulkReassignmentDoesNotStripLastSector(
+  db: D1Database,
+  empresaId: number,
+  setorId: number,
+  usuarioIdsSendoRemovidos: number[],
+): Promise<void> {
+  for (const usuarioId of usuarioIdsSendoRemovidos) {
+    const usuario = await db
+      .prepare('SELECT active, perfil FROM usuarios WHERE id = ? AND deleted_at IS NULL')
+      .bind(usuarioId)
+      .first<{ active: number; perfil: string }>();
+
+    const permaneceGestorAtivo = Boolean(usuario?.active) && isManagerPerfil(usuario?.perfil);
+    if (!permaneceGestorAtivo) continue;
+
+    const restantes = await countActiveSetoresGestorExcludingSetor(
+      db,
+      empresaId,
+      usuarioId,
+      setorId,
+    );
+    if (restantes === 0) {
+      throw new SetorGestorConflictError(
+        `Não é possível remover o gestor ${usuarioId} deste setor: é o último setor ativo dele. Altere o papel ou desative o usuário antes.`,
+      );
+    }
+  }
+}
+
 /**
  * Monta (sem executar) os INSERTs de setores_gestores necessários para que
  * `usuarioId` passe a gerenciar todos os setores em `setorIds`, pulando os
@@ -505,20 +557,33 @@ export async function updateSetorGestor(
   const updates: string[] = [];
   const binds: unknown[] = [];
 
+  // Reatribuir usuario_id/setor_id nesta linha remove o vínculo do gestor
+  // ORIGINAL com este setor, tão efetivamente quanto deletar a linha —
+  // precisa da mesma proteção de "último setor de gestor ativo".
+  let usuarioIdDestino: number | null = null;
+  if (data.usuario_id !== undefined || data.gestor_id !== undefined) {
+    usuarioIdDestino = await resolveUsuarioId(db, empresaId, {
+      usuario_id: data.usuario_id,
+      gestor_id: data.gestor_id,
+    });
+  }
+  const trocandoUsuario = usuarioIdDestino !== null && usuarioIdDestino !== current.usuario_id;
+  const trocandoSetor = data.setor_id !== undefined && data.setor_id !== current.setor_id;
+
+  if (trocandoUsuario || trocandoSetor) {
+    await assertNaoRemoveUltimoSetorDeGestorAtivo(db, empresaId, current.usuario_id, id);
+  }
+
   if (data.setor_id !== undefined) {
     await ensureSetorBelongsToEmpresa(db, empresaId, data.setor_id);
     updates.push('setor_id = ?');
     binds.push(data.setor_id);
   }
 
-  if (data.usuario_id !== undefined || data.gestor_id !== undefined) {
-    const usuarioId = await resolveUsuarioId(db, empresaId, {
-      usuario_id: data.usuario_id,
-      gestor_id: data.gestor_id,
-    });
-    await ensureUsuarioGestorValido(db, empresaId, usuarioId);
+  if (usuarioIdDestino !== null) {
+    await ensureUsuarioGestorValido(db, empresaId, usuarioIdDestino);
     updates.push('usuario_id = ?');
-    binds.push(usuarioId);
+    binds.push(usuarioIdDestino);
 
     if (await tableHasColumn(db, 'setores_gestores', 'gestor_id')) {
       updates.push('gestor_id = ?');
