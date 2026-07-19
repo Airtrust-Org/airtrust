@@ -44,6 +44,55 @@ async function authFetch(baseUrl, token, path, options = {}) {
   });
 }
 
+// Mesmo fuso operacional e mesma técnica (Intl + locale en-CA para YYYY-MM-DD)
+// usados por worker-airtrust/src/utils/ficha-availability.ts (SIMULADORES_OPERATIONAL_TIMEZONE /
+// saoPauloNowKey) — não há um módulo JS puro compartilhado para importar aqui
+// (o backend é TypeScript compilado no Worker), então a lógica é replicada
+// literalmente para garantir que "hoje" neste script seja sempre o mesmo dia
+// civil que o gate de disponibilidade do PDF usa no servidor, mesmo quando UTC
+// já virou o dia seguinte (ou ainda está no dia anterior) no Brasil.
+export const SIMULADORES_OPERATIONAL_TIMEZONE = 'America/Sao_Paulo';
+
+export function saoPauloTodayDateKey(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SIMULADORES_OPERATIONAL_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const get = (type) => parts.find((part) => part.type === type)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+// Horário único por execução, dentro do próprio dia civil (nunca cruza a
+// meia-noite): usada apenas para a sessão dedicada ao teste de PDF (I_pdf),
+// que precisa ficar no dia de hoje e por isso não pode se apoiar no
+// randomDayOffset (dias no futuro) usado pelos demais cenários para evitar
+// colisão de agendamento — aqui a variação é de horário, não de dia.
+// Nunca aceita 409 (ou qualquer status != 200) como PASS — o gate de
+// disponibilidade "ficha só no dia" é comportamento de produto legítimo, não
+// algo a contornar aqui.
+export function isValidPdfResponse(pdfStatus) {
+  return (
+    pdfStatus?.status === 200 &&
+    pdfStatus?.contentType?.includes('application/pdf') === true &&
+    pdfStatus?.bytes > 0 &&
+    pdfStatus?.hasPdfSignature === true
+  );
+}
+
+export function pdfFixtureTimeWindow(random = Math.random()) {
+  const WINDOW_START_MINUTES = 6 * 60; // 06:00
+  const WINDOW_END_MINUTES = 22 * 60; // 22:00 — sessão de 60min sempre cabe antes disso
+  const SLOT_MINUTES = 15;
+  const slotCount = Math.floor((WINDOW_END_MINUTES - WINDOW_START_MINUTES - 60) / SLOT_MINUTES);
+  const slot = Math.floor(random * slotCount);
+  const startMinutes = WINDOW_START_MINUTES + slot * SLOT_MINUTES;
+  const endMinutes = startMinutes + 60;
+  const toHHMM = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+  return { hora_inicio: toHHMM(startMinutes), hora_fim: toHHMM(endMinutes) };
+}
+
 async function main() {
   const baseUrl = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL || DEFAULT_BASE_URL);
   const email = String(process.env.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid');
@@ -331,9 +380,15 @@ async function main() {
     };
   }
 
-  // I. PDF: existência e tamanho não-vazio (conteúdo detalhado — 33 itens/18+15/ECL/sem
-  //    QRH/FAP — já coberto por testes automatizados locais; aqui confirmamos apenas
-  //    que o endpoint remoto responde com um PDF não vazio para a sessão criada em F).
+  // I. PDF: sessão DEDICADA (separada da F, que usa data futura de propósito para
+  //    não colidir com B/C/D) agendada para o dia civil de HOJE no fuso operacional
+  //    (America/Sao_Paulo) — a ficha só fica disponível para PDF no dia da sessão
+  //    (worker-airtrust/src/utils/ficha-availability.ts), então usar uma data futura
+  //    aqui (como F fazia) sempre resulta em 409 FICHA_NOT_AVAILABLE_YET, nunca 200.
+  //    Conteúdo detalhado (33 itens/18+15/ECL/sem QRH/FAP) já coberto por testes
+  //    automatizados locais; aqui confirmamos que o endpoint remoto responde com um
+  //    PDF de verdade (200, content-type, assinatura %PDF-, corpo não vazio) para a
+  //    ficha do tenant sintético — sem mockar a resposta e sem tocar no gate.
   // NOTE: GET /api/simuladores/fichas (simuladores-fichas.ts) accepts only
   // `status`/`tipo_sessao` query params — there is NO `sessao_id` filter.
   // Fichas link back to their session via the `agendamento_slot_id` column
@@ -343,23 +398,65 @@ async function main() {
   // silently return the caller's whole/unscoped ficha list and could pick
   // the WRONG ficha's PDF — a false ok:true).
   {
-    const pdfStatus = report.scenarios.F_examiner_program_event2?.ok && event2SessionId
+    const pdfFixtureRunId = `pdf-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const pdfFixtureDate = saoPauloTodayDateKey();
+    const { hora_inicio, hora_fim } = pdfFixtureTimeWindow();
+
+    const pdfSessionCreated = await authFetch(baseUrl, token, '/api/simuladores/sessoes/compartilhada', {
+      method: 'POST',
+      body: JSON.stringify({
+        data: pdfFixtureDate,
+        hora_inicio,
+        hora_fim,
+        simulador_id: simuladorId,
+        instrutor_id: instrutorId,
+        participantes: [
+          { funcionario_id: participante1Id },
+          { funcionario_id: participante2Id },
+        ],
+        observacoes: `QA smoke — fixture dedicada I_pdf ${pdfFixtureRunId} (rollback via seed --rollback)`,
+        segmentos: [
+          {
+            modelo_sessao_id: modeloIdByCodigo('EXA-V03'),
+            finalidade_codigo: 'ATUACAO_EXAMINADOR',
+            inicio: hora_inicio,
+            fim: hora_fim,
+            participantes: [
+              { funcionario_id: participante1Id, funcao: 'PF', cumpre_treinamento: true },
+              { funcionario_id: participante2Id, funcao: 'PM' },
+            ],
+          },
+        ],
+      }),
+    });
+    const pdfSessionId = pdfSessionCreated.json?.data?.sessao?.id ?? pdfSessionCreated.json?.resumo?.sessao_id ?? null;
+    const pdfSessionOk = pdfSessionCreated.status === 201 && pdfSessionId != null;
+
+    const pdfStatus = pdfSessionOk
       ? await (async () => {
           const fichasList = await authFetch(baseUrl, token, '/api/simuladores/fichas');
           const fichaId =
-            (fichasList.json?.data ?? []).find((f) => f.agendamento_slot_id === event2SessionId)?.id ?? null;
-          if (!fichaId) return { status: null, bytes: 0, note: 'nenhuma ficha com agendamento_slot_id correspondente à sessão' };
+            (fichasList.json?.data ?? []).find((f) => f.agendamento_slot_id === pdfSessionId)?.id ?? null;
+          if (!fichaId) return { status: null, bytes: 0, note: 'nenhuma ficha com agendamento_slot_id correspondente à sessão dedicada' };
           const res = await fetch(`${baseUrl}/api/simuladores/fichas/${fichaId}/pdf`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
           });
+          const contentType = res.headers.get('content-type') || '';
           const buf = await res.arrayBuffer();
-          return { status: res.status, bytes: buf.byteLength, fichaId };
+          const bytes = Buffer.from(buf);
+          const hasPdfSignature = bytes.length >= 5 && bytes.subarray(0, 5).toString('latin1') === '%PDF-';
+          return { status: res.status, contentType, bytes: buf.byteLength, hasPdfSignature, fichaId };
         })()
-      : { status: null, bytes: 0 };
+      : { status: null, bytes: 0, note: 'sessão dedicada de PDF não foi criada (ver pdfSessionCreated)' };
+
     report.scenarios.I_pdf = {
-      ok: pdfStatus.status === 200 && pdfStatus.bytes > 0,
-      note: 'conteúdo detalhado (33 itens, 18 técnicos + 15 NOTECHS, ECL, sem QRH/FAP) já coberto por testes automatizados locais; aqui só existência/tamanho remoto',
+      ok: isValidPdfResponse(pdfStatus),
+      note: 'sessão dedicada agendada para hoje (fuso America/Sao_Paulo) — 409 (FICHA_NOT_AVAILABLE_YET) nunca é aceito como PASS',
+      pdfFixtureDate,
+      pdfFixtureHorario: `${hora_inicio}-${hora_fim}`,
+      pdfSessionCreateStatus: pdfSessionCreated.status,
+      pdfSessionId,
       ...pdfStatus,
     };
   }
@@ -374,7 +471,13 @@ async function main() {
   console.log('SMOKE_OK');
 }
 
-main().catch((err) => {
-  console.error(String(err?.message || err));
-  process.exitCode = 1;
-});
+// Executa apenas quando chamado diretamente (node scripts/staging/smoke-examiner-training.mjs),
+// nunca quando importado por um teste unitário dos helpers acima (evita golpear
+// staging de verdade só por causa de um import estático em scripts/__tests__/*.test.mjs).
+const isMainModule = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  main().catch((err) => {
+    console.error(String(err?.message || err));
+    process.exitCode = 1;
+  });
+}
