@@ -144,14 +144,27 @@ describe('ficha-header utils', () => {
     ]);
   });
 
-  it('builds the same fixed title1 regardless of session data, keeping frontend/worker parity', () => {
+  it('uses the fixed title1 for regular sessions, keeping frontend/worker parity on the fallback', () => {
     expect(buildFichaHeaderTitle({}).title1).toBe('FICHA DE TREINAMENTO DE VOO');
     expect(
       buildFichaHeaderTitle({ sessaoTitulo: 'Qualquer Sessão' }).title1,
     ).toBe('FICHA DE TREINAMENTO DE VOO');
+  });
+
+  it('uses the special-event headerTitle as title1, keeping the training block identifiable (e.g. Examinador 1/2)', () => {
+    expect(buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01' }).title1).toBe(
+      'Treinamento Prático de Examinador 1/2',
+    );
+    expect(buildFichaHeaderTitle({ sessaoCodigo: 'INST-E02' }).title1).toBe(
+      'Treinamento Prático de Instrutor 2/2',
+    );
+  });
+
+  it('prefers an explicit sessaoTituloLinha1 over the special-event headerTitle for title1', () => {
     expect(
-      buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01' }).title1,
-    ).toBe('FICHA DE TREINAMENTO DE VOO');
+      buildFichaHeaderTitle({ sessaoCodigo: 'EXA-E01', sessaoTituloLinha1: 'Título Explícito' })
+        .title1,
+    ).toBe('Título Explícito');
   });
 
   it('prefers the special-event subtitle for title2 over raw session title fields', () => {
@@ -159,26 +172,17 @@ describe('ficha-header utils', () => {
       buildFichaHeaderTitle({
         sessaoCodigo: 'EXA-E01',
         sessaoTitulo: 'Deveria ser ignorado',
-        sessaoTituloLinha1: 'Também ignorado',
       }).title2,
     ).toBe('SOP Normal e Condução Inicial / SOP Anormal e Avaliação');
   });
 
-  it('falls back to sessaoTituloLinha2, then linha1, then sessaoTitulo when there is no special definition', () => {
+  it('falls back to sessaoTituloLinha2, then sessaoTitulo when there is no special definition', () => {
     expect(
       buildFichaHeaderTitle({
         sessaoTituloLinha2: 'Linha 2',
-        sessaoTituloLinha1: 'Linha 1',
         sessaoTitulo: 'Título Único',
       }).title2,
     ).toBe('Linha 2');
-
-    expect(
-      buildFichaHeaderTitle({
-        sessaoTituloLinha1: 'Linha 1',
-        sessaoTitulo: 'Título Único',
-      }).title2,
-    ).toBe('Linha 1');
 
     expect(buildFichaHeaderTitle({ sessaoTitulo: 'Título Único' }).title2).toBe('Título Único');
   });

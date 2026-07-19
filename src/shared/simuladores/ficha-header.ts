@@ -120,15 +120,18 @@ export interface FichaHeaderTitle {
 
 export function buildFichaHeaderTitle(params: BuildFichaHeaderTitleParams): FichaHeaderTitle {
   const specialDefinition = getSpecialEventSessionDefinition(params.sessaoCodigo);
-  const title1 = 'FICHA DE TREINAMENTO DE VOO';
 
-  let title2 = '';
-  if (specialDefinition) {
-    title2 = specialDefinition.headerSubtitle || specialDefinition.headerTitle || '';
-  }
-  if (!title2) {
-    title2 = params.sessaoTituloLinha2 || params.sessaoTituloLinha1 || params.sessaoTitulo || '';
-  }
+  // Sessões especiais (examinador/instrutor) identificam o treinamento e o
+  // bloco (ex.: "Treinamento Prático de Examinador 1/2") em title1; o fixo
+  // "FICHA DE TREINAMENTO DE VOO" só se aplica quando não há esse contexto.
+  const title1 =
+    params.sessaoTituloLinha1 || specialDefinition?.headerTitle || 'FICHA DE TREINAMENTO DE VOO';
+
+  const title2 =
+    params.sessaoTituloLinha2 ||
+    specialDefinition?.headerSubtitle ||
+    params.sessaoTitulo ||
+    '';
 
   return { title1, title2 };
 }
