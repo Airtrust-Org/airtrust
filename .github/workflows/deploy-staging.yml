@@ -100,8 +100,8 @@ jobs:
             exit 1
           fi
 
-          if [[ "$DEPLOY_WORKER" != "true" && "$DEPLOY_FRONTEND" != "true" && "$APPLY_MIGRATIONS" != "true" ]]; then
-            echo "Select at least one action: deploy_worker, deploy_frontend, or apply_migrations." >&2
+          if [[ "$DEPLOY_WORKER" != "true" && "$DEPLOY_FRONTEND" != "true" && "$APPLY_MIGRATIONS" != "true" ]]; then&& "$APPLY_MIGRATIONS" != "true" ]]; then "$APPLY_MIGRATIONS" != "true" && "$RUN_SMOKE" != "true" ]]; then
+            echo "Select at least one action: deploy_worker, deploy_frontend, apply_migrations, or run_smoke." >echo "Select at least one action: deploy_worker, deploy_frontend, or apply_migrations." >&22
             exit 1
           fi
 
@@ -110,10 +110,6 @@ jobs:
             exit 1
           fi
 
-          if [[ "$RUN_SMOKE" == "true" && "$DEPLOY_WORKER" != "true" && "$APPLY_MIGRATIONS" != "true" ]]; then
-            echo "run_smoke=true requires deploy_worker or apply_migrations (nothing to smoke otherwise)." >&2
-            exit 1
-          fi
 
       - name: Compute release version
         id: version
