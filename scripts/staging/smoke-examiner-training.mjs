@@ -99,17 +99,21 @@ function saoPauloNowMinutesOfDay(now = new Date()) {
 // isso a janela é limitada ao horário atual menos uma margem de segurança,
 // nunca ao intervalo fixo 06:00–21:45 usado anteriormente.
 export function pdfFixtureTimeWindow(random = Math.random(), now = new Date()) {
-  const WINDOW_START_MINUTES = 6 * 60; // 06:00
+  const PREFERRED_WINDOW_START_MINUTES = 6 * 60; // 06:00, piso preferencial (não absoluto)
   const SAFETY_BUFFER_MINUTES = 15; // margem contra corrida com o relógio do Worker
   const SLOT_MINUTES = 15;
-  const latestStartMinutes = Math.min(
-    saoPauloNowMinutesOfDay(now) - SAFETY_BUFFER_MINUTES,
-    21 * 60, // sessão de 60min sempre cabe antes de 22:00
+  // Nunca pode ficar no futuro em relação a "agora", mesmo de madrugada — por
+  // isso o piso preferencial de 06:00 cede quando "agora" ainda não chegou lá
+  // (ex.: smoke rodando às 03:00 América/São_Paulo não pode agendar 06:00).
+  const latestStartMinutes = Math.max(
+    0,
+    Math.min(saoPauloNowMinutesOfDay(now) - SAFETY_BUFFER_MINUTES, 21 * 60), // sessão de 60min cabe antes de 22:00
   );
-  const windowEndMinutes = Math.max(WINDOW_START_MINUTES, latestStartMinutes);
-  const slotCount = Math.max(1, Math.floor((windowEndMinutes - WINDOW_START_MINUTES) / SLOT_MINUTES) + 1);
+  const windowStartMinutes = Math.min(PREFERRED_WINDOW_START_MINUTES, latestStartMinutes);
+  const windowEndMinutes = latestStartMinutes;
+  const slotCount = Math.max(1, Math.floor((windowEndMinutes - windowStartMinutes) / SLOT_MINUTES) + 1);
   const slot = Math.floor(random * slotCount);
-  const startMinutes = Math.min(WINDOW_START_MINUTES + slot * SLOT_MINUTES, windowEndMinutes);
+  const startMinutes = Math.min(windowStartMinutes + slot * SLOT_MINUTES, windowEndMinutes);
   const endMinutes = startMinutes + 60;
   const toHHMM = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
   return { hora_inicio: toHHMM(startMinutes), hora_fim: toHHMM(endMinutes) };

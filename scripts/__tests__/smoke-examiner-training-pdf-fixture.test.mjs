@@ -58,6 +58,8 @@ describe('smoke-examiner-training: PDF fixture date/time', () => {
     // "agora" — reprodução direta do bug: hora_inicio="20:15" sorteado quando o
     // horário real era ~18:27 America/Sao_Paulo.
     const sampleNows = [
+      '2026-07-19T03:00:00.000Z', // 00:00 BRT — madrugada, antes do piso preferencial de 06:00
+      '2026-07-19T06:00:00.000Z', // 03:00 BRT — idem
       '2026-07-19T09:30:00.000Z', // 06:30 BRT
       '2026-07-19T13:00:00.000Z', // 10:00 BRT
       '2026-07-19T18:00:00.000Z', // 15:00 BRT
