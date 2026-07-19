@@ -1120,7 +1120,7 @@ export default function FichaDetalhe() {
                   <p className="text-sm font-semibold text-slate-900">{ficha.instrutor_nome}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 uppercase">Modelo/Equipamento</p>
+                  <p className="text-xs text-slate-500 uppercase">Modelo</p>
                   {isEditMode && specialDefinition?.kind === 'instructor' ? (
                     <input
                       value={ficha.equipamento_utilizado || ''}
