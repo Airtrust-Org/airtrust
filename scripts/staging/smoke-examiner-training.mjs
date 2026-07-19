@@ -144,13 +144,19 @@ async function main() {
   const conversionBody = {
     data: data1,
     hora_inicio: '08:00',
-    hora_fim: '09:00',
-    ...commonSessionFields,
+    hora_fim: '10:00',
+    simulador_id: simuladorId,
+    instrutor_id: instrutorId,
+    participantes: [
+      { funcionario_id: participante1Id },
+      { funcionario_id: participante2Id },
+    ],
     segmentos: [
       {
         modelo_sessao_id: modeloIdByCodigo('EXA-V01'),
         finalidade_codigo: 'ATUACAO_EXAMINADOR',
-        duracao_minutos: 60,
+        inicio: '08:00',
+        fim: '09:00',
         funcoes: [
           { funcionario_id: participante1Id, funcao: 'PF' },
           { funcionario_id: participante2Id, funcao: 'PM' },
@@ -159,7 +165,8 @@ async function main() {
       {
         modelo_sessao_id: modeloIdByCodigo('EXA-V02'),
         finalidade_codigo: 'ATUACAO_EXAMINADOR',
-        duracao_minutos: 60,
+        inicio: '09:00',
+        fim: '10:00',
         funcoes: [
           { funcionario_id: participante1Id, funcao: 'PF' },
           { funcionario_id: participante2Id, funcao: 'PM' },
@@ -246,14 +253,20 @@ async function main() {
       body: JSON.stringify({
         data: data2,
         hora_inicio: '08:00',
-        hora_fim: '09:00',
-        ...commonSessionFields,
+        hora_fim: '10:00',
+        simulador_id: simuladorId,
+        instrutor_id: instrutorId,
+        participantes: [
+          { funcionario_id: participante1Id },
+          { funcionario_id: participante2Id },
+        ],
         observacoes: 'QA smoke — evento 2 examinador (rollback via seed --rollback)',
         segmentos: [
           {
             modelo_sessao_id: modeloIdByCodigo('EXA-V03'),
             finalidade_codigo: 'ATUACAO_EXAMINADOR',
-            duracao_minutos: 60,
+            inicio: '08:00',
+            fim: '09:00',
             funcoes: [
               { funcionario_id: participante1Id, funcao: 'PF' },
               { funcionario_id: participante2Id, funcao: 'PM' },
@@ -262,7 +275,8 @@ async function main() {
           {
             modelo_sessao_id: modeloIdByCodigo('EXA-V04'),
             finalidade_codigo: 'ATUACAO_EXAMINADOR',
-            duracao_minutos: 60,
+            inicio: '09:00',
+            fim: '10:00',
             funcoes: [
               { funcionario_id: participante1Id, funcao: 'PF' },
               { funcionario_id: participante2Id, funcao: 'PM' },
