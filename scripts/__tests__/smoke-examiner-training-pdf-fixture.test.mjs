@@ -35,9 +35,15 @@ describe('smoke-examiner-training: PDF fixture date/time', () => {
     assert.equal(key, '2026-07-19');
   });
 
+  // 21:00 America/Sao_Paulo (2026-07-20T00:00:00Z) — horário fixo e tardio o
+  // suficiente para abrir a janela inteira de slots (06:00 até ~20:45),
+  // tornando estes dois testes determinísticos independentemente de quando
+  // a suíte realmente rodar.
+  const LATE_AFTERNOON_NOW = new Date('2026-07-20T00:00:00.000Z');
+
   it('produces a valid same-day 60-minute window that never crosses midnight', () => {
     for (let i = 0; i < 50; i += 1) {
-      const { hora_inicio, hora_fim } = pdfFixtureTimeWindow(i / 50);
+      const { hora_inicio, hora_fim } = pdfFixtureTimeWindow(i / 50, LATE_AFTERNOON_NOW);
       assert.match(hora_inicio, /^\d{2}:\d{2}$/);
       assert.match(hora_fim, /^\d{2}:\d{2}$/);
       assert.ok(hora_inicio < hora_fim, `hora_inicio (${hora_inicio}) deve ser < hora_fim (${hora_fim})`);
@@ -46,10 +52,42 @@ describe('smoke-examiner-training: PDF fixture date/time', () => {
     }
   });
 
+  it('never picks a hora_inicio later than "now" in São Paulo time (would trigger a legitimate 409)', () => {
+    // Varre horários de "agora" ao longo do dia (manhã, tarde, noite) e confirma
+    // que o horário sorteado para a sessão nunca fica no futuro em relação a
+    // "agora" — reprodução direta do bug: hora_inicio="20:15" sorteado quando o
+    // horário real era ~18:27 America/Sao_Paulo.
+    const sampleNows = [
+      '2026-07-19T03:00:00.000Z', // 00:00 BRT — madrugada, antes do piso preferencial de 06:00
+      '2026-07-19T06:00:00.000Z', // 03:00 BRT — idem
+      '2026-07-19T09:30:00.000Z', // 06:30 BRT
+      '2026-07-19T13:00:00.000Z', // 10:00 BRT
+      '2026-07-19T18:00:00.000Z', // 15:00 BRT
+      '2026-07-19T21:27:00.000Z', // 18:27 BRT — horário real da falha reproduzida
+      '2026-07-20T00:45:00.000Z', // 21:45 BRT
+    ];
+    for (const iso of sampleNows) {
+      const now = new Date(iso);
+      const nowKey = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(now);
+      for (let i = 0; i < 20; i += 1) {
+        const { hora_inicio } = pdfFixtureTimeWindow(i / 20, now);
+        assert.ok(
+          hora_inicio <= nowKey,
+          `hora_inicio (${hora_inicio}) não pode ser posterior ao horário atual (${nowKey}) para now=${iso}`,
+        );
+      }
+    }
+  });
+
   it('spreads distinct executions across distinct time slots (low collision probability)', () => {
     const slots = new Set();
     for (let i = 0; i < 20; i += 1) {
-      const { hora_inicio } = pdfFixtureTimeWindow(i / 20);
+      const { hora_inicio } = pdfFixtureTimeWindow(i / 20, LATE_AFTERNOON_NOW);
       slots.add(hora_inicio);
     }
     // 20 evenly-spaced samples across the window must land on at least 15
