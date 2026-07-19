@@ -935,7 +935,7 @@ app.post('/fichas/:id/pdf', async (c) => {
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
 
     const f = await c.env.DB.prepare(
-      `SELECT 
+      `SELECT
         fs.id,
         fs.uuid,
         fs.instrutor_id,
@@ -944,7 +944,6 @@ app.post('/fichas/:id/pdf', async (c) => {
         fs.observacoes,
         fs.assinatura_aluno_timestamp,
         fs.assinatura_instrutor_timestamp,
-        ${FICHA_INSTRUCTOR_META_SELECT},
         fs.colaborador_id_aluno,
         fs.data_sessao as ficha_data_sessao,
         fs.created_at as ficha_created_at,
@@ -965,7 +964,6 @@ app.post('/fichas/:id/pdf', async (c) => {
       INNER JOIN simulador_agendamentos sa ON fs.agendamento_slot_id = sa.id AND sa.deleted_at IS NULL
       INNER JOIN funcionarios ft ON fs.colaborador_id_aluno = ft.id AND ft.deleted_at IS NULL
       INNER JOIN funcionarios fi ON fs.instrutor_id = fi.id AND fi.deleted_at IS NULL
-      ${FICHA_INSTRUCTOR_META_JOIN}
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
       LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
       LEFT JOIN sessoes_participantes sp ON sp.sessao_id = sa.id
@@ -978,6 +976,36 @@ app.post('/fichas/:id/pdf', async (c) => {
       .first<any>();
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+
+    // fichas_sessao_instrutor_meta é opcional: ambientes cuja migration
+    // 0429_instructor_event_models ainda não foi aplicada não têm essa
+    // tabela. Buscar em query separada e degradar para null em vez de
+    // derrubar a geração inteira do PDF por causa de metadado decorativo
+    // (equipamento/dispositivo/assento já têm fallback em dadosPDF).
+    type InstructorMetaRow = {
+      equipamento_utilizado?: string | null;
+      dispositivo_identificacao?: string | null;
+      assento_instrucao_utilizado?: string | null;
+    };
+    let instructorMeta: InstructorMetaRow | null = null;
+    try {
+      instructorMeta = await c.env.DB.prepare(
+        `SELECT ${FICHA_INSTRUCTOR_META_SELECT} FROM fichas_sessao_instrutor_meta fsi
+         WHERE fsi.ficha_id = ? AND fsi.empresa_id = ?`,
+      )
+        .bind(fichaId, tenantEmpresaId)
+        .first<InstructorMetaRow>();
+    } catch (metaError) {
+      console.warn(
+        '[FICHA PDF] fichas_sessao_instrutor_meta indisponível (tabela ausente ou erro transitório) — seguindo sem metadado de instrutor:',
+        metaError,
+      );
+    }
+    if (instructorMeta) {
+      f.equipamento_utilizado = instructorMeta.equipamento_utilizado;
+      f.dispositivo_identificacao = instructorMeta.dispositivo_identificacao;
+      f.assento_instrucao_utilizado = instructorMeta.assento_instrucao_utilizado;
+    }
 
     // ── Verificar disponibilidade (ficha só no dia) ─────────────────────────
     const availability = await getFichaAvailabilityFromDb(c.env.DB, fichaId);

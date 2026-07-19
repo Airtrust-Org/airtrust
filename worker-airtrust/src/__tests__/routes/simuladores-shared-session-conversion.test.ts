@@ -710,4 +710,42 @@ describe('PUT /sessoes/:id/converter-compartilhada', () => {
       ),
     ).toHaveLength(0);
   });
+
+  it('cancels obsolete segmentos before inserting the retried ones, so an idempotent resend never collides on (agendamento_id, ordem)', async () => {
+    // conversionPayload()'s segmentos carry no `id` (the client never knows
+    // the server-generated segment ids from the first conversion), so every
+    // retry resolves identity as `new:<ordem>` and re-inserts ordem 1/2.
+    // idx_sim_segmentos_ordem_ativa is a UNIQUE index on (agendamento_id,
+    // ordem) WHERE deleted_at IS NULL — if the INSERT of the new row runs
+    // before the old active row with the same ordem is soft-deleted, D1
+    // throws "UNIQUE constraint failed" and the whole batch is rejected
+    // (400). The cleanup statements for segmentos not in the desired set
+    // must therefore be queued before the insert/update statements for the
+    // desired ones, not after.
+    const { db, batches } = createDbForConversion({
+      modoCompartilhado: 1,
+      status: 'AGENDADO',
+      sharedStateMatchesPayload: true,
+    });
+
+    const response = await callConvert(db, conversionPayload());
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ success: true });
+
+    const queries = batches[0].map((item) => item.query);
+    const firstSegmentInsertIndex = queries.findIndex((q) =>
+      q.startsWith('INSERT INTO simulador_agendamento_segmentos'),
+    );
+    const segmentCancelIndexes = queries
+      .map((q, index) =>
+        q.includes("UPDATE simulador_agendamento_segmentos SET status = 'CANCELADO'") ? index : -1,
+      )
+      .filter((index) => index >= 0);
+
+    expect(firstSegmentInsertIndex).toBeGreaterThanOrEqual(0);
+    expect(segmentCancelIndexes.length).toBeGreaterThan(0);
+    for (const cancelIndex of segmentCancelIndexes) {
+      expect(cancelIndex).toBeLessThan(firstSegmentInsertIndex);
+    }
+  });
 });

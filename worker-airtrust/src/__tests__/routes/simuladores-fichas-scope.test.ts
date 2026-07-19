@@ -63,7 +63,7 @@ const FUNCIONARIO_SETORES = new Map<number, number>([
   [302, 30],
 ]);
 
-function createFichasDb() {
+function createFichasDb(options?: { instructorMetaTableMissing?: boolean }) {
   const runs: Array<{ query: string; args: unknown[] }> = [];
   const fichas: FichaRow[] = [
     {
@@ -102,6 +102,16 @@ function createFichasDb() {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          if (query.includes('FROM fichas_sessao_instrutor_meta')) {
+            // Regression: some environments (e.g. staging before migration
+            // 0429_instructor_event_models is applied) don't have this table
+            // yet. The PDF route must degrade gracefully instead of a 500.
+            if (options?.instructorMetaTableMissing) {
+              throw new Error('no such table: fichas_sessao_instrutor_meta: SQLITE_ERROR');
+            }
+            return null;
+          }
+
           if (query.includes('COALESCE(sa.data, fs.data_sessao)') && query.includes('WHERE fs.id = ?')) {
             // Availability query: return data_sessao based on ficha id
             const fichaId = Number(args[0]);
@@ -579,7 +589,7 @@ describe('simuladores fichas scope guards', () => {
     expect(resp.status).not.toBe(409);
   });
 
-  it('POST /fichas/:id/pdf permite ficha disponivel (availability gate)', async () => {
+  it('POST /fichas/:id/pdf permite ficha disponivel (availability gate) e retorna um PDF valido', async () => {
     getEmployeeSectorAccessMock.mockResolvedValue({
       mode: 'all',
       setorIds: [],
@@ -597,8 +607,77 @@ describe('simuladores fichas scope guards', () => {
       {} as ExecutionContext,
     );
 
-    // 409 seria blocked, qualquer outro = passou pelo gate
-    expect(resp.status).not.toBe(409);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('application/pdf');
+    const buf = await resp.arrayBuffer();
+    expect(buf.byteLength).toBeGreaterThan(0);
+  });
+
+  it('POST /fichas/:id/pdf nao retorna 500 quando fichas_sessao_instrutor_meta nao existe (migration 0429 nao aplicada neste ambiente)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb({ instructorMetaTableMissing: true });
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901/pdf', { method: 'POST' }),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'admin',
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('application/pdf');
+    const buf = await resp.arrayBuffer();
+    expect(buf.byteLength).toBeGreaterThan(0);
+  });
+
+  it('POST /fichas/:id/pdf retorna 404 controlado (nao 500) para ficha inexistente', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/999999/pdf', { method: 'POST' }),
+      {
+        DB: db,
+        __mockEmpresaId: 6,
+        __mockRole: 'admin',
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(resp.status).toBe(404);
+    await expect(resp.json()).resolves.toMatchObject({ success: false });
+  });
+
+  it('POST /fichas/:id/pdf isola por tenant (empresa diferente nao encontra a ficha)', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    const { db } = createFichasDb();
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901/pdf', { method: 'POST' }),
+      {
+        DB: db,
+        __mockEmpresaId: 999,
+        __mockRole: 'admin',
+      } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(resp.status).toBe(404);
   });
 
   it('PUT /fichas/:id bloqueia aluno sem vinculo (write gate)', async () => {
