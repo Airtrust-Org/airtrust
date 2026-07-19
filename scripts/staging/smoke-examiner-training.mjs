@@ -186,6 +186,7 @@ async function main() {
     report.scenarios.C_conversion = {
       ok: converted.status === 200 && segmentos.length === 2,
       status: converted.status,
+      error: converted.status !== 200 ? converted.json : undefined,
       segmentCount: segmentos.length,
       allSixtyMinutes: segmentos.every((s) => s.duracao_minutos === 60),
     };
@@ -291,6 +292,7 @@ async function main() {
     report.scenarios.F_examiner_program_event2 = {
       ok: created.status === 201 && segmentos.length === 2 && fapHits.length === 0,
       status: created.status,
+      error: created.status !== 201 ? created.json : undefined,
       segmentCount: segmentos.length,
       noFap: fapHits.length === 0,
       sessionId: event2SessionId,
