@@ -24,6 +24,12 @@ import { badRequest, forbidden, notFound } from '../middleware/error-handler';
 import { createLogger } from '../utils/logger';
 import { hashPassword } from '../utils/security';
 import {
+  isManagerPerfil,
+  assertSetoresValidosParaEmpresa,
+  buildManagerSetorInsertStatements,
+  SetorGestorValidationError,
+} from '../services/setores-gestores';
+import {
   isPlatformAdminAccess,
   resolvePlatformAccessState,
 } from '../lib/rbac/platform-access';
@@ -418,6 +424,7 @@ adminUsuariosRoutes.post('/', async (c) => {
     perfil?: string;
     funcionario_id?: number | null;
     empresa_id?: number;
+    setor_ids?: number[];
   }>();
 
   const email = String(body?.email || '')
@@ -427,6 +434,7 @@ adminUsuariosRoutes.post('/', async (c) => {
   const perfil = String(body?.perfil || 'ALUNO').toUpperCase();
   const funcionarioId = body?.funcionario_id ?? null;
   const targetEmpresaId = Number(body?.empresa_id ?? empresaId);
+  const isManager = isManagerPerfil(perfil);
 
   if (!email || !nome) {
     throw badRequest('email e nome são obrigatórios', 'MISSING_FIELDS');
@@ -443,6 +451,19 @@ adminUsuariosRoutes.post('/', async (c) => {
   // Gestor não pode criar ADMINISTRADOR
   if (perfil === 'ADMINISTRADOR' || perfil === 'ADMIN') {
     requireAdmin(callerRole, 'criar usuário ADMINISTRADOR');
+  }
+
+  // Gestor exige ao menos um setor válido da mesma empresa (fail-closed por design)
+  let setorIdsValidados: number[] = [];
+  if (isManager) {
+    try {
+      setorIdsValidados = await assertSetoresValidosParaEmpresa(db, targetEmpresaId, body?.setor_ids);
+    } catch (err) {
+      if (err instanceof SetorGestorValidationError) {
+        throw badRequest(err.message, 'MANAGER_REQUIRES_SECTOR');
+      }
+      throw err;
+    }
   }
 
   // Validar e-mail básico
@@ -477,14 +498,32 @@ adminUsuariosRoutes.post('/', async (c) => {
     throw new Error('Falha ao criar usuário');
   }
 
-  // Vincular à empresa
-  await db
-    .prepare(
-      `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, is_primary, role)
-       VALUES (?, ?, 1, ?)`,
-    )
-    .bind(novoUsuarioId, targetEmpresaId, perfil)
-    .run();
+  // Vincular à empresa e, se gestor, gravar os setores atomicamente com o vínculo
+  if (isManager) {
+    const setorStatements = await buildManagerSetorInsertStatements(
+      db,
+      targetEmpresaId,
+      novoUsuarioId,
+      setorIdsValidados,
+    );
+    await db.batch([
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, is_primary, role)
+           VALUES (?, ?, 1, ?)`,
+        )
+        .bind(novoUsuarioId, targetEmpresaId, perfil),
+      ...setorStatements,
+    ]);
+  } else {
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, is_primary, role)
+         VALUES (?, ?, 1, ?)`,
+      )
+      .bind(novoUsuarioId, targetEmpresaId, perfil)
+      .run();
+  }
 
   // Gerar token de convite (48h)
   const inviteToken = generateInviteToken();
@@ -545,6 +584,7 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     perfil?: string;
     funcionario_id?: number | null;
     active?: boolean;
+    setor_ids?: number[];
   }>();
 
   // Verificar que usuário existe
@@ -574,8 +614,47 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     throw forbidden('Apenas ADMINISTRADOR pode editar outros administradores', 'INSUFFICIENT_ROLE');
   }
 
+  // Promoção para gestor ou ativação de gestor exige ao menos um setor (fail-closed)
+  const tornandoSeGestor = Boolean(body?.perfil) && isManagerPerfil(targetPerfil) && !isManagerPerfil(existente.perfil);
+  const ativandoGestor = body?.active === true && isManagerPerfil(targetPerfil);
+  let setorStatementsParaGestor: D1PreparedStatement[] = [];
+
+  if (tornandoSeGestor || ativandoGestor) {
+    if (Array.isArray(body?.setor_ids) && body.setor_ids.length > 0) {
+      try {
+        setorStatementsParaGestor = await buildManagerSetorInsertStatements(
+          db,
+          empresaId,
+          id,
+          body.setor_ids,
+        );
+      } catch (err) {
+        if (err instanceof SetorGestorValidationError) {
+          throw badRequest(err.message, 'MANAGER_REQUIRES_SECTOR');
+        }
+        throw err;
+      }
+    } else {
+      const existingCount = await db
+        .prepare(
+          `SELECT COUNT(*) as n FROM setores_gestores
+             WHERE usuario_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL`,
+        )
+        .bind(id, empresaId)
+        .first<{ n: number }>();
+
+      if (!Number(existingCount?.n || 0)) {
+        throw badRequest(
+          'Gestor requer ao menos um setor (setor_ids) para ser criado/ativado',
+          'MANAGER_REQUIRES_SECTOR',
+        );
+      }
+    }
+  }
+
   const updates: string[] = [];
   const binds: (string | number | null)[] = [];
+  const statementsAdicionais: D1PreparedStatement[] = [];
 
   if (body?.nome) {
     updates.push('nome = ?');
@@ -584,11 +663,13 @@ adminUsuariosRoutes.put('/:id', async (c) => {
   if (body?.perfil) {
     updates.push('perfil = ?');
     binds.push(body.perfil.toUpperCase());
-    // Sincronizar role em usuarios_empresas
-    await db
-      .prepare(`UPDATE usuarios_empresas SET role = ? WHERE usuario_id = ? AND empresa_id = ?`)
-      .bind(body.perfil.toUpperCase(), id, empresaId)
-      .run();
+    // Sincronizar role em usuarios_empresas na mesma transação da UPDATE
+    // de usuarios abaixo — não deixar perfil e role divergentes.
+    statementsAdicionais.push(
+      db
+        .prepare(`UPDATE usuarios_empresas SET role = ? WHERE usuario_id = ? AND empresa_id = ?`)
+        .bind(body.perfil.toUpperCase(), id, empresaId),
+    );
   }
   if (body?.funcionario_id !== undefined) {
     updates.push('funcionario_id = ?');
@@ -606,10 +687,18 @@ adminUsuariosRoutes.put('/:id', async (c) => {
   updates.push("updated_at = datetime('now')");
   binds.push(id);
 
-  await db
-    .prepare(`UPDATE usuarios SET ${updates.join(', ')} WHERE id = ?`)
-    .bind(...binds)
-    .run();
+  const todosOsStatements = [...statementsAdicionais, ...setorStatementsParaGestor];
+  if (todosOsStatements.length > 0) {
+    await db.batch([
+      db.prepare(`UPDATE usuarios SET ${updates.join(', ')} WHERE id = ?`).bind(...binds),
+      ...todosOsStatements,
+    ]);
+  } else {
+    await db
+      .prepare(`UPDATE usuarios SET ${updates.join(', ')} WHERE id = ?`)
+      .bind(...binds)
+      .run();
+  }
 
   const atualizado = await db
     .prepare(

@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 const gestorRoleValues = ['GESTOR', 'MANAGER', 'COMPLIANCE'];
 
+const managerPerfilValues = ['GESTOR', 'MANAGER', 'SUPERVISOR', 'COORDENADOR', 'COORDINATOR'];
+
+export class SetorGestorValidationError extends Error {}
+export class SetorGestorConflictError extends Error {}
+
+export function isManagerPerfil(value: unknown): boolean {
+  return managerPerfilValues.includes(String(value || '').trim().toUpperCase());
+}
+
 const setorGestorBaseSchema = z.object({
   setor_id: z.number().int().positive('Setor é obrigatório'),
   usuario_id: z.number().int().positive().optional(),
@@ -116,13 +125,196 @@ async function ensureSetorBelongsToEmpresa(
   setorId: number,
 ): Promise<void> {
   const setor = await db
-    .prepare('SELECT id FROM setores WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .prepare(
+      'SELECT id FROM setores WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND ativo = 1',
+    )
     .bind(setorId, empresaId)
     .first();
 
   if (!setor) {
-    throw new Error('Setor não encontrado para esta empresa');
+    throw new SetorGestorValidationError(
+      'Setor não encontrado, inativo ou pertencente a outra empresa',
+    );
   }
+}
+
+/**
+ * Valida uma lista de setor_ids para atribuição de gestor: exige ao menos um
+ * id, e cada um deve pertencer à empresa informada e estar ativo. Usado no
+ * fluxo de criação/ativação de gestor (usuarios), não substitui a validação
+ * de setor único usada pelo CRUD de setores_gestores.
+ */
+export async function assertSetoresValidosParaEmpresa(
+  db: D1Database,
+  empresaId: number,
+  setorIds: number[] | undefined | null,
+): Promise<number[]> {
+  const uniqueIds = [...new Set((setorIds || []).map(Number))].filter(
+    (n) => Number.isInteger(n) && n > 0,
+  );
+
+  if (uniqueIds.length === 0) {
+    throw new SetorGestorValidationError(
+      'Gestor requer ao menos um setor válido (setor_ids)',
+    );
+  }
+
+  const placeholders = uniqueIds.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(
+      `SELECT id FROM setores WHERE id IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL AND ativo = 1`,
+    )
+    .bind(...uniqueIds, empresaId)
+    .all<{ id: number }>();
+
+  const found = new Set((rows.results || []).map((r) => Number(r.id)));
+  const invalid = uniqueIds.filter((setorId) => !found.has(setorId));
+
+  if (invalid.length > 0) {
+    throw new SetorGestorValidationError(
+      `Setor inválido, inativo ou de outra empresa: ${invalid.join(', ')}`,
+    );
+  }
+
+  return uniqueIds;
+}
+
+async function countActiveSetoresGestor(
+  db: D1Database,
+  empresaId: number,
+  usuarioId: number,
+  excludeId?: number,
+): Promise<number> {
+  const row = excludeId
+    ? await db
+        .prepare(
+          `SELECT COUNT(*) as n FROM setores_gestores
+             WHERE usuario_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL AND id != ?`,
+        )
+        .bind(usuarioId, empresaId, excludeId)
+        .first<{ n: number }>()
+    : await db
+        .prepare(
+          `SELECT COUNT(*) as n FROM setores_gestores
+             WHERE usuario_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL`,
+        )
+        .bind(usuarioId, empresaId)
+        .first<{ n: number }>();
+
+  return Number(row?.n || 0);
+}
+
+async function assertNaoRemoveUltimoSetorDeGestorAtivo(
+  db: D1Database,
+  empresaId: number,
+  usuarioId: number | null,
+  excludeId: number,
+): Promise<void> {
+  if (!usuarioId) return;
+
+  const usuario = await db
+    .prepare('SELECT active, perfil FROM usuarios WHERE id = ? AND deleted_at IS NULL')
+    .bind(usuarioId)
+    .first<{ active: number; perfil: string }>();
+
+  const permaneceGestorAtivo = Boolean(usuario?.active) && isManagerPerfil(usuario?.perfil);
+  if (!permaneceGestorAtivo) return;
+
+  const restantes = await countActiveSetoresGestor(db, empresaId, usuarioId, excludeId);
+  if (restantes === 0) {
+    throw new SetorGestorConflictError(
+      'Não é possível remover o último setor de um gestor ativo. Altere o papel ou desative o usuário antes.',
+    );
+  }
+}
+
+async function countActiveSetoresGestorExcludingSetor(
+  db: D1Database,
+  empresaId: number,
+  usuarioId: number,
+  excludeSetorId: number,
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) as n FROM setores_gestores
+         WHERE usuario_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL AND setor_id != ?`,
+    )
+    .bind(usuarioId, empresaId, excludeSetorId)
+    .first<{ n: number }>();
+
+  return Number(row?.n || 0);
+}
+
+/**
+ * Usada por operações de reatribuição em massa de um setor (ex.: bulk-assign)
+ * que removem TODOS os gestores atuais de um setor antes de recriar a lista.
+ * Para cada usuário sendo removido, garante que ele não fique com zero
+ * setores ativos enquanto permanecer um gestor ativo.
+ */
+export async function assertBulkReassignmentDoesNotStripLastSector(
+  db: D1Database,
+  empresaId: number,
+  setorId: number,
+  usuarioIdsSendoRemovidos: number[],
+): Promise<void> {
+  for (const usuarioId of usuarioIdsSendoRemovidos) {
+    const usuario = await db
+      .prepare('SELECT active, perfil FROM usuarios WHERE id = ? AND deleted_at IS NULL')
+      .bind(usuarioId)
+      .first<{ active: number; perfil: string }>();
+
+    const permaneceGestorAtivo = Boolean(usuario?.active) && isManagerPerfil(usuario?.perfil);
+    if (!permaneceGestorAtivo) continue;
+
+    const restantes = await countActiveSetoresGestorExcludingSetor(
+      db,
+      empresaId,
+      usuarioId,
+      setorId,
+    );
+    if (restantes === 0) {
+      throw new SetorGestorConflictError(
+        `Não é possível remover o gestor ${usuarioId} deste setor: é o último setor ativo dele. Altere o papel ou desative o usuário antes.`,
+      );
+    }
+  }
+}
+
+/**
+ * Monta (sem executar) os INSERTs de setores_gestores necessários para que
+ * `usuarioId` passe a gerenciar todos os setores em `setorIds`, pulando os
+ * que já estão ativos. Retorna prepared statements para o chamador incluir
+ * no mesmo `db.batch()` que grava o papel do usuário — grava role+setores
+ * atomicamente.
+ */
+export async function buildManagerSetorInsertStatements(
+  db: D1Database,
+  empresaId: number,
+  usuarioId: number,
+  setorIds: number[] | undefined | null,
+): Promise<D1PreparedStatement[]> {
+  const validIds = await assertSetoresValidosParaEmpresa(db, empresaId, setorIds);
+
+  const existing = await db
+    .prepare(
+      `SELECT setor_id FROM setores_gestores
+         WHERE usuario_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL`,
+    )
+    .bind(usuarioId, empresaId)
+    .all<{ setor_id: number }>();
+
+  const existingSet = new Set((existing.results || []).map((r) => Number(r.setor_id)));
+  const toInsert = validIds.filter((setorId) => !existingSet.has(setorId));
+
+  return toInsert.map((setorId) =>
+    db
+      .prepare(
+        `INSERT INTO setores_gestores
+           (setor_id, usuario_id, gestor_id, empresa_id, role, ativo, created_at, updated_at)
+         VALUES (?, ?, NULL, ?, 'manager', 1, datetime('now'), datetime('now'))`,
+      )
+      .bind(setorId, usuarioId, empresaId),
+  );
 }
 
 async function ensureUsuarioGestorValido(
@@ -365,20 +557,33 @@ export async function updateSetorGestor(
   const updates: string[] = [];
   const binds: unknown[] = [];
 
+  // Reatribuir usuario_id/setor_id nesta linha remove o vínculo do gestor
+  // ORIGINAL com este setor, tão efetivamente quanto deletar a linha —
+  // precisa da mesma proteção de "último setor de gestor ativo".
+  let usuarioIdDestino: number | null = null;
+  if (data.usuario_id !== undefined || data.gestor_id !== undefined) {
+    usuarioIdDestino = await resolveUsuarioId(db, empresaId, {
+      usuario_id: data.usuario_id,
+      gestor_id: data.gestor_id,
+    });
+  }
+  const trocandoUsuario = usuarioIdDestino !== null && usuarioIdDestino !== current.usuario_id;
+  const trocandoSetor = data.setor_id !== undefined && data.setor_id !== current.setor_id;
+
+  if (trocandoUsuario || trocandoSetor) {
+    await assertNaoRemoveUltimoSetorDeGestorAtivo(db, empresaId, current.usuario_id, id);
+  }
+
   if (data.setor_id !== undefined) {
     await ensureSetorBelongsToEmpresa(db, empresaId, data.setor_id);
     updates.push('setor_id = ?');
     binds.push(data.setor_id);
   }
 
-  if (data.usuario_id !== undefined || data.gestor_id !== undefined) {
-    const usuarioId = await resolveUsuarioId(db, empresaId, {
-      usuario_id: data.usuario_id,
-      gestor_id: data.gestor_id,
-    });
-    await ensureUsuarioGestorValido(db, empresaId, usuarioId);
+  if (usuarioIdDestino !== null) {
+    await ensureUsuarioGestorValido(db, empresaId, usuarioIdDestino);
     updates.push('usuario_id = ?');
-    binds.push(usuarioId);
+    binds.push(usuarioIdDestino);
 
     if (await tableHasColumn(db, 'setores_gestores', 'gestor_id')) {
       updates.push('gestor_id = ?');
@@ -392,6 +597,9 @@ export async function updateSetorGestor(
   }
 
   if (data.ativo !== undefined) {
+    if (data.ativo === false) {
+      await assertNaoRemoveUltimoSetorDeGestorAtivo(db, empresaId, current.usuario_id, id);
+    }
     updates.push('ativo = ?');
     binds.push(data.ativo ? 1 : 0);
   }
@@ -424,6 +632,8 @@ export async function deleteSetorGestor(db: D1Database, empresaId: number, id: n
   if (!current) {
     throw new Error('Relação setor-gestor não encontrada');
   }
+
+  await assertNaoRemoveUltimoSetorDeGestorAtivo(db, empresaId, current.usuario_id, id);
 
   await db
     .prepare(

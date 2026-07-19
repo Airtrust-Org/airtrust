@@ -16,6 +16,11 @@ import type { Env } from '../types';
 import { AppError } from '../utils/errors';
 import { getTenantContext, requireTenantRole } from '../middleware/tenant';
 import { generateRefreshToken } from '../utils/security';
+import {
+  assertSetoresValidosParaEmpresa,
+  buildManagerSetorInsertStatements,
+  SetorGestorValidationError,
+} from '../services/setores-gestores';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -230,12 +235,14 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
     nome,
     empresaIds,
     modulosAtivos,
+    setorIds,
   } = (await c.req.json()) as {
     email: string;
     role?: string;
     nome?: string;
     empresaIds?: number[];
     modulosAtivos?: string[];
+    setorIds?: number[];
   };
 
   if (!email) {
@@ -272,6 +279,17 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
 
     if (!empresaAtiva) {
       throw new AppError(`Empresa ${empresaId} não encontrada ou inativa`, 404);
+    }
+
+    if (normalizeEmpresaUserRole(role) === 'manager') {
+      try {
+        await assertSetoresValidosParaEmpresa(db, empresaId, setorIds);
+      } catch (err) {
+        if (err instanceof SetorGestorValidationError) {
+          throw new AppError(err.message, 400);
+        }
+        throw err;
+      }
     }
 
     if (tenantCtx.empresaCodigo !== 'airtrust') {
@@ -335,20 +353,28 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
 
     if (link) continue;
 
-    if (hasModulosAtivos) {
-      await db
-        .prepare(
-          'INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary, modulos_ativos) VALUES (?, ?, ?, 0, ?)',
-        )
-        .bind(user.id, empresaId, normalizedRole, modulosAtivosJson)
-        .run();
+    const vinculoStatement = hasModulosAtivos
+      ? db
+          .prepare(
+            'INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary, modulos_ativos) VALUES (?, ?, ?, 0, ?)',
+          )
+          .bind(user.id, empresaId, normalizedRole, modulosAtivosJson)
+      : db
+          .prepare(
+            'INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary) VALUES (?, ?, ?, 0)',
+          )
+          .bind(user.id, empresaId, normalizedRole);
+
+    if (normalizedRole === 'manager') {
+      const setorStatements = await buildManagerSetorInsertStatements(
+        db,
+        empresaId,
+        user.id,
+        setorIds,
+      );
+      await db.batch([vinculoStatement, ...setorStatements]);
     } else {
-      await db
-        .prepare(
-          'INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary) VALUES (?, ?, ?, 0)',
-        )
-        .bind(user.id, empresaId, normalizedRole)
-        .run();
+      await vinculoStatement.run();
     }
 
     vinculosCriados += 1;
@@ -585,6 +611,26 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
     throw new AppError('Usuário não encontrado', 404);
   }
 
+  // Papel manager exige setor já vinculado na empresa alvo antes de gravar o
+  // novo acesso — esta rota não cria vínculos de setor, apenas reatribui role.
+  for (const acesso of acessos) {
+    if (acesso.role !== 'manager') continue;
+    const existingSector = await db
+      .prepare(
+        `SELECT id FROM setores_gestores
+           WHERE usuario_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+           LIMIT 1`,
+      )
+      .bind(usuarioId, acesso.empresaId)
+      .first();
+    if (!existingSector) {
+      throw new AppError(
+        `Gestor requer ao menos um setor vinculado na empresa ${acesso.empresaId} antes de assumir o papel manager`,
+        400,
+      );
+    }
+  }
+
   const { hasModulosAtivos } = await getUsuariosEmpresasFeatures(db);
 
   await db
@@ -653,11 +699,22 @@ app.post('/:id/usuarios', requireTenantRole('admin'), async (c) => {
   }
 
   const body = await c.req.json();
-  const { usuario_id, role = 'viewer' } = body;
+  const { usuario_id, role = 'viewer', setor_ids: setorIdsForAdd } = body;
   const normalizedRole = normalizeEmpresaUserRole(role);
 
   if (!usuario_id) {
     throw new AppError('usuario_id é obrigatório', 400);
+  }
+
+  if (normalizedRole === 'manager') {
+    try {
+      await assertSetoresValidosParaEmpresa(db, id, setorIdsForAdd);
+    } catch (err) {
+      if (err instanceof SetorGestorValidationError) {
+        throw new AppError(err.message, 400);
+      }
+      throw err;
+    }
   }
 
   // Verificar se usuário existe
@@ -687,15 +744,26 @@ app.post('/:id/usuarios', requireTenantRole('admin'), async (c) => {
     }
   }
 
-  await db
+  const vinculoStatement = db
     .prepare(
       `
     INSERT INTO usuarios_empresas (usuario_id, empresa_id, role)
     VALUES (?, ?, ?)
   `,
     )
-    .bind(usuario_id, id, normalizedRole)
-    .run();
+    .bind(usuario_id, id, normalizedRole);
+
+  if (normalizedRole === 'manager') {
+    const setorStatements = await buildManagerSetorInsertStatements(
+      db,
+      id,
+      Number(usuario_id),
+      setorIdsForAdd,
+    );
+    await db.batch([vinculoStatement, ...setorStatements]);
+  } else {
+    await vinculoStatement.run();
+  }
 
   await syncUsuarioPerfilFromAcessos(db, Number(usuario_id));
 

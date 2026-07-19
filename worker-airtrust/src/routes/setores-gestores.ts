@@ -18,9 +18,19 @@ import {
   deleteSetorGestor,
   getGestoresByFuncionarioSetor,
   listEligibleGestorUsers,
+  SetorGestorValidationError,
+  SetorGestorConflictError,
+  assertBulkReassignmentDoesNotStripLastSector,
 } from '../services/setores-gestores';
 
 const setoresGestores = new Hono<{ Bindings: Env }>();
+
+// Converte os erros tipados do serviço em respostas 4xx; não faz nada para
+// outros erros, deixando o catch original tratá-los (ex.: UNIQUE constraint).
+function rethrowAsApiError(error: unknown): void {
+  if (error instanceof SetorGestorValidationError) throw new ApiError(error.message, 400);
+  if (error instanceof SetorGestorConflictError) throw new ApiError(error.message, 409);
+}
 
 const logger = (c: any) => createLogger(c, 'SetoresGestores');
 
@@ -196,6 +206,7 @@ setoresGestores.post('/', requireRole('admin', 'manager'), async (c) => {
     );
   } catch (error: unknown) {
     if (error instanceof ApiError) throw error;
+    rethrowAsApiError(error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger(c).error('Erro ao criar setor-gestor', toError(error));
 
@@ -250,6 +261,7 @@ setoresGestores.put('/:id', requireRole('admin', 'manager'), async (c) => {
     });
   } catch (error: unknown) {
     if (error instanceof ApiError) throw error;
+    rethrowAsApiError(error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger(c).error('Erro ao atualizar setor-gestor', toError(error));
     throw new ApiError(`Erro ao atualizar setor-gestor: ${errorMsg}`, 500);
@@ -290,6 +302,7 @@ setoresGestores.delete('/:id', requireRole('admin', 'manager'), async (c) => {
     });
   } catch (error: unknown) {
     if (error instanceof ApiError) throw error;
+    rethrowAsApiError(error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger(c).error('Erro ao deletar setor-gestor', toError(error));
     throw new ApiError(`Erro ao deletar setor-gestor: ${errorMsg}`, 500);
@@ -317,6 +330,29 @@ setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin', 'manager'), 
     if (!Array.isArray(usuarioIds)) {
       throw new ApiError('usuario_ids deve ser um array', 400);
     }
+
+    // Gestores atualmente vinculados a este setor que NÃO estão na nova
+    // lista ficarão sem vínculo aqui — bloquear se for o último setor ativo
+    // de algum deles enquanto permanecerem gestores ativos.
+    const vinculosAtuais = await db
+      .prepare(
+        `SELECT usuario_id FROM setores_gestores
+           WHERE setor_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+             AND usuario_id IS NOT NULL`,
+      )
+      .bind(setorId, empresaId)
+      .all<{ usuario_id: number }>();
+
+    const usuarioIdsSendoRemovidos = (vinculosAtuais.results || [])
+      .map((row) => Number(row.usuario_id))
+      .filter((uid) => !usuarioIds.includes(uid));
+
+    await assertBulkReassignmentDoesNotStripLastSector(
+      db,
+      empresaId,
+      setorId,
+      usuarioIdsSendoRemovidos,
+    );
 
     // Delete existing assignments
     await db
@@ -361,6 +397,7 @@ setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin', 'manager'), 
     });
   } catch (error: unknown) {
     if (error instanceof ApiError) throw error;
+    rethrowAsApiError(error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger(c).error('Erro ao fazer bulk assign', toError(error));
     throw new ApiError(`Erro ao fazer bulk assign: ${errorMsg}`, 500);
