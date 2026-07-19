@@ -300,6 +300,9 @@ export default function UsuariosPage() {
   // Funcionários sem usuário (para vincular ao criar)
   const [funcionarios, setFuncionarios] = useState<FuncionarioOpcao[]>([]);
 
+  // Gestores com ao menos um setor ativo vinculado (para indicador "sem setor")
+  const [gestoresComSetor, setGestoresComSetor] = useState<Set<number>>(new Set());
+
   // ─── Carregar dados ──────────────────────────────────────────────────────────
 
   const carregarUsuarios = useCallback(async () => {
@@ -326,10 +329,26 @@ export default function UsuariosPage() {
     }
   }, []);
 
+  const carregarGestoresComSetor = useCallback(async () => {
+    try {
+      const res = await apiFetch('/setores-gestores');
+      const json = await res.json();
+      if (json.success) {
+        const ids = (json.data || [])
+          .map((sg: { usuario_id?: number }) => sg.usuario_id)
+          .filter((id: number | undefined): id is number => Boolean(id));
+        setGestoresComSetor(new Set(ids));
+      }
+    } catch {
+      // silencioso — indicador é apenas informativo
+    }
+  }, []);
+
   useEffect(() => {
     carregarUsuarios();
     carregarFuncionarios();
-  }, [carregarUsuarios, carregarFuncionarios]);
+    carregarGestoresComSetor();
+  }, [carregarUsuarios, carregarFuncionarios, carregarGestoresComSetor]);
 
   // ─── Filtro ──────────────────────────────────────────────────────────────────
 
@@ -468,6 +487,15 @@ export default function UsuariosPage() {
                         <Shield className="h-3 w-3" />
                         {perfilLabel(u.perfil)}
                       </span>
+                      {normalizePerfil(u.perfil) === 'GESTOR' && !gestoresComSetor.has(u.id) && (
+                        <span
+                          title="Este gestor não possui nenhum setor vinculado e não visualiza nenhum dado até que um setor seja atribuído"
+                          className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          Sem setor
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600">
                       {u.funcionario_nome ? (
@@ -640,6 +668,90 @@ export default function UsuariosPage() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Campo: Setores gerenciados (obrigatório quando perfil = GESTOR)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SetorOpcao = { id: number; nome: string };
+
+function SetoresGerenciadosField({
+  selectedIds,
+  onChange,
+  showError,
+}: {
+  selectedIds: number[];
+  onChange: (ids: number[]) => void;
+  showError: boolean;
+}) {
+  const [setores, setSetores] = useState<SetorOpcao[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch('/setores');
+        const json = await res.json();
+        if (!cancelled && json.success) {
+          setSetores(json.data || []);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggle = (id: number) => {
+    onChange(
+      selectedIds.includes(id) ? selectedIds.filter((s) => s !== id) : [...selectedIds, id],
+    );
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">
+        Setores gerenciados <span className="text-red-500">*</span>
+      </label>
+      <p className="text-xs text-slate-500 mb-2">
+        O gestor verá apenas dados e qualificações dos setores selecionados abaixo.
+      </p>
+      {loading ? (
+        <p className="text-xs text-slate-400">Carregando setores…</p>
+      ) : setores.length === 0 ? (
+        <p className="text-xs text-amber-600">Nenhum setor ativo cadastrado nesta empresa.</p>
+      ) : (
+        <div
+          className={`border rounded-lg p-2 max-h-40 overflow-y-auto space-y-1 ${
+            showError && selectedIds.length === 0 ? 'border-red-400' : 'border-slate-300'
+          }`}
+        >
+          {setores.map((s) => (
+            <label
+              key={s.id}
+              className="flex items-center gap-2 text-sm px-2 py-1 rounded hover:bg-slate-50 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(s.id)}
+                onChange={() => toggle(s.id)}
+              />
+              {s.nome}
+            </label>
+          ))}
+        </div>
+      )}
+      {showError && selectedIds.length === 0 && (
+        <p className="text-xs text-red-500 mt-1">
+          Selecione ao menos um setor para o gestor.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Modal: Criar Usuário
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -658,6 +770,8 @@ function ModalCriarUsuario({
   const [email, setEmail] = useState('');
   const [perfil, setPerfil] = useState('ALUNO');
   const [funcionarioId, setFuncionarioId] = useState<number | null>(null);
+  const [setorIds, setSetorIds] = useState<number[]>([]);
+  const [tentouEnviar, setTentouEnviar] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const perfisSelecionaveis = isAdmin ? PERFIS : PERFIS.filter((p) => p.value !== 'ADMINISTRADOR');
@@ -677,11 +791,21 @@ function ModalCriarUsuario({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTentouEnviar(true);
+    if (perfil === 'GESTOR' && setorIds.length === 0) {
+      return;
+    }
     setSaving(true);
     try {
       const res = await apiFetch('/admin/usuarios', {
         method: 'POST',
-        body: JSON.stringify({ nome, email, perfil, funcionario_id: funcionarioId }),
+        body: JSON.stringify({
+          nome,
+          email,
+          perfil,
+          funcionario_id: funcionarioId,
+          ...(perfil === 'GESTOR' ? { setor_ids: setorIds } : {}),
+        }),
       });
       const json = await res.json();
       if (json.success) {
@@ -762,6 +886,14 @@ function ModalCriarUsuario({
             </p>
           </div>
 
+          {perfil === 'GESTOR' && (
+            <SetoresGerenciadosField
+              selectedIds={setorIds}
+              onChange={setSetorIds}
+              showError={tentouEnviar}
+            />
+          )}
+
           {/* Vínculo com funcionário (opcional) */}
           {(perfil === 'INSTRUTOR' || perfil === 'ALUNO') && (
             <div>
@@ -800,7 +932,7 @@ function ModalCriarUsuario({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || (perfil === 'GESTOR' && setorIds.length === 0)}
               className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition disabled:opacity-50 flex items-center gap-2"
             >
               {saving ? (
@@ -840,7 +972,10 @@ function ModalEditarUsuario({
   const [nome, setNome] = useState(usuario.nome);
   const [perfil, setPerfil] = useState(normalizePerfil(usuario.perfil) || 'ALUNO');
   const [funcionarioId, setFuncionarioId] = useState<number | null>(usuario.funcionario_id);
+  const [setorIds, setSetorIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const promovendoParaGestor = perfil === 'GESTOR' && normalizePerfil(usuario.perfil) !== 'GESTOR';
 
   // Incluir o funcionário atual na lista (já que pode já estar vinculado)
   const funcionariosOpcoes =
@@ -865,7 +1000,12 @@ function ModalEditarUsuario({
     try {
       const res = await apiFetch(`/admin/usuarios/${usuario.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ nome, perfil, funcionario_id: funcionarioId }),
+        body: JSON.stringify({
+          nome,
+          perfil,
+          funcionario_id: funcionarioId,
+          ...(perfil === 'GESTOR' && setorIds.length > 0 ? { setor_ids: setorIds } : {}),
+        }),
       });
       const json = await res.json();
       if (json.success) {
@@ -934,6 +1074,14 @@ function ModalEditarUsuario({
             </select>
           </div>
 
+          {perfil === 'GESTOR' && (
+            <SetoresGerenciadosField
+              selectedIds={setorIds}
+              onChange={setSetorIds}
+              showError={promovendoParaGestor}
+            />
+          )}
+
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Funcionário vinculado <span className="text-slate-400 font-normal">(opcional)</span>
@@ -963,7 +1111,7 @@ function ModalEditarUsuario({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || (promovendoParaGestor && setorIds.length === 0)}
               className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
             >
               {saving ? 'Salvando...' : 'Salvar'}

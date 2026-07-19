@@ -18,9 +18,18 @@ import {
   deleteSetorGestor,
   getGestoresByFuncionarioSetor,
   listEligibleGestorUsers,
+  SetorGestorValidationError,
+  SetorGestorConflictError,
 } from '../services/setores-gestores';
 
 const setoresGestores = new Hono<{ Bindings: Env }>();
+
+// Converte os erros tipados do serviço em respostas 4xx; não faz nada para
+// outros erros, deixando o catch original tratá-los (ex.: UNIQUE constraint).
+function rethrowAsApiError(error: unknown): void {
+  if (error instanceof SetorGestorValidationError) throw new ApiError(error.message, 400);
+  if (error instanceof SetorGestorConflictError) throw new ApiError(error.message, 409);
+}
 
 const logger = (c: any) => createLogger(c, 'SetoresGestores');
 
@@ -196,6 +205,7 @@ setoresGestores.post('/', requireRole('admin', 'manager'), async (c) => {
     );
   } catch (error: unknown) {
     if (error instanceof ApiError) throw error;
+    rethrowAsApiError(error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger(c).error('Erro ao criar setor-gestor', toError(error));
 
@@ -250,6 +260,7 @@ setoresGestores.put('/:id', requireRole('admin', 'manager'), async (c) => {
     });
   } catch (error: unknown) {
     if (error instanceof ApiError) throw error;
+    rethrowAsApiError(error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger(c).error('Erro ao atualizar setor-gestor', toError(error));
     throw new ApiError(`Erro ao atualizar setor-gestor: ${errorMsg}`, 500);
@@ -290,6 +301,7 @@ setoresGestores.delete('/:id', requireRole('admin', 'manager'), async (c) => {
     });
   } catch (error: unknown) {
     if (error instanceof ApiError) throw error;
+    rethrowAsApiError(error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger(c).error('Erro ao deletar setor-gestor', toError(error));
     throw new ApiError(`Erro ao deletar setor-gestor: ${errorMsg}`, 500);
@@ -361,6 +373,7 @@ setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin', 'manager'), 
     });
   } catch (error: unknown) {
     if (error instanceof ApiError) throw error;
+    rethrowAsApiError(error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger(c).error('Erro ao fazer bulk assign', toError(error));
     throw new ApiError(`Erro ao fazer bulk assign: ${errorMsg}`, 500);

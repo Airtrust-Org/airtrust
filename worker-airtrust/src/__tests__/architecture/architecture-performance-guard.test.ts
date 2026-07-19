@@ -35,8 +35,8 @@ const LARGE_FILE_LINE_CAPS = {
 const SQL_PREPARE_CAPS = {
   // Acknowledged growth: tipo_sessao fallback normalization + tipos_sessao cor persistence guard.
   'routes/simuladores-modelos.ts': 69,
-  // Cap raised 2026-06-30: counted 63 (pre-existing growth).
-  'routes/auth.ts': 63,
+  // Cap raised 2026-07-19: counted 64 (fail-closed sector check on manager invite/accept).
+  'routes/auth.ts': 64,
   // Cap raised 2026-07-09: counted 55 (pre-existing growth of schema guards).
   'routes/simuladores-sessoes-update.ts': 55,
   // Cap raised 2026-07-09: counted 55 (hasColumn PRAGMA added for formato_id guard + new tenant isolation prepares).

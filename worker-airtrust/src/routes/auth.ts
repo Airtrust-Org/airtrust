@@ -25,6 +25,7 @@ import { buildAuditMetadata } from '../lib/audit/context';
 import { enviarEmailAlert } from '../cron/notificacoes';
 import { isAdminRole, normalizeAirtrustRole } from '../utils/role-resolution';
 import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
+import { isManagerPerfil } from '../services/setores-gestores';
 
 // Tipar variáveis adicionadas ao contexto pelo middleware auth()
 type AuthVars = {
@@ -640,6 +641,25 @@ authRoutes.post('/invite/accept', async (c) => {
 
   if (expired?.expired) {
     throw unauthorized('Convite expirado', 'INVITE_EXPIRED');
+  }
+
+  const inviteRolePreCheck = convite.role || 'member';
+  if (isManagerPerfil(inviteRolePreCheck)) {
+    const existingSector = await db
+      .prepare(
+        `SELECT id FROM setores_gestores
+           WHERE usuario_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+           LIMIT 1`,
+      )
+      .bind(convite.usuario_id, convite.empresa_id)
+      .first();
+
+    if (!existingSector) {
+      throw badRequest(
+        'Convite de gestor sem setor vinculado. Peça ao administrador para atribuir um setor antes de aceitar o convite.',
+        'MANAGER_INVITE_MISSING_SECTOR',
+      );
+    }
   }
 
   const passwordHash = await hashPassword(senha);
