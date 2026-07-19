@@ -98,11 +98,13 @@ async function main() {
   // a guaranteed 400 here that silently cascaded into C/D/G being skipped
   // while still counting as passing in the final ok-check — fixed.
   let simpleSessionId = null;
+  const randomDayOffset1 = 7 + Math.floor(Math.random() * 10000);
+  const data1 = new Date(Date.now() + randomDayOffset1 * 86400000).toISOString().slice(0, 10);
   {
     const created = await authFetch(baseUrl, token, '/api/simuladores/sessoes', {
       method: 'POST',
       body: JSON.stringify({
-        data: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+        data: data1,
         horario_inicio: '08:00',
         horario_fim: '09:00',
         tipo_sessao: 'PER',
@@ -140,8 +142,9 @@ async function main() {
   // | OUTRO), never a model code; the model itself is linked via the numeric
   // modelo_sessao_id resolved above.
   const conversionBody = {
-    data: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+    data: data1,
     hora_inicio: '08:00',
+    hora_fim: '09:00',
     ...commonSessionFields,
     segmentos: [
       {
@@ -236,11 +239,14 @@ async function main() {
   // usa modelos distintos de C/D para não colidir com a sessão convertida acima).
   let event2SessionId = null;
   {
+    const randomDayOffset2 = 8 + Math.floor(Math.random() * 10000);
+    const data2 = new Date(Date.now() + randomDayOffset2 * 86400000).toISOString().slice(0, 10);
     const created = await authFetch(baseUrl, token, '/api/simuladores/sessoes/compartilhada', {
       method: 'POST',
       body: JSON.stringify({
-        data: new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10),
+        data: data2,
         hora_inicio: '08:00',
+        hora_fim: '09:00',
         ...commonSessionFields,
         observacoes: 'QA smoke — evento 2 examinador (rollback via seed --rollback)',
         segmentos: [
