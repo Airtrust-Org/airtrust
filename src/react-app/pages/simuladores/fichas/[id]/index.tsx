@@ -2228,7 +2228,8 @@ export default function FichaDetalhe() {
                       const dadosPDF: FichaPDFData = {
                         fichaId: ficha.id,
                         sessao_codigo: ficha.sessao_codigo || undefined,
-                        sessao_titulo: ficha.sessao_modelo || 'Sessão de Treinamento',
+                        sessao_titulo: ficha.sessao_titulo || 'Sessão de Treinamento',
+                        sessao_nome: ficha.sessao_titulo || undefined,
                         sessao_titulo_linha1: specialDefinition?.headerTitle,
                         sessao_titulo_linha2: specialDefinition?.headerSubtitle,
                         tripulante_nome: ficha.participante_nome,
