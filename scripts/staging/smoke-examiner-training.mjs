@@ -115,7 +115,7 @@ async function main() {
         observacoes: 'QA smoke — sessão simples (rollback via seed --rollback)',
       }),
     });
-    simpleSessionId = created.json?.data?.id ?? null;
+    simpleSessionId = created.json?.data?.id ?? created.json?.data?.sessao_id ?? created.json?.data?.sessaoId ?? null;
     const editOk = simpleSessionId
       ? (
           await authFetch(baseUrl, token, `/api/simuladores/sessoes/${simpleSessionId}`, {
