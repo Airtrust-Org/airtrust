@@ -273,6 +273,41 @@ async function login(baseUrl, email, password) {
   return response.json;
 }
 
+function extractRefreshToken(payload) {
+  const token = payload?.data?.refreshToken ?? payload?.refreshToken ?? null;
+  assert(typeof token === 'string' && token.length > 10, 'login/refresh sem refreshToken');
+  return token;
+}
+
+async function refreshTokens(baseUrl, refreshToken) {
+  return fetchJson(`${baseUrl}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+}
+
+async function logout(baseUrl, { accessToken, refreshToken }) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  return fetchJson(`${baseUrl}/api/auth/logout`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ refreshToken }),
+  });
+}
+
+async function selectEmpresa(baseUrl, accessToken, empresaId) {
+  return fetchJson(`${baseUrl}/api/auth/select-empresa`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ empresaId }),
+  });
+}
+
 function buildReadOnlyEndpointSpecs(expectedEmail) {
   return READ_ONLY_ENDPOINT_SPECS.map((spec) => ({
     ...spec,
@@ -295,11 +330,15 @@ export {
   buildReadOnlyEndpointSpecs,
   decodeJwtPayload,
   extractAccessToken,
+  extractRefreshToken,
   extractCount,
   fetchJson,
   login,
+  logout,
   maskEmail,
   normalizeBaseUrl,
   pickKeys,
+  refreshTokens,
+  selectEmpresa,
   assert,
 };
