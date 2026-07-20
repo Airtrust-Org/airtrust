@@ -60,28 +60,31 @@ describe('0437 — setores_gestores gestor_id optional', () => {
     tempDirs.push(tmpDir);
     const dbPath = join(tmpDir, 'test.db');
 
+    // Split into individual calls for maximum sqlite3 version compatibility.
+    // Older sqlite3 binaries (including CI ubuntu-latest) can behave
+    // unpredictably when views, multi-row INSERTs, and PRAGMAs share a batch.
+    runSqlite(dbPath, 'CREATE TABLE empresas (id INTEGER PRIMARY KEY, nome TEXT);');
+    runSqlite(dbPath, "INSERT INTO empresas (id, nome) VALUES (6, 'Costa do Sol');");
+    runSqlite(dbPath, "INSERT INTO empresas (id, nome) VALUES (7, 'Outro Tenant');");
+
     runSqlite(
       dbPath,
-      `
-      PRAGMA foreign_keys = ON;
-
-      CREATE TABLE empresas (id INTEGER PRIMARY KEY, nome TEXT);
-      INSERT INTO empresas (id, nome) VALUES (6, 'Costa do Sol'), (7, 'Outro Tenant');
-
-      CREATE TABLE usuarios (
+      `CREATE TABLE usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         email TEXT,
         perfil TEXT DEFAULT 'GESTOR',
         deleted_at TEXT
-      );
-      INSERT INTO usuarios (id, nome, email, perfil) VALUES
-        (43, 'Gestor 43', 'g43@test', 'GESTOR'),
-        (59, 'Gestor 59', 'g59@test', 'GESTOR'),
-        (63, 'Antonio', 'antonio@test', 'GESTOR'),
-        (100, 'Outro Gestor', 'g100@test', 'GESTOR');
+      );`,
+    );
+    runSqlite(dbPath, "INSERT INTO usuarios (id, nome, email, perfil) VALUES (43, 'Gestor 43', 'g43@test', 'GESTOR');");
+    runSqlite(dbPath, "INSERT INTO usuarios (id, nome, email, perfil) VALUES (59, 'Gestor 59', 'g59@test', 'GESTOR');");
+    runSqlite(dbPath, "INSERT INTO usuarios (id, nome, email, perfil) VALUES (63, 'Antonio', 'antonio@test', 'GESTOR');");
+    runSqlite(dbPath, "INSERT INTO usuarios (id, nome, email, perfil) VALUES (100, 'Outro Gestor', 'g100@test', 'GESTOR');");
 
-      CREATE TABLE setores (
+    runSqlite(
+      dbPath,
+      `CREATE TABLE setores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         codigo TEXT NOT NULL,
         nome TEXT NOT NULL,
@@ -89,34 +92,34 @@ describe('0437 — setores_gestores gestor_id optional', () => {
         ativo INTEGER DEFAULT 1,
         deleted_at TEXT,
         empresa_id INTEGER NOT NULL
-      );
-      INSERT INTO setores (id, codigo, nome, empresa_id) VALUES
-        (10, 'TRI', 'Tripulacao', 6),
-        (11, 'MAN', 'Manutencao', 6),
-        (20, 'TRI7', 'Tripulacao Tenant 7', 7);
+      );`,
+    );
+    runSqlite(dbPath, "INSERT INTO setores (id, codigo, nome, empresa_id) VALUES (10, 'TRI', 'Tripulacao', 6);");
+    runSqlite(dbPath, "INSERT INTO setores (id, codigo, nome, empresa_id) VALUES (11, 'MAN', 'Manutencao', 6);");
+    runSqlite(dbPath, "INSERT INTO setores (id, codigo, nome, empresa_id) VALUES (20, 'TRI7', 'Tripulacao Tenant 7', 7);");
 
-      CREATE TABLE notificacoes_convocacao_cc_gestores (
+    runSqlite(
+      dbPath,
+      `CREATE TABLE notificacoes_convocacao_cc_gestores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         email TEXT,
         cargo TEXT,
         ativo INTEGER DEFAULT 1,
         deleted_at TEXT
+      );`,
+    );
+    for (let i = 1; i <= 10; i++) {
+      runSqlite(
+        dbPath,
+        `INSERT INTO notificacoes_convocacao_cc_gestores (id, nome, email, cargo, ativo) VALUES (${i}, 'Legado ${i}', 'leg${i}@test', 'Manager', 1);`,
       );
-      INSERT INTO notificacoes_convocacao_cc_gestores (id, nome, email, cargo, ativo) VALUES
-        (1, 'Legado 1', 'leg1@test', 'Manager', 1),
-        (2, 'Legado 2', 'leg2@test', 'Manager', 1),
-        (3, 'Legado 3', 'leg3@test', 'Manager', 1),
-        (4, 'Legado 4', 'leg4@test', 'Manager', 1),
-        (5, 'Legado 5', 'leg5@test', 'Manager', 1),
-        (6, 'Legado 6', 'leg6@test', 'Manager', 1),
-        (7, 'Legado 7', 'leg7@test', 'Manager', 1),
-        (8, 'Legado 8', 'leg8@test', 'Manager', 1),
-        (9, 'Legado 9', 'leg9@test', 'Manager', 1),
-        (10, 'Legado 10', 'leg10@test', 'Manager', 1);
+    }
 
-      -- Schema pré-migration idêntico à produção (10 linhas, gestor_id NOT NULL)
-      CREATE TABLE setores_gestores (
+    // Schema pré-migration idêntico à produção (10 linhas, gestor_id NOT NULL)
+    runSqlite(
+      dbPath,
+      `CREATE TABLE setores_gestores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         setor_id INTEGER NOT NULL,
         gestor_id INTEGER NOT NULL,
@@ -130,53 +133,77 @@ describe('0437 — setores_gestores gestor_id optional', () => {
         FOREIGN KEY (setor_id) REFERENCES setores(id),
         FOREIGN KEY (gestor_id) REFERENCES notificacoes_convocacao_cc_gestores(id),
         FOREIGN KEY (empresa_id) REFERENCES empresas(id)
-      );
-
-      CREATE UNIQUE INDEX idx_setores_gestores_unique
-        ON setores_gestores(setor_id, gestor_id, empresa_id)
-        WHERE deleted_at IS NULL;
-      CREATE INDEX idx_setores_gestores_setor
-        ON setores_gestores(setor_id, empresa_id, ativo)
-        WHERE deleted_at IS NULL;
-      CREATE INDEX idx_setores_gestores_gestor
-        ON setores_gestores(gestor_id, empresa_id, ativo)
-        WHERE deleted_at IS NULL;
-      CREATE INDEX idx_setores_gestores_empresa
-        ON setores_gestores(empresa_id)
-        WHERE deleted_at IS NULL;
-      CREATE INDEX idx_setores_gestores_role
-        ON setores_gestores(role, ativo)
-        WHERE deleted_at IS NULL;
-      CREATE INDEX idx_setores_gestores_usuario
-        ON setores_gestores(usuario_id, empresa_id, ativo)
-        WHERE deleted_at IS NULL;
-      CREATE UNIQUE INDEX idx_setores_gestores_usuario_unique
-        ON setores_gestores(setor_id, usuario_id, empresa_id)
-        WHERE deleted_at IS NULL AND usuario_id IS NOT NULL;
-
-      -- 10 linhas simulando produção: todas com gestor_id preenchido,
-      -- algumas com usuario_id, algumas sem
-      INSERT INTO setores_gestores (id, setor_id, gestor_id, empresa_id, role, ativo, deleted_at, usuario_id)
-      VALUES
-        (1, 10, 1, 6, 'manager', 1, NULL, 43),
-        (2, 10, 2, 6, 'manager', 1, NULL, 59),
-        (3, 11, 3, 6, 'manager', 1, NULL, NULL),
-        (4, 10, 4, 6, 'backup', 1, NULL, NULL),
-        (5, 11, 5, 6, 'observer', 1, NULL, NULL),
-        (6, 10, 6, 6, 'manager', 1, NULL, NULL),
-        (7, 10, 7, 6, 'manager', 0, NULL, NULL),
-        (8, 11, 8, 6, 'manager', 1, datetime('now'), NULL),
-        (9, 20, 9, 7, 'manager', 1, NULL, NULL),
-        (10, 20, 10, 7, 'manager', 1, NULL, 100);
-      `,
+      );`,
     );
 
-    // View must be created in a separate call — some sqlite3 versions
-    // reject view DDL in the same batch as the table it references.
     runSqlite(
       dbPath,
-      `
-      CREATE VIEW vw_setores_gestores_ativo AS
+      `CREATE UNIQUE INDEX idx_setores_gestores_unique
+        ON setores_gestores(setor_id, gestor_id, empresa_id)
+        WHERE deleted_at IS NULL;`,
+    );
+    runSqlite(
+      dbPath,
+      `CREATE INDEX idx_setores_gestores_setor
+        ON setores_gestores(setor_id, empresa_id, ativo)
+        WHERE deleted_at IS NULL;`,
+    );
+    runSqlite(
+      dbPath,
+      `CREATE INDEX idx_setores_gestores_gestor
+        ON setores_gestores(gestor_id, empresa_id, ativo)
+        WHERE deleted_at IS NULL;`,
+    );
+    runSqlite(
+      dbPath,
+      `CREATE INDEX idx_setores_gestores_empresa
+        ON setores_gestores(empresa_id)
+        WHERE deleted_at IS NULL;`,
+    );
+    runSqlite(
+      dbPath,
+      `CREATE INDEX idx_setores_gestores_role
+        ON setores_gestores(role, ativo)
+        WHERE deleted_at IS NULL;`,
+    );
+    runSqlite(
+      dbPath,
+      `CREATE INDEX idx_setores_gestores_usuario
+        ON setores_gestores(usuario_id, empresa_id, ativo)
+        WHERE deleted_at IS NULL;`,
+    );
+    runSqlite(
+      dbPath,
+      `CREATE UNIQUE INDEX idx_setores_gestores_usuario_unique
+        ON setores_gestores(setor_id, usuario_id, empresa_id)
+        WHERE deleted_at IS NULL AND usuario_id IS NOT NULL;`,
+    );
+
+    // 10 linhas simulando produção
+    const rows = [
+      [1, 10, 1, 6, 'manager', 1, 'NULL', 43],
+      [2, 10, 2, 6, 'manager', 1, 'NULL', 59],
+      [3, 11, 3, 6, 'manager', 1, 'NULL', 'NULL'],
+      [4, 10, 4, 6, 'backup', 1, 'NULL', 'NULL'],
+      [5, 11, 5, 6, 'observer', 1, 'NULL', 'NULL'],
+      [6, 10, 6, 6, 'manager', 1, 'NULL', 'NULL'],
+      [7, 10, 7, 6, 'manager', 0, 'NULL', 'NULL'],
+      [8, 11, 8, 6, 'manager', 1, "datetime('now')", 'NULL'],
+      [9, 20, 9, 7, 'manager', 1, 'NULL', 'NULL'],
+      [10, 20, 10, 7, 'manager', 1, 'NULL', 100],
+    ];
+    for (const [id, setor_id, gestor_id, empresa_id, role, ativo, deleted_at, usuario_id] of rows) {
+      runSqlite(
+        dbPath,
+        `INSERT INTO setores_gestores (id, setor_id, gestor_id, empresa_id, role, ativo, deleted_at, usuario_id)
+         VALUES (${id}, ${setor_id}, ${gestor_id}, ${empresa_id}, '${role}', ${ativo}, ${deleted_at}, ${usuario_id});`,
+      );
+    }
+
+    // View created separately for cross-version sqlite3 compatibility
+    runSqlite(
+      dbPath,
+      `CREATE VIEW vw_setores_gestores_ativo AS
       SELECT
         sg.id,
         sg.setor_id,
@@ -197,8 +224,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
         AND s.deleted_at IS NULL
         AND s.ativo = 1
         AND g.deleted_at IS NULL
-        AND g.ativo = 1;
-      `,
+        AND g.ativo = 1;`,
     );
 
     return dbPath;
