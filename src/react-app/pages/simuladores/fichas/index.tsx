@@ -160,11 +160,42 @@ const formatarResumoModelos = (modelos: string[]) => {
   return `${modelos.slice(0, 3).join(', ')} e mais ${modelos.length - 3}`;
 };
 
-export function FichasAvaliacaoContent() {
+export type FichasViewMode = 'all' | 'minhas' | 'para-avaliar';
+
+interface FichasAvaliacaoContentProps {
+  /**
+   * 'minhas' — apenas fichas onde o usuário autenticado é o participante
+   *   avaliado (aluno). Sem ações de avaliação/assinatura de instrutor.
+   * 'para-avaliar' — apenas fichas onde o usuário autenticado é o
+   *   instrutor formalmente atribuído. Nunca mostra assinatura como aluno.
+   * 'all' (padrão) — painel completo (admin/gestor), comportamento legado.
+   */
+  mode?: FichasViewMode;
+}
+
+const FICHAS_VIEW_COPY: Record<Exclude<FichasViewMode, 'all'>, { title: string; subtitle: string }> = {
+  minhas: {
+    title: 'Minhas Fichas de Treinamento de Voo',
+    subtitle: 'Consulte e assine suas próprias fichas como participante.',
+  },
+  'para-avaliar': {
+    title: 'Fichas de Treinamento de Voo para Avaliar',
+    subtitle: 'Avalie e assine as fichas dos participantes sob sua instrução.',
+  },
+};
+
+export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentProps = {}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, isGestor, isAluno, isInstrutor } = usePermissions();
   const { user: currentUser } = useAuth();
+  const isMinhasMode = mode === 'minhas';
+  const isParaAvaliarMode = mode === 'para-avaliar';
+  // Nas telas dedicadas ("Minhas Fichas" / "Fichas para Avaliar") as ações de
+  // instrutor (avaliar / assinar instrutor / imprimir ficha modelo) seguem o
+  // papel exercido NESSA lista (identidade por ficha, já garantida pelo
+  // backend), nunca o papel global do usuário.
+  const showInstrutorActions = isMinhasMode ? false : isParaAvaliarMode ? true : !isAluno;
   const sessaoIdParam = searchParams.get('sessao');
   const [fichas, setFichas] = useState<Ficha[]>([]);
   const [instrutores, setInstrutores] = useState<Instrutor[]>([]);
@@ -516,9 +547,16 @@ export function FichasAvaliacaoContent() {
       console.log('[CARREGAR_FICHAS] Iniciando busca...');
 
       // Adicionar timestamp para evitar cache
-      const endpoint = sessaoIdParam
-        ? `${API_BASE_URL}/simuladores/sessoes/${sessaoIdParam}/fichas?t=${new Date().getTime()}`
-        : `${API_BASE_URL}/simuladores/fichas?t=${new Date().getTime()}`;
+      // Telas dedicadas ("Minhas Fichas" / "Fichas para Avaliar") usam
+      // endpoints com contrato próprio: identidade sempre derivada da sessão
+      // autenticada no backend, nunca do papel global do usuário.
+      const endpoint = isMinhasMode
+        ? `${API_BASE_URL}/simuladores/fichas/minhas?t=${new Date().getTime()}`
+        : isParaAvaliarMode
+          ? `${API_BASE_URL}/simuladores/fichas/para-avaliar?t=${new Date().getTime()}`
+          : sessaoIdParam
+            ? `${API_BASE_URL}/simuladores/sessoes/${sessaoIdParam}/fichas?t=${new Date().getTime()}`
+            : `${API_BASE_URL}/simuladores/fichas?t=${new Date().getTime()}`;
 
       const response = await fetch(endpoint, {
         headers: {
@@ -697,8 +735,10 @@ export function FichasAvaliacaoContent() {
     return { pendentes, aguardando, concluidas };
   }, [fichas]);
 
-  const canDeleteFicha = isAdmin || isGestor;
-  const showAlunoSimplificado = isAluno || isInstrutor;
+  // Nas telas dedicadas não há exclusão de fichas (fora de escopo) nem
+  // painel de filtros avançados — layout simplificado sempre.
+  const canDeleteFicha = mode === 'all' && (isAdmin || isGestor);
+  const showAlunoSimplificado = mode !== 'all' || isAluno || isInstrutor;
 
   // Handlers dos modais
   const handleAvaliar = (fichaId: number) => {
@@ -901,7 +941,7 @@ export function FichasAvaliacaoContent() {
 
     return (
       <>
-        {isPendente && !isAluno && isFichaFutura && (
+        {isPendente && showInstrutorActions && isFichaFutura && (
           <button
             type="button"
             disabled
@@ -912,7 +952,7 @@ export function FichasAvaliacaoContent() {
           </button>
         )}
 
-        {isPendente && !isAluno && !isFichaFutura && (
+        {isPendente && showInstrutorActions && !isFichaFutura && (
           <button
             type="button"
             onClick={() => handleAvaliar(ficha.id)}
@@ -923,7 +963,11 @@ export function FichasAvaliacaoContent() {
           </button>
         )}
 
+        {/* "Assinar (Aluno)" nunca aparece na tela "para avaliar": mesmo que a
+            identidade coincida por engano de dados, essa tela é exclusiva do
+            papel de instrutor. */}
         {ficha.status === 'AGUARDANDO_ASSINATURA_ALUNO' &&
+          !isParaAvaliarMode &&
           currentUser?.funcionario_id != null &&
           ficha.colaborador_id_aluno != null &&
           Number(currentUser.funcionario_id) === Number(ficha.colaborador_id_aluno) && (
@@ -937,7 +981,8 @@ export function FichasAvaliacaoContent() {
         )}
 
         {ficha.status === 'AGUARDANDO_ASSINATURA_ALUNO' &&
-          (currentUser?.funcionario_id == null ||
+          (isParaAvaliarMode ||
+            currentUser?.funcionario_id == null ||
             ficha.colaborador_id_aluno == null ||
             Number(currentUser.funcionario_id) !== Number(ficha.colaborador_id_aluno)) && (
           <span className={`${baseActionClass} text-blue-700 bg-blue-50 border border-blue-200 ${compact ? 'flex-1' : ''}`}>
@@ -945,7 +990,7 @@ export function FichasAvaliacaoContent() {
           </span>
         )}
 
-        {ficha.status === 'AGUARDANDO_ASSINATURA_INSTRUTOR' && !isAluno && (
+        {ficha.status === 'AGUARDANDO_ASSINATURA_INSTRUTOR' && showInstrutorActions && (
           <button
             onClick={() => handleAssinar(ficha.id, 'INSTRUTOR')}
             className={`${baseActionClass} bg-purple-600 text-white hover:bg-purple-700 ${compact ? 'flex-1' : ''}`}
@@ -955,7 +1000,7 @@ export function FichasAvaliacaoContent() {
           </button>
         )}
 
-        {isInstrutor && ficha.status === 'AVALIACAO_PENDENTE' && (
+        {showInstrutorActions && ficha.status === 'AVALIACAO_PENDENTE' && (
           <button
             onClick={() => handleGerarFichaModeloDaFicha(ficha.id)}
             disabled={gerandoFichaModeloFichaId === ficha.id}
@@ -999,6 +1044,15 @@ export function FichasAvaliacaoContent() {
   return (
     <>
       <div className="space-y-4 animate-fade-in-up">
+        {mode !== 'all' && (
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">
+              {FICHAS_VIEW_COPY[mode].title}
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">{FICHAS_VIEW_COPY[mode].subtitle}</p>
+          </div>
+        )}
+
         {/* Busca e Filtros */}
         {!showAlunoSimplificado && (
           <SimuladoresCard className="p-4">
@@ -1231,7 +1285,11 @@ export function FichasAvaliacaoContent() {
             <p className="text-gray-500 text-sm max-w-sm mx-auto">
               {busca || filtroStatus || filtroInstrutor
                 ? 'Tente ajustar os filtros para encontrar o que procura'
-                : 'As fichas aparecerão aqui quando as sessões forem criadas'}
+                : isMinhasMode
+                  ? 'Você ainda não possui fichas de treinamento de voo como participante.'
+                  : isParaAvaliarMode
+                    ? 'Nenhuma ficha de treinamento de voo aguardando sua avaliação como instrutor.'
+                    : 'As fichas aparecerão aqui quando as sessões forem criadas'}
             </p>
           </SimuladoresCard>
         ) : (

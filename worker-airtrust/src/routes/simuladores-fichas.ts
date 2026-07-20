@@ -306,6 +306,154 @@ async function criarNotificacaoFicha(
 // FICHAS — Listagem e criação
 // ==========================================================================
 
+/**
+ * SELECT/JOIN base compartilhado pelas rotas de listagem de fichas
+ * (GET /fichas, GET /fichas/minhas, GET /fichas/para-avaliar).
+ * Mantém a mesma projeção de status derivado e metadados de sessão.
+ */
+const FICHAS_LIST_BASE_QUERY = `
+      SELECT
+        f.*,
+        CASE
+          WHEN f.assinatura_instrutor_timestamp IS NOT NULL THEN
+            CASE
+              WHEN f.resultado_final = 'REPROVADO' THEN 'NAO_APROVADO'
+              WHEN f.resultado_final = 'APROVADO' THEN 'APROVADO'
+              WHEN f.aprovado = 0 AND f.resultado_final != 'PENDENTE' THEN 'NAO_APROVADO'
+              WHEN f.aprovado = 1 THEN 'APROVADO'
+              ELSE 'APROVADO'
+            END
+          WHEN f.assinatura_aluno_timestamp IS NOT NULL THEN 'AGUARDANDO_ASSINATURA_INSTRUTOR'
+          WHEN f.status IN ('AGUARDANDO_ASSINATURA_ALUNO', 'AGUARDANDO_ASSINATURA_INSTRUTOR', 'AVALIACAO_PENDENTE', 'APROVADO', 'NAO_APROVADO') THEN f.status
+          WHEN f.status IN ('AGUARDANDO_ASSINATURAS', 'AVALIADA') THEN 'AGUARDANDO_ASSINATURA_ALUNO'
+          WHEN f.status IN ('ASSINADA_ALUNO') THEN 'AGUARDANDO_ASSINATURA_INSTRUTOR'
+          WHEN f.status IN ('ASSINADA_TOTAL', 'APROVADA', 'CONCLUIDA') THEN
+            CASE
+              WHEN f.resultado_final = 'REPROVADO' THEN 'NAO_APROVADO'
+              WHEN f.resultado_final = 'APROVADO' THEN 'APROVADO'
+              WHEN f.aprovado = 0 AND f.resultado_final != 'PENDENTE' THEN 'NAO_APROVADO'
+              WHEN f.aprovado = 1 THEN 'APROVADO'
+              ELSE 'APROVADO'
+            END
+          ELSE 'AVALIACAO_PENDENTE'
+        END as status,
+        COALESCE(sa.data, f.data_sessao) || ' ' || COALESCE(sa.hora_inicio, '') as data_hora,
+        sa.data as data_sessao,
+        sa.hora_inicio,
+        sa.hora_fim,
+        COALESCE(mf.nome, sa.nome, m.nome, t.tema, f.tipo_sessao, 'Sessão') as sessao_titulo,
+        COALESCE(mf.nome, sa.nome, m.nome, t.tema) as sessao_modelo,
+        COALESCE(sa.tipo_sessao, f.tipo_sessao, 'N/A') as simulador_codigo,
+        COALESCE(sim.nome, sim.tipo, 'N/A') as simulador_nome,
+        COALESCE(aluno.nome, 'N/A') as participante_nome,
+        COALESCE(aluno.codigo_anac, '') as aluno_codigo_anac,
+        COALESCE(instrutor.nome, 'N/A') as instrutor_nome
+      FROM fichas_sessao f
+      LEFT JOIN simulador_agendamentos sa ON f.agendamento_slot_id = sa.id
+      LEFT JOIN modelos_sessao m ON sa.tipo_sessao = m.codigo
+      LEFT JOIN modelos_sessao mf ON f.tipo_sessao = mf.codigo AND mf.deleted_at IS NULL
+      LEFT JOIN sessoes_template t ON f.template_id = t.id
+      LEFT JOIN simuladores sim ON sa.simulador_id = sim.id
+      LEFT JOIN funcionarios aluno ON f.colaborador_id_aluno = aluno.id
+      LEFT JOIN funcionarios instrutor ON f.instrutor_id = instrutor.id
+      WHERE f.deleted_at IS NULL
+        AND f.empresa_id = ?
+        AND aluno.empresa_id = ?
+        AND (sa.id IS NULL OR sa.empresa_id = ?)
+`;
+
+/**
+ * GET /fichas/minhas
+ *
+ * Fichas onde o usuário autenticado é o ALUNO/PARTICIPANTE avaliado
+ * (colaborador_id_aluno). Identidade é sempre derivada da sessão
+ * autenticada (usuarios -> funcionarios), nunca de um funcionario_id
+ * enviado pelo cliente. Não existe fallback global por role: um
+ * admin/gestor sem vínculo funcional não vê nada aqui.
+ */
+app.get('/fichas/minhas', async (c) => {
+  try {
+    const ctx = c as unknown as { get: (k: string) => unknown };
+    const userId = String(ctx.get('userId') || '');
+    const empresaId = String(ctx.get('empresaId') || '');
+    const tenantEmpresaId = getEmpresaId(c);
+
+    const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
+    if (!funcId) return c.json({ success: true, data: [] });
+
+    const statusFilter = c.req.query('status') || '';
+
+    let q = `${FICHAS_LIST_BASE_QUERY} AND f.colaborador_id_aluno = ?`;
+    const params: (string | number)[] = [
+      tenantEmpresaId,
+      tenantEmpresaId,
+      tenantEmpresaId,
+      funcId,
+    ];
+
+    if (statusFilter) {
+      q += ' AND f.status=?';
+      params.push(statusFilter);
+    }
+    q += ' ORDER BY f.created_at DESC';
+
+    const r = await c.env.DB.prepare(q)
+      .bind(...params)
+      .all();
+
+    return c.json({ success: true, data: r.results || [] });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+    return c.json({ success: false, error: msg }, 500);
+  }
+});
+
+/**
+ * GET /fichas/para-avaliar
+ *
+ * Fichas onde o usuário autenticado é o INSTRUTOR formalmente atribuído
+ * (instrutor_id). Nunca inclui fichas onde o usuário é apenas o aluno,
+ * mesmo quando o mesmo funcionário acumula os dois papéis em fichas
+ * diferentes. Sem fallback global por role (admin/gestor sem vínculo
+ * funcional não vê nada).
+ */
+app.get('/fichas/para-avaliar', async (c) => {
+  try {
+    const ctx = c as unknown as { get: (k: string) => unknown };
+    const userId = String(ctx.get('userId') || '');
+    const empresaId = String(ctx.get('empresaId') || '');
+    const tenantEmpresaId = getEmpresaId(c);
+
+    const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
+    if (!funcId) return c.json({ success: true, data: [] });
+
+    const statusFilter = c.req.query('status') || '';
+
+    let q = `${FICHAS_LIST_BASE_QUERY} AND f.instrutor_id = ?`;
+    const params: (string | number)[] = [
+      tenantEmpresaId,
+      tenantEmpresaId,
+      tenantEmpresaId,
+      funcId,
+    ];
+
+    if (statusFilter) {
+      q += ' AND f.status=?';
+      params.push(statusFilter);
+    }
+    q += ' ORDER BY f.created_at DESC';
+
+    const r = await c.env.DB.prepare(q)
+      .bind(...params)
+      .all();
+
+    return c.json({ success: true, data: r.results || [] });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+    return c.json({ success: false, error: msg }, 500);
+  }
+});
+
 app.get('/fichas', async (c) => {
   try {
     const ctx = c as unknown as { get: (k: string) => unknown };

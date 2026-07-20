@@ -474,7 +474,7 @@ const BackupRestorePage = () => {
                   <div className="font-medium text-neutral-600 mb-1">Conteúdo:</div>
                   <ul className="space-y-1 text-neutral-800">
                     <li>• {previewDados.resumo.funcionarios} funcionários</li>
-                    <li>• {previewDados.resumo.fichas_simulador} fichas de simulador</li>
+                    <li>• {previewDados.resumo.fichas_simulador} fichas de treinamento de voo</li>
                     <li>• {previewDados.resumo.treinamentos} treinamentos</li>
                   </ul>
                 </div>
