@@ -468,3 +468,27 @@ describe('isControleVoosShadowModeEnabledForEmpresa', () => {
     expect(isControleVoosShadowModeEnabledForEmpresa(47, enabledEnv)).toBe(true);
   });
 });
+
+describe('Controle de Voos / SIGVOOS import architecture boundary', () => {
+  it('never lets the Controle de Voos read model or the SIGVOOS importer depend on the legacy direct SIGVOOS-to-FRMS sync service', () => {
+    // Required architecture: SIGVOOS/SIGI -> Controle de Voos -> FRMS. The files
+    // below must stay free of a direct dependency on the legacy sync service that
+    // still writes frms_jornada straight from SIGVOOS (services/sigvoos-frms.ts),
+    // otherwise the two pipelines merge and tenant/identity guarantees built into
+    // Controle de Voos stop applying to what FRMS actually reads.
+    const guardedFiles = [
+      join(testDir, '../../lib/frms/controle-voos-source.ts'),
+      join(testDir, '../../lib/frms/controle-voos-shadow-comparator.ts'),
+      join(testDir, '../../lib/frms/controle-voos-shadow-flag.ts'),
+      join(testDir, '../../services/controle-voos/sigvoos-importer.ts'),
+      join(testDir, '../../services/controle-voos/controle-voos-jornadas.ts'),
+    ];
+
+    for (const filePath of guardedFiles) {
+      const source = readFileSync(filePath, 'utf8');
+      expect(source).not.toMatch(/from ['"].*services\/sigvoos-frms['"]/);
+      expect(source).not.toMatch(/from ['"].*routes\/frms['"]/);
+      expect(source).not.toMatch(/from ['"].*routes\/frms-fira['"]/);
+    }
+  });
+});
