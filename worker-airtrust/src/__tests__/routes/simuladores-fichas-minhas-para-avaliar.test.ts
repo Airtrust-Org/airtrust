@@ -75,6 +75,18 @@ const USER_TO_FUNCIONARIO = new Map<number, number | null>([
   [102, 10], // aluno puro
   [103, 30], // outro instrutor
   [104, null], // usuário sem vínculo (admin/gestor incluso)
+  [105, 10], // aluno com GRANT individual de simuladores.evaluate
+  [106, 20], // instrutor com DENY individual de simuladores.evaluate
+]);
+
+/**
+ * userId -> override individual de 'simuladores.evaluate' na tabela
+ * usuario_permissoes (mesmo mecanismo usado no login, ver auth.ts).
+ * Ausente = sem override (cai no default de role).
+ */
+const PERMISSION_OVERRIDES = new Map<number, 'GRANT' | 'DENY'>([
+  [105, 'GRANT'], // aluno explicitamente autorizado a avaliar
+  [106, 'DENY'], // instrutor explicitamente proibido de avaliar
 ]);
 
 function createDb() {
@@ -90,6 +102,13 @@ function createDb() {
           return null;
         },
         all: async () => {
+          if (query.includes('FROM usuario_permissoes')) {
+            const userId = Number(args[0]);
+            const permissao = String(args[1]);
+            if (permissao !== 'simuladores.evaluate') return { results: [] };
+            const tipo = PERMISSION_OVERRIDES.get(userId);
+            return { results: tipo ? [{ tipo }] : [] };
+          }
           if (query.includes('FROM fichas_sessao f') && query.includes('ORDER BY f.created_at DESC')) {
             const tenantEmpresaId = Number(args[0]);
             const isMinhas = query.includes('AND f.colaborador_id_aluno = ?');
@@ -142,6 +161,14 @@ function callParaAvaliar(env: Partial<Env> & Record<string, unknown>) {
   );
 }
 
+function callLegacyFichas(env: Partial<Env> & Record<string, unknown>) {
+  return simuladoresFichasRoutes.fetch(
+    new Request('http://localhost/fichas'),
+    { DB: createDb(), ...env } as unknown as Env,
+    {} as ExecutionContext,
+  );
+}
+
 describe('GET /fichas/minhas — identidade de participante', () => {
   it('instrutor que também é aluno vê apenas a ficha onde é o aluno (ficha A)', async () => {
     const resp = await callMinhas({ __mockEmpresaId: 6, __mockUserId: 101, __mockRole: 'instrutor' });
@@ -180,18 +207,46 @@ describe('GET /fichas/minhas — identidade de participante', () => {
   });
 });
 
-describe('GET /fichas/para-avaliar — identidade de instrutor atribuído', () => {
+describe('GET /fichas/para-avaliar — capability precondition (simuladores.evaluate)', () => {
+  it('aluno (sem capability) recebe 403 INSTRUCTOR_EVALUATION_FORBIDDEN — nunca 200 com lista vazia', async () => {
+    const resp = await callParaAvaliar({ __mockEmpresaId: 6, __mockUserId: 102, __mockRole: 'aluno' });
+    expect(resp.status).toBe(403);
+    const body = (await resp.json()) as { success: boolean; code: string };
+    expect(body.success).toBe(false);
+    expect(body.code).toBe('INSTRUCTOR_EVALUATION_FORBIDDEN');
+  });
+
+  it('admin/gestor sem override de capability recebe 403 (sem fallback global de role)', async () => {
+    const resp = await callParaAvaliar({ __mockEmpresaId: 6, __mockUserId: 104, __mockRole: 'admin' });
+    expect(resp.status).toBe(403);
+    const body = (await resp.json()) as { success: boolean; code: string };
+    expect(body.code).toBe('INSTRUCTOR_EVALUATION_FORBIDDEN');
+  });
+
+  it('instrutor com DENY individual explícito recebe 403, mesmo tendo instrutor_id em uma ficha real', async () => {
+    // userId 106 -> funcionario 20 (instrutor da ficha B), mas tem DENY explícito
+    const resp = await callParaAvaliar({ __mockEmpresaId: 6, __mockUserId: 106, __mockRole: 'instrutor' });
+    expect(resp.status).toBe(403);
+    const body = (await resp.json()) as { success: boolean; code: string };
+    expect(body.code).toBe('INSTRUCTOR_EVALUATION_FORBIDDEN');
+  });
+
+  it('aluno com GRANT individual de simuladores.evaluate passa a capability, mas ainda filtra por instrutor_id (sem fichas atribuídas → lista vazia, não 403)', async () => {
+    // userId 105 -> funcionario 10 (aluno da ficha B, nunca instrutor de nada)
+    const resp = await callParaAvaliar({ __mockEmpresaId: 6, __mockUserId: 105, __mockRole: 'aluno' });
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { success: boolean; data: unknown[] };
+    expect(body.success).toBe(true);
+    expect(body.data).toEqual([]);
+  });
+});
+
+describe('GET /fichas/para-avaliar — identidade de instrutor atribuído (com capability)', () => {
   it('instrutor que também é aluno vê apenas a ficha onde é o instrutor (ficha B), nunca a A', async () => {
     const resp = await callParaAvaliar({ __mockEmpresaId: 6, __mockUserId: 101, __mockRole: 'instrutor' });
     expect(resp.status).toBe(200);
     const body = (await resp.json()) as { success: boolean; data: Array<{ id: number }> };
     expect(body.data.map((f) => f.id)).toEqual([2]);
-  });
-
-  it('aluno puro (sem papel de instrutor em nenhuma ficha) não vê nada', async () => {
-    const resp = await callParaAvaliar({ __mockEmpresaId: 6, __mockUserId: 102, __mockRole: 'aluno' });
-    const body = (await resp.json()) as { success: boolean; data: unknown[] };
-    expect(body.data).toEqual([]);
   });
 
   it('instrutor vê apenas as fichas onde ele é o instrutor atribuído (ficha A), nunca as de outro instrutor', async () => {
@@ -200,8 +255,9 @@ describe('GET /fichas/para-avaliar — identidade de instrutor atribuído', () =
     expect(body.data.map((f) => f.id)).toEqual([1]);
   });
 
-  it('usuário sem funcionario_id recebe lista vazia, mesmo sendo admin/gestor (sem fallback global)', async () => {
-    const resp = await callParaAvaliar({ __mockEmpresaId: 6, __mockUserId: 104, __mockRole: 'admin' });
+  it('instrutor sem nenhuma ficha atribuída (mas com capability) recebe lista vazia, não 403', async () => {
+    // userId 103 -> funcionario 30, sem fichas no tenant 7 (só tem a D lá, mas tenant ativo é 6)
+    const resp = await callParaAvaliar({ __mockEmpresaId: 7, __mockUserId: 999, __mockRole: 'instrutor' });
     expect(resp.status).toBe(200);
     const body = (await resp.json()) as { success: boolean; data: unknown[] };
     expect(body.success).toBe(true);
@@ -213,5 +269,38 @@ describe('GET /fichas/para-avaliar — identidade de instrutor atribuído', () =
     const body = (await resp.json()) as { success: boolean; data: Array<{ id: number }> };
     // Instrutor 30 (userId 103) atua na ficha D, mas essa é do tenant 7 — não deve aparecer no tenant 6
     expect(body.data.every((f) => f.id !== 4)).toBe(true);
+  });
+});
+
+describe('GET /fichas — endpoint legado (fechamento para não-administrativos)', () => {
+  it('instrutor não-admin recebe 403 LEGACY_FICHAS_LIST_FORBIDDEN, nunca a lista mesclada instrutor_id OR colaborador_id_aluno', async () => {
+    const resp = await callLegacyFichas({ __mockEmpresaId: 6, __mockUserId: 101, __mockRole: 'instrutor' });
+    expect(resp.status).toBe(403);
+    const body = (await resp.json()) as { success: boolean; code: string };
+    expect(body.success).toBe(false);
+    expect(body.code).toBe('LEGACY_FICHAS_LIST_FORBIDDEN');
+  });
+
+  it('aluno não-admin recebe 403 no endpoint legado', async () => {
+    const resp = await callLegacyFichas({ __mockEmpresaId: 6, __mockUserId: 102, __mockRole: 'aluno' });
+    expect(resp.status).toBe(403);
+    const body = (await resp.json()) as { success: boolean; code: string };
+    expect(body.code).toBe('LEGACY_FICHAS_LIST_FORBIDDEN');
+  });
+
+  it('admin/gestor (escopo administrativo formal) continua funcionando — único consumidor legítimo restante', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({ mode: 'all', setorIds: [], funcionarioId: null });
+    const resp = await callLegacyFichas({ __mockEmpresaId: 6, __mockUserId: 104, __mockRole: 'admin' });
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { success: boolean };
+    expect(body.success).toBe(true);
+  });
+
+  it('gestor (escopo administrativo formal) continua funcionando', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({ mode: 'all', setorIds: [], funcionarioId: null });
+    const resp = await callLegacyFichas({ __mockEmpresaId: 6, __mockUserId: 104, __mockRole: 'gestor' });
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { success: boolean };
+    expect(body.success).toBe(true);
   });
 });
