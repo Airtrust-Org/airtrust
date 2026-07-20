@@ -78,7 +78,13 @@ function data(response, label, status = 200) {
   return response.json.data;
 }
 async function tokenFor(email, password) {
-  return extractAccessToken(await login(API, email, password));
+  try {
+    return extractAccessToken(await login(API, email, password));
+  } catch (error) {
+    fail(
+      `login failed for ${String(email).replace(/^(.).+(@.*)$/, '$1***$2')}: ${safeError(error)}`,
+    );
+  }
 }
 async function versionGuard() {
   const version = await fetchJson(`${API}/api/version`);
@@ -159,6 +165,15 @@ async function createUser(admin, employee, profile, sectorIds = []) {
     }),
     `set ${profile} password`,
   );
+  // Admin create leaves active=0 (invite-pending). Password reset alone does not
+  // activate; login requires active=1. Use the existing admin update contract.
+  data(
+    await request(`/api/admin/usuarios/${created.id}`, admin, {
+      method: 'PUT',
+      body: { active: true, ...(sectorIds.length ? { setor_ids: sectorIds } : {}) },
+    }),
+    `activate ${profile} user`,
+  );
   state.ids.users.push(Number(created.id));
   return { email, password };
 }
@@ -179,6 +194,13 @@ async function createUserWithoutEmployee(admin) {
       body: { nova_senha: password },
     }),
     'set no-employee password',
+  );
+  data(
+    await request(`/api/admin/usuarios/${created.id}`, admin, {
+      method: 'PUT',
+      body: { active: true },
+    }),
+    'activate no-employee user',
   );
   state.ids.users.push(Number(created.id));
   return { email, password };
@@ -417,6 +439,7 @@ async function cleanup(admin) {
 }
 async function main() {
   let admin;
+  let fatalError = null;
   try {
     ok(process.env.QA_ADMIN_EMAIL && process.env.QA_ADMIN_PASSWORD, 'QA secrets unavailable');
     ok(
@@ -428,7 +451,7 @@ async function main() {
     await runFichas(admin);
     await runLms(admin);
   } catch (error) {
-    writeSummary(error);
+    fatalError = error;
     throw error;
   } finally {
     if (admin) {
@@ -438,7 +461,7 @@ async function main() {
         state.cleanup = `FAILED: ${safeError(error)}`;
       }
     }
-    writeSummary();
+    writeSummary(fatalError);
   }
   ok(state.cleanup === 'PASS', `cleanup failed: ${state.cleanup}`);
 }
