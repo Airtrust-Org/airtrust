@@ -42,6 +42,27 @@ function rollbackSql(): string {
   );
 }
 
+/**
+ * Applies the migration in two batches for maximum sqlite3 cross-version
+ * compatibility. Some CI sqlite3 binaries (notably ubuntu-latest) reject
+ * CREATE VIEW in the same batch as a DROP + RENAME of the referenced table.
+ */
+function applyMigration(dbPath: string): void {
+  const sql = migrationSql();
+  // Split at the view rebuild boundary: everything before DROP VIEW is batch 1,
+  // DROP VIEW + CREATE VIEW + PRAGMA ON is batch 2.
+  const viewMarker = 'DROP VIEW IF EXISTS vw_setores_gestores_ativo;';
+  const idx = sql.indexOf(viewMarker);
+  if (idx === -1) {
+    runSqlite(dbPath, sql);
+    return;
+  }
+  const batch1 = sql.slice(0, idx).trim();
+  const batch2 = sql.slice(idx).trim();
+  if (batch1) runSqlite(dbPath, batch1);
+  if (batch2) runSqlite(dbPath, batch2);
+}
+
 describe('0437 — setores_gestores gestor_id optional', () => {
   const tempDirs: string[] = [];
 
@@ -248,7 +269,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
     const beforeCount = scalar(dbPath, 'SELECT COUNT(*) FROM setores_gestores;');
     expect(beforeCount).toBe('10');
 
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     const afterCount = scalar(dbPath, 'SELECT COUNT(*) FROM setores_gestores;');
     expect(afterCount).toBe('10');
@@ -263,7 +284,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
       'SELECT id, setor_id, gestor_id, empresa_id, role, ativo, COALESCE(deleted_at, "NULL"), COALESCE(usuario_id, "NULL") FROM setores_gestores ORDER BY id;',
     );
 
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     const after = rows(
       dbPath,
@@ -275,14 +296,14 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('passa PRAGMA integrity_check após migration', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
     const integrity = scalar(dbPath, 'PRAGMA integrity_check;');
     expect(integrity).toBe('ok');
   });
 
   it('passa PRAGMA foreign_key_check após migration', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
     const fkCheck = runSqlite(dbPath, 'PRAGMA foreign_key_check;').trim();
     expect(fkCheck).toBe('');
   });
@@ -293,7 +314,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('aceita gestor_id NULL com usuario_id preenchido (caminho moderno)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Este é exatamente o caso do Antônio que falhou em produção
     runSqlite(
@@ -311,7 +332,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('rejeita ambos NULL (CHECK constraint)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     expect(() => {
       runSqlite(
@@ -324,7 +345,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('rejeita vínculo duplicado ativo por gestor_id (índice legado)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Linha 1 já tem (setor_id=10, gestor_id=1, empresa_id=6)
     expect(() => {
@@ -338,7 +359,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('rejeita vínculo duplicado ativo por usuario_id (índice moderno)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Insere um moderno primeiro
     runSqlite(
@@ -359,7 +380,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('permite novo vínculo após soft delete (mesmo usuario_id)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Insere e soft-deleta
     runSqlite(
@@ -389,7 +410,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('isola vínculos por empresa (índice tenant-safe)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Mesmo usuario_id=63 existe no tenant 6
     runSqlite(
@@ -423,7 +444,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('view inclui gestor moderno (usuario_id-only) após migration', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Insere gestor moderno
     runSqlite(
@@ -439,7 +460,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('view inclui gestores legados (gestor_id) após migration', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Linhas legadas com gestor_id devem continuar visíveis
     const viewRows = rows(dbPath, "SELECT id FROM vw_setores_gestores_ativo WHERE gestor_id IS NOT NULL;");
@@ -462,7 +483,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
     );
 
     // Aplica migration
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Verifica que migration foi aplicada (gestor_id agora é opcional)
     const colInfo = runSqlite(
@@ -491,7 +512,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('rollback não tem CHECK constraint residual', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
     runSqlite(dbPath, rollbackSql());
 
     // Deve rejeitar gestor_id NULL (NOT NULL voltou)
