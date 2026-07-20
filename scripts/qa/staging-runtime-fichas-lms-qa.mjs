@@ -95,7 +95,7 @@ async function currentEmpresaId(token, label) {
 async function createSector(admin, code, name) {
   const result = await request('/api/setores', admin, {
     method: 'POST',
-    body: { codigo: code, nome },
+    body: { codigo: code, nome: name },
   });
   const row = data(result, `create sector ${code}`, 201);
   state.ids.sectors.push(Number(row.id));
