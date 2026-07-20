@@ -59,22 +59,19 @@ function createDb() {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          const userId = String(args[0] ?? '');
+
           if (query.includes('FROM fichas_sessao') && (query.includes('fs.id = ?') || query.includes('fs.id=?'))) {
-            // Simula getFichaWithInstructorMeta: retorna ficha válida
-            if (args[1] === '999') return null; // ficha não encontrada
+            if (args[1] === '999') return null;
             return fichaRow;
           }
           if (query.includes('SELECT f.id FROM usuarios')) {
-            const userId = String(args[0] ?? '');
-            // userId 101 = usuário com funcionario_id = 20 (instrutor)
-            // userId 201 = usuário com funcionario_id = 10 (aluno)
-            // userId 301 = usuário sem funcionario
-            if (userId === '101') return { id: '20' }; // instrutor
-            if (userId === '201') return { id: '10' }; // aluno
-            return null; // sem vínculo
+            if (userId === '101') return { id: '20' };
+            if (userId === '201') return { id: '10' };
+            return null;
           }
           if (query.includes('COUNT(1) as total') && query.includes('fichas_sessao_manobras')) {
-            return { total: 5 }; // tem manobras
+            return { total: 5 };
           }
           if (query.includes('FROM funcionarios') && query.includes('JOIN usuarios')) {
             if (userId === '101') return { userId: 101, nome: 'Instrutor Teste' };
@@ -122,7 +119,7 @@ describe('POST /fichas/:id/assinar — student signature ownership', () => {
     );
 
     expect(response.status).toBe(403);
-    const body = await response.json();
+    const body = (await response.json()) as { success: boolean; code?: string; error?: string };
     expect(body.success).toBe(false);
     expect(body.code).toBe('STUDENT_SIGNATURE_FORBIDDEN');
   });
@@ -157,7 +154,7 @@ describe('POST /fichas/:id/assinar — student signature ownership', () => {
     );
 
     expect(response.status).toBe(403);
-    const body = await response.json();
+    const body = (await response.json()) as { success: boolean };
     expect(body.success).toBe(false);
   });
 
