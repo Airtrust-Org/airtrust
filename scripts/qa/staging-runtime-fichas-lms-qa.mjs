@@ -168,46 +168,12 @@ async function createUserWithoutEmployee(admin) {
   state.ids.users.push(Number(created.id));
   return { email, password };
 }
-async function createOtherTenantUser(admin) {
-  const company = data(
-    await request('/api/empresas', admin, {
-      method: 'POST',
-      body: {
-        nome: `${prefix} Outro Tenant`,
-        codigo: `qa${String(process.env.GITHUB_RUN_ID || '0').slice(-12)}`,
-        plano: 'basic',
-        max_funcionarios: 5,
-        max_storage_mb: 10,
-      },
-    }),
-    'create other tenant',
-    201,
-  );
-  state.ids.company = Number(company.id);
-  const email = `${prefix.toLowerCase()}-other-tenant@example.invalid`;
-  const created = data(
-    await request('/api/admin/usuarios', admin, {
-      method: 'POST',
-      body: {
-        email,
-        nome: `${prefix} Outro Tenant`,
-        perfil: 'ALUNO',
-        funcionario_id: null,
-        empresa_id: state.ids.company,
-      },
-    }),
-    'create other-tenant user',
-    201,
-  );
-  const password = crypto.randomBytes(24).toString('base64url');
-  data(
-    await request(`/api/admin/usuarios/${created.id}/reset-senha`, admin, {
-      method: 'PATCH',
-      body: { nova_senha: password },
-    }),
-    'set other-tenant password',
-  );
-  state.ids.users.push(Number(created.id));
+async function resolveOtherTenantUser() {
+  const email = String(process.env.STAGING_SMOKE_EMAIL || '').trim();
+  const password = String(process.env.STAGING_SMOKE_PASSWORD || '');
+  ok(email && password, 'STAGING_SMOKE_EMAIL/PASSWORD required for cross-tenant checks');
+  // Never create a second empresa here: POST /api/empresas is system-admin only.
+  // Reuse the pre-seeded staging smoke tenant (same pattern as examiner H_cross_tenant).
   return { email, password };
 }
 async function createFicha(admin, aluno, instrutor, label) {
@@ -235,6 +201,7 @@ function ids(rows) {
   return new Set(rows.map((row) => Number(row.id)));
 }
 async function runFichas(admin) {
+  state.empresa_id = await currentEmpresaId(admin, 'primary');
   const ops = await createSector(admin, `${prefix}-OPS`, `${prefix} Operações`);
   const maintenance = await createSector(admin, `${prefix}-MNT`, `${prefix} Manutenção`);
   const common = await createEmployee(admin, `${prefix} Aluno`, ops, 1);
@@ -254,7 +221,7 @@ async function runFichas(admin) {
   const managerEmployee = await createEmployee(admin, `${prefix} Gestor`, ops, 6);
   const managerUser = await createUser(admin, managerEmployee, 'GESTOR', [ops]);
   const noEmployeeUser = await createUserWithoutEmployee(admin);
-  const otherTenantUser = await createOtherTenantUser(admin);
+  const otherTenantUser = await resolveOtherTenantUser();
   const fichaA = await createFicha(admin, instructorStudent, instructorOne, 'A');
   const fichaB = await createFicha(admin, common, instructorStudent, 'B');
   const fichaC = await createFicha(admin, thirdStudent, instructorTwo, 'C');
@@ -264,8 +231,11 @@ async function runFichas(admin) {
   const managerToken = await tokenFor(managerUser.email, managerUser.password);
   const noEmployeeToken = await tokenFor(noEmployeeUser.email, noEmployeeUser.password);
   const otherTenantToken = await tokenFor(otherTenantUser.email, otherTenantUser.password);
-  state.empresa_id = await currentEmpresaId(admin, 'primary');
   state.other_empresa_id = await currentEmpresaId(otherTenantToken, 'other');
+  ok(
+    state.other_empresa_id !== state.empresa_id,
+    'foreign smoke tenant must differ from QA primary tenant',
+  );
   runtime.managerToken = managerToken;
   runtime.otherTenantToken = otherTenantToken;
   const commonOwn = ids(await list(commonToken, 'minhas'));
@@ -434,6 +404,10 @@ async function main() {
   let admin;
   try {
     ok(process.env.QA_ADMIN_EMAIL && process.env.QA_ADMIN_PASSWORD, 'QA secrets unavailable');
+    ok(
+      process.env.STAGING_SMOKE_EMAIL && process.env.STAGING_SMOKE_PASSWORD,
+      'STAGING_SMOKE secrets unavailable',
+    );
     await versionGuard();
     admin = await tokenFor(process.env.QA_ADMIN_EMAIL, process.env.QA_ADMIN_PASSWORD);
     await runFichas(admin);
