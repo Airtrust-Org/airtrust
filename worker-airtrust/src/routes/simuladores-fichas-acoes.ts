@@ -346,7 +346,11 @@ app.post('/fichas/:id/assinar', async (c) => {
       if (!funcId) return c.json({ success: false, error: 'Usuário sem vínculo funcional' }, 403);
 
       if (b.tipo === 'ALUNO' && String(f.colaborador_id_aluno) !== String(funcId)) {
-        return c.json({ success: false, error: 'Você não é o aluno desta ficha' }, 403);
+        return c.json({
+          success: false,
+          code: 'STUDENT_SIGNATURE_FORBIDDEN',
+          error: 'Apenas o aluno avaliado pode assinar como aluno',
+        }, 403);
       }
       // Para assinar como INSTRUTOR: deve ser o instrutor da ficha
       // (mesmo que também seja aluno em outra ficha, aqui o papel é de instrutor)
