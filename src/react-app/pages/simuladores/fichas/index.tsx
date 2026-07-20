@@ -13,6 +13,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useAuth } from '@/react-app/hooks/useAuth';
 import AppLayout from '@/react-app/components/AppLayout';
 import {
   CalendarDays,
@@ -59,6 +60,7 @@ interface Ficha {
   agendamento_slot_id?: number; // sessao_id
   participante_nome: string;
   participante_funcao: 'PIC' | 'SIC' | 'OBS' | 'PF' | 'PM';
+  colaborador_id_aluno?: number;
   aluno_matricula?: string;
   aluno_codigo_anac?: string;
   simulador_codigo: string;
@@ -162,6 +164,7 @@ export function FichasAvaliacaoContent() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, isGestor, isAluno, isInstrutor } = usePermissions();
+  const { user: currentUser } = useAuth();
   const sessaoIdParam = searchParams.get('sessao');
   const [fichas, setFichas] = useState<Ficha[]>([]);
   const [instrutores, setInstrutores] = useState<Instrutor[]>([]);
@@ -920,7 +923,10 @@ export function FichasAvaliacaoContent() {
           </button>
         )}
 
-        {ficha.status === 'AGUARDANDO_ASSINATURA_ALUNO' && (
+        {ficha.status === 'AGUARDANDO_ASSINATURA_ALUNO' &&
+          currentUser?.funcionario_id != null &&
+          ficha.colaborador_id_aluno != null &&
+          Number(currentUser.funcionario_id) === Number(ficha.colaborador_id_aluno) && (
           <button
             onClick={() => handleAssinar(ficha.id, 'TRIPULANTE')}
             className={`${baseActionClass} bg-primary text-white hover:bg-primary/90 ${compact ? 'flex-1' : ''}`}
@@ -928,6 +934,15 @@ export function FichasAvaliacaoContent() {
             <PenTool size={14} />
             Assinar (Aluno)
           </button>
+        )}
+
+        {ficha.status === 'AGUARDANDO_ASSINATURA_ALUNO' &&
+          (currentUser?.funcionario_id == null ||
+            ficha.colaborador_id_aluno == null ||
+            Number(currentUser.funcionario_id) !== Number(ficha.colaborador_id_aluno)) && (
+          <span className={`${baseActionClass} text-blue-700 bg-blue-50 border border-blue-200 ${compact ? 'flex-1' : ''}`}>
+            Aguardando assinatura do aluno
+          </span>
         )}
 
         {ficha.status === 'AGUARDANDO_ASSINATURA_INSTRUTOR' && !isAluno && (
