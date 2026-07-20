@@ -470,4 +470,46 @@ describe('0437 — setores_gestores gestor_id optional', () => {
       );
     }).toThrow(/NOT NULL constraint failed/);
   });
+
+  it('rollback seguro recusa execucao se existirem linhas com gestor_id IS NULL', () => {
+    const dbPath = setupPreMigrationDb();
+    runSqlite(dbPath, migrationSql());
+
+    // Insere linha moderna com gestor_id IS NULL
+    runSqlite(
+      dbPath,
+      `INSERT INTO setores_gestores (setor_id, gestor_id, usuario_id, empresa_id, role)
+       VALUES (10, NULL, 63, 6, 'manager');`,
+    );
+
+    // Rollback deve falhar por conta do preflight check (CHECK constraint na tabela temporária de assertiva)
+    expect(() => {
+      runSqlite(dbPath, rollbackSql());
+    }).toThrow(/CHECK constraint failed/);
+  });
+
+  it('rollback seguro funciona se as linhas com gestor_id IS NULL forem removidas antes', () => {
+    const dbPath = setupPreMigrationDb();
+    runSqlite(dbPath, migrationSql());
+
+    // Insere linha moderna
+    runSqlite(
+      dbPath,
+      `INSERT INTO setores_gestores (setor_id, gestor_id, usuario_id, empresa_id, role)
+       VALUES (10, NULL, 63, 6, 'manager');`,
+    );
+
+    // Simula remoção controlada antes do rollback (como exigido pela documentação)
+    runSqlite(dbPath, 'DELETE FROM setores_gestores WHERE gestor_id IS NULL;');
+
+    // Agora o rollback deve funcionar com sucesso
+    runSqlite(dbPath, rollbackSql());
+
+    // Verifica se a estrutura antiga (NOT NULL) foi reestabelecida
+    const colInfoAfter = runSqlite(
+      dbPath,
+      "SELECT \"notnull\" FROM pragma_table_info('setores_gestores') WHERE name='gestor_id';",
+    ).trim();
+    expect(colInfoAfter).toBe('1');
+  });
 });
