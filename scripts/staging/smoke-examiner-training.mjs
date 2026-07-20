@@ -190,6 +190,35 @@ export async function createPdfSessionInAvailableSlot({ candidates, createSessio
   throw err;
 }
 
+export async function releasePriorPdfFixtureSlots({
+  listSessions,
+  deleteSession,
+  dateKey,
+  simuladorId,
+}) {
+  const listed = await listSessions(dateKey);
+  const rows = Array.isArray(listed?.json?.data)
+    ? listed.json.data
+    : Array.isArray(listed?.json?.data?.items)
+      ? listed.json.data.items
+      : [];
+  const released = [];
+  for (const row of rows) {
+    const observacoes = String(row?.observacoes || '');
+    const sameSim = Number(row?.simulador_id) === Number(simuladorId);
+    const sameDay = String(row?.data || '') === dateKey;
+    const isPdfFixture = /fixture dedicada I_pdf/i.test(observacoes);
+    if (!sameSim || !sameDay || !isPdfFixture || row?.id == null) continue;
+    const deleted = await deleteSession(row.id);
+    released.push({
+      id: Number(row.id),
+      horario: `${row.horario_inicio || row.hora_inicio || '?'}-${row.horario_fim || row.hora_fim || '?'}`,
+      status: deleted?.status ?? null,
+    });
+  }
+  return released;
+}
+
 async function main() {
   const baseUrl = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL || DEFAULT_BASE_URL);
   const email = String(
@@ -527,6 +556,18 @@ async function main() {
   {
     const pdfFixtureRunId = `pdf-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const pdfFixtureDate = saoPauloTodayDateKey();
+    const releasedSlots = await releasePriorPdfFixtureSlots({
+      dateKey: pdfFixtureDate,
+      simuladorId,
+      listSessions: (dateKey) =>
+        authFetch(
+          baseUrl,
+          token,
+          `/api/simuladores/sessoes?data_inicio=${dateKey}&data_fim=${dateKey}&view=summary&limit=200`,
+        ),
+      deleteSession: (id) =>
+        authFetch(baseUrl, token, `/api/simuladores/sessoes/${id}`, { method: 'DELETE' }),
+    });
     const candidates = pdfFixtureCandidateTimeWindows();
     let selectedCandidate = null;
     let pdfAttempts = [];
@@ -571,38 +612,39 @@ async function main() {
     } catch (error) {
       // Todos os slots ocupados — tenta reutilizar uma sessão QA existente do dia.
       pdfAttempts = error?.attempts || pdfAttempts;
-      const fichasList = await authFetch(baseUrl, token, '/api/simuladores/fichas');
-      const todayFichas = (fichasList.json?.data ?? []).filter((f) => {
-        // Fichas têm reference_date ou data_sessao; filtra pelas que são do dia atual.
-        const fDate =
-          f.reference_date ||
-          f.data_sessao ||
-          (f.sessao?.data) ||
-          '';
-        return String(fDate).startsWith(pdfFixtureDate);
-      });
-      const reusableFicha = todayFichas.find(
-        (f) =>
-          f.agendamento_slot_id != null &&
-          (String(f.observacoes || '').includes('QA smoke') ||
-           String(f.sessao?.observacoes || '').includes('QA smoke')),
+      const sessionsList = await authFetch(
+        baseUrl,
+        token,
+        `/api/simuladores/sessoes?data_inicio=${pdfFixtureDate}&data_fim=${pdfFixtureDate}&view=summary&limit=200`,
       );
+      const todaySessions = (sessionsList.json?.data ?? []).filter(
+        (s) =>
+          Number(s.simulador_id) === Number(simuladorId) &&
+          /fixture dedicada I_pdf|QA smoke/i.test(String(s.observacoes || '')),
+      );
+      const reusableSession = todaySessions[0] || null;
+      const fichasList = await authFetch(baseUrl, token, '/api/simuladores/fichas');
+      const reusableFicha = reusableSession
+        ? (fichasList.json?.data ?? []).find(
+            (f) => Number(f.agendamento_slot_id) === Number(reusableSession.id),
+          )
+        : null;
 
-      if (reusableFicha) {
+      if (reusableSession && reusableFicha) {
         reusedExistingSession = true;
         // Constrói um response sintético compatível com o caminho de sucesso.
         pdfSessionCreated = {
           status: 200, // 200 indica "já existente", não 201
           json: {
             data: {
-              sessao: { id: reusableFicha.agendamento_slot_id },
+              sessao: { id: reusableSession.id },
             },
-            resumo: { sessao_id: reusableFicha.agendamento_slot_id },
+            resumo: { sessao_id: reusableSession.id },
           },
         };
         selectedCandidate = {
-          hora_inicio: reusableFicha.hora_inicio || reusableFicha.sessao?.hora_inicio || '??:??',
-          hora_fim: reusableFicha.hora_fim || reusableFicha.sessao?.hora_fim || '??:??',
+          hora_inicio: reusableSession.horario_inicio || reusableSession.hora_inicio || '??:??',
+          hora_fim: reusableSession.horario_fim || reusableSession.hora_fim || '??:??',
         };
         pdfAttempts.push({
           attempt: pdfAttempts.length + 1,
@@ -618,9 +660,10 @@ async function main() {
           note: String(error?.message || error),
           pdfFixtureDate,
           candidateCount: candidates.length,
+          releasedPriorFixtures: releasedSlots.length,
           attempts: pdfAttempts,
           fallbackTried: true,
-          todayFichaCount: todayFichas.length,
+          todaySessionCount: todaySessions.length,
         };
         throw error;
       }
@@ -674,6 +717,7 @@ async function main() {
       pdfFixtureDate,
       selectedSlot: `${hora_inicio}-${hora_fim}`,
       candidateCount: candidates.length,
+      releasedPriorFixtures: releasedSlots.length,
       attempts: pdfAttempts,
       reusedExistingSession,
       pdfSessionCreateStatus: pdfSessionCreated?.status ?? null,

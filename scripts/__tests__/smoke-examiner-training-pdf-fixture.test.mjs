@@ -10,6 +10,7 @@ import {
   isValidPdfResponse,
   sanitizeScheduleConflict,
   createPdfSessionInAvailableSlot,
+  releasePriorPdfFixtureSlots,
 } from '../staging/smoke-examiner-training.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -282,5 +283,42 @@ describe('smoke-examiner-training: PDF fixture date/time', () => {
     assert.match(source, /discardReason/);
     assert.doesNotMatch(source, /Authorization.*attempts/);
     assert.doesNotMatch(source, /QA_EXAMINER_ADMIN_PASSWORD.*I_pdf/);
+  });
+
+  it('releases only prior I_pdf fixture sessions for the same day and simulator', async () => {
+    const deleted = [];
+    const released = await releasePriorPdfFixtureSlots({
+      dateKey: '2026-07-20',
+      simuladorId: 7,
+      listSessions: async () => ({
+        status: 200,
+        json: {
+          data: [
+            {
+              id: 11,
+              data: '2026-07-20',
+              simulador_id: 7,
+              horario_inicio: '08:00',
+              horario_fim: '09:00',
+              observacoes: 'QA smoke — fixture dedicada I_pdf old',
+            },
+            {
+              id: 12,
+              data: '2026-07-20',
+              simulador_id: 7,
+              horario_inicio: '10:00',
+              horario_fim: '11:00',
+              observacoes: 'sessão legítima do tenant',
+            },
+          ],
+        },
+      }),
+      deleteSession: async (id) => {
+        deleted.push(id);
+        return { status: 200 };
+      },
+    });
+    assert.deepEqual(deleted, [11]);
+    assert.equal(released.length, 1);
   });
 });
