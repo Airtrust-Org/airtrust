@@ -75,6 +75,10 @@ const sigvoosMigrationPath = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../../migrations/0411_controle_voos_sigvoos_integration_schema.sql',
 );
+const rdvWorkflowMigrationPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../migrations/0438_controle_voos_rdv_coordenacao_workflow.sql',
+);
 const routePath = join(dirname(fileURLToPath(import.meta.url)), '../../routes/controle-voos.ts');
 const sigvoosRealPreviewServicePath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -117,6 +121,17 @@ function createSqliteD1(): SqliteD1 {
 
   runSql(databasePath, 'PRAGMA foreign_keys = ON;');
   runSql(databasePath, readFileSync(migrationPath, 'utf8'));
+  runSql(databasePath, readFileSync(rdvWorkflowMigrationPath, 'utf8'));
+  runSql(
+    databasePath,
+    `
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY,
+        funcionario_id INTEGER,
+        deleted_at TEXT
+      );
+    `,
+  );
   seed(databasePath);
 
   const db = {

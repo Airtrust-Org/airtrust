@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/react-app/services/apiClient';
+import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 
 // ---- Status types ----
 
@@ -13,6 +14,14 @@ export type CvFlightStatus =
   | 'alternado_divergido';
 
 export type CvRdvStatus = 'rascunho' | 'preenchimento_finalizado' | 'cancelado';
+
+export type CvRdvWorkflowStatus =
+  | 'rascunho'
+  | 'enviado'
+  | 'em_revisao'
+  | 'aprovado_coordenacao'
+  | 'finalizado'
+  | 'cancelado';
 
 // ---- Entity types ----
 
@@ -61,8 +70,103 @@ export interface CvRdv {
   preenchido_em: string | null;
   finalizado_operacionalmente_por: number | null;
   finalizado_operacionalmente_em: string | null;
+  workflow_status: CvRdvWorkflowStatus;
+  versao: number;
+  enviado_por: number | null;
+  enviado_em: string | null;
+  revisao_iniciada_por: number | null;
+  revisao_iniciada_em: string | null;
+  aprovado_coordenacao_por: number | null;
+  aprovado_coordenacao_em: string | null;
+  finalizado_workflow_em: string | null;
+  reaberto_por: number | null;
+  reaberto_em: string | null;
+  motivo_devolucao: string | null;
+  motivo_cancelamento: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CvRdvAlerta {
+  id: number;
+  tipo: string;
+  severidade: 'INFORMATIVO' | 'ATENCAO' | 'IMPEDE_ENVIO' | 'IMPEDE_APROVACAO';
+  mensagem: string;
+  regra: string;
+}
+
+export interface CvRdvRevisao {
+  id: number;
+  versao: number;
+  entidade: string;
+  registro_id: number | null;
+  campo: string;
+  valor_anterior: string | null;
+  valor_novo: string | null;
+  usuario_id: number | null;
+  justificativa: string | null;
+  estado_anterior: string | null;
+  estado_novo: string | null;
+  created_at: string;
+}
+
+export interface CvRdvAprovacao {
+  id: number;
+  versao: number;
+  tipo_aprovacao: 'COORDENACAO' | 'CONTRATANTE' | 'COMERCIAL';
+  status: string;
+  usuario_id: number | null;
+  funcionario_id: number | null;
+  observacao: string | null;
+  justificativa: string | null;
+  created_at: string;
+}
+
+export interface CvRdvFilaItem {
+  id: number;
+  voo_id: number;
+  numero: string;
+  data_voo: string;
+  status: CvRdvStatus;
+  workflow_status: CvRdvWorkflowStatus;
+  versao: number;
+  responsavel_preenchimento_id: number | null;
+  enviado_em: string | null;
+  aprovado_coordenacao_em: string | null;
+  finalizado_workflow_em: string | null;
+  motivo_devolucao: string | null;
+  prefixo: string;
+  aeronave_id: number | null;
+  data_programacao: string;
+}
+
+export interface CvTripulante {
+  id: number;
+  voo_id: number;
+  etapa_id: number | null;
+  funcionario_id: number;
+  funcao: 'PIC' | 'SIC' | 'COM' | 'MEC' | 'OUTRO';
+  horario_apresentacao: string | null;
+  horario_dispensa: string | null;
+  observacoes: string | null;
+  funcionario_nome: string | null;
+  funcionario_codigo_anac: string | null;
+}
+
+export interface CvAbastecimento {
+  id: number;
+  voo_id: number;
+  etapa_id: number | null;
+  fornecedor: string | null;
+  localidade: string | null;
+  combustivel_solicitado: number | null;
+  unidade: string;
+  combustivel_abastecido: number | null;
+  numero_ce: string | null;
+  anexo_r2_key: string | null;
+  responsavel_id: number | null;
+  data_hora: string;
+  observacoes: string | null;
 }
 
 export interface CvAeroporto {
@@ -283,4 +387,303 @@ export function useFinalizarPreenchimentoRdv() {
       void qc.invalidateQueries({ queryKey: ['cv-dashboard'] });
     },
   });
+}
+
+// ===========================================================================
+// Fluxo Piloto -> Coordenação (workflow do RDV)
+// ===========================================================================
+
+function invalidateRdvQueries(qc: ReturnType<typeof useQueryClient>, vooId: string | number) {
+  void qc.invalidateQueries({ queryKey: ['cv-rdv', vooId] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv', String(vooId)] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv-alertas', vooId] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv-alertas', String(vooId)] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv-revisoes', vooId] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv-revisoes', String(vooId)] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv-aprovacoes', vooId] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv-aprovacoes', String(vooId)] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv-fila'] });
+  void qc.invalidateQueries({ queryKey: ['cv-dashboard'] });
+}
+
+export function useMeusVoos() {
+  return useQuery({
+    queryKey: ['cv-meus-voos'],
+    queryFn: async () => {
+      const response = await apiClient.get<unknown>(`${API}/voos/meus`);
+      return extractPayload<CvVoo[]>(response, []);
+    },
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
+export function useRdvAlertas(vooId: string | number | undefined) {
+  return useQuery({
+    queryKey: ['cv-rdv-alertas', vooId],
+    enabled: !!vooId,
+    queryFn: async () => {
+      const response = await apiClient.get<unknown>(`${API}/voos/${vooId}/rdv/alertas`);
+      return extractPayload<CvRdvAlerta[]>(response, []);
+    },
+    staleTime: 10_000,
+    retry: 1,
+  });
+}
+
+export function useRdvRevisoes(vooId: string | number | undefined) {
+  return useQuery({
+    queryKey: ['cv-rdv-revisoes', vooId],
+    enabled: !!vooId,
+    queryFn: async () => {
+      const response = await apiClient.get<unknown>(`${API}/voos/${vooId}/rdv/revisoes`);
+      return extractPayload<CvRdvRevisao[]>(response, []);
+    },
+    staleTime: 10_000,
+    retry: 1,
+  });
+}
+
+export function useRdvAprovacoes(vooId: string | number | undefined) {
+  return useQuery({
+    queryKey: ['cv-rdv-aprovacoes', vooId],
+    enabled: !!vooId,
+    queryFn: async () => {
+      const response = await apiClient.get<unknown>(`${API}/voos/${vooId}/rdv/aprovacoes`);
+      return extractPayload<CvRdvAprovacao[]>(response, []);
+    },
+    staleTime: 10_000,
+    retry: 1,
+  });
+}
+
+export function useRdvFila(filtros?: {
+  status?: CvRdvWorkflowStatus;
+  data_inicio?: string;
+  data_fim?: string;
+  aeronave_id?: number;
+  piloto_funcionario_id?: number;
+}) {
+  return useQuery({
+    queryKey: ['cv-rdv-fila', filtros],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filtros?.status) params.set('status', filtros.status);
+      if (filtros?.data_inicio) params.set('data_inicio', filtros.data_inicio);
+      if (filtros?.data_fim) params.set('data_fim', filtros.data_fim);
+      if (filtros?.aeronave_id) params.set('aeronave_id', String(filtros.aeronave_id));
+      if (filtros?.piloto_funcionario_id) params.set('piloto_funcionario_id', String(filtros.piloto_funcionario_id));
+      const qs = params.toString();
+      const response = await apiClient.get<unknown>(`${API}/rdv/fila${qs ? `?${qs}` : ''}`);
+      return extractPayload<CvRdvFilaItem[]>(response, []);
+    },
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+function useRdvWorkflowAction<TBody extends Record<string, unknown> = Record<string, unknown>>(action: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ vooId, body }: { vooId: string | number; body?: TBody }) => {
+      const response = await apiClient.post<unknown>(`${API}/voos/${vooId}/rdv/${action}`, body || {});
+      return extractPayload<CvRdv>(response, null as unknown as CvRdv);
+    },
+    onSuccess: (_, vars) => invalidateRdvQueries(qc, vars.vooId),
+  });
+}
+
+export function useEnviarRdv() {
+  return useRdvWorkflowAction<{ versao?: number }>('enviar');
+}
+
+export function useIniciarRevisaoRdv() {
+  return useRdvWorkflowAction<{ versao?: number }>('iniciar-revisao');
+}
+
+export function useDevolverRdv() {
+  return useRdvWorkflowAction<{ versao?: number; justificativa: string }>('devolver');
+}
+
+export function useAprovarRdv() {
+  return useRdvWorkflowAction<{ versao?: number; observacao?: string }>('aprovar');
+}
+
+export function useFinalizarRdv() {
+  return useRdvWorkflowAction<{ versao?: number }>('finalizar');
+}
+
+export function useReabrirRdv() {
+  return useRdvWorkflowAction<{ versao?: number; justificativa: string }>('reabrir');
+}
+
+export function useCancelarRdv() {
+  return useRdvWorkflowAction<{ versao?: number; justificativa: string }>('cancelar');
+}
+
+export function useCorrigirRdv() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      vooId,
+      versao,
+      justificativa,
+      campos,
+    }: {
+      vooId: string | number;
+      versao?: number;
+      justificativa: string;
+      campos: RdvInput;
+    }) => {
+      const response = await apiClient.post<unknown>(`${API}/voos/${vooId}/rdv/corrigir`, {
+        versao,
+        justificativa,
+        campos,
+      });
+      return extractPayload<CvRdv>(response, null as unknown as CvRdv);
+    },
+    onSuccess: (_, vars) => invalidateRdvQueries(qc, vars.vooId),
+  });
+}
+
+// ===========================================================================
+// Tripulação
+// ===========================================================================
+
+export function useTripulantes(vooId: string | number | undefined) {
+  return useQuery({
+    queryKey: ['cv-tripulantes', vooId],
+    enabled: !!vooId,
+    queryFn: async () => {
+      const response = await apiClient.get<unknown>(`${API}/voos/${vooId}/tripulantes`);
+      return extractPayload<CvTripulante[]>(response, []);
+    },
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useCriarTripulante() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      vooId,
+      funcionario_id,
+      funcao,
+      etapa_id,
+      horario_apresentacao,
+      horario_dispensa,
+      observacoes,
+    }: {
+      vooId: string | number;
+      funcionario_id: number;
+      funcao: CvTripulante['funcao'];
+      etapa_id?: number | null;
+      horario_apresentacao?: string | null;
+      horario_dispensa?: string | null;
+      observacoes?: string | null;
+    }) => {
+      const response = await apiClient.post<unknown>(`${API}/voos/${vooId}/tripulantes`, {
+        funcionario_id,
+        funcao,
+        etapa_id,
+        horario_apresentacao,
+        horario_dispensa,
+        observacoes,
+      });
+      return extractPayload<{ id: number }>(response, { id: 0 });
+    },
+    onSuccess: (_, vars) => {
+      void qc.invalidateQueries({ queryKey: ['cv-tripulantes', vars.vooId] });
+      void qc.invalidateQueries({ queryKey: ['cv-rdv-alertas', vars.vooId] });
+    },
+  });
+}
+
+export function useRemoverTripulante() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ vooId, tripulanteId }: { vooId: string | number; tripulanteId: number }) => {
+      const response = await apiClient.delete<unknown>(`${API}/voos/${vooId}/tripulantes/${tripulanteId}`);
+      return extractPayload<{ id: number }>(response, { id: 0 });
+    },
+    onSuccess: (_, vars) => {
+      void qc.invalidateQueries({ queryKey: ['cv-tripulantes', vars.vooId] });
+      void qc.invalidateQueries({ queryKey: ['cv-rdv-alertas', vars.vooId] });
+    },
+  });
+}
+
+// ===========================================================================
+// Abastecimentos
+// ===========================================================================
+
+export function useAbastecimentos(vooId: string | number | undefined) {
+  return useQuery({
+    queryKey: ['cv-abastecimentos', vooId],
+    enabled: !!vooId,
+    queryFn: async () => {
+      const response = await apiClient.get<unknown>(`${API}/voos/${vooId}/abastecimentos`);
+      return extractPayload<CvAbastecimento[]>(response, []);
+    },
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useCriarAbastecimento() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      vooId,
+      ...dados
+    }: {
+      vooId: string | number;
+      data_hora: string;
+      fornecedor?: string;
+      localidade?: string;
+      combustivel_solicitado?: number;
+      unidade?: string;
+      combustivel_abastecido?: number;
+      numero_ce?: string;
+      etapa_id?: number | null;
+      observacoes?: string;
+    }) => {
+      const response = await apiClient.post<unknown>(`${API}/voos/${vooId}/abastecimentos`, dados);
+      return extractPayload<{ id: number }>(response, { id: 0 });
+    },
+    onSuccess: (_, vars) => {
+      void qc.invalidateQueries({ queryKey: ['cv-abastecimentos', vars.vooId] });
+      void qc.invalidateQueries({ queryKey: ['cv-rdv-alertas', vars.vooId] });
+    },
+  });
+}
+
+export function useRemoverAbastecimento() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ vooId, abastecimentoId }: { vooId: string | number; abastecimentoId: number }) => {
+      const response = await apiClient.delete<unknown>(`${API}/voos/${vooId}/abastecimentos/${abastecimentoId}`);
+      return extractPayload<{ id: number }>(response, { id: 0 });
+    },
+    onSuccess: (_, vars) => {
+      void qc.invalidateQueries({ queryKey: ['cv-abastecimentos', vars.vooId] });
+    },
+  });
+}
+
+// ===========================================================================
+// Relatório Petrobras (PDF fictício, marca d'água TESTE)
+// ===========================================================================
+
+export async function abrirRelatorioPetrobrasPdf(vooId: string | number): Promise<void> {
+  const response = await fetchWithAuth(`${API_BASE_URL}${API}/voos/${vooId}/rdv/relatorio-petrobras`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: 'Falha ao gerar relatorio' }));
+    throw new Error(body.error || 'Falha ao gerar relatorio');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

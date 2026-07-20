@@ -6,6 +6,7 @@ import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosBreadcrumb from './components/ControleVoosBreadcrumb';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
+import ControleVoosRdvWorkflowPanel from './components/ControleVoosRdvWorkflowPanel';
 import {
   useControleVoosVoo,
   useControleVoosRdv,
@@ -15,6 +16,7 @@ import {
   type CvRdv,
   type CvAeroporto,
 } from '@/react-app/hooks/useControleVoos';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { formatDate, formatDateTime, formatTime, formatHours, formatCombustivel } from './data/controleVoosUtils';
 
 function buildAeroMap(aeroportos: CvAeroporto[]) {
@@ -112,6 +114,8 @@ export default function ControleVoosRdvDetalhe() {
   const { data: aeroportos = [] } = useControleVoosAeroportos();
   const salvarMutation = useSalvarRdv();
   const finalizarMutation = useFinalizarPreenchimentoRdv();
+  const { isAdmin, isGestor } = usePermissions();
+  const isCoordenacao = isAdmin || isGestor;
 
   const aeroMap = buildAeroMap(aeroportos);
   const isLoading = vooLoading || rdvLoading;
@@ -689,6 +693,8 @@ export default function ControleVoosRdvDetalhe() {
                   )}
                 </div>
               </div>
+
+              {rdv && id && <ControleVoosRdvWorkflowPanel vooId={id} rdv={rdv} isCoordenacao={isCoordenacao} />}
 
               <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
                 <Link to={`/controle-voos/voos/${voo.id}`} className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
