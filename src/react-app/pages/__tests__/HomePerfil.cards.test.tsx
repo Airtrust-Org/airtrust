@@ -58,4 +58,45 @@ describe('HomePerfil quick access cards', () => {
     expect(cards.map((card) => card.title)).toContain('Minha Escala');
     expect(cards.map((card) => card.title)).not.toContain('Minha Pasta 360');
   });
+
+  it('mostra "Minhas Fichas de Treinamento de Voo" e "Fichas de Treinamento de Voo para Avaliar" como duas entradas distintas', () => {
+    const cards = buildHomeAccessCards({
+      role: 'INSTRUTOR',
+      can: canAll,
+      funcionarioId: 20,
+    });
+
+    const minhas = cards.find((card) => card.title === 'Minhas Fichas de Treinamento de Voo');
+    const paraAvaliar = cards.find(
+      (card) => card.title === 'Fichas de Treinamento de Voo para Avaliar',
+    );
+
+    expect(minhas).toBeDefined();
+    expect(paraAvaliar).toBeDefined();
+    expect(minhas?.route).toBe('/simuladores/fichas/minhas');
+    expect(paraAvaliar?.route).toBe('/simuladores/fichas/para-avaliar');
+
+    // Copy exata exigida pela especificação
+    expect(minhas?.description).toBe('Consulte e assine suas próprias fichas como participante.');
+    expect(paraAvaliar?.description).toBe(
+      'Avalie e assine as fichas dos participantes sob sua instrução.',
+    );
+
+    // Terminologia legada não deve mais aparecer
+    expect(cards.map((card) => card.title)).not.toContain('Minhas Fichas de Simulador');
+    expect(cards.map((card) => card.title)).not.toContain('Avaliar / Assinar Fichas');
+  });
+
+  it('esconde "Fichas de Treinamento de Voo para Avaliar" para um aluno puro (sem simuladores.evaluate)', () => {
+    const cards = buildHomeAccessCards({
+      role: 'ALUNO',
+      can: (permission) => permission === 'self.ficha',
+      funcionarioId: 10,
+    });
+
+    expect(cards.map((card) => card.title)).toContain('Minhas Fichas de Treinamento de Voo');
+    expect(cards.map((card) => card.title)).not.toContain(
+      'Fichas de Treinamento de Voo para Avaliar',
+    );
+  });
 });

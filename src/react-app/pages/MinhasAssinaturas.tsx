@@ -194,7 +194,7 @@ const MinhasAssinaturas: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Nenhuma assinatura pendente
               </h3>
-              <p className="text-gray-600">Todas as suas fichas de simulador estão em dia.</p>
+              <p className="text-gray-600">Todas as suas fichas de treinamento de voo estão em dia.</p>
             </div>
           )}
 
