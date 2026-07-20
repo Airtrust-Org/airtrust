@@ -21,9 +21,11 @@ const LARGE_FILE_LINE_CAPS = {
   // Cap raised 2026-07-08: counted 3760 (qualificacao_historico_status added to
   // satisfy ConsolidatedTrainingItem — BUG-011 Stage 3 fix, not a mask).
   'routes/treinamentos-planejados.ts': 3760,
-  // Cap raised 2026-07-15: counted 3275 (PR #324 added qualificacao_vencimento_fim_mes
-  // guard + duplicate-generation guard to 3 routes fixing SCORM-generated vencimento_fim_mes).
-  'routes/lms-matriculas.ts': 3275,
+  // Cap raised 2026-07-20: counted 3296 (fix/lms-tenant-sector-scoped-visibility —
+  // added manager sector-scope guard to GET/PATCH-status/DELETE matrícula endpoints
+  // so a sector-restricted manager can no longer read/cancel/alter another
+  // sector's matrícula by id).
+  'routes/lms-matriculas.ts': 3296,
   // Acknowledged growth (pre-existing, logged 2026-06-30): controle de voos CRUD + histórico.
   'routes/controle-voos.ts': 2112,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
