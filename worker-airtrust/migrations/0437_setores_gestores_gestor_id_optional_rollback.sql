@@ -11,6 +11,9 @@
 
 PRAGMA foreign_keys = OFF;
 
+-- Remove view antes do rebuild (SQLite 3.37 compat)
+DROP VIEW IF EXISTS vw_setores_gestores_ativo;
+
 CREATE TABLE setores_gestores_rollback (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setor_id INTEGER NOT NULL,
@@ -59,9 +62,30 @@ CREATE INDEX IF NOT EXISTS idx_setores_gestores_role
   WHERE deleted_at IS NULL;
 
 -- Restaura view original (INNER JOIN)
-DROP VIEW IF EXISTS vw_setores_gestores_ativo;
-
 CREATE VIEW vw_setores_gestores_ativo AS
+SELECT
+  sg.id,
+  sg.setor_id,
+  sg.gestor_id,
+  sg.empresa_id,
+  sg.role,
+  s.nome AS setor_nome,
+  s.codigo AS setor_codigo,
+  g.nome AS gestor_nome,
+  g.email AS gestor_email,
+  g.cargo AS gestor_cargo,
+  sg.created_at
+FROM setores_gestores sg
+INNER JOIN setores s ON s.id = sg.setor_id
+INNER JOIN notificacoes_convocacao_cc_gestores g ON g.id = sg.gestor_id
+WHERE sg.deleted_at IS NULL
+  AND sg.ativo = 1
+  AND s.deleted_at IS NULL
+  AND s.ativo = 1
+  AND g.deleted_at IS NULL
+  AND g.ativo = 1;
+
+PRAGMA foreign_keys = ON;
 SELECT
   sg.id,
   sg.setor_id,
