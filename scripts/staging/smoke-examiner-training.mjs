@@ -664,66 +664,75 @@ async function main() {
           attempts: pdfAttempts,
           fallbackTried: true,
           todaySessionCount: todaySessions.length,
+          selectedSlot: null,
+          reusedExistingSession: false,
+          pdfSessionCreateStatus: null,
+          pdfSessionId: null,
+          status: null,
+          bytes: 0,
         };
-        throw error;
+        pdfSessionCreated = null; // sinaliza que não há sessão — o allOk final captura ok:false
       }
     }
 
-    const { hora_inicio, hora_fim } = selectedCandidate;
-    const pdfSessionId =
-      pdfSessionCreated.json?.data?.sessao?.id ?? pdfSessionCreated.json?.resumo?.sessao_id ?? null;
-    const pdfSessionOk = pdfSessionId != null;
+    // Só processa PDF se há uma sessão (nova ou reutilizada).
+    if (pdfSessionCreated) {
+      const { hora_inicio, hora_fim } = selectedCandidate;
+      const pdfSessionId =
+        pdfSessionCreated.json?.data?.sessao?.id ?? pdfSessionCreated.json?.resumo?.sessao_id ?? null;
+      const pdfSessionOk = pdfSessionId != null;
 
-    const pdfStatus = pdfSessionOk
-      ? await (async () => {
-          const fichasList = await authFetch(baseUrl, token, '/api/simuladores/fichas');
-          const fichaId =
-            (fichasList.json?.data ?? []).find((f) => f.agendamento_slot_id === pdfSessionId)?.id ??
-            null;
-          if (!fichaId)
+      const pdfStatus = pdfSessionOk
+        ? await (async () => {
+            const fichasList = await authFetch(baseUrl, token, '/api/simuladores/fichas');
+            const fichaId =
+              (fichasList.json?.data ?? []).find((f) => f.agendamento_slot_id === pdfSessionId)?.id ??
+              null;
+            if (!fichaId)
+              return {
+                status: null,
+                bytes: 0,
+                note: 'nenhuma ficha com agendamento_slot_id correspondente à sessão (dedicada ou reutilizada)',
+              };
+            const res = await fetch(`${baseUrl}/api/simuladores/fichas/${fichaId}/pdf`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const contentType = res.headers.get('content-type') || '';
+            const buf = await res.arrayBuffer();
+            const bytes = Buffer.from(buf);
+            const hasPdfSignature =
+              bytes.length >= 5 && bytes.subarray(0, 5).toString('latin1') === '%PDF-';
             return {
-              status: null,
-              bytes: 0,
-              note: 'nenhuma ficha com agendamento_slot_id correspondente à sessão (dedicada ou reutilizada)',
+              status: res.status,
+              contentType,
+              bytes: buf.byteLength,
+              hasPdfSignature,
+              fichaId,
             };
-          const res = await fetch(`${baseUrl}/api/simuladores/fichas/${fichaId}/pdf`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const contentType = res.headers.get('content-type') || '';
-          const buf = await res.arrayBuffer();
-          const bytes = Buffer.from(buf);
-          const hasPdfSignature =
-            bytes.length >= 5 && bytes.subarray(0, 5).toString('latin1') === '%PDF-';
-          return {
-            status: res.status,
-            contentType,
-            bytes: buf.byteLength,
-            hasPdfSignature,
-            fichaId,
+          })()
+        : {
+            status: null,
+            bytes: 0,
+            note: 'sessão dedicada de PDF não foi criada e nenhuma sessão QA existente reutilizável foi encontrada',
           };
-        })()
-      : {
-          status: null,
-          bytes: 0,
-          note: 'sessão dedicada de PDF não foi criada e nenhuma sessão QA existente reutilizável foi encontrada',
-        };
 
-    report.scenarios.I_pdf = {
-      ok: isValidPdfResponse(pdfStatus),
-      note: reusedExistingSession
-        ? 'sessão QA existente reutilizada (todos os slots estavam ocupados por smoke runs anteriores)'
-        : 'sessão dedicada agendada para hoje (fuso America/Sao_Paulo) — 409 (FICHA_NOT_AVAILABLE_YET) nunca é aceito como PASS',
-      pdfFixtureDate,
-      selectedSlot: `${hora_inicio}-${hora_fim}`,
-      candidateCount: candidates.length,
-      releasedPriorFixtures: releasedSlots.length,
-      attempts: pdfAttempts,
-      reusedExistingSession,
-      pdfSessionCreateStatus: pdfSessionCreated?.status ?? null,
-      pdfSessionId,
-      ...pdfStatus,
-    };
+      report.scenarios.I_pdf = {
+        ok: isValidPdfResponse(pdfStatus),
+        note: reusedExistingSession
+          ? 'sessão QA existente reutilizada (todos os slots estavam ocupados por smoke runs anteriores)'
+          : 'sessão dedicada agendada para hoje (fuso America/Sao_Paulo) — 409 (FICHA_NOT_AVAILABLE_YET) nunca é aceito como PASS',
+        pdfFixtureDate,
+        selectedSlot: `${hora_inicio}-${hora_fim}`,
+        candidateCount: candidates.length,
+        releasedPriorFixtures: releasedSlots.length,
+        attempts: pdfAttempts,
+        reusedExistingSession,
+        pdfSessionCreateStatus: pdfSessionCreated?.status ?? null,
+        pdfSessionId,
+        ...pdfStatus,
+      };
+    }
   }
 
   const allOk = Object.values(report.scenarios).every((s) => s.ok === true || s.ok === null);
