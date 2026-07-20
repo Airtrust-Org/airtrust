@@ -21,6 +21,12 @@ vi.mock('@/react-app/hooks/usePermissions', () => ({
   usePermissions: () => permissionsMock(),
 }));
 
+const authMock = vi.fn();
+
+vi.mock('@/react-app/hooks/useAuth', () => ({
+  useAuth: () => authMock(),
+}));
+
 vi.mock('@/react-app/components/modals/ModalAvaliarFicha', () => ({
   default: () => null,
 }));
@@ -93,6 +99,7 @@ describe('FichasAvaliacaoContent modal de ficha modelo', () => {
       isAluno: false,
       isInstrutor: false,
     });
+    authMock.mockReturnValue({ user: { id: 1, email: 'admin@test', nome: 'Admin', role: 'ADMINISTRADOR', permissions: [], funcionario_id: null } });
   });
 
   afterEach(() => {
@@ -369,5 +376,125 @@ describe('FichasAvaliacaoContent modal de ficha modelo', () => {
     expect(evaluateButtons.length).toBeGreaterThan(0);
     evaluateButtons.forEach((button) => expect(button).toBeEnabled());
     expect(screen.queryByRole('button', { name: /Ficha disponível no dia da sessão/ })).toBeNull();
+  });
+});
+
+describe('FichasAvaliacaoContent — student signature ownership in list', () => {
+  beforeEach(() => {
+    permissionsMock.mockReturnValue({
+      isAdmin: false,
+      isGestor: false,
+      isAluno: false,
+      isInstrutor: true,
+    });
+    authMock.mockReturnValue({ user: { id: 2, email: 'instrutor@test', nome: 'Instrutor', role: 'INSTRUTOR', permissions: [], funcionario_id: 20 } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  function fichasResponse(overrides: Record<string, unknown> = {}) {
+    const yesterday = formatOperationalDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
+    return jsonResponse({
+      success: true,
+      data: [buildFicha({
+        status: 'AGUARDANDO_ASSINATURA_ALUNO',
+        colaborador_id_aluno: 10,
+        data_hora: yesterday,
+        data_sessao: yesterday,
+        hora_inicio: '08:00',
+        ...overrides,
+      })],
+    });
+  }
+
+  it('instrutor não vê botão Assinar (Aluno) e vê status de espera', async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/simuladores/fichas?')) return fichasResponse();
+      if (url.includes('/simuladores/instrutores')) return jsonResponse({ success: true, data: [] });
+      return jsonResponse({ success: true, data: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+
+    await screen.findAllByRole('row');
+    expect(screen.queryByRole('button', { name: /Assinar \(Aluno\)/ })).toBeNull();
+    expect(screen.getAllByText('Aguardando assinatura do aluno').length).toBeGreaterThan(0);
+  });
+
+  it('aluno vê botão Assinar (Aluno) na própria ficha', async () => {
+    authMock.mockReturnValue({ user: { id: 3, email: 'aluno@test', nome: 'Aluno', role: 'ALUNO', permissions: [], funcionario_id: 10 } });
+    permissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, isAluno: true, isInstrutor: false });
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/simuladores/fichas?')) return fichasResponse();
+      if (url.includes('/simuladores/instrutores')) return jsonResponse({ success: true, data: [] });
+      return jsonResponse({ success: true, data: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+
+    await screen.findAllByRole('row');
+    const signButtons = screen.getAllByRole('button', { name: /Assinar \(Aluno\)/ });
+    expect(signButtons.length).toBeGreaterThan(0);
+    expect(screen.queryByText('Aguardando assinatura do aluno')).toBeNull();
+  });
+
+  it('aluno não vê botão na ficha de outro aluno', async () => {
+    authMock.mockReturnValue({ user: { id: 3, email: 'aluno@test', nome: 'Aluno', role: 'ALUNO', permissions: [], funcionario_id: 10 } });
+    permissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, isAluno: true, isInstrutor: false });
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/simuladores/fichas?')) return fichasResponse({ colaborador_id_aluno: 99 });
+      if (url.includes('/simuladores/instrutores')) return jsonResponse({ success: true, data: [] });
+      return jsonResponse({ success: true, data: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+
+    await screen.findAllByRole('row');
+    expect(screen.queryByRole('button', { name: /Assinar \(Aluno\)/ })).toBeNull();
+    expect(screen.getAllByText('Aguardando assinatura do aluno').length).toBeGreaterThan(0);
+  });
+
+  it('usuário sem funcionario_id não vê botão', async () => {
+    authMock.mockReturnValue({ user: { id: 5, email: 'nofunc@test', nome: 'NoFunc', role: 'ALUNO', permissions: [], funcionario_id: null } });
+    permissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, isAluno: true, isInstrutor: false });
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/simuladores/fichas?')) return fichasResponse();
+      if (url.includes('/simuladores/instrutores')) return jsonResponse({ success: true, data: [] });
+      return jsonResponse({ success: true, data: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+
+    await screen.findAllByRole('row');
+    expect(screen.queryByRole('button', { name: /Assinar \(Aluno\)/ })).toBeNull();
+    expect(screen.getAllByText('Aguardando assinatura do aluno').length).toBeGreaterThan(0);
+  });
+
+  it('status não pendente não mostra botão nem texto de espera', async () => {
+    authMock.mockReturnValue({ user: { id: 3, email: 'aluno@test', nome: 'Aluno', role: 'ALUNO', permissions: [], funcionario_id: 10 } });
+    permissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, isAluno: true, isInstrutor: false });
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/simuladores/fichas?')) return fichasResponse({ status: 'APROVADO' });
+      if (url.includes('/simuladores/instrutores')) return jsonResponse({ success: true, data: [] });
+      return jsonResponse({ success: true, data: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+
+    await screen.findAllByRole('row');
+    expect(screen.queryByRole('button', { name: /Assinar \(Aluno\)/ })).toBeNull();
+    expect(screen.queryByText('Aguardando assinatura do aluno')).toBeNull();
   });
 });
