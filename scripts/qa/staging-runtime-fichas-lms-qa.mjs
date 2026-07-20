@@ -65,7 +65,15 @@ async function request(path, token, options = {}) {
   return response;
 }
 function data(response, label, status = 200) {
-  ok(response.status === status, `${label}: expected ${status}, got ${response.status}`);
+  if (response.status !== status) {
+    const detail = String(
+      response.json?.error || response.json?.message || response.json?.code || '',
+    )
+      .replace(/\b\d{11}\b/g, '[cpf]')
+      .replace(/\b[\w.+-]+@[\w.-]+\b/g, '[email]')
+      .slice(0, 160);
+    fail(`${label}: expected ${status}, got ${response.status}${detail ? ` (${detail})` : ''}`);
+  }
   ok(response.json?.success === true, `${label}: success=true required`);
   return response.json.data;
 }
@@ -103,12 +111,19 @@ async function createSector(admin, code, name) {
 }
 async function createEmployee(admin, name, sectorId, index, instructor = false) {
   const email = `${prefix.toLowerCase()}-${index}@example.invalid`;
+  // CPF must be unique per run: earlier failed QA left orphans with fixed
+  // index-only seeds (100000001..) that correctly return HTTP 400 on reuse.
+  const runSeed = Number(
+    String(process.env.GITHUB_RUN_ID || Date.now())
+      .replace(/\D/g, '')
+      .slice(-8) || '1',
+  );
   const result = await request('/api/funcionarios', admin, {
     method: 'POST',
     body: {
       nome: name,
       email,
-      cpf: cpf(100000000 + index),
+      cpf: cpf(runSeed * 10 + index),
       matricula: `${prefix}-${index}`,
       setor_id: sectorId,
       funcao: instructor ? 'INSTRUTOR' : 'ALUNO',
