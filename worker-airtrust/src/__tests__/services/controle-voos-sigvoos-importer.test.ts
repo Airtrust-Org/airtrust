@@ -829,4 +829,96 @@ describe('controle-voos sigvoos importer', () => {
     expect(stage[0].payload_sanitizado_json).not.toContain('REMOVE-PASSWORD');
     expect(stage[0].payload_sanitizado_json).not.toContain('REMOVE-SECRET');
   });
+
+  it('never merges two distinct SIGVOOS flight_report.id values sharing the same date/prefix/route (DUPLICATE_CONFLICT-safe)', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<Record<string, unknown>>('sigvoos-com-flight-report-id.json');
+    const conflicting = {
+      ...fixture,
+      flight_report: {
+        ...(fixture.flight_report as Record<string, unknown>),
+        id: 700199,
+      },
+    };
+
+    await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+    const second = await importSigvoosPayloadToControleVoos(db, 6, conflicting, { actorUserId: 10 });
+
+    expect(second.processedRecords).toBe(1);
+
+    const flights = db.queryJson<FlightRow>(
+      `SELECT id, origem_importacao, sigvoos_flight_report_id, sigvoos_flight_number, sigvoos_content_hash
+         FROM cv_voos
+        WHERE empresa_id = 6
+          AND prefixo = 'ATX7001'
+        ORDER BY sigvoos_flight_report_id`,
+    );
+
+    // Two distinct external flight_report.id values must never be collapsed into a
+    // single cv_voos row, even when date/prefix/route coincide. Each keeps its own
+    // externally-sourced identity so no report gets silently dropped or overwritten.
+    expect(flights).toHaveLength(2);
+    expect(flights.map((f) => f.sigvoos_flight_report_id)).toEqual([700101, 700199]);
+  });
+
+  it('rejects reusing a flight_report.id already bound to a different empresa (TENANT_MISMATCH)', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<Record<string, unknown>>('sigvoos-com-flight-report-id.json');
+
+    await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+    await importSigvoosPayloadToControleVoos(db, 7, fixture, { actorUserId: 20 });
+
+    const flights = db.queryJson<{ empresa_id: number; sigvoos_flight_report_id: number }>(
+      `SELECT empresa_id, sigvoos_flight_report_id
+         FROM cv_voos
+        WHERE sigvoos_flight_report_id = 700101
+        ORDER BY empresa_id`,
+    );
+
+    // Same external SIGVOOS id, two tenants: each tenant gets its own independent
+    // cv_voos row scoped by (empresa_id, sigvoos_flight_report_id) - the same
+    // external id can never be read back for the wrong tenant.
+    expect(flights).toEqual([
+      { empresa_id: 6, sigvoos_flight_report_id: 700101 },
+      { empresa_id: 7, sigvoos_flight_report_id: 700101 },
+    ]);
+
+    const crossTenantLeak = db.queryJson<{ total: number }>(
+      `SELECT COUNT(*) AS total
+         FROM cv_voos
+        WHERE empresa_id = 6
+          AND sigvoos_flight_report_id = 700101
+          AND id IN (SELECT id FROM cv_voos WHERE empresa_id = 7)`,
+    );
+    expect(crossTenantLeak).toEqual([{ total: 0 }]);
+  });
+
+  it('preserves an already-confirmed flight_report.id and never overwrites it with NULL on reimport', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<Record<string, unknown>>('sigvoos-com-flight-report-id.json');
+    const withoutReportId = {
+      ...fixture,
+      flight_report: {
+        ...(fixture.flight_report as Record<string, unknown>),
+        id: null,
+      },
+    };
+
+    await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+
+    const before = db.queryJson<{ sigvoos_flight_report_id: number | null }>(
+      `SELECT sigvoos_flight_report_id FROM cv_voos WHERE empresa_id = 6 AND prefixo = 'ATX7001'`,
+    );
+    expect(before).toEqual([{ sigvoos_flight_report_id: 700101 }]);
+
+    // A later payload for the same operational flight that arrives without the
+    // external id (SOURCE_MISSING for that field) must never clobber the value
+    // that is already confirmed.
+    await importSigvoosPayloadToControleVoos(db, 6, withoutReportId, { actorUserId: 10 });
+
+    const after = db.queryJson<{ sigvoos_flight_report_id: number | null }>(
+      `SELECT sigvoos_flight_report_id FROM cv_voos WHERE empresa_id = 6 AND prefixo = 'ATX7001'`,
+    );
+    expect(after).toEqual([{ sigvoos_flight_report_id: 700101 }]);
+  });
 });
