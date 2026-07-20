@@ -54,16 +54,18 @@ function migrationSql(): string {
  */
 function applyMigration(dbPath: string): void {
   const sql = migrationSql();
-  const viewMarker = '\nDROP VIEW IF EXISTS vw_setores_gestores_ativo;';
-  const idx = sql.indexOf(viewMarker);
+  // Split before the view DDL section. CI sqlite3 3.37 rejects CREATE VIEW
+  // that references a table rebuilt (DROP+RENAME) in the same batch.
+  const splitMarker = '3. View corrigida';
+  const idx = sql.indexOf(splitMarker);
   if (idx === -1) {
     runSqlite(dbPath, sql);
     return;
   }
-  // Batch 1: PRAGMA OFF, table rebuild, indexes
-  const batch1 = sql.slice(0, idx).trim();
-  // Batch 2: DROP VIEW, CREATE VIEW, PRAGMA ON
-  const batch2 = sql.slice(idx).trim();
+  // Find the start of the comment line containing the marker
+  const commentStart = sql.lastIndexOf('--', idx);
+  const batch1 = sql.slice(0, commentStart > 0 ? commentStart : idx).trim();
+  const batch2 = sql.slice(commentStart > 0 ? commentStart : idx).trim();
   if (batch1) runSqlite(dbPath, batch1);
   if (batch2) runSqlite(dbPath, batch2);
 }
