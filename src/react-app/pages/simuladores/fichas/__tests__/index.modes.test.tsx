@@ -95,6 +95,7 @@ describe('FichasAvaliacaoContent — mode="minhas" (própria ficha como particip
       isGestor: false,
       isAluno: false,
       isInstrutor: true,
+      can: () => true,
     });
     authMock.mockReturnValue({
       user: { id: 2, email: 'instrutor@test', nome: 'Instrutor-Aluno', role: 'INSTRUTOR', permissions: [], funcionario_id: 20 },
@@ -197,6 +198,10 @@ describe('FichasAvaliacaoContent — mode="para-avaliar" (instrutor atribuído)'
       isGestor: false,
       isAluno: false,
       isInstrutor: true,
+      can: (permission: string | string[]) => {
+        const perms = Array.isArray(permission) ? permission : [permission];
+        return perms.includes('simuladores.evaluate');
+      },
     });
     authMock.mockReturnValue({
       user: { id: 2, email: 'instrutor@test', nome: 'Instrutor-Aluno', role: 'INSTRUTOR', permissions: [], funcionario_id: 20 },
@@ -290,5 +295,50 @@ describe('FichasAvaliacaoContent — mode="para-avaliar" (instrutor atribuído)'
     await screen.findAllByRole('row');
     expect(screen.queryByRole('button', { name: /Assinar \(Aluno\)/ })).toBeNull();
     expect(screen.getAllByText('Aguardando assinatura do aluno').length).toBeGreaterThan(0);
+  });
+});
+
+describe('FichasAvaliacaoContent — showInstrutorActions não é habilitado apenas pelo mode', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it('mode="para-avaliar" sem a capability simuladores.evaluate não mostra ações de instrutor, mesmo com dados na lista', async () => {
+    // Cenário defensivo: mesmo que o backend retornasse dados (ex.: bug futuro
+    // ou resposta cacheada), o front nunca deve inferir a capability apenas
+    // do mode da tela — precisa checar can('simuladores.evaluate').
+    permissionsMock.mockReturnValue({
+      isAdmin: false,
+      isGestor: false,
+      isAluno: false,
+      isInstrutor: false,
+      can: () => false,
+    });
+    authMock.mockReturnValue({
+      user: { id: 9, email: 'sem-capability@test', nome: 'Sem Capability', role: 'ALUNO', permissions: [], funcionario_id: 30 },
+    });
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/simuladores/fichas/para-avaliar')) {
+        return jsonResponse({
+          success: true,
+          data: [
+            buildFicha({ id: 2, colaborador_id_aluno: 10, status: 'AVALIACAO_PENDENTE' }),
+            buildFicha({ id: 3, colaborador_id_aluno: 10, status: 'AGUARDANDO_ASSINATURA_INSTRUTOR' }),
+          ],
+        });
+      }
+      return jsonResponse({ success: true, data: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderMode('para-avaliar');
+
+    await screen.findAllByRole('row');
+    expect(screen.queryByRole('button', { name: /Avaliar Tripulante/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Assinar Instrutor/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Imprimir Ficha Modelo/ })).toBeNull();
   });
 });

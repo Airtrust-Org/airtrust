@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
@@ -187,15 +187,21 @@ const FICHAS_VIEW_COPY: Record<Exclude<FichasViewMode, 'all'>, { title: string; 
 export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentProps = {}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isAdmin, isGestor, isAluno, isInstrutor } = usePermissions();
+  const { isAdmin, isGestor, isAluno, isInstrutor, can } = usePermissions();
   const { user: currentUser } = useAuth();
   const isMinhasMode = mode === 'minhas';
   const isParaAvaliarMode = mode === 'para-avaliar';
+  // Capability real (não apenas "o modo da tela é para-avaliar"): mesma
+  // permissão nomeada que a rota de backend exige (simuladores.evaluate).
   // Nas telas dedicadas ("Minhas Fichas" / "Fichas para Avaliar") as ações de
   // instrutor (avaliar / assinar instrutor / imprimir ficha modelo) seguem o
   // papel exercido NESSA lista (identidade por ficha, já garantida pelo
-  // backend), nunca o papel global do usuário.
-  const showInstrutorActions = isMinhasMode ? false : isParaAvaliarMode ? true : !isAluno;
+  // backend) E a capability real do usuário — nunca apenas o modo da tela.
+  const showInstrutorActions = isMinhasMode
+    ? false
+    : isParaAvaliarMode
+      ? can('simuladores.evaluate')
+      : !isAluno;
   const sessaoIdParam = searchParams.get('sessao');
   const [fichas, setFichas] = useState<Ficha[]>([]);
   const [instrutores, setInstrutores] = useState<Instrutor[]>([]);
@@ -1696,10 +1702,40 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
   );
 }
 
+/**
+ * FichasSessao — página legada montada em /simuladores/fichas.
+ *
+ * A visão administrativa formal (admin/gestor, com getEmployeeSectorAccess
+ * no backend) é o único consumidor legítimo que resta do endpoint
+ * não-escopado GET /fichas — permanece intacta abaixo.
+ *
+ * Para qualquer outro papel (instrutor, aluno, etc.) esta rota não serve
+ * mais a lista mesclada "instrutor_id OR colaborador_id_aluno" (ver
+ * GET /fichas no backend, que agora responde 403
+ * LEGACY_FICHAS_LIST_FORBIDDEN nesse caso). O usuário é redirecionado
+ * direto para a tela dedicada correta: quem tem a capability
+ * 'simuladores.evaluate' vai para "Fichas para Avaliar"; todo o resto vai
+ * para "Minhas Fichas".
+ */
 export default function FichasSessao() {
+  const { isAdmin, isGestor, can } = usePermissions();
+
+  if (isAdmin || isGestor) {
+    return (
+      <AppLayout>
+        <FichasAvaliacaoContent />
+      </AppLayout>
+    );
+  }
+
   return (
-    <AppLayout>
-      <FichasAvaliacaoContent />
-    </AppLayout>
+    <Navigate
+      to={
+        can('simuladores.evaluate')
+          ? '/simuladores/fichas/para-avaliar'
+          : '/simuladores/fichas/minhas'
+      }
+      replace
+    />
   );
 }
