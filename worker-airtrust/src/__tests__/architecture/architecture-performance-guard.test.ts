@@ -26,10 +26,6 @@ const LARGE_FILE_LINE_CAPS = {
   // so a sector-restricted manager can no longer read/cancel/alter another
   // sector's matrícula by id).
   'routes/lms-matriculas.ts': 3296,
-  // Cap raised 2026-07-20: counted 3584 (feat/controle-voos-rdv-sigvoos-reinicio —
-  // added the RDV Piloto->Coordenação review/approval workflow, tripulação e
-  // abastecimentos CRUD, motor de alertas and the Petrobras PDF export route).
-  'routes/controle-voos.ts': 3585,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   'routes/frms-fadiga-checkin.ts': 2021,
   // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.
@@ -50,10 +46,6 @@ const SQL_PREPARE_CAPS = {
   'routes/treinamentos-planejados.ts': 56,
   // Acknowledged growth (2026-06-29): auto-cert hooks added 2 .prepare() calls via ensureCertificateForQualification.
   'routes/lms-matriculas.ts': 47,
-  // Cap raised 2026-07-20: counted 66 (feat/controle-voos-rdv-sigvoos-reinicio —
-  // RDV workflow transitions, aprovações/revisões/alertas queries, tripulação e
-  // abastecimentos CRUD, fila da Coordenação and the PDF export data assembly).
-  'routes/controle-voos.ts': 66,
 } as const;
 
 const HIGH_SQL_LIMIT_CAPS = {

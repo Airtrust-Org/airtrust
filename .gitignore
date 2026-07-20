@@ -73,6 +73,9 @@ pids/
 *.seed
 *.pid.lock
 
+# Local visual previews (fictional RDV PDF renders — never commit)
+artifacts/rdv-pdf-preview/
+
 # ========== OS ==========
 .DS_Store
 .DS_Store?
@@ -162,6 +165,13 @@ lms/
 *.gz
 *.7z
 *.rar
+
+# Browser/network capture artifacts (never commit)
+*-captura/
+*.har
+*.mhtml
+*.webarchive
+
 .tmp-deploy*/
 dist/
 build/

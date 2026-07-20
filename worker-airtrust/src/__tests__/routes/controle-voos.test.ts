@@ -1073,7 +1073,7 @@ describe('controle voos routes', () => {
     expect(finalizeResponse.status).toBe(403);
   });
 
-  it('editor cria, edita e finaliza RDV', async () => {
+  it('editor sem vinculo de tripulacao nao cria/edita/finaliza RDV (exige capability+crew ou Coordenacao)', async () => {
     const db = createSqliteD1();
 
     const createResponse = await request(
@@ -1083,7 +1083,13 @@ describe('controle voos routes', () => {
       1,
       'editor',
     );
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(403);
+
+    // Admin (Coordenacao via visualizar_todos) cria o rascunho para isolar o caso do editor.
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload({ numero: 'RDV-20260614-EDT' })),
+    });
 
     const updateResponse = await request(
       db,
@@ -1092,7 +1098,7 @@ describe('controle voos routes', () => {
       1,
       'editor',
     );
-    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.status).toBe(403);
 
     const finalizeResponse = await request(
       db,
@@ -1101,7 +1107,7 @@ describe('controle voos routes', () => {
       1,
       'editor',
     );
-    expect(finalizeResponse.status).toBe(200);
+    expect(finalizeResponse.status).toBe(403);
   });
 
   it('registra evento rdv em criacao, atualizacao e finalizacao', async () => {

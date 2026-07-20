@@ -1,7 +1,7 @@
 -- source_reference: feat/controle-voos-rdv-sigvoos-reinicio (RDV Piloto -> Coordenação workflow)
 -- operational_decision: ADDITIVE_ONLY_NEW_COLUMNS_AND_TABLES - nenhuma tabela/coluna existente alterada ou removida
 -- dry_run_required: sim - aplicado e validado em D1 local (schema vazio e schema pré-existente com 0410/0411)
--- rollback_plan_required: sim - ver 0438_controle_voos_rdv_coordenacao_workflow_rollback.sql
+-- rollback_plan_required: sim - ver rollback_0438_controle_voos_rdv_coordenacao_workflow.sql (fora da cadeia de prefixos numéricos)
 --
 -- Controle de Voos: fluxo de revisão/aprovação da Coordenação para o RDV (Relatório de Voo).
 --
@@ -11,13 +11,14 @@
 --     'rascunho' | 'preenchimento_finalizado' | 'cancelado', que continua
 --     controlando o "lock" operacional dos campos preenchidos pelo piloto);
 --   - Adiciona um novo eixo ortogonal `workflow_status` para o fluxo de
---     revisão da Coordenação (piloto -> envio -> revisão -> aprovação ->
---     finalização -> reabertura), com concorrência otimista via `versao`.
+--     revisão da Coordenação, com estados explícitos e independentemente
+--     consultáveis (inclusive DEVOLVIDO e REABERTO — nenhum deles é
+--     colapsado em outro estado) e concorrência otimista via `versao`.
 --
--- Novo eixo `workflow_status` (cv_rdv_operacional):
---   rascunho -> enviado -> em_revisao -> aprovado_coordenacao -> finalizado -> em_revisao (reabertura)
---   em_revisao -> rascunho (devolução; motivo_devolucao registra o porquê)
---   {rascunho, enviado, em_revisao} -> cancelado
+-- Novo eixo `workflow_status` (cv_rdv_operacional), com CHECK fechado:
+--   rascunho -> enviado -> em_revisao -> aprovado_coordenacao -> finalizado -> reaberto -> em_revisao
+--   em_revisao -> devolvido -> {rascunho, enviado}
+--   {rascunho, enviado, em_revisao, devolvido, reaberto} -> cancelado
 --
 -- Não introduz nenhuma tabela/coluna com nomes reservados a eDB, Diário de
 -- Bordo Digital, SDRMe ou qualquer termo de homologação/validação ANAC.
@@ -37,6 +38,8 @@ ALTER TABLE cv_rdv_operacional ADD COLUMN enviado_por INTEGER;
 ALTER TABLE cv_rdv_operacional ADD COLUMN enviado_em TEXT;
 ALTER TABLE cv_rdv_operacional ADD COLUMN revisao_iniciada_por INTEGER;
 ALTER TABLE cv_rdv_operacional ADD COLUMN revisao_iniciada_em TEXT;
+ALTER TABLE cv_rdv_operacional ADD COLUMN devolvido_por INTEGER;
+ALTER TABLE cv_rdv_operacional ADD COLUMN devolvido_em TEXT;
 ALTER TABLE cv_rdv_operacional ADD COLUMN aprovado_coordenacao_por INTEGER;
 ALTER TABLE cv_rdv_operacional ADD COLUMN aprovado_coordenacao_em TEXT;
 ALTER TABLE cv_rdv_operacional ADD COLUMN finalizado_workflow_em TEXT;
@@ -44,6 +47,49 @@ ALTER TABLE cv_rdv_operacional ADD COLUMN reaberto_por INTEGER;
 ALTER TABLE cv_rdv_operacional ADD COLUMN reaberto_em TEXT;
 ALTER TABLE cv_rdv_operacional ADD COLUMN motivo_devolucao TEXT;
 ALTER TABLE cv_rdv_operacional ADD COLUMN motivo_cancelamento TEXT;
+
+-- SQLite não permite CHECK em ALTER TABLE ADD COLUMN sobre expressões não
+-- determinísticas em algumas versões; aplicamos o CHECK fechado via um
+-- rebuild leve (CREATE TRIGGER de validação) em vez de recriar a tabela
+-- inteira (evitaria risco de perda de dados/índices em uma tabela já usada
+-- em produção por 0410/0411).
+CREATE TRIGGER IF NOT EXISTS trg_cv_rdv_operacional_workflow_status_insert
+BEFORE INSERT ON cv_rdv_operacional
+FOR EACH ROW
+WHEN NEW.workflow_status NOT IN (
+  'rascunho', 'enviado', 'em_revisao', 'devolvido',
+  'aprovado_coordenacao', 'finalizado', 'reaberto', 'cancelado'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'cv_rdv_operacional workflow_status invalido');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cv_rdv_operacional_workflow_status_update
+BEFORE UPDATE OF workflow_status ON cv_rdv_operacional
+FOR EACH ROW
+WHEN NEW.workflow_status NOT IN (
+  'rascunho', 'enviado', 'em_revisao', 'devolvido',
+  'aprovado_coordenacao', 'finalizado', 'reaberto', 'cancelado'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'cv_rdv_operacional workflow_status invalido');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cv_rdv_operacional_versao_insert
+BEFORE INSERT ON cv_rdv_operacional
+FOR EACH ROW
+WHEN NEW.versao < 1
+BEGIN
+  SELECT RAISE(ABORT, 'cv_rdv_operacional versao invalida');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cv_rdv_operacional_versao_update
+BEFORE UPDATE OF versao ON cv_rdv_operacional
+FOR EACH ROW
+WHEN NEW.versao < 1
+BEGIN
+  SELECT RAISE(ABORT, 'cv_rdv_operacional versao invalida');
+END;
 
 CREATE INDEX IF NOT EXISTS idx_cv_rdv_operacional_empresa_workflow_data
   ON cv_rdv_operacional (empresa_id, workflow_status, data_voo)
@@ -55,7 +101,8 @@ CREATE INDEX IF NOT EXISTS idx_cv_rdv_operacional_empresa_workflow_responsavel
 
 -- ---------------------------------------------------------------------------
 -- Aprovações (não é "assinatura digital" nem homologação ANAC — apenas
--- registro interno de decisão de revisão/aprovação).
+-- registro interno de decisão de revisão/aprovação, incluindo a confirmação
+-- do comandante). Tabela append-only: nunca é atualizada, só inserida.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS cv_rdv_aprovacoes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,8 +116,9 @@ CREATE TABLE IF NOT EXISTS cv_rdv_aprovacoes (
   observacao TEXT,
   justificativa TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  CHECK (tipo_aprovacao IN ('COORDENACAO', 'CONTRATANTE', 'COMERCIAL')),
+  CHECK (tipo_aprovacao IN ('COMANDANTE', 'COORDENACAO', 'CONTRATANTE', 'COMERCIAL')),
   CHECK (status IN ('ENVIADO', 'REVISAO_INICIADA', 'APROVADO', 'DEVOLVIDO', 'REJEITADO', 'REABERTO', 'CANCELADO')),
+  CHECK (versao >= 1),
   FOREIGN KEY (rdv_id) REFERENCES cv_rdv_operacional(id)
 );
 
@@ -91,9 +139,19 @@ BEGIN
   SELECT RAISE(ABORT, 'cv_rdv_aprovacoes empresa_id mismatch');
 END;
 
+-- Append-only: qualquer UPDATE é bloqueado (o app nunca atualiza uma
+-- aprovação já registrada; correções geram uma nova linha/versão).
+CREATE TRIGGER IF NOT EXISTS trg_cv_rdv_aprovacoes_no_update
+BEFORE UPDATE ON cv_rdv_aprovacoes
+FOR EACH ROW
+BEGIN
+  SELECT RAISE(ABORT, 'cv_rdv_aprovacoes e append-only, UPDATE nao permitido');
+END;
+
 -- ---------------------------------------------------------------------------
 -- Revisões: diff campo-a-campo com justificativa, para a tela de "diferenças"
 -- da Coordenação. Complementa (não substitui) a tabela genérica `auditoria`.
+-- Também é append-only.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS cv_rdv_revisoes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,6 +169,7 @@ CREATE TABLE IF NOT EXISTS cv_rdv_revisoes (
   estado_novo TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   CHECK (entidade IN ('rdv', 'etapa', 'tripulante', 'abastecimento')),
+  CHECK (versao >= 1),
   FOREIGN KEY (rdv_id) REFERENCES cv_rdv_operacional(id)
 );
 
@@ -128,8 +187,17 @@ BEGIN
   SELECT RAISE(ABORT, 'cv_rdv_revisoes empresa_id mismatch');
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_cv_rdv_revisoes_no_update
+BEFORE UPDATE ON cv_rdv_revisoes
+FOR EACH ROW
+BEGIN
+  SELECT RAISE(ABORT, 'cv_rdv_revisoes e append-only, UPDATE nao permitido');
+END;
+
 -- ---------------------------------------------------------------------------
--- Alertas derivados de regras (informativo/atenção/impeditivo).
+-- Alertas derivados de regras (informativo/atenção/impeditivo). Esta tabela
+-- NÃO é append-only (uma regra pode ser marcada como resolvida), então o
+-- guard de tenant cobre apenas a mudança das chaves de vínculo.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS cv_rdv_alertas (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -174,6 +242,36 @@ WHEN NOT EXISTS (
 )
 BEGIN
   SELECT RAISE(ABORT, 'cv_rdv_alertas empresa_id mismatch');
+END;
+
+-- etapa_id, quando informado, precisa pertencer ao mesmo voo do RDV.
+CREATE TRIGGER IF NOT EXISTS trg_cv_rdv_alertas_etapa_insert
+BEFORE INSERT ON cv_rdv_alertas
+FOR EACH ROW
+WHEN NEW.etapa_id IS NOT NULL
+ AND NOT EXISTS (
+   SELECT 1
+   FROM cv_voo_etapas e
+   INNER JOIN cv_rdv_operacional r ON r.voo_id = e.voo_id AND r.empresa_id = e.empresa_id
+   WHERE e.id = NEW.etapa_id
+     AND e.empresa_id = NEW.empresa_id
+     AND r.id = NEW.rdv_id
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'cv_rdv_alertas etapa_id nao pertence ao voo do rdv');
+END;
+
+-- Bloqueia alteração das chaves de vínculo (empresa/rdv/etapa); os demais
+-- campos (resolvido, resolvido_por, resolvido_em, justificativa_resolucao,
+-- updated_at) continuam livremente atualizáveis pela aplicação.
+CREATE TRIGGER IF NOT EXISTS trg_cv_rdv_alertas_keys_immutable
+BEFORE UPDATE OF empresa_id, rdv_id, etapa_id ON cv_rdv_alertas
+FOR EACH ROW
+WHEN NEW.empresa_id <> OLD.empresa_id
+  OR NEW.rdv_id <> OLD.rdv_id
+  OR IFNULL(NEW.etapa_id, -1) <> IFNULL(OLD.etapa_id, -1)
+BEGIN
+  SELECT RAISE(ABORT, 'cv_rdv_alertas chaves de vinculo sao imutaveis');
 END;
 
 -- ---------------------------------------------------------------------------
@@ -228,17 +326,6 @@ BEGIN
   SELECT RAISE(ABORT, 'cv_voo_abastecimentos empresa_id mismatch');
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_cv_voo_abastecimentos_voo_update
-BEFORE UPDATE OF empresa_id, voo_id ON cv_voo_abastecimentos
-FOR EACH ROW
-WHEN NOT EXISTS (
-  SELECT 1 FROM cv_voos v
-  WHERE v.id = NEW.voo_id AND v.empresa_id = NEW.empresa_id
-)
-BEGIN
-  SELECT RAISE(ABORT, 'cv_voo_abastecimentos empresa_id mismatch');
-END;
-
 CREATE TRIGGER IF NOT EXISTS trg_cv_voo_abastecimentos_etapa_insert
 BEFORE INSERT ON cv_voo_abastecimentos
 FOR EACH ROW
@@ -249,4 +336,16 @@ WHEN NEW.etapa_id IS NOT NULL
  )
 BEGIN
   SELECT RAISE(ABORT, 'cv_voo_abastecimentos etapa_id mismatch');
+END;
+
+-- Bloqueia alteração das chaves de vínculo (empresa/voo/etapa); os demais
+-- campos operacionais continuam atualizáveis pela aplicação.
+CREATE TRIGGER IF NOT EXISTS trg_cv_voo_abastecimentos_keys_immutable
+BEFORE UPDATE OF empresa_id, voo_id, etapa_id ON cv_voo_abastecimentos
+FOR EACH ROW
+WHEN NEW.empresa_id <> OLD.empresa_id
+  OR NEW.voo_id <> OLD.voo_id
+  OR IFNULL(NEW.etapa_id, -1) <> IFNULL(OLD.etapa_id, -1)
+BEGIN
+  SELECT RAISE(ABORT, 'cv_voo_abastecimentos chaves de vinculo sao imutaveis');
 END;
