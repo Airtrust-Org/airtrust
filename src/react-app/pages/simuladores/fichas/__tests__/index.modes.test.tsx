@@ -91,6 +91,7 @@ function buildFicha(overrides: Record<string, unknown> = {}) {
 describe('FichasAvaliacaoContent — mode="minhas" (própria ficha como participante)', () => {
   beforeEach(() => {
     permissionsMock.mockReturnValue({
+      role: 'INSTRUTOR',
       isAdmin: false,
       isGestor: false,
       isAluno: false,
@@ -194,6 +195,7 @@ describe('FichasAvaliacaoContent — mode="minhas" (própria ficha como particip
 describe('FichasAvaliacaoContent — mode="para-avaliar" (instrutor atribuído)', () => {
   beforeEach(() => {
     permissionsMock.mockReturnValue({
+      role: 'INSTRUTOR',
       isAdmin: false,
       isGestor: false,
       isAluno: false,
@@ -309,6 +311,7 @@ describe('FichasAvaliacaoContent — showInstrutorActions não é habilitado ape
     // ou resposta cacheada), o front nunca deve inferir a capability apenas
     // do mode da tela — precisa checar can('simuladores.evaluate').
     permissionsMock.mockReturnValue({
+      role: 'ALUNO',
       isAdmin: false,
       isGestor: false,
       isAluno: false,
@@ -340,5 +343,40 @@ describe('FichasAvaliacaoContent — showInstrutorActions não é habilitado ape
     expect(screen.queryByRole('button', { name: /Avaliar Tripulante/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Assinar Instrutor/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Imprimir Ficha Modelo/ })).toBeNull();
+  });
+
+  it('mode="para-avaliar" com role ADMINISTRADOR não mostra ações de instrutor mesmo se o can() genérico (wildcard admin) retornasse true — a checagem usa a capability real, não can()', async () => {
+    // Regressão do achado de review: usePermissions().can() aplica wildcard
+    // de ADMINISTRADOR/GESTOR (podem fazer qualquer coisa por padrão). Essa
+    // tela precisa da capability REAL de instrutor (hasInstructorEvaluationCapability),
+    // que não tem esse wildcard — mesmo que can() diga "true" para um admin.
+    permissionsMock.mockReturnValue({
+      role: 'ADMINISTRADOR',
+      isAdmin: true,
+      isGestor: false,
+      isAluno: false,
+      isInstrutor: false,
+      can: () => true, // wildcard genérico do app — não deve ser usado aqui
+    });
+    authMock.mockReturnValue({
+      user: { id: 1, email: 'admin@test', nome: 'Admin', role: 'ADMINISTRADOR', permissions: [], funcionario_id: null },
+    });
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/simuladores/fichas/para-avaliar')) {
+        return jsonResponse({
+          success: true,
+          data: [buildFicha({ id: 2, colaborador_id_aluno: 10, status: 'AVALIACAO_PENDENTE' })],
+        });
+      }
+      return jsonResponse({ success: true, data: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderMode('para-avaliar');
+
+    await screen.findAllByRole('row');
+    expect(screen.queryByRole('button', { name: /Avaliar Tripulante/ })).toBeNull();
   });
 });

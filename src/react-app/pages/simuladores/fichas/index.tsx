@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { hasInstructorEvaluationCapability } from '@/react-app/utils/simuladoresEvaluateCapability';
 import AppLayout from '@/react-app/components/AppLayout';
 import {
   CalendarDays,
@@ -187,20 +188,23 @@ const FICHAS_VIEW_COPY: Record<Exclude<FichasViewMode, 'all'>, { title: string; 
 export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentProps = {}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isAdmin, isGestor, isAluno, isInstrutor, can } = usePermissions();
+  const { role, isAdmin, isGestor, isAluno, isInstrutor } = usePermissions();
   const { user: currentUser } = useAuth();
   const isMinhasMode = mode === 'minhas';
   const isParaAvaliarMode = mode === 'para-avaliar';
-  // Capability real (não apenas "o modo da tela é para-avaliar"): mesma
-  // permissão nomeada que a rota de backend exige (simuladores.evaluate).
+  // Capability real (não apenas "o modo da tela é para-avaliar" e não o
+  // `can()` genérico, que aplica wildcard de ADMINISTRADOR/GESTOR): mesma
+  // regra que a rota de backend exige em GET /fichas/para-avaliar
+  // (hasSimuladoresEvaluateCapability — sem fallback de role admin/gestor).
   // Nas telas dedicadas ("Minhas Fichas" / "Fichas para Avaliar") as ações de
   // instrutor (avaliar / assinar instrutor / imprimir ficha modelo) seguem o
   // papel exercido NESSA lista (identidade por ficha, já garantida pelo
-  // backend) E a capability real do usuário — nunca apenas o modo da tela.
+  // backend) E a capability real do usuário — nunca apenas o modo da tela
+  // nem o wildcard de role administrativo.
   const showInstrutorActions = isMinhasMode
     ? false
     : isParaAvaliarMode
-      ? can('simuladores.evaluate')
+      ? hasInstructorEvaluationCapability(role, currentUser?.permissions)
       : !isAluno;
   const sessaoIdParam = searchParams.get('sessao');
   const [fichas, setFichas] = useState<Ficha[]>([]);
@@ -1718,7 +1722,8 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
  * para "Minhas Fichas".
  */
 export default function FichasSessao() {
-  const { isAdmin, isGestor, can } = usePermissions();
+  const { role, isAdmin, isGestor } = usePermissions();
+  const { user: currentUser } = useAuth();
 
   if (isAdmin || isGestor) {
     return (
@@ -1731,7 +1736,7 @@ export default function FichasSessao() {
   return (
     <Navigate
       to={
-        can('simuladores.evaluate')
+        hasInstructorEvaluationCapability(role, currentUser?.permissions)
           ? '/simuladores/fichas/para-avaliar'
           : '/simuladores/fichas/minhas'
       }

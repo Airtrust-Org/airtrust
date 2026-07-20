@@ -9,23 +9,42 @@
  * acumula os dois papéis em fichas diferentes.
  *
  * Capability gate: além do `ProtectedRoute` (autenticação), esta tela
- * exige a permissão nomeada 'simuladores.evaluate' — o mesmo nome de
- * capability que o backend valida em GET /fichas/para-avaliar
+ * exige a capability real 'simuladores.evaluate' — o mesmo nome que o
+ * backend valida em GET /fichas/para-avaliar
  * (hasSimuladoresEvaluateCapability, 403 INSTRUCTOR_EVALUATION_FORBIDDEN).
- * Sem ela, o componente de lista nem chega a montar — o usuário é
- * redirecionado para a tela que sempre pode ver ("Minhas Fichas").
+ *
+ * IMPORTANTE: aqui NÃO usamos `usePermissions().can('simuladores.evaluate')`
+ * diretamente — esse `can()` genérico aplica o wildcard de
+ * ADMINISTRADOR/GESTOR (podem fazer qualquer coisa por padrão no resto do
+ * app), o que faria um admin/gestor sem vínculo de instrutor montar esta
+ * tela mesmo sabendo que o backend vai recusar com 403. Usamos
+ * `hasInstructorEvaluationCapability`, que espelha exatamente a mesma
+ * regra do backend (sem wildcard de role). Sem a capability, o componente
+ * de lista nem chega a montar:
+ *   - admin/gestor → redireciona para a visão administrativa formal
+ *     existente em /simuladores/fichas (getEmployeeSectorAccess).
+ *   - qualquer outro papel → redireciona para "Minhas Fichas" (tela que
+ *     qualquer vínculo funcional sempre pode ver).
  */
 
 import { Navigate } from 'react-router-dom';
 import AppLayout from '@/react-app/components/AppLayout';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useAuth } from '@/react-app/hooks/useAuth';
+import { hasInstructorEvaluationCapability } from '@/react-app/utils/simuladoresEvaluateCapability';
 import { FichasAvaliacaoContent } from './index';
 
 export default function FichasParaAvaliarTreinamentoVoo() {
-  const { can } = usePermissions();
+  const { role, isAdmin, isGestor } = usePermissions();
+  const { user } = useAuth();
 
-  if (!can('simuladores.evaluate')) {
-    return <Navigate to="/simuladores/fichas/minhas" replace />;
+  if (!hasInstructorEvaluationCapability(role, user?.permissions)) {
+    return (
+      <Navigate
+        to={isAdmin || isGestor ? '/simuladores/fichas' : '/simuladores/fichas/minhas'}
+        replace
+      />
+    );
   }
 
   return (
