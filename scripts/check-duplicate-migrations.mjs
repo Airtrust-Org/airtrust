@@ -56,6 +56,10 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0420_notificacoes_log_add_empresa_id_preflight_audit.sql',
     '0420_notificacoes_log_add_empresa_id_rollback.sql',
   ],
+  '0437': [
+    '0437_setores_gestores_gestor_id_optional.sql',
+    '0437_setores_gestores_gestor_id_optional_rollback.sql',
+  ],
 };
 
 const files = fs
