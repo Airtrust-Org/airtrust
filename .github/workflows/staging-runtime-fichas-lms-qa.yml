@@ -49,8 +49,6 @@ jobs:
           [[ -n "$STAGING_SMOKE_EMAIL" && -n "$STAGING_SMOKE_PASSWORD" ]] || { echo 'AIRTRUST_STAGING_FUNCTIONAL_QA_GUARD_NO_GO: required smoke tenant secrets absent' >&2; exit 1; }
           echo "::add-mask::$QA_ADMIN_EMAIL"
           echo "::add-mask::$QA_ADMIN_PASSWORD"
-          echo "::add-mask::$STAGING_SMOKE_EMAIL"
-          echo "::add-mask::$STAGING_SMOKE_PASSWORD"
           blocked_host="api.""airtrust.online"
           ! grep -Fq "$blocked_host" scripts/qa/staging-runtime-fichas-lms-qa.mjs || { echo 'AIRTRUST_STAGING_FUNCTIONAL_QA_GUARD_NO_GO: production target found' >&2; exit 1; }
           ! grep -Eqi 'wrangler .*deploy|migration|sincronizar-frms|frms_jornada' scripts/qa/staging-runtime-fichas-lms-qa.mjs || { echo 'AIRTRUST_STAGING_FUNCTIONAL_QA_GUARD_NO_GO: forbidden operation found' >&2; exit 1; }
@@ -89,8 +87,6 @@ jobs:
           set -euo pipefail
           echo "::add-mask::$QA_ADMIN_EMAIL"
           echo "::add-mask::$QA_ADMIN_PASSWORD"
-          echo "::add-mask::$STAGING_SMOKE_EMAIL"
-          echo "::add-mask::$STAGING_SMOKE_PASSWORD"
           node scripts/qa/staging-runtime-fichas-lms-qa.mjs
       - name: Ensure sanitized QA summary exists
         if: always()
