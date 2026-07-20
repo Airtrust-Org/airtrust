@@ -59,6 +59,14 @@ const DashboardDesempenho = lazyWithRetry(
   'DashboardDesempenho',
 );
 const FichasSessao = lazyWithRetry(() => import('./pages/simuladores/fichas'), 'FichasSessao');
+const FichasMinhas = lazyWithRetry(
+  () => import('./pages/simuladores/fichas/minhas'),
+  'FichasMinhas',
+);
+const FichasParaAvaliar = lazyWithRetry(
+  () => import('./pages/simuladores/fichas/para-avaliar'),
+  'FichasParaAvaliar',
+);
 const FichaDetalhe = lazyWithRetry(
   () => import('./pages/simuladores/fichas/FichaDetalhe'),
   'FichaDetalhe',
@@ -508,6 +516,22 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <FichasSessao />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/simuladores/fichas/minhas"
+                      element={
+                        <ProtectedRoute>
+                          <FichasMinhas />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/simuladores/fichas/para-avaliar"
+                      element={
+                        <ProtectedRoute>
+                          <FichasParaAvaliar />
                         </ProtectedRoute>
                       }
                     />

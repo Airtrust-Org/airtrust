@@ -33,7 +33,7 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
   },
   {
     tipo: 'SIMULADOR',
-    titulo: 'Fichas de Simulador',
+    titulo: 'Fichas de Treinamento de Voo',
     descricao: 'Fichas de treinamento em simulador arquivadas',
     icone: Plane,
     cor: 'cyan',
