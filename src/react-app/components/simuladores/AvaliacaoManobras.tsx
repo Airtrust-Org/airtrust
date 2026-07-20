@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
+import { useAuth } from '@/react-app/hooks/useAuth';
 import {
   CheckCircle,
   XCircle,
@@ -67,6 +68,7 @@ interface AvaliacaoManobrasProps {
 }
 
 const AvaliacaoManobras: React.FC<AvaliacaoManobrasProps> = ({ fichaUuid, onClose }) => {
+  const { user: currentUser } = useAuth();
   const [dados, setDados] = useState<DadosFicha | null>(null);
   const [notas, setNotas] = useState<Record<number, string>>({});
   const [observacoes, setObservacoes] = useState<Record<number, string>>({});
@@ -543,7 +545,10 @@ const AvaliacaoManobras: React.FC<AvaliacaoManobrasProps> = ({ fichaUuid, onClos
             </Button>
 
             {/* Botão de Assinatura baseado no status */}
-            {dados.status_workflow === 'PENDENTE_ALUNO' && (
+            {/* O aluno só pode assinar se for o próprio tripulante avaliado */}
+            {dados.status_workflow === 'PENDENTE_ALUNO' &&
+              currentUser?.funcionario_id != null &&
+              Number(currentUser.funcionario_id) === Number(dados.colaborador.id) && (
               <Button
                 onClick={assinarFicha}
                 className="bg-primary hover:bg-primary/90"
@@ -552,6 +557,15 @@ const AvaliacaoManobras: React.FC<AvaliacaoManobrasProps> = ({ fichaUuid, onClos
                 <Shield className="w-4 h-4 mr-2" />
                 Assinar como Aluno
               </Button>
+            )}
+
+            {/* Instrutor vê o status mas não o botão de assinatura do aluno */}
+            {dados.status_workflow === 'PENDENTE_ALUNO' &&
+              (currentUser?.funcionario_id == null ||
+                Number(currentUser.funcionario_id) !== Number(dados.colaborador.id)) && (
+              <span className="inline-flex items-center px-4 py-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+                Aguardando assinatura do aluno
+              </span>
             )}
 
             {dados.status_workflow === 'PENDENTE_INSTRUTOR_FINAL' && (
