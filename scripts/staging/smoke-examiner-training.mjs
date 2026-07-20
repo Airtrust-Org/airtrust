@@ -64,11 +64,12 @@ export function saoPauloTodayDateKey(now = new Date()) {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
-// Horário único por execução, dentro do próprio dia civil (nunca cruza a
-// meia-noite): usada apenas para a sessão dedicada ao teste de PDF (I_pdf),
-// que precisa ficar no dia de hoje e por isso não pode se apoiar no
-// randomDayOffset (dias no futuro) usado pelos demais cenários para evitar
-// colisão de agendamento — aqui a variação é de horário, não de dia.
+// A sessão dedicada ao teste de PDF (I_pdf) precisa ficar no dia atual, mas
+// não pode depender de um único horário aleatório: execuções anteriores do
+// smoke deixam sessões sintéticas válidas na agenda QA e o backend deve
+// corretamente rejeitar sobreposições. Tentamos uma lista determinística de
+// slots já iniciados, aceitando retry exclusivamente para o conflito explícito
+// que o contrato do backend retorna.
 // Nunca aceita 409 (ou qualquer status != 200) como PASS — o gate de
 // disponibilidade "ficha só no dia" é comportamento de produto legítimo, não
 // algo a contornar aqui.
@@ -98,10 +99,10 @@ function saoPauloNowMinutesOfDay(now = new Date()) {
 // um 409 FICHA_NOT_AVAILABLE_YET legítimo (a sessão ainda não começou) — por
 // isso a janela é limitada ao horário atual menos uma margem de segurança,
 // nunca ao intervalo fixo 06:00–21:45 usado anteriormente.
-export function pdfFixtureTimeWindow(random = Math.random(), now = new Date()) {
+export function pdfFixtureCandidateTimeWindows(now = new Date()) {
   const PREFERRED_WINDOW_START_MINUTES = 6 * 60; // 06:00, piso preferencial (não absoluto)
   const SAFETY_BUFFER_MINUTES = 15; // margem contra corrida com o relógio do Worker
-  const SLOT_MINUTES = 15;
+  const SLOT_MINUTES = 60;
   // Nunca pode ficar no futuro em relação a "agora", mesmo de madrugada — por
   // isso o piso preferencial de 06:00 cede quando "agora" ainda não chegou lá
   // (ex.: smoke rodando às 03:00 América/São_Paulo não pode agendar 06:00).
@@ -111,21 +112,98 @@ export function pdfFixtureTimeWindow(random = Math.random(), now = new Date()) {
   );
   const windowStartMinutes = Math.min(PREFERRED_WINDOW_START_MINUTES, latestStartMinutes);
   const windowEndMinutes = latestStartMinutes;
-  const slotCount = Math.max(1, Math.floor((windowEndMinutes - windowStartMinutes) / SLOT_MINUTES) + 1);
-  const slot = Math.floor(random * slotCount);
-  const startMinutes = Math.min(windowStartMinutes + slot * SLOT_MINUTES, windowEndMinutes);
-  const endMinutes = startMinutes + 60;
-  const toHHMM = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-  return { hora_inicio: toHHMM(startMinutes), hora_fim: toHHMM(endMinutes) };
+  const startAt = Math.floor(windowStartMinutes / SLOT_MINUTES) * SLOT_MINUTES;
+  const toHHMM = (mins) =>
+    `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+  const candidates = [];
+  for (let startMinutes = startAt; startMinutes <= windowEndMinutes; startMinutes += SLOT_MINUTES) {
+    if (startMinutes + 60 <= 22 * 60) {
+      candidates.push({ hora_inicio: toHHMM(startMinutes), hora_fim: toHHMM(startMinutes + 60) });
+    }
+  }
+  return candidates;
+}
+
+// Mantido para consumidores externos legados; o smoke usa todos os candidatos.
+export function pdfFixtureTimeWindow(_random = Math.random(), now = new Date()) {
+  return pdfFixtureCandidateTimeWindows(now)[0] || { hora_inicio: '00:00', hora_fim: '01:00' };
+}
+
+export function sanitizeScheduleConflict(response) {
+  if (response?.status !== 400) return null;
+  const raw = String(response?.json?.error || response?.json?.message || '');
+  const match = raw.match(/^Conflito externo de (simulador|instrutor|participante)(?::\s*\d+)?$/i);
+  if (!match) return null;
+  const resource = match[1].toLowerCase();
+  return {
+    errorCode: 'EXTERNAL_SCHEDULE_CONFLICT',
+    message: `Conflito externo de ${resource}`,
+    resource,
+  };
+}
+
+export async function createPdfSessionInAvailableSlot({ candidates, createSession }) {
+  const attempts = [];
+  for (const [index, candidate] of candidates.entries()) {
+    const response = await createSession(candidate);
+    const conflict = sanitizeScheduleConflict(response);
+    const errorCode =
+      conflict?.errorCode ||
+      (typeof response?.json?.code === 'string'
+        ? response.json.code.replace(/[^A-Z0-9_]/gi, '')
+        : undefined);
+    const sanitizedMessage =
+      conflict?.message ||
+      (typeof response?.json?.error === 'string'
+        ? String(response.json.error)
+            .replace(/\b\d{3,}\b/g, '[id]')
+            .slice(0, 120)
+        : undefined);
+    const attempt = {
+      attempt: index + 1,
+      horario: `${candidate.hora_inicio}-${candidate.hora_fim}`,
+      status: response.status,
+      errorCode: errorCode || null,
+      message: sanitizedMessage || null,
+      discardReason: null,
+    };
+    if (response.status === 201) {
+      attempt.discardReason = 'selected';
+      attempts.push(attempt);
+      return { response, selected: candidate, attempts };
+    }
+    if (conflict) {
+      attempt.discardReason = `schedule_conflict_${conflict.resource}`;
+      attempts.push(attempt);
+      continue;
+    }
+    attempt.discardReason = `hard_fail_http_${response.status}`;
+    attempts.push(attempt);
+    const err = new Error(
+      `I_pdf não pode usar ${attempt.horario}: HTTP ${response.status}${errorCode ? ` (${errorCode})` : ''}`,
+    );
+    err.attempts = attempts;
+    throw err;
+  }
+  const err = new Error(`I_pdf sem slot disponível: ${JSON.stringify(attempts)}`);
+  err.attempts = attempts;
+  throw err;
 }
 
 async function main() {
   const baseUrl = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL || DEFAULT_BASE_URL);
-  const email = String(process.env.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid');
+  const email = String(
+    process.env.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid',
+  );
   const password = String(process.env.QA_EXAMINER_ADMIN_PASSWORD || '');
   assert(password, 'QA_EXAMINER_ADMIN_PASSWORD é obrigatório para o smoke autenticado.');
 
-  const report = { baseUrl, admin: maskEmail(email), scenarios: {}, generatedAtUtc: new Date().toISOString() };
+  const report = {
+    baseUrl,
+    admin: maskEmail(email),
+    scenarios: {},
+    generatedAtUtc: new Date().toISOString(),
+  };
 
   const loginResult = await login(baseUrl, email, password);
   const token = extractAccessToken(loginResult);
@@ -140,28 +218,34 @@ async function main() {
   const participante2Id = byMatricula('QA-PARTICIPANTE-BRAVO');
 
   const simuladores = await authFetch(baseUrl, token, '/api/simuladores');
-  const simuladorId = (simuladores.json?.data ?? []).find((s) => s.nome === 'QA-SIM-01')?.id ?? null;
+  const simuladorId =
+    (simuladores.json?.data ?? []).find((s) => s.nome === 'QA-SIM-01')?.id ?? null;
 
   const modelos = await authFetch(baseUrl, token, '/api/simuladores/modelos-sessao');
-  const modeloIdByCodigo = (codigo) => (modelos.json?.data ?? []).find((m) => m.codigo === codigo)?.id ?? null;
+  const modeloIdByCodigo = (codigo) =>
+    (modelos.json?.data ?? []).find((m) => m.codigo === codigo)?.id ?? null;
 
-  assert(instrutorId && participante1Id && participante2Id && simuladorId, 'Fixture QA incompleta — rode scripts/staging/seed-qa-examiner-training.mjs --apply primeiro.');
+  assert(
+    instrutorId && participante1Id && participante2Id && simuladorId,
+    'Fixture QA incompleta — rode scripts/staging/seed-qa-examiner-training.mjs --apply primeiro.',
+  );
 
   const commonSessionFields = {
     hora_fim: '09:00',
     simulador_id: simuladorId,
     instrutor_id: instrutorId,
-    participantes: [
-      { funcionario_id: participante1Id },
-      { funcionario_id: participante2Id },
-    ],
+    participantes: [{ funcionario_id: participante1Id }, { funcionario_id: participante2Id }],
   };
 
   // A. Capability
   {
     const { status, json } = await fetchJson(`${baseUrl}/api/capabilities`);
     const ok = status === 200 && json?.data?.simulador_shared_sessions === true;
-    report.scenarios.A_capability = { ok, status, shared_sessions_enabled: json?.data?.simulador_shared_sessions };
+    report.scenarios.A_capability = {
+      ok,
+      status,
+      shared_sessions_enabled: json?.data?.simulador_shared_sessions,
+    };
   }
 
   // B. Sessão simples: criar, editar, reabrir, cancelar sem efeito.
@@ -192,7 +276,11 @@ async function main() {
         observacoes: 'QA smoke — sessão simples (rollback via seed --rollback)',
       }),
     });
-    simpleSessionId = created.json?.data?.id ?? created.json?.data?.sessao_id ?? created.json?.data?.sessaoId ?? null;
+    simpleSessionId =
+      created.json?.data?.id ??
+      created.json?.data?.sessao_id ??
+      created.json?.data?.sessaoId ??
+      null;
     const editOk = simpleSessionId
       ? (
           await authFetch(baseUrl, token, `/api/simuladores/sessoes/${simpleSessionId}`, {
@@ -222,10 +310,7 @@ async function main() {
     hora_fim: '10:00',
     simulador_id: simuladorId,
     instrutor_id: instrutorId,
-    participantes: [
-      { funcionario_id: participante1Id },
-      { funcionario_id: participante2Id },
-    ],
+    participantes: [{ funcionario_id: participante1Id }, { funcionario_id: participante2Id }],
     segmentos: [
       {
         modelo_sessao_id: modeloIdByCodigo('EXA-V01'),
@@ -291,7 +376,10 @@ async function main() {
       note: 'bloqueio por ficha assinada coberto por teste automatizado, não por este smoke',
     };
   } else {
-    report.scenarios.D_idempotent_reconversion = { ok: false, skipped: 'no simple session id from B' };
+    report.scenarios.D_idempotent_reconversion = {
+      ok: false,
+      skipped: 'no simple session id from B',
+    };
   }
 
   // E. Programa genérico: painel EXA ausente, EXA-V01..04 ocultos.
@@ -332,10 +420,7 @@ async function main() {
         hora_fim: '10:00',
         simulador_id: simuladorId,
         instrutor_id: instrutorId,
-        participantes: [
-          { funcionario_id: participante1Id },
-          { funcionario_id: participante2Id },
-        ],
+        participantes: [{ funcionario_id: participante1Id }, { funcionario_id: participante2Id }],
         observacoes: 'QA smoke — evento 2 examinador (rollback via seed --rollback)',
         segmentos: [
           {
@@ -376,7 +461,11 @@ async function main() {
 
   // G. Histórico: reabrir sessão convertida (B/C) e confirmar que os segmentos não duplicam.
   if (simpleSessionId) {
-    const reopened = await authFetch(baseUrl, token, `/api/simuladores/sessoes/compartilhada/${simpleSessionId}`);
+    const reopened = await authFetch(
+      baseUrl,
+      token,
+      `/api/simuladores/sessoes/compartilhada/${simpleSessionId}`,
+    );
     const segmentos = reopened.json?.data?.segmentos ?? [];
     report.scenarios.G_history_reopen = {
       ok: reopened.status === 200 && segmentos.length === 2,
@@ -391,14 +480,21 @@ async function main() {
   //    Usa a fixture smoke pré-existente (scripts/seed-staging-smoke-user.mjs) como tenant
   //    estrangeiro — nunca cria um segundo tenant QA só para este teste.
   if (simpleSessionId && process.env.STAGING_SMOKE_EMAIL && process.env.STAGING_SMOKE_PASSWORD) {
-    const foreignLogin = await login(baseUrl, process.env.STAGING_SMOKE_EMAIL, process.env.STAGING_SMOKE_PASSWORD);
+    const foreignLogin = await login(
+      baseUrl,
+      process.env.STAGING_SMOKE_EMAIL,
+      process.env.STAGING_SMOKE_PASSWORD,
+    );
     const foreignToken = extractAccessToken(foreignLogin);
     const crossAttempt = await authFetch(
       baseUrl,
       foreignToken,
       `/api/simuladores/sessoes/compartilhada/${simpleSessionId}`,
     );
-    report.scenarios.H_cross_tenant = { ok: crossAttempt.status === 404, status: crossAttempt.status };
+    report.scenarios.H_cross_tenant = {
+      ok: crossAttempt.status === 404,
+      status: crossAttempt.status,
+    };
   } else {
     report.scenarios.H_cross_tenant = {
       ok: null,
@@ -426,44 +522,72 @@ async function main() {
   {
     const pdfFixtureRunId = `pdf-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const pdfFixtureDate = saoPauloTodayDateKey();
-    const { hora_inicio, hora_fim } = pdfFixtureTimeWindow();
-
-    const pdfSessionCreated = await authFetch(baseUrl, token, '/api/simuladores/sessoes/compartilhada', {
-      method: 'POST',
-      body: JSON.stringify({
-        data: pdfFixtureDate,
-        hora_inicio,
-        hora_fim,
-        simulador_id: simuladorId,
-        instrutor_id: instrutorId,
-        participantes: [
-          { funcionario_id: participante1Id },
-          { funcionario_id: participante2Id },
-        ],
-        observacoes: `QA smoke — fixture dedicada I_pdf ${pdfFixtureRunId} (rollback via seed --rollback)`,
-        segmentos: [
-          {
-            modelo_sessao_id: modeloIdByCodigo('EXA-V03'),
-            finalidade_codigo: 'ATUACAO_EXAMINADOR',
-            inicio: hora_inicio,
-            fim: hora_fim,
-            participantes: [
-              { funcionario_id: participante1Id, funcao: 'PF', cumpre_treinamento: true },
-              { funcionario_id: participante2Id, funcao: 'PM' },
-            ],
-          },
-        ],
-      }),
-    });
-    const pdfSessionId = pdfSessionCreated.json?.data?.sessao?.id ?? pdfSessionCreated.json?.resumo?.sessao_id ?? null;
+    const candidates = pdfFixtureCandidateTimeWindows();
+    let selectedCandidate = null;
+    let pdfAttempts = [];
+    let pdfSessionCreated;
+    try {
+      const result = await createPdfSessionInAvailableSlot({
+        candidates,
+        createSession: async ({ hora_inicio, hora_fim }) =>
+          authFetch(baseUrl, token, '/api/simuladores/sessoes/compartilhada', {
+            method: 'POST',
+            body: JSON.stringify({
+              data: pdfFixtureDate,
+              hora_inicio,
+              hora_fim,
+              simulador_id: simuladorId,
+              instrutor_id: instrutorId,
+              participantes: [
+                { funcionario_id: participante1Id },
+                { funcionario_id: participante2Id },
+              ],
+              observacoes: `QA smoke — fixture dedicada I_pdf ${pdfFixtureRunId} (rollback via seed --rollback)`,
+              segmentos: [
+                {
+                  modelo_sessao_id: modeloIdByCodigo('EXA-V03'),
+                  finalidade_codigo: 'ATUACAO_EXAMINADOR',
+                  inicio: hora_inicio,
+                  fim: hora_fim,
+                  participantes: [
+                    { funcionario_id: participante1Id, funcao: 'PF', cumpre_treinamento: true },
+                    { funcionario_id: participante2Id, funcao: 'PM' },
+                  ],
+                },
+              ],
+            }),
+          }),
+      });
+      pdfSessionCreated = result.response;
+      selectedCandidate = result.selected;
+      pdfAttempts = result.attempts;
+    } catch (error) {
+      report.scenarios.I_pdf = {
+        ok: false,
+        note: String(error?.message || error),
+        pdfFixtureDate,
+        candidateCount: candidates.length,
+        attempts: error?.attempts || pdfAttempts,
+      };
+      throw error;
+    }
+    const { hora_inicio, hora_fim } = selectedCandidate;
+    const pdfSessionId =
+      pdfSessionCreated.json?.data?.sessao?.id ?? pdfSessionCreated.json?.resumo?.sessao_id ?? null;
     const pdfSessionOk = pdfSessionCreated.status === 201 && pdfSessionId != null;
 
     const pdfStatus = pdfSessionOk
       ? await (async () => {
           const fichasList = await authFetch(baseUrl, token, '/api/simuladores/fichas');
           const fichaId =
-            (fichasList.json?.data ?? []).find((f) => f.agendamento_slot_id === pdfSessionId)?.id ?? null;
-          if (!fichaId) return { status: null, bytes: 0, note: 'nenhuma ficha com agendamento_slot_id correspondente à sessão dedicada' };
+            (fichasList.json?.data ?? []).find((f) => f.agendamento_slot_id === pdfSessionId)?.id ??
+            null;
+          if (!fichaId)
+            return {
+              status: null,
+              bytes: 0,
+              note: 'nenhuma ficha com agendamento_slot_id correspondente à sessão dedicada',
+            };
           const res = await fetch(`${baseUrl}/api/simuladores/fichas/${fichaId}/pdf`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
@@ -471,16 +595,30 @@ async function main() {
           const contentType = res.headers.get('content-type') || '';
           const buf = await res.arrayBuffer();
           const bytes = Buffer.from(buf);
-          const hasPdfSignature = bytes.length >= 5 && bytes.subarray(0, 5).toString('latin1') === '%PDF-';
-          return { status: res.status, contentType, bytes: buf.byteLength, hasPdfSignature, fichaId };
+          const hasPdfSignature =
+            bytes.length >= 5 && bytes.subarray(0, 5).toString('latin1') === '%PDF-';
+          return {
+            status: res.status,
+            contentType,
+            bytes: buf.byteLength,
+            hasPdfSignature,
+            fichaId,
+          };
         })()
-      : { status: null, bytes: 0, note: 'sessão dedicada de PDF não foi criada (ver pdfSessionCreated)' };
+      : {
+          status: null,
+          bytes: 0,
+          note: 'sessão dedicada de PDF não foi criada (ver pdfSessionCreated)',
+        };
 
     report.scenarios.I_pdf = {
       ok: isValidPdfResponse(pdfStatus),
       note: 'sessão dedicada agendada para hoje (fuso America/Sao_Paulo) — 409 (FICHA_NOT_AVAILABLE_YET) nunca é aceito como PASS',
       pdfFixtureDate,
       pdfFixtureHorario: `${hora_inicio}-${hora_fim}`,
+      selectedSlot: `${hora_inicio}-${hora_fim}`,
+      candidateCount: candidates.length,
+      attempts: pdfAttempts,
       pdfSessionCreateStatus: pdfSessionCreated.status,
       pdfSessionId,
       ...pdfStatus,
