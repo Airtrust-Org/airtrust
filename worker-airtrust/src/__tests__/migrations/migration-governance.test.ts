@@ -70,6 +70,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0420_notificacoes_log_add_empresa_id_preflight_audit.sql',
     '0420_notificacoes_log_add_empresa_id_rollback.sql',
   ],
+  '0437': [
+    '0437_setores_gestores_gestor_id_optional.sql',
+    '0437_setores_gestores_gestor_id_optional_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -105,6 +109,8 @@ const EXPECTED_FOREIGN_KEYS_OFF_FILES = [
   '0397_harden_empresa_id_wave2.sql',
   '0399_harden_empresa_id_wave3.sql',
   '0402_harden_empresa_id_wave4.sql',
+  '0437_setores_gestores_gestor_id_optional.sql',
+  '0437_setores_gestores_gestor_id_optional_rollback.sql',
 ] as const;
 
 function listCanonicalMigrationFiles(): string[] {
@@ -148,9 +154,8 @@ describe('migration governance', () => {
     const regularPrefixes = numericPrefixes.filter((prefix) => prefix !== '9999');
     const highPrefixes = files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file));
 
-    // Ratchet raised 2026-07-16: 0436 reserved for simulator-session
-    // notification metadata on notificacoes_log.
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(436);
+    // Ratchet raised 2026-07-19: 0437 setores_gestores gestor_id optional.
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(437);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
