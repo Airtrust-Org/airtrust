@@ -98,9 +98,37 @@ export function evaluateProductionSmoke({ expectedVersion, expectedSha, response
   const stats = health?.json?.stats ?? {};
   const versionData = version?.json?.data ?? {};
 
-  // 1. /api/health responds HTTP 200.
+  // 1. /api/health responds HTTP 200. A connection-level failure (refused,
+  //    DNS, timeout — captured by the CLI as networkError) gets its own code
+  //    so the retry policy can treat "no connection yet" and "got a bad
+  //    status" consistently, without conflating them with unrelated codes.
   if (!health || health.status !== 200) {
-    fail('health-200', `/api/health returned ${health?.status ?? 'no-response'} (expected 200)`);
+    const code = health?.networkError ? 'health-network-error' : 'health-200';
+    fail(
+      code,
+      `/api/health returned ${health?.status ?? health?.networkError ?? 'no-response'} (expected 200)`,
+    );
+  }
+
+  // 1b. /api/version responds HTTP 200. Previously unchecked — a persistent
+  //     500/404 on /api/version could pass through unnoticed as long as the
+  //     derived fields below happened to fail with a retryable code.
+  if (!version || version.status !== 200) {
+    const code = version?.networkError ? 'version-network-error' : 'version-200';
+    fail(
+      code,
+      `/api/version returned ${version?.status ?? version?.networkError ?? 'no-response'} (expected 200)`,
+    );
+  }
+
+  // 1c. A 200 response whose body did not parse as JSON is structurally
+  //     invalid — never a transient condition, so it must fail immediately
+  //     rather than being retried away (it will not fix itself).
+  if (health && health.status === 200 && health.json === null) {
+    fail('health-invalid-json', '/api/health returned 200 but the body is not valid JSON');
+  }
+  if (version && version.status === 200 && version.json === null) {
+    fail('version-invalid-json', '/api/version returned 200 but the body is not valid JSON');
   }
 
   // 2. environment is production (not staging/dev).
@@ -115,12 +143,18 @@ export function evaluateProductionSmoke({ expectedVersion, expectedSha, response
   // 3. APP_VERSION equals expected release version and is not a placeholder.
   const reportedVersion = firstNonEmpty(stats.version, versionData.version);
   if (FORBIDDEN_VERSIONS.has(reportedVersion.toLowerCase())) {
-    fail('version-placeholder', `version "${reportedVersion || '(empty)'}" is a forbidden placeholder`);
+    fail(
+      'version-placeholder',
+      `version "${reportedVersion || '(empty)'}" is a forbidden placeholder`,
+    );
   }
   if (!expectedVersion) {
     fail('version-expected-missing', 'expectedVersion was not provided to the smoke');
   } else if (reportedVersion !== expectedVersion) {
-    fail('version-mismatch', `version "${reportedVersion || '(empty)'}" != expected "${expectedVersion}"`);
+    fail(
+      'version-mismatch',
+      `version "${reportedVersion || '(empty)'}" != expected "${expectedVersion}"`,
+    );
   }
   // /api/version and /api/health must agree on the deployed version.
   if (stats.version && versionData.version && stats.version !== versionData.version) {
@@ -155,7 +189,10 @@ export function evaluateProductionSmoke({ expectedVersion, expectedSha, response
   if (!sourceShaHeader) {
     fail('source-sha-header', 'X-AirTrust-Source-SHA response header absent');
   } else if (expectedSha && sourceShaHeader !== expectedSha) {
-    fail('source-sha-mismatch', `X-AirTrust-Source-SHA "${sourceShaHeader}" != expected "${expectedSha}"`);
+    fail(
+      'source-sha-mismatch',
+      `X-AirTrust-Source-SHA "${sourceShaHeader}" != expected "${expectedSha}"`,
+    );
   }
 
   // 7. Bundle hash (SHA-256 of the Worker bundle, provenance Phase 4) present.
@@ -179,23 +216,41 @@ export function evaluateProductionSmoke({ expectedVersion, expectedSha, response
   }
 
   // 9. Protected route without a token returns exactly 401 (not 403, not 200).
+  //    A network-level failure to reach the route is transient (retryable);
+  //    an actual wrong status is a security-invariant violation and must not
+  //    be retried away.
   if (!protectedRes || protectedRes.status !== 401) {
-    fail(
-      'protected-401',
-      `protected route ${PROTECTED_PROBE_PATH} without token returned ${protectedRes?.status ?? 'no-response'} (expected 401)`,
-    );
+    if (protectedRes?.networkError) {
+      fail(
+        'protected-network-error',
+        `protected route ${PROTECTED_PROBE_PATH} unreachable: ${protectedRes.networkError}`,
+      );
+    } else {
+      fail(
+        'protected-401',
+        `protected route ${PROTECTED_PROBE_PATH} without token returned ${protectedRes?.status ?? 'no-response'} (expected 401)`,
+      );
+    }
   }
 
   // 10. Maintenance route returns 404 Not Found when maintenance mode is not
   //     active. A 403 would signal the route exists but is blocked — it must
-  //     instead look non-existent.
+  //     instead look non-existent. As above, a network-level failure is kept
+  //     distinct from an actual wrong status.
   if (!maintenance || maintenance.status !== 404) {
-    const observed = maintenance?.status ?? 'no-response';
-    const hint = observed === 403 ? ' — 403 leaks that the maintenance route exists' : '';
-    fail(
-      'maintenance-404',
-      `maintenance route ${MAINTENANCE_PROBE_PATH} returned ${observed} (expected 404)${hint}`,
-    );
+    if (maintenance?.networkError) {
+      fail(
+        'maintenance-network-error',
+        `maintenance route ${MAINTENANCE_PROBE_PATH} unreachable: ${maintenance.networkError}`,
+      );
+    } else {
+      const observed = maintenance?.status ?? 'no-response';
+      const hint = observed === 403 ? ' — 403 leaks that the maintenance route exists' : '';
+      fail(
+        'maintenance-404',
+        `maintenance route ${MAINTENANCE_PROBE_PATH} returned ${observed} (expected 404)${hint}`,
+      );
+    }
   }
 
   // 11. Legacy localhost-only debug string must be absent from every public
@@ -229,14 +284,25 @@ export function evaluateProductionSmoke({ expectedVersion, expectedSha, response
 }
 
 /**
- * Failure codes that indicate Cloudflare edge may still be serving the previous
- * Worker Version after a successful deploy. Retry is safe only when EVERY
- * observed failure is in this set — security/identity invariants (401/404,
- * environment, localhost leak, placeholders) must fail immediately.
+ * Failure codes considered transient — either Cloudflare edge still serving
+ * the previous Worker Version right after a deploy, or the deploy target
+ * being briefly unreachable (connection refused, timeout, 502/503/504) while
+ * the new Version finishes rolling out. Retry is safe only when EVERY
+ * observed failure is in this set — security/identity invariants (wrong
+ * 401/404, environment, localhost leak, placeholders) must fail immediately
+ * and are deliberately excluded, even though the underlying route may also be
+ * unreachable in the same window (that unreachability surfaces as the
+ * `*-network-error` codes instead, which ARE retryable).
  *
  * Stale-edge responses typically combine version mismatch with the previous
  * source SHA / missing provenance stamps from an older Worker; limiting retry
  * to version-mismatch alone caused false smoke failures during propagation.
+ *
+ * `health-200` / `version-200` intentionally cover both transient statuses
+ * (502/503/504 while the edge stabilizes) and a persistent one (e.g. 500):
+ * a persistent failure still resolves to a definitive FAIL once
+ * SMOKE_MAX_RETRIES or SMOKE_MAX_TOTAL_MS is exhausted — it is never turned
+ * into a PASS.
  */
 export const EDGE_PROPAGATION_FAILURE_CODES = new Set([
   'version-mismatch',
@@ -246,6 +312,12 @@ export const EDGE_PROPAGATION_FAILURE_CODES = new Set([
   'source-sha-mismatch',
   'bundle-hash',
   'manifest-hash',
+  'health-200',
+  'health-network-error',
+  'version-200',
+  'version-network-error',
+  'protected-network-error',
+  'maintenance-network-error',
 ]);
 
 export function failureCode(failure) {
@@ -258,6 +330,99 @@ export function failureCode(failure) {
 export function isEdgePropagationOnly(failures) {
   if (!Array.isArray(failures) || failures.length === 0) return false;
   return failures.every((f) => EDGE_PROPAGATION_FAILURE_CODES.has(failureCode(f)));
+}
+
+/**
+ * Reasons a retry attempt loop can stop. Exported so tests and the CLI share
+ * one vocabulary instead of comparing ad hoc strings.
+ */
+export const STOP_REASONS = Object.freeze({
+  PASSED: 'passed',
+  NON_RETRYABLE_FAILURE: 'non-retryable-failure',
+  MAX_RETRIES_EXHAUSTED: 'max-retries-exhausted',
+  TIME_BUDGET_EXHAUSTED: 'time-budget-exhausted',
+});
+
+/**
+ * Pure(-ish) retry/backoff orchestrator around evaluateProductionSmoke. Takes
+ * its I/O (collectResponses, sleep, now) as injectable dependencies so the
+ * full retry/backoff/time-budget/stop-reason state machine can be unit
+ * tested with canned response sequences and a fake clock — no real network,
+ * no real timers, no c8-ignored blind spot for this logic.
+ *
+ * Bounded by BOTH maxRetries (attempt count) and maxTotalMs (wall-clock
+ * budget) — whichever is hit first stops the loop. Never retries a failure
+ * whose code is not in EDGE_PROPAGATION_FAILURE_CODES: those are treated as
+ * immediate, definitive failures.
+ *
+ * `onAttempt(attempt, result, note)` is an optional side-effecting callback
+ * for logging; it never influences control flow.
+ */
+export async function runHardenedSmoke({
+  expectedVersion,
+  expectedSha,
+  maxRetries,
+  retryDelayMs,
+  maxTotalMs,
+  collectResponses,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now = () => Date.now(),
+  onAttempt = () => {},
+}) {
+  if (!(maxRetries >= 1)) throw new Error('maxRetries must be >= 1');
+  if (!(retryDelayMs >= 0)) throw new Error('retryDelayMs must be >= 0');
+  if (!(maxTotalMs >= 0)) throw new Error('maxTotalMs must be >= 0');
+
+  const startedAt = now();
+  let result;
+  let attemptsUsed = 0;
+  let stopReason = STOP_REASONS.MAX_RETRIES_EXHAUSTED;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    attemptsUsed = attempt;
+    const responses = await collectResponses();
+    result = evaluateProductionSmoke({ expectedVersion, expectedSha, responses });
+
+    if (result.ok) {
+      stopReason = STOP_REASONS.PASSED;
+      onAttempt(attempt, result, stopReason);
+      break;
+    }
+
+    const isTransient = isEdgePropagationOnly(result.failures);
+    if (!isTransient) {
+      stopReason = STOP_REASONS.NON_RETRYABLE_FAILURE;
+      onAttempt(attempt, result, stopReason);
+      break;
+    }
+
+    const elapsedMs = now() - startedAt;
+    const hasAttemptsLeft = attempt < maxRetries;
+    const withinTimeBudget = elapsedMs + retryDelayMs <= maxTotalMs;
+
+    if (!hasAttemptsLeft) {
+      stopReason = STOP_REASONS.MAX_RETRIES_EXHAUSTED;
+      onAttempt(attempt, result, stopReason);
+      break;
+    }
+    if (!withinTimeBudget) {
+      stopReason = STOP_REASONS.TIME_BUDGET_EXHAUSTED;
+      onAttempt(attempt, result, stopReason);
+      break;
+    }
+
+    onAttempt(attempt, result, 'retry-transient');
+    await sleep(retryDelayMs);
+  }
+
+  return {
+    ok: result.ok,
+    result,
+    attemptsUsed,
+    maxRetries,
+    stopReason,
+    totalElapsedMs: now() - startedAt,
+  };
 }
 
 /* c8 ignore start — CLI/network plumbing, exercised by the deploy workflow, not unit tests. */
@@ -275,7 +440,9 @@ function assertAllowedProductionBaseUrl(value) {
     throw new Error('PROD_API_BASE_URL must point at the host root');
   }
   if (host === PRODUCTION_BLOCKED_HOST) {
-    throw new Error(`PROD_API_BASE_URL must not use the non-canonical alias ${PRODUCTION_BLOCKED_HOST}`);
+    throw new Error(
+      `PROD_API_BASE_URL must not use the non-canonical alias ${PRODUCTION_BLOCKED_HOST}`,
+    );
   }
   if (host !== PRODUCTION_CANONICAL_HOST && host !== PRODUCTION_FALLBACK_HOST) {
     throw new Error(
@@ -285,28 +452,50 @@ function assertAllowedProductionBaseUrl(value) {
   return `${parsed.protocol}//${parsed.host}`;
 }
 
-async function probe(baseUrl, path) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    redirect: 'manual',
-  });
-  const bodyText = await response.text();
-  let json = null;
+// A request that neither resolves nor rejects within this window is aborted
+// and folded into the same networkError path as a connection refusal — the
+// smoke must never hang indefinitely on one slow probe.
+async function probe(baseUrl, path, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    json = bodyText ? JSON.parse(bodyText) : null;
-  } catch {
-    json = null;
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      redirect: 'manual',
+      signal: controller.signal,
+    });
+    const bodyText = await response.text();
+    let json = null;
+    try {
+      json = bodyText ? JSON.parse(bodyText) : null;
+    } catch {
+      json = null;
+    }
+    return {
+      status: response.status,
+      headers: response.headers,
+      bodyText,
+      json,
+      networkError: null,
+    };
+  } catch (error) {
+    // Sanitized on purpose: only the error name/message (e.g. "AbortError",
+    // "fetch failed") is kept, never headers or response bodies which could
+    // carry auth material from a misbehaving edge.
+    const reason = error?.name === 'AbortError' ? 'timeout' : error?.message || 'network-error';
+    return { status: null, headers: null, bodyText: '', json: null, networkError: reason };
+  } finally {
+    clearTimeout(timer);
   }
-  return { status: response.status, headers: response.headers, bodyText, json };
 }
 
-async function collectResponses(baseUrl) {
+async function collectResponses(baseUrl, timeoutMs) {
   const [health, version, protectedRes, maintenance] = await Promise.all([
-    probe(baseUrl, '/api/health'),
-    probe(baseUrl, '/api/version'),
-    probe(baseUrl, PROTECTED_PROBE_PATH),
-    probe(baseUrl, MAINTENANCE_PROBE_PATH),
+    probe(baseUrl, '/api/health', timeoutMs),
+    probe(baseUrl, '/api/version', timeoutMs),
+    probe(baseUrl, PROTECTED_PROBE_PATH, timeoutMs),
+    probe(baseUrl, MAINTENANCE_PROBE_PATH, timeoutMs),
   ]);
   return { health, version, protected: protectedRes, maintenance };
 }
@@ -325,42 +514,54 @@ async function main() {
   if (!expectedVersion) throw new Error('EXPECTED_APP_VERSION is required');
   if (!expectedSha) throw new Error('EXPECTED_SOURCE_SHA is required');
 
+  // Cloudflare's edge may serve the previous Worker Version, or be briefly
+  // unreachable, for a short window after `wrangler deploy` reports success.
+  // Bounded by attempt count AND wall-clock time so a persistently broken
+  // deploy fails in a fixed, predictable window rather than retrying forever.
+  const maxRetries = Number(process.env.SMOKE_MAX_RETRIES || 6);
+  const retryDelayMs = Number(process.env.SMOKE_RETRY_DELAY_MS || 10000);
+  const requestTimeoutMs = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS || 8000);
+  const maxTotalMs = Number(process.env.SMOKE_MAX_TOTAL_MS || 120000);
+
   log(`BASE_URL=${baseUrl}`);
   log(`EXPECTED_APP_VERSION=${expectedVersion}`);
   log(`EXPECTED_SOURCE_SHA=${expectedSha}`);
+  log(
+    `POLICY maxRetries=${maxRetries} retryDelayMs=${retryDelayMs} requestTimeoutMs=${requestTimeoutMs} maxTotalMs=${maxTotalMs}`,
+  );
 
-  // Cloudflare's edge may serve the previous Worker Version for several seconds
-  // after `wrangler deploy` reports success. Retry the whole probe set until the
-  // deployed version matches, then evaluate every invariant on the final set.
-  const maxRetries = Number(process.env.SMOKE_MAX_RETRIES || 6);
-  const retryDelayMs = Number(process.env.SMOKE_RETRY_DELAY_MS || 10000);
+  const run = await runHardenedSmoke({
+    expectedVersion,
+    expectedSha,
+    maxRetries,
+    retryDelayMs,
+    maxTotalMs,
+    collectResponses: () => collectResponses(baseUrl, requestTimeoutMs),
+    onAttempt: (attempt, result, note) => {
+      if (note === 'retry-transient') {
+        log(
+          `attempt ${attempt}/${maxRetries}: transient, retrying — ${result.failures.join('; ')}`,
+        );
+      } else if (note === STOP_REASONS.PASSED) {
+        log(`attempt ${attempt}/${maxRetries}: all checks passed`);
+      } else {
+        log(`attempt ${attempt}/${maxRetries}: stopping (${note}) — ${result.failures.join('; ')}`);
+      }
+    },
+  });
 
-  let result;
-  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
-    const responses = await collectResponses(baseUrl);
-    result = evaluateProductionSmoke({ expectedVersion, expectedSha, responses });
+  log(`OBSERVED=${JSON.stringify(run.result.observed)}`);
+  log(
+    `SUMMARY ok=${run.ok} attempts=${run.attemptsUsed}/${run.maxRetries} stopReason=${run.stopReason} elapsedMs=${run.totalElapsedMs}`,
+  );
 
-    if (result.ok) {
-      log(`attempt ${attempt}/${maxRetries}: all checks passed`);
-      break;
-    }
-
-    if (attempt < maxRetries && isEdgePropagationOnly(result.failures)) {
-      log(`attempt ${attempt}/${maxRetries}: awaiting edge propagation — ${result.failures.join('; ')}`);
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-      continue;
-    }
-
-    break;
-  }
-
-  log(`OBSERVED=${JSON.stringify(result.observed)}`);
-
-  if (!result.ok) {
-    for (const failure of result.failures) {
+  if (!run.ok) {
+    for (const failure of run.result.failures) {
       process.stderr.write(`[production-postdeploy-smoke][FAIL] ${failure}\n`);
     }
-    throw new Error(`production post-deploy smoke failed with ${result.failures.length} error(s)`);
+    throw new Error(
+      `production post-deploy smoke failed with ${run.result.failures.length} error(s) after ${run.attemptsUsed}/${run.maxRetries} attempt(s) (${run.stopReason})`,
+    );
   }
 
   log('SMOKE_OK all hardened production post-deploy checks passed');
