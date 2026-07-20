@@ -130,25 +130,28 @@ export function buildHomeAccessCards(params: {
     });
   }
 
-  // Minhas fichas (assinatura)
+  // Minhas fichas (assinatura como participante/aluno) — identidade por
+  // ficha é resolvida no backend (GET /fichas/minhas); esse card só
+  // controla a visibilidade da entrada, não o conteúdo da lista.
   if (can('self.ficha')) {
     cards.push({
       icon: <ClipboardList className="w-7 h-7" />,
-      title: 'Minhas Fichas de Simulador',
-      description: 'Acesse e assine suas fichas de avaliação em simulador.',
-      route: '/simuladores/fichas',
+      title: 'Minhas Fichas de Treinamento de Voo',
+      description: 'Consulte e assine suas próprias fichas como participante.',
+      route: '/simuladores/fichas/minhas',
       color: 'bg-emerald-50',
       iconColor: 'text-emerald-600',
     });
   }
 
-  // Avaliar / assinar fichas de alunos (INSTRUTOR)
+  // Avaliar / assinar fichas dos participantes sob instrução — nunca
+  // mostrado a um aluno puro (gate por permissão simuladores.evaluate).
   if (can('simuladores.evaluate')) {
     cards.push({
       icon: <PenLine className="w-7 h-7" />,
-      title: 'Avaliar / Assinar Fichas',
-      description: 'Avalie e assine fichas de alunos nas sessões de simulador.',
-      route: '/simuladores/fichas',
+      title: 'Fichas de Treinamento de Voo para Avaliar',
+      description: 'Avalie e assine as fichas dos participantes sob sua instrução.',
+      route: '/simuladores/fichas/para-avaliar',
       color: 'bg-amber-50',
       iconColor: 'text-amber-600',
     });
@@ -347,7 +350,7 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
                       O que ainda depende de você
                     </h2>
                     <p className="mt-1 text-xs sm:text-sm text-slate-500">
-                      Pendências e atualizações das suas fichas de simulador.
+                      Pendências e atualizações das suas fichas de treinamento de voo.
                     </p>
                   </div>
                   {notificacoes.length > 0 && (

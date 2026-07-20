@@ -141,7 +141,7 @@ async function getFicha(db: D1Database, fichaId: string | number, empresaId: str
          COALESCE(fs.empresa_id, aluno.empresa_id) AS empresa_id,
          aluno.nome AS aluno_nome,
          instrutor.nome AS instrutor_nome,
-         COALESCE(sa.nome, fs.tipo_sessao, 'Ficha de simulador') AS sessao_nome,
+         COALESCE(sa.nome, fs.tipo_sessao, 'Ficha de treinamento de voo') AS sessao_nome,
          COALESCE(sa.data, fs.data_sessao) AS data_sessao
        FROM fichas_sessao fs
        INNER JOIN funcionarios aluno ON aluno.id = fs.colaborador_id_aluno AND aluno.deleted_at IS NULL
@@ -503,7 +503,7 @@ app.get('/fichas-edicoes', async (c) => {
            instrutor.nome AS instrutor_nome,
            solicitante.nome AS solicitante_nome,
            aprovador.email AS aprovador_email,
-           COALESCE(sa.nome, fs.tipo_sessao, 'Ficha de simulador') AS sessao_nome,
+           COALESCE(sa.nome, fs.tipo_sessao, 'Ficha de treinamento de voo') AS sessao_nome,
            COALESCE(sa.data, fs.data_sessao) AS data_sessao
          FROM fichas_sessao_edicoes fe
          INNER JOIN fichas_sessao fs ON fs.id = fe.ficha_id AND fs.deleted_at IS NULL

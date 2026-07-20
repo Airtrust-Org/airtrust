@@ -25,7 +25,7 @@ import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
-import { resolveFichaScope } from '../utils/ficha-role-scope';
+import { normalizeFichaRole, resolveFichaScope } from '../utils/ficha-role-scope';
 import { audit, requireAdminForDelete } from './simuladores-shared';
 import { syncHorasVooFromSimulador } from '../shared/handlers/horasVooFromSimulador.handler';
 import {
@@ -306,12 +306,227 @@ async function criarNotificacaoFicha(
 // FICHAS — Listagem e criação
 // ==========================================================================
 
+/**
+ * Extrai o userId do contexto Hono autenticado sem recorrer a `as unknown
+ * as` — o parâmetro é estruturalmente compatível com `Context['get']`
+ * (mesmo padrão usado em `escalas-alocacoes-helpers-internal.ts`).
+ */
+function getContextUserId(c: { get: (k: string) => unknown }): string {
+  return String(c.get('userId') || '');
+}
+
+/** Mesmo padrão estrutural de `getContextUserId`, para o role autenticado. */
+function getContextUserRole(c: { get: (k: string) => unknown }): string {
+  return String(c.get('userRole') || '');
+}
+
+/**
+ * SELECT/JOIN base compartilhado pelas rotas de listagem de fichas
+ * (GET /fichas, GET /fichas/minhas, GET /fichas/para-avaliar).
+ * Mantém a mesma projeção de status derivado e metadados de sessão.
+ */
+const FICHAS_LIST_BASE_QUERY = `
+      SELECT
+        f.*,
+        CASE
+          WHEN f.assinatura_instrutor_timestamp IS NOT NULL THEN
+            CASE
+              WHEN f.resultado_final = 'REPROVADO' THEN 'NAO_APROVADO'
+              WHEN f.resultado_final = 'APROVADO' THEN 'APROVADO'
+              WHEN f.aprovado = 0 AND f.resultado_final != 'PENDENTE' THEN 'NAO_APROVADO'
+              WHEN f.aprovado = 1 THEN 'APROVADO'
+              ELSE 'APROVADO'
+            END
+          WHEN f.assinatura_aluno_timestamp IS NOT NULL THEN 'AGUARDANDO_ASSINATURA_INSTRUTOR'
+          WHEN f.status IN ('AGUARDANDO_ASSINATURA_ALUNO', 'AGUARDANDO_ASSINATURA_INSTRUTOR', 'AVALIACAO_PENDENTE', 'APROVADO', 'NAO_APROVADO') THEN f.status
+          WHEN f.status IN ('AGUARDANDO_ASSINATURAS', 'AVALIADA') THEN 'AGUARDANDO_ASSINATURA_ALUNO'
+          WHEN f.status IN ('ASSINADA_ALUNO') THEN 'AGUARDANDO_ASSINATURA_INSTRUTOR'
+          WHEN f.status IN ('ASSINADA_TOTAL', 'APROVADA', 'CONCLUIDA') THEN
+            CASE
+              WHEN f.resultado_final = 'REPROVADO' THEN 'NAO_APROVADO'
+              WHEN f.resultado_final = 'APROVADO' THEN 'APROVADO'
+              WHEN f.aprovado = 0 AND f.resultado_final != 'PENDENTE' THEN 'NAO_APROVADO'
+              WHEN f.aprovado = 1 THEN 'APROVADO'
+              ELSE 'APROVADO'
+            END
+          ELSE 'AVALIACAO_PENDENTE'
+        END as status,
+        COALESCE(sa.data, f.data_sessao) || ' ' || COALESCE(sa.hora_inicio, '') as data_hora,
+        sa.data as data_sessao,
+        sa.hora_inicio,
+        sa.hora_fim,
+        COALESCE(mf.nome, sa.nome, m.nome, t.tema, f.tipo_sessao, 'Sessão') as sessao_titulo,
+        COALESCE(mf.nome, sa.nome, m.nome, t.tema) as sessao_modelo,
+        COALESCE(sa.tipo_sessao, f.tipo_sessao, 'N/A') as simulador_codigo,
+        COALESCE(sim.nome, sim.tipo, 'N/A') as simulador_nome,
+        COALESCE(aluno.nome, 'N/A') as participante_nome,
+        COALESCE(aluno.codigo_anac, '') as aluno_codigo_anac,
+        COALESCE(instrutor.nome, 'N/A') as instrutor_nome
+      FROM fichas_sessao f
+      LEFT JOIN simulador_agendamentos sa ON f.agendamento_slot_id = sa.id
+      LEFT JOIN modelos_sessao m ON sa.tipo_sessao = m.codigo
+      LEFT JOIN modelos_sessao mf ON f.tipo_sessao = mf.codigo AND mf.deleted_at IS NULL
+      LEFT JOIN sessoes_template t ON f.template_id = t.id
+      LEFT JOIN simuladores sim ON sa.simulador_id = sim.id
+      LEFT JOIN funcionarios aluno ON f.colaborador_id_aluno = aluno.id
+      LEFT JOIN funcionarios instrutor ON f.instrutor_id = instrutor.id
+      WHERE f.deleted_at IS NULL
+        AND f.empresa_id = ?
+        AND aluno.empresa_id = ?
+        AND (sa.id IS NULL OR sa.empresa_id = ?)
+`;
+
+/**
+ * GET /fichas/minhas
+ *
+ * Fichas onde o usuário autenticado é o ALUNO/PARTICIPANTE avaliado
+ * (colaborador_id_aluno). Identidade é sempre derivada da sessão
+ * autenticada (usuarios -> funcionarios), nunca de um funcionario_id
+ * enviado pelo cliente. Não existe fallback global por role: um
+ * admin/gestor sem vínculo funcional não vê nada aqui.
+ */
+app.get('/fichas/minhas', async (c) => {
+  try {
+    const userId = getContextUserId(c);
+    const tenantEmpresaId = getEmpresaId(c);
+
+    const funcId = await getFuncionarioId(c.env.DB, userId, tenantEmpresaId);
+    if (!funcId) return c.json({ success: true, data: [] });
+
+    const statusFilter = c.req.query('status') || '';
+
+    let q = `${FICHAS_LIST_BASE_QUERY} AND f.colaborador_id_aluno = ?`;
+    const params: (string | number)[] = [
+      tenantEmpresaId,
+      tenantEmpresaId,
+      tenantEmpresaId,
+      funcId,
+    ];
+
+    if (statusFilter) {
+      q += ' AND f.status=?';
+      params.push(statusFilter);
+    }
+    q += ' ORDER BY f.created_at DESC';
+
+    const r = await c.env.DB.prepare(q)
+      .bind(...params)
+      .all();
+
+    return c.json({ success: true, data: r.results || [] });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+    return c.json({ success: false, error: msg }, 500);
+  }
+});
+
+/** Código de erro estável retornado quando falta a capability de avaliação. */
+const INSTRUCTOR_EVALUATION_FORBIDDEN_CODE = 'INSTRUCTOR_EVALUATION_FORBIDDEN';
+
+/**
+ * Capability explícita "simuladores.evaluate" (avaliar/assinar como
+ * instrutor). Espelha o mesmo sistema de overrides individuais usado no
+ * login (tabela `usuario_permissoes`, colunas `permissao`/`tipo` com
+ * 'GRANT'|'DENY' — ver worker-airtrust/src/routes/auth.ts e
+ * src/react-app/hooks/usePermissions.ts, que consome esses mesmos
+ * overrides via `user.permissions` no JWT).
+ *
+ * Resolução: DENY explícito sempre vence; GRANT explícito concede mesmo a
+ * um role que não seria INSTRUTOR; na ausência de override, aplica o
+ * default de role (apenas INSTRUTOR).
+ *
+ * Diferença deliberada em relação ao `can()` do frontend: esta rota NÃO
+ * aplica o wildcard de ADMINISTRADOR/GESTOR — não há fallback global de
+ * role aqui, por instrução explícita (um admin/gestor só passa com um
+ * GRANT individual de 'simuladores.evaluate').
+ */
+async function hasSimuladoresEvaluateCapability(
+  db: D1Database,
+  userId: string,
+  role: string,
+): Promise<boolean> {
+  const overrideRows = await db
+    .prepare(
+      `SELECT tipo FROM usuario_permissoes WHERE usuario_id = ? AND permissao = ?`,
+    )
+    .bind(userId, 'simuladores.evaluate')
+    .all<{ tipo: string }>()
+    .catch(() => ({ results: [] as Array<{ tipo: string }> }));
+
+  const rows = overrideRows.results || [];
+  if (rows.some((r) => String(r.tipo).toUpperCase() === 'DENY')) return false;
+  if (rows.some((r) => String(r.tipo).toUpperCase() === 'GRANT')) return true;
+
+  return normalizeFichaRole(role) === 'INSTRUTOR';
+}
+
+/**
+ * GET /fichas/para-avaliar
+ *
+ * Fichas onde o usuário autenticado é o INSTRUTOR formalmente atribuído
+ * (instrutor_id). Nunca inclui fichas onde o usuário é apenas o aluno,
+ * mesmo quando o mesmo funcionário acumula os dois papéis em fichas
+ * diferentes. Sem fallback global por role (admin/gestor sem vínculo
+ * funcional não vê nada).
+ *
+ * Duas condições independentes, ambas obrigatórias:
+ *   1. Capability 'simuladores.evaluate' (hasSimuladoresEvaluateCapability)
+ *      — precondição. Sem ela: 403 INSTRUCTOR_EVALUATION_FORBIDDEN.
+ *   2. instrutor_id da ficha === funcionario_id da sessão autenticada
+ *      — filtro de dados. Ter a capability não basta; ter uma linha
+ *      "acidental" de instrutor_id não basta sem a capability.
+ */
+app.get('/fichas/para-avaliar', async (c) => {
+  try {
+    const userId = getContextUserId(c);
+    const role = getContextUserRole(c);
+    const tenantEmpresaId = getEmpresaId(c);
+
+    const hasCapability = await hasSimuladoresEvaluateCapability(c.env.DB, userId, role);
+    if (!hasCapability) {
+      return c.json(
+        {
+          success: false,
+          code: INSTRUCTOR_EVALUATION_FORBIDDEN_CODE,
+          error: 'Você não tem permissão para avaliar fichas de treinamento de voo',
+        },
+        403,
+      );
+    }
+
+    const funcId = await getFuncionarioId(c.env.DB, userId, tenantEmpresaId);
+    if (!funcId) return c.json({ success: true, data: [] });
+
+    const statusFilter = c.req.query('status') || '';
+
+    let q = `${FICHAS_LIST_BASE_QUERY} AND f.instrutor_id = ?`;
+    const params: (string | number)[] = [
+      tenantEmpresaId,
+      tenantEmpresaId,
+      tenantEmpresaId,
+      funcId,
+    ];
+
+    if (statusFilter) {
+      q += ' AND f.status=?';
+      params.push(statusFilter);
+    }
+    q += ' ORDER BY f.created_at DESC';
+
+    const r = await c.env.DB.prepare(q)
+      .bind(...params)
+      .all();
+
+    return c.json({ success: true, data: r.results || [] });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+    return c.json({ success: false, error: msg }, 500);
+  }
+});
+
 app.get('/fichas', async (c) => {
   try {
-    const ctx = c as unknown as { get: (k: string) => unknown };
-    const userId = String(ctx.get('userId') || '');
-    const role = String(ctx.get('userRole') || '');
-    const empresaId = String(ctx.get('empresaId') || '');
+    const role = getContextUserRole(c);
     const tenantEmpresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
 
@@ -371,26 +586,22 @@ app.get('/fichas', async (c) => {
     const params: (string | number)[] = [tenantEmpresaId, tenantEmpresaId, tenantEmpresaId];
 
     // ── Controle de acesso por perfil ────────────────────────────────────────
+    // Este endpoint é a visão administrativa formal (admin/gestor com
+    // getEmployeeSectorAccess) — o único consumidor legítimo restante do
+    // acesso não-escopado por papel. Não-administrativos (instrutor, aluno)
+    // NÃO recebem mais a lista mesclada "instrutor_id OR colaborador_id_aluno":
+    // devem usar GET /fichas/minhas ou GET /fichas/para-avaliar, que resolvem
+    // a identidade por ficha em vez de por papel global.
     if (!isFullAccess(role)) {
-      const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
-      if (!funcId) return c.json({ success: true, data: [] }); // sem vínculo → sem fichas
-
-      const scope = resolveFichaScope(role);
-      if (scope === 'ALUNO_PENDING_SIGNATURE') {
-        // Aluno: apenas fichas onde ele é o participante E aguardando assinatura dele
-        q += ` AND f.colaborador_id_aluno = ?
-          AND f.assinatura_aluno_timestamp IS NULL
-          AND f.assinatura_instrutor_timestamp IS NULL
-          AND f.status IN ('AGUARDANDO_ASSINATURA_ALUNO','AGUARDANDO_ASSINATURAS','AVALIADA')`;
-        params.push(funcId);
-      } else if (scope === 'INSTRUTOR_OR_ALUNO') {
-        // Instrutor pode ser também aluno em outra sessão — vê ambos os casos
-        q += ' AND (f.instrutor_id = ? OR f.colaborador_id_aluno = ?)';
-        params.push(funcId, funcId);
-      } else {
-        // Perfil desconhecido → nega acesso a tudo
-        return c.json({ success: true, data: [] });
-      }
+      return c.json(
+        {
+          success: false,
+          code: 'LEGACY_FICHAS_LIST_FORBIDDEN',
+          error:
+            'Este endpoint é restrito ao escopo administrativo formal. Use /simuladores/fichas/minhas ou /simuladores/fichas/para-avaliar.',
+        },
+        403,
+      );
     }
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -551,10 +762,8 @@ app.route('/', fichasSimuladorRoutes);
 app.get('/fichas/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const ctx = c as unknown as { get: (k: string) => unknown };
-    const userId = String(ctx.get('userId') || '');
-    const role = String(ctx.get('userRole') || '');
-    const empresaId = String(ctx.get('empresaId') || '');
+    const userId = getContextUserId(c);
+    const role = getContextUserRole(c);
     const tenantEmpresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
 
@@ -692,7 +901,7 @@ app.get('/fichas/:id', async (c) => {
 
     // ── Verificar acesso por perfil ───────────────────────────────────────────
     if (!isFullAccess(role)) {
-      const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
+      const funcId = await getFuncionarioId(c.env.DB, userId, tenantEmpresaId);
       const scope = resolveFichaScope(role);
       const authorized =
         scope === 'ALUNO_PENDING_SIGNATURE'
@@ -927,10 +1136,8 @@ app.get('/fichas/:id', async (c) => {
 app.post('/fichas/:id/pdf', async (c) => {
   try {
     const fichaId = c.req.param('id');
-    const ctx = c as unknown as { get: (k: string) => unknown };
-    const userId = String(ctx.get('userId') || '');
-    const role = String(ctx.get('userRole') || '');
-    const empresaId = String(ctx.get('empresaId') || '');
+    const userId = getContextUserId(c);
+    const role = getContextUserRole(c);
     const tenantEmpresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
 
@@ -1043,7 +1250,7 @@ app.post('/fichas/:id/pdf', async (c) => {
 
     // ── Verificar acesso por perfil ───────────────────────────────────────────
     if (!isFullAccess(role)) {
-      const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
+      const funcId = await getFuncionarioId(c.env.DB, userId, tenantEmpresaId);
       const scope = resolveFichaScope(role);
       const authorized =
         scope === 'ALUNO_PENDING_SIGNATURE'
@@ -1257,10 +1464,8 @@ app.post('/fichas/:id/pdf', async (c) => {
 app.put('/fichas/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const ctx = c as unknown as { get: (k: string) => unknown };
-    const userId = String(ctx.get('userId') || '');
-    const role = String(ctx.get('userRole') || '');
-    const empresaId = String(ctx.get('empresaId') || '');
+    const userId = getContextUserId(c);
+    const role = getContextUserRole(c);
     const tenantEmpresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
     const b = await c.req.json();
@@ -1282,7 +1487,7 @@ app.put('/fichas/:id', async (c) => {
 
     // ── Verificar acesso por perfil ──────────────────────────────────────
     if (!isFullAccess(role)) {
-      const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
+      const funcId = await getFuncionarioId(c.env.DB, userId, tenantEmpresaId);
       const scope = resolveFichaScope(role);
       const authorized =
         scope === 'ALUNO_PENDING_SIGNATURE'

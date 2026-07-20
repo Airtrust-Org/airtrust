@@ -372,7 +372,7 @@ function labelTabelaAuditoria(tabela: string) {
     qualificacoes_historico: 'Qualificações',
     licencas: 'Licenças',
     lms_matriculas: 'Treinamentos LMS',
-    fichas_sessao: 'Fichas de simulador',
+    fichas_sessao: 'Fichas de treinamento de voo',
     pasta_virtual: 'Pasta 360',
     documentos: 'Documentos',
   };

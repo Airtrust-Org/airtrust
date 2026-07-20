@@ -129,7 +129,7 @@ async function arquivarFichaAutomaticamente(db: D1Database, fichaId: string): Pr
         'Simuladores',
         caminhoR2,
         nomeArquivo,
-        `Ficha de Simulador - ${ficha.sessao_titulo || 'Sessão'} - ${ficha.sessao_data || ''}`,
+        `Ficha de Treinamento de Voo - ${ficha.sessao_titulo || 'Sessão'} - ${ficha.sessao_data || ''}`,
       )
       .run();
 
@@ -649,7 +649,7 @@ app.post('/fichas/:id/arquivar', async (c) => {
           'Simuladores',
           caminhoR2,
           nomeArquivo,
-          `Ficha de Simulador - ${ficha.sessao_titulo || 'Sessão'} - ${ficha.sessao_data || ''}`,
+          `Ficha de Treinamento de Voo - ${ficha.sessao_titulo || 'Sessão'} - ${ficha.sessao_data || ''}`,
         )
         .run();
       console.log('✅ Ficha inserida na pasta_virtual');
