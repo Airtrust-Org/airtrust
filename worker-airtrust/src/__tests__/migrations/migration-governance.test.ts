@@ -74,16 +74,16 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
-  '0438': [
-    '0438_controle_voos_rdv_coordenacao_workflow.sql',
-    '0438_controle_voos_rdv_coordenacao_workflow_rollback.sql',
-  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
   '0098-indices-performance.sql',
   '132_add_funcionario_ativo.sql',
   'purge-soft-deleted-qualificacoes.sql',
+  // 0438's rollback deliberately does NOT start with digits: it must never
+  // be a candidate for duplicate-prefix detection, and must never be picked
+  // up by any tool that walks migrations by numeric prefix order.
+  'rollback_0438_controle_voos_rdv_coordenacao_workflow.sql',
 ] as const;
 
 const EXPECTED_CREATE_TEMP_TABLE_FILES = [

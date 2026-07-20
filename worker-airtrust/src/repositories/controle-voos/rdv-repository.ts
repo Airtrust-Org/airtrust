@@ -1,0 +1,387 @@
+/**
+ * Acesso a dados de voos/RDV (cv_voos, cv_rdv_operacional). Módulo
+ * compartilhado entre `routes/controle-voos.ts` (CRUD original de
+ * voos/RDV) e `routes/controle-voos-rdv-workflow.ts` (fluxo de revisão
+ * da Coordenação) — nenhum dos dois define este acesso a dados
+ * independentemente.
+ */
+import type { Context } from 'hono';
+import { ApiError } from '../../middleware/error-handler';
+import { getEmpresaId } from '../../middleware/tenant';
+import type { Env } from '../../types';
+import { extrairUsuarioAuditoria, registrarAuditoria } from '../../utils/auditoria';
+
+export type FlightStatus =
+  | 'planejado'
+  | 'liberado_operacionalmente'
+  | 'em_andamento'
+  | 'pousado'
+  | 'concluido_operacionalmente'
+  | 'cancelado'
+  | 'alternado_divergido';
+
+export type FlightRow = {
+  id: number;
+  empresa_id: number;
+  prefixo: string;
+  data_programacao: string;
+  origem_id: number;
+  destino_id: number;
+  tipo_voo_id: number;
+  natureza_voo_id: number;
+  aeronave_id: number | null;
+  horario_previsto_partida: string;
+  horario_previsto_chegada: string;
+  horario_real_partida: string | null;
+  horario_real_chegada: string | null;
+  status: FlightStatus;
+  observacoes: string | null;
+  cancelado_motivo_id: number | null;
+  alternado_destino_id: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RdvStatus = 'rascunho' | 'preenchimento_finalizado' | 'cancelado';
+
+// Fluxo de revisão/aprovação da Coordenação (eixo ortogonal ao `status`
+// operacional acima, que continua controlando apenas o lock de campos).
+// Nenhum estado é colapsado em outro: DEVOLVIDO e REABERTO são estados
+// reais, persistidos e independentemente consultáveis (ver migration 0438).
+export type RdvWorkflowStatus =
+  | 'rascunho'
+  | 'enviado'
+  | 'em_revisao'
+  | 'devolvido'
+  | 'aprovado_coordenacao'
+  | 'finalizado'
+  | 'reaberto'
+  | 'cancelado';
+
+export type RdvRow = {
+  id: number;
+  empresa_id: number;
+  voo_id: number;
+  numero: string;
+  data_voo: string;
+  horario_decolagem_real: string | null;
+  horario_pouso_real: string | null;
+  horas_voadas: number | null;
+  numero_pousos: number | null;
+  ciclos: number | null;
+  combustivel_decolagem: number | null;
+  combustivel_pouso: number | null;
+  combustivel_consumo: number | null;
+  pob: number | null;
+  carga_kg: number | null;
+  ocorrencias: string | null;
+  divergencias: string | null;
+  status: RdvStatus;
+  responsavel_preenchimento_id: number | null;
+  preenchido_em: string | null;
+  finalizado_operacionalmente_por: number | null;
+  finalizado_operacionalmente_em: string | null;
+  workflow_status: RdvWorkflowStatus;
+  versao: number;
+  enviado_por: number | null;
+  enviado_em: string | null;
+  revisao_iniciada_por: number | null;
+  revisao_iniciada_em: string | null;
+  devolvido_por: number | null;
+  devolvido_em: string | null;
+  aprovado_coordenacao_por: number | null;
+  aprovado_coordenacao_em: string | null;
+  finalizado_workflow_em: string | null;
+  reaberto_por: number | null;
+  reaberto_em: string | null;
+  motivo_devolucao: string | null;
+  motivo_cancelamento: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FlightInput = Partial<{
+  prefixo: string;
+  data_programacao: string;
+  origem_id: number;
+  destino_id: number;
+  tipo_voo_id: number;
+  natureza_voo_id: number;
+  aeronave_id: number | null;
+  horario_previsto_partida: string;
+  horario_previsto_chegada: string;
+  horario_real_partida: string | null;
+  horario_real_chegada: string | null;
+  status: FlightStatus;
+  observacoes: string | null;
+  cancelado_motivo_id: number | null;
+  alternado_destino_id: number | null;
+}>;
+
+export type RdvInput = Partial<{
+  numero: string;
+  data_voo: string;
+  horario_decolagem_real: string | null;
+  horario_pouso_real: string | null;
+  horas_voadas: number | null;
+  numero_pousos: number | null;
+  ciclos: number | null;
+  combustivel_decolagem: number | null;
+  combustivel_pouso: number | null;
+  combustivel_consumo: number | null;
+  pob: number | null;
+  carga_kg: number | null;
+  ocorrencias: string | null;
+  divergencias: string | null;
+}>;
+
+export const FLIGHT_SELECT = `
+  id, empresa_id, prefixo, data_programacao, origem_id, destino_id,
+  tipo_voo_id, natureza_voo_id, aeronave_id,
+  horario_previsto_partida, horario_previsto_chegada,
+  horario_real_partida, horario_real_chegada,
+  status, observacoes, cancelado_motivo_id, alternado_destino_id,
+  created_at, updated_at
+`;
+
+export const RDV_SELECT = `
+  id, empresa_id, voo_id, numero, data_voo,
+  horario_decolagem_real, horario_pouso_real,
+  horas_voadas, numero_pousos, ciclos,
+  combustivel_decolagem, combustivel_pouso, combustivel_consumo,
+  pob, carga_kg, ocorrencias, divergencias,
+  status, responsavel_preenchimento_id, preenchido_em,
+  finalizado_operacionalmente_por, finalizado_operacionalmente_em,
+  workflow_status, versao, enviado_por, enviado_em,
+  revisao_iniciada_por, revisao_iniciada_em,
+  devolvido_por, devolvido_em,
+  aprovado_coordenacao_por, aprovado_coordenacao_em,
+  finalizado_workflow_em, reaberto_por, reaberto_em,
+  motivo_devolucao, motivo_cancelamento,
+  created_at, updated_at
+`;
+
+export const allowedRdvFields = new Set([
+  'numero',
+  'data_voo',
+  'horario_decolagem_real',
+  'horario_pouso_real',
+  'horas_voadas',
+  'numero_pousos',
+  'ciclos',
+  'combustivel_decolagem',
+  'combustivel_pouso',
+  'combustivel_consumo',
+  'pob',
+  'carga_kg',
+  'ocorrencias',
+  'divergencias',
+]);
+
+export function getEmpresaIdSafe(c: Context<{ Bindings: Env }>): number {
+  try {
+    return getEmpresaId(c);
+  } catch {
+    const raw = (c.get as (key: string) => unknown)('empresaId');
+    const parsed = typeof raw === 'string' ? Number(raw) : Number(raw || 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+}
+
+export function getActorId(c: Context<{ Bindings: Env }>): string | number | null {
+  const raw = (c.get as (key: string) => unknown)('userId');
+  if (typeof raw === 'string' || typeof raw === 'number') return raw;
+  return null;
+}
+
+export async function getFlightOrThrow(
+  db: D1Database,
+  id: string,
+  empresaId: number,
+): Promise<FlightRow> {
+  const row = await db
+    .prepare(
+      `
+      SELECT ${FLIGHT_SELECT}
+      FROM cv_voos
+      WHERE id = ?
+        AND empresa_id = ?
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    )
+    .bind(id, empresaId)
+    .first<FlightRow>();
+
+  if (!row) {
+    throw new ApiError('Voo nao encontrado', 404, 'CONTROLE_VOOS_NOT_FOUND');
+  }
+  return row;
+}
+
+export async function getActiveRdvByFlight(
+  db: D1Database,
+  vooId: number | string,
+  empresaId: number,
+): Promise<RdvRow | null> {
+  return db
+    .prepare(
+      `
+      SELECT ${RDV_SELECT}
+      FROM cv_rdv_operacional
+      WHERE voo_id = ?
+        AND empresa_id = ?
+        AND deleted_at IS NULL
+        AND status <> 'cancelado'
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+    )
+    .bind(vooId, empresaId)
+    .first<RdvRow>();
+}
+
+export async function getRdvOrThrow(
+  db: D1Database,
+  id: number | string,
+  empresaId: number,
+): Promise<RdvRow> {
+  const row = await db
+    .prepare(
+      `
+      SELECT ${RDV_SELECT}
+      FROM cv_rdv_operacional
+      WHERE id = ?
+        AND empresa_id = ?
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    )
+    .bind(id, empresaId)
+    .first<RdvRow>();
+
+  if (!row) {
+    throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
+  }
+  return row;
+}
+
+export function buildMergedRdv(existing: RdvRow, input: RdvInput): RdvInput {
+  return {
+    numero: input.numero ?? existing.numero,
+    data_voo: input.data_voo ?? existing.data_voo,
+    horario_decolagem_real:
+      input.horario_decolagem_real !== undefined
+        ? input.horario_decolagem_real
+        : existing.horario_decolagem_real,
+    horario_pouso_real:
+      input.horario_pouso_real !== undefined
+        ? input.horario_pouso_real
+        : existing.horario_pouso_real,
+    horas_voadas: input.horas_voadas !== undefined ? input.horas_voadas : existing.horas_voadas,
+    numero_pousos: input.numero_pousos !== undefined ? input.numero_pousos : existing.numero_pousos,
+    ciclos: input.ciclos !== undefined ? input.ciclos : existing.ciclos,
+    combustivel_decolagem:
+      input.combustivel_decolagem !== undefined
+        ? input.combustivel_decolagem
+        : existing.combustivel_decolagem,
+    combustivel_pouso:
+      input.combustivel_pouso !== undefined ? input.combustivel_pouso : existing.combustivel_pouso,
+    combustivel_consumo:
+      input.combustivel_consumo !== undefined
+        ? input.combustivel_consumo
+        : existing.combustivel_consumo,
+    pob: input.pob !== undefined ? input.pob : existing.pob,
+    carga_kg: input.carga_kg !== undefined ? input.carga_kg : existing.carga_kg,
+    ocorrencias: input.ocorrencias !== undefined ? input.ocorrencias : existing.ocorrencias,
+    divergencias: input.divergencias !== undefined ? input.divergencias : existing.divergencias,
+  };
+}
+
+export async function getFuncionarioIdForUser(
+  db: D1Database,
+  userId: number | string | null,
+): Promise<number | null> {
+  if (userId === null || userId === undefined || userId === '') return null;
+  const row = await db
+    .prepare('SELECT funcionario_id FROM usuarios WHERE id = ? AND deleted_at IS NULL LIMIT 1')
+    .bind(userId)
+    .first<{ funcionario_id: number | null }>();
+  return row?.funcionario_id ?? null;
+}
+
+export async function isCrewOnFlight(
+  db: D1Database,
+  empresaId: number,
+  vooId: number,
+  funcionarioId: number,
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `
+      SELECT id FROM cv_voo_tripulantes
+      WHERE voo_id = ? AND empresa_id = ? AND funcionario_id = ? AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    )
+    .bind(vooId, empresaId, funcionarioId)
+    .first();
+  return !!row;
+}
+
+export async function recordFlightEvent(params: {
+  db: D1Database;
+  empresaId: number;
+  vooId: number;
+  tipoEvento: 'status' | 'horario' | 'tripulacao' | 'rdv' | 'ocorrencia' | 'observacao' | 'sistema';
+  statusAnterior?: FlightStatus | null;
+  statusNovo?: FlightStatus | null;
+  descricao?: string | null;
+  motivoId?: number | null;
+  metadata?: Record<string, unknown>;
+  usuarioId?: number | string | null;
+}): Promise<void> {
+  await params.db
+    .prepare(
+      `
+      INSERT INTO cv_voo_eventos (
+        empresa_id, voo_id, tipo_evento, status_anterior, status_novo,
+        descricao, motivo_id, metadata_json, usuario_id, created_by, updated_by,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `,
+    )
+    .bind(
+      params.empresaId,
+      params.vooId,
+      params.tipoEvento,
+      params.statusAnterior || null,
+      params.statusNovo || null,
+      params.descricao || null,
+      params.motivoId || null,
+      params.metadata ? JSON.stringify(params.metadata) : null,
+      params.usuarioId || null,
+      params.usuarioId || null,
+      params.usuarioId || null,
+    )
+    .run();
+}
+
+export async function maybeRecordSystemAudit(
+  c: Context<{ Bindings: Env }>,
+  table: string,
+  action: 'INSERT' | 'UPDATE',
+  recordId: string | number,
+  beforeData: unknown,
+  afterData: unknown,
+): Promise<void> {
+  await registrarAuditoria({
+    db: c.env.DB,
+    tabela: table,
+    acao: action,
+    registro_id: recordId,
+    dados_anteriores: beforeData,
+    dados_novos: afterData,
+    ...extrairUsuarioAuditoria(c),
+  });
+}

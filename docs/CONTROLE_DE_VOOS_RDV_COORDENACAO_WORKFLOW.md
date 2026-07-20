@@ -21,7 +21,7 @@ histórica sugeria:
 | Item | Estado antes desta entrega |
 |---|---|
 | Schema `cv_voos`, `cv_rdv_operacional`, `cv_voo_etapas`, `cv_voo_tripulantes`, `cv_voo_eventos` | ✅ Migrations 0410/0411, tenant-scoped, indexado, com triggers de guarda de tenant |
-| Rotas CRUD de voos/RDV, transições de status operacional, dashboard | ✅ `worker-airtrust/src/routes/controle-voos.ts` (2112 linhas) |
+| Rotas CRUD de voos/RDV, transições de status operacional, dashboard | ✅ `worker-airtrust/src/routes/controle-voos.ts` |
 | RDV: estados | ⚠️ Só `rascunho` / `preenchimento_finalizado` / `cancelado` — **sem fluxo de revisão/aprovação da Coordenação** |
 | Tripulação | ⚠️ Schema existia, **sem rota de CRUD** |
 | Abastecimentos | ❌ Ausente |
@@ -37,15 +37,26 @@ histórica sugeria:
 ## 2. O que esta entrega adiciona (estritamente aditivo)
 
 - **Migration `0438_controle_voos_rdv_coordenacao_workflow.sql`** (+ rollback documentado):
-  novas colunas em `cv_rdv_operacional` (workflow_status, versao, enviado_*, revisao_*,
-  aprovado_coordenacao_*, finalizado_workflow_em, reaberto_*, motivo_devolucao,
-  motivo_cancelamento) e 3 tabelas novas (`cv_rdv_aprovacoes`, `cv_rdv_revisoes`,
+  **15** novas colunas em `cv_rdv_operacional` (`workflow_status`, `versao`,
+  `enviado_por`/`enviado_em`, `revisao_iniciada_por`/`revisao_iniciada_em`,
+  `devolvido_por`/`devolvido_em`, `aprovado_coordenacao_por`/`aprovado_coordenacao_em`,
+  `finalizado_workflow_em`, `reaberto_por`/`reaberto_em`, `motivo_devolucao`,
+  `motivo_cancelamento`) e 3 tabelas novas (`cv_rdv_aprovacoes`, `cv_rdv_revisoes`,
   `cv_rdv_alertas`) + 1 tabela operacional nova (`cv_voo_abastecimentos`). Nenhuma tabela ou
   coluna existente foi removida, renomeada ou teve seu CHECK alterado.
-- **Máquina de estados do fluxo** (backend, `worker-airtrust/src/routes/controle-voos.ts`):
-  `rascunho → enviado → em_revisao → aprovado_coordenacao → finalizado → em_revisao (reabertura)`,
-  com devolução (`em_revisao → rascunho`, justificativa obrigatória) e cancelamento
-  (justificativa obrigatória). Concorrência otimista via coluna `versao`.
+  A segunda execução da migration é **fail-closed** (guarda `_rollback_0438_column_guard`
+  aborta se `workflow_status` já existir) — **não é idempotente**.
+- **Máquina de estados do fluxo** (backend):
+  `rascunho → enviado → em_revisao → aprovado_coordenacao → finalizado → reaberto → em_revisao`,
+  com estados explícitos **`devolvido`** e **`reaberto`** (não colapsados em
+  `rascunho`/`em_revisao`), devolução (`em_revisao → devolvido`, justificativa obrigatória)
+  e cancelamento (justificativa obrigatória). Concorrência otimista via coluna `versao`.
+- **Código modular** (extração WIP): rotas em
+  `worker-airtrust/src/routes/controle-voos-rdv-workflow.ts`, RBAC/estados em
+  `services/controle-voos/rdv-workflow.ts`, alertas em `rdv-alertas.ts`, acesso a dados em
+  `repositories/controle-voos/rdv-repository.ts`. O CRUD operacional pré-existente permanece em
+  `controle-voos.ts` (inclui `finalizar-preenchimento`, que grava aprovação tipo
+  **`COMANDANTE`**).
 - **Endpoints novos**: `enviar`, `iniciar-revisao`, `devolver`, `corrigir` (Coordenação, com
   diff campo-a-campo + justificativa), `aprovar`, `finalizar`, `reabrir`, `cancelar`,
   `GET .../alertas`, `GET .../revisoes`, `GET .../aprovacoes`, `GET /rdv/fila` (fila da
@@ -55,8 +66,9 @@ histórica sugeria:
   ausentes, tripulação ausente, comandante duplicado, trechos ausentes, trechos
   sobrepostos, abastecimento sem trecho), persistidas em `cv_rdv_alertas` com
   resolução automática quando a regra deixa de se aplicar.
-- **RBAC `voos.rdv.*`**: capabilities nomeadas (ver seção 5) integradas sobre a hierarquia
-  de roles já existente — **sem elevar globalmente `student`**: acesso próprio do piloto
+- **RBAC real por capability `voos.rdv.*`**: resolve via `usuario_permissoes`
+  (DENY > GRANT > default de role) em `hasRdvCapability` — **não** é só wrapper de
+  `checkPermission(role)`. Sem elevar globalmente `student`: acesso próprio do piloto
   sempre exige vínculo de tripulação (`usuarios.funcionario_id` → `cv_voo_tripulantes`).
 - **PDF do relatório Petrobras** (`services/controle-voos/rdv-pdf.ts`, pdf-lib): layout de
   referência, totais vindos do backend, multi-página com cabeçalho repetido, e marca d'água
@@ -86,38 +98,55 @@ O RDV agora tem um fluxo de aprovação completo, mas seu **modelo de dados oper
 ```
 RASCUNHO --enviar (requer status=preenchimento_finalizado)--> ENVIADO
 ENVIADO --iniciar-revisao--> EM_REVISAO
-EM_REVISAO --devolver (justificativa obrigatória)--> RASCUNHO
+EM_REVISAO --devolver (justificativa obrigatória)--> DEVOLVIDO
 EM_REVISAO --corrigir (justificativa obrigatória, não muda o estado)--> EM_REVISAO
 EM_REVISAO --aprovar--> APROVADO_COORDENACAO
 APROVADO_COORDENACAO --finalizar--> FINALIZADO
-FINALIZADO --reabrir (justificativa obrigatória)--> EM_REVISAO
-{RASCUNHO, ENVIADO, EM_REVISAO} --cancelar (justificativa obrigatória)--> CANCELADO
+FINALIZADO --reabrir (justificativa obrigatória)--> REABERTO
+REABERTO --iniciar-revisao--> EM_REVISAO
+DEVOLVIDO --enviar (após re-finalizar preenchimento)--> ENVIADO
+{RASCUNHO, ENVIADO, EM_REVISAO, DEVOLVIDO, REABERTO} --cancelar (justificativa obrigatória)--> CANCELADO
 ```
+
+`DEVOLVIDO` e `REABERTO` são **estados reais e independentemente consultáveis**
+(`workflow_status`); o eixo operacional `status` pode voltar a `rascunho` para destrancar
+edição do piloto, sem colapsar o eixo de workflow.
+
+Em `finalizar-preenchimento`, o backend grava em `cv_rdv_aprovacoes` um registro
+`tipo_aprovacao='COMANDANTE'` / `status='APROVADO'` (confirmação do piloto responsável —
+**não** é assinatura digital).
 
 Decisão de escopo: os estados `APROVADO_CONTRATANTE`/`APROVADO_COMERCIAL` do enunciado
 ("quando exigido") **não são um gate obrigatório nesta entrega** — o enum
 `cv_rdv_aprovacoes.tipo_aprovacao` já suporta `CONTRATANTE`/`COMERCIAL` para uso futuro,
-mas hoje só `COORDENACAO` é gravado. Documentado como item de backlog (seção 8).
+mas hoje só `COMANDANTE` e `COORDENACAO` são gravados. Documentado como item de backlog
+(seção 8).
 
 Toda transição é validada no backend (`assertRdvWorkflowTransition`) — nunca depende só da
-UI. Cada transição grava um registro em `cv_rdv_aprovacoes` e incrementa `versao`
+UI. Cada transição de fluxo grava um registro em `cv_rdv_aprovacoes` e incrementa `versao`
 (concorrência otimista: toda mutação exige o `versao` esperado ou retorna 409).
+Separação de funções: `assertNotSelfApproval` impede que o responsável pelo preenchimento
+aprove o mesmo RDV na Coordenação.
 
 ## 5. RBAC — capabilities `voos.rdv.*`
 
-Implementadas como wrappers nomeados sobre a hierarquia de roles já existente
-(`admin > manager > instructor > editor > student > viewer`), **sem elevar globalmente**
-o perfil `student`:
+Implementadas em `hasRdvCapability` / `requireRdvCapability` com a mesma precedência do
+resto do backend:
 
-| Capability | Regra de acesso |
-|---|---|
-| `voos.rdv.visualizar_proprio`, `criar_proprio`, `editar_rascunho_proprio`, `enviar`, `cancelar` | role ≥ `editor` **OU** (role ≥ `student` **E** vínculo de tripulação no voo via `usuarios.funcionario_id` → `cv_voo_tripulantes`) |
-| `voos.rdv.visualizar_todos`, `revisar`, `corrigir`, `devolver`, `aprovar_coordenacao`, `reabrir`, `exportar_petrobras` | role ≥ `manager` (Coordenação) |
-| `voos.rdv.aprovar_comercial` | reservada para o gate futuro (não usada nesta entrega) |
+1. **DENY** explícito em `usuario_permissoes` → nega
+2. **GRANT** explícito em `usuario_permissoes` → concede
+3. default por role (não é só `checkPermission` / wrapper de hierarquia)
 
-Testado: piloto sem vínculo de tripulação recebe 403 (`CONTROLE_VOOS_RDV_NOT_CREW`);
-Coordenação (`manager`+) acessa qualquer RDV do tenant sem precisar de vínculo; cross-tenant
-retorna 404 (nunca 200 com dado de outra empresa).
+| Capability | Default de role | Escopo adicional |
+|---|---|---|
+| `voos.rdv.visualizar_proprio`, `criar_proprio`, `editar_rascunho_proprio`, `enviar`, `cancelar` | ≥ `student` | piloto: exige vínculo de tripulação no voo |
+| `voos.rdv.visualizar_todos`, `revisar`, `corrigir`, `devolver`, `aprovar_coordenacao`, `reabrir`, `exportar_petrobras` | ≥ `manager` (Coordenação) | sem vínculo de tripulação |
+| `voos.rdv.aprovar_comercial` | **sem default** — só GRANT explícito | gate futuro |
+
+Testado: student/viewer sem capability → 403; piloto com capability + crew → OK; piloto com
+capability sem crew → 403 `CONTROLE_VOOS_RDV_NOT_CREW`; Coordenação com capability → OK;
+manager com DENY explícito em capability → 403; cross-tenant → 404; IDOR sem crew → 403;
+self-approval da Coordenação → 403 `CONTROLE_VOOS_RDV_SELF_APPROVAL_FORBIDDEN`.
 
 ## 6. Alertas implementados (escopo reduzido, documentado)
 
@@ -134,7 +163,7 @@ após envio" como alerta dedicado (hoje coberto pela trilha de revisões/justifi
 ## 7. Relatório Petrobras (PDF)
 
 - Gerado sob demanda em `GET /api/controle-voos/voos/:id/rdv/relatorio-petrobras`
-  (capability `voos.rdv.exportar_petrobras`, role ≥ `manager`).
+  (capability `voos.rdv.exportar_petrobras`, default ≥ `manager`).
 - Todos os totais vêm de `cv_rdv_operacional`/`cv_voo_etapas` calculados pelo backend — o
   PDF nunca recalcula.
 - Marca d'água **"TESTE — NÃO ENVIAR À PETROBRAS"** em todas as páginas, sem flag de
@@ -159,11 +188,14 @@ após envio" como alerta dedicado (hoje coberto pela trilha de revisões/justifi
 
 ## 9. Rollback
 
-- Migration: `0438_controle_voos_rdv_coordenacao_workflow_rollback.sql` remove as tabelas
-  novas e as colunas adicionadas; recusa-se a prosseguir se existir qualquer RDV com
-  `workflow_status <> 'rascunho'` (evita perda silenciosa de fluxo em andamento).
-- Código: toda a mudança é aditiva a `controle-voos.ts` — reverter o merge do PR remove o
-  fluxo novo sem afetar as rotas/endpoints pré-existentes.
+- Migration rollback: `worker-airtrust/migrations/rollback_0438_controle_voos_rdv_coordenacao_workflow.sql`
+  (nome **fora** da cadeia numérica — aplicar só manualmente). Remove as tabelas novas e as
+  15 colunas adicionadas; **fail-closed** se existir qualquer dado de workflow (aprovações,
+  revisões, alertas, abastecimentos, ou RDV com `workflow_status <> 'rascunho'` / `versao <> 1`
+  / campos novos preenchidos).
+- A própria `0438` também é fail-closed na **reexecução** (não idempotente).
+- Código: extração modular em `controle-voos-rdv-workflow.ts` + services/repository; reverter
+  o merge do PR remove o fluxo novo sem afetar as rotas/endpoints pré-existentes do CRUD.
 - Nenhuma migration foi aplicada em staging ou produção. Testado apenas localmente (D1
   local, schema vazio e schema pré-existente com 0410/0411).
 
@@ -173,15 +205,17 @@ após envio" como alerta dedicado (hoje coberto pela trilha de revisões/justifi
 2. Aplicar `0438` em staging via `scripts/apply-migration-production.sh` (ou wrapper
    equivalente de staging) com autorização explícita.
 3. Fumaça manual do fluxo completo (enviar → revisar → devolver → corrigir → aprovar →
-   finalizar → reabrir) com dados fictícios.
-4. Confirmar RBAC (piloto vs Coordenação) com usuários reais de staging.
+   finalizar → reabrir) com dados fictícios, confirmando `workflow_status` explícitos
+   `devolvido`/`reaberto`.
+4. Confirmar RBAC por capability (piloto vs Coordenação, DENY/GRANT, self-approval) com
+   usuários reais de staging.
 5. Confirmar que o PDF gerado em staging mantém a marca d'água.
 
 ## 11. Riscos
 
 | Risco | Severidade | Mitigação |
 |---|---|---|
-| `controle-voos.ts` cresceu para 3585 linhas / 66 `.prepare()` | Médio | Ratchets de arquitetura atualizados com justificativa; refatorar em arquivo dedicado é backlog técnico razoável, não bloqueador |
-| Alertas cobrem só 6 de ~20 regras do enunciado | Médio | Documentado explicitamente (seção 6); rule engine é extensível (`RdvAlertRule[]`) |
-| RBAC de capability é convenção sobre hierarquia, não um sistema fino de permissões dedicado | Baixo | Suficiente para o objetivo (ownership + role mínimo); documentado em vez de forçar uma reforma de RBAC fora de escopo |
+| God-file histórico em `controle-voos.ts` | Médio | Extração WIP para `controle-voos-rdv-workflow.ts` + services; **sem** raise de caps no `architecture-performance-guard` para `controle-voos.ts` |
+| Alertas cobrem só 6–7 de ~20 regras do enunciado | Médio | Documentado explicitamente (seção 6); rule engine é extensível (`RdvAlertRule[]`) |
+| Segunda execução de 0438 falha (não idempotente) | Baixo | Intencional / fail-closed; documentado; rollback dedicado fora da cadeia numérica |
 | PDF não foi validado visualmente em navegador (ambiente sem preview de PDF binário) | Baixo | Testado via bytes (`%PDF-`, tamanho, watermark desenhado); recomenda-se abertura manual em staging antes de uso real |

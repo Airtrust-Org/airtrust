@@ -19,8 +19,10 @@ export type CvRdvWorkflowStatus =
   | 'rascunho'
   | 'enviado'
   | 'em_revisao'
+  | 'devolvido'
   | 'aprovado_coordenacao'
   | 'finalizado'
+  | 'reaberto'
   | 'cancelado';
 
 // ---- Entity types ----
@@ -76,6 +78,8 @@ export interface CvRdv {
   enviado_em: string | null;
   revisao_iniciada_por: number | null;
   revisao_iniciada_em: string | null;
+  devolvido_por: number | null;
+  devolvido_em: string | null;
   aprovado_coordenacao_por: number | null;
   aprovado_coordenacao_em: string | null;
   finalizado_workflow_em: string | null;
@@ -113,7 +117,7 @@ export interface CvRdvRevisao {
 export interface CvRdvAprovacao {
   id: number;
   versao: number;
-  tipo_aprovacao: 'COORDENACAO' | 'CONTRATANTE' | 'COMERCIAL';
+  tipo_aprovacao: 'COMANDANTE' | 'COORDENACAO' | 'CONTRATANTE' | 'COMERCIAL';
   status: string;
   usuario_id: number | null;
   funcionario_id: number | null;
@@ -263,8 +267,17 @@ function extractPayload<T>(response: unknown, fallback: T): T {
   const r = response as HttpOk;
   if (!r.success) throw new Error(r.error || 'Erro de API');
   const body = r.data as Record<string, unknown> | undefined;
-  if (body && typeof body === 'object' && 'data' in body) return body.data as T;
+  if (body && typeof body === 'object' && 'data' in body) return (body.data as T) ?? fallback;
   return (r.data as T) ?? fallback;
+}
+
+/** Like extractPayload, but throws when the API returns a null/undefined entity. */
+function extractPayloadRequired<T>(response: unknown): T {
+  const payload = extractPayload<T | null | undefined>(response, null);
+  if (payload == null) {
+    throw new Error('Resposta vazia da API');
+  }
+  return payload;
 }
 
 function extractBody<T>(response: unknown): T {
@@ -284,7 +297,7 @@ export function useControleVoosDashboard(data?: string) {
       const params = new URLSearchParams();
       if (data) params.set('data', data);
       const response = await apiClient.get<unknown>(`${API}/dashboard?${params.toString()}`);
-      return extractPayload<CvDashboard>(response, {} as CvDashboard);
+      return extractPayloadRequired<CvDashboard>(response);
     },
     staleTime: 30_000,
     retry: 1,
@@ -311,7 +324,9 @@ export function useControleVoosVoos(filtros?: {
       if (filtros?.limit) params.set('limit', String(filtros.limit));
       const qs = params.toString();
       const response = await apiClient.get<unknown>(`${API}/voos${qs ? `?${qs}` : ''}`);
-      const body = extractBody<{ success: boolean; data: CvVoo[]; pagination: CvPagination }>(response);
+      const body = extractBody<{ success: boolean; data: CvVoo[]; pagination: CvPagination }>(
+        response,
+      );
       return { voos: body.data || [], pagination: body.pagination };
     },
     staleTime: 30_000,
@@ -325,7 +340,7 @@ export function useControleVoosVoo(id: string | number | undefined) {
     enabled: !!id,
     queryFn: async () => {
       const response = await apiClient.get<unknown>(`${API}/voos/${id}`);
-      return extractPayload<CvVoo>(response, null as unknown as CvVoo);
+      return extractPayloadRequired<CvVoo>(response);
     },
     staleTime: 30_000,
     retry: 1,
@@ -364,7 +379,7 @@ export function useSalvarRdv() {
   return useMutation({
     mutationFn: async ({ vooId, dados }: { vooId: string | number; dados: RdvInput }) => {
       const response = await apiClient.put<unknown>(`${API}/voos/${vooId}/rdv`, dados);
-      return extractPayload<CvRdv>(response, null as unknown as CvRdv);
+      return extractPayloadRequired<CvRdv>(response);
     },
     onSuccess: (_, vars) => {
       void qc.invalidateQueries({ queryKey: ['cv-rdv', vars.vooId] });
@@ -378,8 +393,11 @@ export function useFinalizarPreenchimentoRdv() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (vooId: string | number) => {
-      const response = await apiClient.post<unknown>(`${API}/voos/${vooId}/rdv/finalizar-preenchimento`, {});
-      return extractPayload<CvRdv>(response, null as unknown as CvRdv);
+      const response = await apiClient.post<unknown>(
+        `${API}/voos/${vooId}/rdv/finalizar-preenchimento`,
+        {},
+      );
+      return extractPayloadRequired<CvRdv>(response);
     },
     onSuccess: (_, vooId) => {
       void qc.invalidateQueries({ queryKey: ['cv-rdv', vooId] });
@@ -472,7 +490,8 @@ export function useRdvFila(filtros?: {
       if (filtros?.data_inicio) params.set('data_inicio', filtros.data_inicio);
       if (filtros?.data_fim) params.set('data_fim', filtros.data_fim);
       if (filtros?.aeronave_id) params.set('aeronave_id', String(filtros.aeronave_id));
-      if (filtros?.piloto_funcionario_id) params.set('piloto_funcionario_id', String(filtros.piloto_funcionario_id));
+      if (filtros?.piloto_funcionario_id)
+        params.set('piloto_funcionario_id', String(filtros.piloto_funcionario_id));
       const qs = params.toString();
       const response = await apiClient.get<unknown>(`${API}/rdv/fila${qs ? `?${qs}` : ''}`);
       return extractPayload<CvRdvFilaItem[]>(response, []);
@@ -482,12 +501,17 @@ export function useRdvFila(filtros?: {
   });
 }
 
-function useRdvWorkflowAction<TBody extends Record<string, unknown> = Record<string, unknown>>(action: string) {
+function useRdvWorkflowAction<TBody extends Record<string, unknown> = Record<string, unknown>>(
+  action: string,
+) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ vooId, body }: { vooId: string | number; body?: TBody }) => {
-      const response = await apiClient.post<unknown>(`${API}/voos/${vooId}/rdv/${action}`, body || {});
-      return extractPayload<CvRdv>(response, null as unknown as CvRdv);
+      const response = await apiClient.post<unknown>(
+        `${API}/voos/${vooId}/rdv/${action}`,
+        body || {},
+      );
+      return extractPayloadRequired<CvRdv>(response);
     },
     onSuccess: (_, vars) => invalidateRdvQueries(qc, vars.vooId),
   });
@@ -540,7 +564,7 @@ export function useCorrigirRdv() {
         justificativa,
         campos,
       });
-      return extractPayload<CvRdv>(response, null as unknown as CvRdv);
+      return extractPayloadRequired<CvRdv>(response);
     },
     onSuccess: (_, vars) => invalidateRdvQueries(qc, vars.vooId),
   });
@@ -603,8 +627,16 @@ export function useCriarTripulante() {
 export function useRemoverTripulante() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ vooId, tripulanteId }: { vooId: string | number; tripulanteId: number }) => {
-      const response = await apiClient.delete<unknown>(`${API}/voos/${vooId}/tripulantes/${tripulanteId}`);
+    mutationFn: async ({
+      vooId,
+      tripulanteId,
+    }: {
+      vooId: string | number;
+      tripulanteId: number;
+    }) => {
+      const response = await apiClient.delete<unknown>(
+        `${API}/voos/${vooId}/tripulantes/${tripulanteId}`,
+      );
       return extractPayload<{ id: number }>(response, { id: 0 });
     },
     onSuccess: (_, vars) => {
@@ -662,8 +694,16 @@ export function useCriarAbastecimento() {
 export function useRemoverAbastecimento() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ vooId, abastecimentoId }: { vooId: string | number; abastecimentoId: number }) => {
-      const response = await apiClient.delete<unknown>(`${API}/voos/${vooId}/abastecimentos/${abastecimentoId}`);
+    mutationFn: async ({
+      vooId,
+      abastecimentoId,
+    }: {
+      vooId: string | number;
+      abastecimentoId: number;
+    }) => {
+      const response = await apiClient.delete<unknown>(
+        `${API}/voos/${vooId}/abastecimentos/${abastecimentoId}`,
+      );
       return extractPayload<{ id: number }>(response, { id: 0 });
     },
     onSuccess: (_, vars) => {
@@ -677,7 +717,9 @@ export function useRemoverAbastecimento() {
 // ===========================================================================
 
 export async function abrirRelatorioPetrobrasPdf(vooId: string | number): Promise<void> {
-  const response = await fetchWithAuth(`${API_BASE_URL}${API}/voos/${vooId}/rdv/relatorio-petrobras`);
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}${API}/voos/${vooId}/rdv/relatorio-petrobras`,
+  );
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: 'Falha ao gerar relatorio' }));
     throw new Error(body.error || 'Falha ao gerar relatorio');

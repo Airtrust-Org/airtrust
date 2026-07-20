@@ -93,6 +93,7 @@ import backupRoutes from './routes/backup';
 import { edappRouter } from './routes/integracoes_edapp';
 import { sigvoosRouter } from './routes/integracoes_sigvoos';
 import controleVoosRoutes from './routes/controle-voos';
+import controleVoosRdvWorkflowRoutes from './routes/controle-voos-rdv-workflow';
 // Multi-Tenant (Empresas)
 import { empresasRoutes } from './routes/empresas';
 // Assets (R2)
@@ -669,6 +670,7 @@ app.route('/api/integracoes/sigvoos', sigvoosRouter);
 
 // Controle de Voos N1 - endpoints operacionais internos
 app.route('/api/controle-voos', controleVoosRoutes);
+app.route('/api/controle-voos', controleVoosRdvWorkflowRoutes);
 
 /**
  * Rotas de Backup & Restore
