@@ -77,14 +77,27 @@ function data(response, label, status = 200) {
   ok(response.json?.success === true, `${label}: success=true required`);
   return response.json.data;
 }
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
 async function tokenFor(email, password) {
-  try {
-    return extractAccessToken(await login(API, email, password));
-  } catch (error) {
-    fail(
-      `login failed for ${String(email).replace(/^(.).+(@.*)$/, '$1***$2')}: ${safeError(error)}`,
-    );
+  // Staging login rate limit is 5 req/min. Fixture setup logs in several users.
+  let lastError = null;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      return extractAccessToken(await login(API, email, password));
+    } catch (error) {
+      lastError = error;
+      const message = safeError(error);
+      if (!/login retornou 429/.test(message) || attempt === 4) {
+        fail(`login failed for ${String(email).replace(/^(.).+(@.*)$/, '$1***$2')}: ${message}`);
+      }
+      await sleep(16000);
+    }
   }
+  fail(
+    `login failed for ${String(email).replace(/^(.).+(@.*)$/, '$1***$2')}: ${safeError(lastError)}`,
+  );
 }
 async function versionGuard() {
   const version = await fetchJson(`${API}/api/version`);
