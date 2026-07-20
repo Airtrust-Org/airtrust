@@ -358,8 +358,13 @@ jobs:
         # X-AirTrust-Worker-Version / X-AirTrust-Source-SHA headers present and
         # matching, bundle + manifest hashes present, protected route -> 401,
         # maintenance route -> 404 (not 403), and no localhost debug-route leak.
-        # Logic and negative-path proofs live in
-        # scripts/smoke-production-postdeploy.mjs (unit-tested in
+        # Transient propagation failures (connection refused, timeout,
+        # 502/503/504, stale version/SHA/provenance while the edge catches up)
+        # retry with a fixed backoff, bounded by BOTH SMOKE_MAX_RETRIES and
+        # SMOKE_MAX_TOTAL_MS. Security/identity invariants (wrong 401/404,
+        # wrong environment, persistent SHA mismatch, localhost leak) fail
+        # immediately and are never retried. Logic and negative-path proofs
+        # live in scripts/smoke-production-postdeploy.mjs (unit-tested in
         # scripts/__tests__/smoke-production-postdeploy.test.mjs).
         env:
           PROD_API_BASE_URL: https://api.airtrust.online
@@ -367,6 +372,8 @@ jobs:
           EXPECTED_SOURCE_SHA: ${{ github.sha }}
           SMOKE_MAX_RETRIES: '6'
           SMOKE_RETRY_DELAY_MS: '10000'
+          SMOKE_REQUEST_TIMEOUT_MS: '8000'
+          SMOKE_MAX_TOTAL_MS: '120000'
         run: |
           set -euo pipefail
           node scripts/smoke-production-postdeploy.mjs
