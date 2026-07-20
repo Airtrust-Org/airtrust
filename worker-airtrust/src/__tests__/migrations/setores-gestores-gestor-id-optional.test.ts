@@ -23,7 +23,11 @@ function runSqlite(dbPath: string, sql: string): string {
     }
     return result.stdout;
   } finally {
-    try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* noop */ }
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* noop */
+    }
   }
 }
 
@@ -32,10 +36,7 @@ function scalar(dbPath: string, sql: string): string {
 }
 
 function rows(dbPath: string, sql: string): string[] {
-  return runSqlite(dbPath, `${sql}\n`)
-    .trim()
-    .split('\n')
-    .filter(Boolean);
+  return runSqlite(dbPath, `${sql}\n`).trim().split('\n').filter(Boolean);
 }
 
 function migrationSql(): string {
@@ -43,6 +44,28 @@ function migrationSql(): string {
     join(__dirname, '../../../migrations/0437_setores_gestores_gestor_id_optional.sql'),
     'utf8',
   );
+}
+
+/**
+ * Applies the migration in two separate sqlite3 invocations.
+ * CI's sqlite3 3.37 fails to create a view referencing a table that
+ * was dropped and renamed in the same batch. Splitting at the DROP VIEW
+ * boundary ensures the table rebuild commits before the view is recreated.
+ */
+function applyMigration(dbPath: string): void {
+  const sql = migrationSql();
+  const viewMarker = '\nDROP VIEW IF EXISTS vw_setores_gestores_ativo;';
+  const idx = sql.indexOf(viewMarker);
+  if (idx === -1) {
+    runSqlite(dbPath, sql);
+    return;
+  }
+  // Batch 1: PRAGMA OFF, table rebuild, indexes
+  const batch1 = sql.slice(0, idx).trim();
+  // Batch 2: DROP VIEW, CREATE VIEW, PRAGMA ON
+  const batch2 = sql.slice(idx).trim();
+  if (batch1) runSqlite(dbPath, batch1);
+  if (batch2) runSqlite(dbPath, batch2);
 }
 
 function rollbackSql(): string {
@@ -87,10 +110,22 @@ describe('0437 — setores_gestores gestor_id optional', () => {
         deleted_at TEXT
       );`,
     );
-    runSqlite(dbPath, "INSERT INTO usuarios (id, nome, email, perfil) VALUES (43, 'Gestor 43', 'g43@test', 'GESTOR');");
-    runSqlite(dbPath, "INSERT INTO usuarios (id, nome, email, perfil) VALUES (59, 'Gestor 59', 'g59@test', 'GESTOR');");
-    runSqlite(dbPath, "INSERT INTO usuarios (id, nome, email, perfil) VALUES (63, 'Antonio', 'antonio@test', 'GESTOR');");
-    runSqlite(dbPath, "INSERT INTO usuarios (id, nome, email, perfil) VALUES (100, 'Outro Gestor', 'g100@test', 'GESTOR');");
+    runSqlite(
+      dbPath,
+      "INSERT INTO usuarios (id, nome, email, perfil) VALUES (43, 'Gestor 43', 'g43@test', 'GESTOR');",
+    );
+    runSqlite(
+      dbPath,
+      "INSERT INTO usuarios (id, nome, email, perfil) VALUES (59, 'Gestor 59', 'g59@test', 'GESTOR');",
+    );
+    runSqlite(
+      dbPath,
+      "INSERT INTO usuarios (id, nome, email, perfil) VALUES (63, 'Antonio', 'antonio@test', 'GESTOR');",
+    );
+    runSqlite(
+      dbPath,
+      "INSERT INTO usuarios (id, nome, email, perfil) VALUES (100, 'Outro Gestor', 'g100@test', 'GESTOR');",
+    );
 
     runSqlite(
       dbPath,
@@ -104,9 +139,18 @@ describe('0437 — setores_gestores gestor_id optional', () => {
         empresa_id INTEGER NOT NULL
       );`,
     );
-    runSqlite(dbPath, "INSERT INTO setores (id, codigo, nome, empresa_id) VALUES (10, 'TRI', 'Tripulacao', 6);");
-    runSqlite(dbPath, "INSERT INTO setores (id, codigo, nome, empresa_id) VALUES (11, 'MAN', 'Manutencao', 6);");
-    runSqlite(dbPath, "INSERT INTO setores (id, codigo, nome, empresa_id) VALUES (20, 'TRI7', 'Tripulacao Tenant 7', 7);");
+    runSqlite(
+      dbPath,
+      "INSERT INTO setores (id, codigo, nome, empresa_id) VALUES (10, 'TRI', 'Tripulacao', 6);",
+    );
+    runSqlite(
+      dbPath,
+      "INSERT INTO setores (id, codigo, nome, empresa_id) VALUES (11, 'MAN', 'Manutencao', 6);",
+    );
+    runSqlite(
+      dbPath,
+      "INSERT INTO setores (id, codigo, nome, empresa_id) VALUES (20, 'TRI7', 'Tripulacao Tenant 7', 7);",
+    );
 
     runSqlite(
       dbPath,
@@ -258,7 +302,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
     const beforeCount = scalar(dbPath, 'SELECT COUNT(*) FROM setores_gestores;');
     expect(beforeCount).toBe('10');
 
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     const afterCount = scalar(dbPath, 'SELECT COUNT(*) FROM setores_gestores;');
     expect(afterCount).toBe('10');
@@ -273,7 +317,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
       'SELECT id, setor_id, gestor_id, empresa_id, role, ativo, COALESCE(deleted_at, "NULL"), COALESCE(usuario_id, "NULL") FROM setores_gestores ORDER BY id;',
     );
 
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     const after = rows(
       dbPath,
@@ -285,14 +329,14 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('passa PRAGMA integrity_check após migration', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
     const integrity = scalar(dbPath, 'PRAGMA integrity_check;');
     expect(integrity).toBe('ok');
   });
 
   it('passa PRAGMA foreign_key_check após migration', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
     const fkCheck = runSqlite(dbPath, 'PRAGMA foreign_key_check;').trim();
     expect(fkCheck).toBe('');
   });
@@ -303,7 +347,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('aceita gestor_id NULL com usuario_id preenchido (caminho moderno)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Este é exatamente o caso do Antônio que falhou em produção
     runSqlite(
@@ -314,14 +358,14 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
     const count = scalar(
       dbPath,
-      "SELECT COUNT(*) FROM setores_gestores WHERE usuario_id = 63 AND gestor_id IS NULL AND empresa_id = 6;",
+      'SELECT COUNT(*) FROM setores_gestores WHERE usuario_id = 63 AND gestor_id IS NULL AND empresa_id = 6;',
     );
     expect(count).toBe('1');
   });
 
   it('rejeita ambos NULL (CHECK constraint)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     expect(() => {
       runSqlite(
@@ -334,7 +378,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('rejeita vínculo duplicado ativo por gestor_id (índice legado)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Linha 1 já tem (setor_id=10, gestor_id=1, empresa_id=6)
     expect(() => {
@@ -348,7 +392,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('rejeita vínculo duplicado ativo por usuario_id (índice moderno)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Insere um moderno primeiro
     runSqlite(
@@ -369,7 +413,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('permite novo vínculo após soft delete (mesmo usuario_id)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Insere e soft-deleta
     runSqlite(
@@ -377,7 +421,10 @@ describe('0437 — setores_gestores gestor_id optional', () => {
       `INSERT INTO setores_gestores (setor_id, gestor_id, usuario_id, empresa_id, role)
        VALUES (10, NULL, 63, 6, 'manager');`,
     );
-    runSqlite(dbPath, `UPDATE setores_gestores SET deleted_at = datetime('now') WHERE usuario_id = 63;`);
+    runSqlite(
+      dbPath,
+      `UPDATE setores_gestores SET deleted_at = datetime('now') WHERE usuario_id = 63;`,
+    );
 
     // Deve permitir novo vínculo
     runSqlite(
@@ -388,7 +435,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
     const count = scalar(
       dbPath,
-      "SELECT COUNT(*) FROM setores_gestores WHERE usuario_id = 63 AND deleted_at IS NULL;",
+      'SELECT COUNT(*) FROM setores_gestores WHERE usuario_id = 63 AND deleted_at IS NULL;',
     );
     expect(count).toBe('1');
   });
@@ -399,7 +446,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('isola vínculos por empresa (índice tenant-safe)', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Mesmo usuario_id=63 existe no tenant 6
     runSqlite(
@@ -417,11 +464,11 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
     const count6 = scalar(
       dbPath,
-      "SELECT COUNT(*) FROM setores_gestores WHERE usuario_id = 63 AND empresa_id = 6 AND deleted_at IS NULL;",
+      'SELECT COUNT(*) FROM setores_gestores WHERE usuario_id = 63 AND empresa_id = 6 AND deleted_at IS NULL;',
     );
     const count7 = scalar(
       dbPath,
-      "SELECT COUNT(*) FROM setores_gestores WHERE usuario_id = 63 AND empresa_id = 7 AND deleted_at IS NULL;",
+      'SELECT COUNT(*) FROM setores_gestores WHERE usuario_id = 63 AND empresa_id = 7 AND deleted_at IS NULL;',
     );
     expect(count6).toBe('1');
     expect(count7).toBe('1');
@@ -433,7 +480,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('view inclui gestor moderno (usuario_id-only) após migration', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Insere gestor moderno
     runSqlite(
@@ -442,17 +489,23 @@ describe('0437 — setores_gestores gestor_id optional', () => {
        VALUES (10, NULL, 63, 6, 'manager');`,
     );
 
-    const viewRows = rows(dbPath, 'SELECT id, gestor_nome FROM vw_setores_gestores_ativo WHERE usuario_id = 63;');
+    const viewRows = rows(
+      dbPath,
+      'SELECT id, gestor_nome FROM vw_setores_gestores_ativo WHERE usuario_id = 63;',
+    );
     expect(viewRows.length).toBeGreaterThanOrEqual(1);
     expect(viewRows[0]).toContain('Antonio');
   });
 
   it('view inclui gestores legados (gestor_id) após migration', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Linhas legadas com gestor_id devem continuar visíveis
-    const viewRows = rows(dbPath, "SELECT id FROM vw_setores_gestores_ativo WHERE gestor_id IS NOT NULL;");
+    const viewRows = rows(
+      dbPath,
+      'SELECT id FROM vw_setores_gestores_ativo WHERE gestor_id IS NOT NULL;',
+    );
     // 10 linhas, das quais 8 estão ativas + não deletadas (ids 1-6, 9, 10)
     expect(viewRows.length).toBeGreaterThanOrEqual(8);
   });
@@ -465,14 +518,17 @@ describe('0437 — setores_gestores gestor_id optional', () => {
     const dbPath = setupPreMigrationDb();
 
     // Snapshot pré
-    const preSchema = runSqlite(dbPath, "SELECT sql FROM sqlite_master WHERE name='setores_gestores' AND type='table';").trim();
+    const preSchema = runSqlite(
+      dbPath,
+      "SELECT sql FROM sqlite_master WHERE name='setores_gestores' AND type='table';",
+    ).trim();
     const preData = rows(
       dbPath,
       'SELECT id, setor_id, gestor_id, empresa_id, role, ativo, COALESCE(deleted_at, "NULL"), COALESCE(usuario_id, "NULL") FROM setores_gestores ORDER BY id;',
     );
 
     // Aplica migration
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
 
     // Verifica que migration foi aplicada (gestor_id agora é opcional)
     const colInfo = runSqlite(
@@ -501,7 +557,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
 
   it('rollback não tem CHECK constraint residual', () => {
     const dbPath = setupPreMigrationDb();
-    runSqlite(dbPath, migrationSql());
+    applyMigration(dbPath);
     runSqlite(dbPath, rollbackSql());
 
     // Deve rejeitar gestor_id NULL (NOT NULL voltou)
