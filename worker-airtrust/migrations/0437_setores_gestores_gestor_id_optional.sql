@@ -16,6 +16,13 @@
 PRAGMA foreign_keys = OFF;
 
 -- =========================================================================
+-- 0. Remover view antes do rebuild para evitar revalidação de schema
+--    contra tabela temporariamente ausente (SQLite 3.37 compat).
+-- =========================================================================
+
+DROP VIEW IF EXISTS vw_setores_gestores_ativo;
+
+-- =========================================================================
 -- 1. Rebuild com gestor_id opcional + CHECK constraint
 -- =========================================================================
 
@@ -83,9 +90,33 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_setores_gestores_usuario_unique
 -- 3. View corrigida: LEFT JOIN para não excluir gestores usuario_id-only
 -- =========================================================================
 
-DROP VIEW IF EXISTS vw_setores_gestores_ativo;
-
 CREATE VIEW vw_setores_gestores_ativo AS
+SELECT
+  sg.id,
+  sg.setor_id,
+  sg.gestor_id,
+  sg.usuario_id,
+  sg.empresa_id,
+  sg.role,
+  s.nome AS setor_nome,
+  s.codigo AS setor_codigo,
+  COALESCE(u.nome, g.nome) AS gestor_nome,
+  COALESCE(u.email, g.email) AS gestor_email,
+  g.cargo AS gestor_cargo,
+  sg.created_at
+FROM setores_gestores sg
+INNER JOIN setores s ON s.id = sg.setor_id
+LEFT JOIN notificacoes_convocacao_cc_gestores g
+  ON g.id = sg.gestor_id AND g.deleted_at IS NULL AND g.ativo = 1
+LEFT JOIN usuarios u
+  ON u.id = sg.usuario_id AND u.deleted_at IS NULL
+WHERE sg.deleted_at IS NULL
+  AND sg.ativo = 1
+  AND s.deleted_at IS NULL
+  AND s.ativo = 1
+  AND (g.id IS NOT NULL OR u.id IS NOT NULL);
+
+PRAGMA foreign_keys = ON;
 SELECT
   sg.id,
   sg.setor_id,
