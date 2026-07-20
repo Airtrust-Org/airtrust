@@ -5,8 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import {
   saoPauloTodayDateKey,
+  pdfFixtureCandidateTimeWindows,
   pdfFixtureTimeWindow,
   isValidPdfResponse,
+  sanitizeScheduleConflict,
+  createPdfSessionInAvailableSlot,
 } from '../staging/smoke-examiner-training.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -46,9 +49,15 @@ describe('smoke-examiner-training: PDF fixture date/time', () => {
       const { hora_inicio, hora_fim } = pdfFixtureTimeWindow(i / 50, LATE_AFTERNOON_NOW);
       assert.match(hora_inicio, /^\d{2}:\d{2}$/);
       assert.match(hora_fim, /^\d{2}:\d{2}$/);
-      assert.ok(hora_inicio < hora_fim, `hora_inicio (${hora_inicio}) deve ser < hora_fim (${hora_fim})`);
+      assert.ok(
+        hora_inicio < hora_fim,
+        `hora_inicio (${hora_inicio}) deve ser < hora_fim (${hora_fim})`,
+      );
       assert.ok(hora_fim <= '23:00', `hora_fim (${hora_fim}) não deve ultrapassar 23:00`);
-      assert.ok(hora_inicio >= '06:00', `hora_inicio (${hora_inicio}) não deve começar antes de 06:00`);
+      assert.ok(
+        hora_inicio >= '06:00',
+        `hora_inicio (${hora_inicio}) não deve começar antes de 06:00`,
+      );
     }
   });
 
@@ -84,22 +93,21 @@ describe('smoke-examiner-training: PDF fixture date/time', () => {
     }
   });
 
-  it('spreads distinct executions across distinct time slots (low collision probability)', () => {
-    const slots = new Set();
-    for (let i = 0; i < 20; i += 1) {
-      const { hora_inicio } = pdfFixtureTimeWindow(i / 20, LATE_AFTERNOON_NOW);
-      slots.add(hora_inicio);
-    }
-    // 20 evenly-spaced samples across the window must land on at least 15
-    // distinct slots — proves the slot resolution is fine-grained enough that
-    // two real executions picking independent Math.random() values are very
-    // unlikely to collide on the same simulador/day.
-    assert.ok(slots.size >= 15, `esperado >=15 horários distintos, obteve ${slots.size}`);
+  it('uses deterministic 60-minute candidates that have already started', () => {
+    const slots = pdfFixtureCandidateTimeWindows(LATE_AFTERNOON_NOW);
+    assert.ok(slots.length >= 10);
+    assert.deepEqual(slots[0], { hora_inicio: '06:00', hora_fim: '07:00' });
+    assert.equal(new Set(slots.map(({ hora_inicio }) => hora_inicio)).size, slots.length);
   });
 
   it('never accepts a non-200 (e.g. 409 FICHA_NOT_AVAILABLE_YET) as a valid PDF response', () => {
     assert.equal(
-      isValidPdfResponse({ status: 409, contentType: 'application/json', bytes: 120, hasPdfSignature: false }),
+      isValidPdfResponse({
+        status: 409,
+        contentType: 'application/json',
+        bytes: 120,
+        hasPdfSignature: false,
+      }),
       false,
     );
     assert.equal(isValidPdfResponse({ status: null, bytes: 0 }), false);
@@ -107,21 +115,41 @@ describe('smoke-examiner-training: PDF fixture date/time', () => {
 
   it('requires status 200, application/pdf content-type, non-empty body and the %PDF- signature', () => {
     assert.equal(
-      isValidPdfResponse({ status: 200, contentType: 'application/pdf', bytes: 5713, hasPdfSignature: true }),
+      isValidPdfResponse({
+        status: 200,
+        contentType: 'application/pdf',
+        bytes: 5713,
+        hasPdfSignature: true,
+      }),
       true,
     );
     assert.equal(
-      isValidPdfResponse({ status: 200, contentType: 'application/json', bytes: 5713, hasPdfSignature: true }),
+      isValidPdfResponse({
+        status: 200,
+        contentType: 'application/json',
+        bytes: 5713,
+        hasPdfSignature: true,
+      }),
       false,
       'content-type divergente não deve passar mesmo com status 200',
     );
     assert.equal(
-      isValidPdfResponse({ status: 200, contentType: 'application/pdf', bytes: 0, hasPdfSignature: false }),
+      isValidPdfResponse({
+        status: 200,
+        contentType: 'application/pdf',
+        bytes: 0,
+        hasPdfSignature: false,
+      }),
       false,
       'corpo vazio não deve passar',
     );
     assert.equal(
-      isValidPdfResponse({ status: 200, contentType: 'application/pdf', bytes: 52, hasPdfSignature: false }),
+      isValidPdfResponse({
+        status: 200,
+        contentType: 'application/pdf',
+        bytes: 52,
+        hasPdfSignature: false,
+      }),
       false,
       'sem assinatura %PDF- (ex.: corpo é na verdade um JSON de erro) não deve passar',
     );
@@ -130,9 +158,129 @@ describe('smoke-examiner-training: PDF fixture date/time', () => {
   it('keeps the other scenarios (B/C/D, F) scheduled on future days, never today, to avoid conflicting with the dedicated PDF-day fixture', () => {
     const source = readFileSync(join(ROOT, 'scripts/staging/smoke-examiner-training.mjs'), 'utf8');
     const offsetDeclarations = [...source.matchAll(/const randomDayOffset(\d) = (\d+) \+/g)];
-    assert.equal(offsetDeclarations.length, 2, 'esperado exatamente dois offsets de dia futuro (B/C/D e F)');
+    assert.equal(
+      offsetDeclarations.length,
+      2,
+      'esperado exatamente dois offsets de dia futuro (B/C/D e F)',
+    );
     for (const [, , minDays] of offsetDeclarations) {
-      assert.ok(Number(minDays) >= 7, 'offset mínimo dos demais cenários deve permanecer >= 7 dias no futuro');
+      assert.ok(
+        Number(minDays) >= 7,
+        'offset mínimo dos demais cenários deve permanecer >= 7 dias no futuro',
+      );
     }
+  });
+
+  it('retries a recognized 400 schedule conflict and selects the next free slot', async () => {
+    const candidates = [
+      { hora_inicio: '06:00', hora_fim: '07:00' },
+      { hora_inicio: '07:00', hora_fim: '08:00' },
+    ];
+    const tried = [];
+    const result = await createPdfSessionInAvailableSlot({
+      candidates,
+      createSession: async (slot) => {
+        tried.push(slot.hora_inicio);
+        return slot.hora_inicio === '06:00'
+          ? { status: 400, json: { error: 'Conflito externo de simulador' } }
+          : { status: 201, json: { data: { sessao: { id: 123 } } } };
+      },
+    });
+    assert.deepEqual(tried, ['06:00', '07:00']);
+    assert.deepEqual(result.selected, candidates[1]);
+    assert.equal(result.attempts[0].discardReason, 'schedule_conflict_simulador');
+    assert.equal(result.attempts[1].discardReason, 'selected');
+  });
+
+  it('retries through several occupied slots before success', async () => {
+    const candidates = [
+      { hora_inicio: '06:00', hora_fim: '07:00' },
+      { hora_inicio: '07:00', hora_fim: '08:00' },
+      { hora_inicio: '08:00', hora_fim: '09:00' },
+      { hora_inicio: '09:00', hora_fim: '10:00' },
+    ];
+    const result = await createPdfSessionInAvailableSlot({
+      candidates,
+      createSession: async (slot) =>
+        slot.hora_inicio === '09:00'
+          ? { status: 201, json: { data: { sessao: { id: 99 } } } }
+          : { status: 400, json: { error: 'Conflito externo de instrutor' } },
+    });
+    assert.equal(result.selected.hora_inicio, '09:00');
+    assert.equal(result.attempts.length, 4);
+    assert.equal(
+      result.attempts.filter((a) => a.discardReason?.startsWith('schedule_conflict_')).length,
+      3,
+    );
+  });
+
+  it('reports every occupied candidate with sanitized diagnostics', async () => {
+    await assert.rejects(
+      () =>
+        createPdfSessionInAvailableSlot({
+          candidates: [
+            { hora_inicio: '06:00', hora_fim: '07:00' },
+            { hora_inicio: '07:00', hora_fim: '08:00' },
+          ],
+          createSession: async () => ({
+            status: 400,
+            json: { error: 'Conflito externo de participante: 9988' },
+          }),
+        }),
+      (error) => {
+        assert.match(String(error.message), /I_pdf sem slot disponível/);
+        assert.equal(error.attempts.length, 2);
+        assert.equal(error.attempts[0].message, 'Conflito externo de participante');
+        assert.doesNotMatch(JSON.stringify(error.attempts), /9988/);
+        return true;
+      },
+    );
+  });
+
+  it('does not mistake an unrelated 400 or a 500 for a conflict', async () => {
+    assert.equal(
+      sanitizeScheduleConflict({ status: 400, json: { error: 'Payload inválido' } }),
+      null,
+    );
+    assert.equal(
+      sanitizeScheduleConflict({ status: 400, json: { error: 'Conflito externo de simulador' } })
+        ?.errorCode,
+      'EXTERNAL_SCHEDULE_CONFLICT',
+    );
+    await assert.rejects(
+      () =>
+        createPdfSessionInAvailableSlot({
+          candidates: [{ hora_inicio: '06:00', hora_fim: '07:00' }],
+          createSession: async () => ({ status: 400, json: { error: 'Payload inválido' } }),
+        }),
+      /HTTP 400/,
+    );
+    await assert.rejects(
+      () =>
+        createPdfSessionInAvailableSlot({
+          candidates: [{ hora_inicio: '06:00', hora_fim: '07:00' }],
+          createSession: async () => ({ status: 500, json: { error: 'Erro interno' } }),
+        }),
+      /HTTP 500/,
+    );
+    await assert.rejects(
+      () =>
+        createPdfSessionInAvailableSlot({
+          candidates: [{ hora_inicio: '06:00', hora_fim: '07:00' }],
+          createSession: async () => ({
+            status: 409,
+            json: { code: 'FICHA_NOT_AVAILABLE_YET', error: 'ainda não' },
+          }),
+        }),
+      /HTTP 409/,
+    );
+  });
+
+  it('keeps logs free of auth material markers in the I_pdf reporting path', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/smoke-examiner-training.mjs'), 'utf8');
+    assert.match(source, /selectedSlot/);
+    assert.match(source, /discardReason/);
+    assert.doesNotMatch(source, /Authorization.*attempts/);
+    assert.doesNotMatch(source, /QA_EXAMINER_ADMIN_PASSWORD.*I_pdf/);
   });
 });
