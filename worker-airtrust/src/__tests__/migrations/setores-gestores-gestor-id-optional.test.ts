@@ -168,7 +168,14 @@ describe('0437 — setores_gestores gestor_id optional', () => {
         (8, 11, 8, 6, 'manager', 1, datetime('now'), NULL),
         (9, 20, 9, 7, 'manager', 1, NULL, NULL),
         (10, 20, 10, 7, 'manager', 1, NULL, 100);
+      `,
+    );
 
+    // View must be created in a separate call — some sqlite3 versions
+    // reject view DDL in the same batch as the table it references.
+    runSqlite(
+      dbPath,
+      `
       CREATE VIEW vw_setores_gestores_ativo AS
       SELECT
         sg.id,
