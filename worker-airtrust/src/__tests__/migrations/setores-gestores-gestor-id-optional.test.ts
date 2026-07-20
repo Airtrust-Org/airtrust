@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 function runSqlite(dbPath: string, sql: string): string {
-  const result = spawnSync('sqlite3', [dbPath], {
+  // -batch flag ensures clean stdin parsing across sqlite3 versions
+  const result = spawnSync('sqlite3', ['-batch', dbPath], {
     input: sql,
     encoding: 'utf-8',
     timeout: 10_000,
