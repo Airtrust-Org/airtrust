@@ -832,6 +832,13 @@ app.get('/:id', async (c) => {
     if (!callerFuncionarioId || Number(matricula.funcionario_id) !== callerFuncionarioId) {
       throw new ApiError('Acesso negado', 403);
     }
+  } else {
+    // Managers with a restricted sector scope must not see matrículas of
+    // employees outside their assigned sectors, even when they know the id.
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    if (access.mode === 'restricted') {
+      await assertFuncionarioInScope(db, empresaId, Number(matricula.funcionario_id), access);
+    }
   }
 
   const tipoConteudo = (matricula.tipo_conteudo as string) ?? 'scorm';
@@ -1315,6 +1322,13 @@ app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
     .bind(matriculaId, empresaId)
     .first<{ id: number; status: string; funcionario_id: number; curso_titulo: string }>();
   if (!existing) throw new ApiError('Matrícula não encontrada', 404);
+
+  if (!hasRole(c, 'admin')) {
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    if (access.mode === 'restricted') {
+      await assertFuncionarioInScope(db, empresaId, existing.funcionario_id, access);
+    }
+  }
 
   await db
     .prepare(
@@ -2069,6 +2083,13 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
       qualificacao_vencimento_fim_mes: VencimentoMode | null;
     }>();
   if (!existing) throw new ApiError('Matrícula não encontrada', 404);
+
+  if (!hasRole(c, 'admin')) {
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    if (access.mode === 'restricted') {
+      await assertFuncionarioInScope(db, empresaId, existing.funcionario_id, access);
+    }
+  }
 
   const { status, observacoes } = parsed.data;
   const now = new Date().toISOString().slice(0, 10);
