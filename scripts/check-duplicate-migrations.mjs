@@ -60,6 +60,10 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
+  '0438': [
+    '0438_controle_voos_rdv_coordenacao_workflow.sql',
+    '0438_controle_voos_rdv_coordenacao_workflow_rollback.sql',
+  ],
 };
 
 const files = fs

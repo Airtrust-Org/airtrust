@@ -74,6 +74,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
+  '0438': [
+    '0438_controle_voos_rdv_coordenacao_workflow.sql',
+    '0438_controle_voos_rdv_coordenacao_workflow_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -154,8 +158,8 @@ describe('migration governance', () => {
     const regularPrefixes = numericPrefixes.filter((prefix) => prefix !== '9999');
     const highPrefixes = files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file));
 
-    // Ratchet raised 2026-07-19: 0437 setores_gestores gestor_id optional.
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(437);
+    // Ratchet raised 2026-07-20: 0438 controle-voos RDV coordenacao workflow.
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(438);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
