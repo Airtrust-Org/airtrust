@@ -359,9 +359,9 @@ export type RdvVersionGuard = {
  * disponível para os chamadores que só precisam de uma escrita isolada.
  *
  * Quando `guard` é informado, o INSERT vira um `INSERT ... SELECT ... WHERE
- * EXISTS` condicionado a `cv_rdv_operacional` já estar na versão esperada —
- * ver `buildRdvVersionGuardedInsert` para o motivo (o mesmo `db.batch()` do
- * UPDATE CAS que precede esta escrita).
+ * (SELECT changes()) > 0 AND EXISTS` — ver `buildRdvVersionGuardedInsert`
+ * para o motivo detalhado (mesmo padrão, mesmo `db.batch()` do UPDATE CAS
+ * que precede esta escrita).
  */
 export function buildFlightEventStatement(
   db: D1Database,
@@ -405,9 +405,10 @@ export function buildFlightEventStatement(
         created_at, updated_at
       )
       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
-      WHERE EXISTS (
-        SELECT 1 FROM cv_rdv_operacional WHERE id = ? AND empresa_id = ? AND versao = ?
-      )
+      WHERE (SELECT changes()) > 0
+        AND EXISTS (
+          SELECT 1 FROM cv_rdv_operacional WHERE id = ? AND empresa_id = ? AND versao = ?
+        )
     `,
     )
     .bind(...values, guard.rdvId, guard.empresaId, guard.expectedVersion);
@@ -420,19 +421,48 @@ export async function recordFlightEvent(
 }
 
 /**
- * Monta (sem executar) um INSERT condicionado a `cv_rdv_operacional` já
- * estar na versão esperada (`INSERT ... SELECT ... WHERE EXISTS`), para
- * agrupar com o UPDATE CAS no mesmo `db.batch([...])`.
+ * Monta (sem executar) um INSERT condicionado ao sucesso do UPDATE CAS que
+ * o precede no MESMO `db.batch([...])`, para agrupar aprovação/revisão/
+ * evento com o UPDATE otimista de `cv_rdv_operacional`.
  *
- * Necessário porque `db.batch` do D1 é atômico (todas as instruções
- * executam em uma única transação implícita: se qualquer uma falhar,
- * nenhuma é commitada), mas NÃO é condicional — todas as instruções do
- * array rodam independente do resultado das anteriores. Sem esta guarda,
- * um UPDATE que afeta 0 linhas (versão perdeu a corrida) ainda deixaria os
- * INSERTs seguintes do mesmo batch inserirem aprovação/revisão/evento como
- * se a transição tivesse ocorrido. Com a guarda, o INSERT também insere 0
- * linhas nesse caso — nenhum efeito colateral e nenhum erro (a rota
- * detecta a perda do CAS pelo `meta.changes` do UPDATE, não deste INSERT).
+ * ACHADO DE CONCORRÊNCIA (staging, 2026-07-21): a guarda original era só
+ * `WHERE EXISTS (SELECT 1 FROM cv_rdv_operacional WHERE ... versao = ?)`
+ * com `expectedVersion = novaVersao` (a versão ALVO, não a versão antiga
+ * lida por esta requisição). Isso prova apenas que a linha ESTÁ na versão
+ * alvo no momento em que este INSERT roda — não prova que foi ESTA
+ * transação que a levou até lá. Sob corrida real, duas requisições
+ * concorrentes leem o mesmo `rdv.versao` (ex.: 6) e calculam o mesmo
+ * `novaVersao` (7). A vencedora executa o UPDATE (6→7) e o INSERT desta
+ * mesma guarda vê `EXISTS(... versao = 7)` = true (efeito do seu próprio
+ * UPDATE, na mesma conexão). A perdedora tem seu UPDATE rejeitado pelo CAS
+ * (`WHERE versao = 6` não bate mais — 0 linhas), mas quando SEU INSERT
+ * guardado roda, o `EXISTS(... versao = 7)` TAMBÉM é true — porque a
+ * vencedora já comprometeu essa mesma versão-alvo antes. A perdedora
+ * recebe 409 (via `assertCasApplied` no UPDATE), mas o INSERT já foi
+ * commitado como efeito colateral: linha duplicada em `cv_rdv_aprovacoes`
+ * (reproduzido e confirmado em staging: duas linhas com a mesma `versao`,
+ * uma para cada requisição da corrida).
+ *
+ * CORREÇÃO: adicionar `AND (SELECT changes()) > 0` — `changes()` do SQLite
+ * reflete o número de linhas afetadas pela ÚLTIMA instrução de escrita
+ * completada NA MESMA CONEXÃO/TRANSAÇÃO (`db.batch()` roda como uma única
+ * transação implícita, com as instruções do array executando em ordem
+ * nessa mesma conexão). Como o UPDATE CAS é sempre a instrução IMEDIATAMENTE
+ * ANTERIOR a este INSERT no batch (ver todos os handlers de transição em
+ * `routes/controle-voos-rdv-workflow.ts`), `(SELECT changes()) > 0` prova
+ * que O PRÓPRIO UPDATE DESTA TRANSAÇÃO afetou uma linha — não apenas que a
+ * versão-alvo existe. A perdedora da corrida tem `changes() = 0` no seu
+ * próprio UPDATE (rejeitado pelo CAS), então seu INSERT guardado também
+ * insere 0 linhas, independente do que a vencedora já tenha commitado.
+ * O `EXISTS(...)` original é mantido como camada adicional (nunca abre o
+ * guard sozinho; some precisa de `changes() > 0` também).
+ *
+ * Quando múltiplos INSERTs guardados são encadeados no mesmo batch (ex.:
+ * várias linhas de `cv_rdv_revisoes` em `corrigir`), o encadeamento
+ * continua correto: `changes()` de cada INSERT reflete o INSERT
+ * imediatamente anterior, que por sua vez só teve `changes() = 1` se ELE
+ * tiver herdado um `changes() > 0` verdadeiro — zero se propaga
+ * corretamente por toda a cadeia quando o UPDATE original falhou.
  *
  * `table`/`columns`/`valuesSql` vêm sempre de literais fixos no código
  * (nunca de entrada do usuário) — não há risco de injeção via
@@ -453,9 +483,10 @@ export function buildRdvVersionGuardedInsert(
       `
       INSERT INTO ${params.table} (${params.columns})
       SELECT ${params.valuesSql}
-      WHERE EXISTS (
-        SELECT 1 FROM cv_rdv_operacional WHERE id = ? AND empresa_id = ? AND versao = ?
-      )
+      WHERE (SELECT changes()) > 0
+        AND EXISTS (
+          SELECT 1 FROM cv_rdv_operacional WHERE id = ? AND empresa_id = ? AND versao = ?
+        )
     `,
     )
     .bind(
