@@ -48,9 +48,33 @@ vi.mock('../../middleware/guias-instrutor-permissions', () => {
       c.set('guiasInstrutorRole', role);
       await next();
     };
+  const GUIAS_INSTRUTOR_CAPABILITIES = {
+    visualizar: 'simuladores.guias.visualizar',
+    gerenciar: 'simuladores.guias.gerenciar',
+  } as const;
   return {
+    GUIAS_INSTRUTOR_CAPABILITIES,
     requireGuiaInstrutorRead: guard(READ, 'Acesso restrito a instrutores autorizados'),
     requireGuiaInstrutorManage: guard(MANAGE, 'Publicação restrita a gestores/administradores'),
+    // Espelha, para os testes de rota, a mesma role de teste (x-test-guia-role)
+    // já usada pelo guard acima — não reintroduz a lógica real de
+    // DENY/GRANT/platform-admin (coberta à parte em
+    // __tests__/middleware/guias-instrutor-permissions.test.ts).
+    hasGuiaInstrutorCapability: async (c: any, capability: string) => {
+      const role = String(c.req.header('x-test-guia-role') || '').toUpperCase();
+      if (role === 'PLATFORM_ADMIN') return true;
+      if (capability === GUIAS_INSTRUTOR_CAPABILITIES.gerenciar) return MANAGE.has(role);
+      return READ.has(role);
+    },
+    resolveGuiaInstrutorPermissions: async (c: any) => {
+      const role = String(c.req.header('x-test-guia-role') || '').toUpperCase();
+      const isPlatformAdmin = role === 'PLATFORM_ADMIN';
+      return {
+        podeVisualizar: isPlatformAdmin || READ.has(role),
+        podeGerenciar: isPlatformAdmin || MANAGE.has(role),
+        isPlatformAdmin,
+      };
+    },
   };
 });
 
@@ -229,6 +253,40 @@ describe('simuladores-guias-instrutor — segurança e isolamento', () => {
       }),
       baseGuia({ id: 101, empresa_id: 7, status: 'ATIVO' }), // outra empresa
     ];
+  });
+
+  it('GET /guias-instrutor/minhas-permissoes reflete a capability real (nao texto de role)', async () => {
+    const app = createApp();
+    const platformAdminRes = await app.request(
+      '/api/simuladores/guias-instrutor/minhas-permissoes',
+      { headers: { Authorization: 'Bearer x', 'x-test-empresa-id': '6', 'x-test-guia-role': 'PLATFORM_ADMIN' } },
+      createMockEnv(guias),
+    );
+    expect(platformAdminRes.status).toBe(200);
+    expect(await platformAdminRes.json()).toMatchObject({
+      success: true,
+      data: { podeVisualizar: true, podeGerenciar: true, isPlatformAdmin: true },
+    });
+
+    const instrutorRes = await app.request(
+      '/api/simuladores/guias-instrutor/minhas-permissoes',
+      { headers: { Authorization: 'Bearer x', 'x-test-empresa-id': '6', 'x-test-guia-role': 'INSTRUTOR' } },
+      createMockEnv(guias),
+    );
+    expect(await instrutorRes.json()).toMatchObject({
+      success: true,
+      data: { podeVisualizar: true, podeGerenciar: false, isPlatformAdmin: false },
+    });
+
+    const semAcessoRes = await app.request(
+      '/api/simuladores/guias-instrutor/minhas-permissoes',
+      { headers: { Authorization: 'Bearer x', 'x-test-empresa-id': '6', 'x-test-guia-role': 'USUARIO' } },
+      createMockEnv(guias),
+    );
+    expect(await semAcessoRes.json()).toMatchObject({
+      success: true,
+      data: { podeVisualizar: false, podeGerenciar: false, isPlatformAdmin: false },
+    });
   });
 
   it('instrutor lista apenas guias ATIVOs da própria empresa', async () => {
