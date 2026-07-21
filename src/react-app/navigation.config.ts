@@ -164,6 +164,11 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
           label: 'Templates',
           path: '/simuladores/templates',
         },
+        {
+          id: 'simuladores-guias-instrutor',
+          label: 'Guias do Instrutor',
+          path: '/instrutor/guias',
+        },
       ],
     },
     {
