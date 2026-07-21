@@ -225,6 +225,69 @@ describe('rdv-pdf — geração', () => {
     expect(pages).toBeGreaterThanOrEqual(1);
   });
 
+  it('renderiza 2 etapas persistidas com horários/combustível na ordem; soft-deleted não entra no payload', async () => {
+    const etapasAtivas = [
+      {
+        numero_etapa: 1,
+        origem_icao: 'SBRJ',
+        destino_icao: 'SBSP',
+        horario_motor_ligado: '09:50',
+        horario_decolagem: '10:00',
+        horario_pouso: '10:40',
+        horario_motor_desligado: '10:50',
+        tempo_decolagem_pouso: '00:40',
+        tempo_total: '01:00',
+        pousos_diurnos: 1,
+        pousos_noturnos: 0,
+        pax: 4,
+        payload: 100,
+        combustivel_inicio: 1000,
+        combustivel_fim: 800,
+      },
+      {
+        numero_etapa: 2,
+        origem_icao: 'SBSP',
+        destino_icao: 'SBRJ',
+        horario_motor_ligado: '11:00',
+        horario_decolagem: '11:10',
+        horario_pouso: '11:50',
+        horario_motor_desligado: '12:00',
+        tempo_decolagem_pouso: '00:40',
+        tempo_total: '01:00',
+        pousos_diurnos: 1,
+        pousos_noturnos: 0,
+        pax: 2,
+        payload: 50,
+        combustivel_inicio: 800,
+        combustivel_fim: 650,
+      },
+    ];
+    // Soft-deleted would be filtered by SQL (deleted_at IS NULL) before PDF — payload only gets active rows.
+    const bytes = await gerarRelatorioPetrobrasPdf(baseData({ etapas: etapasAtivas }));
+    const text = extractPdfText(bytes);
+    expect(text).toContain('SBRJ');
+    expect(text).toContain('SBSP');
+    expect(text).toContain('10:00');
+    expect(text).toContain('11:10');
+    expect(text).toContain('1000');
+    expect(text).toContain('650');
+
+    const reordered = await gerarRelatorioPetrobrasPdf(
+      baseData({
+        etapas: [
+          { ...etapasAtivas[1], numero_etapa: 1 },
+          { ...etapasAtivas[0], numero_etapa: 2 },
+        ],
+      }),
+    );
+    const reorderedText = extractPdfText(reordered);
+    const firstLegIdx = reorderedText.indexOf('11:10');
+    const secondLegIdx = reorderedText.indexOf('10:00');
+    expect(firstLegIdx).toBeGreaterThan(-1);
+    expect(secondLegIdx).toBeGreaterThan(-1);
+    expect(firstLegIdx).toBeLessThan(secondLegIdx);
+  });
+
   it('gera PDF com vários trechos sem truncar conteúdo', async () => {
     const etapas = Array.from({ length: 18 }, (_, i) => ({
       numero_etapa: i + 1,

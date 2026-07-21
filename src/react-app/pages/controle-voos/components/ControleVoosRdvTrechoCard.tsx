@@ -1,11 +1,18 @@
 import { Copy, Trash2 } from 'lucide-react';
-import type { RdvTrechoDraft } from '../data/rdvPilotFlow';
-import { calcConsumoCombustivel, calcHorasVoadas, parseNumber } from '../data/rdvPilotFlow';
+import type { RdvSaveStatus, RdvTrechoDraft } from '../data/rdvPilotFlow';
+import {
+  calcConsumoCombustivel,
+  calcHorasVoadas,
+  parseNumber,
+  RDV_SAVE_STATUS_LABELS,
+} from '../data/rdvPilotFlow';
 
 type Props = {
   index: number;
   trecho: RdvTrechoDraft;
   readOnly?: boolean;
+  saveStatus?: RdvSaveStatus;
+  saveError?: string | null;
   onChange: (next: RdvTrechoDraft) => void;
   onDuplicate: () => void;
   onRemove: () => void;
@@ -15,10 +22,20 @@ type Props = {
 const inputClass =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 
+const statusTone: Record<RdvSaveStatus, string> = {
+  idle: 'text-slate-400',
+  pendente: 'text-amber-600 dark:text-amber-400',
+  salvando: 'text-blue-600 dark:text-blue-400',
+  salvo: 'text-emerald-600 dark:text-emerald-400',
+  erro: 'text-red-600 dark:text-red-400',
+};
+
 export default function ControleVoosRdvTrechoCard({
   index,
   trecho,
   readOnly,
+  saveStatus = 'idle',
+  saveError,
   onChange,
   onDuplicate,
   onRemove,
@@ -40,15 +57,27 @@ export default function ControleVoosRdvTrechoCard({
       data-testid={`rdv-trecho-card-${index}`}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-          Trecho {index + 1}
-        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            Trecho {index + 1}
+            {trecho.id ? (
+              <span className="ml-2 text-xs font-normal text-slate-400">#{trecho.id}</span>
+            ) : null}
+          </h3>
+          <span
+            className={`text-xs ${statusTone[saveStatus]}`}
+            data-testid={`rdv-trecho-status-${index}`}
+          >
+            {RDV_SAVE_STATUS_LABELS[saveStatus]}
+          </span>
+        </div>
         {!readOnly && (
           <div className="flex gap-2">
             <button
               type="button"
               onClick={onDuplicate}
-              className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              disabled={!trecho.id}
+              className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-40 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             >
               <Copy className="h-3.5 w-3.5" /> Duplicar
             </button>
@@ -63,6 +92,12 @@ export default function ControleVoosRdvTrechoCard({
           </div>
         )}
       </div>
+
+      {saveError ? (
+        <p className="mb-2 text-xs text-red-600 dark:text-red-400" role="alert">
+          {saveError}
+        </p>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className="space-y-1 text-sm">

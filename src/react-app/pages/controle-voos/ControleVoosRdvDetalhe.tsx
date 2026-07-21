@@ -45,30 +45,24 @@ import {
 } from './data/controleVoosUtils';
 import {
   RDV_PILOT_STEPS,
-  aggregateTrechosToFormPatch,
   buildFormState,
   calcConsumoCombustivel,
   calcHorasVoadas,
   collectFieldErrors,
   computeProgressPercent,
-  duplicateTrecho,
-  emptyTrecho,
   formatRdvNumero,
   getSalvarRdvErrorMessage,
   getStepIndex,
   isStepComplete,
   isVersionConflictError,
-  loadTrechoDraft,
   parseNumber,
-  saveTrechoDraft,
-  seedTrechosFromVoo,
   validateField,
   type RdvFormState,
   type RdvPilotStepId,
-  type RdvTrechoDraft,
 } from './data/rdvPilotFlow';
 import { useRdvAutosave } from './hooks/useRdvAutosave';
 import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
+import { usePersistedEtapas } from './hooks/usePersistedEtapas';
 
 function buildAeroMap(aeroportos: CvAeroporto[]) {
   return new Map(aeroportos.map((a) => [a.id, a]));
@@ -98,7 +92,6 @@ export default function ControleVoosRdvDetalhe() {
   const { id } = useParams<{ id: string }>();
   const [step, setStep] = useState<RdvPilotStepId>('identificacao');
   const [formState, setFormState] = useState<RdvFormState | null>(null);
-  const [trechos, setTrechos] = useState<RdvTrechoDraft[]>([]);
   const [touched, setTouched] = useState<Partial<Record<keyof RdvFormState, boolean>>>({});
   const [finalizarConfirm, setFinalizarConfirm] = useState(false);
   const [versionConflict, setVersionConflict] = useState(false);
@@ -132,6 +125,18 @@ export default function ControleVoosRdvDetalhe() {
   const editable = canEditRdv(rdv);
   const form = formState;
 
+  const origemIcao = voo ? aeroMap.get(voo.origem_id)?.codigo_icao || '' : '';
+  const destinoIcao = voo ? aeroMap.get(voo.destino_id)?.codigo_icao || '' : '';
+
+  const etapasState = usePersistedEtapas({
+    vooId: id,
+    rdv,
+    editable,
+    origemIcao,
+    destinoIcao,
+  });
+  const trechos = etapasState.drafts;
+
   const autosave = useRdvAutosave({
     vooId: id,
     form,
@@ -140,37 +145,17 @@ export default function ControleVoosRdvDetalhe() {
     saveFn: async ({ vooId, dados }) => salvarMutation.mutateAsync({ vooId, dados }),
   });
 
-  useUnsavedChangesGuard(autosave.hasPending && editable);
+  useUnsavedChangesGuard((autosave.hasPending || etapasState.hasPending) && editable);
 
-  function hydrateFromServer(
-    nextVoo: NonNullable<typeof voo>,
-    nextRdv: CvRdv | null | undefined,
-    forceTrechos = false,
-  ) {
+  function hydrateFromServer(nextVoo: NonNullable<typeof voo>, nextRdv: CvRdv | null | undefined) {
     const nextForm = buildFormState(nextVoo, nextRdv ?? null);
     setFormState(nextForm);
     autosave.resetBaseline(nextForm);
-
-    const origemAero = aeroMap.get(nextVoo.origem_id);
-    const destinoAero = aeroMap.get(nextVoo.destino_id);
-    const stored = id && !forceTrechos ? loadTrechoDraft(id) : null;
-    if (stored) {
-      setTrechos(stored);
-    } else {
-      setTrechos(
-        seedTrechosFromVoo(
-          nextVoo,
-          origemAero?.codigo_icao || '',
-          destinoAero?.codigo_icao || '',
-          nextRdv ?? null,
-        ),
-      );
-    }
     setHydrated(true);
     setFinalizarConfirm(false);
   }
 
-  // Hydrate once per voo / first RDV id — do not wipe local edits on autosave invalidate
+  // Hydrate form once per voo / first RDV id — etapas vêm da API via usePersistedEtapas
   useEffect(() => {
     if (!voo) return;
     const key = `${voo.id}:${rdv?.id ?? 'new'}`;
@@ -180,18 +165,13 @@ export default function ControleVoosRdvDetalhe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voo?.id, rdv?.id, id]);
 
-  useEffect(() => {
-    if (!id || trechos.length === 0) return;
-    saveTrechoDraft(id, trechos);
-  }, [id, trechos]);
-
   const stepOptions = useMemo(
     () => ({
       tripulantesCount: tripulantes.length,
       abastecimentosCount: abastecimentos.length,
-      trechosCount: trechos.length,
+      trechosCount: etapasState.serverCount || trechos.length,
     }),
-    [abastecimentos.length, trechos.length, tripulantes.length],
+    [abastecimentos.length, etapasState.serverCount, trechos.length, tripulantes.length],
   );
 
   const completedSteps = useMemo(() => {
@@ -277,12 +257,6 @@ export default function ControleVoosRdvDetalhe() {
     setTouched((t) => ({ ...t, [field]: true }));
   }
 
-  function applyTrechos(nextTrechos: RdvTrechoDraft[]) {
-    setTrechos(nextTrechos);
-    const patch = aggregateTrechosToFormPatch(nextTrechos);
-    setFormState((current) => (current ? { ...current, ...patch } : current));
-  }
-
   async function handleManualSave() {
     if (!id || !form) return;
     const errors = collectFieldErrors(form, voo, trechos);
@@ -341,11 +315,15 @@ export default function ControleVoosRdvDetalhe() {
 
   async function handleReloadAfterConflict() {
     setVersionConflict(false);
-    const [vooResult, rdvResult] = await Promise.all([refetchVoo(), refetchRdv()]);
+    const [vooResult, rdvResult] = await Promise.all([
+      refetchVoo(),
+      refetchRdv(),
+      etapasState.reloadFromServer(),
+    ]);
     const nextVoo = vooResult.data;
     if (nextVoo) {
       hydratedKeyRef.current = null;
-      hydrateFromServer(nextVoo, rdvResult.data, true);
+      hydrateFromServer(nextVoo, rdvResult.data);
     }
     toast.message('Dados recarregados. Continue a partir da versão atual.');
   }
@@ -545,8 +523,19 @@ export default function ControleVoosRdvDetalhe() {
                       <button
                         type="button"
                         onClick={() => {
-                          const last = trechos[trechos.length - 1];
-                          applyTrechos([...trechos, emptyTrecho(last?.destino || '', '')]);
+                          void (async () => {
+                            if (!rdv && form) {
+                              const ok = await autosave.saveNow();
+                              if (!ok) {
+                                toast.error(
+                                  autosave.error || 'Salve a identificação antes dos trechos.',
+                                );
+                                return;
+                              }
+                              await refetchRdv();
+                            }
+                            await etapasState.addEtapa();
+                          })();
                         }}
                         className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
                       >
@@ -554,6 +543,18 @@ export default function ControleVoosRdvDetalhe() {
                       </button>
                     )}
                   </div>
+                  {(etapasState.versionConflict || versionConflict) && (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                      Conflito de versão nos trechos.{' '}
+                      <button
+                        type="button"
+                        className="font-semibold underline"
+                        onClick={() => void handleReloadAfterConflict()}
+                      >
+                        Recarregar do servidor
+                      </button>
+                    </p>
+                  )}
                   {fieldErrors.trechos && (
                     <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
                       {fieldErrors.trechos}
@@ -565,23 +566,17 @@ export default function ControleVoosRdvDetalhe() {
                       index={index}
                       trecho={trecho}
                       readOnly={!editable}
+                      saveStatus={etapasState.statusByLocalId[trecho.localId] || 'idle'}
+                      saveError={etapasState.errorByLocalId[trecho.localId]}
                       canRemove={trechos.length > 1}
-                      onChange={(next) => {
-                        const copy = [...trechos];
-                        copy[index] = next;
-                        applyTrechos(copy);
-                      }}
-                      onDuplicate={() => {
-                        const copy = [...trechos];
-                        copy.splice(index + 1, 0, duplicateTrecho(trecho));
-                        applyTrechos(copy);
-                      }}
-                      onRemove={() => applyTrechos(trechos.filter((_, i) => i !== index))}
+                      onChange={(next) => etapasState.updateDraft(trecho.localId, next)}
+                      onDuplicate={() => void etapasState.duplicateEtapa(trecho.localId)}
+                      onRemove={() => void etapasState.removeEtapa(trecho.localId)}
                     />
                   ))}
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Horas e consumo são calculados automaticamente. Totais agregados alimentam o RDV
-                    operacional.
+                    Trechos são gravados em `cv_voo_etapas` (fonte canônica). Horas e consumo do
+                    cartão são preview; totais oficiais vêm do backend após o save.
                   </p>
                 </section>
               )}

@@ -81,14 +81,24 @@ export interface ControleVoosOperationalRecord {
  * inferidas por nome de função) entre o que o SIGVOOS/legado fornece ao FRMS e
  * o que o Controle de Voos consegue oferecer hoje via `listControleVoosJornadas`.
  * Não inventar paridade: estes pontos permanecem como lacuna até resolução futura.
+ *
+ * Futuro (ainda NÃO ativo): qualquer transformação FRMS a partir do Controle de
+ * Voos deve consumir as **etapas persistidas** em `cv_voo_etapas` (horários,
+ * ICAO, combustível, tempos por perna) como fonte canônica do realizado. Os
+ * campos agregados de `cv_rdv_operacional` são compatibilidade/legado e não
+ * devem substituir as etapas quando estas existirem. Este módulo permanece
+ * somente leitura e não escreve no FRMS.
  */
 export const CONTROLE_VOOS_FRMS_KNOWN_GAPS: readonly string[] = [
   'Timezone explícito: os horários (`engine_start`, `takeoff_time`, etc.) continuam sem coluna IANA própria no schema CV/SIGVOOS atual; o contrato agora expõe `timezone=null` e falha de forma conservadora no comparador em vez de presumir America/Sao_Paulo.',
   'Matrícula do tripulante permanece fora do contrato CV -> FRMS por não ser necessária à identidade canônica e por risco de PII. Quando houver chave externa estável, usa-se `sigvoos_staff_id`.',
+  'Transformação futura deve preferir cv_voo_etapas persistidas sobre campos agregados do RDV quando houver etapas; agregados do formulário não são origem definitiva.',
 ];
 
 function normalizeStatus(value: string | null): string | null {
-  const normalized = String(value || '').trim().toLowerCase();
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase();
   return normalized || null;
 }
 
@@ -101,7 +111,8 @@ function mapOperationalStatus(item: ControleVoosJornadaItem): ControleVoosOperat
   if (raw.includes('corrig')) return 'CORRIGIDO';
   if (raw === 'planejado') return 'PLANEJADO';
   if (raw.includes('confirm') || raw.includes('liberado_operacionalmente')) return 'CONFIRMADO';
-  if (raw.includes('realiz') || raw.includes('conclu') || raw.includes('fechado')) return 'REALIZADO';
+  if (raw.includes('realiz') || raw.includes('conclu') || raw.includes('fechado'))
+    return 'REALIZADO';
   return 'DESCONHECIDO';
 }
 
@@ -127,8 +138,10 @@ function mapJornadaItemToOperationalRecord(
   return {
     empresaId,
     identificadorInterno: item.jornada_id,
-    identificadorExterno: item.external_id_sigvoos != null ? String(item.external_id_sigvoos) : null,
-    identificadorExternoTripulante: item.sigvoos_staff_id != null ? String(item.sigvoos_staff_id) : null,
+    identificadorExterno:
+      item.external_id_sigvoos != null ? String(item.external_id_sigvoos) : null,
+    identificadorExternoTripulante:
+      item.sigvoos_staff_id != null ? String(item.sigvoos_staff_id) : null,
     origem: 'CONTROLE_VOOS',
     origemDados: item.origem_dados,
     tripulanteId: item.tripulante_id,
@@ -138,6 +151,8 @@ function mapJornadaItemToOperationalRecord(
     timezone,
     timezoneFonte: timezone ? 'EXPLICITO' : 'INDISPONIVEL',
     vooId: item.voo_id,
+    // Futuro FRMS (ainda inativo): preferir etapas persistidas em cv_voo_etapas
+    // sobre campos agregados do RDV quando houver pernas — não alterar runtime aqui.
     etapaId: item.etapa_id,
     aeronaveIdentificador: item.aeronave,
     origemIcao: item.origem_icao,
@@ -166,7 +181,9 @@ export async function fetchControleVoosOperationalRecords(
   to: string,
 ): Promise<ControleVoosOperationalRecord[]> {
   if (!Number.isFinite(empresaId) || empresaId <= 0) {
-    throw new Error('fetchControleVoosOperationalRecords requer empresaId válido da identidade autenticada.');
+    throw new Error(
+      'fetchControleVoosOperationalRecords requer empresaId válido da identidade autenticada.',
+    );
   }
 
   const { items } = await listControleVoosJornadas(db, empresaId, {

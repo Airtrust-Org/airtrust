@@ -349,3 +349,10 @@ WHEN NEW.empresa_id <> OLD.empresa_id
 BEGIN
   SELECT RAISE(ABORT, 'cv_voo_abastecimentos chaves de vinculo sao imutaveis');
 END;
+
+-- Unicidade de numero_etapa por voo (ativo). Complementa o índice não-único
+-- idx_cv_voo_etapas_empresa_voo_numero de 0411; necessário para CRUD manual
+-- de etapas sem colidir números após reorder/duplicar.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cv_voo_etapas_empresa_voo_numero_unique
+  ON cv_voo_etapas (empresa_id, voo_id, numero_etapa)
+  WHERE deleted_at IS NULL;

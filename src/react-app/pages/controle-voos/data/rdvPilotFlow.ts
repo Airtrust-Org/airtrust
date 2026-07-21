@@ -40,6 +40,8 @@ export type RdvFormState = {
 
 export type RdvTrechoDraft = {
   localId: string;
+  /** id persistido em cv_voo_etapas; null/undefined = ainda não confirmado no servidor */
+  id?: number | null;
   origem: string;
   destino: string;
   horario_decolagem: string;
@@ -49,6 +51,7 @@ export type RdvTrechoDraft = {
   numero_pousos: string;
   pob: string;
   carga_kg: string;
+  saveStatus?: RdvSaveStatus;
 };
 
 export type FieldErrors = Partial<Record<keyof RdvFormState, string>> & {
@@ -56,6 +59,14 @@ export type FieldErrors = Partial<Record<keyof RdvFormState, string>> & {
 };
 
 const TRECHO_DRAFT_PREFIX = 'cv-rdv-trechos:';
+const ETAPA_PENDING_PREFIX = 'cv-rdv-etapas-pending:';
+
+export type EtapaPendingRecovery = {
+  vooId: string;
+  versao: number;
+  timestamp: string;
+  patches: Array<{ id: number; fields: Record<string, string | number | null> }>;
+};
 
 export function formatRdvNumero(dataVoo: string, prefixo: string) {
   const compactDate = dataVoo.split('-').join('');
@@ -189,6 +200,7 @@ export function duplicateTrecho(trecho: RdvTrechoDraft): RdvTrechoDraft {
 export function emptyTrecho(origem = '', destino = ''): RdvTrechoDraft {
   return {
     localId: createLocalId(),
+    id: null,
     origem,
     destino,
     horario_decolagem: '',
@@ -199,6 +211,96 @@ export function emptyTrecho(origem = '', destino = ''): RdvTrechoDraft {
     pob: '',
     carga_kg: '',
   };
+}
+
+/** Mapeia etapa persistida → draft de UI (campos do cartão). */
+export function draftFromEtapa(
+  etapa: {
+    id: number;
+    origem_icao: string | null;
+    destino_icao: string | null;
+    horario_decolagem: string | null;
+    horario_pouso: string | null;
+    combustivel_inicio: number | null;
+    combustivel_fim: number | null;
+    pousos_diurnos: number | null;
+    pousos_noturnos: number | null;
+    pax: number | null;
+    payload: number | null;
+  },
+  localId?: string,
+): RdvTrechoDraft {
+  const pousos = (etapa.pousos_diurnos ?? 0) + (etapa.pousos_noturnos ?? 0);
+  return {
+    localId: localId || `e-${etapa.id}`,
+    id: etapa.id,
+    origem: etapa.origem_icao || '',
+    destino: etapa.destino_icao || '',
+    horario_decolagem: toInputDateTime(etapa.horario_decolagem),
+    horario_pouso: toInputDateTime(etapa.horario_pouso),
+    combustivel_decolagem: toInputNumber(etapa.combustivel_inicio),
+    combustivel_pouso: toInputNumber(etapa.combustivel_fim),
+    numero_pousos: toInputNumber(pousos || null) || '0',
+    pob: toInputNumber(etapa.pax),
+    carga_kg: toInputNumber(etapa.payload),
+    saveStatus: 'salvo',
+  };
+}
+
+/** Patch de API a partir do draft (sem versao/mode). */
+export function draftToEtapaPatch(draft: RdvTrechoDraft): Record<string, string | number | null> {
+  const pousos = parseInteger(draft.numero_pousos);
+  return {
+    origem_icao: draft.origem.trim().toUpperCase() || null,
+    destino_icao: draft.destino.trim().toUpperCase() || null,
+    horario_decolagem: fromInputDateTime(draft.horario_decolagem),
+    horario_pouso: fromInputDateTime(draft.horario_pouso),
+    combustivel_inicio: parseNumber(draft.combustivel_decolagem),
+    combustivel_fim: parseNumber(draft.combustivel_pouso),
+    pousos_diurnos: pousos,
+    pousos_noturnos: 0,
+    pax: parseInteger(draft.pob),
+    payload: parseNumber(draft.carga_kg),
+  };
+}
+
+export function etapaPendingStorageKey(vooId: string | number) {
+  return `${ETAPA_PENDING_PREFIX}${vooId}`;
+}
+
+export function loadEtapaPendingRecovery(vooId: string | number): EtapaPendingRecovery | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(etapaPendingStorageKey(vooId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as EtapaPendingRecovery;
+    if (!parsed || typeof parsed.versao !== 'number' || !Array.isArray(parsed.patches)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveEtapaPendingRecovery(vooId: string | number, payload: EtapaPendingRecovery) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(etapaPendingStorageKey(vooId), JSON.stringify(payload));
+  } catch {
+    // privacy mode / quota
+  }
+}
+
+export function clearEtapaPendingRecovery(vooId: string | number) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(etapaPendingStorageKey(vooId));
+  } catch {
+    // ignore
+  }
+}
+
+export function formsAreEqual(a: RdvFormState, b: RdvFormState): boolean {
+  return (Object.keys(a) as (keyof RdvFormState)[]).every((key) => a[key] === b[key]);
 }
 
 /** Agrega trechos → campos do RDV (primeiro decolagem / último pouso / totais). */
@@ -448,8 +550,4 @@ export function clearTrechoDraft(vooId: string | number) {
   } catch {
     // ignore
   }
-}
-
-export function formsAreEqual(a: RdvFormState, b: RdvFormState): boolean {
-  return (Object.keys(a) as (keyof RdvFormState)[]).every((key) => a[key] === b[key]);
 }

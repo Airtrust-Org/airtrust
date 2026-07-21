@@ -3,8 +3,12 @@
  * regras estruturais e auto-contidas em Controle de Voos (não cruza com o
  * domínio de Qualificações/ASO nesta entrega — ver documentação para o
  * backlog).
+ *
+ * Trechos: valida etapas persistidas em `cv_voo_etapas` (realizado). Horários
+ * previstos do voo não entram nestas regras.
  */
 import type { FlightRow, RdvRow } from '../../repositories/controle-voos/rdv-repository';
+import { parseEtapaInstant } from './rdv-etapas';
 
 export type RdvAlertSeveridade = 'INFORMATIVO' | 'ATENCAO' | 'IMPEDE_ENVIO' | 'IMPEDE_APROVACAO';
 
@@ -15,6 +19,18 @@ export type RdvAlertRule = {
   mensagem: string;
   etapaId?: number | null;
 };
+
+function alertKey(rule: Pick<RdvAlertRule, 'regra' | 'etapaId'>): string {
+  return `${rule.regra}:${rule.etapaId ?? 'global'}`;
+}
+
+function durationMs(start: Date, end: Date): number {
+  let diff = end.getTime() - start.getTime();
+  if (diff < 0 && start.getUTCFullYear() === 1970 && end.getUTCFullYear() === 1970) {
+    diff += 24 * 60 * 60 * 1000;
+  }
+  return diff;
+}
 
 export async function computeRdvAlertRules(
   db: D1Database,
@@ -70,18 +86,25 @@ export async function computeRdvAlertRules(
   const etapas = await db
     .prepare(
       `
-      SELECT id, numero_etapa, horario_decolagem, horario_pouso
+      SELECT id, numero_etapa, origem_icao, destino_icao,
+             horario_decolagem, horario_pouso, horario_motor_desligado,
+             combustivel_inicio, combustivel_fim
       FROM cv_voo_etapas
       WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
-      ORDER BY numero_etapa ASC
+      ORDER BY numero_etapa ASC, id ASC
     `,
     )
     .bind(voo.id, empresaId)
     .all<{
       id: number;
       numero_etapa: number;
+      origem_icao: string | null;
+      destino_icao: string | null;
       horario_decolagem: string | null;
       horario_pouso: string | null;
+      horario_motor_desligado: string | null;
+      combustivel_inicio: number | null;
+      combustivel_fim: number | null;
     }>();
   const legs = etapas.results || [];
 
@@ -94,19 +117,105 @@ export async function computeRdvAlertRules(
     });
   }
 
+  for (const leg of legs) {
+    if (!leg.origem_icao) {
+      rules.push({
+        regra: 'TRECHO_ORIGEM_AUSENTE',
+        tipo: 'trechos',
+        severidade: 'IMPEDE_ENVIO',
+        mensagem: `Trecho ${leg.numero_etapa} sem origem ICAO`,
+        etapaId: leg.id,
+      });
+    }
+    if (!leg.destino_icao) {
+      rules.push({
+        regra: 'TRECHO_DESTINO_AUSENTE',
+        tipo: 'trechos',
+        severidade: 'IMPEDE_ENVIO',
+        mensagem: `Trecho ${leg.numero_etapa} sem destino ICAO`,
+        etapaId: leg.id,
+      });
+    }
+    if (leg.horario_decolagem && leg.horario_pouso) {
+      const start = parseEtapaInstant(leg.horario_decolagem);
+      const end = parseEtapaInstant(leg.horario_pouso);
+      if (start && end && durationMs(start, end) < 0) {
+        rules.push({
+          regra: 'TRECHO_POUSO_ANTES_DECOLAGEM',
+          tipo: 'trechos',
+          severidade: 'IMPEDE_ENVIO',
+          mensagem: `Trecho ${leg.numero_etapa}: pouso anterior a decolagem`,
+          etapaId: leg.id,
+        });
+      }
+    }
+    if (leg.horario_pouso && leg.horario_motor_desligado) {
+      const pouso = parseEtapaInstant(leg.horario_pouso);
+      const corte = parseEtapaInstant(leg.horario_motor_desligado);
+      if (pouso && corte && durationMs(pouso, corte) < 0) {
+        rules.push({
+          regra: 'TRECHO_CORTE_ANTES_POUSO',
+          tipo: 'trechos',
+          severidade: 'IMPEDE_ENVIO',
+          mensagem: `Trecho ${leg.numero_etapa}: corte (motor desligado) anterior ao pouso`,
+          etapaId: leg.id,
+        });
+      }
+    }
+    if (
+      leg.combustivel_inicio != null &&
+      leg.combustivel_fim != null &&
+      leg.combustivel_fim > leg.combustivel_inicio
+    ) {
+      rules.push({
+        regra: 'TRECHO_COMBUSTIVEL_INCOERENTE',
+        tipo: 'trechos',
+        severidade: 'IMPEDE_ENVIO',
+        mensagem: `Trecho ${leg.numero_etapa}: combustivel fim maior que inicio`,
+        etapaId: leg.id,
+      });
+    }
+    if (
+      (leg.combustivel_inicio != null && leg.combustivel_inicio < 0) ||
+      (leg.combustivel_fim != null && leg.combustivel_fim < 0)
+    ) {
+      rules.push({
+        regra: 'TRECHO_COMBUSTIVEL_NEGATIVO',
+        tipo: 'trechos',
+        severidade: 'IMPEDE_ENVIO',
+        mensagem: `Trecho ${leg.numero_etapa}: combustivel negativo`,
+        etapaId: leg.id,
+      });
+    }
+  }
+
   for (let i = 1; i < legs.length; i += 1) {
     const previous = legs[i - 1];
     const current = legs[i];
+    if (previous.horario_pouso && current.horario_decolagem) {
+      const prevPouso = parseEtapaInstant(previous.horario_pouso);
+      const currDec = parseEtapaInstant(current.horario_decolagem);
+      if (prevPouso && currDec && durationMs(prevPouso, currDec) < 0) {
+        rules.push({
+          regra: 'TRECHOS_SOBREPOSTOS',
+          tipo: 'trechos',
+          severidade: 'IMPEDE_ENVIO',
+          mensagem: `Trecho ${current.numero_etapa} inicia antes do pouso do trecho ${previous.numero_etapa}`,
+          etapaId: current.id,
+        });
+      }
+    }
+
     if (
-      previous.horario_pouso &&
-      current.horario_decolagem &&
-      current.horario_decolagem < previous.horario_pouso
+      previous.destino_icao &&
+      current.origem_icao &&
+      previous.destino_icao.toUpperCase() !== current.origem_icao.toUpperCase()
     ) {
       rules.push({
-        regra: 'TRECHOS_SOBREPOSTOS',
+        regra: 'TRECHOS_CONTINUIDADE_ICAO',
         tipo: 'trechos',
-        severidade: 'IMPEDE_ENVIO',
-        mensagem: `Trecho ${current.numero_etapa} inicia antes do pouso do trecho ${previous.numero_etapa}`,
+        severidade: 'ATENCAO',
+        mensagem: `Trecho ${current.numero_etapa} origem (${current.origem_icao}) difere do destino do trecho ${previous.numero_etapa} (${previous.destino_icao})`,
         etapaId: current.id,
       });
     }
@@ -130,6 +239,34 @@ export async function computeRdvAlertRules(
         mensagem: 'Existe abastecimento sem trecho vinculado',
       });
     }
+
+    const abastecimentosOrfaos = await db
+      .prepare(
+        `
+        SELECT a.id, a.etapa_id
+        FROM cv_voo_abastecimentos a
+        WHERE a.voo_id = ? AND a.empresa_id = ? AND a.deleted_at IS NULL
+          AND a.etapa_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM cv_voo_etapas e
+            WHERE e.id = a.etapa_id
+              AND e.voo_id = a.voo_id
+              AND e.empresa_id = a.empresa_id
+              AND e.deleted_at IS NULL
+          )
+      `,
+      )
+      .bind(voo.id, empresaId)
+      .all<{ id: number; etapa_id: number }>();
+    for (const orphan of abastecimentosOrfaos.results || []) {
+      rules.push({
+        regra: 'ABASTECIMENTO_ETAPA_INVALIDA',
+        tipo: 'abastecimento',
+        severidade: 'IMPEDE_ENVIO',
+        mensagem: `Abastecimento ${orphan.id} aponta para etapa inexistente ou excluida (${orphan.etapa_id})`,
+        etapaId: orphan.etapa_id,
+      });
+    }
   }
 
   return rules;
@@ -137,7 +274,8 @@ export async function computeRdvAlertRules(
 
 // Recalcula os alertas e sincroniza com cv_rdv_alertas: resolve
 // automaticamente regras que deixaram de se aplicar e insere as novas
-// ainda não registradas. Nunca duplica uma regra já aberta.
+// ainda não registradas. Chave lógica = regra + etapa_id (evita colapsar
+// alertas por-trecho distintos).
 export async function syncRdvAlerts(
   db: D1Database,
   empresaId: number,
@@ -145,19 +283,19 @@ export async function syncRdvAlerts(
   rdv: RdvRow,
 ): Promise<Array<RdvAlertRule & { id: number }>> {
   const fresh = await computeRdvAlertRules(db, empresaId, voo, rdv);
-  const freshRegras = new Set(fresh.map((r) => r.regra));
+  const freshKeys = new Set(fresh.map((r) => alertKey(r)));
 
   const existingOpen = await db
     .prepare(
-      `SELECT id, regra FROM cv_rdv_alertas WHERE rdv_id = ? AND empresa_id = ? AND resolvido = 0 AND deleted_at IS NULL`,
+      `SELECT id, regra, etapa_id FROM cv_rdv_alertas WHERE rdv_id = ? AND empresa_id = ? AND resolvido = 0 AND deleted_at IS NULL`,
     )
     .bind(rdv.id, empresaId)
-    .all<{ id: number; regra: string }>();
+    .all<{ id: number; regra: string; etapa_id: number | null }>();
   const openRows = existingOpen.results || [];
-  const openRegras = new Set(openRows.map((r) => r.regra));
+  const openKeys = new Set(openRows.map((r) => alertKey({ regra: r.regra, etapaId: r.etapa_id })));
 
   for (const row of openRows) {
-    if (!freshRegras.has(row.regra)) {
+    if (!freshKeys.has(alertKey({ regra: row.regra, etapaId: row.etapa_id }))) {
       await db
         .prepare(
           `
@@ -175,7 +313,7 @@ export async function syncRdvAlerts(
 
   const created: Array<RdvAlertRule & { id: number }> = [];
   for (const rule of fresh) {
-    if (openRegras.has(rule.regra)) continue;
+    if (openKeys.has(alertKey(rule))) continue;
     const result = await db
       .prepare(
         `
@@ -203,7 +341,7 @@ export async function syncRdvAlerts(
   const stillOpen = await db
     .prepare(
       `
-      SELECT id, tipo, severidade, mensagem, regra, impeditivo_envio, impeditivo_aprovacao
+      SELECT id, tipo, severidade, mensagem, regra, etapa_id, impeditivo_envio, impeditivo_aprovacao
       FROM cv_rdv_alertas
       WHERE rdv_id = ? AND empresa_id = ? AND resolvido = 0 AND deleted_at IS NULL
       ORDER BY severidade DESC, created_at ASC
@@ -216,6 +354,7 @@ export async function syncRdvAlerts(
       severidade: RdvAlertSeveridade;
       mensagem: string;
       regra: string;
+      etapa_id: number | null;
       impeditivo_envio: number;
       impeditivo_aprovacao: number;
     }>();
@@ -226,5 +365,6 @@ export async function syncRdvAlerts(
     severidade: r.severidade,
     mensagem: r.mensagem,
     regra: r.regra,
+    etapaId: r.etapa_id,
   }));
 }

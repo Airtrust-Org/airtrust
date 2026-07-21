@@ -61,6 +61,8 @@ DROP TRIGGER IF EXISTS trg_cv_voo_abastecimentos_etapa_insert;
 DROP TRIGGER IF EXISTS trg_cv_voo_abastecimentos_voo_insert;
 DROP TABLE IF EXISTS cv_voo_abastecimentos;
 
+DROP INDEX IF EXISTS idx_cv_voo_etapas_empresa_voo_numero_unique;
+
 DROP TRIGGER IF EXISTS trg_cv_rdv_alertas_keys_immutable;
 DROP TRIGGER IF EXISTS trg_cv_rdv_alertas_etapa_insert;
 DROP TRIGGER IF EXISTS trg_cv_rdv_alertas_rdv_insert;
