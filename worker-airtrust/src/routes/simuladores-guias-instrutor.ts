@@ -387,7 +387,11 @@ app.get('/guias-instrutor/:id/html', requireGuiaInstrutorRead(), async (c) => {
     return notFound('Arquivo não encontrado');
   }
 
-  return new Response(object.body, {
+  // IMPORTANTE: usar c.newResponse() em vez de new Response() para que o
+  // Hono mescle os headers CORS já injetados pelo middleware cors() com os
+  // headers desta resposta binária. new Response() nativo ignora c.header().
+  return c.newResponse(object.body, {
+    status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Content-Security-Policy': GUIA_HTML_CSP,
@@ -432,10 +436,17 @@ async function servePdf(
       ? contentDispositionAttachment(filename)
       : `inline; filename="${filename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '')}"`;
 
-  return new Response(object.body, {
+  // IMPORTANTE: usar c.newResponse() em vez de new Response() para que o
+  // Hono mescle os headers CORS já injetados pelo middleware cors() com os
+  // headers desta resposta binária. new Response() nativo ignora c.header().
+  // Access-Control-Expose-Headers é obrigatório para que o navegador
+  // exponha Content-Disposition ao JavaScript do frontend.
+  return c.newResponse(object.body, {
+    status: 200,
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': contentDisposition,
+      'Access-Control-Expose-Headers': 'Content-Disposition, Content-Type, Content-Length, ETag',
       ...GUIA_SECURITY_HEADERS,
     },
   });
