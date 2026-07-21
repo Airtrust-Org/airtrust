@@ -1,7 +1,8 @@
--- PREFLIGHT AUDIT para 0438_controle_voos_rdv_coordenacao_workflow.sql
+-- PREFLIGHT AUDIT para worker-airtrust/migrations/0438_controle_voos_rdv_coordenacao_workflow.sql
 -- Somente leitura. Rodar SEPARADAMENTE, em cada ambiente, ANTES da migration.
--- Não faz parte da sequência de migrations (não deve ser registrado no ledger
--- d1_migrations) — é uma ferramenta de decisão manual para o operador.
+-- Vive fora de worker-airtrust/migrations/ deliberadamente: nunca deve ser
+-- lida pelo runner de migrations nem registrada no ledger d1_migrations —
+-- é uma ferramenta de decisão manual para o operador, não uma migration.
 --
 -- A própria migration 0438 já recusa se aplicar sozinha quando encontra a
 -- duplicidade descrita no item 1 abaixo (guarda fail-closed logo no início

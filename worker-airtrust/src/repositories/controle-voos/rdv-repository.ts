@@ -342,15 +342,60 @@ export type FlightEventParams = {
 };
 
 /**
+ * Vínculo com o RDV que uma escrita dependente precisa confirmar antes de
+ * se efetivar, dentro do MESMO `db.batch([...])` do UPDATE otimista que a
+ * precede — ver `buildRdvVersionGuardedInsert`.
+ */
+export type RdvVersionGuard = {
+  rdvId: number;
+  empresaId: number;
+  expectedVersion: number;
+};
+
+/**
  * Monta (sem executar) o INSERT de evento do voo, para permitir agrupar em
  * `db.batch([...])` junto de outras escritas obrigatórias (ex.: aprovação)
  * que devem ser atômicas entre si. `recordFlightEvent` abaixo continua
  * disponível para os chamadores que só precisam de uma escrita isolada.
+ *
+ * Quando `guard` é informado, o INSERT vira um `INSERT ... SELECT ... WHERE
+ * EXISTS` condicionado a `cv_rdv_operacional` já estar na versão esperada —
+ * ver `buildRdvVersionGuardedInsert` para o motivo (o mesmo `db.batch()` do
+ * UPDATE CAS que precede esta escrita).
  */
 export function buildFlightEventStatement(
   db: D1Database,
   params: FlightEventParams,
+  guard?: RdvVersionGuard,
 ): D1PreparedStatement {
+  const values = [
+    params.empresaId,
+    params.vooId,
+    params.tipoEvento,
+    params.statusAnterior || null,
+    params.statusNovo || null,
+    params.descricao || null,
+    params.motivoId || null,
+    params.metadata ? JSON.stringify(params.metadata) : null,
+    params.usuarioId || null,
+    params.usuarioId || null,
+    params.usuarioId || null,
+  ];
+
+  if (!guard) {
+    return db
+      .prepare(
+        `
+      INSERT INTO cv_voo_eventos (
+        empresa_id, voo_id, tipo_evento, status_anterior, status_novo,
+        descricao, motivo_id, metadata_json, usuario_id, created_by, updated_by,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `,
+      )
+      .bind(...values);
+  }
+
   return db
     .prepare(
       `
@@ -358,28 +403,150 @@ export function buildFlightEventStatement(
         empresa_id, voo_id, tipo_evento, status_anterior, status_novo,
         descricao, motivo_id, metadata_json, usuario_id, created_by, updated_by,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      )
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+      WHERE EXISTS (
+        SELECT 1 FROM cv_rdv_operacional WHERE id = ? AND empresa_id = ? AND versao = ?
+      )
     `,
     )
-    .bind(
-      params.empresaId,
-      params.vooId,
-      params.tipoEvento,
-      params.statusAnterior || null,
-      params.statusNovo || null,
-      params.descricao || null,
-      params.motivoId || null,
-      params.metadata ? JSON.stringify(params.metadata) : null,
-      params.usuarioId || null,
-      params.usuarioId || null,
-      params.usuarioId || null,
-    );
+    .bind(...values, guard.rdvId, guard.empresaId, guard.expectedVersion);
 }
 
 export async function recordFlightEvent(
   params: FlightEventParams & { db: D1Database },
 ): Promise<void> {
   await buildFlightEventStatement(params.db, params).run();
+}
+
+/**
+ * Monta (sem executar) um INSERT condicionado a `cv_rdv_operacional` já
+ * estar na versão esperada (`INSERT ... SELECT ... WHERE EXISTS`), para
+ * agrupar com o UPDATE CAS no mesmo `db.batch([...])`.
+ *
+ * Necessário porque `db.batch` do D1 é atômico (todas as instruções
+ * executam em uma única transação implícita: se qualquer uma falhar,
+ * nenhuma é commitada), mas NÃO é condicional — todas as instruções do
+ * array rodam independente do resultado das anteriores. Sem esta guarda,
+ * um UPDATE que afeta 0 linhas (versão perdeu a corrida) ainda deixaria os
+ * INSERTs seguintes do mesmo batch inserirem aprovação/revisão/evento como
+ * se a transição tivesse ocorrido. Com a guarda, o INSERT também insere 0
+ * linhas nesse caso — nenhum efeito colateral e nenhum erro (a rota
+ * detecta a perda do CAS pelo `meta.changes` do UPDATE, não deste INSERT).
+ *
+ * `table`/`columns`/`valuesSql` vêm sempre de literais fixos no código
+ * (nunca de entrada do usuário) — não há risco de injeção via
+ * concatenação dos nomes de tabela/coluna.
+ */
+export function buildRdvVersionGuardedInsert(
+  db: D1Database,
+  params: {
+    table: string;
+    columns: string;
+    valuesSql: string;
+    bindValues: unknown[];
+    guard: RdvVersionGuard;
+  },
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `
+      INSERT INTO ${params.table} (${params.columns})
+      SELECT ${params.valuesSql}
+      WHERE EXISTS (
+        SELECT 1 FROM cv_rdv_operacional WHERE id = ? AND empresa_id = ? AND versao = ?
+      )
+    `,
+    )
+    .bind(
+      ...params.bindValues,
+      params.guard.rdvId,
+      params.guard.empresaId,
+      params.guard.expectedVersion,
+    );
+}
+
+/**
+ * Monta (sem executar) um UPDATE em uma tabela dependente do RDV (ex.:
+ * `cv_voo_tripulantes`, `cv_voo_abastecimentos`), condicionado a
+ * `cv_rdv_operacional` estar na versão informada em `guard.expectedVersion`
+ * — tipicamente a versão ATUAL/antiga, já que este UPDATE roda ANTES do
+ * incremento de versão no mesmo `db.batch([...])` (ver
+ * `buildRdvVersionBumpGatedOnPriorChanges`, que só efetiva o incremento se
+ * este UPDATE tiver afetado alguma linha). Essa ordem evita os dois
+ * problemas opostos: incrementar a versão do RDV sem nenhuma mutação real
+ * associada (`id` inexistente) e mutar a linha dependente com uma versão
+ * de RDV já desatualizada (corrida concorrente).
+ */
+export function buildRdvVersionGuardedUpdate(
+  db: D1Database,
+  params: {
+    table: string;
+    setSql: string;
+    setBindValues: unknown[];
+    whereSql: string;
+    whereBindValues: unknown[];
+    guard: RdvVersionGuard;
+  },
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `
+      UPDATE ${params.table}
+      SET ${params.setSql}
+      WHERE ${params.whereSql}
+        AND EXISTS (
+          SELECT 1 FROM cv_rdv_operacional WHERE id = ? AND empresa_id = ? AND versao = ?
+        )
+    `,
+    )
+    .bind(
+      ...params.setBindValues,
+      ...params.whereBindValues,
+      params.guard.rdvId,
+      params.guard.empresaId,
+      params.guard.expectedVersion,
+    );
+}
+
+/**
+ * Monta (sem executar) o UPDATE que incrementa `cv_rdv_operacional.versao`,
+ * condicionado SIMULTANEAMENTE a (1) a versão atual bater (CAS) e (2) a
+ * instrução IMEDIATAMENTE ANTERIOR no mesmo `db.batch([...])` ter afetado ao
+ * menos uma linha (`(SELECT changes()) > 0` — `changes()` do SQLite reflete
+ * a última instrução de escrita completada na mesma conexão/transação).
+ *
+ * Uso: quando o efeito colateral dependente (ex.: soft-delete de
+ * tripulante/abastecimento) precisa ser a CONDIÇÃO do incremento de versão,
+ * não a sua consequência — sem isso, um `id` inexistente ainda
+ * incrementaria a versão do RDV mesmo sem nenhuma mudança real associada
+ * ("versão incrementada sem alteração").
+ */
+export function buildRdvVersionBumpGatedOnPriorChanges(
+  db: D1Database,
+  params: {
+    rdvId: number;
+    empresaId: number;
+    currentVersion: number;
+    nextVersion: number;
+    userId: number | string | null;
+  },
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `
+      UPDATE cv_rdv_operacional
+      SET versao = ?, updated_by = ?, updated_at = datetime('now')
+      WHERE id = ? AND empresa_id = ? AND versao = ? AND (SELECT changes()) > 0
+    `,
+    )
+    .bind(
+      params.nextVersion,
+      params.userId,
+      params.rdvId,
+      params.empresaId,
+      params.currentVersion,
+    );
 }
 
 export async function maybeRecordSystemAudit(
