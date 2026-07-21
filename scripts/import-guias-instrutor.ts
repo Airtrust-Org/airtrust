@@ -2,6 +2,8 @@ import * as fs from 'node:fs';
 import { sanitizeGuiaHtml } from '../worker-airtrust/src/lib/guias-instrutor/html-sanitizer';
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
+import * as crypto from 'node:crypto';
+
 function extractCodeFromHtml(rawHtml: string) {
   const sectionMatch = rawHtml.match(/<section[^>]*>[\s\S]*?<\/section>/i);
   const text = sectionMatch
@@ -20,6 +22,9 @@ function extractCodeFromHtml(rawHtml: string) {
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  const isBackfill = args.includes('--backfill-html-only');
+
   console.log('Extraindo arquivos...');
   execSync('unzip -o -q AW139.zip -d tmp_guias', { stdio: 'inherit' });
   execSync('unzip -o -q SK76.zip -d tmp_guias', { stdio: 'inherit' });
@@ -99,10 +104,22 @@ async function main() {
       const tmpFile = path.join('tmp_guias', `upload_${codigo}.html`);
       fs.writeFileSync(tmpFile, htmlSanitizado);
 
-      // Fazer upload para R2 usando wrangler
+      // Fazer upload para R2 usando wrangler e atualizar D1 no modo backfill
       const r2Key = guiaNoBanco.html_r2_key;
-      console.log(`Fazendo upload para R2: ${r2Key}...`);
-      execSync(`npx wrangler r2 object put "airtrust-assets/${r2Key}" --file "${tmpFile}"`, { stdio: 'inherit' });
+      if (isBackfill) {
+        console.log(`Fazendo upload para R2: ${r2Key}...`);
+        execSync(`npx wrangler r2 object put "airtrust-assets/${r2Key}" --file "${tmpFile}"`, { stdio: 'inherit' });
+
+        const htmlBuffer = fs.readFileSync(tmpFile);
+        const sha256 = crypto.createHash('sha256').update(htmlBuffer).digest('hex');
+        const sizeBytes = htmlBuffer.length;
+
+        console.log(`Atualizando hash na D1 para ${codigo} (SHA256: ${sha256}, Size: ${sizeBytes} bytes)...`);
+        const updateQuery = `UPDATE simuladores_guias_instrutor SET html_sha256 = '${sha256}', html_tamanho_bytes = ${sizeBytes} WHERE codigo = '${codigo}'`;
+        execSync(`npx wrangler d1 execute airtrust-db --remote --command "${updateQuery}"`, { stdio: 'inherit' });
+      } else {
+        console.log(`Modo normal: HTML sanitizado salvo em ${tmpFile}. Use --backfill-html-only para publicar no R2 e D1.`);
+      }
     }
   }
 
