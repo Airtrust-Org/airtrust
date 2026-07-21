@@ -23,6 +23,9 @@ export interface GuiaInstrutor {
   pdf_tamanho_bytes: number | null;
   publicado_em: string | null;
   updated_at: string;
+  modelo_sessao_id: number | null;
+  nome_sessao: string | null;
+  descricao_sessao: string | null;
 }
 
 export interface ProximaSessaoGuia {
