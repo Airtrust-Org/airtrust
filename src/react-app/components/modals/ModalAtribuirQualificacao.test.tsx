@@ -31,6 +31,7 @@ const tiposMock = [
     nome: 'AW139 — Curriculo de Solo (F1)',
     codigo: 'F1',
     categoria: 'TREINAMENTO TEÓRICO',
+    categoria_id: 3,
     validade: 12,
   },
 ];
@@ -68,6 +69,14 @@ vi.mock('@/react-app/hooks/qualificacoes/useTiposQualificacao', () => ({
   }),
 }));
 
+vi.mock('@/react-app/hooks/qualificacoes/useCategoriasQualificacao', () => ({
+  useCategoriasQualificacao: () => ({
+    data: [{ id: 3, codigo: 'TEORICO', nome: 'Teórico', ativo: true, ordem: 3 }],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 vi.mock('@/react-app/utils/confirmDialog', () => ({
   showAlertDialog: vi.fn(),
 }));
@@ -81,6 +90,13 @@ describe('ModalAtribuirQualificacao', () => {
     serviceMocks.atualizarHistoricoQualificacao.mockReset();
     serviceMocks.criarHistoricoQualificacao.mockReset();
     serviceMocks.atualizarHistoricoQualificacao.mockResolvedValue({ id: 77 });
+  });
+
+  it('uses only the canonical category catalog rather than legacy type text', () => {
+    render(<ModalAtribuirQualificacao isOpen onClose={vi.fn()} />);
+
+    expect(screen.getByRole('option', { name: 'Teórico' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'TREINAMENTO TEÓRICO' })).not.toBeInTheDocument();
   });
 
   it('preserva o instrutor selecionado apos rerender do parent e envia no update', async () => {

@@ -30,6 +30,7 @@ export interface TipoQualificacaoResumo {
   nome: string;
   codigo: string;
   categoria: string;
+  categoria_id?: number | null;
   descricao?: string | null;
   conteudo_programatico?: string | null;
   carga_horaria?: number | null;
