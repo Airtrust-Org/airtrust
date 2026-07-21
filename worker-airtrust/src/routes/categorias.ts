@@ -26,12 +26,14 @@ app.use('*', auth());
  * Query params opcionais:
  *   setor_ids=1,2,3 — filtra categorias que têm pelo menos um tipo vinculado aos setores indicados
  *   setor_id=11     — alias para setor_ids (um único valor)
+ *   ativo=1         — retorna apenas categorias ativas (uso de criação)
  */
 app.get('/', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
 
   const rawSetorIds = c.req.query('setor_ids') || c.req.query('setor_id');
+  const apenasAtivas = c.req.query('ativo') === '1';
   const setorIds: number[] = rawSetorIds
     ? rawSetorIds
         .split(',')
@@ -45,25 +47,25 @@ app.get('/', async (c) => {
   if (setorIds.length > 0) {
     const placeholders = setorIds.map(() => '?').join(', ');
     sql = `
-      SELECT DISTINCT qc.id, qc.nome, qc.cor, qc.descricao, qc.ativo, qc.created_at, qc.updated_at
+      SELECT DISTINCT qc.id, qc.codigo, qc.nome, qc.cor, qc.descricao, qc.ativo, qc.created_at, qc.updated_at
       FROM qualificacoes_categorias qc
       INNER JOIN qualificacoes_tipos qt
-        ON qt.categoria = qc.nome
+        ON qt.categoria_id = qc.id
         AND qt.empresa_id = qc.empresa_id
         AND qt.deleted_at IS NULL
       INNER JOIN qualificacoes_tipos_setores qts
         ON qts.tipo_id = qt.id
         AND qts.empresa_id = qc.empresa_id
         AND qts.setor_id IN (${placeholders})
-      WHERE qc.empresa_id = ? AND qc.deleted_at IS NULL
+      WHERE qc.empresa_id = ? AND qc.deleted_at IS NULL ${apenasAtivas ? 'AND qc.ativo = 1' : ''}
       ORDER BY qc.id ASC
     `;
     bindings = [...setorIds, empresaId];
   } else {
     sql = `
-      SELECT id, nome, cor, descricao, ativo, created_at, updated_at
+      SELECT id, codigo, nome, cor, descricao, ativo, created_at, updated_at
       FROM qualificacoes_categorias
-      WHERE empresa_id = ? AND deleted_at IS NULL
+      WHERE empresa_id = ? AND deleted_at IS NULL ${apenasAtivas ? 'AND ativo = 1' : ''}
       ORDER BY id ASC
     `;
     bindings = [empresaId];
@@ -72,12 +74,14 @@ app.get('/', async (c) => {
   const { results } = await db.prepare(sql).bind(...bindings).all<any>();
 
   const categorias: QualificacaoCategoria[] = (results || []).map((r) => ({
-    id: r.id,
-    nome: r.nome,
+      id: r.id,
+      codigo: r.codigo,
+      nome: r.nome,
     slug: slugify(r.nome),
     cor: r.cor || generateColorFromName(r.nome),
     descricao: r.descricao,
-    ordem: r.id,
+      ordem: r.id,
+      ativo: Boolean(r.ativo),
     created_at: r.created_at,
     updated_at: r.updated_at,
   }));
@@ -149,11 +153,13 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
 
     const novaCategoria: QualificacaoCategoria = {
       id: result.meta.last_row_id as number,
+      codigo,
       nome,
       slug: slugify(nome),
       cor,
       descricao: descricao || undefined,
       ordem: result.meta.last_row_id as number,
+      ativo: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -229,6 +235,29 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
 
     if (duplicate) {
       return c.json({ success: false, error: 'Categoria já existe' }, 409);
+    }
+
+    if (nome !== undefined && nextNome !== existing.nome) {
+      const modelosEmUso = await db
+        .prepare(
+          `SELECT id
+             FROM qualificacoes_tipos
+            WHERE empresa_id = ?
+              AND deleted_at IS NULL
+              AND (
+                categoria_id = ?
+                OR UPPER(TRIM(COALESCE(categoria, ''))) = UPPER(TRIM(?))
+              )
+            LIMIT 1`,
+        )
+        .bind(empresaId, id, existing.nome)
+        .first();
+      if (modelosEmUso) {
+        return c.json(
+          { success: false, error: 'Categoria possui modelos ativos; reclassifique-os por operação controlada antes de renomear' },
+          409,
+        );
+      }
     }
 
     const updates: string[] = [];
@@ -307,6 +336,24 @@ app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
   }
 
   try {
+    const emUso = await db
+      .prepare(
+        `SELECT id
+           FROM qualificacoes_tipos
+          WHERE empresa_id = ?
+            AND deleted_at IS NULL
+            AND (categoria_id = ? OR (categoria_id IS NULL AND UPPER(TRIM(COALESCE(categoria, ''))) = UPPER(TRIM((SELECT nome FROM qualificacoes_categorias WHERE id = ? AND empresa_id = ?)))))
+          LIMIT 1`,
+      )
+      .bind(empresaId, id, id, empresaId)
+      .first();
+    if (emUso) {
+      return c.json(
+        { success: false, error: 'Categoria possui modelos ativos; reclassifique-os antes de remover ou desativar' },
+        409,
+      );
+    }
+
     const result = await db
       .prepare(
         `UPDATE qualificacoes_categorias
