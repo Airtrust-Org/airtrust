@@ -72,12 +72,12 @@ async function resolveActiveVinculoRole(
   usuarioId: number,
   empresaId: number,
 ): Promise<string> {
+  // Colunas confirmadas reais de `usuarios_empresas` (staging e produção,
+  // via PRAGMA table_info): id, usuario_id, empresa_id, role, is_primary,
+  // created_at — sem `ativo` nem `deleted_at`. Vínculo é removido por
+  // DELETE físico, não soft-delete.
   const row = await db
-    .prepare(
-      `SELECT role FROM usuarios_empresas
-       WHERE usuario_id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
-       LIMIT 1`,
-    )
+    .prepare(`SELECT role FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ? LIMIT 1`)
     .bind(usuarioId, empresaId)
     .first<{ role: string }>();
 
