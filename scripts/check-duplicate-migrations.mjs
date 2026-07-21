@@ -78,6 +78,10 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
+  '0438': [
+    '0438_guias_instrutor_simulador.sql',
+    '0438_guias_instrutor_simulador_rollback.sql',
+  ],
 };
 
 // Sufixos que denunciam um arquivo operacional (consulta manual read-only:

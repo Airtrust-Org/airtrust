@@ -99,4 +99,23 @@ describe('HomePerfil quick access cards', () => {
       'Fichas de Treinamento de Voo para Avaliar',
     );
   });
+
+  it('mostra "Guias do Instrutor" apenas para role INSTRUTOR', () => {
+    const paraInstrutor = buildHomeAccessCards({
+      role: 'INSTRUTOR',
+      can: canAll,
+      funcionarioId: 20,
+    });
+    const guia = paraInstrutor.find((card) => card.title === 'Guias do Instrutor');
+    expect(guia).toBeDefined();
+    expect(guia?.route).toBe('/instrutor/guias');
+  });
+
+  it('não mostra "Guias do Instrutor" para ALUNO nem USUARIO', () => {
+    const paraAluno = buildHomeAccessCards({ role: 'ALUNO', can: canAll, funcionarioId: 10 });
+    const paraUsuario = buildHomeAccessCards({ role: 'USUARIO', can: canAll, funcionarioId: 10 });
+
+    expect(paraAluno.map((card) => card.title)).not.toContain('Guias do Instrutor');
+    expect(paraUsuario.map((card) => card.title)).not.toContain('Guias do Instrutor');
+  });
 });

@@ -10,7 +10,10 @@ export function Breadcrumbs() {
     'funcionarios': 'Funcionários',
     'simuladores': 'Simuladores & Voo',
     'qualificacoes': 'Qualificações',
-    'configuracoes': 'Configurações'
+    'configuracoes': 'Configurações',
+    'instrutor': 'Instrutor',
+    'guias': 'Guias do Instrutor',
+    'guias-instrutor': 'Guias do Instrutor',
   };
 
   return (

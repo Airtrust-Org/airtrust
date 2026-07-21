@@ -95,6 +95,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
+  '0438': [
+    '0438_guias_instrutor_simulador.sql',
+    '0438_guias_instrutor_simulador_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -182,7 +186,9 @@ describe('migration governance', () => {
     );
 
     // Ratchet raised 2026-07-20: 0438 controle-voos RDV coordenacao workflow.
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(438);
+    // Ratchet raised 2026-07-21: 0439 guias_instrutor_simulador (renumerado de
+    // 0438 para nao colidir com a migration do RDV, ja mergeada em main).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(439);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
