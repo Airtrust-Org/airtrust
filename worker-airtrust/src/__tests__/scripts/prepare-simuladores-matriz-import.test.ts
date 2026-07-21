@@ -9,6 +9,7 @@ describe('matriz import planner', () => {
     const input = { empresaId: 7, sourceHashes: { matrix: 'a'.repeat(64) }, aw139: matrix, sk76: { models: [], items: [] }, loft: 0 };
     expect(createDeterministicPlan(input).plan_sha256).toBe(createDeterministicPlan(input).plan_sha256);
     expect(sha256({ b: 1, a: 2 })).toBe(sha256({ a: 2, b: 1 }));
+    expect(sha256(Buffer.from('abc'))).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
   });
 
   it('rejects invalid tenant, position count and repeated order while allowing a code in both LOFT legs', () => {
