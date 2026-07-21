@@ -95,10 +95,6 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
-  '0438': [
-    '0438_guias_instrutor_simulador.sql',
-    '0438_guias_instrutor_simulador_rollback.sql',
-  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -109,6 +105,10 @@ const EXPECTED_NON_STANDARD_FILES = [
   // be a candidate for duplicate-prefix detection, and must never be picked
   // up by any tool that walks migrations by numeric prefix order.
   'rollback_0438_controle_voos_rdv_coordenacao_workflow.sql',
+  // Mesmo padrão para 0439 (guias do instrutor) — renomeado de
+  // '0439_guias_instrutor_simulador_rollback.sql' (sufixo, colidia com a
+  // detecção de prefixo duplicado) para 'rollback_0439_...' (prefixo).
+  'rollback_0439_guias_instrutor_simulador.sql',
 ] as const;
 
 const EXPECTED_CREATE_TEMP_TABLE_FILES = [
