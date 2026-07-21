@@ -123,7 +123,11 @@ const HARD_BLOCKED_TAGS = new Set([
   'frame',
   'frameset',
   'param',
-  'meta', // meta é tratado à parte (charset/viewport são reescritos explicitamente)
+  // meta NÃO entra aqui — tem tratamento dedicado em walk() (charset/viewport
+  // sobrevivem, http-equiv é sempre removido). Colocá-lo neste set faria a
+  // checagem de HARD_BLOCKED_TAGS interceptar e descartar TODO <meta> antes
+  // do tratamento dedicado ser alcançado (bug real, achado em QA visual: o
+  // <meta charset="utf-8"> desaparecia e o documento servido virava mojibake).
 ]);
 
 const GLOBAL_SAFE_ATTRS = new Set(['class', 'id', 'lang', 'title']);
@@ -227,9 +231,7 @@ function walk(
       }
 
       if (HARD_BLOCKED_TAGS.has(tag)) {
-        if (tag !== 'meta') {
-          ctx.alertas.push(`tag removida: <${tag}>`);
-        }
+        ctx.alertas.push(`tag removida: <${tag}>`);
         continue;
       }
 
