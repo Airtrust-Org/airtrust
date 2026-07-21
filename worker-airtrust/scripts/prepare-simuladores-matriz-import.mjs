@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import XLSX from 'xlsx';
+import { createDeterministicPlan, sha256 } from './lib/matriz-import-plan.mjs';
 
 const EXPECTED = { AW139: { modelos: 30, itens: 540, loft: 14 }, SK76: { modelos: 21, itens: 378, loft: 8 } };
 
@@ -97,6 +98,18 @@ function validateLoft(sourceDir, aircraft, matrix) {
   }
   return entries.length;
 }
+function requireCanonicalSources(directory, aircraft, expectedHtml) {
+  const required = aircraft === 'AW139'
+    ? ['Matriz_AW139_CORRIGIDA_LOFT.xlsx', 'CORRECAO_LOFT_DECOLAGEM_PFB.json', 'VALIDACAO_FINAL.json', 'criterios_avaliacao_especificos_1a10.json']
+    : ['Matriz_S76_Novo_Padrao.xlsx', 'Matriz_S76_Novo_Padrao.csv', 'arquitetura_loft_duas_pernas.json', 'VALIDACAO_FINAL.json', 'criterios_avaliacao_especificos_1a10.json', 'Alteracoes_AirTrust_Recomendadas_S76.csv'];
+  for (const file of required) if (!fs.existsSync(path.join(directory, file))) fail(`${aircraft}: fonte canônica ausente (${file})`);
+  const htmlDir = path.join(directory, 'html');
+  const htmlFiles = fs.existsSync(htmlDir) ? fs.readdirSync(htmlDir).filter((file) => file.endsWith('.html')) : [];
+  if (htmlFiles.length !== expectedHtml) fail(`${aircraft}: esperados ${expectedHtml} guias HTML; encontrados ${htmlFiles.length}`);
+  const validation = JSON.parse(fs.readFileSync(path.join(directory, 'VALIDACAO_FINAL.json'), 'utf8'));
+  if (validation.todos_loft_decolagem_antes_evento === false) fail(`${aircraft}: validação final reprova LOFT`);
+  return required;
+}
 function compareS76Csv(csvFile, matrix) {
   const rows = XLSX.utils.sheet_to_json(XLSX.readFile(csvFile).Sheets.Sheet1, { header: 1, defval: '' });
   const header = headerIndex(rows);
@@ -116,6 +129,8 @@ const out = arg('--out') || 'tmp/simuladores-matriz-import';
 if (!aw139 || !sk76 || !Number.isInteger(empresaId) || empresaId <= 0) {
   fail('uso: --aw139 <diretório> --sk76 <diretório> --empresa-id <tenant> [--out <diretório>]');
 }
+const awRequired = requireCanonicalSources(aw139, 'AW139', 30);
+const s76Required = requireCanonicalSources(sk76, 'SK76', 21);
 const aw = readMatrix(path.join(aw139, 'Matriz_AW139_CORRIGIDA_LOFT.xlsx'), 'AW139');
 const s76 = readMatrix(path.join(sk76, 'Matriz_S76_Novo_Padrao.xlsx'), 'SK76');
 validateMatrix(aw, 'AW139'); validateMatrix(s76, 'SK76');
@@ -123,6 +138,15 @@ compareS76Csv(path.join(sk76, 'Matriz_S76_Novo_Padrao.csv'), s76);
 const loftAw = validateLoft(aw139, 'AW139', aw);
 const loftS76 = validateLoft(sk76, 'SK76', s76);
 fs.mkdirSync(out, { recursive: true });
-const plan = { generated_at: new Date().toISOString(), empresa_id: empresaId, mode: 'DRY_RUN', source: { aw139: path.basename(aw139), sk76: path.basename(sk76) }, totals: { modelos: aw.models.length + s76.models.length, vinculos: aw.items.length + s76.items.length, loft: loftAw + loftS76 }, matrices: { AW139: aw, SK76: s76 }, safeguards: ['tenant obrigatório', 'não aplica DML', 'requer snapshot e revisão antes de aplicar', 'modelos históricos devem ser versionados, não sobrescritos'] };
+const sourceFiles = [
+  ...awRequired.map((file) => [aw139, `AW139/${file}`]),
+  ...s76Required.map((file) => [sk76, `SK76/${file}`]),
+];
+const sourceHashes = Object.fromEntries(sourceFiles.map(([directory, label]) => {
+  const file = label.split('/').at(-1);
+  return [label, sha256(fs.readFileSync(path.join(directory, file)))];
+}));
+const deterministic = createDeterministicPlan({ empresaId, sourceHashes, aw139: aw, sk76: s76, loft: loftAw + loftS76 });
+const plan = { generated_at: new Date().toISOString(), mode: 'DRY_RUN', ...deterministic, safeguards: ['tenant obrigatório', 'não aplica DML', 'requer snapshot e revisão antes de aplicar', 'modelos históricos devem ser versionados, não sobrescritos'] };
 fs.writeFileSync(path.join(out, 'plan.json'), `${JSON.stringify(plan, null, 2)}\n`);
 console.log(JSON.stringify({ ok: true, out: path.resolve(out), empresa_id: empresaId, ...plan.totals }, null, 2));

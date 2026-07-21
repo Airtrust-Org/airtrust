@@ -1,29 +1,158 @@
--- Structural support for the private AW139/S-76 final-matrix importer.
--- No catalogue data is loaded here. The controlled importer is tenant-scoped.
--- Rollback: DROP TABLE modelos_sessao_matriz_imports; DROP INDEX ...;
+-- Simulator matrix versioning.  This migration deliberately keeps
+-- modelos_sessao.codigo as the globally-unique physical identity used by
+-- legacy foreign keys.  The user-facing, tenant-scoped identity lives in the
+-- version table below.  It is safe to apply only through the local migration
+-- gate; it contains no AW139/S-76 catalogue data.
+--
+-- Rollback (after verifying no import is APPLIED): drop the triggers and
+-- indexes below, then drop the four new tables. Do not delete session/ficha
+-- history; their FK target is modelos_sessao and remains untouched.
 
-ALTER TABLE modelos_sessao ADD COLUMN versao_matriz TEXT;
-ALTER TABLE modelos_sessao ADD COLUMN substituido_por_modelo_id INTEGER;
-ALTER TABLE modelos_sessao ADD COLUMN efetivo_em TEXT;
-ALTER TABLE modelos_sessao_manobras ADD COLUMN metadados_contextuais_json TEXT;
+-- The final LOFT matrices intentionally use the same manoeuvre code twice in
+-- a model (one per leg). The old UNIQUE(modelo_id, manobra_id) cannot encode
+-- that. Preserve every row and make execution position the unique identity.
+DROP TRIGGER IF EXISTS trigger_modelos_sessao_manobras_updated_at;
+CREATE TABLE modelos_sessao_manobras_0440 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  modelo_id INTEGER NOT NULL,
+  manobra_id INTEGER NOT NULL,
+  ordem INTEGER NOT NULL CHECK(ordem BETWEEN 1 AND 18),
+  obrigatoria BOOLEAN DEFAULT 1,
+  observacoes TEXT,
+  created_at DATETIME DEFAULT (datetime('now')),
+  updated_at DATETIME DEFAULT (datetime('now')),
+  deleted_at DATETIME,
+  created_by TEXT,
+  updated_by TEXT,
+  tripulante TEXT NOT NULL DEFAULT 'AB' CHECK(tripulante IN ('A','B','AB','PFA','PMB','PFB','PMA')),
+  FOREIGN KEY (modelo_id) REFERENCES modelos_sessao(id) ON DELETE CASCADE,
+  FOREIGN KEY (manobra_id) REFERENCES manobras(id) ON DELETE CASCADE,
+  UNIQUE(modelo_id, ordem)
+);
+INSERT INTO modelos_sessao_manobras_0440
+  (id, modelo_id, manobra_id, ordem, obrigatoria, observacoes, created_at, updated_at, deleted_at, created_by, updated_by, tripulante)
+SELECT id, modelo_id, manobra_id, ordem, obrigatoria, observacoes, created_at, updated_at, deleted_at, created_by, updated_by, tripulante
+FROM modelos_sessao_manobras;
+DROP TABLE modelos_sessao_manobras;
+ALTER TABLE modelos_sessao_manobras_0440 RENAME TO modelos_sessao_manobras;
+CREATE INDEX IF NOT EXISTS idx_modelos_sessao_manobras_modelo_id ON modelos_sessao_manobras(modelo_id);
+CREATE INDEX IF NOT EXISTS idx_modelos_sessao_manobras_manobra_id ON modelos_sessao_manobras(manobra_id);
+CREATE INDEX IF NOT EXISTS idx_modelos_sessao_manobras_modelo_ordem ON modelos_sessao_manobras(modelo_id, ordem) WHERE deleted_at IS NULL;
+CREATE TRIGGER IF NOT EXISTS trigger_modelos_sessao_manobras_updated_at
+AFTER UPDATE ON modelos_sessao_manobras FOR EACH ROW BEGIN
+  UPDATE modelos_sessao_manobras SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
 
-CREATE TABLE IF NOT EXISTS modelos_sessao_matriz_imports (
+CREATE TABLE IF NOT EXISTS modelos_sessao_versionamento (
+  modelo_id INTEGER PRIMARY KEY,
+  empresa_id INTEGER NOT NULL,
+  codigo_canonico TEXT NOT NULL COLLATE NOCASE,
+  versao_numero INTEGER NOT NULL CHECK(versao_numero >= 1),
+  versao_matriz TEXT NOT NULL DEFAULT 'LEGACY',
+  is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0, 1)),
+  modelo_anterior_id INTEGER,
+  efetivo_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  efetivo_ate TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (modelo_id) REFERENCES modelos_sessao(id),
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+  FOREIGN KEY (modelo_anterior_id) REFERENCES modelos_sessao(id),
+  CHECK(efetivo_ate IS NULL OR efetivo_ate >= efetivo_em),
+  CHECK(modelo_anterior_id IS NULL OR modelo_anterior_id <> modelo_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_modelo_canonico_corrente_tenant
+  ON modelos_sessao_versionamento(empresa_id, codigo_canonico)
+  WHERE is_current = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_modelo_canonico_versao_tenant
+  ON modelos_sessao_versionamento(empresa_id, codigo_canonico, versao_numero);
+CREATE INDEX IF NOT EXISTS idx_modelo_versionamento_anterior
+  ON modelos_sessao_versionamento(modelo_anterior_id);
+
+-- Existing models become explicit legacy current versions. New imports use a
+-- physical code such as A139-I-01/12@M2026.07-V2, while displaying the exact
+-- canonical code A139-I-01/12.
+INSERT INTO modelos_sessao_versionamento (modelo_id, empresa_id, codigo_canonico, versao_numero, versao_matriz, is_current)
+SELECT id, empresa_id, codigo, 1, 'LEGACY', 1
+FROM modelos_sessao
+WHERE empresa_id IS NOT NULL
+  AND deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM modelos_sessao_versionamento v WHERE v.modelo_id = modelos_sessao.id
+  );
+
+CREATE TRIGGER IF NOT EXISTS trg_modelo_versao_mesmo_tenant_insert
+BEFORE INSERT ON modelos_sessao_versionamento
+WHEN NEW.modelo_anterior_id IS NOT NULL
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM modelos_sessao_versionamento previous
+    WHERE previous.modelo_id = NEW.modelo_anterior_id AND previous.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'modelo anterior inexistente ou pertence a outro tenant') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_modelo_versao_sem_ciclo_insert
+BEFORE INSERT ON modelos_sessao_versionamento
+WHEN NEW.modelo_anterior_id IS NOT NULL
+BEGIN
+  WITH RECURSIVE ancestors(id) AS (
+    SELECT NEW.modelo_anterior_id
+    UNION ALL
+    SELECT v.modelo_anterior_id FROM modelos_sessao_versionamento v
+    JOIN ancestors a ON a.id = v.modelo_id
+    WHERE v.modelo_anterior_id IS NOT NULL
+  )
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM ancestors WHERE id = NEW.modelo_id)
+    THEN RAISE(ABORT, 'cadeia de versoes ciclica') END;
+END;
+
+CREATE TABLE IF NOT EXISTS modelos_sessao_manobras_contexto (
+  modelo_manobra_id INTEGER PRIMARY KEY,
+  empresa_id INTEGER NOT NULL,
+  metadados_json TEXT NOT NULL CHECK(json_valid(metadados_json)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (modelo_manobra_id) REFERENCES modelos_sessao_manobras(id),
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id)
+);
+CREATE INDEX IF NOT EXISTS idx_modelo_manobra_contexto_tenant
+  ON modelos_sessao_manobras_contexto(empresa_id);
+
+CREATE TABLE IF NOT EXISTS simuladores_matriz_imports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uuid TEXT NOT NULL UNIQUE,
   empresa_id INTEGER NOT NULL,
-  aeronave TEXT NOT NULL CHECK(aeronave IN ('AW139', 'SK76')),
   versao_matriz TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('DRY_RUN', 'APPLIED', 'ROLLED_BACK', 'FAILED')),
-  snapshot_json TEXT NOT NULL,
-  plano_json TEXT NOT NULL,
-  created_by INTEGER,
+  schema_version INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('DRY_RUN', 'APPLYING', 'APPLIED', 'ROLLED_BACK', 'FAILED')),
+  plan_sha256 TEXT NOT NULL CHECK(length(plan_sha256) = 64),
+  source_hashes_json TEXT NOT NULL CHECK(json_valid(source_hashes_json) AND length(source_hashes_json) <= 32768),
+  base_fingerprint TEXT NOT NULL CHECK(length(base_fingerprint) = 64),
+  expected_counts_json TEXT NOT NULL CHECK(json_valid(expected_counts_json) AND length(expected_counts_json) <= 8192),
+  applied_counts_json TEXT CHECK(applied_counts_json IS NULL OR (json_valid(applied_counts_json) AND length(applied_counts_json) <= 8192)),
+  requested_by INTEGER,
+  correlation_id TEXT,
+  failure_reason TEXT,
+  rollback_uuid TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   applied_at TEXT,
   rolled_back_at TEXT,
   FOREIGN KEY (empresa_id) REFERENCES empresas(id)
 );
+CREATE INDEX IF NOT EXISTS idx_simuladores_matriz_imports_tenant
+  ON simuladores_matriz_imports(empresa_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_modelos_sessao_matriz_imports_tenant
-  ON modelos_sessao_matriz_imports(empresa_id, aeronave, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_modelos_sessao_versao_matriz_tenant
-  ON modelos_sessao(empresa_id, versao_matriz) WHERE deleted_at IS NULL;
+CREATE TABLE IF NOT EXISTS simuladores_matriz_import_changes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  import_id INTEGER NOT NULL,
+  entidade TEXT NOT NULL,
+  entity_id INTEGER,
+  operacao TEXT NOT NULL CHECK(operacao IN ('INSERT', 'UPDATE', 'INACTIVATE', 'REACTIVATE')),
+  before_json TEXT CHECK(before_json IS NULL OR (json_valid(before_json) AND length(before_json) <= 65536)),
+  after_json TEXT CHECK(after_json IS NULL OR (json_valid(after_json) AND length(after_json) <= 65536)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (import_id) REFERENCES simuladores_matriz_imports(id)
+);
+CREATE INDEX IF NOT EXISTS idx_simuladores_matriz_changes_import
+  ON simuladores_matriz_import_changes(import_id, entidade);
