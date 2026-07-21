@@ -9,28 +9,26 @@ import type { Env } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
 
 vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: any, next: () => Promise<void>) => {
-      if (!c.req.header('Authorization')) {
-        return c.json({ success: false, error: 'Token de autenticacao nao fornecido' }, 401);
-      }
+  auth: () => async (c: any, next: () => Promise<void>) => {
+    if (!c.req.header('Authorization')) {
+      return c.json({ success: false, error: 'Token de autenticacao nao fornecido' }, 401);
+    }
 
-      const empresaId = Number(c.req.header('x-test-empresa-id') || 1);
-      const role = String(c.req.header('x-test-role') || 'admin').toLowerCase();
-      c.set('userId', 10);
-      c.set('empresaId', empresaId);
-      c.set('userRole', role);
-      c.set('tenantContext', {
-        empresaId,
-        empresaCodigo: `empresa-${empresaId}`,
-        empresaNome: `Empresa ${empresaId}`,
-        role,
-        plano: 'pro',
-        permissions: role === 'viewer' ? ['read'] : ['read', 'write'],
-      });
-      await next();
-    },
+    const empresaId = Number(c.req.header('x-test-empresa-id') || 1);
+    const role = String(c.req.header('x-test-role') || 'admin').toLowerCase();
+    c.set('userId', 10);
+    c.set('empresaId', empresaId);
+    c.set('userRole', role);
+    c.set('tenantContext', {
+      empresaId,
+      empresaCodigo: `empresa-${empresaId}`,
+      empresaNome: `Empresa ${empresaId}`,
+      role,
+      plano: 'pro',
+      permissions: role === 'viewer' ? ['read'] : ['read', 'write'],
+    });
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', async (importOriginal) => {
@@ -121,6 +119,8 @@ function createSqliteD1(): SqliteD1 {
 
   runSql(databasePath, 'PRAGMA foreign_keys = ON;');
   runSql(databasePath, readFileSync(migrationPath, 'utf8'));
+  // 0438 referencia cv_voo_etapas (0411) no índice único e nos FKs de abastecimentos.
+  runSql(databasePath, readFileSync(sigvoosMigrationPath, 'utf8'));
   runSql(databasePath, readFileSync(rdvWorkflowMigrationPath, 'utf8'));
   runSql(
     databasePath,
@@ -155,7 +155,10 @@ function createSqliteD1(): SqliteD1 {
         run: async () => {
           runSql(databasePath, interpolate(sql, binds));
           const lastId = sql.includes('INSERT INTO cv_voos')
-            ? queryJson<{ id: number }>(databasePath, 'SELECT id FROM cv_voos ORDER BY id DESC LIMIT 1')[0]?.id
+            ? queryJson<{ id: number }>(
+                databasePath,
+                'SELECT id FROM cv_voos ORDER BY id DESC LIMIT 1',
+              )[0]?.id
             : sql.includes('INSERT INTO cv_rdv_operacional')
               ? queryJson<{ id: number }>(
                   databasePath,
@@ -286,7 +289,15 @@ async function requestWithoutAuth(
 }
 
 function applySigvoosSchema(databasePath: string) {
-  runSql(databasePath, readFileSync(sigvoosMigrationPath, 'utf8'));
+  // createSqliteD1 já aplica 0411 (pré-requisito de 0438). Evitar ALTER TABLE
+  // não-idempotente da mesma migration.
+  const alreadyApplied = runSql(
+    databasePath,
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='cv_voo_etapas' LIMIT 1;",
+  );
+  if (!alreadyApplied) {
+    runSql(databasePath, readFileSync(sigvoosMigrationPath, 'utf8'));
+  }
   runSql(
     databasePath,
     `
@@ -675,7 +686,9 @@ describe('controle voos routes', () => {
     });
 
     expect(response.status).toBe(201);
-    const body = await response.json() as { data: { id: number; empresa_id: number; prefixo: string } };
+    const body = (await response.json()) as {
+      data: { id: number; empresa_id: number; prefixo: string };
+    };
     expect(body.data).toMatchObject({ empresa_id: 1, prefixo: 'ATX-2099' });
 
     const events = db.queryJson<{ tipo_evento: string; status_novo: string }>(
@@ -688,7 +701,7 @@ describe('controle voos routes', () => {
     const db = createSqliteD1();
 
     const response = await request(db, '/api/controle-voos/voos?limit=500');
-    const body = await response.json() as {
+    const body = (await response.json()) as {
       data: Array<{ empresa_id: number; prefixo: string }>;
       pagination: { limit: number; total: number };
     };
@@ -780,7 +793,10 @@ describe('controle voos routes', () => {
 
     for (const nome of ['aeroportos', 'tipos-voo', 'naturezas-voo', 'motivos-operacionais']) {
       const response = await request(db, `/api/controle-voos/catalogos/${nome}`);
-      const body = await response.json() as { data: Array<{ id: number }>; meta: { count: number } };
+      const body = (await response.json()) as {
+        data: Array<{ id: number }>;
+        meta: { count: number };
+      };
 
       expect(response.status).toBe(200);
       expect(body.meta.count).toBeGreaterThan(0);
@@ -922,8 +938,12 @@ describe('controle voos routes', () => {
     });
 
     expect(response.status).toBe(200);
-    const body = await response.json() as {
-      data: { status: string; finalizado_operacionalmente_por: number; finalizado_operacionalmente_em: string | null };
+    const body = (await response.json()) as {
+      data: {
+        status: string;
+        finalizado_operacionalmente_por: number;
+        finalizado_operacionalmente_em: string | null;
+      };
     };
     expect(body.data.status).toBe('preenchimento_finalizado');
     expect(body.data.finalizado_operacionalmente_por).toBe(10);
@@ -1292,7 +1312,7 @@ describe('controle voos routes', () => {
     );
 
     expect(response.status).toBe(200);
-    const body = await response.json() as {
+    const body = (await response.json()) as {
       data: {
         uso_operacional_interno: boolean;
         relatorio_interno: boolean;
@@ -1343,9 +1363,7 @@ describe('controle voos routes', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       data: {
-        cancelamentos_por_motivo: [
-          { motivo_id: 501, motivo_nome: 'Meteorologia', total: 1 },
-        ],
+        cancelamentos_por_motivo: [{ motivo_id: 501, motivo_nome: 'Meteorologia', total: 1 }],
       },
     });
   });
@@ -1458,7 +1476,7 @@ describe('controle voos routes', () => {
     });
 
     const tenantBRows = db.queryJson<{ total: number }>(
-      "SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = 2 AND deleted_at IS NULL",
+      'SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = 2 AND deleted_at IS NULL',
     );
     expect(tenantBRows[0]?.total).toBe(1);
   });
@@ -1788,7 +1806,10 @@ describe('controle voos routes', () => {
     const response = await request(
       db,
       '/api/controle-voos/sigvoos/real-preview',
-      { method: 'POST', body: JSON.stringify({ from: '2026-06-01', to: '2026-06-16', limit: 10, pageSize: 10 }) },
+      {
+        method: 'POST',
+        body: JSON.stringify({ from: '2026-06-01', to: '2026-06-16', limit: 10, pageSize: 10 }),
+      },
       1,
       'manager',
       { CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true' },
@@ -1986,7 +2007,12 @@ describe('controle voos routes', () => {
           byDate: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number }>;
           byBase: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number }>;
           byAircraft: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number }>;
-          byFlightType: Array<{ key: string; cvTotal: number; frmsTotal: number | null; delta: number | null }>;
+          byFlightType: Array<{
+            key: string;
+            cvTotal: number;
+            frmsTotal: number | null;
+            delta: number | null;
+          }>;
         };
         normalizationErrors: string[];
         missingFields: string[];
@@ -2053,9 +2079,27 @@ describe('controle voos routes', () => {
           frmsJourneysSigvoos: number;
         };
         divergences: {
-          byDate: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number; status: string }>;
-          byBase: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number; status: string }>;
-          byAircraft: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number; status: string }>;
+          byDate: Array<{
+            key: string;
+            cvTotal: number;
+            frmsTotal: number;
+            delta: number;
+            status: string;
+          }>;
+          byBase: Array<{
+            key: string;
+            cvTotal: number;
+            frmsTotal: number;
+            delta: number;
+            status: string;
+          }>;
+          byAircraft: Array<{
+            key: string;
+            cvTotal: number;
+            frmsTotal: number;
+            delta: number;
+            status: string;
+          }>;
         };
         recommendation: { status: string; reasons: string[] };
       };

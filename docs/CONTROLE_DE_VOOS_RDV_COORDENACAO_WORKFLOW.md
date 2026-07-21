@@ -18,21 +18,21 @@ resolvidas antes desta entrega; ver auditoria na seção 1).
 Auditoria de `origin/main` encontrou uma base **muito mais madura** do que a documentação
 histórica sugeria:
 
-| Item | Estado antes desta entrega |
-|---|---|
-| Schema `cv_voos`, `cv_rdv_operacional`, `cv_voo_etapas`, `cv_voo_tripulantes`, `cv_voo_eventos` | ✅ Migrations 0410/0411, tenant-scoped, indexado, com triggers de guarda de tenant |
-| Rotas CRUD de voos/RDV, transições de status operacional, dashboard | ✅ `worker-airtrust/src/routes/controle-voos.ts` |
-| RDV: estados | ⚠️ Só `rascunho` / `preenchimento_finalizado` / `cancelado` — **sem fluxo de revisão/aprovação da Coordenação** |
-| Tripulação | ⚠️ Schema existia, **sem rota de CRUD** |
-| Abastecimentos | ❌ Ausente |
-| Alertas | ⚠️ Só contadores agregados no dashboard, sem motor de regras |
-| Aprovações / histórico de revisão campo-a-campo | ❌ Ausente |
-| PDF do relatório | ❌ Ausente |
-| RBAC `voos.rdv.*` | ❌ Ausente (só hierarquia genérica de role) |
-| SIGVOOS importer | ✅ Read-only confirmado, sem qualquer escrita de volta |
-| FRMS | ⚠️ Ainda lê SIGVOOS diretamente em produção (`services/sigvoos-frms.ts`); o caminho canônico `controle-voos-source.ts` existe mas está **dormente** (shadow mode, feature-flag desligada por padrão) |
-| Frontend RDV (piloto) | ✅ Real, não-mock, com create/edit/finalize |
-| Frontend Coordenação | ❌ Ausente |
+| Item                                                                                            | Estado antes desta entrega                                                                                                                                                                           |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema `cv_voos`, `cv_rdv_operacional`, `cv_voo_etapas`, `cv_voo_tripulantes`, `cv_voo_eventos` | ✅ Migrations 0410/0411, tenant-scoped, indexado, com triggers de guarda de tenant                                                                                                                   |
+| Rotas CRUD de voos/RDV, transições de status operacional, dashboard                             | ✅ `worker-airtrust/src/routes/controle-voos.ts`                                                                                                                                                     |
+| RDV: estados                                                                                    | ⚠️ Só `rascunho` / `preenchimento_finalizado` / `cancelado` — **sem fluxo de revisão/aprovação da Coordenação**                                                                                      |
+| Tripulação                                                                                      | ⚠️ Schema existia, **sem rota de CRUD**                                                                                                                                                              |
+| Abastecimentos                                                                                  | ❌ Ausente                                                                                                                                                                                           |
+| Alertas                                                                                         | ⚠️ Só contadores agregados no dashboard, sem motor de regras                                                                                                                                         |
+| Aprovações / histórico de revisão campo-a-campo                                                 | ❌ Ausente                                                                                                                                                                                           |
+| PDF do relatório                                                                                | ❌ Ausente                                                                                                                                                                                           |
+| RBAC `voos.rdv.*`                                                                               | ❌ Ausente (só hierarquia genérica de role)                                                                                                                                                          |
+| SIGVOOS importer                                                                                | ✅ Read-only confirmado, sem qualquer escrita de volta                                                                                                                                               |
+| FRMS                                                                                            | ⚠️ Ainda lê SIGVOOS diretamente em produção (`services/sigvoos-frms.ts`); o caminho canônico `controle-voos-source.ts` existe mas está **dormente** (shadow mode, feature-flag desligada por padrão) |
+| Frontend RDV (piloto)                                                                           | ✅ Real, não-mock, com create/edit/finalize                                                                                                                                                          |
+| Frontend Coordenação                                                                            | ❌ Ausente                                                                                                                                                                                           |
 
 ## 2. O que esta entrega adiciona (estritamente aditivo)
 
@@ -61,11 +61,13 @@ histórica sugeria:
   diff campo-a-campo + justificativa), `aprovar`, `finalizar`, `reabrir`, `cancelar`,
   `GET .../alertas`, `GET .../revisoes`, `GET .../aprovacoes`, `GET /rdv/fila` (fila da
   Coordenação com filtros), `GET /voos/meus` (piloto), CRUD de `tripulantes` e
-  `abastecimentos`, `GET .../rdv/relatorio-petrobras` (PDF).
-- **Motor de alertas** (`syncRdvAlerts`): 7 regras auto-contidas (campos obrigatórios
-  ausentes, tripulação ausente, comandante duplicado, trechos ausentes, trechos
-  sobrepostos, abastecimento sem trecho), persistidas em `cv_rdv_alertas` com
-  resolução automática quando a regra deixa de se aplicar.
+  `abastecimentos`, CRUD de **etapas/trechos** (`controle-voos-rdv-etapas.ts`),
+  `GET .../rdv/relatorio-petrobras` (PDF).
+- **Motor de alertas** (`syncRdvAlerts`): regras auto-contidas (campos obrigatórios
+  ausentes, tripulação ausente, comandante duplicado, trechos ausentes/incompletos/
+  sobrepostos/continuidade ICAO, combustível incoerente, abastecimento sem trecho ou
+  com etapa inválida), persistidas em `cv_rdv_alertas` com resolução automática quando
+  a regra deixa de se aplicar.
 - **RBAC real por capability `voos.rdv.*`**: resolve via `usuario_permissoes`
   (DENY > GRANT > default de role) em `hasRdvCapability` — **não** é só wrapper de
   `checkPermission(role)`. Sem elevar globalmente `student`: acesso próprio do piloto
@@ -84,6 +86,7 @@ SIGVOOS → adaptador/importador (read-only) → Controle de Voos → dados norm
 ```
 
 Esta entrega **não altera** a integração SIGVOOS nem a source policy do FRMS:
+
 - `services/sigvoos-frms.ts` continua sendo o caminho legado real em produção.
 - `lib/frms/controle-voos-source.ts` continua dormente (shadow mode, flag desligada).
 - Nenhuma jornada do FRMS foi reprocessada ou regravada.
@@ -92,6 +95,34 @@ O RDV agora tem um fluxo de aprovação completo, mas seu **modelo de dados oper
 (`cv_voos`, `cv_rdv_operacional`, `cv_voo_etapas`) já era, antes desta entrega, a fonte
 "AirTrust-owned" preparada para futuramente alimentar o FRMS via `controle-voos-source.ts`
 — este trabalho apenas adiciona o ciclo de vida de revisão/aprovação em cima dela.
+
+## 3.1 CRUD de etapas (`cv_voo_etapas`) — realizado vs programado
+
+Rotas em `worker-airtrust/src/routes/controle-voos-rdv-etapas.ts` + serviço
+`services/controle-voos/rdv-etapas.ts` (não em `controle-voos.ts`).
+
+| Método | Path                                 | Notas                                                                                   |
+| ------ | ------------------------------------ | --------------------------------------------------------------------------------------- |
+| GET    | `/voos/:id/etapas`                   | Lista etapas **realizadas**; `meta.programado` vem do voo (`horario_previsto_*` + ICAO) |
+| POST   | `/voos/:id/etapas`                   | Cria etapa `origem_dados='MANUAL'`; body exige `versao` (RDV)                           |
+| PATCH  | `/voos/:id/etapas/:etapaId`          | Atualiza campos operacionais; preserva `origem_dados` SIGVOOS                           |
+| DELETE | `/voos/:id/etapas/:etapaId`          | Soft delete (`deleted_at`); sem restore                                                 |
+| POST   | `/voos/:id/etapas/:etapaId/duplicar` | Nova linha com próximo `numero_etapa`                                                   |
+| PUT    | `/voos/:id/etapas/ordem`             | Body `{ versao, ordem: number[] }`                                                      |
+
+**Programado vs realizado:** não há colunas dual nas etapas. Horários/combustível em
+`cv_voo_etapas` = realizado; `cv_voos.horario_previsto_*` = programado.
+
+**Edição:** piloto em `workflow_status` ∈ {`rascunho`,`devolvido`}; Coordenação em
+`em_revisao` com capability `corrigir` + justificativa (grava diffs em `cv_rdv_revisoes`
+com `entidade='etapa'`). Toda mutação incrementa `cv_rdv_operacional.versao`, sincroniza
+agregados do RDV a partir das etapas e recalcula alertas.
+
+**FRMS (futuro, read-only note):** quando a transformação FRMS for ativada, deve preferir
+etapas persistidas em `cv_voo_etapas` sobre campos agregados de `cv_rdv_operacional`
+quando houver pernas. Esta entrega **não** altera write paths do FRMS nem ativa a flag.
+
+Índice aditivo em 0438: `UNIQUE (empresa_id, voo_id, numero_etapa) WHERE deleted_at IS NULL`.
 
 ## 4. Máquina de estados
 
@@ -137,11 +168,11 @@ resto do backend:
 2. **GRANT** explícito em `usuario_permissoes` → concede
 3. default por role (não é só `checkPermission` / wrapper de hierarquia)
 
-| Capability | Default de role | Escopo adicional |
-|---|---|---|
-| `voos.rdv.visualizar_proprio`, `criar_proprio`, `editar_rascunho_proprio`, `enviar`, `cancelar` | ≥ `student` | piloto: exige vínculo de tripulação no voo |
-| `voos.rdv.visualizar_todos`, `revisar`, `corrigir`, `devolver`, `aprovar_coordenacao`, `reabrir`, `exportar_petrobras` | ≥ `manager` (Coordenação) | sem vínculo de tripulação |
-| `voos.rdv.aprovar_comercial` | **sem default** — só GRANT explícito | gate futuro |
+| Capability                                                                                                             | Default de role                      | Escopo adicional                           |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------ |
+| `voos.rdv.visualizar_proprio`, `criar_proprio`, `editar_rascunho_proprio`, `enviar`, `cancelar`                        | ≥ `student`                          | piloto: exige vínculo de tripulação no voo |
+| `voos.rdv.visualizar_todos`, `revisar`, `corrigir`, `devolver`, `aprovar_coordenacao`, `reabrir`, `exportar_petrobras` | ≥ `manager` (Coordenação)            | sem vínculo de tripulação                  |
+| `voos.rdv.aprovar_comercial`                                                                                           | **sem default** — só GRANT explícito | gate futuro                                |
 
 Testado: student/viewer sem capability → 403; piloto com capability + crew → OK; piloto com
 capability sem crew → 403 `CONTROLE_VOOS_RDV_NOT_CREW`; Coordenação com capability → OK;
@@ -150,10 +181,13 @@ self-approval da Coordenação → 403 `CONTROLE_VOOS_RDV_SELF_APPROVAL_FORBIDDE
 
 ## 6. Alertas implementados (escopo reduzido, documentado)
 
-Implementadas 7 regras auto-contidas em Controle de Voos (ver `computeRdvAlertRules`):
+Implementadas regras auto-contidas em Controle de Voos (ver `computeRdvAlertRules`):
 `CAMPOS_OBRIGATORIOS_AUSENTES`, `TRIPULACAO_AUSENTE`, `COMANDANTE_DUPLICADO`,
-`TRECHOS_AUSENTES`, `TRECHOS_SOBREPOSTOS`, `ABASTECIMENTO_SEM_TRECHO`. As duas primeiras e
-`COMANDANTE_DUPLICADO`/`TRECHOS_SOBREPOSTOS` são `IMPEDE_ENVIO`; as demais, `ATENCAO`.
+`TRECHOS_AUSENTES`, `TRECHO_ORIGEM_AUSENTE`, `TRECHO_DESTINO_AUSENTE`,
+`TRECHO_POUSO_ANTES_DECOLAGEM`, `TRECHO_CORTE_ANTES_POUSO`, `TRECHOS_SOBREPOSTOS`,
+`TRECHOS_CONTINUIDADE_ICAO`, `TRECHO_COMBUSTIVEL_INCOERENTE`, `TRECHO_COMBUSTIVEL_NEGATIVO`,
+`ABASTECIMENTO_SEM_TRECHO`, `ABASTECIMENTO_ETAPA_INVALIDA`. Impeditivos de envio vs
+atenção conforme severidade no código.
 
 **Deliberadamente fora do escopo desta entrega** (backlog): alertas de qualificação/ASO/
 habilitação vencida (cruzariam com o domínio de Qualificações — risco de acoplamento sem
@@ -213,9 +247,9 @@ após envio" como alerta dedicado (hoje coberto pela trilha de revisões/justifi
 
 ## 11. Riscos
 
-| Risco | Severidade | Mitigação |
-|---|---|---|
-| God-file histórico em `controle-voos.ts` | Médio | Extração WIP para `controle-voos-rdv-workflow.ts` + services; **sem** raise de caps no `architecture-performance-guard` para `controle-voos.ts` |
-| Alertas cobrem só 6–7 de ~20 regras do enunciado | Médio | Documentado explicitamente (seção 6); rule engine é extensível (`RdvAlertRule[]`) |
-| Segunda execução de 0438 falha (não idempotente) | Baixo | Intencional / fail-closed; documentado; rollback dedicado fora da cadeia numérica |
-| PDF não foi validado visualmente em navegador (ambiente sem preview de PDF binário) | Baixo | Testado via bytes (`%PDF-`, tamanho, watermark desenhado); recomenda-se abertura manual em staging antes de uso real |
+| Risco                                                                               | Severidade | Mitigação                                                                                                                                       |
+| ----------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| God-file histórico em `controle-voos.ts`                                            | Médio      | Extração WIP para `controle-voos-rdv-workflow.ts` + services; **sem** raise de caps no `architecture-performance-guard` para `controle-voos.ts` |
+| Alertas cobrem só 6–7 de ~20 regras do enunciado                                    | Médio      | Documentado explicitamente (seção 6); rule engine é extensível (`RdvAlertRule[]`)                                                               |
+| Segunda execução de 0438 falha (não idempotente)                                    | Baixo      | Intencional / fail-closed; documentado; rollback dedicado fora da cadeia numérica                                                               |
+| PDF não foi validado visualmente em navegador (ambiente sem preview de PDF binário) | Baixo      | Testado via bytes (`%PDF-`, tamanho, watermark desenhado); recomenda-se abertura manual em staging antes de uso real                            |

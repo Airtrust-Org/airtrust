@@ -17,13 +17,18 @@ import {
   buildFormState,
   calcConsumoCombustivel,
   calcHorasVoadas,
+  clearEtapaPendingRecovery,
   clearTrechoDraft,
   computeProgressPercent,
+  draftFromEtapa,
+  draftToEtapaPatch,
   duplicateTrecho,
   getStepIndex,
   isStepComplete,
   isVersionConflictError,
+  loadEtapaPendingRecovery,
   loadTrechoDraft,
+  saveEtapaPendingRecovery,
   saveTrechoDraft,
   seedTrechosFromVoo,
   type RdvFormState,
@@ -338,6 +343,7 @@ describe('ControleVoosRdvSaveStatus + TrechoCard', () => {
       'SBRJ',
       null,
     )[0];
+    trecho.id = 42;
     trecho.combustivel_decolagem = '800';
     trecho.combustivel_pouso = '500';
 
@@ -356,6 +362,90 @@ describe('ControleVoosRdvSaveStatus + TrechoCard', () => {
     expect(screen.getByText('300')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Duplicar/i }));
     expect(onDuplicate).toHaveBeenCalled();
+  });
+});
+
+describe('etapas persistidas — mapeamento e recuperação local', () => {
+  afterEach(() => {
+    clearEtapaPendingRecovery(601);
+    sessionStorage.clear();
+  });
+
+  it('mapeia etapa da API para draft e de volta sem perder ICAO/combustível', () => {
+    const draft = draftFromEtapa({
+      id: 11,
+      origem_icao: 'SBRJ',
+      destino_icao: 'SBSP',
+      horario_decolagem: '2026-06-14T10:00:00Z',
+      horario_pouso: '2026-06-14T11:00:00Z',
+      combustivel_inicio: 900,
+      combustivel_fim: 700,
+      pousos_diurnos: 1,
+      pousos_noturnos: 0,
+      pax: 4,
+      payload: 120,
+    });
+    expect(draft.id).toBe(11);
+    expect(draft.origem).toBe('SBRJ');
+    expect(draft.combustivel_decolagem).toBe('900');
+    const patch = draftToEtapaPatch(draft);
+    expect(patch.origem_icao).toBe('SBRJ');
+    expect(patch.combustivel_inicio).toBe(900);
+    expect(patch.pax).toBe(4);
+  });
+
+  it('recupera patches pendentes da mesma versao e descarta recuperação mais antiga que o servidor', () => {
+    saveEtapaPendingRecovery(601, {
+      vooId: '601',
+      versao: 3,
+      timestamp: '2026-06-14T12:00:00Z',
+      patches: [{ id: 11, fields: { origem_icao: 'SBGR' } }],
+    });
+    expect(loadEtapaPendingRecovery(601)?.versao).toBe(3);
+    expect(loadEtapaPendingRecovery(601)?.patches[0].fields.origem_icao).toBe('SBGR');
+
+    // Simula servidor mais novo: caller limpa recovery quando pending.versao < server
+    const pending = loadEtapaPendingRecovery(601)!;
+    const serverVersao = 4;
+    if (pending.versao < serverVersao) {
+      clearEtapaPendingRecovery(601);
+    }
+    expect(loadEtapaPendingRecovery(601)).toBeNull();
+  });
+
+  it('não usa aggregateTrechosToFormPatch como fonte canônica quando há ids persistidos', () => {
+    const a = draftFromEtapa({
+      id: 1,
+      origem_icao: 'SBRJ',
+      destino_icao: 'SBSP',
+      horario_decolagem: '2026-06-14T10:00:00Z',
+      horario_pouso: '2026-06-14T10:40:00Z',
+      combustivel_inicio: 1000,
+      combustivel_fim: 800,
+      pousos_diurnos: 1,
+      pousos_noturnos: 0,
+      pax: 2,
+      payload: null,
+    });
+    const b = draftFromEtapa({
+      id: 2,
+      origem_icao: 'SBSP',
+      destino_icao: 'SBRJ',
+      horario_decolagem: '2026-06-14T11:00:00Z',
+      horario_pouso: '2026-06-14T11:30:00Z',
+      combustivel_inicio: 800,
+      combustivel_fim: 650,
+      pousos_diurnos: 1,
+      pousos_noturnos: 0,
+      pax: 3,
+      payload: null,
+    });
+    expect([a, b].every((t) => typeof t.id === 'number')).toBe(true);
+    // Agregado ainda existe só como helper legado de compatibilidade visual.
+    const legacy = aggregateTrechosToFormPatch([a, b]);
+    expect(legacy.numero_pousos).toBe('2');
+    expect(legacy.combustivel_decolagem).toBe('1000');
+    expect(legacy.combustivel_pouso).toBe('650');
   });
 });
 

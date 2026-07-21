@@ -173,6 +173,71 @@ export interface CvAbastecimento {
   observacoes: string | null;
 }
 
+export interface CvEtapa {
+  id: number;
+  empresa_id: number;
+  voo_id: number;
+  numero_etapa: number;
+  sigvoos_leg_number: number | null;
+  origem_icao: string | null;
+  destino_icao: string | null;
+  horario_motor_ligado: string | null;
+  horario_decolagem: string | null;
+  horario_pouso: string | null;
+  horario_motor_desligado: string | null;
+  tempo_decolagem_pouso: string | null;
+  tempo_total: string | null;
+  tempo_navegacao: string | null;
+  tempo_ifr: string | null;
+  tempo_noturno: string | null;
+  pousos_diurnos: number | null;
+  pousos_noturnos: number | null;
+  starts: number | null;
+  pax: number | null;
+  payload: number | null;
+  combustivel_inicio: number | null;
+  combustivel_fim: number | null;
+  unidade_combustivel: string | null;
+  origem_dados: 'MANUAL' | 'SIGVOOS';
+  created_at: string;
+  updated_at: string;
+}
+
+export type EtapaInput = {
+  versao: number;
+  justificativa?: string;
+  mode?: 'pilot' | 'coordenacao';
+  numero_etapa?: number;
+  origem_icao?: string | null;
+  destino_icao?: string | null;
+  horario_motor_ligado?: string | null;
+  horario_decolagem?: string | null;
+  horario_pouso?: string | null;
+  horario_motor_desligado?: string | null;
+  tempo_navegacao?: string | null;
+  tempo_ifr?: string | null;
+  tempo_noturno?: string | null;
+  pousos_diurnos?: number | null;
+  pousos_noturnos?: number | null;
+  starts?: number | null;
+  pax?: number | null;
+  payload?: number | null;
+  combustivel_inicio?: number | null;
+  combustivel_fim?: number | null;
+  unidade_combustivel?: string | null;
+};
+
+export type EtapasListResult = {
+  etapas: CvEtapa[];
+  versao: number | null;
+  programado: {
+    origem_icao: string | null;
+    destino_icao: string | null;
+    horario_previsto_partida: string | null;
+    horario_previsto_chegada: string | null;
+  } | null;
+};
+
 export interface CvAeroporto {
   id: number;
   codigo: string;
@@ -278,6 +343,22 @@ function extractPayloadRequired<T>(response: unknown): T {
     throw new Error('Resposta vazia da API');
   }
   return payload;
+}
+
+function extractPayloadAndMeta<T>(
+  response: unknown,
+  fallback: T,
+): { data: T; meta: { versao?: number | null } } {
+  const r = response as HttpOk;
+  if (!r.success) throw new Error(r.error || 'Erro de API');
+  const body = r.data as Record<string, unknown> | undefined;
+  if (body && typeof body === 'object' && 'data' in body) {
+    return {
+      data: (body.data as T) ?? fallback,
+      meta: (body.meta as { versao?: number | null }) || {},
+    };
+  }
+  return { data: (r.data as T) ?? fallback, meta: {} };
 }
 
 function extractBody<T>(response: unknown): T {
@@ -709,6 +790,153 @@ export function useRemoverAbastecimento() {
     onSuccess: (_, vars) => {
       void qc.invalidateQueries({ queryKey: ['cv-abastecimentos', vars.vooId] });
     },
+  });
+}
+
+// ===========================================================================
+// Etapas / trechos (cv_voo_etapas — persistidos)
+// ===========================================================================
+
+function invalidateEtapaQueries(qc: ReturnType<typeof useQueryClient>, vooId: string | number) {
+  void qc.invalidateQueries({ queryKey: ['cv-etapas', vooId] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv', vooId] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv', String(vooId)] });
+  void qc.invalidateQueries({ queryKey: ['cv-rdv-alertas', vooId] });
+}
+
+export function useEtapas(vooId: string | number | undefined) {
+  return useQuery({
+    queryKey: ['cv-etapas', vooId],
+    enabled: !!vooId,
+    queryFn: async (): Promise<EtapasListResult> => {
+      const response = await apiClient.get<unknown>(`${API}/voos/${vooId}/etapas`);
+      const { data, meta } = extractPayloadAndMeta<CvEtapa[]>(response, []);
+      const body = (response as HttpOk).data as
+        | { meta?: { versao?: number | null; programado?: EtapasListResult['programado'] } }
+        | undefined;
+      return {
+        etapas: data,
+        versao: body?.meta?.versao ?? meta.versao ?? null,
+        programado: body?.meta?.programado ?? null,
+      };
+    },
+    staleTime: 10_000,
+    retry: 1,
+  });
+}
+
+export function useCriarEtapa() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ vooId, ...body }: { vooId: string | number } & EtapaInput) => {
+      const response = await apiClient.post<unknown>(`${API}/voos/${vooId}/etapas`, body);
+      const { data, meta } = extractPayloadAndMeta<CvEtapa | null>(response, null);
+      if (!data) throw new Error('Resposta vazia da API');
+      return { data, meta };
+    },
+    onSuccess: (_, vars) => invalidateEtapaQueries(qc, vars.vooId),
+  });
+}
+
+export function useAtualizarEtapa() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      vooId,
+      etapaId,
+      ...body
+    }: { vooId: string | number; etapaId: number } & EtapaInput) => {
+      const response = await apiClient.patch<unknown>(
+        `${API}/voos/${vooId}/etapas/${etapaId}`,
+        body,
+      );
+      const { data, meta } = extractPayloadAndMeta<CvEtapa | null>(response, null);
+      if (!data) throw new Error('Resposta vazia da API');
+      return { data, meta };
+    },
+    onSuccess: (_, vars) => invalidateEtapaQueries(qc, vars.vooId),
+  });
+}
+
+export function useRemoverEtapa() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      vooId,
+      etapaId,
+      versao,
+      justificativa,
+      mode,
+    }: {
+      vooId: string | number;
+      etapaId: number;
+      versao: number;
+      justificativa?: string;
+      mode?: 'pilot' | 'coordenacao';
+    }) => {
+      const response = await apiClient.delete<unknown>(`${API}/voos/${vooId}/etapas/${etapaId}`, {
+        body: JSON.stringify({ versao, justificativa, mode }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      return extractPayloadAndMeta<{ id: number }>(response, { id: 0 });
+    },
+    onSuccess: (_, vars) => invalidateEtapaQueries(qc, vars.vooId),
+  });
+}
+
+export function useDuplicarEtapa() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      vooId,
+      etapaId,
+      versao,
+      justificativa,
+      mode,
+    }: {
+      vooId: string | number;
+      etapaId: number;
+      versao: number;
+      justificativa?: string;
+      mode?: 'pilot' | 'coordenacao';
+    }) => {
+      const response = await apiClient.post<unknown>(
+        `${API}/voos/${vooId}/etapas/${etapaId}/duplicar`,
+        { versao, justificativa, mode },
+      );
+      const { data, meta } = extractPayloadAndMeta<CvEtapa | null>(response, null);
+      if (!data) throw new Error('Resposta vazia da API');
+      return { data, meta };
+    },
+    onSuccess: (_, vars) => invalidateEtapaQueries(qc, vars.vooId),
+  });
+}
+
+export function useReordenarEtapas() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      vooId,
+      versao,
+      ordem,
+      justificativa,
+      mode,
+    }: {
+      vooId: string | number;
+      versao: number;
+      ordem: number[];
+      justificativa?: string;
+      mode?: 'pilot' | 'coordenacao';
+    }) => {
+      const response = await apiClient.put<unknown>(`${API}/voos/${vooId}/etapas/ordem`, {
+        versao,
+        ordem,
+        justificativa,
+        mode,
+      });
+      return extractPayloadAndMeta<CvEtapa[]>(response, []);
+    },
+    onSuccess: (_, vars) => invalidateEtapaQueries(qc, vars.vooId),
   });
 }
 
