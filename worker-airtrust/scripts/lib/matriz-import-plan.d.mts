@@ -1,5 +1,16 @@
 export interface ModeloPlano {
   codigo: string;
+  programa: string;
+  ciclo: string | null;
+  titulo: string | null;
+  aeronave: 'AW139' | 'SK76';
+}
+
+export interface CriteriosPlano {
+  '1-2': string | null;
+  '3-5': string | null;
+  '6-8': string | null;
+  '9-10': string | null;
 }
 
 export interface ItemMatrizPlano {
@@ -8,6 +19,17 @@ export interface ItemMatrizPlano {
   codigo: string;
   nome: string;
   execucao_pf: string;
+  categoria: string | null;
+  fase_voo: string | null;
+  tipo_conteudo: string | null;
+  cenario: string | null;
+  configuracao_ios: string | null;
+  desempenho_esperado: string | null;
+  foco_instrutor: string | null;
+  como_observar: string | null;
+  referencia_tecnica: string | null;
+  rastreabilidade_interna: string | null;
+  criterios: CriteriosPlano;
 }
 
 export interface MatrizPlano {

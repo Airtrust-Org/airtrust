@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createDeterministicPlan, sha256, validateModelItems } from '../../../scripts/lib/matriz-import-plan.mjs';
 
-const items = Array.from({ length: 18 }, (_, index) => ({ modelo: 'A139-I-01/12', ordem: index + 1, codigo: `A-${index + 1}`, nome: `M ${index + 1}`, execucao_pf: 'A' }));
-const matrix = { models: [{ codigo: 'A139-I-01/12' }], items };
+const items = Array.from({ length: 18 }, (_, index) => ({
+  modelo: 'A139-I-01/12', ordem: index + 1, codigo: `A-${index + 1}`, nome: `M ${index + 1}`, execucao_pf: 'A',
+  categoria: 'PROCEDIMENTO', fase_voo: 'SOLO', tipo_conteudo: 'NORMAL', cenario: null, configuracao_ios: null,
+  desempenho_esperado: 'Esperado', foco_instrutor: 'Foco', como_observar: 'Observação', referencia_tecnica: 'RFM', rastreabilidade_interna: null,
+  criterios: { '1-2': 'Baixo', '3-5': 'Médio', '6-8': 'Bom', '9-10': 'Excelente' },
+}));
+const matrix = { models: [{ codigo: 'A139-I-01/12', programa: 'Inicial', ciclo: null, titulo: 'Inicial', aeronave: 'AW139' as const }], items };
 
 describe('matriz import planner', () => {
   it('produces a stable hash without volatile timestamps', () => {

@@ -31,6 +31,19 @@ function getEmpresaIdFromRequest(c: Parameters<typeof getTenantContext>[0]): num
   return getTenantContext(c).empresaId;
 }
 
+/**
+ * Compatibility gate for additive migrations. A missing table is a supported
+ * legacy schema; an unreadable schema is an operational error and must reach
+ * the route handler rather than silently exposing legacy data.
+ */
+async function optionalTableExists(db: D1Database, tableName: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .bind(tableName)
+    .first<{ name: string }>();
+  return row?.name === tableName;
+}
+
 function validateObservacoesBatchInput(
   manobras: Array<{ observacoes?: unknown }>,
 ): { ok: true; values: Array<string | null> } | { ok: false; error: string } {
@@ -476,20 +489,11 @@ app.get('/modelos-sessao', async (c) => {
     const col = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
     const columns = (col.results || []).map((r: any) => r.name);
     const hasQualificacaoTipoId = columns.includes('qualificacao_tipo_id');
-    let versioningTable: { name: string } | null = null;
-    try {
-      versioningTable = await c.env.DB
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_versionamento'")
-        .bind()
-        .first<{ name: string }>();
-    } catch {
-      // Pre-0440 schemas and minimal route mocks intentionally retain legacy behaviour.
-      versioningTable = null;
-    }
-    const versioningJoin = versioningTable
+    const hasVersioningTable = await optionalTableExists(c.env.DB, 'modelos_sessao_versionamento');
+    const versioningJoin = hasVersioningTable
       ? 'INNER JOIN modelos_sessao_versionamento msv ON msv.modelo_id = ms.id AND msv.empresa_id = ms.empresa_id AND msv.is_current = 1'
       : '';
-    const versioningSelect = versioningTable
+    const versioningSelect = hasVersioningTable
       ? ', msv.codigo_canonico, msv.versao_matriz, msv.versao_numero, msv.efetivo_em, msv.efetivo_ate'
       : ', ms.codigo as codigo_canonico, NULL as versao_matriz, NULL as versao_numero, NULL as efetivo_em, NULL as efetivo_ate';
     const filtroModeloExpr = [
@@ -746,19 +750,11 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
-    let contextTable: { name: string } | null = null;
-    try {
-      contextTable = await c.env.DB
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_manobras_contexto'")
-        .bind()
-        .first<{ name: string }>();
-    } catch {
-      contextTable = null;
-    }
-    const contextJoin = contextTable
+    const hasContextTable = await optionalTableExists(c.env.DB, 'modelos_sessao_manobras_contexto');
+    const contextJoin = hasContextTable
       ? 'LEFT JOIN modelos_sessao_manobras_contexto msmc ON msmc.modelo_manobra_id = msm.id AND msmc.empresa_id = ms.empresa_id'
       : '';
-    const contextSelect = contextTable ? ', msmc.metadados_json as metadados_contextuais' : ', NULL as metadados_contextuais';
+    const contextSelect = hasContextTable ? ', msmc.metadados_json as metadados_contextuais' : ', NULL as metadados_contextuais';
     const result = await c.env.DB.prepare(
       `SELECT 
         msm.id,
