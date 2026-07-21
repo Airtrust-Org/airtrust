@@ -1,4 +1,4 @@
--- Rollback: 0438_guias_instrutor_simulador.sql
+-- Rollback: 0439_guias_instrutor_simulador.sql
 -- Reversível: dropa apenas os objetos criados por esta migration. Não toca em
 -- nenhuma tabela pré-existente (modelos_sessao, modelos_aeronave, empresas).
 
