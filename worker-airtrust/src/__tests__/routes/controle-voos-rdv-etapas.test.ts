@@ -105,6 +105,53 @@ function targetTableOf(sql: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * `db.batch([...])` real (uma única conexão/transação), não um statement por
+ * processo `sqlite3` — necessário porque as transições do RDV (`enviar`,
+ * `iniciar-revisao`, etc., exercitadas indiretamente aqui via `ensureRdv`/
+ * chamadas diretas de fluxo) agora executam o UPDATE CAS DENTRO do mesmo
+ * `db.batch()` que os efeitos colaterais obrigatórios — ver a mesma função em
+ * `controle-voos-rdv-workflow.test.ts` para a explicação completa (`changes()`
+ * só reflete o statement anterior NA MESMA conexão; `.bail on` + `BEGIN`/
+ * `COMMIT` únicos garantem rollback integral em caso de falha).
+ */
+function execBatch(
+  databasePath: string,
+  statements: Array<{ sql: string; binds: unknown[] }>,
+): Array<{ meta: { changes: number; last_row_id: number } }> {
+  if (statements.length === 0) return [];
+  const parts: string[] = ['.bail on', 'BEGIN IMMEDIATE;'];
+  for (const stmt of statements) {
+    const sql = interpolate(stmt.sql, stmt.binds).trim();
+    parts.push(sql.endsWith(';') ? sql : `${sql};`);
+    parts.push('SELECT changes() AS __n, last_insert_rowid() AS __lid;');
+  }
+  parts.push('COMMIT;');
+
+  const result = spawnSync('sqlite3', ['-json', databasePath], {
+    input: parts.join('\n'),
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    throw new Error(`D1_BATCH_FAILED: ${result.stderr || result.stdout}`);
+  }
+
+  const blocks = result.stdout
+    .split(/(?<=\])\s*\n(?=\[)/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  if (blocks.length !== statements.length) {
+    throw new Error(
+      `D1_BATCH_HARNESS_MISMATCH: esperava ${statements.length} blocos de resultado, recebeu ${blocks.length}`,
+    );
+  }
+  return blocks.map((block) => {
+    const rows = JSON.parse(block) as Array<{ __n: number; __lid: number }>;
+    const row = rows[0] || { __n: 0, __lid: 0 };
+    return { meta: { changes: row.__n ?? 0, last_row_id: row.__lid ?? 0 } };
+  });
+}
+
 function createSqliteD1(): SqliteD1 {
   const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-cv-rdv-etapas-'));
   const databasePath = join(tempDir, 'routes.sqlite');
@@ -160,6 +207,8 @@ function createSqliteD1(): SqliteD1 {
     prepare(sql: string) {
       let binds: unknown[] = [];
       const statement = {
+        __sql: sql,
+        __binds: () => binds,
         bind: (...args: unknown[]) => {
           binds = args;
           return statement;
@@ -185,6 +234,11 @@ function createSqliteD1(): SqliteD1 {
       };
       return statement;
     },
+    batch: async (statements: Array<{ __sql: string; __binds: () => unknown[] }>) =>
+      execBatch(
+        databasePath,
+        statements.map((stmt) => ({ sql: stmt.__sql, binds: stmt.__binds() })),
+      ),
   } as unknown as SqliteD1;
 
   return db;

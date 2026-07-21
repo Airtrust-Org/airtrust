@@ -123,6 +123,71 @@ function execWithChanges(databasePath: string, sql: string): number {
   return rows[0]?.n ?? 0;
 }
 
+/**
+ * Executa TODAS as instruções de um `db.batch([...])` em uma única invocação
+ * do `sqlite3` CLI (uma única conexão/transação), não uma por statement.
+ *
+ * Isso é necessário porque D1 executa `batch()` como uma transação implícita
+ * única: se qualquer statement falhar, nenhum é commitado, e `changes()`
+ * dentro de uma statement reflete a instrução de escrita IMEDIATAMENTE
+ * ANTERIOR NA MESMA CONEXÃO — é exatamente o que
+ * `buildRdvVersionBumpGatedOnPriorChanges` depende (`(SELECT changes()) > 0`
+ * embutido no próprio UPDATE). Um harness que roda cada statement em um
+ * processo `sqlite3` separado (conexão nova a cada `run()`) sempre veria
+ * `changes() = 0` nesse UPDATE, porque nenhuma escrita anterior teria
+ * ocorrido NAQUELA conexão — quebrando o gate mesmo quando a mutação
+ * anterior teve sucesso de verdade. Ver comentário de
+ * `buildRdvVersionBumpGatedOnPriorChanges` em `rdv-repository.ts`.
+ *
+ * Estratégia: um único script `.bail on / BEGIN / stmt1; SELECT changes(),
+ * last_insert_rowid(); stmt2; SELECT ...; COMMIT` enviado a uma única
+ * invocação do `sqlite3 -json`. Com `.bail on`, uma falha em qualquer
+ * statement aborta o script ANTES do COMMIT — a transação nunca é efetivada
+ * e a conexão fecha sem commit, revertendo tudo (comprovado empiricamente
+ * em isolamento: INSERT duplicado com UNIQUE constraint no meio do batch
+ * deixa a tabela inalterada). Cada SELECT de marcador produz um array JSON
+ * próprio no stdout (`[...][...]...`),
+ * concatenados sem separador — por isso o split usa o limite `]`↵`[`.
+ */
+function execBatch(
+  databasePath: string,
+  statements: Array<{ sql: string; binds: unknown[] }>,
+): Array<{ meta: { changes: number; last_row_id: number } }> {
+  if (statements.length === 0) return [];
+  const parts: string[] = ['.bail on', 'BEGIN IMMEDIATE;'];
+  for (const stmt of statements) {
+    const sql = interpolate(stmt.sql, stmt.binds).trim();
+    parts.push(sql.endsWith(';') ? sql : `${sql};`);
+    parts.push('SELECT changes() AS __n, last_insert_rowid() AS __lid;');
+  }
+  parts.push('COMMIT;');
+
+  const result = spawnSync('sqlite3', ['-json', databasePath], {
+    input: parts.join('\n'),
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    // Espelha o comportamento real do D1: batch() rejeita a Promise e
+    // nenhuma escrita fica persistida (transação nunca chega ao COMMIT).
+    throw new Error(`D1_BATCH_FAILED: ${result.stderr || result.stdout}`);
+  }
+
+  const blocks = result.stdout
+    .split(/(?<=\])\s*\n(?=\[)/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  if (blocks.length !== statements.length) {
+    throw new Error(
+      `D1_BATCH_HARNESS_MISMATCH: esperava ${statements.length} blocos de resultado, recebeu ${blocks.length}`,
+    );
+  }
+  return blocks.map((block) => {
+    const rows = JSON.parse(block) as Array<{ __n: number; __lid: number }>;
+    const row = rows[0] || { __n: 0, __lid: 0 };
+    return { meta: { changes: row.__n ?? 0, last_row_id: row.__lid ?? 0 } };
+  });
+}
+
 function createSqliteD1(): SqliteD1 {
   const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-cv-rdv-workflow-'));
   const databasePath = join(tempDir, 'routes.sqlite');
@@ -178,6 +243,11 @@ function createSqliteD1(): SqliteD1 {
     prepare(sql: string) {
       let binds: unknown[] = [];
       const statement = {
+        // Não-enumeráveis: expõem sql/binds só para `batch()` montar o
+        // script de uma única transação — não fazem parte da interface
+        // pública de D1PreparedStatement.
+        __sql: sql,
+        __binds: () => binds,
         bind: (...args: unknown[]) => {
           binds = args;
           return statement;
@@ -203,13 +273,11 @@ function createSqliteD1(): SqliteD1 {
       };
       return statement;
     },
-    batch: async (statements: Array<{ run: () => Promise<unknown> }>) => {
-      const results = [];
-      for (const statement of statements) {
-        results.push(await statement.run());
-      }
-      return results;
-    },
+    batch: async (statements: Array<{ __sql: string; __binds: () => unknown[] }>) =>
+      execBatch(
+        databasePath,
+        statements.map((stmt) => ({ sql: stmt.__sql, binds: stmt.__binds() })),
+      ),
   } as unknown as SqliteD1;
 
   return db;
@@ -1051,12 +1119,13 @@ describe('RDV — tripulação e abastecimentos', () => {
 
   it('registra abastecimento vinculado ao voo e lista por voo', async () => {
     const db = createSqliteD1();
+    await preencherRdvCompleto(db);
     const criar = await request(
       db,
       '/api/controle-voos/voos/601/abastecimentos',
       {
         method: 'POST',
-        body: JSON.stringify({
+        body: await transitionBody(db, {
           data_hora: '2026-06-14T09:50:00Z',
           fornecedor: 'Fornecedor Ficticio',
           combustivel_abastecido: 500,
@@ -1141,6 +1210,7 @@ describe('RDV — A1: ownership em tripulantes/abastecimentos/PDF (assertRdvSelf
 
   it('DELETE tripulante: id pertencente a outro voo do mesmo tenant retorna 404, nunca sucesso silencioso', async () => {
     const db = createSqliteD1();
+    await preencherRdvCompleto(db);
     runSql(
       db.databasePath,
       `
@@ -1159,9 +1229,10 @@ describe('RDV — A1: ownership em tripulantes/abastecimentos/PDF (assertRdvSelf
       `SELECT id FROM cv_voo_tripulantes WHERE voo_id = 602 LIMIT 1`,
     )[0];
 
+    const versaoAtual = await currentVersao(db);
     const res = await request(
       db,
-      `/api/controle-voos/voos/601/tripulantes/${outroVooTripulante.id}`,
+      `/api/controle-voos/voos/601/tripulantes/${outroVooTripulante.id}?versao=${versaoAtual}`,
       { method: 'DELETE' },
       COORDENACAO,
     );
@@ -1189,6 +1260,7 @@ describe('RDV — A1: ownership em tripulantes/abastecimentos/PDF (assertRdvSelf
 
   it('DELETE tripulante: Coordenacao com capability global exclui sem precisar de vinculo', async () => {
     const db = createSqliteD1();
+    await preencherRdvCompleto(db);
     const criar = await request(
       db,
       '/api/controle-voos/voos/601/tripulantes',
@@ -1197,9 +1269,10 @@ describe('RDV — A1: ownership em tripulantes/abastecimentos/PDF (assertRdvSelf
     );
     const { data } = (await criar.json()) as { data: { id: number } };
 
+    const versaoAtual = await currentVersao(db);
     const res = await request(
       db,
-      `/api/controle-voos/voos/601/tripulantes/${data.id}`,
+      `/api/controle-voos/voos/601/tripulantes/${data.id}?versao=${versaoAtual}`,
       { method: 'DELETE' },
       COORDENACAO,
     );
@@ -1234,6 +1307,7 @@ describe('RDV — A1: ownership em tripulantes/abastecimentos/PDF (assertRdvSelf
 
   it('DELETE abastecimento: id de outro voo do mesmo tenant retorna 404, nunca sucesso silencioso', async () => {
     const db = createSqliteD1();
+    await preencherRdvCompleto(db);
     runSql(
       db.databasePath,
       `
@@ -1252,9 +1326,10 @@ describe('RDV — A1: ownership em tripulantes/abastecimentos/PDF (assertRdvSelf
       `SELECT id FROM cv_voo_abastecimentos WHERE voo_id = 602 LIMIT 1`,
     )[0];
 
+    const versaoAtual = await currentVersao(db);
     const res = await request(
       db,
-      `/api/controle-voos/voos/601/abastecimentos/${outro.id}`,
+      `/api/controle-voos/voos/601/abastecimentos/${outro.id}?versao=${versaoAtual}`,
       { method: 'DELETE' },
       COORDENACAO,
     );
@@ -1282,20 +1357,25 @@ describe('RDV — A1: ownership em tripulantes/abastecimentos/PDF (assertRdvSelf
 
   it('DELETE abastecimento: Coordenacao com capability global exclui sem precisar de vinculo', async () => {
     const db = createSqliteD1();
+    await preencherRdvCompleto(db);
     const criar = await request(
       db,
       '/api/controle-voos/voos/601/abastecimentos',
       {
         method: 'POST',
-        body: JSON.stringify({ data_hora: '2026-06-14T09:50:00Z', combustivel_abastecido: 100 }),
+        body: await transitionBody(db, {
+          data_hora: '2026-06-14T09:50:00Z',
+          combustivel_abastecido: 100,
+        }),
       },
       COORDENACAO,
     );
     const { data } = (await criar.json()) as { data: { id: number } };
 
+    const versaoAtual = await currentVersao(db);
     const res = await request(
       db,
-      `/api/controle-voos/voos/601/abastecimentos/${data.id}`,
+      `/api/controle-voos/voos/601/abastecimentos/${data.id}?versao=${versaoAtual}`,
       { method: 'DELETE' },
       COORDENACAO,
     );
@@ -1491,6 +1571,43 @@ describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () =>
       const body = (await res.json()) as { code?: string };
       expect(body.code).toBe('CONTROLE_VOOS_RDV_VERSION_INVALID');
     });
+
+    // Fault injection §9: duas chamadas concorrentes com a MESMA versao
+    // conhecida — exatamente uma vence (200/201), a perdedora recebe 409,
+    // e a versao do RDV avanca uma unica vez (nunca duas), provando que o
+    // efeito colateral condicionado (`buildRdvVersionGuardedInsert`/
+    // `buildFlightEventStatement` com guard) nao se aplicou na perdedora.
+    it(`${caso.nome}: concorrencia com a mesma versao — exatamente uma chamada vence, a outra recebe 409, versao avanca uma unica vez`, async () => {
+      const db = createSqliteD1();
+      await prepararEstado(db, caso.estado);
+      const versaoConhecida = await currentVersao(db);
+
+      const [primeira, segunda] = await Promise.all([
+        request(
+          db,
+          caso.path,
+          { method: 'POST', body: JSON.stringify({ ...caso.extra, versao: versaoConhecida }) },
+          caso.actor,
+        ),
+        request(
+          db,
+          caso.path,
+          { method: 'POST', body: JSON.stringify({ ...caso.extra, versao: versaoConhecida }) },
+          caso.actor,
+        ),
+      ]);
+
+      const statuses = [primeira.status, segunda.status].sort();
+      expect(statuses[1]).toBe(409);
+      expect(statuses[0]).not.toBe(409);
+
+      const perdedora = primeira.status === 409 ? primeira : segunda;
+      const perdedoraBody = (await perdedora.json()) as { code?: string };
+      expect(perdedoraBody.code).toBe('CONTROLE_VOOS_RDV_VERSION_CONFLICT');
+
+      const versaoFinal = await currentVersao(db);
+      expect(versaoFinal).toBe(versaoConhecida + 1);
+    });
   }
 
   it('enviar: duas chamadas com a mesma versao conhecida — a segunda (perdedora) recebe 409 e nao duplica aprovacao/evento', async () => {
@@ -1541,5 +1658,104 @@ describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () =>
       `SELECT id FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND descricao LIKE '%enviado para revisao%'`,
     );
     expect(eventosEnvio.length).toBe(1);
+  });
+});
+
+// ===========================================================================
+// Harness — semântica de `db.batch()` do mock sqlite3 (execBatch). Cobre os
+// mínimos exigidos para confiar que os testes de CAS/atomicidade acima estão
+// exercitando a mesma semântica do D1 real (uma única transação, ordem
+// preservada, changes() refletindo o statement anterior, rollback integral),
+// não um artefato do harness.
+// ===========================================================================
+describe('Harness — execBatch (semântica de db.batch())', () => {
+  it('dois statements válidos persistem', async () => {
+    const db = createSqliteD1();
+    await db
+      .batch([
+        db.prepare(`INSERT INTO empresas (id, razao_social) VALUES (901, 'A')`),
+        db.prepare(`INSERT INTO empresas (id, razao_social) VALUES (902, 'B')`),
+      ] as unknown as D1PreparedStatement[])
+      .then((rs) => rs);
+    const rows = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM empresas WHERE id IN (901, 902) ORDER BY id`,
+    );
+    expect(rows.map((r) => r.id)).toEqual([901, 902]);
+  });
+
+  it('o segundo statement falha e o primeiro é revertido (rollback integral)', async () => {
+    const db = createSqliteD1();
+    await expect(
+      db.batch([
+        db.prepare(`INSERT INTO empresas (id, razao_social) VALUES (910, 'C')`),
+        db.prepare(`INSERT INTO empresas (id, razao_social) VALUES (910, 'D')`), // PK duplicada
+      ] as unknown as D1PreparedStatement[]),
+    ).rejects.toThrow();
+    const rows = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM empresas WHERE id = 910`,
+    );
+    expect(rows.length).toBe(0);
+  });
+
+  it('changes() observa o statement imediatamente anterior no mesmo batch', async () => {
+    const db = createSqliteD1();
+    const [, bumpResult] = await db.batch([
+      db.prepare(`UPDATE empresas SET razao_social = 'X' WHERE id = 1`),
+      db.prepare(
+        `UPDATE empresas SET razao_social = 'Y' WHERE id = 1 AND (SELECT changes()) > 0`,
+      ),
+    ] as unknown as D1PreparedStatement[]);
+    expect(bumpResult.meta.changes).toBe(1);
+  });
+
+  it('resultado com zero alterações bloqueia o efeito dependente gated em changes()', async () => {
+    const db = createSqliteD1();
+    const [, bumpResult] = await db.batch([
+      db.prepare(`UPDATE empresas SET razao_social = 'X' WHERE id = 999999`), // 0 linhas
+      db.prepare(
+        `UPDATE empresas SET razao_social = 'Y' WHERE id = 1 AND (SELECT changes()) > 0`,
+      ),
+    ] as unknown as D1PreparedStatement[]);
+    expect(bumpResult.meta.changes).toBe(0);
+    const row = queryJson<{ razao_social: string }>(
+      db.databasePath,
+      `SELECT razao_social FROM empresas WHERE id = 1`,
+    )[0];
+    expect(row.razao_social).not.toBe('Y');
+  });
+
+  it('resultados preservam a ordem dos statements de entrada', async () => {
+    const db = createSqliteD1();
+    const results = await db.batch([
+      db.prepare(`INSERT INTO empresas (id, razao_social) VALUES (920, 'ordem-1')`),
+      db.prepare(`INSERT INTO empresas (id, razao_social) VALUES (921, 'ordem-2')`),
+      db.prepare(`INSERT INTO empresas (id, razao_social) VALUES (922, 'ordem-3')`),
+    ] as unknown as D1PreparedStatement[]);
+    expect(results.map((r) => r.meta.last_row_id)).toEqual([920, 921, 922]);
+  });
+
+  it('batches concorrentes em bancos distintos não misturam estado (isolamento por conexão/arquivo)', async () => {
+    const dbA = createSqliteD1();
+    const dbB = createSqliteD1();
+    await Promise.all([
+      dbA.batch([
+        dbA.prepare(`UPDATE empresas SET razao_social = 'concurrent-A' WHERE id = 1`),
+      ] as unknown as D1PreparedStatement[]),
+      dbB.batch([
+        dbB.prepare(`UPDATE empresas SET razao_social = 'concurrent-B' WHERE id = 1`),
+      ] as unknown as D1PreparedStatement[]),
+    ]);
+    const rowA = queryJson<{ razao_social: string }>(
+      dbA.databasePath,
+      `SELECT razao_social FROM empresas WHERE id = 1`,
+    )[0];
+    const rowB = queryJson<{ razao_social: string }>(
+      dbB.databasePath,
+      `SELECT razao_social FROM empresas WHERE id = 1`,
+    )[0];
+    expect(rowA.razao_social).toBe('concurrent-A');
+    expect(rowB.razao_social).toBe('concurrent-B');
   });
 });

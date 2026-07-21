@@ -95,10 +95,6 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
-  '0438': [
-    '0438_controle_voos_rdv_coordenacao_workflow.sql',
-    '0438_controle_voos_rdv_coordenacao_workflow_preflight_audit.sql',
-  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -225,5 +221,30 @@ describe('migration governance', () => {
     );
 
     expect(offenders).toEqual([...EXPECTED_FOREIGN_KEYS_OFF_FILES]);
+  });
+
+  // Achado do PR #419: 0438's preflight (consulta read-only para decisão
+  // manual do operador, sem ALTER/CREATE) vivia em worker-airtrust/migrations/
+  // e era registrada no ledger d1_migrations como se fosse uma migration de
+  // verdade. Movida para scripts/validation/controle-voos-rdv-0438-preflight.sql.
+  // Este teste garante que o padrão não volte a aparecer sem passar por uma
+  // decisão explícita (a única exceção histórica é 0420, anterior a este guard).
+  it('keeps preflight/audit/validation-only read-only files out of the canonical migrations dir', () => {
+    const NON_MIGRATION_FILENAME_SUFFIXES = [
+      '_preflight_audit.sql',
+      '_preflight.sql',
+      '_validation_only.sql',
+      '_readonly.sql',
+      '_read_only.sql',
+    ];
+    const HISTORICAL_ALLOWLIST = ['0420_notificacoes_log_add_empresa_id_preflight_audit.sql'];
+
+    const offenders = files.filter(
+      (file) =>
+        NON_MIGRATION_FILENAME_SUFFIXES.some((suffix) => file.toLowerCase().endsWith(suffix)) &&
+        !HISTORICAL_ALLOWLIST.includes(file),
+    );
+
+    expect(offenders).toEqual([]);
   });
 });

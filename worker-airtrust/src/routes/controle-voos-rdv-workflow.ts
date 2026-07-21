@@ -20,6 +20,9 @@ import {
   getFuncionarioIdForUser,
   recordFlightEvent,
   buildFlightEventStatement,
+  buildRdvVersionGuardedInsert,
+  buildRdvVersionGuardedUpdate,
+  buildRdvVersionBumpGatedOnPriorChanges,
   maybeRecordSystemAudit,
   allowedRdvFields,
   type RdvInput,
@@ -36,7 +39,7 @@ import {
   requireExpectedRdvVersion,
   assertCasApplied,
   requireNonEmptyText,
-  recordRdvFieldRevisions,
+  buildRdvFieldRevisionStatements,
 } from '../services/controle-voos/rdv-workflow';
 import { syncRdvAlerts } from '../services/controle-voos/rdv-alertas';
 import {
@@ -63,6 +66,22 @@ async function parseJsonPayload(
     if (error instanceof ApiError) throw error;
     throw new ApiError('Payload JSON invalido', 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
   }
+}
+
+// DELETE não costuma carregar corpo JSON no cliente; aceita `versao` via
+// querystring nesse caso (mesmo padrão já usado em
+// `routes/controle-voos-rdv-etapas.ts` para o DELETE de etapas).
+async function parseVersionedMutationPayload(
+  c: import('hono').Context<{ Bindings: Env }>,
+): Promise<Record<string, unknown>> {
+  const contentType = c.req.header('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return parseJsonPayload(c);
+  }
+  const payload: Record<string, unknown> = {};
+  const versaoQuery = c.req.query('versao');
+  if (versaoQuery != null) payload.versao = Number(versaoQuery);
+  return payload;
 }
 
 function assertPayloadFields(payload: Record<string, unknown>, allowed: Set<string>): void {
@@ -449,36 +468,39 @@ rdvWorkflow.post('/voos/:id/rdv/enviar', auth(), requireAnyRdvAccess(), async (c
   }
 
   const novaVersao = rdv.versao + 1;
-  const updateResult = await c.env.DB.prepare(
-    `
-      UPDATE cv_rdv_operacional
-      SET workflow_status = 'enviado', versao = ?, enviado_por = ?, enviado_em = datetime('now'),
-          updated_by = ?, updated_at = datetime('now')
-      WHERE id = ? AND empresa_id = ? AND versao = ?
-    `,
-  )
-    .bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao)
-    .run();
-  assertCasApplied(updateResult);
-
-  await c.env.DB.batch([
+  const guard = { rdvId: rdv.id, empresaId, expectedVersion: novaVersao };
+  const [updateResult] = await c.env.DB.batch([
     c.env.DB.prepare(
       `
-        INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, created_at)
-        VALUES (?, ?, ?, 'COORDENACAO', 'ENVIADO', ?, datetime('now'))
+        UPDATE cv_rdv_operacional
+        SET workflow_status = 'enviado', versao = ?, enviado_por = ?, enviado_em = datetime('now'),
+            updated_by = ?, updated_at = datetime('now')
+        WHERE id = ? AND empresa_id = ? AND versao = ?
       `,
-    ).bind(empresaId, rdv.id, novaVersao, userId),
-    buildFlightEventStatement(c.env.DB, {
-      empresaId,
-      vooId: voo.id,
-      tipoEvento: 'rdv',
-      statusAnterior: voo.status,
-      statusNovo: voo.status,
-      descricao: 'RDV enviado para revisao da Coordenacao',
-      metadata: { action: 'enviar', rdv_id: rdv.id, versao: novaVersao },
-      usuarioId: userId,
+    ).bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao),
+    buildRdvVersionGuardedInsert(c.env.DB, {
+      table: 'cv_rdv_aprovacoes',
+      columns: 'empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, created_at',
+      valuesSql: `?, ?, ?, 'COORDENACAO', 'ENVIADO', ?, datetime('now')`,
+      bindValues: [empresaId, rdv.id, novaVersao, userId],
+      guard,
     }),
+    buildFlightEventStatement(
+      c.env.DB,
+      {
+        empresaId,
+        vooId: voo.id,
+        tipoEvento: 'rdv',
+        statusAnterior: voo.status,
+        statusNovo: voo.status,
+        descricao: 'RDV enviado para revisao da Coordenacao',
+        metadata: { action: 'enviar', rdv_id: rdv.id, versao: novaVersao },
+        usuarioId: userId,
+      },
+      guard,
+    ),
   ]);
+  assertCasApplied(updateResult);
 
   const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
   return c.json({ success: true, data: updated });
@@ -502,26 +524,25 @@ rdvWorkflow.post(
     assertRdvVersion(rdv, expectedVersion);
 
     const novaVersao = rdv.versao + 1;
-    const updateResult = await c.env.DB.prepare(
-      `
+    const guard = { rdvId: rdv.id, empresaId, expectedVersion: novaVersao };
+    const [updateResult] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `
         UPDATE cv_rdv_operacional
         SET workflow_status = 'em_revisao', versao = ?, revisao_iniciada_por = ?,
             revisao_iniciada_em = datetime('now'), updated_by = ?, updated_at = datetime('now')
         WHERE id = ? AND empresa_id = ? AND versao = ?
       `,
-    )
-      .bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao)
-      .run();
+      ).bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao),
+      buildRdvVersionGuardedInsert(c.env.DB, {
+        table: 'cv_rdv_aprovacoes',
+        columns: 'empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, created_at',
+        valuesSql: `?, ?, ?, 'COORDENACAO', 'REVISAO_INICIADA', ?, datetime('now')`,
+        bindValues: [empresaId, rdv.id, novaVersao, userId],
+        guard,
+      }),
+    ]);
     assertCasApplied(updateResult);
-
-    await c.env.DB.prepare(
-      `
-        INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, created_at)
-        VALUES (?, ?, ?, 'COORDENACAO', 'REVISAO_INICIADA', ?, datetime('now'))
-      `,
-    )
-      .bind(empresaId, rdv.id, novaVersao, userId)
-      .run();
 
     const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
     return c.json({ success: true, data: updated });
@@ -547,37 +568,41 @@ rdvWorkflow.post(
     const justificativa = requireNonEmptyText(payload.justificativa, 'justificativa');
 
     const novaVersao = rdv.versao + 1;
-    const updateResult = await c.env.DB.prepare(
-      `
+    const guard = { rdvId: rdv.id, empresaId, expectedVersion: novaVersao };
+    const [updateResult] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `
       UPDATE cv_rdv_operacional
       SET workflow_status = 'devolvido', status = 'rascunho', versao = ?,
           devolvido_por = ?, devolvido_em = datetime('now'),
           motivo_devolucao = ?, updated_by = ?, updated_at = datetime('now')
       WHERE id = ? AND empresa_id = ? AND versao = ?
     `,
-    )
-      .bind(novaVersao, userId, justificativa, userId, rdv.id, empresaId, rdv.versao)
-      .run();
-    assertCasApplied(updateResult);
-
-    await c.env.DB.batch([
-      c.env.DB.prepare(
-        `
-        INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, justificativa, created_at)
-        VALUES (?, ?, ?, 'COORDENACAO', 'DEVOLVIDO', ?, ?, datetime('now'))
-      `,
-      ).bind(empresaId, rdv.id, novaVersao, userId, justificativa),
-      buildFlightEventStatement(c.env.DB, {
-        empresaId,
-        vooId: voo.id,
-        tipoEvento: 'rdv',
-        statusAnterior: voo.status,
-        statusNovo: voo.status,
-        descricao: 'RDV devolvido ao piloto pela Coordenacao',
-        metadata: { action: 'devolver', rdv_id: rdv.id, versao: novaVersao, justificativa },
-        usuarioId: userId,
+      ).bind(novaVersao, userId, justificativa, userId, rdv.id, empresaId, rdv.versao),
+      buildRdvVersionGuardedInsert(c.env.DB, {
+        table: 'cv_rdv_aprovacoes',
+        columns:
+          'empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, justificativa, created_at',
+        valuesSql: `?, ?, ?, 'COORDENACAO', 'DEVOLVIDO', ?, ?, datetime('now')`,
+        bindValues: [empresaId, rdv.id, novaVersao, userId, justificativa],
+        guard,
       }),
+      buildFlightEventStatement(
+        c.env.DB,
+        {
+          empresaId,
+          vooId: voo.id,
+          tipoEvento: 'rdv',
+          statusAnterior: voo.status,
+          statusNovo: voo.status,
+          descricao: 'RDV devolvido ao piloto pela Coordenacao',
+          metadata: { action: 'devolver', rdv_id: rdv.id, versao: novaVersao, justificativa },
+          usuarioId: userId,
+        },
+        guard,
+      ),
     ]);
+    assertCasApplied(updateResult);
 
     const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
     return c.json({ success: true, data: updated });
@@ -627,30 +652,25 @@ rdvWorkflow.post(
     }
 
     const novaVersao = rdv.versao + 1;
-    let updateResult: D1Result;
+    let updateStmt: D1PreparedStatement;
     if (fields.length > 0) {
       fields.push('versao = ?', 'updated_by = ?', 'updated_at = datetime("now")');
       values.push(novaVersao, userId, rdv.id, empresaId, rdv.versao);
 
-      updateResult = await c.env.DB.prepare(
+      updateStmt = c.env.DB.prepare(
         `
         UPDATE cv_rdv_operacional
         SET ${fields.join(', ')}
         WHERE id = ? AND empresa_id = ? AND versao = ?
       `,
-      )
-        .bind(...values)
-        .run();
+      ).bind(...values);
     } else {
-      updateResult = await c.env.DB.prepare(
+      updateStmt = c.env.DB.prepare(
         `UPDATE cv_rdv_operacional SET versao = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND versao = ?`,
-      )
-        .bind(novaVersao, userId, rdv.id, empresaId, rdv.versao)
-        .run();
+      ).bind(novaVersao, userId, rdv.id, empresaId, rdv.versao);
     }
-    assertCasApplied(updateResult);
 
-    const changedFields = await recordRdvFieldRevisions({
+    const revisionStmts = buildRdvFieldRevisionStatements({
       db: c.env.DB,
       empresaId,
       rdvId: rdv.id,
@@ -663,10 +683,20 @@ rdvWorkflow.post(
       estadoNovo: rdv.workflow_status,
     });
 
+    const [updateResult] = await c.env.DB.batch([updateStmt, ...revisionStmts]);
+    assertCasApplied(updateResult);
+
+    // Auditoria genérica best-effort (nunca bloqueia nem reverte a
+    // transição principal — ver comentário em `registrarAuditoria`),
+    // por isso permanece fora do batch atômico acima.
     await maybeRecordSystemAudit(c, 'cv_rdv_operacional', 'UPDATE', rdv.id, rdv, merged);
 
     const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
-    return c.json({ success: true, data: updated, meta: { campos_alterados: changedFields } });
+    return c.json({
+      success: true,
+      data: updated,
+      meta: { campos_alterados: revisionStmts.length },
+    });
   },
 );
 
@@ -700,38 +730,42 @@ rdvWorkflow.post(
     }
 
     const novaVersao = rdv.versao + 1;
-    const updateResult = await c.env.DB.prepare(
-      `
+    const guard = { rdvId: rdv.id, empresaId, expectedVersion: novaVersao };
+    const observacao = typeof payload.observacao === 'string' ? payload.observacao : null;
+    const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
+    const [updateResult] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `
         UPDATE cv_rdv_operacional
         SET workflow_status = 'aprovado_coordenacao', versao = ?, aprovado_coordenacao_por = ?,
             aprovado_coordenacao_em = datetime('now'), updated_by = ?, updated_at = datetime('now')
         WHERE id = ? AND empresa_id = ? AND versao = ?
       `,
-    )
-      .bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao)
-      .run();
-    assertCasApplied(updateResult);
-
-    const observacao = typeof payload.observacao === 'string' ? payload.observacao : null;
-    const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
-    await c.env.DB.batch([
-      c.env.DB.prepare(
-        `
-        INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, funcionario_id, observacao, created_at)
-        VALUES (?, ?, ?, 'COORDENACAO', 'APROVADO', ?, ?, ?, datetime('now'))
-      `,
-      ).bind(empresaId, rdv.id, novaVersao, userId, funcionarioId, observacao),
-      buildFlightEventStatement(c.env.DB, {
-        empresaId,
-        vooId: voo.id,
-        tipoEvento: 'rdv',
-        statusAnterior: voo.status,
-        statusNovo: voo.status,
-        descricao: 'RDV aprovado pela Coordenacao',
-        metadata: { action: 'aprovar', rdv_id: rdv.id, versao: novaVersao },
-        usuarioId: userId,
+      ).bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao),
+      buildRdvVersionGuardedInsert(c.env.DB, {
+        table: 'cv_rdv_aprovacoes',
+        columns:
+          'empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, funcionario_id, observacao, created_at',
+        valuesSql: `?, ?, ?, 'COORDENACAO', 'APROVADO', ?, ?, ?, datetime('now')`,
+        bindValues: [empresaId, rdv.id, novaVersao, userId, funcionarioId, observacao],
+        guard,
       }),
+      buildFlightEventStatement(
+        c.env.DB,
+        {
+          empresaId,
+          vooId: voo.id,
+          tipoEvento: 'rdv',
+          statusAnterior: voo.status,
+          statusNovo: voo.status,
+          descricao: 'RDV aprovado pela Coordenacao',
+          metadata: { action: 'aprovar', rdv_id: rdv.id, versao: novaVersao },
+          usuarioId: userId,
+        },
+        guard,
+      ),
     ]);
+    assertCasApplied(updateResult);
 
     const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
     return c.json({ success: true, data: updated });
@@ -756,29 +790,32 @@ rdvWorkflow.post(
     assertRdvVersion(rdv, expectedVersion);
 
     const novaVersao = rdv.versao + 1;
-    const updateResult = await c.env.DB.prepare(
-      `
+    const guard = { rdvId: rdv.id, empresaId, expectedVersion: novaVersao };
+    const [updateResult] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `
         UPDATE cv_rdv_operacional
         SET workflow_status = 'finalizado', versao = ?, finalizado_workflow_em = datetime('now'),
             updated_by = ?, updated_at = datetime('now')
         WHERE id = ? AND empresa_id = ? AND versao = ?
       `,
-    )
-      .bind(novaVersao, userId, rdv.id, empresaId, rdv.versao)
-      .run();
+      ).bind(novaVersao, userId, rdv.id, empresaId, rdv.versao),
+      buildFlightEventStatement(
+        c.env.DB,
+        {
+          empresaId,
+          vooId: voo.id,
+          tipoEvento: 'rdv',
+          statusAnterior: voo.status,
+          statusNovo: voo.status,
+          descricao: 'RDV finalizado',
+          metadata: { action: 'finalizar', rdv_id: rdv.id, versao: novaVersao },
+          usuarioId: userId,
+        },
+        guard,
+      ),
+    ]);
     assertCasApplied(updateResult);
-
-    await recordFlightEvent({
-      db: c.env.DB,
-      empresaId,
-      vooId: voo.id,
-      tipoEvento: 'rdv',
-      statusAnterior: voo.status,
-      statusNovo: voo.status,
-      descricao: 'RDV finalizado',
-      metadata: { action: 'finalizar', rdv_id: rdv.id, versao: novaVersao },
-      usuarioId: userId,
-    });
 
     const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
     return c.json({ success: true, data: updated });
@@ -804,36 +841,40 @@ rdvWorkflow.post(
     const justificativa = requireNonEmptyText(payload.justificativa, 'justificativa');
 
     const novaVersao = rdv.versao + 1;
-    const updateResult = await c.env.DB.prepare(
-      `
+    const guard = { rdvId: rdv.id, empresaId, expectedVersion: novaVersao };
+    const [updateResult] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `
       UPDATE cv_rdv_operacional
       SET workflow_status = 'reaberto', status = 'rascunho', versao = ?,
           reaberto_por = ?, reaberto_em = datetime('now'), updated_by = ?, updated_at = datetime('now')
       WHERE id = ? AND empresa_id = ? AND versao = ?
     `,
-    )
-      .bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao)
-      .run();
-    assertCasApplied(updateResult);
-
-    await c.env.DB.batch([
-      c.env.DB.prepare(
-        `
-      INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, justificativa, created_at)
-      VALUES (?, ?, ?, 'COORDENACAO', 'REABERTO', ?, ?, datetime('now'))
-    `,
-      ).bind(empresaId, rdv.id, novaVersao, userId, justificativa),
-      buildFlightEventStatement(c.env.DB, {
-        empresaId,
-        vooId: voo.id,
-        tipoEvento: 'rdv',
-        statusAnterior: voo.status,
-        statusNovo: voo.status,
-        descricao: 'RDV reaberto pela Coordenacao',
-        metadata: { action: 'reabrir', rdv_id: rdv.id, versao: novaVersao, justificativa },
-        usuarioId: userId,
+      ).bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao),
+      buildRdvVersionGuardedInsert(c.env.DB, {
+        table: 'cv_rdv_aprovacoes',
+        columns:
+          'empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, justificativa, created_at',
+        valuesSql: `?, ?, ?, 'COORDENACAO', 'REABERTO', ?, ?, datetime('now')`,
+        bindValues: [empresaId, rdv.id, novaVersao, userId, justificativa],
+        guard,
       }),
+      buildFlightEventStatement(
+        c.env.DB,
+        {
+          empresaId,
+          vooId: voo.id,
+          tipoEvento: 'rdv',
+          statusAnterior: voo.status,
+          statusNovo: voo.status,
+          descricao: 'RDV reaberto pela Coordenacao',
+          metadata: { action: 'reabrir', rdv_id: rdv.id, versao: novaVersao, justificativa },
+          usuarioId: userId,
+        },
+        guard,
+      ),
     ]);
+    assertCasApplied(updateResult);
 
     const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
     return c.json({ success: true, data: updated });
@@ -857,26 +898,26 @@ rdvWorkflow.post('/voos/:id/rdv/cancelar', auth(), requireAnyRdvAccess(), async 
   const justificativa = requireNonEmptyText(payload.justificativa, 'justificativa');
 
   const novaVersao = rdv.versao + 1;
-  const updateResult = await c.env.DB.prepare(
-    `
+  const guard = { rdvId: rdv.id, empresaId, expectedVersion: novaVersao };
+  const [updateResult] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `
       UPDATE cv_rdv_operacional
       SET workflow_status = 'cancelado', status = 'cancelado', versao = ?,
           motivo_cancelamento = ?, updated_by = ?, updated_at = datetime('now')
       WHERE id = ? AND empresa_id = ? AND versao = ?
     `,
-  )
-    .bind(novaVersao, justificativa, userId, rdv.id, empresaId, rdv.versao)
-    .run();
+    ).bind(novaVersao, justificativa, userId, rdv.id, empresaId, rdv.versao),
+    buildRdvVersionGuardedInsert(c.env.DB, {
+      table: 'cv_rdv_aprovacoes',
+      columns:
+        'empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, justificativa, created_at',
+      valuesSql: `?, ?, ?, 'COORDENACAO', 'CANCELADO', ?, ?, datetime('now')`,
+      bindValues: [empresaId, rdv.id, novaVersao, userId, justificativa],
+      guard,
+    }),
+  ]);
   assertCasApplied(updateResult);
-
-  await c.env.DB.prepare(
-    `
-      INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, justificativa, created_at)
-      VALUES (?, ?, ?, 'COORDENACAO', 'CANCELADO', ?, ?, datetime('now'))
-    `,
-  )
-    .bind(empresaId, rdv.id, novaVersao, userId, justificativa)
-    .run();
 
   const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
   return c.json({ success: true, data: updated });
@@ -1063,19 +1104,45 @@ rdvWorkflow.delete(
       RDV_CAPABILITIES.editarRascunhoProprio,
     );
 
-    const result = await c.env.DB.prepare(
-      `
-        UPDATE cv_voo_tripulantes
-        SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now')
-        WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
-      `,
-    )
-      .bind(userId, tripulanteId, voo.id, empresaId)
-      .run();
+    const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
+    if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
 
-    if (!result.meta.changes) {
-      throw new ApiError('Tripulante nao encontrado', 404, 'CONTROLE_VOOS_TRIPULANTE_NOT_FOUND');
+    const payload = await parseVersionedMutationPayload(c);
+    const expectedVersion = requireExpectedRdvVersion(payload);
+    assertRdvVersion(rdv, expectedVersion);
+
+    const novaVersao = rdv.versao + 1;
+    const guard = { rdvId: rdv.id, empresaId, expectedVersion: rdv.versao };
+    const [tripulanteResult, rdvResult] = await c.env.DB.batch([
+      buildRdvVersionGuardedUpdate(c.env.DB, {
+        table: 'cv_voo_tripulantes',
+        setSql: `deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now')`,
+        setBindValues: [userId],
+        whereSql: 'id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        whereBindValues: [tripulanteId, voo.id, empresaId],
+        guard,
+      }),
+      buildRdvVersionBumpGatedOnPriorChanges(c.env.DB, {
+        rdvId: rdv.id,
+        empresaId,
+        currentVersion: rdv.versao,
+        nextVersion: novaVersao,
+        userId,
+      }),
+    ]);
+
+    if (!tripulanteResult.meta.changes) {
+      const stillExists = await c.env.DB.prepare(
+        'SELECT id FROM cv_voo_tripulantes WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+      )
+        .bind(tripulanteId, voo.id, empresaId)
+        .first();
+      if (!stillExists) {
+        throw new ApiError('Tripulante nao encontrado', 404, 'CONTROLE_VOOS_TRIPULANTE_NOT_FOUND');
+      }
+      assertCasApplied({ meta: { changes: 0 } });
     }
+    assertCasApplied(rdvResult);
 
     return c.json({ success: true, data: { id: tripulanteId } });
   },
@@ -1114,6 +1181,11 @@ rdvWorkflow.post('/voos/:id/abastecimentos', auth(), requireAnyRdvAccess(), asyn
   await assertRdvSelfScope(c, c.env.DB, empresaId, voo.id, RDV_CAPABILITIES.editarRascunhoProprio);
   const payload = await parseJsonPayload(c);
 
+  const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
+  if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
+  const expectedVersion = requireExpectedRdvVersion(payload);
+  assertRdvVersion(rdv, expectedVersion);
+
   const dataHora = String(payload.data_hora || '').trim();
   if (!dataHora) throw new ApiError('data_hora invalido', 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
   const fornecedor = payload.fornecedor ? String(payload.fornecedor) : null;
@@ -1133,36 +1205,44 @@ rdvWorkflow.post('/voos/:id/abastecimentos', auth(), requireAnyRdvAccess(), asyn
   const etapaId = parseOptionalPositiveInteger(payload.etapa_id, 'etapa_id');
   const observacoes = payload.observacoes ? String(payload.observacoes) : null;
 
-  const result = await c.env.DB.prepare(
-    `
-        INSERT INTO cv_voo_abastecimentos (
-          empresa_id, voo_id, etapa_id, fornecedor, localidade,
-          combustivel_solicitado, unidade, combustivel_abastecido, numero_ce,
-          anexo_r2_key, responsavel_id, data_hora, observacoes,
-          created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  const novaVersao = rdv.versao + 1;
+  const guard = { rdvId: rdv.id, empresaId, expectedVersion: novaVersao };
+  const [rdvResult, abastecimentoResult] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE cv_rdv_operacional SET versao = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND versao = ?`,
+    ).bind(novaVersao, userId, rdv.id, empresaId, rdv.versao),
+    buildRdvVersionGuardedInsert(c.env.DB, {
+      table: 'cv_voo_abastecimentos',
+      columns: `
+        empresa_id, voo_id, etapa_id, fornecedor, localidade,
+        combustivel_solicitado, unidade, combustivel_abastecido, numero_ce,
+        anexo_r2_key, responsavel_id, data_hora, observacoes,
+        created_by, updated_by, created_at, updated_at
       `,
-  )
-    .bind(
-      empresaId,
-      voo.id,
-      etapaId,
-      fornecedor,
-      localidade,
-      combustivelSolicitado,
-      unidade,
-      combustivelAbastecido,
-      numeroCe,
-      anexoR2Key,
-      responsavelId,
-      dataHora,
-      observacoes,
-      userId,
-      userId,
-    )
-    .run();
+      valuesSql: `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')`,
+      bindValues: [
+        empresaId,
+        voo.id,
+        etapaId,
+        fornecedor,
+        localidade,
+        combustivelSolicitado,
+        unidade,
+        combustivelAbastecido,
+        numeroCe,
+        anexoR2Key,
+        responsavelId,
+        dataHora,
+        observacoes,
+        userId,
+        userId,
+      ],
+      guard,
+    }),
+  ]);
+  assertCasApplied(rdvResult);
 
-  return c.json({ success: true, data: { id: Number(result.meta.last_row_id) } }, 201);
+  return c.json({ success: true, data: { id: Number(abastecimentoResult.meta.last_row_id) } }, 201);
 });
 
 rdvWorkflow.delete(
@@ -1183,23 +1263,49 @@ rdvWorkflow.delete(
       RDV_CAPABILITIES.editarRascunhoProprio,
     );
 
-    const result = await c.env.DB.prepare(
-      `
-        UPDATE cv_voo_abastecimentos
-        SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now')
-        WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
-      `,
-    )
-      .bind(userId, abastecimentoId, voo.id, empresaId)
-      .run();
+    const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
+    if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
 
-    if (!result.meta.changes) {
-      throw new ApiError(
-        'Abastecimento nao encontrado',
-        404,
-        'CONTROLE_VOOS_ABASTECIMENTO_NOT_FOUND',
-      );
+    const payload = await parseVersionedMutationPayload(c);
+    const expectedVersion = requireExpectedRdvVersion(payload);
+    assertRdvVersion(rdv, expectedVersion);
+
+    const novaVersao = rdv.versao + 1;
+    const guard = { rdvId: rdv.id, empresaId, expectedVersion: rdv.versao };
+    const [abastecimentoResult, rdvResult] = await c.env.DB.batch([
+      buildRdvVersionGuardedUpdate(c.env.DB, {
+        table: 'cv_voo_abastecimentos',
+        setSql: `deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now')`,
+        setBindValues: [userId],
+        whereSql: 'id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        whereBindValues: [abastecimentoId, voo.id, empresaId],
+        guard,
+      }),
+      buildRdvVersionBumpGatedOnPriorChanges(c.env.DB, {
+        rdvId: rdv.id,
+        empresaId,
+        currentVersion: rdv.versao,
+        nextVersion: novaVersao,
+        userId,
+      }),
+    ]);
+
+    if (!abastecimentoResult.meta.changes) {
+      const stillExists = await c.env.DB.prepare(
+        'SELECT id FROM cv_voo_abastecimentos WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+      )
+        .bind(abastecimentoId, voo.id, empresaId)
+        .first();
+      if (!stillExists) {
+        throw new ApiError(
+          'Abastecimento nao encontrado',
+          404,
+          'CONTROLE_VOOS_ABASTECIMENTO_NOT_FOUND',
+        );
+      }
+      assertCasApplied({ meta: { changes: 0 } });
     }
+    assertCasApplied(rdvResult);
 
     return c.json({ success: true, data: { id: abastecimentoId } });
   },

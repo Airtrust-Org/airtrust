@@ -16,6 +16,7 @@ import {
   getActorId,
   getFuncionarioIdForUser,
   isCrewOnFlight,
+  buildRdvVersionGuardedInsert,
   type RdvRow,
   type RdvWorkflowStatus,
 } from '../../repositories/controle-voos/rdv-repository';
@@ -364,11 +365,18 @@ const RDV_DIFF_FIELDS = [
   'divergencias',
 ] as const;
 
-// Registra diferenças campo-a-campo entre duas versões do RDV, com
-// justificativa obrigatória. Alimenta a tela de "diferenças" da
-// Coordenação (complementa, não substitui, a auditoria genérica em
-// `auditoria`).
-export async function recordRdvFieldRevisions(params: {
+/**
+ * Monta (sem executar) os INSERTs de diferença campo-a-campo entre duas
+ * versões do RDV, com justificativa obrigatória — para a tela de
+ * "diferenças" da Coordenação (complementa, não substitui, a auditoria
+ * genérica em `auditoria`).
+ *
+ * Cada INSERT é condicionado à versão esperada (`buildRdvVersionGuardedInsert`)
+ * para poder ser agrupado no MESMO `db.batch([...])` do UPDATE CAS que
+ * precede esta chamada — ver o handler de `corrigir` em
+ * `routes/controle-voos-rdv-workflow.ts`.
+ */
+export function buildRdvFieldRevisionStatements(params: {
   db: D1Database;
   empresaId: number;
   rdvId: number;
@@ -379,7 +387,7 @@ export async function recordRdvFieldRevisions(params: {
   justificativa: string;
   estadoAnterior: string;
   estadoNovo: string;
-}): Promise<number> {
+}): D1PreparedStatement[] {
   const {
     db,
     empresaId,
@@ -392,39 +400,36 @@ export async function recordRdvFieldRevisions(params: {
     estadoAnterior,
     estadoNovo,
   } = params;
-  let changed = 0;
+  const statements: D1PreparedStatement[] = [];
 
   for (const field of RDV_DIFF_FIELDS) {
     const previousValue = Reflect.get(before, field) ?? null;
     const nextValue = Reflect.get(after, field) ?? null;
     if (String(previousValue ?? '') === String(nextValue ?? '')) continue;
 
-    changed += 1;
-    await db
-      .prepare(
-        `
-        INSERT INTO cv_rdv_revisoes (
-          empresa_id, rdv_id, versao, entidade, registro_id, campo,
-          valor_anterior, valor_novo, usuario_id, justificativa,
-          estado_anterior, estado_novo, created_at
-        ) VALUES (?, ?, ?, 'rdv', ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `,
-      )
-      .bind(
-        empresaId,
-        rdvId,
-        versao,
-        rdvId,
-        field,
-        previousValue === null ? null : String(previousValue),
-        nextValue === null ? null : String(nextValue),
-        usuarioId,
-        justificativa,
-        estadoAnterior,
-        estadoNovo,
-      )
-      .run();
+    statements.push(
+      buildRdvVersionGuardedInsert(db, {
+        table: 'cv_rdv_revisoes',
+        columns:
+          'empresa_id, rdv_id, versao, entidade, registro_id, campo, valor_anterior, valor_novo, usuario_id, justificativa, estado_anterior, estado_novo, created_at',
+        valuesSql: `?, ?, ?, 'rdv', ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')`,
+        bindValues: [
+          empresaId,
+          rdvId,
+          versao,
+          rdvId,
+          field,
+          previousValue === null ? null : String(previousValue),
+          nextValue === null ? null : String(nextValue),
+          usuarioId,
+          justificativa,
+          estadoAnterior,
+          estadoNovo,
+        ],
+        guard: { rdvId, empresaId, expectedVersion: versao },
+      }),
+    );
   }
 
-  return changed;
+  return statements;
 }

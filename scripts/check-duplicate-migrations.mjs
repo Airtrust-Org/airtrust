@@ -78,11 +78,45 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
-  '0438': [
-    '0438_controle_voos_rdv_coordenacao_workflow.sql',
-    '0438_controle_voos_rdv_coordenacao_workflow_preflight_audit.sql',
-  ],
 };
+
+// Sufixos que denunciam um arquivo operacional (consulta manual read-only:
+// preflight, auditoria de decisão, validação) disfarçado de migration —
+// nunca deve viver em worker-airtrust/migrations/, pois o runner de
+// migrations aplica todo arquivo .sql do diretório em sequência e o
+// registra no ledger d1_migrations. Ver worker-airtrust/migrations_experimental
+// para o padrão já usado para conteúdo fora da cadeia canônica, e
+// scripts/validation/ para onde este tipo de arquivo deve viver (ex.:
+// 0438's preflight, movido para
+// scripts/validation/controle-voos-rdv-0438-preflight.sql).
+//
+// Deliberadamente casado como SUFIXO do nome (não substring livre): migrations
+// reais e legítimas criam tabelas/colunas/índices de auditoria de negócio
+// (ex.: 0102_admin_actions_audit.sql, 0332_create_audit_logs_compatible.sql)
+// e não devem ser confundidas com um arquivo read-only de preflight.
+const NON_MIGRATION_FILENAME_SUFFIXES = [
+  '_preflight_audit.sql',
+  '_preflight.sql',
+  '_validation_only.sql',
+  '_readonly.sql',
+  '_read_only.sql',
+];
+
+// Arquivos anteriores a este guard, fora do escopo desta correção (PR #419
+// cobre apenas 0438) — não renumerar/mover migrations antigas aqui. Registrado
+// para que o guard não regrida silenciosamente se alguém reintroduzir o
+// padrão em uma migration nova.
+const HISTORICAL_NON_MIGRATION_FILENAME_ALLOWLIST = [
+  '0420_notificacoes_log_add_empresa_id_preflight_audit.sql',
+];
+
+function findNonMigrationFiles(migrationFiles) {
+  return migrationFiles.filter(
+    (file) =>
+      NON_MIGRATION_FILENAME_SUFFIXES.some((suffix) => file.toLowerCase().endsWith(suffix)) &&
+      !HISTORICAL_NON_MIGRATION_FILENAME_ALLOWLIST.includes(file),
+  );
+}
 
 const files = fs
   .readdirSync(migrationsDir)
@@ -139,6 +173,23 @@ for (const file of files) {
   const bucket = byPrefix.get(prefix) || [];
   bucket.push(file);
   byPrefix.set(prefix, bucket);
+}
+
+const nonMigrationFiles = findNonMigrationFiles(files);
+if (nonMigrationFiles.length > 0) {
+  console.error(
+    JSON.stringify(
+      {
+        ok: false,
+        reason: 'non_migration_file_in_migrations_dir',
+        files: nonMigrationFiles,
+        hint: 'Preflight/audit/validation/read-only .sql files must live outside worker-airtrust/migrations/ (e.g. scripts/validation/) — they are not migrations and must never be applied or ledgered by the runner.',
+      },
+      null,
+      2,
+    ),
+  );
+  process.exit(1);
 }
 
 const changedFiles = getChangedMigrationFiles();
