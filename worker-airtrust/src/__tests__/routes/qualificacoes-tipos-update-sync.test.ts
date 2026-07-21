@@ -148,6 +148,10 @@ describe('qualificacoes tipos update sync', () => {
   it('recalcula historicos por id e por codigo legado, invalida stats e retorna contagens', async () => {
     const { db, calls } = createMockDb([
       [
+        'SELECT id, nome FROM qualificacoes_categorias',
+        { first: (args) => ({ id: 3, nome: args[1] }) },
+      ],
+      [
         "PRAGMA table_info('qualificacoes_tipos')",
         {
           all: () => ({
@@ -319,6 +323,10 @@ describe('qualificacoes tipos update sync', () => {
 
   it('usa formato EAD para manter o curso sincronizado mesmo quando a categoria muda', async () => {
     const { db } = createMockDb([
+      [
+        'SELECT id, nome FROM qualificacoes_categorias',
+        { first: (args) => ({ id: 3, nome: args[1] }) },
+      ],
       [
         "PRAGMA table_info('qualificacoes_tipos')",
         {

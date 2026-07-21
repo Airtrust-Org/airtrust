@@ -41,6 +41,7 @@ type TipoAtualizadoRow = {
   codigo: string | null;
   nome: string | null;
   categoria: string | null;
+  categoria_id?: number | null;
   formato_id: number | null;
   formato_codigo: string | null;
   validade: number | null;
@@ -137,6 +138,7 @@ type TiposColumnsSupport = {
   hasCargaRecorrente: boolean;
   hasFormatoId: boolean;
   hasClasseRequisito: boolean;
+  hasCategoriaId: boolean;
 };
 
 function deriveModeloTipo(validade: number | null | undefined, categoria?: string | null): string {
@@ -187,6 +189,7 @@ async function loadQualificacoesTiposColumnsSupport(
   const hasIsCheck = hasColumn('is_check');
   const hasFormatoId = hasColumn('formato_id');
   const hasClasseRequisito = hasColumn('classe_requisito');
+  const hasCategoriaId = hasColumn('categoria_id');
 
   return {
     hasIsCheck,
@@ -195,6 +198,7 @@ async function loadQualificacoesTiposColumnsSupport(
     hasCargaRecorrente,
     hasFormatoId,
     hasClasseRequisito,
+    hasCategoriaId,
   };
 }
 
@@ -202,7 +206,8 @@ async function loadQualificacoesTiposColumnsSupport(
 const createTipoSchema = z.object({
   nome: z.string().min(3, 'Nome obrigatório (mínimo 3 caracteres)'),
   codigo: z.string().min(1, 'Código obrigatório'),
-  categoria: z.string().min(1, 'Categoria obrigatória'),
+  categoria: z.string().min(1, 'Categoria obrigatória').optional(),
+  categoria_id: z.number().int().positive('Categoria inválida').optional(),
   descricao: z.string().optional(),
   conteudo_programatico: z.string().nullable().optional(),
   carga_horaria_inicial: z.number().nullable().optional(),
@@ -214,12 +219,13 @@ const createTipoSchema = z.object({
   is_check: z.union([z.boolean(), z.number()]).optional().default(false),
   formato_id: z.number().int().positive().nullable().optional(),
   classe_requisito: z.enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA']).nullable().optional(),
-});
+}).refine((value) => value.categoria_id || value.categoria, { message: 'Categoria obrigatória' });
 
 const updateTipoSchema = z.object({
   nome: z.string().min(3).optional(),
   codigo: z.string().min(1).optional().nullable(),
   categoria: z.string().min(1).optional().nullable(),
+  categoria_id: z.number().int().positive('Categoria inválida').optional().nullable(),
   descricao: z.string().optional().nullable(),
   conteudo_programatico: z.string().optional().nullable(),
   carga_horaria_inicial: z.number().nullable().optional(),
@@ -435,11 +441,46 @@ function buildSetoresAggregationJoin(hasQualificacoesTiposSetores: boolean): str
   `;
 }
 
-function buildCategoriaJoin(): string {
+function buildCategoriaJoin(hasCategoriaId: boolean): string {
   return `LEFT JOIN qualificacoes_categorias qc
-    ON qc.nome = qt.categoria
+    ON ${hasCategoriaId ? 'qc.id = qt.categoria_id' : 'qc.nome = qt.categoria'}
    AND qc.empresa_id = qt.empresa_id
    AND qc.deleted_at IS NULL`;
+}
+
+async function resolveCategoriaCanonica(
+  db: D1Database,
+  empresaId: number,
+  categoriaId?: number | null,
+  categoriaLegada?: string | null,
+): Promise<{ id: number; nome: string } | null> {
+  if (categoriaId) {
+    return db
+      .prepare(
+        `SELECT id, nome
+           FROM qualificacoes_categorias
+          WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(categoriaId, empresaId)
+      .first<{ id: number; nome: string }>();
+  }
+
+  // Compatibility only: a legacy client can name an already canonical category,
+  // but cannot introduce arbitrary taxonomy text.
+  if (!categoriaLegada?.trim()) return null;
+  return db
+    .prepare(
+      `SELECT id, nome
+         FROM qualificacoes_categorias
+        WHERE empresa_id = ?
+          AND ativo = 1
+          AND deleted_at IS NULL
+          AND UPPER(TRIM(nome)) = UPPER(TRIM(?))
+        LIMIT 1`,
+    )
+    .bind(empresaId, categoriaLegada)
+    .first<{ id: number; nome: string }>();
 }
 
 function buildFormatoJoin(hasFormatoId: boolean): string {
@@ -655,7 +696,7 @@ router.get(
         (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.qualificacao_id = qt.id AND qh.deleted_at IS NULL) AS total_no_historico,
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
-        ${buildCategoriaJoin()}
+        ${buildCategoriaJoin(columnsSupport.hasCategoriaId)}
         ${buildFormatoJoin(columnsSupport.hasFormatoId)}
         ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE ${conditions.join(' AND ')}
@@ -707,7 +748,7 @@ router.get(
         }, qt.created_at, qt.updated_at,
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
-        ${buildCategoriaJoin()}
+        ${buildCategoriaJoin(columnsSupport.hasCategoriaId)}
         ${buildFormatoJoin(columnsSupport.hasFormatoId)}
         ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE qt.id = ? AND qt.deleted_at IS NULL AND qt.empresa_id = ? AND ${setorScope.clause}
@@ -796,7 +837,16 @@ router.post(
     const data = parsed.data;
     const codigo = normalizeTipoCodigo(data.codigo);
     const nome = data.nome.trim();
-    const categoria = data.categoria.trim();
+    const categoriaCanonica = await resolveCategoriaCanonica(
+      db,
+      empresaId,
+      data.categoria_id,
+      data.categoria,
+    );
+    if (!categoriaCanonica) {
+      return c.json({ success: false, error: 'Categoria canônica não encontrada ou inativa' }, 404);
+    }
+    const categoria = categoriaCanonica.nome;
 
     // Verificar duplicidade
     const existing = await db
@@ -848,6 +898,7 @@ router.post(
       ativo,
     ];
     if (hasIsCheck) { insertCols.push('is_check'); insertBinds.push(isCheck); }
+    if (columnsSupport.hasCategoriaId) { insertCols.push('categoria_id'); insertBinds.push(categoriaCanonica.id); }
     if (columnsSupport.hasFormatoId) { insertCols.push('formato_id'); insertBinds.push(data.formato_id ?? null); }
     if (columnsSupport.hasClasseRequisito) { insertCols.push('classe_requisito'); insertBinds.push(data.classe_requisito ?? null); }
     insertBinds.push(empresaId);
@@ -950,6 +1001,7 @@ router.post(
                 qt.nome,
                 qt.descricao,
                 qt.categoria,
+                ${columnsSupport.hasCategoriaId ? 'qt.categoria_id,' : 'NULL AS categoria_id,'}
                 ${
                   columnsSupport.hasFormatoId
                     ? 'qt.formato_id, qf.codigo AS formato_codigo, qf.nome AS formato_nome, qf.cor AS formato_cor,'
@@ -1067,10 +1119,14 @@ router.put(
       .bind(id, empresaId)
       .first()) as TipoAnteriorRow | null;
 
-    const categoriaFinal =
-      data.categoria !== undefined
-        ? (data.categoria || '').trim()
-        : String(rowAtual?.categoria || '');
+    const categoriaFoiInformada = data.categoria_id !== undefined || data.categoria !== undefined;
+    const categoriaCanonica = categoriaFoiInformada
+      ? await resolveCategoriaCanonica(db, empresaId, data.categoria_id, data.categoria)
+      : null;
+    if (categoriaFoiInformada && !categoriaCanonica) {
+      return c.json({ success: false, error: 'Categoria canônica não encontrada ou inativa' }, 404);
+    }
+    const categoriaFinal = categoriaCanonica?.nome ?? String(rowAtual?.categoria || '');
     let formatoCodigoFinal = rowAtual?.formato_codigo ?? null;
     if (
       columnsSupport.hasFormatoId &&
@@ -1105,9 +1161,13 @@ router.put(
       updateParts.push('codigo = ?');
       binds.push(normalizeTipoCodigo(data.codigo));
     }
-    if (data.categoria) {
+    if (categoriaFoiInformada) {
       updateParts.push('categoria = ?');
-      binds.push(data.categoria.trim());
+      binds.push(categoriaFinal);
+      if (columnsSupport.hasCategoriaId) {
+        updateParts.push('categoria_id = ?');
+        binds.push(categoriaCanonica!.id);
+      }
     }
     if (data.descricao !== undefined) {
       updateParts.push('descricao = ?');
@@ -1135,7 +1195,7 @@ router.put(
       updateParts.push('validade = ?');
       binds.push(data.validade == null ? null : Number(data.validade));
     }
-    if (data.categoria !== undefined || data.validade !== undefined) {
+    if (categoriaFoiInformada || data.validade !== undefined) {
       updateParts.push('tipo = ?');
       binds.push(deriveModeloTipo(validadeFinal, categoriaFinal));
     }
