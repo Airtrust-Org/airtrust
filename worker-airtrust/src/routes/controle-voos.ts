@@ -2,9 +2,8 @@ import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
-import { checkPermission, getEmpresaId } from '../middleware/tenant';
+import { checkPermission } from '../middleware/tenant';
 import type { Env } from '../types';
-import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
 import {
   parseSigvoosRealPreviewRequest,
   runSigvoosRealApiPreview,
@@ -16,101 +15,27 @@ import {
   SigvoosShadowCompareError,
 } from '../services/controle-voos/sigvoos-shadow-compare';
 import { listControleVoosJornadas } from '../services/controle-voos/controle-voos-jornadas';
-
-type FlightStatus =
-  | 'planejado'
-  | 'liberado_operacionalmente'
-  | 'em_andamento'
-  | 'pousado'
-  | 'concluido_operacionalmente'
-  | 'cancelado'
-  | 'alternado_divergido';
-
-type FlightRow = {
-  id: number;
-  empresa_id: number;
-  prefixo: string;
-  data_programacao: string;
-  origem_id: number;
-  destino_id: number;
-  tipo_voo_id: number;
-  natureza_voo_id: number;
-  aeronave_id: number | null;
-  horario_previsto_partida: string;
-  horario_previsto_chegada: string;
-  horario_real_partida: string | null;
-  horario_real_chegada: string | null;
-  status: FlightStatus;
-  observacoes: string | null;
-  cancelado_motivo_id: number | null;
-  alternado_destino_id: number | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type RdvStatus = 'rascunho' | 'preenchimento_finalizado' | 'cancelado';
-
-type RdvRow = {
-  id: number;
-  empresa_id: number;
-  voo_id: number;
-  numero: string;
-  data_voo: string;
-  horario_decolagem_real: string | null;
-  horario_pouso_real: string | null;
-  horas_voadas: number | null;
-  numero_pousos: number | null;
-  ciclos: number | null;
-  combustivel_decolagem: number | null;
-  combustivel_pouso: number | null;
-  combustivel_consumo: number | null;
-  pob: number | null;
-  carga_kg: number | null;
-  ocorrencias: string | null;
-  divergencias: string | null;
-  status: RdvStatus;
-  responsavel_preenchimento_id: number | null;
-  preenchido_em: string | null;
-  finalizado_operacionalmente_por: number | null;
-  finalizado_operacionalmente_em: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type FlightInput = Partial<{
-  prefixo: string;
-  data_programacao: string;
-  origem_id: number;
-  destino_id: number;
-  tipo_voo_id: number;
-  natureza_voo_id: number;
-  aeronave_id: number | null;
-  horario_previsto_partida: string;
-  horario_previsto_chegada: string;
-  horario_real_partida: string | null;
-  horario_real_chegada: string | null;
-  status: FlightStatus;
-  observacoes: string | null;
-  cancelado_motivo_id: number | null;
-  alternado_destino_id: number | null;
-}>;
-
-type RdvInput = Partial<{
-  numero: string;
-  data_voo: string;
-  horario_decolagem_real: string | null;
-  horario_pouso_real: string | null;
-  horas_voadas: number | null;
-  numero_pousos: number | null;
-  ciclos: number | null;
-  combustivel_decolagem: number | null;
-  combustivel_pouso: number | null;
-  combustivel_consumo: number | null;
-  pob: number | null;
-  carga_kg: number | null;
-  ocorrencias: string | null;
-  divergencias: string | null;
-}>;
+import {
+  type FlightStatus,
+  type FlightRow,
+  type RdvStatus,
+  type RdvRow,
+  type FlightInput,
+  type RdvInput,
+  FLIGHT_SELECT,
+  RDV_SELECT,
+  allowedRdvFields,
+  getEmpresaIdSafe,
+  getActorId,
+  getFlightOrThrow,
+  getActiveRdvByFlight,
+  getRdvOrThrow,
+  buildMergedRdv,
+  recordFlightEvent,
+  maybeRecordSystemAudit,
+  getFuncionarioIdForUser,
+} from '../repositories/controle-voos/rdv-repository';
+import { RDV_CAPABILITIES, assertRdvSelfScope } from '../services/controle-voos/rdv-workflow';
 
 type OperationalReadFilters = {
   dataInicio: string;
@@ -139,26 +64,6 @@ type SigvoosRefreshPreviewCounts = {
 };
 
 const controleVoos = new Hono<{ Bindings: Env }>();
-
-const FLIGHT_SELECT = `
-  id, empresa_id, prefixo, data_programacao, origem_id, destino_id,
-  tipo_voo_id, natureza_voo_id, aeronave_id,
-  horario_previsto_partida, horario_previsto_chegada,
-  horario_real_partida, horario_real_chegada,
-  status, observacoes, cancelado_motivo_id, alternado_destino_id,
-  created_at, updated_at
-`;
-
-const RDV_SELECT = `
-  id, empresa_id, voo_id, numero, data_voo,
-  horario_decolagem_real, horario_pouso_real,
-  horas_voadas, numero_pousos, ciclos,
-  combustivel_decolagem, combustivel_pouso, combustivel_consumo,
-  pob, carga_kg, ocorrencias, divergencias,
-  status, responsavel_preenchimento_id, preenchido_em,
-  finalizado_operacionalmente_por, finalizado_operacionalmente_em,
-  created_at, updated_at
-`;
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
@@ -200,23 +105,6 @@ const blockedFields = new Set([
   'created_by',
   'updated_by',
   'usuario_id',
-]);
-
-const allowedRdvFields = new Set([
-  'numero',
-  'data_voo',
-  'horario_decolagem_real',
-  'horario_pouso_real',
-  'horas_voadas',
-  'numero_pousos',
-  'ciclos',
-  'combustivel_decolagem',
-  'combustivel_pouso',
-  'combustivel_consumo',
-  'pob',
-  'carga_kg',
-  'ocorrencias',
-  'divergencias',
 ]);
 
 const blockedScopePatterns = [
@@ -265,22 +153,6 @@ const catalogos: Record<string, CatalogConfig> = {
     orderBy: 'tipo ASC, ordem ASC, nome ASC',
   },
 };
-
-function getEmpresaIdSafe(c: Context<{ Bindings: Env }>): number {
-  try {
-    return getEmpresaId(c);
-  } catch {
-    const raw = (c.get as (key: string) => unknown)('empresaId');
-    const parsed = typeof raw === 'string' ? Number(raw) : Number(raw || 0);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-}
-
-function getActorId(c: Context<{ Bindings: Env }>): string | number | null {
-  const raw = (c.get as (key: string) => unknown)('userId');
-  if (typeof raw === 'string' || typeof raw === 'number') return raw;
-  return null;
-}
 
 function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
@@ -366,7 +238,11 @@ function isIsoLikeDateTime(value: string): boolean {
   return Number.isFinite(Date.parse(value));
 }
 
-function assertTimeOrder(start: string | null | undefined, end: string | null | undefined, code: string) {
+function assertTimeOrder(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  code: string,
+) {
   if (!start || !end) return;
   if (!isIsoLikeDateTime(start) || !isIsoLikeDateTime(end)) {
     throw new ApiError('Horario invalido', 400, 'CONTROLE_VOOS_INVALID_TIME');
@@ -421,7 +297,9 @@ async function parseJsonPayload(c: Context<{ Bindings: Env }>): Promise<Record<s
   }
 }
 
-async function parseOptionalJsonPayload(c: Context<{ Bindings: Env }>): Promise<Record<string, unknown>> {
+async function parseOptionalJsonPayload(
+  c: Context<{ Bindings: Env }>,
+): Promise<Record<string, unknown>> {
   const contentType = c.req.header('content-type') || '';
   const length = c.req.header('content-length');
   if (!contentType.includes('application/json') && (!length || Number(length) === 0)) {
@@ -438,7 +316,12 @@ async function parseOptionalJsonPayload(c: Context<{ Bindings: Env }>): Promise<
 }
 
 function assertNoTenantOverride(payload: Record<string, unknown>): void {
-  if ('empresaId' in payload || 'empresa_id' in payload || 'tenantId' in payload || 'tenant_id' in payload) {
+  if (
+    'empresaId' in payload ||
+    'empresa_id' in payload ||
+    'tenantId' in payload ||
+    'tenant_id' in payload
+  ) {
     throw new ApiError(
       'Tenant arbitrario nao permitido neste gatilho',
       400,
@@ -447,7 +330,11 @@ function assertNoTenantOverride(payload: Record<string, unknown>): void {
   }
 }
 
-function parseDateOnlyParam(value: string | null | undefined, field: string, required = false): string | null {
+function parseDateOnlyParam(
+  value: string | null | undefined,
+  field: string,
+  required = false,
+): string | null {
   const normalized = normalizeString(value, field, required);
   if (normalized === null) return null;
   if (!isIsoDateOnly(normalized)) {
@@ -472,11 +359,7 @@ function parseOperationalReadFilters(
     dataFim = exactDate;
   } else if (options?.requireRange) {
     if (!dataInicio || !dataFim) {
-      throw new ApiError(
-        'Periodo obrigatorio',
-        400,
-        'CONTROLE_VOOS_INVALID_PERIOD',
-      );
+      throw new ApiError('Periodo obrigatorio', 400, 'CONTROLE_VOOS_INVALID_PERIOD');
     }
   } else if (!dataInicio && !dataFim) {
     const today = new Date().toISOString().slice(0, 10);
@@ -534,7 +417,10 @@ function buildFlightScope(alias: string, empresaId: number, filters: Operational
   return { where: clauses.join(' AND '), values };
 }
 
-function normalizeFlightInput(payload: Record<string, unknown>, requireBaseFields: boolean): FlightInput {
+function normalizeFlightInput(
+  payload: Record<string, unknown>,
+  requireBaseFields: boolean,
+): FlightInput {
   const input: FlightInput = {};
 
   if (payload.prefixo !== undefined || requireBaseFields) {
@@ -561,19 +447,31 @@ function normalizeFlightInput(payload: Record<string, unknown>, requireBaseField
   }
   if (payload.horario_previsto_partida !== undefined || requireBaseFields) {
     input.horario_previsto_partida =
-      normalizeString(payload.horario_previsto_partida, 'horario_previsto_partida', requireBaseFields) ||
-      undefined;
+      normalizeString(
+        payload.horario_previsto_partida,
+        'horario_previsto_partida',
+        requireBaseFields,
+      ) || undefined;
   }
   if (payload.horario_previsto_chegada !== undefined || requireBaseFields) {
     input.horario_previsto_chegada =
-      normalizeString(payload.horario_previsto_chegada, 'horario_previsto_chegada', requireBaseFields) ||
-      undefined;
+      normalizeString(
+        payload.horario_previsto_chegada,
+        'horario_previsto_chegada',
+        requireBaseFields,
+      ) || undefined;
   }
   if (payload.horario_real_partida !== undefined) {
-    input.horario_real_partida = normalizeString(payload.horario_real_partida, 'horario_real_partida');
+    input.horario_real_partida = normalizeString(
+      payload.horario_real_partida,
+      'horario_real_partida',
+    );
   }
   if (payload.horario_real_chegada !== undefined) {
-    input.horario_real_chegada = normalizeString(payload.horario_real_chegada, 'horario_real_chegada');
+    input.horario_real_chegada = normalizeString(
+      payload.horario_real_chegada,
+      'horario_real_chegada',
+    );
   }
   if (payload.status !== undefined) {
     input.status = normalizeStatus(payload.status);
@@ -721,7 +619,11 @@ function assertRdvRules(input: {
 function assertStatusTransition(from: FlightStatus, to: FlightStatus): void {
   if (from === to) return;
   if (!statusTransitions[from].includes(to)) {
-    throw new ApiError('Transicao de status nao permitida', 409, 'CONTROLE_VOOS_INVALID_TRANSITION');
+    throw new ApiError(
+      'Transicao de status nao permitida',
+      409,
+      'CONTROLE_VOOS_INVALID_TRANSITION',
+    );
   }
 }
 
@@ -813,70 +715,6 @@ function assertCancellationReason(input: Pick<FlightInput, 'status' | 'cancelado
   }
 }
 
-async function getFlightOrThrow(db: D1Database, id: string, empresaId: number): Promise<FlightRow> {
-  const row = await db
-    .prepare(
-      `
-      SELECT ${FLIGHT_SELECT}
-      FROM cv_voos
-      WHERE id = ?
-        AND empresa_id = ?
-        AND deleted_at IS NULL
-      LIMIT 1
-    `,
-    )
-    .bind(id, empresaId)
-    .first<FlightRow>();
-
-  if (!row) {
-    throw new ApiError('Voo nao encontrado', 404, 'CONTROLE_VOOS_NOT_FOUND');
-  }
-  return row;
-}
-
-async function getActiveRdvByFlight(
-  db: D1Database,
-  vooId: number | string,
-  empresaId: number,
-): Promise<RdvRow | null> {
-  return db
-    .prepare(
-      `
-      SELECT ${RDV_SELECT}
-      FROM cv_rdv_operacional
-      WHERE voo_id = ?
-        AND empresa_id = ?
-        AND deleted_at IS NULL
-        AND status <> 'cancelado'
-      ORDER BY id DESC
-      LIMIT 1
-    `,
-    )
-    .bind(vooId, empresaId)
-    .first<RdvRow>();
-}
-
-async function getRdvOrThrow(db: D1Database, id: number | string, empresaId: number): Promise<RdvRow> {
-  const row = await db
-    .prepare(
-      `
-      SELECT ${RDV_SELECT}
-      FROM cv_rdv_operacional
-      WHERE id = ?
-        AND empresa_id = ?
-        AND deleted_at IS NULL
-      LIMIT 1
-    `,
-    )
-    .bind(id, empresaId)
-    .first<RdvRow>();
-
-  if (!row) {
-    throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
-  }
-  return row;
-}
-
 function buildMergedFlight(existing: FlightRow, input: FlightInput): FlightInput {
   return {
     prefixo: input.prefixo ?? existing.prefixo,
@@ -886,10 +724,8 @@ function buildMergedFlight(existing: FlightRow, input: FlightInput): FlightInput
     tipo_voo_id: input.tipo_voo_id ?? existing.tipo_voo_id,
     natureza_voo_id: input.natureza_voo_id ?? existing.natureza_voo_id,
     aeronave_id: input.aeronave_id !== undefined ? input.aeronave_id : existing.aeronave_id,
-    horario_previsto_partida:
-      input.horario_previsto_partida ?? existing.horario_previsto_partida,
-    horario_previsto_chegada:
-      input.horario_previsto_chegada ?? existing.horario_previsto_chegada,
+    horario_previsto_partida: input.horario_previsto_partida ?? existing.horario_previsto_partida,
+    horario_previsto_chegada: input.horario_previsto_chegada ?? existing.horario_previsto_chegada,
     horario_real_partida:
       input.horario_real_partida !== undefined
         ? input.horario_real_partida
@@ -911,98 +747,6 @@ function buildMergedFlight(existing: FlightRow, input: FlightInput): FlightInput
   };
 }
 
-function buildMergedRdv(existing: RdvRow, input: RdvInput): RdvInput {
-  return {
-    numero: input.numero ?? existing.numero,
-    data_voo: input.data_voo ?? existing.data_voo,
-    horario_decolagem_real:
-      input.horario_decolagem_real !== undefined
-        ? input.horario_decolagem_real
-        : existing.horario_decolagem_real,
-    horario_pouso_real:
-      input.horario_pouso_real !== undefined
-        ? input.horario_pouso_real
-        : existing.horario_pouso_real,
-    horas_voadas: input.horas_voadas !== undefined ? input.horas_voadas : existing.horas_voadas,
-    numero_pousos:
-      input.numero_pousos !== undefined ? input.numero_pousos : existing.numero_pousos,
-    ciclos: input.ciclos !== undefined ? input.ciclos : existing.ciclos,
-    combustivel_decolagem:
-      input.combustivel_decolagem !== undefined
-        ? input.combustivel_decolagem
-        : existing.combustivel_decolagem,
-    combustivel_pouso:
-      input.combustivel_pouso !== undefined
-        ? input.combustivel_pouso
-        : existing.combustivel_pouso,
-    combustivel_consumo:
-      input.combustivel_consumo !== undefined
-        ? input.combustivel_consumo
-        : existing.combustivel_consumo,
-    pob: input.pob !== undefined ? input.pob : existing.pob,
-    carga_kg: input.carga_kg !== undefined ? input.carga_kg : existing.carga_kg,
-    ocorrencias: input.ocorrencias !== undefined ? input.ocorrencias : existing.ocorrencias,
-    divergencias: input.divergencias !== undefined ? input.divergencias : existing.divergencias,
-  };
-}
-
-async function recordFlightEvent(params: {
-  db: D1Database;
-  empresaId: number;
-  vooId: number;
-  tipoEvento: 'status' | 'horario' | 'tripulacao' | 'rdv' | 'ocorrencia' | 'observacao' | 'sistema';
-  statusAnterior?: FlightStatus | null;
-  statusNovo?: FlightStatus | null;
-  descricao?: string | null;
-  motivoId?: number | null;
-  metadata?: Record<string, unknown>;
-  usuarioId?: number | string | null;
-}) {
-  await params.db
-    .prepare(
-      `
-      INSERT INTO cv_voo_eventos (
-        empresa_id, voo_id, tipo_evento, status_anterior, status_novo,
-        descricao, motivo_id, metadata_json, usuario_id, created_by, updated_by,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `,
-    )
-    .bind(
-      params.empresaId,
-      params.vooId,
-      params.tipoEvento,
-      params.statusAnterior || null,
-      params.statusNovo || null,
-      params.descricao || null,
-      params.motivoId || null,
-      params.metadata ? JSON.stringify(params.metadata) : null,
-      params.usuarioId || null,
-      params.usuarioId || null,
-      params.usuarioId || null,
-    )
-    .run();
-}
-
-async function maybeRecordSystemAudit(
-  c: Context<{ Bindings: Env }>,
-  table: string,
-  action: 'INSERT' | 'UPDATE',
-  recordId: string | number,
-  beforeData: unknown,
-  afterData: unknown,
-) {
-  await registrarAuditoria({
-    db: c.env.DB,
-    tabela: table,
-    acao: action,
-    registro_id: recordId,
-    dados_anteriores: beforeData,
-    dados_novos: afterData,
-    ...extrairUsuarioAuditoria(c),
-  });
-}
-
 function catalogKey(rawName: string): keyof typeof catalogos | null {
   const name = rawName.trim().toLowerCase().replace(/_/g, '-');
   if (name === 'aeroportos') return 'aeroportos';
@@ -1013,7 +757,10 @@ function catalogKey(rawName: string): keyof typeof catalogos | null {
 }
 
 async function queryCount(db: D1Database, sql: string, ...values: unknown[]): Promise<number> {
-  const row = await db.prepare(sql).bind(...values).first<{ total: number }>();
+  const row = await db
+    .prepare(sql)
+    .bind(...values)
+    .first<{ total: number }>();
   return Number(row?.total || 0);
 }
 
@@ -1035,7 +782,11 @@ async function buildSigvoosRefreshPreview(
     importedCrew,
     lastImported,
   ] = await Promise.all([
-    queryCount(db, 'SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = ? AND deleted_at IS NULL', empresaId),
+    queryCount(
+      db,
+      'SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = ? AND deleted_at IS NULL',
+      empresaId,
+    ),
     queryCount(
       db,
       "SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = ? AND import_status = 'PENDING' AND deleted_at IS NULL",
@@ -1099,169 +850,193 @@ async function buildSigvoosRefreshPreview(
   };
 }
 
-controleVoos.post('/sigvoos/sync-preview', auth(), requireControleVoosSigvoosPreview(), async (c) => {
-  const empresaId = getEmpresaIdSafe(c);
-  if (!empresaId) {
-    throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
-  }
+controleVoos.post(
+  '/sigvoos/sync-preview',
+  auth(),
+  requireControleVoosSigvoosPreview(),
+  async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
+    }
 
-  const payload = await parseOptionalJsonPayload(c);
-  assertNoTenantOverride(payload);
+    const payload = await parseOptionalJsonPayload(c);
+    assertNoTenantOverride(payload);
 
-  const enabled = c.env.CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED === 'true';
-  if (!enabled) {
+    const enabled = c.env.CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED === 'true';
+    if (!enabled) {
+      return c.json({
+        success: true,
+        data: {
+          mode: 'preview',
+          enabled: false,
+          tenantScoped: true,
+          writesEnabled: false,
+          realApiCalled: false,
+          provider: 'SIGVOOS',
+          empresaId,
+          status: 'FEATURE_DISABLED',
+          message: 'Preview runtime SIGVOOS desativado por feature flag.',
+          counts: {
+            stagingTotal: 0,
+            stagingPending: 0,
+            stagingProcessed: 0,
+            stagingConflict: 0,
+            openConflicts: 0,
+            importedFlights: 0,
+            importedStages: 0,
+            importedCrew: 0,
+          },
+          lastImportedAt: null,
+        },
+      });
+    }
+
+    const preview = await buildSigvoosRefreshPreview(c.env.DB, empresaId);
+
     return c.json({
       success: true,
       data: {
         mode: 'preview',
-        enabled: false,
+        enabled,
         tenantScoped: true,
         writesEnabled: false,
         realApiCalled: false,
         provider: 'SIGVOOS',
         empresaId,
-        status: 'FEATURE_DISABLED',
-        message: 'Preview runtime SIGVOOS desativado por feature flag.',
-        counts: {
-          stagingTotal: 0,
-          stagingPending: 0,
-          stagingProcessed: 0,
-          stagingConflict: 0,
-          openConflicts: 0,
-          importedFlights: 0,
-          importedStages: 0,
-          importedCrew: 0,
-        },
-        lastImportedAt: null,
+        status: 'READY',
+        message: 'Previa SIGVOOS disponivel sem chamada externa e sem gravacao.',
+        ...preview,
       },
     });
-  }
+  },
+);
 
-  const preview = await buildSigvoosRefreshPreview(c.env.DB, empresaId);
+controleVoos.post(
+  '/sigvoos/real-preview',
+  auth(),
+  requireControleVoosSigvoosPreview(),
+  async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
+    }
 
-  return c.json({
-    success: true,
-    data: {
-      mode: 'preview',
-      enabled,
-      tenantScoped: true,
-      writesEnabled: false,
-      realApiCalled: false,
-      provider: 'SIGVOOS',
-      empresaId,
-      status: 'READY',
-      message: 'Previa SIGVOOS disponivel sem chamada externa e sem gravacao.',
-      ...preview,
-    },
-  });
-});
+    const payload = await parseOptionalJsonPayload(c);
+    assertNoTenantOverride(payload);
 
-controleVoos.post('/sigvoos/real-preview', auth(), requireControleVoosSigvoosPreview(), async (c) => {
-  const empresaId = getEmpresaIdSafe(c);
-  if (!empresaId) {
-    throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
-  }
-
-  const payload = await parseOptionalJsonPayload(c);
-  assertNoTenantOverride(payload);
-
-  const enabled = c.env.CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED === 'true';
-  if (!enabled) {
-    return c.json({
-      success: true,
-      data: {
-        mode: 'real-preview',
-        enabled: false,
-        tenantScoped: true,
-        writesEnabled: false,
-        realApiCalled: false,
-        provider: 'SIGVOOS',
-        empresaId,
-        status: 'FEATURE_DISABLED',
-        message: 'Preview real SIGVOOS desativado por feature flag.',
-        summary: {
-          recordsReceived: 0,
-          candidateFlights: 0,
-          withFlightReportId: 0,
-          withoutFlightReportId: 0,
-          crewWithStaffId: 0,
-          crewWithOnlyInscription: 0,
-          potentialConflictsEstimated: 0,
-          missingFields: {},
-          sensitiveFieldsDetected: [],
-          observedTopLevelFields: [],
-          sampleShape: [],
-          contractErrors: [],
+    const enabled = c.env.CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED === 'true';
+    if (!enabled) {
+      return c.json({
+        success: true,
+        data: {
+          mode: 'real-preview',
+          enabled: false,
+          tenantScoped: true,
+          writesEnabled: false,
+          realApiCalled: false,
+          provider: 'SIGVOOS',
+          empresaId,
+          status: 'FEATURE_DISABLED',
+          message: 'Preview real SIGVOOS desativado por feature flag.',
+          summary: {
+            recordsReceived: 0,
+            candidateFlights: 0,
+            withFlightReportId: 0,
+            withoutFlightReportId: 0,
+            crewWithStaffId: 0,
+            crewWithOnlyInscription: 0,
+            potentialConflictsEstimated: 0,
+            missingFields: {},
+            sensitiveFieldsDetected: [],
+            observedTopLevelFields: [],
+            sampleShape: [],
+            contractErrors: [],
+          },
         },
-      },
-    });
-  }
-
-  try {
-    const request = parseSigvoosRealPreviewRequest(payload);
-    const preview = await runSigvoosRealApiPreview(c.env.DB, empresaId, c.env, request);
-    return c.json({ success: true, data: preview });
-  } catch (error) {
-    const safePreviewError = error as { name?: string; code?: unknown; status?: unknown };
-    if (
-      error instanceof SigvoosRealPreviewError ||
-      (safePreviewError.name === 'SigvoosRealPreviewError' && typeof safePreviewError.code === 'string')
-    ) {
-      const status = typeof safePreviewError.status === 'number' ? safePreviewError.status : 502;
-      throw new ApiError('Preview real SIGVOOS indisponivel', status, String(safePreviewError.code));
+      });
     }
-    throw new ApiError(
-      'Preview real SIGVOOS indisponivel',
-      502,
-      'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_FAILED',
-    );
-  }
-});
 
-controleVoos.get('/sigvoos/shadow-compare', auth(), requireControleVoosSigvoosPreview(), async (c) => {
-  const empresaId = getEmpresaIdSafe(c);
-  if (!empresaId) {
-    throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
-  }
-
-  if (c.env.ENVIRONMENT !== 'staging' && c.env.ENVIRONMENT !== 'production') {
-    throw new ApiError(
-      'Shadow compare SIGVOOS indisponivel',
-      404,
-      'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_STAGING_ONLY',
-    );
-  }
-
-  const enabled = c.env.CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED === 'true';
-  if (!enabled) {
-    throw new ApiError('Shadow compare SIGVOOS indisponivel', 404, 'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_DISABLED');
-  }
-
-  try {
-    const window = parseSigvoosShadowCompareWindow({
-      from: c.req.query('from'),
-      to: c.req.query('to'),
-    });
-    const rawRole = (c.get as (key: string) => unknown)('userRole');
-    const role = typeof rawRole === 'string' ? rawRole : null;
-    const report = await buildSigvoosShadowCompareReport(c.env.DB, empresaId, window, { role });
-    return c.json({ success: true, data: report });
-  } catch (error) {
-    const safeError = error as { name?: string; code?: unknown; status?: unknown };
-    if (
-      error instanceof SigvoosShadowCompareError ||
-      (safeError.name === 'SigvoosShadowCompareError' && typeof safeError.code === 'string')
-    ) {
-      const status = typeof safeError.status === 'number' ? safeError.status : 400;
-      throw new ApiError('Shadow compare SIGVOOS indisponivel', status, String(safeError.code));
+    try {
+      const request = parseSigvoosRealPreviewRequest(payload);
+      const preview = await runSigvoosRealApiPreview(c.env.DB, empresaId, c.env, request);
+      return c.json({ success: true, data: preview });
+    } catch (error) {
+      const safePreviewError = error as { name?: string; code?: unknown; status?: unknown };
+      if (
+        error instanceof SigvoosRealPreviewError ||
+        (safePreviewError.name === 'SigvoosRealPreviewError' &&
+          typeof safePreviewError.code === 'string')
+      ) {
+        const status = typeof safePreviewError.status === 'number' ? safePreviewError.status : 502;
+        throw new ApiError(
+          'Preview real SIGVOOS indisponivel',
+          status,
+          String(safePreviewError.code),
+        );
+      }
+      throw new ApiError(
+        'Preview real SIGVOOS indisponivel',
+        502,
+        'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_FAILED',
+      );
     }
-    throw new ApiError(
-      'Shadow compare SIGVOOS indisponivel',
-      502,
-      'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_FAILED',
-    );
-  }
-});
+  },
+);
+
+controleVoos.get(
+  '/sigvoos/shadow-compare',
+  auth(),
+  requireControleVoosSigvoosPreview(),
+  async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
+    }
+
+    if (c.env.ENVIRONMENT !== 'staging' && c.env.ENVIRONMENT !== 'production') {
+      throw new ApiError(
+        'Shadow compare SIGVOOS indisponivel',
+        404,
+        'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_STAGING_ONLY',
+      );
+    }
+
+    const enabled = c.env.CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED === 'true';
+    if (!enabled) {
+      throw new ApiError(
+        'Shadow compare SIGVOOS indisponivel',
+        404,
+        'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_DISABLED',
+      );
+    }
+
+    try {
+      const window = parseSigvoosShadowCompareWindow({
+        from: c.req.query('from'),
+        to: c.req.query('to'),
+      });
+      const rawRole = (c.get as (key: string) => unknown)('userRole');
+      const role = typeof rawRole === 'string' ? rawRole : null;
+      const report = await buildSigvoosShadowCompareReport(c.env.DB, empresaId, window, { role });
+      return c.json({ success: true, data: report });
+    } catch (error) {
+      const safeError = error as { name?: string; code?: unknown; status?: unknown };
+      if (
+        error instanceof SigvoosShadowCompareError ||
+        (safeError.name === 'SigvoosShadowCompareError' && typeof safeError.code === 'string')
+      ) {
+        const status = typeof safeError.status === 'number' ? safeError.status : 400;
+        throw new ApiError('Shadow compare SIGVOOS indisponivel', status, String(safeError.code));
+      }
+      throw new ApiError(
+        'Shadow compare SIGVOOS indisponivel',
+        502,
+        'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_FAILED',
+      );
+    }
+  },
+);
 
 controleVoos.get('/jornadas', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
@@ -1288,7 +1063,8 @@ controleVoos.get('/jornadas', auth(), async (c) => {
 controleVoos.get('/voos', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const page = Math.max(parseInt(c.req.query('page') || '1', 10) || 1, 1);
-  const requestedLimit = parseInt(c.req.query('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT;
+  const requestedLimit =
+    parseInt(c.req.query('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT;
   const limit = Math.min(Math.max(requestedLimit, 1), MAX_LIMIT);
   const offset = (page - 1) * limit;
   const filters = ['empresa_id = ?', 'deleted_at IS NULL'];
@@ -1478,7 +1254,12 @@ controleVoos.post('/voos/:id/status', auth(), requireControleVoosWrite(), async 
   const id = c.req.param('id');
   const existing = await getFlightOrThrow(c.env.DB, id, empresaId);
   const payload = await parseJsonPayload(c);
-  const allowedStatusPayloadFields = new Set(['status', 'motivo_id', 'cancelado_motivo_id', 'descricao']);
+  const allowedStatusPayloadFields = new Set([
+    'status',
+    'motivo_id',
+    'cancelado_motivo_id',
+    'descricao',
+  ]);
   assertPayloadFields(payload, allowedStatusPayloadFields);
 
   const status = normalizeStatus(payload.status);
@@ -1549,15 +1330,27 @@ controleVoos.get('/voos/:id/rdv', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const vooId = c.req.param('id');
   const flight = await getFlightOrThrow(c.env.DB, vooId, empresaId);
+  await assertRdvSelfScope(c, c.env.DB, empresaId, flight.id, RDV_CAPABILITIES.visualizarProprio);
   const rdv = await getActiveRdvByFlight(c.env.DB, flight.id, empresaId);
   return c.json({ success: true, data: rdv });
 });
 
-controleVoos.put('/voos/:id/rdv', auth(), requireControleVoosWrite(), async (c) => {
+// Escrita do rascunho exige capability real: Coordenação com
+// `visualizar_todos` (via assertRdvSelfScope) OU piloto com
+// `editar_rascunho_proprio` + vínculo de tripulação. O role genérico
+// `editor`/`student` sozinho nunca libera a escrita.
+controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const userId = Number(getActorId(c));
   const vooId = c.req.param('id');
   const flight = await getFlightOrThrow(c.env.DB, vooId, empresaId);
+  await assertRdvSelfScope(
+    c,
+    c.env.DB,
+    empresaId,
+    flight.id,
+    RDV_CAPABILITIES.editarRascunhoProprio,
+  );
   const payload = await parseJsonPayload(c);
   assertPayloadFields(payload, allowedRdvFields);
   const existing = await getActiveRdvByFlight(c.env.DB, flight.id, empresaId);
@@ -1571,9 +1364,8 @@ controleVoos.put('/voos/:id/rdv', auth(), requireControleVoosWrite(), async (c) 
   }
 
   if (!existing) {
-    const createResult = await c.env.DB
-      .prepare(
-        `
+    const createResult = await c.env.DB.prepare(
+      `
         INSERT INTO cv_rdv_operacional (
           empresa_id, voo_id, numero, data_voo,
           horario_decolagem_real, horario_pouso_real,
@@ -1588,7 +1380,7 @@ controleVoos.put('/voos/:id/rdv', auth(), requireControleVoosWrite(), async (c) 
           ?, ?, datetime('now'), datetime('now')
         )
       `,
-      )
+    )
       .bind(
         empresaId,
         flight.id,
@@ -1678,11 +1470,20 @@ controleVoos.put('/voos/:id/rdv', auth(), requireControleVoosWrite(), async (c) 
   return c.json({ success: true, data: updated });
 });
 
-controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), requireControleVoosWrite(), async (c) => {
+controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const userId = Number(getActorId(c));
   const vooId = c.req.param('id');
   const flight = await getFlightOrThrow(c.env.DB, vooId, empresaId);
+  // Confirmação do comandante: exige capability própria + vínculo de
+  // tripulação (ou Coordenação com visualizar_todos). Não usa bypass por role.
+  await assertRdvSelfScope(
+    c,
+    c.env.DB,
+    empresaId,
+    flight.id,
+    RDV_CAPABILITIES.editarRascunhoProprio,
+  );
   const existing = await getActiveRdvByFlight(c.env.DB, flight.id, empresaId);
 
   if (!existing) {
@@ -1727,12 +1528,30 @@ controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), requireContro
     'cv_rdv_operacional',
     'UPDATE',
     existing.id,
-    { status: existing.status, finalizado_operacionalmente_em: existing.finalizado_operacionalmente_em },
+    {
+      status: existing.status,
+      finalizado_operacionalmente_em: existing.finalizado_operacionalmente_em,
+    },
     {
       status: 'preenchimento_finalizado',
       finalizado_operacionalmente_por: userId,
     },
   );
+
+  // Confirmação/aprovação do comandante: o piloto que finaliza o
+  // preenchimento operacional está confirmando os dados como responsável
+  // pelo voo. Registrado como um evento de aprovação distinto (tipo
+  // COMANDANTE) — auditável (usuário, funcionário, versão, data,
+  // observação, status) e explicitamente NÃO chamado de assinatura digital.
+  const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
+  await c.env.DB.prepare(
+    `
+      INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, funcionario_id, created_at)
+      VALUES (?, ?, ?, 'COMANDANTE', 'APROVADO', ?, ?, datetime('now'))
+    `,
+  )
+    .bind(empresaId, existing.id, existing.versao, userId, funcionarioId)
+    .run();
 
   const updated = await getRdvOrThrow(c.env.DB, existing.id, empresaId);
   return c.json({ success: true, data: updated });
@@ -1743,9 +1562,8 @@ controleVoos.get('/dashboard', auth(), async (c) => {
   const filters = parseOperationalReadFilters(c);
   const scope = buildFlightScope('v', empresaId, filters);
 
-  const totalsRow = await c.env.DB
-    .prepare(
-      `
+  const totalsRow = await c.env.DB.prepare(
+    `
       SELECT
         COUNT(*) AS total_voos,
         SUM(CASE WHEN v.status = 'planejado' THEN 1 ELSE 0 END) AS voos_planejados,
@@ -1785,20 +1603,19 @@ controleVoos.get('/dashboard', auth(), async (c) => {
        AND r.status <> 'cancelado'
       WHERE ${scope.where}
     `,
-    )
+  )
     .bind(...scope.values)
     .first<Record<string, number | null>>();
 
-  const { results: nextFlights } = await c.env.DB
-    .prepare(
-      `
+  const { results: nextFlights } = await c.env.DB.prepare(
+    `
       SELECT ${FLIGHT_SELECT}
       FROM cv_voos v
       WHERE ${scope.where}
       ORDER BY v.data_programacao ASC, v.horario_previsto_partida ASC, v.id ASC
       LIMIT 10
     `,
-    )
+  )
     .bind(...scope.values)
     .all<FlightRow>();
 
@@ -1856,9 +1673,8 @@ controleVoos.get('/relatorios/resumo-operacional', auth(), async (c) => {
   const filters = parseOperationalReadFilters(c, { requireRange: true });
   const scope = buildFlightScope('v', empresaId, filters);
 
-  const overallRow = await c.env.DB
-    .prepare(
-      `
+  const overallRow = await c.env.DB.prepare(
+    `
       SELECT
         COUNT(*) AS total_voos,
         SUM(CASE WHEN v.status = 'planejado' THEN 1 ELSE 0 END) AS planejado,
@@ -1905,13 +1721,12 @@ controleVoos.get('/relatorios/resumo-operacional', auth(), async (c) => {
        AND r.status <> 'cancelado'
       WHERE ${scope.where}
     `,
-    )
+  )
     .bind(...scope.values)
     .first<Record<string, number | null>>();
 
-  const { results: perDay } = await c.env.DB
-    .prepare(
-      `
+  const { results: perDay } = await c.env.DB.prepare(
+    `
       SELECT
         v.data_programacao AS data,
         COUNT(*) AS total_voos,
@@ -1961,13 +1776,12 @@ controleVoos.get('/relatorios/resumo-operacional', auth(), async (c) => {
       GROUP BY v.data_programacao
       ORDER BY v.data_programacao ASC
     `,
-    )
+  )
     .bind(...scope.values)
     .all<Record<string, number | string | null>>();
 
-  const { results: cancelamentos } = await c.env.DB
-    .prepare(
-      `
+  const { results: cancelamentos } = await c.env.DB.prepare(
+    `
       SELECT
         m.id AS motivo_id,
         m.nome AS motivo_nome,
@@ -1982,7 +1796,7 @@ controleVoos.get('/relatorios/resumo-operacional', auth(), async (c) => {
       GROUP BY m.id, m.nome
       ORDER BY total DESC, motivo_nome ASC
     `,
-    )
+  )
     .bind(...scope.values)
     .all<{ motivo_id: number | null; motivo_nome: string | null; total: number }>();
 

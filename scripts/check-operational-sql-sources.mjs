@@ -51,6 +51,7 @@ function getChangedFiles() {
 const violations = [];
 
 for (const file of getChangedFiles()) {
+  if (!fs.existsSync(file)) continue; // ignore deletions still listed in `git status`
   const content = fs.readFileSync(file, 'utf8');
   if (!DML_RE.test(content)) continue;
 
