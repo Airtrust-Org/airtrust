@@ -25,6 +25,33 @@ export type ResultadoGeracaoQualificacao = {
   qualificacoes_geradas: QualificacaoGerada[];
 };
 
+function normalizeTipoCurricular(value?: string | null): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * G1-SEM is a curricular completion, not a side effect of a six-month FAP.
+ * Keep this intentionally strict: an unresolved curricular type must fail closed.
+ */
+export function isTipoCurricularSemestral(
+  codigo?: string | null,
+  nome?: string | null,
+): boolean {
+  const normalizedCodigo = normalizeTipoCurricular(codigo);
+  const normalizedNome = normalizeTipoCurricular(nome);
+  if (normalizedCodigo) {
+    return normalizedCodigo === 'SEM' || normalizedCodigo === 'SEMESTRAL';
+  }
+  return (
+    normalizedNome === 'SEM' ||
+    normalizedNome === 'SEMESTRAL'
+  );
+}
+
 export function getQualificacaoGeracaoErrorStatus(message: string): number | null {
   if (message === 'Não encontrada') return 404;
   if (
@@ -53,21 +80,38 @@ export async function gerarQualificacaoDaFicha(
               ms.qualificacao_tipo_id as modelo_qualificacao_tipo_id,
               qt.codigo as modelo_qualificacao_codigo,
               qt.nome as modelo_qualificacao_nome,
-              qt.validade as modelo_qualificacao_validade
+              qt.validade as modelo_qualificacao_validade,
+              ts.codigo as tipo_curricular_codigo,
+              ts.nome as tipo_curricular_nome
        FROM fichas_sessao f
-       LEFT JOIN funcionarios aluno ON f.colaborador_id_aluno = aluno.id
-       LEFT JOIN simulador_agendamentos sa ON sa.id = f.agendamento_slot_id AND sa.deleted_at IS NULL
+       LEFT JOIN funcionarios aluno
+         ON f.colaborador_id_aluno = aluno.id
+        AND aluno.empresa_id = f.empresa_id
+       LEFT JOIN simulador_agendamentos sa
+         ON sa.id = f.agendamento_slot_id
+        AND sa.empresa_id = f.empresa_id
+        AND sa.deleted_at IS NULL
        LEFT JOIN simulador_atribuicoes_curriculares sac
          ON sac.id = f.atribuicao_curricular_id
+        AND sac.empresa_id = f.empresa_id
         AND sac.deleted_at IS NULL
        LEFT JOIN modelos_sessao ms ON (
          (sac.modelo_sessao_id IS NOT NULL AND ms.id = sac.modelo_sessao_id)
          OR (sac.modelo_sessao_id IS NULL AND f.template_id IS NOT NULL AND ms.id = f.template_id)
          OR (sac.modelo_sessao_id IS NULL AND f.template_id IS NULL AND sa.template_id IS NOT NULL AND ms.id = sa.template_id)
          OR (sac.modelo_sessao_id IS NULL AND f.template_id IS NULL AND sa.template_id IS NULL AND ms.codigo = f.tipo_sessao)
-       ) AND ms.deleted_at IS NULL
-       LEFT JOIN qualificacoes_tipos qt ON qt.id = ms.qualificacao_tipo_id AND qt.deleted_at IS NULL
-       WHERE f.id = ? AND f.deleted_at IS NULL`,
+       )
+        AND ms.empresa_id = f.empresa_id
+        AND ms.deleted_at IS NULL
+       LEFT JOIN tipos_sessao ts
+         ON ts.id = ms.tipo_sessao_id
+        AND ts.empresa_id = ms.empresa_id
+        AND ts.deleted_at IS NULL
+       LEFT JOIN qualificacoes_tipos qt
+         ON qt.id = ms.qualificacao_tipo_id
+        AND qt.empresa_id = f.empresa_id
+        AND qt.deleted_at IS NULL
+       WHERE f.id = ? AND f.empresa_id IS NOT NULL AND f.deleted_at IS NULL`,
     )
     .bind(fid)
     .first<any>();
@@ -149,8 +193,13 @@ export async function gerarQualificacaoDaFicha(
                 qt.nome as qt_nome,
                 qt.validade as qt_validade
          FROM sessoes_checks sc
+         INNER JOIN simulador_agendamentos sa_check
+           ON sa_check.id = sc.sessao_id
+          AND sa_check.empresa_id = ?
+          AND sa_check.deleted_at IS NULL
          INNER JOIN qualificacoes_tipos qt
            ON qt.id = sc.qualificacao_tipo_id
+          AND qt.empresa_id = ?
           AND qt.deleted_at IS NULL
          WHERE sc.sessao_id = ? AND sc.deleted_at IS NULL
            AND sc.qualificacao_tipo_id IS NOT NULL
@@ -187,7 +236,7 @@ export async function gerarQualificacaoDaFicha(
                )
            )`,
       )
-      .bind(f.agendamento_slot_id, f.colaborador_id_aluno)
+      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, f.colaborador_id_aluno)
       .all();
 
     for (const check of (checksMarcados.results || []) as any[]) {
@@ -234,9 +283,23 @@ export async function gerarQualificacaoDaFicha(
     }
   }
 
-  // Quando a sessão inclui um check semestral (validade 6 meses, ex: FAP06),
-  // registra um G1-SEM concluído na data da própria sessão, com validade de 6 meses.
-  if (fichaTemCheckSemestral && f.colaborador_id_aluno) {
+  const tipoCurricularResolvido = isTipoCurricularSemestral(
+    f.tipo_curricular_codigo,
+    f.tipo_curricular_nome,
+  );
+  const tipoCurricularAusente = !normalizeTipoCurricular(f.tipo_curricular_codigo) &&
+    !normalizeTipoCurricular(f.tipo_curricular_nome);
+
+  if (fichaTemCheckSemestral && tipoCurricularAusente) {
+    console.warn(
+      `[gerarQualificacaoDaFicha] G1-SEM ignorada: tipo curricular não resolvido (ficha=${fid}, empresa=${String(f.empresa_id || '')}, modelo=${String(f.modelo_id || '')})`,
+    );
+  }
+
+  // A conclusão de G1-SEM exige os dois fatos independentes: check semestral
+  // aprovado e tipo curricular canônico SEM/SEMESTRAL. Uma FAP de seis meses
+  // dentro de uma ficha PER nunca conclui o currículo semestral.
+  if (fichaTemCheckSemestral && tipoCurricularResolvido && f.colaborador_id_aluno) {
     try {
       const g1semResult = await realizarG1SemPendente(db, {
         funcionarioId: Number(f.colaborador_id_aluno),
