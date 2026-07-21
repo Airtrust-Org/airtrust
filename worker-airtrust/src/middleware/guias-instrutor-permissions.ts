@@ -93,7 +93,7 @@ async function resolveActiveVinculoRole(
 }
 
 export async function hasGuiaInstrutorCapability(
-  c: Context<any>,
+  c: Context,
   capability: GuiaInstrutorCapability,
 ): Promise<boolean> {
   if (isDevAuthBypassEnabled(c.env)) return true;
@@ -124,7 +124,7 @@ export async function hasGuiaInstrutorCapability(
  * lógica de `hasGuiaInstrutorCapability` usada pelos guards reais.
  */
 export async function resolveGuiaInstrutorPermissions(
-  c: Context<any>,
+  c: Context,
 ): Promise<{ podeVisualizar: boolean; podeGerenciar: boolean; isPlatformAdmin: boolean }> {
   const isPlatformAdmin = isDevAuthBypassEnabled(c.env) || isPlatformAdminContext(c);
   const [podeVisualizar, podeGerenciar] = await Promise.all([
