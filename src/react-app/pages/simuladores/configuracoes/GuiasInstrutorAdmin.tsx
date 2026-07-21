@@ -3,8 +3,9 @@
  *
  * Cadastro, publicação de novas versões, vínculo com modelo de sessão,
  * ativação/desativação e consulta de auditoria. Requer
- * simuladores.guias_instrutor.manage no backend (gestor/admin com vínculo
- * ativo na empresa) — o gate de role aqui é só de UX.
+ * `simuladores.guias.gerenciar` no backend (sem default de role — só
+ * Platform Admin/Administrador Master ou GRANT explícito). O frontend usa
+ * `useGuiasInstrutorPermissions()`, nunca texto de role/perfil.
  */
 
 import { useEffect, useState } from 'react';
@@ -14,7 +15,7 @@ import AppLayout from '@/react-app/components/AppLayout';
 import { Breadcrumbs } from '@/react-app/components/shared/Breadcrumbs';
 import { PageHeader } from '@/react-app/components/UI/PageHeader';
 import { Button, Card, EmptyState, Input, Select } from '@/react-app/components/UI';
-import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useGuiasInstrutorPermissions } from '@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions';
 import { useTenantQueryKey } from '@/react-app/lib/useTenantQueryKey';
 import { fetchWithAuth, API_BASE_URL } from '@/react-app/config/api';
 import { useGuiasInstrutor, type GuiaInstrutor } from '@/react-app/lib/guias-instrutor/api';
@@ -365,7 +366,7 @@ function LinhaGuia({ guia, onMudou }: { guia: GuiaInstrutor & { id: number }; on
 }
 
 export default function GuiasInstrutorAdmin() {
-  const { role } = usePermissions();
+  const { podeGerenciar, isLoading: permissoesCarregando } = useGuiasInstrutorPermissions();
   const { tenantKey } = useTenantQueryKey();
   const queryClient = useQueryClient();
   const [statusFiltro, setStatusFiltro] = useState('');
@@ -392,7 +393,18 @@ export default function GuiasInstrutorAdmin() {
     refetch();
   }
 
-  if (role !== 'GESTOR' && role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+  if (permissoesCarregando) {
+    return (
+      <AppLayout>
+        <div className="px-4 sm:px-6 py-6 space-y-3">
+          <div className="h-6 w-64 rounded bg-slate-200 dark:bg-slate-800 animate-pulse" />
+          <div className="h-40 rounded-lg bg-slate-100 dark:bg-slate-800/60 animate-pulse" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!podeGerenciar) {
     return (
       <AppLayout>
         <EmptyState

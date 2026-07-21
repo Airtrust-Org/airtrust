@@ -1,10 +1,15 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import TabGestaoWrapper from '../TabGestaoWrapper';
 
 vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'https://api.airtrust.online/api',
   getAccessToken: () => 'token',
+}));
+
+vi.mock('@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions', () => ({
+  useGuiasInstrutorPermissions: () => ({ podeGerenciar: false, podeVisualizar: false, isPlatformAdmin: false, isLoading: false }),
 }));
 
 vi.mock('../../cadastros/simuladores/index', () => ({ default: () => <div>SimuladoresPage</div> }));
@@ -38,7 +43,7 @@ describe('TabGestaoWrapper', () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(responses.shift()));
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<TabGestaoWrapper />);
+    render(<MemoryRouter><TabGestaoWrapper /></MemoryRouter>);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nao como zero real');
     expect(screen.getAllByText('Erro').length).toBeGreaterThan(0);
@@ -60,7 +65,7 @@ describe('TabGestaoWrapper', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<TabGestaoWrapper />);
+    render(<MemoryRouter><TabGestaoWrapper /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
