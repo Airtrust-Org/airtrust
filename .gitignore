@@ -227,17 +227,6 @@ docs/snapshots/
 pilot-cv-n1-*.sql
 pilot-cv-n1-*.dump.sql
 
-# ========== THIRD-PARTY SYSTEM CAPTURE / SCRAPE TOOLING ==========
-# Any local capture/scrape output of external legacy systems (screenshots, HAR,
-# HTML dumps, endpoint inventories) must never enter this public repo.
-*-captura/
-*captura*/screenshots/
-*captura*/har/
-*captura*/html/
-*captura*/auth/
-*.har
-outputs/
-
 # ========== GUIAS DO INSTRUTOR — MATERIAIS OPERACIONAIS (NUNCA VERSIONAR) ==========
 AW139.zip
 SK76.zip
