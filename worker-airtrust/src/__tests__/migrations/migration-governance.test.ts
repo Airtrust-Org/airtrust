@@ -105,6 +105,10 @@ const EXPECTED_NON_STANDARD_FILES = [
   // be a candidate for duplicate-prefix detection, and must never be picked
   // up by any tool that walks migrations by numeric prefix order.
   'rollback_0438_controle_voos_rdv_coordenacao_workflow.sql',
+  // Mesmo padrão para 0439 (guias do instrutor) — renomeado de
+  // '0439_guias_instrutor_simulador_rollback.sql' (sufixo, colidia com a
+  // detecção de prefixo duplicado) para 'rollback_0439_...' (prefixo).
+  'rollback_0439_guias_instrutor_simulador.sql',
 ] as const;
 
 const EXPECTED_CREATE_TEMP_TABLE_FILES = [
@@ -182,7 +186,9 @@ describe('migration governance', () => {
     );
 
     // Ratchet raised 2026-07-20: 0438 controle-voos RDV coordenacao workflow.
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(438);
+    // Ratchet raised 2026-07-21: 0439 guias_instrutor_simulador (renumerado de
+    // 0438 para nao colidir com a migration do RDV, ja mergeada em main).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(439);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 

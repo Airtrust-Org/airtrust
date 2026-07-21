@@ -58,6 +58,18 @@ const DashboardDesempenho = lazyWithRetry(
   () => import('./pages/simuladores/dashboard/DashboardDesempenho'),
   'DashboardDesempenho',
 );
+const GuiasInstrutor = lazyWithRetry(
+  () => import('./pages/instrutor/GuiasInstrutor'),
+  'GuiasInstrutor',
+);
+const GuiaInstrutorViewer = lazyWithRetry(
+  () => import('./pages/instrutor/GuiaInstrutorViewer'),
+  'GuiaInstrutorViewer',
+);
+const GuiasInstrutorAdmin = lazyWithRetry(
+  () => import('./pages/simuladores/configuracoes/GuiasInstrutorAdmin'),
+  'GuiasInstrutorAdmin',
+);
 const FichasSessao = lazyWithRetry(() => import('./pages/simuladores/fichas'), 'FichasSessao');
 const FichasMinhas = lazyWithRetry(
   () => import('./pages/simuladores/fichas/minhas'),
@@ -518,6 +530,30 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <FichasSessao />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/instrutor/guias"
+                      element={
+                        <ProtectedRoute>
+                          <GuiasInstrutor />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/instrutor/guias/:id"
+                      element={
+                        <ProtectedRoute>
+                          <GuiaInstrutorViewer />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/simuladores/configuracoes/guias-instrutor"
+                      element={
+                        <ProtectedRoute requiredPermission="simuladores.view">
+                          <GuiasInstrutorAdmin />
                         </ProtectedRoute>
                       }
                     />

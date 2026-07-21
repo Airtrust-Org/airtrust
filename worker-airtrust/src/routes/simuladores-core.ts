@@ -23,6 +23,7 @@ import fichasExtras from './simuladores-fichas-extras';
 import modelos from './simuladores-modelos';
 import catalogo from './simuladores-catalogo';
 import relatorios from './simuladores-relatorios';
+import guiasInstrutor from './simuladores-guias-instrutor';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -34,6 +35,7 @@ app.route('/', fichasEdicoes);
 app.route('/', fichasExtras);
 app.route('/', modelos);
 app.route('/', catalogo);
+app.route('/', guiasInstrutor);
 app.route('/', equipamentos); // LAST — has /:id wildcard for simuladores CRUD
 
 export default app;
