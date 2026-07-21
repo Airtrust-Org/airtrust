@@ -176,10 +176,14 @@ function createSqliteD1(): SqliteD1 {
         funcionario_id INTEGER,
         deleted_at TEXT
       );
+      -- Schema minimo de 'empresas' espelhando SOMENTE as colunas confirmadas
+      -- no schema real (staging e producao via PRAGMA table_info, ver
+      -- scripts/validation/controle-voos-rdv-empresas-schema-contract.mjs).
+      -- 'nome_fantasia' e definida em migrations/0150 mas nunca existiu de
+      -- fato nas bases reais (o schema real seguiu migrations/0161).
       CREATE TABLE IF NOT EXISTS empresas (
         id INTEGER PRIMARY KEY,
-        razao_social TEXT,
-        nome_fantasia TEXT
+        razao_social TEXT
       );
       CREATE TABLE IF NOT EXISTS aeronaves (
         id INTEGER PRIMARY KEY,
@@ -274,7 +278,7 @@ function seed(databasePath: string) {
       INSERT INTO usuarios (id, funcionario_id, deleted_at) VALUES
         (10, 1001, NULL), (11, NULL, NULL), (12, 1002, NULL), (20, 2001, NULL);
 
-      INSERT INTO empresas (id, razao_social, nome_fantasia) VALUES (1, 'AirTrust Teste Ltda', 'AirTrust Teste');
+      INSERT INTO empresas (id, razao_social) VALUES (1, 'AirTrust Teste Ltda');
 
       INSERT INTO cv_voo_tripulantes (empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by)
       VALUES (1, 601, 1001, 'PIC', 10, 10), (1, 601, 1002, 'SIC', 10, 10);
