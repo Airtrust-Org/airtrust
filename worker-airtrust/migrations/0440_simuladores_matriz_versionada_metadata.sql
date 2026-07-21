@@ -23,28 +23,39 @@
 -- that. Preserve every row and make execution position the unique identity.
 -- Preflight must complete before the legacy table is touched. Historical
 -- positions 19–22 are valid and are intentionally not constrained here.
-CREATE TEMP TABLE _0440_preflight (
-  ok INTEGER NOT NULL CHECK(ok = 1)
-);
-INSERT INTO _0440_preflight(ok)
-SELECT CASE WHEN
-  NOT EXISTS (
+BEGIN IMMEDIATE;
+CREATE TEMP TABLE _0440_preflight (id INTEGER PRIMARY KEY);
+CREATE TEMP TRIGGER _0440_preflight_validate
+BEFORE INSERT ON _0440_preflight
+BEGIN
+  SELECT CASE WHEN EXISTS (
     SELECT 1 FROM modelos_sessao_manobras
     WHERE ordem IS NULL OR tripulante NOT IN ('A', 'B', 'AB')
-  )
-  AND NOT EXISTS (
+  ) THEN RAISE(ROLLBACK, '0440 preflight: ordem ou tripulante legado inválido') END;
+  SELECT CASE WHEN EXISTS (
     SELECT 1 FROM modelos_sessao_manobras msm
     LEFT JOIN modelos_sessao ms ON ms.id = msm.modelo_id
     LEFT JOIN manobras m ON m.id = msm.manobra_id
-    WHERE ms.id IS NULL OR m.id IS NULL
-  )
-  AND NOT EXISTS (
+    WHERE ms.id IS NULL OR m.id IS NULL OR m.empresa_id <> ms.empresa_id
+  ) THEN RAISE(ROLLBACK, '0440 preflight: vínculo legado órfão') END;
+  SELECT CASE WHEN EXISTS (
     SELECT 1 FROM modelos_sessao_manobras
     WHERE deleted_at IS NULL
     GROUP BY modelo_id, ordem
     HAVING COUNT(*) > 1
-  )
-THEN 1 ELSE 0 END;
+  ) THEN RAISE(ROLLBACK, '0440 preflight: ordem ativa duplicada') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM sqlite_master
+    WHERE type = 'trigger' AND tbl_name = 'modelos_sessao_manobras'
+      AND name <> 'trigger_modelos_sessao_manobras_updated_at'
+  ) THEN RAISE(ROLLBACK, '0440 preflight: trigger legado não inventariado') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM sqlite_master
+    WHERE type = 'table' AND sql LIKE '%REFERENCES modelos_sessao_manobras%'
+  ) THEN RAISE(ROLLBACK, '0440 preflight: FK filha para vínculos não suportada') END;
+END;
+INSERT INTO _0440_preflight(id) VALUES (1);
+DROP TRIGGER _0440_preflight_validate;
 DROP TABLE _0440_preflight;
 DROP TRIGGER IF EXISTS trigger_modelos_sessao_manobras_updated_at;
 CREATE TABLE modelos_sessao_manobras_0440 (
@@ -79,6 +90,24 @@ CREATE TRIGGER IF NOT EXISTS trigger_modelos_sessao_manobras_updated_at
 AFTER UPDATE ON modelos_sessao_manobras FOR EACH ROW BEGIN
   UPDATE modelos_sessao_manobras SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
+CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_mesmo_tenant_insert
+BEFORE INSERT ON modelos_sessao_manobras
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM modelos_sessao ms JOIN manobras m
+      ON m.id = NEW.manobra_id AND m.empresa_id = ms.empresa_id
+    WHERE ms.id = NEW.modelo_id
+  ) THEN RAISE(ABORT, 'modelo e manobra pertencem a tenants diferentes') END;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_mesmo_tenant_update
+BEFORE UPDATE OF modelo_id, manobra_id ON modelos_sessao_manobras
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM modelos_sessao ms JOIN manobras m
+      ON m.id = NEW.manobra_id AND m.empresa_id = ms.empresa_id
+    WHERE ms.id = NEW.modelo_id
+  ) THEN RAISE(ABORT, 'modelo e manobra pertencem a tenants diferentes') END;
+END;
 
 CREATE TABLE IF NOT EXISTS modelos_sessao_versionamento (
   modelo_id INTEGER PRIMARY KEY,
@@ -110,11 +139,12 @@ CREATE INDEX IF NOT EXISTS idx_modelo_versionamento_anterior
 -- Existing models become explicit legacy current versions. New imports use a
 -- physical code such as A139-I-01/12@M2026.07-V2, while displaying the exact
 -- canonical code A139-I-01/12.
-INSERT INTO modelos_sessao_versionamento (modelo_id, empresa_id, codigo_canonico, versao_numero, versao_matriz, is_current)
-SELECT id, empresa_id, codigo, 1, 'LEGACY', 1
+INSERT INTO modelos_sessao_versionamento (modelo_id, empresa_id, codigo_canonico, versao_numero, versao_matriz, is_current, efetivo_em, efetivo_ate)
+SELECT id, empresa_id, codigo, 1, 'LEGACY', CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END,
+  COALESCE(deleted_at, CURRENT_TIMESTAMP),
+  CASE WHEN deleted_at IS NULL THEN NULL ELSE deleted_at END
 FROM modelos_sessao
 WHERE empresa_id IS NOT NULL
-  AND deleted_at IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM modelos_sessao_versionamento v WHERE v.modelo_id = modelos_sessao.id
   );
@@ -127,8 +157,14 @@ BEGIN
   ) THEN RAISE(ABORT, 'modelo e empresa divergentes') END;
   SELECT CASE WHEN NEW.modelo_anterior_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM modelos_sessao_versionamento previous
-    WHERE previous.modelo_id = NEW.modelo_anterior_id AND previous.empresa_id = NEW.empresa_id AND previous.codigo_canonico = NEW.codigo_canonico AND previous.versao_numero < NEW.versao_numero
+    WHERE previous.modelo_id = NEW.modelo_anterior_id AND previous.empresa_id = NEW.empresa_id
+      AND previous.codigo_canonico = NEW.codigo_canonico AND previous.versao_numero = NEW.versao_numero - 1
+      AND previous.efetivo_em <= NEW.efetivo_em
   ) THEN RAISE(ABORT, 'modelo anterior inexistente ou pertence a outro tenant') END;
+  SELECT CASE WHEN NEW.versao_numero = 1 AND NEW.modelo_anterior_id IS NOT NULL
+    THEN RAISE(ABORT, 'versão inicial não pode ter predecessor') END;
+  SELECT CASE WHEN NEW.versao_numero > 1 AND NEW.modelo_anterior_id IS NULL
+    THEN RAISE(ABORT, 'nova versão exige predecessor imediato') END;
   SELECT CASE WHEN NEW.is_current = 1 AND NEW.efetivo_ate IS NOT NULL THEN RAISE(ABORT, 'versão corrente não pode ter término') END;
   SELECT CASE WHEN NEW.is_current = 0 AND NEW.efetivo_ate IS NULL THEN RAISE(ABORT, 'versão histórica exige término') END;
 END;
@@ -160,6 +196,8 @@ BEGIN
     OR NEW.efetivo_em <> OLD.efetivo_em
     OR NEW.created_at <> OLD.created_at
     THEN RAISE(ABORT, 'identidade de versão é imutável') END;
+  SELECT CASE WHEN OLD.is_current = 0 AND NEW.is_current = 1
+    THEN RAISE(ABORT, 'versão histórica não pode voltar a vigente; crie versão de reversão auditada') END;
   SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM modelos_sessao ms WHERE ms.id = NEW.modelo_id AND ms.empresa_id = NEW.empresa_id)
     THEN RAISE(ABORT, 'modelo e empresa divergentes') END;
   SELECT CASE WHEN NEW.is_current = 1 AND NEW.efetivo_ate IS NOT NULL THEN RAISE(ABORT, 'versão corrente não pode ter término') END;
@@ -167,7 +205,8 @@ BEGIN
   SELECT CASE WHEN NEW.modelo_anterior_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM modelos_sessao_versionamento previous
     WHERE previous.modelo_id = NEW.modelo_anterior_id AND previous.empresa_id = NEW.empresa_id
-      AND previous.codigo_canonico = NEW.codigo_canonico AND previous.versao_numero < NEW.versao_numero
+      AND previous.codigo_canonico = NEW.codigo_canonico AND previous.versao_numero = NEW.versao_numero - 1
+      AND previous.efetivo_em <= NEW.efetivo_em
   ) THEN RAISE(ABORT, 'predecessor inválido') END;
 END;
 CREATE TRIGGER IF NOT EXISTS trg_modelo_versao_updated_at
@@ -179,7 +218,7 @@ END;
 CREATE TABLE IF NOT EXISTS modelos_sessao_manobras_contexto (
   modelo_manobra_id INTEGER PRIMARY KEY,
   empresa_id INTEGER NOT NULL,
-  metadados_json TEXT NOT NULL CHECK(json_valid(metadados_json)),
+  metadados_json TEXT NOT NULL CHECK(json_valid(metadados_json) AND json_type(metadados_json) = 'object'),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (modelo_manobra_id) REFERENCES modelos_sessao_manobras(id),
@@ -241,3 +280,20 @@ CREATE TABLE IF NOT EXISTS simuladores_matriz_import_changes (
 );
 CREATE INDEX IF NOT EXISTS idx_simuladores_matriz_changes_import
   ON simuladores_matriz_import_changes(import_id, entidade);
+CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_status_insert
+BEFORE INSERT ON simuladores_matriz_imports
+WHEN NEW.status <> 'DRY_RUN'
+BEGIN
+  SELECT RAISE(ABORT, 'importação deve iniciar em DRY_RUN');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_status_update
+BEFORE UPDATE OF status ON simuladores_matriz_imports
+WHEN NOT (
+  (OLD.status = 'DRY_RUN' AND NEW.status IN ('APPLYING', 'FAILED')) OR
+  (OLD.status = 'APPLYING' AND NEW.status IN ('APPLIED', 'FAILED')) OR
+  (OLD.status = 'APPLIED' AND NEW.status = 'ROLLED_BACK')
+)
+BEGIN
+  SELECT RAISE(ABORT, 'transição de status da importação inválida');
+END;
+COMMIT;
