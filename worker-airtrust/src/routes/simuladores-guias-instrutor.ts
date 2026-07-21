@@ -255,13 +255,13 @@ app.get('/guias-instrutor/proximas-sessoes', requireGuiaInstrutorRead(), async (
   let sql = `
     SELECT
       sa.id as sessao_id, sa.data, sa.hora_inicio, sa.hora_fim, sa.tipo_sessao,
-      sa.nome as tema_sessao, sa.modelo_sessao_id,
+      sa.nome as tema_sessao, sa.template_id as modelo_sessao_id,
       s.nome as simulador_nome,
       g.id as guia_id
     FROM simulador_agendamentos sa
     LEFT JOIN simuladores s ON sa.simulador_id = s.id
     LEFT JOIN simuladores_modelos_sessao_guias msg
-      ON msg.modelo_sessao_id = sa.modelo_sessao_id AND msg.empresa_id = sa.empresa_id
+      ON msg.modelo_sessao_id = sa.template_id AND msg.empresa_id = sa.empresa_id
       AND msg.deleted_at IS NULL AND msg.principal = 1
     LEFT JOIN simuladores_guias_instrutor g
       ON g.id = msg.guia_id AND g.status = 'ATIVO' AND g.deleted_at IS NULL
@@ -293,7 +293,7 @@ app.get('/sessoes/:sessaoId/guias-instrutor', requireGuiaInstrutorRead(), async 
   }
 
   const sessao = await c.env.DB.prepare(
-    `SELECT id, modelo_sessao_id FROM simulador_agendamentos
+    `SELECT id, template_id as modelo_sessao_id FROM simulador_agendamentos
      WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
   )
     .bind(sessaoId, empresaId)
