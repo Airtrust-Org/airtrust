@@ -16,7 +16,11 @@ import {
 // 'instructor'/'manager'/'admin' minúsculo) — instrutores reais (role
 // 'instructor') nunca teriam passado no gate de leitura.
 
-type Vinculo = { usuario_id: number; empresa_id: number; role: string; ativo: number };
+// Espelha o schema REAL de usuarios_empresas (id, usuario_id, empresa_id,
+// role, is_primary, created_at) — sem `ativo` nem `deleted_at`. O achado
+// original (colunas fictícias na query) foi reproduzido ao vivo em staging
+// (500: "no such column: ativo") e corrigido em resolveActiveVinculoRole.
+type Vinculo = { usuario_id: number; empresa_id: number; role: string };
 type Permissao = { usuario_id: number; permissao: string; tipo: 'GRANT' | 'DENY' };
 
 function buildFakeDb(vinculos: Vinculo[], permissoes: Permissao[]) {
@@ -32,7 +36,7 @@ function buildFakeDb(vinculos: Vinculo[], permissoes: Permissao[]) {
           if (sql.includes('FROM usuarios_empresas')) {
             const [usuarioId, empresaId] = binds as [number, number];
             const row = vinculos.find(
-              (v) => v.usuario_id === usuarioId && v.empresa_id === empresaId && v.ativo === 1,
+              (v) => v.usuario_id === usuarioId && v.empresa_id === empresaId,
             );
             return (row ? { role: row.role } : null) as T | null;
           }
@@ -78,7 +82,7 @@ function buildFakeContext(params: {
 
 describe('hasGuiaInstrutorCapability — visualizar', () => {
   it('instructor tem default de leitura', async () => {
-    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role: 'instructor', ativo: 1 }], []);
+    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role: 'instructor' }], []);
     const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
     c.get = (key: string) =>
       key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
@@ -88,7 +92,7 @@ describe('hasGuiaInstrutorCapability — visualizar', () => {
 
   it('manager e admin também têm default de leitura (hierarquia acima de instructor)', async () => {
     for (const role of ['manager', 'admin']) {
-      const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role, ativo: 1 }], []);
+      const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role }], []);
       const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
       c.get = (key: string) =>
         key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
@@ -99,7 +103,7 @@ describe('hasGuiaInstrutorCapability — visualizar', () => {
 
   it('editor/student/viewer NÃO têm default de leitura', async () => {
     for (const role of ['editor', 'student', 'viewer']) {
-      const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role, ativo: 1 }], []);
+      const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role }], []);
       const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
       c.get = (key: string) =>
         key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
@@ -110,7 +114,7 @@ describe('hasGuiaInstrutorCapability — visualizar', () => {
 
   it('student com GRANT explícito de visualizar consegue ler', async () => {
     const db = buildFakeDb(
-      [{ usuario_id: 10, empresa_id: 1, role: 'student', ativo: 1 }],
+      [{ usuario_id: 10, empresa_id: 1, role: 'student' }],
       [{ usuario_id: 10, permissao: GUIAS_INSTRUTOR_CAPABILITIES.visualizar, tipo: 'GRANT' }],
     );
     const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
@@ -122,7 +126,7 @@ describe('hasGuiaInstrutorCapability — visualizar', () => {
 
   it('DENY explícito bloqueia instructor mesmo com default de leitura', async () => {
     const db = buildFakeDb(
-      [{ usuario_id: 10, empresa_id: 1, role: 'instructor', ativo: 1 }],
+      [{ usuario_id: 10, empresa_id: 1, role: 'instructor' }],
       [{ usuario_id: 10, permissao: GUIAS_INSTRUTOR_CAPABILITIES.visualizar, tipo: 'DENY' }],
     );
     const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
@@ -134,7 +138,7 @@ describe('hasGuiaInstrutorCapability — visualizar', () => {
 
   it('DENY prevalece mesmo com GRANT simultâneo (defesa em profundidade)', async () => {
     const db = buildFakeDb(
-      [{ usuario_id: 10, empresa_id: 1, role: 'instructor', ativo: 1 }],
+      [{ usuario_id: 10, empresa_id: 1, role: 'instructor' }],
       [
         { usuario_id: 10, permissao: GUIAS_INSTRUTOR_CAPABILITIES.visualizar, tipo: 'DENY' },
         { usuario_id: 10, permissao: GUIAS_INSTRUTOR_CAPABILITIES.visualizar, tipo: 'GRANT' },
@@ -163,7 +167,7 @@ describe('hasGuiaInstrutorCapability — visualizar', () => {
 
 describe('hasGuiaInstrutorCapability — gerenciar', () => {
   it('manager NÃO tem default de gerenciamento (decisão de produto explícita)', async () => {
-    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role: 'manager', ativo: 1 }], []);
+    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role: 'manager' }], []);
     const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
     c.get = (key: string) =>
       key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
@@ -172,7 +176,7 @@ describe('hasGuiaInstrutorCapability — gerenciar', () => {
   });
 
   it('admin (tenant, não platform) também NÃO tem default de gerenciamento', async () => {
-    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role: 'admin', ativo: 1 }], []);
+    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role: 'admin' }], []);
     const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
     c.get = (key: string) =>
       key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
@@ -182,7 +186,7 @@ describe('hasGuiaInstrutorCapability — gerenciar', () => {
 
   it('manager com GRANT explícito de gerenciar consegue gerenciar', async () => {
     const db = buildFakeDb(
-      [{ usuario_id: 10, empresa_id: 1, role: 'manager', ativo: 1 }],
+      [{ usuario_id: 10, empresa_id: 1, role: 'manager' }],
       [{ usuario_id: 10, permissao: GUIAS_INSTRUTOR_CAPABILITIES.gerenciar, tipo: 'GRANT' }],
     );
     const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
@@ -224,7 +228,7 @@ describe('hasGuiaInstrutorCapability — gerenciar', () => {
 
 describe('hasGuiaInstrutorCapability — multi-tenant', () => {
   it('vínculo ativo em outra empresa não concede acesso na empresa atual', async () => {
-    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 2, role: 'admin', ativo: 1 }], []);
+    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 2, role: 'admin' }], []);
     const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
     c.get = (key: string) =>
       key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
@@ -232,8 +236,8 @@ describe('hasGuiaInstrutorCapability — multi-tenant', () => {
     expect(allowed).toBe(false);
   });
 
-  it('vínculo inativo (ativo=0) não concede acesso', async () => {
-    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role: 'instructor', ativo: 0 }], []);
+  it('usuário sem nenhum vínculo na empresa não tem acesso (nem default, nem GRANT)', async () => {
+    const db = buildFakeDb([], []);
     const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
     c.get = (key: string) =>
       key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
