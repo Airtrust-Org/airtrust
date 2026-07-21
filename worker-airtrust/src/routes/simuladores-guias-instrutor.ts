@@ -573,7 +573,7 @@ app.post('/guias-instrutor/:id/versoes', requireGuiaInstrutorManage(), async (c)
 
   const pdfFile = formData.get('pdf') as File | null;
   const htmlFile = formData.get('html') as File | null;
-  const assetFiles = formData.getAll('assets') as unknown as File[];
+  const assetFiles: unknown[] = formData.getAll('assets');
   if (!pdfFile) return badRequest('arquivo PDF é obrigatório');
 
   // ── Fase 1: validação completa, nenhuma escrita ainda ──────────────────
