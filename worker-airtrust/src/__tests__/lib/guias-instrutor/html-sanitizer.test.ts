@@ -72,6 +72,19 @@ describe('sanitizeGuiaHtml', () => {
     expect(result.alertas.filter((a) => a.includes('residual'))).toHaveLength(0);
   });
 
+  it('preserva <meta charset> (achado de QA visual: sem isso o documento vira mojibake)', () => {
+    const result = sanitizeGuiaHtml(CLEAN_SAMPLE);
+    expect(result.html).toMatch(/<meta[^>]*charset="utf-8"[^>]*>/i);
+  });
+
+  it('preserva <meta charset> e <meta name=viewport>, mas descarta <meta http-equiv=refresh> no mesmo documento', () => {
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=https://example.com"></head><body>ok</body></html>`;
+    const result = sanitizeGuiaHtml(html);
+    expect(result.html).toMatch(/<meta[^>]*charset="utf-8"[^>]*>/i);
+    expect(result.html).toMatch(/<meta[^>]*name="viewport"[^>]*>/i);
+    expect(result.html.toLowerCase()).not.toMatch(/http-equiv/);
+  });
+
   describe('payloads adversariais (parser estrutural, não regex)', () => {
     const wrap = (body: string) => `<!DOCTYPE html><html><body>${body}</body></html>`;
 
