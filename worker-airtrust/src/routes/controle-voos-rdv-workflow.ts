@@ -251,9 +251,15 @@ rdvWorkflow.get(
     if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
 
     const [empresa, aeronave, tripulantes, etapas, abastecimentos, aprovacoes] = await Promise.all([
-      c.env.DB.prepare('SELECT razao_social, nome_fantasia FROM empresas WHERE id = ? LIMIT 1')
+      // Somente `razao_social` — a única coluna de nome de empresa confirmada
+      // presente no schema real (staging e produção; ver
+      // scripts/validation/controle-voos-rdv-empresas-schema-contract).
+      // `nome_fantasia` é definida em migrations/0150 mas nunca existiu de
+      // fato nas bases reais (schema real seguiu migrations/0161), o que
+      // derrubava esta rota com 500 (SQLITE_ERROR: no such column).
+      c.env.DB.prepare('SELECT razao_social FROM empresas WHERE id = ? LIMIT 1')
         .bind(empresaId)
-        .first<{ razao_social: string; nome_fantasia: string | null }>(),
+        .first<{ razao_social: string | null }>(),
       voo.aeronave_id
         ? c.env.DB.prepare('SELECT modelo FROM aeronaves WHERE id = ? LIMIT 1')
             .bind(voo.aeronave_id)
@@ -321,7 +327,7 @@ rdvWorkflow.get(
     });
 
     const data: RelatorioPetrobrasData = {
-      empresa_nome: empresa?.nome_fantasia || empresa?.razao_social || 'AirTrust',
+      empresa_nome: empresa?.razao_social || 'AirTrust',
       base: null,
       contrato: null,
       cliente: null,
