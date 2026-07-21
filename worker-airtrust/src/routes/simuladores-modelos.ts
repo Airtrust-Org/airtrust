@@ -476,9 +476,16 @@ app.get('/modelos-sessao', async (c) => {
     const col = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
     const columns = (col.results || []).map((r: any) => r.name);
     const hasQualificacaoTipoId = columns.includes('qualificacao_tipo_id');
-    const versioningTable = await c.env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_versionamento'",
-    ).first<{ name: string }>();
+    let versioningTable: { name: string } | null = null;
+    try {
+      versioningTable = await c.env.DB
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_versionamento'")
+        .bind()
+        .first<{ name: string }>();
+    } catch {
+      // Pre-0440 schemas and minimal route mocks intentionally retain legacy behaviour.
+      versioningTable = null;
+    }
     const versioningJoin = versioningTable
       ? 'INNER JOIN modelos_sessao_versionamento msv ON msv.modelo_id = ms.id AND msv.empresa_id = ms.empresa_id AND msv.is_current = 1'
       : '';
@@ -739,9 +746,15 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
-    const contextTable = await c.env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_manobras_contexto'",
-    ).first<{ name: string }>();
+    let contextTable: { name: string } | null = null;
+    try {
+      contextTable = await c.env.DB
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_manobras_contexto'")
+        .bind()
+        .first<{ name: string }>();
+    } catch {
+      contextTable = null;
+    }
     const contextJoin = contextTable
       ? 'LEFT JOIN modelos_sessao_manobras_contexto msmc ON msmc.modelo_manobra_id = msm.id AND msmc.empresa_id = ms.empresa_id'
       : '';

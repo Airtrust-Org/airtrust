@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-// @ts-ignore JavaScript CLI module is executed by Node; its runtime contract is tested here.
 import { createDeterministicPlan, sha256, validateModelItems } from '../../../scripts/lib/matriz-import-plan.mjs';
 
 const items = Array.from({ length: 18 }, (_, index) => ({ modelo: 'A139-I-01/12', ordem: index + 1, codigo: `A-${index + 1}`, nome: `M ${index + 1}`, execucao_pf: 'A' }));
