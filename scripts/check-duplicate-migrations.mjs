@@ -8,8 +8,14 @@ const root = process.cwd();
 const migrationsDir = path.join(root, 'worker-airtrust', 'migrations');
 const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
   '0049': ['0049_create_integrated_view.sql', '0049_qualificacoes_view_integrada.sql'],
-  '0062': ['0062_consolidate_ssot_preserve_data.sql', '0062_ssot_extended_tables_triggers_indexes.sql'],
-  '0063': ['0063_align_qualificacoes_tipos_schema.sql', '0063_normalize_qualificacoes_historico_schema.sql'],
+  '0062': [
+    '0062_consolidate_ssot_preserve_data.sql',
+    '0062_ssot_extended_tables_triggers_indexes.sql',
+  ],
+  '0063': [
+    '0063_align_qualificacoes_tipos_schema.sql',
+    '0063_normalize_qualificacoes_historico_schema.sql',
+  ],
   '0068': ['0068_enrich_and_fk.sql', '0068_reintroduce_fk_qualificacoes_historico.sql'],
   '0069': ['0069_create_view_qualificacoes_historico_v.sql', '0069_repoint_view_qualificacoes.sql'],
   '0092': [
@@ -26,7 +32,10 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
   '0093': ['0093_create_importacoes_log.sql', '0093_perf_indexes_qualificacoes.sql'],
   '0098': ['0098_add_certificado_arquivo_fk.sql', '0098_add_examinador_checks.sql'],
   '0107': ['0107_fix_historico_fks.sql', '0107_refactor_qualificacoes_historico.sql'],
-  '0112': ['0112_add_missing_columns_qualificacoes_historico.sql', '0112_seed_qualificacoes_tipos_exemplo.sql'],
+  '0112': [
+    '0112_add_missing_columns_qualificacoes_historico.sql',
+    '0112_seed_qualificacoes_tipos_exemplo.sql',
+  ],
   '0117': ['0117_create_modelos_aeronave.sql', '0117_fix_qualificacoes_tipos_trigger.sql'],
   '0137': ['0137_add_integrity_checks.sql', '0137_fix_certificados_completo.sql'],
   '0140': ['0140_add_simuladores_indexes.sql', '0140_fix_fk_modelos_sessao_manobras.sql'],
@@ -38,11 +47,17 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0150_refactor_aeronaves_remove_codigo.sql',
   ],
   '0151': ['0151_add_empresa_id_incremental.sql', '0151_migrate_aeronave_references.sql'],
-  '0159': ['0159_add_gera_qualificacao_modelos_sessao.sql', '0159_remover_tipo_aeronave_modelos_sessao.sql'],
+  '0159': [
+    '0159_add_gera_qualificacao_modelos_sessao.sql',
+    '0159_remover_tipo_aeronave_modelos_sessao.sql',
+  ],
   '0172': ['0172_create_treinamentos_planejados.sql', '0172_rollback_treinamentos.sql'],
   '0200': ['0200_performance_composite_indexes.sql', '0200_remove_unused_columns_historico.sql'],
   '0215': ['0215_frms_notas_resolucao.sql', '0215_frms_visual_thresholds.sql'],
-  '0246': ['0246_enforce_tripulacao_unique_aeronave.sql', '0246_fix_vw_tripulante_operacional_guerra.sql'],
+  '0246': [
+    '0246_enforce_tripulacao_unique_aeronave.sql',
+    '0246_fix_vw_tripulante_operacional_guerra.sql',
+  ],
   '0263': ['0263_backfill_manobras_descricao.sql', '0263_frms_effectiveness_thresholds.sql'],
   '0284': ['0284_fix_sk76_loft_check_0303.sql', '0284_frat_multilevel_bowtie_risk.sql'],
   '0320': ['0320_alertas_whatsapp_delivery_tracking.sql', '0320_treinamentos_convocacao_email.sql'],
@@ -50,7 +65,10 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
   '0340': ['0340_lms_cursos_ead_metadata.sql', '0340_perfis_permissoes.sql'],
   '0347': ['0347_lms_cursos_content_filename.sql', '0347_lms_edapp_tenant_indexes.sql'],
   '0362': ['0362_fichas_edicao_pos_finalizacao.sql', '0362_frms_daily_fatigue_v01.sql'],
-  '0367': ['0367_classificar_dificuldade_sk76_restantes.sql', '0367_sk76_reaquisicao_experiencia_recente.sql'],
+  '0367': [
+    '0367_classificar_dificuldade_sk76_restantes.sql',
+    '0367_sk76_reaquisicao_experiencia_recente.sql',
+  ],
   '0420': [
     '0420_notificacoes_log_add_empresa_id.sql',
     '0420_notificacoes_log_add_empresa_id_preflight_audit.sql',
@@ -59,6 +77,10 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
   '0437': [
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
+  ],
+  '0438': [
+    '0438_controle_voos_rdv_coordenacao_workflow.sql',
+    '0438_controle_voos_rdv_coordenacao_workflow_preflight_audit.sql',
   ],
 };
 
@@ -77,7 +99,14 @@ function getChangedMigrationFiles() {
     }).trim();
     const diff = execFileSync(
       'git',
-      ['diff', '--name-only', '--diff-filter=AMR', `${baseRef}...HEAD`, '--', 'worker-airtrust/migrations'],
+      [
+        'diff',
+        '--name-only',
+        '--diff-filter=AMR',
+        `${baseRef}...HEAD`,
+        '--',
+        'worker-airtrust/migrations',
+      ],
       { encoding: 'utf8' },
     );
     diff
@@ -89,11 +118,9 @@ function getChangedMigrationFiles() {
     // Fallback to local working tree only when origin/main is not available.
   }
 
-  const status = execFileSync(
-    'git',
-    ['status', '--short', '--', 'worker-airtrust/migrations'],
-    { encoding: 'utf8' },
-  );
+  const status = execFileSync('git', ['status', '--short', '--', 'worker-airtrust/migrations'], {
+    encoding: 'utf8',
+  });
   status
     .split('\n')
     .map((line) => line.trim())
@@ -122,7 +149,10 @@ const duplicates = [...changedFiles]
     const siblings = byPrefix.get(match[1]) || [];
     if (siblings.length <= 1) return null;
     const allowlisted = HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST[match[1]];
-    if (allowlisted && JSON.stringify([...siblings].sort()) === JSON.stringify([...allowlisted].sort())) {
+    if (
+      allowlisted &&
+      JSON.stringify([...siblings].sort()) === JSON.stringify([...allowlisted].sort())
+    ) {
       return null;
     }
     return { prefix: match[1], files: siblings, allowlisted: allowlisted || null };

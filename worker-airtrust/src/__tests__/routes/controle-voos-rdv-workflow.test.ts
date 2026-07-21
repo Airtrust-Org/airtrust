@@ -104,6 +104,25 @@ function targetTableOf(sql: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * Executa a instrução e devolve o número real de linhas afetadas (via
+ * `changes()` na mesma conexão), em vez de um valor fixo. Necessário para
+ * exercitar de verdade o CAS otimista (`assertCasApplied`) e os 404 de
+ * ownership (DELETE que não encontra a linha) — um `changes: 1` hard-coded
+ * mascararia exatamente os dois bugs corrigidos em A1/A2.
+ */
+function execWithChanges(databasePath: string, sql: string): number {
+  const result = spawnSync('sqlite3', ['-json', databasePath], {
+    input: `${sql};\nSELECT changes() AS n;`,
+    encoding: 'utf8',
+  });
+  expect(result.status, result.stderr).toBe(0);
+  const trimmed = result.stdout.trim();
+  if (!trimmed) return 0;
+  const rows = JSON.parse(trimmed) as Array<{ n: number }>;
+  return rows[0]?.n ?? 0;
+}
+
 function createSqliteD1(): SqliteD1 {
   const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-cv-rdv-workflow-'));
   const databasePath = join(tempDir, 'routes.sqlite');
@@ -171,7 +190,7 @@ function createSqliteD1(): SqliteD1 {
           results: queryJson<T>(databasePath, interpolate(sql, binds)),
         }),
         run: async () => {
-          runSql(databasePath, interpolate(sql, binds));
+          const changes = execWithChanges(databasePath, interpolate(sql, binds));
           const table = targetTableOf(sql);
           const lastId = table
             ? queryJson<{ id: number }>(
@@ -179,10 +198,17 @@ function createSqliteD1(): SqliteD1 {
                 `SELECT id FROM ${table} ORDER BY id DESC LIMIT 1`,
               )[0]?.id
             : 0;
-          return { meta: { changes: 1, last_row_id: lastId || 0 } };
+          return { meta: { changes, last_row_id: lastId || 0 } };
         },
       };
       return statement;
+    },
+    batch: async (statements: Array<{ run: () => Promise<unknown> }>) => {
+      const results = [];
+      for (const statement of statements) {
+        results.push(await statement.run());
+      }
+      return results;
     },
   } as unknown as SqliteD1;
 
@@ -285,8 +311,26 @@ const PILOTO = { role: 'student', userId: 10 } as const;
 /** Coordenação com defaults de role manager (user 11). */
 const COORDENACAO = { role: 'manager', userId: 11 } as const;
 
+/** Versao atual do RDV do voo (default 601) — `versao` agora e obrigatoria em toda transicao. */
+async function currentVersao(db: SqliteD1, vooId = 601): Promise<number> {
+  const rows = queryJson<{ versao: number }>(
+    db.databasePath,
+    `SELECT versao FROM cv_rdv_operacional WHERE voo_id = ${vooId} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1`,
+  );
+  return Number(rows[0]?.versao ?? 1);
+}
+
+/** Corpo JSON de uma transicao de fluxo, com `versao` atual sempre incluida. */
+async function transitionBody(
+  db: SqliteD1,
+  extra: Record<string, unknown> = {},
+  vooId = 601,
+): Promise<string> {
+  return JSON.stringify({ versao: await currentVersao(db, vooId), ...extra });
+}
+
 async function preencherRdvCompleto(
-  db: D1Database,
+  db: SqliteD1,
   opts: { role?: string; userId?: number } = PILOTO,
 ) {
   const res = await request(
@@ -310,7 +354,7 @@ async function preencherRdvCompleto(
   return (await res.json()) as { data: { id: number; versao: number } };
 }
 
-async function avancarAteEmRevisao(db: D1Database) {
+async function avancarAteEmRevisao(db: SqliteD1) {
   await preencherRdvCompleto(db);
   await request(
     db,
@@ -321,29 +365,29 @@ async function avancarAteEmRevisao(db: D1Database) {
   await request(
     db,
     '/api/controle-voos/voos/601/rdv/enviar',
-    { method: 'POST', body: '{}' },
+    { method: 'POST', body: await transitionBody(db) },
     PILOTO,
   );
   await request(
     db,
     '/api/controle-voos/voos/601/rdv/iniciar-revisao',
-    { method: 'POST', body: '{}' },
+    { method: 'POST', body: await transitionBody(db) },
     COORDENACAO,
   );
 }
 
-async function avancarAteFinalizado(db: D1Database) {
+async function avancarAteFinalizado(db: SqliteD1) {
   await avancarAteEmRevisao(db);
   await request(
     db,
     '/api/controle-voos/voos/601/rdv/aprovar',
-    { method: 'POST', body: '{}' },
+    { method: 'POST', body: await transitionBody(db) },
     COORDENACAO,
   );
   await request(
     db,
     '/api/controle-voos/voos/601/rdv/finalizar',
-    { method: 'POST', body: '{}' },
+    { method: 'POST', body: await transitionBody(db) },
     COORDENACAO,
   );
 }
@@ -373,7 +417,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const enviar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     expect(enviar.status).toBe(200);
@@ -386,7 +430,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const revisao = await request(
       db,
       '/api/controle-voos/voos/601/rdv/iniciar-revisao',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
     expect(revisao.status).toBe(200);
@@ -394,7 +438,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const aprovar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/aprovar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
     expect(aprovar.status).toBe(200);
@@ -404,7 +448,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const finalizar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
     expect(finalizar.status).toBe(200);
@@ -437,7 +481,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const devolver = await request(
       db,
       '/api/controle-voos/voos/601/rdv/devolver',
-      { method: 'POST', body: JSON.stringify({ justificativa: 'Corrigir POB' }) },
+      { method: 'POST', body: await transitionBody(db, { justificativa: 'Corrigir POB' }) },
       COORDENACAO,
     );
     expect(devolver.status).toBe(200);
@@ -461,32 +505,32 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/iniciar-revisao',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/aprovar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
 
     const reabrir = await request(
       db,
       '/api/controle-voos/voos/601/rdv/reabrir',
-      { method: 'POST', body: JSON.stringify({ justificativa: 'Cliente pediu ajuste' }) },
+      { method: 'POST', body: await transitionBody(db, { justificativa: 'Cliente pediu ajuste' }) },
       COORDENACAO,
     );
     expect(reabrir.status).toBe(200);
@@ -537,7 +581,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const enviar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
     expect(enviar.status).toBe(409);
@@ -551,7 +595,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const enviar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     expect(enviar.status).toBe(409);
@@ -569,7 +613,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const aprovar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/aprovar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
     expect(aprovar.status).toBe(409);
@@ -584,17 +628,21 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const semJustificativa = await request(
       db,
       '/api/controle-voos/voos/601/rdv/devolver',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
     expect(semJustificativa.status).toBe(400);
+    const semJustificativaBody = (await semJustificativa.json()) as { code?: string };
+    expect(semJustificativaBody.code).toBe('CONTROLE_VOOS_RDV_JUSTIFICATIVA_OBRIGATORIA');
 
     const devolver = await request(
       db,
       '/api/controle-voos/voos/601/rdv/devolver',
       {
         method: 'POST',
-        body: JSON.stringify({ justificativa: 'Faltou informar consumo de combustivel' }),
+        body: await transitionBody(db, {
+          justificativa: 'Faltou informar consumo de combustivel',
+        }),
       },
       COORDENACAO,
     );
@@ -631,7 +679,10 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const foraDeRevisao = await request(
       db,
       '/api/controle-voos/voos/601/rdv/corrigir',
-      { method: 'POST', body: JSON.stringify({ justificativa: 'x', campos: { pob: 5 } }) },
+      {
+        method: 'POST',
+        body: await transitionBody(db, { justificativa: 'x', campos: { pob: 5 } }),
+      },
       COORDENACAO,
     );
     expect(foraDeRevisao.status).toBe(409);
@@ -639,30 +690,32 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/iniciar-revisao',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
 
     const semJustificativa = await request(
       db,
       '/api/controle-voos/voos/601/rdv/corrigir',
-      { method: 'POST', body: JSON.stringify({ campos: { pob: 5 } }) },
+      { method: 'POST', body: await transitionBody(db, { campos: { pob: 5 } }) },
       COORDENACAO,
     );
     expect(semJustificativa.status).toBe(400);
+    const semJustificativaBody = (await semJustificativa.json()) as { code?: string };
+    expect(semJustificativaBody.code).toBe('CONTROLE_VOOS_RDV_JUSTIFICATIVA_OBRIGATORIA');
 
     const corrigir = await request(
       db,
       '/api/controle-voos/voos/601/rdv/corrigir',
       {
         method: 'POST',
-        body: JSON.stringify({
+        body: await transitionBody(db, {
           justificativa: 'POB divergente do manifesto',
           campos: { pob: 5, carga_kg: 120 },
         }),
@@ -716,17 +769,21 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const semJustificativa = await request(
       db,
       '/api/controle-voos/voos/601/rdv/reabrir',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       COORDENACAO,
     );
     expect(semJustificativa.status).toBe(400);
+    const semJustificativaBody = (await semJustificativa.json()) as { code?: string };
+    expect(semJustificativaBody.code).toBe('CONTROLE_VOOS_RDV_JUSTIFICATIVA_OBRIGATORIA');
 
     const reabrir = await request(
       db,
       '/api/controle-voos/voos/601/rdv/reabrir',
       {
         method: 'POST',
-        body: JSON.stringify({ justificativa: 'Cliente solicitou correcao de horario' }),
+        body: await transitionBody(db, {
+          justificativa: 'Cliente solicitou correcao de horario',
+        }),
       },
       COORDENACAO,
     );
@@ -754,7 +811,10 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const cancelar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/cancelar',
-      { method: 'POST', body: JSON.stringify({ justificativa: 'Voo cancelado por meteorologia' }) },
+      {
+        method: 'POST',
+        body: await transitionBody(db, { justificativa: 'Voo cancelado por meteorologia' }),
+      },
       PILOTO,
     );
     expect(cancelar.status).toBe(200);
@@ -812,7 +872,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
 
@@ -895,7 +955,7 @@ describe('RDV — RBAC por capability (usuario_permissoes + defaults de role)', 
     const aprovar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/aprovar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       { role: 'manager', userId: 13 },
     );
     expect(aprovar.status).toBe(403);
@@ -942,20 +1002,20 @@ describe('RDV — RBAC por capability (usuario_permissoes + defaults de role)', 
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       { role: 'manager', userId: 10 },
     );
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/iniciar-revisao',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       { role: 'manager', userId: 10 },
     );
 
     const aprovar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/aprovar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: await transitionBody(db) },
       { role: 'manager', userId: 10 },
     );
     expect(aprovar.status).toBe(403);
@@ -1039,5 +1099,447 @@ describe("RDV — relatório Petrobras (PDF fictício com marca d'água)", () =>
     expect(bytes.byteLength).toBeGreaterThan(500);
     const header = Buffer.from(bytes.slice(0, 5)).toString('latin1');
     expect(header).toBe('%PDF-');
+  });
+});
+
+// ===========================================================================
+// A1 — auditoria PR #419: ownership (assertRdvSelfScope) em endpoints que
+// antes checavam apenas capability, permitindo que qualquer usuario com o
+// default de `student` mutasse tripulacao/abastecimento de um voo ao qual
+// nao estava vinculado.
+// ===========================================================================
+describe('RDV — A1: ownership em tripulantes/abastecimentos/PDF (assertRdvSelfScope)', () => {
+  it('DELETE tripulante: usuario com capability mas sem vinculo de tripulacao recebe 403 NOT_CREW', async () => {
+    const db = createSqliteD1();
+    // user 12 = funcionario 1002 (SIC no voo 601 por padrao); removemos o
+    // vinculo para simular exatamente o bypass do achado A1.
+    runSql(
+      db.databasePath,
+      `DELETE FROM cv_voo_tripulantes WHERE voo_id = 601 AND funcionario_id = 1002;`,
+    );
+    const alvo = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_tripulantes WHERE voo_id = 601 LIMIT 1`,
+    )[0];
+
+    const res = await request(
+      db,
+      `/api/controle-voos/voos/601/tripulantes/${alvo.id}`,
+      { method: 'DELETE' },
+      { role: 'student', userId: 12 },
+    );
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('CONTROLE_VOOS_RDV_NOT_CREW');
+
+    const stillActive = queryJson<{ deleted_at: string | null }>(
+      db.databasePath,
+      `SELECT deleted_at FROM cv_voo_tripulantes WHERE id = ${alvo.id}`,
+    );
+    expect(stillActive[0].deleted_at).toBeNull();
+  });
+
+  it('DELETE tripulante: id pertencente a outro voo do mesmo tenant retorna 404, nunca sucesso silencioso', async () => {
+    const db = createSqliteD1();
+    runSql(
+      db.databasePath,
+      `
+        INSERT INTO cv_voos (
+          id, empresa_id, prefixo, data_programacao, origem_id, destino_id,
+          tipo_voo_id, natureza_voo_id, horario_previsto_partida,
+          horario_previsto_chegada, status, created_by, updated_by
+        ) VALUES (602, 1, 'ATX-1002', '2026-06-14', 101, 102, 301, 401,
+          '2026-06-14T10:00:00Z', '2026-06-14T11:00:00Z', 'concluido_operacionalmente', 10, 10);
+        INSERT INTO cv_voo_tripulantes (empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by)
+        VALUES (1, 602, 1002, 'PIC', 10, 10);
+      `,
+    );
+    const outroVooTripulante = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_tripulantes WHERE voo_id = 602 LIMIT 1`,
+    )[0];
+
+    const res = await request(
+      db,
+      `/api/controle-voos/voos/601/tripulantes/${outroVooTripulante.id}`,
+      { method: 'DELETE' },
+      COORDENACAO,
+    );
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('CONTROLE_VOOS_TRIPULANTE_NOT_FOUND');
+
+    const stillActive = queryJson<{ deleted_at: string | null }>(
+      db.databasePath,
+      `SELECT deleted_at FROM cv_voo_tripulantes WHERE id = ${outroVooTripulante.id}`,
+    );
+    expect(stillActive[0].deleted_at).toBeNull();
+  });
+
+  it('DELETE tripulante inexistente nunca retorna sucesso (404)', async () => {
+    const db = createSqliteD1();
+    const res = await request(
+      db,
+      '/api/controle-voos/voos/601/tripulantes/999999',
+      { method: 'DELETE' },
+      COORDENACAO,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('DELETE tripulante: Coordenacao com capability global exclui sem precisar de vinculo', async () => {
+    const db = createSqliteD1();
+    const criar = await request(
+      db,
+      '/api/controle-voos/voos/601/tripulantes',
+      { method: 'POST', body: JSON.stringify({ funcionario_id: 1002, funcao: 'MEC' }) },
+      COORDENACAO,
+    );
+    const { data } = (await criar.json()) as { data: { id: number } };
+
+    const res = await request(
+      db,
+      `/api/controle-voos/voos/601/tripulantes/${data.id}`,
+      { method: 'DELETE' },
+      COORDENACAO,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('POST abastecimento: usuario com capability mas sem vinculo de tripulacao recebe 403 NOT_CREW', async () => {
+    const db = createSqliteD1();
+    runSql(
+      db.databasePath,
+      `DELETE FROM cv_voo_tripulantes WHERE voo_id = 601 AND funcionario_id = 1002;`,
+    );
+    const res = await request(
+      db,
+      '/api/controle-voos/voos/601/abastecimentos',
+      {
+        method: 'POST',
+        body: JSON.stringify({ data_hora: '2026-06-14T09:50:00Z', combustivel_abastecido: 100 }),
+      },
+      { role: 'student', userId: 12 },
+    );
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('CONTROLE_VOOS_RDV_NOT_CREW');
+
+    const abastecimentos = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_abastecimentos WHERE voo_id = 601`,
+    );
+    expect(abastecimentos.length).toBe(0);
+  });
+
+  it('DELETE abastecimento: id de outro voo do mesmo tenant retorna 404, nunca sucesso silencioso', async () => {
+    const db = createSqliteD1();
+    runSql(
+      db.databasePath,
+      `
+        INSERT INTO cv_voos (
+          id, empresa_id, prefixo, data_programacao, origem_id, destino_id,
+          tipo_voo_id, natureza_voo_id, horario_previsto_partida,
+          horario_previsto_chegada, status, created_by, updated_by
+        ) VALUES (602, 1, 'ATX-1002', '2026-06-14', 101, 102, 301, 401,
+          '2026-06-14T10:00:00Z', '2026-06-14T11:00:00Z', 'concluido_operacionalmente', 10, 10);
+        INSERT INTO cv_voo_abastecimentos (empresa_id, voo_id, data_hora, combustivel_abastecido, unidade, created_by, updated_by)
+        VALUES (1, 602, '2026-06-14T09:00:00Z', 200, 'L', 10, 10);
+      `,
+    );
+    const outro = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_abastecimentos WHERE voo_id = 602 LIMIT 1`,
+    )[0];
+
+    const res = await request(
+      db,
+      `/api/controle-voos/voos/601/abastecimentos/${outro.id}`,
+      { method: 'DELETE' },
+      COORDENACAO,
+    );
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('CONTROLE_VOOS_ABASTECIMENTO_NOT_FOUND');
+
+    const stillActive = queryJson<{ deleted_at: string | null }>(
+      db.databasePath,
+      `SELECT deleted_at FROM cv_voo_abastecimentos WHERE id = ${outro.id}`,
+    );
+    expect(stillActive[0].deleted_at).toBeNull();
+  });
+
+  it('DELETE abastecimento inexistente nunca retorna sucesso (404)', async () => {
+    const db = createSqliteD1();
+    const res = await request(
+      db,
+      '/api/controle-voos/voos/601/abastecimentos/999999',
+      { method: 'DELETE' },
+      COORDENACAO,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('DELETE abastecimento: Coordenacao com capability global exclui sem precisar de vinculo', async () => {
+    const db = createSqliteD1();
+    const criar = await request(
+      db,
+      '/api/controle-voos/voos/601/abastecimentos',
+      {
+        method: 'POST',
+        body: JSON.stringify({ data_hora: '2026-06-14T09:50:00Z', combustivel_abastecido: 100 }),
+      },
+      COORDENACAO,
+    );
+    const { data } = (await criar.json()) as { data: { id: number } };
+
+    const res = await request(
+      db,
+      `/api/controle-voos/voos/601/abastecimentos/${data.id}`,
+      { method: 'DELETE' },
+      COORDENACAO,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('PDF: GRANT individual de exportar_petrobras sem vinculo de tripulacao recebe 403 NOT_CREW (capability nao substitui escopo)', async () => {
+    const db = createSqliteD1();
+    await preencherRdvCompleto(db);
+    runSql(
+      db.databasePath,
+      `DELETE FROM cv_voo_tripulantes WHERE voo_id = 601 AND funcionario_id = 1002;
+       INSERT INTO usuario_permissoes (usuario_id, permissao, tipo) VALUES (12, 'voos.rdv.exportar_petrobras', 'GRANT');`,
+    );
+    const res = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/relatorio-petrobras',
+      {},
+      { role: 'student', userId: 12 },
+    );
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('CONTROLE_VOOS_RDV_NOT_CREW');
+  });
+
+  it('PDF: piloto vinculado com GRANT individual de exportar_petrobras consegue exportar o proprio relatorio', async () => {
+    const db = createSqliteD1();
+    await preencherRdvCompleto(db);
+    runSql(
+      db.databasePath,
+      `INSERT INTO usuario_permissoes (usuario_id, permissao, tipo) VALUES (10, 'voos.rdv.exportar_petrobras', 'GRANT');`,
+    );
+    const res = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/relatorio-petrobras',
+      {},
+      PILOTO,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('PDF: cross-tenant nunca acessa relatorio de outro tenant (404, sem revelar existencia)', async () => {
+    const db = createSqliteD1();
+    const res = await request(
+      db,
+      '/api/controle-voos/voos/701/rdv/relatorio-petrobras',
+      {},
+      { ...COORDENACAO, empresaId: 1 },
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+// ===========================================================================
+// A2 — auditoria PR #419: `versao` passa a ser obrigatoria (nao opcional) em
+// toda transicao de fluxo, com CAS (`assertCasApplied`) apos o UPDATE
+// otimista antes de qualquer aprovacao/revisao/evento ser registrado.
+// ===========================================================================
+describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () => {
+  type EstadoAlvo =
+    | 'rascunho'
+    | 'preenchimento_finalizado'
+    | 'enviado'
+    | 'em_revisao'
+    | 'aprovado_coordenacao'
+    | 'finalizado';
+
+  async function prepararEstado(db: SqliteD1, alvo: EstadoAlvo): Promise<void> {
+    await preencherRdvCompleto(db);
+    if (alvo === 'rascunho') return;
+    await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
+      { method: 'POST' },
+      PILOTO,
+    );
+    if (alvo === 'preenchimento_finalizado') return;
+    await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/enviar',
+      { method: 'POST', body: await transitionBody(db) },
+      PILOTO,
+    );
+    if (alvo === 'enviado') return;
+    await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/iniciar-revisao',
+      { method: 'POST', body: await transitionBody(db) },
+      COORDENACAO,
+    );
+    if (alvo === 'em_revisao') return;
+    await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/aprovar',
+      { method: 'POST', body: await transitionBody(db) },
+      COORDENACAO,
+    );
+    if (alvo === 'aprovado_coordenacao') return;
+    await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/finalizar',
+      { method: 'POST', body: await transitionBody(db) },
+      COORDENACAO,
+    );
+  }
+
+  const casos: Array<{
+    nome: string;
+    path: string;
+    estado: EstadoAlvo;
+    actor: { role: string; userId: number };
+    extra?: Record<string, unknown>;
+  }> = [
+    {
+      nome: 'enviar',
+      path: '/api/controle-voos/voos/601/rdv/enviar',
+      estado: 'preenchimento_finalizado',
+      actor: PILOTO,
+    },
+    {
+      nome: 'iniciar-revisao',
+      path: '/api/controle-voos/voos/601/rdv/iniciar-revisao',
+      estado: 'enviado',
+      actor: COORDENACAO,
+    },
+    {
+      nome: 'devolver',
+      path: '/api/controle-voos/voos/601/rdv/devolver',
+      estado: 'em_revisao',
+      actor: COORDENACAO,
+      extra: { justificativa: 'x' },
+    },
+    {
+      nome: 'corrigir',
+      path: '/api/controle-voos/voos/601/rdv/corrigir',
+      estado: 'em_revisao',
+      actor: COORDENACAO,
+      extra: { justificativa: 'x', campos: {} },
+    },
+    {
+      nome: 'aprovar',
+      path: '/api/controle-voos/voos/601/rdv/aprovar',
+      estado: 'em_revisao',
+      actor: COORDENACAO,
+    },
+    {
+      nome: 'finalizar',
+      path: '/api/controle-voos/voos/601/rdv/finalizar',
+      estado: 'aprovado_coordenacao',
+      actor: COORDENACAO,
+    },
+    {
+      nome: 'reabrir',
+      path: '/api/controle-voos/voos/601/rdv/reabrir',
+      estado: 'finalizado',
+      actor: COORDENACAO,
+      extra: { justificativa: 'x' },
+    },
+    {
+      nome: 'cancelar',
+      path: '/api/controle-voos/voos/601/rdv/cancelar',
+      estado: 'rascunho',
+      actor: PILOTO,
+      extra: { justificativa: 'x' },
+    },
+  ];
+
+  for (const caso of casos) {
+    it(`${caso.nome}: rejeita ausencia de versao (400 VERSION_REQUIRED)`, async () => {
+      const db = createSqliteD1();
+      await prepararEstado(db, caso.estado);
+      const res = await request(
+        db,
+        caso.path,
+        { method: 'POST', body: JSON.stringify({ ...caso.extra }) },
+        caso.actor,
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { code?: string };
+      expect(body.code).toBe('CONTROLE_VOOS_RDV_VERSION_REQUIRED');
+    });
+
+    it(`${caso.nome}: rejeita versao nao inteira/invalida (400 VERSION_INVALID)`, async () => {
+      const db = createSqliteD1();
+      await prepararEstado(db, caso.estado);
+      const res = await request(
+        db,
+        caso.path,
+        { method: 'POST', body: JSON.stringify({ ...caso.extra, versao: 'abc' }) },
+        caso.actor,
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { code?: string };
+      expect(body.code).toBe('CONTROLE_VOOS_RDV_VERSION_INVALID');
+    });
+  }
+
+  it('enviar: duas chamadas com a mesma versao conhecida — a segunda (perdedora) recebe 409 e nao duplica aprovacao/evento', async () => {
+    const db = createSqliteD1();
+    await preencherRdvCompleto(db);
+    await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
+      { method: 'POST' },
+      PILOTO,
+    );
+    const versaoConhecida = await currentVersao(db);
+
+    const primeira = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/enviar',
+      { method: 'POST', body: JSON.stringify({ versao: versaoConhecida }) },
+      PILOTO,
+    );
+    expect(primeira.status).toBe(200);
+
+    // "Concorrente": ainda usa a versao que conhecia antes da primeira vencer.
+    const segunda = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/enviar',
+      { method: 'POST', body: JSON.stringify({ versao: versaoConhecida }) },
+      PILOTO,
+    );
+    expect(segunda.status).toBe(409);
+    const segundaBody = (await segunda.json()) as { code?: string };
+    expect(segundaBody.code).toBe('CONTROLE_VOOS_RDV_VERSION_CONFLICT');
+
+    const rdvId = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_rdv_operacional WHERE voo_id = 601`,
+    )[0].id;
+    const aprovacoesEnviado = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_rdv_aprovacoes WHERE rdv_id = ${rdvId} AND status = 'ENVIADO'`,
+    );
+    expect(aprovacoesEnviado.length).toBe(1);
+
+    // outras acoes anteriores (PUT do RDV, finalizar-preenchimento) tambem
+    // gravam eventos tipo 'rdv' fora do escopo desta correcao; filtramos
+    // pela descricao especifica do 'enviar' para isolar duplicacao.
+    const eventosEnvio = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND descricao LIKE '%enviado para revisao%'`,
+    );
+    expect(eventosEnvio.length).toBe(1);
   });
 });

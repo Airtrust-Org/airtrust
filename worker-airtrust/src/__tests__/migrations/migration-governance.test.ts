@@ -10,12 +10,21 @@ const experimentalMigrationPath = join(
   'migrations_experimental',
   '0410_experimental_regulated_records_core.sql',
 );
-const wranglerConfigPaths = [join(workerRoot, 'wrangler.toml'), join(workerRoot, 'wrangler.dev.toml')] as const;
+const wranglerConfigPaths = [
+  join(workerRoot, 'wrangler.toml'),
+  join(workerRoot, 'wrangler.dev.toml'),
+] as const;
 
 const EXPECTED_DUPLICATE_PREFIXES = {
   '0049': ['0049_create_integrated_view.sql', '0049_qualificacoes_view_integrada.sql'],
-  '0062': ['0062_consolidate_ssot_preserve_data.sql', '0062_ssot_extended_tables_triggers_indexes.sql'],
-  '0063': ['0063_align_qualificacoes_tipos_schema.sql', '0063_normalize_qualificacoes_historico_schema.sql'],
+  '0062': [
+    '0062_consolidate_ssot_preserve_data.sql',
+    '0062_ssot_extended_tables_triggers_indexes.sql',
+  ],
+  '0063': [
+    '0063_align_qualificacoes_tipos_schema.sql',
+    '0063_normalize_qualificacoes_historico_schema.sql',
+  ],
   '0068': ['0068_enrich_and_fk.sql', '0068_reintroduce_fk_qualificacoes_historico.sql'],
   '0069': ['0069_create_view_qualificacoes_historico_v.sql', '0069_repoint_view_qualificacoes.sql'],
   '0092': [
@@ -32,7 +41,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
   '0093': ['0093_create_importacoes_log.sql', '0093_perf_indexes_qualificacoes.sql'],
   '0098': ['0098_add_certificado_arquivo_fk.sql', '0098_add_examinador_checks.sql'],
   '0107': ['0107_fix_historico_fks.sql', '0107_refactor_qualificacoes_historico.sql'],
-  '0112': ['0112_add_missing_columns_qualificacoes_historico.sql', '0112_seed_qualificacoes_tipos_exemplo.sql'],
+  '0112': [
+    '0112_add_missing_columns_qualificacoes_historico.sql',
+    '0112_seed_qualificacoes_tipos_exemplo.sql',
+  ],
   '0117': ['0117_create_modelos_aeronave.sql', '0117_fix_qualificacoes_tipos_trigger.sql'],
   '0137': ['0137_add_integrity_checks.sql', '0137_fix_certificados_completo.sql'],
   '0140': ['0140_add_simuladores_indexes.sql', '0140_fix_fk_modelos_sessao_manobras.sql'],
@@ -44,11 +56,17 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0150_refactor_aeronaves_remove_codigo.sql',
   ],
   '0151': ['0151_add_empresa_id_incremental.sql', '0151_migrate_aeronave_references.sql'],
-  '0159': ['0159_add_gera_qualificacao_modelos_sessao.sql', '0159_remover_tipo_aeronave_modelos_sessao.sql'],
+  '0159': [
+    '0159_add_gera_qualificacao_modelos_sessao.sql',
+    '0159_remover_tipo_aeronave_modelos_sessao.sql',
+  ],
   '0172': ['0172_create_treinamentos_planejados.sql', '0172_rollback_treinamentos.sql'],
   '0200': ['0200_performance_composite_indexes.sql', '0200_remove_unused_columns_historico.sql'],
   '0215': ['0215_frms_notas_resolucao.sql', '0215_frms_visual_thresholds.sql'],
-  '0246': ['0246_enforce_tripulacao_unique_aeronave.sql', '0246_fix_vw_tripulante_operacional_guerra.sql'],
+  '0246': [
+    '0246_enforce_tripulacao_unique_aeronave.sql',
+    '0246_fix_vw_tripulante_operacional_guerra.sql',
+  ],
   '0263': ['0263_backfill_manobras_descricao.sql', '0263_frms_effectiveness_thresholds.sql'],
   '0284': ['0284_fix_sk76_loft_check_0303.sql', '0284_frat_multilevel_bowtie_risk.sql'],
   '0320': ['0320_alertas_whatsapp_delivery_tracking.sql', '0320_treinamentos_convocacao_email.sql'],
@@ -56,7 +74,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
   '0340': ['0340_lms_cursos_ead_metadata.sql', '0340_perfis_permissoes.sql'],
   '0347': ['0347_lms_cursos_content_filename.sql', '0347_lms_edapp_tenant_indexes.sql'],
   '0362': ['0362_fichas_edicao_pos_finalizacao.sql', '0362_frms_daily_fatigue_v01.sql'],
-  '0367': ['0367_classificar_dificuldade_sk76_restantes.sql', '0367_sk76_reaquisicao_experiencia_recente.sql'],
+  '0367': [
+    '0367_classificar_dificuldade_sk76_restantes.sql',
+    '0367_sk76_reaquisicao_experiencia_recente.sql',
+  ],
   '0418': [
     '0418_notechs_codigos_categorizados.sql',
     '0418_notechs_codigos_categorizados_rollback.sql',
@@ -73,6 +94,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
   '0437': [
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
+  ],
+  '0438': [
+    '0438_controle_voos_rdv_coordenacao_workflow.sql',
+    '0438_controle_voos_rdv_coordenacao_workflow_preflight_audit.sql',
   ],
 } as const;
 
@@ -156,7 +181,9 @@ describe('migration governance', () => {
       .filter((prefix): prefix is string => prefix !== null);
 
     const regularPrefixes = numericPrefixes.filter((prefix) => prefix !== '9999');
-    const highPrefixes = files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file));
+    const highPrefixes = files.filter(
+      (file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file),
+    );
 
     // Ratchet raised 2026-07-20: 0438 controle-voos RDV coordenacao workflow.
     expect(Math.max(...regularPrefixes.map(Number))).toBe(438);
@@ -172,12 +199,14 @@ describe('migration governance', () => {
 
   it('keeps Wrangler D1 migrations configured to the canonical migrations folder', () => {
     for (const configPath of wranglerConfigPaths) {
-      const configuredMigrationDirs = [...readFileSync(configPath, 'utf8').matchAll(/^\s*migrations_dir\s*=\s*"([^"]+)"/gm)].map(
-        ([, migrationsDir]) => migrationsDir,
-      );
+      const configuredMigrationDirs = [
+        ...readFileSync(configPath, 'utf8').matchAll(/^\s*migrations_dir\s*=\s*"([^"]+)"/gm),
+      ].map(([, migrationsDir]) => migrationsDir);
 
       expect(configuredMigrationDirs.length).toBeGreaterThan(0);
-      expect(configuredMigrationDirs.every((migrationsDir) => migrationsDir === './migrations')).toBe(true);
+      expect(
+        configuredMigrationDirs.every((migrationsDir) => migrationsDir === './migrations'),
+      ).toBe(true);
       expect(configuredMigrationDirs).not.toContain('./migrations_experimental');
     }
   });

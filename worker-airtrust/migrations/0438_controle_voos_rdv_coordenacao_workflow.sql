@@ -32,6 +32,35 @@ SELECT CASE WHEN EXISTS (
 ) THEN 0 ELSE 1 END;
 DROP TABLE IF EXISTS _rollback_0438_column_guard;
 
+-- Preflight fail-closed, executado ANTES de qualquer ALTER/CREATE desta
+-- migration (não apenas antes do índice único lá embaixo): o runner de
+-- migrations do D1/SQLite não garante que todo o arquivo rode dentro de uma
+-- única transação (cada instrução pode ser auto-commitada individualmente),
+-- então um guard posicionado só perto do índice deixaria as demais
+-- alterações desta migration já aplicadas antes do abort. Recusa aplicar se
+-- já existir qualquer duplicidade ativa de (empresa_id, voo_id,
+-- numero_etapa) em cv_voo_etapas — a criação do índice único lá embaixo
+-- falharia de qualquer forma, mas de forma menos clara e após alterações
+-- parciais. Não deduplica nem apaga nada; apenas aborta. Para investigar
+-- e resolver manualmente antes de aplicar em staging/produção (read-only):
+--
+--   SELECT empresa_id, voo_id, numero_etapa, COUNT(*) AS quantidade
+--   FROM cv_voo_etapas
+--   WHERE deleted_at IS NULL
+--   GROUP BY empresa_id, voo_id, numero_etapa
+--   HAVING COUNT(*) > 1;
+CREATE TABLE IF NOT EXISTS _preflight_0438_etapa_numero_guard (
+  ok INTEGER NOT NULL CHECK (ok = 1)
+);
+INSERT INTO _preflight_0438_etapa_numero_guard (ok)
+SELECT CASE WHEN EXISTS (
+  SELECT 1 FROM cv_voo_etapas
+  WHERE deleted_at IS NULL
+  GROUP BY empresa_id, voo_id, numero_etapa
+  HAVING COUNT(*) > 1
+) THEN 0 ELSE 1 END;
+DROP TABLE IF EXISTS _preflight_0438_etapa_numero_guard;
+
 ALTER TABLE cv_rdv_operacional ADD COLUMN workflow_status TEXT NOT NULL DEFAULT 'rascunho';
 ALTER TABLE cv_rdv_operacional ADD COLUMN versao INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE cv_rdv_operacional ADD COLUMN enviado_por INTEGER;
