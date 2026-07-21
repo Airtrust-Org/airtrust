@@ -519,7 +519,7 @@ app.put('/guias-instrutor/:id', requireGuiaInstrutorManage(), async (c) => {
       `INSERT INTO simuladores_modelos_sessao_guias
          (empresa_id, modelo_sessao_id, guia_id, principal, ordem)
        VALUES (?, ?, ?, ?, 1)
-       ON CONFLICT(modelo_sessao_id, guia_id) DO UPDATE SET
+       ON CONFLICT(modelo_sessao_id, guia_id) WHERE deleted_at IS NULL DO UPDATE SET
          principal = excluded.principal, updated_at = datetime('now'), deleted_at = NULL`,
     )
       .bind(empresaId, input.modelo_sessao_id, id, input.principal ?? 1)
