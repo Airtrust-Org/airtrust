@@ -476,6 +476,15 @@ app.get('/modelos-sessao', async (c) => {
     const col = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
     const columns = (col.results || []).map((r: any) => r.name);
     const hasQualificacaoTipoId = columns.includes('qualificacao_tipo_id');
+    const versioningTable = await c.env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_versionamento'",
+    ).first<{ name: string }>();
+    const versioningJoin = versioningTable
+      ? 'INNER JOIN modelos_sessao_versionamento msv ON msv.modelo_id = ms.id AND msv.empresa_id = ms.empresa_id AND msv.is_current = 1'
+      : '';
+    const versioningSelect = versioningTable
+      ? ', msv.codigo_canonico, msv.versao_matriz, msv.versao_numero, msv.efetivo_em, msv.efetivo_ate'
+      : ', ms.codigo as codigo_canonico, NULL as versao_matriz, NULL as versao_numero, NULL as efetivo_em, NULL as efetivo_ate';
     const filtroModeloExpr = [
       columns.includes('modelo_aeronave') ? 'ms.modelo_aeronave' : null,
       columns.includes('codigo_aeronave') ? 'ms.codigo_aeronave' : null,
@@ -551,10 +560,11 @@ app.get('/modelos-sessao', async (c) => {
       SELECT
         ms.*,
         ts.nome as tipo_sessao_nome,
-        ts.codigo as tipo_sessao_codigo${qualificacaoSelect},
+        ts.codigo as tipo_sessao_codigo${qualificacaoSelect}${versioningSelect},
         (SELECT COUNT(*) FROM modelos_sessao_manobras
          WHERE modelo_id = ms.id AND deleted_at IS NULL) as total_manobras
       FROM modelos_sessao ms
+      ${versioningJoin}
       LEFT JOIN tipos_sessao ts ON ${tiposJoinOn}
       ${qualificacaoJoin}
       WHERE ms.deleted_at IS NULL
@@ -729,6 +739,13 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
+    const contextTable = await c.env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'modelos_sessao_manobras_contexto'",
+    ).first<{ name: string }>();
+    const contextJoin = contextTable
+      ? 'LEFT JOIN modelos_sessao_manobras_contexto msmc ON msmc.modelo_manobra_id = msm.id AND msmc.empresa_id = ms.empresa_id'
+      : '';
+    const contextSelect = contextTable ? ', msmc.metadados_json as metadados_contextuais' : ', NULL as metadados_contextuais';
     const result = await c.env.DB.prepare(
       `SELECT 
         msm.id,
@@ -742,7 +759,7 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
         COALESCE(m.nome, m.descricao, m.codigo) as manobra_descricao,
         m.categoria as manobra_categoria,
         m.nivel_dificuldade,
-        m.tempo_estimado
+        m.tempo_estimado${contextSelect}
       FROM modelos_sessao_manobras msm
       INNER JOIN modelos_sessao ms
         ON ms.id = msm.modelo_id
@@ -752,6 +769,7 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
         ON msm.manobra_id = m.id
        AND m.deleted_at IS NULL
        AND m.empresa_id = ?
+      ${contextJoin}
       WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL
       ORDER BY msm.ordem ASC`,
     )
