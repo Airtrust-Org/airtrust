@@ -354,4 +354,86 @@ describe('simuladores-guias-instrutor — segurança e isolamento', () => {
     }, createMockEnv(guias));
     expect(res.status).toBe(201);
   });
+
+  it('publicação de versão: falha na escrita final compensa (apaga R2 órfão + rascunho D1)', async () => {
+    const app = createApp();
+    const base = baseGuia({ id: 50, empresa_id: 6, status: 'RASCUNHO', html_r2_key: null, pdf_r2_key: null });
+
+    const putKeys: string[] = [];
+    const deletedKeys: string[] = [];
+    let deletedDraftId: number | null = null;
+    let updateAttempted = false;
+
+    const DB = {
+      prepare(sql: string) {
+        const binder = {
+          _params: [] as unknown[],
+          bind(...params: unknown[]) {
+            binder._params = params;
+            return binder;
+          },
+          async first<T = unknown>(): Promise<T | null> {
+            if (sql.includes('FROM modelos_aeronave')) {
+              return { id: 1, nome: 'AW139', codigo: 'AW139' } as unknown as T;
+            }
+            if (sql.includes('FROM simuladores_guias_instrutor') && sql.includes('WHERE id = ? AND empresa_id = ?')) {
+              return base as unknown as T;
+            }
+            return null;
+          },
+          async run() {
+            if (sql.trim().startsWith('UPDATE simuladores_guias_instrutor')) {
+              updateAttempted = true;
+              throw new Error('simulated D1 write failure');
+            }
+            if (sql.trim().startsWith('DELETE FROM simuladores_guias_instrutor')) {
+              deletedDraftId = binder._params[0] as number;
+              return { meta: {} };
+            }
+            if (sql.trim().startsWith('INSERT INTO simuladores_guias_instrutor')) {
+              return { meta: { last_row_id: 777 } };
+            }
+            return { meta: {} };
+          },
+        };
+        return binder;
+      },
+      batch: vi.fn(async () => []),
+    };
+
+    const BUCKET = {
+      async get() {
+        return null;
+      },
+      async put(key: string) {
+        putKeys.push(key);
+        return {};
+      },
+      async delete(key: string) {
+        deletedKeys.push(key);
+        return undefined;
+      },
+    };
+
+    const formData = new FormData();
+    formData.set('versao', '2.0');
+    formData.set('pdf', new File(['%PDF-1.4 fake'], 'guia.pdf', { type: 'application/pdf' }));
+
+    const res = await app.request(
+      '/api/simuladores/guias-instrutor/50/versoes',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer x', 'x-test-empresa-id': '6', 'x-test-guia-role': 'ADMIN' },
+        body: formData,
+      },
+      { DB, BUCKET } as unknown as Env,
+    );
+
+    expect(res.status).toBe(500);
+    expect(updateAttempted).toBe(true);
+    expect(putKeys.length).toBeGreaterThan(0);
+    // Todo objeto R2 que chegou a ser enviado é apagado na compensação.
+    expect(deletedKeys).toEqual(putKeys);
+    expect(deletedDraftId).toBe(777);
+  });
 });

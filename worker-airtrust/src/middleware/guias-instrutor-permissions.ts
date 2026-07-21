@@ -1,14 +1,30 @@
 /**
- * Permissões explícitas da Biblioteca de Guias do Instrutor de Simulador.
+ * Gate de acesso da Biblioteca de Guias do Instrutor de Simulador.
  *
- * Não reutiliza requireRole()/RBAC de role cacheada no JWT: consulta
- * `usuarios_empresas` diretamente, por requisição, escopada à empresa ativa
- * do tenant. Isso evita depender de over-provisioning de role "instructor"
- * e garante que o vínculo usuário↔empresa↔role esteja ativo agora, não no
- * momento em que o token foi emitido.
+ * IMPORTANTE — o que isto É e o que NÃO É:
+ * Isto é um allowlist de roles resolvido por requisição (não é permissão
+ * granular por-guia/por-recurso). A melhoria real sobre `requireRole()` é
+ * que a role é lida direto de `usuarios_empresas` a cada requisição —
+ * escopada à empresa ativa do tenant, com `ativo=1 AND deleted_at IS NULL`
+ * — em vez de confiar numa role cacheada no JWT/contexto. Isso fecha a
+ * janela entre "vínculo foi revogado" e "token ainda diz que a pessoa tem
+ * acesso", mas continua sendo checagem por-role, não por-usuário/por-guia.
  *
  *   simuladores.guias_instrutor.read   → INSTRUTOR, GESTOR, ADMIN, SUPER_ADMIN
  *   simuladores.guias_instrutor.manage → GESTOR, ADMIN, SUPER_ADMIN (não instrutor)
+ *
+ * Decisão consciente, não a ideal: o projeto não tem hoje nenhuma
+ * infraestrutura de permissão granular (nem `requirePermission()`, nem
+ * tabela de permissões por recurso) — ver auditoria arquitetural desta
+ * feature. Construir isso do zero seria RBAC global novo, fora do escopo
+ * desta entrega. "GESTOR" aqui herda o mesmo significado amplo que já tem
+ * em todo o resto do sistema; se a intenção de produto for restringir
+ * publicação a um subconjunto de gestores (ex: só quem é responsável pelo
+ * programa de treinamento daquela aeronave), isso precisa de uma decisão
+ * de governança explícita do time — não decidida unilateralmente aqui.
+ * BACKLOG: `simuladores.guias_instrutor.manage` como permissão granular
+ * real (tabela de vínculo usuário↔recurso), se/quando o produto precisar
+ * de administradores de conteúdo mais restritos que "todo GESTOR".
  */
 
 import type { MiddlewareHandler } from 'hono';

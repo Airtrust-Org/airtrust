@@ -538,6 +538,27 @@ app.put('/guias-instrutor/:id', requireGuiaInstrutorManage(), async (c) => {
   return c.json({ success: true, data: { id } });
 });
 
+/**
+ * Publicação em duas fases (não é uma transação cross-system: D1 e R2 são
+ * sistemas separados, sem 2PC entre eles).
+ *
+ * Fase 1 (abaixo): TODA validação — PDF, HTML, sanitização — roda ANTES de
+ * qualquer escrita em D1 ou R2. Isso elimina a classe de falha mais comum
+ * (entrada inválida) sem deixar nada órfão, porque nada foi escrito ainda.
+ *
+ * Fase 2: cria o registro D1 em RASCUNHO, sobe PDF/HTML para chaves R2
+ * determinísticas (empresa+aeronave+programa+código+versão), e só então
+ * marca o registro como VALIDACAO. Se qualquer passo da Fase 2 falhar
+ * depois de já ter escrito algo, o `catch` abaixo tenta compensar
+ * (best-effort): apaga os objetos R2 já enviados e remove o registro
+ * RASCUNHO. Compensação best-effort não é atomicidade — numa falha dupla
+ * (ex: a própria compensação falha), pode sobrar um objeto R2 órfão ou uma
+ * linha RASCUNHO travada. Ambos os casos são seguros (nunca ficam
+ * alcançáveis como ATIVO — `ativar()` exige pdf_r2_key preenchido, e o
+ * registro nunca aparece na biblioteca fora de RASCUNHO/VALIDACAO) e
+ * autocorrigem numa nova tentativa, já que a chave R2 é determinística
+ * (mesma versão ⇒ mesma chave ⇒ sobrescreve o objeto órfão).
+ */
 app.post('/guias-instrutor/:id/versoes', requireGuiaInstrutorManage(), async (c) => {
   const { empresaId } = getTenantContext(c);
   const userId = normalizeContextUserId(c.get('userId'));
@@ -555,6 +576,7 @@ app.post('/guias-instrutor/:id/versoes', requireGuiaInstrutorManage(), async (c)
   const assetFiles = formData.getAll('assets') as unknown as File[];
   if (!pdfFile) return badRequest('arquivo PDF é obrigatório');
 
+  // ── Fase 1: validação completa, nenhuma escrita ainda ──────────────────
   const assets: Record<string, { bytes: Uint8Array; mimeType: string }> = {};
   for (const assetFile of assetFiles) {
     if (!(assetFile instanceof File)) continue;
@@ -568,29 +590,20 @@ app.post('/guias-instrutor/:id/versoes', requireGuiaInstrutorManage(), async (c)
   if (pdfBytes.length === 0) return badRequest('PDF vazio rejeitado');
   if (!looksLikePdf(pdfBytes)) return badRequest('arquivo enviado no campo PDF não é um PDF válido');
 
-  const insertResult = await c.env.DB.prepare(
-    `INSERT INTO simuladores_guias_instrutor
-       (empresa_id, modelo_aeronave_id, programa, ciclo, sessao_numero, sessao_total,
-        codigo, titulo, descricao, versao, status, created_by, updated_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RASCUNHO', ?, ?)`,
-  )
-    .bind(
-      empresaId,
-      base.modelo_aeronave_id,
-      base.programa,
-      base.ciclo,
-      base.sessao_numero,
-      base.sessao_total,
-      base.codigo,
-      base.titulo,
-      base.descricao,
-      versao,
-      userId,
-      userId,
-    )
-    .run();
+  let sanitizedHtml: string | null = null;
+  let sanitizeAlertas: string[] = [];
+  let htmlStatus = 'NAO_DISPONIVEL';
 
-  const newId = Number(insertResult.meta.last_row_id);
+  if (htmlFile) {
+    const rawHtml = await htmlFile.text();
+    if (!rawHtml || !looksLikeHtml(rawHtml)) {
+      return badRequest('arquivo enviado no campo HTML não parece ser um HTML válido');
+    }
+    const sanitized = sanitizeGuiaHtml(rawHtml, assets);
+    sanitizedHtml = sanitized.html;
+    sanitizeAlertas = sanitized.alertas;
+    htmlStatus = sanitized.aprovado ? 'VALIDO' : 'REJEITADO';
+  }
 
   const aeronave = await c.env.DB.prepare('SELECT codigo FROM modelos_aeronave WHERE id = ?')
     .bind(base.modelo_aeronave_id)
@@ -604,80 +617,117 @@ app.post('/guias-instrutor/:id/versoes', requireGuiaInstrutorManage(), async (c)
     versao,
     arquivo: 'guia.pdf',
   });
-  await c.env.BUCKET.put(pdfKey, pdfBytes, {
-    httpMetadata: { contentType: 'application/pdf' },
-  });
-  const pdfHash = await sha256Hex(pdfBytes.buffer as ArrayBuffer);
+  const htmlKey = htmlFile
+    ? buildGuiaR2Key({
+        empresaId,
+        aeronaveCodigo: aeronave?.codigo || 'AERONAVE',
+        programa: base.programa,
+        codigo: base.codigo,
+        versao,
+        arquivo: 'index.html',
+      })
+    : null;
 
-  let htmlStatus = 'NAO_DISPONIVEL';
-  let htmlKey: string | null = null;
-  let htmlHash: string | null = null;
-  let htmlSize: number | null = null;
-  let sanitizeAlertas: string[] = [];
+  // ── Fase 2: escrita, com compensação best-effort em caso de falha ──────
+  let newId: number | null = null;
+  const uploadedKeys: string[] = [];
 
-  if (htmlFile) {
-    const rawHtml = await htmlFile.text();
-    if (!rawHtml || !looksLikeHtml(rawHtml)) {
-      return badRequest('arquivo enviado no campo HTML não parece ser um HTML válido');
-    }
-    const sanitized = sanitizeGuiaHtml(rawHtml, assets);
-    sanitizeAlertas = sanitized.alertas;
-    htmlStatus = sanitized.aprovado ? 'VALIDO' : 'REJEITADO';
-
-    htmlKey = buildGuiaR2Key({
-      empresaId,
-      aeronaveCodigo: aeronave?.codigo || 'AERONAVE',
-      programa: base.programa,
-      codigo: base.codigo,
-      versao,
-      arquivo: 'index.html',
-    });
-    const htmlBytes = new TextEncoder().encode(sanitized.html);
-    await c.env.BUCKET.put(htmlKey, htmlBytes, {
-      httpMetadata: { contentType: 'text/html; charset=utf-8' },
-    });
-    htmlHash = await sha256Hex(htmlBytes.buffer as ArrayBuffer);
-    htmlSize = htmlBytes.length;
-  }
-
-  await c.env.DB.prepare(
-    `UPDATE simuladores_guias_instrutor
-     SET pdf_r2_key = ?, pdf_nome = ?, pdf_mime_type = 'application/pdf',
-         pdf_tamanho_bytes = ?, pdf_sha256 = ?,
-         html_r2_key = ?, html_nome = ?, html_mime_type = ?, html_tamanho_bytes = ?,
-         html_sha256 = ?, html_status_validacao = ?,
-         status = 'VALIDACAO', updated_by = ?, updated_at = datetime('now')
-     WHERE id = ? AND empresa_id = ?`,
-  )
-    .bind(
-      pdfKey,
-      pdfFile.name,
-      pdfBytes.length,
-      pdfHash,
-      htmlKey,
-      htmlFile?.name ?? null,
-      htmlFile ? 'text/html' : null,
-      htmlSize,
-      htmlHash,
-      htmlStatus,
-      userId,
-      newId,
-      empresaId,
+  try {
+    const insertResult = await c.env.DB.prepare(
+      `INSERT INTO simuladores_guias_instrutor
+         (empresa_id, modelo_aeronave_id, programa, ciclo, sessao_numero, sessao_total,
+          codigo, titulo, descricao, versao, status, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RASCUNHO', ?, ?)`,
     )
-    .run();
+      .bind(
+        empresaId,
+        base.modelo_aeronave_id,
+        base.programa,
+        base.ciclo,
+        base.sessao_numero,
+        base.sessao_total,
+        base.codigo,
+        base.titulo,
+        base.descricao,
+        versao,
+        userId,
+        userId,
+      )
+      .run();
 
-  await registrarAuditoria(c.env.DB, {
-    empresaId,
-    guiaId: newId,
-    usuarioId: userId,
-    acao: 'UPLOAD_VERSAO',
-    novo: { versao, pdf_sha256: pdfHash, html_sha256: htmlHash, html_status_validacao: htmlStatus, sanitizeAlertas },
-  });
+    newId = Number(insertResult.meta.last_row_id);
 
-  return c.json({
-    success: true,
-    data: { id: newId, versao, html_status_validacao: htmlStatus, sanitizeAlertas },
-  }, 201);
+    await c.env.BUCKET.put(pdfKey, pdfBytes, { httpMetadata: { contentType: 'application/pdf' } });
+    uploadedKeys.push(pdfKey);
+    const pdfHash = await sha256Hex(pdfBytes.buffer as ArrayBuffer);
+
+    let htmlHash: string | null = null;
+    let htmlSize: number | null = null;
+
+    if (htmlFile && htmlKey && sanitizedHtml !== null) {
+      const htmlBytes = new TextEncoder().encode(sanitizedHtml);
+      await c.env.BUCKET.put(htmlKey, htmlBytes, {
+        httpMetadata: { contentType: 'text/html; charset=utf-8' },
+      });
+      uploadedKeys.push(htmlKey);
+      htmlHash = await sha256Hex(htmlBytes.buffer as ArrayBuffer);
+      htmlSize = htmlBytes.length;
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE simuladores_guias_instrutor
+       SET pdf_r2_key = ?, pdf_nome = ?, pdf_mime_type = 'application/pdf',
+           pdf_tamanho_bytes = ?, pdf_sha256 = ?,
+           html_r2_key = ?, html_nome = ?, html_mime_type = ?, html_tamanho_bytes = ?,
+           html_sha256 = ?, html_status_validacao = ?,
+           status = 'VALIDACAO', updated_by = ?, updated_at = datetime('now')
+       WHERE id = ? AND empresa_id = ?`,
+    )
+      .bind(
+        pdfKey,
+        pdfFile.name,
+        pdfBytes.length,
+        pdfHash,
+        htmlKey,
+        htmlFile?.name ?? null,
+        htmlFile ? 'text/html' : null,
+        htmlSize,
+        htmlHash,
+        htmlStatus,
+        userId,
+        newId,
+        empresaId,
+      )
+      .run();
+
+    await registrarAuditoria(c.env.DB, {
+      empresaId,
+      guiaId: newId,
+      usuarioId: userId,
+      acao: 'UPLOAD_VERSAO',
+      novo: { versao, pdf_sha256: pdfHash, html_sha256: htmlHash, html_status_validacao: htmlStatus, sanitizeAlertas },
+    });
+
+    return c.json(
+      { success: true, data: { id: newId, versao, html_status_validacao: htmlStatus, sanitizeAlertas } },
+      201,
+    );
+  } catch (err) {
+    for (const key of uploadedKeys) {
+      await c.env.BUCKET.delete(key).catch((cleanupErr) =>
+        console.error('[guias-instrutor] compensação: falha ao apagar objeto R2 órfão', key, cleanupErr),
+      );
+    }
+    if (newId !== null) {
+      await c.env.DB.prepare('DELETE FROM simuladores_guias_instrutor WHERE id = ? AND empresa_id = ?')
+        .bind(newId, empresaId)
+        .run()
+        .catch((cleanupErr) =>
+          console.error('[guias-instrutor] compensação: falha ao remover rascunho órfão', newId, cleanupErr),
+        );
+    }
+    throw err;
+  }
 });
 
 app.post('/guias-instrutor/:id/validar-html', requireGuiaInstrutorManage(), async (c) => {
