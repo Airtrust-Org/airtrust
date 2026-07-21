@@ -4,6 +4,16 @@
 -- version table below.  It is safe to apply only through the local migration
 -- gate; it contains no AW139/S-76 catalogue data.
 --
+-- OPERATIONAL MARKERS (guard:operational-sql-sources):
+-- source_reference: schema snapshot local pré-0440 e contrato de matriz AW139/S-76,
+--   conferidos sem conexão a D1 remoto.
+-- operational_decision: reconstruir somente a tabela de vínculos para remover a
+--   unicidade modelo/manobra; preservar IDs e posições históricas inclusive 19–22.
+-- dry_run_required: executar o teste descartável 0440 e PRAGMA foreign_key_check
+--   antes de qualquer aplicação local autorizada.
+-- rollback_plan_required: usar simuladores_matriz_import_changes para dados; para
+--   DDL, reverter em cópia local validada, sem apagar fichas ou sessões.
+--
 -- Rollback (after verifying no import is APPLIED): drop the triggers and
 -- indexes below, then drop the four new tables. Do not delete session/ficha
 -- history; their FK target is modelos_sessao and remains untouched.
@@ -141,7 +151,15 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_modelo_versao_integridade_update
 BEFORE UPDATE ON modelos_sessao_versionamento
 BEGIN
-  SELECT CASE WHEN NEW.modelo_id <> OLD.modelo_id THEN RAISE(ABORT, 'modelo_id versionado é imutável') END;
+  SELECT CASE WHEN NEW.modelo_id <> OLD.modelo_id
+    OR NEW.empresa_id <> OLD.empresa_id
+    OR NEW.codigo_canonico <> OLD.codigo_canonico
+    OR NEW.versao_numero <> OLD.versao_numero
+    OR NEW.versao_matriz <> OLD.versao_matriz
+    OR COALESCE(NEW.modelo_anterior_id, -1) <> COALESCE(OLD.modelo_anterior_id, -1)
+    OR NEW.efetivo_em <> OLD.efetivo_em
+    OR NEW.created_at <> OLD.created_at
+    THEN RAISE(ABORT, 'identidade de versão é imutável') END;
   SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM modelos_sessao ms WHERE ms.id = NEW.modelo_id AND ms.empresa_id = NEW.empresa_id)
     THEN RAISE(ABORT, 'modelo e empresa divergentes') END;
   SELECT CASE WHEN NEW.is_current = 1 AND NEW.efetivo_ate IS NOT NULL THEN RAISE(ABORT, 'versão corrente não pode ter término') END;
@@ -151,6 +169,11 @@ BEGIN
     WHERE previous.modelo_id = NEW.modelo_anterior_id AND previous.empresa_id = NEW.empresa_id
       AND previous.codigo_canonico = NEW.codigo_canonico AND previous.versao_numero < NEW.versao_numero
   ) THEN RAISE(ABORT, 'predecessor inválido') END;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_modelo_versao_updated_at
+AFTER UPDATE OF is_current, efetivo_ate ON modelos_sessao_versionamento
+FOR EACH ROW BEGIN
+  UPDATE modelos_sessao_versionamento SET updated_at = CURRENT_TIMESTAMP WHERE modelo_id = NEW.modelo_id;
 END;
 
 CREATE TABLE IF NOT EXISTS modelos_sessao_manobras_contexto (
