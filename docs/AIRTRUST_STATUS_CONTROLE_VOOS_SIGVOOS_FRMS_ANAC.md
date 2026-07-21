@@ -4,6 +4,15 @@
 **Classificação:** Interno — NÃO submeter à ANAC
 **Propósito:** Visão consolidada do estado atual das 4 frentes interligadas, sem implementação.
 
+> **Nota de atualização (2026-07-20):** este documento está parcialmente desatualizado.
+> A entrega `feat/controle-voos-rdv-sigvoos-reinicio` adicionou o fluxo de revisão/aprovação
+> Piloto → Coordenação do RDV, tripulação e abastecimentos com CRUD real, motor de alertas e
+> exportação em PDF — resolvendo os itens "Atribuição de tripulantes... Placeholder" e
+> parte do item "Fechamento completo de governança N1" listados na seção 1 abaixo.
+> Ver `CONTROLE_DE_VOOS_RDV_COORDENACAO_WORKFLOW.md` para o estado atual dessa frente
+> específica. As demais frentes (SIGVOOS, FRMS, ANAC) não foram alteradas por essa entrega
+> e o conteúdo abaixo permanece a referência válida para elas.
+
 ---
 
 ## 1. Estado Atual do Controle de Voos N1

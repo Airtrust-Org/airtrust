@@ -26,8 +26,6 @@ const LARGE_FILE_LINE_CAPS = {
   // so a sector-restricted manager can no longer read/cancel/alter another
   // sector's matrícula by id).
   'routes/lms-matriculas.ts': 3296,
-  // Acknowledged growth (pre-existing, logged 2026-06-30): controle de voos CRUD + histórico.
-  'routes/controle-voos.ts': 2112,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   'routes/frms-fadiga-checkin.ts': 2021,
   // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.

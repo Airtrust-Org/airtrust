@@ -271,6 +271,8 @@ const ControleVoosVoos = lazyWithRetry(() => import('./pages/controle-voos/Contr
 const ControleVoosVooDetalhe = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosVooDetalhe'), 'ControleVoosVooDetalhe');
 const ControleVoosRdv = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosRdv'), 'ControleVoosRdv');
 const ControleVoosRdvDetalhe = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosRdvDetalhe'), 'ControleVoosRdvDetalhe');
+const ControleVoosMeusVoos = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosMeusVoos'), 'ControleVoosMeusVoos');
+const ControleVoosCoordenacaoFila = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosCoordenacaoFila'), 'ControleVoosCoordenacaoFila');
 const ControleVoosJornadas = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosJornadas'), 'ControleVoosJornadas');
 const ControleVoosIndisponibilidades = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosIndisponibilidades'), 'ControleVoosIndisponibilidades');
 const ControleVoosHangaragem = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosHangaragem'), 'ControleVoosHangaragem');
@@ -936,6 +938,8 @@ export default function App() {
                     <Route path="/controle-voos/voos/:id" element={<ProtectedRoute><ControleVoosVooDetalhe /></ProtectedRoute>} />
                     <Route path="/controle-voos/rdv" element={<ProtectedRoute><ControleVoosRdv /></ProtectedRoute>} />
                     <Route path="/controle-voos/rdv/:id" element={<ProtectedRoute><ControleVoosRdvDetalhe /></ProtectedRoute>} />
+                    <Route path="/controle-voos/meus-voos" element={<ProtectedRoute><ControleVoosMeusVoos /></ProtectedRoute>} />
+                    <Route path="/controle-voos/coordenacao/fila" element={<ProtectedRoute><ControleVoosCoordenacaoFila /></ProtectedRoute>} />
                     <Route path="/controle-voos/jornadas" element={<ProtectedRoute><ControleVoosJornadas /></ProtectedRoute>} />
                     <Route path="/controle-voos/indisponibilidades" element={<ProtectedRoute><ControleVoosIndisponibilidades /></ProtectedRoute>} />
                     <Route path="/controle-voos/hangaragem" element={<ProtectedRoute><ControleVoosHangaragem /></ProtectedRoute>} />
