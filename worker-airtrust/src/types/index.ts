@@ -226,11 +226,13 @@ export interface QualificacaoReclassQueueItem {
 // Categoria de Qualificação
 export interface QualificacaoCategoria {
   id: number;
+  codigo: string;
   nome: string;
   slug: string;
   cor: string;
   descricao?: string;
   ordem: number;
+  ativo: boolean;
   created_at: string;
   updated_at: string;
   deleted_at?: string | null;

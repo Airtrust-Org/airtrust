@@ -10,6 +10,7 @@ import {
 } from '@/react-app/services/qualificacoesService';
 import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncionariosAtivos';
 import { useTiposQualificacao } from '@/react-app/hooks/qualificacoes/useTiposQualificacao';
+import { useCategoriasQualificacao } from '@/react-app/hooks/qualificacoes/useCategoriasQualificacao';
 import { HistoricoQualificacaoInput } from '@/react-app/schemas/qualificacoes';
 import { dateToHTMLFormat } from '@/react-app/utils/dateUtils';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
@@ -110,16 +111,24 @@ export function ModalAtribuirQualificacao({
     error: errorFuncionarios,
   } = useFuncionariosAtivos();
   const { data: tiposData = [], isLoading: loadingTipos } = useTiposQualificacao();
+  const {
+    data: categoriasData = [],
+    isLoading: loadingCategorias,
+    error: errorCategorias,
+  } = useCategoriasQualificacao();
   const [validadeMeses, setValidadeMeses] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const loading = loadingTipos || loadingFuncionarios;
+  const loading = loadingTipos || loadingFuncionarios || loadingCategorias;
   const todosTipos = useMemo(() => tiposData as TipoQualificacaoResumo[], [tiposData]);
   const categorias = useMemo(
-    () => [...new Set(todosTipos.map((tipo) => tipo.categoria))].filter(Boolean).sort() as string[],
-    [todosTipos],
+    () => [...categoriasData].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR')),
+    [categoriasData],
   );
   const tiposFiltrados = useMemo(
-    () => (form.categoria ? todosTipos.filter((tipo) => tipo.categoria === form.categoria) : []),
+    () =>
+      form.categoria
+        ? todosTipos.filter((tipo) => Number(tipo.categoria_id) === Number(form.categoria))
+        : [],
     [form.categoria, todosTipos],
   );
   const instrutoresCadastrados = useMemo(
@@ -132,6 +141,7 @@ export function ModalAtribuirQualificacao({
     [funcionariosData],
   );
   const selectedTipo = todosTipos.find((tipo) => tipo.codigo === form.qualificacao_codigo) || null;
+  const isLegacyEditing = Boolean(isEditMode && selectedTipo && !selectedTipo.categoria_id);
   const isG1Selected = isG1Qualificacao(form.qualificacao_codigo);
   const isG1SemSelected = isG1SemQualificacao(form.qualificacao_codigo);
   const isSemestralModeloSelected = Number(selectedTipo?.validade || 0) === 6;
@@ -197,20 +207,21 @@ export function ModalAtribuirQualificacao({
     }
 
     const tipo = todosTipos.find((item) => item.codigo === habilitacao.qualificacao_codigo);
-    if (!tipo?.categoria || form.categoria === tipo.categoria) {
+    const categoriaId = tipo?.categoria_id ? String(tipo.categoria_id) : '';
+    if (!categoriaId || form.categoria === categoriaId) {
       return;
     }
 
     setForm((prev) =>
-      prev.categoria === tipo.categoria ? prev : { ...prev, categoria: tipo.categoria },
+      prev.categoria === categoriaId ? prev : { ...prev, categoria: categoriaId },
     );
   }, [habilitacao?.qualificacao_codigo, todosTipos, form.categoria]);
 
   useEffect(() => {
     if (!form.categoria && form.qualificacao_codigo && todosTipos.length > 0) {
       const tipoSelecionado = todosTipos.find((tipo) => tipo.codigo === form.qualificacao_codigo);
-      if (tipoSelecionado?.categoria) {
-        setForm((prev) => ({ ...prev, categoria: tipoSelecionado.categoria }));
+      if (tipoSelecionado?.categoria_id) {
+        setForm((prev) => ({ ...prev, categoria: String(tipoSelecionado.categoria_id) }));
       }
     }
   }, [form.categoria, form.qualificacao_codigo, todosTipos]);
@@ -283,6 +294,11 @@ export function ModalAtribuirQualificacao({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (errorCategorias) {
+      toast.warning('❌ Erro: categorias canônicas indisponíveis');
+      return;
+    }
+
     const funcionarioId = parseInt(form.funcionario_id, 10);
     const qualificacaoCodigo = form.qualificacao_codigo;
 
@@ -293,7 +309,7 @@ export function ModalAtribuirQualificacao({
     }
 
     // Buscar CPF do funcionário selecionado
-    const funcionarioSelecionado = funcionariosData.find((f) => f.id === funcionarioId);
+    const funcionarioSelecionado = funcionariosData.find((f: Funcionario) => f.id === funcionarioId);
     if (!funcionarioSelecionado) {
       toast.warning('❌ Erro: Funcionário não encontrado');
       return;
@@ -311,7 +327,7 @@ export function ModalAtribuirQualificacao({
       return;
     }
 
-    if (!form.categoria) {
+    if (!form.categoria && !isLegacyEditing) {
       toast.warning('❌ Erro: Categoria obrigatória');
       return;
     }
@@ -450,16 +466,22 @@ export function ModalAtribuirQualificacao({
                     setForm({ ...form, categoria: e.target.value, qualificacao_codigo: '' });
                   }}
                   required
-                  disabled={!form.funcionario_id || loading}
+                  disabled={!form.funcionario_id || loading || Boolean(errorCategorias)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   <option value="">Selecione...</option>
                   {categorias.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
+                    <option key={cat.id} value={cat.id}>
+                      {cat.nome}
                     </option>
                   ))}
                 </select>
+                {errorCategorias && (
+                  <p className="mt-1 text-xs text-red-600">⚠️ Não foi possível carregar as categorias canônicas. O salvamento está bloqueado.</p>
+                )}
+                {isLegacyEditing && (
+                  <p className="mt-1 text-xs text-amber-600">⚠️ Categoria legada: preserve o modelo para salvar sem reclassificar, ou selecione uma categoria canônica.</p>
+                )}
                 {!form.funcionario_id && (
                   <p className="mt-1 text-xs text-gray-500">ℹ️ Selecione um funcionário primeiro</p>
                 )}
@@ -482,10 +504,15 @@ export function ModalAtribuirQualificacao({
                     setForm({ ...form, qualificacao_codigo: codigo });
                   }}
                   required
-                  disabled={!form.categoria || loading}
+                  disabled={(!form.categoria && !isLegacyEditing) || loading || Boolean(errorCategorias)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   <option value="">Selecione...</option>
+                  {isLegacyEditing && selectedTipo && (
+                    <option value={selectedTipo.codigo}>
+                      {selectedTipo.nome} {selectedTipo.codigo && `(${selectedTipo.codigo})`} — Categoria legada
+                    </option>
+                  )}
                   {tiposFiltrados.map((tipo) => (
                     <option key={tipo.id} value={tipo.codigo}>
                       {tipo.nome} {tipo.codigo && `(${tipo.codigo})`}
