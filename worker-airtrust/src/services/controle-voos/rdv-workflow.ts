@@ -294,6 +294,47 @@ export function assertRdvVersion(existing: RdvRow, expectedVersion: unknown): vo
   }
 }
 
+/**
+ * `versao` é obrigatória em toda transição de fluxo do RDV (nunca opcional):
+ * sem ela, um cliente desatualizado nem chegaria a saber que perdeu uma
+ * mudança concorrente. Separado de `assertRdvVersion` (que compara contra o
+ * estado atual) para reportar 400 quando o campo simplesmente não foi
+ * enviado ou é malformado, distinto do 409 de versão desatualizada.
+ */
+export function requireExpectedRdvVersion(payload: Record<string, unknown>): number {
+  if (
+    !Object.prototype.hasOwnProperty.call(payload, 'versao') ||
+    payload.versao === null ||
+    payload.versao === undefined ||
+    payload.versao === ''
+  ) {
+    throw new ApiError('versao e obrigatoria', 400, 'CONTROLE_VOOS_RDV_VERSION_REQUIRED');
+  }
+  const parsed = typeof payload.versao === 'number' ? payload.versao : Number(payload.versao);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new ApiError('versao invalida', 400, 'CONTROLE_VOOS_RDV_VERSION_INVALID');
+  }
+  return parsed;
+}
+
+/**
+ * Confirma que o UPDATE otimista (`WHERE ... AND versao = ?`) realmente
+ * afetou uma linha. Cobre a janela entre o SELECT que validou `versao` e o
+ * UPDATE em si: se outra requisição venceu a corrida nesse intervalo, o
+ * UPDATE atual afeta 0 linhas mesmo com `assertRdvVersion` já tendo
+ * passado — sem esta checagem, o código seguiria inserindo aprovação/
+ * revisão/evento como se a transição tivesse ocorrido.
+ */
+export function assertCasApplied(result: { meta: { changes: number } }): void {
+  if (!result.meta.changes) {
+    throw new ApiError(
+      'Versao do RDV desatualizada. Recarregue os dados antes de continuar.',
+      409,
+      'CONTROLE_VOOS_RDV_VERSION_CONFLICT',
+    );
+  }
+}
+
 export function requireNonEmptyText(value: unknown, field: string): string {
   const text = typeof value === 'string' ? value.trim() : '';
   if (!text) {

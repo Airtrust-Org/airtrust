@@ -19,6 +19,7 @@ import {
   buildMergedRdv,
   getFuncionarioIdForUser,
   recordFlightEvent,
+  buildFlightEventStatement,
   maybeRecordSystemAudit,
   allowedRdvFields,
   type RdvInput,
@@ -32,6 +33,8 @@ import {
   assertFuncionarioBelongsToEmpresa,
   assertRdvWorkflowTransition,
   assertRdvVersion,
+  requireExpectedRdvVersion,
+  assertCasApplied,
   requireNonEmptyText,
   recordRdvFieldRevisions,
 } from '../services/controle-voos/rdv-workflow';
@@ -59,24 +62,6 @@ async function parseJsonPayload(
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError('Payload JSON invalido', 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
-  }
-}
-
-async function parseOptionalJsonPayload(
-  c: import('hono').Context<{ Bindings: Env }>,
-): Promise<Record<string, unknown>> {
-  const contentType = c.req.header('content-type') || '';
-  const length = c.req.header('content-length');
-  if (!contentType.includes('application/json') && (!length || Number(length) === 0)) {
-    return {};
-  }
-  try {
-    const body = await c.req.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? (body as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
   }
 }
 
@@ -242,6 +227,7 @@ rdvWorkflow.get(
     const empresaId = getEmpresaIdSafe(c);
     const vooId = c.req.param('id');
     const voo = await getFlightOrThrow(c.env.DB, vooId, empresaId);
+    await assertRdvSelfScope(c, c.env.DB, empresaId, voo.id, RDV_CAPABILITIES.exportarPetrobras);
     const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
     if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
 
@@ -448,8 +434,9 @@ rdvWorkflow.post('/voos/:id/rdv/enviar', auth(), requireAnyRdvAccess(), async (c
   }
   assertRdvWorkflowTransition(rdv.workflow_status, 'enviado');
 
-  const payload = await parseOptionalJsonPayload(c);
-  if (payload.versao !== undefined) assertRdvVersion(rdv, payload.versao);
+  const payload = await parseJsonPayload(c);
+  const expectedVersion = requireExpectedRdvVersion(payload);
+  assertRdvVersion(rdv, expectedVersion);
 
   const alerts = await syncRdvAlerts(c.env.DB, empresaId, voo, rdv);
   const blocking = alerts.filter((a) => a.severidade === 'IMPEDE_ENVIO');
@@ -462,7 +449,7 @@ rdvWorkflow.post('/voos/:id/rdv/enviar', auth(), requireAnyRdvAccess(), async (c
   }
 
   const novaVersao = rdv.versao + 1;
-  await c.env.DB.prepare(
+  const updateResult = await c.env.DB.prepare(
     `
       UPDATE cv_rdv_operacional
       SET workflow_status = 'enviado', versao = ?, enviado_por = ?, enviado_em = datetime('now'),
@@ -472,27 +459,26 @@ rdvWorkflow.post('/voos/:id/rdv/enviar', auth(), requireAnyRdvAccess(), async (c
   )
     .bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao)
     .run();
+  assertCasApplied(updateResult);
 
-  await c.env.DB.prepare(
-    `
-      INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, created_at)
-      VALUES (?, ?, ?, 'COORDENACAO', 'ENVIADO', ?, datetime('now'))
-    `,
-  )
-    .bind(empresaId, rdv.id, novaVersao, userId)
-    .run();
-
-  await recordFlightEvent({
-    db: c.env.DB,
-    empresaId,
-    vooId: voo.id,
-    tipoEvento: 'rdv',
-    statusAnterior: voo.status,
-    statusNovo: voo.status,
-    descricao: 'RDV enviado para revisao da Coordenacao',
-    metadata: { action: 'enviar', rdv_id: rdv.id, versao: novaVersao },
-    usuarioId: userId,
-  });
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `
+        INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, created_at)
+        VALUES (?, ?, ?, 'COORDENACAO', 'ENVIADO', ?, datetime('now'))
+      `,
+    ).bind(empresaId, rdv.id, novaVersao, userId),
+    buildFlightEventStatement(c.env.DB, {
+      empresaId,
+      vooId: voo.id,
+      tipoEvento: 'rdv',
+      statusAnterior: voo.status,
+      statusNovo: voo.status,
+      descricao: 'RDV enviado para revisao da Coordenacao',
+      metadata: { action: 'enviar', rdv_id: rdv.id, versao: novaVersao },
+      usuarioId: userId,
+    }),
+  ]);
 
   const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
   return c.json({ success: true, data: updated });
@@ -511,11 +497,12 @@ rdvWorkflow.post(
     if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
 
     assertRdvWorkflowTransition(rdv.workflow_status, 'em_revisao');
-    const payload = await parseOptionalJsonPayload(c);
-    if (payload.versao !== undefined) assertRdvVersion(rdv, payload.versao);
+    const payload = await parseJsonPayload(c);
+    const expectedVersion = requireExpectedRdvVersion(payload);
+    assertRdvVersion(rdv, expectedVersion);
 
     const novaVersao = rdv.versao + 1;
-    await c.env.DB.prepare(
+    const updateResult = await c.env.DB.prepare(
       `
         UPDATE cv_rdv_operacional
         SET workflow_status = 'em_revisao', versao = ?, revisao_iniciada_por = ?,
@@ -525,6 +512,7 @@ rdvWorkflow.post(
     )
       .bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao)
       .run();
+    assertCasApplied(updateResult);
 
     await c.env.DB.prepare(
       `
@@ -554,11 +542,12 @@ rdvWorkflow.post(
 
     assertRdvWorkflowTransition(rdv.workflow_status, 'devolvido');
     const payload = await parseJsonPayload(c);
-    if (payload.versao !== undefined) assertRdvVersion(rdv, payload.versao);
+    const expectedVersion = requireExpectedRdvVersion(payload);
+    assertRdvVersion(rdv, expectedVersion);
     const justificativa = requireNonEmptyText(payload.justificativa, 'justificativa');
 
     const novaVersao = rdv.versao + 1;
-    await c.env.DB.prepare(
+    const updateResult = await c.env.DB.prepare(
       `
       UPDATE cv_rdv_operacional
       SET workflow_status = 'devolvido', status = 'rascunho', versao = ?,
@@ -569,27 +558,26 @@ rdvWorkflow.post(
     )
       .bind(novaVersao, userId, justificativa, userId, rdv.id, empresaId, rdv.versao)
       .run();
+    assertCasApplied(updateResult);
 
-    await c.env.DB.prepare(
-      `
-      INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, justificativa, created_at)
-      VALUES (?, ?, ?, 'COORDENACAO', 'DEVOLVIDO', ?, ?, datetime('now'))
-    `,
-    )
-      .bind(empresaId, rdv.id, novaVersao, userId, justificativa)
-      .run();
-
-    await recordFlightEvent({
-      db: c.env.DB,
-      empresaId,
-      vooId: voo.id,
-      tipoEvento: 'rdv',
-      statusAnterior: voo.status,
-      statusNovo: voo.status,
-      descricao: 'RDV devolvido ao piloto pela Coordenacao',
-      metadata: { action: 'devolver', rdv_id: rdv.id, versao: novaVersao, justificativa },
-      usuarioId: userId,
-    });
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `
+        INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, justificativa, created_at)
+        VALUES (?, ?, ?, 'COORDENACAO', 'DEVOLVIDO', ?, ?, datetime('now'))
+      `,
+      ).bind(empresaId, rdv.id, novaVersao, userId, justificativa),
+      buildFlightEventStatement(c.env.DB, {
+        empresaId,
+        vooId: voo.id,
+        tipoEvento: 'rdv',
+        statusAnterior: voo.status,
+        statusNovo: voo.status,
+        descricao: 'RDV devolvido ao piloto pela Coordenacao',
+        metadata: { action: 'devolver', rdv_id: rdv.id, versao: novaVersao, justificativa },
+        usuarioId: userId,
+      }),
+    ]);
 
     const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
     return c.json({ success: true, data: updated });
@@ -617,7 +605,8 @@ rdvWorkflow.post(
     }
 
     const payload = await parseJsonPayload(c);
-    if (payload.versao !== undefined) assertRdvVersion(rdv, payload.versao);
+    const expectedVersion = requireExpectedRdvVersion(payload);
+    assertRdvVersion(rdv, expectedVersion);
     const justificativa = requireNonEmptyText(payload.justificativa, 'justificativa');
     const campos = (
       payload.campos && typeof payload.campos === 'object' ? payload.campos : {}
@@ -638,11 +627,12 @@ rdvWorkflow.post(
     }
 
     const novaVersao = rdv.versao + 1;
+    let updateResult: D1Result;
     if (fields.length > 0) {
       fields.push('versao = ?', 'updated_by = ?', 'updated_at = datetime("now")');
       values.push(novaVersao, userId, rdv.id, empresaId, rdv.versao);
 
-      await c.env.DB.prepare(
+      updateResult = await c.env.DB.prepare(
         `
         UPDATE cv_rdv_operacional
         SET ${fields.join(', ')}
@@ -652,12 +642,13 @@ rdvWorkflow.post(
         .bind(...values)
         .run();
     } else {
-      await c.env.DB.prepare(
+      updateResult = await c.env.DB.prepare(
         `UPDATE cv_rdv_operacional SET versao = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND versao = ?`,
       )
         .bind(novaVersao, userId, rdv.id, empresaId, rdv.versao)
         .run();
     }
+    assertCasApplied(updateResult);
 
     const changedFields = await recordRdvFieldRevisions({
       db: c.env.DB,
@@ -694,8 +685,9 @@ rdvWorkflow.post(
     await assertNotSelfApproval(c, c.env.DB, rdv);
 
     assertRdvWorkflowTransition(rdv.workflow_status, 'aprovado_coordenacao');
-    const payload = await parseOptionalJsonPayload(c);
-    if (payload.versao !== undefined) assertRdvVersion(rdv, payload.versao);
+    const payload = await parseJsonPayload(c);
+    const expectedVersion = requireExpectedRdvVersion(payload);
+    assertRdvVersion(rdv, expectedVersion);
 
     const alerts = await syncRdvAlerts(c.env.DB, empresaId, voo, rdv);
     const blocking = alerts.filter((a) => a.severidade === 'IMPEDE_APROVACAO');
@@ -708,7 +700,7 @@ rdvWorkflow.post(
     }
 
     const novaVersao = rdv.versao + 1;
-    await c.env.DB.prepare(
+    const updateResult = await c.env.DB.prepare(
       `
         UPDATE cv_rdv_operacional
         SET workflow_status = 'aprovado_coordenacao', versao = ?, aprovado_coordenacao_por = ?,
@@ -718,29 +710,28 @@ rdvWorkflow.post(
     )
       .bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao)
       .run();
+    assertCasApplied(updateResult);
 
     const observacao = typeof payload.observacao === 'string' ? payload.observacao : null;
     const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
-    await c.env.DB.prepare(
-      `
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `
         INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, funcionario_id, observacao, created_at)
         VALUES (?, ?, ?, 'COORDENACAO', 'APROVADO', ?, ?, ?, datetime('now'))
       `,
-    )
-      .bind(empresaId, rdv.id, novaVersao, userId, funcionarioId, observacao)
-      .run();
-
-    await recordFlightEvent({
-      db: c.env.DB,
-      empresaId,
-      vooId: voo.id,
-      tipoEvento: 'rdv',
-      statusAnterior: voo.status,
-      statusNovo: voo.status,
-      descricao: 'RDV aprovado pela Coordenacao',
-      metadata: { action: 'aprovar', rdv_id: rdv.id, versao: novaVersao },
-      usuarioId: userId,
-    });
+      ).bind(empresaId, rdv.id, novaVersao, userId, funcionarioId, observacao),
+      buildFlightEventStatement(c.env.DB, {
+        empresaId,
+        vooId: voo.id,
+        tipoEvento: 'rdv',
+        statusAnterior: voo.status,
+        statusNovo: voo.status,
+        descricao: 'RDV aprovado pela Coordenacao',
+        metadata: { action: 'aprovar', rdv_id: rdv.id, versao: novaVersao },
+        usuarioId: userId,
+      }),
+    ]);
 
     const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
     return c.json({ success: true, data: updated });
@@ -760,11 +751,12 @@ rdvWorkflow.post(
     if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
 
     assertRdvWorkflowTransition(rdv.workflow_status, 'finalizado');
-    const payload = await parseOptionalJsonPayload(c);
-    if (payload.versao !== undefined) assertRdvVersion(rdv, payload.versao);
+    const payload = await parseJsonPayload(c);
+    const expectedVersion = requireExpectedRdvVersion(payload);
+    assertRdvVersion(rdv, expectedVersion);
 
     const novaVersao = rdv.versao + 1;
-    await c.env.DB.prepare(
+    const updateResult = await c.env.DB.prepare(
       `
         UPDATE cv_rdv_operacional
         SET workflow_status = 'finalizado', versao = ?, finalizado_workflow_em = datetime('now'),
@@ -774,6 +766,7 @@ rdvWorkflow.post(
     )
       .bind(novaVersao, userId, rdv.id, empresaId, rdv.versao)
       .run();
+    assertCasApplied(updateResult);
 
     await recordFlightEvent({
       db: c.env.DB,
@@ -806,11 +799,12 @@ rdvWorkflow.post(
 
     assertRdvWorkflowTransition(rdv.workflow_status, 'reaberto');
     const payload = await parseJsonPayload(c);
-    if (payload.versao !== undefined) assertRdvVersion(rdv, payload.versao);
+    const expectedVersion = requireExpectedRdvVersion(payload);
+    assertRdvVersion(rdv, expectedVersion);
     const justificativa = requireNonEmptyText(payload.justificativa, 'justificativa');
 
     const novaVersao = rdv.versao + 1;
-    await c.env.DB.prepare(
+    const updateResult = await c.env.DB.prepare(
       `
       UPDATE cv_rdv_operacional
       SET workflow_status = 'reaberto', status = 'rascunho', versao = ?,
@@ -820,27 +814,26 @@ rdvWorkflow.post(
     )
       .bind(novaVersao, userId, userId, rdv.id, empresaId, rdv.versao)
       .run();
+    assertCasApplied(updateResult);
 
-    await c.env.DB.prepare(
-      `
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `
       INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, justificativa, created_at)
       VALUES (?, ?, ?, 'COORDENACAO', 'REABERTO', ?, ?, datetime('now'))
     `,
-    )
-      .bind(empresaId, rdv.id, novaVersao, userId, justificativa)
-      .run();
-
-    await recordFlightEvent({
-      db: c.env.DB,
-      empresaId,
-      vooId: voo.id,
-      tipoEvento: 'rdv',
-      statusAnterior: voo.status,
-      statusNovo: voo.status,
-      descricao: 'RDV reaberto pela Coordenacao',
-      metadata: { action: 'reabrir', rdv_id: rdv.id, versao: novaVersao, justificativa },
-      usuarioId: userId,
-    });
+      ).bind(empresaId, rdv.id, novaVersao, userId, justificativa),
+      buildFlightEventStatement(c.env.DB, {
+        empresaId,
+        vooId: voo.id,
+        tipoEvento: 'rdv',
+        statusAnterior: voo.status,
+        statusNovo: voo.status,
+        descricao: 'RDV reaberto pela Coordenacao',
+        metadata: { action: 'reabrir', rdv_id: rdv.id, versao: novaVersao, justificativa },
+        usuarioId: userId,
+      }),
+    ]);
 
     const updated = await getRdvOrThrow(c.env.DB, rdv.id, empresaId);
     return c.json({ success: true, data: updated });
@@ -859,11 +852,12 @@ rdvWorkflow.post('/voos/:id/rdv/cancelar', auth(), requireAnyRdvAccess(), async 
 
   assertRdvWorkflowTransition(rdv.workflow_status, 'cancelado');
   const payload = await parseJsonPayload(c);
-  if (payload.versao !== undefined) assertRdvVersion(rdv, payload.versao);
+  const expectedVersion = requireExpectedRdvVersion(payload);
+  assertRdvVersion(rdv, expectedVersion);
   const justificativa = requireNonEmptyText(payload.justificativa, 'justificativa');
 
   const novaVersao = rdv.versao + 1;
-  await c.env.DB.prepare(
+  const updateResult = await c.env.DB.prepare(
     `
       UPDATE cv_rdv_operacional
       SET workflow_status = 'cancelado', status = 'cancelado', versao = ?,
@@ -873,6 +867,7 @@ rdvWorkflow.post('/voos/:id/rdv/cancelar', auth(), requireAnyRdvAccess(), async 
   )
     .bind(novaVersao, justificativa, userId, rdv.id, empresaId, rdv.versao)
     .run();
+  assertCasApplied(updateResult);
 
   await c.env.DB.prepare(
     `
@@ -1053,15 +1048,22 @@ rdvWorkflow.put('/voos/:id/tripulantes/:tripulanteId', auth(), requireAnyRdvAcce
 rdvWorkflow.delete(
   '/voos/:id/tripulantes/:tripulanteId',
   auth(),
-  requireRdvCapability(RDV_CAPABILITIES.editarRascunhoProprio),
+  requireAnyRdvAccess(),
   async (c) => {
     const empresaId = getEmpresaIdSafe(c);
     const userId = Number(getActorId(c));
     const vooId = c.req.param('id');
     const tripulanteId = parsePositiveInteger(c.req.param('tripulanteId'), 'tripulanteId');
     const voo = await getFlightOrThrow(c.env.DB, vooId, empresaId);
+    await assertRdvSelfScope(
+      c,
+      c.env.DB,
+      empresaId,
+      voo.id,
+      RDV_CAPABILITIES.editarRascunhoProprio,
+    );
 
-    await c.env.DB.prepare(
+    const result = await c.env.DB.prepare(
       `
         UPDATE cv_voo_tripulantes
         SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now')
@@ -1070,6 +1072,10 @@ rdvWorkflow.delete(
     )
       .bind(userId, tripulanteId, voo.id, empresaId)
       .run();
+
+    if (!result.meta.changes) {
+      throw new ApiError('Tripulante nao encontrado', 404, 'CONTROLE_VOOS_TRIPULANTE_NOT_FOUND');
+    }
 
     return c.json({ success: true, data: { id: tripulanteId } });
   },
@@ -1100,38 +1106,35 @@ rdvWorkflow.get('/voos/:id/abastecimentos', auth(), requireAnyRdvAccess(), async
   return c.json({ success: true, data: results || [] });
 });
 
-rdvWorkflow.post(
-  '/voos/:id/abastecimentos',
-  auth(),
-  requireRdvCapability(RDV_CAPABILITIES.editarRascunhoProprio),
-  async (c) => {
-    const empresaId = getEmpresaIdSafe(c);
-    const userId = Number(getActorId(c));
-    const vooId = c.req.param('id');
-    const voo = await getFlightOrThrow(c.env.DB, vooId, empresaId);
-    const payload = await parseJsonPayload(c);
+rdvWorkflow.post('/voos/:id/abastecimentos', auth(), requireAnyRdvAccess(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const userId = Number(getActorId(c));
+  const vooId = c.req.param('id');
+  const voo = await getFlightOrThrow(c.env.DB, vooId, empresaId);
+  await assertRdvSelfScope(c, c.env.DB, empresaId, voo.id, RDV_CAPABILITIES.editarRascunhoProprio);
+  const payload = await parseJsonPayload(c);
 
-    const dataHora = String(payload.data_hora || '').trim();
-    if (!dataHora) throw new ApiError('data_hora invalido', 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
-    const fornecedor = payload.fornecedor ? String(payload.fornecedor) : null;
-    const localidade = payload.localidade ? String(payload.localidade) : null;
-    const unidade = payload.unidade ? String(payload.unidade) : 'L';
-    const combustivelSolicitado =
-      payload.combustivel_solicitado != null && payload.combustivel_solicitado !== ''
-        ? Number(payload.combustivel_solicitado)
-        : null;
-    const combustivelAbastecido =
-      payload.combustivel_abastecido != null && payload.combustivel_abastecido !== ''
-        ? Number(payload.combustivel_abastecido)
-        : null;
-    const numeroCe = payload.numero_ce ? String(payload.numero_ce) : null;
-    const anexoR2Key = payload.anexo_r2_key ? String(payload.anexo_r2_key) : null;
-    const responsavelId = parseOptionalPositiveInteger(payload.responsavel_id, 'responsavel_id');
-    const etapaId = parseOptionalPositiveInteger(payload.etapa_id, 'etapa_id');
-    const observacoes = payload.observacoes ? String(payload.observacoes) : null;
+  const dataHora = String(payload.data_hora || '').trim();
+  if (!dataHora) throw new ApiError('data_hora invalido', 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
+  const fornecedor = payload.fornecedor ? String(payload.fornecedor) : null;
+  const localidade = payload.localidade ? String(payload.localidade) : null;
+  const unidade = payload.unidade ? String(payload.unidade) : 'L';
+  const combustivelSolicitado =
+    payload.combustivel_solicitado != null && payload.combustivel_solicitado !== ''
+      ? Number(payload.combustivel_solicitado)
+      : null;
+  const combustivelAbastecido =
+    payload.combustivel_abastecido != null && payload.combustivel_abastecido !== ''
+      ? Number(payload.combustivel_abastecido)
+      : null;
+  const numeroCe = payload.numero_ce ? String(payload.numero_ce) : null;
+  const anexoR2Key = payload.anexo_r2_key ? String(payload.anexo_r2_key) : null;
+  const responsavelId = parseOptionalPositiveInteger(payload.responsavel_id, 'responsavel_id');
+  const etapaId = parseOptionalPositiveInteger(payload.etapa_id, 'etapa_id');
+  const observacoes = payload.observacoes ? String(payload.observacoes) : null;
 
-    const result = await c.env.DB.prepare(
-      `
+  const result = await c.env.DB.prepare(
+    `
         INSERT INTO cv_voo_abastecimentos (
           empresa_id, voo_id, etapa_id, fornecedor, localidade,
           combustivel_solicitado, unidade, combustivel_abastecido, numero_ce,
@@ -1139,42 +1142,48 @@ rdvWorkflow.post(
           created_by, updated_by, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `,
+  )
+    .bind(
+      empresaId,
+      voo.id,
+      etapaId,
+      fornecedor,
+      localidade,
+      combustivelSolicitado,
+      unidade,
+      combustivelAbastecido,
+      numeroCe,
+      anexoR2Key,
+      responsavelId,
+      dataHora,
+      observacoes,
+      userId,
+      userId,
     )
-      .bind(
-        empresaId,
-        voo.id,
-        etapaId,
-        fornecedor,
-        localidade,
-        combustivelSolicitado,
-        unidade,
-        combustivelAbastecido,
-        numeroCe,
-        anexoR2Key,
-        responsavelId,
-        dataHora,
-        observacoes,
-        userId,
-        userId,
-      )
-      .run();
+    .run();
 
-    return c.json({ success: true, data: { id: Number(result.meta.last_row_id) } }, 201);
-  },
-);
+  return c.json({ success: true, data: { id: Number(result.meta.last_row_id) } }, 201);
+});
 
 rdvWorkflow.delete(
   '/voos/:id/abastecimentos/:abastecimentoId',
   auth(),
-  requireRdvCapability(RDV_CAPABILITIES.editarRascunhoProprio),
+  requireAnyRdvAccess(),
   async (c) => {
     const empresaId = getEmpresaIdSafe(c);
     const userId = Number(getActorId(c));
     const vooId = c.req.param('id');
     const abastecimentoId = parsePositiveInteger(c.req.param('abastecimentoId'), 'abastecimentoId');
     const voo = await getFlightOrThrow(c.env.DB, vooId, empresaId);
+    await assertRdvSelfScope(
+      c,
+      c.env.DB,
+      empresaId,
+      voo.id,
+      RDV_CAPABILITIES.editarRascunhoProprio,
+    );
 
-    await c.env.DB.prepare(
+    const result = await c.env.DB.prepare(
       `
         UPDATE cv_voo_abastecimentos
         SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now')
@@ -1183,6 +1192,14 @@ rdvWorkflow.delete(
     )
       .bind(userId, abastecimentoId, voo.id, empresaId)
       .run();
+
+    if (!result.meta.changes) {
+      throw new ApiError(
+        'Abastecimento nao encontrado',
+        404,
+        'CONTROLE_VOOS_ABASTECIMENTO_NOT_FOUND',
+      );
+    }
 
     return c.json({ success: true, data: { id: abastecimentoId } });
   },

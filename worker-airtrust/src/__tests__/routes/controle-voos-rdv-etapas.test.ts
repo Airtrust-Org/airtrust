@@ -644,10 +644,11 @@ describe('RDV etapas — CRUD multi-tenant', () => {
       { method: 'POST' },
       PILOTO,
     );
+    versao = await getVersao(db);
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: JSON.stringify({ versao }) },
       PILOTO,
     );
 
@@ -663,7 +664,7 @@ describe('RDV etapas — CRUD multi-tenant', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/iniciar-revisao',
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: JSON.stringify({ versao }) },
       COORDENACAO,
     );
     versao = await getVersao(db);

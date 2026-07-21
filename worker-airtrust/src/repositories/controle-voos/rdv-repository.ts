@@ -329,8 +329,7 @@ export async function isCrewOnFlight(
   return !!row;
 }
 
-export async function recordFlightEvent(params: {
-  db: D1Database;
+export type FlightEventParams = {
   empresaId: number;
   vooId: number;
   tipoEvento: 'status' | 'horario' | 'tripulacao' | 'rdv' | 'ocorrencia' | 'observacao' | 'sistema';
@@ -340,8 +339,19 @@ export async function recordFlightEvent(params: {
   motivoId?: number | null;
   metadata?: Record<string, unknown>;
   usuarioId?: number | string | null;
-}): Promise<void> {
-  await params.db
+};
+
+/**
+ * Monta (sem executar) o INSERT de evento do voo, para permitir agrupar em
+ * `db.batch([...])` junto de outras escritas obrigatórias (ex.: aprovação)
+ * que devem ser atômicas entre si. `recordFlightEvent` abaixo continua
+ * disponível para os chamadores que só precisam de uma escrita isolada.
+ */
+export function buildFlightEventStatement(
+  db: D1Database,
+  params: FlightEventParams,
+): D1PreparedStatement {
+  return db
     .prepare(
       `
       INSERT INTO cv_voo_eventos (
@@ -363,8 +373,13 @@ export async function recordFlightEvent(params: {
       params.usuarioId || null,
       params.usuarioId || null,
       params.usuarioId || null,
-    )
-    .run();
+    );
+}
+
+export async function recordFlightEvent(
+  params: FlightEventParams & { db: D1Database },
+): Promise<void> {
+  await buildFlightEventStatement(params.db, params).run();
 }
 
 export async function maybeRecordSystemAudit(
