@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import {
   Plane,
@@ -11,9 +12,11 @@ import {
   ClipboardCheck,
   FileText,
   BookOpen,
+  Library,
   ArrowUpRight,
   ArrowLeft,
 } from 'lucide-react';
+import { useGuiasInstrutorPermissions } from '@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions';
 
 function useCountUp(target: number, duration = 600, start = true) {
   const [value, setValue] = useState(0);
@@ -83,6 +86,8 @@ const colorClasses: Record<string, { icon: string; badge: string }> = {
 };
 
 export default function TabGestaoWrapper() {
+  const navigate = useNavigate();
+  const { podeGerenciar: podeGerenciarGuias } = useGuiasInstrutorPermissions();
   const [loading, setLoading] = useState(true);
   const [dataReady, setDataReady] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -339,6 +344,23 @@ export default function TabGestaoWrapper() {
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Biblioteca de avaliação</p>
             <div className="grid gap-2.5">
               {bibliotecaCards.map(renderCard)}
+              {podeGerenciarGuias && (
+                <button
+                  onClick={() => navigate('/simuladores/configuracoes/guias-instrutor')}
+                  className="group flex items-center gap-3 w-full rounded-lg border border-gray-200 bg-white p-3.5 text-left transition-all duration-150 hover:border-gray-300 hover:shadow-sm"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
+                    <Library className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900">Gerenciar Guias do Instrutor</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Publicação, versionamento e vínculo com sessões
+                    </p>
+                  </div>
+                  <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-gray-400 transition-all duration-200 group-hover:text-gray-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </button>
+              )}
             </div>
           </section>
         </div>
