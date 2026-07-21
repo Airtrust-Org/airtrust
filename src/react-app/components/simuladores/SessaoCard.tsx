@@ -10,6 +10,7 @@ import { Clock, User, Users, FileText, Edit2, Trash2, Mail, MessageCircle } from
 import { toast } from 'sonner';
 import { getCorSimulador, isCheck, getRingCheck } from '@/react-app/utils/simulador-cores';
 import { enviarNotificacaoSessao, montarResumoCanal } from '@/react-app/utils/sessaoNotificacoes';
+import { BotaoGuiaSessao } from './BotaoGuiaSessao';
 
 export interface Participante {
   id: number;
@@ -257,6 +258,7 @@ export default function SessaoCard({ sessao, onEdit, onDelete, onVerFichas }: Se
           <FileText size={14} />
           Fichas ({sessao.fichas?.length || 0})
         </button>
+        <BotaoGuiaSessao sessaoId={sessao.id} />
         <button
           onClick={handleEnviarEmail}
           disabled={sendingChannel !== null}

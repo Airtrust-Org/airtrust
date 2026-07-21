@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   LockKeyhole,
   HeartPulse,
+  BookOpen,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
@@ -127,6 +128,20 @@ export function buildHomeAccessCards(params: {
       route: '/simuladores',
       color: 'bg-violet-50',
       iconColor: 'text-violet-600',
+    });
+  }
+
+  // Guias do Instrutor — biblioteca de material de preparação de sessão.
+  // Gate visual apenas; a autorização real é validada no backend por
+  // simuladores.guias_instrutor.read (vínculo ativo instrutor↔empresa).
+  if (role === 'INSTRUTOR') {
+    cards.push({
+      icon: <BookOpen className="w-7 h-7" />,
+      title: 'Guias do Instrutor',
+      description: 'Consulte os materiais das sessões iniciais, periódicas e semestrais.',
+      route: '/instrutor/guias',
+      color: 'bg-indigo-50',
+      iconColor: 'text-indigo-600',
     });
   }
 
