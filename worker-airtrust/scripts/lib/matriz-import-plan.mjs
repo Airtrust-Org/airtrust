@@ -11,7 +11,10 @@ export function stableJson(value) {
 }
 
 export function sha256(value) {
-  return crypto.createHash('sha256').update(typeof value === 'string' ? value : stableJson(value)).digest('hex');
+  if (typeof value === 'string' || Buffer.isBuffer(value) || value instanceof Uint8Array) {
+    return crypto.createHash('sha256').update(value).digest('hex');
+  }
+  return crypto.createHash('sha256').update(stableJson(value)).digest('hex');
 }
 
 export function validateModelItems(models, items) {

@@ -15,18 +15,18 @@ node worker-airtrust/scripts/prepare-simuladores-matriz-import.mjs \
   --empresa-id <TENANT_ID> --out /tmp/airtrust-simuladores-plan
 ```
 
-O comando falha fechado se encontrar outra contagem que não 30/540/14 para AW139, 21/378/8 para S-76, ordem fora de 1–18, vínculo duplicado ou divergência entre CSV e XLSX do S-76. A saída `plan.json` é o snapshot sanitizado a revisar antes de qualquer carga.
+O comando falha fechado se encontrar outra contagem que não 30/540/14 para AW139, 21/378/8 para S-76, ordem fora de 1–18 em modelo novo, vínculo duplicado na mesma posição ou divergência entre CSV e XLSX do S-76. O manifesto contém SHA-256 dos bytes de cada fonte consumida, inclusive cada guia HTML. A saída `plan.json` é o plano sanitizado a revisar antes de qualquer carga.
 
 ## Aplicação local controlada
 
 1. Aplicar somente a migration `0440_simuladores_matriz_versionada_metadata.sql` no D1 local.
 2. Capturar um snapshot das linhas do tenant afetadas (`modelos_sessao`, `modelos_sessao_manobras`, `manobras`, fichas e agendamentos).
 3. Executar o dry-run acima com o tenant real — nunca com um ID fixo em código.
-4. O aplicador operacional deve criar nova versão para qualquer modelo com referência histórica, inativar a versão antiga somente para novas seleções e registrar `modelos_sessao_matriz_imports`.
+4. O aplicador operacional deve criar nova versão para qualquer modelo com referência histórica, inativar a versão antiga somente para novas seleções e registrar `simuladores_matriz_imports` e as mudanças em `simuladores_matriz_import_changes`.
 5. Reexecutar o dry-run e as validações de 18 posições/LOFT antes de promover o artefato.
 
 Não há comando de staging ou produção nesta mudança. A migration não contém carga de dados e não deve ser executada remotamente sem revisão operacional.
 
 ## Rollback
 
-Reverter uma aplicação de dados usando o `snapshot_json` registrado em `modelos_sessao_matriz_imports`, restrito ao mesmo `empresa_id`. Marque a execução como `ROLLED_BACK`; não apague fichas, sessões, qualificações ou auditoria. O rollback estrutural requer remover os índices e a tabela de importações e somente então as colunas adicionadas, em banco local validado.
+Reverter uma aplicação de dados usando as mudanças registradas por importação em `simuladores_matriz_import_changes`, restrito ao mesmo `empresa_id`. Marque a execução como `ROLLED_BACK`; não apague fichas, sessões, qualificações ou auditoria. O rollback estrutural requer remover os índices e as tabelas de versionamento/importação em banco local validado.

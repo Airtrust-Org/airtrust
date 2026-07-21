@@ -11,12 +11,37 @@
 -- The final LOFT matrices intentionally use the same manoeuvre code twice in
 -- a model (one per leg). The old UNIQUE(modelo_id, manobra_id) cannot encode
 -- that. Preserve every row and make execution position the unique identity.
+-- Preflight must complete before the legacy table is touched. Historical
+-- positions 19–22 are valid and are intentionally not constrained here.
+CREATE TEMP TABLE _0440_preflight (
+  ok INTEGER NOT NULL CHECK(ok = 1)
+);
+INSERT INTO _0440_preflight(ok)
+SELECT CASE WHEN
+  NOT EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras
+    WHERE ordem IS NULL OR tripulante NOT IN ('A', 'B', 'AB')
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras msm
+    LEFT JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+    LEFT JOIN manobras m ON m.id = msm.manobra_id
+    WHERE ms.id IS NULL OR m.id IS NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras
+    WHERE deleted_at IS NULL
+    GROUP BY modelo_id, ordem
+    HAVING COUNT(*) > 1
+  )
+THEN 1 ELSE 0 END;
+DROP TABLE _0440_preflight;
 DROP TRIGGER IF EXISTS trigger_modelos_sessao_manobras_updated_at;
 CREATE TABLE modelos_sessao_manobras_0440 (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   modelo_id INTEGER NOT NULL,
   manobra_id INTEGER NOT NULL,
-  ordem INTEGER NOT NULL CHECK(ordem BETWEEN 1 AND 18),
+  ordem INTEGER NOT NULL,
   obrigatoria BOOLEAN DEFAULT 1,
   observacoes TEXT,
   created_at DATETIME DEFAULT (datetime('now')),
@@ -26,8 +51,9 @@ CREATE TABLE modelos_sessao_manobras_0440 (
   updated_by TEXT,
   tripulante TEXT NOT NULL DEFAULT 'AB' CHECK(tripulante IN ('A','B','AB','PFA','PMB','PFB','PMA')),
   FOREIGN KEY (modelo_id) REFERENCES modelos_sessao(id) ON DELETE CASCADE,
-  FOREIGN KEY (manobra_id) REFERENCES manobras(id) ON DELETE CASCADE,
-  UNIQUE(modelo_id, ordem)
+  FOREIGN KEY (manobra_id) REFERENCES manobras(id) ON DELETE CASCADE
+  -- Repeated manoeuvre codes are valid across LOFT legs. Active execution
+  -- order, rather than manoeuvre identity, is the unique relationship.
 );
 INSERT INTO modelos_sessao_manobras_0440
   (id, modelo_id, manobra_id, ordem, obrigatoria, observacoes, created_at, updated_at, deleted_at, created_by, updated_by, tripulante)
@@ -38,6 +64,7 @@ ALTER TABLE modelos_sessao_manobras_0440 RENAME TO modelos_sessao_manobras;
 CREATE INDEX IF NOT EXISTS idx_modelos_sessao_manobras_modelo_id ON modelos_sessao_manobras(modelo_id);
 CREATE INDEX IF NOT EXISTS idx_modelos_sessao_manobras_manobra_id ON modelos_sessao_manobras(manobra_id);
 CREATE INDEX IF NOT EXISTS idx_modelos_sessao_manobras_modelo_ordem ON modelos_sessao_manobras(modelo_id, ordem) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_modelos_sessao_manobras_ordem_ativa ON modelos_sessao_manobras(modelo_id, ordem) WHERE deleted_at IS NULL;
 CREATE TRIGGER IF NOT EXISTS trigger_modelos_sessao_manobras_updated_at
 AFTER UPDATE ON modelos_sessao_manobras FOR EACH ROW BEGIN
   UPDATE modelos_sessao_manobras SET updated_at = datetime('now') WHERE id = NEW.id;
@@ -84,12 +111,16 @@ WHERE empresa_id IS NOT NULL
 
 CREATE TRIGGER IF NOT EXISTS trg_modelo_versao_mesmo_tenant_insert
 BEFORE INSERT ON modelos_sessao_versionamento
-WHEN NEW.modelo_anterior_id IS NOT NULL
 BEGIN
   SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM modelos_sessao ms WHERE ms.id = NEW.modelo_id AND ms.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'modelo e empresa divergentes') END;
+  SELECT CASE WHEN NEW.modelo_anterior_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM modelos_sessao_versionamento previous
-    WHERE previous.modelo_id = NEW.modelo_anterior_id AND previous.empresa_id = NEW.empresa_id
+    WHERE previous.modelo_id = NEW.modelo_anterior_id AND previous.empresa_id = NEW.empresa_id AND previous.codigo_canonico = NEW.codigo_canonico AND previous.versao_numero < NEW.versao_numero
   ) THEN RAISE(ABORT, 'modelo anterior inexistente ou pertence a outro tenant') END;
+  SELECT CASE WHEN NEW.is_current = 1 AND NEW.efetivo_ate IS NOT NULL THEN RAISE(ABORT, 'versão corrente não pode ter término') END;
+  SELECT CASE WHEN NEW.is_current = 0 AND NEW.efetivo_ate IS NULL THEN RAISE(ABORT, 'versão histórica exige término') END;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_modelo_versao_sem_ciclo_insert
@@ -107,6 +138,21 @@ BEGIN
     THEN RAISE(ABORT, 'cadeia de versoes ciclica') END;
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_modelo_versao_integridade_update
+BEFORE UPDATE ON modelos_sessao_versionamento
+BEGIN
+  SELECT CASE WHEN NEW.modelo_id <> OLD.modelo_id THEN RAISE(ABORT, 'modelo_id versionado é imutável') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM modelos_sessao ms WHERE ms.id = NEW.modelo_id AND ms.empresa_id = NEW.empresa_id)
+    THEN RAISE(ABORT, 'modelo e empresa divergentes') END;
+  SELECT CASE WHEN NEW.is_current = 1 AND NEW.efetivo_ate IS NOT NULL THEN RAISE(ABORT, 'versão corrente não pode ter término') END;
+  SELECT CASE WHEN NEW.is_current = 0 AND NEW.efetivo_ate IS NULL THEN RAISE(ABORT, 'versão histórica exige término') END;
+  SELECT CASE WHEN NEW.modelo_anterior_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM modelos_sessao_versionamento previous
+    WHERE previous.modelo_id = NEW.modelo_anterior_id AND previous.empresa_id = NEW.empresa_id
+      AND previous.codigo_canonico = NEW.codigo_canonico AND previous.versao_numero < NEW.versao_numero
+  ) THEN RAISE(ABORT, 'predecessor inválido') END;
+END;
+
 CREATE TABLE IF NOT EXISTS modelos_sessao_manobras_contexto (
   modelo_manobra_id INTEGER PRIMARY KEY,
   empresa_id INTEGER NOT NULL,
@@ -118,6 +164,22 @@ CREATE TABLE IF NOT EXISTS modelos_sessao_manobras_contexto (
 );
 CREATE INDEX IF NOT EXISTS idx_modelo_manobra_contexto_tenant
   ON modelos_sessao_manobras_contexto(empresa_id);
+CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_contexto_tenant_insert
+BEFORE INSERT ON modelos_sessao_manobras_contexto
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras msm JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+    WHERE msm.id = NEW.modelo_manobra_id AND ms.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'contexto e vínculo pertencem a tenants diferentes') END;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_contexto_tenant_update
+BEFORE UPDATE ON modelos_sessao_manobras_contexto
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras msm JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+    WHERE msm.id = NEW.modelo_manobra_id AND ms.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'contexto e vínculo pertencem a tenants diferentes') END;
+END;
 
 CREATE TABLE IF NOT EXISTS simuladores_matriz_imports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

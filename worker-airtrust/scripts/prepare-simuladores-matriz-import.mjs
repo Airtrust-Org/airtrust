@@ -110,6 +110,11 @@ function requireCanonicalSources(directory, aircraft, expectedHtml) {
   if (validation.todos_loft_decolagem_antes_evento === false) fail(`${aircraft}: validação final reprova LOFT`);
   return required;
 }
+function htmlSourceHashes(directory, aircraft) {
+  const htmlDir = path.join(directory, 'html');
+  return fs.readdirSync(htmlDir).filter((file) => file.endsWith('.html')).sort()
+    .map((file) => [`${aircraft}/html/${file}`, sha256(fs.readFileSync(path.join(htmlDir, file)))]);
+}
 function compareS76Csv(csvFile, matrix) {
   const rows = XLSX.utils.sheet_to_json(XLSX.readFile(csvFile).Sheets.Sheet1, { header: 1, defval: '' });
   const header = headerIndex(rows);
@@ -145,7 +150,7 @@ const sourceFiles = [
 const sourceHashes = Object.fromEntries(sourceFiles.map(([directory, label]) => {
   const file = label.split('/').at(-1);
   return [label, sha256(fs.readFileSync(path.join(directory, file)))];
-}));
+}).concat(htmlSourceHashes(aw139, 'AW139'), htmlSourceHashes(sk76, 'SK76')).sort(([left], [right]) => left.localeCompare(right)));
 const deterministic = createDeterministicPlan({ empresaId, sourceHashes, aw139: aw, sk76: s76, loft: loftAw + loftS76 });
 const plan = { generated_at: new Date().toISOString(), mode: 'DRY_RUN', ...deterministic, safeguards: ['tenant obrigatório', 'não aplica DML', 'requer snapshot e revisão antes de aplicar', 'modelos históricos devem ser versionados, não sobrescritos'] };
 fs.writeFileSync(path.join(out, 'plan.json'), `${JSON.stringify(plan, null, 2)}\n`);
