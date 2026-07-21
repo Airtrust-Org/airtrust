@@ -2,9 +2,16 @@
  * Biblioteca de Guias do Instrutor de Simulador.
  *
  * Consulta apenas — não é módulo LMS (sem matrícula/progresso/conclusão).
- * Acesso real é validado no backend (simuladores.guias_instrutor.read);
- * o gate de role aqui é só para UX, evitando renderizar a tela para quem
- * não deveria vê-la mesmo digitando a URL diretamente.
+ * Autorização real (leitura) é validada no backend
+ * (simuladores.guias.visualizar) — o frontend nunca infere acesso a partir
+ * de texto de role/perfil; consulta `useGuiasInstrutorPermissions()`, que
+ * reflete a mesma decisão real do backend (inclui bypass de Platform
+ * Admin/Administrador Master). Enquanto a permissão carrega, mostra
+ * skeleton — nunca "Acesso restrito" prematuro.
+ *
+ * Exporta o conteúdo (`GuiasInstrutorContent`) separado da página
+ * (`GuiasInstrutor`, default) para ser reaproveitado como aba dentro de
+ * `/simuladores`, sem duplicar a implementação.
  */
 
 import { useMemo, useState } from 'react';
@@ -23,7 +30,7 @@ import { Breadcrumbs } from '@/react-app/components/shared/Breadcrumbs';
 import { PageHeader } from '@/react-app/components/UI/PageHeader';
 import { Button, Card, EmptyState, Input, Tabs, TabsContent, TabsList, TabsTrigger } from '@/react-app/components/UI';
 import { Skeleton } from '@/react-app/components/UI/Skeleton';
-import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useGuiasInstrutorPermissions } from '@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions';
 import {
   baixarGuiaPdf,
   useGuiasInstrutor,
@@ -282,23 +289,85 @@ function BibliotecaAeronave({ aeronave, busca }: { aeronave: string; busca: stri
   );
 }
 
-export default function GuiasInstrutor() {
-  const { role } = usePermissions();
+function AcessoRestrito() {
+  return (
+    <EmptyState
+      icon={<AlertTriangle className="w-10 h-10 text-amber-500" />}
+      title="Acesso restrito"
+      description="Esta área é exclusiva para instrutores autorizados."
+    />
+  );
+}
+
+function GuiasInstrutorSkeleton() {
+  return (
+    <div className="px-4 sm:px-6 pb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-28 rounded-lg" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <Skeleton key={i} className="h-40 rounded-lg" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Conteúdo da biblioteca, sem AppLayout/Breadcrumbs/PageHeader — reaproveitado
+ * como aba dentro de `/simuladores` (que já fornece seu próprio layout) e
+ * pela página completa `GuiasInstrutor` (default export) abaixo.
+ */
+export function GuiasInstrutorContent() {
+  const { podeVisualizar, isLoading } = useGuiasInstrutorPermissions();
   const [aeronaveAtiva, setAeronaveAtiva] = useState<string>(AERONAVES[0]);
   const [busca, setBusca] = useState('');
 
-  if (role !== 'INSTRUTOR' && role !== 'GESTOR' && role !== 'ADMIN') {
-    return (
-      <AppLayout>
-        <EmptyState
-          icon={<AlertTriangle className="w-10 h-10 text-amber-500" />}
-          title="Acesso restrito"
-          description="Esta área é exclusiva para instrutores autorizados."
-        />
-      </AppLayout>
-    );
-  }
+  if (isLoading) return <GuiasInstrutorSkeleton />;
+  if (!podeVisualizar) return <AcessoRestrito />;
 
+  return (
+    <div className="px-4 sm:px-6 pb-10">
+      <ProximasSessoes />
+
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por título ou código…"
+            className="pl-9"
+            aria-label="Buscar guias por título ou código"
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-2 mb-6 border-b border-slate-200 dark:border-slate-800">
+        {AERONAVES.map((a) => (
+          <button
+            key={a}
+            onClick={() => setAeronaveAtiva(a)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              aeronaveAtiva === a
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900'
+            }`}
+          >
+            {a === 'AW139' ? 'AW139' : 'S-76'}
+          </button>
+        ))}
+      </div>
+
+      <BibliotecaAeronave aeronave={aeronaveAtiva} busca={busca} />
+    </div>
+  );
+}
+
+export default function GuiasInstrutor() {
   return (
     <AppLayout>
       <div className="px-4 sm:px-6 pt-4">
@@ -308,41 +377,7 @@ export default function GuiasInstrutor() {
         title="Guias do Instrutor"
         description="Materiais de preparação e condução das sessões de simulador."
       />
-
-      <div className="px-4 sm:px-6 pb-10">
-        <ProximasSessoes />
-
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por título ou código…"
-              className="pl-9"
-              aria-label="Buscar guias por título ou código"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-2 mb-6 border-b border-slate-200 dark:border-slate-800">
-          {AERONAVES.map((a) => (
-            <button
-              key={a}
-              onClick={() => setAeronaveAtiva(a)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                aeronaveAtiva === a
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900'
-              }`}
-            >
-              {a === 'AW139' ? 'AW139' : 'S-76'}
-            </button>
-          ))}
-        </div>
-
-        <BibliotecaAeronave aeronave={aeronaveAtiva} busca={busca} />
-      </div>
+      <GuiasInstrutorContent />
     </AppLayout>
   );
 }

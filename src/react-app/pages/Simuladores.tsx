@@ -8,11 +8,12 @@
 
 import { useState, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CalendarDays, ClipboardCheck, Settings, Loader, Calendar } from 'lucide-react';
+import { CalendarDays, ClipboardCheck, Settings, Loader, Calendar, BookOpen } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import { Button as UIButton } from '@/react-app/components/UI';
 import { importWithRetry, lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
+import { useGuiasInstrutorPermissions } from '@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions';
 
 const ModalNovaSessao = lazyWithRetry(
   () => import('@/react-app/components/modals/ModalNovaSessao'),
@@ -33,9 +34,13 @@ const TabGestaoWrapper = lazyWithRetry(
   () => import('./simuladores/tabs/TabGestaoWrapper'),
   'SimuladoresTabGestao',
 );
+const TabGuiasInstrutor = lazyWithRetry(
+  () => import('./instrutor/GuiasInstrutor').then((m) => ({ default: m.GuiasInstrutorContent })),
+  'SimuladoresTabGuiasInstrutor',
+);
 
 // Preload function para melhorar UX
-const preloadTab = (tab: 'agenda' | 'fichas' | 'gestao') => {
+const preloadTab = (tab: 'agenda' | 'fichas' | 'gestao' | 'guias') => {
   if (tab === 'agenda') {
     void importWithRetry(
       () => import('./simuladores/agenda/CalendarioAgendamentos'),
@@ -55,17 +60,27 @@ const preloadTab = (tab: 'agenda' | 'fichas' | 'gestao') => {
       reloadOnChunkError: false,
       maxAttempts: 2,
     });
+  } else if (tab === 'guias') {
+    void importWithRetry(() => import('./instrutor/GuiasInstrutor'), 'PreloadTabGuiasInstrutor', {
+      reloadOnChunkError: false,
+      maxAttempts: 2,
+    });
   }
 };
 
-type TabType = 'agenda' | 'fichas' | 'gestao';
+type TabType = 'agenda' | 'fichas' | 'gestao' | 'guias';
 
 export default function Simuladores() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as TabType | null;
   const [modalNovaSessaoOpen, setModalNovaSessaoOpen] = useState(false);
+  const { podeVisualizar: podeVerGuias } = useGuiasInstrutorPermissions();
 
-  const validTabs: TabType[] = ['agenda', 'fichas', 'gestao'];
+  // 'guias' só entra em validTabs quando a permissão real já carregou e
+  // autoriza — nunca infere de role/perfil. Enquanto carrega ou se não
+  // autorizado, cai no fallback 'agenda' (mesmo comportamento de uma aba
+  // que nunca existiu para este usuário).
+  const validTabs: TabType[] = ['agenda', 'fichas', 'gestao', ...(podeVerGuias ? (['guias'] as const) : [])];
 
   // Tab ativa derivada da URL, com fallback para 'agenda'
   const activeTab: TabType = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'agenda';
@@ -87,6 +102,9 @@ export default function Simuladores() {
     { id: 'agenda' as TabType, label: 'Agenda / Calendário', icon: CalendarDays },
     { id: 'fichas' as TabType, label: 'Fichas de Avaliação', icon: ClipboardCheck },
     { id: 'gestao' as TabType, label: 'Gestão', icon: Settings },
+    ...(podeVerGuias
+      ? [{ id: 'guias' as TabType, label: 'Guias do Instrutor', icon: BookOpen }]
+      : []),
   ];
 
   return (
@@ -146,6 +164,7 @@ export default function Simuladores() {
             {activeTab === 'agenda' && <TabAgenda />}
             {activeTab === 'fichas' && <TabFichas />}
             {activeTab === 'gestao' && <TabGestaoWrapper />}
+            {activeTab === 'guias' && <TabGuiasInstrutor />}
           </Suspense>
         </div>
 

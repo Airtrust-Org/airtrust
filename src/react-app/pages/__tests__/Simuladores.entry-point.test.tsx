@@ -34,6 +34,18 @@ vi.mock('../simuladores/fichas/index', () => ({
 vi.mock('../simuladores/tabs/TabGestaoWrapper', () => ({
   default: () => <div>tab-gestao-mock</div>,
 }));
+vi.mock('../instrutor/GuiasInstrutor', () => ({
+  GuiasInstrutorContent: () => <div>tab-guias-instrutor-mock</div>,
+}));
+const mockGuiasPermissoes = {
+  podeVisualizar: false,
+  podeGerenciar: false,
+  isPlatformAdmin: false,
+  isLoading: false,
+};
+vi.mock('@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions', () => ({
+  useGuiasInstrutorPermissions: () => mockGuiasPermissoes,
+}));
 
 function renderPage() {
   return render(
@@ -80,5 +92,35 @@ describe('Simuladores — ponto de entrada "Nova Sessão de Voo"', () => {
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: /modal-nova-sessao-mock/i })).toBeInTheDocument();
     });
+  });
+});
+
+describe('Simuladores — quarta aba "Guias do Instrutor"', () => {
+  it('não aparece para usuário sem simuladores.guias.visualizar', () => {
+    mockGuiasPermissoes.podeVisualizar = false;
+    mockGuiasPermissoes.isPlatformAdmin = false;
+    renderPage();
+    expect(screen.queryByRole('button', { name: /Guias do Instrutor/i })).not.toBeInTheDocument();
+  });
+
+  it('aparece para usuário com simuladores.guias.visualizar (instructor/manager/admin autorizados)', async () => {
+    mockGuiasPermissoes.podeVisualizar = true;
+    const user = userEvent.setup();
+    renderPage();
+
+    const aba = screen.getByRole('button', { name: /Guias do Instrutor/i });
+    expect(aba).toBeInTheDocument();
+
+    await user.click(aba);
+    await waitFor(() => {
+      expect(screen.getByText('tab-guias-instrutor-mock')).toBeInTheDocument();
+    });
+  });
+
+  it('aparece para Platform Admin/Administrador Master (bypass real do backend)', () => {
+    mockGuiasPermissoes.podeVisualizar = true;
+    mockGuiasPermissoes.isPlatformAdmin = true;
+    renderPage();
+    expect(screen.getByRole('button', { name: /Guias do Instrutor/i })).toBeInTheDocument();
   });
 });

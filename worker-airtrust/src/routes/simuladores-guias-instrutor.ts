@@ -5,9 +5,11 @@
  * um modelo_sessao. NÃO é módulo LMS: sem matrícula, progresso, conclusão,
  * certificado ou controle de páginas lidas.
  *
- * Acesso de leitura:  simuladores.guias_instrutor.read  (INSTRUTOR/GESTOR/ADMIN/SUPER_ADMIN
- *                      vinculados ativamente à empresa — ver middleware/guias-instrutor-permissions.ts)
- * Acesso de gestão:   simuladores.guias_instrutor.manage (GESTOR/ADMIN/SUPER_ADMIN)
+ * Acesso de leitura:  simuladores.guias.visualizar (default: role >= instructor,
+ *                      GRANT explícito, ou Platform Admin — ver
+ *                      middleware/guias-instrutor-permissions.ts)
+ * Acesso de gestão:   simuladores.guias.gerenciar (sem default de role — só
+ *                      GRANT explícito ou Platform Admin)
  *
  * Rotas montadas sob /api/simuladores (ver simuladores-core.ts).
  */
@@ -20,6 +22,9 @@ import { getTenantContext, normalizeContextUserId } from '../middleware/tenant';
 import {
   requireGuiaInstrutorRead,
   requireGuiaInstrutorManage,
+  resolveGuiaInstrutorPermissions,
+  hasGuiaInstrutorCapability,
+  GUIAS_INSTRUTOR_CAPABILITIES,
 } from '../middleware/guias-instrutor-permissions';
 import { badRequest, forbidden, notFound } from '../middleware/error-handler';
 import { getFuncId, isFullAccessRole } from './simuladores-shared';
@@ -184,13 +189,22 @@ function publicGuiaShape(row: GuiaRow, aeronaveNome: string, aeronaveCodigo: str
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// CAPABILITIES — única fonte de autorização real para o frontend consumir
+// (nunca inferir a partir de texto de role/perfil cacheado no JWT).
+// ─────────────────────────────────────────────────────────────────────────
+
+app.get('/guias-instrutor/minhas-permissoes', auth(), async (c) => {
+  const result = await resolveGuiaInstrutorPermissions(c);
+  return c.json({ success: true, data: result });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // LEITURA — instrutor autorizado da empresa ativa
 // ─────────────────────────────────────────────────────────────────────────
 
 app.get('/guias-instrutor', requireGuiaInstrutorRead(), async (c) => {
   const { empresaId } = getTenantContext(c);
-  const role = String(c.get('guiasInstrutorRole' as never) || '');
-  const isManage = role === 'GESTOR' || role === 'ADMIN' || role === 'SUPER_ADMIN';
+  const isManage = await hasGuiaInstrutorCapability(c, GUIAS_INSTRUTOR_CAPABILITIES.gerenciar);
 
   const aeronave = c.req.query('aeronave');
   const programa = c.req.query('programa');
@@ -326,8 +340,7 @@ app.get('/sessoes/:sessaoId/guias-instrutor', requireGuiaInstrutorRead(), async 
 app.get('/guias-instrutor/:id', requireGuiaInstrutorRead(), async (c) => {
   const { empresaId } = getTenantContext(c);
   const id = Number(c.req.param('id'));
-  const role = String(c.get('guiasInstrutorRole' as never) || '');
-  const isManage = role === 'GESTOR' || role === 'ADMIN' || role === 'SUPER_ADMIN';
+  const isManage = await hasGuiaInstrutorCapability(c, GUIAS_INSTRUTOR_CAPABILITIES.gerenciar);
 
   const row = await loadGuia(c.env.DB, empresaId, id, { anyStatus: isManage });
   if (!row) return notFound('Guia não encontrado');

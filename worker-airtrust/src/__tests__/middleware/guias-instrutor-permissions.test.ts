@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GUIAS_INSTRUTOR_CAPABILITIES,
   hasGuiaInstrutorCapability,
+  resolveGuiaInstrutorPermissions,
 } from '../../middleware/guias-instrutor-permissions';
 
 // Cobre a lógica real de `hasGuiaInstrutorCapability` (o teste de rota
@@ -209,7 +210,7 @@ describe('hasGuiaInstrutorCapability — gerenciar', () => {
     expect(allowed).toBe(true);
   });
 
-  it('DENY explícito bloqueia até platform admin', async () => {
+  it('platform admin continua autorizado mesmo com DENY tenant-level registrado (decisão de produto explícita)', async () => {
     const db = buildFakeDb(
       [],
       [{ usuario_id: 99, permissao: GUIAS_INSTRUTOR_CAPABILITIES.gerenciar, tipo: 'DENY' }],
@@ -222,7 +223,7 @@ describe('hasGuiaInstrutorCapability — gerenciar', () => {
       return undefined;
     };
     const allowed = await hasGuiaInstrutorCapability(c, GUIAS_INSTRUTOR_CAPABILITIES.gerenciar);
-    expect(allowed).toBe(false);
+    expect(allowed).toBe(true);
   });
 });
 
@@ -243,5 +244,38 @@ describe('hasGuiaInstrutorCapability — multi-tenant', () => {
       key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
     const allowed = await hasGuiaInstrutorCapability(c, GUIAS_INSTRUTOR_CAPABILITIES.visualizar);
     expect(allowed).toBe(false);
+  });
+});
+
+describe('resolveGuiaInstrutorPermissions — endpoint de capabilities do frontend', () => {
+  it('platform admin: todas as flags true, mesmo sem vinculo na empresa', async () => {
+    const db = buildFakeDb([], []);
+    const c = buildFakeContext({ db, userId: 99, empresaId: 1, isPlatformAdmin: true });
+    c.get = (key: string) => {
+      if (key === 'userId') return 99;
+      if (key === 'tenantContext') return { empresaId: 1 };
+      if (key === 'platformAccessState') return { userId: 99, isLegacyPlatformAdmin: false, hasPersistedPlatformAdmin: true, hasSupportReadOnlyRole: false, hasSupportElevatedRole: false, supportGrants: [], source: 'persisted' };
+      return undefined;
+    };
+    const result = await resolveGuiaInstrutorPermissions(c);
+    expect(result).toEqual({ podeVisualizar: true, podeGerenciar: true, isPlatformAdmin: true });
+  });
+
+  it('instructor comum: visualizar true, gerenciar false, isPlatformAdmin false', async () => {
+    const db = buildFakeDb([{ usuario_id: 10, empresa_id: 1, role: 'instructor' }], []);
+    const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
+    c.get = (key: string) =>
+      key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
+    const result = await resolveGuiaInstrutorPermissions(c);
+    expect(result).toEqual({ podeVisualizar: true, podeGerenciar: false, isPlatformAdmin: false });
+  });
+
+  it('usuario sem vinculo: todas as flags false', async () => {
+    const db = buildFakeDb([], []);
+    const c = buildFakeContext({ db, userId: 10, empresaId: 1 });
+    c.get = (key: string) =>
+      key === 'userId' ? 10 : key === 'tenantContext' ? { empresaId: 1 } : undefined;
+    const result = await resolveGuiaInstrutorPermissions(c);
+    expect(result).toEqual({ podeVisualizar: false, podeGerenciar: false, isPlatformAdmin: false });
   });
 });

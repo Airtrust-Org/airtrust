@@ -1,14 +1,22 @@
 /**
  * Gate de acesso da Biblioteca de Guias do Instrutor de Simulador.
  *
- * Capabilities (mesmo padrão de `usuario_permissoes` já usado pelo RDV —
- * ver `services/controle-voos/rdv-workflow.ts`): DENY explícito > GRANT
- * explícito > default do role. Nunca confia em role cacheada no JWT —
- * sempre re-lê `usuarios_empresas` no momento da requisição.
+ * Ordem de resolução (decisão de produto explícita — Administrador
+ * Master/Platform Admin é um axis de acesso da PLATAFORMA, não da empresa,
+ * e nunca deve ficar refém de configuração feita dentro de um tenant):
+ *
+ *   1. não autenticado → 401;
+ *   2. Platform Admin / Administrador Master → acesso permitido
+ *      IMEDIATAMENTE, incondicional — nenhum DENY de tenant bloqueia;
+ *   3. usuário comum: DENY explícito > GRANT explícito > default do role
+ *      (mesmo padrão de `usuario_permissoes` já usado pelo RDV — ver
+ *      `services/controle-voos/rdv-workflow.ts`). Nunca confia em role
+ *      cacheada no JWT — sempre re-lê `usuarios_empresas` no momento da
+ *      requisição.
  *
  *   simuladores.guias.visualizar → default: role >= instructor (instrutor,
  *     manager, admin); demais roles (editor/student/viewer) só com GRANT
- *     explícito. Platform admin sempre passa.
+ *     explícito.
  *   simuladores.guias.gerenciar  → SEM default de role (nem para manager) —
  *     só platform admin ou GRANT explícito de `simuladores.guias.gerenciar`.
  *     Decisão de produto explícita: publicação de guias não é liberada
@@ -85,7 +93,7 @@ async function resolveActiveVinculoRole(
 }
 
 export async function hasGuiaInstrutorCapability(
-  c: Context<{ Bindings: Env; Variables: Variables }>,
+  c: Context,
   capability: GuiaInstrutorCapability,
 ): Promise<boolean> {
   if (isDevAuthBypassEnabled(c.env)) return true;
@@ -94,17 +102,36 @@ export async function hasGuiaInstrutorCapability(
   const numericUserId = typeof userId === 'string' ? Number(userId) : Number(userId || 0);
   if (!numericUserId) return false;
 
-  // DENY explícito é absoluto — checado antes até do bypass de platform admin,
-  // para que um DENY intencional nunca seja contornado por um axis distinto.
+  // Platform Admin / Administrador Master: acesso incondicional, checado
+  // ANTES de qualquer DENY/GRANT de tenant. Este axis é da plataforma, não
+  // da empresa — um DENY registrado dentro de um tenant nunca deve poder
+  // bloquear o administrador master da própria plataforma.
+  if (isPlatformAdminContext(c)) return true;
+
   const override = await readPermissionOverride(c.env.DB, numericUserId, capability);
   if (override === 'DENY') return false;
   if (override === 'GRANT') return true;
 
-  if (isPlatformAdminContext(c)) return true;
-
   const { empresaId } = getTenantContext(c);
   const role = await resolveActiveVinculoRole(c.env.DB, numericUserId, empresaId);
   return defaultGrantForRole(capability, role);
+}
+
+/**
+ * Resolve as três flags de autorização de uma vez, para o endpoint de
+ * capabilities consumido pelo frontend (`useGuiasInstrutorPermissions`).
+ * Nunca deriva autorização de texto de role/perfil — sempre da mesma
+ * lógica de `hasGuiaInstrutorCapability` usada pelos guards reais.
+ */
+export async function resolveGuiaInstrutorPermissions(
+  c: Context,
+): Promise<{ podeVisualizar: boolean; podeGerenciar: boolean; isPlatformAdmin: boolean }> {
+  const isPlatformAdmin = isDevAuthBypassEnabled(c.env) || isPlatformAdminContext(c);
+  const [podeVisualizar, podeGerenciar] = await Promise.all([
+    hasGuiaInstrutorCapability(c, GUIAS_INSTRUTOR_CAPABILITIES.visualizar),
+    hasGuiaInstrutorCapability(c, GUIAS_INSTRUTOR_CAPABILITIES.gerenciar),
+  ]);
+  return { podeVisualizar, podeGerenciar, isPlatformAdmin };
 }
 
 function guard(
