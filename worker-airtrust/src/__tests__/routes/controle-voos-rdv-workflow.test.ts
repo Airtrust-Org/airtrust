@@ -212,10 +212,16 @@ function createSqliteD1(): SqliteD1 {
         funcionario_id INTEGER,
         deleted_at TEXT
       );
+      -- Schema minimo de 'empresas' espelhando SOMENTE as colunas confirmadas
+      -- no schema real (staging e producao via PRAGMA table_info, ver
+      -- scripts/validation/controle-voos-rdv-empresas-schema-contract.mjs).
+      -- 'nome_fantasia' e definida em migrations/0150 mas nunca existiu de
+      -- fato nas bases reais (o schema real seguiu migrations/0161) — o
+      -- schema sintetico anterior incluia essa coluna e mascarava o 500 real
+      -- do PDF (SQLITE_ERROR: no such column: nome_fantasia).
       CREATE TABLE IF NOT EXISTS empresas (
         id INTEGER PRIMARY KEY,
-        razao_social TEXT,
-        nome_fantasia TEXT
+        razao_social TEXT
       );
       CREATE TABLE IF NOT EXISTS aeronaves (
         id INTEGER PRIMARY KEY,
@@ -320,7 +326,7 @@ function seed(databasePath: string) {
       INSERT INTO usuario_permissoes (usuario_id, permissao, tipo)
       VALUES (13, 'voos.rdv.aprovar_coordenacao', 'DENY');
 
-      INSERT INTO empresas (id, razao_social, nome_fantasia) VALUES (1, 'AirTrust Teste Ltda', 'AirTrust Teste');
+      INSERT INTO empresas (id, razao_social) VALUES (1, 'AirTrust Teste Ltda');
 
       INSERT INTO cv_voo_tripulantes (empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by)
       VALUES (1, 601, 1001, 'PIC', 10, 10), (1, 601, 1002, 'SIC', 10, 10);
@@ -1141,6 +1147,117 @@ describe('RDV — tripulação e abastecimentos', () => {
     expect(listarBody.data.length).toBe(1);
     expect(listarBody.data[0].fornecedor).toBe('Fornecedor Ficticio');
   });
+
+  // Fault injection §7: revalida que o hotfix de atomicidade (mesmo
+  // mecanismo usado nas 8 transições) também protege POST abastecimento —
+  // que usa `buildRdvVersionGuardedInsert` diretamente.
+  it('POST abastecimento: duas chamadas concorrentes com a mesma versao — exatamente uma grava, a outra recebe 409, sem linha duplicada', async () => {
+    const db = createSqliteD1();
+    await preencherRdvCompleto(db);
+    const versaoConhecida = await currentVersao(db);
+    const body = JSON.stringify({
+      versao: versaoConhecida,
+      data_hora: '2026-06-14T09:50:00Z',
+      fornecedor: 'Fornecedor Concorrente',
+      combustivel_abastecido: 500,
+      unidade: 'L',
+    });
+
+    const [primeira, segunda] = await Promise.all([
+      request(db, '/api/controle-voos/voos/601/abastecimentos', { method: 'POST', body }, COORDENACAO),
+      request(db, '/api/controle-voos/voos/601/abastecimentos', { method: 'POST', body }, COORDENACAO),
+    ]);
+
+    const statuses = [primeira.status, segunda.status].sort();
+    expect(statuses).toEqual([201, 409]);
+
+    const rdvId = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_rdv_operacional WHERE voo_id = 601`,
+    )[0].id;
+    const abastecimentos = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_abastecimentos WHERE fornecedor = 'Fornecedor Concorrente'`,
+    );
+    expect(abastecimentos.length).toBe(1);
+    expect(await currentVersao(db)).toBe(versaoConhecida + 1);
+    void rdvId;
+  });
+
+  it('DELETE tripulante: duas chamadas concorrentes na mesma linha — exatamente uma remove (200), a outra recebe 404, versao avanca uma unica vez', async () => {
+    const db = createSqliteD1();
+    await preencherRdvCompleto(db);
+    const alvo = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_tripulantes WHERE voo_id = 601 AND funcionario_id = 1002 LIMIT 1`,
+    )[0];
+    const versaoConhecida = await currentVersao(db);
+
+    const [primeira, segunda] = await Promise.all([
+      request(
+        db,
+        `/api/controle-voos/voos/601/tripulantes/${alvo.id}?versao=${versaoConhecida}`,
+        { method: 'DELETE' },
+        COORDENACAO,
+      ),
+      request(
+        db,
+        `/api/controle-voos/voos/601/tripulantes/${alvo.id}?versao=${versaoConhecida}`,
+        { method: 'DELETE' },
+        COORDENACAO,
+      ),
+    ]);
+
+    const statuses = [primeira.status, segunda.status].sort();
+    expect(statuses).toEqual([200, 404]);
+    expect(await currentVersao(db)).toBe(versaoConhecida + 1);
+
+    const aindaAtivo = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_tripulantes WHERE id = ${alvo.id} AND deleted_at IS NULL`,
+    );
+    expect(aindaAtivo.length).toBe(0);
+  });
+
+  it('DELETE abastecimento: duas chamadas concorrentes na mesma linha — exatamente uma remove (200), a outra recebe 404, versao avanca uma unica vez', async () => {
+    const db = createSqliteD1();
+    await preencherRdvCompleto(db);
+    const criar = await request(
+      db,
+      '/api/controle-voos/voos/601/abastecimentos',
+      {
+        method: 'POST',
+        body: await transitionBody(db, {
+          data_hora: '2026-06-14T09:50:00Z',
+          fornecedor: 'Fornecedor Para Deletar',
+          combustivel_abastecido: 500,
+          unidade: 'L',
+        }),
+      },
+      COORDENACAO,
+    );
+    const criarBody = (await criar.json()) as { data: { id: number } };
+    const versaoConhecida = await currentVersao(db);
+
+    const [primeira, segunda] = await Promise.all([
+      request(
+        db,
+        `/api/controle-voos/voos/601/abastecimentos/${criarBody.data.id}?versao=${versaoConhecida}`,
+        { method: 'DELETE' },
+        COORDENACAO,
+      ),
+      request(
+        db,
+        `/api/controle-voos/voos/601/abastecimentos/${criarBody.data.id}?versao=${versaoConhecida}`,
+        { method: 'DELETE' },
+        COORDENACAO,
+      ),
+    ]);
+
+    const statuses = [primeira.status, segunda.status].sort();
+    expect(statuses).toEqual([200, 404]);
+    expect(await currentVersao(db)).toBe(versaoConhecida + 1);
+  });
 });
 
 describe("RDV — relatório Petrobras (PDF fictício com marca d'água)", () => {
@@ -1513,7 +1630,10 @@ describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () =>
       path: '/api/controle-voos/voos/601/rdv/corrigir',
       estado: 'em_revisao',
       actor: COORDENACAO,
-      extra: { justificativa: 'x', campos: {} },
+      // `pob` real (nao vazio) para exercitar buildRdvFieldRevisionStatements
+      // (cv_rdv_revisoes) na corrida — campos:{} nao gera nenhum INSERT
+      // guardado e deixaria a corrida sem efeito colateral pra checar.
+      extra: { justificativa: 'x', campos: { pob: 5 } },
     },
     {
       nome: 'aprovar',
@@ -1542,6 +1662,28 @@ describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () =>
       extra: { justificativa: 'x' },
     },
   ];
+
+  // Efeitos colaterais esperados de cada transição, para provar que a
+  // corrida não deixa NENHUM efeito colateral duplicado (achado de staging
+  // 2026-07-21: o guard original de `buildRdvVersionGuardedInsert`/
+  // `buildFlightEventStatement` provava apenas que a versão-alvo existe, não
+  // que ESTA requisição a produziu — a perdedora do CAS ainda conseguia
+  // inserir aprovação/evento). `null` = a transição não escreve nessa
+  // tabela (ex.: `finalizar` não insere em `cv_rdv_aprovacoes`; `cancelar`
+  // não insere em `cv_voo_eventos`).
+  const efeitosColaterais: Record<
+    string,
+    { aprovacaoStatus: string | null; evento: boolean; revisoes: boolean }
+  > = {
+    enviar: { aprovacaoStatus: 'ENVIADO', evento: true, revisoes: false },
+    'iniciar-revisao': { aprovacaoStatus: 'REVISAO_INICIADA', evento: false, revisoes: false },
+    devolver: { aprovacaoStatus: 'DEVOLVIDO', evento: true, revisoes: false },
+    corrigir: { aprovacaoStatus: null, evento: false, revisoes: true },
+    aprovar: { aprovacaoStatus: 'APROVADO', evento: true, revisoes: false },
+    finalizar: { aprovacaoStatus: null, evento: true, revisoes: false },
+    reabrir: { aprovacaoStatus: 'REABERTO', evento: true, revisoes: false },
+    cancelar: { aprovacaoStatus: 'CANCELADO', evento: false, revisoes: false },
+  };
 
   for (const caso of casos) {
     it(`${caso.nome}: rejeita ausencia de versao (400 VERSION_REQUIRED)`, async () => {
@@ -1607,6 +1749,36 @@ describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () =>
 
       const versaoFinal = await currentVersao(db);
       expect(versaoFinal).toBe(versaoConhecida + 1);
+
+      // Nenhum efeito colateral duplicado: exatamente uma linha de
+      // aprovação/evento para a versão-alvo, nunca uma por chamada da
+      // corrida (achado de staging 2026-07-21).
+      const rdvId = queryJson<{ id: number }>(
+        db.databasePath,
+        `SELECT id FROM cv_rdv_operacional WHERE voo_id = 601`,
+      )[0].id;
+      const efeitos = efeitosColaterais[caso.nome];
+      if (efeitos.aprovacaoStatus) {
+        const aprovacoes = queryJson<{ id: number }>(
+          db.databasePath,
+          `SELECT id FROM cv_rdv_aprovacoes WHERE rdv_id = ${rdvId} AND versao = ${versaoConhecida + 1} AND status = '${efeitos.aprovacaoStatus}'`,
+        );
+        expect(aprovacoes.length).toBe(1);
+      }
+      if (efeitos.evento) {
+        const eventos = queryJson<{ id: number }>(
+          db.databasePath,
+          `SELECT id FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND metadata_json LIKE '%"versao":${versaoConhecida + 1}%'`,
+        );
+        expect(eventos.length).toBe(1);
+      }
+      if (efeitos.revisoes) {
+        const revisoes = queryJson<{ id: number }>(
+          db.databasePath,
+          `SELECT id FROM cv_rdv_revisoes WHERE rdv_id = ${rdvId} AND versao = ${versaoConhecida + 1} AND campo = 'pob'`,
+        );
+        expect(revisoes.length).toBe(1);
+      }
     });
   }
 
