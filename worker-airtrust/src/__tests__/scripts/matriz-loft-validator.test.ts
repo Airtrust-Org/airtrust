@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { validateLoftSemantics } from '../../../scripts/lib/matriz-loft-validator.mjs';
 
-function item(ordem, codigo, fase_voo, execucao_pf, tipo_conteudo, nome = codigo) {
+function item(
+  ordem: number,
+  codigo: string,
+  fase_voo: string,
+  execucao_pf: string,
+  tipo_conteudo: string,
+  nome = codigo,
+) {
   return { modelo: 'A139-I-11/12', ordem, codigo, nome, fase_voo, execucao_pf, tipo_conteudo };
 }
 
