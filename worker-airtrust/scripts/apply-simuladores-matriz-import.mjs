@@ -15,6 +15,12 @@ import {
   validateSessionContract,
 } from './lib/matriz-session-contract.mjs';
 import { buildTenantFingerprint } from './lib/matriz-base-fingerprint.mjs';
+import {
+  validateManoeuvreResolution,
+  physicalManoeuvreCode,
+} from './lib/matriz-manobra-resolution.mjs';
+
+const REUSE_RESOLUTION_TYPES = new Set(['EXACT_UNIQUE', 'FORMAL_ALIAS', 'LEGACY_EQUIVALENT']);
 
 function fail(message) {
   throw new Error(`Aplicação de matriz recusada: ${message}`);
@@ -159,6 +165,21 @@ export function applyPlan({ dbPath, plan, importUuid, dryRun }) {
   if (plan.totals?.modelos !== 51 || plan.totals?.vinculos !== 918 || plan.totals?.loft !== 22)
     fail('51/918/22');
 
+  const models = [...(plan.matrices?.AW139?.models || []), ...(plan.matrices?.SK76?.models || [])];
+  const items = [...(plan.matrices?.AW139?.items || []), ...(plan.matrices?.SK76?.items || [])];
+  if (models.length !== 51 || items.length !== 918) fail('contagens do plano');
+  const requestedCodes = [...new Set(items.map((item) => String(item.codigo || '')))];
+  validateManoeuvreResolution(plan.manobra_resolution, { requestedCodes });
+  for (const entry of plan.manobra_resolution) {
+    if (!REUSE_RESOLUTION_TYPES.has(entry.resolution_type)) continue;
+    const owned = sqliteJson(
+      dbPath,
+      `SELECT id FROM manobras WHERE id=${Number(entry.existing_manobra_id)} AND empresa_id=${empresaId} AND deleted_at IS NULL`,
+    );
+    if (!owned.length)
+      fail(`${entry.codigo_canonico}: manobra_id ${entry.existing_manobra_id} não pertence ao tenant ou está inativa`);
+  }
+
   if (dryRun) {
     const before = fingerprint.fingerprint;
     const after = loadFingerprint(dbPath, empresaId).fingerprint;
@@ -179,10 +200,6 @@ export function applyPlan({ dbPath, plan, importUuid, dryRun }) {
   }
 
   const versaoMatriz = String(plan.versao_matriz || 'M2026.07');
-  const models = [...(plan.matrices?.AW139?.models || []), ...(plan.matrices?.SK76?.models || [])];
-  const items = [...(plan.matrices?.AW139?.items || []), ...(plan.matrices?.SK76?.items || [])];
-  if (models.length !== 51 || items.length !== 918) fail('contagens do plano');
-
   const tx = [];
   tx.push('BEGIN IMMEDIATE;');
   tx.push(`INSERT INTO simuladores_matriz_imports(
@@ -265,6 +282,54 @@ function applyPlanJs({
     );
   }
 
+  // Resolve every canonical manoeuvre code to exactly one tenant-scoped
+  // manobra_id *before* any model/link is created: reuse the approved
+  // existing_manobra_id for EXACT_UNIQUE/FORMAL_ALIAS/LEGACY_EQUIVALENT, or
+  // create the manobra for TRUE_MISSING/COLLISION/CROSS_TENANT_ONLY — unless
+  // a prior (rolled-back) import for this same versao_matriz already created
+  // and resolved it, in which case that manobra is reused, never duplicated.
+  for (const entry of plan.manobra_resolution) {
+    const codigoEscaped = entry.codigo_canonico.replace(/'/g, "''");
+    if (REUSE_RESOLUTION_TYPES.has(entry.resolution_type)) {
+      sql.push(`INSERT OR IGNORE INTO simuladores_matriz_manobra_resolution(
+          empresa_id,versao_matriz,codigo_canonico,manobra_id,resolution_type,source_hash,import_uuid
+        ) VALUES (
+          ${empresaId},'${versaoMatriz.replace(/'/g, "''")}','${codigoEscaped}',
+          ${Number(entry.existing_manobra_id)},'${entry.resolution_type}','${entry.source_hash}',
+          '${importUuid.replace(/'/g, "''")}'
+        );`);
+      continue;
+    }
+
+    const alreadyResolved = sqliteJson(
+      dbPath,
+      `SELECT manobra_id FROM simuladores_matriz_manobra_resolution
+       WHERE empresa_id=${empresaId} AND versao_matriz='${versaoMatriz.replace(/'/g, "''")}'
+         AND codigo_canonico='${codigoEscaped}' LIMIT 1`,
+    )[0];
+    if (!alreadyResolved) {
+      const payload = entry.create_payload;
+      const codigoFisico = (
+        entry.resolution_type === 'COLLISION'
+          ? physicalManoeuvreCode(entry.codigo_canonico, versaoMatriz)
+          : entry.codigo_canonico
+      ).replace(/'/g, "''");
+      const sqlText = (value) => (value == null ? 'NULL' : `'${String(value).replace(/'/g, "''")}'`);
+      sql.push(`INSERT INTO manobras(empresa_id,codigo,nome,categoria,tipo_aeronave,created_at,updated_at)
+        VALUES(${empresaId},'${codigoFisico}',${sqlText(payload.nome)},${sqlText(payload.categoria)},${sqlText(payload.tipo_aeronave)},CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);`);
+      sql.push(`INSERT INTO simuladores_matriz_manobra_resolution(
+          empresa_id,versao_matriz,codigo_canonico,manobra_id,resolution_type,source_hash,import_uuid
+        )
+        SELECT ${empresaId},'${versaoMatriz.replace(/'/g, "''")}','${codigoEscaped}',id,'${entry.resolution_type}','${entry.source_hash}','${importUuid.replace(/'/g, "''")}'
+        FROM manobras WHERE codigo='${codigoFisico}' AND empresa_id=${empresaId} AND deleted_at IS NULL;`);
+      sql.push(`INSERT INTO simuladores_matriz_import_changes(import_id,entidade,entity_id,operacao,after_json)
+        SELECT imp.id, 'manobras', m.id, 'INSERT', json_object('codigo_canonico', '${codigoEscaped}', 'resolution_type', '${entry.resolution_type}')
+        FROM manobras m
+        JOIN simuladores_matriz_imports imp ON imp.uuid='${importUuid.replace(/'/g, "''")}'
+        WHERE m.codigo='${codigoFisico}' AND m.empresa_id=${empresaId} AND m.deleted_at IS NULL;`);
+    }
+  }
+
   // Precompute next ids using max+offset in-SQL through a staging table.
   sql.push(`CREATE TEMP TABLE _matriz_apply_models(
     codigo_canonico TEXT PRIMARY KEY,
@@ -276,10 +341,16 @@ function applyPlanJs({
   );`);
 
   for (const model of models) {
+    // The highest versao_numero ever recorded for this code — not just the
+    // current one — is the real predecessor: a code can have no *current*
+    // version (e.g. compensated after a rollback with no prior history) while
+    // a physical row for it still exists, and reusing versao_numero=1 there
+    // would collide with that row's still-existing physical codigo.
     const prev = sqliteJson(
       dbPath,
       `SELECT modelo_id, versao_numero FROM modelos_sessao_versionamento
-       WHERE empresa_id=${empresaId} AND codigo_canonico='${String(model.codigo).replace(/'/g, "''")}' AND is_current=1 LIMIT 1`,
+       WHERE empresa_id=${empresaId} AND codigo_canonico='${String(model.codigo).replace(/'/g, "''")}'
+       ORDER BY versao_numero DESC LIMIT 1`,
     )[0];
     const versaoNumero = prev ? Number(prev.versao_numero) + 1 : 1;
     const codigoFisico = physicalCode(model.codigo, versaoMatriz, versaoNumero);
@@ -320,14 +391,16 @@ function applyPlanJs({
   }
 
   sql.push(`INSERT INTO modelos_sessao_manobras(modelo_id,manobra_id,ordem,obrigatoria,tripulante,observacoes,created_at,updated_at)
-    SELECT i.modelo_id, man.id, l.ordem, 1,
+    SELECT i.modelo_id, r.manobra_id, l.ordem, 1,
       CASE WHEN upper(l.execucao_pf) LIKE '%B%' AND upper(l.execucao_pf) NOT LIKE '%A%B%' AND upper(l.execucao_pf) NOT LIKE 'AB' THEN 'B'
            WHEN upper(l.execucao_pf) LIKE '%A%' AND upper(l.execucao_pf) NOT LIKE 'AB' THEN 'A'
            ELSE 'AB' END,
       NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     FROM _matriz_apply_links l
     JOIN _matriz_apply_ids i ON i.codigo_canonico = l.codigo_canonico
-    JOIN manobras man ON man.codigo = l.manobra_codigo AND man.empresa_id=${empresaId} AND man.deleted_at IS NULL;`);
+    JOIN simuladores_matriz_manobra_resolution r
+      ON r.empresa_id=${empresaId} AND r.versao_matriz='${versaoMatriz.replace(/'/g, "''")}' AND r.codigo_canonico = l.manobra_codigo
+    JOIN manobras man ON man.id = r.manobra_id AND man.empresa_id=${empresaId} AND man.deleted_at IS NULL;`);
 
   sql.push(`INSERT INTO modelos_sessao_manobras_contexto(modelo_manobra_id,empresa_id,metadados_json)
     SELECT msm.id, ${empresaId},
@@ -383,6 +456,22 @@ function applyPlanJs({
     `SELECT codigo_canonico, COUNT(*) AS c FROM modelos_sessao_versionamento WHERE empresa_id=${empresaId} AND is_current=1 GROUP BY codigo_canonico HAVING c<>1`,
   );
   if (currents.length) fail('mais de uma versão corrente detectada');
+
+  const requestedCodeCount = new Set(items.map((item) => String(item.codigo || ''))).size;
+  const resolutionCount = sqliteJson(
+    dbPath,
+    `SELECT COUNT(*) AS c FROM simuladores_matriz_manobra_resolution WHERE empresa_id=${empresaId} AND versao_matriz='${versaoMatriz.replace(/'/g, "''")}'`,
+  )[0]?.c;
+  if (Number(resolutionCount) !== requestedCodeCount) {
+    fail(`resolução de manobras incompleta: esperadas ${requestedCodeCount}; encontradas ${resolutionCount}`);
+  }
+  const resolutionCrossTenant = sqliteJson(
+    dbPath,
+    `SELECT r.codigo_canonico FROM simuladores_matriz_manobra_resolution r
+     JOIN manobras m ON m.id = r.manobra_id
+     WHERE r.empresa_id=${empresaId} AND r.versao_matriz='${versaoMatriz.replace(/'/g, "''")}' AND m.empresa_id<>${empresaId}`,
+  );
+  if (resolutionCrossTenant.length) fail('manobra de outro tenant referenciada na resolução');
 
   return { ok: true, mode: 'APPLY', status: 'APPLIED', fingerprint: fingerprint.fingerprint };
 }

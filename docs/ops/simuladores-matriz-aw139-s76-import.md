@@ -12,10 +12,42 @@ A matriz final exige 30/540/14 (AW139) e 21/378/8 (S-76). Modelos referenciados 
 task_tmp="$(cat /tmp/airtrust-simuladores-path)"
 node worker-airtrust/scripts/prepare-simuladores-matriz-import.mjs \
   --aw139 "$task_tmp/AW139" --sk76 "$task_tmp/SK76" \
-  --empresa-id <TENANT_ID> --out /tmp/airtrust-simuladores-plan
+  --empresa-id <TENANT_ID> --tenant-state /tmp/airtrust-tenant-state.json \
+  --out /tmp/airtrust-simuladores-plan
 ```
 
-O plano sanitizado inclui contrato 51/918/22, 61 hashes de fonte (incluindo 51 HTML), `plan_sha256`, fingerprint da base, versões correntes esperadas, resumo LOFT e safeguards. Qualquer adulteração de hash/contrato/fingerprint falha fechado.
+`--tenant-state` é um artefato temporário, sanitizado e gerado pela auditoria
+read-only do tenant. Ele deve conter `empresa_id`, versões correntes,
+manobras resolvidas, vínculos e o estado real da migration 0440. O planejador
+recusa arrays vazios, estado de migration ausente ou tenant divergente: nunca
+gera um fingerprint de produção com placeholders. Não versionar esse arquivo.
+
+O plano sanitizado inclui contrato 51/918/22, 61 hashes de fonte (incluindo 51 HTML), `plan_sha256`, fingerprint da base, versões correntes esperadas, resumo LOFT, safeguards e o bloco `manobra_resolution`. Qualquer adulteração de hash/contrato/fingerprint/resolução falha fechado.
+
+## Resolução de manobras (301 códigos canônicos)
+
+As matrizes finais referenciam 301 códigos de manobra distintos (918 posições).
+`prepare-simuladores-matriz-import.mjs` classifica cada código contra o
+catálogo do próprio tenant (via `tenant-state.resolved_manoeuvres`) em exatamente
+uma categoria — `EXACT_UNIQUE`, `FORMAL_ALIAS`, `LEGACY_EQUIVALENT`,
+`TRUE_MISSING`, `COLLISION` ou `CROSS_TENANT_ONLY` — usando
+`scripts/lib/matriz-manobra-resolution.mjs`. `FORMAL_ALIAS`/`LEGACY_EQUIVALENT`
+exigem revisão humana e nunca são inferidos automaticamente; passe-os via
+`tenant-state.manobra_resolution_overrides` com evidência.
+
+A migration `0441` cria `simuladores_matriz_manobra_resolution`
+(`UNIQUE(empresa_id, versao_matriz, codigo_canonico)`, imutável após inserção).
+O aplicador cria manobras tenant-scoped para os tipos que exigem criação
+*antes* dos 918 vínculos, registra a resolução, e só então cria os vínculos —
+sempre pelo `manobra_id` resolvido, nunca por `manobras.codigo` diretamente.
+Reaplicações (mesmo `versao_matriz`) reusam a resolução já registrada em vez
+de duplicar a manobra.
+
+Reconciliação real de 2026-07-22 (tenant 6): 278/301 códigos já tinham
+resolução única (`EXACT_UNIQUE`); os 23 restantes foram confirmados ausentes
+tanto no tenant quanto em toda a base (nenhuma outra empresa os possui) e
+classificados `TRUE_MISSING` — serão criados pelo aplicador a partir das
+fontes canônicas, sem inventar conteúdo técnico.
 
 ## Aplicação local controlada
 

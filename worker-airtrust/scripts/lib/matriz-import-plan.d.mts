@@ -49,12 +49,14 @@ export interface PlanoDeterministico {
   loft_summary?: unknown;
   safeguards?: string[];
   contract_ref?: unknown;
+  manobra_resolution?: unknown[];
 }
 
 export const PLAN_SCHEMA_VERSION: number;
 export const EXPECTED_SOURCE_HASH_COUNT: number;
 export function stableJson(value: unknown): string;
 export function sha256(value: string | Uint8Array | object): string;
+export function sealPlan<T extends Record<string, unknown>>(planWithoutHash: T): T & { plan_sha256: string };
 export function validateModelItems(models: ModeloPlano[], items: ItemMatrizPlano[]): void;
 export function createDeterministicPlan(input: {
   empresaId: number;
@@ -66,6 +68,7 @@ export function createDeterministicPlan(input: {
   baseFingerprint?: string | null;
   expectedCurrentVersions?: unknown[];
   loftSummary?: unknown;
+  manobraResolution: unknown[];
   safeguards?: string[];
 }): PlanoDeterministico;
 export function assertPlanIntegrity(

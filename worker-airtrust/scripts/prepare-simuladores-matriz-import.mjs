@@ -13,6 +13,7 @@ import XLSX from 'xlsx';
 import {
   createDeterministicPlan,
   sha256,
+  sealPlan,
   EXPECTED_SOURCE_HASH_COUNT,
 } from './lib/matriz-import-plan.mjs';
 import {
@@ -20,7 +21,11 @@ import {
   loadSessionContract,
   validateSessionContract,
 } from './lib/matriz-session-contract.mjs';
-import { buildTenantFingerprint } from './lib/matriz-base-fingerprint.mjs';
+import {
+  assertRealTenantFingerprintState,
+  buildTenantFingerprint,
+} from './lib/matriz-base-fingerprint.mjs';
+import { buildManoeuvreResolutionEntries } from './lib/matriz-manobra-resolution.mjs';
 
 const EXPECTED = {
   AW139: { modelos: 30, itens: 540, loft: 14 },
@@ -211,10 +216,23 @@ function compareS76Csv(csvFile, matrix) {
 const aw139 = arg('--aw139');
 const sk76 = arg('--sk76');
 const empresaId = Number(arg('--empresa-id'));
+const tenantStatePath = arg('--tenant-state');
 const out = arg('--out') || 'tmp/simuladores-matriz-import';
-if (!aw139 || !sk76 || !Number.isInteger(empresaId) || empresaId <= 0) {
-  fail('uso: --aw139 <diretório> --sk76 <diretório> --empresa-id <tenant> [--out <diretório>]');
+if (!aw139 || !sk76 || !Number.isInteger(empresaId) || empresaId <= 0 || !tenantStatePath) {
+  fail(
+    'uso: --aw139 <diretório> --sk76 <diretório> --empresa-id <tenant> --tenant-state <snapshot-json> [--out <diretório>]',
+  );
 }
+if (!fs.existsSync(tenantStatePath)) fail('snapshot tenant-scoped inexistente');
+const tenantState = JSON.parse(fs.readFileSync(tenantStatePath, 'utf8'));
+if (Number(tenantState.empresa_id) !== empresaId) fail('tenant do snapshot diverge');
+assertRealTenantFingerprintState({
+  empresaId,
+  currentVersions: tenantState.current_versions,
+  resolvedManoeuvres: tenantState.resolved_manoeuvres,
+  links: tenantState.links,
+  migrationState: tenantState.migration_state,
+});
 const awRequired = requireCanonicalSources(aw139, 'AW139', 30);
 const s76Required = requireCanonicalSources(sk76, 'SK76', 21);
 const aw = readMatrix(path.join(aw139, 'Matriz_AW139_CORRIGIDA_LOFT.xlsx'), 'AW139');
@@ -255,11 +273,17 @@ const loftSummary = {
 };
 const baseFingerprint = buildTenantFingerprint({
   empresaId,
-  currentVersions: [],
-  resolvedManoeuvres: [],
-  links: [],
-  migrationState: { has_0440: false, versionamento_count: 0 },
+  currentVersions: tenantState.current_versions,
+  resolvedManoeuvres: tenantState.resolved_manoeuvres,
+  links: tenantState.links,
+  migrationState: tenantState.migration_state,
 }).fingerprint;
+const manobraResolution = buildManoeuvreResolutionEntries({
+  empresaId,
+  items: [...aw.items, ...s76.items],
+  tenantManobras: tenantState.resolved_manoeuvres,
+  overrides: tenantState.manobra_resolution_overrides || {},
+});
 const deterministic = createDeterministicPlan({
   empresaId,
   sourceHashes,
@@ -268,13 +292,15 @@ const deterministic = createDeterministicPlan({
   loft: loftAw + loftS76,
   contract,
   baseFingerprint,
-  expectedCurrentVersions: [],
+  expectedCurrentVersions: tenantState.current_versions,
   loftSummary,
+  manobraResolution,
 });
-const plan = {
+const { plan_sha256: _deterministicHash, ...deterministicPayload } = deterministic;
+const plan = sealPlan({
   generated_at: new Date().toISOString(),
   mode: 'DRY_RUN',
-  ...deterministic,
+  ...deterministicPayload,
   contract_validation: contractSummary,
   safeguards: [
     'tenant obrigatório',
@@ -284,7 +310,7 @@ const plan = {
     'modelos históricos devem ser versionados, não sobrescritos',
     'rollback compensatório append-only (COMPENSATE)',
   ],
-};
+});
 fs.writeFileSync(path.join(out, 'plan.json'), `${JSON.stringify(plan, null, 2)}\n`);
 console.log(
   JSON.stringify(

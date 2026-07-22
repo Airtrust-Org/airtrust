@@ -8,6 +8,10 @@ import {
   sha256,
   EXPECTED_SOURCE_HASH_COUNT,
 } from '../../../scripts/lib/matriz-import-plan.mjs';
+import {
+  EXPECTED_MANOEUVRE_CODE_COUNT,
+  buildManoeuvreResolutionEntries,
+} from '../../../scripts/lib/matriz-manobra-resolution.mjs';
 import { applyPlan, loadFingerprint } from '../../../scripts/apply-simuladores-matriz-import.mjs';
 import { runCompensatoryRollback } from '../../../scripts/rollback-simuladores-matriz-import.mjs';
 
@@ -16,6 +20,13 @@ const MIGRATION = readFileSync(
   join(ROOT, 'migrations/0440_simuladores_matriz_versionada_metadata.sql'),
   'utf8',
 );
+const MIGRATION_0441 = readFileSync(
+  join(ROOT, 'migrations/0441_simuladores_matriz_manobra_resolution.sql'),
+  'utf8',
+);
+// The fixture pre-seeds every code except this one, which must resolve as
+// TRUE_MISSING and be created tenant-scoped by the executor.
+const MISSING_CODE = `MAN-${EXPECTED_MANOEUVRE_CODE_COUNT}`;
 const CONTRACT = JSON.parse(
   readFileSync(join(ROOT, 'data/simuladores-matriz/session-contract-51.json'), 'utf8'),
 );
@@ -46,12 +57,12 @@ function sourceHashes() {
   );
 }
 
-function item(modelo: string, ordem: number) {
+function item(modelo: string, ordem: number, codigo: string) {
   return {
     modelo,
     ordem,
-    codigo: `MAN-${ordem}`,
-    nome: `Manobra ${ordem}`,
+    codigo,
+    nome: `Manobra ${codigo}`,
     execucao_pf: ordem % 2 === 0 ? 'B' : 'A',
     categoria: 'PROCEDIMENTO',
     fase_voo: ordem <= 2 ? 'SOLO' : 'VOO',
@@ -83,8 +94,17 @@ function matricesFromContract() {
       aeronave: s.aeronave as 'AW139' | 'SK76',
       tipo_qualificacao_estruturado: String(s.tipo_qualificacao_estruturado),
     }));
+    // Cycle deterministically through exactly EXPECTED_MANOEUVRE_CODE_COUNT
+    // distinct manoeuvre codes across all model positions, mirroring the real
+    // matrices (918 item-positions resolving to 301 distinct canonical
+    // codes) instead of the trivial 18-code-per-model shape.
+    let globalOrder = 0;
     const items = models.flatMap((model) =>
-      Array.from({ length: 18 }, (_, order) => item(model.codigo, order + 1)),
+      Array.from({ length: 18 }, (_, order) => {
+        const codigo = `MAN-${(globalOrder % EXPECTED_MANOEUVRE_CODE_COUNT) + 1}`;
+        globalOrder += 1;
+        return item(model.codigo, order + 1, codigo);
+      }),
     );
     return { models, items };
   };
@@ -92,9 +112,11 @@ function matricesFromContract() {
 }
 
 function seedDb(db: string) {
-  const manobraRows = Array.from({ length: 18 }, (_, i) => {
+  // Pre-seed every canonical code except MISSING_CODE, which must resolve as
+  // TRUE_MISSING and be created by the executor itself.
+  const manobraRows = Array.from({ length: EXPECTED_MANOEUVRE_CODE_COUNT - 1 }, (_, i) => {
     const id = i + 1;
-    return `(${id},7,'MAN-${id}','Manobra ${id}',NULL)`;
+    return `(${id},7,'MAN-${id}','Manobra MAN-${id}',NULL)`;
   }).join(',\n');
   const sessions = CONTRACT.sessions as Array<{ codigo_canonico: string; titulo_sanitizado: string; tipo_qualificacao_estruturado: string }>;
   const modelRows = sessions
@@ -138,8 +160,14 @@ CREATE TABLE manobras(
   empresa_id INTEGER NOT NULL,
   codigo TEXT NOT NULL,
   nome TEXT,
+  categoria TEXT,
+  tipo_aeronave TEXT,
+  created_at TEXT,
+  updated_at TEXT,
   deleted_at TEXT
 );
+CREATE UNIQUE INDEX ux_manobras_empresa_codigo_active
+  ON manobras(empresa_id, codigo) WHERE deleted_at IS NULL;
 CREATE TABLE modelos_sessao_manobras(
   id INTEGER PRIMARY KEY,
   modelo_id INTEGER NOT NULL,
@@ -173,7 +201,7 @@ CREATE TABLE simulador_agendamentos(
 CREATE TABLE fichas_sessao(
   id INTEGER PRIMARY KEY,
   agendamento_slot_id INTEGER,
-  modelo_id INTEGER REFERENCES modelos_sessao(id),
+  template_id INTEGER REFERENCES modelos_sessao(id),
   empresa_id INTEGER REFERENCES empresas(id)
 );
 CREATE TABLE simulador_atribuicoes_curriculares(
@@ -190,6 +218,7 @@ VALUES ${linkRows};
 `;
   expect(run(db, sql).status).toBe(0);
   expect(run(db, `BEGIN IMMEDIATE;\n${MIGRATION}\nCOMMIT;`).status).toBe(0);
+  expect(run(db, `BEGIN IMMEDIATE;\n${MIGRATION_0441}\nCOMMIT;`).status).toBe(0);
   // 0440 seeds LEGACY versionamento from existing modelos; re-assert current LEGACY rows.
   const versionCount = queryJson<Array<{ c: number }>>(
     db,
@@ -210,6 +239,15 @@ VALUES ${linkRows};
 function buildPlan(db: string) {
   const { aw139, sk76 } = matricesFromContract();
   const fingerprint = loadFingerprint(db, 7);
+  const tenantManobras = queryJson<Array<{ id: number; codigo: string; empresa_id: number }>>(
+    db,
+    'SELECT id, codigo, empresa_id FROM manobras WHERE empresa_id=7 AND deleted_at IS NULL',
+  );
+  const manobraResolution = buildManoeuvreResolutionEntries({
+    empresaId: 7,
+    items: [...aw139.items, ...sk76.items],
+    tenantManobras,
+  });
   return createDeterministicPlan({
     empresaId: 7,
     sourceHashes: sourceHashes(),
@@ -219,6 +257,7 @@ function buildPlan(db: string) {
     baseFingerprint: fingerprint.fingerprint,
     contract: CONTRACT,
     loftSummary: { total: 22, valid: 22 },
+    manobraResolution,
   });
 }
 
@@ -261,8 +300,43 @@ describe('matriz local apply + compensatory rollback', () => {
         ),
       ).toEqual([]);
 
+      // TRUE_MISSING manoeuvre code was created tenant-scoped, resolved
+      // exactly once, and all 918 links now exist.
+      const createdManobra = queryJson<Array<{ id: number; empresa_id: number; deleted_at: string | null }>>(
+        db,
+        `SELECT id, empresa_id, deleted_at FROM manobras WHERE codigo='${MISSING_CODE}'`,
+      );
+      expect(createdManobra).toHaveLength(1);
+      expect(createdManobra[0].empresa_id).toBe(7);
+      expect(createdManobra[0].deleted_at).toBeNull();
+      expect(
+        queryJson<Array<{ c: number }>>(
+          db,
+          "SELECT COUNT(*) AS c FROM simuladores_matriz_manobra_resolution WHERE empresa_id=7 AND versao_matriz='M2026.07'",
+        )[0]?.c,
+      ).toBe(EXPECTED_MANOEUVRE_CODE_COUNT);
+      expect(
+        queryJson<Array<{ resolution_type: string; manobra_id: number }>>(
+          db,
+          `SELECT resolution_type, manobra_id FROM simuladores_matriz_manobra_resolution WHERE empresa_id=7 AND codigo_canonico='${MISSING_CODE}'`,
+        )[0],
+      ).toEqual({ resolution_type: 'TRUE_MISSING', manobra_id: createdManobra[0].id });
+      expect(
+        queryJson<Array<{ c: number }>>(
+          db,
+          `SELECT COUNT(*) AS c FROM modelos_sessao_manobras msm
+           JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+           WHERE ms.empresa_id=7 AND ms.codigo LIKE '%@M2026.07-V%'`,
+        )[0]?.c,
+      ).toBe(918);
+
       const second = applyPlan({ dbPath: db, plan, importUuid, dryRun: false });
       expect(second.idempotent).toBe(true);
+      // Idempotent reapply must not duplicate the created manobra.
+      expect(
+        queryJson<Array<{ c: number }>>(db, `SELECT COUNT(*) AS c FROM manobras WHERE codigo='${MISSING_CODE}'`)[0]
+          ?.c,
+      ).toBe(1);
 
       expect(() =>
         applyPlan({
@@ -299,6 +373,20 @@ describe('matriz local apply + compensatory rollback', () => {
           "SELECT COUNT(*) AS c FROM modelos_sessao_versionamento WHERE empresa_id=7 AND versao_matriz='M2026.07'",
         )[0]?.c,
       ).toBe(51);
+      // Rollback is compensatory: the created manobra and its audited
+      // resolution are never deleted, even though the import is ROLLED_BACK.
+      expect(
+        queryJson<Array<{ c: number }>>(
+          db,
+          `SELECT COUNT(*) AS c FROM manobras WHERE codigo='${MISSING_CODE}' AND empresa_id=7 AND deleted_at IS NULL`,
+        )[0]?.c,
+      ).toBe(1);
+      expect(
+        queryJson<Array<{ c: number }>>(
+          db,
+          `SELECT COUNT(*) AS c FROM simuladores_matriz_manobra_resolution WHERE empresa_id=7 AND codigo_canonico='${MISSING_CODE}'`,
+        )[0]?.c,
+      ).toBe(1);
 
       const rb2 = runCompensatoryRollback({
         d1Local: db,
@@ -349,6 +437,18 @@ describe('matriz local apply + compensatory rollback', () => {
         dryRun: false,
       });
       expect(reapply.status).toBe('APPLIED');
+      // Reapply under a new import-uuid (after the first import was rolled
+      // back) must reuse the previously created manobra, never duplicate it.
+      expect(
+        queryJson<Array<{ c: number }>>(db, `SELECT COUNT(*) AS c FROM manobras WHERE codigo='${MISSING_CODE}'`)[0]
+          ?.c,
+      ).toBe(1);
+      expect(
+        queryJson<Array<{ c: number }>>(
+          db,
+          "SELECT COUNT(*) AS c FROM simuladores_matriz_manobra_resolution WHERE empresa_id=7 AND versao_matriz='M2026.07'",
+        )[0]?.c,
+      ).toBe(EXPECTED_MANOEUVRE_CODE_COUNT);
       expect(
         queryJson<Array<{ c: number }>>(
           db,

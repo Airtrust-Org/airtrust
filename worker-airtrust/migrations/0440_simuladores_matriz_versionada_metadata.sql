@@ -93,6 +93,7 @@ BEGIN
         'idx_modelos_sessao_manobras_modelo_id',
         'idx_modelos_sessao_manobras_manobra_id',
         'idx_modelos_sessao_manobras_ordem',
+        'idx_modelos_sessao_manobras_modelo_ordem',
         'idx_modelos_sessao_manobras_modelo',
         'idx_modelos_sessao_manobras_manobra',
         'idx_modelos_manobras_modelo'
