@@ -48,6 +48,25 @@ backups/
 *.pfx
 *.key
 
+# ========== PLAYWRIGHT AUTH STORAGE (NEVER COMMIT) ==========
+# Playwright auth state files contain live session tokens and refresh credentials.
+# These must never be committed under any circumstances.
+e2e/.auth/
+e2e/.auth/**
+**/playwright/.auth/
+**/.auth/user.json
+**/.auth/*.json
+playwright/.auth/
+
+# ========== PRODUCTION BACKUPS AND DUMPS (NEVER COMMIT) ==========
+backups_production/
+backups_staging/
+_arquivos_nao_usados/exports/
+*.production.sql
+*-production-*.sql
+*_production_*.sql
+*-pre-apply-*.sql
+
 # ========== ENVIRONMENT VARIABLES ==========
 .env
 .env.*
