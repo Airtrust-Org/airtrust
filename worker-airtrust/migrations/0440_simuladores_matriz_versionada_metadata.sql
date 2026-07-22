@@ -23,36 +23,69 @@
 -- that. Preserve every row and make execution position the unique identity.
 -- Preflight must complete before the legacy table is touched. Historical
 -- positions 19–22 are valid and are intentionally not constrained here.
-BEGIN IMMEDIATE;
-CREATE TEMP TABLE _0440_preflight (id INTEGER PRIMARY KEY);
-CREATE TEMP TRIGGER _0440_preflight_validate
-BEFORE INSERT ON _0440_preflight
+-- Preflight uses a real (non-TEMP) table: D1 rejects CREATE TEMP with SQLITE_AUTH.
+CREATE TABLE IF NOT EXISTS _0440_preflight_guard (
+  id INTEGER PRIMARY KEY CHECK(id = 1)
+);
+CREATE TRIGGER IF NOT EXISTS _0440_preflight_validate
+BEFORE INSERT ON _0440_preflight_guard
 BEGIN
   SELECT CASE WHEN EXISTS (
-    SELECT 1 FROM modelos_sessao_manobras
-    WHERE ordem IS NULL OR tripulante NOT IN ('A', 'B', 'AB')
-  ) THEN RAISE(ROLLBACK, '0440 preflight: ordem ou tripulante legado inválido') END;
+    SELECT 1 FROM sqlite_master
+    WHERE type = 'table' AND name = 'modelos_sessao_manobras_0440'
+  ) THEN RAISE(ABORT, '0440 preflight: tabela temporária de destino já existe') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM sqlite_master
+    WHERE type = 'table' AND name = 'modelos_sessao_versionamento'
+  ) AND EXISTS (
+    SELECT 1 FROM sqlite_master
+    WHERE type = 'index' AND name = 'uq_modelos_sessao_manobras_ordem_ativa'
+  ) THEN RAISE(ABORT, '0440 preflight: migration já aplicada em estado incompatível com reexecução') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM sqlite_master
+    WHERE type = 'table' AND name = 'modelos_sessao_versionamento'
+  ) AND EXISTS (
+    SELECT 1 FROM sqlite_master
+    WHERE type = 'table' AND name = 'modelos_sessao_manobras'
+      AND sql LIKE '%UNIQUE%modelo_id%manobra_id%'
+  ) THEN RAISE(ABORT, '0440 preflight: execução parcial anterior detectada') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras WHERE ordem IS NULL
+  ) THEN RAISE(ABORT, '0440 preflight: ordem nula') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras WHERE tripulante NOT IN ('A', 'B', 'AB')
+  ) THEN RAISE(ABORT, '0440 preflight: tripulante inválido') END;
   SELECT CASE WHEN EXISTS (
     SELECT 1 FROM modelos_sessao_manobras msm
     LEFT JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+    WHERE ms.id IS NULL
+  ) THEN RAISE(ABORT, '0440 preflight: modelo órfão') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras msm
     LEFT JOIN manobras m ON m.id = msm.manobra_id
-    WHERE ms.id IS NULL OR m.id IS NULL OR m.empresa_id <> ms.empresa_id
-  ) THEN RAISE(ROLLBACK, '0440 preflight: vínculo legado órfão') END;
+    WHERE m.id IS NULL
+  ) THEN RAISE(ABORT, '0440 preflight: manobra órfã') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras msm
+    JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+    JOIN manobras m ON m.id = msm.manobra_id
+    WHERE m.empresa_id <> ms.empresa_id
+  ) THEN RAISE(ABORT, '0440 preflight: vínculo cross-tenant') END;
   SELECT CASE WHEN EXISTS (
     SELECT 1 FROM modelos_sessao_manobras
     WHERE deleted_at IS NULL
     GROUP BY modelo_id, ordem
     HAVING COUNT(*) > 1
-  ) THEN RAISE(ROLLBACK, '0440 preflight: ordem ativa duplicada') END;
+  ) THEN RAISE(ABORT, '0440 preflight: ordem ativa duplicada') END;
   SELECT CASE WHEN EXISTS (
     SELECT 1 FROM sqlite_master
     WHERE type = 'trigger' AND tbl_name = 'modelos_sessao_manobras'
       AND name <> 'trigger_modelos_sessao_manobras_updated_at'
-  ) THEN RAISE(ROLLBACK, '0440 preflight: trigger legado não inventariado') END;
+  ) THEN RAISE(ABORT, '0440 preflight: trigger legado não inventariado') END;
   SELECT CASE WHEN EXISTS (
     SELECT 1 FROM sqlite_master
     WHERE type = 'table' AND sql LIKE '%REFERENCES modelos_sessao_manobras%'
-  ) THEN RAISE(ROLLBACK, '0440 preflight: FK filha para vínculos não suportada') END;
+  ) THEN RAISE(ABORT, '0440 preflight: FK filha para vínculos não suportada') END;
   SELECT CASE WHEN EXISTS (
     SELECT 1 FROM sqlite_master
     WHERE type = 'index' AND tbl_name = 'modelos_sessao_manobras' AND sql IS NOT NULL
@@ -64,11 +97,11 @@ BEGIN
         'idx_modelos_sessao_manobras_manobra',
         'idx_modelos_manobras_modelo'
       )
-  ) THEN RAISE(ROLLBACK, '0440 preflight: índice legado não inventariado') END;
+  ) THEN RAISE(ABORT, '0440 preflight: índice legado não inventariado') END;
 END;
-INSERT INTO _0440_preflight(id) VALUES (1);
-DROP TRIGGER _0440_preflight_validate;
-DROP TABLE _0440_preflight;
+INSERT INTO _0440_preflight_guard(id) VALUES (1);
+DROP TRIGGER IF EXISTS _0440_preflight_validate;
+DROP TABLE IF EXISTS _0440_preflight_guard;
 DROP TRIGGER IF EXISTS trigger_modelos_sessao_manobras_updated_at;
 CREATE TABLE modelos_sessao_manobras_0440 (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,8 +153,26 @@ BEGIN
     WHERE ms.id = NEW.modelo_id
   ) THEN RAISE(ABORT, 'modelo e manobra pertencem a tenants diferentes') END;
 END;
+CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_versionada_imutavel_insert
+BEFORE INSERT ON modelos_sessao_manobras
+WHEN EXISTS (
+  SELECT 1 FROM modelos_sessao_versionamento v
+  WHERE v.modelo_id = NEW.modelo_id AND v.versao_matriz <> 'LEGACY'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'vínculo de versão publicada é imutável');
+END;
 CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_versionada_imutavel
 BEFORE UPDATE OF modelo_id, manobra_id, ordem, tripulante, observacoes, deleted_at ON modelos_sessao_manobras
+WHEN EXISTS (
+  SELECT 1 FROM modelos_sessao_versionamento v
+  WHERE v.modelo_id = OLD.modelo_id AND v.versao_matriz <> 'LEGACY'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'vínculo de versão publicada é imutável');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_versionada_imutavel_delete
+BEFORE DELETE ON modelos_sessao_manobras
 WHEN EXISTS (
   SELECT 1 FROM modelos_sessao_versionamento v
   WHERE v.modelo_id = OLD.modelo_id AND v.versao_matriz <> 'LEGACY'
@@ -258,6 +309,11 @@ BEGIN
     SELECT 1 FROM modelos_sessao_manobras msm JOIN modelos_sessao ms ON ms.id = msm.modelo_id
     WHERE msm.id = NEW.modelo_manobra_id AND ms.empresa_id = NEW.empresa_id
   ) THEN RAISE(ABORT, 'contexto e vínculo pertencem a tenants diferentes') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras msm
+    JOIN modelos_sessao_versionamento v ON v.modelo_id = msm.modelo_id
+    WHERE msm.id = NEW.modelo_manobra_id AND v.versao_matriz <> 'LEGACY'
+  ) THEN RAISE(ABORT, 'contexto de versão publicada é imutável') END;
 END;
 CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_contexto_tenant_update
 BEFORE UPDATE ON modelos_sessao_manobras_contexto
@@ -266,11 +322,26 @@ BEGIN
     SELECT 1 FROM modelos_sessao_manobras msm JOIN modelos_sessao ms ON ms.id = msm.modelo_id
     WHERE msm.id = NEW.modelo_manobra_id AND ms.empresa_id = NEW.empresa_id
   ) THEN RAISE(ABORT, 'contexto e vínculo pertencem a tenants diferentes') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM modelos_sessao_manobras msm
+    JOIN modelos_sessao_versionamento v ON v.modelo_id = msm.modelo_id
+    WHERE msm.id = OLD.modelo_manobra_id AND v.versao_matriz <> 'LEGACY'
+  ) OR NEW.modelo_manobra_id <> OLD.modelo_manobra_id
+    OR NEW.empresa_id <> OLD.empresa_id
+    OR NEW.metadados_json <> OLD.metadados_json
+    OR NEW.created_at <> OLD.created_at
+    OR NEW.updated_at <> OLD.updated_at
+  THEN RAISE(ABORT, 'contexto de versão publicada é imutável') END;
 END;
-CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_contexto_imutavel
-BEFORE UPDATE ON modelos_sessao_manobras_contexto
+CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_contexto_imutavel_delete
+BEFORE DELETE ON modelos_sessao_manobras_contexto
+WHEN EXISTS (
+  SELECT 1 FROM modelos_sessao_manobras msm
+  JOIN modelos_sessao_versionamento v ON v.modelo_id = msm.modelo_id
+  WHERE msm.id = OLD.modelo_manobra_id AND v.versao_matriz <> 'LEGACY'
+)
 BEGIN
-  SELECT RAISE(ABORT, 'contexto de versão é imutável');
+  SELECT RAISE(ABORT, 'contexto de versão publicada é imutável');
 END;
 
 CREATE TABLE IF NOT EXISTS simuladores_matriz_imports (
@@ -290,6 +361,7 @@ CREATE TABLE IF NOT EXISTS simuladores_matriz_imports (
   failure_reason TEXT,
   rollback_uuid TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   applied_at TEXT,
   rolled_back_at TEXT,
   FOREIGN KEY (empresa_id) REFERENCES empresas(id)
@@ -302,7 +374,7 @@ CREATE TABLE IF NOT EXISTS simuladores_matriz_import_changes (
   import_id INTEGER NOT NULL,
   entidade TEXT NOT NULL,
   entity_id INTEGER,
-  operacao TEXT NOT NULL CHECK(operacao IN ('INSERT', 'UPDATE', 'INACTIVATE', 'REACTIVATE')),
+  operacao TEXT NOT NULL CHECK(operacao IN ('INSERT', 'UPDATE', 'INACTIVATE', 'COMPENSATE')),
   before_json TEXT CHECK(before_json IS NULL OR (json_valid(before_json) AND length(before_json) <= 65536)),
   after_json TEXT CHECK(after_json IS NULL OR (json_valid(after_json) AND length(after_json) <= 65536)),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -312,13 +384,19 @@ CREATE INDEX IF NOT EXISTS idx_simuladores_matriz_changes_import
   ON simuladores_matriz_import_changes(import_id, entidade);
 CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_status_insert
 BEFORE INSERT ON simuladores_matriz_imports
-WHEN NEW.status <> 'DRY_RUN' OR NEW.applied_at IS NOT NULL OR NEW.rolled_back_at IS NOT NULL
+WHEN NEW.status <> 'DRY_RUN'
+  OR NEW.applied_at IS NOT NULL
+  OR NEW.rolled_back_at IS NOT NULL
+  OR NEW.applied_counts_json IS NOT NULL
+  OR NEW.rollback_uuid IS NOT NULL
+  OR (NEW.failure_reason IS NOT NULL AND length(trim(NEW.failure_reason)) > 0)
 BEGIN
   SELECT RAISE(ABORT, 'importação deve iniciar em DRY_RUN');
 END;
 CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_identity_update
 BEFORE UPDATE ON simuladores_matriz_imports
-WHEN NEW.uuid <> OLD.uuid
+WHEN NEW.id <> OLD.id
+  OR NEW.uuid <> OLD.uuid
   OR NEW.empresa_id <> OLD.empresa_id
   OR NEW.versao_matriz <> OLD.versao_matriz
   OR NEW.schema_version <> OLD.schema_version
@@ -332,18 +410,77 @@ WHEN NEW.uuid <> OLD.uuid
 BEGIN
   SELECT RAISE(ABORT, 'identidade da importação é imutável');
 END;
-CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_status_update
-BEFORE UPDATE OF status ON simuladores_matriz_imports
-WHEN NOT (
-  (OLD.status = 'DRY_RUN' AND NEW.status IN ('APPLYING', 'FAILED')) OR
-  (OLD.status = 'APPLYING' AND NEW.status IN ('APPLIED', 'FAILED')) OR
-  (OLD.status = 'APPLIED' AND NEW.status = 'ROLLED_BACK')
-) OR (NEW.status = 'DRY_RUN' AND (NEW.applied_at IS NOT NULL OR NEW.rolled_back_at IS NOT NULL))
-  OR (NEW.status = 'APPLYING' AND NEW.applied_at IS NOT NULL)
-  OR (NEW.status = 'APPLIED' AND (NEW.applied_at IS NULL OR NEW.applied_counts_json IS NULL))
-  OR (NEW.status = 'FAILED' AND (NEW.failure_reason IS NULL OR length(trim(NEW.failure_reason)) = 0))
-  OR (NEW.status = 'ROLLED_BACK' AND (NEW.rolled_back_at IS NULL OR NEW.rollback_uuid IS NULL))
+CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_state_update
+BEFORE UPDATE ON simuladores_matriz_imports
 BEGIN
-  SELECT RAISE(ABORT, 'transição de status da importação inválida');
+  SELECT CASE WHEN OLD.status = 'ROLLED_BACK'
+    THEN RAISE(ABORT, 'importação ROLLED_BACK é terminal e imutável') END;
+  SELECT CASE WHEN NEW.status <> OLD.status AND NOT (
+    (OLD.status = 'DRY_RUN' AND NEW.status IN ('APPLYING', 'FAILED')) OR
+    (OLD.status = 'APPLYING' AND NEW.status IN ('APPLIED', 'FAILED')) OR
+    (OLD.status = 'APPLIED' AND NEW.status = 'ROLLED_BACK')
+  ) THEN RAISE(ABORT, 'transição de status da importação inválida') END;
+  SELECT CASE WHEN NEW.status = 'DRY_RUN' AND (
+    NEW.applied_at IS NOT NULL OR NEW.rolled_back_at IS NOT NULL
+    OR NEW.applied_counts_json IS NOT NULL OR NEW.rollback_uuid IS NOT NULL
+  ) THEN RAISE(ABORT, 'invariante DRY_RUN violada') END;
+  SELECT CASE WHEN NEW.status = 'APPLYING' AND (
+    NEW.applied_at IS NOT NULL OR NEW.rolled_back_at IS NOT NULL
+  ) THEN RAISE(ABORT, 'invariante APPLYING violada') END;
+  SELECT CASE WHEN NEW.status = 'APPLIED' AND (
+    NEW.applied_at IS NULL OR NEW.applied_counts_json IS NULL
+    OR (NEW.failure_reason IS NOT NULL AND length(trim(NEW.failure_reason)) > 0)
+  ) THEN RAISE(ABORT, 'invariante APPLIED violada') END;
+  SELECT CASE WHEN NEW.status = 'FAILED' AND (
+    NEW.failure_reason IS NULL OR length(trim(NEW.failure_reason)) = 0
+    OR NEW.applied_at IS NOT NULL OR NEW.rolled_back_at IS NOT NULL OR NEW.rollback_uuid IS NOT NULL
+  ) THEN RAISE(ABORT, 'invariante FAILED violada') END;
+  SELECT CASE WHEN NEW.status = 'ROLLED_BACK' AND (
+    NEW.rolled_back_at IS NULL OR NEW.rollback_uuid IS NULL
+  ) THEN RAISE(ABORT, 'invariante ROLLED_BACK violada') END;
+  SELECT CASE WHEN OLD.status = 'APPLIED' AND NEW.status = 'APPLIED' AND (
+    COALESCE(NEW.applied_counts_json, '') <> COALESCE(OLD.applied_counts_json, '')
+    OR COALESCE(NEW.applied_at, '') <> COALESCE(OLD.applied_at, '')
+    OR COALESCE(NEW.failure_reason, '') <> COALESCE(OLD.failure_reason, '')
+    OR COALESCE(NEW.rolled_back_at, '') <> COALESCE(OLD.rolled_back_at, '')
+    OR COALESCE(NEW.rollback_uuid, '') <> COALESCE(OLD.rollback_uuid, '')
+  ) THEN RAISE(ABORT, 'campos de aplicação APPLIED são imutáveis') END;
+  SELECT CASE WHEN OLD.status = 'FAILED' AND NEW.status = 'FAILED' AND (
+    COALESCE(NEW.failure_reason, '') <> COALESCE(OLD.failure_reason, '')
+    OR COALESCE(NEW.applied_counts_json, '') <> COALESCE(OLD.applied_counts_json, '')
+    OR COALESCE(NEW.applied_at, '') <> COALESCE(OLD.applied_at, '')
+    OR COALESCE(NEW.rolled_back_at, '') <> COALESCE(OLD.rolled_back_at, '')
+    OR COALESCE(NEW.rollback_uuid, '') <> COALESCE(OLD.rollback_uuid, '')
+  ) THEN RAISE(ABORT, 'campos FAILED são imutáveis') END;
 END;
-COMMIT;
+CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_updated_at
+AFTER UPDATE ON simuladores_matriz_imports
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+  AND (
+    NEW.status IS NOT OLD.status
+    OR COALESCE(NEW.applied_counts_json, '') IS NOT COALESCE(OLD.applied_counts_json, '')
+    OR COALESCE(NEW.failure_reason, '') IS NOT COALESCE(OLD.failure_reason, '')
+    OR COALESCE(NEW.applied_at, '') IS NOT COALESCE(OLD.applied_at, '')
+    OR COALESCE(NEW.rolled_back_at, '') IS NOT COALESCE(OLD.rolled_back_at, '')
+    OR COALESCE(NEW.rollback_uuid, '') IS NOT COALESCE(OLD.rollback_uuid, '')
+  )
+BEGIN
+  UPDATE simuladores_matriz_imports
+  SET updated_at = CURRENT_TIMESTAMP
+  WHERE id = NEW.id;
+END;
+-- Manual-only falsification guard. Relies on SQLite default recursive_triggers=OFF
+-- so the AFTER trigger above can bump updated_at without re-entering this guard.
+CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_updated_at_guard
+BEFORE UPDATE ON simuladores_matriz_imports
+WHEN NEW.updated_at <> OLD.updated_at
+  AND NEW.status IS OLD.status
+  AND COALESCE(NEW.applied_counts_json, '') IS COALESCE(OLD.applied_counts_json, '')
+  AND COALESCE(NEW.failure_reason, '') IS COALESCE(OLD.failure_reason, '')
+  AND COALESCE(NEW.applied_at, '') IS COALESCE(OLD.applied_at, '')
+  AND COALESCE(NEW.rolled_back_at, '') IS COALESCE(OLD.rolled_back_at, '')
+  AND COALESCE(NEW.rollback_uuid, '') IS COALESCE(OLD.rollback_uuid, '')
+BEGIN
+  SELECT RAISE(ABORT, 'updated_at da importação é gerenciado pelo banco');
+END;
