@@ -413,7 +413,17 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_state_update
 BEFORE UPDATE ON simuladores_matriz_imports
 BEGIN
-  SELECT CASE WHEN OLD.status = 'ROLLED_BACK'
+  -- Permit the companion timestamp trigger to stamp a terminal record; every
+  -- material field remains unchanged in that internal update.
+  SELECT CASE WHEN OLD.status = 'ROLLED_BACK' AND NOT (
+    NEW.status IS OLD.status
+    AND COALESCE(NEW.applied_counts_json, '') IS COALESCE(OLD.applied_counts_json, '')
+    AND COALESCE(NEW.failure_reason, '') IS COALESCE(OLD.failure_reason, '')
+    AND COALESCE(NEW.applied_at, '') IS COALESCE(OLD.applied_at, '')
+    AND COALESCE(NEW.rolled_back_at, '') IS COALESCE(OLD.rolled_back_at, '')
+    AND COALESCE(NEW.rollback_uuid, '') IS COALESCE(OLD.rollback_uuid, '')
+    AND NEW.updated_at = CURRENT_TIMESTAMP
+  )
     THEN RAISE(ABORT, 'importação ROLLED_BACK é terminal e imutável') END;
   SELECT CASE WHEN NEW.status <> OLD.status AND NOT (
     (OLD.status = 'DRY_RUN' AND NEW.status IN ('APPLYING', 'FAILED')) OR
@@ -475,6 +485,10 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_updated_at_guard
 BEFORE UPDATE ON simuladores_matriz_imports
 WHEN NEW.updated_at <> OLD.updated_at
+  -- The companion AFTER trigger performs the canonical CURRENT_TIMESTAMP bump.
+  -- SQLite still invokes sibling triggers for that internal update even with
+  -- recursive_triggers disabled, so allow only that database-generated value.
+  AND NEW.updated_at <> CURRENT_TIMESTAMP
   AND NEW.status IS OLD.status
   AND COALESCE(NEW.applied_counts_json, '') IS COALESCE(OLD.applied_counts_json, '')
   AND COALESCE(NEW.failure_reason, '') IS COALESCE(OLD.failure_reason, '')
