@@ -351,7 +351,7 @@
       "command": "bash",
       "args": [
         "-c",
-        "set -euo pipefail\ncd \"/Users/filipedaumas/Documents/airtrust v1\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"fix(api): evita 500 em /funcionarios (alias SQL)\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
+        "set -euo pipefail\ncd \"<AIRTRUST_ROOT>\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"fix(api): evita 500 em /funcionarios (alias SQL)\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
       ],
       "isBackground": false,
       "group": "build"
@@ -392,7 +392,7 @@
       "command": "bash",
       "args": [
         "-c",
-        "set -euo pipefail\ncd \"/Users/filipedaumas/Documents/airtrust v1\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"chore(ui): remove total/validas do dashboard qualificacoes\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
+        "set -euo pipefail\ncd \"<AIRTRUST_ROOT>\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"chore(ui): remove total/validas do dashboard qualificacoes\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
       ],
       "isBackground": false,
       "group": "build"
@@ -423,7 +423,7 @@
       "command": "bash",
       "args": [
         "-c",
-        "set -euo pipefail\ncd \"/Users/filipedaumas/Documents/airtrust v1\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"feat(qualificacoes): filtro categoria no historico\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
+        "set -euo pipefail\ncd \"<AIRTRUST_ROOT>\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"feat(qualificacoes): filtro categoria no historico\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
       ],
       "isBackground": false,
       "group": "build"
@@ -454,7 +454,7 @@
       "command": "bash",
       "args": [
         "-c",
-        "set -euo pipefail\ncd \"/Users/filipedaumas/Documents/airtrust v1\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"fix(ui/api): page size 20/50/100 + historico status schema\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
+        "set -euo pipefail\ncd \"<AIRTRUST_ROOT>\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"fix(ui/api): page size 20/50/100 + historico status schema\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
       ],
       "isBackground": false,
       "group": "build"

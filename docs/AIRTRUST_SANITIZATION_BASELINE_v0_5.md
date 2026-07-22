@@ -4,7 +4,7 @@ Data: 2026-05-29
 
 ## 1) Situação inicial do diretório principal sujo
 
-Diretório principal auditado: `/Users/filipedaumas/SAAS/Airtrust`
+Diretório principal auditado: `<AIRTRUST_ROOT>`
 
 - HEAD local: `586988c7c23a4b4607098dc4ae04e8d9fb568dec`
 - `origin/main`: `84e3353164ab7b8dd007225773faf3202daccb8d`
@@ -21,7 +21,7 @@ Blocos identificados no snapshot sujo:
 
 - O diretório principal sujo foi preservado intacto como snapshot em progresso.
 - Foi criada worktree limpa baseada em `origin/main` para baseline seguro:
-  - caminho: `/Users/filipedaumas/SAAS/Airtrust-clean-sanitize`
+  - caminho: `<AIRTRUST_ROOT>-clean-sanitize`
   - branch: `codex/airtrust-clean-sanitize`
   - HEAD: `84e3353164ab7b8dd007225773faf3202daccb8d`
   - relação com `origin/main`: `0 ahead / 0 behind`
@@ -74,9 +74,9 @@ D. Só ao final decidir estratégia para o snapshot sujo original (cherry-pick/m
 ## 7) Evidências capturadas no diretório principal
 
 Arquivos de auditoria gerados em:
-- `/Users/filipedaumas/SAAS/Airtrust/docs/sanificacao-airtrust/status-before-sanitize.txt`
-- `/Users/filipedaumas/SAAS/Airtrust/docs/sanificacao-airtrust/diff-stat-before-sanitize.txt`
-- `/Users/filipedaumas/SAAS/Airtrust/docs/sanificacao-airtrust/diff-name-status-before-sanitize.txt`
-- `/Users/filipedaumas/SAAS/Airtrust/docs/sanificacao-airtrust/git-log-before-sanitize.txt`
-- `/Users/filipedaumas/SAAS/Airtrust/docs/sanificacao-airtrust/ahead-behind-before-sanitize.txt`
-- `/Users/filipedaumas/SAAS/Airtrust/docs/sanificacao-airtrust/untracked-before-sanitize.txt`
+- `<AIRTRUST_ROOT>/docs/sanificacao-airtrust/status-before-sanitize.txt`
+- `<AIRTRUST_ROOT>/docs/sanificacao-airtrust/diff-stat-before-sanitize.txt`
+- `<AIRTRUST_ROOT>/docs/sanificacao-airtrust/diff-name-status-before-sanitize.txt`
+- `<AIRTRUST_ROOT>/docs/sanificacao-airtrust/git-log-before-sanitize.txt`
+- `<AIRTRUST_ROOT>/docs/sanificacao-airtrust/ahead-behind-before-sanitize.txt`
+- `<AIRTRUST_ROOT>/docs/sanificacao-airtrust/untracked-before-sanitize.txt`

@@ -2,7 +2,7 @@
 
 **Data:** 2026-05-30
 **Fase:** READ-ONLY — inventário documental e técnico
-**Repositório:** `/Users/filipedaumas/SAAS/Airtrust`
+**Repositório:** `<AIRTRUST_ROOT>`
 **Autor:** Claude Code (assistente), revisão por Filipe Daumas
 
 ---

@@ -40,7 +40,7 @@ Não existe migration anterior que crie `integracoes_sigvoos_config`. Em ambient
 - `0387` tem número posterior a `0354`.
 - Portanto, a cadeia ordenada `... -> 0354 -> ... -> 0387` continua inválida em bootstrap limpo.
 
-O teste local atualizado em [sigvoos-base-tables-schema.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/migrations/sigvoos-base-tables-schema.test.ts) confirmou dois pontos:
+O teste local atualizado em [sigvoos-base-tables-schema.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/migrations/sigvoos-base-tables-schema.test.ts) confirmou dois pontos:
 - `0354` falha em schema limpo com pré-requisitos mínimos por ausência de `integracoes_sigvoos_config`.
 - Concatenar `0387` depois da `0354` não resgata a execução, porque a falha ocorre antes.
 

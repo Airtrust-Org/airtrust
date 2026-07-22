@@ -14,30 +14,30 @@ Na Escala Diária:
 
 ## 2) Sintomas observados
 Sintomas confirmados por leitura de código:
-- Frontend monta URL de disponibilidade com `aeronave_id`, `data_inicio`, `data_fim`, `quinzena`, `incluir_bloqueados=true` ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:1475)).
-- Frontend separa retorno em aptos vs bloqueados por `pode_ser_alocado` e exibe `motivo_bloqueio` no `<optgroup>` ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:1486), [EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:1773)).
-- FRMS indisponível é ativado por erro de qualquer um dos endpoints `daily-fatigue` ou `daily-fatigue/alerts` ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:520)).
+- Frontend monta URL de disponibilidade com `aeronave_id`, `data_inicio`, `data_fim`, `quinzena`, `incluir_bloqueados=true` ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:1475)).
+- Frontend separa retorno em aptos vs bloqueados por `pode_ser_alocado` e exibe `motivo_bloqueio` no `<optgroup>` ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:1486), [EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:1773)).
+- FRMS indisponível é ativado por erro de qualquer um dos endpoints `daily-fatigue` ou `daily-fatigue/alerts` ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:520)).
 
 ## 3) Fluxo frontend -> backend
 ### 3.1 Aeronaves ativas
-- Frontend: `GET /api/aeronaves?somente_ativas=1` ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:513)).
+- Frontend: `GET /api/aeronaves?somente_ativas=1` ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:513)).
 - Uso: seleção por prefixo/modelo no modal.
 
 ### 3.2 Tripulantes operacionais
-- Frontend: `GET /api/escalas/tripulantes-operacionais?...` ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:1475)).
-- Rota backend: `/api/escalas/tripulantes-operacionais` montada por [escalas-core.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/escalas-core.ts:72), implementada em [escalas-tripulantes-operacionais.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:83).
+- Frontend: `GET /api/escalas/tripulantes-operacionais?...` ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:1475)).
+- Rota backend: `/api/escalas/tripulantes-operacionais` montada por [escalas-core.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/escalas-core.ts:72), implementada em [escalas-tripulantes-operacionais.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:83).
 
 ### 3.3 FRMS daily-fatigue
-- Frontend: `GET /api/frms/daily-fatigue?date=YYYY-MM-DD&scope=team` ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:507)).
-- Backend: [frms-fadiga-checkin.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:667).
+- Frontend: `GET /api/frms/daily-fatigue?date=YYYY-MM-DD&scope=team` ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:507)).
+- Backend: [frms-fadiga-checkin.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/frms-fadiga-checkin.ts:667).
 
 ### 3.4 FRMS alerts
-- Frontend: `GET /api/frms/daily-fatigue/alerts?date=YYYY-MM-DD` ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:511)).
-- Backend: [frms-fadiga-checkin.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:815).
+- Frontend: `GET /api/frms/daily-fatigue/alerts?date=YYYY-MM-DD` ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:511)).
+- Backend: [frms-fadiga-checkin.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/frms-fadiga-checkin.ts:815).
 
 ## 4) Endpoint de aeronaves
 - Query usada: `somente_ativas=1`.
-- Frontend ainda reforça filtro local de ativo via `isAeronaveAtiva` ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:396)).
+- Frontend ainda reforça filtro local de ativo via `isAeronaveAtiva` ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:396)).
 
 ## 5) Endpoint de tripulantes operacionais (auditoria)
 ## 5.1 Query params esperados
@@ -48,72 +48,72 @@ Sintomas confirmados por leitura de código:
 - `quinzena` (opcional)
 - `incluir_bloqueados` (opcional)
 
-Fonte: [escalas-tripulantes-operacionais.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:83).
+Fonte: [escalas-tripulantes-operacionais.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:83).
 
 ## 5.2 Como define `pode_ser_alocado`
 Vem do status operacional do CTE de tripulante:
 - `APTO`, `ATENCAO_CMA`, `ATENCAO_FRMS` => `true`
 - `BLOQUEADO_CMA`, `BLOQUEADO_FRMS` => `false`
 
-Fonte: [getTripulanteOperacional.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/shared/getTripulanteOperacional.ts:319).
+Fonte: [getTripulanteOperacional.ts](<AIRTRUST_ROOT>/worker-airtrust/src/shared/getTripulanteOperacional.ts:319).
 
 ## 5.3 Como define motivo de bloqueio
 Quando há conflito de alocação/situação/férias no período, o endpoint sobrescreve para `pode_ser_alocado=false` e preenche `motivo_bloqueio` com:
 - situação especial (`Em Simulador`, etc.) + período;
 - ou `Alocado em <prefixo> Q<quinzena>`.
 
-Fonte: [escalas-tripulantes-operacionais.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:305).
+Fonte: [escalas-tripulantes-operacionais.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:305).
 
 ## 5.4 Simulador / outra aeronave / férias / situação
 Todos entram como conflito por sobreposição de período (`data_inicio`/`data_fim`) quando bloqueadores.
 
-Fonte: [escalas-tripulantes-operacionais.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:210).
+Fonte: [escalas-tripulantes-operacionais.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:210).
 
 ## 5.5 Quinzena (Q1/Q2)
 - `quinzena` no endpoint **não bloqueia**. Só ordena prioridade (preferencial / personalizada / oposta).
 - `Q1/Q2` no motivo vem de `escala_alocacoes.quinzena_id -> escalas_quinzenas.numero`.
 
-Fonte: [escalas-tripulantes-operacionais.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:175).
+Fonte: [escalas-tripulantes-operacionais.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:175).
 
 ## 5.6 Modelo da aeronave (AW139/SK76/S76)
 - Normalização: `S76`/`SK76` => `SK76`; `AW139` => `AW139`.
 - Filtro aceita aliases e múltiplas fontes de habilitação (novo + legado).
 
-Fonte: [getTripulanteOperacional.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/shared/getTripulanteOperacional.ts:44), [getTripulanteOperacional.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/shared/getTripulanteOperacional.ts:416).
+Fonte: [getTripulanteOperacional.ts](<AIRTRUST_ROOT>/worker-airtrust/src/shared/getTripulanteOperacional.ts:44), [getTripulanteOperacional.ts](<AIRTRUST_ROOT>/worker-airtrust/src/shared/getTripulanteOperacional.ts:416).
 
 ## 6) Endpoint FRMS daily-fatigue
 ## 6.1 Parâmetros
 - `date` (opcional, default hoje)
 - `scope` (usar `team` para visão de equipe)
 
-Fonte: [frms-fadiga-checkin.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:670).
+Fonte: [frms-fadiga-checkin.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/frms-fadiga-checkin.ts:670).
 
 ## 6.2 Dependência de tenant/autenticação
 - Rota protegida por `auth()` e depende de `getEmpresaId()` (tenant context).
 - Sem tenant válido: erro e retorno 500 genérico da rota.
 
-Fontes: [frms-fadiga-checkin.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:22), [tenant.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/middleware/tenant.ts:378).
+Fontes: [frms-fadiga-checkin.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/frms-fadiga-checkin.ts:22), [tenant.ts](<AIRTRUST_ROOT>/worker-airtrust/src/middleware/tenant.ts:378).
 
 ## 6.3 Regras de status
 - `normal`, `attention`, `critical`, `unfit_for_duty`
 - sem check-in com jornada => `not_submitted`
 - sem jornada => `no_duty`
 
-Fonte: [frms-fadiga-checkin.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:755).
+Fonte: [frms-fadiga-checkin.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/frms-fadiga-checkin.ts:755).
 
 ## 7) Endpoint FRMS alerts
 - Para gestor: combina alertas persistidos com sintéticos de `not_submitted`.
 - Para não-gestor: retorna no máximo alerta próprio.
 
-Fonte: [frms-fadiga-checkin.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:815).
+Fonte: [frms-fadiga-checkin.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/frms-fadiga-checkin.ts:815).
 
 ## 8) Causa provável dos tripulantes indisponíveis
 ### Causa principal confirmada por código
-O frontend EVD **não envia `escala_id`** ao consultar disponibilidade ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:1475)).
+O frontend EVD **não envia `escala_id`** ao consultar disponibilidade ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:1475)).
 
 No backend, quando existe conflito de período em `escala_alocacoes`, só libera se for `mesmoEscalaAtual` (`conflito.escala_id === escala_id`); sem `escala_id` isso nunca ocorre, então vira bloqueio.
 
-Fonte: [escalas-tripulantes-operacionais.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:323).
+Fonte: [escalas-tripulantes-operacionais.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:323).
 
 Impacto direto:
 - tripulante já alocado na escala mensal pode aparecer como bloqueado na EVD mesmo quando deveria ser candidato;
@@ -122,13 +122,13 @@ Impacto direto:
 ### Causa secundária
 Conflito é calculado por **sobreposição de período** e não por "mesma aeronave"; alocação em outra aeronave no período também bloqueia.
 
-Fonte: [escalas-tripulantes-operacionais.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:245).
+Fonte: [escalas-tripulantes-operacionais.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:245).
 
 ## 9) Causa provável do FRMS indisponível
 ## 9.1 O que dispara o banner
 `frmsUnavailable = frmsDailyError || frmsAlertsError`.
 
-Fonte: [EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:520).
+Fonte: [EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:520).
 
 ## 9.2 Hipóteses técnicas mais prováveis
 1. erro de tenant/auth em `/api/frms/daily-fatigue` ou `/alerts`;  
@@ -153,7 +153,7 @@ Sem `TOKEN` neste ambiente, não foi possível confirmar por chamada real.
 Privacidade: não expor `KSS`, horas de sono, sintomas, medicação, álcool, observações pessoais na EVD pública/snapshot.
 
 ## 11) Comunicação Escala Mensal <-> Escala Diária
-- UI EVD calcula quinzena por data (`<=15 => primeira; >15 => segunda`) ([EvdPage.tsx](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/escalas/EvdPage.tsx:354)).
+- UI EVD calcula quinzena por data (`<=15 => primeira; >15 => segunda`) ([EvdPage.tsx](<AIRTRUST_ROOT>/src/react-app/pages/escalas/EvdPage.tsx:354)).
 - Backend de disponibilidade usa `quinzena` só para ordenação, não para bloqueio.
 - Bloqueios Q2 vistos na UI vêm de conflito de `escala_alocacoes` no período, não da regra de quinzena em si.
 

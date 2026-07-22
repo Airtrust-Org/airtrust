@@ -1,6 +1,6 @@
 # 08 — Prompt para GPT-5.4 Codex: integrar a resolução OPS-NOT-X1
 
-> Copie o bloco abaixo integralmente como prompt para o agente de implementação (GPT-5.4 Codex) que já está trabalhando no worktree `/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet`, branch `codex/simuladores-composicao-curricular-sonnet-20260713`.
+> Copie o bloco abaixo integralmente como prompt para o agente de implementação (GPT-5.4 Codex) que já está trabalhando no worktree `<AIRTRUST_ROOT>-worktrees/simuladores-curriculo-sonnet`, branch `codex/simuladores-composicao-curricular-sonnet-20260713`.
 
 ---
 

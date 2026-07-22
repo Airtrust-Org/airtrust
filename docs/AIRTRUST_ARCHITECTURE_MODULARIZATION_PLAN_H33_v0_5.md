@@ -164,7 +164,7 @@ Racional:
 ## Follow-up H34-A — System/public routes extraction
 - Data: 2026-05-26.
 - Extração aplicada (quick win, patch pequeno e reversível):
-  - handlers movidos de `worker-airtrust/src/index.ts` para [system.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/system.ts):
+  - handlers movidos de `worker-airtrust/src/index.ts` para [system.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/system.ts):
     - `GET /api/health`
     - `GET /api/version`
     - `GET /api/status`
@@ -176,7 +176,7 @@ Racional:
   - aliases 307 para `/api/health` mantidos;
   - sem mudança em middlewares globais (auth/tenant/RBAC), version header stamping, ou regras de negócio.
 - Testes:
-  - novo teste [system-routes.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/system-routes.test.ts) cobrindo contrato/status/path das rotas extraídas.
+  - novo teste [system-routes.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/system-routes.test.ts) cobrindo contrato/status/path das rotas extraídas.
 - Validações executadas pós-extração:
   - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
   - `npx tsc --noEmit`
@@ -193,7 +193,7 @@ Racional:
 ## Follow-up H34-B — Public routes extraction
 - Data: 2026-05-26.
 - Extração aplicada (quick win, patch pequeno e reversível):
-  - handlers movidos de `worker-airtrust/src/index.ts` para [public-routes.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/public-routes.ts):
+  - handlers movidos de `worker-airtrust/src/index.ts` para [public-routes.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/public-routes.ts):
     - `GET /api/public/locale`
     - `POST /api/public/translate`
   - montagem no index preservada via `registerPublicRoutes(app)`.
@@ -202,7 +202,7 @@ Racional:
   - comportamento de erro/fallback de tradução mantido;
   - sem mudança em auth/tenant/RBAC ou regras de domínio.
 - Testes:
-  - novo teste [public-routes.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/public-routes.test.ts) cobrindo contrato dos endpoints públicos, erro `400`, fallback e erro de provider.
+  - novo teste [public-routes.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/public-routes.test.ts) cobrindo contrato dos endpoints públicos, erro `400`, fallback e erro de provider.
 - Validações executadas pós-extração:
   - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
   - `npx tsc --noEmit`

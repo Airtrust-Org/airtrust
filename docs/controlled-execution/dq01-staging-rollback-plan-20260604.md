@@ -31,9 +31,9 @@ Restauro remoto somente se a janela falhar ou se a validação pós-execução i
 Comando planejado de rollback:
 
 ```bash
-cd /Users/filipedaumas/SAAS/Airtrust/worker-airtrust
+cd <AIRTRUST_ROOT>/worker-airtrust
 npx wrangler d1 execute airtrust-db-staging --env staging --remote \
-  --file /Users/filipedaumas/SAAS/Airtrust/worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/staging/dq01-staging-pre-window-20260604T190420Z.sql
+  --file <AIRTRUST_ROOT>/worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/staging/dq01-staging-pre-window-20260604T190420Z.sql
 ```
 
 Observações:

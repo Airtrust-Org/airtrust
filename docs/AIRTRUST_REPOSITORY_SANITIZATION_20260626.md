@@ -2,31 +2,31 @@
 
 ## Estado inicial
 
-- Pasta canônica `/Users/filipedaumas/SAAS/Airtrust` estava em `feat/lms-progresso-recuperacao-dry-run`.
+- Pasta canônica `<AIRTRUST_ROOT>` estava em `feat/lms-progresso-recuperacao-dry-run`.
 - Working tree canônica tinha alterações rastreadas em docs e `worker-airtrust/src/routes/simuladores-fichas.ts`.
-- Havia múltiplas worktrees e clones paralelos em `/Users/filipedaumas/SAAS/Airtrust-worktrees` e `/Users/filipedaumas/SAAS`.
+- Havia múltiplas worktrees e clones paralelos em `<AIRTRUST_ROOT>-worktrees` e `/Users/filipedaumas/SAAS`.
 - `origin/main` evoluiu durante a sanitização e terminou em `2be72f03f7bf5ef075d80b78caaff38d95b3756e`.
 
 ## Inventário e classificação
 
 | Path | Branch/HEAD | Estado | Classificação | Ação |
 | --- | --- | --- | --- | --- |
-| `/Users/filipedaumas/SAAS/Airtrust` | `main` @ `2be72f03` | limpo | `KEEP_CANONICAL_CANDIDATE` | saneado in-place |
-| `/Users/filipedaumas/SAAS/Airtrust-worktrees/deploy-main-20260626` | `codex/lms-dry-run-closeout-20260626` @ `8445ed2` | limpo no início da sanitização | `KEEP_ACTIVE_PR` | mantido como única worktree |
-| `/Users/filipedaumas/SAAS/Airtrust-worktrees/incident-lms-maintenance-progress-20260625` | `codex/lms-maintenance-postdeploy-validation-report-20260625` @ `311c485` | limpo | `REMOVE_MERGED_CLEAN` | removido |
-| `/Users/filipedaumas/SAAS/Airtrust-worktrees/lms-maintenance-recovery-audit-20260626` | `codex/lms-maintenance-recovery-audit-20260626` @ `060c8cc` | modificado/untracked | `ARCHIVE_PATCH_THEN_REMOVE` | patch salvo e removido |
-| `/Users/filipedaumas/SAAS/Airtrust-worktrees/lms-recovery-apply-aw139-20260626` | `main` @ `a8b9f12` | limpo | `REMOVE_MERGED_CLEAN` | removido |
-| `/Users/filipedaumas/SAAS/Airtrust-worktrees/lms-recovery-dry-run-20260626` | `codex/lms-recovery-dry-run-20260626` @ `b7d310a` | limpo | `REMOVE_MERGED_CLEAN` | removido |
-| `/Users/filipedaumas/SAAS/Airtrust-worktrees/lms-recovery-pr162-clean-20260626` | `codex/lms-recovery-pr162-clean-20260626` | modificado/untracked | `ARCHIVE_PATCH_THEN_REMOVE` | patch salvo e removido |
-| `/Users/filipedaumas/SAAS/Airtrust-worktrees/deploy-main-20260625` | clone paralelo em `main` | untracked | `STANDALONE_CLONE_REVIEW` | preservado e removido |
-| `/Users/filipedaumas/SAAS/Airtrust-deploy-main` | clone paralelo em `main` | modificado | `STANDALONE_CLONE_REVIEW` | preservado e removido |
-| `/Users/filipedaumas/SAAS/Airtrust-sw-decommission-main-publish` | clone paralelo em `main` | limpo | `REMOVE_MERGED_CLEAN` | removido |
-| `/Users/filipedaumas/SAAS/Airtrust-sw-decommission-main-publish-local` | clone paralelo em `main` | modificado | `STANDALONE_CLONE_REVIEW` | preservado e removido |
-| `/Users/filipedaumas/SAAS/Airtrust-archive-contaminated-20260624` | `codex/hotfix-lms-aw-progress-reset-20260622` @ `aa138c2` | altamente modificado | `DO_NOT_TOUCH_ACTIVE_UNKNOWN` | mantido como arquivo histórico |
+| `<AIRTRUST_ROOT>` | `main` @ `2be72f03` | limpo | `KEEP_CANONICAL_CANDIDATE` | saneado in-place |
+| `<AIRTRUST_ROOT>-worktrees/deploy-main-20260626` | `codex/lms-dry-run-closeout-20260626` @ `8445ed2` | limpo no início da sanitização | `KEEP_ACTIVE_PR` | mantido como única worktree |
+| `<AIRTRUST_ROOT>-worktrees/incident-lms-maintenance-progress-20260625` | `codex/lms-maintenance-postdeploy-validation-report-20260625` @ `311c485` | limpo | `REMOVE_MERGED_CLEAN` | removido |
+| `<AIRTRUST_ROOT>-worktrees/lms-maintenance-recovery-audit-20260626` | `codex/lms-maintenance-recovery-audit-20260626` @ `060c8cc` | modificado/untracked | `ARCHIVE_PATCH_THEN_REMOVE` | patch salvo e removido |
+| `<AIRTRUST_ROOT>-worktrees/lms-recovery-apply-aw139-20260626` | `main` @ `a8b9f12` | limpo | `REMOVE_MERGED_CLEAN` | removido |
+| `<AIRTRUST_ROOT>-worktrees/lms-recovery-dry-run-20260626` | `codex/lms-recovery-dry-run-20260626` @ `b7d310a` | limpo | `REMOVE_MERGED_CLEAN` | removido |
+| `<AIRTRUST_ROOT>-worktrees/lms-recovery-pr162-clean-20260626` | `codex/lms-recovery-pr162-clean-20260626` | modificado/untracked | `ARCHIVE_PATCH_THEN_REMOVE` | patch salvo e removido |
+| `<AIRTRUST_ROOT>-worktrees/deploy-main-20260625` | clone paralelo em `main` | untracked | `STANDALONE_CLONE_REVIEW` | preservado e removido |
+| `<AIRTRUST_ROOT>-deploy-main` | clone paralelo em `main` | modificado | `STANDALONE_CLONE_REVIEW` | preservado e removido |
+| `<AIRTRUST_ROOT>-sw-decommission-main-publish` | clone paralelo em `main` | limpo | `REMOVE_MERGED_CLEAN` | removido |
+| `<AIRTRUST_ROOT>-sw-decommission-main-publish-local` | clone paralelo em `main` | modificado | `STANDALONE_CLONE_REVIEW` | preservado e removido |
+| `<AIRTRUST_ROOT>-archive-contaminated-20260624` | `codex/hotfix-lms-aw-progress-reset-20260622` @ `aa138c2` | altamente modificado | `DO_NOT_TOUCH_ACTIVE_UNKNOWN` | mantido como arquivo histórico |
 
 ## Patches e preservação
 
-- Arquivo raiz: `/Users/filipedaumas/SAAS/Airtrust-repo-archive/20260626`
+- Arquivo raiz: `<AIRTRUST_ROOT>-repo-archive/20260626`
 - Patches, `status`, `untracked` e `head` foram salvos para:
   - `Airtrust`
   - `Airtrust-archive-contaminated-20260624`
@@ -49,14 +49,14 @@
 
 ## Resultado final
 
-- Pasta canônica restaurada em `/Users/filipedaumas/SAAS/Airtrust`.
+- Pasta canônica restaurada em `<AIRTRUST_ROOT>`.
 - Branch final: `main`.
 - HEAD final: `2be72f03f7bf5ef075d80b78caaff38d95b3756e`.
 - `origin/main`: `2be72f03f7bf5ef075d80b78caaff38d95b3756e`.
 - `git status --short`: limpo na pasta canônica.
 - Worktrees restantes:
-  - `/Users/filipedaumas/SAAS/Airtrust`
-  - `/Users/filipedaumas/SAAS/Airtrust-worktrees/deploy-main-20260626`
+  - `<AIRTRUST_ROOT>`
+  - `<AIRTRUST_ROOT>-worktrees/deploy-main-20260626`
 
 ## Riscos e próximos passos
 

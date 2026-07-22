@@ -112,7 +112,7 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 - Conclusão: o runner remoto está completo e fail-closed. A barreira agora é dupla: (a) env vars e (b) `wrangler login` ativo. Ambas são operacionais, não técnicas.
 
 **Evidência Sprint X.3 (2026-06-03):**
-- Worktree limpo isolado em `/Users/filipedaumas/SAAS/Airtrust-r03-probe` para não tocar os untracked do repositório principal.
+- Worktree limpo isolado em `<AIRTRUST_ROOT>-r03-probe` para não tocar os untracked do repositório principal.
 - Branch de execução: `sprint-x3-r03-probe`; HEAD == `origin/main` (`ed354f94bd1a9c23375ee3d8535707e93d1dc4b7`).
 - `git status` limpo no worktree; `npm run ops:guard` PASS.
 - `preflight-clean-deploy.sh` falhou apenas pelo gate `deploy only from main`, incompatível com a própria exigência de worktree em branch separada; nenhum deploy foi tentado.

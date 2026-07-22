@@ -3,7 +3,7 @@
 Data: 2026-05-25
 Ferramenta/modelo: DeepSeek (inteligencia media)
 Fase: H6-B — Classificacao read-only de dumps, seeds e unknowns
-Repositorio: `/Users/filipedaumas/SAAS/Airtrust`
+Repositorio: `<AIRTRUST_ROOT>`
 
 ## 1. Sumario executivo
 

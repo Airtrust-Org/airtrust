@@ -1,7 +1,7 @@
 # AirTrust — Opus Strategic Product & Engineering Roadmap
 
 - **Data:** 2026-06-02
-- **Repositório:** `/Users/filipedaumas/SAAS/Airtrust`
+- **Repositório:** `<AIRTRUST_ROOT>`
 - **Branch:** `main`
 - **HEAD auditado:** `5777d775876c7088907c039d0306dfd7bc0b2f9d` (== `origin/main`, 0 ahead / 0 behind)
 - **Working tree:** sem alterações *tracked*; apenas *untracked* (`docs/`, `knowledge/`, `scripts/seed-*.sql`, `scripts/validation/audit-endpoint-matrix.mjs`).
@@ -149,7 +149,7 @@ Executa a **ação #1 do Plano 7 dias** (padronizar resposta de erro), com o pad
 ```text
 Prompt — Codex: padronizar resposta de erro do worker (parar de vazar error.message)
 
-Repositório: /Users/filipedaumas/SAAS/Airtrust  | Branch: main
+Repositório: <AIRTRUST_ROOT>  | Branch: main
 Objetivo: remover o vazamento de detalhe interno em respostas de erro do worker,
 onde handlers retornam `details: error.message` (ou equivalente) ao cliente.
 Manter o log server-side completo; expor ao cliente apenas mensagem genérica.

@@ -2,7 +2,7 @@
 
 ## Estado inicial
 
-- Repositório: `/Users/filipedaumas/SAAS/Airtrust`
+- Repositório: `<AIRTRUST_ROOT>`
 - Branch inicial da macroetapa: `codex/data-integrity-guardrails-onda-1`
 - `HEAD` inicial: `3118f997d1a149eb6d3fe68355549665463a9660`
 - `origin/main` de referência: `a387819895f797e159081ff7665ceccb67f95bf8`

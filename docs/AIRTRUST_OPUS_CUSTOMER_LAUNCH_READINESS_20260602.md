@@ -4,7 +4,7 @@
 ---
 
 **Data:** 2026-06-02  
-**Repositório:** `/Users/filipedaumas/SAAS/Airtrust`  
+**Repositório:** `<AIRTRUST_ROOT>`  
 **Branch / HEAD auditados:** `main` @ `5777d775876c7088907c039d0306dfd7bc0b2f9d` (== `origin/main`, 0 ahead / 0 behind)  
 **Modo:** read-only. Nenhum código alterado, nenhum commit/push/deploy/migration, nenhum DB remoto tocado, nenhuma empresa/usuário criado.  
 **Ferramenta:** Opus (via Claude Sonnet 4.6) — auditoria estratégica + técnica + operacional  
@@ -686,7 +686,7 @@ GROUP BY empresa_id;
 ```text
 Prompt — Codex: Fechar exposição de documentos sensíveis no /api/assets (L1 LGPD)
 
-Repositório: /Users/filipedaumas/SAAS/Airtrust  |  Branch: main
+Repositório: <AIRTRUST_ROOT>  |  Branch: main
 Objetivo: garantir que o endpoint GET /api/assets/* NÃO sirva documentos
 sensíveis (certificados, exames médicos, documentos pessoais) sem autenticação.
 Hoje o handler (routes/assets.ts) serve QUALQUER chave R2 publicamente com

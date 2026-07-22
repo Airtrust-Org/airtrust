@@ -1,6 +1,0 @@
-matricula_funcionario,codigo_qualificacao,data_obtencao,data_validade,nota,status,observacoes
-1001,CMA-2024,2024-01-15,2025-01-15,5,ATIVO,Exame realizado no CEMAL SP
-1001,ICAO-PROF,2024-02-20,2026-02-20,4,ATIVO,Nível 4 - Satisfatório
-1002,CMA-2024,2024-02-01,2025-02-01,5,ATIVO,Exame completo sem restrições
-1002,DG-CAT6,2024-03-10,2026-03-10,5,ATIVO,Certificação categoria 6
-1003,SEL-001,2024-02-15,2027-02-15,4,ATIVO,Curso realizado em Manaus

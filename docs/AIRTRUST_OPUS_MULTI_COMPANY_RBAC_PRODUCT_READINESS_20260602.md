@@ -1,7 +1,7 @@
 # AirTrust — Opus Readiness: Multiempresa, Onboarding, RBAC e Produto
 
 - **Data:** 2026-06-02
-- **Repositório:** `/Users/filipedaumas/SAAS/Airtrust`
+- **Repositório:** `<AIRTRUST_ROOT>`
 - **Branch / HEAD:** `main` @ `5777d775876c7088907c039d0306dfd7bc0b2f9d` (== `origin/main`, 0 ahead / 0 behind)
 - **Working tree:** sem *tracked changes*; apenas *untracked* (`docs/`, `knowledge/`, `scripts/seed-*.sql`, `scripts/validation/*`).
 - **Modo:** read-only. Nenhum código alterado, nenhum commit/push/deploy/migration, nenhum DB remoto/real tocado, nenhuma empresa/usuário criado.
@@ -191,7 +191,7 @@ Executa o **bloqueio #3 (Antes da 1ª empresa)**: verificar e blindar o isolamen
 ```text
 Prompt — Codex: garantir isolamento de tenant no serving de assets (/api/assets/*)
 
-Repositório: /Users/filipedaumas/SAAS/Airtrust  | Branch: main
+Repositório: <AIRTRUST_ROOT>  | Branch: main
 Objetivo: garantir que um usuário autenticado de uma empresa NÃO consiga ler
 arquivos/documentos de outra empresa via o endpoint de assets (R2 keys usam
 prefixo empresas/{id}/...). Confirmar o comportamento atual e blindar com

@@ -35,7 +35,7 @@ Publicacao do pacote de gestao de turmas multi-dia, instrutores por turma, emiss
 ## Backup pre-apply
 
 - dump completo D1:
-  - `/Users/filipedaumas/SAAS/Airtrust/artifacts/db-backups/airtrust-db-production-pre-apply-20260606T1538-0300.sql`
+  - `<AIRTRUST_ROOT>/artifacts/db-backups/airtrust-db-production-pre-apply-20260606T1538-0300.sql`
 - tamanho local baixado: `97M`
 
 ## Apply remoto D1

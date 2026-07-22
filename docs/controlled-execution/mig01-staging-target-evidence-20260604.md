@@ -20,7 +20,7 @@
 O ponto de entrada da janela MIG e o snapshot pos-DQ de staging:
 
 ```text
-/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/staging/dq01-staging-post-window-20260604T191117Z.sqlite
+<AIRTRUST_ROOT>/worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/staging/dq01-staging-post-window-20260604T191117Z.sqlite
 ```
 
 Evidencias do snapshot:

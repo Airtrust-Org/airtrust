@@ -2,7 +2,7 @@
 
 ## Estado inicial Git
 ```text
-pwd: /Users/filipedaumas/SAAS/Airtrust
+pwd: <AIRTRUST_ROOT>
 branch: main
 HEAD: d9a74a9d8f92491a3ca5eb1e1eada0178957c6e3
 origin/main: d9a74a9d8f92491a3ca5eb1e1eada0178957c6e3

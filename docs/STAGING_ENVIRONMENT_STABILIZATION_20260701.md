@@ -78,7 +78,7 @@ Recomendacao:
 
 Arquivo:
 
-- [scripts/smoke-staging-auth.mjs](/Users/filipedaumas/SAAS/Airtrust/scripts/smoke-staging-auth.mjs)
+- [scripts/smoke-staging-auth.mjs](<AIRTRUST_ROOT>/scripts/smoke-staging-auth.mjs)
 
 Comando:
 
@@ -111,7 +111,7 @@ Comportamento:
 
 Arquivo:
 
-- [scripts/seed-staging-smoke-user.mjs](/Users/filipedaumas/SAAS/Airtrust/scripts/seed-staging-smoke-user.mjs)
+- [scripts/seed-staging-smoke-user.mjs](<AIRTRUST_ROOT>/scripts/seed-staging-smoke-user.mjs)
 
 Dry-run:
 
@@ -140,7 +140,7 @@ Propriedades:
 
 Arquivo:
 
-- [scripts/staging-doctor.mjs](/Users/filipedaumas/SAAS/Airtrust/scripts/staging-doctor.mjs)
+- [scripts/staging-doctor.mjs](<AIRTRUST_ROOT>/scripts/staging-doctor.mjs)
 
 Comando:
 
@@ -164,7 +164,7 @@ Comportamento:
 
 Arquivo:
 
-- [.github/workflows/smoke-staging.yml](/Users/filipedaumas/SAAS/Airtrust/.github/workflows/smoke-staging.yml)
+- [.github/workflows/smoke-staging.yml](<AIRTRUST_ROOT>/.github/workflows/smoke-staging.yml)
 
 Uso:
 
@@ -201,9 +201,9 @@ Nao executar deploy de frontend nesta fase.
 
 Estado atual:
 
-- existe worker frontend staging em [worker-frontend/wrangler.toml](/Users/filipedaumas/SAAS/Airtrust/worker-frontend/wrangler.toml:1);
-- o frontend reconhece `main.airtrust.pages.dev` e roteia para a API de staging em [src/react-app/config/api.ts](/Users/filipedaumas/SAAS/Airtrust/src/react-app/config/api.ts:33);
-- o workflow atual de Pages continua production-only em [.github/workflows/deploy-airtrust.yml](/Users/filipedaumas/SAAS/Airtrust/.github/workflows/deploy-airtrust.yml:285).
+- existe worker frontend staging em [worker-frontend/wrangler.toml](<AIRTRUST_ROOT>/worker-frontend/wrangler.toml:1);
+- o frontend reconhece `main.airtrust.pages.dev` e roteia para a API de staging em [src/react-app/config/api.ts](<AIRTRUST_ROOT>/src/react-app/config/api.ts:33);
+- o workflow atual de Pages continua production-only em [.github/workflows/deploy-airtrust.yml](<AIRTRUST_ROOT>/.github/workflows/deploy-airtrust.yml:285).
 
 Diretriz:
 

@@ -6,7 +6,7 @@
 
 ## 2. Initial Git State
 
-- Workspace root: `/Users/filipedaumas/SAAS/Airtrust`
+- Workspace root: `<AIRTRUST_ROOT>`
 - Initial `HEAD`: `d2de056f49f088d792f4c75fe4eda76819d6fe52`
 - `origin/main`: `d2de056f49f088d792f4c75fe4eda76819d6fe52`
 - Tracked diff before work: clean

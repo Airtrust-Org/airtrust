@@ -1360,7 +1360,7 @@ echo "🚀 APLICAR MIGRAÇÕES EM PRODUÇÃO"
 echo "================================="
 echo ""
 
-PROJECT_ROOT="/Users/filipedaumas/Documents/airtrust v1"
+PROJECT_ROOT="<AIRTRUST_ROOT>"
 MIGRATIONS_DIR="$PROJECT_ROOT/worker-airtrust/migrations"
 
 cd "$PROJECT_ROOT"
@@ -1440,7 +1440,7 @@ echo "🚀 Aplicando migrations de refatoração de aeronaves..."
 echo ""
 
 # Diretório base
-BASE_DIR="/Users/filipedaumas/Documents/airtrust v1"
+BASE_DIR="<AIRTRUST_ROOT>"
 MIGRATIONS_DIR="$BASE_DIR/worker-airtrust/migrations"
 
 # Verificar se as migrations existem
@@ -4377,7 +4377,7 @@ if __name__ == "__main__":
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/Users/filipedaumas/Documents/airtrust v1"
+ROOT="<AIRTRUST_ROOT>"
 API="https://airtrust-api-production.airtrust.workers.dev/api"
 DB="airtrust-db"
 TARGET_ID=42
@@ -4437,7 +4437,7 @@ echo "[audit] bateria concluída com sucesso; restaurando estado original via tr
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/Users/filipedaumas/Documents/airtrust v1"
+ROOT="<AIRTRUST_ROOT>"
 API="https://airtrust-api-production.airtrust.workers.dev/api"
 DB="airtrust-db"
 

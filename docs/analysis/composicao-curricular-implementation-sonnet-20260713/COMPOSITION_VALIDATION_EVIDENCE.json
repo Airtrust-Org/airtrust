@@ -2,8 +2,8 @@
   "generated_at": "2026-07-13T21:21:01.332Z",
   "git_head": "56241da2f70553767dc36bcb01d97c326bc6998c",
   "git_branch": "codex/simuladores-composicao-curricular-sonnet-20260713",
-  "final_db": "/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/tmp/simuladores-curriculo-sonnet-20260713/curriculum_work.sqlite",
-  "before_db": "/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/tmp/simuladores-curriculo-sonnet-20260713/curriculum_before.sqlite",
+  "final_db": "<AIRTRUST_ROOT>-worktrees/simuladores-curriculo-sonnet/tmp/simuladores-curriculo-sonnet-20260713/curriculum_work.sqlite",
+  "before_db": "<AIRTRUST_ROOT>-worktrees/simuladores-curriculo-sonnet/tmp/simuladores-curriculo-sonnet-20260713/curriculum_before.sqlite",
   "changed_codes": [
     "A139-I-02/12",
     "A139-I-04/12",

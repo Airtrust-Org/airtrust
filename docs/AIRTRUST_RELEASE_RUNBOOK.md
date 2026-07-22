@@ -16,7 +16,7 @@
 ## Fluxo emergencial
 
 1. Confirmar que existe incidente real ou indisponibilidade do GitHub Actions.
-2. Garantir que a pasta ativa é `/Users/filipedaumas/SAAS/Airtrust`.
+2. Garantir que a pasta ativa é `<AIRTRUST_ROOT>`.
 3. Garantir `main` limpo e alinhado com `origin/main`.
 4. Rodar `npm run repo:doctor`.
 5. Usar `npm run release:worker:local-emergency` apenas com aprovação explícita.

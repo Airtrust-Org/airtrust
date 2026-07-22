@@ -21,7 +21,7 @@
 - commit publicado de codigo:
   - `274250c1e232463e858135af3d6a22502fe3a41d`
 - backup D1 pre-apply:
-  - `/Users/filipedaumas/SAAS/Airtrust/artifacts/db-backups/airtrust-db-production-pre-apply-20260606T1538-0300.sql`
+  - `<AIRTRUST_ROOT>/artifacts/db-backups/airtrust-db-production-pre-apply-20260606T1538-0300.sql`
 - relatorio operacional detalhado:
   - `docs/AIRTRUST_TRAINING_CLASS_MANAGEMENT_DEPLOY_20260606.md`
 - validacao funcional local:

@@ -7,10 +7,10 @@ import subprocess
 import sys
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-RAW = "/Users/filipedaumas/SAAS/Airtrust/docs/analysis/revisao-independente-fichas-raw-20260713"
-SONNET = "/Users/filipedaumas/SAAS/Airtrust/docs/analysis/composicao-curricular-final-sonnet-20260713"
-MAIN_REPO = "/Users/filipedaumas/SAAS/Airtrust"
-WORKTREE = "/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet"
+RAW = "<AIRTRUST_ROOT>/docs/analysis/revisao-independente-fichas-raw-20260713"
+SONNET = "<AIRTRUST_ROOT>/docs/analysis/composicao-curricular-final-sonnet-20260713"
+MAIN_REPO = "<AIRTRUST_ROOT>"
+WORKTREE = "<AIRTRUST_ROOT>-worktrees/simuladores-curriculo-sonnet"
 
 errors = []
 warnings = []

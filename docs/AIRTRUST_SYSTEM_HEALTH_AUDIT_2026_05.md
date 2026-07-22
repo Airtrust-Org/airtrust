@@ -1,7 +1,7 @@
 # AIRTRUST — System Health Audit (2026-05)
 
 Data da auditoria: 2026-05-25  
-Repositório: `/Users/filipedaumas/SAAS/Airtrust`  
+Repositório: `<AIRTRUST_ROOT>`  
 Escopo: Auditoria read-only (sem patch funcional)
 
 ## 1. Sumário executivo

@@ -6,7 +6,7 @@ Status: **ENCERRADO**
 ## 1) Branch de trabalho
 
 - `codex/rubens-instrutor-role-fix` (base: `codex/airtrust-clean-sanitize` → `origin/main`)
-- Worktree limpa: `/Users/filipedaumas/SAAS/Airtrust-clean-sanitize`
+- Worktree limpa: `<AIRTRUST_ROOT>-clean-sanitize`
 
 ## 2) Commits
 
@@ -77,7 +77,7 @@ Status: **ENCERRADO**
 
 - [x] Sem migration aplicada.
 - [x] Sem alteração manual de banco.
-- [x] Sem uso do snapshot sujo (`/Users/filipedaumas/SAAS/Airtrust`).
+- [x] Sem uso do snapshot sujo (`<AIRTRUST_ROOT>`).
 - [x] Nenhum arquivo de FRMS, Escala ou UI genérica foi alterado.
 - [x] Diff restrito a auth/perfil, escopo de fichas, utilitários role/scope, testes, script diagnóstico e docs.
 

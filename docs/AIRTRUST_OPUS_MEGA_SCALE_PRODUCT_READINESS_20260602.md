@@ -1,7 +1,7 @@
 # AirTrust — Opus Mega Audit: Multiempresa, Onboarding, RBAC, Produto, Compliance, Demo e Roadmap
 
 - **Data:** 2026-06-02
-- **Repositório:** `/Users/filipedaumas/SAAS/Airtrust`
+- **Repositório:** `<AIRTRUST_ROOT>`
 - **Branch / HEAD auditado:** `main` @ `5777d775876c7088907c039d0306dfd7bc0b2f9d` (== `origin/main`, 0 ahead / 0 behind)
 - **Working tree:** sem alterações *tracked*; apenas *untracked* (`docs/`, `knowledge/`, `scripts/seed-*.sql`, `scripts/validation/*`).
 - **Modo:** read-only, auditoria estratégica + técnica + produto + compliance. Nenhum código alterado, nenhum commit/push/deploy/migration, nenhum DB remoto/real tocado, nenhuma empresa/usuário criado.
@@ -394,7 +394,7 @@ Executa o **bloqueio #1 (antes da 1ª empresa)**: blindar o isolamento de tenant
 ```text
 Prompt — Codex: blindar isolamento de tenant no serving de assets (/api/assets/*)
 
-Repositório: /Users/filipedaumas/SAAS/Airtrust  | Branch: main
+Repositório: <AIRTRUST_ROOT>  | Branch: main
 Objetivo: /api/assets/* hoje é PÚBLICO (na whitelist de index.ts) e serve QUALQUER
 chave do R2 sem auth nem verificação de tenant (routes/assets.ts). Isso expõe
 documentos/fichas e, criticamente, PDFs FIRA de fadiga em chaves semi-adivinháveis

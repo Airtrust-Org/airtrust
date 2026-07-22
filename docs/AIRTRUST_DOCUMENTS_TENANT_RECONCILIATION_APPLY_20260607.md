@@ -20,8 +20,8 @@
 
 | Field | Value |
 | --- | --- |
-| Command | `env -u CLOUDFLARE_API_TOKEN wrangler d1 export airtrust-db --env production --remote --output /Users/filipedaumas/SAAS/Airtrust/artifacts/db-backups/airtrust-db-preapply-lote2-20260607_130901.sql` |
-| Path | `/Users/filipedaumas/SAAS/Airtrust/artifacts/db-backups/airtrust-db-preapply-lote2-20260607_130901.sql` |
+| Command | `env -u CLOUDFLARE_API_TOKEN wrangler d1 export airtrust-db --env production --remote --output <AIRTRUST_ROOT>/artifacts/db-backups/airtrust-db-preapply-lote2-20260607_130901.sql` |
+| Path | `<AIRTRUST_ROOT>/artifacts/db-backups/airtrust-db-preapply-lote2-20260607_130901.sql` |
 | Size | `102,628,674 bytes` (`98M`) |
 | Timestamp | `Jun 7 13:09:10 2026` |
 | Result | Success |
@@ -30,9 +30,9 @@
 
 | Artifact | Path | Rows |
 | --- | --- | ---: |
-| Documentos snapshot | `/Users/filipedaumas/SAAS/Airtrust/artifacts/sanitization/lote2-preapply-documentos-20260607.csv` | 45 |
-| Pasta virtual snapshot | `/Users/filipedaumas/SAAS/Airtrust/artifacts/sanitization/lote2-preapply-pasta-virtual-20260607.csv` | 60 |
-| Explicit rollback SQL | `/Users/filipedaumas/SAAS/Airtrust/artifacts/sanitization/rollback-documentos-lote2-explicit-20260607.sql` | 105 IDs |
+| Documentos snapshot | `<AIRTRUST_ROOT>/artifacts/sanitization/lote2-preapply-documentos-20260607.csv` | 45 |
+| Pasta virtual snapshot | `<AIRTRUST_ROOT>/artifacts/sanitization/lote2-preapply-pasta-virtual-20260607.csv` | 60 |
+| Explicit rollback SQL | `<AIRTRUST_ROOT>/artifacts/sanitization/rollback-documentos-lote2-explicit-20260607.sql` | 105 IDs |
 
 ### Snapshot shape notes
 
@@ -128,7 +128,7 @@ This residue:
 ## Rollback
 
 - Rollback was prepared with explicit IDs only:
-  - `/Users/filipedaumas/SAAS/Airtrust/artifacts/sanitization/rollback-documentos-lote2-explicit-20260607.sql`
+  - `<AIRTRUST_ROOT>/artifacts/sanitization/rollback-documentos-lote2-explicit-20260607.sql`
 - Rollback was **not executed** because post-checks passed for all moved rows.
 
 ## Validation

@@ -11,7 +11,7 @@ Medir com segurança o custo do endpoint `GET /api/simuladores/sessoes`, compara
 Esta fase **não** reescreve a query detalhada nem altera frontend.
 
 ## 2. Estado atual do endpoint
-Arquivo de referência: [simuladores-sessoes.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts)
+Arquivo de referência: [simuladores-sessoes.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/simuladores-sessoes.ts)
 
 - Default:
   - mantém payload completo com `participantes` e `fichas`;
@@ -23,7 +23,7 @@ Arquivo de referência: [simuladores-sessoes.ts](/Users/filipedaumas/SAAS/Airtru
   - preserva envelope de resposta e mantém `participantes`/`fichas` como arrays vazios.
 
 ## 3. Script de benchmark criado
-Script read-only: [benchmark-simuladores-sessoes.sh](/Users/filipedaumas/SAAS/Airtrust/scripts/validation/benchmark-simuladores-sessoes.sh)
+Script read-only: [benchmark-simuladores-sessoes.sh](<AIRTRUST_ROOT>/scripts/validation/benchmark-simuladores-sessoes.sh)
 
 Uso:
 ```bash

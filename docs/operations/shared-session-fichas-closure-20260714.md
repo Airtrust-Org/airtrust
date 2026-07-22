@@ -67,4 +67,4 @@ Encerramento funcional confirmado em 2026-07-14:
 - a PR residual foi formalmente encerrada sem merge.
 
 Pendência remanescente:
-- reconciliação formal do drift entre schema real de produção e ledger de migrations, documentada em [production-schema-snapshot-20260714/README.md](/Users/filipedaumas/SAAS/Airtrust/docs/database/production-schema-snapshot-20260714/README.md).
+- reconciliação formal do drift entre schema real de produção e ledger de migrations, documentada em [production-schema-snapshot-20260714/README.md](<AIRTRUST_ROOT>/docs/database/production-schema-snapshot-20260714/README.md).

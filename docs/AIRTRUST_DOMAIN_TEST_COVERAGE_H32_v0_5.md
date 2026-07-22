@@ -12,8 +12,8 @@ Data: 2026-05-26
 
 ## 3. Testes adicionados
 Arquivos:
-- [backup-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/backup-guards.test.ts)
-- [admin-apply-migration-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/admin-apply-migration-guards.test.ts)
+- [backup-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/backup-guards.test.ts)
+- [admin-apply-migration-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/admin-apply-migration-guards.test.ts)
 
 Cenários cobertos:
 1. `POST /backup/manual` retorna `401` sem autenticação.
@@ -48,7 +48,7 @@ Rotas cobertas:
 - `POST /sgso/nao-conformidades`
 
 Arquivo de teste:
-- [sgso-auditorias-ncs-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/sgso-auditorias-ncs-guards.test.ts)
+- [sgso-auditorias-ncs-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/sgso-auditorias-ncs-guards.test.ts)
 
 Cenários adicionados:
 1. sem autenticação em escrita retorna `401`;
@@ -79,7 +79,7 @@ Rotas cobertas:
 - `GET /fichas` (negativo de tenant ausente)
 
 Arquivo de teste:
-- [simuladores-sessoes-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-sessoes-guards.test.ts)
+- [simuladores-sessoes-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/simuladores-sessoes-guards.test.ts)
 
 Cenários adicionados:
 1. sem autenticação em `PUT /sessoes/:id` retorna `401`;
@@ -110,7 +110,7 @@ Rotas cobertas:
 - `GET /sgso/relprev/submissoes`
 
 Arquivo de teste:
-- [sgso-nextgen-relatos-acoes-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/sgso-nextgen-relatos-acoes-guards.test.ts)
+- [sgso-nextgen-relatos-acoes-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/sgso-nextgen-relatos-acoes-guards.test.ts)
 
 Cenários adicionados:
 1. sem autenticação em escrita de workflow retorna `401`;

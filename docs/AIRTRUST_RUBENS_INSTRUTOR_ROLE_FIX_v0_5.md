@@ -1,7 +1,7 @@
 # AIRTRUST RUBENS INSTRUTOR ROLE FIX v0.5
 
 Data: 2026-05-29
-Worktree: `/Users/filipedaumas/SAAS/Airtrust-clean-sanitize`
+Worktree: `<AIRTRUST_ROOT>-clean-sanitize`
 
 ## 1) Problema
 

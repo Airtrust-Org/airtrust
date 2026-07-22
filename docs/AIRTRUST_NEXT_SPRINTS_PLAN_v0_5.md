@@ -298,7 +298,7 @@
 ### Sprint X.3 — Worktree limpo + tentativa sem autorização ⚠️ SKIPPED
 - **Status:** SKIPPED em 2026-06-03 (HEAD `ed354f9`).
 - **Objetivo:** repetir o fluxo do R03 em worktree limpo para não tocar untracked fora do escopo no repositório principal.
-- **Entregue:** worktree `/Users/filipedaumas/SAAS/Airtrust-r03-probe`; branch `sprint-x3-r03-probe`; HEAD == `origin/main`; `git status` limpo no worktree; `ops:guard` PASS; runner revalidado como seguro.
+- **Entregue:** worktree `<AIRTRUST_ROOT>-r03-probe`; branch `sprint-x3-r03-probe`; HEAD == `origin/main`; `git status` limpo no worktree; `ops:guard` PASS; runner revalidado como seguro.
 - **Resultado:** `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED` porque `AIRTRUST_ALLOW_SCHEMA_PROBE`, `AIRTRUST_SCHEMA_PROBE_TARGET`, `AIRTRUST_CONFIRM_READ_ONLY_SCHEMA_PROBE` e `AIRTRUST_CONFIRM_PRODUCTION_READ_ONLY` estavam `UNSET`.
 - **Nota operacional:** `preflight-clean-deploy.sh` falhou apenas pelo gate `deploy only from main`, incompatível com a própria exigência de worktree em branch separada. Como não houve deploy, runtime ou schema change, isso foi tratado como conflito de procedimento, não como falha técnica do probe.
 - **Decisão:** R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED`.
@@ -566,7 +566,7 @@
 - **Status:** CONCLUIDO em 2026-06-04.
 - **Objetivo:** tentar avançar de `READY_FOR_CONTROLLED_BACKFILL` para execução real somente se houvesse staging aprovado, snapshot, rollback e autorização explícita.
 - **Entregue:**
-  - documento [AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md);
+  - documento [AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md);
   - script fail-closed `scripts/dq01-controlled-backfill-gate.sh`;
   - teste `dq01-controlled-backfill-gate.test.ts`;
   - ampliação de `simuladores-sessoes-data-quality.test.ts` para bloquear criação órfã quando a sessão não existe.
@@ -578,8 +578,8 @@
 - **Status:** CONCLUIDO em 2026-06-04.
 - **Objetivo:** preparar o pacote compartilhado de staging/snapshot/rollback/approval/safe-command para `DQ-01` e `MIG-01`, sem mutation real.
 - **Entregue:**
-  - documento [AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md);
-  - runbook [AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md);
+  - documento [AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md);
+  - runbook [AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md);
   - gate genérico `scripts/controlled-execution-gate.sh`;
   - wrapper `scripts/mig01-controlled-rebaseline-gate.sh`;
   - `dq01-controlled-backfill-gate.sh` reancorado no contrato genérico;
@@ -592,7 +592,7 @@
 - **Status:** CONCLUIDO em 2026-06-04.
 - **Objetivo:** fechar o ciclo atual sem criar nova preparação redundante, executando a decisão real dos gates e uma correção preventiva local de arquitetura/performance.
 - **Entregue:**
-  - relatório [AIRTRUST_AUDIT_CYCLE_FINAL_CLOSURE_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_AUDIT_CYCLE_FINAL_CLOSURE_v0_5.md);
+  - relatório [AIRTRUST_AUDIT_CYCLE_FINAL_CLOSURE_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_AUDIT_CYCLE_FINAL_CLOSURE_v0_5.md);
   - teste `architecture-performance-guard.test.ts`;
   - matriz/plano/resumo atualizados para refletir bloqueio real de ambiente.
 - **Sem:** backfill real, rebaseline real, D1 remoto, deploy, migration nova, edição de migration histórica.
@@ -603,7 +603,7 @@
 - **Status:** CONCLUIDO em 2026-06-04.
 - **Objetivo:** fechar os residuos finais de auth/tenant apontados pela auditoria Opus e confirmar a ponte para execucao controlada.
 - **Entregue:**
-  - relatorio [AIRTRUST_FINAL_LOCAL_RESIDUAL_CLOSURE_AND_CONTROLLED_EXECUTION_BRIDGE_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_FINAL_LOCAL_RESIDUAL_CLOSURE_AND_CONTROLLED_EXECUTION_BRIDGE_v0_5.md);
+  - relatorio [AIRTRUST_FINAL_LOCAL_RESIDUAL_CLOSURE_AND_CONTROLLED_EXECUTION_BRIDGE_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_FINAL_LOCAL_RESIDUAL_CLOSURE_AND_CONTROLLED_EXECUTION_BRIDGE_v0_5.md);
   - `AUTH-RESIDUAL-01 = RESOLVED`;
   - `AUTH-RESIDUAL-02 = RESOLVED`;
   - `AUTH_TENANT = CONFIRMED_CLOSED`;
@@ -616,9 +616,9 @@
 - **Status:** CONCLUIDO em 2026-06-04.
 - **Objetivo:** materializar um pacote operacional rastreável para `DQ-01`, sem executar backfill, sem D1 remoto e sem tocar produção.
 - **Entregue:**
-  - documento [AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md);
-  - evidência de target [dq01-target-evidence-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/dq01-target-evidence-20260604.md);
-  - plano de rollback [dq01-rollback-plan-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/dq01-rollback-plan-20260604.md);
+  - documento [AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md);
+  - evidência de target [dq01-target-evidence-20260604.md](<AIRTRUST_ROOT>/docs/controlled-execution/dq01-target-evidence-20260604.md);
+  - plano de rollback [dq01-rollback-plan-20260604.md](<AIRTRUST_ROOT>/docs/controlled-execution/dq01-rollback-plan-20260604.md);
   - wrapper read-only `scripts/run-dq01-local-copy-backfill-readonly.sh`;
   - snapshot local pré-janela não rastreado em `.wrangler/state/v3/d1/controlled-execution-snapshots/`.
 - **Gates:** `controlled-execution-gate.sh = READY_FOR_MANUAL_CONTROLLED_EXECUTION`; `dq01-controlled-backfill-gate.sh = READY_FOR_MANUAL_CONTROLLED_EXECUTION`; `audit-data-quality-readiness.sh = PASS`.
@@ -630,7 +630,7 @@
 - **Status:** CONCLUIDO em 2026-06-04.
 - **Objetivo:** executar DQ-01 de forma controlada em `local-copy`, sem tocar staging, produção, D1 remoto, deploy, `MIG-01` ou `0389`.
 - **Entregue:**
-  - resultado [AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md);
+  - resultado [AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md);
   - safe command mutante `scripts/run-dq01-local-copy-backfill-apply.sh`;
   - teste `dq01-local-copy-backfill-apply.test.ts`;
   - snapshot pré-janela `dq01-local-copy-pre-window-20260604T172927Z.sqlite` fora do versionamento;
@@ -644,9 +644,9 @@
 - **Status:** CONCLUIDO em 2026-06-04.
 - **Objetivo:** materializar `staging` como ambiente controlado canônico de `DQ-01`, capturar snapshot/rollback, passar nos gates e executar o lote autorizado sem deploy, sem `MIG-01` e sem `0389`.
 - **Entregue:**
-  - resultado [AIRTRUST_DQ01_STAGING_BACKFILL_EXECUTION_RESULT_AND_MIG01_HANDOFF_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_DQ01_STAGING_BACKFILL_EXECUTION_RESULT_AND_MIG01_HANDOFF_v0_5.md);
-  - evidência de target [dq01-staging-target-evidence-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/dq01-staging-target-evidence-20260604.md);
-  - plano de rollback [dq01-staging-rollback-plan-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/dq01-staging-rollback-plan-20260604.md);
+  - resultado [AIRTRUST_DQ01_STAGING_BACKFILL_EXECUTION_RESULT_AND_MIG01_HANDOFF_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_DQ01_STAGING_BACKFILL_EXECUTION_RESULT_AND_MIG01_HANDOFF_v0_5.md);
+  - evidência de target [dq01-staging-target-evidence-20260604.md](<AIRTRUST_ROOT>/docs/controlled-execution/dq01-staging-target-evidence-20260604.md);
+  - plano de rollback [dq01-staging-rollback-plan-20260604.md](<AIRTRUST_ROOT>/docs/controlled-execution/dq01-staging-rollback-plan-20260604.md);
   - wrappers `scripts/run-dq01-staging-backfill-readonly.sh` e `scripts/run-dq01-staging-backfill-apply.sh`;
   - teste `dq01-staging-backfill-apply.test.ts`;
   - snapshot pré-janela e pós-janela não rastreados em `.wrangler/state/v3/d1/controlled-execution-snapshots/staging/`.
@@ -660,11 +660,11 @@
 - **Status:** CONCLUIDO em 2026-06-04.
 - **Objetivo:** executar o rebaseline controlado de `MIG-01` usando o snapshot pos-DQ de `staging`, sem D1 remoto novo, sem deploy, sem producao, sem DQ novo e sem apply da `0389`.
 - **Entregue:**
-  - resultado [AIRTRUST_MIG01_CONTROLLED_REBASELINE_EXECUTION_RESULT_AND_0389_HANDOFF_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_MIG01_CONTROLLED_REBASELINE_EXECUTION_RESULT_AND_0389_HANDOFF_v0_5.md);
-  - evidência de target [mig01-staging-target-evidence-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/mig01-staging-target-evidence-20260604.md);
-  - plano de rollback [mig01-staging-rollback-plan-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/mig01-staging-rollback-plan-20260604.md);
-  - baseline SQL [mig01-staging-schema-baseline-20260604.sql](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/mig01-staging-schema-baseline-20260604.sql);
-  - summary [mig01-staging-rebaseline-summary-20260604.txt](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/mig01-staging-rebaseline-summary-20260604.txt);
+  - resultado [AIRTRUST_MIG01_CONTROLLED_REBASELINE_EXECUTION_RESULT_AND_0389_HANDOFF_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_MIG01_CONTROLLED_REBASELINE_EXECUTION_RESULT_AND_0389_HANDOFF_v0_5.md);
+  - evidência de target [mig01-staging-target-evidence-20260604.md](<AIRTRUST_ROOT>/docs/controlled-execution/mig01-staging-target-evidence-20260604.md);
+  - plano de rollback [mig01-staging-rollback-plan-20260604.md](<AIRTRUST_ROOT>/docs/controlled-execution/mig01-staging-rollback-plan-20260604.md);
+  - baseline SQL [mig01-staging-schema-baseline-20260604.sql](<AIRTRUST_ROOT>/docs/controlled-execution/mig01-staging-schema-baseline-20260604.sql);
+  - summary [mig01-staging-rebaseline-summary-20260604.txt](<AIRTRUST_ROOT>/docs/controlled-execution/mig01-staging-rebaseline-summary-20260604.txt);
   - wrapper `scripts/run-mig01-staging-rebaseline.sh`;
   - teste `mig01-staging-rebaseline.test.ts`.
 - **Gates:** `controlled-execution-gate.sh = READY_FOR_MANUAL_CONTROLLED_EXECUTION`; `mig01-controlled-rebaseline-gate.sh = READY_FOR_MANUAL_CONTROLLED_EXECUTION`; `audit-migration-chain-readiness.sh = PASS`.

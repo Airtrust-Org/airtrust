@@ -3,8 +3,8 @@
 - HEAD: 56241da2f70553767dc36bcb01d97c326bc6998c
 - Branch: codex/simuladores-composicao-curricular-sonnet-20260713
 - Base: 9aa1984d5a0007cb9aa60943cdc3064e4bdb4b01
-- Banco final: /Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/tmp/simuladores-curriculo-sonnet-20260713/curriculum_work.sqlite
-- Banco baseline: /Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/tmp/simuladores-curriculo-sonnet-20260713/curriculum_before.sqlite
+- Banco final: <AIRTRUST_ROOT>-worktrees/simuladores-curriculo-sonnet/tmp/simuladores-curriculo-sonnet-20260713/curriculum_work.sqlite
+- Banco baseline: <AIRTRUST_ROOT>-worktrees/simuladores-curriculo-sonnet/tmp/simuladores-curriculo-sonnet-20260713/curriculum_before.sqlite
 
 ## A139-I-02/12
 - nome anterior: Voo Visual e Perfil Básico

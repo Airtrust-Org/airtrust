@@ -1,7 +1,7 @@
 -- AirTrust MIG-01 staging schema baseline
 -- Generated: 2026-06-04
 -- Source target: staging / airtrust-db-staging
--- Source snapshot: /Users/filipedaumas/SAAS/Airtrust/worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/staging/dq01-staging-post-window-20260604T191117Z.sqlite
+-- Source snapshot: <AIRTRUST_ROOT>/worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/staging/dq01-staging-post-window-20260604T191117Z.sqlite
 -- Approval: MIG01-STAGING-20260604-FILIPE
 -- Scope: schema-only baseline artifact; excludes d1_migrations; no D1 remote; no deploy; no 0389 apply
 

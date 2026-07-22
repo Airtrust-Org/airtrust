@@ -3,7 +3,7 @@
 ## Escopo
 
 - Frente: LMS/SCORM Tripulacao/Operacoes.
-- Pasta canonica: `/Users/filipedaumas/SAAS/Airtrust`.
+- Pasta canonica: `<AIRTRUST_ROOT>`.
 - ZIPs fonte oficiais: `~/EADs/Tripulação/*.zip`.
 - Nao houve SQL de escrita, migration, rollback, conclusao manual de matricula ou qualificacao manual nesta fase.
 

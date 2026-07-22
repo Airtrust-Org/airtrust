@@ -23,7 +23,7 @@ Impacto:
 
 ## Causa Raiz do GET
 
-O `GET /api/simuladores/sessoes` em [worker-airtrust/src/routes/simuladores-sessoes.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:273) assumia que o schema local sempre possuia:
+O `GET /api/simuladores/sessoes` em [worker-airtrust/src/routes/simuladores-sessoes.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/simuladores-sessoes.ts:273) assumia que o schema local sempre possuia:
 
 - `simulador_agendamentos.tipo_dispositivo`
 - `simulador_agendamentos.aeronave_id`
@@ -100,7 +100,7 @@ Diagnostico final:
 
 ## Estrategia de Isolamento Validada
 
-Os builders em [monthlyAgendaPrint.ts](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:1) ja operam como documento isolado:
+Os builders em [monthlyAgendaPrint.ts](<AIRTRUST_ROOT>/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:1) ja operam como documento isolado:
 
 - HTML proprio;
 - `@page` por formato;
@@ -121,19 +121,19 @@ Os builders em [monthlyAgendaPrint.ts](/Users/filipedaumas/SAAS/Airtrust/src/rea
 
 ### Before
 
-- [before-fixed-api-monthly-list-2026-02.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/before-fixed-api-monthly-list-2026-02.pdf)
-- [before-fixed-api-monthly-calendar-2026-02.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/before-fixed-api-monthly-calendar-2026-02.pdf)
-- [before-fixed-api-weekly-2026-02-22.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/before-fixed-api-weekly-2026-02-22.pdf)
-- [before-fixed-api-daily-2026-02-28.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/before-fixed-api-daily-2026-02-28.pdf)
-- [before-fixed-api-agenda-2026-02.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/before-fixed-api-agenda-2026-02.pdf)
+- [before-fixed-api-monthly-list-2026-02.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/before-fixed-api-monthly-list-2026-02.pdf)
+- [before-fixed-api-monthly-calendar-2026-02.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/before-fixed-api-monthly-calendar-2026-02.pdf)
+- [before-fixed-api-weekly-2026-02-22.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/before-fixed-api-weekly-2026-02-22.pdf)
+- [before-fixed-api-daily-2026-02-28.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/before-fixed-api-daily-2026-02-28.pdf)
+- [before-fixed-api-agenda-2026-02.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/before-fixed-api-agenda-2026-02.pdf)
 
 ### After
 
-- [after-monthly-list-2026-02.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/after-monthly-list-2026-02.pdf)
-- [after-monthly-calendar-2026-02.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/after-monthly-calendar-2026-02.pdf)
-- [after-weekly-2026-02-22.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/after-weekly-2026-02-22.pdf)
-- [after-daily-2026-02-28.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/after-daily-2026-02-28.pdf)
-- [after-agenda-2026-02.pdf](/Users/filipedaumas/SAAS/Airtrust/artifacts/print-validation/after-agenda-2026-02.pdf)
+- [after-monthly-list-2026-02.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/after-monthly-list-2026-02.pdf)
+- [after-monthly-calendar-2026-02.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/after-monthly-calendar-2026-02.pdf)
+- [after-weekly-2026-02-22.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/after-weekly-2026-02-22.pdf)
+- [after-daily-2026-02-28.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/after-daily-2026-02-28.pdf)
+- [after-agenda-2026-02.pdf](<AIRTRUST_ROOT>/artifacts/print-validation/after-agenda-2026-02.pdf)
 
 Observacao:
 
@@ -180,7 +180,7 @@ Observacao:
 
 Criado:
 
-- [simuladores-sessoes-schema-compat.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-sessoes-schema-compat.test.ts:1)
+- [simuladores-sessoes-schema-compat.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/simuladores-sessoes-schema-compat.test.ts:1)
 
 Cobertura:
 
@@ -192,7 +192,7 @@ Cobertura:
 
 Ajustado:
 
-- [monthlyAgendaPrint.test.ts](/Users/filipedaumas/SAAS/Airtrust/src/react-app/pages/simuladores/agenda/__tests__/monthlyAgendaPrint.test.ts:1)
+- [monthlyAgendaPrint.test.ts](<AIRTRUST_ROOT>/src/react-app/pages/simuladores/agenda/__tests__/monthlyAgendaPrint.test.ts:1)
 
 Cobertura:
 

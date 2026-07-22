@@ -11,7 +11,7 @@ alteracao de aeronave, alteracao de tenant, deploy, commit ou push foi executado
 
 | Item | Resultado |
 | --- | --- |
-| Repositorio | `/Users/filipedaumas/SAAS/Airtrust` |
+| Repositorio | `<AIRTRUST_ROOT>` |
 | Branch | `main` |
 | HEAD inicial | `e6cb33430b82a360fa09da12da964307620a20e2` |
 | HEAD final | `e6cb33430b82a360fa09da12da964307620a20e2` |

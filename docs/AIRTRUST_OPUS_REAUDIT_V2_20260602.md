@@ -1,7 +1,7 @@
 # AirTrust — Reauditoria Opus v2 (pós-hardening)
 
 - **Data:** 2026-06-02
-- **Repositório:** `/Users/filipedaumas/SAAS/Airtrust`
+- **Repositório:** `<AIRTRUST_ROOT>`
 - **Branch:** `main`
 - **HEAD auditado:** `e6d773eb9e973a4f5b35fdee87da67fbbe1e9381` (== `origin/main`, árvore limpa de *tracked*)
 - **Modo:** read-only. Nenhum código alterado, nenhum commit/push/deploy/migration, nenhum DB remoto tocado.

@@ -319,7 +319,7 @@ estão em 5 arquivos não relacionados ao escopo desta onda.
 ### 9.5 Lint guards
 
 ```
-npm --prefix /Users/filipedaumas/SAAS/Airtrust run lint
+npm --prefix <AIRTRUST_ROOT> run lint
 Exit code: 0
 Resultado: 4/4 PASS
 ```

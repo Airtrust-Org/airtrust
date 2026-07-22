@@ -18,7 +18,7 @@ Decisao final:
 - branch antiga: `feat/lms-progresso-recuperacao-dry-run`;
 - commit util preservado: `f0379bb`;
 - worktree limpo usado para fechamento:
-  `/Users/filipedaumas/SAAS/Airtrust-worktrees/lms-recovery-pr162-clean-20260626`;
+  `<AIRTRUST_ROOT>-worktrees/lms-recovery-pr162-clean-20260626`;
 - branch limpa:
   `codex/lms-recovery-pr162-clean-20260626`.
 

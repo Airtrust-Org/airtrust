@@ -9,9 +9,9 @@ Modo de execução:
 - nenhum ledger alterado.
 
 Artefatos:
-- snapshot estrutural versionado: [structural-snapshot.json](/Users/filipedaumas/SAAS/Airtrust/docs/database/production-schema-snapshot-20260714/structural-snapshot.json)
+- snapshot estrutural versionado: [structural-snapshot.json](<AIRTRUST_ROOT>/docs/database/production-schema-snapshot-20260714/structural-snapshot.json)
 - snapshot sanitizado fora do repositório: `~/.airtrust-prod-ops/schema-audit-20260714/production-schema-snapshot-sanitized.json`
-- matriz auxiliar de migrations: [migration-ledger-audit-0408-0429.json](/Users/filipedaumas/SAAS/Airtrust/docs/database/production-schema-snapshot-20260714/migration-ledger-audit-0408-0429.json)
+- matriz auxiliar de migrations: [migration-ledger-audit-0408-0429.json](<AIRTRUST_ROOT>/docs/database/production-schema-snapshot-20260714/migration-ledger-audit-0408-0429.json)
 
 Marcador metodológico:
 - `COMPARACAO_ESTATICA_NAO_EXECUTADA`: a reconciliação com o corpus de migrations foi feita por inspeção estática do repositório, sem replay local do chain completo.
@@ -40,7 +40,7 @@ Achado crítico:
 
 Limitação deliberada:
 - a instrução operacional foi `Não executar migrations`;
-- por isso, a comparação com a fonte B foi feita por inspeção estática do corpus `worker-airtrust/migrations/*.sql`, do artefato local [scripts/schema-local.sql](/Users/filipedaumas/SAAS/Airtrust/scripts/schema-local.sql) e das migrations-alvo `0151`, `0408`–`0429`;
+- por isso, a comparação com a fonte B foi feita por inspeção estática do corpus `worker-airtrust/migrations/*.sql`, do artefato local [scripts/schema-local.sql](<AIRTRUST_ROOT>/scripts/schema-local.sql) e das migrations-alvo `0151`, `0408`–`0429`;
 - `COMPARACAO_ESTATICA_NAO_EXECUTADA`: não houve replay local do chain completo.
 
 Conclusões da fonte B:
@@ -51,7 +51,7 @@ Conclusões da fonte B:
 
 ## Fonte C — Documentação
 
-Divergências objetivas em [DATABASE_SCHEMA.md](/Users/filipedaumas/SAAS/Airtrust/DATABASE_SCHEMA.md):
+Divergências objetivas em [DATABASE_SCHEMA.md](<AIRTRUST_ROOT>/DATABASE_SCHEMA.md):
 - a seção de simuladores lista apenas `simuladores`, `simulador_sessoes`, `simulador_agendamentos`, `fichas_sessao`, `fichas_sessao_edicoes`, `modelos_sessao`, `manobras` e `modelos_aeronave`;
 - a documentação não reflete `sessoes_participantes`, `simulador_atribuicoes_curriculares`, `simulador_agendamento_segmentos`, `simulador_segmento_atribuicoes`, `simulador_segmento_participantes`, `modelos_sessao_requisitos` nem `fichas_sessao_instrutor_meta`;
 - o texto afirma padrão universal de `empresa_id` e `deleted_at` em todas as tabelas, o que é falso para `simuladores` e `sessoes_participantes` na produção real;
@@ -132,7 +132,7 @@ Leitura objetiva:
 ## Migration 0151
 
 Achado específico:
-- [0151_add_empresa_id_incremental.sql](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/migrations/0151_add_empresa_id_incremental.sql) tenta adicionar `empresa_id` em `simuladores`;
+- [0151_add_empresa_id_incremental.sql](<AIRTRUST_ROOT>/worker-airtrust/migrations/0151_add_empresa_id_incremental.sql) tenta adicionar `empresa_id` em `simuladores`;
 - produção real continua sem `simuladores.empresa_id`;
 - portanto, `0151` não é uma descrição confiável do schema real de produção para esta tabela;
 - isso reforça que não se pode inferir produção apenas pelo corpus de migrations.

@@ -1,6 +1,0 @@
-## F1.A
-    2669 worker-airtrust/src/routes/escalas-core.ts
-     310 worker-airtrust/src/routes/escalas/index.ts
-     481 total
-     310 worker-airtrust/src/routes/escalas/index.ts
-     171 worker-airtrust/src/routes/escalas/helpers.ts

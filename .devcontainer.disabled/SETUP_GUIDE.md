@@ -74,7 +74,7 @@ devcontainer build --workspace-folder .
 
 Seu projeto está automaticamente montado dentro do container:
 
-- **Host**: `/Users/filipedaumas/Documents/airtrust v1`
+- **Host**: `<AIRTRUST_ROOT>`
 - **Container**: `/workspace`
 
 Todas as mudanças são sincronizadas em tempo real.

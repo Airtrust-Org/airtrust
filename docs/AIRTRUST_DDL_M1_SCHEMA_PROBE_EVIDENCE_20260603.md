@@ -10,7 +10,7 @@ A Sprint X foi interrompida porque `ensureSolicitacoesTreinamentoLinkSchema()` p
 
 ## 3. Ambiente consultado
 
-- Repositório: `/Users/filipedaumas/SAAS/Airtrust`
+- Repositório: `<AIRTRUST_ROOT>`
 - Branch: `main`
 - HEAD consultado: `cf5866907d820fb085472f748243968c6d03510d`
 - Probe local: snapshot D1 em `worker-airtrust/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/`
@@ -481,8 +481,8 @@ Após execução, a decisão da M1 será reclassificada conforme:
 
 ### 13.1 Estado inicial
 
-- Repositório principal mantido intacto em `/Users/filipedaumas/SAAS/Airtrust`
-- Worktree limpo criado em `/Users/filipedaumas/SAAS/Airtrust-r03-probe`
+- Repositório principal mantido intacto em `<AIRTRUST_ROOT>`
+- Worktree limpo criado em `<AIRTRUST_ROOT>-r03-probe`
 - Branch do worktree: `sprint-x3-r03-probe`
 - HEAD: `ed354f94bd1a9c23375ee3d8535707e93d1dc4b7`
 - origin/main: `ed354f94bd1a9c23375ee3d8535707e93d1dc4b7`

@@ -1,7 +1,7 @@
 # AirTrust — Hardening `empresa_id DEFAULT 1` — Wave 3
 
 Data: 2026-06-09
-Repo: `/Users/filipedaumas/SAAS/Airtrust`
+Repo: `<AIRTRUST_ROOT>`
 Branch: `main`
 Base validada: `5959279e`
 

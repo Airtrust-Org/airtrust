@@ -1,3 +1,0 @@
-funcionario_id,tipo,codigo,nome,data_conclusao,data_vencimento,instrutor,nota_final
-6,CMA,CMA-TESTE-001,Teste Importação Produção 1,2025-10-23,2026-10-23,Instrutor Teste,10
-7,ICAO,ICAO-TESTE-001,Teste Importação Produção 2,2025-10-23,2027-10-23,Instrutor Teste,9

@@ -1,7 +1,7 @@
 # AirTrust — Auditoria Geral Independente (Opus)
 
 - **Data:** 2026-06-01
-- **Repositório:** `/Users/filipedaumas/SAAS/Airtrust`
+- **Repositório:** `<AIRTRUST_ROOT>`
 - **Branch auditada:** `main`
 - **HEAD:** `70c15fa` (== `origin/main`, árvore limpa de alterações *tracked*)
 - **Modo:** read-only. Nenhum arquivo de código alterado, nenhum commit, push, deploy ou migration.

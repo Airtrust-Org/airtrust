@@ -31,19 +31,19 @@ Validações adicionais:
 - G2 criada para sessão `58`: `0`
 
 ## Proteção implementada para prevenção
-Arquivo: [scripts/backfill-qualificacoes-sessoes-mes.sh](/Users/filipedaumas/SAAS/Airtrust/scripts/backfill-qualificacoes-sessoes-mes.sh)
+Arquivo: [scripts/backfill-qualificacoes-sessoes-mes.sh](<AIRTRUST_ROOT>/scripts/backfill-qualificacoes-sessoes-mes.sh)
 - O backfill só aplica `PLANEJADA` para `date(data) >= date('now')`.
 - Itens em data passada não entram em apply como planejada.
 
-Arquivo: [simuladores-shared.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/simuladores-shared.ts)
+Arquivo: [simuladores-shared.ts](<AIRTRUST_ROOT>/worker-airtrust/src/routes/simuladores-shared.ts)
 - O helper automático bloqueia criação de `PLANEJADA` para sessão passada (`bloqueadasDataPassada`).
 
 Chamadores cobertos:
-- [simuladores-sessoes.ts:816](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:816)
-- [simuladores-sessoes-update.ts:430](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:430)
+- [simuladores-sessoes.ts:816](<AIRTRUST_ROOT>/worker-airtrust/src/routes/simuladores-sessoes.ts:816)
+- [simuladores-sessoes-update.ts:430](<AIRTRUST_ROOT>/worker-airtrust/src/routes/simuladores-sessoes-update.ts:430)
 
 ## Cobertura de teste
-Arquivo: [simuladores-planejadas-edit-session.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-planejadas-edit-session.test.ts)
+Arquivo: [simuladores-planejadas-edit-session.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/simuladores-planejadas-edit-session.test.ts)
 - Sessão futura elegível gera `PLANEJADA`.
 - Reedição não duplica.
 - Sessão passada elegível não gera `PLANEJADA`.

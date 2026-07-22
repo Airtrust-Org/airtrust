@@ -34,7 +34,7 @@ Auditoria complementar de inicio:
 
 ```text
 pwd
-/Users/filipedaumas/SAAS/Airtrust
+<AIRTRUST_ROOT>
 
 git branch --show-current
 main

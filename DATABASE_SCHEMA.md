@@ -187,8 +187,8 @@ Ordem de aplicação: **alfabética** pelo nome do arquivo.
 
 Desde 2026-07-14 o schema de produção passa a ser governado por:
 
-- snapshot read-only versionado em [docs/database/production-schema-snapshot-20260714/README.md](/Users/filipedaumas/SAAS/Airtrust-worktrees/schema-baseline-v2-20260714/docs/database/production-schema-snapshot-20260714/README.md);
-- contrato versionado em [docs/database/schema-contracts/production-d1-baseline-v2.json](/Users/filipedaumas/SAAS/Airtrust-worktrees/schema-baseline-v2-20260714/docs/database/schema-contracts/production-d1-baseline-v2.json);
+- snapshot read-only versionado em [docs/database/production-schema-snapshot-20260714/README.md](<AIRTRUST_ROOT>-worktrees/schema-baseline-v2-20260714/docs/database/production-schema-snapshot-20260714/README.md);
+- contrato versionado em [docs/database/schema-contracts/production-d1-baseline-v2.json](<AIRTRUST_ROOT>-worktrees/schema-baseline-v2-20260714/docs/database/schema-contracts/production-d1-baseline-v2.json);
 - ledger V2 em `worker-airtrust/schema-v2/`.
 
 Regras operacionais:

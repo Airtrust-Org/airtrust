@@ -872,8 +872,8 @@
   ],
   "network_errors": [],
   "screenshots": [
-    "/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/docs/analysis/composicao-curricular-implementation-sonnet-20260713/frontend-screenshots/01-login.png",
-    "/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/docs/analysis/composicao-curricular-implementation-sonnet-20260713/frontend-screenshots/02-funcionarios.png",
-    "/Users/filipedaumas/SAAS/Airtrust-worktrees/simuladores-curriculo-sonnet/docs/analysis/composicao-curricular-implementation-sonnet-20260713/frontend-screenshots/03-modelos-sessao.png"
+    "<AIRTRUST_ROOT>-worktrees/simuladores-curriculo-sonnet/docs/analysis/composicao-curricular-implementation-sonnet-20260713/frontend-screenshots/01-login.png",
+    "<AIRTRUST_ROOT>-worktrees/simuladores-curriculo-sonnet/docs/analysis/composicao-curricular-implementation-sonnet-20260713/frontend-screenshots/02-funcionarios.png",
+    "<AIRTRUST_ROOT>-worktrees/simuladores-curriculo-sonnet/docs/analysis/composicao-curricular-implementation-sonnet-20260713/frontend-screenshots/03-modelos-sessao.png"
   ]
 }

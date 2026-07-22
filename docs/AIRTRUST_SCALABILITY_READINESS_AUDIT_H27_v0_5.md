@@ -224,7 +224,7 @@ Prioridade alta (sem cobertura de rota dedicada equivalente):
 - Baseline confirmado: `main`, `HEAD == origin/main == 589f33e00c50d216b55f3fbb489b436aad3a8cc3`, divergência `0/0`.
 - Validações baseline H33: `tsc` worker/root, `build`, `lint` e `test:worker` verdes (`483` testes).
 - Entregável principal:
-  - [AIRTRUST_ARCHITECTURE_MODULARIZATION_PLAN_H33_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_ARCHITECTURE_MODULARIZATION_PLAN_H33_v0_5.md)
+  - [AIRTRUST_ARCHITECTURE_MODULARIZATION_PLAN_H33_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_ARCHITECTURE_MODULARIZATION_PLAN_H33_v0_5.md)
 - Direção recomendada:
   - iniciar H34-A com quick wins de extração em `worker-airtrust/src/index.ts` sem alterar contratos;
   - manter FRMS/EVD/importação/auth-tenant como áreas congeladas para refactor estrutural até cobertura adicional (H35).
@@ -236,7 +236,7 @@ Próxima fase recomendada: **H28 — Tenant safety contracts**.
 Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e confiança de dados; corrigir isso primeiro reduz risco sistêmico antes de qualquer refactor de escala/manutenibilidade.
 
 ## Follow-up H28 — Tenant safety contracts
-- Execução registrada em [AIRTRUST_TENANT_SAFETY_CONTRACTS_H28_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_TENANT_SAFETY_CONTRACTS_H28_v0_5.md).
+- Execução registrada em [AIRTRUST_TENANT_SAFETY_CONTRACTS_H28_v0_5.md](<AIRTRUST_ROOT>/docs/AIRTRUST_TENANT_SAFETY_CONTRACTS_H28_v0_5.md).
 - Tratado nesta fase:
   - contrato explícito de auth + tenant em `assistente`;
   - isolamento por `empresa_id` no `/api/sessoes` simplificado, com fail-closed.
@@ -257,7 +257,7 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - matriz retorna `500` com `success: false`, `error: MATRIZ_TREINAMENTO_FAILED` e mensagem estável;
   - `/api/templates` retorna `503` com `success: false`, `error: TEMPLATES_ENDPOINT_UNAVAILABLE`.
 - Testes adicionados:
-  - [fail-open-hardening.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/fail-open-hardening.test.ts)
+  - [fail-open-hardening.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/fail-open-hardening.test.ts)
 - Validações executadas:
   - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
   - `npx tsc --noEmit`
@@ -280,7 +280,7 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - instrutores: default `limit=100`, cap `200`, `offset` default `0`.
   - sessoes: default preservado por perfil (`100` full-access, `500` perfis restritos), cap `200` full-access e `500` restritos.
 - Testes adicionados:
-  - [simuladores-sessoes-pagination.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-sessoes-pagination.test.ts)
+  - [simuladores-sessoes-pagination.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/simuladores-sessoes-pagination.test.ts)
 - Validações executadas:
   - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
   - `npx tsc --noEmit`
@@ -303,7 +303,7 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - mesmo `requestId` no header de resposta, payload de erro e log de backend;
   - nenhum stack trace exposto em payload público de produção.
 - Testes adicionados:
-  - [error-handler-request-id.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/error-handler-request-id.test.ts)
+  - [error-handler-request-id.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/error-handler-request-id.test.ts)
 - Validações executadas:
   - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
   - `npx tsc --noEmit`
@@ -322,7 +322,7 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - mantém contrato de envelope `{ success, data, pagination }`;
   - retorna `participantes` e `fichas` vazios para evitar quebra em consumidores que esperam arrays.
 - Testes adicionados/ajustados:
-  - [simuladores-sessoes-pagination.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-sessoes-pagination.test.ts)
+  - [simuladores-sessoes-pagination.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/simuladores-sessoes-pagination.test.ts)
   - cobertura do default preservado e validação de que `view=summary` não executa query com `json_group_array`.
 - Validações executadas:
   - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
@@ -338,7 +338,7 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - benchmark **read-only** antes de qualquer otimização estrutural da query detalhada;
   - sem alteração de contrato default, sem frontend, sem writes.
 - Script criado:
-  - [benchmark-simuladores-sessoes.sh](/Users/filipedaumas/SAAS/Airtrust/scripts/validation/benchmark-simuladores-sessoes.sh)
+  - [benchmark-simuladores-sessoes.sh](<AIRTRUST_ROOT>/scripts/validation/benchmark-simuladores-sessoes.sh)
 - O que mede:
   - `default` vs `view=summary`;
   - `http_code`, `time_total`, `size_download`, `success`, `pagination`, `data_count`, `auth_required`.
@@ -357,11 +357,11 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - H32-C: simuladores sessões/fichas guards (tests-only).
   - H32-D: SGSO Next Gen relatos/ações guards (tests-only).
 - Novos testes adicionados:
-  - [backup-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/backup-guards.test.ts)
-  - [admin-apply-migration-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/admin-apply-migration-guards.test.ts)
-  - [sgso-auditorias-ncs-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/sgso-auditorias-ncs-guards.test.ts)
-  - [simuladores-sessoes-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-sessoes-guards.test.ts)
-  - [sgso-nextgen-relatos-acoes-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/sgso-nextgen-relatos-acoes-guards.test.ts)
+  - [backup-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/backup-guards.test.ts)
+  - [admin-apply-migration-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/admin-apply-migration-guards.test.ts)
+  - [sgso-auditorias-ncs-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/sgso-auditorias-ncs-guards.test.ts)
+  - [simuladores-sessoes-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/simuladores-sessoes-guards.test.ts)
+  - [sgso-nextgen-relatos-acoes-guards.test.ts](<AIRTRUST_ROOT>/worker-airtrust/src/__tests__/routes/sgso-nextgen-relatos-acoes-guards.test.ts)
 - Riscos cobertos:
   - autenticação obrigatória em rotas sensíveis;
   - fail-closed de RBAC em backup;

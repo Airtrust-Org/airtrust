@@ -215,7 +215,7 @@ Atacar `ARCH-01` por extrações incrementais orientadas a teste, começando por
 ## 10. Prompt recomendado para auditoria Opus pós-ciclo
 
 ```text
-Você é Opus em modo auditoria independente. Audite o repositório AirTrust em /Users/filipedaumas/SAAS/Airtrust no HEAD mais recente de main.
+Você é Opus em modo auditoria independente. Audite o repositório AirTrust em <AIRTRUST_ROOT> no HEAD mais recente de main.
 
 Objetivo: validar se o ciclo atual de auditoria foi fechado corretamente sem mascarar riscos.
 

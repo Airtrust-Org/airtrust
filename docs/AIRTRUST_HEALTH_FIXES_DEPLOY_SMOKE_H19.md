@@ -1,7 +1,7 @@
 # AIRTRUST v0.4-H19 — Consolidated deploy and smoke after health fixes
 
 Data: 2026-05-25
-Repo: `/Users/filipedaumas/SAAS/Airtrust`
+Repo: `<AIRTRUST_ROOT>`
 Objetivo: validar baseline consolidada, executar deploy controlado e smoke read-only.
 
 ## 1) Commits incluídos no baseline alvo

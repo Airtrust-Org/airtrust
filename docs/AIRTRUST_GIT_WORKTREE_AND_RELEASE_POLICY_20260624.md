@@ -18,7 +18,7 @@ Companion documents:
 
 - Prefer one of:
   - `.worktrees/<ticket-or-pr>` inside the repo, or
-  - `/Users/filipedaumas/SAAS/Airtrust-worktrees/<ticket>`.
+  - `<AIRTRUST_ROOT>-worktrees/<ticket>`.
 - **Avoid `/private/tmp`** for any work that may outlive a single session. Temp
   worktrees there are the main source of orphaned, unclassified trees.
 - Agent-managed worktrees under `.claude/worktrees/` are owned by the harness and
