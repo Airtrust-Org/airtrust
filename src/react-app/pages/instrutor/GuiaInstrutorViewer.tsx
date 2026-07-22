@@ -21,6 +21,7 @@ import {
   guiaPdfUrl,
   useGuiaInstrutor,
 } from '@/react-app/lib/guias-instrutor/api';
+import { getNomeExibicaoGuia } from '@/react-app/lib/guias-instrutor/helpers';
 
 /**
  * O visualizador de PDF precisa de um blob: URL — um <iframe src> direto para
@@ -148,8 +149,8 @@ export default function GuiaInstrutorViewer() {
             <Button variant="ghost" onClick={() => navigate('/instrutor/guias')} aria-label="Voltar">
               <ArrowLeft className="w-4 h-4" />
             </Button>
-            <div>
-              <h1 className="text-base font-semibold text-slate-900 dark:text-slate-100">{guia.titulo}</h1>
+            <div title={getNomeExibicaoGuia(guia).tooltip}>
+              <h1 className="text-base font-semibold text-slate-900 dark:text-slate-100">{getNomeExibicaoGuia(guia).visivel}</h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                 {guia.codigo} · v{guia.versao} · {guia.aeronave_nome} ·{' '}
                 {PROGRAMA_LABEL[guia.programa] || guia.programa}

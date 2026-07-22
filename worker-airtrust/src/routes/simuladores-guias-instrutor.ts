@@ -105,6 +105,9 @@ type GuiaRow = {
   updated_by: number | null;
   created_at: string;
   updated_at: string;
+  modelo_sessao_id?: number | null;
+  nome_sessao?: string | null;
+  descricao_sessao?: string | null;
 };
 
 async function loadGuia(
@@ -113,18 +116,22 @@ async function loadGuia(
   id: number,
   opts: { anyStatus?: boolean } = {},
 ): Promise<GuiaRow | null> {
-  const statusClause = opts.anyStatus ? '' : "AND status = 'ATIVO'";
+  const statusClause = opts.anyStatus ? '' : "AND g.status = 'ATIVO'";
   const row = await db
     .prepare(
-      `SELECT id, empresa_id, modelo_aeronave_id, programa, ciclo, sessao_numero, sessao_total,
-              codigo, titulo, descricao, versao, status,
-              html_r2_key, html_nome, html_mime_type, html_tamanho_bytes, html_sha256,
-              html_status_validacao,
-              pdf_r2_key, pdf_nome, pdf_mime_type, pdf_tamanho_bytes, pdf_sha256,
-              substituido_por_id, publicado_em, created_by, updated_by,
-              created_at, updated_at, deleted_at
-       FROM simuladores_guias_instrutor
-       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL ${statusClause}
+      `SELECT g.id, g.empresa_id, g.modelo_aeronave_id, g.programa, g.ciclo, g.sessao_numero, g.sessao_total,
+              g.codigo, g.titulo, g.descricao, g.versao, g.status,
+              g.html_r2_key, g.html_nome, g.html_mime_type, g.html_tamanho_bytes, g.html_sha256,
+              g.html_status_validacao,
+              g.pdf_r2_key, g.pdf_nome, g.pdf_mime_type, g.pdf_tamanho_bytes, g.pdf_sha256,
+              g.substituido_por_id, g.publicado_em, g.created_by, g.updated_by,
+              g.created_at, g.updated_at, g.deleted_at,
+              msg.modelo_sessao_id, ms.nome as nome_sessao, ms.descricao as descricao_sessao
+       FROM simuladores_guias_instrutor g
+       LEFT JOIN simuladores_modelos_sessao_guias msg 
+         ON msg.guia_id = g.id AND msg.empresa_id = g.empresa_id AND msg.deleted_at IS NULL AND msg.principal = 1
+       LEFT JOIN modelos_sessao ms ON ms.id = msg.modelo_sessao_id
+       WHERE g.id = ? AND g.empresa_id = ? AND g.deleted_at IS NULL ${statusClause}
        LIMIT 1`,
     )
     .bind(id, empresaId)
@@ -185,6 +192,9 @@ function publicGuiaShape(row: GuiaRow, aeronaveNome: string, aeronaveCodigo: str
     pdf_tamanho_bytes: row.pdf_tamanho_bytes,
     publicado_em: row.publicado_em,
     updated_at: row.updated_at,
+    modelo_sessao_id: row.modelo_sessao_id ?? null,
+    nome_sessao: row.nome_sessao ?? null,
+    descricao_sessao: row.descricao_sessao ?? null,
   };
 }
 
@@ -213,9 +223,13 @@ app.get('/guias-instrutor', requireGuiaInstrutorRead(), async (c) => {
   const admin = c.req.query('admin') === '1' && isManage;
 
   let sql = `
-    SELECT g.*, ma.nome as aeronave_nome, ma.codigo as aeronave_codigo
+    SELECT g.*, ma.nome as aeronave_nome, ma.codigo as aeronave_codigo,
+           msg.modelo_sessao_id, ms.nome as nome_sessao, ms.descricao as descricao_sessao
     FROM simuladores_guias_instrutor g
     JOIN modelos_aeronave ma ON ma.id = g.modelo_aeronave_id
+    LEFT JOIN simuladores_modelos_sessao_guias msg 
+      ON msg.guia_id = g.id AND msg.empresa_id = g.empresa_id AND msg.deleted_at IS NULL AND msg.principal = 1
+    LEFT JOIN modelos_sessao ms ON ms.id = msg.modelo_sessao_id
     WHERE g.empresa_id = ? AND g.deleted_at IS NULL
   `;
   const params: unknown[] = [empresaId];
@@ -236,15 +250,15 @@ app.get('/guias-instrutor', requireGuiaInstrutorRead(), async (c) => {
     params.push(programa);
   }
   if (q) {
-    sql += ' AND (g.titulo LIKE ? OR g.codigo LIKE ?)';
-    params.push(`%${q}%`, `%${q}%`);
+    sql += ' AND (g.titulo LIKE ? OR g.codigo LIKE ? OR ms.nome LIKE ?)';
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
   }
 
   sql += ' ORDER BY ma.nome, g.programa, g.ciclo, g.sessao_numero';
 
   const result = await c.env.DB.prepare(sql)
     .bind(...params)
-    .all<GuiaRow & { aeronave_nome: string; aeronave_codigo: string }>();
+    .all<GuiaRow & { aeronave_nome: string; aeronave_codigo: string; modelo_sessao_id: number | null; nome_sessao: string | null; descricao_sessao: string | null }>();
 
   const data = (result.results || []).map((row) =>
     admin
@@ -318,17 +332,19 @@ app.get('/sessoes/:sessaoId/guias-instrutor', requireGuiaInstrutorRead(), async 
   }
 
   const row = await c.env.DB.prepare(
-    `SELECT g.*, ma.nome as aeronave_nome, ma.codigo as aeronave_codigo
+    `SELECT g.*, ma.nome as aeronave_nome, ma.codigo as aeronave_codigo,
+            msg.modelo_sessao_id, ms.nome as nome_sessao, ms.descricao as descricao_sessao
      FROM simuladores_modelos_sessao_guias msg
      JOIN simuladores_guias_instrutor g ON g.id = msg.guia_id
      JOIN modelos_aeronave ma ON ma.id = g.modelo_aeronave_id
+     LEFT JOIN modelos_sessao ms ON ms.id = msg.modelo_sessao_id
      WHERE msg.modelo_sessao_id = ? AND msg.empresa_id = ? AND msg.deleted_at IS NULL
        AND g.status = 'ATIVO' AND g.deleted_at IS NULL
      ORDER BY msg.principal DESC, msg.ordem ASC
      LIMIT 1`,
   )
     .bind(sessao.modelo_sessao_id, empresaId)
-    .first<GuiaRow & { aeronave_nome: string; aeronave_codigo: string }>();
+    .first<GuiaRow & { aeronave_nome: string; aeronave_codigo: string; modelo_sessao_id: number | null; nome_sessao: string | null; descricao_sessao: string | null }>();
 
   if (!row) {
     return c.json({ success: true, data: null });
