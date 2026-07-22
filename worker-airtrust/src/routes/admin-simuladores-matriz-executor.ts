@@ -119,6 +119,8 @@ type ManobraResolutionEntry = {
   create_payload: Record<string, unknown> | null;
   source_hash: string;
 };
+type MatrizModel = Record<string, unknown> & { codigo: string };
+type MatrizItem = Record<string, unknown> & { modelo: string; ordem: number; codigo: string };
 type MatrizPlan = {
   empresa_id: number;
   versao_matriz?: string;
@@ -127,9 +129,23 @@ type MatrizPlan = {
   source_hashes: Record<string, string>;
   base_fingerprint?: string | null;
   totals: { modelos: number; vinculos: number; loft: number };
-  matrices: { AW139: { models: unknown[]; items: unknown[] }; SK76: { models: unknown[]; items: unknown[] } };
+  matrices: {
+    AW139: { models: MatrizModel[]; items: MatrizItem[] };
+    SK76: { models: MatrizModel[]; items: MatrizItem[] };
+  };
   manobra_resolution: ManobraResolutionEntry[];
 };
+type ResolutionRow = { codigo_canonico: string; manobra_id: number; resolution_type: string; source_hash: string };
+type ManobraRow = {
+  id: number;
+  codigo: string;
+  empresa_id: number;
+  nome: string | null;
+  categoria: string | null;
+  tipo_aeronave: string | null;
+  descricao: string | null;
+};
+type VersionamentoRow = { codigo_canonico: string; modelo_id: number; versao_numero: number };
 
 async function validatePlanAgainstLiveState(db: D1Database, plan: MatrizPlan, empresaId: number) {
   if (Number(plan.empresa_id) !== empresaId) fail('tenant do plano diverge');
@@ -145,7 +161,7 @@ async function validatePlanAgainstLiveState(db: D1Database, plan: MatrizPlan, em
   const models = [...(plan.matrices?.AW139?.models || []), ...(plan.matrices?.SK76?.models || [])];
   const items = [...(plan.matrices?.AW139?.items || []), ...(plan.matrices?.SK76?.items || [])];
   if (models.length !== 51 || items.length !== 918) fail('contagens do plano');
-  const requestedCodes = [...new Set(items.map((item: any) => String(item.codigo || '')))];
+  const requestedCodes = [...new Set(items.map((item) => String(item.codigo || '')))];
   validateManoeuvreResolution(plan.manobra_resolution, { requestedCodes });
 
   for (const entry of plan.manobra_resolution) {
@@ -173,25 +189,25 @@ async function gatherLookups(db: D1Database, empresaId: number, versaoMatriz: st
          WHERE empresa_id=?1 AND versao_matriz=?2`,
       )
       .bind(empresaId, versaoMatriz)
-      .all()
-  ).results as any[];
+      .all<ResolutionRow>()
+  ).results;
   const existingResolutionByCode = new Map(existingResolutionRows.map((r) => [r.codigo_canonico, r]));
 
   const manobraRows = (
     await db
       .prepare('SELECT id, codigo, empresa_id, nome, categoria, tipo_aeronave, descricao FROM manobras WHERE empresa_id=?1')
       .bind(empresaId)
-      .all()
-  ).results as any[];
+      .all<ManobraRow>()
+  ).results;
   const manobraById = new Map(manobraRows.map((r) => [Number(r.id), r]));
 
   const versionamentoRows = (
     await db
       .prepare('SELECT codigo_canonico, modelo_id, versao_numero FROM modelos_sessao_versionamento WHERE empresa_id=?1')
       .bind(empresaId)
-      .all()
-  ).results as any[];
-  const maxVersionByCode = new Map<string, any>();
+      .all<VersionamentoRow>()
+  ).results;
+  const maxVersionByCode = new Map<string, VersionamentoRow>();
   for (const row of versionamentoRows) {
     const current = maxVersionByCode.get(row.codigo_canonico);
     if (!current || Number(row.versao_numero) > Number(current.versao_numero)) {
@@ -313,7 +329,7 @@ app.post('/apply', async (c) => {
       .all();
     if (currents.results?.length) fail('mais de uma versão corrente detectada');
 
-    const requestedCodeCount = new Set(items.map((item: any) => String(item.codigo || ''))).size;
+    const requestedCodeCount = new Set(items.map((item) => String(item.codigo || ''))).size;
     const resolutionCount = (
       await db
         .prepare('SELECT COUNT(*) AS c FROM simuladores_matriz_manobra_resolution WHERE empresa_id=?1 AND versao_matriz=?2')
