@@ -105,8 +105,7 @@ function normalizeTipoSessaoToken(value: unknown): string {
   if (!compact) return '';
   if (compact === 'INI' || compact.includes('INICIAL')) return 'INI';
   if (compact === 'PER' || compact.includes('PERIOD') || compact.includes('RECORR')) return 'PER';
-  if (compact === 'OPC' || compact.includes('PROFICIENCY') || compact.includes('CHECK'))
-    return 'OPC';
+  if (compact === 'OPC' || compact.includes('PROFICIENCY') || compact.includes('CHECK')) return 'OPC';
   if (compact === 'SEM' || compact.includes('SEMEST')) return 'SEM';
   if (compact === 'EXA' || compact.includes('EXAM')) return 'EXA';
   if (compact === 'INS' || compact.includes('INSTR')) return 'INS';
@@ -239,9 +238,7 @@ app.post('/tipos-sessao', async (c) => {
     }
     const { codigo, nome, descricao, cor } = parsed.data;
     const tiposCols = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
-    const hasCorCol = (tiposCols.results || []).some(
-      (row: any) => String(row?.name || '') === 'cor',
-    );
+    const hasCorCol = (tiposCols.results || []).some((row: any) => String(row?.name || '') === 'cor');
 
     // Verificar duplicidade
     const existe = await c.env.DB.prepare(
@@ -297,9 +294,7 @@ app.put('/tipos-sessao/:id', async (c) => {
     }
     const { codigo, nome, descricao, cor } = parsed.data;
     const tiposCols = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
-    const hasCorCol = (tiposCols.results || []).some(
-      (row: any) => String(row?.name || '') === 'cor',
-    );
+    const hasCorCol = (tiposCols.results || []).some((row: any) => String(row?.name || '') === 'cor');
 
     // Buscar dados anteriores
     const anterior = await c.env.DB.prepare(
@@ -553,13 +548,13 @@ app.get('/modelos-sessao', async (c) => {
     )
       .trim()
       .toUpperCase();
-    const tipoSessaoNome = String(c.req.query('tipo_sessao_nome') || '')
-      .trim()
-      .toUpperCase();
+    const tipoSessaoNome = String(c.req.query('tipo_sessao_nome') || '').trim().toUpperCase();
     const tipo = c.req.query('tipo'); // SIMULADOR | AERONAVE
     const ativo = c.req.query('ativo');
     const qualificacaoTipoIdRaw = c.req.query('qualificacao_tipo_id');
-    const qualificacaoTipoId = qualificacaoTipoIdRaw ? Number(qualificacaoTipoIdRaw) : null;
+    const qualificacaoTipoId = qualificacaoTipoIdRaw
+      ? Number(qualificacaoTipoIdRaw)
+      : null;
     if (
       qualificacaoTipoIdRaw &&
       (!Number.isInteger(qualificacaoTipoId) || Number(qualificacaoTipoId) <= 0)
@@ -603,12 +598,12 @@ app.get('/modelos-sessao', async (c) => {
       }
 
       if (tipoSessaoCodigo) {
-        tipoClauses.push("UPPER(TRIM(COALESCE(ts.codigo, ''))) = ?");
+        tipoClauses.push('UPPER(TRIM(COALESCE(ts.codigo, \'\'))) = ?');
         params.push(tipoSessaoCodigo);
       }
 
       if (tipoSessaoNome) {
-        tipoClauses.push("UPPER(TRIM(COALESCE(ts.nome, ''))) = ?");
+        tipoClauses.push('UPPER(TRIM(COALESCE(ts.nome, \'\'))) = ?');
         params.push(tipoSessaoNome);
       }
 
@@ -802,7 +797,20 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
       .bind(empresaId, empresaId, id)
       .all();
 
-    const data = (result.results || []).map((row: any) => {
+    type ManobraRow = {
+      metadados_contextuais?: string | null;
+      contexto_fase_voo?: string | null;
+      contexto_tipo_conteudo?: string | null;
+      contexto_execucao_pf?: string | null;
+      contexto_codigo_manobra?: string | null;
+      contexto_nome?: string | null;
+      manobra_categoria?: string | null;
+      tripulante?: string | null;
+      manobra_codigo?: string | null;
+      manobra_nome?: string | null;
+      [key: string]: unknown;
+    };
+    const data = ((result.results || []) as ManobraRow[]).map((row) => {
       const legacyFallback = !row.metadados_contextuais;
       return {
         ...row,
@@ -975,9 +983,16 @@ app.post('/modelos-sessao', async (c) => {
     }
 
     if (
-      !(await ensureQualificacaoTipoBelongsToEmpresa(c.env.DB, qualificacao_tipo_id, empresaId))
+      !(await ensureQualificacaoTipoBelongsToEmpresa(
+        c.env.DB,
+        qualificacao_tipo_id,
+        empresaId,
+      ))
     ) {
-      return c.json({ success: false, error: 'Tipo de qualificação inválido para a empresa' }, 400);
+      return c.json(
+        { success: false, error: 'Tipo de qualificação inválido para a empresa' },
+        400,
+      );
     }
 
     // Verificar duplicidade de código
@@ -1395,10 +1410,8 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
         const chunk = modeloCodigos.slice(i, i + 100);
         const placeholders = chunk.map(() => '?').join(',');
         const rows = await c.env.DB.prepare(
-          `SELECT id, codigo, nome FROM modelos_sessao WHERE deleted_at IS NULL AND empresa_id = ? AND UPPER(TRIM(codigo)) IN (${placeholders})`,
-        )
-          .bind(empresaId, ...chunk)
-          .all();
+          `SELECT id, codigo, nome FROM modelos_sessao WHERE deleted_at IS NULL AND empresa_id = ? AND UPPER(TRIM(codigo)) IN (${placeholders})`
+        ).bind(empresaId, ...chunk).all();
         for (const row of rows.results || []) {
           modelosMap.set(String(row.codigo).toUpperCase().trim(), row);
         }
@@ -1411,10 +1424,8 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
         const chunk = manobraCodigos.slice(i, i + 100);
         const placeholders = chunk.map(() => '?').join(',');
         const rows = await c.env.DB.prepare(
-          `SELECT id, codigo, nome FROM manobras WHERE deleted_at IS NULL AND empresa_id = ? AND UPPER(TRIM(codigo)) IN (${placeholders})`,
-        )
-          .bind(empresaId, ...chunk)
-          .all();
+          `SELECT id, codigo, nome FROM manobras WHERE deleted_at IS NULL AND empresa_id = ? AND UPPER(TRIM(codigo)) IN (${placeholders})`
+        ).bind(empresaId, ...chunk).all();
         for (const row of rows.results || []) {
           manobrasMap.set(String(row.codigo).toUpperCase().trim(), row);
         }
@@ -1423,15 +1434,13 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
 
     const relacoesMap = new Map<string, any>();
     if (modelosMap.size > 0) {
-      const mIds = [...modelosMap.values()].map((m) => m.id);
+      const mIds = [...modelosMap.values()].map(m => m.id);
       for (let i = 0; i < mIds.length; i += 100) {
         const chunk = mIds.slice(i, i + 100);
         const placeholders = chunk.map(() => '?').join(',');
         const rows = await c.env.DB.prepare(
-          `SELECT id, modelo_id, manobra_id, deleted_at FROM modelos_sessao_manobras WHERE modelo_id IN (${placeholders}) ORDER BY id DESC`,
-        )
-          .bind(...chunk)
-          .all();
+          `SELECT id, modelo_id, manobra_id, deleted_at FROM modelos_sessao_manobras WHERE modelo_id IN (${placeholders}) ORDER BY id DESC`
+        ).bind(...chunk).all();
         for (const row of rows.results || []) {
           const key = `${row.modelo_id}_${row.manobra_id}`;
           if (!relacoesMap.has(key)) relacoesMap.set(key, row);
@@ -1561,8 +1570,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
 
       const relacaoKey = `${modelo.id}_${manobra.id}`;
       const cachedRelacao = relacoesMap.get(relacaoKey);
-      const relacaoAtiva =
-        cachedRelacao && cachedRelacao.deleted_at === null ? cachedRelacao : null;
+      const relacaoAtiva = cachedRelacao && cachedRelacao.deleted_at === null ? cachedRelacao : null;
 
       const observacoesValidation = validateModeloSessaoObservacoesInput(row.observacoes);
       if (!observacoesValidation.ok) {
@@ -1591,8 +1599,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
         continue;
       }
 
-      const relacaoSoftDeleted =
-        cachedRelacao && cachedRelacao.deleted_at !== null ? cachedRelacao : null;
+      const relacaoSoftDeleted = cachedRelacao && cachedRelacao.deleted_at !== null ? cachedRelacao : null;
 
       if (relacaoSoftDeleted) {
         await c.env.DB.prepare(
@@ -1730,7 +1737,10 @@ app.put('/modelos-sessao/:id', async (c) => {
     }
 
     if (!(await ensureQualificacaoTipoBelongsToEmpresa(c.env.DB, newQualifTipoId, empresaId))) {
-      return c.json({ success: false, error: 'Tipo de qualificação inválido para a empresa' }, 400);
+      return c.json(
+        { success: false, error: 'Tipo de qualificação inválido para a empresa' },
+        400,
+      );
     }
 
     // Verificar se a coluna tipo já existe (adicionada pela migration 0363)
@@ -1748,7 +1758,10 @@ app.put('/modelos-sessao/:id', async (c) => {
              duracao_estimada = ?, gera_qualificacao = ?, qualificacao_tipo_id = ?, updated_at = datetime('now')
          WHERE id = ? AND empresa_id = ?`;
 
-    const tipoFinal = tipo !== undefined ? tipo : (anterior as any).tipo || 'SIMULADOR';
+    const tipoFinal =
+      tipo !== undefined
+        ? tipo
+        : (anterior as any).tipo || 'SIMULADOR';
 
     const updateBinds = hasTipoColPut
       ? [
@@ -1759,9 +1772,7 @@ app.put('/modelos-sessao/:id', async (c) => {
           modelo_aeronave !== undefined ? modelo_aeronave : anterior.modelo_aeronave,
           descricao !== undefined ? descricao : anterior.descricao,
           duracao_estimada !== undefined ? duracao_estimada : anterior.duracao_estimada,
-          gera_qualificacao !== undefined
-            ? gera_qualificacao
-            : (anterior as any).gera_qualificacao || 0,
+          gera_qualificacao !== undefined ? gera_qualificacao : (anterior as any).gera_qualificacao || 0,
           newQualifTipoId || null,
           id,
           empresaId,
@@ -1773,9 +1784,7 @@ app.put('/modelos-sessao/:id', async (c) => {
           modelo_aeronave !== undefined ? modelo_aeronave : anterior.modelo_aeronave,
           descricao !== undefined ? descricao : anterior.descricao,
           duracao_estimada !== undefined ? duracao_estimada : anterior.duracao_estimada,
-          gera_qualificacao !== undefined
-            ? gera_qualificacao
-            : (anterior as any).gera_qualificacao || 0,
+          gera_qualificacao !== undefined ? gera_qualificacao : (anterior as any).gera_qualificacao || 0,
           newQualifTipoId || null,
           id,
           empresaId,
