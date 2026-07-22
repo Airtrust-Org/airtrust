@@ -60,6 +60,8 @@ function item(modelo: string, ordem: number) {
     configuracao_ios: null,
     desempenho_esperado: 'ok',
     foco_instrutor: 'foco',
+    como_observar: 'ok',
+    referencia_tecnica: 'ok',
     rastreabilidade_interna: null,
     criterios: { '1-2': 'a', '3-5': 'b', '6-8': 'c', '9-10': 'd' },
   };
@@ -76,7 +78,7 @@ function matricesFromContract() {
     const models = sessions.map((s) => ({
       codigo: String(s.codigo_canonico),
       programa: String(s.programa),
-      ciclo: s.ciclo,
+      ciclo: s.ciclo == null ? null : String(s.ciclo),
       titulo: String(s.titulo_sanitizado),
       aeronave: s.aeronave as 'AW139' | 'SK76',
       tipo_qualificacao_estruturado: String(s.tipo_qualificacao_estruturado),
@@ -377,7 +379,14 @@ describe('matriz local apply + compensatory rollback', () => {
     expect(() =>
       applyPlan({
         dbPath: '/tmp/nope.sqlite',
-        plan: { empresa_id: 7, totals: { modelos: 51, vinculos: 918, loft: 22 }, source_hashes: sourceHashes(), plan_sha256: 'x' },
+        plan: {
+          schema_version: 2,
+          empresa_id: 7,
+          matrices: { AW139: { models: [], items: [] }, SK76: { models: [], items: [] } },
+          totals: { modelos: 51, vinculos: 918, loft: 22 },
+          source_hashes: sourceHashes(),
+          plan_sha256: 'x',
+        },
         importUuid: 'x',
         dryRun: true,
       }),

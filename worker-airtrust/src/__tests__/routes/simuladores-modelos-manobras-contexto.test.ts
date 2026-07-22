@@ -120,10 +120,13 @@ describe('GET /modelos-sessao/:id/manobras historical context', () => {
       new Request('http://localhost/modelos-sessao/1000/manobras', {
         headers: { Authorization: 'Bearer test' },
       }),
-      { DB: db } as Env,
+      { DB: db } as unknown as Env,
     );
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as {
+      success: boolean;
+      data: Array<{ contexto: Record<string, unknown> }>;
+    };
     expect(body.success).toBe(true);
     expect(body.data[0].contexto).toMatchObject({
       fase_voo: 'DECOLAGEM',
@@ -147,10 +150,10 @@ describe('GET /modelos-sessao/:id/manobras historical context', () => {
       new Request('http://localhost/modelos-sessao/1000/manobras', {
         headers: { Authorization: 'Bearer test' },
       }),
-      { DB: db } as Env,
+      { DB: db } as unknown as Env,
     );
     expect(res.status).toBe(500);
-    const body = await res.json();
+    const body = (await res.json()) as { success: boolean };
     expect(body.success).toBe(false);
   });
 });
