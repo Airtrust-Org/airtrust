@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * source_reference: docs/ops/simuladores-matriz-aw139-s76-import.md
+ * operational_decision: Backfill dos assets HTML dos guias de simulador (inlining logo empresa em data:URI)
+ * dry_run_required: Executar com --dry-run antes de aplicar em produção
+ * rollback_plan_required: Manifesto de backup gerado em backups_production/ em caso de necessidade de restauração
+ *
  * Importador Canônico e Script de Backfill dos Assets dos Guias de Instrutor.
  *
  * Funcionalidades:
