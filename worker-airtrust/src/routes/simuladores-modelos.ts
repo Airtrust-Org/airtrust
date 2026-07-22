@@ -754,7 +754,19 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
     const contextJoin = hasContextTable
       ? 'LEFT JOIN modelos_sessao_manobras_contexto msmc ON msmc.modelo_manobra_id = msm.id AND msmc.empresa_id = ms.empresa_id'
       : '';
-    const contextSelect = hasContextTable ? ', msmc.metadados_json as metadados_contextuais' : ', NULL as metadados_contextuais';
+    const contextSelect = hasContextTable
+      ? `, msmc.metadados_json as metadados_contextuais
+        , json_extract(msmc.metadados_json, '$.fase_voo') as contexto_fase_voo
+        , json_extract(msmc.metadados_json, '$.tipo_conteudo') as contexto_tipo_conteudo
+        , json_extract(msmc.metadados_json, '$.execucao_pf') as contexto_execucao_pf
+        , json_extract(msmc.metadados_json, '$.codigo_manobra') as contexto_codigo_manobra
+        , json_extract(msmc.metadados_json, '$.nome') as contexto_nome`
+      : `, NULL as metadados_contextuais
+        , NULL as contexto_fase_voo
+        , NULL as contexto_tipo_conteudo
+        , NULL as contexto_execucao_pf
+        , NULL as contexto_codigo_manobra
+        , NULL as contexto_nome`;
     const result = await c.env.DB.prepare(
       `SELECT 
         msm.id,
@@ -785,7 +797,35 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
       .bind(empresaId, empresaId, id)
       .all();
 
-    return c.json({ success: true, data: result.results });
+    type ManobraRow = {
+      metadados_contextuais?: string | null;
+      contexto_fase_voo?: string | null;
+      contexto_tipo_conteudo?: string | null;
+      contexto_execucao_pf?: string | null;
+      contexto_codigo_manobra?: string | null;
+      contexto_nome?: string | null;
+      manobra_categoria?: string | null;
+      tripulante?: string | null;
+      manobra_codigo?: string | null;
+      manobra_nome?: string | null;
+      [key: string]: unknown;
+    };
+    const data = ((result.results || []) as ManobraRow[]).map((row) => {
+      const legacyFallback = !row.metadados_contextuais;
+      return {
+        ...row,
+        contexto: {
+          fase_voo: row.contexto_fase_voo ?? (legacyFallback ? row.manobra_categoria : null),
+          tipo_conteudo: row.contexto_tipo_conteudo ?? null,
+          execucao_pf: row.contexto_execucao_pf ?? row.tripulante ?? null,
+          codigo_manobra: row.contexto_codigo_manobra ?? row.manobra_codigo ?? null,
+          nome: row.contexto_nome ?? row.manobra_nome ?? null,
+          fonte: row.metadados_contextuais ? 'CONTEXTO_VERSAO' : 'LEGACY_MANOBRA',
+        },
+      };
+    });
+
+    return c.json({ success: true, data });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro GET manobras:', e.message);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);

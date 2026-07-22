@@ -1,10 +1,10 @@
 # Importação controlada — matriz final AW139 e S-76
 
-O importador lê os pacotes privados indicados pelo operador. Não copie os ZIPs, planilhas, guias HTML ou PDFs para este repositório.
+O importador lê os pacotes privados indicados pelo operador. Não copie os ZIPs, planilhas, guias HTML ou PDFs para este repositório. O contrato sanitizado versionado é `worker-airtrust/data/simuladores-matriz/session-contract-51.json` (51/918/22) e o resumo LOFT `loft-summary-22.json` (22/22).
 
 ## Estado de referência levantado em 2026-07-21
 
-O snapshot local pré-Matriz V6 tinha 25 modelos AW139 com 550 vínculos e 24 modelos SK76 com 528 vínculos. A matriz final exige, respectivamente, 30/540 e 21/378. Modelos referenciados por ficha, sessão concluída, agendamento iniciado ou qualificação devem receber versão nova; os vínculos históricos não podem ser atualizados.
+A matriz final exige 30/540/14 (AW139) e 21/378/8 (S-76). Modelos referenciados por ficha, sessão concluída, agendamento iniciado ou qualificação devem receber versão nova; os vínculos históricos não podem ser atualizados após publicação não-LEGACY.
 
 ## Dry-run obrigatório
 
@@ -15,18 +15,41 @@ node worker-airtrust/scripts/prepare-simuladores-matriz-import.mjs \
   --empresa-id <TENANT_ID> --out /tmp/airtrust-simuladores-plan
 ```
 
-O comando falha fechado se encontrar outra contagem que não 30/540/14 para AW139, 21/378/8 para S-76, ordem fora de 1–18 em modelo novo, vínculo duplicado na mesma posição ou divergência entre CSV e XLSX do S-76. O manifesto contém SHA-256 dos bytes de cada fonte consumida, inclusive cada guia HTML. A saída `plan.json` é o plano sanitizado a revisar antes de qualquer carga.
+O plano sanitizado inclui contrato 51/918/22, 61 hashes de fonte (incluindo 51 HTML), `plan_sha256`, fingerprint da base, versões correntes esperadas, resumo LOFT e safeguards. Qualquer adulteração de hash/contrato/fingerprint falha fechado.
 
 ## Aplicação local controlada
 
-1. Aplicar somente a migration `0440_simuladores_matriz_versionada_metadata.sql` no D1 local.
-2. Capturar um snapshot das linhas do tenant afetadas (`modelos_sessao`, `modelos_sessao_manobras`, `manobras`, fichas e agendamentos).
-3. Executar o dry-run acima com o tenant real — nunca com um ID fixo em código.
-4. O aplicador operacional deve criar nova versão para qualquer modelo com referência histórica, inativar a versão antiga somente para novas seleções e registrar `simuladores_matriz_imports` e as mudanças em `simuladores_matriz_import_changes`.
-5. Reexecutar o dry-run e as validações de 18 posições/LOFT antes de promover o artefato.
+```sh
+node worker-airtrust/scripts/apply-simuladores-matriz-import.mjs \
+  --plan /tmp/airtrust-simuladores-plan/plan.json \
+  --aw139 "$task_tmp/AW139" --sk76 "$task_tmp/SK76" \
+  --empresa-id <TENANT_ID> --d1-local <arquivo-sqlite-local> \
+  --import-uuid <uuid> --dry-run
 
-Não há comando de staging ou produção nesta mudança. A migration não contém carga de dados e não deve ser executada remotamente sem revisão operacional.
+node worker-airtrust/scripts/apply-simuladores-matriz-import.mjs \
+  ... --apply
+```
 
-## Rollback
+Regras: somente D1 local explícito; recusa `--remote`/staging/produção; ordem atômica modelo→vínculos→contextos→versão; segundo apply com o mesmo UUID/hash é idempotente.
 
-Reverter uma aplicação de dados usando as mudanças registradas por importação em `simuladores_matriz_import_changes`, restrito ao mesmo `empresa_id`. Marque a execução como `ROLLED_BACK`; não apague fichas, sessões, qualificações ou auditoria. O rollback estrutural requer remover os índices e as tabelas de versionamento/importação em banco local validado.
+## Rollback compensatório append-only
+
+```sh
+node worker-airtrust/scripts/rollback-simuladores-matriz-import.mjs \
+  --d1-local <arquivo-sqlite-local> --empresa-id <TENANT_ID> \
+  --import-uuid <uuid>
+```
+
+Cria V3 compensatória equivalente à V1 (`COMPENSATE`), preserva V1/V2, não apaga fichas/sessões/qualificações/auditoria e é idempotente na segunda execução.
+
+## LOFT 22/22
+
+```sh
+node worker-airtrust/scripts/validate-simuladores-matriz-loft.mjs \
+  --aw139 "$task_tmp/AW139" --sk76 "$task_tmp/SK76" \
+  --report /tmp/airtrust-loft-report.json
+```
+
+Relatório detalhado somente em `/tmp`. No repositório permanece apenas o resumo sanitizado 22/22.
+
+Não há comando de staging ou produção nesta mudança. A migration `0440` não contém carga de dados e não deve ser executada remotamente sem revisão operacional.
