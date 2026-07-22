@@ -53,6 +53,18 @@ BEGIN
     SELECT 1 FROM sqlite_master
     WHERE type = 'table' AND sql LIKE '%REFERENCES modelos_sessao_manobras%'
   ) THEN RAISE(ROLLBACK, '0440 preflight: FK filha para vínculos não suportada') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM sqlite_master
+    WHERE type = 'index' AND tbl_name = 'modelos_sessao_manobras' AND sql IS NOT NULL
+      AND name NOT IN (
+        'idx_modelos_sessao_manobras_modelo_id',
+        'idx_modelos_sessao_manobras_manobra_id',
+        'idx_modelos_sessao_manobras_ordem',
+        'idx_modelos_sessao_manobras_modelo',
+        'idx_modelos_sessao_manobras_manobra',
+        'idx_modelos_manobras_modelo'
+      )
+  ) THEN RAISE(ROLLBACK, '0440 preflight: índice legado não inventariado') END;
 END;
 INSERT INTO _0440_preflight(id) VALUES (1);
 DROP TRIGGER _0440_preflight_validate;
@@ -108,6 +120,15 @@ BEGIN
     WHERE ms.id = NEW.modelo_id
   ) THEN RAISE(ABORT, 'modelo e manobra pertencem a tenants diferentes') END;
 END;
+CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_versionada_imutavel
+BEFORE UPDATE OF modelo_id, manobra_id, ordem, tripulante, observacoes, deleted_at ON modelos_sessao_manobras
+WHEN EXISTS (
+  SELECT 1 FROM modelos_sessao_versionamento v
+  WHERE v.modelo_id = OLD.modelo_id AND v.versao_matriz <> 'LEGACY'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'vínculo de versão publicada é imutável');
+END;
 
 CREATE TABLE IF NOT EXISTS modelos_sessao_versionamento (
   modelo_id INTEGER PRIMARY KEY,
@@ -141,7 +162,11 @@ CREATE INDEX IF NOT EXISTS idx_modelo_versionamento_anterior
 -- canonical code A139-I-01/12.
 INSERT INTO modelos_sessao_versionamento (modelo_id, empresa_id, codigo_canonico, versao_numero, versao_matriz, is_current, efetivo_em, efetivo_ate)
 SELECT id, empresa_id, codigo, 1, 'LEGACY', CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END,
-  COALESCE(deleted_at, CURRENT_TIMESTAMP),
+  CASE
+    WHEN created_at IS NOT NULL AND (deleted_at IS NULL OR created_at <= deleted_at) THEN created_at
+    WHEN deleted_at IS NOT NULL THEN deleted_at
+    ELSE CURRENT_TIMESTAMP
+  END,
   CASE WHEN deleted_at IS NULL THEN NULL ELSE deleted_at END
 FROM modelos_sessao
 WHERE empresa_id IS NOT NULL
@@ -242,6 +267,11 @@ BEGIN
     WHERE msm.id = NEW.modelo_manobra_id AND ms.empresa_id = NEW.empresa_id
   ) THEN RAISE(ABORT, 'contexto e vínculo pertencem a tenants diferentes') END;
 END;
+CREATE TRIGGER IF NOT EXISTS trg_modelo_manobra_contexto_imutavel
+BEFORE UPDATE ON modelos_sessao_manobras_contexto
+BEGIN
+  SELECT RAISE(ABORT, 'contexto de versão é imutável');
+END;
 
 CREATE TABLE IF NOT EXISTS simuladores_matriz_imports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -282,9 +312,25 @@ CREATE INDEX IF NOT EXISTS idx_simuladores_matriz_changes_import
   ON simuladores_matriz_import_changes(import_id, entidade);
 CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_status_insert
 BEFORE INSERT ON simuladores_matriz_imports
-WHEN NEW.status <> 'DRY_RUN'
+WHEN NEW.status <> 'DRY_RUN' OR NEW.applied_at IS NOT NULL OR NEW.rolled_back_at IS NOT NULL
 BEGIN
   SELECT RAISE(ABORT, 'importação deve iniciar em DRY_RUN');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_identity_update
+BEFORE UPDATE ON simuladores_matriz_imports
+WHEN NEW.uuid <> OLD.uuid
+  OR NEW.empresa_id <> OLD.empresa_id
+  OR NEW.versao_matriz <> OLD.versao_matriz
+  OR NEW.schema_version <> OLD.schema_version
+  OR NEW.plan_sha256 <> OLD.plan_sha256
+  OR NEW.source_hashes_json <> OLD.source_hashes_json
+  OR NEW.base_fingerprint <> OLD.base_fingerprint
+  OR NEW.expected_counts_json <> OLD.expected_counts_json
+  OR COALESCE(NEW.requested_by, -1) <> COALESCE(OLD.requested_by, -1)
+  OR COALESCE(NEW.correlation_id, '') <> COALESCE(OLD.correlation_id, '')
+  OR NEW.created_at <> OLD.created_at
+BEGIN
+  SELECT RAISE(ABORT, 'identidade da importação é imutável');
 END;
 CREATE TRIGGER IF NOT EXISTS trg_simuladores_matriz_import_status_update
 BEFORE UPDATE OF status ON simuladores_matriz_imports
@@ -292,7 +338,11 @@ WHEN NOT (
   (OLD.status = 'DRY_RUN' AND NEW.status IN ('APPLYING', 'FAILED')) OR
   (OLD.status = 'APPLYING' AND NEW.status IN ('APPLIED', 'FAILED')) OR
   (OLD.status = 'APPLIED' AND NEW.status = 'ROLLED_BACK')
-)
+) OR (NEW.status = 'DRY_RUN' AND (NEW.applied_at IS NOT NULL OR NEW.rolled_back_at IS NOT NULL))
+  OR (NEW.status = 'APPLYING' AND NEW.applied_at IS NOT NULL)
+  OR (NEW.status = 'APPLIED' AND (NEW.applied_at IS NULL OR NEW.applied_counts_json IS NULL))
+  OR (NEW.status = 'FAILED' AND (NEW.failure_reason IS NULL OR length(trim(NEW.failure_reason)) = 0))
+  OR (NEW.status = 'ROLLED_BACK' AND (NEW.rolled_back_at IS NULL OR NEW.rollback_uuid IS NULL))
 BEGIN
   SELECT RAISE(ABORT, 'transição de status da importação inválida');
 END;
