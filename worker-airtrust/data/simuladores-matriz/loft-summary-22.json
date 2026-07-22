@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "totals": {
+    "loft": 22,
+    "aw139": 14,
+    "sk76": 8,
+    "verdict": "22/22"
+  },
+  "sessions": [
+    {
+      "codigo_canonico": "A139-I-11/12",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-I-11/12",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Inicial_Sessao_11_de_12.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-I-12/12",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-I-12/12",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Inicial_Sessao_12_de_12.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-P-03/04-C1-IFR-LOFT",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-P-03/04-C1-IFR-LOFT",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Periodico_Ciclo_1_Sessao_3_de_4.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-P-04/04-C1-CHECK",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-P-04/04-C1-CHECK",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Periodico_Ciclo_1_Sessao_4_de_4.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-S-01/02-C1",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-S-01/02-C1",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Semestral_Ciclo_1_Sessao_1_de_2.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-S-02/02-C1",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-S-02/02-C1",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Semestral_Ciclo_1_Sessao_2_de_2.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-P-03/04-C2-IFR-LOFT",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-P-03/04-C2-IFR-LOFT",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Periodico_Ciclo_2_Sessao_3_de_4.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-P-04/04-C2-CHECK",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-P-04/04-C2-CHECK",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Periodico_Ciclo_2_Sessao_4_de_4.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-S-01/02-C2",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-S-01/02-C2",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Semestral_Ciclo_2_Sessao_1_de_2.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-S-02/02-C2",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-S-02/02-C2",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Semestral_Ciclo_2_Sessao_2_de_2.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-P-03/04-C3-IFR-LOFT",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-P-03/04-C3-IFR-LOFT",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Periodico_Ciclo_3_Sessao_3_de_4.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-P-04/04-C3-CHECK",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-P-04/04-C3-CHECK",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Periodico_Ciclo_3_Sessao_4_de_4.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-S-01/02-C3",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-S-01/02-C3",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Semestral_Ciclo_3_Sessao_1_de_2.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "A139-S-02/02-C3",
+      "aeronave": "AW139",
+      "arquitetura_id_sanitizado": "AW139:A139-S-02/02-C3",
+      "html_relpath": "AW139/html/Guia_Instrutor_Simulador_AW139_Semestral_Ciclo_3_Sessao_2_de_2.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "SK76-I-11/12",
+      "aeronave": "SK76",
+      "arquitetura_id_sanitizado": "SK76:SK76-I-11/12",
+      "html_relpath": "SK76/html/Guia_Instrutor_Simulador_S76_SK76-I-11-12.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "SK76-I-12/12",
+      "aeronave": "SK76",
+      "arquitetura_id_sanitizado": "SK76:SK76-I-12/12",
+      "html_relpath": "SK76/html/Guia_Instrutor_Simulador_S76_SK76-I-12-12.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "S76-P-02/04-C1",
+      "aeronave": "SK76",
+      "arquitetura_id_sanitizado": "SK76:S76-P-02/04-C1",
+      "html_relpath": "SK76/html/Guia_Instrutor_Simulador_S76_S76-P-02-04-C1.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "S76-P-02/04-C2",
+      "aeronave": "SK76",
+      "arquitetura_id_sanitizado": "SK76:S76-P-02/04-C2",
+      "html_relpath": "SK76/html/Guia_Instrutor_Simulador_S76_S76-P-02-04-C2.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "S76-P-02/04-C3",
+      "aeronave": "SK76",
+      "arquitetura_id_sanitizado": "SK76:S76-P-02/04-C3",
+      "html_relpath": "SK76/html/Guia_Instrutor_Simulador_S76_S76-P-02-04-C3.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "SK76-P-CHECK",
+      "aeronave": "SK76",
+      "arquitetura_id_sanitizado": "SK76:SK76-P-CHECK",
+      "html_relpath": "SK76/html/Guia_Instrutor_Simulador_S76_SK76-P-CHECK.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "SK76-S-01/02",
+      "aeronave": "SK76",
+      "arquitetura_id_sanitizado": "SK76:SK76-S-01/02",
+      "html_relpath": "SK76/html/Guia_Instrutor_Simulador_S76_SK76-S-01-02.html",
+      "posicoes": 18
+    },
+    {
+      "codigo_canonico": "SK76-S-02/02",
+      "aeronave": "SK76",
+      "arquitetura_id_sanitizado": "SK76:SK76-S-02/02",
+      "html_relpath": "SK76/html/Guia_Instrutor_Simulador_S76_SK76-S-02-02.html",
+      "posicoes": 18
+    }
+  ]
+}

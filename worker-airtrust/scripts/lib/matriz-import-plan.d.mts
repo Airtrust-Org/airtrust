@@ -44,9 +44,15 @@ export interface PlanoDeterministico {
   matrices: { AW139: MatrizPlano; SK76: MatrizPlano };
   totals: { modelos: number; vinculos: number; loft: number };
   plan_sha256: string;
+  base_fingerprint?: string | null;
+  expected_current_versions?: unknown[];
+  loft_summary?: unknown;
+  safeguards?: string[];
+  contract_ref?: unknown;
 }
 
 export const PLAN_SCHEMA_VERSION: number;
+export const EXPECTED_SOURCE_HASH_COUNT: number;
 export function stableJson(value: unknown): string;
 export function sha256(value: string | Uint8Array | object): string;
 export function validateModelItems(models: ModeloPlano[], items: ItemMatrizPlano[]): void;
@@ -56,4 +62,13 @@ export function createDeterministicPlan(input: {
   aw139: MatrizPlano;
   sk76: MatrizPlano;
   loft: number;
+  contract?: unknown;
+  baseFingerprint?: string | null;
+  expectedCurrentVersions?: unknown[];
+  loftSummary?: unknown;
+  safeguards?: string[];
 }): PlanoDeterministico;
+export function assertPlanIntegrity(
+  plan: any,
+  opts?: { sourceHashes?: Record<string, string>; baseFingerprint?: string },
+): boolean;
