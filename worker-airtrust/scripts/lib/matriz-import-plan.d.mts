@@ -37,6 +37,18 @@ export interface MatrizPlano {
   items: ItemMatrizPlano[];
 }
 
+export interface ManobraResolutionEntry {
+  codigo_canonico: string;
+  resolution_type: 'EXACT_UNIQUE' | 'FORMAL_ALIAS' | 'LEGACY_EQUIVALENT' | 'TRUE_MISSING' | 'COLLISION' | 'CROSS_TENANT_ONLY';
+  existing_manobra_id: number | null;
+  create_payload: Record<string, unknown> | null;
+  evidence: Record<string, unknown> | null;
+  source_hash: string;
+  models_using: string[];
+  expected_link_count: number;
+  evidence_hash: string | null;
+}
+
 export interface PlanoDeterministico {
   schema_version: number;
   empresa_id: number;
@@ -49,12 +61,15 @@ export interface PlanoDeterministico {
   loft_summary?: unknown;
   safeguards?: string[];
   contract_ref?: unknown;
+  manobra_resolution: ManobraResolutionEntry[];
+  versao_matriz?: string;
 }
 
 export const PLAN_SCHEMA_VERSION: number;
 export const EXPECTED_SOURCE_HASH_COUNT: number;
 export function stableJson(value: unknown): string;
 export function sha256(value: string | Uint8Array | object): string;
+export function sealPlan<T extends Record<string, unknown>>(planWithoutHash: T): T & { plan_sha256: string };
 export function validateModelItems(models: ModeloPlano[], items: ItemMatrizPlano[]): void;
 export function createDeterministicPlan(input: {
   empresaId: number;
@@ -66,6 +81,7 @@ export function createDeterministicPlan(input: {
   baseFingerprint?: string | null;
   expectedCurrentVersions?: unknown[];
   loftSummary?: unknown;
+  manobraResolution: unknown[];
   safeguards?: string[];
 }): PlanoDeterministico;
 export function assertPlanIntegrity(

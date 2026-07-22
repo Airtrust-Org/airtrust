@@ -47,6 +47,10 @@ export interface Env {
   AIRTRUST_RELEASE_MANIFEST_SHA256?: string;
   // Dev helpers
   ENABLE_DEV_AUTH_BYPASS?: string; // 'true' apenas em development via .dev.vars
+  // Executor controlado da importação da matriz de simuladores AW139/S-76
+  // (tenant-scoped, empresa_id=6). Disabled by default; never set 'true' in
+  // production without explicit, reviewed authorization for that specific run.
+  ENABLE_SIMULADORES_MATRIZ_EXECUTOR?: string;
   USE_INTEGRATED_VIEW?: string; // 'true' habilita uso da view integrada
   USE_QUALIFICACOES_VIEW?: string; // deprecated (view removida); ignorado
   // Migração arquitetural SIGVOOS→Controle de Voos→FRMS (shadow-mode, ver docs/frms-controle-voos-migracao.md)

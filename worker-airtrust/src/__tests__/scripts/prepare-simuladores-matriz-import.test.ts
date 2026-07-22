@@ -5,6 +5,10 @@ import {
   validateModelItems,
   EXPECTED_SOURCE_HASH_COUNT,
 } from '../../../scripts/lib/matriz-import-plan.mjs';
+import {
+  EXPECTED_MANOEUVRE_CODE_COUNT,
+  buildManoeuvreResolutionEntries,
+} from '../../../scripts/lib/matriz-manobra-resolution.mjs';
 
 const item = (modelo: string, ordem: number, codigo = `A-${ordem}`) => ({
   modelo,
@@ -25,6 +29,16 @@ const item = (modelo: string, ordem: number, codigo = `A-${ordem}`) => ({
   criterios: { '1-2': 'Baixo', '3-5': 'Médio', '6-8': 'Bom', '9-10': 'Excelente' },
 });
 
+// Cycles through exactly EXPECTED_MANOEUVRE_CODE_COUNT distinct manoeuvre
+// codes across all model positions, mirroring the real matrices where 918
+// item-positions resolve to exactly 301 distinct canonical codes.
+let globalOrderCounter = 0;
+function nextCode() {
+  const code = `A-${(globalOrderCounter % EXPECTED_MANOEUVRE_CODE_COUNT) + 1}`;
+  globalOrderCounter += 1;
+  return code;
+}
+
 function matrix(prefix: string, count: number) {
   const aeronave = (prefix.startsWith('A') ? 'AW139' : 'SK76') as 'AW139' | 'SK76';
   const models = Array.from({ length: count }, (_, index) => ({
@@ -35,7 +49,7 @@ function matrix(prefix: string, count: number) {
     aeronave,
   }));
   const items = models.flatMap((model) =>
-    Array.from({ length: 18 }, (_, order) => item(model.codigo, order + 1)),
+    Array.from({ length: 18 }, (_, order) => item(model.codigo, order + 1, nextCode())),
   );
   return { models, items };
 }
@@ -51,8 +65,14 @@ function sourceHashes() {
 
 describe('matriz import planner', () => {
   it('produces a stable hash without volatile timestamps and requires 61 hashes + 51/918/22', () => {
+    globalOrderCounter = 0;
     const aw139 = matrix('A139', 30);
     const sk76 = matrix('SK76', 21);
+    const manobraResolution = buildManoeuvreResolutionEntries({
+      empresaId: 7,
+      items: [...aw139.items, ...sk76.items],
+      tenantManobras: [],
+    });
     const input = {
       empresaId: 7,
       sourceHashes: sourceHashes(),
@@ -61,6 +81,7 @@ describe('matriz import planner', () => {
       loft: 22,
       baseFingerprint: 'b'.repeat(64),
       contract: { schema_version: 1, totals: { modelos: 51, vinculos: 918, loft: 22 } },
+      manobraResolution,
     };
     expect(createDeterministicPlan(input).plan_sha256).toBe(
       createDeterministicPlan(input).plan_sha256,

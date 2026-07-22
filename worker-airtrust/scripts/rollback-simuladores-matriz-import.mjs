@@ -95,7 +95,7 @@ export function runCompensatoryRollback({
 
   const usedByFicha = sqliteJson(
     d1Local,
-    `SELECT id FROM fichas_sessao WHERE modelo_id IN (${importedIds.join(',') || '-1'}) LIMIT 1`,
+    `SELECT id FROM fichas_sessao WHERE template_id IN (${importedIds.join(',') || '-1'}) LIMIT 1`,
   );
   const usedByAgendamento = sqliteJson(
     d1Local,
@@ -115,12 +115,25 @@ export function runCompensatoryRollback({
       `SELECT * FROM modelos_sessao_versionamento WHERE modelo_id=${importedId} AND empresa_id=${empresaId}`,
     )[0];
     if (!version) continue;
-    const previous = version.modelo_anterior_id
-      ? sqliteJson(
-          d1Local,
-          `SELECT * FROM modelos_sessao_versionamento WHERE modelo_id=${Number(version.modelo_anterior_id)} AND empresa_id=${empresaId}`,
-        )[0]
-      : null;
+
+    if (!version.modelo_anterior_id) {
+      // First-ever version of this canonical code: nothing existed before it,
+      // so there is no prior state to restore. Compensation here is simply
+      // deactivating the current version — the manobra/link history it
+      // created stays untouched and auditable, nothing is deleted.
+      if (Number(version.is_current) === 0) continue; // already compensated
+      sql.push(`UPDATE modelos_sessao_versionamento SET is_current=0, efetivo_ate=CURRENT_TIMESTAMP
+        WHERE modelo_id=${importedId} AND empresa_id=${empresaId} AND is_current=1;`);
+      sql.push(`INSERT INTO simuladores_matriz_import_changes(import_id,entidade,entity_id,operacao,after_json)
+        VALUES(${Number(imp.id)}, 'modelos_sessao_versionamento', ${importedId}, 'COMPENSATE',
+               json_object('deactivated_no_predecessor', json('true'), 'codigo_canonico', '${String(version.codigo_canonico).replace(/'/g, "''")}'));`);
+      continue;
+    }
+
+    const previous = sqliteJson(
+      d1Local,
+      `SELECT * FROM modelos_sessao_versionamento WHERE modelo_id=${Number(version.modelo_anterior_id)} AND empresa_id=${empresaId}`,
+    )[0];
     if (!previous) fail(`predecessor ausente para modelo ${importedId}`);
 
     const existingCompensation = sqliteJson(

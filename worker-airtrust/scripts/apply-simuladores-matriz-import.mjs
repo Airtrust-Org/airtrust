@@ -15,6 +15,12 @@ import {
   validateSessionContract,
 } from './lib/matriz-session-contract.mjs';
 import { buildTenantFingerprint } from './lib/matriz-base-fingerprint.mjs';
+import { validateManoeuvreResolution } from './lib/matriz-manobra-resolution.mjs';
+import {
+  REUSE_RESOLUTION_TYPES,
+  buildResolutionStatements,
+  buildModelAndLinkStatements,
+} from './lib/matriz-apply-core.mjs';
 
 function fail(message) {
   throw new Error(`Aplicação de matriz recusada: ${message}`);
@@ -99,30 +105,6 @@ export function loadFingerprint(dbPath, empresaId) {
   });
 }
 
-function physicalCode(canonical, versaoMatriz, versaoNumero) {
-  return `${canonical}@${versaoMatriz}-V${versaoNumero}`;
-}
-
-function resolveStructuredTipo(model) {
-  const candidates = [model.tipo_qualificacao_estruturado, model.tipo, model.programa].map((value) =>
-    String(value || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .trim()
-      .toUpperCase(),
-  );
-  for (const raw of candidates) {
-    if (!raw) continue;
-    // Never accept code/title-like tokens (digits, slashes, hyphens).
-    if (/[0-9]/.test(raw) || raw.includes('/') || raw.includes('-')) continue;
-    if (raw === 'INICIAL' || raw === 'INI') return 'INICIAL';
-    if (raw === 'PERIODICO' || raw === 'PER' || raw === 'RECORRENTE') return 'PERIODICO';
-    if (raw === 'SEMESTRAL' || raw === 'SEM') return 'SEMESTRAL';
-    if (raw === 'CHECK') return 'CHECK';
-  }
-  fail(`tipo_qualificacao_estruturado ausente/inválido para ${model.codigo}`);
-}
-
 export function applyPlan({ dbPath, plan, importUuid, dryRun }) {
   assert0440(dbPath);
   const empresaId = Number(plan.empresa_id);
@@ -159,6 +141,21 @@ export function applyPlan({ dbPath, plan, importUuid, dryRun }) {
   if (plan.totals?.modelos !== 51 || plan.totals?.vinculos !== 918 || plan.totals?.loft !== 22)
     fail('51/918/22');
 
+  const models = [...(plan.matrices?.AW139?.models || []), ...(plan.matrices?.SK76?.models || [])];
+  const items = [...(plan.matrices?.AW139?.items || []), ...(plan.matrices?.SK76?.items || [])];
+  if (models.length !== 51 || items.length !== 918) fail('contagens do plano');
+  const requestedCodes = [...new Set(items.map((item) => String(item.codigo || '')))];
+  validateManoeuvreResolution(plan.manobra_resolution, { requestedCodes });
+  for (const entry of plan.manobra_resolution) {
+    if (!REUSE_RESOLUTION_TYPES.has(entry.resolution_type)) continue;
+    const owned = sqliteJson(
+      dbPath,
+      `SELECT id FROM manobras WHERE id=${Number(entry.existing_manobra_id)} AND empresa_id=${empresaId} AND deleted_at IS NULL`,
+    );
+    if (!owned.length)
+      fail(`${entry.codigo_canonico}: manobra_id ${entry.existing_manobra_id} não pertence ao tenant ou está inativa`);
+  }
+
   if (dryRun) {
     const before = fingerprint.fingerprint;
     const after = loadFingerprint(dbPath, empresaId).fingerprint;
@@ -179,46 +176,10 @@ export function applyPlan({ dbPath, plan, importUuid, dryRun }) {
   }
 
   const versaoMatriz = String(plan.versao_matriz || 'M2026.07');
-  const models = [...(plan.matrices?.AW139?.models || []), ...(plan.matrices?.SK76?.models || [])];
-  const items = [...(plan.matrices?.AW139?.items || []), ...(plan.matrices?.SK76?.items || [])];
-  if (models.length !== 51 || items.length !== 918) fail('contagens do plano');
-
-  const tx = [];
-  tx.push('BEGIN IMMEDIATE;');
-  tx.push(`INSERT INTO simuladores_matriz_imports(
-      uuid,empresa_id,versao_matriz,schema_version,status,plan_sha256,source_hashes_json,base_fingerprint,expected_counts_json
-    ) VALUES (
-      '${importUuid.replace(/'/g, "''")}',${empresaId},'${versaoMatriz.replace(/'/g, "''")}',
-      ${Number(plan.schema_version || 2)},'DRY_RUN','${plan.plan_sha256}',
-      '${JSON.stringify(plan.source_hashes).replace(/'/g, "''")}',
-      '${fingerprint.fingerprint}',
-      '${JSON.stringify(plan.totals).replace(/'/g, "''")}'
-    );`);
-  tx.push(
-    `UPDATE simuladores_matriz_imports SET status='APPLYING' WHERE uuid='${importUuid.replace(/'/g, "''")}';`,
-  );
 
   const liveFingerprint = loadFingerprint(dbPath, empresaId).fingerprint;
   if (liveFingerprint !== fingerprint.fingerprint) fail('fingerprint mudou antes do apply');
 
-  for (const model of models) {
-    const prev = sqliteJson(
-      dbPath,
-      `SELECT modelo_id, versao_numero, codigo_canonico FROM modelos_sessao_versionamento
-       WHERE empresa_id=${empresaId} AND codigo_canonico='${String(model.codigo).replace(/'/g, "''")}' AND is_current=1 LIMIT 1`,
-    )[0];
-    const nextVersion = prev ? Number(prev.versao_numero) + 1 : 1;
-    const codigoFisico = physicalCode(model.codigo, versaoMatriz, nextVersion).replace(/'/g, "''");
-    const tipo = resolveStructuredTipo(model);
-    tx.push(`INSERT INTO modelos_sessao(codigo,nome,empresa_id,tipo,created_at,updated_at)
-      VALUES('${codigoFisico}','${String(model.titulo || model.codigo).replace(/'/g, "''")}',${empresaId},'${tipo}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);`);
-    tx.push(
-      `CREATE TEMP TABLE IF NOT EXISTS _apply_map(codigo TEXT PRIMARY KEY, modelo_id INTEGER, prev_id INTEGER, versao INTEGER);`,
-    );
-  }
-
-  // Simpler approach for local applicator: execute stepwise in JS with immediate statements inside one BEGIN via sqlite.
-  // Rebuild as JS-driven transaction:
   return applyPlanJs({
     dbPath,
     plan,
@@ -265,110 +226,66 @@ function applyPlanJs({
     );
   }
 
-  // Precompute next ids using max+offset in-SQL through a staging table.
-  sql.push(`CREATE TEMP TABLE _matriz_apply_models(
-    codigo_canonico TEXT PRIMARY KEY,
-    codigo_fisico TEXT NOT NULL,
-    nome TEXT NOT NULL,
-    tipo TEXT NOT NULL,
-    prev_id INTEGER,
-    versao_numero INTEGER NOT NULL
-  );`);
+  // Gather phase: every read this apply needs, fetched up front as plain
+  // lookups, so the actual statement generation (matriz-apply-core.mjs) is a
+  // pure function shared verbatim with the D1-backed production executor —
+  // the two can never silently drift apart because they run the same code.
+  const existingResolutionRows = sqliteJson(
+    dbPath,
+    `SELECT codigo_canonico, manobra_id, resolution_type, source_hash FROM simuladores_matriz_manobra_resolution
+     WHERE empresa_id=${empresaId} AND versao_matriz='${versaoMatriz.replace(/'/g, "''")}'`,
+  );
+  const existingResolutionByCode = new Map(existingResolutionRows.map((r) => [r.codigo_canonico, r]));
+  const manobraRows = sqliteJson(
+    dbPath,
+    `SELECT id, codigo, empresa_id, nome, categoria, tipo_aeronave, descricao FROM manobras WHERE empresa_id=${empresaId}`,
+  );
+  const manobraById = new Map(manobraRows.map((r) => [Number(r.id), r]));
 
-  for (const model of models) {
-    const prev = sqliteJson(
-      dbPath,
-      `SELECT modelo_id, versao_numero FROM modelos_sessao_versionamento
-       WHERE empresa_id=${empresaId} AND codigo_canonico='${String(model.codigo).replace(/'/g, "''")}' AND is_current=1 LIMIT 1`,
-    )[0];
-    const versaoNumero = prev ? Number(prev.versao_numero) + 1 : 1;
-    const codigoFisico = physicalCode(model.codigo, versaoMatriz, versaoNumero);
-    const tipo = resolveStructuredTipo(model);
-    sql.push(`INSERT INTO _matriz_apply_models VALUES(
-      '${String(model.codigo).replace(/'/g, "''")}',
-      '${codigoFisico.replace(/'/g, "''")}',
-      '${String(model.titulo || model.codigo).replace(/'/g, "''")}',
-      '${tipo}',
-      ${prev ? Number(prev.modelo_id) : 'NULL'},
-      ${versaoNumero}
-    );`);
+  // Resolve every canonical manoeuvre code to exactly one tenant-scoped
+  // manobra_id *before* any model/link is created: reuse the approved
+  // existing_manobra_id for EXACT_UNIQUE/FORMAL_ALIAS/LEGACY_EQUIVALENT, or
+  // create the manobra for TRUE_MISSING/COLLISION/CROSS_TENANT_ONLY — unless
+  // a prior (rolled-back) import for this same versao_matriz already resolved
+  // it, in which case that resolution is reused, never duplicated. A prior
+  // resolution is reused only after an exact field-by-field match against
+  // this plan's entry; any divergence fails the whole apply closed rather
+  // than silently keeping (or silently overwriting) the old row.
+  sql.push(
+    ...buildResolutionStatements({
+      plan,
+      empresaId,
+      versaoMatriz,
+      importUuid,
+      fail,
+      existingResolutionByCode,
+      manobraById,
+    }),
+  );
+
+  const versionamentoRows = sqliteJson(
+    dbPath,
+    `SELECT codigo_canonico, modelo_id, versao_numero FROM modelos_sessao_versionamento WHERE empresa_id=${empresaId}`,
+  );
+  const maxVersionByCode = new Map();
+  for (const row of versionamentoRows) {
+    const current = maxVersionByCode.get(row.codigo_canonico);
+    if (!current || Number(row.versao_numero) > Number(current.versao_numero)) {
+      maxVersionByCode.set(row.codigo_canonico, row);
+    }
   }
-
-  sql.push(`INSERT INTO modelos_sessao(codigo,nome,empresa_id,tipo,created_at,updated_at)
-    SELECT codigo_fisico,nome,${empresaId},tipo,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM _matriz_apply_models;`);
-
-  sql.push(`CREATE TEMP TABLE _matriz_apply_ids AS
-    SELECT m.codigo_canonico, ms.id AS modelo_id, m.prev_id, m.versao_numero, m.tipo
-    FROM _matriz_apply_models m
-    JOIN modelos_sessao ms ON ms.codigo = m.codigo_fisico AND ms.empresa_id=${empresaId};`);
-
-  // Resolve manoeuvre ids by code for tenant
-  sql.push(`CREATE TEMP TABLE _matriz_apply_links(
-    codigo_canonico TEXT, ordem INTEGER, manobra_codigo TEXT, execucao_pf TEXT,
-    fase_voo TEXT, tipo_conteudo TEXT, nome TEXT
-  );`);
-  for (const item of items) {
-    sql.push(`INSERT INTO _matriz_apply_links VALUES(
-      '${String(item.modelo).replace(/'/g, "''")}',
-      ${Number(item.ordem)},
-      '${String(item.codigo).replace(/'/g, "''")}',
-      '${String(item.execucao_pf || 'AB').replace(/'/g, "''")}',
-      '${String(item.fase_voo || '').replace(/'/g, "''")}',
-      '${String(item.tipo_conteudo || '').replace(/'/g, "''")}',
-      '${String(item.nome || '').replace(/'/g, "''")}'
-    );`);
-  }
-
-  sql.push(`INSERT INTO modelos_sessao_manobras(modelo_id,manobra_id,ordem,obrigatoria,tripulante,observacoes,created_at,updated_at)
-    SELECT i.modelo_id, man.id, l.ordem, 1,
-      CASE WHEN upper(l.execucao_pf) LIKE '%B%' AND upper(l.execucao_pf) NOT LIKE '%A%B%' AND upper(l.execucao_pf) NOT LIKE 'AB' THEN 'B'
-           WHEN upper(l.execucao_pf) LIKE '%A%' AND upper(l.execucao_pf) NOT LIKE 'AB' THEN 'A'
-           ELSE 'AB' END,
-      NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM _matriz_apply_links l
-    JOIN _matriz_apply_ids i ON i.codigo_canonico = l.codigo_canonico
-    JOIN manobras man ON man.codigo = l.manobra_codigo AND man.empresa_id=${empresaId} AND man.deleted_at IS NULL;`);
-
-  sql.push(`INSERT INTO modelos_sessao_manobras_contexto(modelo_manobra_id,empresa_id,metadados_json)
-    SELECT msm.id, ${empresaId},
-      json_object(
-        'fase_voo', l.fase_voo,
-        'tipo_conteudo', l.tipo_conteudo,
-        'execucao_pf', l.execucao_pf,
-        'nome', l.nome,
-        'codigo_manobra', l.manobra_codigo
-      )
-    FROM modelos_sessao_manobras msm
-    JOIN _matriz_apply_ids i ON i.modelo_id = msm.modelo_id
-    JOIN _matriz_apply_links l ON l.codigo_canonico = i.codigo_canonico AND l.ordem = msm.ordem;`);
-
-  sql.push(`UPDATE modelos_sessao_versionamento
-    SET is_current=0, efetivo_ate=CURRENT_TIMESTAMP
-    WHERE empresa_id=${empresaId} AND is_current=1
-      AND codigo_canonico IN (SELECT codigo_canonico FROM _matriz_apply_ids)
-      AND modelo_id IN (SELECT prev_id FROM _matriz_apply_ids WHERE prev_id IS NOT NULL);`);
-
-  sql.push(`INSERT INTO modelos_sessao_versionamento(
-      modelo_id,empresa_id,codigo_canonico,versao_numero,versao_matriz,is_current,modelo_anterior_id,efetivo_em,efetivo_ate
-    )
-    SELECT modelo_id,${empresaId},codigo_canonico,versao_numero,'${versaoMatriz.replace(/'/g, "''")}',1,prev_id,CURRENT_TIMESTAMP,NULL
-    FROM _matriz_apply_ids;`);
-
-  sql.push(`INSERT INTO simuladores_matriz_import_changes(import_id,entidade,entity_id,operacao,after_json)
-    SELECT imp.id, 'modelos_sessao', i.modelo_id, 'INSERT', json_object('codigo_canonico', i.codigo_canonico, 'versao', i.versao_numero)
-    FROM _matriz_apply_ids i
-    JOIN simuladores_matriz_imports imp ON imp.uuid='${importUuid.replace(/'/g, "''")}';`);
-
-  sql.push(`INSERT INTO simuladores_matriz_import_changes(import_id,entidade,entity_id,operacao,after_json)
-    SELECT imp.id, 'modelos_sessao_versionamento', i.prev_id, 'INACTIVATE', json_object('codigo_canonico', i.codigo_canonico)
-    FROM _matriz_apply_ids i
-    JOIN simuladores_matriz_imports imp ON imp.uuid='${importUuid.replace(/'/g, "''")}'
-    WHERE i.prev_id IS NOT NULL;`);
-
-  sql.push(`UPDATE simuladores_matriz_imports
-    SET status='APPLIED', applied_at=CURRENT_TIMESTAMP,
-        applied_counts_json='${JSON.stringify({ modelos: 51, vinculos: 918, loft: 22 }).replace(/'/g, "''")}'
-    WHERE uuid='${importUuid.replace(/'/g, "''")}';`);
+  sql.push(
+    ...buildModelAndLinkStatements({
+      plan,
+      empresaId,
+      versaoMatriz,
+      importUuid,
+      fail,
+      models,
+      items,
+      maxVersionByCode,
+    }),
+  );
   sql.push('COMMIT;');
 
   try {
@@ -383,6 +300,22 @@ function applyPlanJs({
     `SELECT codigo_canonico, COUNT(*) AS c FROM modelos_sessao_versionamento WHERE empresa_id=${empresaId} AND is_current=1 GROUP BY codigo_canonico HAVING c<>1`,
   );
   if (currents.length) fail('mais de uma versão corrente detectada');
+
+  const requestedCodeCount = new Set(items.map((item) => String(item.codigo || ''))).size;
+  const resolutionCount = sqliteJson(
+    dbPath,
+    `SELECT COUNT(*) AS c FROM simuladores_matriz_manobra_resolution WHERE empresa_id=${empresaId} AND versao_matriz='${versaoMatriz.replace(/'/g, "''")}'`,
+  )[0]?.c;
+  if (Number(resolutionCount) !== requestedCodeCount) {
+    fail(`resolução de manobras incompleta: esperadas ${requestedCodeCount}; encontradas ${resolutionCount}`);
+  }
+  const resolutionCrossTenant = sqliteJson(
+    dbPath,
+    `SELECT r.codigo_canonico FROM simuladores_matriz_manobra_resolution r
+     JOIN manobras m ON m.id = r.manobra_id
+     WHERE r.empresa_id=${empresaId} AND r.versao_matriz='${versaoMatriz.replace(/'/g, "''")}' AND m.empresa_id<>${empresaId}`,
+  );
+  if (resolutionCrossTenant.length) fail('manobra de outro tenant referenciada na resolução');
 
   return { ok: true, mode: 'APPLY', status: 'APPLIED', fingerprint: fingerprint.fingerprint };
 }

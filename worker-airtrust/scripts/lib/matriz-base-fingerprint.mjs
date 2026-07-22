@@ -1,5 +1,28 @@
 import { sha256, stableJson } from './matriz-import-plan.mjs';
 
+/**
+ * Reject planner inputs that merely look like a tenant snapshot.  A plan made
+ * from empty arrays cannot detect a production change between approval and
+ * apply, so it must never be accepted as a production-grade fingerprint.
+ */
+export function assertRealTenantFingerprintState({
+  empresaId,
+  currentVersions,
+  resolvedManoeuvres,
+  links,
+  migrationState,
+}) {
+  if (!Number.isInteger(empresaId) || empresaId <= 0)
+    throw new Error('empresa_id inválido para snapshot do fingerprint');
+  if (!migrationState || typeof migrationState.has_0440 !== 'boolean')
+    throw new Error('snapshot sem estado real da migration 0440');
+  if (!Array.isArray(currentVersions) || currentVersions.length === 0)
+    throw new Error('snapshot sem versões correntes');
+  if (!Array.isArray(resolvedManoeuvres) || resolvedManoeuvres.length === 0)
+    throw new Error('snapshot sem manobras resolvidas');
+  if (!Array.isArray(links) || links.length === 0) throw new Error('snapshot sem vínculos');
+}
+
 export function buildTenantFingerprint({
   empresaId,
   currentVersions = [],

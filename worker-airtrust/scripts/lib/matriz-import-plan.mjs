@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import { EXPECTED_TOTALS } from './matriz-session-contract.mjs';
+import { validateManoeuvreResolution } from './matriz-manobra-resolution.mjs';
 
-export const PLAN_SCHEMA_VERSION = 2;
+export const PLAN_SCHEMA_VERSION = 4;
 export const EXPECTED_SOURCE_HASH_COUNT = 61;
 
 export function stableJson(value) {
@@ -20,6 +21,13 @@ export function sha256(value) {
     return crypto.createHash('sha256').update(value).digest('hex');
   }
   return crypto.createHash('sha256').update(stableJson(value)).digest('hex');
+}
+
+export function sealPlan(planWithoutHash) {
+  if (!planWithoutHash || typeof planWithoutHash !== 'object') throw new Error('plano inválido');
+  if (Object.hasOwn(planWithoutHash, 'plan_sha256'))
+    throw new Error('sealPlan recebe plano sem plan_sha256');
+  return { ...planWithoutHash, plan_sha256: sha256(planWithoutHash) };
 }
 
 export function validateModelItems(models, items) {
@@ -51,12 +59,14 @@ export function createDeterministicPlan({
   baseFingerprint = null,
   expectedCurrentVersions = [],
   loftSummary = null,
+  manobraResolution,
   safeguards = [
     'tenant obrigatório',
     'somente D1 local',
     'requer snapshot e revisão antes de aplicar',
     'modelos históricos devem ser versionados, não sobrescritos',
     'rollback compensatório append-only (COMPENSATE)',
+    '301 códigos de manobra resolvidos 1:1 antes dos 918 vínculos',
   ],
 }) {
   if (!Number.isInteger(empresaId) || empresaId <= 0) throw new Error('empresa_id inválido');
@@ -80,6 +90,10 @@ export function createDeterministicPlan({
   ) {
     throw new Error('plano fora do contrato 51/918/22');
   }
+  const requestedCodes = [
+    ...new Set([...aw139.items, ...sk76.items].map((item) => String(item.codigo || ''))),
+  ];
+  validateManoeuvreResolution(manobraResolution, { requestedCodes });
   const payload = {
     schema_version: PLAN_SCHEMA_VERSION,
     empresa_id: empresaId,
@@ -92,16 +106,24 @@ export function createDeterministicPlan({
     base_fingerprint: baseFingerprint,
     expected_current_versions: expectedCurrentVersions,
     loft_summary: loftSummary,
+    manobra_resolution: manobraResolution,
     safeguards,
   };
-  return { ...payload, plan_sha256: sha256(payload) };
+  return sealPlan(payload);
 }
 
 export function assertPlanIntegrity(plan, { sourceHashes, baseFingerprint } = {}) {
   if (!plan?.plan_sha256) throw new Error('plan_sha256 ausente');
+  if (plan.schema_version !== PLAN_SCHEMA_VERSION)
+    throw new Error(`schema de plano incompatível: ${plan.schema_version}`);
   const { plan_sha256: _ignored, ...payload } = plan;
   const expected = sha256(payload);
-  if (expected !== plan.plan_sha256) throw new Error('plan_sha256 adulterado');
+  const received = String(plan.plan_sha256);
+  if (
+    received.length !== expected.length ||
+    !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received))
+  )
+    throw new Error('plan_sha256 adulterado');
   if (sourceHashes) {
     for (const [key, value] of Object.entries(sourceHashes)) {
       if (plan.source_hashes?.[key] !== value) throw new Error(`hash de fonte adulterado: ${key}`);
