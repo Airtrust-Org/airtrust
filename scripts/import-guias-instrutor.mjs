@@ -95,7 +95,7 @@ function executeD1Query(query) {
 }
 
 function uploadR2Object(r2Key, filePath) {
-  const cmd = `cd worker-airtrust && npx wrangler r2 object put "airtrust-assets/${r2Key}" --file "${filePath}" --remote`;
+  const cmd = `cd worker-airtrust && npx wrangler r2 object put "airtrust-storage/${r2Key}" --file "${filePath}" --remote`;
   execSync(cmd, { stdio: 'pipe' });
 }
 
@@ -281,11 +281,13 @@ async function main() {
   if (options.backfill) {
     console.log('\n[5/5] EXECUTANDO BACKFILL EM PRODUÇÃO (R2 + D1)...');
     let count = 0;
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
     for (const item of reprocessed) {
       count++;
       console.log(`[${count}/51] Atualizando R2/D1 para ${item.codigo} (ID: ${item.id})...`);
       
-      const tmpFile = path.join(tmpDir, `upload_${item.id}.html`);
+      const tmpFile = path.resolve(tmpDir, `upload_${item.id}.html`);
       fs.writeFileSync(tmpFile, item.htmlContent, 'utf-8');
 
       // Upload para R2

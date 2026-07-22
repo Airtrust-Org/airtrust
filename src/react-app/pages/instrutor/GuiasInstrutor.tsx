@@ -325,11 +325,15 @@ function GuiasInstrutorSkeleton() {
  * pela página completa `GuiasInstrutor` (default export) abaixo.
  */
 export function GuiasInstrutorContent() {
-  const { podeVisualizar, isLoading } = useGuiasInstrutorPermissions();
+  const { podeVisualizar, isLoading: permissoesCarregando } = useGuiasInstrutorPermissions();
   const [aeronaveAtiva, setAeronaveAtiva] = useState<string>(AERONAVES[0]);
   const [busca, setBusca] = useState('');
 
-  if (isLoading) return <GuiasInstrutorSkeleton />;
+  // Dispara requisições em paralelo com as permissões para eliminar o waterfall de rede
+  useGuiasInstrutor({ aeronave: aeronaveAtiva, q: busca || undefined });
+  useProximasSessoesComGuia(6);
+
+  if (permissoesCarregando) return <GuiasInstrutorSkeleton />;
   if (!podeVisualizar) return <AcessoRestrito />;
 
   return (
