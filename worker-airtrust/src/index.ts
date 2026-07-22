@@ -128,6 +128,7 @@ import frmsFadigaAcumuladaRoutes from './routes/frms-fadiga-acumulada';
 import preferenciasRoutes from './routes/preferencias';
 import { adminUsuariosRoutes } from './routes/admin-usuarios';
 import { adminPerfisRoutes } from './routes/admin-perfis';
+import adminSimuladoresMatrizExecutorRoutes from './routes/admin-simuladores-matriz-executor';
 import lmsCursosRoutes from './routes/lms-cursos';
 import lmsMatriculasRoutes from './routes/lms-matriculas';
 import lmsAssetsRoutes from './routes/lms-assets';
@@ -408,6 +409,14 @@ app.use(
 app.route('/api/auth', authRoutes);
 app.route('/api/admin/usuarios', adminUsuariosRoutes);
 app.route('/api/admin/perfis', adminPerfisRoutes);
+// Executor controlado da matriz de simuladores AW139/S-76 (empresa_id=6).
+// Desabilitado por padrão (ENABLE_SIMULADORES_MATRIZ_EXECUTOR); nunca
+// habilitar em produção sem autorização explícita para a execução.
+app.use(
+  '/api/admin/simuladores-matriz-import/*',
+  rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'simuladores-matriz-import' }),
+);
+app.route('/api/admin/simuladores-matriz-import', adminSimuladoresMatrizExecutorRoutes);
 app.route('/api/preferencias', preferenciasRoutes);
 
 /**

@@ -30,6 +30,75 @@ describe('matriz-guia-resolution', () => {
     expect(result).toEqual([{ codigo_canonico: 'A139-I-01/12', guia_id: 1, match_type: 'EXACT_CODE' }]);
   });
 
+  it('matches by exact code even when html_relpath has no Sessao_N_de_M pattern (real SK76 filename convention)', () => {
+    // Real data: SK76-I-01/12's html_relpath is
+    // "SK76/html/Guia_Instrutor_Simulador_S76_SK76-I-01-12.html" — it embeds
+    // the canonical code directly and never matches Sessao_N_de_M at all.
+    const sessions = [session('SK76-I-01/12', 'SK76/html/Guia_Instrutor_Simulador_S76_SK76-I-01-12.html', null, 'Inicial', 'SK76')];
+    const guias = [guia(1, 'SK76-I-01/12', 'INICIAL', null, 1, 12, 'SK76')];
+    const result = resolveGuiaLinks({ sessions, guias });
+    expect(result).toEqual([{ codigo_canonico: 'SK76-I-01/12', guia_id: 1, match_type: 'EXACT_CODE' }]);
+  });
+
+  it('derives ciclo from codigo_canonico when the session contract leaves ciclo null (real S76 data gap)', () => {
+    // Real data: all S76-P-*/04-C{n} contract sessions have ciclo:null even
+    // though the code itself already encodes "-C1"/"-C2"/"-C3".
+    const sessions = [
+      session('S76-P-01/04-C1', 'SK76/html/Guia_Instrutor_Simulador_S76_S76-P-01-04-C1.html', null, 'Periódico', 'SK76'),
+    ];
+    const guias = [guia(45, 'S76-P-01/04-C1', 'PERIODICO', 1, null, null, 'SK76')];
+    const result = resolveGuiaLinks({ sessions, guias });
+    expect(result).toEqual([{ codigo_canonico: 'S76-P-01/04-C1', guia_id: 45, match_type: 'EXACT_CODE' }]);
+  });
+
+  it('still rejects an exact match with a genuinely different ciclo even when both are code-derived', () => {
+    const sessions = [
+      session('S76-P-01/04-C1', 'SK76/html/Guia_Instrutor_Simulador_S76_S76-P-01-04-C1.html', null, 'Periódico', 'SK76'),
+    ];
+    const guias = [guia(45, 'S76-P-01/04-C1', 'PERIODICO', 2, null, null, 'SK76')];
+    expect(() => resolveGuiaLinks({ sessions, guias })).toThrow(/aeronave\/programa\/ciclo\/sessão incompatível/);
+  });
+
+  it('matches guia.programa against the finer tipo_qualificacao_estruturado when it differs from the broad programa (real SK76-P-CHECK data)', () => {
+    // Real data: SK76-P-CHECK's contract programa is "Periódico", but its own
+    // guia row stores programa="CHECK" (the finer type), not "PERIODICO".
+    const sessions = [
+      {
+        codigo_canonico: 'SK76-P-CHECK',
+        aeronave: 'SK76',
+        programa: 'Periódico',
+        ciclo: null,
+        tipo_qualificacao_estruturado: 'CHECK',
+        html_relpath: 'SK76/html/Guia_Instrutor_Simulador_S76_SK76-P-CHECK.html',
+      },
+    ];
+    const guias = [guia(51, 'SK76-P-CHECK', 'CHECK', null, null, null, 'SK76')];
+    const result = resolveGuiaLinks({ sessions, guias });
+    expect(result).toEqual([{ codigo_canonico: 'SK76-P-CHECK', guia_id: 51, match_type: 'EXACT_CODE' }]);
+  });
+
+  it('matches an exact codigo_canonico when programa differs only by accent/case', () => {
+    const sessions = [session('A139-I-01/12', 'AW139/html/G_Inicial_Sessao_1_de_12.html', null, 'Inicial')];
+    const guias = [guia(1, 'A139-I-01/12', 'inicial', null, 1, 12)];
+    const result = resolveGuiaLinks({ sessions, guias });
+    expect(result).toEqual([{ codigo_canonico: 'A139-I-01/12', guia_id: 1, match_type: 'EXACT_CODE' }]);
+  });
+
+  it('rejects an exact codigo_canonico match that belongs to the wrong aircraft', () => {
+    // A stale/reused guia row could share a code string across aircraft
+    // families; the exact code alone must never be trusted.
+    const sessions = [session('A139-I-01/12', 'AW139/html/G_Inicial_Sessao_1_de_12.html', null, 'INICIAL', 'AW139')];
+    const guias = [guia(1, 'A139-I-01/12', 'INICIAL', null, 1, 12, 'SK76')];
+    expect(() => resolveGuiaLinks({ sessions, guias })).toThrow(/aeronave\/programa\/ciclo\/sessão incompatível/);
+  });
+
+  it('rejects an exact codigo_canonico match with an incompatible ciclo', () => {
+    const sessions = [session('A139-P-02/04-C1-OFFSHORE', 'AW139/html/G_Periodico_Ciclo_1_Sessao_2_de_4.html', 'C1')];
+    // Same code, but this guia row is actually the ciclo-2 guide (drifted).
+    const guias = [guia(16, 'A139-P-02/04-C1-OFFSHORE', 'PERIODICO', 2, 2, 4)];
+    expect(() => resolveGuiaLinks({ sessions, guias })).toThrow(/aeronave\/programa\/ciclo\/sessão incompatível/);
+  });
+
   it('falls back to the structured signature when the guia code uses stale naming', () => {
     const sessions = [
       session('A139-P-02/04-C1-OFFSHORE', 'AW139/html/G_Periodico_Ciclo_1_Sessao_2_de_4.html', 'C1'),

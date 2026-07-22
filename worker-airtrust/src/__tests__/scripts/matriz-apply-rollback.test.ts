@@ -5,9 +5,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   createDeterministicPlan,
+  sealPlan,
   sha256,
   EXPECTED_SOURCE_HASH_COUNT,
 } from '../../../scripts/lib/matriz-import-plan.mjs';
+import type { PlanoDeterministico } from '../../../scripts/lib/matriz-import-plan.mjs';
 import {
   EXPECTED_MANOEUVRE_CODE_COUNT,
   buildManoeuvreResolutionEntries,
@@ -161,7 +163,9 @@ CREATE TABLE manobras(
   codigo TEXT NOT NULL,
   nome TEXT,
   categoria TEXT,
+  descricao TEXT,
   tipo_aeronave TEXT,
+  referencias_json TEXT,
   created_at TEXT,
   updated_at TEXT,
   deleted_at TEXT
@@ -243,10 +247,20 @@ function buildPlan(db: string) {
     db,
     'SELECT id, codigo, empresa_id FROM manobras WHERE empresa_id=7 AND deleted_at IS NULL',
   );
+  // Carry forward any already-resolved code for this matrix version instead
+  // of reclassifying it (see prepare-simuladores-matriz-import.mjs).
+  const existingResolutions = queryJson<Array<{ codigo_canonico: string; resolution_type: string; manobra_id: number }>>(
+    db,
+    "SELECT codigo_canonico, resolution_type, manobra_id FROM simuladores_matriz_manobra_resolution WHERE empresa_id=7 AND versao_matriz='M2026.07'",
+  );
+  const overrides = Object.fromEntries(
+    existingResolutions.map((r) => [r.codigo_canonico, { resolution_type: r.resolution_type, existing_manobra_id: r.manobra_id }]),
+  );
   const manobraResolution = buildManoeuvreResolutionEntries({
     empresaId: 7,
     items: [...aw139.items, ...sk76.items],
     tenantManobras,
+    overrides,
   });
   return createDeterministicPlan({
     empresaId: 7,
@@ -309,6 +323,39 @@ describe('matriz local apply + compensatory rollback', () => {
       expect(createdManobra).toHaveLength(1);
       expect(createdManobra[0].empresa_id).toBe(7);
       expect(createdManobra[0].deleted_at).toBeNull();
+
+      // Every field the create_payload carries must be persisted — not
+      // silently dropped — either on manobras itself (nome/categoria/
+      // tipo_aeronave/descricao/referencia_tecnica) or, for fase_voo/
+      // tipo_conteudo, on the per-link context row (they describe how the
+      // manoeuvre is used within *this* session, not an inherent catalog
+      // property of the manobra).
+      const expectedPayload = plan.manobra_resolution.find(
+        (e: any) => e.codigo_canonico === MISSING_CODE,
+      )!.create_payload!;
+      const persistedManobra = queryJson<Array<{ nome: string; categoria: string; tipo_aeronave: string | null; descricao: string | null; referencias_json: string | null }>>(
+        db,
+        `SELECT nome, categoria, tipo_aeronave, descricao, referencias_json FROM manobras WHERE codigo='${MISSING_CODE}' AND empresa_id=7`,
+      )[0];
+      expect(persistedManobra.nome).toBe(expectedPayload.nome);
+      expect(persistedManobra.categoria).toBe(expectedPayload.categoria);
+      expect(persistedManobra.tipo_aeronave).toBe(expectedPayload.tipo_aeronave);
+      expect(persistedManobra.descricao).toBe(expectedPayload.descricao);
+      expect(JSON.parse(persistedManobra.referencias_json!).referencia_tecnica).toBe(expectedPayload.referencia_tecnica);
+
+      const persistedContext = queryJson<Array<{ metadados_json: string }>>(
+        db,
+        `SELECT ctx.metadados_json FROM modelos_sessao_manobras_contexto ctx
+         JOIN modelos_sessao_manobras msm ON msm.id = ctx.modelo_manobra_id
+         JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+         JOIN simuladores_matriz_manobra_resolution r ON r.manobra_id = msm.manobra_id AND r.empresa_id=7
+         WHERE r.codigo_canonico='${MISSING_CODE}' AND ms.codigo LIKE '%@M2026.07%'
+         LIMIT 1`,
+      )[0];
+      const parsedContext = JSON.parse(persistedContext.metadados_json);
+      expect(parsedContext.fase_voo).toBe(expectedPayload.fase_voo);
+      expect(parsedContext.tipo_conteudo).toBe(expectedPayload.tipo_conteudo);
+
       expect(
         queryJson<Array<{ c: number }>>(
           db,
@@ -486,10 +533,126 @@ describe('matriz local apply + compensatory rollback', () => {
           totals: { modelos: 51, vinculos: 918, loft: 22 },
           source_hashes: sourceHashes(),
           plan_sha256: 'x',
+          manobra_resolution: [],
         },
         importUuid: 'x',
         dryRun: true,
       }),
     ).toThrow();
   });
+});
+
+function reseal(plan: Record<string, unknown>): PlanoDeterministico {
+  const { plan_sha256: _drop, ...payload } = plan;
+  return sealPlan(payload) as unknown as PlanoDeterministico;
+}
+function withMutatedResolution(plan: PlanoDeterministico, codigo: string, mutation: Record<string, unknown>): PlanoDeterministico {
+  const manobra_resolution = plan.manobra_resolution.map((e) =>
+    e.codigo_canonico === codigo ? { ...e, ...mutation } : e,
+  );
+  return reseal({ ...plan, manobra_resolution });
+}
+
+describe('manobra resolution integrity: fails closed on any divergence from the already-stored resolution', () => {
+  function setupAppliedDb() {
+    const dir = mkdtempSync(join(tmpdir(), 'matriz-resolution-'));
+    const db = join(dir, 'local.sqlite');
+    seedDb(db);
+    const plan = buildPlan(db);
+    applyPlan({ dbPath: db, plan, importUuid: 'ru-1', dryRun: false });
+    return { dir, db };
+  }
+
+  it('reapplying the identical plan under a new UUID is idempotent (already-registered resolution reused)', () => {
+    const { dir, db } = setupAppliedDb();
+    try {
+      const plan2 = buildPlan(db);
+      const result = applyPlan({ dbPath: db, plan: plan2, importUuid: 'ru-2', dryRun: false });
+      expect(result.status).toBe('APPLIED');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('rejects a plan claiming a different manobra_id for an already-resolved code', () => {
+    const { dir, db } = setupAppliedDb();
+    try {
+      const plan2 = buildPlan(db);
+      const targetCode = plan2.manobra_resolution.find((e: any) => e.resolution_type === 'EXACT_UNIQUE')!.codigo_canonico;
+      const missingCodeManobraId = queryJson<Array<{ manobra_id: number }>>(
+        db,
+        `SELECT manobra_id FROM simuladores_matriz_manobra_resolution WHERE empresa_id=7 AND codigo_canonico='${MISSING_CODE}'`,
+      )[0].manobra_id;
+      const mutated = withMutatedResolution(plan2, targetCode, { existing_manobra_id: missingCodeManobraId });
+      expect(() => applyPlan({ dbPath: db, plan: mutated, importUuid: 'ru-2', dryRun: false })).toThrow(
+        /manobra_id divergente/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('rejects a plan claiming a different resolution_type for an already-resolved code', () => {
+    const { dir, db } = setupAppliedDb();
+    try {
+      const plan2 = buildPlan(db);
+      const targetCode = plan2.manobra_resolution.find((e: any) => e.resolution_type === 'EXACT_UNIQUE')!.codigo_canonico;
+      const mutated = withMutatedResolution(plan2, targetCode, { resolution_type: 'LEGACY_EQUIVALENT' });
+      expect(() => applyPlan({ dbPath: db, plan: mutated, importUuid: 'ru-2', dryRun: false })).toThrow(
+        /resolution_type divergente/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('rejects a plan claiming a different source_hash for an already-resolved code', () => {
+    const { dir, db } = setupAppliedDb();
+    try {
+      const plan2 = buildPlan(db);
+      const targetCode = plan2.manobra_resolution.find((e: any) => e.resolution_type === 'EXACT_UNIQUE')!.codigo_canonico;
+      const mutated = withMutatedResolution(plan2, targetCode, { source_hash: 'f'.repeat(64) });
+      expect(() => applyPlan({ dbPath: db, plan: mutated, importUuid: 'ru-2', dryRun: false })).toThrow(
+        /source_hash divergente/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('rejects a plan claiming a different create_payload for an already-created TRUE_MISSING manobra', () => {
+    const { dir, db } = setupAppliedDb();
+    try {
+      const plan2 = buildPlan(db);
+      const mutated = withMutatedResolution(plan2, MISSING_CODE, {
+        create_payload: { ...plan2.manobra_resolution.find((e: any) => e.codigo_canonico === MISSING_CODE)!.create_payload, categoria: 'CATEGORIA-ADULTERADA' },
+      });
+      expect(() => applyPlan({ dbPath: db, plan: mutated, importUuid: 'ru-2', dryRun: false })).toThrow(
+        /diverge do create_payload/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('rejects apply when the already-stored resolution row was tampered with directly in the database', () => {
+    const { dir, db } = setupAppliedDb();
+    try {
+      // Bypass the immutability trigger the way a direct DB tamper would.
+      // The FK on manobra_id forbids pointing at a nonexistent manobra, so a
+      // tamper can only redirect the row to a *different real* one — which
+      // must still be caught (wrong physical code/payload for this code).
+      run(
+        db,
+        `DROP TRIGGER trg_matriz_manobra_resolution_imutavel;
+         UPDATE simuladores_matriz_manobra_resolution SET manobra_id = 1 WHERE empresa_id=7 AND codigo_canonico='${MISSING_CODE}';`,
+      );
+      const plan2 = buildPlan(db); // reflects the tampered row's resolution_type via carry-forward, but not the redirected manobra_id
+      expect(() => applyPlan({ dbPath: db, plan: plan2, importUuid: 'ru-2', dryRun: false })).toThrow(
+        /diverge do create_payload/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

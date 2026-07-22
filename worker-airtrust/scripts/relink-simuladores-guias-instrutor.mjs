@@ -72,6 +72,22 @@ export function relinkGuias({ dbPath, empresaId, versaoMatriz = 'M2026.07', cont
     const modeloId = currentByCode.get(codigo_canonico);
     if (!modeloId) fail(`${codigo_canonico}: nenhuma versão corrente ${versaoMatriz}`);
 
+    // Always deactivate any active link for this guia pointing at a model
+    // other than the current one — independent of whether the correct link
+    // already exists — so a guia is never left with two simultaneously
+    // active links (one stale + one correct) after a version bump.
+    const staleLinks = sqliteJson(
+      dbPath,
+      `SELECT id FROM simuladores_modelos_sessao_guias
+       WHERE empresa_id=${empresaId} AND guia_id=${Number(guia_id)} AND modelo_sessao_id<>${Number(modeloId)} AND deleted_at IS NULL`,
+    );
+    if (staleLinks.length) {
+      sql.push(`UPDATE simuladores_modelos_sessao_guias
+        SET deleted_at=CURRENT_TIMESTAMP
+        WHERE empresa_id=${empresaId} AND guia_id=${Number(guia_id)} AND modelo_sessao_id<>${Number(modeloId)} AND deleted_at IS NULL;`);
+      deactivatedStale += staleLinks.length;
+    }
+
     const alreadyLinked = sqliteJson(
       dbPath,
       `SELECT id FROM simuladores_modelos_sessao_guias
@@ -79,16 +95,13 @@ export function relinkGuias({ dbPath, empresaId, versaoMatriz = 'M2026.07', cont
     );
     if (alreadyLinked.length) continue; // idempotent: correct link already active
 
-    sql.push(`UPDATE simuladores_modelos_sessao_guias
-      SET deleted_at=CURRENT_TIMESTAMP
-      WHERE empresa_id=${empresaId} AND guia_id=${Number(guia_id)} AND modelo_sessao_id<>${Number(modeloId)} AND deleted_at IS NULL;`);
     sql.push(`INSERT INTO simuladores_modelos_sessao_guias(empresa_id, modelo_sessao_id, guia_id, principal, ordem, created_at, updated_at)
       VALUES(${empresaId}, ${Number(modeloId)}, ${Number(guia_id)}, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`);
     created += 1;
   }
   sql.push('COMMIT;');
 
-  if (created > 0) {
+  if (created > 0 || deactivatedStale > 0) {
     try {
       sqlite(dbPath, sql.join('\n'));
     } catch (error) {
@@ -125,6 +138,24 @@ export function relinkGuias({ dbPath, empresaId, versaoMatriz = 'M2026.07', cont
     .map((r) => r.modelo_sessao_id)
     .filter((id, i, arr) => arr.indexOf(id) !== i);
   if (duplicateModel.length) fail('modelo corrente com mais de um guia principal ativo');
+
+  // Any active link at all (not just those pointing at a current model) must
+  // total exactly one per guia: no stray active link may be left pointing at
+  // a historical (non-current) model when a current one exists for that code.
+  const allActiveLinksForTenant = sqliteJson(
+    dbPath,
+    `SELECT guia_id, modelo_sessao_id FROM simuladores_modelos_sessao_guias
+     WHERE empresa_id=${empresaId} AND deleted_at IS NULL AND guia_id IN (${resolutions.map((r) => Number(r.guia_id)).join(',') || '-1'})`,
+  );
+  if (allActiveLinksForTenant.length !== resolutions.length) {
+    fail(
+      `esperado exatamente 1 vínculo ativo por guia (${resolutions.length}); encontrados ${allActiveLinksForTenant.length} — possível vínculo ativo remanescente para versão histórica`,
+    );
+  }
+  const duplicateGuia = allActiveLinksForTenant
+    .map((r) => r.guia_id)
+    .filter((id, i, arr) => arr.indexOf(id) !== i);
+  if (duplicateGuia.length) fail('guia com mais de um vínculo ativo');
 
   return { ok: true, created, deactivatedStale, totalActiveLinks: activeLinks.length, byAeronave };
 }

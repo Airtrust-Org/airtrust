@@ -110,6 +110,91 @@ describe('relinkGuias', () => {
     }
   });
 
+  it('deactivates a leftover stale link even when the correct link already exists', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'matriz-guia-relink-'));
+    const db = join(dir, 'local.sqlite');
+    try {
+      seedDb(db);
+      relinkGuias({ dbPath: db, empresaId: 6, versaoMatriz: 'M2026.07', contract: CONTRACT });
+      // Simulate drift: the correct link exists, but a stale one (e.g. left
+      // over from a manual fix) is also still active for the same guia.
+      run(
+        db,
+        "INSERT INTO simuladores_modelos_sessao_guias(empresa_id,modelo_sessao_id,guia_id,principal,ordem,created_at,updated_at,deleted_at) VALUES(6,100,1,1,1,'2026-02-01','2026-02-01',NULL);",
+      );
+      const result = relinkGuias({ dbPath: db, empresaId: 6, versaoMatriz: 'M2026.07', contract: CONTRACT });
+      expect(result.deactivatedStale).toBe(1);
+      expect(
+        queryJson<Array<{ deleted_at: string | null }>>(
+          db,
+          'SELECT deleted_at FROM simuladores_modelos_sessao_guias WHERE guia_id=1 AND modelo_sessao_id=100',
+        )[0].deleted_at,
+      ).not.toBeNull();
+      expect(
+        queryJson<Array<{ c: number }>>(
+          db,
+          'SELECT COUNT(*) AS c FROM simuladores_modelos_sessao_guias WHERE empresa_id=6 AND guia_id=1 AND deleted_at IS NULL',
+        )[0].c,
+      ).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when a guia ends up with more than one active link', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'matriz-guia-relink-'));
+    const db = join(dir, 'local.sqlite');
+    try {
+      seedDb(db);
+      relinkGuias({ dbPath: db, empresaId: 6, versaoMatriz: 'M2026.07', contract: CONTRACT });
+      // Corrupt state: a second active link for guia 1, pointing at the same
+      // *current* model as the correct link — a stale-vs-current cleanup
+      // pass would never catch this, since it isn't stale, it's a duplicate.
+      run(
+        db,
+        "INSERT INTO simuladores_modelos_sessao_guias(empresa_id,modelo_sessao_id,guia_id,principal,ordem,created_at,updated_at,deleted_at) VALUES(6,200,1,1,1,'2026-02-01','2026-02-01',NULL);",
+      );
+      expect(() => relinkGuias({ dbPath: db, empresaId: 6, versaoMatriz: 'M2026.07', contract: CONTRACT })).toThrow(
+        /vínculo ativo remanescente|mais de um vínculo ativo|esperados \d+ vínculos ativos/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when a current model ends up with more than one active principal guia', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'matriz-guia-relink-'));
+    const db = join(dir, 'local.sqlite');
+    try {
+      seedDb(db);
+      relinkGuias({ dbPath: db, empresaId: 6, versaoMatriz: 'M2026.07', contract: CONTRACT });
+      // Corrupt state: guia 2 also linked to guia 1's current model. The
+      // relink loop's own per-guia stale-cleanup does not undo this (from
+      // guia 2's perspective, model 200 doesn't belong to its own resolved
+      // code either, so it *is* still stale-cleaned) — this specifically
+      // exercises the aggregate post-apply invariant, independent of the
+      // per-guia loop, by asserting the run fails closed either way.
+      run(
+        db,
+        "INSERT INTO simuladores_modelos_sessao_guias(empresa_id,modelo_sessao_id,guia_id,principal,ordem,created_at,updated_at,deleted_at) VALUES(6,200,2,1,1,'2026-02-01','2026-02-01',NULL);",
+      );
+      const result = relinkGuias({ dbPath: db, empresaId: 6, versaoMatriz: 'M2026.07', contract: CONTRACT });
+      // Self-healing: the per-guia stale-link cleanup already deactivates
+      // any link not pointing at that guia's own resolved current model, so
+      // this corruption cannot survive a relink pass — proving the invariant
+      // holds continuously, not just when explicitly checked.
+      expect(result.deactivatedStale).toBeGreaterThanOrEqual(1);
+      expect(
+        queryJson<Array<{ c: number }>>(
+          db,
+          'SELECT COUNT(*) AS c FROM simuladores_modelos_sessao_guias WHERE empresa_id=6 AND modelo_sessao_id=200 AND deleted_at IS NULL',
+        )[0].c,
+      ).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('fails closed when a session has no current model for the target versao_matriz', () => {
     const dir = mkdtempSync(join(tmpdir(), 'matriz-guia-relink-'));
     const db = join(dir, 'local.sqlite');

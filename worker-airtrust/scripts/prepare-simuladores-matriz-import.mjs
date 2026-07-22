@@ -278,11 +278,23 @@ const baseFingerprint = buildTenantFingerprint({
   links: tenantState.links,
   migrationState: tenantState.migration_state,
 }).fingerprint;
+// A code already resolved for this matrix version is a closed historical
+// fact (the resolution table is insert-only): carry its original
+// resolution_type/manobra_id forward instead of reclassifying it, since a
+// TRUE_MISSING/COLLISION/CROSS_TENANT_ONLY code becomes trivially
+// code-matchable the instant its own manobra is created, which must not
+// silently relabel an already-audited decision.
+const carryForwardOverrides = Object.fromEntries(
+  (tenantState.existing_manobra_resolutions || []).map((r) => [
+    r.codigo_canonico,
+    { resolution_type: r.resolution_type, existing_manobra_id: r.manobra_id },
+  ]),
+);
 const manobraResolution = buildManoeuvreResolutionEntries({
   empresaId,
   items: [...aw.items, ...s76.items],
   tenantManobras: tenantState.resolved_manoeuvres,
-  overrides: tenantState.manobra_resolution_overrides || {},
+  overrides: { ...carryForwardOverrides, ...(tenantState.manobra_resolution_overrides || {}) },
 });
 const deterministic = createDeterministicPlan({
   empresaId,
