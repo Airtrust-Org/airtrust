@@ -151,9 +151,7 @@ export function filtrarChecksCompativeisComModelo<T extends { codigo?: string | 
   checks: T[],
   modeloAeronave: unknown,
 ): T[] {
-  return checks.filter((check) =>
-    isCheckCompativelComModeloAeronave(check.codigo, modeloAeronave),
-  );
+  return checks.filter((check) => isCheckCompativelComModeloAeronave(check.codigo, modeloAeronave));
 }
 
 export async function listarTiposCheckPorIds(
@@ -199,13 +197,9 @@ export async function simuladoresHasEmpresaId(db: D1Database): Promise<boolean> 
     return cached;
   }
 
-  const result = await db
-    .prepare('PRAGMA table_info(simuladores)')
-    .all<{ name: string }>();
+  const result = await db.prepare('PRAGMA table_info(simuladores)').all<{ name: string }>();
 
-  const has = (result.results || []).some(
-    (row) => String(row.name || '') === 'empresa_id',
-  );
+  const has = (result.results || []).some((row) => String(row.name || '') === 'empresa_id');
 
   simuladoresHasEmpresaIdCache.set(db, has);
   return has;
@@ -227,9 +221,7 @@ export async function fichasSessaoManobrasHasEmpresaId(db: D1Database): Promise<
     .prepare('PRAGMA table_info(fichas_sessao_manobras)')
     .all<{ name: string }>();
 
-  const has = (result.results || []).some(
-    (row) => String(row.name || '') === 'empresa_id',
-  );
+  const has = (result.results || []).some((row) => String(row.name || '') === 'empresa_id');
 
   fichasSessaoManobrasHasEmpresaIdCache.set(db, has);
   return has;
@@ -244,7 +236,7 @@ export async function getSimuladorModeloAeronave(
     return '';
   }
 
-  const hasEmpresaId = empresaId != null && await simuladoresHasEmpresaId(db);
+  const hasEmpresaId = empresaId != null && (await simuladoresHasEmpresaId(db));
   const scopedFilter = hasEmpresaId ? ' AND empresa_id = ?' : '';
   const simulador = await db
     .prepare(
@@ -463,7 +455,9 @@ export async function resolveTemplateIdSessao(
   const explicit = Number(params.templateId || params.modeloSessaoId);
   if (Number.isInteger(explicit) && explicit > 0) {
     const explicitRow = await db
-      .prepare(`SELECT id FROM modelos_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+      .prepare(
+        `SELECT id FROM modelos_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
       .bind(explicit, params.empresaId)
       .first<{ id: number }>();
     // Fail-open by design: an explicit id that doesn't belong to this tenant
@@ -480,7 +474,9 @@ export async function resolveTemplateIdSessao(
   }
 
   const modeloAeronave = normalizeModeloAeronave(params.modeloAeronave);
-  const tipoSessaoCodigo = String(params.tipoSessaoCodigo || '').trim().toUpperCase();
+  const tipoSessaoCodigo = String(params.tipoSessaoCodigo || '')
+    .trim()
+    .toUpperCase();
 
   const result = await db
     .prepare(
@@ -520,9 +516,7 @@ export async function normalizeChecksSessao(
 ): Promise<number[]> {
   const idsUnicos = Array.isArray(checkIds)
     ? Array.from(
-        new Set(
-          checkIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0),
-        ),
+        new Set(checkIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)),
       )
     : [];
 
@@ -627,7 +621,12 @@ export async function criarQualificacoesPlanejadas(
     participantes: Array<{ funcionario_id: number }>;
     empresaId: number;
   },
-): Promise<{ criadas: number; puladas: number; conflitosUniques: number; bloqueadasDataPassada: number }> {
+): Promise<{
+  criadas: number;
+  puladas: number;
+  conflitosUniques: number;
+  bloqueadasDataPassada: number;
+}> {
   const modelo = await db
     .prepare(
       `SELECT ms.gera_qualificacao, ms.qualificacao_tipo_id, ms.duracao_estimada,
@@ -659,13 +658,32 @@ export async function criarQualificacoesPlanejadas(
 
   const requisitos = await carregarRequisitosModeloSessao(db, params.modeloId, params.empresaId);
 
-  // Mapear tipo_sessao → tipo_treinamento (CHECK constraint: INICIAL, RECORRENTE, SEMESTRAL, UPGRADE, ESPECIFICO)
+  // Structured session qualification typing only — never substring of code/title.
   const TIPO_TREINAMENTO_MAP: Record<string, string> = {
     INI: 'INICIAL',
+    INICIAL: 'INICIAL',
     PER: 'RECORRENTE',
+    PERIODICO: 'RECORRENTE',
+    RECORRENTE: 'RECORRENTE',
     SEM: 'SEMESTRAL',
+    SEMESTRAL: 'SEMESTRAL',
+    CHECK: 'RECORRENTE',
+    UPGRADE: 'UPGRADE',
+    ESPECIFICO: 'ESPECIFICO',
   };
-  const tipoTreinamento = TIPO_TREINAMENTO_MAP[params.tipoSessao?.toUpperCase()] || params.tipoSessao || null;
+  const tipoRaw = String(params.tipoSessao || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+  // Refuse code/title-like values (e.g. A139-P-01/04-C1) to prevent Semestral false positives.
+  if (/[0-9]/.test(tipoRaw) || tipoRaw.includes('/') || tipoRaw.includes('-')) {
+    return { criadas: 0, puladas: 0, conflitosUniques: 0, bloqueadasDataPassada: 0 };
+  }
+  const tipoTreinamento = TIPO_TREINAMENTO_MAP[tipoRaw];
+  if (!tipoTreinamento) {
+    return { criadas: 0, puladas: 0, conflitosUniques: 0, bloqueadasDataPassada: 0 };
+  }
 
   const stmts: ReturnType<typeof db.prepare>[] = [];
   let criadas = 0;
@@ -783,7 +801,9 @@ async function carregarRequisitosModeloSessao(
   db: D1Database,
   modeloId: number,
   empresaId: number,
-): Promise<Array<{ requisito_modelo_sessao_id: number; requisito_qualificacao_tipo_id: number | null }>> {
+): Promise<
+  Array<{ requisito_modelo_sessao_id: number; requisito_qualificacao_tipo_id: number | null }>
+> {
   try {
     const statement = db
       .prepare(
@@ -824,7 +844,10 @@ async function funcionarioAtendeRequisitosModelo(
   params: {
     empresaId: number;
     funcionarioId: number;
-    requisitos: Array<{ requisito_modelo_sessao_id: number; requisito_qualificacao_tipo_id: number | null }>;
+    requisitos: Array<{
+      requisito_modelo_sessao_id: number;
+      requisito_qualificacao_tipo_id: number | null;
+    }>;
   },
 ): Promise<boolean> {
   for (const requisito of params.requisitos) {
@@ -880,10 +903,7 @@ export async function sincronizarQualificacoesDaSessaoConcluida(
 
   const result =
     empresaId && empresaId > 0
-      ? await db
-          .prepare(`${queryBase} AND empresa_id = ?`)
-          .bind(params.sessaoId, empresaId)
-          .run()
+      ? await db.prepare(`${queryBase} AND empresa_id = ?`).bind(params.sessaoId, empresaId).run()
       : await db.prepare(queryBase).bind(params.sessaoId).run();
 
   return { atualizadas: Number(result.meta?.changes || 0) };
