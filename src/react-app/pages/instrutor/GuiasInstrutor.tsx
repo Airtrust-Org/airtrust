@@ -37,6 +37,7 @@ import {
   useProximasSessoesComGuia,
   type GuiaInstrutor,
 } from '@/react-app/lib/guias-instrutor/api';
+import { getNomeExibicaoGuia, formatarNomeSessaoVisivel } from '@/react-app/lib/guias-instrutor/helpers';
 
 const AERONAVES = ['AW139', 'SK76'] as const;
 const PROGRAMAS: Array<{ key: GuiaInstrutor['programa']; label: string }> = [
@@ -53,6 +54,8 @@ function GuiaCard({ guia }: { guia: GuiaInstrutor }) {
   const navigate = useNavigate();
   const [baixando, setBaixando] = useState(false);
 
+  const tituloExibido = getNomeExibicaoGuia(guia);
+
   async function handleDownload() {
     setBaixando(true);
     try {
@@ -67,8 +70,8 @@ function GuiaCard({ guia }: { guia: GuiaInstrutor }) {
   return (
     <Card className="p-4 flex flex-col gap-3 focus-within:ring-2 focus-within:ring-primary">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{guia.titulo}</p>
+        <div title={tituloExibido.tooltip}>
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{tituloExibido.visivel}</p>
           <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">{guia.codigo}</p>
         </div>
         <span className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300">
@@ -148,8 +151,8 @@ function ProximasSessoes() {
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {new Date(`${sessao.data}T00:00:00`).toLocaleDateString('pt-BR')} · {sessao.hora_inicio}
             </p>
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {sessao.tema_sessao || sessao.tipo_sessao || 'Sessão de simulador'}
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100" title={sessao.tema_sessao || ''}>
+              {sessao.tema_sessao ? formatarNomeSessaoVisivel(sessao.tema_sessao) : (sessao.tipo_sessao || 'Sessão de simulador')}
             </p>
             {sessao.simulador_nome && (
               <p className="text-xs text-slate-500 dark:text-slate-400">{sessao.simulador_nome}</p>

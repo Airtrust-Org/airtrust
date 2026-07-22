@@ -172,7 +172,7 @@ function createMockEnv(guias: GuiaRow[]) {
           if (sql.includes('FROM modelos_aeronave')) {
             return { id: 1, nome: 'AW139', codigo: 'AW139' } as unknown as T;
           }
-          if (sql.includes('FROM simuladores_guias_instrutor') && sql.includes('WHERE id = ? AND empresa_id = ?')) {
+          if (sql.includes('FROM simuladores_guias_instrutor') && sql.includes('WHERE g.id = ? AND g.empresa_id = ?')) {
             const [id, empresaId] = binder._params as [number, number];
             const anyStatus = !sql.includes("status = 'ATIVO'");
             const row = guias.find(
@@ -434,7 +434,7 @@ describe('simuladores-guias-instrutor — segurança e isolamento', () => {
             if (sql.includes('FROM modelos_aeronave')) {
               return { id: 1, nome: 'AW139', codigo: 'AW139' } as unknown as T;
             }
-            if (sql.includes('FROM simuladores_guias_instrutor') && sql.includes('WHERE id = ? AND empresa_id = ?')) {
+            if (sql.includes('FROM simuladores_guias_instrutor') && sql.includes('WHERE g.id = ? AND g.empresa_id = ?')) {
               return base as unknown as T;
             }
             return null;

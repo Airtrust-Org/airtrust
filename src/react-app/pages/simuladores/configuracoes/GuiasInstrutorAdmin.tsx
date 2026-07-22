@@ -19,6 +19,7 @@ import { useGuiasInstrutorPermissions } from '@/react-app/hooks/guias-instrutor/
 import { useTenantQueryKey } from '@/react-app/lib/useTenantQueryKey';
 import { fetchWithAuth, API_BASE_URL } from '@/react-app/config/api';
 import { useGuiasInstrutor, type GuiaInstrutor } from '@/react-app/lib/guias-instrutor/api';
+import { getNomeExibicaoGuia } from '@/react-app/lib/guias-instrutor/helpers';
 
 async function postJson(path: string, body: unknown) {
   const res = await fetchWithAuth(`${API_BASE_URL}${path}`, {
@@ -265,8 +266,9 @@ function LinhaGuia({ guia, onMudou }: { guia: GuiaInstrutor & { id: number }; on
         <button
           onClick={() => setExpandido((v) => !v)}
           className="text-left flex-1 min-w-[240px]"
+          title={getNomeExibicaoGuia(guia).tooltip}
         >
-          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{guia.titulo}</p>
+          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{getNomeExibicaoGuia(guia).visivel}</p>
           <p className="text-xs font-mono text-slate-500">{guia.codigo} · v{guia.versao}</p>
         </button>
         <span

@@ -147,7 +147,7 @@ function createMockEnv(empresaId = 6) {
           }
           if (
             sql.includes('FROM simuladores_guias_instrutor') &&
-            sql.includes('WHERE id = ? AND empresa_id = ?')
+            (sql.includes('WHERE id = ? AND empresa_id = ?') || sql.includes('WHERE g.id = ? AND g.empresa_id = ?'))
           ) {
             const [id, empId] = binder._params as [number, number];
             if (id === guia.id && empId === guia.empresa_id) {

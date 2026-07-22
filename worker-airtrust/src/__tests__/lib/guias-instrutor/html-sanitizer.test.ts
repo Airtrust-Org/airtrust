@@ -66,6 +66,46 @@ describe('sanitizeGuiaHtml', () => {
     expect(result.aprovado).toBe(true);
   });
 
+  it('remove src de assets ausentes no mapa fornecido', () => {
+    const result = sanitizeGuiaHtml(CLEAN_SAMPLE, {});
+    expect(result.html).not.toContain('assets/logo.png');
+    // Ensure the img tag is kept but the src is removed
+    expect(result.html).toMatch(/<img\s*\/?>/i);
+  });
+
+  it('suporta caminhos com espaços e caracteres especiais em assets locais', () => {
+    const html = `<html><body><img src="../assets/logo%20costa%20do%20sol.png" /></body></html>`;
+    const result = sanitizeGuiaHtml(html, {
+      'logo%20costa%20do%20sol.png': { bytes: new Uint8Array([1, 2, 3]), mimeType: 'image/png' },
+    });
+    expect(result.html).toMatch(/src="data:image\/png;base64,[A-Za-z0-9+/=]+"/);
+  });
+
+  it('suporta diferentes tipos MIME (jpeg, webp)', () => {
+    const html = `<html><body><img src="foto.jpg" /><img src="img.webp" /></body></html>`;
+    const result = sanitizeGuiaHtml(html, {
+      'foto.jpg': { bytes: new Uint8Array([255, 216, 255]), mimeType: 'image/jpeg' },
+      'img.webp': { bytes: new Uint8Array([82, 73, 70, 70]), mimeType: 'image/webp' },
+    });
+    expect(result.html).toMatch(/src="data:image\/jpeg;base64,[A-Za-z0-9+/=]+"/);
+    expect(result.html).toMatch(/src="data:image\/webp;base64,[A-Za-z0-9+/=]+"/);
+  });
+
+  it('ignora e remove URLs absolutas, localhost e file:// no inlineLocalAssets', () => {
+    const html = `<html><body>
+      <img src="http://localhost:8080/logo.png" />
+      <img src="file:///etc/passwd" />
+      <img src="https://example.com/logo.png" />
+    </body></html>`;
+    const result = sanitizeGuiaHtml(html, {
+      'logo.png': { bytes: new Uint8Array([1, 2, 3]), mimeType: 'image/png' },
+      'passwd': { bytes: new Uint8Array([1, 2, 3]), mimeType: 'text/plain' },
+    });
+    expect(result.html).not.toMatch(/src="http/i);
+    expect(result.html).not.toMatch(/src="file/i);
+    expect(result.html).not.toMatch(/data:image/i);
+    expect(result.html).toMatch(/<img\s*\/?>/g);
+  });
   it('não sobra script/iframe/form residual em HTML limpo', () => {
     const result = sanitizeGuiaHtml(CLEAN_SAMPLE);
     expect(result.aprovado).toBe(true);
