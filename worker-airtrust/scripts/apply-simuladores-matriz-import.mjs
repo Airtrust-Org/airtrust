@@ -65,7 +65,7 @@ function assert0440(dbPath) {
   if (!rows.length) fail('migration 0440 não aplicada');
 }
 
-function loadFingerprint(dbPath, empresaId) {
+export function loadFingerprint(dbPath, empresaId) {
   const currentVersions = sqliteJson(
     dbPath,
     `SELECT modelo_id, codigo_canonico, versao_numero, versao_matriz, is_current
@@ -103,7 +103,27 @@ function physicalCode(canonical, versaoMatriz, versaoNumero) {
   return `${canonical}@${versaoMatriz}-V${versaoNumero}`;
 }
 
-function applyPlan({ dbPath, plan, importUuid, dryRun }) {
+function resolveStructuredTipo(model) {
+  const candidates = [model.tipo_qualificacao_estruturado, model.tipo, model.programa].map((value) =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase(),
+  );
+  for (const raw of candidates) {
+    if (!raw) continue;
+    // Never accept code/title-like tokens (digits, slashes, hyphens).
+    if (/[0-9]/.test(raw) || raw.includes('/') || raw.includes('-')) continue;
+    if (raw === 'INICIAL' || raw === 'INI') return 'INICIAL';
+    if (raw === 'PERIODICO' || raw === 'PER' || raw === 'RECORRENTE') return 'PERIODICO';
+    if (raw === 'SEMESTRAL' || raw === 'SEM') return 'SEMESTRAL';
+    if (raw === 'CHECK') return 'CHECK';
+  }
+  fail(`tipo_qualificacao_estruturado ausente/inválido para ${model.codigo}`);
+}
+
+export function applyPlan({ dbPath, plan, importUuid, dryRun }) {
   assert0440(dbPath);
   const empresaId = Number(plan.empresa_id);
   const tenant = sqliteJson(dbPath, `SELECT id FROM empresas WHERE id=${empresaId}`);
@@ -115,6 +135,15 @@ function applyPlan({ dbPath, plan, importUuid, dryRun }) {
   );
   if (existing[0]?.status === 'APPLIED' && existing[0]?.plan_sha256 === plan.plan_sha256) {
     return { ok: true, idempotent: true, status: 'APPLIED' };
+  }
+  if (existing[0] && existing[0].plan_sha256 !== plan.plan_sha256) {
+    fail('UUID de importação já usado com plan_sha256 diferente');
+  }
+  if (existing[0]?.status === 'ROLLED_BACK') {
+    fail('UUID já compensado; use novo import-uuid para reapply');
+  }
+  if (existing[0]?.status === 'FAILED') {
+    fail('UUID em FAILED; use novo import-uuid');
   }
 
   const fingerprint = loadFingerprint(dbPath, empresaId);
@@ -180,21 +209,12 @@ function applyPlan({ dbPath, plan, importUuid, dryRun }) {
     )[0];
     const nextVersion = prev ? Number(prev.versao_numero) + 1 : 1;
     const codigoFisico = physicalCode(model.codigo, versaoMatriz, nextVersion).replace(/'/g, "''");
-    const tipo = String(model.programa || '')
-      .toUpperCase()
-      .includes('SEMESTRAL')
-      ? 'SEMESTRAL'
-      : String(model.programa || '')
-            .toUpperCase()
-            .includes('INICIAL')
-        ? 'INICIAL'
-        : 'PERIODICO';
+    const tipo = resolveStructuredTipo(model);
     tx.push(`INSERT INTO modelos_sessao(codigo,nome,empresa_id,tipo,created_at,updated_at)
       VALUES('${codigoFisico}','${String(model.titulo || model.codigo).replace(/'/g, "''")}',${empresaId},'${tipo}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);`);
     tx.push(
       `CREATE TEMP TABLE IF NOT EXISTS _apply_map(codigo TEXT PRIMARY KEY, modelo_id INTEGER, prev_id INTEGER, versao INTEGER);`,
     );
-    // Map filled after inserts via post-pass outside pure SQL is complex; use deterministic subquery:
   }
 
   // Simpler approach for local applicator: execute stepwise in JS with immediate statements inside one BEGIN via sqlite.
@@ -208,6 +228,7 @@ function applyPlan({ dbPath, plan, importUuid, dryRun }) {
     fingerprint,
     models,
     items,
+    existingRow: existing[0] || null,
   });
 }
 
@@ -220,21 +241,29 @@ function applyPlanJs({
   fingerprint,
   models,
   items,
+  existingRow,
 }) {
   const sql = [];
   sql.push('BEGIN IMMEDIATE;');
-  sql.push(`INSERT INTO simuladores_matriz_imports(
-      uuid,empresa_id,versao_matriz,schema_version,status,plan_sha256,source_hashes_json,base_fingerprint,expected_counts_json
-    ) VALUES (
-      '${importUuid.replace(/'/g, "''")}',${empresaId},'${versaoMatriz.replace(/'/g, "''")}',
-      ${Number(plan.schema_version || 2)},'DRY_RUN','${plan.plan_sha256}',
-      '${JSON.stringify(plan.source_hashes).replace(/'/g, "''")}',
-      '${fingerprint.fingerprint}',
-      '${JSON.stringify(plan.totals).replace(/'/g, "''")}'
-    );`);
-  sql.push(
-    `UPDATE simuladores_matriz_imports SET status='APPLYING' WHERE uuid='${importUuid.replace(/'/g, "''")}';`,
-  );
+  if (existingRow) {
+    sql.push(
+      `UPDATE simuladores_matriz_imports SET status='APPLYING', failure_reason=NULL
+       WHERE uuid='${importUuid.replace(/'/g, "''")}' AND status IN ('DRY_RUN','APPLYING');`,
+    );
+  } else {
+    sql.push(`INSERT INTO simuladores_matriz_imports(
+        uuid,empresa_id,versao_matriz,schema_version,status,plan_sha256,source_hashes_json,base_fingerprint,expected_counts_json
+      ) VALUES (
+        '${importUuid.replace(/'/g, "''")}',${empresaId},'${versaoMatriz.replace(/'/g, "''")}',
+        ${Number(plan.schema_version || 2)},'DRY_RUN','${plan.plan_sha256}',
+        '${JSON.stringify(plan.source_hashes).replace(/'/g, "''")}',
+        '${fingerprint.fingerprint}',
+        '${JSON.stringify(plan.totals).replace(/'/g, "''")}'
+      );`);
+    sql.push(
+      `UPDATE simuladores_matriz_imports SET status='APPLYING' WHERE uuid='${importUuid.replace(/'/g, "''")}';`,
+    );
+  }
 
   // Precompute next ids using max+offset in-SQL through a staging table.
   sql.push(`CREATE TEMP TABLE _matriz_apply_models(
@@ -254,11 +283,7 @@ function applyPlanJs({
     )[0];
     const versaoNumero = prev ? Number(prev.versao_numero) + 1 : 1;
     const codigoFisico = physicalCode(model.codigo, versaoMatriz, versaoNumero);
-    const tipo = /semestral/i.test(model.programa || '')
-      ? 'SEMESTRAL'
-      : /inicial/i.test(model.programa || '')
-        ? 'INICIAL'
-        : 'PERIODICO';
+    const tipo = resolveStructuredTipo(model);
     sql.push(`INSERT INTO _matriz_apply_models VALUES(
       '${String(model.codigo).replace(/'/g, "''")}',
       '${codigoFisico.replace(/'/g, "''")}',
@@ -362,36 +387,52 @@ function applyPlanJs({
   return { ok: true, mode: 'APPLY', status: 'APPLIED', fingerprint: fingerprint.fingerprint };
 }
 
-refuseRemote();
-const planPath = arg('--plan');
-const aw139 = arg('--aw139');
-const sk76 = arg('--sk76');
-const empresaId = Number(arg('--empresa-id'));
-const d1Local = arg('--d1-local');
-const importUuid = arg('--import-uuid');
-const dryRun = hasFlag('--dry-run');
-const apply = hasFlag('--apply');
-if (
-  !planPath ||
-  !aw139 ||
-  !sk76 ||
-  !Number.isInteger(empresaId) ||
-  empresaId <= 0 ||
-  !d1Local ||
-  !importUuid
-) {
-  fail('uso: --plan --aw139 --sk76 --empresa-id --d1-local --import-uuid (--dry-run|--apply)');
+export function runApplyCli(argv = process.argv) {
+  const previousArgv = process.argv;
+  process.argv = argv;
+  try {
+    refuseRemote();
+    const planPath = arg('--plan');
+    const aw139 = arg('--aw139');
+    const sk76 = arg('--sk76');
+    const empresaId = Number(arg('--empresa-id'));
+    const d1Local = arg('--d1-local');
+    const importUuid = arg('--import-uuid');
+    const dryRun = hasFlag('--dry-run');
+    const apply = hasFlag('--apply');
+    if (
+      !planPath ||
+      !aw139 ||
+      !sk76 ||
+      !Number.isInteger(empresaId) ||
+      empresaId <= 0 ||
+      !d1Local ||
+      !importUuid
+    ) {
+      fail('uso: --plan --aw139 --sk76 --empresa-id --d1-local --import-uuid (--dry-run|--apply)');
+    }
+    if (dryRun === apply) fail('informe exatamente um de --dry-run ou --apply');
+    if (!fs.existsSync(d1Local)) fail('D1 local inexistente');
+    if (!fs.existsSync(aw139) || !fs.existsSync(sk76)) fail('fontes AW139/S-76 ausentes');
+
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
+    if (Number(plan.empresa_id) !== empresaId) fail('tenant do plano diverge');
+    const contract = loadSessionContract(
+      defaultContractPath(path.join(path.dirname(fileURLToPath(import.meta.url)), '..')),
+    );
+    validateSessionContract(contract);
+
+    const result = applyPlan({ dbPath: d1Local, plan, importUuid, dryRun });
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  } finally {
+    process.argv = previousArgv;
+  }
 }
-if (dryRun === apply) fail('informe exatamente um de --dry-run ou --apply');
-if (!fs.existsSync(d1Local)) fail('D1 local inexistente');
-if (!fs.existsSync(aw139) || !fs.existsSync(sk76)) fail('fontes AW139/S-76 ausentes');
 
-const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
-if (Number(plan.empresa_id) !== empresaId) fail('tenant do plano diverge');
-const contract = loadSessionContract(
-  defaultContractPath(path.join(path.dirname(fileURLToPath(import.meta.url)), '..')),
-);
-validateSessionContract(contract);
-
-const result = applyPlan({ dbPath: d1Local, plan, importUuid, dryRun });
-console.log(JSON.stringify(result, null, 2));
+const isMain =
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain) {
+  runApplyCli(process.argv);
+}

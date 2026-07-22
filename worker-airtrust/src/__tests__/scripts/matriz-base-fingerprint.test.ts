@@ -32,12 +32,13 @@ const item = (modelo: string, ordem: number) => ({
 });
 
 function matrix(prefix: string, n: number) {
+  const aeronave = (prefix.startsWith('A') ? 'AW139' : 'SK76') as 'AW139' | 'SK76';
   const models = Array.from({ length: n }, (_, index) => ({
     codigo: `${prefix}-${index + 1}`,
     programa: 'Inicial',
     ciclo: null,
     titulo: `T${index + 1}`,
-    aeronave: prefix.startsWith('A') ? 'AW139' : 'SK76',
+    aeronave,
   }));
   const items = models.flatMap((model) =>
     Array.from({ length: 18 }, (_, order) => item(model.codigo, order + 1)),

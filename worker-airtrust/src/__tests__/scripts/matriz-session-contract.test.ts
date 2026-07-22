@@ -18,12 +18,12 @@ describe('matriz session contract 51', () => {
     expect(result.totals).toEqual({ modelos: 51, vinculos: 918, loft: 22 });
     expect(AW139_CODES).toHaveLength(30);
     expect(SK76_CODES).toHaveLength(21);
-    expect(contract.sessions.map((s) => s.codigo_canonico)).toEqual(
-      expect.arrayContaining(AW139_CODES),
-    );
-    expect(contract.sessions.map((s) => s.codigo_canonico)).toEqual(
-      expect.arrayContaining(SK76_CODES),
-    );
+    expect(
+      contract.sessions.map((s: { codigo_canonico: string }) => s.codigo_canonico),
+    ).toEqual(expect.arrayContaining(AW139_CODES));
+    expect(
+      contract.sessions.map((s: { codigo_canonico: string }) => s.codigo_canonico),
+    ).toEqual(expect.arrayContaining(SK76_CODES));
     expect(result.aw139).toMatchObject({ INICIAL: 12, PERIODICO: 12, SEMESTRAL: 6, loft: 14 });
     expect(result.sk76).toMatchObject({ INICIAL: 12, PERIODICO: 7, SEMESTRAL: 2, loft: 8 });
   });
@@ -43,13 +43,18 @@ describe('matriz session contract 51', () => {
     expect(() => validateSessionContract(removed)).toThrow(/51/);
 
     const cycle = structuredClone(contract);
-    const target = cycle.sessions.find((s) => s.codigo_canonico.includes('-C1'));
-    target.ciclo = 'C9';
-    target.tipo_qualificacao_estruturado = 'INICIAL';
+    const target = cycle.sessions.find((s: { codigo_canonico: string }) =>
+      s.codigo_canonico.includes('-C1'),
+    );
+    expect(target).toBeDefined();
+    target!.ciclo = 'C9';
+    target!.tipo_qualificacao_estruturado = 'INICIAL';
     expect(() => validateSessionContract(cycle)).toThrow();
 
     const loft = structuredClone(contract);
-    loft.sessions.find((s) => s.loft).loft = false;
+    const loftSession = loft.sessions.find((s: { loft: boolean }) => s.loft);
+    expect(loftSession).toBeDefined();
+    loftSession!.loft = false;
     loft.totals.loft = 21;
     expect(() => validateSessionContract(loft)).toThrow(/LOFT|22/);
   });
