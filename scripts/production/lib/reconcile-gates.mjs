@@ -12,8 +12,7 @@ export const PRODUCTION_TARGET = Object.freeze({
   database_id: '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae',
 });
 
-export const CONFIRM_TEXT_RECONCILE =
-  'I understand this reconciles only the 0440 ledger entry';
+export const CONFIRM_TEXT_RECONCILE = 'I understand this reconciles only the 0440 ledger entry';
 
 /**
  * Refuse any target that is not exactly the production D1. `actual` must carry
@@ -63,9 +62,7 @@ export function validateBackup({ path, expectedBytes, expectedSha256 }) {
     throw new Error('tamanho esperado do backup (bytes) é obrigatório');
   }
   if (stat.size !== expectedBytes) {
-    throw new Error(
-      `tamanho do backup diverge: ${stat.size} bytes (esperado ${expectedBytes})`,
-    );
+    throw new Error(`tamanho do backup diverge: ${stat.size} bytes (esperado ${expectedBytes})`);
   }
   if (!expectedSha256 || !/^[0-9a-f]{64}$/i.test(expectedSha256)) {
     throw new Error('SHA-256 esperado do backup é obrigatório (64 hex)');

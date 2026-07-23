@@ -144,7 +144,7 @@ if ! cmp -s "$SRC" "$TMP_MIGRATIONS_DIR/$migration_name"; then
   echo "ERROR: copy of $migration_name is not byte-identical to source" >&2
   exit 1
 fi
-count="$(ls -1 "$TMP_MIGRATIONS_DIR" | wc -l | tr -d ' ')"
+count="$(find "$TMP_MIGRATIONS_DIR" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
 if [[ "$count" != "1" ]]; then
   echo "ERROR: isolated migrations dir must contain exactly 1 file; found $count" >&2
   exit 1

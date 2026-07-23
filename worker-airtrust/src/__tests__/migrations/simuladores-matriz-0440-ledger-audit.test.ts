@@ -1,10 +1,18 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
+
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 // @ts-ignore — pure .mjs auditor, no type declarations
-import { classify0440, STATES, deriveExpectedContract, splitStatements } from '../../../scripts/lib/simuladores-matriz-0440-audit.mjs';
+import {
+  classify0440,
+  STATES,
+  deriveExpectedContract,
+  splitStatements,
+} from '../../../scripts/lib/simuladores-matriz-0440-audit.mjs';
 
 const ROOT = process.cwd();
 const MIGRATION_PATH = join(ROOT, 'migrations/0440_simuladores_matriz_versionada_metadata.sql');
@@ -68,7 +76,9 @@ const SNAPSHOT_TABLES = [
 ];
 
 function buildSnapshot(db: string, withInvariants = true) {
-  const objects = sqliteJson<Array<{ type: string; name: string; tbl_name: string; sql: string | null }>>(
+  const objects = sqliteJson<
+    Array<{ type: string; name: string; tbl_name: string; sql: string | null }>
+  >(
     db,
     "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE type IN ('table','index','trigger')",
   );
@@ -173,7 +183,10 @@ describe('0440 auditor — four states', () => {
     const db = applied0440Db('missing-table');
     dbs.push(db);
     // Drop dependents then the table.
-    sqlite(db, 'DROP TABLE simuladores_matriz_import_changes; DROP TABLE simuladores_matriz_imports;');
+    sqlite(
+      db,
+      'DROP TABLE simuladores_matriz_import_changes; DROP TABLE simuladores_matriz_imports;',
+    );
     const res = classify0440({ migrationSql, snapshot: buildSnapshot(db) });
     expect(res.state).toBe(STATES.PARCIALMENTE_APLICADA);
     expect(res.missing).toContain('tabela simuladores_matriz_imports');
@@ -188,7 +201,9 @@ describe('0440 auditor — four states', () => {
     );
     const res = classify0440({ migrationSql, snapshot: buildSnapshot(db) });
     expect(res.state).toBe(STATES.CONFLITANTE);
-    expect(res.conflicts.some((c: string) => c.includes('idx_modelo_versionamento_anterior'))).toBe(true);
+    expect(res.conflicts.some((c: string) => c.includes('idx_modelo_versionamento_anterior'))).toBe(
+      true,
+    );
   });
 
   it('CONFLITANTE when a trigger body diverges', () => {
@@ -202,7 +217,9 @@ describe('0440 auditor — four states', () => {
     );
     const res = classify0440({ migrationSql, snapshot: buildSnapshot(db) });
     expect(res.state).toBe(STATES.CONFLITANTE);
-    expect(res.conflicts.some((c: string) => c.includes('trg_modelo_versao_updated_at'))).toBe(true);
+    expect(res.conflicts.some((c: string) => c.includes('trg_modelo_versao_updated_at'))).toBe(
+      true,
+    );
   });
 
   it('CONFLITANTE when the legacy UNIQUE(modelo_id, manobra_id) survives on the links table', () => {
@@ -211,7 +228,9 @@ describe('0440 auditor — four states', () => {
     const db = applied0440Db('legacy-unique');
     dbs.push(db);
     const snapshot = buildSnapshot(db);
-    const links = snapshot.objects.find((o) => o.type === 'table' && o.name === 'modelos_sessao_manobras')!;
+    const links = snapshot.objects.find(
+      (o) => o.type === 'table' && o.name === 'modelos_sessao_manobras',
+    )!;
     links.sql = `${links.sql!.replace(/\)\s*$/, '')}, UNIQUE(modelo_id, manobra_id))`;
     const res = classify0440({ migrationSql, snapshot });
     expect(res.state).toBe(STATES.CONFLITANTE);
@@ -224,7 +243,9 @@ describe('0440 auditor — four states', () => {
     sqlite(db, 'CREATE TABLE modelos_sessao_manobras_0440(id INTEGER PRIMARY KEY);');
     const res = classify0440({ migrationSql, snapshot: buildSnapshot(db) });
     expect(res.state).toBe(STATES.CONFLITANTE);
-    expect(res.conflicts.some((c: string) => c.includes('modelos_sessao_manobras_0440'))).toBe(true);
+    expect(res.conflicts.some((c: string) => c.includes('modelos_sessao_manobras_0440'))).toBe(
+      true,
+    );
   });
 
   it('CONFLITANTE on a new cross-tenant link', () => {

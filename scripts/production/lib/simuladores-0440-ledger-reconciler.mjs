@@ -31,7 +31,10 @@
 //   `DELETE FROM d1_migrations WHERE name = '0440_simuladores_matriz_versionada_metadata.sql'`
 //   (o schema físico da 0440 permanece intacto; nada de domínio é revertido).
 
-import { classify0440, STATES } from '../../../worker-airtrust/scripts/lib/simuladores-matriz-0440-audit.mjs';
+import {
+  classify0440,
+  STATES,
+} from '../../../worker-airtrust/scripts/lib/simuladores-matriz-0440-audit.mjs';
 
 export const LEDGER_ENTRY_NAME = '0440_simuladores_matriz_versionada_metadata.sql';
 
@@ -150,9 +153,7 @@ export function planLedgerWrite({ ledgerSchema, name }) {
   insertCols.push('name');
   insertVals.push(sqlString(name));
 
-  const appliedAt = ledgerSchema.columns.find(
-    (c) => String(c.name).toLowerCase() === 'applied_at',
-  );
+  const appliedAt = ledgerSchema.columns.find((c) => String(c.name).toLowerCase() === 'applied_at');
   if (appliedAt) {
     const hasDefault = appliedAt.dflt_value !== null && appliedAt.dflt_value !== undefined;
     if (!hasDefault && Number(appliedAt.notnull) === 1) {
@@ -251,9 +252,7 @@ export function reconcile({
     return result;
   }
   const dupes = scalar(
-    executor.query(
-      `SELECT COUNT(*) AS c FROM d1_migrations WHERE name = ${sqlString(name)}`,
-    ),
+    executor.query(`SELECT COUNT(*) AS c FROM d1_migrations WHERE name = ${sqlString(name)}`),
   );
   if ((dupes || 0) !== 1) {
     result.refusedReason = `pós-escrita: esperado exatamente 1 registro 0440, encontrado ${dupes}`;

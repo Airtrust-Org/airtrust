@@ -1,18 +1,35 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
+
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 // @ts-ignore — pure .mjs module, no type declarations
 import { sqliteExecutor } from '../../../../scripts/production/lib/executors.mjs';
 // @ts-ignore — pure .mjs module, no type declarations
-import { reconcile, planLedgerWrite, discoverLedgerSchema, ledgerHasEntry, LEDGER_ENTRY_NAME } from '../../../../scripts/production/lib/simuladores-0440-ledger-reconciler.mjs';
+import {
+  reconcile,
+  planLedgerWrite,
+  discoverLedgerSchema,
+  ledgerHasEntry,
+  LEDGER_ENTRY_NAME,
+} from '../../../../scripts/production/lib/simuladores-0440-ledger-reconciler.mjs';
 // @ts-ignore — pure .mjs module, no type declarations
-import { assertProductionTarget, validateBackup, validateMigrationHash, PRODUCTION_TARGET } from '../../../../scripts/production/lib/reconcile-gates.mjs';
+import {
+  assertProductionTarget,
+  validateBackup,
+  validateMigrationHash,
+  PRODUCTION_TARGET,
+} from '../../../../scripts/production/lib/reconcile-gates.mjs';
 
 const WORKER_ROOT = process.cwd();
-const REPO_ROOT = join(WORKER_ROOT, '..');
-const MIGRATION_PATH = join(WORKER_ROOT, 'migrations/0440_simuladores_matriz_versionada_metadata.sql');
+const MIGRATION_PATH = join(
+  WORKER_ROOT,
+  'migrations/0440_simuladores_matriz_versionada_metadata.sql',
+);
 const migrationSql = readFileSync(MIGRATION_PATH, 'utf8');
 const MIG_0441 = join(WORKER_ROOT, 'migrations/0441_simuladores_matriz_manobra_resolution.sql');
 const MIG_0442 = join(WORKER_ROOT, 'migrations/0442_simuladores_matriz_guia_relink.sql');
@@ -87,8 +104,15 @@ function fixtureApplied0440(name: string): string {
 describe('0440 ledger reconciler — gates', () => {
   it('assertProductionTarget accepts the exact production target and refuses others', () => {
     expect(assertProductionTarget({ ...PRODUCTION_TARGET })).toBe(true);
-    expect(() => assertProductionTarget({ database_name: 'airtrust-db-dev', database_id: PRODUCTION_TARGET.database_id })).toThrow(/database_name/);
-    expect(() => assertProductionTarget({ database_name: 'airtrust-db', database_id: 'deadbeef' })).toThrow(/database_id/);
+    expect(() =>
+      assertProductionTarget({
+        database_name: 'airtrust-db-dev',
+        database_id: PRODUCTION_TARGET.database_id,
+      }),
+    ).toThrow(/database_name/);
+    expect(() =>
+      assertProductionTarget({ database_name: 'airtrust-db', database_id: 'deadbeef' }),
+    ).toThrow(/database_id/);
   });
 
   it('validateMigrationHash refuses a wrong expected hash and accepts the real one', () => {
@@ -105,12 +129,19 @@ describe('0440 ledger reconciler — gates', () => {
     const file = join(dir, 'backup.sql');
     writeFileSync(file, 'hello world');
     const bytes = Buffer.byteLength('hello world');
-    const crypto = require('node:crypto');
-    const sha = crypto.createHash('sha256').update('hello world').digest('hex');
-    expect(validateBackup({ path: file, expectedBytes: bytes, expectedSha256: sha })).toMatchObject({ bytes });
-    expect(() => validateBackup({ path: join(dir, 'nope.sql'), expectedBytes: bytes, expectedSha256: sha })).toThrow(/não encontrado/);
-    expect(() => validateBackup({ path: file, expectedBytes: bytes + 1, expectedSha256: sha })).toThrow(/tamanho/);
-    expect(() => validateBackup({ path: file, expectedBytes: bytes, expectedSha256: 'b'.repeat(64) })).toThrow(/SHA-256/);
+    const sha = createHash('sha256').update('hello world').digest('hex');
+    expect(validateBackup({ path: file, expectedBytes: bytes, expectedSha256: sha })).toMatchObject(
+      { bytes },
+    );
+    expect(() =>
+      validateBackup({ path: join(dir, 'nope.sql'), expectedBytes: bytes, expectedSha256: sha }),
+    ).toThrow(/não encontrado/);
+    expect(() =>
+      validateBackup({ path: file, expectedBytes: bytes + 1, expectedSha256: sha }),
+    ).toThrow(/tamanho/);
+    expect(() =>
+      validateBackup({ path: file, expectedBytes: bytes, expectedSha256: 'b'.repeat(64) }),
+    ).toThrow(/SHA-256/);
   });
 });
 
@@ -119,7 +150,11 @@ describe('0440 ledger reconciler — core against a disposable copy', () => {
     const db = fixtureApplied0440('plan');
     const exec = sqliteExecutor(db);
     const schema = discoverLedgerSchema(exec);
-    expect(schema.columns.map((c: { name: string }) => c.name)).toEqual(['id', 'name', 'applied_at']);
+    expect(schema.columns.map((c: { name: string }) => c.name)).toEqual([
+      'id',
+      'name',
+      'applied_at',
+    ]);
     const plan = planLedgerWrite({ ledgerSchema: schema, name: LEDGER_ENTRY_NAME });
     expect(plan.sql).toContain('INSERT INTO d1_migrations');
     expect(plan.sql).toContain('WHERE NOT EXISTS');
@@ -130,7 +165,13 @@ describe('0440 ledger reconciler — core against a disposable copy', () => {
     const db = fixtureApplied0440('dry-run');
     let writes = 0;
     const base = sqliteExecutor(db);
-    const spy = { ...base, exec: (sql: string) => { writes += 1; return base.exec(sql); } };
+    const spy = {
+      ...base,
+      exec: (sql: string) => {
+        writes += 1;
+        return base.exec(sql);
+      },
+    };
     const before = base.query('SELECT COUNT(*) AS c FROM d1_migrations')[0].c;
     const res = reconcile({ executor: spy, migrationSql, fkCheckBaseline: 0, apply: false });
     expect(res.auditState).toBe('INTEGRALMENTE_APLICADA');
@@ -149,14 +190,20 @@ describe('0440 ledger reconciler — core against a disposable copy', () => {
     expect(first.wrote).toBe(true);
     expect(first.revalidatedState).toBe('INTEGRALMENTE_APLICADA');
     // Only bootstrap + 0440 exist now.
-    const names1 = exec.query('SELECT name FROM d1_migrations ORDER BY id').map((r: { name: string }) => r.name);
+    const names1 = exec
+      .query('SELECT name FROM d1_migrations ORDER BY id')
+      .map((r: { name: string }) => r.name);
     expect(names1).toEqual(['0439_bootstrap.sql', LEDGER_ENTRY_NAME]);
 
     const second = reconcile({ executor: exec, migrationSql, fkCheckBaseline: 0, apply: true });
     expect(second.ok).toBe(true);
-    const names2 = exec.query('SELECT name FROM d1_migrations ORDER BY id').map((r: { name: string }) => r.name);
+    const names2 = exec
+      .query('SELECT name FROM d1_migrations ORDER BY id')
+      .map((r: { name: string }) => r.name);
     expect(names2).toEqual(names1); // no duplicate, no error
-    const count = exec.query(`SELECT COUNT(*) AS c FROM d1_migrations WHERE name = '${LEDGER_ENTRY_NAME}'`)[0].c;
+    const count = exec.query(
+      `SELECT COUNT(*) AS c FROM d1_migrations WHERE name = '${LEDGER_ENTRY_NAME}'`,
+    )[0].c;
     expect(count).toBe(1);
   });
 
@@ -197,7 +244,10 @@ describe('0440 ledger reconciler — core against a disposable copy', () => {
 });
 
 function hasWrangler(): boolean {
-  const r = spawnSync('npx', ['--no-install', 'wrangler', '--version'], { cwd: WORKER_ROOT, encoding: 'utf8' });
+  const r = spawnSync('npx', ['--no-install', 'wrangler', '--version'], {
+    cwd: WORKER_ROOT,
+    encoding: 'utf8',
+  });
   return r.status === 0;
 }
 
@@ -212,7 +262,6 @@ describe('0441/0442 ledger-aware remote runner mechanism (local rehearsal)', () 
     const migrationsDir = join(dir, 'migrations');
     const stateDir = join(dir, 'state');
     // Isolated migrations dir: ONLY 0441 and 0442 (never the 400+ historical dir).
-    const { mkdirSync, copyFileSync } = require('node:fs') as typeof import('node:fs');
     mkdirSync(migrationsDir, { recursive: true });
     copyFileSync(MIG_0441, join(migrationsDir, '0441_simuladores_matriz_manobra_resolution.sql'));
     copyFileSync(MIG_0442, join(migrationsDir, '0442_simuladores_matriz_guia_relink.sql'));
@@ -230,12 +279,23 @@ database_id = "00000000-0000-0000-0000-000000000440"
 migrations_dir = "${migrationsDir}"
 `,
     );
-    writeFileSync(join(dir, 'index.js'), 'export default { fetch(){ return new Response("ok"); } };');
+    writeFileSync(
+      join(dir, 'index.js'),
+      'export default { fetch(){ return new Response("ok"); } };',
+    );
 
     const wr = (command: string, json = false) => {
       const args = [
-        '--no-install', 'wrangler', 'd1', 'execute', 'airtrust-0440-runner-proof',
-        '--local', '--config', configPath, '--persist-to', stateDir,
+        '--no-install',
+        'wrangler',
+        'd1',
+        'execute',
+        'airtrust-0440-runner-proof',
+        '--local',
+        '--config',
+        configPath,
+        '--persist-to',
+        stateDir,
       ];
       if (json) args.push('--json');
       args.push('--command', command);
@@ -262,7 +322,20 @@ migrations_dir = "${migrationsDir}"
     );
     const seed = spawnSync(
       'npx',
-      ['--no-install', 'wrangler', 'd1', 'execute', 'airtrust-0440-runner-proof', '--local', '--config', configPath, '--persist-to', stateDir, '--file', seedFile],
+      [
+        '--no-install',
+        'wrangler',
+        'd1',
+        'execute',
+        'airtrust-0440-runner-proof',
+        '--local',
+        '--config',
+        configPath,
+        '--persist-to',
+        stateDir,
+        '--file',
+        seedFile,
+      ],
       { cwd: WORKER_ROOT, encoding: 'utf8' },
     );
     expect(seed.status, seed.stderr || seed.stdout).toBe(0);
@@ -271,12 +344,26 @@ migrations_dir = "${migrationsDir}"
 
     const apply1 = spawnSync(
       'npx',
-      ['--no-install', 'wrangler', 'd1', 'migrations', 'apply', 'DB', '--local', '--config', configPath, '--persist-to', stateDir],
+      [
+        '--no-install',
+        'wrangler',
+        'd1',
+        'migrations',
+        'apply',
+        'DB',
+        '--local',
+        '--config',
+        configPath,
+        '--persist-to',
+        stateDir,
+      ],
       { cwd: WORKER_ROOT, encoding: 'utf8' },
     );
     expect(apply1.status, apply1.stderr || apply1.stdout).toBe(0);
 
-    const namesAfter = wrJson('SELECT name FROM d1_migrations ORDER BY id').map((r: { name: string }) => r.name);
+    const namesAfter = wrJson('SELECT name FROM d1_migrations ORDER BY id').map(
+      (r: { name: string }) => r.name,
+    );
     expect(namesAfter).toEqual([
       '0439_bootstrap.sql',
       '0440_simuladores_matriz_versionada_metadata.sql',
@@ -284,17 +371,38 @@ migrations_dir = "${migrationsDir}"
       '0442_simuladores_matriz_guia_relink.sql',
     ]);
     // The follow-up tables exist.
-    const tables = wrJson("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('simuladores_matriz_manobra_resolution','simuladores_matriz_guia_relink')").map((r: { name: string }) => r.name).sort();
-    expect(tables).toEqual(['simuladores_matriz_guia_relink', 'simuladores_matriz_manobra_resolution']);
+    const tables = wrJson(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('simuladores_matriz_manobra_resolution','simuladores_matriz_guia_relink')",
+    )
+      .map((r: { name: string }) => r.name)
+      .sort();
+    expect(tables).toEqual([
+      'simuladores_matriz_guia_relink',
+      'simuladores_matriz_manobra_resolution',
+    ]);
 
     // Idempotent re-apply: ledger unchanged.
     const apply2 = spawnSync(
       'npx',
-      ['--no-install', 'wrangler', 'd1', 'migrations', 'apply', 'DB', '--local', '--config', configPath, '--persist-to', stateDir],
+      [
+        '--no-install',
+        'wrangler',
+        'd1',
+        'migrations',
+        'apply',
+        'DB',
+        '--local',
+        '--config',
+        configPath,
+        '--persist-to',
+        stateDir,
+      ],
       { cwd: WORKER_ROOT, encoding: 'utf8' },
     );
     expect(apply2.status, apply2.stderr || apply2.stdout).toBe(0);
-    const namesAfter2 = wrJson('SELECT name FROM d1_migrations ORDER BY id').map((r: { name: string }) => r.name);
+    const namesAfter2 = wrJson('SELECT name FROM d1_migrations ORDER BY id').map(
+      (r: { name: string }) => r.name,
+    );
     expect(namesAfter2).toEqual(namesAfter);
 
     const fkAfter = wrJson('PRAGMA foreign_key_check').length;
