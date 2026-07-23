@@ -190,7 +190,9 @@ describe('migration governance', () => {
     // 0438 para nao colidir com a migration do RDV, ja mergeada em main).
     // Ratchet raised 2026-07-21: 0440 simuladores_matriz_versionada_metadata.
     // Ratchet raised 2026-07-22: 0441 simuladores_matriz_manobra_resolution.
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(441);
+    // Ratchet raised 2026-07-22: 0442 simuladores_matriz_guia_relink (separate,
+    // small, atomic executor for the 51 guia-instrutor links only).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(442);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 

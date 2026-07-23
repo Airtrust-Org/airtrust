@@ -51,6 +51,10 @@ export interface Env {
   // (tenant-scoped, empresa_id=6). Disabled by default; never set 'true' in
   // production without explicit, reviewed authorization for that specific run.
   ENABLE_SIMULADORES_MATRIZ_EXECUTOR?: string;
+  // Executor separado e atômico apenas para os 51 vínculos de guias de
+  // instrutor (tenant-scoped, empresa_id=6). Independente do flag acima —
+  // nunca toca matriz, manobras, modelos ou sessões. Disabled by default.
+  ENABLE_SIMULADORES_GUIA_RELINK_EXECUTOR?: string;
   USE_INTEGRATED_VIEW?: string; // 'true' habilita uso da view integrada
   USE_QUALIFICACOES_VIEW?: string; // deprecated (view removida); ignorado
   // Migração arquitetural SIGVOOS→Controle de Voos→FRMS (shadow-mode, ver docs/frms-controle-voos-migracao.md)
