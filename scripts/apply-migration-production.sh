@@ -38,6 +38,25 @@ if [[ ! -f "$migration_file" ]]; then
   exit 1
 fi
 
+# The simuladores matrix migrations 0440/0441/0442 must NEVER be applied through
+# this raw `d1 execute --remote --file` path: it does not update the
+# d1_migrations ledger, which is exactly the incident that this tooling exists
+# to prevent (0440 was applied here and left the ledger out of sync).
+case "$(basename "$migration_file")" in
+  0440_simuladores_matriz_versionada_metadata.sql)
+    echo "ERROR: 0440 must not be (re)applied via raw d1 execute." >&2
+    echo "It was already physically applied; reconcile its ledger entry with:" >&2
+    echo "  node scripts/production/reconcile-simuladores-0440-ledger.mjs --apply ..." >&2
+    exit 4
+    ;;
+  0441_simuladores_matriz_manobra_resolution.sql|0442_simuladores_matriz_guia_relink.sql)
+    echo "ERROR: $(basename "$migration_file") must be applied via the ledger-aware runner:" >&2
+    echo "  bash scripts/production/apply-simuladores-matriz-remote-migration.sh $(basename "$migration_file")" >&2
+    echo "That path uses 'wrangler d1 migrations apply', which updates d1_migrations." >&2
+    exit 4
+    ;;
+esac
+
 no_go_check="$(node scripts/check-single-migration-no-go.mjs "$migration_file")"
 
 if [[ "$no_go_check" == "BLOCKED" ]]; then

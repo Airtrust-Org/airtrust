@@ -1,6 +1,34 @@
 # Runbook — Matriz AW139/S-76: aplicação da matriz + relink dos 51 guias
 
-Status: **PRONTO PARA REVISÃO — NÃO EXECUTADO EM PRODUÇÃO.**
+Status: **RECONCILIAÇÃO DE LEDGER PENDENTE DE GO EXPLÍCITO.** A migration 0440
+foi aplicada fisicamente em produção sem registro no ledger `d1_migrations`
+(ver seção "Incidente" abaixo). 0441/0442 NÃO foram aplicadas. Nenhum deploy do
+Worker e nenhum executor de domínio (matriz/guias) foram executados. A janela só
+pode prosseguir após reconciliar o ledger da 0440 pelo fluxo novo da seção 3.
+
+## Incidente — 0440 aplicada sem ledger
+
+- **O que aconteceu:** `0440_simuladores_matriz_versionada_metadata.sql` foi
+  executada em produção via `scripts/apply-migration-production.sh`, que usa
+  `wrangler d1 execute --remote --file`. Esse comando executa SQL cru e **não**
+  atualiza a tabela de ledger `d1_migrations` (só `wrangler d1 migrations apply`
+  faz isso). Resultado: o schema da 0440 está aplicado, mas o ledger não tem a
+  entrada correspondente.
+- **Causa raiz (estrutural, não erro do operador):** o runbook mandava usar o
+  caminho per-file para produção, e o script com ledger correto
+  (`apply-simuladores-matriz-isolated-migrations.sh`) recusava `--remote`. Havia
+  um buraco entre as duas ferramentas.
+- **Contenção:** a janela foi interrompida corretamente **antes** de 0441/0442.
+  0441 e 0442 seguem ausentes do ledger e não aplicadas. Nenhum deploy do Worker
+  e nenhum executor de matriz/guias foram chamados. Baseline de
+  `foreign_key_check` e os 51 vínculos de guias permaneceram inalterados.
+- **Correção entregue:** um reconciliador dedicado registra **somente** a
+  entrada 0440 no ledger (idempotente, com auditoria estrutural integral como
+  pré-condição) e um runner remoto ledger-aware aplica 0441/0442. O caminho de
+  SQL cru (`apply-migration-production.sh`) agora **recusa** explicitamente
+  0440/0441/0442. Não existe nenhum caminho de INSERT manual solto no ledger.
+
+Status anterior: **PRONTO PARA REVISÃO — NÃO EXECUTADO EM PRODUÇÃO.**
 
 Este runbook cobre a janela operacional completa para produção: migrations
 0440/0441/0442, aplicação da matriz (executor já mergeado em `main`,
@@ -49,46 +77,103 @@ Seguir o procedimento já documentado em
 `scripts/backup_d1_to_r2.sh`. Confirmar o backup **antes** de qualquer
 migration.
 
-## 3. Migrations isoladas 0440/0441/0442 com ledger
+## 3. Ledger da 0440 + migrations 0441/0442 (fluxo obrigatório)
 
-Usar exclusivamente:
+> **Substitui os comandos antigos desta seção.** O caminho de SQL cru
+> (`scripts/apply-migration-production.sh`) agora **recusa** 0440/0441/0442 —
+> por construção não é mais possível reaplicar essas migrations por ele.
+> O script local `apply-simuladores-matriz-isolated-migrations.sh` continua
+> `--local`-only para rehearsals.
+
+Ordem obrigatória:
+
+**3.1 — Auditor estrutural da 0440 (dry-run, read-only)**
+
+O auditor puro `worker-airtrust/scripts/lib/simuladores-matriz-0440-audit.mjs`
+classifica o estado da 0440 em `AUSENTE`, `INTEGRALMENTE_APLICADA`,
+`PARCIALMENTE_APLICADA` ou `CONFLITANTE`, comparando o schema real
+(sqlite_master + PRAGMA) contra o contrato derivado da própria migration e
+conferindo invariantes (contagens, versão corrente única por tenant, zero
+cross-tenant, baseline de `foreign_key_check`). Ele é executado
+automaticamente pelo reconciliador do passo 3.2; a simples existência de
+`modelos_sessao_versionamento` nunca basta para `INTEGRALMENTE_APLICADA`.
+
+**3.2 — Reconciliador do ledger da 0440 (dry-run, depois `--apply`)**
 
 ```bash
-bash scripts/apply-simuladores-matriz-isolated-migrations.sh <wrangler-config> <d1-binding> --local
+# DRY-RUN (nenhuma escrita; imprime plannedWrites e o estado da auditoria):
+node scripts/production/reconcile-simuladores-0440-ledger.mjs \
+  --config worker-airtrust/wrangler.toml --env production \
+  --backup /caminho/absoluto/backup.sql \
+  --backup-bytes <bytes> --backup-sha256 <sha256> \
+  --fk-baseline 525
+
+# APPLY (registra SOMENTE a entrada 0440 no ledger, idempotente):
+node scripts/production/reconcile-simuladores-0440-ledger.mjs \
+  --config worker-airtrust/wrangler.toml --env production \
+  --backup /caminho/absoluto/backup.sql \
+  --backup-bytes <bytes> --backup-sha256 <sha256> \
+  --fk-baseline 525 \
+  --apply --confirm "I understand this reconciles only the 0440 ledger entry"
 ```
 
-Este script:
+O reconciliador: trava o alvo em `airtrust-db` /
+`7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae` (lido do wrangler.toml, não de input
+livre); exige `main` limpa == `origin/main`; valida tamanho **e** SHA-256 do
+backup oficial (fora do Git); valida o SHA-256 da própria 0440 no repo;
+descobre o shape real de `d1_migrations` via `PRAGMA table_info`; confirma que a
+entrada 0440 está ausente; roda o auditor integral e **só prossegue se
+`INTEGRALMENTE_APLICADA`**; escreve exatamente uma linha
+(`INSERT ... WHERE NOT EXISTS`) e revalida ledger + auditoria + FK-check. É o
+**único** caminho autorizado a escrever no ledger para esta reconciliação.
 
-- copia **apenas** `0440_simuladores_matriz_versionada_metadata.sql`,
-  `0441_simuladores_matriz_manobra_resolution.sql` e
-  `0442_simuladores_matriz_guia_relink.sql` — byte-idênticas — para um
-  diretório temporário isolado;
-- gera uma config Wrangler temporária apontando `migrations_dir` para esse
-  diretório, mantendo `database_name`/`database_id` do config original (ou
-  seja, o mesmo D1 de destino);
-- roda `wrangler d1 migrations list` e `wrangler d1 migrations apply` através
-  do mecanismo oficial do ledger (`d1_migrations`) — nunca INSERT manual no
-  ledger;
-- imprime o ledger completo (`SELECT id, name, applied_at FROM d1_migrations`)
-  ao final, para conferência visual de que só essas 3 entradas foram
-  adicionadas.
-
-Validado localmente contra uma cópia descartável (schema pré-0440 sintético +
-bootstrap com 1 migration) nesta sessão: ledger final = bootstrap + 0440 +
-0441 + 0442, reexecução idempotente (nenhuma entrada duplicada), nenhuma
-migration histórica tocada. **Este script só suporta `--local`** — aplicação
-remota continua sendo o procedimento revisado e NO_GO-gated em
-`scripts/apply-migration-production.sh`, um arquivo por vez, com
-`AIRTRUST_ALLOW_PROD_DB_WRITE` explícito por arquivo.
-
-Para produção real:
+**3.3 — 0441 pelo runner remoto ledger-aware**
 
 ```bash
 AIRTRUST_ALLOW_PROD_DB_WRITE=YES \
 AIRTRUST_CONFIRM_PROD_DB_WRITE="I understand this may modify production data" \
-bash scripts/apply-migration-production.sh worker-airtrust/migrations/0440_simuladores_matriz_versionada_metadata.sql
-# repetir para 0441 e depois 0442, na ordem, confirmando o ledger entre cada uma
+AIRTRUST_BACKUP_PATH=/caminho/absoluto/backup.sql \
+AIRTRUST_BACKUP_BYTES=<bytes> AIRTRUST_BACKUP_SHA256=<sha256> \
+bash scripts/production/apply-simuladores-matriz-remote-migration.sh \
+  0441_simuladores_matriz_manobra_resolution.sql
 ```
+
+**3.4 — 0442 pelo mesmo runner**
+
+```bash
+AIRTRUST_ALLOW_PROD_DB_WRITE=YES \
+AIRTRUST_CONFIRM_PROD_DB_WRITE="I understand this may modify production data" \
+AIRTRUST_BACKUP_PATH=/caminho/absoluto/backup.sql \
+AIRTRUST_BACKUP_BYTES=<bytes> AIRTRUST_BACKUP_SHA256=<sha256> \
+bash scripts/production/apply-simuladores-matriz-remote-migration.sh \
+  0442_simuladores_matriz_guia_relink.sql
+```
+
+O runner aceita **exclusivamente** 0441 ou 0442 (bloqueia 0440 e qualquer outro
+nome), trava o alvo de produção, exige `main` limpa e backup validado, copia só
+o único arquivo autorizado para um diretório isolado e usa
+`wrangler d1 migrations apply --remote` (que atualiza o ledger) — nunca aponta
+`migrations_dir` para o diretório real com 400+ migrations, e nunca insere no
+ledger manualmente. Reexecução é idempotente (wrangler pula o que já está no
+ledger). Conferir o ledger entre 0441 e 0442.
+
+### Sequência completa da janela (12 passos)
+
+1. Backup oficial (seção 2).
+2. Auditor dry-run da 0440 (3.1, embutido no reconciliador).
+3. Reconciliador do ledger da 0440 — dry-run, depois `--apply` (3.2).
+4. Auditoria pós-reconciliação (seção 4).
+5. 0441 via runner oficial (3.3).
+6. Auditoria (seção 4).
+7. 0442 via runner oficial (3.4).
+8. Auditoria (seção 4).
+9. Geração do plano final da matriz (seção 5).
+10. Deploy seguro do Worker (seção 6).
+11. Executor da matriz (seção 7).
+12. Executor de relink dos guias (seção 8).
+
+O script local `apply-simuladores-matriz-isolated-migrations.sh` permanece
+disponível **apenas** para rehearsals `--local` contra cópias descartáveis.
 
 ## 4. Auditoria pós-migration (read-only)
 
