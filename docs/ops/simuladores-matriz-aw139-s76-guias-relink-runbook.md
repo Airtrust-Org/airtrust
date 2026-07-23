@@ -70,12 +70,58 @@ Em vez disso:
    / `ENABLE_SIMULADORES_GUIA_RELINK_EXECUTOR` ausentes ou `false`) fora da
    janela — isso já é, por construção, o principal controle de acesso.
 
-## 2. Backup oficial
+## 2. Backup oficial read-only
 
-Seguir o procedimento já documentado em
-`docs/PRODUCTION_BACKUP_AND_ROLLBACK_PLAN.md` /
-`scripts/backup_d1_to_r2.sh`. Confirmar o backup **antes** de qualquer
-migration.
+O caminho legado `scripts/backup_d1_to_r2.sh` está bloqueado e **não** é mais
+referência operacional. O backup oficial desta janela deve ser criado pelo
+comando read-only abaixo, que trava `database_name`/`database_id`, exige
+`main` limpa, grava **fora do Git**, gera bytes + SHA-256, restaura o dump em
+SQLite descartável e executa `PRAGMA integrity_check` + `PRAGMA foreign_key_check`
+antes de qualquer escrita posterior:
+
+```bash
+node scripts/production/backup-production-d1-readonly.mjs \
+  --config worker-airtrust/wrangler.toml \
+  --env production \
+  --out-file /caminho/absoluto/fora-do-git/airtrust-db-preflight-<UTC>.sql
+```
+
+Use no gate seguinte:
+
+- `backup.path`
+- `backup.bytes`
+- `backup.sha256`
+- `restored_sqlite.integrity_check`
+- `restored_sqlite.foreign_key_check_count`
+
+Este comando **não** envia artefatos ao Git nem ao R2.
+
+## 2.1 Pré-flight read-only obrigatório
+
+Antes de qualquer GO de produção, materializar o `tenant-state` e o `plan.json`
+novos com o comando oficial abaixo. Ele usa somente `SELECT/PRAGMA` contra D1,
+valida um Bearer token administrativo já emitido (`empresa_id=6`, `role=admin`)
+sem imprimir o segredo, exige zero sessão/check ativo e zero edição concorrente
+de ficha, grava `/tmp/airtrust-tenant-state.json`, confirma as 61 fontes
+privadas e gera `plan.json` novo.
+
+```bash
+AIRTRUST_PREFLIGHT_AUTH_TOKEN='<bearer-token-admin-empresa-6-ja-emitido>' \
+node scripts/production/preflight-simuladores-matriz-readonly.mjs \
+  --config worker-airtrust/wrangler.toml \
+  --env production \
+  --fk-baseline 525 \
+  --sources-path-file /tmp/airtrust-simuladores-path \
+  --tenant-state-out /tmp/airtrust-tenant-state.json \
+  --plan-out-dir /tmp/airtrust-simuladores-plan \
+  --report-out /tmp/airtrust-simuladores-preflight-report.json
+```
+
+Artefatos obrigatórios do pré-flight:
+
+- `/tmp/airtrust-tenant-state.json`
+- `/tmp/airtrust-simuladores-plan/plan.json`
+- `/tmp/airtrust-simuladores-preflight-report.json`
 
 ## 3. Ledger da 0440 + migrations 0441/0442 (fluxo obrigatório)
 
@@ -288,9 +334,9 @@ resoluções ou auditoria — esses registros ficam inativos e rastreáveis
 
 ## O que este runbook assume que já foi feito antes de GO
 
-- Pré-flight pós-merge (fontes privadas revalidadas, 61 hashes, auditoria
-  read-only do tenant 6, `plan_sha256`/`import_uuid` gerados) — ver seção
-  "Pré-flight pós-merge" no resumo final da sessão que produziu este runbook.
+- Pré-flight pós-merge executado pelo comando de 2.1, com fontes privadas
+  revalidadas, 61 hashes confirmados, auditoria read-only do tenant 6,
+  `plan_sha256` gerado e `tenant-state` materializado fora do Git.
 - Um rehearsal completo contra uma **cópia descartável real do backup de
   produção** (não apenas a fixture sintética usada para validar o mecanismo
   de isolamento de migrations nesta sessão) — isso requer puxar um backup de

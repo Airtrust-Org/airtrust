@@ -32,6 +32,7 @@ import {
   validateBackup,
   validateMigrationHash,
   CONFIRM_TEXT_RECONCILE,
+  resolveProductionTargetFromConfig,
 } from './lib/reconcile-gates.mjs';
 import { wranglerExecutor } from './lib/executors.mjs';
 import {
@@ -67,26 +68,6 @@ function parseArgs(argv) {
     }
   }
   return args;
-}
-
-/**
- * Parse the production D1 target (name + id) directly from the wrangler config,
- * for the given env. Never trusts free-form CLI input for identity.
- */
-export function resolveProductionTargetFromConfig(configPath, env = 'production') {
-  const text = readFileSync(configPath, 'utf8');
-  const header = `[[env.${env}.d1_databases]]`;
-  const idx = text.indexOf(header);
-  if (idx < 0) {
-    throw new Error(`bloco ${header} não encontrado em ${configPath}`);
-  }
-  const section = text.slice(idx + header.length, idx + header.length + 600);
-  const name = (section.match(/database_name\s*=\s*"([^"]+)"/) || [])[1];
-  const id = (section.match(/database_id\s*=\s*"([^"]+)"/) || [])[1];
-  if (!name || !id) {
-    throw new Error(`não foi possível ler database_name/database_id em ${header}`);
-  }
-  return { database_name: name, database_id: id };
 }
 
 function fail(message) {

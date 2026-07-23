@@ -4,6 +4,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 // The one and only production D1 this tooling may target.
@@ -13,6 +14,22 @@ export const PRODUCTION_TARGET = Object.freeze({
 });
 
 export const CONFIRM_TEXT_RECONCILE = 'I understand this reconciles only the 0440 ledger entry';
+
+export function resolveProductionTargetFromConfig(configPath, env = 'production') {
+  const text = readFileSync(configPath, 'utf8');
+  const header = `[[env.${env}.d1_databases]]`;
+  const idx = text.indexOf(header);
+  if (idx < 0) {
+    throw new Error(`bloco ${header} não encontrado em ${configPath}`);
+  }
+  const section = text.slice(idx + header.length, idx + header.length + 600);
+  const name = (section.match(/database_name\s*=\s*"([^"]+)"/) || [])[1];
+  const id = (section.match(/database_id\s*=\s*"([^"]+)"/) || [])[1];
+  if (!name || !id) {
+    throw new Error(`não foi possível ler database_name/database_id em ${header}`);
+  }
+  return { database_name: name, database_id: id };
+}
 
 /**
  * Refuse any target that is not exactly the production D1. `actual` must carry
@@ -76,6 +93,18 @@ export function validateBackup({ path, expectedBytes, expectedSha256 }) {
   return { path, bytes: stat.size, sha256: actual.toLowerCase() };
 }
 
+export function assertPathOutsideRepo({ path, repoRoot }) {
+  if (!path) throw new Error('caminho é obrigatório');
+  if (!repoRoot) throw new Error('repoRoot é obrigatório');
+  const absPath = resolve(path);
+  const absRepoRoot = resolve(repoRoot);
+  const rel = relative(absRepoRoot, absPath);
+  if (rel === '' || (!rel.startsWith('..') && rel !== '.' && !rel.split(/[\\/]/).includes('..'))) {
+    throw new Error(`caminho deve ficar fora do Git: ${absPath}`);
+  }
+  return absPath;
+}
+
 /**
  * Validate that the migration file in the repo matches an expected SHA-256, so
  * the ledger entry we record refers to literally this reviewed migration.
@@ -127,7 +156,9 @@ export default {
   PRODUCTION_TARGET,
   CONFIRM_TEXT_RECONCILE,
   assertProductionTarget,
+  assertPathOutsideRepo,
   sha256OfFile,
+  resolveProductionTargetFromConfig,
   validateBackup,
   validateMigrationHash,
   assertCleanMain,
