@@ -215,7 +215,9 @@ function main() {
 }
 
 function printCommands(commandsRun) {
-  console.log(`--- Comandos wrangler executados (${commandsRun.length}, todos read-only em dry-run) ---`);
+  console.log(
+    `--- Comandos wrangler executados (${commandsRun.length}, todos read-only em dry-run) ---`,
+  );
   for (const c of commandsRun) console.log(`  ${c}`);
 }
 

@@ -137,6 +137,9 @@ self_protected_files=(
   #   closed allowlist of 3 pre-approved migration files by SHA-256.
   ".github/workflows/apply-schema-change-v2.yml"
   "scripts/apply-migration-production.sh"
+  "scripts/production/apply-simuladores-matriz-remote-migration.sh"
+  "scripts/production/reconcile-simuladores-0440-ledger.mjs"
+  "scripts/production/lib/executors.mjs"
   "scripts/schema-v2/apply-schema-bootstrap-v2.sh"
   "scripts/maintenance/recover-lms-emergencias-gerais.mjs"
   "scripts/seed-staging-smoke-user.mjs"
@@ -313,6 +316,36 @@ origin/main
 There is no override flag
 EOF
       ;;
+    "scripts/production/apply-simuladores-matriz-remote-migration.sh")
+      cat <<'EOF'
+AIRTRUST_ALLOW_PROD_DB_WRITE
+AIRTRUST_CONFIRM_PROD_DB_WRITE
+AIRTRUST_BACKUP_PATH
+AIRTRUST_BACKUP_BYTES
+AIRTRUST_BACKUP_SHA256
+EXPECTED_DB_ID="7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
+ALLOWED_0441="0441_simuladores_matriz_manobra_resolution.sql"
+ALLOWED_0442="0442_simuladores_matriz_guia_relink.sql"
+HEAD ($head_sha) != origin/main ($origin_sha)
+EOF
+      ;;
+    "scripts/production/reconcile-simuladores-0440-ledger.mjs")
+      cat <<'EOF'
+assertProductionTarget
+assertCleanMain
+validateBackup
+validateMigrationHash
+CONFIRM_TEXT_RECONCILE
+--fk-baseline é obrigatório
+EOF
+      ;;
+    "scripts/production/lib/executors.mjs")
+      cat <<'EOF'
+allowWrites = false
+executor em modo somente-leitura: escrita bloqueada (dry-run). Nenhuma escrita foi feita.
+baseArgs.push(remote ? '--remote' : '--local');
+EOF
+      ;;
     "scripts/schema-v2/apply-schema-bootstrap-v2.sh")
       cat <<'EOF'
 AIRTRUST_ALLOW_PROD_SCHEMA_BASELINE_V2
@@ -438,6 +471,15 @@ self_protected_pin() {
     "scripts/apply-migration-production.sh")
       echo "45eec03f36070cdb1fafe8c6afad05cb25e86d171b93e449ce367966291ae995"
       ;;
+    "scripts/production/apply-simuladores-matriz-remote-migration.sh")
+      echo "ffa129b0e4530a548d70e493a658eea572ee35c1239e85bcbad34b04dd8c0e9d"
+      ;;
+    "scripts/production/reconcile-simuladores-0440-ledger.mjs")
+      echo "6265d441a6dec2e950e01cd009584adba82ebff27d76864f0344bc5f5aaa9363"
+      ;;
+    "scripts/production/lib/executors.mjs")
+      echo "294343f2e52e3030b671dff453b545e76eb5a2a21e9e8572cb71405ed89227b5"
+      ;;
     "scripts/schema-v2/apply-schema-bootstrap-v2.sh")
       echo "93bbb6872641c1219cd98acb4abd4d07c4c1524df0042d2b3f3cd2eca64163a1"
       ;;
@@ -463,7 +505,7 @@ validate_self_protected_file() {
   local canonical="$1"
   local file="${2:-$1}"
   local local_fail=0
-  local anchor missing="" forbidden_hit="" pattern line count min
+  local anchor missing="" forbidden_hit="" pattern count min
 
   if [[ ! -f "$file" ]]; then
     print_block "self-protected file missing: $canonical" "expected at: $file"
@@ -684,6 +726,10 @@ while IFS= read -r file; do
       rg -q 'AIRTRUST_CONFIRM_PROD_MIGRATIONS_APPLY' "$file"; then
       continue
     fi
+  fi
+
+  if is_self_protected_ok "$file"; then
+    continue
   fi
 
   # Reviewed 2026-07-18 (AIRTRUST_PRODUCTION_READINESS_20260718): false

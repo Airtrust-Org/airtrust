@@ -127,9 +127,7 @@ export function splitStatements(sql) {
   const openRe = /\b(begin|case)\b/gi;
   const endRe = /\bend\b/gi;
   for (const frag of fragments) {
-    const withoutStrings = frag
-      .replace(/--[^\n]*/g, ' ')
-      .replace(/'(?:[^']|'')*'/g, '');
+    const withoutStrings = frag.replace(/--[^\n]*/g, ' ').replace(/'(?:[^']|'')*'/g, '');
     const opens = (withoutStrings.match(openRe) || []).length;
     const ends = (withoutStrings.match(endRe) || []).length;
     buffer = buffer ? `${buffer};\n${frag}` : frag;
@@ -183,13 +181,7 @@ function extractColumnNames(createTableSql) {
     cur += ch;
   }
   if (cur.trim()) parts.push(cur);
-  const constraintKeywords = new Set([
-    'foreign',
-    'primary',
-    'unique',
-    'check',
-    'constraint',
-  ]);
+  const constraintKeywords = new Set(['foreign', 'primary', 'unique', 'check', 'constraint']);
   const cols = [];
   for (const raw of parts) {
     const cleaned = raw.trim();
@@ -482,13 +474,7 @@ export function classify0440({ migrationSql, snapshot }) {
   // apply. The before/after count pairs are only measurable in the disposable
   // rehearsal (production has no "before" snapshot); when provided they still
   // force CONFLITANTE on divergence above, but they are not required here.
-  const requiredInvariants = [
-    dupCurrent,
-    crossTenant,
-    legacyMissing,
-    fkBaseline,
-    fkCurrent,
-  ];
+  const requiredInvariants = [dupCurrent, crossTenant, legacyMissing, fkBaseline, fkCurrent];
   const allInvariantsProvided = requiredInvariants.every((v) => v !== undefined);
 
   if (allArtifactsPresent && allInvariantsProvided) {
