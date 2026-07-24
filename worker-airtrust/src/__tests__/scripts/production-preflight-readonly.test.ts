@@ -189,6 +189,147 @@ describe('production preflight readonly guards', () => {
     ).toThrow(/empresa_id divergente/);
   });
 
+  describe('assertAdminAuth: canonical admin role forms (admin/administrador)', () => {
+    const me = (role: string) => ({ data: { id: 1, email: 'ops@example.com', role, nome: 'Ops' } });
+
+    it('JWT ADMINISTRADOR + me ADMINISTRADOR + empresa 6 → passa', () => {
+      const result = assertAdminAuth({
+        jwtClaims: { empresa_id: 6, role: 'ADMINISTRADOR' },
+        mePayload: me('ADMINISTRADOR'),
+      });
+      expect(result.role).toBe('admin');
+      expect(result.empresa_id).toBe(6);
+    });
+
+    it('JWT administrador + me admin + empresa 6 → passa', () => {
+      const result = assertAdminAuth({
+        jwtClaims: { empresa_id: 6, role: 'administrador' },
+        mePayload: me('admin'),
+      });
+      expect(result.role).toBe('admin');
+    });
+
+    it('JWT ADMIN + me ADMINISTRADOR + empresa 6 → passa', () => {
+      const result = assertAdminAuth({
+        jwtClaims: { empresa_id: 6, role: 'ADMIN' },
+        mePayload: me('ADMINISTRADOR'),
+      });
+      expect(result.role).toBe('admin');
+    });
+
+    it('JWT admin + me ADMIN + empresa 6 → passa', () => {
+      const result = assertAdminAuth({
+        jwtClaims: { empresa_id: 6, role: 'admin' },
+        mePayload: me('ADMIN'),
+      });
+      expect(result.role).toBe('admin');
+    });
+
+    it('JWT GESTOR → falha', () => {
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: 'GESTOR' },
+          mePayload: me('admin'),
+        }),
+      ).toThrow(/role=admin/);
+    });
+
+    it('JWT manager/instructor/instrutor/platform_admin genérico → falha', () => {
+      for (const role of ['manager', 'instructor', 'instrutor', 'platform_admin']) {
+        expect(
+          () =>
+            assertAdminAuth({
+              jwtClaims: { empresa_id: 6, role },
+              mePayload: me('admin'),
+            }),
+          role,
+        ).toThrow(/role=admin/);
+      }
+    });
+
+    it('me GESTOR → falha', () => {
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: 'admin' },
+          mePayload: me('GESTOR'),
+        }),
+      ).toThrow(/role=admin/);
+    });
+
+    it('empresa diferente de 6 → falha', () => {
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 7, role: 'administrador' },
+          mePayload: me('administrador'),
+        }),
+      ).toThrow(/empresa_id divergente/);
+    });
+
+    it('role vazia (JWT ausente) → falha', () => {
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: '' },
+          mePayload: me('admin'),
+        }),
+      ).toThrow(/role=admin/);
+    });
+
+    it('role vazia (me ausente) → falha', () => {
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: 'admin' },
+          mePayload: me(''),
+        }),
+      ).toThrow(/role=admin/);
+    });
+
+    it('/api/auth/me incompleto → falha', () => {
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: 'admin' },
+          mePayload: { data: { id: 1, email: 'ops@example.com', role: 'admin' } }, // sem nome
+        }),
+      ).toThrow(/auth\/me incompleto/);
+
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: 'admin' },
+          mePayload: { data: { email: 'ops@example.com', role: 'admin', nome: 'Ops' } }, // sem id
+        }),
+      ).toThrow(/auth\/me incompleto/);
+
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: 'admin' },
+          mePayload: { data: { id: 1, role: 'admin', nome: 'Ops' } }, // sem email
+        }),
+      ).toThrow(/auth\/me incompleto/);
+
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: 'admin' },
+          mePayload: null,
+        }),
+      ).toThrow(/auth\/me sem payload data válido/);
+    });
+
+    it('rejeita whitespace-only e tipos não-string como role vazia', () => {
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: '   ' },
+          mePayload: me('admin'),
+        }),
+      ).toThrow(/role=admin/);
+
+      expect(() =>
+        assertAdminAuth({
+          jwtClaims: { empresa_id: 6, role: null },
+          mePayload: me('admin'),
+        }),
+      ).toThrow(/role=admin/);
+    });
+  });
+
   it('flags active sessions/checks and pending edits', () => {
     const db = fixtureApplied0440('window-active');
     sqlite(

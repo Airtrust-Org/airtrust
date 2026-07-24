@@ -37,6 +37,24 @@ export const TENANT_STATE_KEYS = Object.freeze([
 ]);
 export const AUTH_ROLE_ADMIN = 'admin';
 
+// Canonical administrative role forms accepted by this preflight gate.
+// AirTrust's runtime (worker-airtrust/src/utils/role-resolution.ts) treats
+// the API role 'admin' and its normalized form 'ADMINISTRADOR' as the same
+// administrative level (isAdminRole()) — a legitimate admin login can
+// legitimately present either spelling in the JWT or in /api/auth/me,
+// depending on which layer produced it. Fail-closed: only these two forms,
+// case-insensitive and trimmed, are accepted; everything else (including
+// empty, other roles, or generic strings like 'platform_admin') is rejected.
+const CANONICAL_ADMIN_ROLES = new Set(['admin', 'administrador']);
+
+export function isCanonicalAdminRole(value) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  if (!normalized) return false;
+  return CANONICAL_ADMIN_ROLES.has(normalized);
+}
+
 export function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
@@ -200,8 +218,8 @@ export function assertAdminAuth({ jwtClaims, mePayload, expectedEmpresaId = ALLO
   if (empresaId !== Number(expectedEmpresaId)) {
     throw new Error(`token com empresa_id divergente: ${empresaId}`);
   }
-  if (role !== AUTH_ROLE_ADMIN) {
-    throw new Error(`token sem role=admin: ${role || 'ausente'}`);
+  if (!isCanonicalAdminRole(jwtClaims?.role)) {
+    throw new Error(`token sem role=admin/administrador: ${role || 'ausente'}`);
   }
   const meData = mePayload?.data ?? mePayload;
   if (!meData || typeof meData !== 'object') {
@@ -210,8 +228,8 @@ export function assertAdminAuth({ jwtClaims, mePayload, expectedEmpresaId = ALLO
   const meRole = String(meData.role || '')
     .trim()
     .toLowerCase();
-  if (meRole !== AUTH_ROLE_ADMIN) {
-    throw new Error(`auth/me sem role=admin: ${meRole || 'ausente'}`);
+  if (!isCanonicalAdminRole(meData.role)) {
+    throw new Error(`auth/me sem role=admin/administrador: ${meRole || 'ausente'}`);
   }
   if (!meData.email || !meData.id || !meData.nome) {
     throw new Error('auth/me incompleto');
@@ -219,7 +237,9 @@ export function assertAdminAuth({ jwtClaims, mePayload, expectedEmpresaId = ALLO
   return {
     user_id: Number(meData.id),
     email_masked: maskEmail(meData.email),
-    role: meRole,
+    // Normalized classification for the sanitized report — both accepted
+    // spellings (admin / administrador) collapse to the same reported role.
+    role: AUTH_ROLE_ADMIN,
     empresa_id: empresaId,
     nome_hash: sha256Text(String(meData.nome)).slice(0, 12),
   };

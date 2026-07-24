@@ -100,10 +100,13 @@ Este comando **não** envia artefatos ao Git nem ao R2.
 
 Antes de qualquer GO de produção, materializar o `tenant-state` e o `plan.json`
 novos com o comando oficial abaixo. Ele usa somente `SELECT/PRAGMA` contra D1,
-valida um Bearer token administrativo já emitido (`empresa_id=6`, `role=admin`)
-sem imprimir o segredo, exige zero sessão/check ativo e zero edição concorrente
-de ficha, grava `/tmp/airtrust-tenant-state.json`, confirma as 61 fontes
-privadas e gera `plan.json` novo.
+valida um Bearer token administrativo já emitido (`empresa_id=6`, role
+canônica `admin` ou `administrador` — as duas formas que o runtime do
+AirTrust trata como administrativas, ver `isAdminRole()` em
+`worker-airtrust/src/utils/role-resolution.ts`) sem imprimir o segredo, exige
+zero sessão/check ativo e zero edição concorrente de ficha, grava
+`/tmp/airtrust-tenant-state.json`, confirma as 61 fontes privadas e gera
+`plan.json` novo.
 
 ```bash
 AIRTRUST_PREFLIGHT_AUTH_TOKEN='<bearer-token-admin-empresa-6-ja-emitido>' \
