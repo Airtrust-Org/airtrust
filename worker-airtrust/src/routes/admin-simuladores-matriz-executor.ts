@@ -51,6 +51,27 @@ function fail(message: string): never {
   throw new ExecutorError(message);
 }
 
+// Sanitized batch diagnostics only: statement count and first-verb/target
+// shape, never SQL text, bind values, or plan contents. Safe to log.
+function firstVerb(sql: string): string {
+  return sql.trim().split(/\s+/, 1)[0]?.toUpperCase() ?? 'UNKNOWN';
+}
+function targetTable(sql: string): string {
+  const match = sql.match(/\b(?:INSERT INTO|UPDATE|WITH[\s\S]*?INSERT INTO|WITH[\s\S]*?UPDATE)\s+([a-zA-Z_][\w]*)/i);
+  return match ? match[1] : 'unknown';
+}
+function summarizeStatements(statements: string[]) {
+  return statements.map((sql, index) => ({
+    index,
+    verb: firstVerb(sql),
+    target: targetTable(sql),
+    bytes: sql.length,
+  }));
+}
+function maskUuid(uuid: string): string {
+  return uuid.length <= 8 ? '***' : `${uuid.slice(0, 8)}...`;
+}
+
 function requireEnabled(env: Env) {
   if (env.ENABLE_SIMULADORES_MATRIZ_EXECUTOR !== 'true') {
     fail(
@@ -319,7 +340,18 @@ app.post('/apply', async (c) => {
 
     // A single D1 batch() is one atomic transaction: either every statement
     // commits, or none do — no manual BEGIN/COMMIT needed or supported here.
-    await db.batch(statements.map((sql) => db.prepare(sql)));
+    try {
+      await db.batch(statements.map((sql) => db.prepare(sql)));
+    } catch (batchError) {
+      const summary = summarizeStatements(statements);
+      const message = batchError instanceof Error ? batchError.message : String(batchError);
+      const cause =
+        batchError instanceof Error && batchError.cause instanceof Error ? batchError.cause.message : undefined;
+      console.error(
+        `[SIMULADORES-MATRIZ-EXECUTOR] batch FAILED empresa=${empresaId} import_uuid=${maskUuid(importUuid)} statements=${summary.length} verbs=${JSON.stringify(summary.map((s) => s.verb))} message=${message}${cause ? ` cause=${cause}` : ''}`,
+      );
+      throw batchError;
+    }
 
     const currents = await db
       .prepare(

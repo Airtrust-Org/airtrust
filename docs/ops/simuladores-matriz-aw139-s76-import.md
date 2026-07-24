@@ -133,6 +133,33 @@ fingerprint, migrations 0440/0441) antes de qualquer escrita. Rate-limited a
 (`src/__tests__/routes/admin-simuladores-matriz-executor.test.ts`); nunca
 invocado contra produção.
 
+### Incidente 2026-07-24: SQLITE_AUTH no apply (causa e correção)
+
+Uma janela autorizada de execução em produção (empresa_id=6) falhou com
+`SQLITE_AUTH` ao chamar `db.batch()`. Auditoria forense read-only confirmou
+zero escrita de domínio (o batch falhou atomicamente antes do primeiro
+statement commitar) e ledger/schema de 0440/0441/0442 intactos — ver
+`/Users/filipedaumas/AirTrust_Operational_Archive/2026-07-24-sqlite-auth-incident/forensic-readonly-report.json`.
+
+Causa raiz: `buildModelAndLinkStatements` (`scripts/lib/matriz-apply-core.mjs`)
+gerava `CREATE TEMP TABLE` para preparar dados de trabalho por modelo/vínculo
+antes de inserir nas tabelas permanentes. O autorizador de query remota do D1
+rejeita qualquer DDL — incluindo `CREATE TEMP TABLE` — e `PRAGMA` avulso, com
+`SQLITE_AUTH`, tanto em produção quanto no emulador local (reproduzido de
+forma idêntica com `PRAGMA integrity_check` e com um `CREATE TEMP TABLE`
+isolado via `env.DB.batch()` real).
+
+Correção: os dados de trabalho por modelo/vínculo agora são computados em
+JS antes da geração de SQL e inlineados como CTEs
+(`WITH _models(...) AS (VALUES ...)`, `WITH _links(...) AS (VALUES ...)`),
+repetidos em cada statement que precisa deles — sem nenhuma tabela
+temporária, DDL, `PRAGMA`, `BEGIN` ou `COMMIT` no batch. Achado adicional
+durante a validação: unir a CTE `_links` inteira (918 linhas) contra tabelas
+permanentes com `CASE`/`json_object` num único statement excede o limite de
+complexidade do D1 (`SQLITE_TOOBIG`), mesmo com o texto SQL bem abaixo do
+limite de tamanho (~68KB); por isso os vínculos são fatiados em lotes de 150
+(`LINKS_CHUNK_SIZE`) — ainda dentro do mesmo `db.batch()` atômico.
+
 ## LOFT 22/22
 
 ```sh
