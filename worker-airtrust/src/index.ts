@@ -130,6 +130,7 @@ import { adminUsuariosRoutes } from './routes/admin-usuarios';
 import { adminPerfisRoutes } from './routes/admin-perfis';
 import adminSimuladoresMatrizExecutorRoutes from './routes/admin-simuladores-matriz-executor';
 import adminSimuladoresGuiasRelinkExecutorRoutes from './routes/admin-simuladores-guias-relink-executor';
+import adminSimuladoresMatrizRemediationExecutorRoutes from './routes/admin-simuladores-matriz-remediation-executor';
 import lmsCursosRoutes from './routes/lms-cursos';
 import lmsMatriculasRoutes from './routes/lms-matriculas';
 import lmsAssetsRoutes from './routes/lms-assets';
@@ -423,6 +424,14 @@ app.route('/api/admin/simuladores-matriz-import', adminSimuladoresMatrizExecutor
 // (ENABLE_SIMULADORES_GUIA_RELINK_EXECUTOR); coberto pelo mesmo rate limiter
 // acima (wildcard /api/admin/simuladores-matriz-import/*).
 app.route('/api/admin/simuladores-matriz-import/guias', adminSimuladoresGuiasRelinkExecutorRoutes);
+// Executor de remediação compensatória das 5 resoluções LEGACY_EQUIVALENT
+// (empresa_id=6). Desabilitado por padrão (ENABLE_SIMULADORES_MATRIZ_REMEDIATION_EXECUTOR);
+// nunca habilitar em produção sem autorização explícita para a execução.
+app.use(
+  '/api/admin/simuladores-matriz-remediation/*',
+  rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'simuladores-matriz-remediation' }),
+);
+app.route('/api/admin/simuladores-matriz-remediation', adminSimuladoresMatrizRemediationExecutorRoutes);
 app.route('/api/preferencias', preferenciasRoutes);
 
 /**

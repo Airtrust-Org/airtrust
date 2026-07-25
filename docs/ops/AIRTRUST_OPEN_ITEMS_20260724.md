@@ -14,7 +14,16 @@
 - Validação AW139 real com os novos contornos fail-closed;
 - Download de certificado;
 - Matriz 51/918/22;
-- Guias 51/30/21.
+- Guias 51/30/21;
+- Remediação compensatória das 5 resoluções LEGACY_EQUIVALENT (produção
+  aplicou 5 códigos como TRUE_MISSING em vez de reaproveitar manobra legada —
+  13 vínculos em 9 modelos correntes afetados). Migration 0443 + executor
+  `admin-simuladores-matriz-remediation-executor.ts` prontos e ensaiados
+  contra cópia forense real (ver
+  `docs/ops/simuladores-matriz-legacy-equivalent-remediation-runbook.md`).
+  Matriz base **não é considerada definitivamente fechada** até esta
+  compensação ser aplicada em produção. LMS/pacotes seguem tratados à parte,
+  sem relação com este item.
 
 ## REVALIDAÇÃO PÓS-DEPLOY:
 - Caso do progresso bloqueado do Luís.
