@@ -6,6 +6,12 @@ vi.mock('../../middleware/auth', async (importOriginal) => {
   return {
     ...actual,
     auth: () => async (c: any, next: () => Promise<void>) => {
+      if (!c.req.header('authorization')) {
+        return c.json(
+          { success: false, error: 'Token de autenticação não fornecido', code: 'MISSING_TOKEN' },
+          401,
+        );
+      }
       c.set('userId', 101);
       c.set('userEmail', 'admin@tenant.local');
       c.set('userRole', 'admin');
@@ -53,7 +59,7 @@ describe('index temporary production endpoints', () => {
     const env = createHealthyEnv();
     const response = await app.request(
       '/api/fix/populate-qualificacao-ids',
-      { method: 'POST' },
+      { method: 'POST', headers: { authorization: 'Bearer synthetic' } },
       env,
     );
 
@@ -67,7 +73,11 @@ describe('index temporary production endpoints', () => {
   });
 
   it('não mantém endpoints /api/fix/* ativos no index', async () => {
-    const response = await app.request('/api/fix/qualquer-coisa', { method: 'POST' }, createHealthyEnv());
+    const response = await app.request(
+      '/api/fix/qualquer-coisa',
+      { method: 'POST', headers: { authorization: 'Bearer synthetic' } },
+      createHealthyEnv(),
+    );
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toMatchObject({
@@ -110,13 +120,20 @@ describe('index temporary production endpoints', () => {
       { ...createHealthyEnv(), ENVIRONMENT: 'staging' },
     );
 
-    expect(response.status).toBe(404);
-    expect(await response.text()).toBe('Not Found');
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      code: 'MISSING_TOKEN',
+    });
     expect(response.headers.get('X-AirTrust-App-Version')).toBe('test-index-temp');
   });
 
   it('mantém alias principal /api/historico redirecionando sem depender do fix removido', async () => {
-    const response = await app.request('/api/historico?limit=1', {}, createHealthyEnv());
+    const response = await app.request(
+      '/api/historico?limit=1',
+      { headers: { authorization: 'Bearer synthetic' } },
+      createHealthyEnv(),
+    );
 
     expect(response.status).toBe(301);
     expect(response.headers.get('location')).toBe('/api/qualificacoes/historico?limit=1');
