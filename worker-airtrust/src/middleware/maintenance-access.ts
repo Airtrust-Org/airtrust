@@ -132,6 +132,7 @@ export async function recordMaintenanceAudit(
     action: string;
     module: 'frms' | 'integracoes_sigvoos';
     entityType: string;
+    capability?: string;
     entityId?: string | number | null;
     success: boolean;
     riskLevel?: 'medium' | 'high' | 'critical';
@@ -159,6 +160,7 @@ export async function recordMaintenanceAudit(
         {
           action: params.action,
           operation_id: params.operationId ?? null,
+          capability: params.capability ?? null,
           result: params.result,
           duration_ms: params.durationMs,
           count: params.count,
@@ -170,6 +172,8 @@ export async function recordMaintenanceAudit(
           module: params.module,
           source: 'maintenance_access',
           operation: params.action,
+          operation_id: params.operationId ?? undefined,
+          capability: params.capability ?? undefined,
           request_path: c.req.path,
           http_method: c.req.method,
           scope: 'tenant',
@@ -178,6 +182,7 @@ export async function recordMaintenanceAudit(
           reason_code: params.failureReasonCode ?? undefined,
           count: params.count,
           approximate_count: params.approximateCount,
+          duration_ms: params.durationMs,
         }),
       ),
       ...buildLegacyAuditoriaActor(c),
@@ -200,6 +205,8 @@ export async function recordMaintenanceAudit(
         module: params.module,
         source: 'maintenance_access',
         operation: params.action,
+        operation_id: params.operationId ?? undefined,
+        capability: params.capability ?? undefined,
         request_path: c.req.path,
         http_method: c.req.method,
         scope: 'tenant',
@@ -208,6 +215,7 @@ export async function recordMaintenanceAudit(
         reason_code: params.failureReasonCode ?? undefined,
         count: params.count,
         approximate_count: params.approximateCount,
+        duration_ms: params.durationMs,
       },
       retentionClass: 'SECURITY_LONG',
     },
