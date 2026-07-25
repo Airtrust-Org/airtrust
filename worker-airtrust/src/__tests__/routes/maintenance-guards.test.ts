@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
+const syncSigvoosForFrmsMock = vi.fn();
+
 vi.mock('../../lib/frms/fortnight-coverage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/frms/fortnight-coverage')>();
   return {
@@ -60,6 +62,14 @@ vi.mock('../../middleware/maintenance-access', async (importOriginal) => {
   };
 });
 
+vi.mock('../../services/sigvoos-frms', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/sigvoos-frms')>();
+  return {
+    ...actual,
+    syncSigvoosForFrms: (...args: unknown[]) => syncSigvoosForFrmsMock(...args),
+  };
+});
+
 import * as coverage from '../../lib/frms/fortnight-coverage';
 import { app } from '../../index';
 import frmsRoutes from '../../routes/frms';
@@ -90,6 +100,7 @@ const appCoveragePath = `/api/frms${coveragePath}`;
 
 beforeEach(() => {
   vi.mocked(coverage.getFrmsFortnightCoverage).mockClear();
+  syncSigvoosForFrmsMock.mockReset();
 });
 
 describe('authenticated maintenance policy', () => {
@@ -123,14 +134,39 @@ describe('authenticated maintenance policy', () => {
     expect(coverage.getFrmsFortnightCoverage).toHaveBeenCalled();
   });
 
-  it('mantém mutation endpoints HTTP de maintenance indisponíveis após autenticação', async () => {
+  it('mantém mutations FRMS indisponíveis e expõe SIGVOOS apenas em dry-run oficial', async () => {
     const env = createEnv();
-    const [apply, reprocess, sync] = await Promise.all([
+    const [apply, reprocess, invalidSync, dryRunSync] = await Promise.all([
       frmsRoutes.request('http://example.test/maintenance/fortnight-materialization-apply', { method: 'POST', headers: { authorization: 'Bearer synthetic' }, body: '{not-json' }, env),
       frmsRoutes.request('http://example.test/maintenance/reprocessar-lote', { method: 'POST', headers: { authorization: 'Bearer synthetic' }, body: '{not-json' }, env),
       sigvoosRouter.request('http://example.test/maintenance/sincronizar-frms', { method: 'POST', headers: { authorization: 'Bearer synthetic' }, body: '{not-json' }, env),
+      sigvoosRouter.request(
+        'http://example.test/maintenance/sincronizar-frms',
+        {
+          method: 'POST',
+          headers: { authorization: 'Bearer synthetic', 'content-type': 'application/json' },
+          body: JSON.stringify({ dryRun: true, from: '2026-06-01', to: '2026-06-02' }),
+        },
+        env,
+      ),
     ]);
 
-    expect([apply.status, reprocess.status, sync.status]).toEqual([404, 404, 404]);
+    expect([apply.status, reprocess.status, invalidSync.status, dryRunSync.status]).toEqual([
+      404,
+      404,
+      400,
+      200,
+    ]);
+    await expect(dryRunSync.json()).resolves.toMatchObject({
+      success: true,
+      operation_id: expect.any(String),
+      data: {
+        mode: 'dry-run',
+        empresa_id: 10,
+        externalCallsPlanned: 0,
+        domainWritesPlanned: 0,
+      },
+    });
+    expect(syncSigvoosForFrmsMock).not.toHaveBeenCalled();
   });
 });

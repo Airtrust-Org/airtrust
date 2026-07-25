@@ -6,7 +6,6 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { rateLimiter } from '../middleware/rate-limit';
 import { tenantMiddleware } from '../middleware/tenant';
-import { localMaintenanceMutationNotFound } from '../middleware/local-maintenance';
 import {
   assertNoImpersonation,
   MAINTENANCE_CAPABILITIES,
@@ -64,6 +63,10 @@ const SyncSchema = z.object({
   baseUrl: z.string().url().optional(),
   chunkDays: z.number().int().min(1).max(7).optional(),
   retryAttempts: z.number().int().min(0).max(3).optional(),
+});
+
+const MaintenanceSyncDryRunSchema = SyncSchema.extend({
+  dryRun: z.literal(true),
 });
 
 const ReconcileSchema = z.object({
@@ -644,6 +647,80 @@ sigvoosRouter.post(
 });
 
 sigvoosRouter.post(
+  '/maintenance/sincronizar-frms',
+  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-maintenance-dry-run' }),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.sigvoosExecutar,
+    'Sincronização SIGVOOS restrita a administradores autorizados.',
+  ),
+  async (c) => {
+    const empresaId = resolveAuthenticatedEmpresaId(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Contexto de empresa ausente', code: 'TENANT_CONTEXT_REQUIRED' },
+        403,
+      );
+    }
+
+    const impersonationDenied = await assertNoImpersonation(c, 'SIGVOOS_IMPERSONATION_BLOCKED');
+    if (impersonationDenied) return impersonationDenied;
+
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = MaintenanceSyncDryRunSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          success: false,
+          error: 'Dados invalidos',
+          code: 'VALIDATION_ERROR',
+          details: parsed.error.flatten(),
+        },
+        400,
+      );
+    }
+
+    const operationId = crypto.randomUUID();
+    const startedAt = Date.now();
+    const preview = {
+      mode: 'dry-run' as const,
+      empresa_id: empresaId,
+      periodo: {
+        from: parsed.data.from ?? null,
+        to: parsed.data.to ?? null,
+      },
+      chunkDays: parsed.data.chunkDays ?? null,
+      retryAttempts: parsed.data.retryAttempts ?? null,
+      clearExistingRequested: Boolean(parsed.data.clearExisting),
+      externalCallsPlanned: 0,
+      domainWritesPlanned: 0,
+      guardrails: [
+        'maintenance-dry-run',
+        'no-external-sigvoos-call',
+        'no-domain-write',
+      ],
+    };
+
+    await recordMaintenanceAudit(c, {
+      action: 'SIGVOOS_MAINTENANCE_SYNC_DRY_RUN',
+      module: 'integracoes_sigvoos',
+      entityType: 'sigvoos_operacao',
+      entityId: operationId,
+      success: true,
+      riskLevel: 'high',
+      result: 'success',
+      durationMs: Date.now() - startedAt,
+      operationId,
+    }).catch(() => {});
+
+    return c.json({
+      success: true,
+      operation_id: operationId,
+      data: preview,
+    });
+  },
+);
+
+sigvoosRouter.post(
   '/reprocessar-previews',
   rateLimiter({ maxRequests: 6, windowSeconds: 60, keyPrefix: 'sigvoos-reprocessar-previews' }),
   requireMaintenanceCapability(
@@ -812,7 +889,5 @@ sigvoosRouter.post(
     },
   });
 });
-
-sigvoosRouter.post('/maintenance/sincronizar-frms', () => localMaintenanceMutationNotFound());
 
 export { sigvoosRouter };
