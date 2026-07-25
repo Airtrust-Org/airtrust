@@ -22,6 +22,11 @@ import { API_BASE_URL } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { parseJsonResponse } from '@/react-app/lib/parseJsonResponse';
 import {
+  baixarCertificadoCanonico,
+  resolveCertificadoDocumentoId,
+  type CertificadoDownloadSource,
+} from '@/react-app/utils/certificadoDownload';
+import {
   getLmsRowCardBorderClasses,
   getLmsActionButtonClasses,
   getLmsActionLabel,
@@ -55,17 +60,11 @@ function statusLabel(s: LmsMatriculaEAD['status']) {
 
 function isCertificadosResponse(
   data: unknown,
-): data is { success: boolean; data: Array<{ r2_key: string; nome_arquivo: string }> } {
+): data is { success: boolean; data: CertificadoDownloadSource[] } {
   if (typeof data !== 'object' || data === null) return false;
   const body = data as Record<string, unknown>;
   if (typeof body.success !== 'boolean' || !Array.isArray(body.data)) return false;
-  return body.data.every(
-    (item) =>
-      typeof item === 'object' &&
-      item !== null &&
-      typeof (item as Record<string, unknown>).r2_key === 'string' &&
-      typeof (item as Record<string, unknown>).nome_arquivo === 'string',
-  );
+  return body.data.every((item) => typeof item === 'object' && item !== null);
 }
 
 function StatusIcon({ status }: { status: LmsMatriculaEAD['status'] }) {
@@ -98,19 +97,13 @@ function BotaoCertificado({ matricula }: { matricula: LmsMatriculaEAD }) {
       }
       // Baixar o mais recente (primeiro da lista)
       const cert = certs[0];
-      const streamRes = await apiFetch(
-        `${API_BASE_URL}/documentos/download/${encodeURIComponent(cert.r2_key)}`,
-      );
-      if (!streamRes.ok) throw new Error('Falha ao baixar certificado.');
-      const blob = await streamRes.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = cert.nome_arquivo ?? 'certificado.pdf';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error('Erro ao baixar certificado.');
+      if (!resolveCertificadoDocumentoId(cert)) {
+        toast.error('Certificado sem identificador de documento válido.');
+        return;
+      }
+      await baixarCertificadoCanonico(cert);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao baixar certificado.');
     } finally {
       setBaixando(false);
     }

@@ -60,6 +60,17 @@ function readLocationFromCmiJson(cmiJson: string | null | undefined): string | n
   }
 }
 
+/**
+ * Quantas vezes toleramos um diagnóstico "candidate" (SCORM ainda não
+ * confirmou status explícito) antes de parar de tentar e mostrar o
+ * estado terminal. Evita spinner/toast infinito quando o pacote nunca
+ * envia passed/failed.
+ */
+const MAX_SCORM_CANDIDATE_ATTEMPTS = 2;
+
+const SCORM_UNRESOLVED_MESSAGE =
+  'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.';
+
 function parseSlideLocation(
   location: string | null | undefined,
 ): { current: number; total: number } | null {
@@ -100,14 +111,16 @@ export default function LmsPlayer() {
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
-  const [completionState, setCompletionState] = useState<'idle' | 'saving' | 'pending' | 'error'>(
-    'idle',
-  );
+  const [completionState, setCompletionState] = useState<
+    'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
+  >('idle');
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
 
   const qc = useQueryClient();
   const id = Number(matriculaId);
   const completionToastIdRef = useRef(`lms-scorm-completion-${id}`);
+  const candidateStreakRef = useRef(0);
+  const unresolvedRef = useRef(false);
   const {
     data: matricula,
     isLoading: matriculaLoading,
@@ -134,8 +147,13 @@ export default function LmsPlayer() {
   const hasCompletionDate = Boolean(matricula?.data_conclusao);
   const isCompletedState = completed || matricula?.status === 'CONCLUIDO' || hasCompletionDate;
   const displayProgress = completed || matricula?.status === 'CONCLUIDO' ? 100 : mergedProgress;
+  const isScormContent = (matricula?.tipo_conteudo ?? 'scorm') === 'scorm';
   const canFinalize =
-    !isCompletedState && matricula?.status !== 'CONCLUIDO' && completionDiagnostic?.can_finalize === true && !isFinalizing;
+    !isCompletedState &&
+    matricula?.status !== 'CONCLUIDO' &&
+    !isScormContent &&
+    completionDiagnostic?.can_finalize === true &&
+    !isFinalizing;
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
@@ -230,13 +248,31 @@ export default function LmsPlayer() {
 
   useEffect(() => {
     if (matricula?.status === 'CONCLUIDO') {
+      unresolvedRef.current = false;
+      candidateStreakRef.current = 0;
       showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
         qualificationGenerated: Boolean(matricula.qualificacao_historico_id || qualificacaoGerada),
       });
       return;
     }
 
+    // Estado terminal já alcançado: não reabrir spinner/toast, não refazer
+    // tentativas. Só sai daqui quando a matrícula virar CONCLUIDO (acima).
+    if (unresolvedRef.current) {
+      return;
+    }
+
     if (completionDiagnostic?.status === 'candidate') {
+      candidateStreakRef.current += 1;
+
+      if (isScormContent && candidateStreakRef.current > MAX_SCORM_CANDIDATE_ATTEMPTS) {
+        unresolvedRef.current = true;
+        toast.dismiss(completionToastIdRef.current);
+        setCompletionState('unresolved');
+        setCompletionMessage(SCORM_UNRESOLVED_MESSAGE);
+        return;
+      }
+
       showCompletionToast(
         completionDiagnostic.final_commit_observed ? 'pending' : 'saving',
         completionDiagnostic.final_commit_observed
@@ -245,6 +281,8 @@ export default function LmsPlayer() {
       );
       return;
     }
+
+    candidateStreakRef.current = 0;
 
     if (
       completionState !== 'idle' &&
@@ -261,6 +299,7 @@ export default function LmsPlayer() {
   }, [
     completionDiagnostic,
     completionState,
+    isScormContent,
     matricula?.qualificacao_historico_id,
     matricula?.status,
     qualificacaoGerada,
@@ -336,6 +375,9 @@ export default function LmsPlayer() {
         event.data.type === 'lms:completion-pending' &&
         event.data.matriculaId === id
       ) {
+        // Estado terminal já alcançado: ignora novos sinais de "pending" do
+        // pacote para não reabrir o ciclo de refetch/spinner.
+        if (unresolvedRef.current) return;
         showCompletionToast(
           event.data.stage === 'saving' ? 'saving' : 'pending',
           typeof event.data.message === 'string' && event.data.message.trim()
@@ -518,6 +560,9 @@ export default function LmsPlayer() {
 
   async function handleFinalizeAndGenerateQualification() {
     if (!matricula) return;
+    // Conclusão SCORM nunca é aceita por finalização manual: exige status
+    // explícito passed/completed vindo do próprio pacote.
+    if (isScormContent) return;
     setIsFinalizing(true);
     try {
       showCompletionToast('saving', 'Conclusão recebida. Salvando progresso...');
@@ -758,16 +803,32 @@ export default function LmsPlayer() {
           </aside>
         </div>
       </main>
-      {(canFinalize || completionState === 'saving' || completionState === 'pending' || completionState === 'error') && (
+      {(canFinalize ||
+        completionState === 'saving' ||
+        completionState === 'pending' ||
+        completionState === 'error' ||
+        completionState === 'unresolved') && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4">
           <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-emerald-300/30 bg-slate-900/90 p-3 shadow-2xl backdrop-blur">
             <div className="mb-2 text-xs text-emerald-200/90">
-              {completionMessage ||
-                (canFinalize
-                  ? 'Conclusão recebida, mas ainda não confirmada pelo servidor.'
-                  : 'Conclusão recebida, mas ainda não confirmada pelo servidor.')}
+              {completionMessage || 'Conclusão recebida, mas ainda não confirmada pelo servidor.'}
             </div>
-            {canFinalize ? (
+            {completionState === 'unresolved' ? (
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="w-full rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
+                >
+                  Sair e reabrir o curso
+                </button>
+                <button
+                  onClick={() => navigate('/lms/cursos')}
+                  className="w-full rounded-xl bg-white/10 px-4 py-2.5 text-sm text-white hover:bg-white/20"
+                >
+                  Voltar ao catálogo
+                </button>
+              </div>
+            ) : canFinalize ? (
               <button
                 onClick={handleFinalizeAndGenerateQualification}
                 disabled={isFinalizing}

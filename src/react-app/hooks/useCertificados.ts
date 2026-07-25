@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
-import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
+import { baixarCertificadoCanonico } from '@/react-app/utils/certificadoDownload';
 
 export interface Certificado {
   id: number;
@@ -166,15 +166,7 @@ export function useCertificados(qualificacao_id: number | null): UseCertificados
       );
 
       // Usar SEMPRE endpoint centralizado de pasta-virtual
-      await previewPdfBeforeDownload({
-        fileName: cert.nome_arquivo,
-        title: `Certificado ${cert.numero_certificado || cert.nome_arquivo}`,
-        mimeType: cert.tipo,
-        fetcher: () =>
-          fetch(`${API_BASE_URL}/pasta-virtual/stream/${id}`, {
-            headers: { Authorization: `Bearer ${getToken()}` },
-          }),
-      });
+      await baixarCertificadoCanonico(cert);
 
       console.log('✅ [useCertificados] Download concluído');
     } catch (err) {
