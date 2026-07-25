@@ -49,7 +49,7 @@ function fail(message: string): never {
 }
 
 function requireEnabled(env: Env) {
-  if ((env as unknown as Record<string, string>).ENABLE_SIMULADORES_MATRIZ_REMEDIATION_EXECUTOR !== 'true') {
+  if (env.ENABLE_SIMULADORES_MATRIZ_REMEDIATION_EXECUTOR !== 'true') {
     fail('Executor de remediação desabilitado. Defina ENABLE_SIMULADORES_MATRIZ_REMEDIATION_EXECUTOR=true apenas para a janela de execução autorizada.');
   }
 }
