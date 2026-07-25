@@ -55,6 +55,16 @@ case "$(basename "$migration_file")" in
     echo "That path uses 'wrangler d1 migrations apply', which updates d1_migrations." >&2
     exit 4
     ;;
+  0443_simuladores_matriz_remediation_compensation.sql)
+    echo "ERROR: 0443 must be applied via its dedicated ledger-aware runner:" >&2
+    echo "  bash scripts/production/apply-simuladores-matriz-0443-remote-migration.sh 0443_simuladores_matriz_remediation_compensation.sql" >&2
+    echo "'wrangler d1 migrations apply' fails on 0443 with SQLITE_ERROR: incomplete" >&2
+    echo "input (confirmed root cause: it submits via D1's query API action, which" >&2
+    echo "cannot reliably parse this migration's size/complexity; the import API" >&2
+    echo "action used by that runner's --file submission handles it correctly and" >&2
+    echo "atomically — see docs/ops/simuladores-matriz-legacy-equivalent-remediation-runbook.md)." >&2
+    exit 4
+    ;;
 esac
 
 no_go_check="$(node scripts/check-single-migration-no-go.mjs "$migration_file")"
