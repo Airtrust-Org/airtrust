@@ -253,3 +253,5 @@ guias-import/
 guias-dry-run/
 guias-manifest/
 guias-assets/
+
+db/
