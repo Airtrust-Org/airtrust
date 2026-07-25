@@ -1235,4 +1235,134 @@ describe('lms matriculas progress integrity', () => {
     });
     expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
   });
+
+  it('nao usa a nota do quiz como progresso quando o pacote informa localizacao real', async () => {
+    // Regressão observada em produção: pacotes com quiz por capítulo enviam
+    // score.raw=100/score.max=100 já no primeiro módulo. Como o progresso é
+    // monotônico, isso fixava a matrícula em 100% enquanto o aluno estava no
+    // início do curso, e o pacote seguia reportando `incomplete`.
+    const cmi = JSON.stringify({
+      'cmi.core.lesson_location': '10/108',
+      'cmi.core.lesson_status': 'incomplete',
+    });
+
+    const { db, calls } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 700,
+            empresa_id: 1,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 0,
+            tentativas: 0,
+            qualificacao_historico_id: null,
+            scorm_mastery_score: 70,
+            gerar_qualificacao_ao_concluir: 0,
+            qualificacao_tipo_id: null,
+            curso_titulo: 'PT6C-67C - Manutenção',
+            qualificacao_codigo: null,
+            qualificacao_nome: null,
+            qualificacao_categoria: null,
+            qualificacao_validade: null,
+          }),
+        },
+      ],
+      ['FROM lms_progresso_scorm', { first: () => null }],
+      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/commit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 700,
+          lesson_status: 'incomplete',
+          score_raw: 100,
+          score_max: 100,
+          cmi_json: cmi,
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    // 10/108 ≈ 9%, e não 100% vindo da nota.
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        matricula_id: 700,
+        novo_status: 'EM_ANDAMENTO',
+        progresso_pct: 9,
+      },
+    });
+    // A matrícula não pode ser marcada como concluída por nota alta.
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    const matriculaUpdate = calls.find(
+      (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
+    );
+    expect(matriculaUpdate?.args[1]).toBe(9);
+  });
+
+  it('ainda usa a nota como progresso quando o pacote nao envia localizacao alguma', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 701,
+            empresa_id: 1,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 0,
+            tentativas: 0,
+            qualificacao_historico_id: null,
+            scorm_mastery_score: 70,
+            gerar_qualificacao_ao_concluir: 0,
+            qualificacao_tipo_id: null,
+            curso_titulo: 'Curso sem location',
+            qualificacao_codigo: null,
+            qualificacao_nome: null,
+            qualificacao_categoria: null,
+            qualificacao_validade: null,
+          }),
+        },
+      ],
+      ['FROM lms_progresso_scorm', { first: () => null }],
+      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/commit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 701,
+          lesson_status: 'incomplete',
+          score_raw: 40,
+          score_max: 100,
+          cmi_json: JSON.stringify({ 'cmi.core.lesson_status': 'incomplete' }),
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { matricula_id: 701, novo_status: 'EM_ANDAMENTO', progresso_pct: 40 },
+    });
+  });
 });

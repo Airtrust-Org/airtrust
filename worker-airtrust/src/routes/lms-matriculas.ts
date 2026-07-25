@@ -1513,9 +1513,9 @@ app.post('/scorm/commit', async (c) => {
   if (sucesso) {
     progressoPct = 100;
   } else if (inferredFromLocation != null || inferredFromScore != null) {
-    // Alguns pacotes mantêm score baixo fixo (ex.: 1/100) mesmo avançando slides.
-    // Nesses casos, usamos o maior sinal disponível para não travar o progresso.
-    progressoPct = Math.max(progressoAnterior, inferredFromLocation ?? 0, inferredFromScore ?? 0);
+    // A nota NUNCA sobrepõe a localização: quiz por capítulo publica score alto no 1º
+    // módulo e, sendo o progresso monotônico, fixava a matrícula em 100% ainda incompleta.
+    progressoPct = Math.max(progressoAnterior, inferredFromLocation ?? inferredFromScore ?? 0);
   } else if (
     d.lesson_status === 'incomplete' ||
     d.completion_status === 'incomplete' ||
