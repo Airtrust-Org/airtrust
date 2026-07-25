@@ -42,7 +42,6 @@ import { rateLimiter, rateLimitPresets } from './middleware/rate-limit';
 import { requireRole } from './middleware/rbac';
 import { getTenantContext, tenantMiddleware } from './middleware/tenant';
 import { domainEventProcessorMiddleware } from './middleware/domainEventProcessor';
-import { isMaintenancePath, localMaintenanceNotFound } from './middleware/local-maintenance';
 
 // Cron
 import { runScheduledJobs } from './cron/scheduled-handler';
@@ -249,15 +248,6 @@ app.use('*', async (c, next) => {
 // Multi-tenant global guard (auth + tenant context), com exclusões explícitas de rotas públicas
 app.use('/api/*', async (c, next) => {
   const pathname = new URL(c.req.url).pathname;
-  const isLocalMaintenanceRoute = isMaintenancePath(pathname);
-
-  // These operational routes are intentionally absent outside an explicitly
-  // enabled local development runtime. Do not use request headers or hostnames
-  // as locality evidence: they are client controlled in a remote Worker.
-  if (isLocalMaintenanceRoute) {
-    const denied = localMaintenanceNotFound(c.env);
-    if (denied) return denied;
-  }
 
   const isPublicPath =
     pathname === '/api/health' ||
@@ -274,8 +264,7 @@ app.use('/api/*', async (c, next) => {
     pathname.startsWith('/api/certificados/validar') ||
     pathname.startsWith('/api/auth/') ||
     pathname === '/api/integracoes/edapp/webhook' ||
-    pathname === '/api/alertas/whatsapp/status-callback' ||
-    isLocalMaintenanceRoute;
+    pathname === '/api/alertas/whatsapp/status-callback';
 
   if (isPublicPath) {
     await next();

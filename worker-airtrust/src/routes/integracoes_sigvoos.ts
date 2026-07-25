@@ -1,9 +1,18 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
+import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
-import { localMaintenanceGate, localMaintenanceMutationNotFound } from '../middleware/local-maintenance';
+import { rateLimiter } from '../middleware/rate-limit';
+import { tenantMiddleware } from '../middleware/tenant';
+import { localMaintenanceMutationNotFound } from '../middleware/local-maintenance';
+import {
+  assertNoImpersonation,
+  MAINTENANCE_CAPABILITIES,
+  recordMaintenanceAudit,
+  requireMaintenanceCapability,
+} from '../middleware/maintenance-access';
 import { getEmpresaIdSafe } from './escalas-shared';
 import {
   getSigvoosConfig,
@@ -19,29 +28,11 @@ import {
   upsertSigvoosConfig,
 } from '../services/sigvoos-frms';
 
-const sigvoosRouter = new Hono<{ Bindings: Env; Variables: { userId?: string } }>();
+const sigvoosRouter = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 
-async function secureCompare(a: string, b: string): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const [aHash, bHash] = await Promise.all([
-    crypto.subtle.digest('SHA-256', encoder.encode(a)),
-    crypto.subtle.digest('SHA-256', encoder.encode(b)),
-  ]);
-  return crypto.subtle.timingSafeEqual(aHash, bHash);
-}
-
-sigvoosRouter.use('/maintenance/*', async (c, next) => {
-  const denied = await localMaintenanceGate(c.env, c.req.raw.headers);
-  if (denied) return denied;
-  return next();
-});
+sigvoosRouter.use('/maintenance/*', auth(), tenantMiddleware());
 
 sigvoosRouter.use('*', async (c, next) => {
-  const pathname = new URL(c.req.url).pathname;
-  if (pathname.endsWith('/maintenance/sincronizar-frms')) {
-    await next();
-    return;
-  }
   return requireRole('admin', 'manager')(c as any, next);
 });
 
@@ -73,10 +64,6 @@ const SyncSchema = z.object({
   baseUrl: z.string().url().optional(),
   chunkDays: z.number().int().min(1).max(7).optional(),
   retryAttempts: z.number().int().min(0).max(3).optional(),
-});
-
-const MaintenanceSyncSchema = SyncSchema.extend({
-  empresaId: z.number().int().positive().optional(),
 });
 
 const ReconcileSchema = z.object({
@@ -354,6 +341,11 @@ function formatSigvoosSyncError(error: unknown): {
   };
 }
 
+function resolveAuthenticatedEmpresaId(c: Context<{ Bindings: Env; Variables: Partial<Variables> }>): number | null {
+  const empresaId = getEmpresaIdSafe(c);
+  return Number.isInteger(empresaId) && Number(empresaId) > 0 ? Number(empresaId) : null;
+}
+
 sigvoosRouter.get('/ping', async (c) => {
   return c.json({ success: true, data: { provider: 'sigvoos', status: 'ready' } });
 });
@@ -480,8 +472,21 @@ sigvoosRouter.post('/mapeamento-manual', async (c) => {
   return c.json({ success: true, data: mapping });
 });
 
-sigvoosRouter.post('/mapear', async (c) => {
-  const empresaId = getEmpresaIdSafe(c);
+sigvoosRouter.post(
+  '/mapear',
+  rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'sigvoos-mapear' }),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.sigvoosExecutar,
+    'Operação SIGVOOS restrita a administradores autorizados.',
+  ),
+  async (c) => {
+  const empresaId = resolveAuthenticatedEmpresaId(c);
+  if (!empresaId) {
+    return c.json({ success: false, error: 'Contexto de empresa ausente', code: 'TENANT_CONTEXT_REQUIRED' }, 403);
+  }
+  const impersonationDenied = await assertNoImpersonation(c, 'SIGVOOS_IMPERSONATION_BLOCKED');
+  if (impersonationDenied) return impersonationDenied;
+
   const operadorId = String(c.get('userId') || '0');
   const body = await c.req.json().catch(() => ({}));
   const parsed = ManualMappingSchema.safeParse(body);
@@ -499,6 +504,8 @@ sigvoosRouter.post('/mapear', async (c) => {
   }
 
   try {
+    const operationId = crypto.randomUUID();
+    const startedAt = Date.now();
     const result = await mapearSigvoosPendenciaERreprocessar(
       c.env.DB,
       empresaId,
@@ -509,7 +516,18 @@ sigvoosRouter.post('/mapear', async (c) => {
       },
       operadorId,
     );
-    return c.json({ success: true, data: result });
+    await recordMaintenanceAudit(c, {
+      action: 'SIGVOOS_MAPEAR_PENDENCIA',
+      module: 'integracoes_sigvoos',
+      entityType: 'sigvoos_operacao',
+      entityId: operationId,
+      success: true,
+      riskLevel: 'high',
+      result: 'success',
+      durationMs: Date.now() - startedAt,
+      operationId,
+    }).catch(() => {});
+    return c.json({ success: true, operation_id: operationId, data: result });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err ?? 'unknown');
     console.error('[sigvoos] /mapear error:', msg);
@@ -517,8 +535,21 @@ sigvoosRouter.post('/mapear', async (c) => {
   }
 });
 
-sigvoosRouter.post('/sincronizar-frms', async (c) => {
-  const empresaId = getEmpresaIdSafe(c);
+sigvoosRouter.post(
+  '/sincronizar-frms',
+  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-sync' }),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.sigvoosExecutar,
+    'Sincronização SIGVOOS restrita a administradores autorizados.',
+  ),
+  async (c) => {
+  const empresaId = resolveAuthenticatedEmpresaId(c);
+  if (!empresaId) {
+    return c.json({ success: false, error: 'Contexto de empresa ausente', code: 'TENANT_CONTEXT_REQUIRED' }, 403);
+  }
+  const impersonationDenied = await assertNoImpersonation(c, 'SIGVOOS_IMPERSONATION_BLOCKED');
+  if (impersonationDenied) return impersonationDenied;
+
   const operadorId = String(c.get('userId') || '0');
   const body = await c.req.json();
   const parsed = SyncSchema.safeParse(body);
@@ -536,6 +567,8 @@ sigvoosRouter.post('/sincronizar-frms', async (c) => {
   }
 
   try {
+    const operationId = crypto.randomUUID();
+    const startedAt = Date.now();
     const shouldChunk = Boolean(
       parsed.data.chunkDays && parsed.data.chunkDays > 0 && parsed.data.from && parsed.data.to,
     );
@@ -547,17 +580,51 @@ sigvoosRouter.post('/sincronizar-frms', async (c) => {
         parsed.data,
         c.env,
       );
-      return c.json({ success: true, data: summary, windows });
+      await recordMaintenanceAudit(c, {
+        action: 'SIGVOOS_SYNC_FRMS',
+        module: 'integracoes_sigvoos',
+        entityType: 'sigvoos_operacao',
+        entityId: operationId,
+        success: true,
+        riskLevel: 'critical',
+        result: 'success',
+        count: Number(summary.totalImportados || 0),
+        durationMs: Date.now() - startedAt,
+        operationId,
+      }).catch(() => {});
+      return c.json({ success: true, operation_id: operationId, data: summary, windows });
     }
 
     const result = await syncSigvoosForFrms(c.env.DB, empresaId, operadorId, parsed.data, c.env);
-    return c.json({ success: true, data: result });
+    await recordMaintenanceAudit(c, {
+      action: 'SIGVOOS_SYNC_FRMS',
+      module: 'integracoes_sigvoos',
+      entityType: 'sigvoos_operacao',
+      entityId: operationId,
+      success: true,
+      riskLevel: 'critical',
+      result: 'success',
+      count: Number(result.totalImportados || 0),
+      durationMs: Date.now() - startedAt,
+      operationId,
+    }).catch(() => {});
+    return c.json({ success: true, operation_id: operationId, data: result });
   } catch (error) {
     const formatted = formatSigvoosSyncError(error);
     const safeInput = {
       ...parsed.data,
       ...(parsed.data.password ? { password: '__REDACTED__' } : {}),
     };
+    await recordMaintenanceAudit(c, {
+      action: 'SIGVOOS_SYNC_FRMS',
+      module: 'integracoes_sigvoos',
+      entityType: 'sigvoos_operacao',
+      entityId: 'sync-error',
+      success: false,
+      riskLevel: 'critical',
+      result: 'error',
+      failureReasonCode: formatted.code,
+    }).catch(() => {});
     console.error('[sigvoos] sync error:', {
       empresaId,
       operadorId,
@@ -576,15 +643,55 @@ sigvoosRouter.post('/sincronizar-frms', async (c) => {
   }
 });
 
-sigvoosRouter.post('/reprocessar-previews', async (c) => {
-  const empresaId = getEmpresaIdSafe(c);
+sigvoosRouter.post(
+  '/reprocessar-previews',
+  rateLimiter({ maxRequests: 6, windowSeconds: 60, keyPrefix: 'sigvoos-reprocessar-previews' }),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.sigvoosExecutar,
+    'Operação SIGVOOS restrita a administradores autorizados.',
+  ),
+  async (c) => {
+  const empresaId = resolveAuthenticatedEmpresaId(c);
+  if (!empresaId) {
+    return c.json({ success: false, error: 'Contexto de empresa ausente', code: 'TENANT_CONTEXT_REQUIRED' }, 403);
+  }
+  const impersonationDenied = await assertNoImpersonation(c, 'SIGVOOS_IMPERSONATION_BLOCKED');
+  if (impersonationDenied) return impersonationDenied;
+
   const operadorId = String(c.get('userId') || '0');
+  const operationId = crypto.randomUUID();
+  const startedAt = Date.now();
   const result = await reprocessarPreviewsSigvoosSemTripulante(c.env.DB, empresaId, operadorId);
-  return c.json({ success: true, data: result });
+  await recordMaintenanceAudit(c, {
+    action: 'SIGVOOS_REPROCESSAR_PREVIEWS',
+    module: 'integracoes_sigvoos',
+    entityType: 'sigvoos_operacao',
+    entityId: operationId,
+    success: true,
+    riskLevel: 'high',
+    result: 'success',
+    count: Number((result as { atualizados?: number }).atualizados || 0),
+    durationMs: Date.now() - startedAt,
+    operationId,
+  }).catch(() => {});
+  return c.json({ success: true, operation_id: operationId, data: result });
 });
 
-sigvoosRouter.post('/reconciliar-pendencias', async (c) => {
-  const empresaId = getEmpresaIdSafe(c);
+sigvoosRouter.post(
+  '/reconciliar-pendencias',
+  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-reconciliar' }),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.sigvoosExecutar,
+    'Operação SIGVOOS restrita a administradores autorizados.',
+  ),
+  async (c) => {
+  const empresaId = resolveAuthenticatedEmpresaId(c);
+  if (!empresaId) {
+    return c.json({ success: false, error: 'Contexto de empresa ausente', code: 'TENANT_CONTEXT_REQUIRED' }, 403);
+  }
+  const impersonationDenied = await assertNoImpersonation(c, 'SIGVOOS_IMPERSONATION_BLOCKED');
+  if (impersonationDenied) return impersonationDenied;
+
   const operadorId = String(c.get('userId') || '0');
   const body = await c.req.json().catch(() => ({}));
   const parsed = ReconcileSchema.safeParse(body);
@@ -609,6 +716,16 @@ sigvoosRouter.post('/reconciliar-pendencias', async (c) => {
   });
 
   if (withRange.length === 0) {
+    await recordMaintenanceAudit(c, {
+      action: 'SIGVOOS_RECONCILIAR_PENDENCIAS',
+      module: 'integracoes_sigvoos',
+      entityType: 'sigvoos_operacao',
+      entityId: 'reconcile-empty',
+      success: true,
+      riskLevel: 'high',
+      result: 'success',
+      count: 0,
+    }).catch(() => {});
     return c.json({
       success: true,
       data: {
@@ -619,6 +736,8 @@ sigvoosRouter.post('/reconciliar-pendencias', async (c) => {
     });
   }
 
+  const operationId = crypto.randomUUID();
+  const startedAt = Date.now();
   const chunkDays = parsed.data.chunkDays ?? 1;
   const retryAttempts = parsed.data.retryAttempts ?? 1;
   const maxWindows = parsed.data.maxWindows ?? 3;
@@ -666,8 +785,23 @@ sigvoosRouter.post('/reconciliar-pendencias', async (c) => {
     return !(item.to < parsed.data.from || item.from > parsed.data.to);
   });
 
+  await recordMaintenanceAudit(c, {
+    action: 'SIGVOOS_RECONCILIAR_PENDENCIAS',
+    module: 'integracoes_sigvoos',
+    entityType: 'sigvoos_operacao',
+    entityId: operationId,
+    success: true,
+    riskLevel: 'high',
+    result: 'success',
+    count: totalImportados,
+    approximateCount: withRange.length,
+    durationMs: Date.now() - startedAt,
+    operationId,
+  }).catch(() => {});
+
   return c.json({
     success: true,
+    operation_id: operationId,
     data: {
       totalPendencias: withRange.length,
       totalPendenciasRestantes: pendenciasRestantes.length,

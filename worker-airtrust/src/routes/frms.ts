@@ -17,10 +17,14 @@ import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { rateLimiter } from '../middleware/rate-limit';
+import { tenantMiddleware } from '../middleware/tenant';
+import { localMaintenanceMutationNotFound } from '../middleware/local-maintenance';
 import {
-  localMaintenanceGate,
-  localMaintenanceMutationNotFound,
-} from '../middleware/local-maintenance';
+  assertNoImpersonation,
+  MAINTENANCE_CAPABILITIES,
+  recordMaintenanceAudit,
+  requireMaintenanceCapability,
+} from '../middleware/maintenance-access';
 import { enviarEmailAlert } from '../cron/notificacoes';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { getFrmsOperationalState } from '../shared/getTripulanteOperacional';
@@ -94,15 +98,11 @@ import {
 const frmsRoutes = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 
 // Must precede every maintenance handler: direct router tests and the full
-// application both fail closed before parsing a request body or touching D1.
-frmsRoutes.use('/maintenance/*', async (c, next) => {
-  const denied = await localMaintenanceGate(c.env, c.req.raw.headers);
-  if (denied) return denied;
-  return next();
-});
+// application enforce auth + tenant before parsing a request body or touching D1.
+frmsRoutes.use('/maintenance/*', auth(), tenantMiddleware());
 
 const FortnightCoverageMaintenanceQuerySchema = z.object({
-  empresa_id: z.coerce.number().int().positive(),
+  empresa_id: z.coerce.number().int().positive().optional(),
   data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   origem: z.string().optional(),
@@ -110,7 +110,7 @@ const FortnightCoverageMaintenanceQuerySchema = z.object({
 });
 
 const FortnightMaterializationApplySchema = z.object({
-  empresa_id: z.coerce.number().int().positive(),
+  empresa_id: z.coerce.number().int().positive().optional(),
   data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   origem: z.union([z.string(), z.array(z.string())]).optional(),
@@ -1267,15 +1267,6 @@ async function buildFrmsDayExplanation(
   };
 }
 
-async function secureCompare(a: string, b: string): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const [aHash, bHash] = await Promise.all([
-    crypto.subtle.digest('SHA-256', encoder.encode(a)),
-    crypto.subtle.digest('SHA-256', encoder.encode(b)),
-  ]);
-  return crypto.subtle.timingSafeEqual(aHash, bHash);
-}
-
 function diffDaysInclusive(dataInicio: string, dataFim: string): number {
   const start = Date.parse(`${dataInicio}T00:00:00Z`);
   const end = Date.parse(`${dataFim}T00:00:00Z`);
@@ -1309,9 +1300,45 @@ function assertMaintenanceWindow(
   return null;
 }
 
+function resolveAuthenticatedEmpresaId(c: FrmsAppContext): number | null {
+  const empresaId = getEmpresaIdSafe(c);
+  return Number.isInteger(empresaId) && Number(empresaId) > 0 ? Number(empresaId) : null;
+}
+
+function assertRequestedEmpresaMatchesTenant(
+  c: FrmsAppContext,
+  requestedEmpresaId: number | undefined,
+): Response | null {
+  const empresaId = resolveAuthenticatedEmpresaId(c);
+  if (!empresaId) {
+    return c.json(
+      { success: false, error: 'Contexto de empresa ausente.', code: 'TENANT_CONTEXT_REQUIRED' },
+      403,
+    );
+  }
+  if (requestedEmpresaId && requestedEmpresaId !== empresaId) {
+    return c.json(
+      {
+        success: false,
+        error: 'empresa_id divergente do tenant autenticado.',
+        code: 'TENANT_ACCESS_DENIED',
+      },
+      403,
+    );
+  }
+  return null;
+}
+
 frmsRoutes.get(
   '/maintenance/fortnight-coverage',
+  rateLimiter({ maxRequests: 20, windowSeconds: 60, keyPrefix: 'frms-maintenance-coverage' }),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.frmsVisualizar,
+    'Acesso restrito a operadores autorizados do FRMS.',
+  ),
   safe(async (c) => {
+    const operationId = crypto.randomUUID();
+    const startedAt = Date.now();
     const parsed = FortnightCoverageMaintenanceQuerySchema.safeParse({
       empresa_id: c.req.query('empresa_id'),
       data_inicio: c.req.query('data_inicio'),
@@ -1330,7 +1357,17 @@ frmsRoutes.get(
       );
     }
 
-    const { empresa_id, data_inicio, data_fim } = parsed.data;
+    const tenantMismatch = assertRequestedEmpresaMatchesTenant(c, parsed.data.empresa_id);
+    if (tenantMismatch) return tenantMismatch;
+
+    const empresaId = resolveAuthenticatedEmpresaId(c);
+    const { data_inicio, data_fim } = parsed.data;
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Contexto de empresa ausente.', code: 'TENANT_CONTEXT_REQUIRED' },
+        403,
+      );
+    }
     const invalidWindow = assertMaintenanceWindow(
       data_inicio,
       data_fim,
@@ -1340,20 +1377,42 @@ frmsRoutes.get(
     if (invalidWindow) return invalidWindow;
 
     const coverage = await getFrmsFortnightCoverage(c.env.DB, {
-      empresaId: empresa_id,
+      empresaId,
       dataInicio: data_inicio,
       dataFim: data_fim,
       origem: parsed.data.origem ? normalizeQueryFilters(parsed.data.origem, 'SIGVOOS') : undefined,
       status: parsed.data.status ? normalizeQueryFilters(parsed.data.status, 'ES') : undefined,
     });
 
-    return c.json({ success: true, ...coverage });
+    await recordMaintenanceAudit(c, {
+      action: 'FRMS_MAINTENANCE_FORTNIGHT_COVERAGE',
+      module: 'frms',
+      entityType: 'frms_maintenance',
+      entityId: operationId,
+      success: true,
+      riskLevel: 'medium',
+      result: 'success',
+      approximateCount: Array.isArray((coverage as { items?: unknown[] }).items)
+        ? Number((coverage as { items?: unknown[] }).items?.length || 0)
+        : undefined,
+      durationMs: Date.now() - startedAt,
+      operationId,
+    }).catch(() => {});
+
+    return c.json({ success: true, operation_id: operationId, ...coverage });
   }),
 );
 
 frmsRoutes.get(
   '/maintenance/fortnight-materialization-preview',
+  rateLimiter({ maxRequests: 20, windowSeconds: 60, keyPrefix: 'frms-maintenance-preview' }),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.frmsVisualizar,
+    'Acesso restrito a operadores autorizados do FRMS.',
+  ),
   safe(async (c) => {
+    const operationId = crypto.randomUUID();
+    const startedAt = Date.now();
     const parsed = FortnightCoverageMaintenanceQuerySchema.safeParse({
       empresa_id: c.req.query('empresa_id'),
       data_inicio: c.req.query('data_inicio'),
@@ -1372,7 +1431,17 @@ frmsRoutes.get(
       );
     }
 
-    const { empresa_id, data_inicio, data_fim } = parsed.data;
+    const tenantMismatch = assertRequestedEmpresaMatchesTenant(c, parsed.data.empresa_id);
+    if (tenantMismatch) return tenantMismatch;
+
+    const empresaId = resolveAuthenticatedEmpresaId(c);
+    const { data_inicio, data_fim } = parsed.data;
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Contexto de empresa ausente.', code: 'TENANT_CONTEXT_REQUIRED' },
+        403,
+      );
+    }
     const invalidWindow = assertMaintenanceWindow(
       data_inicio,
       data_fim,
@@ -1382,14 +1451,27 @@ frmsRoutes.get(
     if (invalidWindow) return invalidWindow;
 
     const preview = await previewFortnightBaseMaterialization(c.env.DB, {
-      empresaId: empresa_id,
+      empresaId,
       dataInicio: data_inicio,
       dataFim: data_fim,
       origem: normalizeQueryFilters(parsed.data.origem, 'SIGVOOS'),
       status: normalizeQueryFilters(parsed.data.status, 'ES'),
     });
 
-    return c.json({ success: true, data: preview });
+    await recordMaintenanceAudit(c, {
+      action: 'FRMS_MAINTENANCE_FORTNIGHT_MATERIALIZATION_PREVIEW',
+      module: 'frms',
+      entityType: 'frms_maintenance',
+      entityId: operationId,
+      success: true,
+      riskLevel: 'medium',
+      result: 'success',
+      approximateCount: Number((preview as { atualizaveis?: number }).atualizaveis || 0),
+      durationMs: Date.now() - startedAt,
+      operationId,
+    }).catch(() => {});
+
+    return c.json({ success: true, operation_id: operationId, data: preview });
   }),
 );
 
@@ -2098,9 +2180,53 @@ frmsRoutes.post(
   '/reprocessar',
   rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'frms-reprocessar' }),
   requireRole('admin'),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.frmsExecutar,
+    'Reprocessamento FRMS restrito a administradores autorizados.',
+  ),
   safe(async (c) => {
-    c.executionCtx.waitUntil(reprocessarTodosTripulantes(c.env.DB));
-    return c.json({ success: true, message: 'Reprocessamento iniciado em background' });
+    const impersonationDenied = await assertNoImpersonation(c, 'FRMS_REPROCESS_IMPERSONATION_BLOCKED');
+    if (impersonationDenied) return impersonationDenied;
+
+    const operationId = crypto.randomUUID();
+    const startedAt = Date.now();
+    c.executionCtx.waitUntil(
+      (async () => {
+        try {
+          const result = await reprocessarTodosTripulantes(c.env.DB);
+          await recordMaintenanceAudit(c, {
+            action: 'FRMS_REPROCESS_ALL',
+            module: 'frms',
+          entityType: 'frms_reprocessamento',
+          entityId: operationId,
+          success: true,
+          riskLevel: 'high',
+          result: 'success',
+          count: Number(result.jornadas || 0),
+          durationMs: Date.now() - startedAt,
+          operationId,
+        });
+        } catch {
+          await recordMaintenanceAudit(c, {
+            action: 'FRMS_REPROCESS_ALL',
+            module: 'frms',
+            entityType: 'frms_reprocessamento',
+            entityId: operationId,
+            success: false,
+            riskLevel: 'critical',
+            result: 'error',
+            durationMs: Date.now() - startedAt,
+            operationId,
+            failureReasonCode: 'FRMS_REPROCESS_ALL_FAILED',
+          });
+        }
+      })(),
+    );
+    return c.json({
+      success: true,
+      operation_id: operationId,
+      message: 'Reprocessamento iniciado em background',
+    });
   }),
 );
 
@@ -2128,14 +2254,43 @@ frmsRoutes.post(
   '/reprocessar/:tripulante_id',
   rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'frms-reprocessar-tripulante' }),
   requireRole('admin'),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.frmsExecutar,
+    'Reprocessamento FRMS restrito a administradores autorizados.',
+  ),
   safe(async (c) => {
+    const impersonationDenied = await assertNoImpersonation(c, 'FRMS_REPROCESS_IMPERSONATION_BLOCKED');
+    if (impersonationDenied) return impersonationDenied;
+
     const tripulanteId = Number(c.req.param('tripulante_id'));
     if (!tripulanteId || isNaN(tripulanteId)) {
       return c.json({ success: false, error: 'tripulante_id inválido' }, 400);
     }
+    const denied = await assertTripulanteEmpresa(c, String(tripulanteId));
+    if (denied) return denied;
+
+    const operationId = crypto.randomUUID();
+    const startedAt = Date.now();
     const limites = await carregarLimites(c.env.DB);
     const count = await reprocessarTripulanteCompleto(c.env.DB, tripulanteId, limites);
-    return c.json({ success: true, data: { tripulante_id: tripulanteId, jornadas: count } });
+    await recordMaintenanceAudit(c, {
+      action: 'FRMS_REPROCESS_TRIPULANTE',
+      module: 'frms',
+      entityType: 'frms_reprocessamento',
+      entityId: String(tripulanteId),
+      success: true,
+      riskLevel: 'high',
+      result: 'success',
+      count,
+      durationMs: Date.now() - startedAt,
+      operationId,
+    }).catch(() => {});
+
+    return c.json({
+      success: true,
+      operation_id: operationId,
+      data: { tripulante_id: tripulanteId, jornadas: count },
+    });
   }),
 );
 

@@ -3,6 +3,57 @@ import type { Env } from '../../types';
 
 const getCoverageMock = vi.fn();
 
+vi.mock('../../middleware/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/auth')>();
+  return {
+    ...actual,
+    auth: () => async (c: any, next: () => Promise<void>) => {
+      if (!c.req.header('authorization')) {
+        return c.json(
+          { success: false, error: 'Token de autenticação não fornecido', code: 'MISSING_TOKEN' },
+          401,
+        );
+      }
+      c.set('userId', 101);
+      c.set('userEmail', 'admin@tenant.local');
+      c.set('userRole', 'admin');
+      c.set('empresaId', 10);
+      await next();
+    },
+  };
+});
+
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
+    tenantMiddleware: () => async (c: any, next: () => Promise<void>) => {
+      c.set('empresaId', 10);
+      c.set('tenantContext', {
+        empresaId: 10,
+        empresaCodigo: 'tenant-test',
+        empresaNome: 'Tenant Test',
+        role: 'admin',
+        plano: 'pro',
+        permissions: ['*'],
+      });
+      await next();
+    },
+  };
+});
+
+vi.mock('../../middleware/maintenance-access', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/maintenance-access')>();
+  return {
+    ...actual,
+    requireMaintenanceCapability: () => async (_c: any, next: () => Promise<void>) => {
+      await next();
+    },
+    recordMaintenanceAudit: vi.fn().mockResolvedValue(undefined),
+    assertNoImpersonation: vi.fn().mockResolvedValue(null),
+  };
+});
+
 vi.mock('../../lib/frms/db-service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/frms/db-service')>();
   return {
@@ -34,13 +85,10 @@ function createDb() {
   } as unknown as D1Database;
 }
 
-function createLocalMaintenanceEnv(overrides: Partial<Env> = {}): Env {
+function createEnv(overrides: Partial<Env> = {}): Env {
   return {
     DB: createDb(),
-    ENVIRONMENT: 'development',
-    ENABLE_LOCAL_MAINTENANCE: 'true',
-    LOCAL_MAINTENANCE_RUNTIME: 'true',
-    MAINTENANCE_SECRET: 'segredo-correto',
+    ENVIRONMENT: 'test',
     ...overrides,
   } as unknown as Env;
 }
@@ -51,42 +99,21 @@ describe('GET /maintenance/fortnight-coverage', () => {
     vi.mocked(frmsDbService.reprocessarTripulanteCompleto).mockClear();
   });
 
-  it('falha fechado com 404 quando MAINTENANCE_SECRET nao esta configurado', async () => {
+  it('responde 401 sem JWT', async () => {
     const response = await frmsRoutes.request(
       'http://localhost/maintenance/fortnight-coverage?data_inicio=2026-06-01&data_fim=2026-06-07',
       { method: 'GET' },
-      { DB: createDb() } as unknown as Env,
+      createEnv(),
     );
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(401);
     expect(getCoverageMock).not.toHaveBeenCalled();
   });
 
-  it('responde 404 sem secret valido', async () => {
-    const response = await frmsRoutes.request(
-      'http://localhost/maintenance/fortnight-coverage?data_inicio=2026-06-01&data_fim=2026-06-07',
-      { method: 'GET' },
-      createLocalMaintenanceEnv(),
-    );
-
-    expect(response.status).toBe(404);
-    expect(getCoverageMock).not.toHaveBeenCalled();
-  });
-
-  it('aceita o header legado x-airtrust-maintenance', async () => {
+  it('usa o tenant autenticado quando empresa_id nao e informado', async () => {
     getCoverageMock.mockResolvedValueOnce({
-      periodo: {
-        data_inicio: '2026-06-01',
-        data_fim: '2026-06-07',
-      },
-      resumo: {
-        total_fatorizacoes: 1,
-        com_dia_periodo: 1,
-        sem_dia_periodo: 0,
-        pct_cobertura: 100,
-        com_total_dias: 1,
-        sem_total_dias: 0,
-      },
+      periodo: { data_inicio: '2026-06-01', data_fim: '2026-06-07' },
+      resumo: { total_fatorizacoes: 1, com_dia_periodo: 1, sem_dia_periodo: 0, pct_cobertura: 100 },
       por_origem: [],
       por_status_jornada: [],
       por_fonte_periodo: [],
@@ -99,19 +126,14 @@ describe('GET /maintenance/fortnight-coverage', () => {
     });
 
     const response = await frmsRoutes.request(
-      'http://localhost/maintenance/fortnight-coverage?empresa_id=6&data_inicio=2026-06-01&data_fim=2026-06-07',
-      {
-        method: 'GET',
-        headers: {
-          'x-airtrust-maintenance': 'segredo-correto',
-        },
-      },
-      createLocalMaintenanceEnv(),
+      'http://localhost/maintenance/fortnight-coverage?data_inicio=2026-06-01&data_fim=2026-06-07',
+      { method: 'GET', headers: { authorization: 'Bearer synthetic' } },
+      createEnv(),
     );
 
     expect(response.status).toBe(200);
     expect(getCoverageMock).toHaveBeenCalledWith(expect.anything(), {
-      empresaId: 6,
+      empresaId: 10,
       dataInicio: '2026-06-01',
       dataFim: '2026-06-07',
       origem: undefined,
@@ -119,16 +141,26 @@ describe('GET /maintenance/fortnight-coverage', () => {
     });
   });
 
+  it('rejeita empresa_id divergente do tenant autenticado', async () => {
+    const response = await frmsRoutes.request(
+      'http://localhost/maintenance/fortnight-coverage?empresa_id=6&data_inicio=2026-06-01&data_fim=2026-06-07',
+      { method: 'GET', headers: { authorization: 'Bearer synthetic' } },
+      createEnv(),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      code: 'TENANT_ACCESS_DENIED',
+    });
+    expect(getCoverageMock).not.toHaveBeenCalled();
+  });
+
   it('rejeita janelas acima do limite maximo', async () => {
     const response = await frmsRoutes.request(
-      'http://localhost/maintenance/fortnight-coverage?empresa_id=6&data_inicio=2026-06-01&data_fim=2026-07-15',
-      {
-        method: 'GET',
-        headers: {
-          'x-maintenance-secret': 'segredo-correto',
-        },
-      },
-      createLocalMaintenanceEnv(),
+      'http://localhost/maintenance/fortnight-coverage?empresa_id=10&data_inicio=2026-06-01&data_fim=2026-07-15',
+      { method: 'GET', headers: { authorization: 'Bearer synthetic' } },
+      createEnv(),
     );
 
     expect(response.status).toBe(400);
@@ -141,10 +173,7 @@ describe('GET /maintenance/fortnight-coverage', () => {
 
   it('retorna payload agregado sem PII e sem chamar reprocessamento', async () => {
     getCoverageMock.mockResolvedValueOnce({
-      periodo: {
-        data_inicio: '2026-06-01',
-        data_fim: '2026-06-07',
-      },
+      periodo: { data_inicio: '2026-06-01', data_fim: '2026-06-07' },
       resumo: {
         total_fatorizacoes: 10,
         com_dia_periodo: 7,
@@ -154,23 +183,11 @@ describe('GET /maintenance/fortnight-coverage', () => {
         sem_total_dias: 3,
       },
       por_origem: [
-        {
-          origem: 'SIGVOOS',
-          total: 8,
-          com_dia_periodo: 7,
-          sem_dia_periodo: 1,
-          pct_cobertura: 87.5,
-        },
+        { origem: 'SIGVOOS', total: 8, com_dia_periodo: 7, sem_dia_periodo: 1, pct_cobertura: 87.5 },
       ],
       por_status_jornada: [],
       por_fonte_periodo: [
-        {
-          fonte_periodo: 'DERIVADO',
-          total: 7,
-          com_dia_periodo: 7,
-          sem_dia_periodo: 0,
-          pct_cobertura: 100,
-        },
+        { fonte_periodo: 'DERIVADO', total: 7, com_dia_periodo: 7, sem_dia_periodo: 0, pct_cobertura: 100 },
       ],
       recuperaveis_estimados: {
         com_escala_alocacoes: 1,
@@ -184,19 +201,14 @@ describe('GET /maintenance/fortnight-coverage', () => {
     });
 
     const response = await frmsRoutes.request(
-      'http://localhost/maintenance/fortnight-coverage?empresa_id=6&data_inicio=2026-06-01&data_fim=2026-06-07&origem=SIGVOOS&status=ES,FE',
-      {
-        method: 'GET',
-        headers: {
-          'x-maintenance-secret': 'segredo-correto',
-        },
-      },
-      createLocalMaintenanceEnv(),
+      'http://localhost/maintenance/fortnight-coverage?empresa_id=10&data_inicio=2026-06-01&data_fim=2026-06-07&origem=SIGVOOS&status=ES,FE',
+      { method: 'GET', headers: { authorization: 'Bearer synthetic' } },
+      createEnv(),
     );
 
     expect(response.status).toBe(200);
     expect(getCoverageMock).toHaveBeenCalledWith(expect.anything(), {
-      empresaId: 6,
+      empresaId: 10,
       dataInicio: '2026-06-01',
       dataFim: '2026-06-07',
       origem: ['SIGVOOS'],
@@ -207,6 +219,7 @@ describe('GET /maintenance/fortnight-coverage', () => {
     const body = await response.json();
     expect(body).toMatchObject({
       success: true,
+      operation_id: expect.any(String),
       resumo: {
         total_fatorizacoes: 10,
         com_dia_periodo: 7,
