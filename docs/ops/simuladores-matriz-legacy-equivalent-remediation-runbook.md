@@ -171,3 +171,66 @@ antes e depois — nunca "zero".
 Qualquer divergência de fingerprint, hash, contagem, ou FK interrompe a
 janela sem escrita. Falha após apply aciona rollback compensatório antes de
 qualquer outra ação.
+
+## 11. Aplicando a migration 0443 remotamente: `wrangler d1 migrations apply` falha
+
+Uma primeira janela de produção autorizada tentou aplicar a migration 0443
+via `wrangler d1 migrations apply` (o mesmo mecanismo ledger-aware já usado
+com sucesso para 0441/0442). A tentativa falhou, antes de qualquer escrita,
+com:
+
+```
+SQLITE_ERROR: incomplete input [code: 7500]
+```
+
+Nenhuma tabela/trigger da 0443 chegou a existir em produção e nenhuma linha
+foi gravada no ledger `d1_migrations` — confirmado por leitura direta
+pós-falha. Zero estado parcial.
+
+### Causa raiz confirmada
+
+Investigação num banco D1 remoto totalmente descartável (nunca staging, nunca
+produção) reproduziu o erro de forma determinística e isolou a causa no
+próprio código do `wrangler` (não na migration 0443, nem em 0440/0441/0442):
+
+`wrangler d1 migrations apply` lê o conteúdo do arquivo de migration, concatena
+em memória um `INSERT INTO d1_migrations (name) VALUES (...)` no final, e
+envia o texto combinado inteiro pela **ação `query` da API do D1** — o mesmo
+caminho leve usado por `wrangler d1 execute --command`. Esse caminho não
+processa de forma confiável um script multi-statement grande/complexo: tanto
+a migration 0440 (502 linhas, muitos triggers) quanto a 0443 (222 linhas,
+vários triggers com múltiplos `SELECT CASE ... END` no mesmo corpo)
+reproduzem o mesmo `SQLITE_ERROR: incomplete input` por esse caminho no banco
+descartável. As migrations 0441/0442, menores e estruturalmente mais simples,
+por coincidência ficam abaixo do que quer que seja o teto de
+complexidade/tamanho desse caminho — o que explica por que aplicaram
+corretamente em produção antes, mesmo com o mesmo defeito latente.
+
+O **exato mesmo texto combinado** (conteúdo da migration + `INSERT` no
+ledger), quando submetido pela **ação `import` da API do D1** —
+`wrangler d1 execute --remote --file <arquivo>`, que faz upload do arquivo
+para processamento no servidor — funciona corretamente e de forma atômica em
+100% dos testes, incluindo um teste de falha forçada (SQL propositalmente
+inválido) que confirmou zero estado parcial em caso de erro.
+
+### Correção
+
+`scripts/production/apply-simuladores-matriz-0443-remote-migration.sh`
+substitui `wrangler d1 migrations apply` por essa combinação comprovada:
+constrói o mesmo texto "migration + INSERT no ledger" (via
+`scripts/lib/migration-remote-apply.mjs`, a mesma função usada pelos testes),
+escreve num arquivo temporário isolado, e submete via
+`wrangler d1 execute --remote --file`. O `INSERT` no ledger faz parte da
+mesma unidade atômica da mudança de schema — nunca um passo manual separado.
+Mantém todos os gates do runner anterior (alvo de produção travado,
+`AIRTRUST_ALLOW_PROD_DB_WRITE`/`AIRTRUST_CONFIRM_PROD_DB_WRITE`, `main` limpa
+== `origin/main`, backup oficial validado por tamanho+SHA-256) e adiciona um
+gate de idempotência: se `0443` já estiver ledgerada, o script sai sem
+reenviar nada.
+
+`scripts/apply-migration-production.sh` (o caminho genérico de
+`d1 execute --remote --file` cru) agora recusa explicitamente 0443 pelo mesmo
+motivo que já recusava 0440/0441/0442: aquele caminho não inclui o `INSERT`
+no ledger, então nunca deve ser usado para estas migrations.
+
+Nem a migration 0443 nem 0440/0441/0442 foram alteradas.
