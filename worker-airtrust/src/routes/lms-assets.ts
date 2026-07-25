@@ -834,8 +834,22 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     isScorm2004,
   );
 
+  const ciclo = await db
+    .prepare(
+      `SELECT id
+         FROM lms_matricula_ciclos
+        WHERE matricula_id = ?
+          AND ciclo_atual = 1
+          AND deleted_at IS NULL
+        ORDER BY id DESC
+        LIMIT 1`,
+    )
+    .bind(matricula.id)
+    .first<{ id: number }>();
+
   const html = buildLaunchPage({
     matriculaId: matricula.id,
+    cicloId: ciclo?.id ?? 0,
     titulo: matricula.titulo,
     launchUrl,
     commitUrl,
@@ -936,6 +950,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
 
 interface LaunchPageConfig {
   matriculaId: number | null;
+  cicloId?: number;
   titulo: string;
   launchUrl: string;
   commitUrl: string | null;
@@ -990,6 +1005,7 @@ function buildScormLaunchState(
 function buildLaunchPage(cfg: LaunchPageConfig): string {
   const {
     matriculaId,
+    cicloId = 0,
     titulo,
     launchUrl,
     commitUrl,
@@ -1143,7 +1159,9 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   var autosaveTimer = null;
   var interactionProbeTimer = null;
   var lastCommittedFingerprint = '';
-  var LOCAL_RESUME_KEY = MATRICULA_ID == null ? null : 'airtrust:scorm:resume:' + String(MATRICULA_ID);
+  var CICLO_ID = ${cicloId};
+  var LEGACY_RESUME_KEY = MATRICULA_ID == null ? null : 'airtrust:scorm:resume:' + String(MATRICULA_ID);
+  var LOCAL_RESUME_KEY = MATRICULA_ID == null ? null : 'airtrust:scorm:resume:' + String(MATRICULA_ID) + ':' + String(CICLO_ID);
   var completionPending = false;
   var completionObservedAt = null;
 
@@ -1347,6 +1365,15 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
     try {
       var raw = localStorage.getItem(LOCAL_RESUME_KEY);
+      if (!raw && LEGACY_RESUME_KEY) {
+        raw = localStorage.getItem(LEGACY_RESUME_KEY);
+        if (raw) {
+          try {
+            localStorage.setItem(LOCAL_RESUME_KEY, raw);
+            localStorage.removeItem(LEGACY_RESUME_KEY);
+          } catch (_e) {}
+        }
+      }
       if (!raw) return null;
       var parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return null;
@@ -1362,6 +1389,9 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
     try {
       localStorage.removeItem(LOCAL_RESUME_KEY);
+      if (LEGACY_RESUME_KEY) {
+        localStorage.removeItem(LEGACY_RESUME_KEY);
+      }
     } catch (_error) {
       // Ignorar indisponibilidade de storage local.
     }

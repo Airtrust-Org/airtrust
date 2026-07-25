@@ -149,6 +149,10 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
           'lms_progresso_scorm',
           { first: () => null },
         ],
+        [
+          'lms_matricula_ciclos',
+          { first: () => ({ id: 44 }) },
+        ],
       ]);
 
       const app = createApp();
