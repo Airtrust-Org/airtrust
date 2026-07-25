@@ -539,3 +539,32 @@ src/react-app/
 ├── theme/ThemeProvider.tsx
 └── utils/lazyWithRetry.ts
 ```
+
+---
+
+## 12. Remoção de rotas mortas em `lookup.ts` (2026-07-25)
+
+`lookup.ts` mantinha handlers GET/POST/DELETE para `/api/funcoes` e `/api/setores`
+com apenas `auth()` (sem `requireRole`, sem `registrarAuditoria`). Esses handlers
+nunca eram alcançados em runtime: `index.ts` monta `funcoes.ts` (`/api/funcoes`) e
+`setores.ts` (`/api/setores`) — ambos com RBAC (`requireRole('admin'|'manager')`),
+escopo de tenant e auditoria completos — antes de montar `lookup.ts` em `/api`
+(linhas 459, 469 e 524 respectivamente). Verificado empiricamente reproduzindo a
+mesma ordem de registro do Hono fora do runtime do Worker: para GET/POST/DELETE em
+ambos os recursos, o roteador que responde é sempre `funcoes.ts`/`setores.ts`,
+nunca `lookup.ts`.
+
+A remoção do código morto em `lookup.ts` não altera comportamento observável de
+nenhum consumidor. Ela elimina um risco latente: se a ordem de montagem em
+`index.ts` mudar no futuro, os handlers sem RBAC/auditoria voltariam a ser
+alcançáveis.
+
+**Fora do escopo desta entrega (não verificado, não declarar como concluído):**
+- Matriz de isolamento multi-tenant executada contra ambiente real (não existe
+  script funcional no repositório nesta data).
+- Restore rehearsal real de backup (SHA-256, restauração em D1/SQLite
+  descartável, `integrity_check`/`foreign_key_check`, RTO/RPO medidos).
+- Classificação individual das migrations 0440–0443 quanto a ledger/aplicação em
+  produção (os 4 arquivos existem no repositório; status de aplicação não foi
+  auditado nesta passagem).
+- Reconciliação de staging.
