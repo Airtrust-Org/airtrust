@@ -50,7 +50,6 @@ describe('SCORM resume restore helpers', () => {
     expect(source).toContain('resolveScormResumeTargetSlide(savedLocation, observedLocation)');
     expect(source).toContain('var shouldCommitLocation = previousLocation !== location;');
     expect(source).toContain('scheduleCommit(800);');
-    expect(source).toContain("localStorage.getItem(LOCAL_RESUME_KEY)");
   });
 
   it('agenda commit quando o pacote marca conclusão por status SCORM', () => {

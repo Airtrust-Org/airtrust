@@ -1,4 +1,4 @@
-# AirTrust Open Items (Atualizado após PR #450)
+# AirTrust Open Items (Atualizado)
 
 ## FECHADO:
 - PR #448 SQLITE_AUTH;
@@ -6,23 +6,23 @@
 - PR #450 loop de UX SCORM;
 - PR #450 download de certificado.
 
+## MERGEADO — PRODUÇÃO PENDENTE:
+- PR #451 (preservar estado de resume de SCORM em lançamentos de ciclos);
+- Correção Segura da Migração (após o merge deste PR de refactoring fail-closed).
+
 ## PRODUÇÃO PENDENTE:
-- deploy do frontend/Worker no SHA atual;
-- matriz AW139/S-76 51/918/22;
-- relink dos guias 51/30/21;
-- validação do certificado;
-- validação pós-deploy do player;
-- recuperação controlada dos alunos afetados;
-- confirmação dos executores false ao final.
+- Validação AW139 real com os novos contornos fail-closed;
+- Download de certificado;
+- Matriz 51/918/22;
+- Guias 51/30/21.
 
-## BLOQUEADOR OU CORREÇÃO PENDENTE:
-- conclusão real do pacote CGA;
-- fontes ausentes de FDM/PT6C/EFB;
-- regressão AW139 (Resolvida no PR de continuação com isolate cycle caching);
-- certificados emitidos sem PDF, se confirmado;
-- outros cursos SCORM inconsistentes.
+## REVALIDAÇÃO PÓS-DEPLOY:
+- Caso do progresso bloqueado do Luís.
 
-## BACKLOG:
-- FRMS/SIGVOOS;
-- taxonomia NOTECHS/exige_manobras_tecnicas;
-- débitos técnicos não relacionados à janela atual.
+## MITIGAÇÃO MERGEADA, PACOTE AINDA BLOQUEADO:
+- Loop do Fabiano (LMS estancado contra o loop do pacote);
+
+## CORREÇÃO DE PACOTE PENDENTE / FONTE PENDENTE:
+- Conclusão real do pacote CGA;
+- Fontes ausentes de FDM / PT6C / EFB;
+- Outros cursos SCORM inconsistentes (relatório emitido).
