@@ -34,6 +34,7 @@ CONTROLE_VOOS_SEED_FILE="$SCRIPT_DIR/seed-local-controle-voos.sql"
 DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 APP_MIGRATIONS=(
+  "$WORKER_DIR/migrations/0289_security_rate_limit_and_token_blocklist.sql"
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
   "$WORKER_DIR/migrations/0335_lms_cursos.sql"
   "$WORKER_DIR/migrations/0336_lms_matriculas.sql"
