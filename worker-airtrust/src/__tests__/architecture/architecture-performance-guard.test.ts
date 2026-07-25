@@ -29,7 +29,7 @@ const LARGE_FILE_LINE_CAPS = {
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   'routes/frms-fadiga-checkin.ts': 2021,
   // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.
-  'routes/lms-assets.ts': 2450,
+  'routes/lms-assets.ts': 2400,
 } as const;
 
 const SQL_PREPARE_CAPS = {
