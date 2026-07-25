@@ -192,7 +192,9 @@ describe('migration governance', () => {
     // Ratchet raised 2026-07-22: 0441 simuladores_matriz_manobra_resolution.
     // Ratchet raised 2026-07-22: 0442 simuladores_matriz_guia_relink (separate,
     // small, atomic executor for the 51 guia-instrutor links only).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(442);
+    // Ratchet raised 2026-07-25: 0443 simuladores_matriz_remediation_compensation
+    // (append-only overlay + ledger for the 5 LEGACY_EQUIVALENT compensation).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(443);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 

@@ -55,6 +55,11 @@ export interface Env {
   // instrutor (tenant-scoped, empresa_id=6). Independente do flag acima —
   // nunca toca matriz, manobras, modelos ou sessões. Disabled by default.
   ENABLE_SIMULADORES_GUIA_RELINK_EXECUTOR?: string;
+  // Executor de remediação compensatória das 5 resoluções LEGACY_EQUIVALENT
+  // da matriz (tenant-scoped, empresa_id=6). Independente dos dois flags
+  // acima — nunca toca a resolução original, só cria overlays append-only e
+  // versões COMPENSATE. Disabled by default.
+  ENABLE_SIMULADORES_MATRIZ_REMEDIATION_EXECUTOR?: string;
   USE_INTEGRATED_VIEW?: string; // 'true' habilita uso da view integrada
   USE_QUALIFICACOES_VIEW?: string; // deprecated (view removida); ignorado
   // Migração arquitetural SIGVOOS→Controle de Voos→FRMS (shadow-mode, ver docs/frms-controle-voos-migracao.md)
