@@ -678,6 +678,7 @@ async function assertCatalogsForInput(
   input: FlightInput,
   empresaId: number,
 ): Promise<void> {
+  await assertCatalogItem(db, 'aeronaves', input.aeronave_id, empresaId, 'aeronave_id');
   await assertCatalogItem(db, 'cv_aeroportos', input.origem_id, empresaId, 'origem_id');
   await assertCatalogItem(db, 'cv_aeroportos', input.destino_id, empresaId, 'destino_id');
   await assertCatalogItem(

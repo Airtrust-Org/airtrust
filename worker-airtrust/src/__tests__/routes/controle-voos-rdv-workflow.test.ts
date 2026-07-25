@@ -1123,6 +1123,83 @@ describe('RDV — tripulação e abastecimentos', () => {
     expect(listarBody.data.length).toBe(3);
   });
 
+  it('PUT tripulante exige versao do RDV, aplica CAS e registra evento de auditoria', async () => {
+    const db = createSqliteD1();
+    await preencherRdvCompleto(db);
+    const alvo = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_tripulantes WHERE voo_id = 601 AND funcionario_id = 1002 LIMIT 1`,
+    )[0];
+
+    const semVersao = await request(
+      db,
+      `/api/controle-voos/voos/601/tripulantes/${alvo.id}`,
+      { method: 'PUT', body: JSON.stringify({ observacoes: 'sem versao' }) },
+      COORDENACAO,
+    );
+    expect(semVersao.status).toBe(400);
+
+    const versaoConhecida = await currentVersao(db);
+    const atualizar = await request(
+      db,
+      `/api/controle-voos/voos/601/tripulantes/${alvo.id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ versao: versaoConhecida, observacoes: 'Atualizado' }),
+      },
+      COORDENACAO,
+    );
+    expect(atualizar.status).toBe(200);
+    expect(await currentVersao(db)).toBe(versaoConhecida + 1);
+
+    const evento = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'tripulacao' AND descricao LIKE '%atualizado%'`,
+    );
+    expect(evento.length).toBe(1);
+
+    const desatualizada = await request(
+      db,
+      `/api/controle-voos/voos/601/tripulantes/${alvo.id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ versao: versaoConhecida, observacoes: 'Versao velha' }),
+      },
+      COORDENACAO,
+    );
+    expect(desatualizada.status).toBe(409);
+  });
+
+  it('PUT tripulante: duas chamadas concorrentes com a mesma versao — exatamente uma grava, a outra recebe 409, versao avanca uma unica vez', async () => {
+    const db = createSqliteD1();
+    await preencherRdvCompleto(db);
+    const alvo = queryJson<{ id: number }>(
+      db.databasePath,
+      `SELECT id FROM cv_voo_tripulantes WHERE voo_id = 601 AND funcionario_id = 1002 LIMIT 1`,
+    )[0];
+    const versaoConhecida = await currentVersao(db);
+    const body = JSON.stringify({ versao: versaoConhecida, observacoes: 'Concorrente' });
+
+    const [primeira, segunda] = await Promise.all([
+      request(
+        db,
+        `/api/controle-voos/voos/601/tripulantes/${alvo.id}`,
+        { method: 'PUT', body },
+        COORDENACAO,
+      ),
+      request(
+        db,
+        `/api/controle-voos/voos/601/tripulantes/${alvo.id}`,
+        { method: 'PUT', body },
+        COORDENACAO,
+      ),
+    ]);
+
+    const statuses = [primeira.status, segunda.status].sort();
+    expect(statuses).toEqual([200, 409]);
+    expect(await currentVersao(db)).toBe(versaoConhecida + 1);
+  });
+
   it('registra abastecimento vinculado ao voo e lista por voo', async () => {
     const db = createSqliteD1();
     await preencherRdvCompleto(db);

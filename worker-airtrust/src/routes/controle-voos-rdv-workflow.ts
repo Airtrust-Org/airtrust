@@ -250,7 +250,8 @@ rdvWorkflow.get(
     const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
     if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
 
-    const [empresa, aeronave, tripulantes, etapas, abastecimentos, aprovacoes] = await Promise.all([
+    const [empresa, aeronave, sigvoosOrigin, tripulantes, etapas, abastecimentos, aprovacoes] =
+      await Promise.all([
       // Somente `razao_social` — a única coluna de nome de empresa confirmada
       // presente no schema real (staging e produção; ver
       // scripts/validation/controle-voos-rdv-empresas-schema-contract).
@@ -265,6 +266,11 @@ rdvWorkflow.get(
             .bind(voo.aeronave_id)
             .first<{ modelo: string }>()
         : Promise.resolve(null),
+      c.env.DB.prepare(
+        'SELECT sigvoos_client_name, sigvoos_contract_name FROM cv_voos WHERE id = ? AND empresa_id = ? LIMIT 1',
+      )
+        .bind(voo.id, empresaId)
+        .first<{ sigvoos_client_name: string | null; sigvoos_contract_name: string | null }>(),
       c.env.DB.prepare(
         `
           SELECT f.nome, f.codigo_anac, t.funcao
@@ -329,8 +335,8 @@ rdvWorkflow.get(
     const data: RelatorioPetrobrasData = {
       empresa_nome: empresa?.razao_social || 'AirTrust',
       base: null,
-      contrato: null,
-      cliente: null,
+      contrato: sigvoosOrigin?.sigvoos_contract_name ?? null,
+      cliente: sigvoosOrigin?.sigvoos_client_name ?? null,
       data_voo: rdv.data_voo,
       prefixo: voo.prefixo,
       modelo_aeronave: aeronave?.modelo ?? null,
@@ -1054,7 +1060,13 @@ rdvWorkflow.put('/voos/:id/tripulantes/:tripulanteId', auth(), requireAnyRdvAcce
   if (!existing)
     throw new ApiError('Tripulante nao encontrado', 404, 'CONTROLE_VOOS_TRIPULANTE_NOT_FOUND');
 
-  const payload = await parseJsonPayload(c);
+  const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
+  if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
+
+  const payload = await parseVersionedMutationPayload(c);
+  const expectedVersion = requireExpectedRdvVersion(payload);
+  assertRdvVersion(rdv, expectedVersion);
+
   const sets: string[] = [];
   const values: unknown[] = [];
 
@@ -1081,12 +1093,42 @@ rdvWorkflow.put('/voos/:id/tripulantes/:tripulanteId', auth(), requireAnyRdvAcce
 
   if (sets.length > 0) {
     sets.push('updated_by = ?', 'updated_at = datetime("now")');
-    values.push(userId, tripulanteId, empresaId);
-    await c.env.DB.prepare(
-      `UPDATE cv_voo_tripulantes SET ${sets.join(', ')} WHERE id = ? AND empresa_id = ?`,
-    )
-      .bind(...values)
-      .run();
+    values.push(userId, tripulanteId, voo.id, empresaId);
+
+    const novaVersao = rdv.versao + 1;
+    const guard = { rdvId: rdv.id, empresaId, expectedVersion: rdv.versao };
+    const [tripulanteResult, rdvResult] = await c.env.DB.batch([
+      buildRdvVersionGuardedUpdate(c.env.DB, {
+        table: 'cv_voo_tripulantes',
+        setSql: sets.join(', '),
+        setBindValues: values.slice(0, values.length - 3),
+        whereSql: 'id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        whereBindValues: values.slice(-3),
+        guard,
+      }),
+      buildRdvVersionBumpGatedOnPriorChanges(c.env.DB, {
+        rdvId: rdv.id,
+        empresaId,
+        currentVersion: rdv.versao,
+        nextVersion: novaVersao,
+        userId,
+      }),
+    ]);
+
+    assertCasApplied(tripulanteResult);
+    assertCasApplied(rdvResult);
+
+    await recordFlightEvent({
+      db: c.env.DB,
+      empresaId,
+      vooId: voo.id,
+      tipoEvento: 'tripulacao',
+      statusAnterior: voo.status,
+      statusNovo: voo.status,
+      descricao: 'Tripulante atualizado',
+      metadata: { action: 'update', tripulante_id: tripulanteId },
+      usuarioId: userId,
+    });
   }
 
   return c.json({ success: true, data: { id: tripulanteId } });

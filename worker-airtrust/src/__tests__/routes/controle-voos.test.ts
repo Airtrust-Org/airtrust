@@ -130,6 +130,15 @@ function createSqliteD1(): SqliteD1 {
         funcionario_id INTEGER,
         deleted_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS aeronaves (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        empresa_id INTEGER,
+        modelo TEXT NOT NULL,
+        prefixo TEXT,
+        ativo INTEGER DEFAULT 1,
+        deleted_at TEXT
+      );
     `,
   );
   seed(databasePath);
@@ -226,6 +235,11 @@ function seed(databasePath: string) {
           302, 402, '2026-06-14T12:00:00Z',
           '2026-06-14T13:00:00Z', 'planejado', 'Tenant B', 20, 20
         );
+
+      INSERT INTO aeronaves (id, empresa_id, modelo, prefixo, ativo)
+      VALUES
+        (901, 1, 'AW139', 'PT-AAA', 1),
+        (902, 2, 'AW139', 'PT-BBB', 1);
     `,
   );
 }
@@ -695,6 +709,43 @@ describe('controle voos routes', () => {
       `SELECT tipo_evento, status_novo FROM cv_voo_eventos WHERE voo_id = ${body.data.id}`,
     );
     expect(events).toEqual([{ tipo_evento: 'sistema', status_novo: 'planejado' }]);
+  });
+
+  it('cria voo com aeronave do proprio tenant', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload({ aeronave_id: 901 })),
+    });
+
+    expect(response.status).toBe(201);
+  });
+
+  it('rejeita criacao de voo com aeronave de outro tenant', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload({ aeronave_id: 902 })),
+    });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('CONTROLE_VOOS_INVALID_CATALOG');
+  });
+
+  it('rejeita patch que vincula voo a aeronave de outro tenant', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601', {
+      method: 'PATCH',
+      body: JSON.stringify({ aeronave_id: 902 }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('CONTROLE_VOOS_INVALID_CATALOG');
   });
 
   it('lista somente voos do tenant atual com limite maximo', async () => {
