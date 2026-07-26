@@ -48,7 +48,7 @@ describe('SCORM resume restore helpers', () => {
     expect(source).toContain('applyLocalResumeBackup();');
     expect(source).toContain('bindFrameProgressTracking();');
     expect(source).toContain('resolveScormResumeTargetSlide(savedLocation, observedLocation)');
-    expect(source).toContain("var shouldCommitLocation = previousLocation !== cmi['cmi.location'];");
+    expect(source).toContain('var shouldCommitLocation = previousLocation !== location;');
     expect(source).toContain('scheduleCommit(800);');
   });
 
