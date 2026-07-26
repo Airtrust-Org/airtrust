@@ -43,7 +43,7 @@ async function run() {
   
   const aeronavesPayload = await authFetch(EXPECTED_API_URL, token, '/api/aeronaves');
   const aeronaves = aeronavesPayload.json?.data || [];
-  const aeronave = aeronaves.find(a => a.prefixo.includes('QA')) || aeronaves[0];
+  const aeronave = aeronaves.find(a => (a.prefixo || '').includes('QA')) || aeronaves[0];
   assert(aeronave, 'Nenhuma aeronave encontrada para criar o voo.');
 
   const vooPayload = {
