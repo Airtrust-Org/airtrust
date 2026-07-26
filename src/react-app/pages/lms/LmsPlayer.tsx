@@ -111,6 +111,7 @@ export default function LmsPlayer() {
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
+  const [launchToken, setLaunchToken] = useState<string | null>(null);
   const [completionState, setCompletionState] = useState<
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
   >('idle');
@@ -159,8 +160,8 @@ export default function LmsPlayer() {
   const canGoNextViewedOnly =
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
   const launchUrl =
-    playerToken && matricula && matricula.tipo_conteudo !== 'h5p'
-      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(playerToken)}${reviewParam ? '&review=1' : ''}`
+    launchToken && matricula && matricula.tipo_conteudo !== 'h5p'
+      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(launchToken)}${reviewParam ? '&review=1' : ''}`
       : null;
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
 
@@ -238,6 +239,14 @@ export default function LmsPlayer() {
   useEffect(() => {
     setIframeLoaded(false);
   }, [launchUrl]);
+
+  useEffect(() => {
+    if (playerToken && !launchToken) {
+      setLaunchToken(playerToken);
+    } else if (!playerToken && launchToken) {
+      setLaunchToken(null);
+    }
+  }, [playerToken, launchToken]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);
