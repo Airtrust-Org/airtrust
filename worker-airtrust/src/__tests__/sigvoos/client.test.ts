@@ -124,6 +124,7 @@ describe('SigvoosApiClient', () => {
     it('handles pagination logic (mocked)', async () => {
       const mockFetch = async (input: RequestInfo | URL) => {
         const url = input.toString();
+        if (url.includes('/get/token')) return new Response(JSON.stringify({ token: 't' }), { status: 200 });
         if (url.includes('page=2')) {
           return new Response(JSON.stringify({ data: [3,4] }), { status: 200 });
         }
@@ -137,7 +138,11 @@ describe('SigvoosApiClient', () => {
     });
 
     it('handles irregular payload gracefully', async () => {
-      const mockFetch = async () => new Response('invalid json', { status: 200 });
+      const mockFetch = async (input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url.includes('/get/token')) return new Response(JSON.stringify({ token: 't' }), { status: 200 });
+        return new Response('invalid json', { status: 200 });
+      };
       const client = new SigvoosApiClient(config, { fetchImpl: mockFetch });
       await assert.rejects(client.postSearch('/data', {}));
     });
@@ -167,6 +172,8 @@ describe('SigvoosApiClient', () => {
 
     it('guarantees zero writes during preview and sigvoos-frms/real-preview compat', async () => {
       const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input.toString();
+        if (url.includes('/get/token')) return new Response(JSON.stringify({ token: 't' }), { status: 200 });
         if (init?.method !== 'GET' && init?.method !== 'POST') {
           throw new Error('Write operation forbidden in preview');
         }
