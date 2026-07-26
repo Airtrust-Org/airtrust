@@ -239,6 +239,24 @@ describe('modelos-aeronave write authorization', () => {
     expect(runs.some((r) => r.query.startsWith('INSERT INTO modelos_aeronave'))).toBe(true);
   });
 
+  // Regressao: D1 real (nao o mock acima) rejeita `undefined` como bind
+  // value com D1_TYPE_ERROR — achado via E2E autenticado real em staging
+  // (POST so com `modelo`, sem fabricante/tipo/categoria/descricao, 500).
+  // O mock de D1 deste arquivo nao valida tipos, entao so um assert direto
+  // sobre os args do bind pega essa classe de bug.
+  it('admin em POST so com modelo (campos opcionais ausentes) nao passa undefined pro bind', async () => {
+    const { env, runs } = createMockEnv();
+    const res = await req('/api/modelos-aeronave', env, 'admin', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ modelo: 'SOMENTE-MODELO' }),
+    });
+    expect(res.status).toBe(201);
+    const insertRun = runs.find((r) => r.query.startsWith('INSERT INTO modelos_aeronave'));
+    expect(insertRun).toBeDefined();
+    expect(insertRun!.args).not.toContain(undefined);
+  });
+
   it('admin em PUT retorna 200 e executa UPDATE', async () => {
     const { env, runs } = createMockEnv();
     const res = await req('/api/modelos-aeronave/1', env, 'admin', {

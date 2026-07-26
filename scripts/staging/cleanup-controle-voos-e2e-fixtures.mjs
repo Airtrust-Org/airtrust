@@ -76,7 +76,11 @@ async function main() {
     // ser limpos junto, ja que pertencem exclusivamente aos tenants sinteticos.
     `DELETE FROM aeronaves WHERE empresa_id IN (${empresaIdList});`,
     `DELETE FROM modelos_aeronave WHERE empresa_id IN (${empresaIdList});`,
+    // funcionarios antes de setores (funcionarios.setor_id referencia
+    // setores.id) — ambos criados via rota oficial (POST /api/funcionarios,
+    // POST /api/setores) por run-controle-voos-e2e.mjs.
     `DELETE FROM funcionarios WHERE empresa_id IN (${empresaIdList});`,
+    `DELETE FROM setores WHERE empresa_id IN (${empresaIdList});`,
     `DELETE FROM usuarios_empresas WHERE empresa_id IN (${empresaIdList});`,
     `DELETE FROM usuarios WHERE id IN (${Object.values(manifest.users).map((u) => u.id).join(', ')});`,
     `DELETE FROM empresas WHERE id IN (${empresaIdList});`,

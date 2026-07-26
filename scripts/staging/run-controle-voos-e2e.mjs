@@ -85,6 +85,24 @@ function nowIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Gera um CPF sintetico com digitos verificadores REAIS (algoritmo oficial,
+// mesmo usado por worker-airtrust/src/utils/cpf.ts isValidCPF) — POST
+// /api/funcionarios rejeita CPF com checksum invalido, e um CPF sequencial
+// (111.111.111-11 etc.) tambem e rejeitado. `seed` so precisa ser unico por
+// chamada para nao colidir com o UNIQUE de outro funcionario sintetico.
+function syntheticCpf(seed) {
+  const base = String(seed).padStart(9, '3').slice(-9).split('').map(Number);
+  const digit = (nums, factorStart) => {
+    let sum = 0;
+    for (let i = 0; i < nums.length; i++) sum += nums[i] * (factorStart - i);
+    const d = 11 - (sum % 11);
+    return d >= 10 ? 0 : d;
+  };
+  const d1 = digit(base, 10);
+  const d2 = digit([...base, d1], 11);
+  return [...base, d1, d2].join('');
+}
+
 async function login(email, password) {
   const res = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
@@ -301,6 +319,38 @@ async function main() {
   });
   rdvVersao += 1;
 
+  // ── 7.5 Criar setor + funcionario via cadastro CANONICO (Funcionarios) ──
+  // funcionarios.setor_id e exigido por trigger real (achado em staging:
+  // trg_funcionarios_setor_required_insert), nao por NOT NULL simples.
+  // CPF precisa de digito verificador valido (isValidCPF real, nao mock).
+  await call({
+    operation: 'criar_setor_canonico',
+    method: 'POST',
+    path: '/api/setores',
+    actor: adminA,
+    tenant: 'A',
+    expectedStatus: 201,
+    body: { codigo: `E2E${manifest.runId}`.slice(0, 20), nome: `E2E Synthetic Setor ${manifest.runId}` },
+  });
+
+  const { json: funcJson, passed: funcPassed } = await call({
+    operation: 'criar_funcionario_canonico',
+    method: 'POST',
+    path: '/api/funcionarios',
+    actor: adminA,
+    tenant: 'A',
+    expectedStatus: 201,
+    body: {
+      nome: `CV E2E Synthetic Crew ${manifest.runId}`,
+      cpf: syntheticCpf('111222333'),
+      email: `cv.e2e.crew.${manifest.runId}@synthetic.invalid`,
+      setor: `E2E Synthetic Setor ${manifest.runId}`,
+      codigo_anac: `E2E-${manifest.runId}`,
+    },
+  });
+  if (!funcPassed) return finish(manifest, false);
+  const funcionarioId = funcJson?.data?.id;
+
   // ── 8. Adicionar tripulante ──────────────────────────────────────────
   const { json: tripJson } = await call({
     operation: 'adicionar_tripulante',
@@ -309,7 +359,7 @@ async function main() {
     actor: adminA,
     tenant: 'A',
     expectedStatus: 201,
-    body: { funcionario_id: manifest.funcionarios.funcA1.id, funcao: 'PIC' },
+    body: { funcionario_id: funcionarioId, funcao: 'PIC' },
   });
   const tripulanteId = tripJson?.data?.id;
 
@@ -444,9 +494,15 @@ async function main() {
     actor: adminA,
     tenant: 'A',
     expectedStatus: 200,
-    body: { versao: rdvVersao, observacoes: 'Corrigido apos devolucao (E2E)' },
+    // PUT /voos/:id/rdv nao aceita `versao` (400 CONTROLE_VOOS_FORBIDDEN_FIELD
+    // — nao esta em allowedRdvFields) e NAO incrementa cv_rdv_operacional.versao
+    // (achado real via E2E: essa rota predata o CAS fino dos endpoints de
+    // workflow e usa apenas o lock grosso de `status` — devolver ja resetou
+    // status para 'rascunho', entao o PUT aqui e permitido sem CAS numerico).
+    // `observacoes` tambem nao existe em allowedRdvFields; `ocorrencias` sim.
+    body: { ocorrencias: 'Corrigido apos devolucao (E2E)' },
   });
-  rdvVersao += 1;
+  // rdvVersao NAO muda aqui — PUT rdv nao bumpa versao (ver comentario acima).
 
   await call({
     operation: 'refinalizar_preenchimento_rdv',

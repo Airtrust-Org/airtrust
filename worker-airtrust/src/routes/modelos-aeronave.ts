@@ -134,10 +134,10 @@ modelosAeronave.post('/', auth(), requireRole('admin'), async (c) => {
       modeloNormalizado,
       modeloNormalizado,
       modeloNormalizado,
-      fabricante,
-      tipo,
-      categoria,
-      descricao,
+      fabricante ?? null,
+      tipo ?? null,
+      categoria ?? null,
+      descricao ?? null,
     )
     .run();
 

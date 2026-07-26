@@ -13,7 +13,7 @@
 // que este script cria, usando o mesmo manifest.
 
 import { createRequire } from 'node:module';
-import { mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -53,19 +53,24 @@ function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
+// IMPORTANT (found empirically against real staging, not documented by
+// wrangler): `d1 execute --file ... --json` submits through D1's
+// file-import API action, which returns EXECUTION METADATA ("Total queries
+// executed", "Rows read", ...) in `results`, NOT the actual query rows —
+// even for a plain SELECT. `--command` submits through the query API
+// action and returns real rows. So every read (SELECT/PRAGMA) here MUST use
+// --command; --file is reserved for the migration DDL apply, where the
+// content is a write and metadata-vs-rows doesn't matter.
 function execD1(dbName, sql, { apply }) {
   if (!apply) {
     log(`[dry-run] SQL:\n${sql}`);
     return null;
   }
-  const tmpFile = join(mkdtempSync(join(tmpdir(), 'cv-e2e-provision-')), 'stmt.sql');
-  writeFileSync(tmpFile, sql, { mode: 0o600 });
   const result = spawnSync(
     'npx',
-    ['wrangler', 'd1', 'execute', dbName, '--env', 'staging', '--remote', '--file', tmpFile, '--json'],
+    ['wrangler', 'd1', 'execute', dbName, '--env', 'staging', '--remote', '--command', sql, '--json'],
     { cwd: WORKER_DIR, encoding: 'utf8' },
   );
-  rmSync(tmpFile, { force: true });
   if (result.status !== 0) {
     throw new Error(`D1 execute falhou: ${result.stderr || result.stdout}`);
   }
@@ -73,14 +78,11 @@ function execD1(dbName, sql, { apply }) {
 }
 
 function queryD1(dbName, sql) {
-  const tmpFile = join(mkdtempSync(join(tmpdir(), 'cv-e2e-query-')), 'stmt.sql');
-  writeFileSync(tmpFile, sql, { mode: 0o600 });
   const result = spawnSync(
     'npx',
-    ['wrangler', 'd1', 'execute', dbName, '--env', 'staging', '--remote', '--file', tmpFile, '--json'],
+    ['wrangler', 'd1', 'execute', dbName, '--env', 'staging', '--remote', '--command', sql, '--json'],
     { cwd: WORKER_DIR, encoding: 'utf8' },
   );
-  rmSync(tmpFile, { force: true });
   if (result.status !== 0) {
     throw new Error(`D1 query falhou: ${result.stderr || result.stdout}`);
   }
@@ -165,26 +167,14 @@ async function main() {
   });
   execD1(dbName, linkSqlParts.join('\n'), { apply });
 
-  // 3. Funcionarios (dados de tripulacao sintetica) — 2 por tenant
-  const funcionarios = [
-    { key: 'funcA1', tenant: 'A', nome: `CV E2E Synthetic Crew A1 ${runId}`, codigo_anac: `E2E-A1-${runId}` },
-    { key: 'funcA2', tenant: 'A', nome: `CV E2E Synthetic Crew A2 ${runId}`, codigo_anac: `E2E-A2-${runId}` },
-    { key: 'funcB1', tenant: 'B', nome: `CV E2E Synthetic Crew B1 ${runId}`, codigo_anac: `E2E-B1-${runId}` },
-  ];
-  const funcSql = funcionarios
-    .map((f) => {
-      const empresaId = f.tenant === 'A' ? empresaAId : empresaBId;
-      return `INSERT INTO funcionarios (nome, empresa_id, codigo_anac, status, ativo) VALUES (${sqlString(f.nome)}, ${empresaId}, ${sqlString(f.codigo_anac)}, 'ATIVO', 1);`;
-    })
-    .join('\n');
-  execD1(dbName, funcSql, { apply });
-  const funcRows = queryD1(
-    dbName,
-    `SELECT id, nome FROM funcionarios WHERE nome IN (${funcionarios.map((f) => sqlString(f.nome)).join(', ')});`,
-  );
-  for (const f of funcionarios) {
-    f.id = funcRows.find((r) => r.nome === f.nome)?.id;
-  }
+  // 3. Funcionarios: NAO criados aqui. POST /api/funcionarios e uma rota
+  //    oficial (requireRole admin/manager) e exige nome/cpf/email validos
+  //    (CPF com digito verificador real) + setor_id valido (trigger
+  //    trg_funcionarios_setor_required_insert, achado real em staging —
+  //    funcionarios.setor_id nao e uma coluna NOT NULL simples, e exigido
+  //    por trigger). run-controle-voos-e2e.mjs cria o setor (POST
+  //    /api/setores) e os funcionarios via essas rotas oficiais, autenticado
+  //    como adminA, com CPFs sinteticos com digito verificador calculado.
 
   // 4. Catalogos Controle de Voos (por tenant). Nao inclui aeronave/modelo:
   //    esses sao cadastros CANONICOS do AirTrust (aeronaves, modelos_aeronave,
@@ -237,7 +227,6 @@ async function main() {
     users: Object.fromEntries(
       users.map((u) => [u.key, { id: u.id, email: u.email, password: u.password, role: u.role, tenant: u.tenant }]),
     ),
-    funcionarios: Object.fromEntries(funcionarios.map((f) => [f.key, { id: f.id, tenant: f.tenant }])),
     catalogA: {
       origemId: findCatalog('cv_aeroportos', 'OR', 'A'),
       destinoId: findCatalog('cv_aeroportos', 'DE', 'A'),
