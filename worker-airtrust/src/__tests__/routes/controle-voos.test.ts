@@ -245,6 +245,11 @@ function createSqliteD1(): SqliteD1 {
   return db;
 }
 
+async function currentVersao(db: any) {
+  const r = await db.prepare('SELECT versao FROM cv_rdv_operacional WHERE voo_id = 601 AND deleted_at IS NULL ORDER BY id DESC LIMIT 1').first() as any;
+  return r?.versao ?? 1;
+}
+
 function seed(databasePath: string) {
   runSql(
     databasePath,
@@ -1120,6 +1125,7 @@ describe('controle voos routes', () => {
         combustivel_decolagem: 1400,
         combustivel_pouso: 800,
         combustivel_consumo: 600,
+        versao: await currentVersao(db),
       }),
     });
 
@@ -1140,6 +1146,7 @@ describe('controle voos routes', () => {
 
     const response = await request(db, '/api/controle-voos/voos/601/rdv/finalizar-preenchimento', {
       method: 'POST',
+      body: JSON.stringify({ versao: await currentVersao(db) }),
     });
 
     expect(response.status).toBe(200);
@@ -1164,6 +1171,7 @@ describe('controle voos routes', () => {
     });
     await request(db, '/api/controle-voos/voos/601/rdv/finalizar-preenchimento', {
       method: 'POST',
+      body: JSON.stringify({ versao: await currentVersao(db) }),
     });
 
     const response = await request(db, '/api/controle-voos/voos/601/rdv', {
@@ -1335,6 +1343,50 @@ describe('controle voos routes', () => {
     expect(finalizeResponse.status).toBe(403);
   });
 
+
+  it('garante que duas criacoes simultaneas de RDV para o mesmo voo geram apenas 1 RDV e a segunda retorna 409', async () => {
+    const db = createSqliteD1();
+
+    const payload = validRdvPayload();
+
+    const responses = await Promise.all([
+      request(db, '/api/controle-voos/voos/601/rdv', { method: 'PUT', body: JSON.stringify(payload) }),
+      request(db, '/api/controle-voos/voos/601/rdv', { method: 'PUT', body: JSON.stringify(payload) })
+    ]);
+
+    const statuses = responses.map((r) => r.status);
+    expect(statuses.sort()).toEqual([201, 409]);
+
+    const eventos = await db
+      .prepare(`SELECT * FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND json_extract(metadata_json, '$.action') = 'create'`)
+      .all();
+    expect(eventos.results).toHaveLength(1);
+  });
+
+  it('garante atomicidade no update do RDV: se a transacao falhar, nao gera evento nem atualiza rdv', async () => {
+    const db = createSqliteD1();
+    
+    await request(db, '/api/controle-voos/voos/601/rdv', { method: 'PUT', body: JSON.stringify(validRdvPayload()) });
+    const rdv = await db.prepare('SELECT versao FROM cv_rdv_operacional WHERE voo_id = 601').first() as any;
+    
+    const originalBatch = db.batch;
+    db.batch = async () => { throw new Error('Mock batch error'); };
+    
+    const response = await request(db, '/api/controle-voos/voos/601/rdv', { method: 'PUT', body: JSON.stringify({ ocorrencias: 'teste atomicidade', versao: rdv?.versao }) });
+    expect(response.status).toBe(500);
+    
+    db.batch = originalBatch;
+    
+    const rdvPos = await db.prepare('SELECT versao, ocorrencias FROM cv_rdv_operacional WHERE voo_id = 601').first<{ versao: number, ocorrencias: string | null }>();
+    expect(rdvPos?.versao).toBe(rdv?.versao);
+    expect(rdvPos?.ocorrencias).toBe('Sem intercorrencias');
+    
+    const eventos = await db
+      .prepare(`SELECT * FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND json_extract(metadata_json, '$.action') = 'update'`)
+      .all();
+    expect(eventos.results).toHaveLength(0);
+  });
+
   it('registra evento rdv em criacao, atualizacao e finalizacao', async () => {
     const db = createSqliteD1();
 
@@ -1344,10 +1396,11 @@ describe('controle voos routes', () => {
     });
     await request(db, '/api/controle-voos/voos/601/rdv', {
       method: 'PUT',
-      body: JSON.stringify({ horas_voadas: 1.25, combustivel_consumo: 500 }),
+      body: JSON.stringify({ horas_voadas: 1.25, combustivel_consumo: 500, versao: 1 }),
     });
     await request(db, '/api/controle-voos/voos/601/rdv/finalizar-preenchimento', {
       method: 'POST',
+      body: JSON.stringify({ versao: await currentVersao(db) }),
     });
 
     const events = db.queryJson<{ tipo_evento: string; descricao: string; metadata_json: string }>(

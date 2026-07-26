@@ -443,11 +443,8 @@ const COORDENACAO = { role: 'manager', userId: 11 } as const;
 
 /** Versao atual do RDV do voo (default 601) — `versao` agora e obrigatoria em toda transicao. */
 async function currentVersao(db: SqliteD1, vooId = 601): Promise<number> {
-  const rows = queryJson<{ versao: number }>(
-    db.databasePath,
-    `SELECT versao FROM cv_rdv_operacional WHERE voo_id = ${vooId} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1`,
-  );
-  return Number(rows[0]?.versao ?? 1);
+  const r = await db.prepare('SELECT versao FROM cv_rdv_operacional WHERE voo_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1').bind(vooId).first() as any;
+  return r?.versao ?? 1;
 }
 
 /** Corpo JSON de uma transicao de fluxo, com `versao` atual sempre incluida. */
@@ -623,7 +620,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv',
-      { method: 'PUT', body: JSON.stringify({ pob: 4 }) },
+      { method: 'PUT', body: JSON.stringify({ pob: 4, versao: await currentVersao(db) }) },
       PILOTO,
     );
     await request(
@@ -788,7 +785,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const editar = await request(
       db,
       '/api/controle-voos/voos/601/rdv',
-      { method: 'PUT', body: JSON.stringify({ ocorrencias: 'Ajustado apos devolucao' }) },
+      { method: 'PUT', body: JSON.stringify({ ocorrencias: 'Ajustado apos devolucao', versao: await currentVersao(db) }) },
       PILOTO,
     );
     expect(editar.status).toBe(200);
