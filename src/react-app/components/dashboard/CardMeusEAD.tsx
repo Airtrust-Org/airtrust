@@ -18,8 +18,7 @@ import {
 import { toast } from 'sonner';
 import { useMinhasEAD, type LmsMatriculaEAD } from '@/react-app/hooks/useLms';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
-import { API_BASE_URL } from '@/react-app/config/api';
-import { apiFetch } from '@/react-app/lib/apiFetch';
+import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import { parseJsonResponse } from '@/react-app/lib/parseJsonResponse';
 import {
   baixarCertificadoCanonico,
@@ -86,7 +85,7 @@ function BotaoCertificado({ matricula }: { matricula: LmsMatriculaEAD }) {
   const handleBaixar = async () => {
     setBaixando(true);
     try {
-      const res = await apiFetch(
+      const res = await fetchWithAuth(
         `${API_BASE_URL}/certificados/historico/${historicoId}/certificados`,
       );
       const json = await parseJsonResponse(res, isCertificadosResponse);

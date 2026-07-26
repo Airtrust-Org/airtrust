@@ -3,8 +3,7 @@
  * CardMeusEAD e useCertificados. Nunca usa r2_key na URL — sempre
  * resolve o documento_id e baixa via /api/pasta-virtual/stream/:id.
  */
-import { API_BASE_URL } from '@/react-app/config/api';
-import { apiFetch } from '@/react-app/lib/apiFetch';
+import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import { previewPdfBeforeDownload } from './pdfPreview';
 
 export interface CertificadoDownloadSource {
@@ -50,7 +49,7 @@ export async function baixarCertificadoCanonico(cert: CertificadoDownloadSource)
     title: `Certificado ${cert.numero_certificado || fileName}`,
     mimeType: cert.tipo || 'application/pdf',
     fetcher: async () => {
-      const response = await apiFetch(`${API_BASE_URL}/pasta-virtual/stream/${documentoId}`);
+      const response = await fetchWithAuth(`${API_BASE_URL}/pasta-virtual/stream/${documentoId}`);
       if (!response.ok) {
         const sanitized = STREAM_ERROR_MESSAGES[response.status];
         if (sanitized) {
