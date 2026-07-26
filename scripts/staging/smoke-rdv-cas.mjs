@@ -221,14 +221,25 @@ async function run() {
     if (vooId) {
       console.log(`\n[E2E] Executando cleanup (cancelamento) do voo sintético ${vooId}...`);
       try {
-        const cleanupRes = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ status: 'cancelado' })
-        });
-        if (cleanupRes.status === 200) {
-          console.log(`[E2E] Voo ${vooId} cancelado com sucesso (cleanup via API; resíduo de linha cancelada é esperado, não um hard-delete).`);
+        // PATCH /voos/:id exige `versao` (CAS de cv_voos, independente do CAS
+        // de cv_rdv_operacional exercitado acima) — buscar o estado atual do
+        // voo imediatamente antes do PATCH, em vez de reaproveitar a versao
+        // da criacao, para o cleanup continuar correto mesmo se algum passo
+        // futuro do teste vier a alterar o voo.
+        const vooAtualRes = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}`);
+        const vooVersaoAtual = vooAtualRes.json?.data?.versao;
+        if (vooAtualRes.status !== 200 || typeof vooVersaoAtual !== 'number') {
+          console.error(`[E2E] CLEANUP_FALHOU: nao foi possivel ler a versao atual do voo ${vooId} (${vooAtualRes.status} - ${JSON.stringify(vooAtualRes.json)})`);
         } else {
-          console.error(`[E2E] CLEANUP_FALHOU: cancelamento do voo ${vooId} retornou ${cleanupRes.status} - ${JSON.stringify(cleanupRes.json)}`);
+          const cleanupRes = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'cancelado', versao: vooVersaoAtual })
+          });
+          if (cleanupRes.status >= 200 && cleanupRes.status < 300) {
+            console.log(`[E2E] Voo ${vooId} cancelado com sucesso (cleanup via API; resíduo de linha cancelada é esperado, não um hard-delete nem restauração do baseline).`);
+          } else {
+            console.error(`[E2E] CLEANUP_FALHOU: cancelamento do voo ${vooId} retornou ${cleanupRes.status} - ${JSON.stringify(cleanupRes.json)}`);
+          }
         }
       } catch (cleanupErr) {
         console.error(`[E2E] CLEANUP_FALHOU: excecao ao cancelar o voo ${vooId}:`, cleanupErr);
