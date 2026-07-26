@@ -38,6 +38,7 @@ function mockOkFetch() {
 describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume único', () => {
   beforeEach(() => {
     setupDom();
+    g.localStorage?.clear();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
