@@ -110,8 +110,14 @@ export default function LmsPlayer() {
   const [liveLocation, setLiveLocation] = useState<string | null>(null);
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [initialToken] = useState<string | null>(() => getAccessToken() ?? token);
+  const [initialToken, setInitialToken] = useState<string | null>(() => getAccessToken() ?? token);
   const [playerToken, setPlayerToken] = useState<string | null>(initialToken);
+
+  useEffect(() => {
+    if (!initialToken && token) {
+      setInitialToken(token);
+    }
+  }, [initialToken, token]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [completionState, setCompletionState] = useState<
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
