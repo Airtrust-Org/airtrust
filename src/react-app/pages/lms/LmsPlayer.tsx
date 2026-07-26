@@ -432,7 +432,7 @@ export default function LmsPlayer() {
         if (typeof event.data.slide_current === 'number' && Number.isFinite(event.data.slide_current)) {
           setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
         }
-        if (event.data.novo_status === 'CONCLUIDO') {
+        if (event.data.novo_status === 'CONCLUIDO' && !effectiveReviewMode) {
           setCompleted(true);
           showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
         }

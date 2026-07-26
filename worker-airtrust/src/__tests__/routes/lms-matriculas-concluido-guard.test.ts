@@ -228,4 +228,50 @@ describe('lms matriculas concluido guard', () => {
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBeFalsy();
   });
+
+  // ─── T5: "Rever" replay (lesson_status=passed) em CONCLUIDO não reescreve
+  // data_conclusao, não incrementa tentativas e não gera qualificação/certificado ──
+
+  it('replay de "Rever" (status=passed) em matricula CONCLUIDO preserva data_conclusao e tentativas', async () => {
+    const updateBindCalls: unknown[][] = [];
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => MATRICULA_CONCLUIDA }],
+      ['FROM lms_progresso_scorm', {
+        first: () => ({
+          lesson_status: 'passed', completion_status: 'completed',
+          success_status: 'passed', score_raw: 90, score_max: 100,
+          score_min: 0, score_scaled: 0.9,
+          session_time: null, total_time: null,
+          suspend_data: 'data', launch_data: null, cmi_json: null,
+        }),
+      }],
+      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1 } }) }],
+      ['UPDATE lms_matriculas', {
+        run: (args) => {
+          updateBindCalls.push(args);
+          return { meta: { changes: 0 } };
+        },
+      }],
+    ]);
+
+    const response = await app.fetch(makeCommit({
+      matricula_id: 1,
+      lesson_status: 'passed',
+      completion_status: 'completed',
+      score_raw: 95,
+      score_max: 100,
+    }), { DB: db } as Env, {} as ExecutionContext);
+
+    expect(response.status).toBe(200);
+    const json = await response.json() as ScormCommitBody;
+    expect(json.success).toBe(true);
+    expect(json.data.ignoredDowngrade).toBeFalsy();
+
+    expect(updateBindCalls).toHaveLength(1);
+    const [novoStatusArg, , , dataConclusaoArg, tentativasIncrementArg] = updateBindCalls[0];
+    expect(novoStatusArg).toBe('CONCLUIDO');
+    expect(dataConclusaoArg).toBeNull();
+    expect(tentativasIncrementArg).toBe(0);
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+  });
 });
