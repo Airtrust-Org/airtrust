@@ -31,6 +31,11 @@ on:
         required: true
         type: boolean
         default: false
+      run_full_smoke:
+        description: 'When run_smoke=true, run the full smoke chain (doctor + auth + examiner-training) instead of RDV CAS only'
+        required: true
+        type: boolean
+        default: false
       release_reason:
         description: 'Why this staging release is needed'
         required: true
@@ -134,6 +139,7 @@ jobs:
           APPLY_MIGRATIONS: ${{ inputs.apply_migrations }}
           APPROVED_MIGRATIONS: ${{ inputs.approved_migrations }}
           RUN_SMOKE: ${{ inputs.run_smoke }}
+          RUN_FULL_SMOKE: ${{ inputs.run_full_smoke }}
         run: |
           set -euo pipefail
           {
@@ -147,7 +153,7 @@ jobs:
             echo "- deploy_worker: $DEPLOY_WORKER"
             echo "- deploy_frontend: $DEPLOY_FRONTEND"
             echo "- apply_migrations: $APPLY_MIGRATIONS ($APPROVED_MIGRATIONS)"
-            echo "- run_smoke: $RUN_SMOKE"
+            echo "- run_smoke: $RUN_SMOKE (full_smoke=$RUN_FULL_SMOKE)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   production-target-guard:
@@ -514,11 +520,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
+      - name: RDV CAS smoke (targeted, single login)
+        if: ${{ !inputs.run_full_smoke }}
+        run: node scripts/staging/smoke-rdv-cas.mjs
       - name: Staging doctor + auth smoke
+        if: ${{ inputs.run_full_smoke }}
         run: |
           npm run staging:doctor
           npm run smoke:staging:auth
       - name: Examiner-training smoke
+        if: ${{ inputs.run_full_smoke }}
         run: node scripts/staging/smoke-examiner-training.mjs
 
   summary:
