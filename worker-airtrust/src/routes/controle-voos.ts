@@ -733,9 +733,19 @@ async function assertAeronaveBelongsToEmpresa(
   empresaId: number,
 ): Promise<void> {
   if (id === null || id === undefined) return;
+  // Mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1
+  // (routes/aeronaves.ts) e pelo frontend (isAeronaveAtiva em EvdPage.tsx):
+  // status NULL/vazio conta como ATIVO; só os códigos de indisponibilidade
+  // abaixo excluem. Sem isso, uma aeronave inativa (fora de operação) podia
+  // ser vinculada a um voo novo.
   const row = await db
     .prepare(
-      `SELECT id FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+      `
+      SELECT id FROM aeronaves
+      WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+        AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) NOT IN ('I', 'INATIVO', 'INDISPONIVEL', 'INDISPONÍVEL')
+      LIMIT 1
+    `,
     )
     .bind(id, empresaId)
     .first<{ id: number }>();

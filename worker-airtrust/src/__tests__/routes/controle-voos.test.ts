@@ -297,7 +297,8 @@ function seed(databasePath: string) {
       INSERT INTO aeronaves (id, empresa_id, modelo, prefixo, status)
       VALUES
         (901, 1, 'AW139', 'PT-AAA', 'ATIVO'),
-        (902, 2, 'AW139', 'PT-BBB', 'ATIVO');
+        (902, 2, 'AW139', 'PT-BBB', 'ATIVO'),
+        (903, 1, 'AW139', 'PT-INA', 'INATIVO');
     `,
   );
 }
@@ -778,6 +779,19 @@ describe('controle voos routes', () => {
     });
 
     expect(response.status).toBe(201);
+  });
+
+  it('rejeita criacao de voo com aeronave inativa', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload({ aeronave_id: 903 })),
+    });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('CONTROLE_VOOS_INVALID_CATALOG');
   });
 
   it('rejeita criacao de voo com aeronave de outro tenant', async () => {

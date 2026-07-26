@@ -30,11 +30,10 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/frms-fadiga-checkin.ts': 2021,
   // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.
   'routes/lms-assets.ts': 2400,
-  // Cap raised 2026-07-26: counted 2036 — hotfix: aeronaves nao tem coluna
-  // `ativo` (schema real usa `status`), assertCatalogItem genérico quebrava
-  // com SQLITE_ERROR ao validar aeronave_id (achado real em staging).
-  // Substituido por assertAeronaveBelongsToEmpresa dedicado.
-  'routes/controle-voos.ts': 2036,
+  // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
+  // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,
+  // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.
+  'routes/controle-voos.ts': 2046,
 } as const;
 
 const SQL_PREPARE_CAPS = {
