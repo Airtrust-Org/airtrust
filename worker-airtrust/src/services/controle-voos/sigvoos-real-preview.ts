@@ -4,6 +4,7 @@ import {
   resolveSigvoosEncryptionSecret,
   decryptSigvoosPassword,
   SigvoosClientError,
+  type SigvoosRuntimeEnv,
 } from '../../lib/sigvoos/client';
 
 const SIGVOOS_DEFAULT_BASE_URL = 'https://api.sigvoos.com.br/api';
@@ -216,7 +217,7 @@ async function loadConfigFromDb(db: D1Database, empresaId: number, env: Env): Pr
   const username = normalizeText(values.get('username'));
   let password = normalizeText(values.get('password'));
   const encrypted = normalizeText(values.get('password_encrypted'));
-  const secret = resolveSigvoosEncryptionSecret(env as unknown as Record<string, string>);
+  const secret = resolveSigvoosEncryptionSecret(env as Env & SigvoosRuntimeEnv);
 
   if (!password && encrypted && secret) {
     try {

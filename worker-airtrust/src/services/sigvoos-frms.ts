@@ -10,6 +10,7 @@ import {
   resolveSigvoosEncryptionSecret,
   encryptSigvoosPassword,
   decryptSigvoosPassword,
+  type SigvoosClientConfig,
 } from '../lib/sigvoos/client';
 
 const SIGVOOS_PAGE_SIZE = 200;
@@ -2375,7 +2376,7 @@ export async function syncSigvoosForFrms(
       system: input.system || SIGVOOS_DEFAULT_SYSTEM,
       },
       runtimeEnv,);
-       const client = new SigvoosApiClient(config as any);
+       const client = new SigvoosApiClient(config as SigvoosClientConfig);
     const token = await client.authenticate();
     const pageSize = input.pageSize || SIGVOOS_PAGE_SIZE;
     const maxPages = input.maxPages || 2;
