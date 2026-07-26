@@ -46,12 +46,17 @@ async function run() {
   const aeronave = aeronaves.find(a => (a.prefixo || '').includes('QA')) || aeronaves[0];
   assert(aeronave, 'Nenhuma aeronave encontrada para criar o voo.');
 
+  const aeroportosPayload = await authFetch(EXPECTED_API_URL, token, '/api/aeroportos');
+  const aeroportos = aeroportosPayload.json?.data || [];
+  const aeroporto = aeroportos[0];
+  assert(aeroporto, 'Nenhum aeroporto encontrado para criar o voo.');
+
   const vooPayload = {
     prefixo: `QA-E2E-${Date.now()}`,
     data_programacao: new Date().toISOString().split('T')[0],
     aeronave_id: aeronave.id,
-    origem_id: null,
-    destino_id: null,
+    origem_id: aeroporto.id,
+    destino_id: aeroporto.id,
     tipo_voo_id: null,
     natureza_voo_id: null,
     horario_previsto_partida: new Date().toISOString(),
