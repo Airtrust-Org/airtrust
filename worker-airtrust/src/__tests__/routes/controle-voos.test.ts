@@ -184,7 +184,7 @@ function createSqliteD1(): SqliteD1 {
         empresa_id INTEGER,
         modelo TEXT NOT NULL,
         prefixo TEXT,
-        ativo INTEGER DEFAULT 1,
+        status TEXT DEFAULT 'ATIVO',
         deleted_at TEXT
       );
     `,
@@ -294,10 +294,10 @@ function seed(databasePath: string) {
           '2026-06-14T13:00:00Z', 'planejado', 'Tenant B', 20, 20
         );
 
-      INSERT INTO aeronaves (id, empresa_id, modelo, prefixo, ativo)
+      INSERT INTO aeronaves (id, empresa_id, modelo, prefixo, status)
       VALUES
-        (901, 1, 'AW139', 'PT-AAA', 1),
-        (902, 2, 'AW139', 'PT-BBB', 1);
+        (901, 1, 'AW139', 'PT-AAA', 'ATIVO'),
+        (902, 2, 'AW139', 'PT-BBB', 'ATIVO');
     `,
   );
 }

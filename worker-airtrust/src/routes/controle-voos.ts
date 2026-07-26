@@ -722,12 +722,34 @@ async function assertCatalogItem(
   }
 }
 
+// `aeronaves` e uma tabela pre-existente (routes/aeronaves.ts), fora do
+// schema cv_* do Controle de Voos, com colunas proprias (`status` em vez de
+// `ativo`) — nao pode reusar assertCatalogItem, que assume o padrao comum
+// dos catalogos cv_* (`ativo = 1`). Confirmado por erro real em staging
+// (SQLITE_ERROR: no such column: ativo) antes desta correcao.
+async function assertAeronaveBelongsToEmpresa(
+  db: D1Database,
+  id: number | null | undefined,
+  empresaId: number,
+): Promise<void> {
+  if (id === null || id === undefined) return;
+  const row = await db
+    .prepare(
+      `SELECT id FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(id, empresaId)
+    .first<{ id: number }>();
+  if (!row) {
+    throw new ApiError('aeronave_id nao pertence a empresa', 400, 'CONTROLE_VOOS_INVALID_CATALOG');
+  }
+}
+
 async function assertCatalogsForInput(
   db: D1Database,
   input: FlightInput,
   empresaId: number,
 ): Promise<void> {
-  await assertCatalogItem(db, 'aeronaves', input.aeronave_id, empresaId, 'aeronave_id');
+  await assertAeronaveBelongsToEmpresa(db, input.aeronave_id, empresaId);
   await assertCatalogItem(db, 'cv_aeroportos', input.origem_id, empresaId, 'origem_id');
   await assertCatalogItem(db, 'cv_aeroportos', input.destino_id, empresaId, 'destino_id');
   await assertCatalogItem(
