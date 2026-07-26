@@ -46,7 +46,7 @@ async function run() {
   const aeronave = aeronaves.find(a => (a.prefixo || '').includes('QA')) || aeronaves[0];
   assert(aeronave, 'Nenhuma aeronave encontrada para criar o voo.');
 
-  const aeroportosPayload = await authFetch(EXPECTED_API_URL, token, '/api/aeroportos');
+  const aeroportosPayload = await authFetch(EXPECTED_API_URL, token, '/api/controle-voos/catalogos/aeroportos');
   const aeroportos = aeroportosPayload.json?.data || [];
   const aeroporto = aeroportos[0];
   assert(aeroporto, 'Nenhum aeroporto encontrado para criar o voo.');
