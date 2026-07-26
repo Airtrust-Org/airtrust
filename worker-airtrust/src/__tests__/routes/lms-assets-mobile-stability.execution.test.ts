@@ -4,13 +4,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLaunchPage } from '../../routes/lms-assets';
 
+// Este pacote (worker-airtrust) compila sem lib "dom" de propósito (é um
+// Cloudflare Worker). Este teste roda em ambiente jsdom via vitest, mas
+// acessa os globais do navegador via globalThis/any para não puxar a lib
+// "dom" inteira para o projeto (isso quebra tipos de Worker em outros
+// arquivos que colidem com tipos DOM, ex. ArrayBuffer/FormData).
+type AnyGlobal = typeof globalThis & Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+const g = globalThis as AnyGlobal;
+
 function extractWrapperScript(html: string): string {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
   return scripts.join('\n;\n');
 }
 
 function setupDom() {
-  document.body.innerHTML = `
+  g.document.body.innerHTML = `
     <div id="status-bar"><span id="status-dot"></span><span id="status-text"></span></div>
     <div id="completion-overlay"><h2></h2><p></p></div>
     <iframe id="scorm-frame"></iframe>
@@ -52,9 +60,9 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     new Function(extractWrapperScript(html))();
 
     // Sem resume state: autosaveReady é liberado assim que o frame "carrega".
-    document.getElementById('scorm-frame')!.dispatchEvent(new Event('load'));
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
 
-    const api = (window as unknown as { API: Record<string, (...args: unknown[]) => unknown> }).API;
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
 
     api.LMSSetValue('cmi.core.lesson_location', '5/103');
     await new Promise((r) => setTimeout(r, 850));
@@ -87,9 +95,9 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     });
 
     new Function(extractWrapperScript(html))();
-    document.getElementById('scorm-frame')!.dispatchEvent(new Event('load'));
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
 
-    const api = (window as unknown as { API: Record<string, (...args: unknown[]) => unknown> }).API;
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
 
     api.LMSSetValue('cmi.core.lesson_location', '5/103');
     await new Promise((r) => setTimeout(r, 850));
@@ -122,15 +130,15 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     new Function(extractWrapperScript(html))();
 
     // Navegação manual antes do primeiro load do frame.
-    window.dispatchEvent(
-      new MessageEvent('message', { data: { type: 'lms:navigate', direction: 'next' } }),
+    g.window.dispatchEvent(
+      new g.MessageEvent('message', { data: { type: 'lms:navigate', direction: 'next' } }),
     );
 
-    document.getElementById('scorm-frame')!.dispatchEvent(new Event('load'));
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
     await new Promise((r) => setTimeout(r, 900));
 
     // autosave deve ter sido liberado mesmo sem o restore rodar (else branch).
-    const api = (window as unknown as { API: Record<string, (...args: unknown[]) => unknown> }).API;
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
     api.LMSSetValue('cmi.core.lesson_location', '9/103');
     await new Promise((r) => setTimeout(r, 850));
     expect(fetchMock).toHaveBeenCalledTimes(1);
