@@ -35,6 +35,7 @@ import {
   maybeRecordSystemAudit,
   getFuncionarioIdForUser,
   buildRdvVersionGuardedUpdate,
+  mapRdvOperacionalUniqueConstraintError,
 } from '../repositories/controle-voos/rdv-repository';
 import { 
   RDV_CAPABILITIES, 
@@ -1548,16 +1549,8 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
       await maybeRecordSystemAudit(c, 'cv_rdv_operacional', 'INSERT', created.id, null, { ...input, versaoNova: 1 });
       return c.json({ success: true, data: created }, 201);
     } catch (err: unknown) {
-      if (
-        (err as Error).message.includes('UNIQUE constraint failed') ||
-        (err as Error).message.includes('D1_ERROR')
-      ) {
-        throw new ApiError(
-          'Versao do RDV desatualizada. Recarregue os dados antes de continuar.',
-          409,
-          'CONTROLE_VOOS_RDV_VERSION_CONFLICT'
-        );
-      }
+      const mapped = mapRdvOperacionalUniqueConstraintError(err);
+      if (mapped) throw mapped;
       throw err;
     }
   }
@@ -1623,7 +1616,14 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
     userId,
   );
 
-  const batchResults = await c.env.DB.batch([stmtUpdate, stmtEvent]);
+  let batchResults;
+  try {
+    batchResults = await c.env.DB.batch([stmtUpdate, stmtEvent]);
+  } catch (err: unknown) {
+    const mapped = mapRdvOperacionalUniqueConstraintError(err);
+    if (mapped) throw mapped;
+    throw err;
+  }
   assertCasApplied(batchResults[0]);
 
   await maybeRecordSystemAudit(

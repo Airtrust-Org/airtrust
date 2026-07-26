@@ -541,6 +541,61 @@ export function buildRdvVersionGuardedUpdate(
     );
 }
 
+// `cv_rdv_operacional` tem duas UNIQUE constraints (migration 0410) que
+// podem falhar num INSERT/UPDATE: uma por voo ativo (corrida de criação) e
+// outra por número de RDV (colisão de negócio, sem relação com CAS). Os
+// fragmentos abaixo são o texto EXATO que o SQLite/D1 emite para cada
+// índice (`UNIQUE constraint failed: <tabela>.<col1>, <tabela>.<col2>`,
+// na ordem de declaração do índice) — usados para diferenciar as duas
+// sem adivinhar a partir de heurísticas de payload.
+const RDV_OPERACIONAL_VOO_UNIQUE_FRAGMENT =
+  'cv_rdv_operacional.empresa_id, cv_rdv_operacional.voo_id';
+const RDV_OPERACIONAL_NUMERO_UNIQUE_FRAGMENT =
+  'cv_rdv_operacional.empresa_id, cv_rdv_operacional.numero';
+
+/**
+ * Classifica um erro do D1 vindo de um INSERT/UPDATE em `cv_rdv_operacional`
+ * nas duas UNIQUE constraints da tabela, devolvendo o `ApiError` correto
+ * para cada uma — ou `null` se o erro não corresponde a nenhuma das duas
+ * (o chamador deve relançar o erro original nesse caso).
+ *
+ * ACHADO (staging, 2026-07-26, run 30212619886): o handler de UPDATE de
+ * `PUT /voos/:id/rdv` não tinha NENHUM tratamento de erro em torno do
+ * `db.batch([stmtUpdate, stmtEvent])` — uma violação de
+ * `idx_cv_rdv_operacional_empresa_numero` (dois RDVs da mesma empresa
+ * disputando o mesmo `numero`) vazava como 500 cru com o texto do
+ * `D1_ERROR`. O caminho de criação (`!existing`) já tratava
+ * `UNIQUE constraint failed` de forma genérica, mas mapeava QUALQUER
+ * violação para `CONTROLE_VOOS_RDV_VERSION_CONFLICT` — inclusive uma
+ * colisão de `numero` com um RDV de OUTRO voo, que não é uma corrida de
+ * versão e não deve pedir "recarregue os dados". Esta função separa os
+ * dois casos pelo texto exato da constraint, para nunca converter um
+ * SQLITE_CONSTRAINT genérico em 409 sem prova de que representa
+ * realmente a perda de uma corrida de criação/versão.
+ */
+export function mapRdvOperacionalUniqueConstraintError(err: unknown): ApiError | null {
+  const message = err instanceof Error ? err.message : String(err);
+  if (!message.includes('UNIQUE constraint failed')) return null;
+
+  if (message.includes(RDV_OPERACIONAL_NUMERO_UNIQUE_FRAGMENT)) {
+    return new ApiError(
+      'Já existe um RDV com este número nesta empresa. Escolha outro número e tente novamente.',
+      409,
+      'CONTROLE_VOOS_RDV_NUMERO_DUPLICADO',
+    );
+  }
+
+  if (message.includes(RDV_OPERACIONAL_VOO_UNIQUE_FRAGMENT)) {
+    return new ApiError(
+      'Versao do RDV desatualizada. Recarregue os dados antes de continuar.',
+      409,
+      'CONTROLE_VOOS_RDV_VERSION_CONFLICT',
+    );
+  }
+
+  return null;
+}
+
 /**
  * Monta (sem executar) o UPDATE que incrementa `cv_rdv_operacional.versao`,
  * condicionado SIMULTANEAMENTE a (1) a versão atual bater (CAS) e (2) a

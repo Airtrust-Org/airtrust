@@ -1363,6 +1363,142 @@ describe('controle voos routes', () => {
     expect(eventos.results).toHaveLength(1);
   });
 
+  it('UPDATE concorrente do mesmo RDV sem alterar numero: exatamente 1 sucesso (versao 5) e 1 conflito 409, sem 500 e sem lost update', async () => {
+    const db = createSqliteD1();
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload({ numero: 'RDV-CONCORRENCIA-601' })),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ versao: 1, ocorrencias: 'v2' }),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ versao: 2, ocorrencias: 'v3' }),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ versao: 3, ocorrencias: 'v4' }),
+    });
+
+    // Duas chamadas concorrentes, mesma versao (4), NENHUMA muda `numero`
+    // (mesmo numero de destino: o que o RDV ja tem) — so `ocorrencias` diverge.
+    const [r1, r2] = await Promise.all([
+      request(db, '/api/controle-voos/voos/601/rdv', {
+        method: 'PUT',
+        body: JSON.stringify({ versao: 4, ocorrencias: 'tentativa-1' }),
+      }),
+      request(db, '/api/controle-voos/voos/601/rdv', {
+        method: 'PUT',
+        body: JSON.stringify({ versao: 4, ocorrencias: 'tentativa-2' }),
+      }),
+    ]);
+
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([200, 409]);
+    expect(statuses).not.toContain(500);
+
+    const winner = r1.status === 200 ? r1 : r2;
+    const loser = r1.status === 200 ? r2 : r1;
+    const winnerBody = (await winner.json()) as { data: { versao: number; ocorrencias: string } };
+    expect(winnerBody.data.versao).toBe(5);
+
+    const loserBody = (await loser.json()) as { code?: string };
+    expect(loserBody.code).toBe('CONTROLE_VOOS_RDV_VERSION_CONFLICT');
+
+    const row = await db
+      .prepare('SELECT versao, ocorrencias FROM cv_rdv_operacional WHERE voo_id = 601')
+      .first<{ versao: number; ocorrencias: string }>();
+    expect(row?.versao).toBe(5);
+    expect(row?.ocorrencias).toBe(winnerBody.data.ocorrencias);
+
+    const eventos = await db
+      .prepare(
+        `SELECT * FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND json_extract(metadata_json, '$.action') = 'update' AND json_extract(metadata_json, '$.versaoNova') = 5`,
+      )
+      .all();
+    expect(eventos.results).toHaveLength(1);
+  });
+
+  it('UPDATE de RDV para numero ja usado por outro RDV da mesma empresa retorna conflito de validacao, nunca 500 nem falso conflito de versao', async () => {
+    const db = createSqliteD1();
+
+    // RDV de outro voo (602) ja reivindica este numero.
+    const outroNumero = 'RDV-JA-EXISTENTE-602';
+    const outroCreate = await request(db, '/api/controle-voos/voos/602/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload({ numero: outroNumero })),
+    });
+    expect(outroCreate.status).toBe(201);
+
+    // RDV sob teste (voo 601) avanca ate versao 4.
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload({ numero: 'RDV-601-V1' })),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ versao: 1, ocorrencias: 'v2' }),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ versao: 2, ocorrencias: 'v3' }),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ versao: 3, ocorrencias: 'v4' }),
+    });
+
+    const before = await db
+      .prepare('SELECT versao, numero, ocorrencias FROM cv_rdv_operacional WHERE voo_id = 601')
+      .first<{ versao: number; numero: string; ocorrencias: string }>();
+    expect(before?.versao).toBe(4);
+
+    // Duas requisicoes concorrentes tentam mudar o numero do RDV 601 para o
+    // MESMO numero ja usado pelo RDV do voo 602 — reproduz staging run
+    // 30212619886 (residuo de execucao anterior do smoke reivindicando o
+    // literal 'concorrencia' e nunca sendo limpo entre execucoes).
+    const [r1, r2] = await Promise.all([
+      request(db, '/api/controle-voos/voos/601/rdv', {
+        method: 'PUT',
+        body: JSON.stringify({ versao: 4, numero: outroNumero, ocorrencias: 'tentativa-1' }),
+      }),
+      request(db, '/api/controle-voos/voos/601/rdv', {
+        method: 'PUT',
+        body: JSON.stringify({ versao: 4, numero: outroNumero, ocorrencias: 'tentativa-2' }),
+      }),
+    ]);
+
+    for (const res of [r1, r2]) {
+      expect(res.status).not.toBe(500);
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as { code?: string };
+      expect(body.code).toBe('CONTROLE_VOOS_RDV_NUMERO_DUPLICADO');
+      expect(body.code).not.toBe('CONTROLE_VOOS_RDV_VERSION_CONFLICT');
+    }
+
+    const after = await db
+      .prepare('SELECT versao, numero, ocorrencias FROM cv_rdv_operacional WHERE voo_id = 601')
+      .first<{ versao: number; numero: string; ocorrencias: string }>();
+    expect(after?.versao).toBe(before?.versao);
+    expect(after?.numero).toBe(before?.numero);
+    expect(after?.ocorrencias).toBe(before?.ocorrencias);
+
+    const eventos = await db
+      .prepare(
+        `SELECT * FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND json_extract(metadata_json, '$.action') = 'update' AND json_extract(metadata_json, '$.versaoAnterior') = 4`,
+      )
+      .all();
+    expect(eventos.results).toHaveLength(0);
+
+    const rowCount = await db
+      .prepare('SELECT COUNT(*) as n FROM cv_rdv_operacional WHERE voo_id = 601')
+      .first<{ n: number }>();
+    expect(rowCount?.n).toBe(1);
+  });
+
   it('garante atomicidade no update do RDV: se a transacao falhar, nao gera evento nem atualiza rdv', async () => {
     const db = createSqliteD1();
     
