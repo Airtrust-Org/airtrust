@@ -11,7 +11,6 @@ import { auth } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from './escalas-shared';
-import { MOBILE_DRAWER_HELPER_JS } from '../lib/scorm/mobile-drawer-helper';
 import type { Env, JwtPayload } from '../types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -1167,7 +1166,6 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   var lastCommittedFingerprint = '';
   var completionPending = false;
   var completionObservedAt = null;
-  var isBootstrapping = true;
 
   ${buildResumeStorageScript({
     matriculaId,
@@ -1280,12 +1278,8 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
   function setScormLocation(location) {
     if (!location || typeof location !== 'string') return;
-    var current = getScormLocation();
-    var decision = protectLocationValue(current, location);
-    if (!decision.blocked) {
-      cmi['cmi.location'] = decision.value;
-      cmi['cmi.core.lesson_location'] = decision.value;
-    }
+    cmi['cmi.location'] = location;
+    cmi['cmi.core.lesson_location'] = location;
   }
 
   function sanitizeTelemetryValue(field, value) {
@@ -1602,26 +1596,21 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
       var moved = navigateFrameToSlide(frameWindow, effectiveTarget);
       if (moved) {
-        isBootstrapping = false;
         window.setTimeout(function() {
           probeFrameProgress();
         }, 120);
       }
 
-      if (remainingAttempts > 0 && !moved) {
+      if (remainingAttempts > 0) {
         window.setTimeout(function() {
           restoreResumeLocation(remainingAttempts - 1);
         }, 250);
-      } else if (!moved) {
-        isBootstrapping = false;
       }
     } catch (_error) {
       if (remainingAttempts > 0) {
         window.setTimeout(function() {
           restoreResumeLocation(remainingAttempts - 1);
         }, 250);
-      } else {
-        isBootstrapping = false;
       }
     }
   }
@@ -1658,8 +1647,6 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         frameWindow.addEventListener('hashchange', triggerProbe);
         frameWindow.addEventListener('popstate', triggerProbe);
       }
-      
-      ${MOBILE_DRAWER_HELPER_JS}
 
       if (doc && typeof doc.addEventListener === 'function') {
         doc.addEventListener('click', triggerProbe, true);
@@ -1714,17 +1701,17 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         cmi['cmi.core.lesson_location'] = location;
       }
 
-      var shouldCommitLocation = previousLocation !== cmi['cmi.location'];
+      var shouldCommitLocation = previousLocation !== location;
       updateMaxVisitedFromLocation(location);
       writeLocalResumeBackup('frame-probe');
       emitProgress({
         progresso_pct: Math.max(parsed.pct, Math.round((effectiveCurrent / effectiveTotal) * 100)),
-        location: cmi['cmi.location'] || location,
+        location: location,
         slide_current: effectiveCurrent,
         slide_total: effectiveTotal,
         reached_end: effectiveCurrent >= effectiveTotal,
       });
-      if (shouldCommitLocation && !isBootstrapping) {
+      if (shouldCommitLocation) {
         scheduleCommit(800);
       }
     } catch (_error) {
@@ -1845,10 +1832,6 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
   function scheduleCommit(delayMs) {
     if (PREVIEW_MODE || MATRICULA_ID == null) return;
-    if (isBootstrapping) {
-       diag(' SCHEDULE_COMMIT BLOCKED by bootstrap');
-       return;
-    }
     if (autosaveTimer) {
       window.clearTimeout(autosaveTimer);
     }
