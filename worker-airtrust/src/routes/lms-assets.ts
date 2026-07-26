@@ -1006,7 +1006,7 @@ function buildScormLaunchState(
   };
 }
 
-function buildLaunchPage(cfg: LaunchPageConfig): string {
+export function buildLaunchPage(cfg: LaunchPageConfig): string {
   const {
     matriculaId,
     cicloId = 0,
@@ -1166,6 +1166,9 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   var lastCommittedFingerprint = '';
   var completionPending = false;
   var completionObservedAt = null;
+  var autosaveReady = false;
+  var resumeAppliedThisLoad = false;
+  var userNavigatedManually = false;
 
   ${buildResumeStorageScript({
     matriculaId,
@@ -1262,7 +1265,8 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
   function fingerprintPayload(data) {
     try {
-      return JSON.stringify(data || {});
+      var d = data || {};
+      return JSON.stringify([d.lesson_status, d.completion_status, d.success_status, d.score_raw, d.suspend_data, getScormLocation()]);
     } catch (_error) {
       return '';
     }
@@ -1575,7 +1579,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
     try {
       var savedLocation = getScormLocation();
       var target = resolveScormResumeTargetSlide(savedLocation, null);
-      if (!target) return;
+      if (!target) { autosaveReady = true; return; }
 
       var frame = document.getElementById('scorm-frame');
       if (!frame || !frame.contentWindow || !frame.contentWindow.document) {
@@ -1583,6 +1587,8 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
           window.setTimeout(function() {
             restoreResumeLocation(remainingAttempts - 1);
           }, 250);
+        } else {
+          autosaveReady = true;
         }
         return;
       }
@@ -1592,7 +1598,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       var parsed = parseProgressFromDocument(doc);
       var observedLocation = parsed ? String(parsed.current) + '/' + String(parsed.total) : null;
       var effectiveTarget = resolveScormResumeTargetSlide(savedLocation, observedLocation);
-      if (!effectiveTarget) return;
+      if (!effectiveTarget) { autosaveReady = true; return; }
 
       var moved = navigateFrameToSlide(frameWindow, effectiveTarget);
       if (moved) {
@@ -1605,12 +1611,16 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         window.setTimeout(function() {
           restoreResumeLocation(remainingAttempts - 1);
         }, 250);
+      } else {
+        autosaveReady = true;
       }
     } catch (_error) {
       if (remainingAttempts > 0) {
         window.setTimeout(function() {
           restoreResumeLocation(remainingAttempts - 1);
         }, 250);
+      } else {
+        autosaveReady = true;
       }
     }
   }
@@ -1831,7 +1841,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   }
 
   function scheduleCommit(delayMs) {
-    if (PREVIEW_MODE || MATRICULA_ID == null) return;
+    if (PREVIEW_MODE || MATRICULA_ID == null || !autosaveReady) return;
     if (autosaveTimer) {
       window.clearTimeout(autosaveTimer);
     }
@@ -2071,6 +2081,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       return;
     }
     if (event.data.type === 'lms:navigate' && (event.data.direction === 'prev' || event.data.direction === 'next')) {
+      userNavigatedManually = true;
       var moved = navigateSlide(event.data.direction);
       if (MATRICULA_ID != null) {
         postToParent({
@@ -2139,8 +2150,8 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         }
         writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
-        diag(' LMSSetValue field=' + element + ' loc=' + (getScormLocation() || 'null') + ' blocked=' + (decision === 'blocked' ? '1' : '0'));
-        scheduleCommit(800);
+        diag(' LMSSetValue field=' + element + ' changed=' + (previousValue === nextValue ? '0' : '1') + ' loc=' + (getScormLocation() || 'null') + ' blocked=' + (decision === 'blocked' ? '1' : '0'));
+        if (previousValue !== nextValue) scheduleCommit(800);
       }
       emitTelemetry(decision === 'blocked' ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_SET_VALUE', {
         field: element,
@@ -2212,7 +2223,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         }
         writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
-        scheduleCommit(800);
+        if (previousValue !== nextValue) scheduleCommit(800);
       }
       emitTelemetry(decision === 'blocked' ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_SET_VALUE', {
         field: element,
@@ -2274,7 +2285,12 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
     setStatus('Conteúdo carregado', true);
     requestFreshToken('frame-loaded');
     bindFrameProgressTracking();
-    restoreResumeLocation(12);
+    if (!resumeAppliedThisLoad && !userNavigatedManually) {
+      resumeAppliedThisLoad = true;
+      restoreResumeLocation(12);
+    } else {
+      autosaveReady = true;
+    }
     probeFrameProgress();
   });
 
