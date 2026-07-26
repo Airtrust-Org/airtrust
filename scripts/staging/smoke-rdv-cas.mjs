@@ -23,6 +23,25 @@ async function authFetch(baseUrl, token, path, options = {}) {
   return { status: res.status, json: res.json };
 }
 
+function validatePayloadField(value, fieldName) {
+  if (value === null || value === undefined || value === '') {
+    throw new Error(`Validação falhou: Campo ${fieldName} não pode ser nulo ou vazio.`);
+  }
+}
+
+function validateVooPayload(payload) {
+  validatePayloadField(payload.prefixo, 'prefixo');
+  validatePayloadField(payload.data_programacao, 'data_programacao');
+  validatePayloadField(payload.aeronave_id, 'aeronave_id');
+  validatePayloadField(payload.origem_id, 'origem_id');
+  validatePayloadField(payload.destino_id, 'destino_id');
+  validatePayloadField(payload.tipo_voo_id, 'tipo_voo_id');
+  validatePayloadField(payload.natureza_voo_id, 'natureza_voo_id');
+  validatePayloadField(payload.horario_previsto_partida, 'horario_previsto_partida');
+  validatePayloadField(payload.horario_previsto_chegada, 'horario_previsto_chegada');
+  validatePayloadField(payload.status, 'status');
+}
+
 async function run() {
   console.log(`\n[E2E] Iniciando E2E Sintético do RDV CAS no ambiente: ${EXPECTED_API_URL}`);
 
@@ -48,8 +67,18 @@ async function run() {
 
   const aeroportosPayload = await authFetch(EXPECTED_API_URL, token, '/api/controle-voos/catalogos/aeroportos');
   const aeroportos = aeroportosPayload.json?.data || [];
-  const aeroporto = aeroportos[0];
-  assert(aeroporto, 'Nenhum aeroporto encontrado para criar o voo.');
+  const aeroporto = aeroportos.find(a => (a.nome || '').toLowerCase().includes('smoke') || (a.nome || '').toLowerCase().includes('qa') || (a.nome || '').toLowerCase().includes('teste')) || aeroportos[0];
+  assert(aeroporto && aeroporto.id, 'Nenhum aeroporto encontrado para criar o voo.');
+
+  const tiposPayload = await authFetch(EXPECTED_API_URL, token, '/api/controle-voos/catalogos/tipos');
+  const tipos = tiposPayload.json?.data || [];
+  const tipo = tipos.find(t => (t.nome || '').toLowerCase().includes('smoke') || (t.nome || '').toLowerCase().includes('qa') || (t.nome || '').toLowerCase().includes('teste')) || tipos[0];
+  assert(tipo && tipo.id, 'Nenhum tipo de voo válido encontrado no catálogo.');
+
+  const naturezasPayload = await authFetch(EXPECTED_API_URL, token, '/api/controle-voos/catalogos/naturezas');
+  const naturezas = naturezasPayload.json?.data || [];
+  const natureza = naturezas.find(n => (n.nome || '').toLowerCase().includes('smoke') || (n.nome || '').toLowerCase().includes('qa') || (n.nome || '').toLowerCase().includes('teste')) || naturezas[0];
+  assert(natureza && natureza.id, 'Nenhuma natureza de voo válida encontrada no catálogo.');
 
   const vooPayload = {
     prefixo: `QA-E2E-${Date.now()}`,
@@ -57,12 +86,14 @@ async function run() {
     aeronave_id: aeronave.id,
     origem_id: aeroporto.id,
     destino_id: aeroporto.id,
-    tipo_voo_id: null,
-    natureza_voo_id: null,
+    tipo_voo_id: tipo.id,
+    natureza_voo_id: natureza.id,
     horario_previsto_partida: new Date().toISOString(),
     horario_previsto_chegada: new Date(Date.now() + 3600000).toISOString(),
     status: 'planejado'
   };
+
+  validateVooPayload(vooPayload);
 
   const criarVooRes = await authFetch(EXPECTED_API_URL, token, '/api/controle-voos/voos', {
     method: 'POST',
@@ -158,12 +189,15 @@ async function run() {
   console.log('[E2E] Proteção de CAS (409) validada com sucesso.');
 
   // Cleanup: Cancelar o voo para não deixar sujeira
+  // Nota: A API atual não permite DELETAR voos em produção/staging, e não há rota
+  // oficial exposta para hard-delete. O cleanup residual inevitável (linhas mantidas na tabela
+  // com status 'cancelado') está documentado. Gates devem ser avaliados se isso for crítico.
   console.log('\n[E2E] Executando cleanup do voo sintético...');
   await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}`, {
     method: 'PATCH',
     body: JSON.stringify({ status: 'cancelado' })
   });
-  console.log(`[E2E] Voo ${vooId} cancelado com sucesso.`);
+  console.log(`[E2E] Voo ${vooId} cancelado com sucesso. (Resíduos mantidos devido à ausência de hard-delete oficial).`);
   
   console.log('\n✅ E2E Sintético do RDV CAS concluído com sucesso!');
 }
