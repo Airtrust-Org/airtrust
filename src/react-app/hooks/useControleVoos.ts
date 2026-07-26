@@ -320,6 +320,7 @@ export interface RdvInput {
   carga_kg?: number | null;
   ocorrencias?: string | null;
   divergencias?: string | null;
+  versao?: number;
 }
 
 // ---- Internal helper ----
@@ -462,9 +463,13 @@ export function useSalvarRdv() {
       const response = await apiClient.put<unknown>(`${API}/voos/${vooId}/rdv`, dados);
       return extractPayloadRequired<CvRdv>(response);
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (data, vars) => {
+      qc.setQueryData(['cv-rdv', vars.vooId], data);
+      qc.setQueryData(['cv-rdv', String(vars.vooId)], data);
+      qc.setQueryData(['cv-rdv', Number(vars.vooId)], data);
       void qc.invalidateQueries({ queryKey: ['cv-rdv', vars.vooId] });
       void qc.invalidateQueries({ queryKey: ['cv-rdv', String(vars.vooId)] });
+      void qc.invalidateQueries({ queryKey: ['cv-rdv', Number(vars.vooId)] });
       void qc.invalidateQueries({ queryKey: ['cv-dashboard'] });
     },
   });

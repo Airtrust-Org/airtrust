@@ -142,7 +142,8 @@ export default function ControleVoosRdvDetalhe() {
     form,
     enabled: Boolean(id && form && editable && hydrated),
     debounceMs: 800,
-    saveFn: async ({ vooId, dados }) => salvarMutation.mutateAsync({ vooId, dados }),
+    saveFn: async ({ vooId, dados }) =>
+      salvarMutation.mutateAsync({ vooId, dados: { ...dados, versao: rdv?.versao } }),
   });
 
   useUnsavedChangesGuard((autosave.hasPending || etapasState.hasPending) && editable);

@@ -33,7 +33,8 @@ const LARGE_FILE_LINE_CAPS = {
   // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
   // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,
   // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.
-  'routes/controle-voos.ts': 2046,
+  // Cap raised again 2026-07-26: counted 2095 — RDV draft CAS implementado.
+  'routes/controle-voos.ts': 2095,
 } as const;
 
 const SQL_PREPARE_CAPS = {

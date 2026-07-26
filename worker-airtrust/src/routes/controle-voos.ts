@@ -34,8 +34,14 @@ import {
   recordFlightEvent,
   maybeRecordSystemAudit,
   getFuncionarioIdForUser,
+  buildRdvVersionGuardedUpdate,
 } from '../repositories/controle-voos/rdv-repository';
-import { RDV_CAPABILITIES, assertRdvSelfScope } from '../services/controle-voos/rdv-workflow';
+import { 
+  RDV_CAPABILITIES, 
+  assertRdvSelfScope, 
+  requireExpectedRdvVersion, 
+  assertCasApplied 
+} from '../services/controle-voos/rdv-workflow';
 
 type OperationalReadFilters = {
   dataInicio: string;
@@ -1472,7 +1478,7 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
     RDV_CAPABILITIES.editarRascunhoProprio,
   );
   const payload = await parseJsonPayload(c);
-  assertPayloadFields(payload, allowedRdvFields);
+  assertPayloadFields(payload, new Set([...allowedRdvFields, 'versao']));
   const existing = await getActiveRdvByFlight(c.env.DB, flight.id, empresaId);
   const input = normalizeRdvInput(payload, !existing);
   const merged = existing ? buildMergedRdv(existing, input) : input;
@@ -1484,64 +1490,80 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
   }
 
   if (!existing) {
-    const createResult = await c.env.DB.prepare(
-      `
-        INSERT INTO cv_rdv_operacional (
-          empresa_id, voo_id, numero, data_voo,
-          horario_decolagem_real, horario_pouso_real,
-          horas_voadas, numero_pousos, ciclos,
-          combustivel_decolagem, combustivel_pouso, combustivel_consumo,
-          pob, carga_kg, ocorrencias, divergencias,
-          status, responsavel_preenchimento_id, preenchido_em,
-          created_by, updated_by, created_at, updated_at
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          'rascunho', ?, datetime('now'),
-          ?, ?, datetime('now'), datetime('now')
-        )
-      `,
-    )
-      .bind(
-        empresaId,
-        flight.id,
-        input.numero,
-        input.data_voo,
-        input.horario_decolagem_real || null,
-        input.horario_pouso_real || null,
-        input.horas_voadas ?? null,
-        input.numero_pousos ?? null,
-        input.ciclos ?? null,
-        input.combustivel_decolagem ?? null,
-        input.combustivel_pouso ?? null,
-        input.combustivel_consumo ?? null,
-        input.pob ?? null,
-        input.carga_kg ?? null,
-        input.ocorrencias || null,
-        input.divergencias || null,
-        userId,
-        userId,
-        userId,
+    try {
+      const createResult = await c.env.DB.prepare(
+        `
+          INSERT INTO cv_rdv_operacional (
+            empresa_id, voo_id, numero, data_voo,
+            horario_decolagem_real, horario_pouso_real,
+            horas_voadas, numero_pousos, ciclos,
+            combustivel_decolagem, combustivel_pouso, combustivel_consumo,
+            pob, carga_kg, ocorrencias, divergencias,
+            status, responsavel_preenchimento_id, preenchido_em,
+            versao, created_by, updated_by, created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            'rascunho', ?, datetime('now'),
+            1, ?, ?, datetime('now'), datetime('now')
+          )
+        `,
       )
-      .run();
+        .bind(
+          empresaId,
+          flight.id,
+          input.numero,
+          input.data_voo,
+          input.horario_decolagem_real || null,
+          input.horario_pouso_real || null,
+          input.horas_voadas ?? null,
+          input.numero_pousos ?? null,
+          input.ciclos ?? null,
+          input.combustivel_decolagem ?? null,
+          input.combustivel_pouso ?? null,
+          input.combustivel_consumo ?? null,
+          input.pob ?? null,
+          input.carga_kg ?? null,
+          input.ocorrencias || null,
+          input.divergencias || null,
+          userId,
+          userId,
+          userId,
+        )
+        .run();
 
-    const created = await getRdvOrThrow(c.env.DB, Number(createResult.meta.last_row_id), empresaId);
+      const created = await getRdvOrThrow(c.env.DB, Number(createResult.meta.last_row_id), empresaId);
 
-    await recordFlightEvent({
-      db: c.env.DB,
-      empresaId,
-      vooId: flight.id,
-      tipoEvento: 'rdv',
-      statusAnterior: flight.status,
-      statusNovo: flight.status,
-      descricao: 'RDV operacional criado',
-      metadata: { action: 'create', rdv_id: created.id, fields: Object.keys(payload).sort() },
-      usuarioId: userId,
-    });
+      await recordFlightEvent({
+        db: c.env.DB,
+        empresaId,
+        vooId: flight.id,
+        tipoEvento: 'rdv',
+        statusAnterior: flight.status,
+        statusNovo: flight.status,
+        descricao: 'RDV operacional criado',
+        metadata: { action: 'create', rdv_id: created.id, fields: Object.keys(payload).sort(), versaoNova: 1 },
+        usuarioId: userId,
+      });
 
-    await maybeRecordSystemAudit(c, 'cv_rdv_operacional', 'INSERT', created.id, null, input);
-    return c.json({ success: true, data: created }, 201);
+      await maybeRecordSystemAudit(c, 'cv_rdv_operacional', 'INSERT', created.id, null, { ...input, versaoNova: 1 });
+      return c.json({ success: true, data: created }, 201);
+    } catch (err: unknown) {
+      if (
+        (err as Error).message.includes('UNIQUE constraint failed') ||
+        (err as Error).message.includes('D1_ERROR')
+      ) {
+        throw new ApiError(
+          'Versao do RDV desatualizada. Recarregue os dados antes de continuar.',
+          409,
+          'CONTROLE_VOOS_RDV_VERSION_CONFLICT'
+        );
+      }
+      throw err;
+    }
   }
 
+  const expectedVersion = requireExpectedRdvVersion(payload);
+  
   const fields: string[] = [];
   const values: unknown[] = [];
 
@@ -1556,36 +1578,63 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
     'status = ?',
     'responsavel_preenchimento_id = ?',
     'preenchido_em = datetime("now")',
+    'versao = versao + 1',
     'updated_by = ?',
     'updated_at = datetime("now")',
   );
-  values.push('rascunho', userId, userId, existing.id, empresaId);
+  values.push('rascunho', userId, userId);
 
-  await c.env.DB.prepare(
-    `
-    UPDATE cv_rdv_operacional
-    SET ${fields.join(', ')}
-    WHERE id = ?
-      AND empresa_id = ?
-      AND deleted_at IS NULL
-  `,
-  )
-    .bind(...values)
-    .run();
-
-  await recordFlightEvent({
-    db: c.env.DB,
-    empresaId,
-    vooId: flight.id,
-    tipoEvento: 'rdv',
-    statusAnterior: flight.status,
-    statusNovo: flight.status,
-    descricao: 'RDV operacional atualizado',
-    metadata: { action: 'update', rdv_id: existing.id, fields: Object.keys(payload).sort() },
-    usuarioId: userId,
+  const stmtUpdate = buildRdvVersionGuardedUpdate(c.env.DB, {
+    table: 'cv_rdv_operacional',
+    setSql: fields.join(', '),
+    setBindValues: values,
+    whereSql: 'id = ? AND empresa_id = ? AND deleted_at IS NULL',
+    whereBindValues: [existing.id, empresaId],
+    guard: { rdvId: existing.id, empresaId, expectedVersion },
   });
 
-  await maybeRecordSystemAudit(c, 'cv_rdv_operacional', 'UPDATE', existing.id, existing, input);
+  const stmtEvent = c.env.DB.prepare(
+    `
+      INSERT INTO cv_voo_eventos (
+        empresa_id, voo_id, tipo_evento, status_anterior, status_novo,
+        descricao, motivo_id, metadata_json, usuario_id, created_by, updated_by,
+        created_at, updated_at
+      )
+      SELECT ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, datetime('now'), datetime('now')
+      WHERE (SELECT changes()) > 0
+    `,
+  ).bind(
+    empresaId,
+    flight.id,
+    'rdv',
+    flight.status,
+    flight.status,
+    'RDV operacional atualizado',
+    JSON.stringify({
+      action: 'update',
+      rdv_id: existing.id,
+      expectedVersion,
+      versaoAnterior: existing.versao,
+      versaoNova: expectedVersion + 1,
+      fields: Object.keys(payload).sort(),
+    }),
+    userId,
+    userId,
+    userId,
+  );
+
+  const batchResults = await c.env.DB.batch([stmtUpdate, stmtEvent]);
+  assertCasApplied(batchResults[0]);
+
+  await maybeRecordSystemAudit(
+    c,
+    'cv_rdv_operacional',
+    'UPDATE',
+    existing.id,
+    { ...existing, versaoAnterior: existing.versao },
+    { ...input, expectedVersion, versaoNova: expectedVersion + 1 }
+  );
+
   const updated = await getRdvOrThrow(c.env.DB, existing.id, empresaId);
   return c.json({ success: true, data: updated });
 });
