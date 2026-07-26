@@ -83,6 +83,14 @@ export async function decryptSigvoosPassword(cipherText: string, secret: string)
   return new TextDecoder().decode(decrypted);
 }
 
+/**
+ * SigvoosApiClient - Unified client for SIGVOOS integration.
+ * 
+ * DIRETRIZES DE USO (CONTRATO DE ARQUITETURA):
+ * 1. Timeout com AbortController é permitido.
+ * 2. Retry e backoff artificial continuam ESTRITAMENTE PROIBIDOS para evitar congestionamento na API de destino.
+ * 3. Reautenticação (retry após erro 401) só deve ser executada se o endpoint de negócio original for comprovadamente idempotente/read-only (ex: GETs e buscas limitadas).
+ */
 export class SigvoosApiClient {
   private token: string | null = null;
   private fetchImpl: typeof fetch;
