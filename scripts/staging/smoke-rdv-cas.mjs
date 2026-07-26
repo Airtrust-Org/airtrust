@@ -56,6 +56,97 @@ function buildRunKey() {
   return `rdv-local-${Date.now()}`;
 }
 
+// Marcador de prefixo usado por TODO voo sintetico criado por este smoke
+// (ver `vooPayload.prefixo` abaixo) — unica base aceita para reconhecer um
+// residuo como inequivocamente proprio deste teste na FASE 4 de cleanup.
+const SMOKE_PREFIX_MARKER = 'QA-E2E-';
+
+// Voos sinteticos deixados por execucoes anteriores deste mesmo smoke,
+// bloqueados por bugs ja corrigidos (500 de UNIQUE, numero nao-unico,
+// cleanup sem versao/motivo) — ver staging runs 30212619886, 30213419151,
+// 30215582951, 30216095703. Lista fechada e historica: nao e um mecanismo
+// generico de limpeza em massa, so uma tentativa pontual de cancelar o que
+// ficou para tras nessa investigacao, sempre revalidando por API antes de
+// tocar em qualquer um.
+const KNOWN_RESIDUAL_VOO_IDS = [22, 23, 24, 25, 26];
+
+// Estados de cv_voos a partir dos quais `statusTransitions` (controle-voos.ts)
+// permite transicionar para 'cancelado'. Fora daqui o PATCH responde 409
+// CONTROLE_VOOS_INVALID_TRANSITION — motivo para pular, nao tocar.
+const CANCELLABLE_STATUSES = new Set(['planejado', 'liberado_operacionalmente']);
+
+// Busca deterministicamente (via catalogo oficial, nunca ID fixo) um motivo
+// operacional ativo do tipo 'cancelamento' para esta empresa. O catalogo ja
+// ordena por tipo ASC, ordem ASC, nome ASC — o primeiro resultado e sempre o
+// mesmo motivo, de forma reproduzivel. Sem motivo valido, aborta sem criar
+// nenhum dado (nenhum voo sintetico chega a ser criado).
+async function fetchCancellationMotivoId(baseUrl, token) {
+  const res = await authFetch(baseUrl, token, '/api/controle-voos/catalogos/motivos?tipo=cancelamento');
+  const motivos = res.json?.data || [];
+  const motivo = motivos[0];
+  if (!motivo || !motivo.id) {
+    throw new Error(
+      `Nenhum motivo operacional ativo do tipo 'cancelamento' encontrado no catalogo (${res.status} - ${JSON.stringify(res.json)}). Abortando sem criar dados.`,
+    );
+  }
+  return motivo.id;
+}
+
+// Helper reutilizavel: cancela um voo sintetico pelo endpoint oficial,
+// enviando todos os campos exigidos pelo contrato de PATCH /voos/:id
+// (versao para o CAS de cv_voos, cancelado_motivo_id para a transicao de
+// cancelamento). Nunca usa SQL. Nunca deve ser lido como hard-delete: a
+// linha permanece na tabela com status 'cancelado', unico cleanup que a
+// API expõe.
+async function cancelSyntheticFlight(baseUrl, token, { vooId, versao, canceladoMotivoId }) {
+  const res = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'cancelado', versao, cancelado_motivo_id: canceladoMotivoId }),
+  });
+  const ok = res.status >= 200 && res.status < 300 && res.json?.data?.status === 'cancelado';
+  return { ok, status: res.status, json: res.json };
+}
+
+// FASE 4: tenta cancelar um residuo conhecido SOMENTE se todos os criterios
+// abaixo forem verdadeiros, lidos via API oficial imediatamente antes de
+// agir (nunca reaproveita estado antigo): pertence a este tenant (GET
+// escopado por empresa_id — 404 se for de outra empresa), prefixo
+// inequivocamente deste smoke, status ainda permite a transicao para
+// cancelado, e versao atual obtida na hora. Qualquer duvida => pula e
+// documenta, nunca toca.
+async function cleanupResidualFlight(baseUrl, token, canceladoMotivoId, vooId) {
+  const getRes = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}`);
+  if (getRes.status !== 200 || !getRes.json?.data) {
+    console.log(`[E2E] Residuo ${vooId}: ignorado (nao encontrado neste tenant; status ${getRes.status}).`);
+    return;
+  }
+
+  const flight = getRes.json.data;
+  if (!String(flight.prefixo || '').includes(SMOKE_PREFIX_MARKER)) {
+    console.log(`[E2E] Residuo ${vooId}: ignorado (prefixo '${flight.prefixo}' nao identifica voo sintetico deste smoke).`);
+    return;
+  }
+  if (!CANCELLABLE_STATUSES.has(flight.status)) {
+    console.log(`[E2E] Residuo ${vooId}: ignorado (status '${flight.status}' nao permite cancelamento).`);
+    return;
+  }
+  if (typeof flight.versao !== 'number') {
+    console.log(`[E2E] Residuo ${vooId}: ignorado (versao atual nao pode ser determinada).`);
+    return;
+  }
+
+  const result = await cancelSyntheticFlight(baseUrl, token, {
+    vooId,
+    versao: flight.versao,
+    canceladoMotivoId,
+  });
+  if (result.ok) {
+    console.log(`[E2E] Residuo ${vooId}: cancelado com sucesso (cleanup via API; nao e hard-delete).`);
+  } else {
+    console.error(`[E2E] Residuo ${vooId}: CLEANUP_FALHOU (${result.status} - ${JSON.stringify(result.json)})`);
+  }
+}
+
 async function run() {
   console.log(`\n[E2E] Iniciando E2E Sintético do RDV CAS no ambiente: ${EXPECTED_API_URL}`);
 
@@ -73,6 +164,12 @@ async function run() {
 
   const runKey = buildRunKey();
   console.log(`[E2E] Prefixo unico desta execucao: ${runKey}`);
+
+  // FASE 2: resolvido ANTES de qualquer criacao de dado — se o catalogo nao
+  // tiver motivo de cancelamento ativo, a execucao para aqui sem criar o
+  // voo sintetico.
+  const canceladoMotivoId = await fetchCancellationMotivoId(EXPECTED_API_URL, token);
+  console.log(`[E2E] Motivo operacional de cancelamento resolvido via catalogo: ID ${canceladoMotivoId}`);
 
   // vooId so e conhecido apos a etapa 1; declarado aqui para o cleanup no
   // finally poder usa-lo mesmo se uma etapa posterior falhar.
@@ -231,14 +328,15 @@ async function run() {
         if (vooAtualRes.status !== 200 || typeof vooVersaoAtual !== 'number') {
           console.error(`[E2E] CLEANUP_FALHOU: nao foi possivel ler a versao atual do voo ${vooId} (${vooAtualRes.status} - ${JSON.stringify(vooAtualRes.json)})`);
         } else {
-          const cleanupRes = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ status: 'cancelado', versao: vooVersaoAtual })
+          const result = await cancelSyntheticFlight(EXPECTED_API_URL, token, {
+            vooId,
+            versao: vooVersaoAtual,
+            canceladoMotivoId,
           });
-          if (cleanupRes.status >= 200 && cleanupRes.status < 300) {
+          if (result.ok) {
             console.log(`[E2E] Voo ${vooId} cancelado com sucesso (cleanup via API; resíduo de linha cancelada é esperado, não um hard-delete nem restauração do baseline).`);
           } else {
-            console.error(`[E2E] CLEANUP_FALHOU: cancelamento do voo ${vooId} retornou ${cleanupRes.status} - ${JSON.stringify(cleanupRes.json)}`);
+            console.error(`[E2E] CLEANUP_FALHOU: cancelamento do voo ${vooId} retornou ${result.status} - ${JSON.stringify(result.json)}`);
           }
         }
       } catch (cleanupErr) {
@@ -246,6 +344,17 @@ async function run() {
       }
     } else {
       console.log('\n[E2E] Cleanup ignorado: nenhum voo sintético chegou a ser criado nesta execução.');
+    }
+
+    // FASE 4: melhor esforco, so mexe em cada residuo conhecido se todos os
+    // criterios de identidade forem confirmados via API imediatamente antes.
+    console.log('\n[E2E] Tentando cleanup dos residuos conhecidos (22-26) — somente se inequivocamente QA...');
+    for (const residualVooId of KNOWN_RESIDUAL_VOO_IDS) {
+      try {
+        await cleanupResidualFlight(EXPECTED_API_URL, token, canceladoMotivoId, residualVooId);
+      } catch (residualErr) {
+        console.error(`[E2E] Residuo ${residualVooId}: CLEANUP_FALHOU (excecao):`, residualErr);
+      }
     }
   }
 }
