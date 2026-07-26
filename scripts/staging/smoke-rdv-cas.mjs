@@ -108,57 +108,57 @@ async function run() {
   console.log('\n[E2E] 2. Criar rascunho inicial do RDV...');
   const rdvPayloadV1 = {
     versao: 0,
-    dados_operacionais: { test: "v1" }
+    ocorrencias: "v1"
   };
   
   const putRdvRes1 = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
     method: 'PUT',
     body: JSON.stringify(rdvPayloadV1)
   });
-  assert(putRdvRes1.json?.data?.versao === 1, `Versão esperada 1, recebida ${putRdvRes1.json?.data?.versao} (${putRdvRes1.status})`);
+  assert(putRdvRes1.json?.data?.versao === 1, `Versão esperada 1, recebida ${putRdvRes1.json?.data?.versao} (${putRdvRes1.status} - ${JSON.stringify(putRdvRes1.json)})`);
   console.log(`[E2E] Rascunho inicial salvo. Versão atual: ${putRdvRes1.json.data.versao}`);
 
   // 3. Atualizar 1->2
   console.log('\n[E2E] 3. Atualizar rascunho 1 -> 2...');
   const rdvPayloadV2 = {
     versao: 1,
-    dados_operacionais: { test: "v2" }
+    ocorrencias: "v2"
   };
   const putRdvRes2 = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
     method: 'PUT',
     body: JSON.stringify(rdvPayloadV2)
   });
-  assert(putRdvRes2.json?.data?.versao === 2, `Versão esperada 2, recebida ${putRdvRes2.json?.data?.versao} (${putRdvRes2.status})`);
+  assert(putRdvRes2.json?.data?.versao === 2, `Versão esperada 2, recebida ${putRdvRes2.json?.data?.versao} (${putRdvRes2.status} - ${JSON.stringify(putRdvRes2.json)})`);
   
   // 4. Atualizar 2->3
   console.log('\n[E2E] 4. Atualizar rascunho 2 -> 3...');
   const rdvPayloadV3 = {
     versao: 2,
-    dados_operacionais: { test: "v3" }
+    ocorrencias: "v3"
   };
   const putRdvRes3 = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
     method: 'PUT',
     body: JSON.stringify(rdvPayloadV3)
   });
-  assert(putRdvRes3.json?.data?.versao === 3, `Versão esperada 3, recebida ${putRdvRes3.json?.data?.versao} (${putRdvRes3.status})`);
+  assert(putRdvRes3.json?.data?.versao === 3, `Versão esperada 3, recebida ${putRdvRes3.json?.data?.versao} (${putRdvRes3.status} - ${JSON.stringify(putRdvRes3.json)})`);
 
   // 5. Atualizar 3->4
   console.log('\n[E2E] 5. Atualizar rascunho 3 -> 4...');
   const rdvPayloadV4 = {
     versao: 3,
-    dados_operacionais: { test: "v4" }
+    ocorrencias: "v4"
   };
   const putRdvRes4 = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
     method: 'PUT',
     body: JSON.stringify(rdvPayloadV4)
   });
-  assert(putRdvRes4.json?.data?.versao === 4, `Versão esperada 4, recebida ${putRdvRes4.json?.data?.versao} (${putRdvRes4.status})`);
+  assert(putRdvRes4.json?.data?.versao === 4, `Versão esperada 4, recebida ${putRdvRes4.json?.data?.versao} (${putRdvRes4.status} - ${JSON.stringify(putRdvRes4.json)})`);
 
   // 6, 7 e 8. Concorrência: abrir duas sessões com a mesma versão (4) e enviar
   console.log('\n[E2E] 6, 7 e 8. Teste de concorrência com versão 4 (CAS)...');
   const payloadConcorrenteV4 = {
     versao: 4,
-    dados_operacionais: { test: "concorrencia" }
+    ocorrencias: "concorrencia"
   };
   
   const prom1 = authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
