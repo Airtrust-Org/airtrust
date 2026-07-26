@@ -110,7 +110,9 @@ export default function LmsPlayer() {
   const [liveLocation, setLiveLocation] = useState<string | null>(null);
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
+  const [initialToken] = useState<string | null>(() => getAccessToken() ?? token);
+  const [playerToken, setPlayerToken] = useState<string | null>(initialToken);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [completionState, setCompletionState] = useState<
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
   >('idle');
@@ -159,8 +161,8 @@ export default function LmsPlayer() {
   const canGoNextViewedOnly =
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
   const launchUrl =
-    playerToken && matricula && matricula.tipo_conteudo !== 'h5p'
-      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(playerToken)}${reviewParam ? '&review=1' : ''}`
+    initialToken && matricula && matricula.tipo_conteudo !== 'h5p'
+      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(initialToken)}${reviewParam ? '&review=1' : ''}`
       : null;
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
 
@@ -444,6 +446,26 @@ export default function LmsPlayer() {
       if (
         event.data &&
         typeof event.data === 'object' &&
+        event.data.type === 'lms:drawer-opened' &&
+        event.data.matriculaId === id
+      ) {
+        setIsDrawerOpen(true);
+        return;
+      }
+
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:drawer-closed' &&
+        event.data.matriculaId === id
+      ) {
+        setIsDrawerOpen(false);
+        return;
+      }
+
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
         event.data.type === 'lms:navigate:ack' &&
         event.data.matriculaId === id &&
         event.data.moved === false
@@ -711,7 +733,7 @@ export default function LmsPlayer() {
         </div>
       )}
 
-      <main className="relative flex-1">
+      <main className={`relative flex-1 ${isDrawerOpen ? 'z-50' : ''}`}>
         <div className="flex h-full min-h-0">
           <div className="relative min-w-0 flex-1">
             {!iframeLoaded && launchUrl ? (

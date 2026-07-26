@@ -1166,6 +1166,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   var lastCommittedFingerprint = '';
   var completionPending = false;
   var completionObservedAt = null;
+  var isBootstrapping = true;
 
   ${buildResumeStorageScript({
     matriculaId,
@@ -1278,8 +1279,12 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
   function setScormLocation(location) {
     if (!location || typeof location !== 'string') return;
-    cmi['cmi.location'] = location;
-    cmi['cmi.core.lesson_location'] = location;
+    var current = getScormLocation();
+    var decision = protectLocationValue(current, location);
+    if (!decision.blocked) {
+      cmi['cmi.location'] = decision.value;
+      cmi['cmi.core.lesson_location'] = decision.value;
+    }
   }
 
   function sanitizeTelemetryValue(field, value) {
@@ -1596,21 +1601,26 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
       var moved = navigateFrameToSlide(frameWindow, effectiveTarget);
       if (moved) {
+        isBootstrapping = false;
         window.setTimeout(function() {
           probeFrameProgress();
         }, 120);
       }
 
-      if (remainingAttempts > 0) {
+      if (remainingAttempts > 0 && !moved) {
         window.setTimeout(function() {
           restoreResumeLocation(remainingAttempts - 1);
         }, 250);
+      } else if (!moved) {
+        isBootstrapping = false;
       }
     } catch (_error) {
       if (remainingAttempts > 0) {
         window.setTimeout(function() {
           restoreResumeLocation(remainingAttempts - 1);
         }, 250);
+      } else {
+        isBootstrapping = false;
       }
     }
   }
@@ -1646,6 +1656,71 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       if (typeof frameWindow.addEventListener === 'function') {
         frameWindow.addEventListener('hashchange', triggerProbe);
         frameWindow.addEventListener('popstate', triggerProbe);
+      }
+      
+      var injectDrawerFix = function() {
+        if (!doc) return;
+        if (doc.__airtrustDrawerInjected) return;
+        doc.__airtrustDrawerInjected = true;
+        
+        var style = doc.createElement('style');
+        style.innerHTML = 
+          '#airtrust-drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99998; }' +
+          '#airtrust-drawer-close { display: none; position: fixed; top: 16px; right: 16px; width: 44px; height: 44px; background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; font-size: 20px; z-index: 99999; cursor: pointer; justify-content: center; align-items: center; }' +
+          'body.airtrust-drawer-open #airtrust-drawer-backdrop { display: block; }' +
+          'body.airtrust-drawer-open #airtrust-drawer-close { display: flex; }' +
+          'body.airtrust-drawer-open { overflow: hidden !important; }';
+        doc.head.appendChild(style);
+
+        var backdrop = doc.createElement('div');
+        backdrop.id = 'airtrust-drawer-backdrop';
+        var closeBtn = doc.createElement('button');
+        closeBtn.id = 'airtrust-drawer-close';
+        closeBtn.innerHTML = '✕';
+        closeBtn.setAttribute('aria-label', 'Fechar menu');
+        
+        doc.body.appendChild(backdrop);
+        doc.body.appendChild(closeBtn);
+
+        var closeDrawer = function() {
+          var openToggle = doc.querySelector('.nav-sidebar-is-open .js-nav-sidebar-toggle, .is-open .nav-sidebar-toggle');
+          if (openToggle && typeof openToggle.click === 'function') {
+            openToggle.click();
+          }
+          doc.body.classList.remove('airtrust-drawer-open');
+          postToParent({ type: 'lms:drawer-closed', matriculaId: MATRICULA_ID });
+        };
+
+        backdrop.addEventListener('click', closeDrawer);
+        closeBtn.addEventListener('click', closeDrawer);
+        doc.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && doc.body.classList.contains('airtrust-drawer-open')) closeDrawer();
+        });
+
+        var checkDrawer = function() {
+          var isOpen = doc.querySelector('.nav-sidebar-is-open, .lesson-sidebar.is-open, .nav-sidebar.is-open') !== null;
+          var wasOpen = doc.body.classList.contains('airtrust-drawer-open');
+          if (isOpen && !wasOpen) {
+            doc.body.classList.add('airtrust-drawer-open');
+            postToParent({ type: 'lms:drawer-opened', matriculaId: MATRICULA_ID });
+          } else if (!isOpen && wasOpen) {
+            doc.body.classList.remove('airtrust-drawer-open');
+            postToParent({ type: 'lms:drawer-closed', matriculaId: MATRICULA_ID });
+          }
+        };
+
+        var observer = new MutationObserver(checkDrawer);
+        observer.observe(doc.body, { attributes: true, childList: true, subtree: true });
+        
+        doc.addEventListener('click', function() {
+          window.setTimeout(checkDrawer, 50);
+        });
+      };
+      
+      if (doc.body) {
+        injectDrawerFix();
+      } else {
+        doc.addEventListener('DOMContentLoaded', injectDrawerFix);
       }
 
       if (doc && typeof doc.addEventListener === 'function') {
@@ -1701,17 +1776,17 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         cmi['cmi.core.lesson_location'] = location;
       }
 
-      var shouldCommitLocation = previousLocation !== location;
+      var shouldCommitLocation = previousLocation !== cmi['cmi.location'];
       updateMaxVisitedFromLocation(location);
       writeLocalResumeBackup('frame-probe');
       emitProgress({
         progresso_pct: Math.max(parsed.pct, Math.round((effectiveCurrent / effectiveTotal) * 100)),
-        location: location,
+        location: cmi['cmi.location'] || location,
         slide_current: effectiveCurrent,
         slide_total: effectiveTotal,
         reached_end: effectiveCurrent >= effectiveTotal,
       });
-      if (shouldCommitLocation) {
+      if (shouldCommitLocation && !isBootstrapping) {
         scheduleCommit(800);
       }
     } catch (_error) {
@@ -1832,6 +1907,10 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
   function scheduleCommit(delayMs) {
     if (PREVIEW_MODE || MATRICULA_ID == null) return;
+    if (isBootstrapping) {
+       diag(' SCHEDULE_COMMIT BLOCKED by bootstrap');
+       return;
+    }
     if (autosaveTimer) {
       window.clearTimeout(autosaveTimer);
     }
