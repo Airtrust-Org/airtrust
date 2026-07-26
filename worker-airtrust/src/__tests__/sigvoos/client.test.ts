@@ -144,7 +144,8 @@ describe('SigvoosApiClient', () => {
         return new Response('invalid json', { status: 200 });
       };
       const client = new SigvoosApiClient(config, { fetchImpl: mockFetch });
-      await assert.rejects(client.postSearch('/data', {}));
+      const res = await client.postSearch('/data', {});
+      assert.equal(res.raw, 'invalid json');
     });
 
     it('clears timeout timer on success', async () => {
@@ -165,8 +166,7 @@ describe('SigvoosApiClient', () => {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
       };
       const client = new SigvoosApiClient(config, { fetchImpl: mockFetch });
-      const res = await client.postSearch('/data', {});
-      assert.equal(res.error, 'Unauthorized');
+      await assert.rejects(client.postSearch('/data', {}));
       assert.equal(reqCount, 2);
     });
 
