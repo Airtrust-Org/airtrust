@@ -108,7 +108,8 @@ async function run() {
   console.log('\n[E2E] 2. Criar rascunho inicial do RDV...');
   const rdvPayloadV1 = {
     versao: 0,
-    ocorrencias: "v1"
+    numero: "v1",
+    data_voo: new Date().toISOString().split('T')[0]
   };
   
   const putRdvRes1 = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
@@ -122,7 +123,7 @@ async function run() {
   console.log('\n[E2E] 3. Atualizar rascunho 1 -> 2...');
   const rdvPayloadV2 = {
     versao: 1,
-    ocorrencias: "v2"
+    numero: "v2"
   };
   const putRdvRes2 = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
     method: 'PUT',
@@ -134,7 +135,7 @@ async function run() {
   console.log('\n[E2E] 4. Atualizar rascunho 2 -> 3...');
   const rdvPayloadV3 = {
     versao: 2,
-    ocorrencias: "v3"
+    numero: "v3"
   };
   const putRdvRes3 = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
     method: 'PUT',
@@ -146,7 +147,7 @@ async function run() {
   console.log('\n[E2E] 5. Atualizar rascunho 3 -> 4...');
   const rdvPayloadV4 = {
     versao: 3,
-    ocorrencias: "v4"
+    numero: "v4"
   };
   const putRdvRes4 = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
     method: 'PUT',
@@ -158,7 +159,7 @@ async function run() {
   console.log('\n[E2E] 6, 7 e 8. Teste de concorrência com versão 4 (CAS)...');
   const payloadConcorrenteV4 = {
     versao: 4,
-    ocorrencias: "concorrencia"
+    numero: "concorrencia"
   };
   
   const prom1 = authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}/rdv`, {
