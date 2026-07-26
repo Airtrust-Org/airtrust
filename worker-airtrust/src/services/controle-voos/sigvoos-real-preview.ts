@@ -1,4 +1,11 @@
 import type { Env } from '../../types';
+import {
+  SigvoosApiClient,
+  resolveSigvoosEncryptionSecret,
+  decryptSigvoosPassword,
+  SigvoosClientError,
+  type SigvoosRuntimeEnv,
+} from '../../lib/sigvoos/client';
 
 const SIGVOOS_DEFAULT_BASE_URL = 'https://api.sigvoos.com.br/api';
 const SIGVOOS_DEFAULT_SYSTEM = 'sigtrip';
@@ -185,35 +192,7 @@ export function parseSigvoosRealPreviewRequest(
   };
 }
 
-function decodeBase64(value: string): Uint8Array {
-  const binary = atob(value);
-  const decoded = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) decoded[index] = binary.charCodeAt(index);
-  return decoded;
-}
-
-function resolveEncryptionSecret(env: Env): string | null {
-  const dedicated = normalizeText(env.SIGVOOS_CONFIG_ENCRYPTION_KEY);
-  if (dedicated) return dedicated;
-  return normalizeText(env.JWT_SECRET);
-}
-
-async function importAesKey(secret: string): Promise<CryptoKey> {
-  const material = new TextEncoder().encode(secret);
-  const digest = await crypto.subtle.digest('SHA-256', material);
-  return crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['decrypt']);
-}
-
-async function decryptPassword(cipherText: string, secret: string): Promise<string | null> {
-  if (!cipherText.startsWith(`${SIGVOOS_PASSWORD_ENCRYPTED_PREFIX}:`)) return null;
-  const parts = cipherText.split(':');
-  if (parts.length !== 4) return null;
-  const iv = decodeBase64(parts[2]);
-  const payload = decodeBase64(parts[3]);
-  const key = await importAesKey(secret);
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, payload);
-  return new TextDecoder().decode(decrypted);
-}
+// Cryptography and base64 functions imported from client
 
 async function loadConfigFromDb(db: D1Database, empresaId: number, env: Env): Promise<SigvoosReadOnlyConfig | null> {
   let rows: D1Result<{ chave: string; valor: string | null }>;
@@ -238,11 +217,11 @@ async function loadConfigFromDb(db: D1Database, empresaId: number, env: Env): Pr
   const username = normalizeText(values.get('username'));
   let password = normalizeText(values.get('password'));
   const encrypted = normalizeText(values.get('password_encrypted'));
-  const secret = resolveEncryptionSecret(env);
+  const secret = resolveSigvoosEncryptionSecret(env as Env & SigvoosRuntimeEnv);
 
   if (!password && encrypted && secret) {
     try {
-      password = await decryptPassword(encrypted, secret);
+      password = await decryptSigvoosPassword(encrypted, secret);
     } catch {
       password = null;
     }
@@ -281,63 +260,7 @@ function formatBrDate(value: string): string {
   return `${day}/${month}/${year}`;
 }
 
-async function fetchJsonWithTimeout(
-  url: string,
-  init: RequestInit,
-  fetchImpl: FetchLike,
-): Promise<unknown> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetchImpl(url, {
-      ...init,
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_UPSTREAM_ERROR', 502);
-    }
-    return await response.json();
-  } catch (error) {
-    if (error instanceof SigvoosRealPreviewError) throw error;
-    throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_NETWORK_ERROR', 502);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function extractToken(payload: unknown): string | null {
-  if (!isRecord(payload)) return null;
-  for (const key of ['accessToken', 'access_token', 'token']) {
-    const token = normalizeText(payload[key]);
-    if (token) return token;
-  }
-  for (const key of ['data', 'result', 'payload']) {
-    const nested = extractToken(payload[key]);
-    if (nested) return nested;
-  }
-  return null;
-}
-
-async function authenticate(config: SigvoosReadOnlyConfig, fetchImpl: FetchLike): Promise<string> {
-  const payload = await fetchJsonWithTimeout(
-    `${config.baseUrl}/get/token`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: config.username,
-        password: config.password,
-        system: config.system,
-      }),
-    },
-    fetchImpl,
-  );
-  const token = extractToken(payload);
-  if (!token) {
-    throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_TOKEN_MISSING', 502);
-  }
-  return token;
-}
+// Auth handled by client
 
 function extractRecords(payload: unknown): SigvoosRecord[] {
   if (Array.isArray(payload)) return payload.filter(isRecord);
@@ -466,31 +389,28 @@ export function summarizeSigvoosRealPreview(records: SigvoosRecord[]): SigvoosRe
 }
 
 async function fetchRecords(
-  config: SigvoosReadOnlyConfig,
-  token: string,
+  client: SigvoosApiClient,
   request: SigvoosRealPreviewRequest,
-  fetchImpl: FetchLike,
 ): Promise<SigvoosRecord[]> {
   const records: SigvoosRecord[] = [];
   for (let page = 1; page <= request.maxPages; page += 1) {
-    const payload = await fetchJsonWithTimeout(
-      `${config.baseUrl}/relatorios/voos/tripulantes/etapas/pesquisa`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          date_start: formatBrDate(request.from),
-          date_finish: formatBrDate(request.to),
-          page,
-          page_size: request.pageSize,
-          limit: request.pageSize,
-        }),
-      },
-      fetchImpl,
-    );
+    let payload;
+    try {
+      payload = await client.postSearch('/relatorios/voos/tripulantes/etapas/pesquisa', {
+        date_start: formatBrDate(request.from),
+        date_finish: formatBrDate(request.to),
+        page,
+        page_size: request.pageSize,
+        limit: request.pageSize,
+      });
+    } catch (err: unknown) {
+      if (err instanceof SigvoosClientError) {
+        if (err.code === 'SIGVOOS_UNAUTHORIZED') throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_TOKEN_MISSING', 502);
+        if (err.code === 'SIGVOOS_TIMEOUT') throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_NETWORK_ERROR', 502);
+        throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_UPSTREAM_ERROR', 502);
+      }
+      throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_NETWORK_ERROR', 502);
+    }
     const pageRecords = extractRecords(payload);
     records.push(...pageRecords);
     if (pageRecords.length < request.pageSize) break;
@@ -505,10 +425,15 @@ export async function runSigvoosRealApiPreview(
   request: SigvoosRealPreviewRequest,
   options: { fetchImpl?: FetchLike } = {},
 ) {
-  const fetchImpl = options.fetchImpl || fetch;
   const config = await loadReadOnlyConfig(db, empresaId, env);
-  const token = await authenticate(config, fetchImpl);
-  const records = await fetchRecords(config, token, request, fetchImpl);
+  const client = new SigvoosApiClient({
+    base_url: config.baseUrl,
+    username: config.username,
+    password: config.password,
+    system: config.system,
+  }, { fetchImpl: options.fetchImpl as typeof fetch });
+  
+  const records = await fetchRecords(client, request);
 
   return {
     mode: 'real-preview' as const,
