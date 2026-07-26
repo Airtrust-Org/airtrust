@@ -146,7 +146,7 @@
     "logs:errors": "chmod +x scripts/analyze-logs.sh && ./scripts/analyze-logs.sh ERROR 60",
     "smoke:assets-public": "bash scripts/smoke-assets-public.sh",
     "smoke:auth:login": "bash scripts/smoke-auth-login.sh",
-    "smoke:staging:auth": "node scripts/smoke-staging-auth.mjs && node scripts/staging/smoke-rdv-cas.mjs",
+    "smoke:staging:auth": "node scripts/smoke-staging-auth.mjs && node scripts/staging/smoke-rdv-cas.mjs && node scripts/staging/smoke-certificado-auth.mjs",
     "smoke:production:auth": "node scripts/smoke-production-auth.mjs",
     "staging:doctor": "node scripts/staging-doctor.mjs",
     "smoke:core:prod": "BASE=https://api.airtrust.online bash scripts/smoke-test-core.sh",
