@@ -74,10 +74,10 @@ function makeHappyResponses() {
       bodyText: JSON.stringify({ success: false, error: 'unauthorized' }),
     },
     maintenance: {
-      status: 404,
+      status: 401,
       headers: {},
-      json: null,
-      bodyText: 'Not Found',
+      json: { success: false, error: 'unauthorized' },
+      bodyText: JSON.stringify({ success: false, error: 'unauthorized' }),
     },
   };
 }
@@ -158,16 +158,24 @@ for (const placeholder of ['latest', 'main', 'dev-local']) {
   });
 }
 
-test('fails when the maintenance route answers 403 instead of 404', () => {
+test('fails when the maintenance route answers 200 instead of 401', () => {
+  const responses = makeHappyResponses();
+  responses.maintenance.status = 200;
+  const result = evaluate(responses);
+  assert.equal(result.ok, false);
+  const failure = result.failures.find((f) => f.startsWith('[maintenance-auth-401]'));
+  assert.ok(failure, 'expected a maintenance-auth-401 failure');
+  assert.match(failure, new RegExp(MAINTENANCE_PROBE_PATH));
+});
+
+test('fails when the maintenance route answers 403 instead of 401', () => {
   const responses = makeHappyResponses();
   responses.maintenance.status = 403;
   const result = evaluate(responses);
   assert.equal(result.ok, false);
-  const maintenanceFailure = result.failures.find((f) => f.startsWith('[maintenance-404]'));
-  assert.ok(maintenanceFailure, 'expected a maintenance-404 failure');
-  // The 403-specific hint must explain WHY 403 is worse than absence.
-  assert.match(maintenanceFailure, /leaks that the maintenance route exists/);
-  assert.match(maintenanceFailure, new RegExp(MAINTENANCE_PROBE_PATH));
+  const failure = result.failures.find((f) => f.startsWith('[maintenance-auth-401]'));
+  assert.ok(failure, 'expected a maintenance-auth-401 failure');
+  assert.match(failure, new RegExp(MAINTENANCE_PROBE_PATH));
 });
 
 test('fails when the Cloudflare version_metadata binding is absent (no id, no header)', () => {
@@ -264,7 +272,7 @@ test('reports every broken invariant at once rather than short-circuiting', () =
   assert.equal(result.ok, false);
   const codes = failureCodes(result);
   assert.ok(codes.includes('health-200'));
-  assert.ok(codes.includes('maintenance-404'));
+  assert.ok(codes.includes('maintenance-auth-401'));
   assert.ok(codes.includes('protected-401'));
 });
 
@@ -306,7 +314,7 @@ test('does not retry when a security invariant fails alongside version mismatch'
   assert.equal(
     isEdgePropagationOnly([
       '[version-mismatch] version "old" != expected "new"',
-      '[maintenance-404] maintenance route returned 403 (expected 404)',
+      '[maintenance-auth-401] maintenance route returned 403 (expected 401)',
     ]),
     false,
   );
@@ -351,7 +359,7 @@ test('classifies a connection-level failure as *-network-error, not the status-b
   assert.ok(codes.includes('maintenance-network-error'));
   assert.ok(!codes.includes('health-200'));
   assert.ok(!codes.includes('protected-401'));
-  assert.ok(!codes.includes('maintenance-404'));
+  assert.ok(!codes.includes('maintenance-auth-401'));
 });
 
 test('a pure connectivity failure across all probes is retry-eligible (propagation-only)', () => {
@@ -371,7 +379,7 @@ test('an actual wrong status on the protected/maintenance routes is never retry-
     false,
   );
   assert.equal(
-    isEdgePropagationOnly(['[maintenance-404] maintenance route returned 200 (expected 404)']),
+    isEdgePropagationOnly(['[maintenance-auth-401] maintenance route returned 200 (expected 401)']),
     false,
   );
 });

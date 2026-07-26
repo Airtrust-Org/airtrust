@@ -233,11 +233,12 @@ export function evaluateProductionSmoke({ expectedVersion, expectedSha, response
     }
   }
 
-  // 10. Maintenance route returns 404 Not Found when maintenance mode is not
-  //     active. A 403 would signal the route exists but is blocked — it must
-  //     instead look non-existent. As above, a network-level failure is kept
-  //     distinct from an actual wrong status.
-  if (!maintenance || maintenance.status !== 404) {
+  // 10. Maintenance route without authentication returns exactly 401 Unauthorized
+  //     (validating the authentication barrier). Neither 200 nor 403 is acceptable
+  //     (200 exposes unauthenticated route data; 403 leaks route existence or bypasses
+  //     auth middleware). Note: 404 for disabled mutations when authenticated is
+  //     covered by integration tests (maintenance-guards.test.ts), not by unauthenticated probes.
+  if (!maintenance || maintenance.status !== 401) {
     if (maintenance?.networkError) {
       fail(
         'maintenance-network-error',
@@ -245,10 +246,9 @@ export function evaluateProductionSmoke({ expectedVersion, expectedSha, response
       );
     } else {
       const observed = maintenance?.status ?? 'no-response';
-      const hint = observed === 403 ? ' — 403 leaks that the maintenance route exists' : '';
       fail(
-        'maintenance-404',
-        `maintenance route ${MAINTENANCE_PROBE_PATH} returned ${observed} (expected 404)${hint}`,
+        'maintenance-auth-401',
+        `maintenance route ${MAINTENANCE_PROBE_PATH} without token returned ${observed} (expected 401)`,
       );
     }
   }
