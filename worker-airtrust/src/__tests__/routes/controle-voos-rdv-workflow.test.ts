@@ -64,6 +64,7 @@ vi.mock('../../utils/auditoria', () => ({
 
 import controleVoosRoutes from '../../routes/controle-voos';
 import controleVoosRdvWorkflowRoutes from '../../routes/controle-voos-rdv-workflow';
+import { registrarAuditoria } from '../../utils/auditoria';
 
 type SqliteD1 = D1Database & { databasePath: string; tempDir: string };
 
@@ -73,6 +74,7 @@ const migrations = [
   join(testDir, '../../../migrations/0410_controle_voos_n1_schema.sql'),
   join(testDir, '../../../migrations/0411_controle_voos_sigvoos_integration_schema.sql'),
   join(testDir, '../../../migrations/0438_controle_voos_rdv_coordenacao_workflow.sql'),
+  join(testDir, '../../../migrations/0444_controle_voos_versao.sql'),
 ].map((p) => readFileSync(p, 'utf8'));
 
 function sqlString(value: unknown): string {
@@ -347,10 +349,59 @@ function createApp() {
   return app;
 }
 
-function createEnv(db: D1Database): Env {
+// R2 mock em memoria — usado apenas pelos testes de anexo de abastecimento
+// (put/get/head reais, escopados por instancia de teste; sem persistencia
+// entre testes, cada `createR2Bucket()` comeca vazio).
+function createR2Bucket(): R2Bucket {
+  const store = new Map<
+    string,
+    { bytes: Uint8Array; contentType?: string; customMetadata?: Record<string, string> }
+  >();
+  return {
+    put: vi.fn(async (key: string, value: unknown, options?: R2PutOptions) => {
+      const bytes =
+        value instanceof Uint8Array
+          ? value
+          : new Uint8Array(await new Response(value as BodyInit).arrayBuffer());
+      store.set(key, {
+        bytes,
+        contentType: options?.httpMetadata
+          ? (options.httpMetadata as { contentType?: string }).contentType
+          : undefined,
+        customMetadata: options?.customMetadata,
+      });
+      return { key } as unknown as R2Object;
+    }),
+    get: vi.fn(async (key: string) => {
+      const entry = store.get(key);
+      if (!entry) return null;
+      return {
+        key,
+        size: entry.bytes.length,
+        httpEtag: '"mock-etag"',
+        customMetadata: entry.customMetadata || {},
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(entry.bytes);
+            controller.close();
+          },
+        }),
+        writeHttpMetadata: (headers: Headers) => {
+          if (entry.contentType) headers.set('content-type', entry.contentType);
+        },
+      } as unknown as R2ObjectBody;
+    }),
+    head: vi.fn(async (key: string) => (store.has(key) ? ({ key } as unknown as R2Object) : null)),
+    delete: vi.fn(async (key: string) => {
+      store.delete(key);
+    }),
+  } as unknown as R2Bucket;
+}
+
+function createEnv(db: D1Database, bucket?: R2Bucket): Env {
   return {
     DB: db,
-    BUCKET: {} as R2Bucket,
+    BUCKET: bucket ?? ({} as R2Bucket),
     JWT_SECRET: 'test-secret',
     ENVIRONMENT: 'test' as Env['ENVIRONMENT'],
     API_URL: 'http://localhost',
@@ -364,18 +415,23 @@ async function request(
   db: D1Database,
   path: string,
   init: RequestInit = {},
-  opts: { empresaId?: number; role?: string; userId?: number } = {},
+  opts: { empresaId?: number; role?: string; userId?: number; bucket?: R2Bucket } = {},
 ) {
   const headers = new Headers(init.headers);
   headers.set('Authorization', 'Bearer test');
   headers.set('x-test-empresa-id', String(opts.empresaId ?? 1));
   headers.set('x-test-role', opts.role ?? 'manager');
   headers.set('x-test-user-id', String(opts.userId ?? 10));
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // FormData define seu proprio Content-Type (multipart + boundary) quando o
+  // Request e construido — forcar application/json aqui quebraria o parsing
+  // de upload de anexo (c.req.formData()).
+  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   return createApp().fetch(
     new Request(`http://localhost${path}`, { ...init, headers }),
-    createEnv(db),
+    createEnv(db, opts.bucket),
     {} as ExecutionContext,
   );
 }
@@ -1223,6 +1279,271 @@ describe('RDV — tripulação e abastecimentos', () => {
     const listarBody = (await listar.json()) as { data: Array<{ fornecedor: string }> };
     expect(listarBody.data.length).toBe(1);
     expect(listarBody.data[0].fornecedor).toBe('Fornecedor Ficticio');
+  });
+
+  describe('anexo de abastecimento (R2)', () => {
+    function pdfFormData(bytes = new Uint8Array([1, 2, 3, 4])): FormData {
+      const form = new FormData();
+      form.set('anexo', new File([bytes], 'recibo.pdf', { type: 'application/pdf' }));
+      return form;
+    }
+
+    it('upload aceita PDF, gera chave escopada por tenant+voo, e o vinculo ao criar o abastecimento funciona', async () => {
+      const db = createSqliteD1();
+      await preencherRdvCompleto(db);
+      const bucket = createR2Bucket();
+
+      const upload = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos/anexo',
+        { method: 'POST', body: pdfFormData() },
+        { ...COORDENACAO, bucket },
+      );
+      expect(upload.status).toBe(201);
+      const uploadBody = (await upload.json()) as {
+        data: { anexo_r2_key: string; size: number; content_type: string; content_hash: string };
+      };
+      expect(uploadBody.data.anexo_r2_key).toMatch(/^controle-voos\/1\/601\/abastecimentos\//);
+      expect(uploadBody.data.content_type).toBe('application/pdf');
+      expect(uploadBody.data.size).toBe(4);
+
+      const criar = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos',
+        {
+          method: 'POST',
+          body: await transitionBody(db, {
+            data_hora: '2026-06-14T09:50:00Z',
+            fornecedor: 'Fornecedor Com Anexo',
+            combustivel_abastecido: 300,
+            unidade: 'L',
+            anexo_r2_key: uploadBody.data.anexo_r2_key,
+          }),
+        },
+        { ...COORDENACAO, bucket },
+      );
+      expect(criar.status).toBe(201);
+      const {
+        data: { id: abastecimentoId },
+      } = (await criar.json()) as { data: { id: number } };
+
+      const download = await request(
+        db,
+        `/api/controle-voos/voos/601/abastecimentos/${abastecimentoId}/anexo`,
+        {},
+        { ...COORDENACAO, bucket },
+      );
+      expect(download.status).toBe(200);
+      const downloaded = new Uint8Array(await download.arrayBuffer());
+      expect(Array.from(downloaded)).toEqual([1, 2, 3, 4]);
+    });
+
+    it('rejeita content-type fora do allowlist', async () => {
+      const db = createSqliteD1();
+      await preencherRdvCompleto(db);
+      const bucket = createR2Bucket();
+
+      const form = new FormData();
+      form.set('anexo', new File([new Uint8Array([1])], 'script.exe', {
+        type: 'application/x-msdownload',
+      }));
+
+      const upload = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos/anexo',
+        { method: 'POST', body: form },
+        { ...COORDENACAO, bucket },
+      );
+      expect(upload.status).toBe(400);
+      const body = (await upload.json()) as { code?: string };
+      expect(body.code).toBe('CONTROLE_VOOS_ANEXO_CONTENT_TYPE_INVALID');
+    });
+
+    it('rejeita anexo acima do limite de 10 MB', async () => {
+      const db = createSqliteD1();
+      await preencherRdvCompleto(db);
+      const bucket = createR2Bucket();
+
+      const form = new FormData();
+      form.set(
+        'anexo',
+        new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'grande.pdf', {
+          type: 'application/pdf',
+        }),
+      );
+
+      const upload = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos/anexo',
+        { method: 'POST', body: form },
+        { ...COORDENACAO, bucket },
+      );
+      expect(upload.status).toBe(400);
+      const body = (await upload.json()) as { code?: string };
+      expect(body.code).toBe('CONTROLE_VOOS_ANEXO_TOO_LARGE');
+    });
+
+    it('rejeita criar abastecimento com chave de outro tenant/voo (nao existe no bucket sob esse escopo)', async () => {
+      const db = createSqliteD1();
+      await preencherRdvCompleto(db);
+      const bucket = createR2Bucket();
+
+      const criar = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos',
+        {
+          method: 'POST',
+          body: await transitionBody(db, {
+            data_hora: '2026-06-14T09:50:00Z',
+            fornecedor: 'Tentativa IDOR',
+            unidade: 'L',
+            anexo_r2_key: 'controle-voos/2/701/abastecimentos/outra-empresa.pdf',
+          }),
+        },
+        { ...COORDENACAO, bucket },
+      );
+      expect(criar.status).toBe(400);
+      const body = (await criar.json()) as { code?: string };
+      expect(body.code).toBe('CONTROLE_VOOS_ANEXO_KEY_SCOPE_INVALID');
+    });
+
+    it('rejeita chave com path traversal', async () => {
+      const db = createSqliteD1();
+      await preencherRdvCompleto(db);
+      const bucket = createR2Bucket();
+
+      const criar = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos',
+        {
+          method: 'POST',
+          body: await transitionBody(db, {
+            data_hora: '2026-06-14T09:50:00Z',
+            fornecedor: 'Tentativa traversal',
+            unidade: 'L',
+            anexo_r2_key: 'controle-voos/1/601/abastecimentos/../../../secrets.pdf',
+          }),
+        },
+        { ...COORDENACAO, bucket },
+      );
+      expect(criar.status).toBe(400);
+      const body = (await criar.json()) as { code?: string };
+      expect(body.code).toBe('CONTROLE_VOOS_ANEXO_KEY_INVALID');
+    });
+
+    it('rejeita chave bem-formada mas nao existente no storage', async () => {
+      const db = createSqliteD1();
+      await preencherRdvCompleto(db);
+      const bucket = createR2Bucket();
+
+      const criar = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos',
+        {
+          method: 'POST',
+          body: await transitionBody(db, {
+            data_hora: '2026-06-14T09:50:00Z',
+            fornecedor: 'Chave fantasma',
+            unidade: 'L',
+            anexo_r2_key: 'controle-voos/1/601/abastecimentos/nao-existe.pdf',
+          }),
+        },
+        { ...COORDENACAO, bucket },
+      );
+      expect(criar.status).toBe(400);
+      const body = (await criar.json()) as { code?: string };
+      expect(body.code).toBe('CONTROLE_VOOS_ANEXO_NOT_FOUND');
+    });
+
+    it('download rejeita usuario de outro tenant (IDOR)', async () => {
+      const db = createSqliteD1();
+      await preencherRdvCompleto(db);
+      const bucket = createR2Bucket();
+
+      const upload = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos/anexo',
+        { method: 'POST', body: pdfFormData() },
+        { ...COORDENACAO, bucket },
+      );
+      const uploadBody = (await upload.json()) as { data: { anexo_r2_key: string } };
+
+      const criar = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos',
+        {
+          method: 'POST',
+          body: await transitionBody(db, {
+            data_hora: '2026-06-14T09:50:00Z',
+            fornecedor: 'Fornecedor IDOR test',
+            unidade: 'L',
+            anexo_r2_key: uploadBody.data.anexo_r2_key,
+          }),
+        },
+        { ...COORDENACAO, bucket },
+      );
+      const {
+        data: { id: abastecimentoId },
+      } = (await criar.json()) as { data: { id: number } };
+
+      const outroTenant = await request(
+        db,
+        `/api/controle-voos/voos/601/abastecimentos/${abastecimentoId}/anexo`,
+        {},
+        { empresaId: 2, role: 'manager', userId: 20, bucket },
+      );
+      expect(outroTenant.status).toBe(404);
+    });
+
+    it('DELETE concorrente do abastecimento com anexo registra auditoria de desvinculo', async () => {
+      const db = createSqliteD1();
+      await preencherRdvCompleto(db);
+      const bucket = createR2Bucket();
+
+      const upload = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos/anexo',
+        { method: 'POST', body: pdfFormData() },
+        { ...COORDENACAO, bucket },
+      );
+      const uploadBody = (await upload.json()) as { data: { anexo_r2_key: string } };
+
+      const criar = await request(
+        db,
+        '/api/controle-voos/voos/601/abastecimentos',
+        {
+          method: 'POST',
+          body: await transitionBody(db, {
+            data_hora: '2026-06-14T09:50:00Z',
+            fornecedor: 'Fornecedor a remover',
+            unidade: 'L',
+            anexo_r2_key: uploadBody.data.anexo_r2_key,
+          }),
+        },
+        { ...COORDENACAO, bucket },
+      );
+      const {
+        data: { id: abastecimentoId },
+      } = (await criar.json()) as { data: { id: number } };
+
+      const remover = await request(
+        db,
+        `/api/controle-voos/voos/601/abastecimentos/${abastecimentoId}`,
+        { method: 'DELETE', body: await transitionBody(db) },
+        { ...COORDENACAO, bucket },
+      );
+      expect(remover.status).toBe(200);
+
+      const unlinkedCalls = vi
+        .mocked(registrarAuditoria)
+        .mock.calls.filter(
+          ([params]) =>
+            params.tabela === 'cv_voo_abastecimentos' &&
+            (params.dados_novos as { action?: string } | null)?.action ===
+              'anexo_unlinked_on_delete',
+        );
+      expect(unlinkedCalls.length).toBe(1);
+    });
   });
 
   // Fault injection §7: revalida que o hotfix de atomicidade (mesmo

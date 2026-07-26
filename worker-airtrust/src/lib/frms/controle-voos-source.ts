@@ -23,6 +23,8 @@ import {
   listControleVoosJornadas,
   type ControleVoosJornadaItem,
   type ControleVoosJornadaOrigemDados,
+  type ControleVoosJornadaQualidadeDado,
+  type ControleVoosJornadaEstadoConflito,
 } from '../../services/controle-voos/controle-voos-jornadas';
 
 /** Origens de dados operacionais reconhecidas pelo Controle de Voos. */
@@ -55,6 +57,8 @@ export interface ControleVoosOperationalRecord {
   /** Como o dado chegou ao Controle de Voos (importado do SIGVOOS, manual, ou editado). */
   origemDados: ControleVoosJornadaOrigemDados;
   tripulanteId: number;
+  /** Função a bordo (PIC/SIC/COM/MEC/OUTRO), como registrada em `cv_voo_tripulantes.funcao`. */
+  funcao: string;
   /** Data operacional no formato YYYY-MM-DD. */
   dataOperacional: string;
   /** Horários locais normalizados HH:MM, sem inferir UTC quando o timezone não existe no schema. */
@@ -74,6 +78,10 @@ export interface ControleVoosOperationalRecord {
   minutosVoo: number;
   /** `last_sync_at` do read-model — usado para detectar mudanças retroativas / idempotência. */
   atualizadoEm: string | null;
+  /** Qualidade do dado conforme já computada pelo read-model (não recalculada aqui). */
+  qualidadeDado: ControleVoosJornadaQualidadeDado;
+  /** Estado de conflito de importação/reconciliação, quando houver (null = sem conflito aberto). */
+  estadoConflito: ControleVoosJornadaEstadoConflito;
 }
 
 /**
@@ -93,6 +101,8 @@ export const CONTROLE_VOOS_FRMS_KNOWN_GAPS: readonly string[] = [
   'Timezone explícito: os horários (`engine_start`, `takeoff_time`, etc.) continuam sem coluna IANA própria no schema CV/SIGVOOS atual; o contrato agora expõe `timezone=null` e falha de forma conservadora no comparador em vez de presumir America/Sao_Paulo.',
   'Matrícula do tripulante permanece fora do contrato CV -> FRMS por não ser necessária à identidade canônica e por risco de PII. Quando houver chave externa estável, usa-se `sigvoos_staff_id`.',
   'Transformação futura deve preferir cv_voo_etapas persistidas sobre campos agregados do RDV quando houver etapas; agregados do formulário não são origem definitiva.',
+  'Horários PLANEJADOS (cv_voos.horario_previsto_partida/chegada) não são expostos por `listControleVoosJornadas` — o read-model agrega apenas o REALIZADO. O contrato FRMS v1 (controle-voos-contract.ts) expõe planejados=null com fonte explícita até o read-model ser estendido.',
+  'Base operacional (aeroporto/plataforma de origem do tripulante) não existe como coluna própria em cv_voos nem no read-model — permanece SIGVOOS_EXTERNAL_EVIDENCE_PENDING no contrato FRMS v1.',
 ];
 
 function normalizeStatus(value: string | null): string | null {
@@ -145,6 +155,7 @@ function mapJornadaItemToOperationalRecord(
     origem: 'CONTROLE_VOOS',
     origemDados: item.origem_dados,
     tripulanteId: item.tripulante_id,
+    funcao: item.funcao,
     dataOperacional: item.data_operacional,
     horaDecolagem: item.takeoff_time,
     horaPouso: item.landing_time,
@@ -163,6 +174,8 @@ function mapJornadaItemToOperationalRecord(
     corrigido: statusOperacional === 'CORRIGIDO',
     minutosVoo: minutosEntre(item.takeoff_time, item.landing_time),
     atualizadoEm: item.last_sync_at,
+    qualidadeDado: item.qualidade_dado,
+    estadoConflito: item.estado_conflito,
   };
 }
 

@@ -13,6 +13,13 @@ import {
   type FrmsJornadaLegacyRow,
 } from '../../lib/frms/controle-voos-shadow-comparator';
 import { isControleVoosShadowModeEnabledForEmpresa } from '../../lib/frms/controle-voos-shadow-flag';
+import {
+  buildFrmsControleVoosContractV1,
+  buildFrmsControleVoosContractV1Batch,
+  frmsControleVoosContractV1Schema,
+  FRMS_CONTROLE_VOOS_CONTRACT_VERSION,
+  SIGVOOS_EXTERNAL_EVIDENCE_PENDING,
+} from '../../lib/frms/controle-voos-contract';
 
 type SqliteD1 = D1Database & { databasePath: string };
 
@@ -298,6 +305,147 @@ describe('fetchControleVoosOperationalRecords', () => {
   });
 });
 
+describe('contrato FRMS v1 (controle-voos-contract)', () => {
+  it('produz um payload que satisfaz o schema versionado, com base/planejados marcados como pendentes explicitamente', async () => {
+    const db = createSqliteD1();
+    seedEmpresa(db.databasePath, 1, 'X');
+    seedVooComTripulante(db.databasePath, {
+      empresaId: 1,
+      vooId: 601,
+      etapaId: 9001,
+      tripulanteRecordId: 9101,
+      funcionarioId: 1001,
+      data: '2026-06-14',
+      takeoff: '08:00',
+      landing: '09:00',
+      externalIdSigvoos: 700101,
+    });
+    const [record] = await fetchControleVoosOperationalRecords(db, 1, '2026-06-14', '2026-06-14');
+
+    const contract = buildFrmsControleVoosContractV1(record);
+    expect(() => frmsControleVoosContractV1Schema.parse(contract)).not.toThrow();
+
+    expect(contract.contractVersion).toBe(FRMS_CONTROLE_VOOS_CONTRACT_VERSION);
+    expect(contract.origem).toBe('CONTROLE_VOOS');
+    expect(contract.horarios.planejados).toEqual({
+      partida: null,
+      chegada: null,
+      fonte: 'NAO_DISPONIVEL_NO_READ_MODEL',
+    });
+    expect(contract.base).toEqual({ codigo: null, fonte: SIGVOOS_EXTERNAL_EVIDENCE_PENDING });
+    expect(contract.idempotencyKey).toBe(
+      `cv:${FRMS_CONTROLE_VOOS_CONTRACT_VERSION}:1:${record.identificadorInterno}:${record.atualizadoEm}`,
+    );
+  });
+
+  it('idempotencyKey e estavel para o mesmo registro e muda quando sourceVersion muda', async () => {
+    const db = createSqliteD1();
+    seedEmpresa(db.databasePath, 1, 'X');
+    seedVooComTripulante(db.databasePath, {
+      empresaId: 1,
+      vooId: 601,
+      etapaId: 9001,
+      tripulanteRecordId: 9101,
+      funcionarioId: 1001,
+      data: '2026-06-14',
+      takeoff: '08:00',
+      landing: '09:00',
+      externalIdSigvoos: 700101,
+    });
+    const [record] = await fetchControleVoosOperationalRecords(db, 1, '2026-06-14', '2026-06-14');
+
+    const contractA = buildFrmsControleVoosContractV1(record);
+    const contractB = buildFrmsControleVoosContractV1(record);
+    expect(contractA.idempotencyKey).toBe(contractB.idempotencyKey);
+
+    const contractC = buildFrmsControleVoosContractV1({ ...record, atualizadoEm: '2026-06-15T00:00:00Z' });
+    expect(contractC.idempotencyKey).not.toBe(contractA.idempotencyKey);
+  });
+
+  it('occurredAt so e preenchido quando timezone explicito E hora de decolagem existem; sem timezone fica null (nao fabrica offset)', async () => {
+    const db = createSqliteD1();
+    seedEmpresa(db.databasePath, 1, 'X');
+    seedVooComTripulante(db.databasePath, {
+      empresaId: 1,
+      vooId: 601,
+      etapaId: 9001,
+      tripulanteRecordId: 9101,
+      funcionarioId: 1001,
+      data: '2026-06-14',
+      takeoff: '08:00',
+      landing: '09:00',
+      externalIdSigvoos: 700101,
+    });
+    const [record] = await fetchControleVoosOperationalRecords(db, 1, '2026-06-14', '2026-06-14');
+    expect(record.timezoneFonte).toBe('INDISPONIVEL');
+
+    const semTimezone = buildFrmsControleVoosContractV1(record);
+    expect(semTimezone.occurredAt).toBeNull();
+
+    const comTimezone = buildFrmsControleVoosContractV1({
+      ...record,
+      timezone: 'America/Sao_Paulo',
+      timezoneFonte: 'EXPLICITO',
+    });
+    expect(comTimezone.occurredAt).toBe('2026-06-14T08:00:00');
+  });
+
+  it('nao usa IDs internos do SIGVOOS como chave canonica — idempotencyKey e vooId/tripulanteId sao sempre do AirTrust', async () => {
+    const db = createSqliteD1();
+    seedEmpresa(db.databasePath, 1, 'X');
+    seedVooComTripulante(db.databasePath, {
+      empresaId: 1,
+      vooId: 601,
+      etapaId: 9001,
+      tripulanteRecordId: 9101,
+      funcionarioId: 1001,
+      data: '2026-06-14',
+      takeoff: '08:00',
+      landing: '09:00',
+      externalIdSigvoos: 700101,
+    });
+    const [record] = await fetchControleVoosOperationalRecords(db, 1, '2026-06-14', '2026-06-14');
+    const contract = buildFrmsControleVoosContractV1(record);
+
+    expect(contract.idempotencyKey).not.toContain('700101');
+    expect(contract.vooId).toBe(601);
+    expect(contract.tripulanteId).toBe(1001);
+  });
+
+  it('lote (batch) preserva ordem e escopo de tenant dos registros de origem', async () => {
+    const db = createSqliteD1();
+    seedEmpresa(db.databasePath, 1, 'X');
+    seedVooComTripulante(db.databasePath, {
+      empresaId: 1,
+      vooId: 601,
+      etapaId: 9001,
+      tripulanteRecordId: 9101,
+      funcionarioId: 1001,
+      data: '2026-06-14',
+      takeoff: '08:00',
+      landing: '09:00',
+      externalIdSigvoos: 700101,
+    });
+    seedVooComTripulante(db.databasePath, {
+      empresaId: 1,
+      vooId: 602,
+      etapaId: 9002,
+      tripulanteRecordId: 9102,
+      funcionarioId: 1002,
+      data: '2026-06-14',
+      takeoff: '10:00',
+      landing: '11:00',
+      externalIdSigvoos: 700102,
+    });
+    const records = await fetchControleVoosOperationalRecords(db, 1, '2026-06-14', '2026-06-14');
+    expect(records.length).toBe(2);
+
+    const contracts = buildFrmsControleVoosContractV1Batch(records);
+    expect(contracts.map((c) => c.vooId)).toEqual(records.map((r) => r.vooId));
+    expect(contracts.every((c) => c.empresaId === 1)).toBe(true);
+  });
+});
+
 describe('compareControleVoosWithLegacyJornada', () => {
   it('não reporta divergência quando legado e Controle de Voos têm exatamente as mesmas chaves tripulante+data e o contrato já traz timezone explícito', () => {
     const cvRecords = [
@@ -309,6 +457,7 @@ describe('compareControleVoosWithLegacyJornada', () => {
         origem: 'CONTROLE_VOOS' as const,
         origemDados: 'importado' as const,
         tripulanteId: 1001,
+        funcao: 'PIC',
         dataOperacional: '2026-06-14',
         horaDecolagem: '08:00',
         horaPouso: '09:00',
@@ -325,6 +474,8 @@ describe('compareControleVoosWithLegacyJornada', () => {
         corrigido: false,
         minutosVoo: 60,
         atualizadoEm: '2026-06-14T12:00:00Z',
+        qualidadeDado: 'completo' as const,
+        estadoConflito: null,
       },
     ];
     const legacyRows: FrmsJornadaLegacyRow[] = [{ tripulante_id: 1001, data: '2026-06-14', empresa_id: 1 }];
@@ -396,6 +547,7 @@ describe('compareControleVoosWithLegacyJornada', () => {
           origem: 'CONTROLE_VOOS',
           origemDados: 'importado',
           tripulanteId: 1001,
+          funcao: 'PIC',
           dataOperacional: '2026-06-14',
           horaDecolagem: '08:00',
           horaPouso: '09:00',
@@ -412,6 +564,8 @@ describe('compareControleVoosWithLegacyJornada', () => {
           corrigido: false,
           minutosVoo: 60,
           atualizadoEm: '2026-06-14T12:00:00Z',
+          qualidadeDado: 'completo',
+          estadoConflito: null,
         },
       ],
       [{ tripulante_id: 1001, data: '2026-06-14', empresa_id: 1 }],

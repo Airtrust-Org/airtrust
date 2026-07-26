@@ -1,0 +1,17 @@
+-- Adiciona controle de concorrencia otimista (CAS) a cv_voos.
+--
+-- cv_voos e mutado diretamente (POST/PATCH/status) independente de existir
+-- um RDV ativo (cv_rdv_operacional e opcional, 0 ou 1 por voo). O RDV ja tem
+-- seu proprio `versao`/CAS (migration 0438) cobrindo o workflow e as
+-- entidades dependentes dele (tripulantes, abastecimentos, etapas) — mas
+-- isso nao protege os campos do proprio voo (prefixo, horarios, aeronave,
+-- status operacional) contra edicao concorrente, incluindo quando o voo
+-- ainda nao tem RDV algum.
+--
+-- Sao dois aggregate roots distintos, cada um com seu proprio versionamento:
+-- cv_voos.versao para mutacoes diretas do voo, cv_rdv_operacional.versao
+-- para o workflow do RDV e seus filhos. Nenhum dos dois substitui o outro.
+--
+-- Append-only: ADD COLUMN com DEFAULT constante, sem rewrite destrutivo.
+-- Linhas existentes recebem versao = 1 (primeira versao valida).
+ALTER TABLE cv_voos ADD COLUMN versao INTEGER NOT NULL DEFAULT 1;

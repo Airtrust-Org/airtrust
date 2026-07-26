@@ -43,6 +43,13 @@ import {
 } from '../services/controle-voos/rdv-workflow';
 import { syncRdvAlerts } from '../services/controle-voos/rdv-alertas';
 import {
+  ABASTECIMENTO_ANEXO_MAX_BYTES,
+  assertAbastecimentoAnexoKeyScope,
+  buildAbastecimentoAnexoKey,
+  hashBytesSha256,
+  resolveAbastecimentoAnexoContentType,
+} from '../services/controle-voos/abastecimento-anexos';
+import {
   gerarRelatorioPetrobrasPdf,
   computeIntegrityHash,
   type RelatorioPetrobrasData,
@@ -1221,6 +1228,105 @@ rdvWorkflow.get('/voos/:id/abastecimentos', auth(), requireAnyRdvAccess(), async
   return c.json({ success: true, data: results || [] });
 });
 
+// Upload do anexo ANTES de criar o abastecimento — o cliente sobe o arquivo
+// aqui, recebe a chave gerada pelo servidor, e a referencia ao criar o
+// abastecimento (POST abaixo), que revalida o escopo dessa chave. Nao exige
+// versao do RDV: efeito colateral e so no R2, nao muta cv_rdv_operacional
+// nem cv_voo_abastecimentos.
+rdvWorkflow.post('/voos/:id/abastecimentos/anexo', auth(), requireAnyRdvAccess(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const userId = Number(getActorId(c));
+  const vooId = c.req.param('id');
+  const voo = await getFlightOrThrow(c.env.DB, vooId, empresaId);
+  await assertRdvSelfScope(c, c.env.DB, empresaId, voo.id, RDV_CAPABILITIES.editarRascunhoProprio);
+
+  const formData = await c.req.formData().catch(() => null);
+  const file = (formData?.get('anexo') ?? null) as File | string | null;
+  if (!(file instanceof File)) {
+    throw new ApiError('Arquivo obrigatorio (campo anexo)', 400, 'CONTROLE_VOOS_ANEXO_MISSING');
+  }
+
+  const contentType = resolveAbastecimentoAnexoContentType(file.type);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new ApiError('Arquivo vazio', 400, 'CONTROLE_VOOS_ANEXO_EMPTY');
+  }
+  if (bytes.length > ABASTECIMENTO_ANEXO_MAX_BYTES) {
+    throw new ApiError('Anexo excede o limite de 10 MB', 400, 'CONTROLE_VOOS_ANEXO_TOO_LARGE');
+  }
+
+  const contentHash = await hashBytesSha256(bytes);
+  const key = buildAbastecimentoAnexoKey(empresaId, voo.id, contentType);
+
+  await c.env.BUCKET.put(key, bytes, {
+    httpMetadata: { contentType },
+    customMetadata: {
+      empresaId: String(empresaId),
+      vooId: String(voo.id),
+      uploadedBy: String(userId),
+      contentHash,
+    },
+  });
+
+  await maybeRecordSystemAudit(c, 'cv_voo_abastecimentos', 'INSERT', key, null, {
+    action: 'anexo_upload',
+    voo_id: voo.id,
+    size: bytes.length,
+    content_type: contentType,
+    content_hash: contentHash,
+  });
+
+  return c.json(
+    {
+      success: true,
+      data: { anexo_r2_key: key, size: bytes.length, content_type: contentType, content_hash: contentHash },
+    },
+    201,
+  );
+});
+
+rdvWorkflow.get(
+  '/voos/:id/abastecimentos/:abastecimentoId/anexo',
+  auth(),
+  requireAnyRdvAccess(),
+  async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const vooId = c.req.param('id');
+    const abastecimentoId = parsePositiveInteger(c.req.param('abastecimentoId'), 'abastecimentoId');
+    const voo = await getFlightOrThrow(c.env.DB, vooId, empresaId);
+    await assertRdvSelfScope(c, c.env.DB, empresaId, voo.id, RDV_CAPABILITIES.visualizarProprio);
+
+    const row = await c.env.DB.prepare(
+      'SELECT anexo_r2_key FROM cv_voo_abastecimentos WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+    )
+      .bind(abastecimentoId, voo.id, empresaId)
+      .first<{ anexo_r2_key: string | null }>();
+
+    if (!row || !row.anexo_r2_key) {
+      throw new ApiError('Anexo nao encontrado', 404, 'CONTROLE_VOOS_ANEXO_NOT_FOUND');
+    }
+    // Defesa em profundidade: mesmo vindo do banco (nao do cliente), reconfirma
+    // o escopo antes de servir — cobre chaves gravadas antes desta validacao.
+    assertAbastecimentoAnexoKeyScope(row.anexo_r2_key, empresaId, voo.id);
+
+    const object = await c.env.BUCKET.get(row.anexo_r2_key);
+    if (!object) {
+      throw new ApiError('Anexo nao encontrado no storage', 404, 'CONTROLE_VOOS_ANEXO_NOT_FOUND');
+    }
+
+    await maybeRecordSystemAudit(c, 'cv_voo_abastecimentos', 'UPDATE', abastecimentoId, null, {
+      action: 'anexo_download',
+      voo_id: voo.id,
+    });
+
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set('etag', object.httpEtag);
+    headers.set('Cache-Control', 'private, no-store');
+    return new Response(object.body, { headers });
+  },
+);
+
 rdvWorkflow.post('/voos/:id/abastecimentos', auth(), requireAnyRdvAccess(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const userId = Number(getActorId(c));
@@ -1249,6 +1355,17 @@ rdvWorkflow.post('/voos/:id/abastecimentos', auth(), requireAnyRdvAccess(), asyn
       : null;
   const numeroCe = payload.numero_ce ? String(payload.numero_ce) : null;
   const anexoR2Key = payload.anexo_r2_key ? String(payload.anexo_r2_key) : null;
+  if (anexoR2Key) {
+    assertAbastecimentoAnexoKeyScope(anexoR2Key, empresaId, voo.id);
+    const anexoObject = await c.env.BUCKET.head(anexoR2Key);
+    if (!anexoObject) {
+      throw new ApiError(
+        'anexo_r2_key nao encontrado no storage. Faca upload antes de vincular.',
+        400,
+        'CONTROLE_VOOS_ANEXO_NOT_FOUND',
+      );
+    }
+  }
   const responsavelId = parseOptionalPositiveInteger(payload.responsavel_id, 'responsavel_id');
   const etapaId = parseOptionalPositiveInteger(payload.etapa_id, 'etapa_id');
   const observacoes = payload.observacoes ? String(payload.observacoes) : null;
@@ -1318,6 +1435,12 @@ rdvWorkflow.delete(
     const expectedVersion = requireExpectedRdvVersion(payload);
     assertRdvVersion(rdv, expectedVersion);
 
+    const existingAnexo = await c.env.DB.prepare(
+      'SELECT anexo_r2_key FROM cv_voo_abastecimentos WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+    )
+      .bind(abastecimentoId, voo.id, empresaId)
+      .first<{ anexo_r2_key: string | null }>();
+
     const novaVersao = rdv.versao + 1;
     const guard = { rdvId: rdv.id, empresaId, expectedVersion: rdv.versao };
     const [abastecimentoResult, rdvResult] = await c.env.DB.batch([
@@ -1354,6 +1477,14 @@ rdvWorkflow.delete(
       assertCasApplied({ meta: { changes: 0 } });
     }
     assertCasApplied(rdvResult);
+
+    if (existingAnexo?.anexo_r2_key) {
+      await maybeRecordSystemAudit(c, 'cv_voo_abastecimentos', 'UPDATE', abastecimentoId, null, {
+        action: 'anexo_unlinked_on_delete',
+        voo_id: voo.id,
+        anexo_r2_key: existingAnexo.anexo_r2_key,
+      });
+    }
 
     return c.json({ success: true, data: { id: abastecimentoId } });
   },

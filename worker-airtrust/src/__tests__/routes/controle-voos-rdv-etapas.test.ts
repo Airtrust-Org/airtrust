@@ -74,6 +74,7 @@ const migrations = [
   join(testDir, '../../../migrations/0410_controle_voos_n1_schema.sql'),
   join(testDir, '../../../migrations/0411_controle_voos_sigvoos_integration_schema.sql'),
   join(testDir, '../../../migrations/0438_controle_voos_rdv_coordenacao_workflow.sql'),
+  join(testDir, '../../../migrations/0444_controle_voos_versao.sql'),
 ].map((p) => readFileSync(p, 'utf8'));
 
 function sqlString(value: unknown): string {

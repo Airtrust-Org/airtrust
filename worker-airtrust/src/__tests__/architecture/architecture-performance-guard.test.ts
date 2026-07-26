@@ -30,6 +30,10 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/frms-fadiga-checkin.ts': 2021,
   // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.
   'routes/lms-assets.ts': 2400,
+  // Cap raised 2026-07-25: counted 2014 — optimistic concurrency (CAS) added to
+  // cv_voos PATCH/status (versao obrigatoria + db.batch com evento gateado em
+  // (SELECT changes()) > 0), mesmo padrao ja usado em cv_rdv_operacional.
+  'routes/controle-voos.ts': 2014,
 } as const;
 
 const SQL_PREPARE_CAPS = {

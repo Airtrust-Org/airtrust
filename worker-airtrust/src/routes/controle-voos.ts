@@ -96,6 +96,8 @@ const allowedFields = new Set([
   'alternado_destino_id',
 ]);
 
+const allowedFieldsWithVersion = new Set([...allowedFields, 'versao']);
+
 const blockedFields = new Set([
   'id',
   'empresa_id',
@@ -623,6 +625,53 @@ function assertStatusTransition(from: FlightStatus, to: FlightStatus): void {
       'Transicao de status nao permitida',
       409,
       'CONTROLE_VOOS_INVALID_TRANSITION',
+    );
+  }
+}
+
+// Concorrencia otimista (CAS) de cv_voos — aggregate root proprio, distinto
+// do versionamento de cv_rdv_operacional (services/controle-voos/rdv-workflow.ts).
+// cv_voos e mutado diretamente por PATCH/status mesmo em voos sem RDV algum,
+// entao nao pode depender da versao do RDV. Mesmo padrao de erro/codigo dos
+// helpers equivalentes do RDV (requireExpectedRdvVersion/assertRdvVersion/
+// assertCasApplied), com codigos proprios para nao colidir na resposta.
+function requireExpectedFlightVersion(payload: Record<string, unknown>): number {
+  if (
+    !Object.prototype.hasOwnProperty.call(payload, 'versao') ||
+    payload.versao === null ||
+    payload.versao === undefined ||
+    payload.versao === ''
+  ) {
+    throw new ApiError('versao e obrigatoria', 400, 'CONTROLE_VOOS_FLIGHT_VERSION_REQUIRED');
+  }
+  const parsed = typeof payload.versao === 'number' ? payload.versao : Number(payload.versao);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new ApiError('versao invalida', 400, 'CONTROLE_VOOS_FLIGHT_VERSION_INVALID');
+  }
+  return parsed;
+}
+
+function assertFlightVersion(existing: FlightRow, expectedVersion: unknown): void {
+  const parsed = typeof expectedVersion === 'number' ? expectedVersion : Number(expectedVersion);
+  if (!Number.isInteger(parsed) || parsed !== existing.versao) {
+    throw new ApiError(
+      'Versao do voo desatualizada. Recarregue os dados antes de continuar.',
+      409,
+      'CONTROLE_VOOS_FLIGHT_VERSION_CONFLICT',
+    );
+  }
+}
+
+// Cobre a janela entre o SELECT que validou a versao e o UPDATE em si: se
+// outra requisicao venceu a corrida nesse intervalo, o UPDATE atual afeta 0
+// linhas mesmo com assertFlightVersion ja tendo passado (mesmo raciocinio
+// documentado em rdv-repository.ts para cv_rdv_operacional).
+function assertFlightCasApplied(result: { meta: { changes: number } }): void {
+  if (!result.meta.changes) {
+    throw new ApiError(
+      'Versao do voo desatualizada. Recarregue os dados antes de continuar.',
+      409,
+      'CONTROLE_VOOS_FLIGHT_VERSION_CONFLICT',
     );
   }
 }
@@ -1194,8 +1243,10 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
   const id = c.req.param('id');
   const existing = await getFlightOrThrow(c.env.DB, id, empresaId);
   const payload = await parseJsonPayload(c);
-  assertPayloadFields(payload, allowedFields);
-  if (Object.keys(payload).length === 0) {
+  assertPayloadFields(payload, allowedFieldsWithVersion);
+  const expectedVersion = requireExpectedFlightVersion(payload);
+  assertFlightVersion(existing, expectedVersion);
+  if (Object.keys(payload).filter((field) => field !== 'versao').length === 0) {
     throw new ApiError('Nenhum campo para atualizar', 400, 'CONTROLE_VOOS_EMPTY_PATCH');
   }
 
@@ -1216,33 +1267,52 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
     }
   }
 
-  fields.push('updated_by = ?', 'updated_at = datetime("now")');
-  values.push(userId, id, empresaId);
+  fields.push('versao = versao + 1', 'updated_by = ?', 'updated_at = datetime("now")');
+  values.push(userId, id, empresaId, existing.versao);
 
-  await c.env.DB.prepare(
-    `
-    UPDATE cv_voos
-    SET ${fields.join(', ')}
-    WHERE id = ?
-      AND empresa_id = ?
-      AND deleted_at IS NULL
-  `,
-  )
-    .bind(...values)
-    .run();
+  const eventoTipo = input.status && input.status !== existing.status ? 'status' : 'observacao';
+  const eventoStatusNovo = merged.status || existing.status;
+  const [updateResult] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `
+      UPDATE cv_voos
+      SET ${fields.join(', ')}
+      WHERE id = ?
+        AND empresa_id = ?
+        AND deleted_at IS NULL
+        AND versao = ?
+    `,
+    ).bind(...values),
+    c.env.DB.prepare(
+      `
+      INSERT INTO cv_voo_eventos (
+        empresa_id, voo_id, tipo_evento, status_anterior, status_novo,
+        descricao, motivo_id, metadata_json, usuario_id, created_by, updated_by,
+        created_at, updated_at
+      )
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+      WHERE (SELECT changes()) > 0
+    `,
+    ).bind(
+      empresaId,
+      existing.id,
+      eventoTipo,
+      existing.status,
+      eventoStatusNovo,
+      'Voo atualizado',
+      merged.cancelado_motivo_id || null,
+      JSON.stringify({
+        fields: Object.keys(payload)
+          .filter((field) => field !== 'versao')
+          .sort(),
+      }),
+      userId,
+      userId,
+      userId,
+    ),
+  ]);
 
-  await recordFlightEvent({
-    db: c.env.DB,
-    empresaId,
-    vooId: existing.id,
-    tipoEvento: input.status && input.status !== existing.status ? 'status' : 'observacao',
-    statusAnterior: existing.status,
-    statusNovo: merged.status || existing.status,
-    descricao: 'Voo atualizado',
-    motivoId: merged.cancelado_motivo_id || null,
-    metadata: { fields: Object.keys(payload).sort() },
-    usuarioId: userId,
-  });
+  assertFlightCasApplied(updateResult);
 
   await maybeRecordSystemAudit(c, 'cv_voos', 'UPDATE', id, existing, input);
   const updated = await getFlightOrThrow(c.env.DB, id, empresaId);
@@ -1260,8 +1330,11 @@ controleVoos.post('/voos/:id/status', auth(), requireControleVoosWrite(), async 
     'motivo_id',
     'cancelado_motivo_id',
     'descricao',
+    'versao',
   ]);
   assertPayloadFields(payload, allowedStatusPayloadFields);
+  const expectedVersion = requireExpectedFlightVersion(payload);
+  assertFlightVersion(existing, expectedVersion);
 
   const status = normalizeStatus(payload.status);
   const motivoId = parseOptionalPositiveInteger(
@@ -1287,32 +1360,46 @@ controleVoos.post('/voos/:id/status', auth(), requireControleVoosWrite(), async 
     status === 'cancelado' ? 'cancelamento' : undefined,
   );
 
-  await c.env.DB.prepare(
-    `
-    UPDATE cv_voos
-    SET status = ?,
-        cancelado_motivo_id = CASE WHEN ? IS NOT NULL THEN ? ELSE cancelado_motivo_id END,
-        updated_by = ?,
-        updated_at = datetime('now')
-    WHERE id = ?
-      AND empresa_id = ?
-      AND deleted_at IS NULL
-  `,
-  )
-    .bind(status, motivoId, motivoId, userId, id, empresaId)
-    .run();
+  const [updateResult] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `
+      UPDATE cv_voos
+      SET status = ?,
+          cancelado_motivo_id = CASE WHEN ? IS NOT NULL THEN ? ELSE cancelado_motivo_id END,
+          versao = versao + 1,
+          updated_by = ?,
+          updated_at = datetime('now')
+      WHERE id = ?
+        AND empresa_id = ?
+        AND deleted_at IS NULL
+        AND versao = ?
+    `,
+    ).bind(status, motivoId, motivoId, userId, id, empresaId, existing.versao),
+    c.env.DB.prepare(
+      `
+      INSERT INTO cv_voo_eventos (
+        empresa_id, voo_id, tipo_evento, status_anterior, status_novo,
+        descricao, motivo_id, usuario_id, created_by, updated_by,
+        created_at, updated_at
+      )
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+      WHERE (SELECT changes()) > 0
+    `,
+    ).bind(
+      empresaId,
+      existing.id,
+      'status',
+      existing.status,
+      status,
+      descricao || 'Status atualizado',
+      motivoId,
+      userId,
+      userId,
+      userId,
+    ),
+  ]);
 
-  await recordFlightEvent({
-    db: c.env.DB,
-    empresaId,
-    vooId: existing.id,
-    tipoEvento: 'status',
-    statusAnterior: existing.status,
-    statusNovo: status,
-    descricao: descricao || 'Status atualizado',
-    motivoId,
-    usuarioId: userId,
-  });
+  assertFlightCasApplied(updateResult);
 
   await maybeRecordSystemAudit(
     c,

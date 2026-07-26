@@ -38,6 +38,7 @@ export type FlightRow = {
   observacoes: string | null;
   cancelado_motivo_id: number | null;
   alternado_destino_id: number | null;
+  versao: number;
   created_at: string;
   updated_at: string;
 };
@@ -140,7 +141,7 @@ export const FLIGHT_SELECT = `
   tipo_voo_id, natureza_voo_id, aeronave_id,
   horario_previsto_partida, horario_previsto_chegada,
   horario_real_partida, horario_real_chegada,
-  status, observacoes, cancelado_motivo_id, alternado_destino_id,
+  status, observacoes, cancelado_motivo_id, alternado_destino_id, versao,
   created_at, updated_at
 `;
 

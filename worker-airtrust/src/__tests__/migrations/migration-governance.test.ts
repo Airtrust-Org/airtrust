@@ -95,6 +95,7 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0437_setores_gestores_gestor_id_optional.sql',
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
+  '0444': ['0444_controle_voos_versao.sql', '0444_controle_voos_versao_rollback.sql'],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -194,7 +195,9 @@ describe('migration governance', () => {
     // small, atomic executor for the 51 guia-instrutor links only).
     // Ratchet raised 2026-07-25: 0443 simuladores_matriz_remediation_compensation
     // (append-only overlay + ledger for the 5 LEGACY_EQUIVALENT compensation).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(443);
+    // Ratchet raised 2026-07-25: 0444 controle_voos_versao (CAS otimista em
+    // cv_voos, append-only ADD COLUMN com DEFAULT constante).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(444);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 

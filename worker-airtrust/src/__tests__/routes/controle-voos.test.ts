@@ -77,6 +77,10 @@ const rdvWorkflowMigrationPath = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../../migrations/0438_controle_voos_rdv_coordenacao_workflow.sql',
 );
+const flightVersionMigrationPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../migrations/0444_controle_voos_versao.sql',
+);
 const routePath = join(dirname(fileURLToPath(import.meta.url)), '../../routes/controle-voos.ts');
 const sigvoosRealPreviewServicePath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -112,6 +116,49 @@ function queryJson<T>(databasePath: string, sql: string): T[] {
   return result.stdout.trim() ? (JSON.parse(result.stdout) as T[]) : [];
 }
 
+// Executa TODAS as instrucoes de um `db.batch([...])` em uma unica invocacao
+// do `sqlite3` CLI (uma unica conexao/transacao) — ver comentario identico
+// em controle-voos-rdv-workflow.test.ts, origem deste harness. Necessario
+// aqui porque PATCH/status de cv_voos agora tambem usa
+// `(SELECT changes()) > 0` para gatear o evento de auditoria dentro do
+// mesmo `db.batch()` do UPDATE com CAS.
+function execBatch(
+  databasePath: string,
+  statements: Array<{ sql: string; binds: unknown[] }>,
+): Array<{ meta: { changes: number; last_row_id: number } }> {
+  if (statements.length === 0) return [];
+  const parts: string[] = ['.bail on', 'BEGIN IMMEDIATE;'];
+  for (const stmt of statements) {
+    const sql = interpolate(stmt.sql, stmt.binds).trim();
+    parts.push(sql.endsWith(';') ? sql : `${sql};`);
+    parts.push('SELECT changes() AS __n, last_insert_rowid() AS __lid;');
+  }
+  parts.push('COMMIT;');
+
+  const result = spawnSync('sqlite3', ['-json', databasePath], {
+    input: parts.join('\n'),
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    throw new Error(`D1_BATCH_FAILED: ${result.stderr || result.stdout}`);
+  }
+
+  const blocks = result.stdout
+    .split(/(?<=\])\s*\n(?=\[)/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  if (blocks.length !== statements.length) {
+    throw new Error(
+      `D1_BATCH_HARNESS_MISMATCH: esperava ${statements.length} blocos de resultado, recebeu ${blocks.length}`,
+    );
+  }
+  return blocks.map((block) => {
+    const rows = JSON.parse(block) as Array<{ __n: number; __lid: number }>;
+    const row = rows[0] || { __n: 0, __lid: 0 };
+    return { meta: { changes: row.__n ?? 0, last_row_id: row.__lid ?? 0 } };
+  });
+}
+
 function createSqliteD1(): SqliteD1 {
   const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-cv-routes-'));
   const databasePath = join(tempDir, 'routes.sqlite');
@@ -122,6 +169,7 @@ function createSqliteD1(): SqliteD1 {
   // 0438 referencia cv_voo_etapas (0411) no índice único e nos FKs de abastecimentos.
   runSql(databasePath, readFileSync(sigvoosMigrationPath, 'utf8'));
   runSql(databasePath, readFileSync(rdvWorkflowMigrationPath, 'utf8'));
+  runSql(databasePath, readFileSync(flightVersionMigrationPath, 'utf8'));
   runSql(
     databasePath,
     `
@@ -150,6 +198,11 @@ function createSqliteD1(): SqliteD1 {
     prepare(sql: string) {
       let binds: unknown[] = [];
       const statement = {
+        // Nao-enumeraveis: expoem sql/binds so para `batch()` montar o
+        // script de uma unica transacao — nao fazem parte da interface
+        // publica de D1PreparedStatement.
+        __sql: sql,
+        __binds: () => binds,
         bind: (...args: unknown[]) => {
           binds = args;
           return statement;
@@ -182,6 +235,11 @@ function createSqliteD1(): SqliteD1 {
       };
       return statement;
     },
+    batch: async (statements: Array<{ __sql: string; __binds: () => unknown[] }>) =>
+      execBatch(
+        databasePath,
+        statements.map((stmt) => ({ sql: stmt.__sql, binds: stmt.__binds() })),
+      ),
   } as unknown as SqliteD1;
 
   return db;
@@ -740,7 +798,7 @@ describe('controle voos routes', () => {
 
     const response = await request(db, '/api/controle-voos/voos/601', {
       method: 'PATCH',
-      body: JSON.stringify({ aeronave_id: 902 }),
+      body: JSON.stringify({ aeronave_id: 902, versao: 1 }),
     });
 
     expect(response.status).toBe(400);
@@ -783,12 +841,12 @@ describe('controle voos routes', () => {
 
     const response = await request(db, '/api/controle-voos/voos/601', {
       method: 'PATCH',
-      body: JSON.stringify({ observacoes: 'Revisao operacional' }),
+      body: JSON.stringify({ observacoes: 'Revisao operacional', versao: 1 }),
     });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      data: { id: 601, observacoes: 'Revisao operacional' },
+      data: { id: 601, observacoes: 'Revisao operacional', versao: 2 },
     });
     expect(
       db.queryJson<{ total: number }>(
@@ -797,17 +855,62 @@ describe('controle voos routes', () => {
     ).toEqual([{ total: 1 }]);
   });
 
+  it('PATCH exige versao do voo, aplica CAS e retorna 409 em versao desatualizada', async () => {
+    const db = createSqliteD1();
+
+    const semVersao = await request(db, '/api/controle-voos/voos/601', {
+      method: 'PATCH',
+      body: JSON.stringify({ observacoes: 'sem versao' }),
+    });
+    expect(semVersao.status).toBe(400);
+    await expect(semVersao.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_FLIGHT_VERSION_REQUIRED',
+    });
+
+    const versaoDesatualizada = await request(db, '/api/controle-voos/voos/601', {
+      method: 'PATCH',
+      body: JSON.stringify({ observacoes: 'versao velha', versao: 99 }),
+    });
+    expect(versaoDesatualizada.status).toBe(409);
+    await expect(versaoDesatualizada.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_FLIGHT_VERSION_CONFLICT',
+    });
+  });
+
+  it('PATCH: duas chamadas concorrentes com a mesma versao — exatamente uma grava, a outra recebe 409, versao avanca uma unica vez', async () => {
+    const db = createSqliteD1();
+
+    const [primeira, segunda] = await Promise.all([
+      request(db, '/api/controle-voos/voos/601', {
+        method: 'PATCH',
+        body: JSON.stringify({ observacoes: 'Concorrente A', versao: 1 }),
+      }),
+      request(db, '/api/controle-voos/voos/601', {
+        method: 'PATCH',
+        body: JSON.stringify({ observacoes: 'Concorrente B', versao: 1 }),
+      }),
+    ]);
+
+    const statuses = [primeira.status, segunda.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    const flight = db.queryJson<{ versao: number }>(
+      'SELECT versao FROM cv_voos WHERE id = 601',
+    )[0];
+    expect(flight.versao).toBe(2);
+  });
+
   it('aceita transicao de status basica', async () => {
     const db = createSqliteD1();
 
     const response = await request(db, '/api/controle-voos/voos/601/status', {
       method: 'POST',
-      body: JSON.stringify({ status: 'liberado_operacionalmente' }),
+      body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
     });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      data: { id: 601, status: 'liberado_operacionalmente' },
+      data: { id: 601, status: 'liberado_operacionalmente', versao: 2 },
     });
   });
 
@@ -816,7 +919,7 @@ describe('controle voos routes', () => {
 
     const response = await request(db, '/api/controle-voos/voos/601/status', {
       method: 'POST',
-      body: JSON.stringify({ status: 'pousado' }),
+      body: JSON.stringify({ status: 'pousado', versao: 1 }),
     });
 
     expect(response.status).toBe(409);
@@ -830,13 +933,50 @@ describe('controle voos routes', () => {
 
     const response = await request(db, '/api/controle-voos/voos/601/status', {
       method: 'POST',
-      body: JSON.stringify({ status: 'cancelado' }),
+      body: JSON.stringify({ status: 'cancelado', versao: 1 }),
     });
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       code: 'CONTROLE_VOOS_CANCEL_REASON_REQUIRED',
     });
+  });
+
+  it('status: duas chamadas concorrentes com a mesma versao — exatamente uma grava, a outra recebe 409, versao avanca uma unica vez', async () => {
+    const db = createSqliteD1();
+
+    const [primeira, segunda] = await Promise.all([
+      request(db, '/api/controle-voos/voos/601/status', {
+        method: 'POST',
+        body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
+      }),
+      request(db, '/api/controle-voos/voos/601/status', {
+        method: 'POST',
+        body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
+      }),
+    ]);
+
+    const statuses = [primeira.status, segunda.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    const flight = db.queryJson<{ versao: number }>(
+      'SELECT versao FROM cv_voos WHERE id = 601',
+    )[0];
+    expect(flight.versao).toBe(2);
+  });
+
+  it('PATCH em voo sem RDV aplica CAS normalmente (compatibilidade explicita)', async () => {
+    const db = createSqliteD1();
+    const semRdv = db.queryJson<{ id: number }>(
+      `SELECT id FROM cv_rdv_operacional WHERE voo_id = 601`,
+    );
+    expect(semRdv.length).toBe(0);
+
+    const response = await request(db, '/api/controle-voos/voos/601', {
+      method: 'PATCH',
+      body: JSON.stringify({ observacoes: 'Voo sem RDV', versao: 1 }),
+    });
+    expect(response.status).toBe(200);
   });
 
   it('lista catalogos permitidos por tenant', async () => {
@@ -907,7 +1047,7 @@ describe('controle voos routes', () => {
     const patchResponse = await request(
       db,
       '/api/controle-voos/voos/601',
-      { method: 'PATCH', body: JSON.stringify({ observacoes: 'Editor ok' }) },
+      { method: 'PATCH', body: JSON.stringify({ observacoes: 'Editor ok', versao: 1 }) },
       1,
       'editor',
     );
