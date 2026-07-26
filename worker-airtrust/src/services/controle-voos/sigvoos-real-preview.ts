@@ -430,7 +430,7 @@ export async function runSigvoosRealApiPreview(
     username: config.username,
     password: config.password,
     system: config.system,
-  });
+  }, { fetchImpl: options.fetchImpl as typeof fetch });
   
   const records = await fetchRecords(client, request);
 

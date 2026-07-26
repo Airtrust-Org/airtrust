@@ -28,11 +28,16 @@ export interface SigvoosRuntimeEnv {
 }
 
 export function encodeBase64(value: Uint8Array): string {
-  return Buffer.from(value).toString('base64');
+  let binary = '';
+  for (let i = 0; i < value.length; i++) binary += String.fromCharCode(value[i]);
+  return btoa(binary);
 }
 
 export function decodeBase64(value: string): Uint8Array {
-  return new Uint8Array(Buffer.from(value, 'base64'));
+  const binary = atob(value);
+  const decoded = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) decoded[index] = binary.charCodeAt(index);
+  return decoded;
 }
 
 export function resolveSigvoosEncryptionSecret(env?: SigvoosRuntimeEnv | null): string | null {
@@ -80,59 +85,62 @@ export async function decryptSigvoosPassword(cipherText: string, secret: string)
 
 export class SigvoosApiClient {
   private token: string | null = null;
+  private fetchImpl: typeof fetch;
 
-  constructor(private config: SigvoosConfig) {}
+  constructor(
+    private config: SigvoosConfig,
+    options?: { fetchImpl?: typeof fetch },
+  ) {
+    this.fetchImpl = options?.fetchImpl || fetch;
+  }
 
-  public async fetchJsonWithRetry(url: string, init: RequestInit, attempts = 3): Promise<Record<string, unknown>> {
+  public async fetchJson(url: string, init: RequestInit, timeoutMs = 8000): Promise<Record<string, unknown>> {
     let lastError: Error | null = null;
-    for (let attempt = 1; attempt <= attempts; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-        
-        const response = await fetch(url, { ...init, signal: controller.signal });
-        clearTimeout(timeoutId);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      const response = await this.fetchImpl(url, { ...init, signal: controller.signal });
+      clearTimeout(timeoutId);
 
-        const text = await response.text();
-        let parsed: Record<string, unknown> = {};
+      const text = await response.text();
+      let parsed: Record<string, unknown> = {};
 
-        if (text.trim().length > 0) {
-          try {
-            parsed = JSON.parse(text) as Record<string, unknown>;
-          } catch {
-            parsed = { raw: text };
-          }
+      if (text.trim().length > 0) {
+        try {
+          parsed = JSON.parse(text) as Record<string, unknown>;
+        } catch {
+          parsed = { raw: text };
         }
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            this.token = null;
-            throw new SigvoosClientError('SIGVOOS_UNAUTHORIZED', 'Unauthorized', 401);
-          }
-          if (response.status >= 500) {
-            throw new SigvoosClientError('SIGVOOS_SERVER_ERROR', `Server Error: ${response.status}`, response.status);
-          }
-          throw new SigvoosClientError('SIGVOOS_HTTP_ERROR', `HTTP ${response.status}: ${JSON.stringify(parsed).slice(0, 300)}`, response.status);
-        }
-
-        return parsed;
-      } catch (err: unknown) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        if (lastError.name === 'AbortError') {
-          lastError = new SigvoosClientError('SIGVOOS_TIMEOUT', 'Timeout ao acessar SIGVOOS');
-        }
-        if (
-          lastError instanceof SigvoosClientError &&
-          (lastError.code === 'SIGVOOS_UNAUTHORIZED' || lastError.status === 401)
-        ) {
-          if (attempt === attempts) throw lastError;
-        } else if (attempt === attempts) {
-          throw lastError;
-        }
-        await new Promise(r => setTimeout(r, 1000 * attempt));
       }
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          this.token = null;
+          throw new SigvoosClientError('SIGVOOS_UNAUTHORIZED', 'Unauthorized', 401);
+        }
+        if (response.status >= 500) {
+          throw new SigvoosClientError('SIGVOOS_SERVER_ERROR', `Server Error: ${response.status}`, response.status);
+        }
+        
+        const sanitized = { ...parsed };
+        for (const k of Object.keys(sanitized)) {
+          if (/(token|senha|password|secret|credential|authorization|tkn|pwd)/i.test(k)) {
+            sanitized[k] = '[MASKED]';
+          }
+        }
+
+        throw new SigvoosClientError('SIGVOOS_HTTP_ERROR', `HTTP ${response.status}: ${JSON.stringify(sanitized).slice(0, 300)}`, response.status);
+      }
+
+      return parsed;
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (lastError.name === 'AbortError') {
+        throw new SigvoosClientError('SIGVOOS_TIMEOUT', 'Timeout ao acessar SIGVOOS');
+      }
+      throw lastError;
     }
-    throw lastError;
   }
 
   public async authenticate(force = false): Promise<string> {
@@ -147,7 +155,7 @@ export class SigvoosApiClient {
       system: this.config.system || SIGVOOS_DEFAULT_SYSTEM,
     };
 
-    const res = await this.fetchJsonWithRetry(`${this.config.base_url.replace(/\/$/, '')}/get/token`, {
+    const res = await this.fetchJson(`${this.config.base_url.replace(/\/$/, '')}/get/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload),
@@ -165,7 +173,7 @@ export class SigvoosApiClient {
   public async postSearch(endpoint: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
     let token = await this.authenticate();
     try {
-      return await this.fetchJsonWithRetry(`${this.config.base_url.replace(/\/$/, '')}${endpoint}`, {
+      return await this.fetchJson(`${this.config.base_url.replace(/\/$/, '')}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -173,11 +181,11 @@ export class SigvoosApiClient {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
-      }, 1);
+      });
     } catch (err) {
       if (err instanceof SigvoosClientError && err.code === 'SIGVOOS_UNAUTHORIZED') {
         token = await this.authenticate(true);
-        return await this.fetchJsonWithRetry(`${this.config.base_url.replace(/\/$/, '')}${endpoint}`, {
+        return await this.fetchJson(`${this.config.base_url.replace(/\/$/, '')}${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -185,7 +193,7 @@ export class SigvoosApiClient {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
-        }, 2);
+        });
       }
       throw err;
     }
