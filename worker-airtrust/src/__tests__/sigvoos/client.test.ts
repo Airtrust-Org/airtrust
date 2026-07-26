@@ -118,7 +118,7 @@ describe('SigvoosApiClient', () => {
     });
 
     it('ensures absence of global fallback', () => {
-      assert.equal(typeof (config as unknown as any).globalFallback, 'undefined');
+      assert.equal(typeof (config as Record<string, unknown>).globalFallback, 'undefined');
     });
 
     it('handles pagination logic (mocked)', async () => {
@@ -132,8 +132,8 @@ describe('SigvoosApiClient', () => {
       const client = new SigvoosApiClient(config, { fetchImpl: mockFetch });
       const page1 = await client.postSearch('/data', {});
       const page2 = await client.postSearch('/data?page=2', {});
-      assert.equal(page1.data[0], 1);
-      assert.equal(page2.data[0], 3);
+      assert.equal((page1.data as number[])[0], 1);
+      assert.equal((page2.data as number[])[0], 3);
     });
 
     it('handles irregular payload gracefully', async () => {
@@ -147,7 +147,7 @@ describe('SigvoosApiClient', () => {
       const mockFetch = async () => new Response(JSON.stringify({ success: true }), { status: 200 });
       const client = new SigvoosApiClient(config, { fetchImpl: mockFetch });
       await client.fetchJson('http://test', {});
-      assert.ok(clearTimeoutSpy.called);
+      expect(clearTimeoutSpy).toHaveBeenCalled();
       clearTimeoutSpy.mockRestore();
     });
 
