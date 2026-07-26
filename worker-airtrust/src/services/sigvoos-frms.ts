@@ -2,12 +2,17 @@ import { z } from 'zod';
 import { carregarLimites } from '../lib/frms/db-service-config';
 import { confirmarImportacaoFira, enrichFiraPreviewLineIntegridade, type FiraImportacaoPreview, type FiraLinhPreview } from '../lib/frms/fira-service';
 import { classifyOperationalCrewRole } from '../lib/frms/operational-crew';
+import {
+  SIGVOOS_DEFAULT_BASE_URL,
+  SIGVOOS_DEFAULT_SYSTEM,
+  SIGVOOS_PASSWORD_MARKER,
+  SigvoosApiClient,
+  resolveSigvoosEncryptionSecret,
+  encryptSigvoosPassword,
+  decryptSigvoosPassword,
+} from '../lib/sigvoos/client';
 
-const SIGVOOS_DEFAULT_BASE_URL = 'https://api.sigvoos.com.br/api';
-const SIGVOOS_DEFAULT_SYSTEM = 'sigtrip';
 const SIGVOOS_PAGE_SIZE = 200;
-const SIGVOOS_PASSWORD_MARKER = '__WORKER_ENCRYPTED__';
-const SIGVOOS_PASSWORD_ENCRYPTED_PREFIX = 'enc:v1';
 
 const CONFIG_KEYS = [
   'base_url',
@@ -30,58 +35,6 @@ type SigvoosConfigKey = (typeof CONFIG_KEYS)[number];
 interface SigvoosRuntimeEnv {
   SIGVOOS_CONFIG_ENCRYPTION_KEY?: string;
   JWT_SECRET?: string;
-}
-
-function encodeBase64(value: Uint8Array): string {
-  return Buffer.from(value).toString('base64');
-}
-
-function decodeBase64(value: string): Uint8Array {
-  return new Uint8Array(Buffer.from(value, 'base64'));
-}
-
-function resolveSigvoosEncryptionSecret(env?: SigvoosRuntimeEnv | null): string | null {
-  if (!env) return null;
-  const fromDedicated = env.SIGVOOS_CONFIG_ENCRYPTION_KEY;
-  if (typeof fromDedicated === 'string' && fromDedicated.trim().length > 0) {
-    return fromDedicated.trim();
-  }
-
-  const fromJwt = env.JWT_SECRET;
-  if (typeof fromJwt === 'string' && fromJwt.trim().length > 0) {
-    return fromJwt.trim();
-  }
-
-  return null;
-}
-
-async function importSigvoosAesKey(secret: string): Promise<CryptoKey> {
-  const material = new TextEncoder().encode(secret);
-  const digest = await crypto.subtle.digest('SHA-256', material);
-  return crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
-}
-
-async function encryptSigvoosPassword(plain: string, secret: string): Promise<string> {
-  const key = await importSigvoosAesKey(secret);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const payload = new TextEncoder().encode(plain);
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, payload);
-  return `${SIGVOOS_PASSWORD_ENCRYPTED_PREFIX}:${encodeBase64(iv)}:${encodeBase64(new Uint8Array(encrypted))}`;
-}
-
-async function decryptSigvoosPassword(cipherText: string, secret: string): Promise<string | null> {
-  if (!cipherText.startsWith(`${SIGVOOS_PASSWORD_ENCRYPTED_PREFIX}:`)) {
-    return null;
-  }
-
-  const parts = cipherText.split(':');
-  if (parts.length !== 4) return null;
-
-  const iv = decodeBase64(parts[2]);
-  const payload = decodeBase64(parts[3]);
-  const key = await importSigvoosAesKey(secret);
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, payload);
-  return new TextDecoder().decode(decrypted);
 }
 
 function isPasswordMarker(value: string | null | undefined): boolean {
@@ -1078,52 +1031,6 @@ async function finalizeSigvoosEvento(
     .run();
 }
 
-async function fetchSigvoosJson(url: string, init: RequestInit): Promise<Record<string, unknown>> {
-  const response = await fetch(url, init);
-  const text = await response.text();
-  let parsed: Record<string, unknown> = {};
-
-  if (text.trim().length > 0) {
-    try {
-      parsed = JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      parsed = { raw: text };
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(`SIGVOOS_HTTP_${response.status}: ${JSON.stringify(parsed).slice(0, 500)}`);
-  }
-
-  return parsed;
-}
-
-async function authenticateSigvoos(config: SigvoosConfig): Promise<string> {
-  if (!config.username || !config.password) {
-    throw new Error('SIGVOOS_CREDENTIALS_MISSING');
-  }
-
-  const response = await fetchSigvoosJson(`${config.base_url.replace(/\/$/, '')}/get/token`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json',
-    },
-    body: JSON.stringify({
-      username: config.username,
-      password: config.password,
-      system: config.system || SIGVOOS_DEFAULT_SYSTEM,
-    }),
-  });
-
-  const token = extractSigvoosAccessToken(response);
-
-  if (!token) {
-    throw new Error(`SIGVOOS_AUTH_INVALID_RESPONSE: ${JSON.stringify(response).slice(0, 500)}`);
-  }
-
-  return token;
-}
 
 export function normalizeSigvoosRecord(raw: Record<string, unknown>): SigvoosNormalizedLeg | null {
   const staff = asRecord(raw.staff);
@@ -2467,10 +2374,9 @@ export async function syncSigvoosForFrms(
       password: input.password || null,
       system: input.system || SIGVOOS_DEFAULT_SYSTEM,
       },
-      runtimeEnv,
-    );
-
-    const token = await authenticateSigvoos(config);
+      runtimeEnv,);
+       const client = new SigvoosApiClient(config as any);
+    const token = await client.authenticate();
     const pageSize = input.pageSize || SIGVOOS_PAGE_SIZE;
     const maxPages = input.maxPages || 2;
     const rawRecords: Record<string, unknown>[] = [];
@@ -2481,24 +2387,13 @@ export async function syncSigvoosForFrms(
       const dateFinish = formatBrDateFromIso(window.to);
 
       for (let page = 1; page <= maxPages; page++) {
-        const payload = await fetchSigvoosJson(
-          `${config.base_url.replace(/\/$/, '')}/relatorios/voos/tripulantes/etapas/pesquisa`,
-          {
-            method: 'POST',
-            headers: {
-              authorization: `Bearer ${token}`,
-              accept: 'application/json',
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify({
-              date_start: dateStart,
-              date_finish: dateFinish,
-              page,
-              page_size: pageSize,
-              limit: pageSize,
-            }),
-          },
-        );
+        const payload = await client.postSearch('/relatorios/voos/tripulantes/etapas/pesquisa', {
+          date_start: dateStart,
+          date_finish: dateFinish,
+          page,
+          page_size: pageSize,
+          limit: pageSize,
+        });
 
         const pageItems = getArrayPayload(payload.data ?? payload);
         for (const item of pageItems) {
