@@ -298,6 +298,26 @@ test('treats stale-edge version + source-sha mismatch as propagation-only', () =
   );
 });
 
+test('treats version-disagree alongside version-mismatch and source-sha-mismatch as propagation-only', () => {
+  assert.equal(
+    isEdgePropagationOnly([
+      '[version-mismatch] version "old" != expected "new"',
+      '[version-disagree] /api/health version "old" != /api/version version "new"',
+      '[source-sha-mismatch] X-AirTrust-Source-SHA "old" != expected "new"',
+    ]),
+    true,
+  );
+});
+
+test('treats isolated version-disagree as propagation-only', () => {
+  assert.equal(
+    isEdgePropagationOnly([
+      '[version-disagree] /api/health version "v1" != /api/version version "v2"',
+    ]),
+    true,
+  );
+});
+
 test('treats missing provenance stamps from an older Worker as propagation-only', () => {
   assert.equal(
     isEdgePropagationOnly([
@@ -310,11 +330,32 @@ test('treats missing provenance stamps from an older Worker as propagation-only'
   );
 });
 
-test('does not retry when a security invariant fails alongside version mismatch', () => {
+test('does not retry when a security invariant fails alongside version mismatch or version-disagree', () => {
   assert.equal(
     isEdgePropagationOnly([
       '[version-mismatch] version "old" != expected "new"',
       '[maintenance-auth-401] maintenance route returned 403 (expected 401)',
+    ]),
+    false,
+  );
+  assert.equal(
+    isEdgePropagationOnly([
+      '[version-disagree] /api/health version "old" != /api/version version "new"',
+      '[maintenance-auth-401] maintenance route returned 200 (expected 401)',
+    ]),
+    false,
+  );
+  assert.equal(
+    isEdgePropagationOnly([
+      '[version-disagree] /api/health version "old" != /api/version version "new"',
+      '[protected-401] protected route returned 200 (expected 401)',
+    ]),
+    false,
+  );
+  assert.equal(
+    isEdgePropagationOnly([
+      '[version-disagree] /api/health version "old" != /api/version version "new"',
+      '[legacy-localhost-leak] legacy localhost debug string leaked in health response',
     ]),
     false,
   );
@@ -454,6 +495,41 @@ test('runHardenedSmoke: recovers from a stale version once the edge catches up',
   const run = await runHardenedSmoke({ ...baseParams(), collectResponses });
   assert.equal(run.ok, true);
   assert.equal(run.attemptsUsed, 3);
+});
+
+test('runHardenedSmoke: recovers from a mixed version (version-disagree) during edge propagation', async () => {
+  const mixed = makeHappyResponses();
+  mixed.health.json.stats.version = 'stale-version';
+  mixed.health.headers['X-AirTrust-Source-SHA'] = 'stale-sha';
+  // health is on stale version, version is on expected version -> triggers version-disagree + version-mismatch + source-sha-mismatch
+  const collectResponses = queueCollector([mixed, mixed, makeHappyResponses()]);
+  const run = await runHardenedSmoke({ ...baseParams(), collectResponses });
+  assert.equal(run.ok, true);
+  assert.equal(run.attemptsUsed, 3);
+  assert.equal(run.stopReason, STOP_REASONS.PASSED);
+});
+
+test('runHardenedSmoke: fails with max-retries-exhausted when version-disagree persists across all attempts', async () => {
+  const mixed = makeHappyResponses();
+  mixed.health.json.stats.version = 'stale-version';
+  mixed.health.headers['X-AirTrust-Source-SHA'] = 'stale-sha';
+  const collectResponses = queueCollector(Array.from({ length: 4 }, () => mixed));
+  const run = await runHardenedSmoke({ ...baseParams({ maxRetries: 4 }), collectResponses });
+  assert.equal(run.ok, false);
+  assert.equal(run.attemptsUsed, 4);
+  assert.equal(run.stopReason, STOP_REASONS.MAX_RETRIES_EXHAUSTED);
+  assert.ok(run.result.failures.some((f) => f.includes('version-disagree')));
+});
+
+test('runHardenedSmoke: stops immediately on attempt 1 when version-disagree occurs alongside a security failure', async () => {
+  const mixedSecurity = makeHappyResponses();
+  mixedSecurity.health.json.stats.version = 'stale-version';
+  mixedSecurity.maintenance.status = 200; // Security violation
+  const collectResponses = queueCollector([mixedSecurity, makeHappyResponses()]);
+  const run = await runHardenedSmoke({ ...baseParams({ maxRetries: 4 }), collectResponses });
+  assert.equal(run.ok, false);
+  assert.equal(run.attemptsUsed, 1);
+  assert.equal(run.stopReason, STOP_REASONS.NON_RETRYABLE_FAILURE);
 });
 
 // 3. Health transiently unavailable, then healthy.

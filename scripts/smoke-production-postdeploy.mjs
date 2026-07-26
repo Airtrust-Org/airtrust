@@ -306,6 +306,7 @@ export function evaluateProductionSmoke({ expectedVersion, expectedSha, response
  */
 export const EDGE_PROPAGATION_FAILURE_CODES = new Set([
   'version-mismatch',
+  'version-disagree',
   'worker-version-id',
   'worker-version-header',
   'source-sha-header',
