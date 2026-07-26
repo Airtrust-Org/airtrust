@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 import { CardMeusEAD } from '@/react-app/components/dashboard/CardMeusEAD';
-import { apiFetch } from '@/react-app/lib/apiFetch';
+import { fetchWithAuth } from '@/react-app/config/api';
 import { baixarCertificadoCanonico } from '@/react-app/utils/certificadoDownload';
 import { useMinhasEAD } from '@/react-app/hooks/useLms';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
@@ -16,9 +16,10 @@ vi.mock('sonner', () => ({
   },
 }));
 
-vi.mock('@/react-app/lib/apiFetch', () => ({
-  apiFetch: vi.fn(),
-}));
+vi.mock('@/react-app/config/api', async () => {
+  const actual = await vi.importActual<typeof import('@/react-app/config/api')>('@/react-app/config/api');
+  return { ...actual, fetchWithAuth: vi.fn() };
+});
 
 vi.mock('@/react-app/utils/certificadoDownload', () => ({
   baixarCertificadoCanonico: vi.fn(),
@@ -41,7 +42,7 @@ vi.mock('@/react-app/hooks/usePermissions', () => ({
   usePermissions: vi.fn(),
 }));
 
-const apiFetchMock = vi.mocked(apiFetch);
+const fetchWithAuthMock = vi.mocked(fetchWithAuth);
 const baixarMock = vi.mocked(baixarCertificadoCanonico);
 const useMinhasEADMock = vi.mocked(useMinhasEAD);
 const usePermissionsMock = vi.mocked(usePermissions);
@@ -97,7 +98,7 @@ describe('CardMeusEAD — download de certificado', () => {
       error: null,
     } as unknown as ReturnType<typeof useMinhasEAD>);
 
-    apiFetchMock.mockResolvedValue(
+    fetchWithAuthMock.mockResolvedValue(
       new Response(
         JSON.stringify({
           success: true,
@@ -116,7 +117,7 @@ describe('CardMeusEAD — download de certificado', () => {
     const calledWith = baixarMock.mock.calls[0][0];
     expect(calledWith.documento_id).toBe(501);
 
-    const calledUrl = String(apiFetchMock.mock.calls[0][0]);
+    const calledUrl = String(fetchWithAuthMock.mock.calls[0][0]);
     expect(calledUrl).toMatch(/\/certificados\/historico\/900\/certificados$/);
     expect(calledUrl).not.toMatch(/r2_key|documentos\/download/);
   });
@@ -128,7 +129,7 @@ describe('CardMeusEAD — download de certificado', () => {
       error: null,
     } as unknown as ReturnType<typeof useMinhasEAD>);
 
-    apiFetchMock.mockResolvedValue(
+    fetchWithAuthMock.mockResolvedValue(
       new Response(JSON.stringify({ success: true, data: [] }), { status: 200 }),
     );
 
@@ -148,7 +149,7 @@ describe('CardMeusEAD — download de certificado', () => {
       error: null,
     } as unknown as ReturnType<typeof useMinhasEAD>);
 
-    apiFetchMock.mockResolvedValue(
+    fetchWithAuthMock.mockResolvedValue(
       new Response(
         JSON.stringify({ success: true, data: [{ id: 501, documento_id: 501, nome_arquivo: 'CERT.pdf' }] }),
         { status: 200 },
@@ -177,5 +178,38 @@ describe('CardMeusEAD — download de certificado', () => {
 
     renderCard();
     expect(screen.queryByText('Baixar certificado')).not.toBeInTheDocument();
+  });
+
+  it('regression: fluxo concluído sem erro "Token de autenticação não fornecido"', async () => {
+    // - matrícula concluída; tem_certificado = 1;
+    useMinhasEADMock.mockReturnValue({
+      data: [matricula({ status: 'CONCLUIDO', tem_certificado: 1 })],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useMinhasEAD>);
+
+    // - chamada autenticada de listagem;
+    fetchWithAuthMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: [{ id: 501, documento_id: 501, nome_arquivo: 'CERT.pdf' }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    // mock do stream não é chamado aqui pois baixarCertificadoCanonico é mockado nesta suíte
+    baixarMock.mockResolvedValue(undefined);
+
+    renderCard();
+
+    // - clicar “Baixar certificado”;
+    fireEvent.click(screen.getByText('Baixar certificado'));
+
+    await waitFor(() => expect(baixarMock).toHaveBeenCalledTimes(1));
+
+    // - fluxo concluído sem toast “Token de autenticação não fornecido”
+    expect(toast.error).not.toHaveBeenCalledWith(expect.stringContaining('Token de autenticação não fornecido'));
   });
 });

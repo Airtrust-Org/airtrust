@@ -3,18 +3,19 @@ import {
   baixarCertificadoCanonico,
   resolveCertificadoDocumentoId,
 } from '@/react-app/utils/certificadoDownload';
-import { apiFetch } from '@/react-app/lib/apiFetch';
+import { fetchWithAuth } from '@/react-app/config/api';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
 
-vi.mock('@/react-app/lib/apiFetch', () => ({
-  apiFetch: vi.fn(),
-}));
+vi.mock('@/react-app/config/api', async () => {
+  const actual = await vi.importActual<typeof import('@/react-app/config/api')>('@/react-app/config/api');
+  return { ...actual, fetchWithAuth: vi.fn() };
+});
 
 vi.mock('@/react-app/utils/pdfPreview', () => ({
   previewPdfBeforeDownload: vi.fn(),
 }));
 
-const apiFetchMock = vi.mocked(apiFetch);
+const fetchWithAuthMock = vi.mocked(fetchWithAuth);
 const previewMock = vi.mocked(previewPdfBeforeDownload);
 
 beforeEach(() => {
@@ -41,7 +42,7 @@ describe('baixarCertificadoCanonico', () => {
     await expect(baixarCertificadoCanonico({ nome_arquivo: 'CERT.pdf' })).rejects.toThrow(
       'Certificado sem identificador de documento válido.',
     );
-    expect(apiFetchMock).not.toHaveBeenCalled();
+    expect(fetchWithAuthMock).not.toHaveBeenCalled();
     expect(previewMock).not.toHaveBeenCalled();
   });
 
@@ -49,7 +50,7 @@ describe('baixarCertificadoCanonico', () => {
     previewMock.mockImplementation(async ({ fetcher }) => {
       await fetcher();
     });
-    apiFetchMock.mockResolvedValue(new Response(new Blob(['x']), { status: 200 }));
+    fetchWithAuthMock.mockResolvedValue(new Response(new Blob(['x']), { status: 200 }));
 
     await baixarCertificadoCanonico({
       id: 99,
@@ -59,14 +60,14 @@ describe('baixarCertificadoCanonico', () => {
       tipo: 'application/pdf',
     });
 
-    expect(apiFetchMock).toHaveBeenCalledTimes(1);
-    const calledUrl = String(apiFetchMock.mock.calls[0][0]);
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+    const calledUrl = String(fetchWithAuthMock.mock.calls[0][0]);
     expect(calledUrl).toMatch(/\/pasta-virtual\/stream\/501$/);
     expect(calledUrl).not.toMatch(/r2_key|documentos\/download/);
   });
 
   it('maps 401 to a sanitized session-expired message', async () => {
-    apiFetchMock.mockResolvedValue(new Response(null, { status: 401 }));
+    fetchWithAuthMock.mockResolvedValue(new Response(null, { status: 401 }));
     previewMock.mockImplementation(async ({ fetcher }) => {
       await fetcher();
     });
@@ -77,7 +78,7 @@ describe('baixarCertificadoCanonico', () => {
   });
 
   it('maps 403 to a sanitized permission message', async () => {
-    apiFetchMock.mockResolvedValue(new Response(null, { status: 403 }));
+    fetchWithAuthMock.mockResolvedValue(new Response(null, { status: 403 }));
     previewMock.mockImplementation(async ({ fetcher }) => {
       await fetcher();
     });
@@ -88,7 +89,7 @@ describe('baixarCertificadoCanonico', () => {
   });
 
   it('maps 404 (missing document or missing R2 object) to a sanitized message', async () => {
-    apiFetchMock.mockResolvedValue(new Response(null, { status: 404 }));
+    fetchWithAuthMock.mockResolvedValue(new Response(null, { status: 404 }));
     previewMock.mockImplementation(async ({ fetcher }) => {
       await fetcher();
     });
