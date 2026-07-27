@@ -17,14 +17,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import LmsPlayer from '@/react-app/pages/lms/LmsPlayer';
 
-const { refetchMatriculaMock, toastLoadingMock, toastSuccessMock, toastErrorMock, toastDismissMock } =
-  vi.hoisted(() => ({
-    refetchMatriculaMock: vi.fn(),
-    toastLoadingMock: vi.fn(),
-    toastSuccessMock: vi.fn(),
-    toastErrorMock: vi.fn(),
-    toastDismissMock: vi.fn(),
-  }));
+const {
+  refetchMatriculaMock,
+  toastLoadingMock,
+  toastSuccessMock,
+  toastErrorMock,
+  toastDismissMock,
+} = vi.hoisted(() => ({
+  refetchMatriculaMock: vi.fn(),
+  toastLoadingMock: vi.fn(),
+  toastSuccessMock: vi.fn(),
+  toastErrorMock: vi.fn(),
+  toastDismissMock: vi.fn(),
+}));
 
 const SCORM_STATUS_INCONSISTENT_DIAGNOSTIC = {
   status: 'candidate' as const,
@@ -181,7 +186,9 @@ describe('LmsPlayer — matrícula 402 (SCORM_STATUS_INCONSISTENT)', () => {
       };
       await act(async () => {
         rerender(
-          <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <QueryClientProvider
+            client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+          >
             <MemoryRouter initialEntries={['/lms/player/scorm/402']}>
               <Routes>
                 <Route path="/lms/player/scorm/:matriculaId" element={<LmsPlayer />} />
@@ -222,16 +229,19 @@ describe('LmsPlayer — matrícula 402 (SCORM_STATUS_INCONSISTENT)', () => {
       ...matriculaMock,
       status: 'CONCLUIDO',
       data_conclusao: '2026-07-24',
-      completion_diagnostic: { ...SCORM_STATUS_INCONSISTENT_DIAGNOSTIC, status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED' },
+      completion_diagnostic: {
+        ...SCORM_STATUS_INCONSISTENT_DIAGNOSTIC,
+        status: 'accepted',
+        code: 'SCORM_COMPLETION_ACCEPTED',
+      },
     };
 
     await dispatchPlayerMessage({ type: 'lms:completed', matriculaId: 402 });
 
     await waitFor(() => {
-      expect(toastSuccessMock).toHaveBeenCalledWith(
-        'Curso concluído e registrado com sucesso.',
-        { id: 'lms-scorm-completion-402' },
-      );
+      expect(toastSuccessMock).toHaveBeenCalledWith('Curso concluído e registrado com sucesso.', {
+        id: 'lms-scorm-completion-402',
+      });
     });
   });
 });

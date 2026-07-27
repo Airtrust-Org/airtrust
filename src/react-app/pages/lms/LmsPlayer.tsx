@@ -317,7 +317,9 @@ export default function LmsPlayer() {
       candidateStreakRef.current = 0;
       if (!effectiveReviewMode) {
         showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
-          qualificationGenerated: Boolean(matricula.qualificacao_historico_id || qualificacaoGerada),
+          qualificationGenerated: Boolean(
+            matricula.qualificacao_historico_id || qualificacaoGerada,
+          ),
         });
       }
       return;
@@ -358,10 +360,7 @@ export default function LmsPlayer() {
       completionDiagnostic.status !== 'accepted' &&
       completionDiagnostic.status !== 'candidate'
     ) {
-      showCompletionToast(
-        'error',
-        'Conclusão recebida, mas ainda não confirmada pelo servidor.',
-      );
+      showCompletionToast('error', 'Conclusão recebida, mas ainda não confirmada pelo servidor.');
     }
   }, [
     completionDiagnostic,
@@ -488,7 +487,10 @@ export default function LmsPlayer() {
             setMaxVisitedSlide((prev) => Math.max(prev, parsed.current));
           }
         }
-        if (typeof event.data.slide_current === 'number' && Number.isFinite(event.data.slide_current)) {
+        if (
+          typeof event.data.slide_current === 'number' &&
+          Number.isFinite(event.data.slide_current)
+        ) {
           setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
         }
         if (event.data.novo_status === 'CONCLUIDO' && !effectiveReviewMode) {
@@ -639,7 +641,10 @@ export default function LmsPlayer() {
       });
       const json = (await res.json()) as {
         success: boolean;
-        data?: { qualificacao_gerada?: unknown; completion_diagnostic?: { can_finalize?: boolean } };
+        data?: {
+          qualificacao_gerada?: unknown;
+          completion_diagnostic?: { can_finalize?: boolean };
+        };
         error?: string;
         code?: string;
       };

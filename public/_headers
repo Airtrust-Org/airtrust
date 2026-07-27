@@ -72,13 +72,17 @@
   Expires: 0
 
 # ===== JAVASCRIPT - CACHE LONGO (com hash) =====
-# Apenas assets versionados por hash devem receber cache imutavel.
+# ATENÇÃO: 1 semana, não 1 ano. Se um asset não existir durante a propagação
+# do deploy, o SPA fallback pode retornar HTML. Com immutable + 1 ano, essa
+# resposta HTML ficaria cacheada permanentemente como JS, quebrando o app.
+# Com 1 semana, o dano é limitado e se auto-corrige.
 /assets/*.js
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=604800, immutable
 
 # ===== CSS - CACHE LONGO (com hash) =====
+# Mesmo racional do JS — 1 semana para auto-corrigir race condition de deploy.
 /assets/*.css
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=604800, immutable
 
 # ===== FONTES - CACHE LONGO =====
 /*.woff

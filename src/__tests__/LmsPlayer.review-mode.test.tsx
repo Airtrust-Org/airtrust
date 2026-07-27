@@ -42,7 +42,11 @@ vi.mock('@/react-app/hooks/useLms', () => ({
     refetch: refetchMatriculaMock,
   }),
   useLmsCurso: () => ({
-    data: { descricao: 'Curso AW139', conteudo_programatico: 'Modulo 1', carga_horaria_minutos: 90 },
+    data: {
+      descricao: 'Curso AW139',
+      conteudo_programatico: 'Modulo 1',
+      carga_horaria_minutos: 90,
+    },
   }),
   lmsKeys: {
     minhasMatriculas: () => ['lms', 'minhas-matriculas'],
@@ -77,9 +81,7 @@ function renderPlayer(initialPath: string) {
 
 async function dispatchPlayerMessage(data: Record<string, unknown>) {
   await act(async () => {
-    window.dispatchEvent(
-      new MessageEvent('message', { origin: 'http://localhost:8787', data }),
-    );
+    window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:8787', data }));
   });
 }
 
