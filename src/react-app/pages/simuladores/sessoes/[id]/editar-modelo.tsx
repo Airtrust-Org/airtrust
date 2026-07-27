@@ -77,7 +77,7 @@ export default function EditarModeloSessao() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium text-gray-700">Código</label>
-              <p className="mt-1 text-gray-900">{modelo.codigo_canonico || modelo.codigo}</p>
+              <p className="mt-1 text-gray-900">{modelo?.codigo_canonico || modelo?.codigo}</p>
             </div>
 
             <div>
