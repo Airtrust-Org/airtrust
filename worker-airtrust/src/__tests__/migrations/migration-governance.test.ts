@@ -108,6 +108,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0447_simuladores_matriz_aw139_sk76_tipo_modelo.sql',
     '0447_simuladores_matriz_aw139_sk76_tipo_modelo_rollback.sql',
   ],
+  '0448': [
+    '0448_simuladores_matriz_aw139_sk76_gera_qualificacao.sql',
+    '0448_simuladores_matriz_aw139_sk76_gera_qualificacao_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -222,7 +226,11 @@ describe('migration governance', () => {
     // import — for the 51 AW139/S-76 canonical models, by canonical code
     // prefix, matching the convention already used by 6 pre-existing
     // non-canonical models of the same tenant).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(447);
+    // Ratchet raised 2026-07-27: 0448 simuladores_matriz_aw139_sk76_gera_qualificacao
+    // (restores gera_qualificacao=1 + qualificacao_tipo_id on the 7 current
+    // check-session models whose predecessor already had it, lost the same
+    // way as the FAP links fixed in 0446).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(448);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 

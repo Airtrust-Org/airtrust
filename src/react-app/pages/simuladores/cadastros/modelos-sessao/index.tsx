@@ -107,6 +107,14 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
   const [modeloSelecionado, setModeloSelecionado] = useState<ModeloSessao | null>(null);
 
   const [codigo, setCodigo] = useState('');
+  // True when editing a model whose physical codigo carries an internal
+  // versioning suffix distinct from its canonical display code — that
+  // suffix is managed by the matrix import system and must not be
+  // silently overwritten by a form save.
+  const codigoSomenteLeitura = Boolean(
+    modeloSelecionado?.codigo_canonico &&
+      modeloSelecionado.codigo_canonico !== modeloSelecionado.codigo,
+  );
   const [nome, setNome] = useState('');
   const [tipoSessaoId, setTipoSessaoId] = useState<number | null>(null);
   const [tipoDispositivo, setTipoDispositivo] = useState<TipoDispositivo>('SIMULADOR');
@@ -306,7 +314,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       setCarregandoDetalhesModelo(true);
       setModoEdicao(true);
       setModeloSelecionado(modelo);
-      setCodigo(modelo.codigo);
+      setCodigo(modelo.codigo_canonico || modelo.codigo);
       setNome(modelo.nome);
       setTipoSessaoId(modelo.tipo_sessao_id);
       setTipoDispositivo(modelo.tipo || 'SIMULADOR');
@@ -359,8 +367,14 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
         tiposCheckFAP,
         tipoAeronave,
       );
+      // When editing a versioned model, `codigo` displays the clean
+      // codigo_canonico (read-only in that case) — never submit that in
+      // place of the physical codigo, which carries the internal
+      // versioning identity (e.g. `@M2026.07-V2`) managed by the matrix
+      // import system.
+      const codigoParaSalvar = codigoSomenteLeitura ? modeloSelecionado!.codigo : codigo;
       const body = {
-        codigo,
+        codigo: codigoParaSalvar,
         nome,
         tipo: tipoDispositivo,
         tipo_sessao_id: tipoSessaoId,
@@ -865,7 +879,13 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value.toUpperCase())}
                     maxLength={20}
+                    disabled={codigoSomenteLeitura}
                   />
+                  {codigoSomenteLeitura && (
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                      Código gerenciado pela versão vigente da matriz; não editável aqui.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
