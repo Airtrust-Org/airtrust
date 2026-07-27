@@ -91,6 +91,10 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0447_simuladores_matriz_aw139_sk76_tipo_modelo.sql',
     '0447_simuladores_matriz_aw139_sk76_tipo_modelo_rollback.sql',
   ],
+  '0448': [
+    '0448_simuladores_matriz_aw139_sk76_gera_qualificacao.sql',
+    '0448_simuladores_matriz_aw139_sk76_gera_qualificacao_rollback.sql',
+  ],
 };
 
 // Sufixos que denunciam um arquivo operacional (consulta manual read-only:
