@@ -194,6 +194,52 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       expect(text).toContain('Empresa não identificada');
     });
 
+    it('sets the asset cookie with SameSite=None; Secure on a non-local (staging/prod-like) request', async () => {
+      verifyJWTMock.mockResolvedValue({
+        empresa_id: 6,
+        funcionario_id: 42,
+        role: 'admin',
+        sub: '42',
+      });
+
+      const db = createMockDb([
+        [
+          'FROM lms_matriculas m',
+          {
+            first: () => ({
+              id: 77,
+              funcionario_id: 42,
+              empresa_id: 6,
+              status: 'EM_ANDAMENTO',
+              curso_id: 99,
+              titulo: 'Curso SCORM Teste',
+              scorm_versao: '1.2',
+              scorm_package_r2_prefix: null,
+              scorm_launch_file: 'index.html',
+              ativo: 1,
+              publicado: 1,
+            }),
+          },
+        ],
+        ['lms_progresso_scorm', { first: () => null }],
+        ['lms_matricula_ciclos', { first: () => ({ id: 44 }) }],
+      ]);
+
+      const app = createApp();
+      const response = await app.fetch(
+        new Request('https://airtrust-api-staging.airtrust.workers.dev/scorm/launch/77', {
+          headers: { Authorization: 'Bearer test.jwt.token' },
+        }),
+        makeEnv(db),
+        {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(200);
+      const setCookie = response.headers.get('set-cookie') ?? '';
+      expect(setCookie).toContain('SameSite=None');
+      expect(setCookie).toContain('Secure');
+    });
+
     it('returns 401 when no token is provided', async () => {
       verifyJWTMock.mockResolvedValue(null);
 
