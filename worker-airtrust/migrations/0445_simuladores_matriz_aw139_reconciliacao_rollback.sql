@@ -1,5 +1,20 @@
 -- Rollback for 0445_simuladores_matriz_aw139_reconciliacao.sql.
 --
+-- OPERATIONAL MARKERS (guard:operational-sql-sources):
+-- source_reference: same read-only production audit (2026-07-27, empresa_id=6)
+--   backing 0445; no new source data, this only reverses that migration's own
+--   writes by exact prior value.
+-- operational_decision: revert fixes 1 and 3 (renames, FAP-link inserts) by
+--   the same ID + exact-value scoping as the forward migration; deliberately
+--   do not attempt to revert fix 2 (see below) since the schema itself
+--   forbids it in place.
+-- dry_run_required: run against the same local D1 copy used to dry-run 0445
+--   before use; each statement is scoped so it is a no-op if the forward
+--   migration was never applied or was only partially applied.
+-- rollback_plan_required: this file is itself the rollback plan for 0445;
+--   it has no rollback of its own beyond re-running 0445 forward again
+--   (both directions are idempotent by construction).
+--
 -- Fix 3 (FAP link carry-forward) and Fix 1 (renames) are reversible and
 -- reverted below, scoped by id + the exact value this migration wrote, so a
 -- row already changed by something else since is left untouched.
