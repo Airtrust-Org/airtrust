@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = process.cwd();
@@ -142,7 +142,41 @@ function countRows(db: string): { links: number; checks: number } {
   )[0];
 }
 
+function wranglerArgs(args: string[]): string[] {
+  const major = Number(process.versions.node.split('.')[0]);
+  return major >= 22
+    ? ['--no-install', 'wrangler', ...args]
+    : ['-y', 'node@22', 'node_modules/wrangler/bin/wrangler.js', ...args];
+}
+
 describe('migration 0449 — check FAP reconciliation (fail-closed, exact baseline only)', () => {
+  it('D1 runtime: Wrangler local imports the migration and rollback without compound SELECTs', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'airtrust-0449-d1-diagnostic-'));
+    const config = join(dir, 'wrangler.toml');
+    const seed = join(dir, 'seed.sql');
+    try {
+      writeFileSync(config, `name = "airtrust-0449-d1-diagnostic"\nmain = "index.js"\ncompatibility_date = "2025-11-22"\n\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "airtrust-0449-d1-diagnostic"\ndatabase_id = "00000000-0000-0000-0000-000000000449"\n`);
+      writeFileSync(join(dir, 'index.js'), 'export default { fetch(){ return new Response("ok"); } };\n');
+      writeFileSync(seed, BASE_SCHEMA + tenantFixtureSql(6, 1, 100));
+      const args = ['d1', 'execute', 'airtrust-0449-d1-diagnostic', '--local', '--config', config];
+      const seeded = spawnSync('npx', wranglerArgs([...args, '--file', seed]), { cwd: ROOT, encoding: 'utf8' });
+      expect(seeded.status, seeded.stderr || seeded.stdout).toBe(0);
+      const applied = spawnSync('npx', wranglerArgs([...args, '--file', MIGRATION_PATH]), { cwd: ROOT, encoding: 'utf8' });
+      expect(applied.status, applied.stderr || applied.stdout).toBe(0);
+      const rolledBack = spawnSync('npx', wranglerArgs([...args, '--file', ROLLBACK_PATH]), { cwd: ROOT, encoding: 'utf8' });
+      expect(rolledBack.status, rolledBack.stderr || rolledBack.stdout).toBe(0);
+      const leftovers = spawnSync('npx', wranglerArgs([...args, '--json', '--command', "SELECT COUNT(*) AS count FROM sqlite_master WHERE name GLOB '_0449*';"]), { cwd: ROOT, encoding: 'utf8' });
+      expect(leftovers.status, leftovers.stderr || leftovers.stdout).toBe(0);
+      expect(JSON.parse(leftovers.stdout)[0].results[0].count).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('guards the 0449 sources against the compound SELECT form rejected by D1', () => {
+    expect(migration).not.toMatch(/UNION\s+ALL/i);
+    expect(rollback).not.toMatch(/UNION\s+ALL/i);
+  });
   it('1. applies cleanly against exactly the audited pre-migration baseline', () => {
     const db = setupDb();
     const result = run(db, migration);
