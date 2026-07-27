@@ -36,56 +36,70 @@ async function assertForbiddenTextIsAbsent(locator: import('@playwright/test').L
 
 test.use({ video: 'on' });
 
-test('SCORM review em staging carrega conteúdo e o menu de Emergências Gerais fecha', async ({
+test('SCORM review carrega conteúdo e o menu de Emergências Gerais fecha', async ({
   page,
   context,
 }, testInfo) => {
-  const evidence: BrowserEvidence = { cookies: [], frames: { wrapperUrl: null, scormUrl: null }, requests: [] };
+  const evidence: BrowserEvidence = {
+    cookies: [],
+    frames: { wrapperUrl: null, scormUrl: null },
+    requests: [],
+  };
   const evidenceTasks: Array<Promise<void>> = [];
 
-  // The currently published Pages build still points its compiled API base at
-  // production. Keep this redirect only as a staging-baseline adapter; the
-  // corrected deploy no longer emits requests matching this route.
-  await page.route('https://api.airtrust.online/api/**', async (route) => {
-    const requested = new URL(route.request().url());
-    const upstream = await page.request.fetch(
-      `https://airtrust-api-staging.airtrust.workers.dev${requested.pathname}${requested.search}`,
-      {
-        method: route.request().method(),
-        headers: route.request().headers(),
-        data: route.request().postDataBuffer() ?? undefined,
-      },
-    );
-    const responseHeaders = upstream.headers();
-    delete responseHeaders['content-encoding'];
-    delete responseHeaders['content-length'];
-    delete responseHeaders['transfer-encoding'];
-    await route.fulfill({
-      status: upstream.status(),
-      headers: responseHeaders,
-      body: await upstream.body(),
+  // When running against a PR preview, the frontend is built with VITE_API_URL
+  // already pointing to the preview Worker — no route interception needed.
+  // When running against the published staging Pages, the compiled API base
+  // may still point to production, so we relay through the staging Worker.
+  const apiBaseUrl = process.env.E2E_API_BASE_URL;
+  if (apiBaseUrl) {
+    const resolvedApiBase = apiBaseUrl.replace(/\/$/, '');
+    await page.route('https://api.airtrust.online/api/**', async (route) => {
+      const requested = new URL(route.request().url());
+      const upstream = await page.request.fetch(
+        `${resolvedApiBase}${requested.pathname}${requested.search}`,
+        {
+          method: route.request().method(),
+          headers: route.request().headers(),
+          data: route.request().postDataBuffer() ?? undefined,
+        },
+      );
+      const responseHeaders = upstream.headers();
+      delete responseHeaders['content-encoding'];
+      delete responseHeaders['content-length'];
+      delete responseHeaders['transfer-encoding'];
+      await route.fulfill({
+        status: upstream.status(),
+        headers: responseHeaders,
+        body: await upstream.body(),
+      });
     });
-  });
+  }
 
   page.on('response', (response) => {
     const url = new URL(response.url());
     if (!url.pathname.startsWith('/api/lms/scorm/')) return;
     evidenceTasks.push(
-      response.request().allHeaders().then((requestHeaders) => {
-        const responseHeaders = response.headers();
-        const setCookie = responseHeaders['set-cookie'] ?? '';
-        const sameSite = setCookie.match(/samesite=([^;]+)/i)?.[1] ?? null;
-        evidence.requests.push({
-          url: sanitizeUrl(response.url()),
-          status: response.status(),
-          contentType: responseHeaders['content-type'] ?? null,
-          cacheControl: responseHeaders['cache-control'] ?? null,
-          location: responseHeaders.location ? sanitizeUrl(responseHeaders.location) : null,
-          requestSentCookie: Boolean(requestHeaders.cookie),
-          requestSentAuthorization: Boolean(requestHeaders.authorization),
-          responseSetCookie: setCookie ? { sameSite, secure: /(?:^|;)\s*secure(?:;|$)/i.test(setCookie) } : null,
-        });
-      }),
+      response
+        .request()
+        .allHeaders()
+        .then((requestHeaders) => {
+          const responseHeaders = response.headers();
+          const setCookie = responseHeaders['set-cookie'] ?? '';
+          const sameSite = setCookie.match(/samesite=([^;]+)/i)?.[1] ?? null;
+          evidence.requests.push({
+            url: sanitizeUrl(response.url()),
+            status: response.status(),
+            contentType: responseHeaders['content-type'] ?? null,
+            cacheControl: responseHeaders['cache-control'] ?? null,
+            location: responseHeaders.location ? sanitizeUrl(responseHeaders.location) : null,
+            requestSentCookie: Boolean(requestHeaders.cookie),
+            requestSentAuthorization: Boolean(requestHeaders.authorization),
+            responseSetCookie: setCookie
+              ? { sameSite, secure: /(?:^|;)\s*secure(?:;|$)/i.test(setCookie) }
+              : null,
+          });
+        }),
     );
   });
 
@@ -148,7 +162,10 @@ test('SCORM review em staging carrega conteúdo e o menu de Emergências Gerais 
     await closeButton.click();
     await expect(drawer).toBeHidden();
 
-    await page.screenshot({ path: testInfo.outputPath('scorm-review-menu-closed.png'), fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('scorm-review-menu-closed.png'),
+      fullPage: true,
+    });
   } finally {
     await Promise.all(evidenceTasks);
     evidence.cookies = (await context.cookies()).map((cookie) => ({
