@@ -56,9 +56,31 @@ export const API_BASE_URL = resolveApiBase();
 export function resolveScormRuntimeBaseUrl(): string {
   const origin = typeof window !== 'undefined' ? window.location?.origin : '';
   const host = typeof window !== 'undefined' ? window.location?.hostname : '';
+
+  // Explicit VITE_API_URL takes priority — used by PR preview builds.
+  const envUrl = (import.meta as unknown as { env?: { VITE_API_URL?: string } })?.env?.VITE_API_URL;
+  const normalizedEnvUrl = envUrl?.trim();
+  if (normalizedEnvUrl && normalizedEnvUrl.length > 0) {
+    // VITE_API_URL points to the preview Worker directly or to the Pages
+    // origin. In both cases the SCORM runtime should reach the Worker that
+    // has the PR code. When VITE_API_URL points to the Pages origin (same-origin
+    // with Functions proxy), use origin-based routing.
+    if (normalizedEnvUrl.startsWith(origin)) return `${origin}/api`;
+    return normalizedEnvUrl;
+  }
+
+  // Staging/main Pages: use same-origin proxy through Functions.
   if (origin && (host === 'main.airtrust.pages.dev' || host === 'staging.airtrust.pages.dev')) {
     return `${origin}/api`;
   }
+
+  // PR preview Pages (any *.airtrust.pages.dev): use same-origin proxy.
+  // The Functions proxy auto-detects preview hostnames and routes to the
+  // preview Worker.
+  if (origin && host.endsWith('.airtrust.pages.dev')) {
+    return `${origin}/api`;
+  }
+
   return API_BASE_URL;
 }
 export const AUTH_TOKEN_CHANGED_EVENT = 'airtrust:token-changed';
