@@ -89,40 +89,25 @@ DROP TABLE IF EXISTS _0449_preflight_tenant_guard;
 -- code resolving zero times.
 CREATE TABLE IF NOT EXISTS _0449_models (role TEXT PRIMARY KEY, modelo_id INTEGER NOT NULL);
 DELETE FROM _0449_models;
-INSERT INTO _0449_models (role, modelo_id)
-SELECT role, modelo_id FROM (
-  SELECT 'AW_INI' AS role, 'A139-I-12/12' AS codigo_canonico
-  UNION ALL SELECT 'AW_PER_C1', 'A139-P-04/04-C1-CHECK'
-  UNION ALL SELECT 'AW_PER_C2', 'A139-P-04/04-C2-CHECK'
-  UNION ALL SELECT 'AW_PER_C3', 'A139-P-04/04-C3-CHECK'
-  UNION ALL SELECT 'AW_SEM_C1', 'A139-S-02/02-C1'
-  UNION ALL SELECT 'AW_SEM_C2', 'A139-S-02/02-C2'
-  UNION ALL SELECT 'AW_SEM_C3', 'A139-S-02/02-C3'
-  UNION ALL SELECT 'SK_INI', 'SK76-I-12/12'
-  UNION ALL SELECT 'SK_PER', 'SK76-P-CHECK'
-  UNION ALL SELECT 'SK_SEM', 'SK76-S-02/02'
-) targets
-JOIN modelos_sessao_versionamento msv
-  ON msv.codigo_canonico = targets.codigo_canonico
- AND msv.is_current = 1
- AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant)
-JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id;
+INSERT INTO _0449_models (role, modelo_id) SELECT 'AW_INI', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'A139-I-12/12' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
+INSERT INTO _0449_models (role, modelo_id) SELECT 'AW_PER_C1', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'A139-P-04/04-C1-CHECK' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
+INSERT INTO _0449_models (role, modelo_id) SELECT 'AW_PER_C2', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'A139-P-04/04-C2-CHECK' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
+INSERT INTO _0449_models (role, modelo_id) SELECT 'AW_PER_C3', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'A139-P-04/04-C3-CHECK' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
+INSERT INTO _0449_models (role, modelo_id) SELECT 'AW_SEM_C1', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'A139-S-02/02-C1' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
+INSERT INTO _0449_models (role, modelo_id) SELECT 'AW_SEM_C2', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'A139-S-02/02-C2' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
+INSERT INTO _0449_models (role, modelo_id) SELECT 'AW_SEM_C3', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'A139-S-02/02-C3' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
+INSERT INTO _0449_models (role, modelo_id) SELECT 'SK_INI', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'SK76-I-12/12' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
+INSERT INTO _0449_models (role, modelo_id) SELECT 'SK_PER', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'SK76-P-CHECK' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
+INSERT INTO _0449_models (role, modelo_id) SELECT 'SK_SEM', ms.id FROM modelos_sessao_versionamento msv JOIN modelos_sessao ms ON ms.id = msv.modelo_id AND ms.empresa_id = msv.empresa_id WHERE msv.codigo_canonico = 'SK76-S-02/02' AND msv.is_current = 1 AND msv.empresa_id = (SELECT empresa_id FROM _0449_tenant);
 
 -- Resolve every qualification role by canonical code, scoped to the same
 -- tenant, excluding soft-deleted qualification-type rows.
 CREATE TABLE IF NOT EXISTS _0449_quals (role TEXT PRIMARY KEY, qual_id INTEGER NOT NULL, is_check INTEGER NOT NULL);
 DELETE FROM _0449_quals;
-INSERT INTO _0449_quals (role, qual_id, is_check)
-SELECT role, qt.id, qt.is_check FROM (
-  SELECT 'AW_FAP06' AS role, 'FAP6-139' AS codigo
-  UNION ALL SELECT 'AW_IFR', 'IFR-139'
-  UNION ALL SELECT 'SK_FAP06', 'FAP06-76'
-  UNION ALL SELECT 'SK_IFR', 'IFR-SK76'
-) targets
-JOIN qualificacoes_tipos qt
-  ON qt.codigo = targets.codigo
- AND qt.empresa_id = (SELECT empresa_id FROM _0449_tenant)
- AND qt.deleted_at IS NULL;
+INSERT INTO _0449_quals (role, qual_id, is_check) SELECT 'AW_FAP06', id, is_check FROM qualificacoes_tipos WHERE codigo = 'FAP6-139' AND empresa_id = (SELECT empresa_id FROM _0449_tenant) AND deleted_at IS NULL;
+INSERT INTO _0449_quals (role, qual_id, is_check) SELECT 'AW_IFR', id, is_check FROM qualificacoes_tipos WHERE codigo = 'IFR-139' AND empresa_id = (SELECT empresa_id FROM _0449_tenant) AND deleted_at IS NULL;
+INSERT INTO _0449_quals (role, qual_id, is_check) SELECT 'SK_FAP06', id, is_check FROM qualificacoes_tipos WHERE codigo = 'FAP06-76' AND empresa_id = (SELECT empresa_id FROM _0449_tenant) AND deleted_at IS NULL;
+INSERT INTO _0449_quals (role, qual_id, is_check) SELECT 'SK_IFR', id, is_check FROM qualificacoes_tipos WHERE codigo = 'IFR-SK76' AND empresa_id = (SELECT empresa_id FROM _0449_tenant) AND deleted_at IS NULL;
 
 -- Every pair this migration will link, tagged with whether it is allowed
 -- to already be active pre-migration ('baseline', must be true) or must
