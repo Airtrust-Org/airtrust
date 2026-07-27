@@ -489,10 +489,9 @@ export async function refreshAccessToken(): Promise<void> {
     if (error instanceof AuthRefreshError) {
       throw error;
     }
-    throw new AuthRefreshError(
-      error instanceof Error ? error.message : 'Refresh token failed',
-      { terminal: false },
-    );
+    throw new AuthRefreshError(error instanceof Error ? error.message : 'Refresh token failed', {
+      terminal: false,
+    });
   }
 }
 

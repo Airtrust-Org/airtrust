@@ -41,8 +41,8 @@ setup('autenticar usuário', async ({ page }) => {
     if (loginUrl.includes('/api/api/')) {
       throw new Error(
         `BUG: double /api/api/ in login URL "${loginUrl}". ` +
-        `E2E_API_BASE_URL was "${process.env.E2E_API_BASE_URL}". ` +
-        `Add a regression test for this path.`,
+          `E2E_API_BASE_URL was "${process.env.E2E_API_BASE_URL}". ` +
+          `Add a regression test for this path.`,
       );
     }
 

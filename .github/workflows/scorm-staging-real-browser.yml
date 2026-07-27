@@ -6,7 +6,7 @@ name: SCORM Staging Real Browser (DISABLED — replaced by scorm-pr499-preview-g
 # into main and the preview infrastructure is cleaned up.
 
 on:
-  workflow_dispatch:  # manual only — no automatic triggers
+  workflow_dispatch: # manual only — no automatic triggers
   # pull_request:     # DISABLED during PR #499
   #   paths: [...]
 
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   staging-real-browser:
-    if: false  # hard-disabled — remove this line to re-enable after PR #499 merge
+    if: false # hard-disabled — remove this line to re-enable after PR #499 merge
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 15

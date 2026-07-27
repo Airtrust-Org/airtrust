@@ -256,7 +256,7 @@ jobs:
   cleanup:
     name: Cleanup Preview Worker
     needs: deploy-and-test
-    if: false  # DISABLED: keep worker alive for visual browser inspection. Delete manually after gate.
+    if: false # DISABLED: keep worker alive for visual browser inspection. Delete manually after gate.
     runs-on: ubuntu-latest
     environment: staging
     env:
