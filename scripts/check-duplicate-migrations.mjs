@@ -83,6 +83,10 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0445_simuladores_matriz_aw139_reconciliacao.sql',
     '0445_simuladores_matriz_aw139_reconciliacao_rollback.sql',
   ],
+  '0446': [
+    '0446_simuladores_matriz_aw139_reconciliacao_followup.sql',
+    '0446_simuladores_matriz_aw139_reconciliacao_followup_rollback.sql',
+  ],
 };
 
 // Sufixos que denunciam um arquivo operacional (consulta manual read-only:

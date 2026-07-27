@@ -94,6 +94,7 @@ interface Participante {
 interface ModeloSessao {
   id: number;
   codigo: string;
+  codigo_canonico?: string | null;
   nome: string;
   tipo_sessao_id: number;
   tipo_aeronave: string;
@@ -2077,7 +2078,7 @@ export default function ModalNovaSessao({
                 <option value="">Selecione um modelo de sessão</option>
                 {modelos.map((modelo) => (
                   <option key={modelo.id} value={modelo.id}>
-                    {modelo.codigo} - {modelo.nome}
+                    {modelo.codigo_canonico || modelo.codigo} - {modelo.nome}
                   </option>
                 ))}
               </select>

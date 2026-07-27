@@ -26,6 +26,7 @@ interface Simulador {
 interface Modelo {
   id: number;
   codigo: string;
+  codigo_canonico?: string | null;
   nome: string;
 }
 
@@ -286,7 +287,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
                 <option value="">Selecione...</option>
                 {modelos.map((modelo) => (
                   <option key={modelo.id} value={modelo.id}>
-                    {modelo.codigo} - {modelo.nome}
+                    {modelo.codigo_canonico || modelo.codigo} - {modelo.nome}
                   </option>
                 ))}
               </select>

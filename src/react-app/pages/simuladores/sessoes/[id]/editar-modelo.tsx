@@ -10,6 +10,7 @@ import ReordenarManobras from '../../components/modelos/ReordenarManobras';
 interface Modelo {
   id: number;
   codigo: string;
+  codigo_canonico?: string | null;
   nome: string;
   descricao: string;
   duracao_estimada: number;
@@ -76,7 +77,7 @@ export default function EditarModeloSessao() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium text-gray-700">Código</label>
-              <p className="mt-1 text-gray-900">{modelo.codigo}</p>
+              <p className="mt-1 text-gray-900">{modelo?.codigo_canonico || modelo?.codigo}</p>
             </div>
 
             <div>
@@ -104,7 +105,7 @@ export default function EditarModeloSessao() {
         <SimuladoresCard padding="none">
           <ReordenarManobras
             modeloId={Number(id)}
-            modeloNome={modelo ? `${modelo.codigo} - ${modelo.nome}` : ''}
+            modeloNome={modelo ? `${modelo.codigo_canonico || modelo.codigo} - ${modelo.nome}` : ''}
           />
         </SimuladoresCard>
       </div>
