@@ -69,7 +69,6 @@ vi.mock('@/react-app/config/api', () => ({
   ensureValidAccessToken: vi.fn(async () => 'token'),
   fetchWithAuth: vi.fn(),
   getAccessToken: () => 'token',
-  resolveScormRuntimeBaseUrl: () => 'http://localhost:8787/api',
 }));
 
 vi.mock('sonner', () => ({
@@ -115,7 +114,6 @@ describe('LmsPlayer completion flow', () => {
     toastErrorMock.mockReset();
     toastDismissMock.mockReset();
     vi.restoreAllMocks();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
   });
 
   it('usa toast de saving sem recorrer a window.alert', async () => {
