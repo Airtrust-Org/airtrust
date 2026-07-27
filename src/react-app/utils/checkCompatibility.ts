@@ -22,14 +22,25 @@ export function isCheckCompatibleWithAircraft(
     return true;
   }
 
-  if (codigo.endsWith('-139')) {
+  // Match on the trailing aircraft-model token after the last '-', not a
+  // literal suffix: codes like `IFR-SK76` end in `SK76`, not `-76`, but
+  // still name the SK76 aircraft just as much as `FAP06-76` does.
+  const ultimoSegmento = codigo.slice(codigo.lastIndexOf('-') + 1);
+
+  if (ultimoSegmento === '139') {
     return modelo.includes('139');
   }
 
-  if (codigo.endsWith('-76')) {
+  if (ultimoSegmento === '76' || ultimoSegmento === 'SK76') {
     return modelo.includes('76');
   }
 
+  // Deliberately permissive fallback: a code whose trailing segment names
+  // no known aircraft (e.g. `FAP14`, `FAP13`, `FAP07`) is an
+  // aircraft-agnostic credential (examiner/instructor accreditation, route
+  // check, etc.) that legitimately applies across every fleet, not an
+  // unhandled case that should be hidden. Only codes recognized as
+  // naming ONE specific aircraft (139/76/SK76 above) are ever restricted.
   return true;
 }
 

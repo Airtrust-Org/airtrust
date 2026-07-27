@@ -230,7 +230,11 @@ describe('migration governance', () => {
     // (restores gera_qualificacao=1 + qualificacao_tipo_id on the 7 current
     // check-session models whose predecessor already had it, lost the same
     // way as the FAP links fixed in 0446).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(448);
+    // Ratchet raised 2026-07-27: 0449 simuladores_check_faps_reconciliacao
+    // (classifies FAP6-139/IFR-SK76 as is_check=1 to match their sibling
+    // FAPs, and adds the FAP06+IFR check-links the canonical rule
+    // requires for AW139/S-76 inicial/periodico/semestral checks).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(449);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
