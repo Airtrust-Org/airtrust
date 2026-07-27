@@ -323,12 +323,11 @@ function buildAbsoluteLmsAssetUrl(request: Request, path: string) {
 }
 
 function appendAssetTokenCookie(headers: Headers, token: string, request: Request) {
-  // None+Secure fora de local (Pages e Workers são sites diferentes em staging).
-  const sameSiteDirective = shouldUseSecureAssetCookie(request) ? 'SameSite=None; Secure' : 'SameSite=Lax';
+  const secureDirective = shouldUseSecureAssetCookie(request) ? '; Secure' : '';
 
   headers.append(
     'Set-Cookie',
-    `${LMS_ASSET_TOKEN_COOKIE}=${encodeURIComponent(token)}; Path=/api/lms/; Max-Age=${LMS_ASSET_TOKEN_MAX_AGE_SECONDS}; ${sameSiteDirective}`,
+    `${LMS_ASSET_TOKEN_COOKIE}=${encodeURIComponent(token)}; Path=/api/lms/; Max-Age=${LMS_ASSET_TOKEN_MAX_AGE_SECONDS}; SameSite=Lax${secureDirective}`,
   );
 }
 
@@ -862,7 +861,8 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     initialCmiJson,
     hasResumeState,
     assetCacheBuster: Date.now().toString(36),
-    reviewMode: matricula.status === 'CONCLUIDO',
+    reviewMode:
+      matricula.status === 'CONCLUIDO' || new URL(c.req.url).searchParams.get('review') === '1',
   });
 
   const headers = buildProtectedLaunchHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'));

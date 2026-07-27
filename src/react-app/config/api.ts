@@ -30,8 +30,8 @@ function resolveApiBase(): string {
 
   if (normalizedEnvUrl && normalizedEnvUrl.length > 0) return normalizedEnvUrl;
 
-  // 🎯 STAGING: main.airtrust.pages.dev → staging API (zero cache)
-  if (host === 'main.airtrust.pages.dev') {
+  // 🎯 STAGING: aliases Pages de staging → staging API.
+  if (host === 'main.airtrust.pages.dev' || host === 'staging.airtrust.pages.dev') {
     return 'https://airtrust-api-staging.airtrust.workers.dev/api';
   }
 
@@ -51,6 +51,15 @@ function resolveApiBase(): string {
 }
 
 export const API_BASE_URL = resolveApiBase();
+
+export function resolveScormRuntimeBaseUrl(): string {
+  const origin = typeof window !== 'undefined' ? window.location?.origin : '';
+  const host = typeof window !== 'undefined' ? window.location?.hostname : '';
+  if (origin && (host === 'main.airtrust.pages.dev' || host === 'staging.airtrust.pages.dev')) {
+    return `${origin}/api`;
+  }
+  return API_BASE_URL;
+}
 export const AUTH_TOKEN_CHANGED_EVENT = 'airtrust:token-changed';
 export const AUTH_PERSIST_LOGIN_KEY = 'airtrust_persist_login';
 const DEFAULT_PERSIST_LOGIN = true;

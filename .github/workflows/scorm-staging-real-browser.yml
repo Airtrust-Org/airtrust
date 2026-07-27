@@ -1,0 +1,45 @@
+name: SCORM Staging Real Browser
+
+on:
+  pull_request:
+    paths:
+      - 'e2e/lms/scorm-review-staging.spec.ts'
+      - 'functions/**'
+      - 'src/react-app/pages/lms/LmsPlayer.tsx'
+      - 'src/react-app/config/api.ts'
+      - 'worker-airtrust/src/routes/lms-assets.ts'
+      - 'worker-airtrust/src/routes/lms-matriculas.ts'
+      - '.github/workflows/scorm-staging-real-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staging-real-browser:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    env:
+      BASE_URL: https://staging.airtrust.pages.dev
+      E2E_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run required browser gate
+        run: npx playwright test e2e/lms/scorm-review-staging.spec.ts --project=chromium
+      - name: Upload sanitized browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorm-staging-real-browser-${{ github.run_id }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn

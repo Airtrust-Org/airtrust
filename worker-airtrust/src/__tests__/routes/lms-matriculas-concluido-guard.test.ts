@@ -1,9 +1,7 @@
 /**
  * Testes para o guard anti-downgrade de CONCLUIDO no SCORM commit.
  *
- * Regra: matrícula CONCLUIDO nunca pode ser rebaixada por commit SCORM.
- * Commits idempotentes (passed/completed/vazio) são permitidos.
- * Commits com incomplete/failed/not attempted são bloqueados com 200 + ignoredDowngrade.
+ * Regra: matrícula CONCLUIDO é somente leitura para commit SCORM.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
@@ -11,10 +9,9 @@ import { Hono } from 'hono';
 type ScormCommitBody = {
   success: boolean;
   data: {
-    ignoredDowngrade?: boolean;
-    status?: string;
+    ignoredReviewCommit?: boolean;
+    novo_status?: string;
     progresso_pct?: number;
-    message?: string;
   };
 };
 
@@ -151,10 +148,9 @@ describe('lms matriculas concluido guard', () => {
     expect(response.status).toBe(200);
     const json = await response.json() as ScormCommitBody;
     expect(json.success).toBe(true);
-    expect(json.data.ignoredDowngrade).toBe(true);
-    expect(json.data.status).toBe('CONCLUIDO');
+    expect(json.data.ignoredReviewCommit).toBe(true);
+    expect(json.data.novo_status).toBe('CONCLUIDO');
     expect(json.data.progresso_pct).toBe(100);
-    expect(json.data.message).toContain('já concluído');
   });
 
   // ─── T2: Bloqueia downgrade CONCLUIDO → failed ───────────────────────────
@@ -175,8 +171,8 @@ describe('lms matriculas concluido guard', () => {
     expect(response.status).toBe(200);
     const json = await response.json() as ScormCommitBody;
     expect(json.success).toBe(true);
-    expect(json.data.ignoredDowngrade).toBe(true);
-    expect(json.data.status).toBe('CONCLUIDO');
+    expect(json.data.ignoredReviewCommit).toBe(true);
+    expect(json.data.novo_status).toBe('CONCLUIDO');
   });
 
   // ─── T3: Bloqueia downgrade CONCLUIDO → not attempted ────────────────────
@@ -195,13 +191,13 @@ describe('lms matriculas concluido guard', () => {
     expect(response.status).toBe(200);
     const json = await response.json() as ScormCommitBody;
     expect(json.success).toBe(true);
-    expect(json.data.ignoredDowngrade).toBe(true);
-    expect(json.data.status).toBe('CONCLUIDO');
+    expect(json.data.ignoredReviewCommit).toBe(true);
+    expect(json.data.novo_status).toBe('CONCLUIDO');
   });
 
-  // ─── T4: Commit sem status (seguro) em CONCLUIDO não é bloqueado ────────
+  // ─── T4: Commit de revisão em CONCLUIDO não escreve estado SCORM ───────
 
-  it('permite commit SCORM sem lesson_status em matricula CONCLUIDO (atualização segura)', async () => {
+  it('ignora commit SCORM sem lesson_status em matrícula concluída', async () => {
     const { app, db } = makeTestEnv([
       ['FROM lms_matriculas m', { first: () => MATRICULA_CONCLUIDA }],
       ['FROM lms_progresso_scorm', {
@@ -226,7 +222,7 @@ describe('lms matriculas concluido guard', () => {
     expect(response.status).toBe(200);
     const json = await response.json() as ScormCommitBody;
     expect(json.success).toBe(true);
-    expect(json.data.ignoredDowngrade).toBeFalsy();
+    expect(json.data.ignoredReviewCommit).toBe(true);
   });
 
   // ─── T5: "Rever" replay (lesson_status=passed) em CONCLUIDO não reescreve
@@ -265,13 +261,9 @@ describe('lms matriculas concluido guard', () => {
     expect(response.status).toBe(200);
     const json = await response.json() as ScormCommitBody;
     expect(json.success).toBe(true);
-    expect(json.data.ignoredDowngrade).toBeFalsy();
+    expect(json.data.ignoredReviewCommit).toBe(true);
 
-    expect(updateBindCalls).toHaveLength(1);
-    const [novoStatusArg, , , dataConclusaoArg, tentativasIncrementArg] = updateBindCalls[0];
-    expect(novoStatusArg).toBe('CONCLUIDO');
-    expect(dataConclusaoArg).toBeNull();
-    expect(tentativasIncrementArg).toBe(0);
+    expect(updateBindCalls).toHaveLength(0);
     expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
   });
 });

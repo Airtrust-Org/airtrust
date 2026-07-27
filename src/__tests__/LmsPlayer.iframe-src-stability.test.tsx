@@ -50,6 +50,7 @@ vi.mock('@/react-app/config/api', () => ({
   ensureValidAccessToken: ensureValidAccessTokenMock,
   fetchWithAuth: vi.fn(),
   getAccessToken: getAccessTokenMock,
+  resolveScormRuntimeBaseUrl: () => 'http://localhost:8787/api',
 }));
 
 vi.mock('sonner', () => ({
@@ -71,6 +72,7 @@ function renderPlayer() {
 
 describe('LmsPlayer — estabilidade do src do iframe frente a rotação de token', () => {
   beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
     ensureValidAccessTokenMock.mockReset().mockResolvedValue('token-initial');
     getAccessTokenMock.mockReset().mockReturnValue('token-initial');
   });
@@ -85,7 +87,7 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
     });
 
     const initialSrc = iframe!.getAttribute('src');
-    expect(initialSrc).toContain('token=token-initial');
+    expect(initialSrc).not.toContain('token=');
 
     // Simula rotação real de token (novo valor, não apenas reafirmação do mesmo).
     ensureValidAccessTokenMock.mockResolvedValue('token-rotated');
@@ -105,7 +107,7 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
     const iframeAfter = container.querySelector('iframe');
     expect(iframeAfter).not.toBeNull();
     expect(iframeAfter!.getAttribute('src')).toBe(initialSrc);
-    expect(iframeAfter!.getAttribute('src')).toContain('token=token-initial');
+    expect(iframeAfter!.getAttribute('src')).not.toContain('token=');
   });
 
   it('libera o iframe (sessão encerrada) quando o token some completamente', async () => {
