@@ -39,7 +39,9 @@ setup('autenticar usuário', async ({ page }) => {
   if ((await rememberMe.count()) > 0) {
     await rememberMe.check();
   }
-  await page.getByRole('button', { name: /entrar/i }).click();
+  // O staging publicado expõe o formulário em inglês ("Sign In"), enquanto
+  // outros ambientes mantêm "Entrar". Ambos são o mesmo submit real.
+  await page.getByRole('button', { name: /^(entrar|sign in)$/i }).click();
 
   // Aguarda redirecionamento pós-login (app navega para "/" após autenticação)
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30000 });
