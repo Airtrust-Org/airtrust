@@ -44,6 +44,7 @@ export function isCheckCompatibleWithAircraft(
   return true;
 }
 
+
 export function filterCompatibleChecks<T extends CheckLike>(
   checks: T[],
   modeloAeronave?: string | null,

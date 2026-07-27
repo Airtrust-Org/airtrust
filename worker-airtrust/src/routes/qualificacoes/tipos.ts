@@ -660,6 +660,14 @@ router.get(
     const conditions = ['qt.deleted_at IS NULL', 'qt.empresa_id = ?', setorScope.clause];
     const bindings: unknown[] = [empresaId, ...setorScope.bindings];
 
+    // Suporte ao filtro ?ativo=1|0 — sem o parâmetro, retorna todos (comportamento anterior)
+    const ativoRaw = c.req.query('ativo');
+    if (ativoRaw === '1' || ativoRaw === 'true') {
+      conditions.push('qt.ativo = 1');
+    } else if (ativoRaw === '0' || ativoRaw === 'false') {
+      conditions.push('qt.ativo = 0');
+    }
+
     if (categoriaId > 0) {
       conditions.push('qc.id = ?');
       bindings.push(categoriaId);
