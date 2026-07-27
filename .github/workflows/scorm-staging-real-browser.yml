@@ -1,23 +1,21 @@
-name: SCORM Staging Real Browser
+name: SCORM Staging Real Browser (DISABLED — replaced by scorm-pr499-preview-gate.yml)
+
+# DISABLED for PR #499: the shared-staging gate tests code that is NOT the PR
+# HEAD. The isolated preview gate (scorm-pr499-preview-gate.yml) is the single
+# required gate for this branch. Re-enable this workflow after PR #499 merges
+# into main and the preview infrastructure is cleaned up.
 
 on:
-  pull_request:
-    paths:
-      - 'e2e/lms/scorm-review-staging.spec.ts'
-      - 'functions/**'
-      - 'src/react-app/pages/lms/LmsPlayer.tsx'
-      - 'src/react-app/config/api.ts'
-      - 'worker-airtrust/src/routes/lms-assets.ts'
-      - 'worker-airtrust/src/routes/lms-matriculas.ts'
-      - '.github/workflows/scorm-staging-real-browser.yml'
-  workflow_dispatch:
+  workflow_dispatch:  # manual only — no automatic triggers
+  # pull_request:     # DISABLED during PR #499
+  #   paths: [...]
 
 permissions:
   contents: read
 
 jobs:
   staging-real-browser:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: false  # hard-disabled — remove this line to re-enable after PR #499 merge
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 15

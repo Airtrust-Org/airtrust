@@ -20,7 +20,7 @@ export const AUTH_FILE = path.join(__dirname, '.auth/user.json');
 setup('autenticar usuário', async ({ page }) => {
   const email = process.env.E2E_EMAIL;
   const password = process.env.E2E_PASSWORD;
-  const apiBaseUrl = process.env.E2E_API_BASE_URL?.replace(/\/$/, '');
+  const rawBase = process.env.E2E_API_BASE_URL?.replace(/\/+$/, '');
 
   if (!email || !password) {
     throw new Error(
@@ -29,8 +29,24 @@ setup('autenticar usuário', async ({ page }) => {
     );
   }
 
-  if (apiBaseUrl) {
-    const response = await page.request.post(`${apiBaseUrl}/api/auth/login`, {
+  if (rawBase) {
+    // Normalize: if base already ends with /api, call /auth/login directly.
+    // If base does NOT end with /api, call /api/auth/login.
+    // This prevents double /api/api/ when E2E_API_BASE_URL=<worker>/api.
+    const loginUrl = rawBase.endsWith('/api')
+      ? `${rawBase}/auth/login`
+      : `${rawBase}/api/auth/login`;
+
+    // Regression guard: never allow /api/api/ in the login URL.
+    if (loginUrl.includes('/api/api/')) {
+      throw new Error(
+        `BUG: double /api/api/ in login URL "${loginUrl}". ` +
+        `E2E_API_BASE_URL was "${process.env.E2E_API_BASE_URL}". ` +
+        `Add a regression test for this path.`,
+      );
+    }
+
+    const response = await page.request.post(loginUrl, {
       data: { email, senha: password },
     });
     if (!response.ok()) {
