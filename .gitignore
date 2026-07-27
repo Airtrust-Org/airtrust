@@ -133,6 +133,7 @@ test-artifacts/
 tmp/
 temp/
 .tmp/
+output/playwright/scorm-origin-diagnosis/
 *.tmp
 *.bak
 *~
