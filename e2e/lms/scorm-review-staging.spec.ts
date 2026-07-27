@@ -46,10 +46,20 @@ test('SCORM review em staging carrega conteúdo e o menu de Emergências Gerais 
   // The currently published Pages build still points its compiled API base at
   // production. Keep this redirect only as a staging-baseline adapter; the
   // corrected deploy no longer emits requests matching this route.
-  await page.route('https://api.airtrust.online/api/**', (route) => {
+  await page.route('https://api.airtrust.online/api/**', async (route) => {
     const requested = new URL(route.request().url());
-    route.continue({
-      url: `https://airtrust-api-staging.airtrust.workers.dev${requested.pathname}${requested.search}`,
+    const upstream = await page.request.fetch(
+      `https://airtrust-api-staging.airtrust.workers.dev${requested.pathname}${requested.search}`,
+      {
+        method: route.request().method(),
+        headers: route.request().headers(),
+        data: route.request().postDataBuffer() ?? undefined,
+      },
+    );
+    await route.fulfill({
+      status: upstream.status(),
+      headers: upstream.headers(),
+      body: await upstream.body(),
     });
   });
 
