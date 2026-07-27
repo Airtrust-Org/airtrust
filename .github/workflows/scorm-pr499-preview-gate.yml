@@ -169,14 +169,34 @@ jobs:
             --commit-dirty=true \
             2>&1 | tee /tmp/pages-deploy.log
 
-          # Extract the preview URL from wrangler output or construct it
-          PREVIEW_URL="$(grep -oP 'https://[a-f0-9]+\.codex-scorm-staging-real-browser\.airtrust\.pages\.dev' /tmp/pages-deploy.log || true)"
+          # Extract the DEPLOYMENT URL from wrangler output.
+          # Format: https://<hash>.airtrust.pages.dev (immediate, no SSL delay).
+          # Do NOT use the alias (truncated branch name) or a constructed URL.
+          PREVIEW_URL="$(grep -oE 'https://[a-f0-9]+\.airtrust\.pages\.dev' /tmp/pages-deploy.log | head -1 || true)"
           if [[ -z "$PREVIEW_URL" ]]; then
-            PREVIEW_URL="https://${{ steps.provenance.outputs.head_short }}.codex-scorm-staging-real-browser.airtrust.pages.dev"
+            echo "FATAL: Could not extract Pages deployment URL from wrangler output." >&2
+            cat /tmp/pages-deploy.log >&2
+            exit 1
           fi
           echo "preview_pages_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
           echo "PREVIEW_PAGES_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
           echo "Pages preview URL: $PREVIEW_URL"
+
+      - name: Wait for Pages SSL to be ready
+        shell: bash
+        run: |
+          echo "Waiting for SSL on $PREVIEW_PAGES_URL ..."
+          for i in $(seq 1 30); do
+            STATUS="$(curl -s -o /dev/null -w '%{http_code}' "$PREVIEW_PAGES_URL" || echo '000')"
+            echo "Attempt $i: HTTP $STATUS"
+            if [[ "$STATUS" == "200" || "$STATUS" == "302" || "$STATUS" == "304" ]]; then
+              echo "Pages preview is reachable."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Pages preview did not become reachable after 5 minutes."
+          exit 1
 
       # ── Playwright Real Browser Gate ────────────────────────────────
       - name: Install Playwright
@@ -231,11 +251,11 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # ── Cleanup ────────────────────────────────────────────────────────
+  # ── Cleanup (delayed — keep worker alive for visual inspection) ──
   cleanup:
     name: Cleanup Preview Worker
     needs: deploy-and-test
-    if: always()
+    if: false  # DISABLED: keep worker alive for visual browser inspection. Delete manually after gate.
     runs-on: ubuntu-latest
     environment: staging
     env:
