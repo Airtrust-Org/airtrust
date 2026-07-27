@@ -149,6 +149,7 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
 describe('Wrapper SCORM real (execução em jsdom) — REVIEW_MODE nunca chama o endpoint de conclusão', () => {
   beforeEach(() => {
     setupDom();
+    g.localStorage?.clear();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
