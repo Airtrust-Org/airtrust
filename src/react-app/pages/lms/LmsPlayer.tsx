@@ -159,10 +159,20 @@ export default function LmsPlayer() {
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
-  const launchUrl =
-    launchToken && matricula && matricula.tipo_conteudo !== 'h5p'
-      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(launchToken)}${reviewParam ? '&review=1' : ''}`
-      : null;
+  // Store the launch URL in a ref so it never changes during the session.
+  // The iframe must stay mounted with the same src — changing the URL or
+  // remounting the iframe causes a black flash and resets the SCORM package
+  // to slide 1, desynchronizing the AirTrust position from the package state.
+  const stableLaunchUrlRef = useRef<string | null>(null);
+  const launchUrl = (() => {
+    if (stableLaunchUrlRef.current) return stableLaunchUrlRef.current;
+    if (launchToken && matricula && matricula.tipo_conteudo !== 'h5p') {
+      const url = `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(launchToken)}${reviewParam ? '&review=1' : ''}`;
+      stableLaunchUrlRef.current = url;
+      return url;
+    }
+    return null;
+  })();
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
 
   function invalidateLmsDashboardCaches() {
@@ -236,9 +246,9 @@ export default function LmsPlayer() {
     };
   }, [qc, token]);
 
-  useEffect(() => {
-    setIframeLoaded(false);
-  }, [launchUrl]);
+  // launchUrl is stable (stored in ref) — no need to reset iframeLoaded.
+  // Removing this effect prevents the loading overlay from flashing during
+  // progress saves (LMSCommit → refetch → re-render).
 
   useEffect(() => {
     if (playerToken && !launchToken) {
