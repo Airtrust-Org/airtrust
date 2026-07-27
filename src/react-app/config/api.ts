@@ -20,15 +20,16 @@ function resolveApiBase(): string {
     typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
   const host = typeof window !== 'undefined' ? window.location.hostname : '';
 
+  // 🎯 Explicit VITE_API_URL takes priority over all hostname-based detection.
+  // This allows PR preview builds to point to ephemeral Workers.
   const normalizedEnvUrl = envUrl?.trim();
+  if (normalizedEnvUrl && normalizedEnvUrl.length > 0) return normalizedEnvUrl;
 
   // 🎯 LOCAL DEVELOPMENT: rota pelo proxy Vite → VITE_DEV_PROXY_TARGET (default: produção).
   // Para usar worker local: set VITE_DEV_PROXY_TARGET=http://localhost:8787 no .env.local
   if (host === 'localhost' || host === '127.0.0.1') {
     return `${origin}/api`;
   }
-
-  if (normalizedEnvUrl && normalizedEnvUrl.length > 0) return normalizedEnvUrl;
 
   // 🎯 STAGING: aliases Pages de staging → staging API.
   if (host === 'main.airtrust.pages.dev' || host === 'staging.airtrust.pages.dev') {

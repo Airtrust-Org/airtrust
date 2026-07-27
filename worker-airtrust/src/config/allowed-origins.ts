@@ -35,5 +35,8 @@ export function resolveAllowedOrigin(origin?: string | null, corsOrigins?: strin
 
   if (/^https:\/\/[a-z0-9-]+\.airtrust\.pages\.dev$/i.test(origin)) return origin;
 
+  // Multi-level Pages preview subdomains (e.g. <hash>.branch-name.airtrust.pages.dev)
+  if (/^https:\/\/[a-z0-9.-]+\.airtrust\.pages\.dev$/i.test(origin)) return origin;
+
   return DEFAULT_ALLOWED_ORIGIN;
 }
