@@ -65,8 +65,8 @@ describe('SCORM mobile stability — autosave e resume', () => {
     );
   });
 
-  it('cookie de asset do SCORM permanece SameSite=Lax porque staging usa proxy de mesmo origin', () => {
-    expect(source).toContain('SameSite=Lax${secureDirective}');
-    expect(source).not.toContain('SameSite=None');
+  it('cookie de asset do SCORM usa SameSite=None; Secure fora de localhost (frontend e worker são sites diferentes em staging)', () => {
+    expect(source).toContain("'SameSite=None; Secure' : 'SameSite=Lax'");
+    expect(source).not.toContain('SameSite=Lax${secureDirective}');
   });
 });

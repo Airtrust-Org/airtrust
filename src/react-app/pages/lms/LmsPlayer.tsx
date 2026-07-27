@@ -19,7 +19,6 @@ import {
   ensureValidAccessToken,
   fetchWithAuth,
   getAccessToken,
-  resolveScormRuntimeBaseUrl,
 } from '@/react-app/config/api';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -112,7 +111,7 @@ export default function LmsPlayer() {
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
-  const [scormSessionReady, setScormSessionReady] = useState(false);
+  const [launchToken, setLaunchToken] = useState<string | null>(null);
   const [completionState, setCompletionState] = useState<
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
   >('idle');
@@ -160,12 +159,11 @@ export default function LmsPlayer() {
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
-  const scormRuntimeBaseUrl = resolveScormRuntimeBaseUrl();
   const launchUrl =
-    scormSessionReady && matricula && matricula.tipo_conteudo !== 'h5p'
-      ? `${scormRuntimeBaseUrl}/lms/scorm/launch/${id}${reviewParam ? '?review=1' : ''}`
+    launchToken && matricula && matricula.tipo_conteudo !== 'h5p'
+      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(launchToken)}${reviewParam ? '&review=1' : ''}`
       : null;
-  const launchOrigin = scormRuntimeBaseUrl.replace(/\/api$/, '');
+  const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
 
   function invalidateLmsDashboardCaches() {
     void qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
@@ -243,29 +241,12 @@ export default function LmsPlayer() {
   }, [launchUrl]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    setScormSessionReady(false);
-
-    if (!playerToken || !matricula || matricula.tipo_conteudo === 'h5p') {
-      return () => controller.abort();
+    if (playerToken && !launchToken) {
+      setLaunchToken(playerToken);
+    } else if (!playerToken && launchToken) {
+      setLaunchToken(null);
     }
-
-    void fetch(`${scormRuntimeBaseUrl}/lms/scorm/assets/session`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { Authorization: `Bearer ${playerToken}` },
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error(`SCORM session HTTP ${response.status}`);
-        if (!controller.signal.aborted) setScormSessionReady(true);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setScormSessionReady(false);
-      });
-
-    return () => controller.abort();
-  }, [matricula, playerToken, scormRuntimeBaseUrl]);
+  }, [playerToken, launchToken]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);

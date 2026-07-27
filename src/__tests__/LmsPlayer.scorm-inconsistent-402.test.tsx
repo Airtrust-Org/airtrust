@@ -87,7 +87,6 @@ vi.mock('@/react-app/config/api', () => ({
   ensureValidAccessToken: vi.fn(async () => 'token'),
   fetchWithAuth: vi.fn(),
   getAccessToken: () => 'token',
-  resolveScormRuntimeBaseUrl: () => 'http://localhost:8787/api',
 }));
 
 vi.mock('sonner', () => ({
@@ -126,7 +125,6 @@ async function dispatchPlayerMessage(data: Record<string, unknown>) {
 
 describe('LmsPlayer — matrícula 402 (SCORM_STATUS_INCONSISTENT)', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
     matriculaMock = {
       id: 402,
       curso_id: 3,
