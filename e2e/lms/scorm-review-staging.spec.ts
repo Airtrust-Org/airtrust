@@ -56,9 +56,13 @@ test('SCORM review em staging carrega conteúdo e o menu de Emergências Gerais 
         data: route.request().postDataBuffer() ?? undefined,
       },
     );
+    const responseHeaders = upstream.headers();
+    delete responseHeaders['content-encoding'];
+    delete responseHeaders['content-length'];
+    delete responseHeaders['transfer-encoding'];
     await route.fulfill({
       status: upstream.status(),
-      headers: upstream.headers(),
+      headers: responseHeaders,
       body: await upstream.body(),
     });
   });
