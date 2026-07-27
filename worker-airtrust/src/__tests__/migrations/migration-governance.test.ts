@@ -100,6 +100,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0445_simuladores_matriz_aw139_reconciliacao.sql',
     '0445_simuladores_matriz_aw139_reconciliacao_rollback.sql',
   ],
+  '0446': [
+    '0446_simuladores_matriz_aw139_reconciliacao_followup.sql',
+    '0446_simuladores_matriz_aw139_reconciliacao_followup_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -204,7 +208,12 @@ describe('migration governance', () => {
     // Ratchet raised 2026-07-27: 0445 simuladores_matriz_aw139_reconciliacao
     // (rename 30 AW139 current models, retire 7 duplicate-current rows,
     // carry FAP check-links forward — ID-scoped, guarded, additive).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(445);
+    // Ratchet raised 2026-07-27: 0446 simuladores_matriz_aw139_reconciliacao_followup
+    // (0445 was built against an archived snapshot that predated a same-day
+    // remediation batch; 9 of the 30 AW139 codes had already been given a
+    // newer current row by that batch, so 0445 fixed their now-retired
+    // predecessor instead. This corrects the actual current rows.)
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(446);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
