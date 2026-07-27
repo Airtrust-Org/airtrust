@@ -29,7 +29,7 @@ setup('autenticar usuário', async ({ page }) => {
   }
 
   await page.goto('/login');
-  await page.waitForLoadState('networkidle');
+  await expect(page.locator('input[type="email"]')).toBeVisible();
 
   // Preenche login form (usando type selectors — mais robusto que getByLabel + i18n)
   await page.locator('input[type="email"]').fill(email);
