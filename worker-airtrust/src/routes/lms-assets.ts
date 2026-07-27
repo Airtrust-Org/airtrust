@@ -323,11 +323,12 @@ function buildAbsoluteLmsAssetUrl(request: Request, path: string) {
 }
 
 function appendAssetTokenCookie(headers: Headers, token: string, request: Request) {
-  const secureDirective = shouldUseSecureAssetCookie(request) ? '; Secure' : '';
+  // None+Secure fora de local (Pages e Workers são sites diferentes em staging).
+  const sameSiteDirective = shouldUseSecureAssetCookie(request) ? 'SameSite=None; Secure' : 'SameSite=Lax';
 
   headers.append(
     'Set-Cookie',
-    `${LMS_ASSET_TOKEN_COOKIE}=${encodeURIComponent(token)}; Path=/api/lms/; Max-Age=${LMS_ASSET_TOKEN_MAX_AGE_SECONDS}; SameSite=Lax${secureDirective}`,
+    `${LMS_ASSET_TOKEN_COOKIE}=${encodeURIComponent(token)}; Path=/api/lms/; Max-Age=${LMS_ASSET_TOKEN_MAX_AGE_SECONDS}; ${sameSiteDirective}`,
   );
 }
 
