@@ -41,6 +41,8 @@ const matriculaMock = {
 vi.mock('@/react-app/hooks/useAuth', () => ({
   useAuth: () => ({
     token: 'token',
+    user: { id: 1, nome: 'Test' },
+    empresaAtualId: 10,
   }),
 }));
 

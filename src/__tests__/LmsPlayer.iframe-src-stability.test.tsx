@@ -28,7 +28,7 @@ const matriculaMock = {
 };
 
 vi.mock('@/react-app/hooks/useAuth', () => ({
-  useAuth: () => ({ token: 'token-initial' }),
+  useAuth: () => ({ token: 'token-initial', user: { id: 1, nome: 'Test' }, empresaAtualId: 10 }),
 }));
 
 vi.mock('@/react-app/hooks/useLms', () => ({

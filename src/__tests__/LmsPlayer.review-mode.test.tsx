@@ -32,7 +32,7 @@ function buildMatricula(status: string) {
 let matriculaMock = buildMatricula('CONCLUIDO');
 
 vi.mock('@/react-app/hooks/useAuth', () => ({
-  useAuth: () => ({ token: 'token' }),
+  useAuth: () => ({ token: 'token', user: { id: 1, nome: 'Test' }, empresaAtualId: 10 }),
 }));
 
 vi.mock('@/react-app/hooks/useLms', () => ({
