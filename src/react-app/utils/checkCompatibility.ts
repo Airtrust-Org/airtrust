@@ -22,11 +22,16 @@ export function isCheckCompatibleWithAircraft(
     return true;
   }
 
-  if (codigo.endsWith('-139')) {
+  // Match on the trailing aircraft-model token after the last '-', not a
+  // literal suffix: codes like `IFR-SK76` end in `SK76`, not `-76`, but
+  // still name the SK76 aircraft just as much as `FAP06-76` does.
+  const ultimoSegmento = codigo.slice(codigo.lastIndexOf('-') + 1);
+
+  if (ultimoSegmento === '139') {
     return modelo.includes('139');
   }
 
-  if (codigo.endsWith('-76')) {
+  if (ultimoSegmento === '76' || ultimoSegmento === 'SK76') {
     return modelo.includes('76');
   }
 

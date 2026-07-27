@@ -27,4 +27,22 @@ describe('checkCompatibility', () => {
   it('filters selected ids by aircraft model and removes duplicates', () => {
     expect(filterCompatibleCheckIds([1, 2, 3, 3], checks, 'SK76')).toEqual([2, 3]);
   });
+
+  it('matches SK76 codes whose suffix is the model name, not a literal "-76"', () => {
+    // IFR-SK76 does not end in the literal substring "-76" (it ends in
+    // "SK76"), but it still names the SK76 aircraft — regression test for
+    // a bug where such codes fell through to the default (return true),
+    // making them incorrectly appear as AW139-compatible too.
+    expect(isCheckCompatibleWithAircraft('IFR-SK76', 'AW139')).toBe(false);
+    expect(isCheckCompatibleWithAircraft('IFR-SK76', 'SK76')).toBe(true);
+  });
+
+  it('does not show SK76-only codes for AW139 models', () => {
+    const checksComIfr = [...checks, { id: 4, codigo: 'IFR-SK76' }, { id: 5, codigo: 'IFR-139' }];
+    expect(filterCompatibleChecks(checksComIfr, 'AW139').map((check) => check.codigo)).toEqual([
+      'FAP05.2-139',
+      'FAP14',
+      'IFR-139',
+    ]);
+  });
 });
