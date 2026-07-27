@@ -1503,11 +1503,11 @@ app.post('/scorm/commit', async (c) => {
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  const sucesso = isScormSuccess(d, {
-    masteryScore: matricula.scorm_mastery_score,
-    effectiveScorePct,
-  });
-  const falha = isScormFailed(d);
+  // "Rever" replay: nunca recomputar sucesso/falha (preserva data_conclusao/tentativas).
+  const sucesso =
+    !matriculaWasConcluido &&
+    isScormSuccess(d, { masteryScore: matricula.scorm_mastery_score, effectiveScorePct });
+  const falha = !matriculaWasConcluido && isScormFailed(d);
 
   let progressoPct = progressoAnterior;
   if (sucesso) {

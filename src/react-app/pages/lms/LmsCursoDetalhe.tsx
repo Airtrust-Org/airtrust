@@ -71,16 +71,17 @@ export default function LmsCursoDetalhe() {
     ];
   }, [curso]);
 
-  function navigatePlayer(matriculaId: number) {
+  function navigatePlayer(matriculaId: number, review?: boolean) {
     if (!curso) return;
+    const suffix = review ? '?review=1' : '';
     if (curso.tipo_conteudo === 'h5p') {
-      navigate(`/lms/player/h5p/${matriculaId}`);
+      navigate(`/lms/player/h5p/${matriculaId}${suffix}`);
     } else if (curso.tipo_conteudo === 'pdf') {
-      navigate(`/lms/player/pdf/${matriculaId}`);
+      navigate(`/lms/player/pdf/${matriculaId}${suffix}`);
     } else if (curso.tipo_conteudo === 'pptx') {
-      navigate(`/lms/player/pptx/${matriculaId}`);
+      navigate(`/lms/player/pptx/${matriculaId}${suffix}`);
     } else {
-      navigate(`/lms/player/${matriculaId}`);
+      navigate(`/lms/player/${matriculaId}${suffix}`);
     }
   }
 
@@ -98,7 +99,7 @@ export default function LmsCursoDetalhe() {
     }
 
     if (matricula && matricula.status !== 'CANCELADO') {
-      navigatePlayer(matricula.id);
+      navigatePlayer(matricula.id, matricula.status === 'CONCLUIDO');
       return;
     }
 
