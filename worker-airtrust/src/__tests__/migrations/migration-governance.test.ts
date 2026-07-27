@@ -112,10 +112,6 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0448_simuladores_matriz_aw139_sk76_gera_qualificacao.sql',
     '0448_simuladores_matriz_aw139_sk76_gera_qualificacao_rollback.sql',
   ],
-  '0449': [
-    '0449_simuladores_check_faps_reconciliacao.sql',
-    '0449_simuladores_check_faps_reconciliacao_rollback.sql',
-  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
