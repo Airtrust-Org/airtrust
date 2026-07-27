@@ -2,7 +2,6 @@ export type TipoSaveDraft = {
   nome?: string | null;
   codigo?: string | null;
   categoria?: string | null;
-  formato_id?: number | null;
   conteudo_programatico?: string | null;
   carga_horaria_inicial?: number | string | null;
   carga_horaria_recorrente?: number | string | null;
@@ -50,7 +49,6 @@ export function buildTipoPayload(editingTipo: TipoSaveDraft): Record<string, unk
       editingTipo.validade != null && Number(editingTipo.validade) > 0
         ? Number(editingTipo.validade)
         : null,
-    formato_id: editingTipo.formato_id ?? null,
   };
 
   if (editingTipo.descricao?.trim() || editingTipo.observacoes?.trim()) {

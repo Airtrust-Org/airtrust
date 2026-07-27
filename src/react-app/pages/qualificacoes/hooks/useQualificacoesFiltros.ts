@@ -118,7 +118,6 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
   const usesHistoricoDataset = isHistoricoTab;
 
   const [historicoCategoriaId, setHistoricoCategoriaId] = useState<number | null>(null);
-  const [historicoFormatoId, setHistoricoFormatoId] = useState<number | null>(null);
 
   useEffect(() => {
     writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
@@ -231,8 +230,6 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     usesHistoricoDataset,
     historicoCategoriaId,
     setHistoricoCategoriaId,
-    historicoFormatoId,
-    setHistoricoFormatoId,
     effectiveHistoricoStatusFiltro,
     isDefaultStatusFilter,
   };

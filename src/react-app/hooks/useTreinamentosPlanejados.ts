@@ -243,7 +243,6 @@ export interface TreinamentoPlanejadoFiltros {
   source?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA' | 'TREINAMENTOS';
   setor_ids?: number[];
   categoria_id?: number | null;
-  formato_id?: number | null;
   qualificacao_tipo_id?: number | null;
 }
 

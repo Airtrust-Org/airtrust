@@ -234,7 +234,9 @@ describe('migration governance', () => {
     // (classifies FAP6-139/IFR-SK76 as is_check=1 to match their sibling
     // FAPs, and adds the FAP06+IFR check-links the canonical rule
     // requires for AW139/S-76 inicial/periodico/semestral checks).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(449);
+    // Ratchet raised 2026-07-27: 0450 qualificacoes_category_only
+    // (migrates EAD-formato types to categoria-only, sets formato_id=NULL).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(450);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 

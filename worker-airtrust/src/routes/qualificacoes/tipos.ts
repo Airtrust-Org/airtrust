@@ -25,7 +25,6 @@ import {
 import { invalidateMaterializedStats } from './shared';
 import {
   isEadCategoria,
-  isEadFormato,
   reconcileImportedEdappHistory,
   softDeleteLmsCourseForQualificacaoTipo,
   syncLmsCourseFromQualificacaoTipo,
@@ -106,6 +105,7 @@ type TipoQualificacaoRow = {
   categoria?: string | null;
   categoria_id?: number | null;
   categoria_cor?: string | null;
+  /** Deprecated read compatibility; never written by this route. */
   formato_id?: number | null;
   formato_codigo?: string | null;
   formato_nome?: string | null;
@@ -136,6 +136,7 @@ type TiposColumnsSupport = {
   hasConteudoProgramatico: boolean;
   hasCargaInicial: boolean;
   hasCargaRecorrente: boolean;
+  // Deprecated schema compatibility: no new request writes this field.
   hasFormatoId: boolean;
   hasClasseRequisito: boolean;
   hasCategoriaId: boolean;
@@ -193,13 +194,21 @@ async function loadQualificacoesTiposColumnsSupport(
 
   return {
     hasIsCheck,
+    hasFormatoId,
     hasConteudoProgramatico,
     hasCargaInicial,
     hasCargaRecorrente,
-    hasFormatoId,
     hasClasseRequisito,
     hasCategoriaId,
   };
+}
+
+function buildFormatoJoin(hasFormatoId: boolean): string {
+  if (!hasFormatoId) return '';
+  return `LEFT JOIN qualificacoes_formatos qf
+    ON qf.id = qt.formato_id
+   AND qf.empresa_id = qt.empresa_id
+   AND qf.deleted_at IS NULL`;
 }
 
 // ===== SCHEMAS VALIDAÇÃO =====
@@ -217,7 +226,6 @@ const createTipoSchema = z.object({
   observacoes: z.string().nullable().optional(),
   ativo: z.union([z.boolean(), z.number()]).optional().default(true),
   is_check: z.union([z.boolean(), z.number()]).optional().default(false),
-  formato_id: z.number().int().positive().nullable().optional(),
   classe_requisito: z.enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA']).nullable().optional(),
 }).refine((value) => value.categoria_id || value.categoria, { message: 'Categoria obrigatória' });
 
@@ -235,7 +243,6 @@ const updateTipoSchema = z.object({
   observacoes: z.string().nullable().optional(),
   ativo: z.union([z.boolean(), z.number()]).optional(),
   is_check: z.union([z.boolean(), z.number()]).optional(),
-  formato_id: z.number().int().positive().nullable().optional(),
   classe_requisito: z.enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA']).nullable().optional(),
 });
 
@@ -481,14 +488,6 @@ async function resolveCategoriaCanonica(
     )
     .bind(empresaId, categoriaLegada)
     .first<{ id: number; nome: string }>();
-}
-
-function buildFormatoJoin(hasFormatoId: boolean): string {
-  if (!hasFormatoId) return '';
-  return `LEFT JOIN qualificacoes_formatos qf
-    ON qf.id = qt.formato_id
-   AND qf.empresa_id = qt.empresa_id
-   AND qf.deleted_at IS NULL`;
 }
 
 async function listTipoSetores(
@@ -899,7 +898,7 @@ router.post(
     ];
     if (hasIsCheck) { insertCols.push('is_check'); insertBinds.push(isCheck); }
     if (columnsSupport.hasCategoriaId) { insertCols.push('categoria_id'); insertBinds.push(categoriaCanonica.id); }
-    if (columnsSupport.hasFormatoId) { insertCols.push('formato_id'); insertBinds.push(data.formato_id ?? null); }
+    // formato_id foi depreciado, não gravamos mais no banco.
     if (columnsSupport.hasClasseRequisito) { insertCols.push('classe_requisito'); insertBinds.push(data.classe_requisito ?? null); }
     insertBinds.push(empresaId);
     const valuePlaceholders = insertCols.map(() => '?').join(', ');
@@ -950,7 +949,8 @@ router.post(
 
       await logAuditoria(db, 'qualificacoes_tipos', String(existing.id), 'RESTORE');
 
-      if (isEadFormato(restored as { formato_codigo?: string | null; categoria?: string | null }) &&
+      const restoredCategoria = (restored as Record<string, unknown> | null)?.categoria;
+      if (typeof restoredCategoria === 'string' && isEadCategoria(restoredCategoria) &&
         (restored as { empresa_id?: number | null })?.empresa_id) {
         await syncLmsCourseFromQualificacaoTipo(db, {
           empresaId: Number((restored as { empresa_id: number }).empresa_id),
@@ -1028,7 +1028,8 @@ router.post(
     // Auditoria
     await logAuditoria(db, 'qualificacoes_tipos', String(newId), 'CREATE');
 
-    if (isEadFormato(created as { formato_codigo?: string | null; categoria?: string | null }) &&
+    const createdCategoria = (created as Record<string, unknown> | null)?.categoria;
+    if (typeof createdCategoria === 'string' && isEadCategoria(createdCategoria) &&
       (created as { empresa_id?: number | null })?.empresa_id) {
       await syncLmsCourseFromQualificacaoTipo(db, {
         empresaId: Number((created as { empresa_id: number }).empresa_id),
@@ -1108,8 +1109,18 @@ router.put(
                 qt.codigo,
                 qt.nome,
                 qt.categoria,
+                ${columnsSupport.hasCategoriaId ? 'qt.categoria_id' : 'NULL as categoria_id'},
                 qt.validade,
                 qt.vencimento_fim_mes,
+                qt.descricao,
+                qt.observacoes,
+                qt.ativo,
+                qt.carga_horaria,
+                qt.carga_horaria_inicial,
+                qt.carga_horaria_recorrente,
+                ${columnsSupport.hasConteudoProgramatico ? 'qt.conteudo_programatico' : 'NULL as conteudo_programatico'},
+                ${hasIsCheck ? 'qt.is_check' : '0 as is_check'},
+                ${columnsSupport.hasClasseRequisito ? 'qt.classe_requisito' : 'NULL as classe_requisito'},
                 ${columnsSupport.hasFormatoId ? 'qt.formato_id, qf.codigo AS formato_codigo' : 'NULL AS formato_id, NULL AS formato_codigo'}
            FROM qualificacoes_tipos qt
            ${columnsSupport.hasFormatoId ? 'LEFT JOIN qualificacoes_formatos qf ON qf.id = qt.formato_id AND qf.deleted_at IS NULL' : ''}
@@ -1117,7 +1128,11 @@ router.put(
           LIMIT 1`,
       )
       .bind(id, empresaId)
-      .first()) as TipoAnteriorRow | null;
+      .first()) as (TipoAnteriorRow & { categoria_id: number | null; descricao: string | null; observacoes: string | null; ativo: number | null; carga_horaria: number | null; carga_horaria_inicial: number | null; carga_horaria_recorrente: number | null; conteudo_programatico: string | null; is_check: number | null; classe_requisito: string | null }) | null;
+
+    if (!rowAtual) {
+      return c.json({ success: false, error: 'Tipo não encontrado' }, 404);
+    }
 
     const categoriaFoiInformada = data.categoria_id !== undefined || data.categoria !== undefined;
     const categoriaCanonica = categoriaFoiInformada
@@ -1127,21 +1142,7 @@ router.put(
       return c.json({ success: false, error: 'Categoria canônica não encontrada ou inativa' }, 404);
     }
     const categoriaFinal = categoriaCanonica?.nome ?? String(rowAtual?.categoria || '');
-    let formatoCodigoFinal = rowAtual?.formato_codigo ?? null;
-    if (
-      columnsSupport.hasFormatoId &&
-      data.formato_id !== undefined &&
-      data.formato_id !== rowAtual?.formato_id
-    ) {
-      const formatoFinal = await db
-        .prepare(
-          'SELECT codigo FROM qualificacoes_formatos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
-        )
-        .bind(data.formato_id, empresaId)
-        .first<{ codigo: string | null }>();
-
-      formatoCodigoFinal = formatoFinal?.codigo ?? null;
-    }
+    // Formato não é mais atualizado, mesmo se enviado pelo client.
     const validadeFinal =
       data.validade !== undefined
         ? data.validade == null
@@ -1149,84 +1150,134 @@ router.put(
           : Number(data.validade)
         : (rowAtual?.validade ?? null);
 
-    // Construir UPDATE dinâmico
+    // Construir UPDATE dinâmico — comparar valores normalizados contra o registro atual
     const updateParts: string[] = [];
     const binds: unknown[] = [];
 
-    if (data.nome) {
-      updateParts.push('nome = ?');
-      binds.push(data.nome.trim());
+    const normalizeStr = (v: unknown) => (typeof v === 'string' ? v.trim() : v) ?? null;
+
+    if (data.nome !== undefined) {
+      const draftNome = normalizeStr(data.nome);
+      const atualNome = normalizeStr(rowAtual.nome);
+      if (draftNome !== atualNome) {
+        updateParts.push('nome = ?');
+        binds.push(draftNome);
+      }
     }
-    if (data.codigo) {
-      updateParts.push('codigo = ?');
-      binds.push(normalizeTipoCodigo(data.codigo));
+    if (data.codigo !== undefined) {
+      const draftCodigo = normalizeTipoCodigo(String(data.codigo ?? ''));
+      const atualCodigo = normalizeTipoCodigo(String(rowAtual.codigo ?? ''));
+      if (draftCodigo !== atualCodigo) {
+        updateParts.push('codigo = ?');
+        binds.push(draftCodigo);
+      }
     }
     if (categoriaFoiInformada) {
-      updateParts.push('categoria = ?');
-      binds.push(categoriaFinal);
-      if (columnsSupport.hasCategoriaId) {
-        updateParts.push('categoria_id = ?');
-        binds.push(categoriaCanonica!.id);
+      const atualCategoria = normalizeStr(rowAtual.categoria);
+      const draftCategoria = normalizeStr(categoriaFinal);
+      if (draftCategoria !== atualCategoria) {
+        updateParts.push('categoria = ?');
+        binds.push(categoriaFinal);
+        if (columnsSupport.hasCategoriaId) {
+          updateParts.push('categoria_id = ?');
+          binds.push(categoriaCanonica!.id);
+        }
       }
     }
     if (data.descricao !== undefined) {
-      updateParts.push('descricao = ?');
-      binds.push(data.descricao || null);
+      const draftDesc = normalizeStr(data.descricao);
+      const atualDesc = normalizeStr(rowAtual.descricao);
+      if (draftDesc !== atualDesc) {
+        updateParts.push('descricao = ?');
+        binds.push(data.descricao || null);
+      }
     }
     if (data.conteudo_programatico !== undefined) {
-      updateParts.push('conteudo_programatico = ?');
-      binds.push(data.conteudo_programatico || null);
+      const draftVal = normalizeStr(data.conteudo_programatico);
+      const atualVal = normalizeStr(rowAtual.conteudo_programatico);
+      if (draftVal !== atualVal) {
+        updateParts.push('conteudo_programatico = ?');
+        binds.push(data.conteudo_programatico || null);
+      }
     }
     if (data.carga_horaria_inicial !== undefined) {
-      updateParts.push('carga_horaria_inicial = ?');
-      binds.push(data.carga_horaria_inicial == null ? null : Number(data.carga_horaria_inicial));
+      const draftVal = data.carga_horaria_inicial == null ? null : Number(data.carga_horaria_inicial);
+      const atualVal = rowAtual.carga_horaria_inicial == null ? null : Number(rowAtual.carga_horaria_inicial);
+      if (draftVal !== atualVal) {
+        updateParts.push('carga_horaria_inicial = ?');
+        binds.push(draftVal);
+      }
     }
     if (data.carga_horaria_recorrente !== undefined) {
-      updateParts.push('carga_horaria_recorrente = ?');
-      binds.push(
-        data.carga_horaria_recorrente == null ? null : Number(data.carga_horaria_recorrente),
-      );
-      updateParts.push('carga_horaria = ?');
-      binds.push(
-        data.carga_horaria_recorrente == null ? null : Number(data.carga_horaria_recorrente),
-      );
+      const draftVal = data.carga_horaria_recorrente == null ? null : Number(data.carga_horaria_recorrente);
+      const atualVal = rowAtual.carga_horaria_recorrente == null ? null : Number(rowAtual.carga_horaria_recorrente);
+      if (draftVal !== atualVal) {
+        updateParts.push('carga_horaria_recorrente = ?');
+        binds.push(draftVal);
+        updateParts.push('carga_horaria = ?');
+        binds.push(draftVal);
+      }
     }
     if (data.validade !== undefined) {
-      updateParts.push('validade = ?');
-      binds.push(data.validade == null ? null : Number(data.validade));
+      const draftVal = data.validade == null ? null : Number(data.validade);
+      const atualVal = rowAtual.validade == null ? null : Number(rowAtual.validade);
+      if (draftVal !== atualVal) {
+        updateParts.push('validade = ?');
+        binds.push(draftVal);
+      }
     }
     if (categoriaFoiInformada || data.validade !== undefined) {
-      updateParts.push('tipo = ?');
-      binds.push(deriveModeloTipo(validadeFinal, categoriaFinal));
+      const tipoAtual = deriveModeloTipo(rowAtual.validade, rowAtual.categoria);
+      const tipoNovo = deriveModeloTipo(validadeFinal, categoriaFinal);
+      if (tipoNovo !== tipoAtual) {
+        updateParts.push('tipo = ?');
+        binds.push(tipoNovo);
+      }
     }
     if (data.vencimento_fim_mes !== undefined) {
-      updateParts.push('vencimento_fim_mes = ?');
-      binds.push(data.vencimento_fim_mes ? 1 : 0);
+      const draftVal = data.vencimento_fim_mes ? 1 : 0;
+      const atualVal = rowAtual.vencimento_fim_mes ? 1 : 0;
+      if (draftVal !== atualVal) {
+        updateParts.push('vencimento_fim_mes = ?');
+        binds.push(draftVal);
+      }
     }
     if (data.observacoes !== undefined) {
-      updateParts.push('observacoes = ?');
-      binds.push(data.observacoes || null);
+      const draftObs = normalizeStr(data.observacoes);
+      const atualObs = normalizeStr(rowAtual.observacoes);
+      if (draftObs !== atualObs) {
+        updateParts.push('observacoes = ?');
+        binds.push(data.observacoes || null);
+      }
     }
     if (data.ativo !== undefined) {
-      updateParts.push('ativo = ?');
-      binds.push(data.ativo ? 1 : 0);
+      const draftVal = data.ativo ? 1 : 0;
+      const atualVal = rowAtual.ativo ? 1 : 0;
+      if (draftVal !== atualVal) {
+        updateParts.push('ativo = ?');
+        binds.push(draftVal);
+      }
     }
-
     if (hasIsCheck && data.is_check !== undefined) {
-      updateParts.push('is_check = ?');
-      binds.push(data.is_check ? 1 : 0);
+      const draftVal = data.is_check ? 1 : 0;
+      const atualVal = rowAtual.is_check ? 1 : 0;
+      if (draftVal !== atualVal) {
+        updateParts.push('is_check = ?');
+        binds.push(draftVal);
+      }
     }
-    if (columnsSupport.hasFormatoId && data.formato_id !== undefined) {
-      updateParts.push('formato_id = ?');
-      binds.push(data.formato_id ?? null);
-    }
+    // formato_id foi depreciado, não gravamos mais no banco.
     if (columnsSupport.hasClasseRequisito && data.classe_requisito !== undefined) {
-      updateParts.push('classe_requisito = ?');
-      binds.push(data.classe_requisito ?? null);
+      const draftVal = data.classe_requisito ?? null;
+      const atualVal = rowAtual.classe_requisito ?? null;
+      if (draftVal !== atualVal) {
+        updateParts.push('classe_requisito = ?');
+        binds.push(draftVal);
+      }
     }
 
     if (updateParts.length === 0) {
-      return c.json({ success: false, error: 'Nada para atualizar' }, 400);
+      return c.json({ success: true, data: { changed: false }, message: 'Nenhuma alteração detectada' }, 200);
     }
 
     updateParts.push("updated_at = datetime('now')");
@@ -1438,14 +1489,8 @@ router.put(
       ...extrairUsuarioAuditoria(c),
     });
 
-    const tipoEraEad = isEadFormato({
-      categoria: rowAtual?.categoria,
-      formato_codigo: rowAtual?.formato_codigo,
-    });
-    const tipoEhEad = isEadFormato({
-      categoria: categoriaFinal,
-      formato_codigo: formatoCodigoFinal,
-    });
+    const tipoEraEad = isEadCategoria(rowAtual?.categoria);
+    const tipoEhEad = isEadCategoria(categoriaFinal);
 
     // ⚠️ qualificacoes_tipos.id é TEXT (UUID desde migration 0031) — usar string diretamente
     const qualificacaoTipoId = String(id);

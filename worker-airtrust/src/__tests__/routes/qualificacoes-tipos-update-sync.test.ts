@@ -183,15 +183,27 @@ describe('qualificacoes tipos update sync', () => {
         },
       ],
       [
-        'SELECT qt.empresa_id, qt.codigo, qt.nome, qt.categoria, qt.validade, qt.vencimento_fim_mes',
+        'SELECT qt.empresa_id, qt.codigo, qt.nome, qt.categoria,',
         {
           first: () => ({
             empresa_id: 7,
             categoria: 'MANUTENCAO',
+            categoria_id: null,
             validade: 12,
             codigo: 'AS350-OLD',
             nome: 'AS350 B2',
             vencimento_fim_mes: 0,
+            descricao: null,
+            observacoes: null,
+            ativo: 1,
+            carga_horaria: null,
+            carga_horaria_inicial: null,
+            carga_horaria_recorrente: null,
+            conteudo_programatico: null,
+            is_check: 0,
+            classe_requisito: null,
+            formato_id: null,
+            formato_codigo: null,
           }),
         },
       ],
@@ -321,7 +333,7 @@ describe('qualificacoes tipos update sync', () => {
     expect(batchCall?.args).toContain('AS350-B2');
   });
 
-  it('usa formato EAD para manter o curso sincronizado mesmo quando a categoria muda', async () => {
+  it('faz soft-delete do curso LMS quando categoria sai de EAD para não-EAD', async () => {
     const { db } = createMockDb([
       [
         'SELECT id, nome FROM qualificacoes_categorias',
@@ -360,17 +372,27 @@ describe('qualificacoes tipos update sync', () => {
         },
       ],
       [
-        'SELECT qt.empresa_id, qt.codigo, qt.nome, qt.categoria, qt.validade, qt.vencimento_fim_mes, qt.formato_id, qf.codigo AS formato_codigo',
+        'SELECT qt.empresa_id, qt.codigo, qt.nome, qt.categoria,',
         {
           first: () => ({
             empresa_id: 7,
             categoria: 'EAD',
+            categoria_id: 3,
             formato_id: 2,
             formato_codigo: 'EAD',
             validade: 12,
             codigo: 'EMERG-001',
             nome: 'Emergências Gerais',
             vencimento_fim_mes: 1,
+            descricao: null,
+            observacoes: null,
+            ativo: 1,
+            carga_horaria: null,
+            carga_horaria_inicial: null,
+            carga_horaria_recorrente: null,
+            conteudo_programatico: null,
+            is_check: 0,
+            classe_requisito: null,
           }),
         },
       ],
@@ -430,14 +452,14 @@ describe('qualificacoes tipos update sync', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(vi.mocked(syncLmsCourseFromQualificacaoTipo)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(syncLmsCourseFromQualificacaoTipo)).toHaveBeenCalledWith(
+    expect(vi.mocked(softDeleteLmsCourseForQualificacaoTipo)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(softDeleteLmsCourseForQualificacaoTipo)).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         empresaId: 7,
         qualificacaoTipoId: '10',
       }),
     );
-    expect(vi.mocked(softDeleteLmsCourseForQualificacaoTipo)).not.toHaveBeenCalled();
+    expect(vi.mocked(syncLmsCourseFromQualificacaoTipo)).not.toHaveBeenCalled();
   });
 });

@@ -22,7 +22,6 @@ import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
 import {
   ensureQualificacaoTipoForCurso,
   isEadCategoria,
-  isEadFormato,
   reconcileImportedEdappHistory,
   resolveCanonicalEadQualificacaoTipoId,
   syncAllEadCoursesFromQualificacoes,
@@ -96,15 +95,17 @@ function buildCourseSetorScope(
     : '';
   const fallbackScope = schema.hasQualificacaoTipoSetores
     ? `(
-        ${schema.hasCursoSetores
-          ? `NOT EXISTS (
+        ${
+          schema.hasCursoSetores
+            ? `NOT EXISTS (
           SELECT 1 FROM lms_cursos_setores lcs_chk
           WHERE lcs_chk.curso_id = ${courseAlias}.id
             AND lcs_chk.empresa_id = ${courseAlias}.empresa_id
             AND lcs_chk.deleted_at IS NULL
         )
         AND `
-          : ''}${courseAlias}.qualificacao_tipo_id IS NOT NULL
+            : ''
+        }${courseAlias}.qualificacao_tipo_id IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM qualificacoes_tipos_setores qts_f
           WHERE qts_f.tipo_id = ${courseAlias}.qualificacao_tipo_id
@@ -172,10 +173,7 @@ async function getCourseSetorSchema(db: D1Database): Promise<{
   return { hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato };
 }
 
-function assertSetorIdsWithinWriteScope(
-  access: EmployeeSectorAccess,
-  setorIds: number[],
-): void {
+function assertSetorIdsWithinWriteScope(access: EmployeeSectorAccess, setorIds: number[]): void {
   if (access.mode === 'all') return;
   if (setorIds.length === 0) {
     throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
@@ -250,7 +248,10 @@ function buildMatriculaEmployeeScope(
 ): { clause: string; bindings: number[] } {
   if (access.mode === 'all') return { clause: '', bindings: [] };
   if (access.mode === 'self') {
-    return { clause: ` AND ${matriculaAlias}.funcionario_id = ?`, bindings: [access.funcionarioId] };
+    return {
+      clause: ` AND ${matriculaAlias}.funcionario_id = ?`,
+      bindings: [access.funcionarioId],
+    };
   }
   if (access.setorIds.length === 0) return { clause: ' AND 1 = 0', bindings: [] };
 
@@ -267,9 +268,7 @@ function buildMatriculaEmployeeScope(
   };
 }
 
-function getCallerUserId(
-  c: Context,
-) {
+function getCallerUserId(c: Context) {
   const raw: unknown = c.get('userId');
   const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
   return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : undefined;
@@ -421,7 +420,13 @@ async function resolveEadQualificacaoBinding(
     throw new ApiError('Tipo de qualificação não encontrado para esta empresa.', 404);
   }
 
-  if (!isEadFormato(tipo)) {
+  // Backward compat: accept formato_codigo='EAD' until all tenants are migrated by 0450.
+  const isEadBackwardCompat =
+    tipo.formato_codigo != null
+      ? String(tipo.formato_codigo).trim().toUpperCase() === 'EAD'
+      : false;
+
+  if (!isEadCategoria(tipo.categoria) && !isEadBackwardCompat) {
     throw new ApiError(
       `O curso LMS só pode ser vinculado a tipos de qualificação EAD. "${tipo.nome}" está na categoria ${tipo.categoria ?? 'sem categoria'} / formato ${tipo.formato_codigo ?? 'sem formato'}.`,
       400,
@@ -452,7 +457,7 @@ async function isLegacyNonEadQualificacaoBinding(
 
   if (!tipo) return false;
 
-  return !isEadFormato(tipo);
+  return !isEadCategoria(tipo.categoria);
 }
 
 async function isEadCourseRequest(
@@ -472,24 +477,6 @@ async function isEadCourseRequest(
       return true;
     } catch {
       return false;
-    }
-  }
-
-  if (params.formatoId) {
-    const formato = await db
-      .prepare(
-        `SELECT codigo
-           FROM qualificacoes_formatos
-          WHERE id = ?
-            AND empresa_id = ?
-            AND deleted_at IS NULL
-          LIMIT 1`,
-      )
-      .bind(params.formatoId, empresaId)
-      .first<{ codigo: string | null }>();
-
-    if (String(formato?.codigo || '').trim().toUpperCase() === 'EAD') {
-      return true;
     }
   }
 
@@ -595,11 +582,7 @@ async function listEmpresaEadQualificacaoTipos(db: D1Database, empresaId: number
   return result.results ?? [];
 }
 
-async function syncEadCoursesFromQualificacoes(
-  db: D1Database,
-  empresaId: number,
-  c: Context,
-) {
+async function syncEadCoursesFromQualificacoes(db: D1Database, empresaId: number, c: Context) {
   const result = await syncAllEadCoursesFromQualificacoes(db, empresaId);
 
   for (const cursoId of result.created) {
@@ -661,14 +644,11 @@ function sanitizeArchivePath(path: string): string | null {
   return normalized;
 }
 
-const setorIdsSchema = z.preprocess(
-  (value) => {
-    if (!value) return [];
-    if (Array.isArray(value)) return value;
-    return value;
-  },
-  z.array(z.number().int().positive()).optional(),
-);
+const setorIdsSchema = z.preprocess((value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return value;
+}, z.array(z.number().int().positive()).optional());
 
 const CursoCreateSchema = z.object({
   titulo: z.string().min(2).max(255),
@@ -746,9 +726,7 @@ function parsePositiveInt(val: string | null | undefined, fallback: number) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-function parseNullableText(
-  value: string | null | undefined,
-): string | null | undefined {
+function parseNullableText(value: string | null | undefined): string | null | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
@@ -918,9 +896,7 @@ async function uploadCursoThumbnail(params: {
   return { thumbnail_r2_key: key, version_tag: versionTag };
 }
 
-async function parseCursoCreateRequest(
-  c: Context,
-) {
+async function parseCursoCreateRequest(c: Context) {
   const contentType = c.req.header('content-type') ?? '';
 
   if (contentType.includes('multipart/form-data')) {
@@ -1553,7 +1529,10 @@ app.get('/', async (c) => {
 
   const rawSetorIds = c.req.query('setor_ids') || c.req.query('setor_id');
   const requestedSetorIds: number[] = rawSetorIds
-    ? rawSetorIds.split(',').map(Number).filter((n) => Number.isFinite(n) && n > 0)
+    ? rawSetorIds
+        .split(',')
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0)
     : [];
 
   const access = await getEmployeeSectorAccess(c, empresaId);
@@ -1603,13 +1582,15 @@ app.get('/', async (c) => {
       : '';
     const fallbackScope = courseSetorSchema.hasQualificacaoTipoSetores
       ? `(
-          ${courseSetorSchema.hasCursoSetores
-            ? `NOT EXISTS (
+          ${
+            courseSetorSchema.hasCursoSetores
+              ? `NOT EXISTS (
             SELECT 1 FROM lms_cursos_setores lcs_chk
             WHERE lcs_chk.curso_id = c.id AND lcs_chk.empresa_id = c.empresa_id AND lcs_chk.deleted_at IS NULL
           )
           AND `
-            : ''}EXISTS (
+              : ''
+          }EXISTS (
             SELECT 1 FROM qualificacoes_tipos_setores qts_f
             WHERE qts_f.tipo_id = c.qualificacao_tipo_id
               AND qts_f.empresa_id = c.empresa_id
@@ -1700,9 +1681,7 @@ app.get('/', async (c) => {
   });
 });
 
-async function handleLmsStats(
-  c: Context,
-) {
+async function handleLmsStats(c: Context) {
   const db = c.env.DB as D1Database;
   const empresaId = getEmpresaIdSafe(c);
 
@@ -2012,7 +1991,10 @@ app.get('/:id{[0-9]+}', async (c) => {
       .bind(cursoId, empresaId, ...courseSectorScope.bindings)
       .first();
     if (!inScope) {
-      return c.json({ success: false, error: 'Acesso negado: curso fora do seu escopo de setor' }, 403);
+      return c.json(
+        { success: false, error: 'Acesso negado: curso fora do seu escopo de setor' },
+        403,
+      );
     }
   }
 
@@ -2066,10 +2048,22 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   }
 
   const insertCols = [
-    'empresa_id', 'titulo', 'descricao', 'categoria', 'carga_horaria_minutos', 'idioma',
-    'conteudo_programatico', 'observacoes', 'carga_horaria_inicial_horas',
-    'carga_horaria_recorrente_horas', 'tipo_conteudo', 'scorm_versao',
-    'scorm_mastery_score', 'qualificacao_tipo_id', 'gerar_qualificacao_ao_concluir', 'publicado',
+    'empresa_id',
+    'titulo',
+    'descricao',
+    'categoria',
+    'carga_horaria_minutos',
+    'idioma',
+    'conteudo_programatico',
+    'observacoes',
+    'carga_horaria_inicial_horas',
+    'carga_horaria_recorrente_horas',
+    'tipo_conteudo',
+    'scorm_versao',
+    'scorm_mastery_score',
+    'qualificacao_tipo_id',
+    'gerar_qualificacao_ao_concluir',
+    'publicado',
   ];
   const insertVals: unknown[] = [
     empresaId,
@@ -2250,11 +2244,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     nextGerarQualificacao !== existing.gerar_qualificacao_ao_concluir ||
     nextQualificacaoTipoId !== existing.qualificacao_tipo_id;
 
-  ensureQualificacaoBinding(
-    nextGerarQualificacao,
-    nextQualificacaoTipoId ?? null,
-    isEadCourse,
-  );
+  ensureQualificacaoBinding(nextGerarQualificacao, nextQualificacaoTipoId ?? null, isEadCourse);
 
   let resolvedQualificacaoTipoId = nextQualificacaoTipoId ?? null;
 
@@ -2320,8 +2310,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     }
   }
 
-  const updateSetorIds =
-    Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : null;
+  const updateSetorIds = Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : null;
   const nextCursoSetorIds = updateSetorIds ?? currentCursoSetorIds;
   await assertCursoWriteScope({
     db,
@@ -2335,7 +2324,8 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     await validateSetorIds(db, empresaId, updateSetorIds);
   }
 
-  if (sets.length === 0 && updateSetorIds === null) throw new ApiError('Nenhum campo para atualizar', 400);
+  if (sets.length === 0 && updateSetorIds === null)
+    throw new ApiError('Nenhum campo para atualizar', 400);
 
   if (sets.length > 0) {
     sets.push("updated_at = datetime('now')");

@@ -33,7 +33,6 @@ describe('tipoSaveFeedback', () => {
       vencimento_fim_mes: 1,
       is_check: 0,
       validade: 12,
-      formato_id: null,
       descricao: 'Descricao',
     });
   });
