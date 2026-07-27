@@ -104,6 +104,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0446_simuladores_matriz_aw139_reconciliacao_followup.sql',
     '0446_simuladores_matriz_aw139_reconciliacao_followup_rollback.sql',
   ],
+  '0447': [
+    '0447_simuladores_matriz_aw139_sk76_tipo_modelo.sql',
+    '0447_simuladores_matriz_aw139_sk76_tipo_modelo_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -213,7 +217,12 @@ describe('migration governance', () => {
     // remediation batch; 9 of the 30 AW139 codes had already been given a
     // newer current row by that batch, so 0445 fixed their now-retired
     // predecessor instead. This corrects the actual current rows.)
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(446);
+    // Ratchet raised 2026-07-27: 0447 simuladores_matriz_aw139_sk76_tipo_modelo
+    // (fills tipo_sessao_id/modelo_aeronave — both NULL since the versioned
+    // import — for the 51 AW139/S-76 canonical models, by canonical code
+    // prefix, matching the convention already used by 6 pre-existing
+    // non-canonical models of the same tenant).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(447);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
