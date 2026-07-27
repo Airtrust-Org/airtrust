@@ -16,8 +16,11 @@
  * (Intentionally empty. Add entries only with an inline justification.)
  */
 export const ALLOWLIST = new Set([
-  // Example (do not remove the comment when adding a real entry):
-  // 'src/react-app/types/some-vendor.d.ts:12', // vendor .d.ts we do not control, tracked in AIRTRUST-XXXX
+  // Vite injects import.meta.env.VITE_API_URL at build time via `define`.
+  // TypeScript does not know about this injected property, so the only way
+  // to read it without a ts-ignore is a double cast through unknown.
+  // This is a Vite convention, not an AirTrust pattern.
+  'src/react-app/config/api.ts:18', // import.meta as unknown as { env?: { VITE_API_URL?: string } }
 ]);
 
 const PRODUCTION_DIR_PATTERNS = [/^src\/react-app\//, /^src\/shared\//, /^worker-airtrust\/src\//];
