@@ -861,6 +861,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     initialCmiJson,
     hasResumeState,
     assetCacheBuster: Date.now().toString(36),
+    reviewMode: matricula.status === 'CONCLUIDO',
   });
 
   const headers = buildProtectedLaunchHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'));
@@ -964,6 +965,7 @@ interface LaunchPageConfig {
   hasResumeState?: boolean;
   previewMode?: boolean;
   assetCacheBuster?: string;
+  reviewMode?: boolean;
 }
 
 function buildScormLaunchState(
@@ -1020,6 +1022,7 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
     hasResumeState = false,
     previewMode,
     assetCacheBuster,
+    reviewMode,
   } = cfg;
 
   const launchUrlWithCacheBuster = assetCacheBuster
@@ -1149,6 +1152,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   var TOKEN = '${escapeHtml(token)}';
   var IS_2004 = ${isScorm2004 ? 'true' : 'false'};
   var PREVIEW_MODE = ${previewMode ? 'true' : 'false'};
+  var REVIEW_MODE = ${reviewMode ? 'true' : 'false'};
   var cmi = (function() {
     try {
       var parsed = JSON.parse(${JSON.stringify(initialCmiJson)});
@@ -1730,8 +1734,8 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   }
 
   function commit(data, attempt, eventType) {
-    if (PREVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
-      diag(' COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
+    if (PREVIEW_MODE || REVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
+      diag(' COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' review=' + REVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
       return Promise.resolve();
     }
     var payloadFingerprint = fingerprintPayload(data);
@@ -1887,7 +1891,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   }
 
   function checkCompletion() {
-    if (completed) return;
+    if (completed || REVIEW_MODE) return;
     var ls = cmi['cmi.core.lesson_status'] || '';
     var cs = cmi['cmi.completion_status'] || '';
     var ss = cmi['cmi.success_status'] || '';

@@ -259,9 +259,11 @@ export default function LmsPlayer() {
     if (matricula?.status === 'CONCLUIDO') {
       unresolvedRef.current = false;
       candidateStreakRef.current = 0;
-      showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
-        qualificationGenerated: Boolean(matricula.qualificacao_historico_id || qualificacaoGerada),
-      });
+      if (!effectiveReviewMode) {
+        showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
+          qualificationGenerated: Boolean(matricula.qualificacao_historico_id || qualificacaoGerada),
+        });
+      }
       return;
     }
 
@@ -308,6 +310,7 @@ export default function LmsPlayer() {
   }, [
     completionDiagnostic,
     completionState,
+    effectiveReviewMode,
     isScormContent,
     matricula?.qualificacao_historico_id,
     matricula?.status,

@@ -197,4 +197,14 @@ describe('LmsPlayer — modo de revisão (matrícula concluída, botão "Rever")
       expect(container.textContent).toContain('Curso concluído');
     });
   });
+
+  it('matrícula concluída em modo revisão: o toast de conclusão do mount não dispara (evita reafirmar "gerada automaticamente" numa revisão)', async () => {
+    const { container } = renderPlayer('/lms/player/42?review=1');
+
+    await waitFor(() => {
+      expect(container.querySelector('iframe')).not.toBeNull();
+    });
+
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
 });
