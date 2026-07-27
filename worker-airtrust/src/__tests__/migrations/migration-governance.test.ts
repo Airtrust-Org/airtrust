@@ -96,6 +96,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0437_setores_gestores_gestor_id_optional_rollback.sql',
   ],
   '0444': ['0444_controle_voos_versao.sql', '0444_controle_voos_versao_rollback.sql'],
+  '0445': [
+    '0445_simuladores_matriz_aw139_reconciliacao.sql',
+    '0445_simuladores_matriz_aw139_reconciliacao_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -197,7 +201,10 @@ describe('migration governance', () => {
     // (append-only overlay + ledger for the 5 LEGACY_EQUIVALENT compensation).
     // Ratchet raised 2026-07-25: 0444 controle_voos_versao (CAS otimista em
     // cv_voos, append-only ADD COLUMN com DEFAULT constante).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(444);
+    // Ratchet raised 2026-07-27: 0445 simuladores_matriz_aw139_reconciliacao
+    // (rename 30 AW139 current models, retire 7 duplicate-current rows,
+    // carry FAP check-links forward — ID-scoped, guarded, additive).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(445);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
