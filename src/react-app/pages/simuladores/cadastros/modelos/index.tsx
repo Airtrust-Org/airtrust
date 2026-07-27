@@ -18,6 +18,7 @@ import { Badge, EmptyState, SimuladoresCard } from '../../components/Simuladores
 interface Modelo {
   id: number;
   codigo: string;
+  codigo_canonico?: string | null;
   nome: string;
   tipo: 'INICIAL' | 'RECORRENTE';
   duracao_minutos: number;
@@ -496,7 +497,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                 {modelos.map((modelo) => (
                   <tr key={modelo.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 text-sm font-medium text-slate-900">
-                      {modelo.codigo}
+                      {modelo.codigo_canonico || modelo.codigo}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-700">{modelo.nome}</td>
                     <td className="px-4 py-3">

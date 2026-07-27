@@ -59,6 +59,7 @@ type TipoDispositivo = 'SIMULADOR' | 'AERONAVE';
 interface ModeloSessao {
   id: number;
   codigo: string;
+  codigo_canonico?: string | null;
   nome: string;
   tipo_sessao_id: number;
   tipo?: TipoDispositivo;
@@ -535,6 +536,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
   const sortCollator = useMemo(() => new Intl.Collator('pt-BR', { sensitivity: 'base' }), []);
   const codeCollator = useMemo(() => new Intl.Collator('pt-BR', { numeric: true }), []);
+  // The physical `codigo` column may carry an internal versioning suffix
+  // (e.g. `@M2026.07-V2`, `@M2026.07-REMEDIATION-<uuid>`) that must never
+  // reach the user. `codigo_canonico` is the clean, user-facing code.
+  const codigoExibicao = useCallback((m: ModeloSessao) => m.codigo_canonico || m.codigo, []);
 
   const modelosFiltrados = useMemo(() => {
     const filtrados = modelos.filter((m) => {
@@ -550,7 +555,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
       switch (sortField) {
         case 'codigo':
-          cmp = codeCollator.compare(a.codigo, b.codigo);
+          cmp = codeCollator.compare(codigoExibicao(a), codigoExibicao(b));
           break;
         case 'nome':
           cmp = sortCollator.compare(a.nome, b.nome);
@@ -583,7 +588,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
       return cmp * dir;
     });
-  }, [modelos, filtroTipoSessao, filtroTipoDispositivo, filtroModeloAeronave, sortField, sortDirection, sortCollator, codeCollator]);
+  }, [modelos, filtroTipoSessao, filtroTipoDispositivo, filtroModeloAeronave, sortField, sortDirection, sortCollator, codeCollator, codigoExibicao]);
 
   if (loading) {
     return (
@@ -749,7 +754,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                 <tr key={modelo.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
                   <td className="px-4 py-3.5">
                     <span className="inline-flex items-center whitespace-nowrap px-2 py-1 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-mono rounded">
-                      {modelo.codigo}
+                      {codigoExibicao(modelo)}
                     </span>
                   </td>
                   <td className="px-4 py-3.5">
