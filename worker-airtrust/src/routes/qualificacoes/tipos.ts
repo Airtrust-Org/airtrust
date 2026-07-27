@@ -25,7 +25,6 @@ import {
 import { invalidateMaterializedStats } from './shared';
 import {
   isEadCategoria,
-  isEadFormato,
   reconcileImportedEdappHistory,
   softDeleteLmsCourseForQualificacaoTipo,
   syncLmsCourseFromQualificacaoTipo,
@@ -106,6 +105,7 @@ type TipoQualificacaoRow = {
   categoria?: string | null;
   categoria_id?: number | null;
   categoria_cor?: string | null;
+  /** Deprecated read compatibility; never written by this route. */
   formato_id?: number | null;
   formato_codigo?: string | null;
   formato_nome?: string | null;
@@ -136,6 +136,7 @@ type TiposColumnsSupport = {
   hasConteudoProgramatico: boolean;
   hasCargaInicial: boolean;
   hasCargaRecorrente: boolean;
+  // Deprecated schema compatibility: no new request writes this field.
   hasFormatoId: boolean;
   hasClasseRequisito: boolean;
   hasCategoriaId: boolean;
@@ -193,13 +194,21 @@ async function loadQualificacoesTiposColumnsSupport(
 
   return {
     hasIsCheck,
+    hasFormatoId,
     hasConteudoProgramatico,
     hasCargaInicial,
     hasCargaRecorrente,
-    hasFormatoId,
     hasClasseRequisito,
     hasCategoriaId,
   };
+}
+
+function buildFormatoJoin(hasFormatoId: boolean): string {
+  if (!hasFormatoId) return '';
+  return `LEFT JOIN qualificacoes_formatos qf
+    ON qf.id = qt.formato_id
+   AND qf.empresa_id = qt.empresa_id
+   AND qf.deleted_at IS NULL`;
 }
 
 // ===== SCHEMAS VALIDAÇÃO =====
@@ -217,7 +226,6 @@ const createTipoSchema = z.object({
   observacoes: z.string().nullable().optional(),
   ativo: z.union([z.boolean(), z.number()]).optional().default(true),
   is_check: z.union([z.boolean(), z.number()]).optional().default(false),
-  formato_id: z.number().int().positive().nullable().optional(),
   classe_requisito: z.enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA']).nullable().optional(),
 }).refine((value) => value.categoria_id || value.categoria, { message: 'Categoria obrigatória' });
 
@@ -235,7 +243,6 @@ const updateTipoSchema = z.object({
   observacoes: z.string().nullable().optional(),
   ativo: z.union([z.boolean(), z.number()]).optional(),
   is_check: z.union([z.boolean(), z.number()]).optional(),
-  formato_id: z.number().int().positive().nullable().optional(),
   classe_requisito: z.enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA']).nullable().optional(),
 });
 
@@ -481,14 +488,6 @@ async function resolveCategoriaCanonica(
     )
     .bind(empresaId, categoriaLegada)
     .first<{ id: number; nome: string }>();
-}
-
-function buildFormatoJoin(hasFormatoId: boolean): string {
-  if (!hasFormatoId) return '';
-  return `LEFT JOIN qualificacoes_formatos qf
-    ON qf.id = qt.formato_id
-   AND qf.empresa_id = qt.empresa_id
-   AND qf.deleted_at IS NULL`;
 }
 
 async function listTipoSetores(

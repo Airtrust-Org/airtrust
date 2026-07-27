@@ -475,24 +475,6 @@ async function isEadCourseRequest(
     }
   }
 
-  if (params.formatoId) {
-    const formato = await db
-      .prepare(
-        `SELECT codigo
-           FROM qualificacoes_formatos
-          WHERE id = ?
-            AND empresa_id = ?
-            AND deleted_at IS NULL
-          LIMIT 1`,
-      )
-      .bind(params.formatoId, empresaId)
-      .first<{ codigo: string | null }>();
-
-    if (String(formato?.codigo || '').trim().toUpperCase() === 'EAD') {
-      return true;
-    }
-  }
-
   return isEadCategoria(params.categoria);
 }
 

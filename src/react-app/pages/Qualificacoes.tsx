@@ -94,7 +94,6 @@ import {
   getHistoricoDisplayStatus,
   getPlanejamentoRelacionamentoKey as getPlanejamentoRelacionamentoKeyBase,
 } from '@/react-app/pages/qualificacoes/historicoStatusUtils';
-import { FormatosTab, type Formato } from '@/react-app/pages/qualificacoes/FormatosTab';
 import { resolveClassificationTagAppearance } from '@/react-app/pages/qualificacoes/classificacaoColors';
 import {
   buildTipoPayload,
@@ -182,8 +181,6 @@ export default function Qualificacoes() {
     usesHistoricoDataset,
     historicoCategoriaId,
     setHistoricoCategoriaId,
-    historicoFormatoId,
-    setHistoricoFormatoId,
     effectiveHistoricoStatusFiltro,
     isDefaultStatusFilter,
   } = useQualificacoesFiltros(highlightedHistoricoId);
@@ -214,7 +211,6 @@ export default function Qualificacoes() {
     highlightedHistoricoId || undefined,
     true,
     historicoCategoriaId,
-    historicoFormatoId,
   );
 
   const shouldLoadPlannedRelatedHistorico = useMemo(
@@ -379,7 +375,6 @@ export default function Qualificacoes() {
     nome: string;
     codigo?: string | null;
     categoria?: string | null;
-    formato_id?: number | null;
     validade?: number | null;
     observacoes?: string | null;
     ativo?: boolean | number;
@@ -517,22 +512,6 @@ export default function Qualificacoes() {
   const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null);
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
   const [novaCategoriaDesc, setNovaCategoriaDesc] = useState('');
-
-  // Estado para Classificações (subtabs dentro da aba Categorias)
-  const [activeClassifSubTab, setActiveClassifSubTab] = useState<'categorias' | 'formatos'>(
-    'categorias',
-  );
-  const [formatos, setFormatos] = useState<Formato[]>([]);
-  const [formatosLoading, setFormatosLoading] = useState(false);
-  const [showFormatoModal, setShowFormatoModal] = useState(false);
-  const [editingFormato, setEditingFormato] = useState<Formato | null>(null);
-  const [novoFormatoNome, setNovoFormatoNome] = useState('');
-  const [novoFormatoCodigo, setNovoFormatoCodigo] = useState('');
-  const [novoFormatoDesc, setNovoFormatoDesc] = useState('');
-  const [novoFormatoCor, setNovoFormatoCor] = useState('#6B7280');
-
-  // Filtros por categoria_id e formato_id no Histórico (pós-migration 0412)
-  // (declarados acima, antes do useEffect que os usa)
 
   const getTipoTreinamentoDisplay = (value?: string | null, validadeMeses?: number | null) => {
     const tipo = String(value || '')
@@ -883,89 +862,6 @@ export default function Qualificacoes() {
       refetchCategorias();
     }
   }, [refetchCategorias, usesHistoricoDataset]);
-
-  // Carregar formatos quando subtab de Classificações estiver ativa
-  const carregarFormatos = useCallback(async () => {
-    setFormatosLoading(true);
-    try {
-      const resp = await fetchWithAuth(`${API_BASE_URL}/qualificacoes/formatos`, {});
-      const json = await resp.json().catch(() => ({ success: false, data: [] }));
-      if (json.success) setFormatos(json.data || []);
-    } catch {
-      // migration não aplicada ou erro — silencioso
-    } finally {
-      setFormatosLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (
-      (activeTab === 'categorias' && activeClassifSubTab === 'formatos') ||
-      activeTab === 'historico'
-    ) {
-      carregarFormatos();
-    }
-  }, [activeTab, activeClassifSubTab, carregarFormatos]);
-
-  const handleSalvarFormato = useCallback(async () => {
-    const isEditing = Boolean(editingFormato);
-    const url = isEditing
-      ? `${API_BASE_URL}/qualificacoes/formatos/${editingFormato!.id}`
-      : `${API_BASE_URL}/qualificacoes/formatos`;
-    const method = isEditing ? 'PUT' : 'POST';
-    const body: Record<string, unknown> = {
-      nome: novoFormatoNome.trim(),
-      descricao: novoFormatoDesc.trim() || null,
-      cor: novoFormatoCor || null,
-    };
-    if (!isEditing) body.codigo = novoFormatoCodigo.trim().toUpperCase();
-    try {
-      const resp = await fetchWithAuth(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const json = await resp.json().catch(() => ({ success: false }));
-      if (!resp.ok || !json.success) {
-        showToast.error(json.error || 'Erro ao salvar formato');
-        return;
-      }
-      showToast.success(isEditing ? 'Formato atualizado' : 'Formato criado');
-      setShowFormatoModal(false);
-      setEditingFormato(null);
-      setNovoFormatoNome('');
-      setNovoFormatoCodigo('');
-      setNovoFormatoDesc('');
-      setNovoFormatoCor('#6B7280');
-      carregarFormatos();
-    } catch {
-      showToast.error('Erro ao salvar formato');
-    }
-  }, [
-    editingFormato,
-    novoFormatoNome,
-    novoFormatoCodigo,
-    novoFormatoDesc,
-    novoFormatoCor,
-    carregarFormatos,
-  ]);
-
-  const handleExcluirFormato = useCallback(async (id: number) => {
-    try {
-      const resp = await fetchWithAuth(`${API_BASE_URL}/qualificacoes/formatos/${id}`, {
-        method: 'DELETE',
-      });
-      const json = await resp.json().catch(() => ({ success: false }));
-      if (!resp.ok || !json.success) {
-        showToast.error(json.error || 'Não foi possível remover o formato');
-        return;
-      }
-      showToast.success('Formato removido');
-      setFormatos((prev) => prev.filter((f) => f.id !== id));
-    } catch {
-      showToast.error('Erro ao remover formato');
-    }
-  }, []);
 
   // Tipo para itens do histórico
   type HistoricoItem = (typeof historico)[number] & {
@@ -2378,7 +2274,6 @@ export default function Qualificacoes() {
                     codigo: '',
                     tipo: null,
                     categoria: '',
-                    formato_id: null,
                     validade: null,
                     observacoes: null,
                     ativo: 1,
@@ -2560,23 +2455,6 @@ export default function Qualificacoes() {
                     .map((cat) => (
                       <option key={cat.id ?? cat.nome} value={cat.nome}>
                         {cat.nome}
-                      </option>
-                    ))}
-                </select>
-                <select
-                  value={historicoFormatoId ?? ''}
-                  onChange={(e) => {
-                    setHistoricoFormatoId(e.target.value ? Number(e.target.value) : null);
-                    setPage(1);
-                  }}
-                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
-                >
-                  <option value="">Formato</option>
-                  {formatos
-                    .filter((f) => f.ativo)
-                    .map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.nome}
                       </option>
                     ))}
                 </select>
@@ -2982,7 +2860,6 @@ export default function Qualificacoes() {
                                     codigo: row.codigo ?? null,
                                     tipo: (row as { tipo?: string | null }).tipo ?? null,
                                     categoria: row.categoria ?? null,
-                                    formato_id: (row as any).formato_id ?? null,
                                     validade: row.validade ?? null,
                                     observacoes: row.observacoes ?? null,
                                     ativo: row.ativo ?? 1,
@@ -3124,31 +3001,6 @@ export default function Qualificacoes() {
                       },
                     },
                     {
-                      id: 'formato',
-                      label: 'Formato',
-                      accessor: (row) => (row as any).formato_nome || '-',
-                      sortable: true,
-                      visible: true,
-                      render: (value, row) => {
-                        const nome = String(value ?? '');
-                        const cor = (row as any).formato_cor as string | undefined;
-                        const codigo = (row as any).formato_codigo as string | undefined;
-                        if (!nome || nome === '-')
-                          return <span className="text-sm font-normal text-slate-400">-</span>;
-                        const appearance = resolveClassificationTagAppearance({
-                          variant: 'format',
-                          label: nome,
-                          code: codigo,
-                          color: cor ?? null,
-                        });
-                        return (
-                          <span className={appearance.className} style={appearance.style}>
-                            {nome}
-                          </span>
-                        );
-                      },
-                    },
-                    {
                       id: 'setores',
                       label: 'Setores',
                       accessor: (row) => row.setores || [],
@@ -3249,63 +3101,15 @@ export default function Qualificacoes() {
 
           {activeTab === 'categorias' && (
             <div>
-              {/* Subtabs: Categorias / Formatos */}
-              <div className="flex gap-1 px-4 pt-3 pb-0 border-b border-slate-200 mb-4">
-                <button
-                  onClick={() => setActiveClassifSubTab('categorias')}
-                  className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-all cursor-pointer ${activeClassifSubTab === 'categorias' ? 'border-primary text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                >
-                  Categorias
-                </button>
-                <button
-                  onClick={() => {
-                    setActiveClassifSubTab('formatos');
-                    carregarFormatos();
-                  }}
-                  className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-all cursor-pointer ${activeClassifSubTab === 'formatos' ? 'border-primary text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                >
-                  Formatos
-                </button>
-              </div>
-
-              {/* Info banner: Modelos é aba própria nesta fase */}
+              {/* Modelos permanece como aba principal própria. */}
               <div className="mx-4 mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 flex items-start gap-2 text-sm text-blue-800">
                 <Info size={16} className="mt-0.5 flex-shrink-0" />
                 <span>
                   <strong>Modelos</strong> (tipos de qualificação) permanece como aba principal
-                  própria. A integração como terceira subtab dentro de Classificações (Categorias |
-                  Formatos | Modelos) está planejada para fase posterior.
+                  própria. A classificação funcional é feita exclusivamente por Categoria.
                 </span>
               </div>
-
-              {activeClassifSubTab === 'formatos' && (
-                <div className="px-4 pb-6">
-                  <FormatosTab
-                    formatos={formatos}
-                    loading={formatosLoading}
-                    canManage={canManageTipos}
-                    onAdd={() => {
-                      setEditingFormato(null);
-                      setNovoFormatoNome('');
-                      setNovoFormatoCodigo('');
-                      setNovoFormatoDesc('');
-                      setNovoFormatoCor('#6B7280');
-                      setShowFormatoModal(true);
-                    }}
-                    onEdit={(fmt) => {
-                      setEditingFormato(fmt);
-                      setNovoFormatoNome(fmt.nome);
-                      setNovoFormatoCodigo(fmt.codigo);
-                      setNovoFormatoDesc(fmt.descricao || '');
-                      setNovoFormatoCor(fmt.cor || '#6B7280');
-                      setShowFormatoModal(true);
-                    }}
-                    onDelete={handleExcluirFormato}
-                  />
-                </div>
-              )}
-
-              {activeClassifSubTab === 'categorias' && categoriasError && (
+              {categoriasError && (
                 <div className="mx-4 mb-4 rounded-md border border-danger-300 bg-danger-50 p-4 flex gap-3">
                   <AlertCircle className="w-6 h-6 text-danger-600 flex-shrink-0" />
                   <div className="flex-1">
@@ -3647,82 +3451,6 @@ export default function Qualificacoes() {
             >
               <Check className="w-4 h-4" />
               {editingCategoria ? 'Atualizar' : 'Criar'}
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Modal de Formato */}
-      <Modal
-        isOpen={showFormatoModal}
-        onClose={() => {
-          setShowFormatoModal(false);
-          setEditingFormato(null);
-          setNovoFormatoNome('');
-          setNovoFormatoCodigo('');
-          setNovoFormatoDesc('');
-          setNovoFormatoCor('#6B7280');
-        }}
-        title={editingFormato ? 'Editar Formato' : 'Novo Formato'}
-        size="md"
-      >
-        <div className="space-y-4">
-          <FormField label="Nome" required>
-            <TextInput
-              placeholder="Ex: EAD, Presencial, Simulador..."
-              value={novoFormatoNome}
-              onChange={(e) => setNovoFormatoNome(e.target.value)}
-              autoFocus
-            />
-          </FormField>
-          {!editingFormato && (
-            <FormField label="Código" required>
-              <TextInput
-                placeholder="Ex: EAD, PRESENCIAL, SIMULADOR (maiúsculo, sem espaços)"
-                value={novoFormatoCodigo}
-                onChange={(e) =>
-                  setNovoFormatoCodigo(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'))
-                }
-              />
-            </FormField>
-          )}
-          <FormField label="Descrição">
-            <TextArea
-              rows={2}
-              placeholder="Descrição opcional..."
-              value={novoFormatoDesc}
-              onChange={(e) => setNovoFormatoDesc(e.target.value)}
-            />
-          </FormField>
-          <FormField label="Cor">
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={novoFormatoCor}
-                onChange={(e) => setNovoFormatoCor(e.target.value)}
-                className="h-10 w-16 cursor-pointer rounded border border-slate-300"
-              />
-              <span className="text-sm text-slate-500">{novoFormatoCor}</span>
-            </div>
-          </FormField>
-          <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-200">
-            <button
-              type="button"
-              onClick={() => {
-                setShowFormatoModal(false);
-                setEditingFormato(null);
-              }}
-              className="px-6 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={handleSalvarFormato}
-              className="px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-2"
-            >
-              <Check className="w-4 h-4" />
-              {editingFormato ? 'Atualizar' : 'Criar'}
             </button>
           </div>
         </div>
@@ -4834,9 +4562,6 @@ export default function Qualificacoes() {
                   if (editingTipo.categoria?.trim()) {
                     optimisticUpdate.categoria = editingTipo.categoria.trim();
                   }
-                  if (editingTipo.formato_id !== undefined) {
-                    optimisticUpdate.formato_id = editingTipo.formato_id ?? null;
-                  }
                   setTipoUpdates((prev) => ({ ...prev, [tipoIdStr]: optimisticUpdate }));
 
                   setShowTipoModal(false);
@@ -4977,45 +4702,6 @@ export default function Qualificacoes() {
                 })),
               ]}
             />
-          </FormField>
-
-          <FormField label="Formato">
-            <Select
-              value={editingTipo?.formato_id != null ? String(editingTipo.formato_id) : ''}
-              onChange={(e) =>
-                setEditingTipo((prev) => ({
-                  ...(prev || {
-                    id: '',
-                    nome: '',
-                    codigo: '',
-                    categoria: '',
-                    validade: null,
-                    ativo: 1,
-                    vencimento_fim_mes: 0,
-                    conteudo_programatico: null,
-                    carga_horaria: null,
-                    carga_horaria_inicial: null,
-                    carga_horaria_recorrente: null,
-                    is_check: 0,
-                  }),
-                  formato_id: (e.target as HTMLSelectElement).value
-                    ? parseInt((e.target as HTMLSelectElement).value, 10)
-                    : null,
-                }))
-              }
-              options={[
-                { value: '', label: '-- Nenhum formato --' },
-                ...formatos
-                  .filter((f) => f.ativo)
-                  .map((f) => ({
-                    value: String(f.id),
-                    label: f.nome,
-                  })),
-              ]}
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Modalidade de execução (EAD, Presencial, Simulador, Voo, etc.).
-            </p>
           </FormField>
 
           <div className="md:col-span-2">

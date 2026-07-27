@@ -1,6 +1,7 @@
 import { upsertImportedEdappCycle } from './lms-matricula-cycle';
 
-export const CANONICAL_TRAINING_CATEGORY = 'Treinamento Teórico';
+/** The sole functional classifier for LMS-backed qualifications. */
+export const CANONICAL_TRAINING_CATEGORY = 'EAD';
 
 type QualificacaoTipoEadRow = {
   id: number;
@@ -85,18 +86,11 @@ export function isEadCategoria(categoria: string | null | undefined) {
   return normalized === 'EAD' || normalized === 'TREINAMENTO EAD';
 }
 
-/**
- * Determina se uma qualificação/curso tem formato EAD.
- * Usa formato_codigo (campo estruturado pós-migration 0412) com fallback para categoria string.
- * Substitui progressivamente isEadCategoria() para novos flows.
- */
+/** @deprecated Kept only to avoid breaking cached worker bundles during rollout. */
 export function isEadFormato(tipo: {
   formato_codigo?: string | null;
   categoria?: string | null;
 }): boolean {
-  if (tipo.formato_codigo) {
-    return tipo.formato_codigo.toUpperCase() === 'EAD';
-  }
   return isEadCategoria(tipo.categoria);
 }
 
