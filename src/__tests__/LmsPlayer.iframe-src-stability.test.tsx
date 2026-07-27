@@ -108,20 +108,12 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
     expect(iframeAfter!.getAttribute('src')).toContain('token=token-initial');
   });
 
-  it('mantém o iframe montado (não desmonta) quando o token desaparece', async () => {
-    // Regression guard: the iframe must stay mounted even when the token
-    // temporarily disappears. Unmounting the iframe causes a black flash
-    // and resets the SCORM package to slide 1 (position desync).
-    // Session expiration is handled by the error/session-expired UI,
-    // not by destroying the iframe.
+  it('libera o iframe (sessão encerrada) quando o token some completamente', async () => {
     const { container } = renderPlayer();
 
     await waitFor(() => {
       expect(container.querySelector('iframe')).not.toBeNull();
     });
-
-    const initialIframe = container.querySelector('iframe');
-    const initialSrc = initialIframe!.getAttribute('src');
 
     ensureValidAccessTokenMock.mockResolvedValue(null);
     getAccessTokenMock.mockReturnValue(null);
@@ -132,10 +124,7 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
     });
 
     await waitFor(() => {
-      // Iframe must remain mounted with the same src — it should NOT be null.
-      const iframeAfter = container.querySelector('iframe');
-      expect(iframeAfter).not.toBeNull();
-      expect(iframeAfter!.getAttribute('src')).toBe(initialSrc);
+      expect(container.querySelector('iframe')).toBeNull();
     });
   });
 });
