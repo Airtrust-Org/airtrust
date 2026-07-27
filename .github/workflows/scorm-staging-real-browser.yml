@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 15
     env:
       BASE_URL: https://staging.airtrust.pages.dev
+      E2E_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
       E2E_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
       E2E_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
     steps:

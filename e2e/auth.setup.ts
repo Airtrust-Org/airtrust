@@ -20,12 +20,42 @@ export const AUTH_FILE = path.join(__dirname, '.auth/user.json');
 setup('autenticar usuário', async ({ page }) => {
   const email = process.env.E2E_EMAIL;
   const password = process.env.E2E_PASSWORD;
+  const apiBaseUrl = process.env.E2E_API_BASE_URL?.replace(/\/$/, '');
 
   if (!email || !password) {
     throw new Error(
       'E2E_EMAIL e E2E_PASSWORD devem ser definidos para executar o auth setup.\n' +
         'Exemplo: E2E_EMAIL=seu@email.com E2E_PASSWORD=suasenha npx playwright test --project=setup',
     );
+  }
+
+  if (apiBaseUrl) {
+    const response = await page.request.post(`${apiBaseUrl}/api/auth/login`, {
+      data: { email, senha: password },
+    });
+    if (!response.ok()) {
+      throw new Error(`Login QA no ambiente alvo retornou HTTP ${response.status()}`);
+    }
+    const payload = (await response.json()) as {
+      data?: { accessToken?: unknown; refreshToken?: unknown };
+    };
+    const accessToken = payload.data?.accessToken;
+    const refreshToken = payload.data?.refreshToken;
+    if (typeof accessToken !== 'string' || typeof refreshToken !== 'string') {
+      throw new Error('Login QA no ambiente alvo não retornou a sessão esperada');
+    }
+
+    await page.goto('/login');
+    await page.evaluate(
+      ({ nextAccessToken, nextRefreshToken }) => {
+        localStorage.setItem('airtrust_token', nextAccessToken);
+        localStorage.setItem('airtrust_refresh_token', nextRefreshToken);
+        localStorage.setItem('airtrust_persist_login', '1');
+      },
+      { nextAccessToken: accessToken, nextRefreshToken: refreshToken },
+    );
+    await page.context().storageState({ path: AUTH_FILE });
+    return;
   }
 
   await page.goto('/login');

@@ -43,6 +43,16 @@ test('SCORM review em staging carrega conteúdo e o menu de Emergências Gerais 
   const evidence: BrowserEvidence = { cookies: [], frames: { wrapperUrl: null, scormUrl: null }, requests: [] };
   const evidenceTasks: Array<Promise<void>> = [];
 
+  // The currently published Pages build still points its compiled API base at
+  // production. Keep this redirect only as a staging-baseline adapter; the
+  // corrected deploy no longer emits requests matching this route.
+  await page.route('https://api.airtrust.online/api/**', (route) => {
+    const requested = new URL(route.request().url());
+    route.continue({
+      url: `https://airtrust-api-staging.airtrust.workers.dev${requested.pathname}${requested.search}`,
+    });
+  });
+
   page.on('response', (response) => {
     const url = new URL(response.url());
     if (!url.pathname.startsWith('/api/lms/scorm/')) return;

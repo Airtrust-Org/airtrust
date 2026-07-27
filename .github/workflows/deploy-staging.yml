@@ -470,6 +470,7 @@ jobs:
           VITE_APP_VERSION: ${{ needs.guard.outputs.app_version }}
           APP_VERSION: ${{ needs.guard.outputs.app_version }}
           APP_BUILD_TIME: ${{ needs.guard.outputs.build_time }}
+          VITE_API_URL: https://airtrust-api-staging.airtrust.workers.dev/api
           VITE_DEV_PROXY_TARGET: https://airtrust-api-staging.airtrust.workers.dev
       - name: Stamp build version
         run: bash scripts/stamp-build-version.sh dist/client/index.html
