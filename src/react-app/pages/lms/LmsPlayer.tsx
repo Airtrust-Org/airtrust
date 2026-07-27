@@ -159,10 +159,33 @@ export default function LmsPlayer() {
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
-  const launchUrl =
-    launchToken && matricula && matricula.tipo_conteudo !== 'h5p'
-      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(launchToken)}${reviewParam ? '&review=1' : ''}`
-      : null;
+  // Session identity: used to determine when the iframe must be recreated.
+  // Changing matricula, user, empresa, or review mode creates a new session.
+  // Progress saves, refetches, and token refreshes do NOT change the session
+  // and must keep the iframe stable.
+  const sessionKey = `${id}:${reviewParam ? 'review' : 'normal'}`;
+  const sessionKeyRef = useRef<string | null>(null);
+  const stableLaunchUrlRef = useRef<string | null>(null);
+  const launchUrl = (() => {
+    // No token yet — nothing to freeze
+    if (!launchToken) {
+      stableLaunchUrlRef.current = null;
+      return null;
+    }
+    // New session: freeze the launch URL
+    if (sessionKeyRef.current !== sessionKey) {
+      sessionKeyRef.current = sessionKey;
+      if (matricula && matricula.tipo_conteudo !== 'h5p') {
+        const url = `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(launchToken)}${reviewParam ? '&review=1' : ''}`;
+        stableLaunchUrlRef.current = url;
+        return url;
+      }
+      stableLaunchUrlRef.current = null;
+      return null;
+    }
+    // Same session: return frozen URL
+    return stableLaunchUrlRef.current;
+  })();
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
 
   function invalidateLmsDashboardCaches() {
@@ -236,15 +259,16 @@ export default function LmsPlayer() {
     };
   }, [qc, token]);
 
-  useEffect(() => {
-    setIframeLoaded(false);
-  }, [launchUrl]);
+  // launchUrl is frozen per session via useRef — the iframe src never changes
+  // during the same session. Resetting iframeLoaded would flash the loading
+  // overlay on every progress save (refetch → re-render).
 
   useEffect(() => {
+    // Only set launchToken once. Token rotation is handled via postMessage,
+    // not by changing the iframe src. Token disappearance is handled by the
+    // render guard (!token && !playerToken) which unmounts the entire component.
     if (playerToken && !launchToken) {
       setLaunchToken(playerToken);
-    } else if (!playerToken && launchToken) {
-      setLaunchToken(null);
     }
   }, [playerToken, launchToken]);
 
