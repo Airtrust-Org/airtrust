@@ -20,7 +20,8 @@ export const ALLOWLIST = new Set([
   // TypeScript does not know about this injected property, so the only way
   // to read it without a ts-ignore is a double cast through unknown.
   // This is a Vite convention, not an AirTrust pattern.
-  'src/react-app/config/api.ts:18', // import.meta as unknown as { env?: { VITE_API_URL?: string } }
+  'src/react-app/config/api.ts:18', // import.meta as unknown as { env?: { VITE_API_URL?: string } } — resolveApiBase
+  'src/react-app/config/api.ts:61', // import.meta as unknown as { env?: { VITE_API_URL?: string } } — resolveScormRuntimeBaseUrl
 ]);
 
 const PRODUCTION_DIR_PATTERNS = [/^src\/react-app\//, /^src\/shared\//, /^worker-airtrust\/src\//];
