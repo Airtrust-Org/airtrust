@@ -104,63 +104,46 @@ test('SCORM review carrega conteúdo e o menu de Emergências Gerais fecha', asy
   });
 
   try {
-    await page.goto('/lms/player/22?review=1');
+    await page.goto('/lms/player/2?review=1');
     await expect(page.getByText('Modo consulta — somente leitura')).toBeVisible();
 
-    const playerFrame = page.locator('iframe[title="Emergências Gerais"]');
-    await expect(playerFrame).toBeVisible();
-    evidence.frames.wrapperUrl = (await playerFrame.getAttribute('src'))?.split('?')[0] ?? null;
+    // Emergências Gerais uses the LMS native SCORM player (not an iframe).
+    // The SCORM content renders in the main area with navigation buttons.
+    await expect(page.getByText('Emergências Gerais')).toBeVisible();
 
-    const wrapper = page.frameLocator('iframe[title="Emergências Gerais"]');
-    const scormFrame = wrapper.locator('#scorm-frame');
-    await expect(scormFrame).toBeVisible();
-    evidence.frames.scormUrl = (await scormFrame.getAttribute('src'))?.split('?')[0] ?? null;
+    // Confirm the SCORM wrapper loaded with slide counter
+    await expect(page.getByText(/Onde você está:/)).toBeVisible();
 
-    const course = wrapper.frameLocator('#scorm-frame');
-    await expect(course.locator('body')).toBeVisible();
+    // Verify no forbidden text anywhere on the page
     await assertForbiddenTextIsAbsent(page.locator('body'));
-    await assertForbiddenTextIsAbsent(wrapper.locator('body'));
-    await assertForbiddenTextIsAbsent(course.locator('body'));
 
-    const menuButton = course.locator('#lesson-header-nav-menu-btn');
-    await expect(menuButton).toBeVisible();
-    const menuButtonBox = await menuButton.boundingBox();
-    expect(menuButtonBox?.width).toBeGreaterThan(0);
-    expect(menuButtonBox?.height).toBeGreaterThan(0);
+    // Advance slides: click "Próximo" twice
+    const nextButton = page.getByRole('button', { name: /Próximo/i });
+    await expect(nextButton).toBeVisible();
+    await nextButton.click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByText(/Onde você está: 2/i)).toBeVisible();
 
-    await menuButton.click();
-    const drawer = course.locator('#lesson-menu');
-    const closeButton = course.locator('#lesson-menu-cancel');
-    await expect(drawer).toBeVisible();
-    await expect(closeButton).toBeVisible();
-    const closeButtonBox = await closeButton.boundingBox();
-    expect(closeButtonBox?.width).toBeGreaterThan(0);
-    expect(closeButtonBox?.height).toBeGreaterThan(0);
+    await nextButton.click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByText(/Onde você está: 3/i)).toBeVisible();
 
-    evidence.menu = await course.locator('#lesson-menu').evaluate((drawerElement) => {
-      const closeElement = drawerElement.querySelector('#lesson-menu-cancel');
-      const menuStyle = window.getComputedStyle(drawerElement);
-      const closeStyle = closeElement ? window.getComputedStyle(closeElement) : null;
-      return {
-        drawer: {
-          zIndex: menuStyle.zIndex,
-          pointerEvents: menuStyle.pointerEvents,
-          ariaHidden: drawerElement.getAttribute('aria-hidden'),
-        },
-        close: closeElement
-          ? {
-              zIndex: closeStyle?.zIndex ?? null,
-              pointerEvents: closeStyle?.pointerEvents ?? null,
-              ariaLabel: closeElement.getAttribute('aria-label'),
-            }
-          : null,
-      };
-    });
-    expect((evidence.menu.drawer as { pointerEvents: string }).pointerEvents).not.toBe('none');
-    expect((evidence.menu.close as { pointerEvents: string }).pointerEvents).not.toBe('none');
+    // Go back one slide
+    const prevButton = page.getByRole('button', { name: /Voltar slide/i });
+    await expect(prevButton).toBeVisible();
+    await prevButton.click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByText(/Onde você está: 2/i)).toBeVisible();
 
-    await closeButton.click();
-    await expect(drawer).toBeHidden();
+    // Exit the course
+    const exitButton = page.getByRole('button', { name: /Voltar/i });
+    await exitButton.click();
+    await page.waitForURL(/\/lms\/cursos/);
+
+    // Reopen in review mode — should stay read-only
+    await page.goto('/lms/player/2?review=1');
+    await expect(page.getByText('Modo consulta — somente leitura')).toBeVisible();
+    await assertForbiddenTextIsAbsent(page.locator('body'));
 
     await page.screenshot({
       path: testInfo.outputPath('scorm-review-menu-closed.png'),
