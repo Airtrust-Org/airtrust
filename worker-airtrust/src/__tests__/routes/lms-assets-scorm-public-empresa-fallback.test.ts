@@ -194,7 +194,7 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       expect(text).toContain('Empresa não identificada');
     });
 
-    it('sets the asset cookie with SameSite=None; Secure on a non-local (staging/prod-like) request', async () => {
+    it('sets the same-origin asset cookie with SameSite=Lax; Secure on a non-local request', async () => {
       verifyJWTMock.mockResolvedValue({
         empresa_id: 6,
         funcionario_id: 42,
@@ -236,7 +236,7 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
 
       expect(response.status).toBe(200);
       const setCookie = response.headers.get('set-cookie') ?? '';
-      expect(setCookie).toContain('SameSite=None');
+      expect(setCookie).toContain('SameSite=Lax');
       expect(setCookie).toContain('Secure');
     });
 

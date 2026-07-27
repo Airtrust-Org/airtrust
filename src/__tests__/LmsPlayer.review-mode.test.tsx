@@ -56,6 +56,7 @@ vi.mock('@/react-app/config/api', () => ({
   ensureValidAccessToken: vi.fn(async () => 'token'),
   fetchWithAuth: vi.fn(),
   getAccessToken: () => 'token',
+  resolveScormRuntimeBaseUrl: () => 'http://localhost:8787/api',
 }));
 
 vi.mock('sonner', () => ({
@@ -85,6 +86,7 @@ async function dispatchPlayerMessage(data: Record<string, unknown>) {
 
 describe('LmsPlayer — modo de revisão (matrícula concluída, botão "Rever")', () => {
   beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
     refetchMatriculaMock.mockReset().mockResolvedValue(undefined);
     toastSuccessMock.mockReset();
     matriculaMock = buildMatricula('CONCLUIDO');

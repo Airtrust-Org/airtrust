@@ -1,0 +1,44 @@
+name: SCORM Staging Real Browser (DISABLED — replaced by scorm-pr499-preview-gate.yml)
+
+# DISABLED for PR #499: the shared-staging gate tests code that is NOT the PR
+# HEAD. The isolated preview gate (scorm-pr499-preview-gate.yml) is the single
+# required gate for this branch. Re-enable this workflow after PR #499 merges
+# into main and the preview infrastructure is cleaned up.
+
+on:
+  workflow_dispatch: # manual only — no automatic triggers
+  # pull_request:     # DISABLED during PR #499
+  #   paths: [...]
+
+permissions:
+  contents: read
+
+jobs:
+  staging-real-browser:
+    if: false # hard-disabled — remove this line to re-enable after PR #499 merge
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    env:
+      BASE_URL: https://staging.airtrust.pages.dev
+      E2E_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+      E2E_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run required browser gate
+        run: npx playwright test e2e/lms/scorm-review-staging.spec.ts --project=chromium
+      - name: Upload sanitized browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorm-staging-real-browser-${{ github.run_id }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn

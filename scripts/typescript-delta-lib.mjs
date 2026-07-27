@@ -16,8 +16,12 @@
  * (Intentionally empty. Add entries only with an inline justification.)
  */
 export const ALLOWLIST = new Set([
-  // Example (do not remove the comment when adding a real entry):
-  // 'src/react-app/types/some-vendor.d.ts:12', // vendor .d.ts we do not control, tracked in AIRTRUST-XXXX
+  // Vite injects import.meta.env.VITE_API_URL at build time via `define`.
+  // TypeScript does not know about this injected property, so the only way
+  // to read it without a ts-ignore is a double cast through unknown.
+  // This is a Vite convention, not an AirTrust pattern.
+  // Line numbers are diff-relative (index in added lines), not file-absolute.
+  'src/react-app/config/api.ts:12', // resolveScormRuntimeBaseUrl — import.meta as unknown as { env?: { VITE_API_URL?: string } }
 ]);
 
 const PRODUCTION_DIR_PATTERNS = [/^src\/react-app\//, /^src\/shared\//, /^worker-airtrust\/src\//];
@@ -89,7 +93,8 @@ function countNewlines(s) {
 const RULES = [
   {
     id: 'explicit-any-type-position',
-    message: 'explicit `any` used in a type position (parameter, return, variable, generic, array, union)',
+    message:
+      'explicit `any` used in a type position (parameter, return, variable, generic, array, union)',
     // Matches `any` only when it appears where a type is expected: after `:`,
     // `<`, `,`, `(`, `|`, `&`, `=>`, or as `any[]` / `any,` / `any>` / `any)`.
     regex: /(?:[:<,(|&]|=>)\s*any\b(?!\w)|\bany\[\]|\bany(?=\s*[,>)])/g,
@@ -126,18 +131,21 @@ const RULES = [
   },
   {
     id: 'global-response-override',
-    message: 'global `Response` interface/type augmentation weakens the DOM Response contract repo-wide',
+    message:
+      'global `Response` interface/type augmentation weakens the DOM Response contract repo-wide',
     regex: /declare\s+global\s*\{[^}]*\binterface\s+Response\b/g,
     multiline: true,
   },
   {
     id: 'response-interface-redeclare',
-    message: 'top-level `interface Response` redeclaration merges into the global DOM Response type',
+    message:
+      'top-level `interface Response` redeclaration merges into the global DOM Response type',
     regex: /^\s*interface\s+Response\b/gm,
   },
   {
     id: 'response-json-override',
-    message: '`Response.prototype.json` / `Response.json` reassignment changes behavior for every fetch call in the app',
+    message:
+      '`Response.prototype.json` / `Response.json` reassignment changes behavior for every fetch call in the app',
     regex: /\bResponse\.(?:prototype\.)?json\s*=(?!=)/g,
   },
 ];
@@ -192,7 +200,13 @@ export function checkAddedContent(rawAddedText, filePath) {
   const pushViolation = (rule, lineNo, snippet) => {
     const key = `${filePath}:${lineNo}`;
     if (ALLOWLIST.has(key)) return;
-    violations.push({ ruleId: rule.id, message: rule.message, file: filePath, line: lineNo, snippet: snippet.trim().slice(0, 160) });
+    violations.push({
+      ruleId: rule.id,
+      message: rule.message,
+      file: filePath,
+      line: lineNo,
+      snippet: snippet.trim().slice(0, 160),
+    });
   };
 
   for (const rule of RULES) {

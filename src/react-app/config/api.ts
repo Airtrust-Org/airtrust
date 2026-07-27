@@ -20,7 +20,10 @@ function resolveApiBase(): string {
     typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
   const host = typeof window !== 'undefined' ? window.location.hostname : '';
 
+  // 🎯 Explicit VITE_API_URL takes priority over all hostname-based detection.
+  // This allows PR preview builds to point to ephemeral Workers.
   const normalizedEnvUrl = envUrl?.trim();
+  if (normalizedEnvUrl && normalizedEnvUrl.length > 0) return normalizedEnvUrl;
 
   // 🎯 LOCAL DEVELOPMENT: rota pelo proxy Vite → VITE_DEV_PROXY_TARGET (default: produção).
   // Para usar worker local: set VITE_DEV_PROXY_TARGET=http://localhost:8787 no .env.local
@@ -28,10 +31,8 @@ function resolveApiBase(): string {
     return `${origin}/api`;
   }
 
-  if (normalizedEnvUrl && normalizedEnvUrl.length > 0) return normalizedEnvUrl;
-
-  // 🎯 STAGING: main.airtrust.pages.dev → staging API (zero cache)
-  if (host === 'main.airtrust.pages.dev') {
+  // 🎯 STAGING: aliases Pages de staging → staging API.
+  if (host === 'main.airtrust.pages.dev' || host === 'staging.airtrust.pages.dev') {
     return 'https://airtrust-api-staging.airtrust.workers.dev/api';
   }
 
@@ -51,6 +52,37 @@ function resolveApiBase(): string {
 }
 
 export const API_BASE_URL = resolveApiBase();
+
+export function resolveScormRuntimeBaseUrl(): string {
+  const origin = typeof window !== 'undefined' ? window.location?.origin : '';
+  const host = typeof window !== 'undefined' ? window.location?.hostname : '';
+
+  // Explicit VITE_API_URL takes priority — used by PR preview builds.
+  const envUrl = (import.meta as unknown as { env?: { VITE_API_URL?: string } })?.env?.VITE_API_URL;
+  const normalizedEnvUrl = envUrl?.trim();
+  if (normalizedEnvUrl && normalizedEnvUrl.length > 0) {
+    // VITE_API_URL points to the preview Worker directly or to the Pages
+    // origin. In both cases the SCORM runtime should reach the Worker that
+    // has the PR code. When VITE_API_URL points to the Pages origin (same-origin
+    // with Functions proxy), use origin-based routing.
+    if (normalizedEnvUrl.startsWith(origin)) return `${origin}/api`;
+    return normalizedEnvUrl;
+  }
+
+  // Staging/main Pages: use same-origin proxy through Functions.
+  if (origin && (host === 'main.airtrust.pages.dev' || host === 'staging.airtrust.pages.dev')) {
+    return `${origin}/api`;
+  }
+
+  // PR preview Pages (any *.airtrust.pages.dev): use same-origin proxy.
+  // The Functions proxy auto-detects preview hostnames and routes to the
+  // preview Worker.
+  if (origin && host.endsWith('.airtrust.pages.dev')) {
+    return `${origin}/api`;
+  }
+
+  return API_BASE_URL;
+}
 export const AUTH_TOKEN_CHANGED_EVENT = 'airtrust:token-changed';
 export const AUTH_PERSIST_LOGIN_KEY = 'airtrust_persist_login';
 const DEFAULT_PERSIST_LOGIN = true;
@@ -457,10 +489,9 @@ export async function refreshAccessToken(): Promise<void> {
     if (error instanceof AuthRefreshError) {
       throw error;
     }
-    throw new AuthRefreshError(
-      error instanceof Error ? error.message : 'Refresh token failed',
-      { terminal: false },
-    );
+    throw new AuthRefreshError(error instanceof Error ? error.message : 'Refresh token failed', {
+      terminal: false,
+    });
   }
 }
 
