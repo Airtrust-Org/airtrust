@@ -47,13 +47,6 @@ jobs:
           npm --prefix worker-airtrust ci
 
       # ── Worker Preview ──────────────────────────────────────────────
-      - name: Generate preview JWT secret
-        shell: bash
-        run: |
-          PREVIEW_JWT_SECRET="$(openssl rand -hex 32)"
-          echo "PREVIEW_JWT_SECRET=$PREVIEW_JWT_SECRET" >> "$GITHUB_ENV"
-          echo "::add-mask::$PREVIEW_JWT_SECRET"
-
       - name: Compute provenance stamps
         id: provenance
         shell: bash
@@ -125,9 +118,17 @@ jobs:
         run: |
           cd worker-airtrust
 
-          # Set JWT secret on the preview worker
-          echo "$PREVIEW_JWT_SECRET" | npx wrangler secret put JWT_SECRET \
-            --config wrangler.pr499.toml
+          # Only set JWT secret on first deploy — preserve it across redeploys
+          # so existing sessions (login cookies, SCORM tokens) remain valid.
+          if npx wrangler secret list --config wrangler.pr499.toml 2>&1 | grep -q JWT_SECRET; then
+            echo "JWT_SECRET already exists on preview worker — preserving it."
+          else
+            echo "First deploy — generating JWT_SECRET."
+            PREVIEW_JWT_SECRET="$(openssl rand -hex 32)"
+            echo "::add-mask::$PREVIEW_JWT_SECRET"
+            echo "$PREVIEW_JWT_SECRET" | npx wrangler secret put JWT_SECRET \
+              --config wrangler.pr499.toml
+          fi
 
           # Deploy
           npx wrangler deploy --config wrangler.pr499.toml 2>&1

@@ -107,46 +107,61 @@ test('SCORM review carrega conteúdo e o menu de Emergências Gerais fecha', asy
     await page.goto('/lms/player/2?review=1');
     await expect(page.getByText('Modo consulta — somente leitura')).toBeVisible();
 
-    // Emergências Gerais uses the LMS native SCORM player (not an iframe).
-    // The SCORM content renders in the main area with navigation buttons.
+    // Emergências Gerais title visible in the LMS shell
     await expect(page.getByText('Emergências Gerais')).toBeVisible();
 
-    // Confirm the SCORM wrapper loaded with slide counter
-    await expect(page.getByText(/Onde você está:/)).toBeVisible();
+    // Wait for the SCORM iframe to load inside the launch page.
+    // The native LMS player embeds the launch HTML in an iframe; the launch
+    // HTML itself contains #scorm-frame which loads the actual SCORM asset.
+    const launchIframe = page.locator('iframe').first();
+    await expect(launchIframe).toBeVisible({ timeout: 15000 });
 
-    // Verify no forbidden text anywhere on the page
+    // Switch into the launch iframe and confirm the SCORM wrapper rendered.
+    const launchFrame = page.frameLocator('iframe').first();
+    const scormFrame = launchFrame.locator('#scorm-frame');
+    await expect(scormFrame).toBeVisible({ timeout: 15000 });
+
+    // Positive assertion: the launch page title matches.
+    await expect(launchFrame.locator('title')).toContainText('Emergências Gerais');
+
+    // Verify no forbidden text anywhere in the parent page or launch frame.
     await assertForbiddenTextIsAbsent(page.locator('body'));
+    await assertForbiddenTextIsAbsent(launchFrame.locator('body'));
 
-    // Advance slides: click "Próximo" twice
+    // The "Próximo" button should become enabled once SCORM loads.
     const nextButton = page.getByRole('button', { name: /Próximo/i });
     await expect(nextButton).toBeVisible();
+    // Wait for it to become enabled (SCORM initialized).
+    await expect(nextButton).toBeEnabled({ timeout: 15000 });
+
+    // Advance two slides.
     await nextButton.click();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
     await expect(page.getByText(/Onde você está: 2/i)).toBeVisible();
 
     await nextButton.click();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
     await expect(page.getByText(/Onde você está: 3/i)).toBeVisible();
 
-    // Go back one slide
+    // Go back one slide.
     const prevButton = page.getByRole('button', { name: /Voltar slide/i });
     await expect(prevButton).toBeVisible();
     await prevButton.click();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
     await expect(page.getByText(/Onde você está: 2/i)).toBeVisible();
 
-    // Exit the course
-    const exitButton = page.getByRole('button', { name: /Voltar/i });
+    // Exit the course via "Voltar" button.
+    const exitButton = page.getByRole('button', { name: /^Voltar$/i });
     await exitButton.click();
-    await page.waitForURL(/\/lms\/cursos/);
+    await page.waitForURL(/\/lms\/cursos/, { timeout: 10000 });
 
-    // Reopen in review mode — should stay read-only
+    // Reopen in review mode — must stay read-only, no completion triggered.
     await page.goto('/lms/player/2?review=1');
     await expect(page.getByText('Modo consulta — somente leitura')).toBeVisible();
     await assertForbiddenTextIsAbsent(page.locator('body'));
 
     await page.screenshot({
-      path: testInfo.outputPath('scorm-review-menu-closed.png'),
+      path: testInfo.outputPath('scorm-review-reopened.png'),
       fullPage: true,
     });
   } finally {
