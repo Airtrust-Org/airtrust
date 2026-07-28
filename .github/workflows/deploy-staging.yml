@@ -509,7 +509,13 @@ jobs:
   deploy-worker:
     name: Deploy Staging Worker
     needs: [guard, production-target-guard, release-write-gate]
-    if: ${{ inputs.deploy_worker && needs.release-write-gate.outputs.write_gate_ok == 'true' }}
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        inputs.deploy_worker &&
+        needs.release-write-gate.outputs.write_gate_ok == 'true'
+      }}
     runs-on: ubuntu-latest
     environment: staging
     outputs:
@@ -712,7 +718,13 @@ jobs:
   deploy-frontend:
     name: Deploy Staging Frontend (Pages preview, staging branch)
     needs: [guard, production-target-guard, release-write-gate]
-    if: ${{ inputs.deploy_frontend && needs.release-write-gate.outputs.write_gate_ok == 'true' }}
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        inputs.deploy_frontend &&
+        needs.release-write-gate.outputs.write_gate_ok == 'true'
+      }}
     runs-on: ubuntu-latest
     environment: staging
     steps:

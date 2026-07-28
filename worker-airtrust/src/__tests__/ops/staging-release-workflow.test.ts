@@ -846,12 +846,37 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
     expect(smokeJob).toContain('needs.release-write-gate.outputs.write_gate_ok == \'true\'');
   });
 
-  it('14. deploys bloqueados por write_gate_ok=false', () => {
+  it('14. apply_migrations=false + write_gate_ok=true permite Worker e Pages (sobrevive a skips intencionais)', () => {
+    const workerJob = workflow.slice(workflow.indexOf('\n  deploy-worker:'), workflow.indexOf('\n  deploy-frontend:'));
+    expect(workerJob).toContain('always()');
+    expect(workerJob).toContain('!cancelled()');
+    expect(workerJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
+    expect(workerJob).toContain('inputs.deploy_worker');
+
+    const frontendJob = workflow.slice(workflow.indexOf('\n  deploy-frontend:'), workflow.indexOf('\n  smoke:'));
+    expect(frontendJob).toContain('always()');
+    expect(frontendJob).toContain('!cancelled()');
+    expect(frontendJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
+    expect(frontendJob).toContain('inputs.deploy_frontend');
+  });
+
+  it('15. write_gate_ok=false ou cancelled bloqueia Worker e Pages', () => {
     const workerJob = workflow.slice(workflow.indexOf('\n  deploy-worker:'), workflow.indexOf('\n  deploy-frontend:'));
     expect(workerJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
+    expect(workerJob).toContain('!cancelled()');
 
     const frontendJob = workflow.slice(workflow.indexOf('\n  deploy-frontend:'), workflow.indexOf('\n  smoke:'));
     expect(frontendJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
+    expect(frontendJob).toContain('!cancelled()');
+  });
+
+  it('16. smoke roda após Worker e Pages verdes, bloqueado após falha', () => {
+    const smokeJob = workflow.slice(workflow.indexOf('\n  smoke:'), workflow.indexOf('\n  summary:'));
+    expect(smokeJob).toContain("needs.deploy-worker.result == 'success'");
+    expect(smokeJob).toContain("needs.deploy-frontend.result == 'success'");
+    expect(smokeJob).toContain('!failure()');
+    expect(smokeJob).toContain('!cancelled()');
+    expect(smokeJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
   });
 });
 
