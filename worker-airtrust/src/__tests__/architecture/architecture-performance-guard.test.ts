@@ -39,7 +39,7 @@ const LARGE_FILE_LINE_CAPS = {
 
 const SQL_PREPARE_CAPS = {
   // Cap raised 2026-07-21: current-version table detection keeps pre-0440 schemas compatible.
-  'routes/simuladores-modelos.ts': 70,
+  'routes/simuladores-modelos.ts': 71,
   // Cap raised 2026-07-19: counted 64 (fail-closed sector check on manager invite/accept).
   'routes/auth.ts': 64,
   // Cap raised 2026-07-09: counted 55 (pre-existing growth of schema guards).

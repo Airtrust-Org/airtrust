@@ -7,10 +7,6 @@ import { ArrowLeft, Plus, Trash2, X, ChevronUp, ChevronDown, Inbox } from 'lucid
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { getColorByIndex } from '@/react-app/utils/colorPalette';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
-import {
-  filterCompatibleCheckIds,
-  filterCompatibleChecks,
-} from '@/react-app/utils/checkCompatibility';
 
 interface TipoSessao {
   id: number;
@@ -204,14 +200,41 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
   const carregarQualificacoesTipos = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/qualificacoes/tipos?ativo=1`, { headers: _authH() });
-      const data = await res.json();
-      if (data.success) {
-        const todos: QualificacaoTipo[] = data.data || [];
-        // Separar: tipos normais (não check) para qualificação principal
-        setQualificacoesTipos(todos.filter((q) => !q.is_check && q.categoria !== 'CHECK'));
-        // Tipos check/FAP para os checks padrão
-        setTiposCheckFAP(todos.filter((q) => q.is_check === 1 || q.categoria === 'CHECK'));
+      const resCats = await fetch(`${API_BASE_URL}/categorias?ativo=1`, { headers: _authH() as Record<string, string> });
+      const dataCats = await resCats.json();
+      const categorias = Array.isArray(dataCats.data) ? dataCats.data : [];
+      
+      const catVoo = categorias.find((c: QualificacaoTipo) => c.codigo === 'VOO');
+      const catCheck = categorias.find((c: QualificacaoTipo) => c.codigo === 'CHECK');
+
+      const sortData = (arr: QualificacaoTipo[]) => {
+        return arr.sort((a, b) => {
+          const c1 = String(a.codigo || '').toLowerCase();
+          const c2 = String(b.codigo || '').toLowerCase();
+          if (c1 < c2) return -1;
+          if (c1 > c2) return 1;
+          const n1 = String(a.nome || '').toLowerCase();
+          const n2 = String(b.nome || '').toLowerCase();
+          return n1.localeCompare(n2);
+        });
+      };
+
+      const vooUrl = catVoo?.id 
+        ? `${API_BASE_URL}/qualificacoes/tipos?ativo=1&categoria_id=${catVoo.id}`
+        : `${API_BASE_URL}/qualificacoes/tipos?ativo=1&categoria=VOO`;
+      const resVoo = await fetch(vooUrl, { headers: _authH() as Record<string, string> });
+      const dataVoo = await resVoo.json();
+      if (dataVoo.success) {
+        setQualificacoesTipos(sortData(dataVoo.data || []));
+      }
+
+      const checkUrl = catCheck?.id
+        ? `${API_BASE_URL}/qualificacoes/tipos?ativo=1&categoria_id=${catCheck.id}`
+        : `${API_BASE_URL}/qualificacoes/tipos?ativo=1&categoria=CHECK`;
+      const resCheck = await fetch(checkUrl, { headers: _authH() as Record<string, string> });
+      const dataCheck = await resCheck.json();
+      if (dataCheck.success) {
+        setTiposCheckFAP(sortData(dataCheck.data || []));
       }
     } catch (err) {
       console.error('Erro ao carregar qualificações:', err);
@@ -301,7 +324,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
         setChecksIdsModelo(
-          filterCompatibleChecks(data.data, tipoAeronave).map((c: { id: number }) => c.id),
+          data.data.map((c: { id: number }) => c.id),
         );
       }
     } catch (err) {
@@ -362,11 +385,6 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
     }
 
     try {
-      const checksCompativeis = filterCompatibleCheckIds(
-        checksIdsModelo,
-        tiposCheckFAP,
-        tipoAeronave,
-      );
       // When editing a versioned model, `codigo` displays the clean
       // codigo_canonico (read-only in that case) — never submit that in
       // place of the physical codigo, which carries the internal
@@ -383,7 +401,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
         duracao_estimada: duracaoEstimada,
         gera_qualificacao: geraQualificacao ? 1 : 0,
         qualificacao_tipo_id: geraQualificacao ? qualificacaoTipoId : null,
-        checks_ids: geraQualificacao ? checksCompativeis : [],
+        checks_ids: geraQualificacao ? checksIdsModelo : [],
       };
       const url = modoEdicao
         ? `${API_BASE_URL}/simuladores/modelos-sessao/${modeloSelecionado!.id}`
@@ -440,21 +458,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
     }
   };
 
-  useEffect(() => {
-    if (checksIdsModelo.length === 0) {
-      return;
-    }
 
-    const checksNormalizados = filterCompatibleCheckIds(
-      checksIdsModelo,
-      tiposCheckFAP,
-      tipoAeronave,
-    );
-
-    if (checksNormalizados.length !== checksIdsModelo.length) {
-      setChecksIdsModelo(checksNormalizados);
-    }
-  }, [checksIdsModelo, tipoAeronave, tiposCheckFAP]);
 
   const salvarManobras = async (modeloId: number) => {
     try {
@@ -1001,7 +1005,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                 <div className="space-y-4 p-4 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 rounded-lg">
                   <div>
                     <label className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-1">
-                      Qualificação Principal Gerada
+                      Qualificação de Voo Gerada
                     </label>
                     <select
                       className="w-full px-3 py-2 border border-green-300 dark:border-green-500/30 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
@@ -1024,7 +1028,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                     </p>
                   </div>
 
-                  {filterCompatibleChecks(tiposCheckFAP, tipoAeronave).length > 0 && (
+                  {tiposCheckFAP.length > 0 && (
                     <div>
                       <label className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-2">
                         Checks FAP Padrão desta Sessão
@@ -1034,7 +1038,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                         As FAPs aprovadas também geram qualificações automáticas.
                       </p>
                       <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                        {filterCompatibleChecks(tiposCheckFAP, tipoAeronave).map((check) => (
+                        {tiposCheckFAP.map((check) => (
                           <label
                             key={check.id}
                             className="flex items-center gap-2 p-2 hover:bg-green-100 dark:hover:bg-green-500/20 rounded cursor-pointer"

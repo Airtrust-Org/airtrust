@@ -168,15 +168,18 @@ export async function listarTiposCheckPorIds(
   }
 
   const placeholders = idsUnicos.map(() => '?').join(',');
-  const scopedFilter = empresaId ? ' AND empresa_id = ?' : '';
+  const scopedFilter = empresaId ? ' AND qt.empresa_id = ? AND qc.empresa_id = qt.empresa_id' : '';
   const result = await db
     .prepare(
-      `SELECT id, codigo, nome, descricao
-       FROM qualificacoes_tipos
-       WHERE id IN (${placeholders})
-         AND deleted_at IS NULL
-         AND ativo = 1
-         AND UPPER(COALESCE(categoria, '')) = 'CHECK'${scopedFilter}`,
+      `SELECT qt.id, qt.codigo, qt.nome, qt.descricao
+       FROM qualificacoes_tipos qt
+       JOIN qualificacoes_categorias qc ON qt.categoria_id = qc.id
+       WHERE qt.id IN (${placeholders})
+         AND qt.deleted_at IS NULL
+         AND qt.ativo = 1
+         AND qc.deleted_at IS NULL
+         AND qc.ativo = 1
+         AND UPPER(COALESCE(qc.codigo, '')) = 'CHECK'${scopedFilter}`,
     )
     .bind(...idsUnicos, ...(empresaId ? [empresaId] : []))
     .all<CheckTipoRecord>();

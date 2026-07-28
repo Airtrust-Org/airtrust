@@ -975,24 +975,40 @@ app.post('/modelos-sessao', async (c) => {
         modelo_aeronave,
       );
     } catch (error: any) {
-      return c.json({ success: false, error: 'Checks inválidos' }, 400);
+      return c.json({ success: false, error: 'Checks inválidos' }, 422);
     }
 
     if (!(await ensureTipoSessaoBelongsToEmpresa(c.env.DB, tipo_sessao_id, empresaId))) {
       return c.json({ success: false, error: 'Tipo de sessão inválido para a empresa' }, 400);
     }
 
-    if (
-      !(await ensureQualificacaoTipoBelongsToEmpresa(
-        c.env.DB,
-        qualificacao_tipo_id,
-        empresaId,
-      ))
-    ) {
-      return c.json(
-        { success: false, error: 'Tipo de qualificação inválido para a empresa' },
-        400,
-      );
+    let qualifTipoIdToSave = qualificacao_tipo_id || null;
+    if (gera_qualificacao === 1) {
+      if (!qualifTipoIdToSave) {
+        return c.json({ success: false, error: 'Qualificação gerada é obrigatória' }, 422);
+      }
+      const qValid = await c.env.DB.prepare(
+        `SELECT qt.id 
+         FROM qualificacoes_tipos qt 
+         JOIN qualificacoes_categorias qc ON qt.categoria_id = qc.id 
+         WHERE qt.id = ? 
+           AND qt.deleted_at IS NULL 
+           AND qt.ativo = 1 
+           AND qt.empresa_id = ? 
+           AND qc.empresa_id = qt.empresa_id 
+           AND qc.deleted_at IS NULL 
+           AND qc.ativo = 1 
+           AND UPPER(COALESCE(qc.codigo, '')) = 'VOO' 
+         LIMIT 1`
+      ).bind(qualifTipoIdToSave, empresaId).first();
+      if (!qValid) {
+        return c.json(
+          { success: false, error: 'Tipo de qualificação de voo inválido para a empresa' },
+          422,
+        );
+      }
+    } else {
+      qualifTipoIdToSave = null;
     }
 
     // Verificar duplicidade de código
@@ -1029,7 +1045,7 @@ app.post('/modelos-sessao', async (c) => {
           descricao || null,
           duracao_estimada || 120,
           gera_qualificacao || 0,
-          qualificacao_tipo_id || null,
+          qualifTipoIdToSave,
           empresaId,
         ]
       : [
@@ -1040,7 +1056,7 @@ app.post('/modelos-sessao', async (c) => {
           descricao || null,
           duracao_estimada || 120,
           gera_qualificacao || 0,
-          qualificacao_tipo_id || null,
+          qualifTipoIdToSave,
           empresaId,
         ];
 
@@ -1724,10 +1740,10 @@ app.put('/modelos-sessao/:id', async (c) => {
           modeloAeronaveFinal,
         );
       } catch (error: any) {
-        return c.json({ success: false, error: 'Checks inválidos' }, 400);
+        return c.json({ success: false, error: 'Checks inválidos' }, 422);
       }
     }
-    const newQualifTipoId =
+    let newQualifTipoId =
       qualificacao_tipo_id !== undefined
         ? qualificacao_tipo_id
         : (anterior as any).qualificacao_tipo_id;
@@ -1736,11 +1752,37 @@ app.put('/modelos-sessao/:id', async (c) => {
       return c.json({ success: false, error: 'Tipo de sessão inválido para a empresa' }, 400);
     }
 
-    if (!(await ensureQualificacaoTipoBelongsToEmpresa(c.env.DB, newQualifTipoId, empresaId))) {
-      return c.json(
-        { success: false, error: 'Tipo de qualificação inválido para a empresa' },
-        400,
-      );
+    const newGeraQualificacao =
+      gera_qualificacao !== undefined
+        ? gera_qualificacao
+        : (anterior as { gera_qualificacao?: number }).gera_qualificacao || 0;
+
+    if (newGeraQualificacao === 1) {
+      if (!newQualifTipoId) {
+        return c.json({ success: false, error: 'Qualificação gerada é obrigatória' }, 422);
+      }
+      const qValid = await c.env.DB.prepare(
+        `SELECT qt.id 
+         FROM qualificacoes_tipos qt 
+         JOIN qualificacoes_categorias qc ON qt.categoria_id = qc.id 
+         WHERE qt.id = ? 
+           AND qt.deleted_at IS NULL 
+           AND qt.ativo = 1 
+           AND qt.empresa_id = ? 
+           AND qc.empresa_id = qt.empresa_id 
+           AND qc.deleted_at IS NULL 
+           AND qc.ativo = 1 
+           AND UPPER(COALESCE(qc.codigo, '')) = 'VOO' 
+         LIMIT 1`
+      ).bind(newQualifTipoId, empresaId).first();
+      if (!qValid) {
+        return c.json(
+          { success: false, error: 'Tipo de qualificação de voo inválido para a empresa' },
+          422,
+        );
+      }
+    } else {
+      newQualifTipoId = null;
     }
 
     // Verificar se a coluna tipo já existe (adicionada pela migration 0363)
