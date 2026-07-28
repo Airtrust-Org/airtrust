@@ -1134,9 +1134,14 @@ router.put(
       return c.json({ success: false, error: 'Tipo não encontrado' }, 404);
     }
 
-    const categoriaFoiInformada = data.categoria_id !== undefined || data.categoria !== undefined;
+    // Only treat category as "informed" if the values are meaningful.
+    // categoria_id must be a positive integer, and/or categoria must be a non-empty string.
+    // null, undefined, 0, or empty string are treated as "not informed".
+    const categoriaIdIsValid = typeof data.categoria_id === 'number' && Number.isFinite(data.categoria_id) && data.categoria_id > 0;
+    const categoriaTextIsValid = typeof data.categoria === 'string' && data.categoria.trim().length > 0;
+    const categoriaFoiInformada = categoriaIdIsValid || categoriaTextIsValid;
     const categoriaCanonica = categoriaFoiInformada
-      ? await resolveCategoriaCanonica(db, empresaId, data.categoria_id, data.categoria)
+      ? await resolveCategoriaCanonica(db, empresaId, categoriaIdIsValid ? data.categoria_id! : undefined, categoriaTextIsValid ? data.categoria : undefined)
       : null;
     if (categoriaFoiInformada && !categoriaCanonica) {
       return c.json({ success: false, error: 'Categoria canônica não encontrada ou inativa' }, 404);
@@ -1172,15 +1177,17 @@ router.put(
         binds.push(draftCodigo);
       }
     }
-    if (categoriaFoiInformada) {
+    if (categoriaFoiInformada && categoriaCanonica) {
       const atualCategoria = normalizeStr(rowAtual.categoria);
       const draftCategoria = normalizeStr(categoriaFinal);
-      if (draftCategoria !== atualCategoria) {
+      const catNomeMudou = draftCategoria !== atualCategoria;
+      const catIdMudou = rowAtual.categoria_id !== categoriaCanonica.id;
+      if (catNomeMudou || catIdMudou) {
         updateParts.push('categoria = ?');
         binds.push(categoriaFinal);
         if (columnsSupport.hasCategoriaId) {
           updateParts.push('categoria_id = ?');
-          binds.push(categoriaCanonica!.id);
+          binds.push(categoriaCanonica.id);
         }
       }
     }

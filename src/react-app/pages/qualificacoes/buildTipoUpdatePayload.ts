@@ -33,6 +33,11 @@ export function buildTipoUpdatePayload(
   ];
 
   for (const { key, norm } of fields) {
+    // Only include fields that actually exist in the draft object.
+    // Never send a field that was not explicitly set by the form.
+    if (!Object.prototype.hasOwnProperty.call(draft, key)) {
+      continue;
+    }
     const origVal = norm(original[key]);
     const draftVal = norm(draft[key]);
     if (origVal !== draftVal) {
