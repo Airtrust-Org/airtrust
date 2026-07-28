@@ -136,6 +136,7 @@ temp/
 *.tmp
 *.bak
 *~
+release/
 
 # ========== CACHE ==========
 .cache/
