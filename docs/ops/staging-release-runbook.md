@@ -13,9 +13,9 @@ dev/staging).
    antes de qualquer migration.
 2. **Preflight de ledger** (`scripts/staging/migration-ledger-preflight.mjs`)
    — read-only, deve retornar `PREFLIGHT_OK`.
-3. **Aplicar migration 0424** (`scripts/staging/apply-approved-migrations.sh
-   --migration=0424_examiner_universal_training_fichas.sql --backup-file=...
-   --apply`) — allowlisted, uma migration por vez, valida pós-condições.
+3. **Aplicar migration 0424 ou 0452** (`scripts/staging/apply-approved-migrations.sh
+--migration=0424_examiner_universal_training_fichas.sql --backup-file=...
+--apply`) — allowlisted, uma migration por vez, valida pós-condições.
 4. **Seed QA** (`scripts/staging/seed-qa-examiner-training.mjs --apply`) —
    cria o `CRED-EXA` sintético que a 0424 exige como âncora (rodar **antes**
    do passo 3 se a 0424 ainda não foi aplicada — ver ordem abaixo).
@@ -30,6 +30,31 @@ explicitamente se o seed não rodou primeiro — isso é o comportamento
 esperado, não um bug (ver `docs/ops/staging-migration-0424-disposable-d1-proof-20260711.md`).
 
 Tudo isso é orquestrado por `.github/workflows/deploy-staging.yml`
+
+## Release de um SHA revisado de PR
+
+O workflow confiável é sempre o arquivo `deploy-staging.yml` presente em
+`main`; ele continua sendo disparado exclusivamente em `refs/heads/main`.
+Para staging, pode-se publicar o `head.sha` exato de um PR draft ou aberto,
+desde que o operador informe `pr_number` e `release_sha` completos.
+
+Antes de qualquer checkout que receba secrets, a guarda consulta a API do
+GitHub e exige: PR aberto, base `main`, mesmo repositório (nunca fork),
+`head.sha` idêntico ao SHA informado, commit existente, ator com permissão de
+write/maintain/admin e todos os check-runs e commit-statuses concluídos com
+sucesso. O ambiente GitHub `staging` continua a exigir a aprovação configurada.
+
+`workflow_sha` identifica o commit de `main` que contém o workflow confiável;
+`release_sha` identifica o conteúdo efetivamente checado, construído e
+publicado. Eles são registrados separadamente. O rollback continua a usar a
+versão anterior do Worker/Pages registrada no sumário da execução, nunca o
+SHA do workflow como substituto do artefato.
+
+A migration `0452_operational_domain_rbac.sql` é allowlisted somente para o
+D1 oficial de staging, uma por execução, com backup, preflight, confirmação e
+validador read-only obrigatório. Isso não autoriza migration ou rollout em
+produção: antes de produção, a 0452 precisa migrar para o fluxo
+`worker-airtrust/schema-v2/` e passar pela governança de produção aplicável.
 (`workflow_dispatch` apenas, `confirmation=AIRTRUST_STAGING`,
 `release_reason` obrigatório). Nenhum gatilho automático em push/merge.
 
@@ -91,11 +116,11 @@ registrado no output do script).
 
 ### Quando restaurar backup vs. compensar
 
-| Situação | Ação |
-|---|---|
-| 0424 aplicada, mas pós-condições falharam (contagens erradas) | Compensação SQL acima, nunca restauração completa. |
-| Corrupção de schema generalizada / `foreign_key_check` não-vazio em múltiplas tabelas não relacionadas | Restauração de backup, com autorização explícita. |
-| Ledger ambíguo (`registrada_mas_nao_aplicada`/`ambigua`) | Parar, não aplicar nada, revisão humana — nem compensação nem restauração até o estado ser entendido. |
+| Situação                                                                                               | Ação                                                                                                  |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| 0424 aplicada, mas pós-condições falharam (contagens erradas)                                          | Compensação SQL acima, nunca restauração completa.                                                    |
+| Corrupção de schema generalizada / `foreign_key_check` não-vazio em múltiplas tabelas não relacionadas | Restauração de backup, com autorização explícita.                                                     |
+| Ledger ambíguo (`registrada_mas_nao_aplicada`/`ambigua`)                                               | Parar, não aplicar nada, revisão humana — nem compensação nem restauração até o estado ser entendido. |
 
 ## Seed QA — rollback
 

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -54,8 +54,68 @@ describe('deploy-staging.yml — static guards', () => {
   });
 
   it('requires branch main and forbids any other ref', () => {
-    expect(workflow).toContain("refs/heads/main");
+    expect(workflow).toContain('refs/heads/main');
     expect(workflow).toContain('only runs from refs/heads/main');
+  });
+
+  it('accepts only an exact reviewed PR head from the same repository', () => {
+    for (const token of [
+      'pr_number:',
+      'release_sha:',
+      '^[0-9a-fA-F]{40}$',
+      '^[1-9][0-9]*$',
+      '/pulls/${prNumber}',
+      "pr.state !== 'open'",
+      "pr.base?.ref !== 'main'",
+      'pr.head?.sha?.toLowerCase() !== releaseSha',
+      'pr.head?.repo?.full_name !== repo',
+      'pr.head?.repo?.fork',
+      '/git/commits/${releaseSha}',
+    ]) {
+      expect(workflow).toContain(token);
+    }
+  });
+
+  it('rejects a non-green release and an actor without release permission', () => {
+    for (const token of [
+      '/collaborators/${actor}/permission',
+      "['write', 'push', 'maintain', 'admin']",
+      '/check-runs?per_page=100',
+      "check.status !== 'completed' || check.conclusion !== 'success'",
+      '/status',
+      // Per-status state check — applied only when statuses exist (empty statuses allowed)
+      "status.state !== 'success'",
+    ]) {
+      expect(workflow).toContain(token);
+    }
+    // Empty statuses must not block when check-runs are green
+    expect(workflow).toContain('statuses.statuses.length > 0');
+    // The old aggregate statuses.state check must NOT be present — it incorrectly blocks repos with no classic statuses
+    expect(workflow).not.toContain("statuses.state !== 'success'");
+  });
+
+  it('checks out the trusted release SHA into release/ and the pipeline itself from main', () => {
+    // Each job that needs release code must checkout release_sha into release/
+    const checkoutRefs =
+      workflow.match(/ref:\s*\$\{\{ needs\.guard\.outputs\.release_sha \}\}/g) ?? [];
+    expect(checkoutRefs.length).toBeGreaterThanOrEqual(6);
+    expect(workflow).toContain('fetch-depth: 0');
+    // Each job must also have a trusted pipeline checkout (from main, no explicit ref = default branch)
+    expect(workflow).toContain('Checkout trusted pipeline (main)');
+    // Release code must land in the release/ subdirectory
+    expect(workflow).toContain('path: release');
+    // No governance script must ever execute from release/
+    expect(workflow).not.toMatch(/bash release\/scripts/);
+    expect(workflow).not.toMatch(/node release\/scripts/);
+  });
+
+
+  it('keeps workflow and release provenance distinct', () => {
+    expect(workflow).toContain('workflow_sha');
+    expect(workflow).toContain('release_sha');
+    expect(workflow).toContain('SOURCE_SHA: ${{ needs.guard.outputs.release_sha }}');
+    expect(workflow).toContain('--commit-hash=${{ needs.guard.outputs.release_sha }}');
+    expect(workflow).toContain('app_version="staging-${build_time}-${release_short_sha}"');
   });
 
   it('never applies the full migration chain — only allowlisted, one-at-a-time files', () => {
@@ -80,12 +140,23 @@ describe('deploy-staging.yml — static guards', () => {
 
   it('validates staging worker targets with a structural parser instead of grepping the whole TOML file', () => {
     expect(workflow).toContain('python3 scripts/staging/assert-staging-worker-targets.py');
-    expect(workflow).not.toContain('grep -q "name = \\"${ALLOWED_STAGING_WORKER_NAME}\\"" worker-airtrust/wrangler.staging.toml');
-    expect(workflow).not.toContain('grep -q "database_id = \\"${ALLOWED_STAGING_DB_ID}\\"" worker-airtrust/wrangler.staging.toml');
+    expect(workflow).not.toContain(
+      'grep -q "name = \\"${ALLOWED_STAGING_WORKER_NAME}\\"" worker-airtrust/wrangler.staging.toml',
+    );
+    expect(workflow).not.toContain(
+      'grep -q "database_id = \\"${ALLOWED_STAGING_DB_ID}\\"" worker-airtrust/wrangler.staging.toml',
+    );
   });
 
   it('uses the staging GitHub environment for every write-capable job', () => {
-    const jobNames = ['backup', 'preflight', 'apply-migrations', 'deploy-worker', 'deploy-frontend', 'smoke'];
+    const jobNames = [
+      'backup',
+      'preflight',
+      'apply-migrations',
+      'deploy-worker',
+      'deploy-frontend',
+      'smoke',
+    ];
     const jobBoundaries = jobNames
       .map((name) => ({ name, index: workflow.indexOf(`\n  ${name}:`) }))
       .sort((a, b) => a.index - b.index);
@@ -105,9 +176,16 @@ describe('deploy-staging.yml — static guards', () => {
     expect(smokeJob).toContain('!cancelled()');
   });
 
-  it('records SHA, run ID, actor, deployment IDs, and rollback target in the summary', () => {
+  it('records workflow SHA, release SHA, actor, deployment IDs, and rollback target in the summary', () => {
     const summaryJob = workflow.slice(workflow.indexOf('summary:'));
-    for (const token of ['github.sha', 'github.run_id', 'github.actor', 'worker_version_id', 'rollback target']) {
+    for (const token of [
+      'WORKFLOW_SHA',
+      'RELEASE_SHA',
+      'github.run_id',
+      'github.actor',
+      'worker_version_id',
+      'rollback target',
+    ]) {
       expect(summaryJob).toContain(token);
     }
   });
@@ -334,7 +412,10 @@ preview_bucket_name = "airtrust-storage-staging"
   });
 
   it('keeps the allowlist narrow instead of matching any staging-like string', () => {
-    const source = readFileSync(join(ROOT, 'scripts/staging/assert-staging-worker-targets.py'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/assert-staging-worker-targets.py'),
+      'utf8',
+    );
     expect(source).toContain('blocked_production_worker_name');
     expect(source).toContain('production database ID');
     expect(source).not.toMatch(/contains\(['"]staging['"]\)/);
@@ -387,23 +468,28 @@ describe('scripts/staging/seed-qa-examiner-training.mjs — guards', () => {
   });
 
   it('refuses --apply without the confirmation env var', () => {
-    const result = runScript('node', [
-      'scripts/staging/seed-qa-examiner-training.mjs',
-      '--apply',
-    ], { QA_EXAMINER_ADMIN_PASSWORD: 'not-a-real-secret-fixture-only' });
+    const result = runScript('node', ['scripts/staging/seed-qa-examiner-training.mjs', '--apply'], {
+      QA_EXAMINER_ADMIN_PASSWORD: 'not-a-real-secret-fixture-only',
+    });
     expect(result.status).not.toBe(0);
     expect(result.stdout + result.stderr).toContain('CONFIRM_STAGING_QA_SEED');
   });
 
   it('never references Costa do Sol as a fixture identity value', () => {
-    const source = readFileSync(join(ROOT, 'scripts/staging/seed-qa-examiner-training.mjs'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/seed-qa-examiner-training.mjs'),
+      'utf8',
+    );
     const executable = stripComments(source);
     expect(executable).not.toMatch(/costa do sol/i);
     expect(source).toContain('AirTrust Staging Examiner QA');
   });
 
   it('creates a QA setor fixture and binds seeded funcionarios to setor_id', () => {
-    const source = readFileSync(join(ROOT, 'scripts/staging/seed-qa-examiner-training.mjs'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/seed-qa-examiner-training.mjs'),
+      'utf8',
+    );
     const executable = stripComments(source);
     expect(executable).toContain('INSERT INTO setores');
     expect(executable).toContain('QA-SETOR-EXA');
@@ -427,12 +513,44 @@ describe('scripts/staging/apply-approved-migrations.sh — guards', () => {
   });
 
   it('refuses the allowlisted migration without a verified backup file', () => {
-    const result = runScript('bash', [
+    // Since the trust-boundary update, the script requires the full release/ path prefix.
+    // Passing a bare filename is now rejected as path traversal, not as missing-backup.
+    const resultBareFilename = runScript('bash', [
       'scripts/staging/apply-approved-migrations.sh',
       '--migration=0424_examiner_universal_training_fichas.sql',
     ]);
-    expect(result.status).not.toBe(0);
-    expect((result.stdout + result.stderr).toLowerCase()).toContain('backup');
+    expect(resultBareFilename.status).not.toBe(0);
+    // Should be rejected due to invalid path (not the release/ prefix)
+    expect((resultBareFilename.stdout + resultBareFilename.stderr).toLowerCase()).toMatch(
+      /allowlist|caminho|inv.lido|path/,
+    );
+
+    // With the correct full path and a real temp file, it should fail on missing backup (not path/file error)
+    const releaseMigrationsDir = join(ROOT, 'release', 'worker-airtrust', 'migrations');
+    const sqlFile = join(releaseMigrationsDir, '0424_examiner_universal_training_fichas.sql');
+    const createdDir = !existsSync(releaseMigrationsDir);
+    try {
+      if (createdDir) mkdirSync(releaseMigrationsDir, { recursive: true });
+      writeFileSync(sqlFile, '-- test migration\n', 'utf8');
+      const resultCorrectPath = runScript('bash', [
+        'scripts/staging/apply-approved-migrations.sh',
+        '--migration=release/worker-airtrust/migrations/0424_examiner_universal_training_fichas.sql',
+      ]);
+      expect(resultCorrectPath.status).not.toBe(0);
+      expect((resultCorrectPath.stdout + resultCorrectPath.stderr).toLowerCase()).toContain('backup');
+    } finally {
+      try { rmSync(sqlFile, { force: true }); } catch {}
+      if (createdDir) try { rmSync(join(ROOT, 'release'), { recursive: true, force: true }); } catch {}
+    }
+  });
+
+
+  it('allowlists 0452 narrowly and invokes its read-only postcondition validator', () => {
+    const source = readFileSync(join(ROOT, 'scripts/staging/apply-approved-migrations.sh'), 'utf8');
+    expect(source).toContain('0452_operational_domain_rbac.sql');
+    expect(source).toContain('RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452"');
+    expect(source).toContain('validate-0452-postconditions.sh');
+    expect(source).not.toContain('APPROVED_MIGRATIONS=("*")');
   });
 
   it('never invokes `wrangler d1 migrations apply` (would replay the whole chain)', () => {
@@ -452,7 +570,10 @@ describe('scripts/staging/migration-ledger-preflight.mjs — guards', () => {
   });
 
   it('is read-only — no wrangler write subcommand appears in the script', () => {
-    const source = readFileSync(join(ROOT, 'scripts/staging/migration-ledger-preflight.mjs'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/migration-ledger-preflight.mjs'),
+      'utf8',
+    );
     const executable = stripComments(source);
     expect(executable).not.toMatch(/d1\s+(migrations\s+apply|create|delete)/);
     expect(executable).not.toContain('INSERT INTO');
@@ -461,26 +582,38 @@ describe('scripts/staging/migration-ledger-preflight.mjs — guards', () => {
   });
 
   it('supports a narrow release scope without widening to arbitrary filenames', () => {
-    const source = readFileSync(join(ROOT, 'scripts/staging/migration-ledger-preflight.mjs'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/migration-ledger-preflight.mjs'),
+      'utf8',
+    );
     expect(source).toContain('--scope=');
-    expect(source).toContain("file.startsWith(`${token}_`)");
+    expect(source).toContain('file.startsWith(`${token}_`)');
   });
 });
 
 describe('scripts/staging/reconcile-approved-migration-ledger.mjs — guards', () => {
   it('requires an exact confirmation phrase for --apply', () => {
-    const source = readFileSync(join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'),
+      'utf8',
+    );
     expect(source).toContain('AIRTRUST_STAGING_LEDGER_RECONCILIATION');
   });
 
   it('hard-blocks non-staging database targets through the shared allowlist', () => {
-    const source = readFileSync(join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'),
+      'utf8',
+    );
     expect(source).toContain('airtrust-db-staging-baseline-20260701');
     expect(source).toContain('7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae');
   });
 
   it('closes the allowlist to 0421, 0422, and 0423 only', () => {
-    const source = readFileSync(join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'),
+      'utf8',
+    );
     expect(source).toContain('0421_shared_session_segment_curricula.sql');
     expect(source).toContain('0422_modelos_sessao_requisitos.sql');
     expect(source).toContain('0423_shared_session_multi_curricula_per_participant.sql');
@@ -488,7 +621,10 @@ describe('scripts/staging/reconcile-approved-migration-ledger.mjs — guards', (
   });
 
   it('uses only explicit ledger INSERT statements and never migrations apply', () => {
-    const source = readFileSync(join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/reconcile-approved-migration-ledger-lib.mjs'),
+      'utf8',
+    );
     const executable = stripComments(source);
     expect(executable).toContain('INSERT INTO d1_migrations');
     expect(executable).not.toMatch(/d1\s+migrations\s+apply/);
@@ -503,7 +639,10 @@ describe('scripts/staging/validate-0424-postconditions.sh — fails closed with 
     // Regression guard: the script must never fall back to a hardcoded
     // ALLOWED_DB_NAME when no --target is given (this exact bug caused an
     // unauthorized live read against real staging D1 during PR #284 review).
-    const source = readFileSync(join(ROOT, 'scripts/staging/validate-0424-postconditions.sh'), 'utf8');
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/validate-0424-postconditions.sh'),
+      'utf8',
+    );
     expect(source).not.toMatch(/db_name="\$\{1:-\$ALLOWED_DB_NAME\}"/);
   });
 
@@ -516,6 +655,31 @@ describe('scripts/staging/validate-0424-postconditions.sh — fails closed with 
   });
 });
 
+describe('scripts/staging/validate-0452-postconditions.sh — staging-only read-only guard', () => {
+  it('fails closed without an explicit staging target', () => {
+    const result = runScript('bash', ['scripts/staging/validate-0452-postconditions.sh']);
+    expect(result.status).not.toBe(0);
+  });
+
+  it('contains all 0452 invariants and no mutating SQL', () => {
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/validate-0452-postconditions.sh'),
+      'utf8',
+    );
+    const executable = stripComments(source);
+    for (const token of [
+      'airtrust-db-staging-baseline-20260701',
+      'dominios_operacionais',
+      'operational_domain_rbac_enabled',
+      'idx_setores_dominio_codigo',
+      'idx_qualificacoes_categorias_dominio_codigo',
+      'idx_lms_cursos_dominio_codigo',
+    ])
+      expect(source).toContain(token);
+    expect(executable).not.toMatch(/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE)\b/);
+  });
+});
+
 describe('deploy-staging.yml — no free-text workflow_dispatch input spliced directly into a run: body', () => {
   it('every `run:` step block references inputs/github context only via env:, never via ${{ }} inline', () => {
     const workflow = readWorkflow();
@@ -524,9 +688,9 @@ describe('deploy-staging.yml — no free-text workflow_dispatch input spliced di
     // through an `env:` block instead (GitHub Actions renders ${{ }} into the
     // generated shell script before bash parses it — splicing free-text
     // workflow_dispatch input there is a script-injection hole).
-    const runBlocks = [...workflow.matchAll(/run:\s*\|\n([\s\S]*?)(?=\n\s{0,10}- name:|\n\s{0,8}[a-z-]+:\n|$)/g)].map(
-      (m) => m[1],
-    );
+    const runBlocks = [
+      ...workflow.matchAll(/run:\s*\|\n([\s\S]*?)(?=\n\s{0,10}- name:|\n\s{0,8}[a-z-]+:\n|$)/g),
+    ].map((m) => m[1]);
     expect(runBlocks.length).toBeGreaterThan(5);
     for (const block of runBlocks) {
       expect(block).not.toMatch(/\$\{\{\s*inputs\./);
@@ -537,6 +701,9 @@ describe('deploy-staging.yml — no free-text workflow_dispatch input spliced di
   it('declares a minimal top-level permissions block', () => {
     const workflow = readWorkflow();
     expect(workflow).toMatch(/^permissions:\s*\n\s*contents:\s*read/m);
+    expect(workflow).toMatch(/^\s*pull-requests:\s*read/m);
+    expect(workflow).toMatch(/^\s*checks:\s*read/m);
+    expect(workflow).not.toMatch(/^\s*\w+:\s*write\s*$/m);
   });
 });
 

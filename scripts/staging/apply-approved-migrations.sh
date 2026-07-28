@@ -6,7 +6,7 @@
 # operational_decision: never uses `wrangler d1 migrations apply` (would try to
 # replay the whole, historically-broken chain — see docs/ops/staging-d1-migration-ledger-reconciliation.md).
 # Applies exactly the migration files passed on the command line, each of
-# which must be in APPROVED_MIGRATIONS below (this release: 0424 only).
+# which must be in APPROVED_MIGRATIONS below.
 # dry_run_required: default mode is dry-run (validates target, backup file,
 # preflight, checksums — no write). --apply is required to execute.
 # rollback_plan_required: see docs/ops/staging-release-runbook.md "D1" section
@@ -24,8 +24,8 @@ trap 'rm -f "$PREFLIGHT_OUTPUT"' EXIT
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_MIGRATION_APPLY"
-APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql")
-RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425"
+APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql")
+RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452"
 
 apply=false
 backup_file=""
@@ -45,34 +45,47 @@ if [[ -z "$migration_arg" ]]; then
   exit 1
 fi
 
+migration_basename="$(basename "$migration_arg")"
+
 is_approved=false
 for approved in "${APPROVED_MIGRATIONS[@]}"; do
-  [[ "$migration_arg" == "$approved" ]] && is_approved=true
+  [[ "$migration_basename" == "$approved" ]] && is_approved=true
 done
 if ! $is_approved; then
-  echo "ERROR: '$migration_arg' não está na allowlist desta release (${APPROVED_MIGRATIONS[*]}). Recusado." >&2
+  echo "ERROR: '$migration_basename' não está na allowlist desta release (${APPROVED_MIGRATIONS[*]}). Recusado." >&2
   exit 1
 fi
 
-migration_path="worker-airtrust/migrations/$migration_arg"
+migration_path="$migration_arg"
+
+if [[ "$migration_path" != "release/worker-airtrust/migrations/$migration_basename" ]]; then
+  echo "ERROR: Caminho inválido. O caminho da migration ($migration_path) deve ser estritamente release/worker-airtrust/migrations/$migration_basename. Path traversal ou escape detectado." >&2
+  exit 1
+fi
+
+if [[ -L "$migration_path" ]]; then
+  echo "ERROR: Symlinks não são permitidos para migrations: $migration_path" >&2
+  exit 1
+fi
+
 if [[ ! -f "$migration_path" ]]; then
   echo "ERROR: arquivo não encontrado: $migration_path" >&2
   exit 1
 fi
 
-if ! git diff --quiet -- "$migration_path" || ! git diff --cached --quiet -- "$migration_path"; then
-  echo "ERROR: '$migration_path' tem alterações locais não commitadas. Recusado (evita aplicar SQL não revisado)." >&2
+if ! git -C release diff --quiet -- "worker-airtrust/migrations/$migration_basename" || ! git -C release diff --cached --quiet -- "worker-airtrust/migrations/$migration_basename"; then
+  echo "ERROR: '$migration_path' tem alterações locais não commitadas no checkout do release. Recusado." >&2
   exit 1
 fi
 
-sha="$(git rev-parse HEAD)"
+sha="$(git -C release rev-parse HEAD)"
 if command -v shasum >/dev/null 2>&1; then
   checksum="$(shasum -a 256 "$migration_path" | awk '{print $1}')"
 else
   checksum="$(sha256sum "$migration_path" | awk '{print $1}')"
 fi
 
-echo "MIGRATION=$migration_arg"
+echo "MIGRATION=$migration_basename"
 echo "SHA=$sha"
 echo "SQL_SHA256=$checksum"
 
@@ -109,9 +122,9 @@ if [[ "$db_name" != "$ALLOWED_DB_NAME" || "$db_id" != "$ALLOWED_DB_ID" ]]; then
   exit 1
 fi
 
-echo "Aplicando $migration_arg em $db_name (uma migration, uma única invocação --remote)..."
+echo "Aplicando $migration_basename em $db_name (uma migration, uma única invocação --remote)..."
 apply_status=0
-( cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --file="migrations/$migration_arg" ) || apply_status=$?
+( cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --file="../$migration_path" ) || apply_status=$?
 
 if [[ $apply_status -ne 0 ]]; then
   echo "MIGRATION_FAILED (esperado se esta for uma tentativa deliberada sem CRED-EXA; ver runbook)." >&2
@@ -119,8 +132,11 @@ if [[ $apply_status -ne 0 ]]; then
 fi
 
 echo "Validando pós-condições de $migration_arg..."
-if [[ "$migration_arg" == "0424_examiner_universal_training_fichas.sql" ]]; then
+if [[ "$migration_basename" == "0424_examiner_universal_training_fichas.sql" ]]; then
   bash "$ROOT/scripts/staging/validate-0424-postconditions.sh" --target="$db_name"
 fi
+if [[ "$migration_basename" == "0452_operational_domain_rbac.sql" ]]; then
+  bash "$ROOT/scripts/staging/validate-0452-postconditions.sh" --target="$db_name"
+fi
 
-echo "MIGRATION_APPLIED_AND_VALIDATED=$migration_arg"
+echo "MIGRATION_APPLIED_AND_VALIDATED=$migration_basename"

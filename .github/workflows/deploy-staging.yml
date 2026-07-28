@@ -7,6 +7,14 @@ on:
         description: 'Type AIRTRUST_STAGING to continue'
         required: true
         type: string
+      pr_number:
+        description: 'Open, same-repository PR whose exact head SHA will be released'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact 40-character commit SHA from the reviewed PR head'
+        required: true
+        type: string
       deploy_worker:
         description: 'Deploy staging Worker'
         required: true
@@ -47,6 +55,8 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
+  checks: read
 
 env:
   NODE_VERSION: '24'
@@ -65,14 +75,21 @@ jobs:
     name: Staging Release Guard
     runs-on: ubuntu-latest
     outputs:
-      app_version: ${{ steps.version.outputs.app_version }}
-      build_time: ${{ steps.version.outputs.build_time }}
+      release_sha: ${{ steps.release.outputs.release_sha }}
+      release_short_sha: ${{ steps.release.outputs.release_short_sha }}
+      app_version: ${{ steps.release.outputs.app_version }}
+      build_time: ${{ steps.release.outputs.build_time }}
     steps:
       - name: Validate staging dispatch inputs
         shell: bash
         env:
           GIT_REF: ${{ github.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_ACTOR: ${{ github.actor }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
           RELEASE_REASON: ${{ inputs.release_reason }}
           DEPLOY_WORKER: ${{ inputs.deploy_worker }}
           DEPLOY_FRONTEND: ${{ inputs.deploy_frontend }}
@@ -92,6 +109,15 @@ jobs:
 
           if [[ "$GIT_REF" != "refs/heads/main" ]]; then
             echo "Deploy Staging only runs from refs/heads/main. Current ref: $GIT_REF" >&2
+            exit 1
+          fi
+
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "release_sha must be exactly 40 hexadecimal characters." >&2
+            exit 1
+          fi
+          if [[ ! "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "pr_number must be a positive integer." >&2
             exit 1
           fi
 
@@ -115,24 +141,76 @@ jobs:
             exit 1
           fi
 
+          export RELEASE_SHA="${RELEASE_SHA,,}"
+          export PR_NUMBER
+          export GITHUB_REPOSITORY
+          export GITHUB_ACTOR
+          node <<'NODE'
+          (async () => {
+          const api = 'https://api.github.com';
+          const repo = process.env.GITHUB_REPOSITORY;
+          const prNumber = process.env.PR_NUMBER;
+          const releaseSha = process.env.RELEASE_SHA;
+          const actor = process.env.GITHUB_ACTOR;
+          const headers = {
+            authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+            accept: 'application/vnd.github+json',
+            'x-github-api-version': '2022-11-28',
+          };
+          async function get(path) {
+            const response = await fetch(`${api}${path}`, { headers });
+            if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
+            return response.json();
+          }
+          const pr = await get(`/repos/${repo}/pulls/${prNumber}`);
+          if (pr.state !== 'open') throw new Error('PR must be open.');
+          if (pr.base?.ref !== 'main') throw new Error('PR base must be main.');
+          if (pr.head?.sha?.toLowerCase() !== releaseSha) throw new Error('release_sha must exactly match PR head.sha.');
+          if (pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork) throw new Error('PR must originate in this repository, never a fork.');
+          const commit = await get(`/repos/${repo}/git/commits/${releaseSha}`);
+          if (!commit?.sha) throw new Error('release_sha does not exist in this repository.');
+          const permission = await get(`/repos/${repo}/collaborators/${actor}/permission`);
+          if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
+            throw new Error('Workflow actor must have write, maintain, or admin permission.');
+          }
+          const checks = await get(`/repos/${repo}/commits/${releaseSha}/check-runs?per_page=100`);
+          if (!Array.isArray(checks.check_runs) || checks.check_runs.length === 0) throw new Error('No check runs found for release_sha.');
+          const badCheck = checks.check_runs.find((check) => check.status !== 'completed' || check.conclusion !== 'success');
+          if (badCheck) throw new Error(`Check ${badCheck.name} is not completed successfully.`);
+          const statuses = await get(`/repos/${repo}/commits/${releaseSha}/status`);
+          if (statuses.statuses.length > 0 && statuses.statuses.some((status) => status.state !== 'success')) {
+            throw new Error('Commit status checks are not all successful.');
+          }
+          })().catch((error) => {
+            console.error(`Reviewed PR release guard failed: ${error.message}`);
+            process.exit(1);
+          });
+          NODE
 
-      - name: Compute release version
-        id: version
+      - name: Compute trusted release metadata
+        id: release
         shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
           build_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          app_version="staging-${build_time}-${GITHUB_SHA::7}"
+          release_sha="${RELEASE_SHA,,}"
+          release_short_sha="${release_sha:0:7}"
+          app_version="staging-${build_time}-${release_short_sha}"
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+          echo "release_short_sha=$release_short_sha" >> "$GITHUB_OUTPUT"
           echo "app_version=$app_version" >> "$GITHUB_OUTPUT"
           echo "build_time=$build_time" >> "$GITHUB_OUTPUT"
 
       - name: Record release metadata
         shell: bash
         env:
-          RELEASE_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
           RELEASE_RUN_ID: ${{ github.run_id }}
           RELEASE_ACTOR: ${{ github.actor }}
-          RELEASE_BUILD_TIME: ${{ steps.version.outputs.build_time }}
+          RELEASE_BUILD_TIME: ${{ steps.release.outputs.build_time }}
           RELEASE_REASON: ${{ inputs.release_reason }}
           DEPLOY_WORKER: ${{ inputs.deploy_worker }}
           DEPLOY_FRONTEND: ${{ inputs.deploy_frontend }}
@@ -145,7 +223,8 @@ jobs:
           {
             echo "## Staging release request"
             echo ""
-            echo "- SHA: \`$RELEASE_SHA\`"
+            echo "- workflow_sha: \`$WORKFLOW_SHA\`"
+            echo "- release_sha: \`$RELEASE_SHA\`"
             echo "- run_id: \`$RELEASE_RUN_ID\`"
             echo "- actor: \`$RELEASE_ACTOR\`"
             echo "- timestamp_utc: \`$RELEASE_BUILD_TIME\`"
@@ -161,7 +240,14 @@ jobs:
     needs: guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout trusted pipeline (main)
+        uses: actions/checkout@v4
+      - name: Checkout release code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
       - name: Assert no production identifiers anywhere in this workflow run
         shell: bash
         run: |
@@ -185,7 +271,14 @@ jobs:
     outputs:
       backup_ok: ${{ steps.backup.outputs.backup_ok }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout trusted pipeline (main)
+        uses: actions/checkout@v4
+      - name: Checkout release code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -211,7 +304,14 @@ jobs:
     outputs:
       preflight_ok: ${{ steps.preflight.outputs.preflight_ok }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout trusted pipeline (main)
+        uses: actions/checkout@v4
+      - name: Checkout release code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -234,7 +334,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout trusted pipeline (main)
+        uses: actions/checkout@v4
+      - name: Checkout release code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -255,7 +362,7 @@ jobs:
           for migration in $APPROVED_MIGRATIONS; do
             bash scripts/staging/backup-d1-staging.sh --apply --out-dir="$RUNNER_TEMP/staging-backups"
             latest_backup="$(ls -t "$RUNNER_TEMP"/staging-backups/*.sql | head -n1)"
-            bash scripts/staging/apply-approved-migrations.sh --migration="$migration" --backup-file="$latest_backup" --apply
+            bash scripts/staging/apply-approved-migrations.sh --migration="release/worker-airtrust/migrations/$migration" --backup-file="$latest_backup" --apply
           done
 
   deploy-worker:
@@ -269,20 +376,29 @@ jobs:
       worker_bundle_sha256: ${{ steps.provenance.outputs.worker_bundle_sha256 }}
       release_manifest_sha256: ${{ steps.provenance.outputs.release_manifest_sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout trusted pipeline (main)
+        uses: actions/checkout@v4
+      - name: Checkout release code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install root dependencies (worker source imports shared/root modules, e.g. zod)
         run: npm ci
+        working-directory: release
       - name: Install worker dependencies
-        run: npm --prefix worker-airtrust ci
+        run: npm ci
+        working-directory: release/worker-airtrust
 
       - name: Prepare staging worker config with provenance
         shell: bash
         run: |
           set -euo pipefail
-          node - "$PWD/worker-airtrust/wrangler.toml" "$PWD/worker-airtrust/wrangler.staging.toml" "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" <<'NODE'
+          node - "$PWD/release/worker-airtrust/wrangler.toml" "$PWD/release/worker-airtrust/wrangler.staging.toml" "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" <<'NODE'
           const fs = require('fs');
           const [sourcePath, outputPath, version, buildTime] = process.argv.slice(2);
           const source = fs.readFileSync(sourcePath, 'utf8');
@@ -311,9 +427,9 @@ jobs:
       - name: Compute and stamp bundle/manifest provenance
         id: provenance
         shell: bash
-        working-directory: worker-airtrust
+        working-directory: release/worker-airtrust
         env:
-          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_SHA: ${{ needs.guard.outputs.release_sha }}
         run: |
           set -euo pipefail
           # Unique, never-reused output dir — a fixed/reusable bundle path is
@@ -331,12 +447,12 @@ jobs:
           fi
           bundle_sha256="$(shasum -a 256 "$bundle_file" | awk '{print $1}')"
           source_sha="$SOURCE_SHA"
-          source_tree="$(git -C .. rev-parse HEAD^{tree})"
+          source_tree="$(git rev-parse HEAD^{tree})"
 
           # First pass: stamp source SHA/tree + bundle hash. Config hash is
           # computed over the result of this pass, then stamped in a second,
           # minimal pass — the manifest never has to include its own hash.
-          node ../scripts/lib/patch-wrangler-env-vars.mjs \
+          node ../../scripts/lib/patch-wrangler-env-vars.mjs \
             wrangler.staging.toml wrangler.staging.toml staging \
             "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" \
             "$(node -e 'console.log(JSON.stringify({AIRTRUST_SOURCE_SHA: process.argv[1], AIRTRUST_SOURCE_TREE: process.argv[2], AIRTRUST_WORKER_BUNDLE_SHA256: process.argv[3]}))' "$source_sha" "$source_tree" "$bundle_sha256")"
@@ -362,7 +478,7 @@ jobs:
           JSON
           manifest_sha256="$(shasum -a 256 "$manifest_file" | awk '{print $1}')"
 
-          node ../scripts/lib/patch-wrangler-env-vars.mjs \
+          node ../../scripts/lib/patch-wrangler-env-vars.mjs \
             wrangler.staging.toml wrangler.staging.toml staging \
             "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" \
             "$(node -e 'console.log(JSON.stringify({AIRTRUST_RELEASE_MANIFEST_SHA256: process.argv[1]}))' "$manifest_sha256")"
@@ -382,7 +498,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/staging/assert-staging-worker-targets.py \
-            --config worker-airtrust/wrangler.staging.toml \
+            --config release/worker-airtrust/wrangler.staging.toml \
             --allowed-worker-name "${ALLOWED_STAGING_WORKER_NAME}" \
             --blocked-production-worker-name "airtrust-api-production" \
             --allowed-db-name "${ALLOWED_STAGING_DB_NAME}" \
@@ -394,7 +510,7 @@ jobs:
 
       - name: Deploy Worker (staging)
         shell: bash
-        working-directory: worker-airtrust
+        working-directory: release/worker-airtrust
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -433,7 +549,7 @@ jobs:
       - name: Smoke provenance (version endpoint must match SHA, never dev-local/latest/empty)
         shell: bash
         env:
-          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_SHA: ${{ needs.guard.outputs.release_sha }}
           EXPECTED_BUNDLE_SHA256: ${{ steps.provenance.outputs.worker_bundle_sha256 }}
         run: |
           set -euo pipefail
@@ -459,20 +575,30 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout trusted pipeline (main)
+        uses: actions/checkout@v4
+      - name: Checkout release code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
+        working-directory: release
       - name: Build frontend against staging API
         run: npm run build
+        working-directory: release
         env:
           VITE_APP_VERSION: ${{ needs.guard.outputs.app_version }}
           APP_VERSION: ${{ needs.guard.outputs.app_version }}
           APP_BUILD_TIME: ${{ needs.guard.outputs.build_time }}
           VITE_DEV_PROXY_TARGET: https://airtrust-api-staging.airtrust.workers.dev
       - name: Stamp build version
-        run: bash scripts/stamp-build-version.sh dist/client/index.html
+        run: bash ../scripts/stamp-build-version.sh dist/client/index.html
+        working-directory: release
         env:
           APP_VERSION: ${{ needs.guard.outputs.app_version }}
       - name: Assert never deploying to the production Pages branch
@@ -490,10 +616,10 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: >-
-            pages deploy dist/client
+            pages deploy release/dist/client
             --project-name=${{ env.PAGES_PROJECT_NAME }}
             --branch=${{ env.PAGES_STAGING_BRANCH }}
-            --commit-hash=${{ github.sha }}
+            --commit-hash=${{ needs.guard.outputs.release_sha }}
 
   smoke:
     name: Authenticated Staging Smoke
@@ -515,7 +641,14 @@ jobs:
       QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
       QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout trusted pipeline (main)
+        uses: actions/checkout@v4
+      - name: Checkout release code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -541,7 +674,8 @@ jobs:
       - name: Write summary
         shell: bash
         env:
-          RELEASE_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          RELEASE_SHA: ${{ needs.guard.outputs.release_sha }}
           RELEASE_RUN_ID: ${{ github.run_id }}
           RELEASE_ACTOR: ${{ github.actor }}
           APPROVED_MIGRATIONS: ${{ inputs.approved_migrations }}
@@ -550,7 +684,8 @@ jobs:
           {
             echo "## Staging release outcome"
             echo ""
-            echo "- SHA: \`$RELEASE_SHA\`"
+            echo "- workflow_sha: \`$WORKFLOW_SHA\`"
+            echo "- release_sha: \`$RELEASE_SHA\`"
             echo "- run_id: \`$RELEASE_RUN_ID\`"
             echo "- actor: \`$RELEASE_ACTOR\`"
             echo "- Worker deployment ID: \`${{ needs.deploy-worker.outputs.worker_version_id || 'not-deployed' }}\`"
