@@ -262,11 +262,16 @@ function decodeJwtPayload(token) {
 }
 
 async function login(baseUrl, email, password) {
-  const response = await fetchJson(`${baseUrl}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, senha: password }),
-  });
+  let response;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    response = await fetchJson(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, senha: password }),
+    });
+    if (response.status !== 429 || attempt === 3) break;
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
 
   assert(response.status === 200, `login retornou ${response.status}`);
   assert(response.json?.success === true, 'login sem success=true');
