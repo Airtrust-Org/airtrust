@@ -689,7 +689,7 @@ describe('deploy-staging.yml — no free-text workflow_dispatch input spliced di
     // generated shell script before bash parses it — splicing free-text
     // workflow_dispatch input there is a script-injection hole).
     const runBlocks = [
-      ...workflow.matchAll(/run:\s*\|\n([\s\S]*?)(?=\n\s{0,10}- name:|\n\s{0,8}[a-z-]+:\n|$)/g),
+      ...workflow.matchAll(/run:\s*\|\n([\s\S]*?)(?=\n\s{0,10}- name:|\n\s{0,10}- id:|\n\s{0,8}[a-z0-9-]+:\n|$)/g),
     ].map((m) => m[1]);
     expect(runBlocks.length).toBeGreaterThan(5);
     for (const block of runBlocks) {
@@ -744,3 +744,114 @@ describe('scripts/staging/smoke-examiner-training.mjs — matches the real POST 
     expect(eBlock).toContain('semiautomated');
   });
 });
+
+describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
+  const workflow = readWorkflow();
+
+  it('1. guard não acessa secrets de staging', () => {
+    const guardJob = workflow.slice(workflow.indexOf('\n  guard:'), workflow.indexOf('\n  production-target-guard:'));
+    expect(guardJob).not.toContain('CLOUDFLARE_D1_BACKUP_API_TOKEN');
+    expect(guardJob).not.toContain('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+    expect(guardJob).not.toContain('CLOUDFLARE_WORKER_API_TOKEN');
+    expect(guardJob).not.toContain('CLOUDFLARE_PAGES_API_TOKEN');
+  });
+
+  it('2. cada secret é lido em job independente com environment staging', () => {
+    const backupJob = workflow.slice(workflow.indexOf('\n  check-d1-backup-token:'), workflow.indexOf('\n  check-d1-migration-token:'));
+    expect(backupJob).toContain('environment: staging');
+    expect(backupJob).toContain('secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN');
+
+    const migrationJob = workflow.slice(workflow.indexOf('\n  check-d1-migration-token:'), workflow.indexOf('\n  check-worker-token:'));
+    expect(migrationJob).toContain('environment: staging');
+    expect(migrationJob).toContain('secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+
+    const workerJob = workflow.slice(workflow.indexOf('\n  check-worker-token:'), workflow.indexOf('\n  check-pages-token:'));
+    expect(workerJob).toContain('environment: staging');
+    expect(workerJob).toContain('secrets.CLOUDFLARE_WORKER_API_TOKEN');
+
+    const pagesJob = workflow.slice(workflow.indexOf('\n  check-pages-token:'), workflow.indexOf('\n  cloudflare-secret-readiness-gate:'));
+    expect(pagesJob).toContain('environment: staging');
+    expect(pagesJob).toContain('secrets.CLOUDFLARE_PAGES_API_TOKEN');
+  });
+
+  it('3. nenhum step combina Worker e Pages tokens', () => {
+    // Assert no block contains both secrets in the whole workflow
+    const lines = workflow.split('\n');
+    let currentJob = '';
+    let currentJobText = '';
+    for (const line of lines) {
+      if (line.match(/^  [a-zA-Z0-9-]+:/)) {
+        if (currentJobText) {
+          const hasWorker = currentJobText.includes('CLOUDFLARE_WORKER_API_TOKEN');
+          const hasPages = currentJobText.includes('CLOUDFLARE_PAGES_API_TOKEN');
+          expect(hasWorker && hasPages).toBe(false);
+        }
+        currentJob = line;
+        currentJobText = '';
+      } else {
+        currentJobText += line + '\n';
+      }
+    }
+  });
+
+  it('4. nenhum step combina backup e migration tokens', () => {
+    const lines = workflow.split('\n');
+    let currentJob = '';
+    let currentJobText = '';
+    for (const line of lines) {
+      if (line.match(/^  [a-zA-Z0-9-]+:/)) {
+        if (currentJobText) {
+          const hasBackup = currentJobText.includes('CLOUDFLARE_D1_BACKUP_API_TOKEN');
+          const hasMigrate = currentJobText.includes('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+          expect(hasBackup && hasMigrate).toBe(false);
+        }
+        currentJob = line;
+        currentJobText = '';
+      } else {
+        currentJobText += line + '\n';
+      }
+    }
+  });
+
+  it('5. secret ausente bloqueia antes de qualquer deploy', () => {
+    const readinessGate = workflow.slice(workflow.indexOf('\n  cloudflare-secret-readiness-gate:'), workflow.indexOf('\n  backup:'));
+    expect(readinessGate).toContain('secret_gate_ok=$ok');
+    const writeGate = workflow.slice(workflow.indexOf('\n  release-write-gate:'), workflow.indexOf('\n  deploy-worker:'));
+    expect(writeGate).toContain('needs: [cloudflare-secret-readiness-gate, backup, preflight, apply-migrations, postconditions]');
+    expect(writeGate).toContain('SECRET_GATE_OK: ${{ needs.cloudflare-secret-readiness-gate.outputs.secret_gate_ok }}');
+    expect(writeGate).toContain('if [[ "$SECRET_GATE_OK" != "true" ]]; then');
+  });
+
+  it('6/7/8. condicionalidade dos inputs para a validação dos tokens', () => {
+    const readinessGate = workflow.slice(workflow.indexOf('\n  cloudflare-secret-readiness-gate:'), workflow.indexOf('\n  backup:'));
+    expect(readinessGate).toContain('if [[ "$APPLY_MIGRATIONS" == "true" ]]; then');
+    expect(readinessGate).toContain('if [[ "$DEPLOY_WORKER" == "true" && "$WORKER_TOKEN_RESULT" != "success" ]]');
+    expect(readinessGate).toContain('if [[ "$DEPLOY_FRONTEND" == "true" && "$PAGES_TOKEN_RESULT" != "success" ]]');
+  });
+
+  it('9/10. postconditions intera sobre APPROVED_MIGRATIONS e usa script flexível', () => {
+    const postconditionsJob = workflow.slice(workflow.indexOf('\n  postconditions:'), workflow.indexOf('\n  release-write-gate:'));
+    expect(postconditionsJob).toContain('for migration in $APPROVED_MIGRATIONS; do');
+    expect(postconditionsJob).toContain('validator="scripts/staging/validate-${prefix}-postconditions.sh"');
+    expect(postconditionsJob).toContain('bash "$validator" --target="${ALLOWED_STAGING_DB_NAME}"');
+    expect(postconditionsJob).not.toContain('validate-0452-postconditions.sh');
+  });
+
+  it('11/12/13. smoke aguarda Worker e Pages de forma segura', () => {
+    const smokeJob = workflow.slice(workflow.indexOf('\n  smoke:'), workflow.indexOf('\n  summary:'));
+    expect(smokeJob).toContain('needs: [guard, production-target-guard, release-write-gate, deploy-worker, deploy-frontend]');
+    expect(smokeJob).toContain('(inputs.deploy_worker == false || needs.deploy-worker.result == \'success\')');
+    expect(smokeJob).toContain('(inputs.deploy_frontend == false || needs.deploy-frontend.result == \'success\')');
+    expect(smokeJob).toContain('!failure()');
+    expect(smokeJob).toContain('needs.release-write-gate.outputs.write_gate_ok == \'true\'');
+  });
+
+  it('14. deploys bloqueados por write_gate_ok=false', () => {
+    const workerJob = workflow.slice(workflow.indexOf('\n  deploy-worker:'), workflow.indexOf('\n  deploy-frontend:'));
+    expect(workerJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
+
+    const frontendJob = workflow.slice(workflow.indexOf('\n  deploy-frontend:'), workflow.indexOf('\n  smoke:'));
+    expect(frontendJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
+  });
+});
+
