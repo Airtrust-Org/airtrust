@@ -14,6 +14,18 @@ import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { audit } from './simuladores-shared';
 import { createLogger, toError } from '../utils/logger';
+import {
+  requireOperationalAccess,
+  skipOperationalGuardForRoles,
+} from '../services/operational-domain-access';
+
+// Fichas de sessão de simulador são fixed-domain OPERACOES — see
+// docs/rbac/gestor-operational-autonomy.md.
+const requireOperacoesFicha = (action: 'create') =>
+  skipOperationalGuardForRoles(
+    ['instructor', 'student'],
+    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' }),
+  );
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -32,7 +44,7 @@ function parseHistoricoLimit(raw: string | undefined): number {
 // ==========================================================================
 
 // POST /historico-notas - Registrar nota no histórico
-app.post('/historico-notas', async (c) => {
+app.post('/historico-notas', requireOperacoesFicha('create'), async (c) => {
   try {
     const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
     const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
@@ -437,7 +449,7 @@ app.get('/dashboard/:funcionarioId', async (c) => {
 // ==========================================================================
 
 // POST /sessoes/:id/checks/resultados - Save only explicit check results
-app.post('/sessoes/:id/checks/resultados', async (c) => {
+app.post('/sessoes/:id/checks/resultados', requireOperacoesFicha('create'), async (c) => {
   try {
     const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
     const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];

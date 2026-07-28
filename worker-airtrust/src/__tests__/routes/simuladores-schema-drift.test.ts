@@ -12,9 +12,13 @@ vi.mock('../../middleware/auth', () => ({
   }
 }));
 
-vi.mock('../../middleware/tenant', () => ({
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
   getTenantContext: () => ({ empresaId: 1, userId: 1 })
-}));
+  };
+});
 
 describe('Simuladores Schema Drift Regressions', () => {
   it('relatorios /uso does not crash when simuladores table lacks empresa_id', async () => {
@@ -76,6 +80,10 @@ describe('Simuladores Schema Drift Regressions', () => {
             return Promise.resolve({ meta: { last_row_id: 123 } });
           },
           first: () => {
+             // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+             if (sql.includes('FROM empresas WHERE id')) {
+               return Promise.resolve({ operational_domain_rbac_enabled: 0 });
+             }
              // Mock fichaCheck and funcionarioCheck success
              if (sql.includes('fichas_sessao')) return Promise.resolve({ id: 1 });
              if (sql.includes('funcionarios')) return Promise.resolve({ id: 10 });

@@ -336,6 +336,14 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
           permissions_required: ['admin'],
         },
         {
+          id: 'rbac-operacional-gestor',
+          label: 'RBAC Operacional do Gestor',
+          path: '/admin/operational-domain-rbac',
+          component: 'AdminOperationalDomainRbac',
+          description: 'Classificar setores/categorias/cursos por domínio e ativar a autonomia operacional do gestor',
+          permissions_required: ['admin'],
+        },
+        {
           id: 'auditoria',
           label: 'Logs de Auditoria',
           path: '/configuracoes/auditoria',

@@ -31,6 +31,9 @@ describe('Simuladores Sessoes Update N+1 Characterization', () => {
       const q = query.toUpperCase();
       const mockResult = {
         first: async () => {
+          if (q.includes('FROM EMPRESAS WHERE ID')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (q.includes('FROM SIMULADOR_AGENDAMENTOS')) {
             return { id: 1, simulador_id: 1, data: '2025-01-01', hora_inicio: '10:00', hora_fim: '12:00', instrutor_id: 99 };
           }

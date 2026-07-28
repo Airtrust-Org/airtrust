@@ -23,12 +23,16 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-vi.mock('../../middleware/tenant', () => ({
-  getTenantContext: (c: any) => ({
-    empresaId: Number(c.req.header('x-test-empresa-id') || 6),
-  }),
-  getEmpresaId: (c: any) => Number(c.get('empresaId') || c.req.header('x-test-empresa-id') || 0),
-}));
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
+    getTenantContext: (c: any) => ({
+      empresaId: Number(c.req.header('x-test-empresa-id') || 6),
+    }),
+    getEmpresaId: (c: any) => Number(c.get('empresaId') || c.req.header('x-test-empresa-id') || 0),
+  };
+});
 
 vi.mock('../../middleware/rbac', () => ({
   requireRole:

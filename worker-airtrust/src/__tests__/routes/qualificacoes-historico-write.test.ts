@@ -75,12 +75,20 @@ type QueryHandler = {
   all?: (args: unknown[]) => Promise<unknown> | unknown;
 };
 
+// This suite doesn't exercise the operational-domain RBAC feature — it's a
+// legacy-tenant test, so the flag query resolves to 0 (disabled) by
+// default, same as any tenant that hasn't opted into the new RBAC.
+const DEFAULT_HANDLERS: Array<[string, QueryHandler]> = [
+  ['operational_domain_rbac_enabled', { first: () => ({ operational_domain_rbac_enabled: 0 }) }],
+];
+
 function createMockDb(handlers: Array<[string, QueryHandler]>) {
   const calls: Array<{ query: string; args: unknown[]; method: 'first' | 'run' | 'all' }> = [];
+  const allHandlers = [...handlers, ...DEFAULT_HANDLERS];
 
   const db = {
     prepare: vi.fn((query: string) => {
-      const entry = handlers.find(([matcher]) => query.includes(matcher));
+      const entry = allHandlers.find(([matcher]) => query.includes(matcher));
       if (!entry) {
         throw new Error(`Unhandled query: ${query}`);
       }

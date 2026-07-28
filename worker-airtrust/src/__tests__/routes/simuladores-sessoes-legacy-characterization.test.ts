@@ -97,6 +97,10 @@ function createDbForLegacyCharacterization() {
     prepare: vi.fn((query: string) => ({
       bind: (...args: unknown[]) => ({
         first: async () => {
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (query.includes('SELECT COUNT(DISTINCT id) AS total') && query.includes('FROM funcionarios')) {
             const totalFuncionarios = args.length > 0 ? Number(args.length - 1) : 0;
             return { total: totalFuncionarios };

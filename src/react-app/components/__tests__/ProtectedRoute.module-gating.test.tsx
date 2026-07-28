@@ -17,6 +17,23 @@ vi.mock('@/react-app/i18n/useLanguage', () => ({
   }),
 }));
 
+// This suite exercises module-based gating (empresas.modulos_ativos) and
+// the pre-existing dev-module email allowlist — unrelated to the newer
+// operational-domain RBAC gate, which stays disabled (legacy behavior) by
+// default here.
+vi.mock('@/react-app/hooks/useOperationalAccess', () => ({
+  useOperationalAccess: () => ({
+    enabled: false,
+    domains: [],
+    setor_ids: [],
+    actions: {},
+    canOperate: () => false,
+    hasDomain: () => false,
+    isLoading: false,
+    isAuthenticated: true,
+  }),
+}));
+
 function renderAt(pathname: string, requiredRole?: string[]) {
   return render(
     <MemoryRouter initialEntries={[pathname]}>

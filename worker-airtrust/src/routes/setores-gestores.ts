@@ -171,8 +171,13 @@ setoresGestores.get('/:id', requireRole('admin', 'manager'), async (c) => {
   }
 });
 
+// Atribuir, alterar e remover vínculos setor-gestor é função exclusivamente
+// administrativa (RBAC gestor-operational-domain): GESTOR não pode ampliar,
+// reduzir ou alterar seu próprio escopo nem o de outro gestor. GESTOR só
+// consulta seu escopo efetivo via GET /api/me/operational-access.
+
 // ===== POST /api/setores-gestores =====
-setoresGestores.post('/', requireRole('admin', 'manager'), async (c) => {
+setoresGestores.post('/', requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
 
@@ -219,7 +224,7 @@ setoresGestores.post('/', requireRole('admin', 'manager'), async (c) => {
 });
 
 // ===== PUT /api/setores-gestores/:id =====
-setoresGestores.put('/:id', requireRole('admin', 'manager'), async (c) => {
+setoresGestores.put('/:id', requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = parseInt(c.req.param('id'), 10);
@@ -269,7 +274,7 @@ setoresGestores.put('/:id', requireRole('admin', 'manager'), async (c) => {
 });
 
 // ===== DELETE /api/setores-gestores/:id =====
-setoresGestores.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+setoresGestores.delete('/:id', requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = parseInt(c.req.param('id'), 10);
@@ -310,7 +315,7 @@ setoresGestores.delete('/:id', requireRole('admin', 'manager'), async (c) => {
 });
 
 // ===== POST /api/setores-gestores/bulk-assign =====
-setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin', 'manager'), async (c) => {
+setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const setorId = parseInt(c.req.param('setor_id'), 10);

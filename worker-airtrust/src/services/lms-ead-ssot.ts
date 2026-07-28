@@ -18,6 +18,7 @@ type QualificacaoTipoEadRow = {
   carga_horaria_inicial: number | null;
   carga_horaria_recorrente: number | null;
   deleted_at: string | null;
+  dominio_codigo: string | null;
 };
 
 type LmsCursoMirrorRow = {
@@ -47,6 +48,7 @@ type LmsCursoMirrorRow = {
   conteudo_arquivo_nome?: string | null;
   matriculas_total?: number | null;
   progressos_scorm_total?: number | null;
+  dominio_codigo?: string | null;
 };
 
 type ImportedHistoryRow = {
@@ -126,11 +128,33 @@ function resolveCourseMinutesFromTipo(tipo: QualificacaoTipoEadRow) {
   );
 }
 
+async function hasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
+  try {
+    const { results } = await db.prepare(`PRAGMA table_info(${table})`).bind().all<{ name: string }>();
+    return (results || []).some((row) => row?.name === column);
+  } catch {
+    return false;
+  }
+}
+
 async function fetchQualificacaoTipo(
   db: D1Database,
   empresaId: number,
   qualificacaoTipoId: number,
 ) {
+  // Item 3: the auto-created lms_curso must inherit dominio_codigo from the
+  // SOURCE qualificacao_tipo's categoria — never default to OPERACOES, and
+  // never guess from free text. categoria_id/dominio_codigo may be absent
+  // in older/frozen fixture schemas, so both joins are defensive.
+  const hasCategoriaId = await hasColumn(db, 'qualificacoes_tipos', 'categoria_id');
+  const hasCategoriaDominio = await hasColumn(db, 'qualificacoes_categorias', 'dominio_codigo');
+  const dominioSelect =
+    hasCategoriaId && hasCategoriaDominio ? 'qc.dominio_codigo' : 'NULL';
+  const dominioJoin =
+    hasCategoriaId && hasCategoriaDominio
+      ? 'LEFT JOIN qualificacoes_categorias qc ON qc.id = qualificacoes_tipos.categoria_id'
+      : '';
+
   return db
     .prepare(
       `SELECT qualificacoes_tipos.id,
@@ -146,11 +170,13 @@ async function fetchQualificacaoTipo(
               qualificacoes_tipos.carga_horaria,
               qualificacoes_tipos.carga_horaria_inicial,
               qualificacoes_tipos.carga_horaria_recorrente,
-              qualificacoes_tipos.deleted_at
+              qualificacoes_tipos.deleted_at,
+              ${dominioSelect} AS dominio_codigo
          FROM qualificacoes_tipos
          LEFT JOIN qualificacoes_formatos qf
            ON qf.id = qualificacoes_tipos.formato_id
           AND qf.deleted_at IS NULL
+         ${dominioJoin}
         WHERE qualificacoes_tipos.id = ?
           AND qualificacoes_tipos.empresa_id = ?
         LIMIT 1`,
@@ -164,6 +190,7 @@ async function fetchCursoByQualificacaoTipo(
   empresaId: number,
   qualificacaoTipoId: number,
 ) {
+  const hasDominioCodigo = await hasColumn(db, 'lms_cursos', 'dominio_codigo');
   const result = await db
     .prepare(
       `SELECT lms_cursos.id,
@@ -185,6 +212,7 @@ async function fetchCursoByQualificacaoTipo(
               lms_cursos.idioma,
               lms_cursos.publicado,
               lms_cursos.ativo,
+              ${hasDominioCodigo ? 'lms_cursos.dominio_codigo,' : 'NULL AS dominio_codigo,'}
               lms_cursos.deleted_at,
               lms_cursos.scorm_package_r2_prefix,
               lms_cursos.scorm_launch_file,
@@ -455,8 +483,18 @@ export async function syncLmsCourseFromQualificacaoTipo(
   const cargaInicial = normalizeNullableNumber(tipo.carga_horaria_inicial);
   const cargaRecorrente = normalizeNullableNumber(tipo.carga_horaria_recorrente);
   const cargaMinutos = resolveCourseMinutesFromTipo(tipo);
+  // Item 3: inherited strictly from the source qualificacao_tipo's categoria
+  // — never guessed, never defaulted to OPERACOES. Stays NULL (unclassified,
+  // blocked by readiness) when the categoria itself has no domain yet.
+  const dominioCodigo = normalizeNullableText(tipo.dominio_codigo);
+  const hasDominioCodigoColumn = await hasColumn(db, 'lms_cursos', 'dominio_codigo');
 
   if (existingCurso?.id) {
+    // Backfill-only: never overwrite a domain an admin already classified
+    // manually, even if the source categoria's domain later changes.
+    const shouldSetDominio =
+      hasDominioCodigoColumn && !existingCurso.dominio_codigo && dominioCodigo;
+
     await db
       .prepare(
         `UPDATE lms_cursos
@@ -472,6 +510,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
                 gerar_qualificacao_ao_concluir = 1,
                 ativo = 1,
                 deleted_at = NULL,
+                ${shouldSetDominio ? 'dominio_codigo = ?,' : ''}
                 updated_at = datetime('now')
           WHERE id = ?
             AND empresa_id = ?`,
@@ -486,6 +525,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
         observacoes,
         cargaInicial,
         cargaRecorrente,
+        ...(shouldSetDominio ? [dominioCodigo] : []),
         existingCurso.id,
         params.empresaId,
       )
@@ -515,10 +555,13 @@ export async function syncLmsCourseFromQualificacaoTipo(
          observacoes,
          carga_horaria_inicial_horas,
          carga_horaria_recorrente_horas,
+         ${hasDominioCodigoColumn ? 'dominio_codigo,' : ''}
          created_at,
          updated_at,
          deleted_at
-       ) VALUES (?, ?, ?, ?, ?, ?, 'pt-BR', 'scorm', '1.2', 70, ?, 1, 0, 1, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, 'pt-BR', 'scorm', '1.2', 70, ?, 1, 0, 1, ?, ?, ?, ?, ${
+         hasDominioCodigoColumn ? '?,' : ''
+       } datetime('now'), datetime('now'), NULL)`,
     )
     .bind(
       params.empresaId,
@@ -532,6 +575,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
       observacoes,
       cargaInicial,
       cargaRecorrente,
+      ...(hasDominioCodigoColumn ? [dominioCodigo] : []),
     )
     .run();
 

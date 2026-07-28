@@ -38,12 +38,16 @@ vi.mock('../../middleware/auth', () => ({
     },
 }));
 
-vi.mock('../../middleware/tenant', () => ({
-  getTenantContext: (c: { req: { header: (name: string) => string | undefined } }) => ({
-    empresaId: Number(c.req.header('x-test-empresa-id') || '6'),
-    role: c.req.header('x-test-tenant-role') || 'manager',
-  }),
-}));
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
+    getTenantContext: (c: { req: { header: (name: string) => string | undefined } }) => ({
+      empresaId: Number(c.req.header('x-test-empresa-id') || '6'),
+      role: c.req.header('x-test-tenant-role') || 'manager',
+    }),
+  };
+});
 
 vi.mock('../../utils/auditoria', () => ({
   registrarAuditoria: vi.fn(),
@@ -113,6 +117,10 @@ function createMockDb(options: {
       const bind = (...args: unknown[]) => ({
         first: async () => {
           calls.push({ query, args, method: 'first' });
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           const statsQuery = query.includes('COUNT(*) as total');
           const globalQuery =
             query.includes('SUM(CASE WHEN') && query.toUpperCase().includes('AS RENOVADAS');

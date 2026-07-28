@@ -31,12 +31,16 @@ vi.mock('../../middleware/auth', () => ({
     },
 }));
 
-vi.mock('../../middleware/tenant', () => ({
-  getTenantContext: () => ({
-    empresaId: 6,
-    role: 'manager',
-  }),
-}));
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
+    getTenantContext: () => ({
+      empresaId: 6,
+      role: 'manager',
+    }),
+  };
+});
 
 vi.mock('../../utils/auditoria', () => ({
   registrarAuditoria: vi.fn(),
@@ -85,6 +89,11 @@ function createMockDb() {
       const bind = (...args: unknown[]) => ({
         first: async () => {
           calls.push({ query, args, method: 'first' });
+
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
 
           if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
             return { total: 3 };
@@ -211,6 +220,9 @@ describe('qualificacoes historico status sort contract', () => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
           calls.push({ query, args, method: 'first' });
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
             return { total: 1 };
           }
@@ -298,6 +310,9 @@ describe('qualificacoes historico status sort contract', () => {
     (db.prepare as unknown as ReturnType<typeof vi.fn>).mockImplementation((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
             return { total: 1 };
           }
@@ -381,6 +396,9 @@ describe('qualificacoes historico status sort contract', () => {
     (db.prepare as unknown as ReturnType<typeof vi.fn>).mockImplementation((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
             return { total: 1 };
           }
@@ -462,6 +480,9 @@ describe('qualificacoes historico status sort contract', () => {
     (db.prepare as unknown as ReturnType<typeof vi.fn>).mockImplementation((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
             return { total: 1 };
           }
@@ -536,6 +557,9 @@ describe('qualificacoes historico status sort contract', () => {
     (db.prepare as unknown as ReturnType<typeof vi.fn>).mockImplementation((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
             return { total: 1 };
           }

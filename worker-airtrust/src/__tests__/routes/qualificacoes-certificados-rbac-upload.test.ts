@@ -267,6 +267,11 @@ function createMockEnv() {
         first: async () => {
           calls.push({ query, args, method: 'first' });
 
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
+
           if (query.includes('SELECT qh.id, qh.funcionario_id, f.empresa_id')) {
             const historico = findHistorico(Number(args[0]));
             const funcionario = historico ? findFuncionario(historico.funcionario_id) : null;

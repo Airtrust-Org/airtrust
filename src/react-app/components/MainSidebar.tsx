@@ -13,11 +13,23 @@ import {
   FileText,
   CheckCircle,
   GraduationCap,
+  Wrench,
+  Plane,
 } from 'lucide-react';
 import { NAVIGATION_CONFIG } from '../navigation.config';
 import { useSystemSettings } from '../hooks/useSystemSettings';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { useOperationalAccess } from '@/react-app/hooks/useOperationalAccess';
 import { getVisibleNavigationItems } from '@/react-app/lib/module-access';
+
+// Nav item ids gated by operational domain once a tenant's
+// operational_domain_rbac_enabled flag is on — mirrors
+// DOMAIN_GATED_MODULES in components/ProtectedRoute.tsx (keep in sync;
+// this one is keyed by nav item id, that one by module key, but both
+// currently resolve to the same 'mro' -> MANUTENCAO mapping).
+const DOMAIN_GATED_NAV_ITEM_IDS: Record<string, 'MANUTENCAO'> = {
+  mro: 'MANUTENCAO',
+};
 
 const iconMap = {
   BarChart3,
@@ -30,12 +42,15 @@ const iconMap = {
   FileText,
   CheckCircle,
   GraduationCap,
+  Wrench,
+  Plane,
 };
 
 function MainSidebar() {
   const location = useLocation();
   const { logoSrc } = useSystemSettings();
   const { user, empresas = [], empresaAtualId = null } = useAuth();
+  const operationalAccess = useOperationalAccess();
   const [expandedItems, setExpandedItems] = useState<string[]>(['lms', 'pessoas']);
   const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
   const visibleMainMenu = getVisibleNavigationItems(
@@ -62,7 +77,11 @@ function MainSidebar() {
     return children.some((child) => isActiveRoute(child.path));
   };
 
-  const hasAccess = (_itemId: string) => {
+  const hasAccess = (itemId: string) => {
+    const gatedDomain = DOMAIN_GATED_NAV_ITEM_IDS[itemId];
+    if (gatedDomain && operationalAccess.enabled && !operationalAccess.hasDomain(gatedDomain)) {
+      return false;
+    }
     return true;
   };
 

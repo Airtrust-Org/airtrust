@@ -40,6 +40,12 @@ import {
   sqlStatusEqualsAny,
 } from '../../lib/status/status-codes';
 import { getCertificadosStorageColumns } from '../qualificacoes-certificados-helpers';
+import {
+  resolveOperationalReadScope,
+  appendOperationalReadFilter,
+  assertOperationalAccess,
+  normalizeTenantRole,
+} from '../../services/operational-domain-access';
 import writeRouter from './historico-write';
 
 const router = new Hono<{ Bindings: Env }>();
@@ -342,6 +348,24 @@ router.get(
     const params: unknown[] = [tenantCtx.empresaId];
     conditions.push(employeeScope.clause);
     params.push(...employeeScope.bindings);
+
+    // Item 1 (read-side filtering): histórico is individual data (tied to
+    // a funcionário's own setor via `f`, and to a categoria's domain via
+    // `qc`) — once RBAC is active, a gestor must be additionally narrowed
+    // to domain+setor, not just the legacy setor scope above. No-op in
+    // legacy mode / for admin/instrutor/aluno.
+    {
+      const readScope = await resolveOperationalReadScope({
+        db,
+        empresaId: tenantCtx.empresaId,
+        userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+        userRole: (c.get as (k: string) => unknown)('userRole'),
+      });
+      appendOperationalReadFilter(conditions, params, readScope, {
+        domainColumn: 'qc.dominio_codigo',
+        setorColumn: employeeScope.hasSetorId ? 'f.setor_id' : undefined,
+      });
+    }
 
     if (requestedSetorIds.length > 0) {
       if (employeeScope.hasSetorId) {
@@ -785,24 +809,41 @@ router.get(
     const { renewedQualificationPredicate, activeRenewedQualificationPredicate } =
       buildRenewalSqlPredicates(hasRenovacaoDe);
 
+    // Item 1 (read-side filtering — contagem): once RBAC is active, a
+    // gestor's stats must also be narrowed to setores with a classified
+    // domain, not just the legacy setor scope. No-op in legacy mode / for
+    // admin/instrutor/aluno.
+    const readScope = await resolveOperationalReadScope({
+      db,
+      empresaId: tenantCtx.empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+    });
+    const statsConditions: string[] = [];
+    const statsReadBindings: unknown[] = [];
+    appendOperationalReadFilter(statsConditions, statsReadBindings, readScope, {
+      setorColumn: 'f.setor_id',
+    });
+    const statsExtraClause = statsConditions.length > 0 ? ` AND ${statsConditions.join(' AND ')}` : '';
+
     const statsResult = await db
       .prepare(
-        `SELECT 
+        `SELECT
         COUNT(*) as total,
-        SUM(CASE 
+        SUM(CASE
           WHEN ${renewedQualificationPredicate} THEN 0
-          WHEN julianday(qh.data_vencimento) >= julianday('now') AND julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1 
-          ELSE 0 
+          WHEN julianday(qh.data_vencimento) >= julianday('now') AND julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1
+          ELSE 0
         END) as validas,
-        SUM(CASE 
+        SUM(CASE
           WHEN ${renewedQualificationPredicate} THEN 0
-          WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1 
-          ELSE 0 
+          WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1
+          ELSE 0
         END) as vencendo,
-        SUM(CASE 
+        SUM(CASE
           WHEN ${renewedQualificationPredicate} THEN 0
-          WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 
-          ELSE 0 
+          WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1
+          ELSE 0
         END) as vencidas,
         SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas
       FROM qualificacoes_historico qh
@@ -811,9 +852,9 @@ router.get(
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND f.empresa_id = ?
-        AND ${employeeScope.clause}`,
+        AND ${employeeScope.clause}${statsExtraClause}`,
       )
-      .bind(tenantCtx.empresaId, ...employeeScope.bindings)
+      .bind(tenantCtx.empresaId, ...employeeScope.bindings, ...statsReadBindings)
       .first();
 
     const stats = {
@@ -861,6 +902,17 @@ router.get(
     const bindings: unknown[] = [tenantCtx.empresaId];
     whereClauses.push(employeeScope.clause);
     bindings.push(...employeeScope.bindings);
+
+    // Item 1 (read-side filtering — contagem/estatísticas estendidas).
+    {
+      const readScope = await resolveOperationalReadScope({
+        db,
+        empresaId: tenantCtx.empresaId,
+        userId: Number((getContextValue as (k: string) => unknown)('userId') || 0),
+        userRole: getContextValue('userRole'),
+      });
+      appendOperationalReadFilter(whereClauses, bindings, readScope, { setorColumn: 'f.setor_id' });
+    }
 
     if (funcionarioId) {
       whereClauses.push('qh.funcionario_id = ?');

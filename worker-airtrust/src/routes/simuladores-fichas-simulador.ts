@@ -18,6 +18,18 @@ import {
 } from './simuladores-fichas-helpers';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 import { buildOperationalFichaManobras, FICHA_TECNICAS_PADRAO_LIMITE } from '../constants/notechs';
+import {
+  requireOperationalAccess,
+  skipOperationalGuardForRoles,
+} from '../services/operational-domain-access';
+
+// Fichas de sessão de simulador são fixed-domain OPERACOES — see
+// docs/rbac/gestor-operational-autonomy.md.
+const requireOperacoesFicha = (action: 'update' | 'create' | 'issue') =>
+  skipOperationalGuardForRoles(
+    ['instructor', 'student'],
+    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' }),
+  );
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -42,7 +54,10 @@ app.get('/fichas-simulador/:id/manobras', async (c) => {
 
 // PUT /fichas-simulador/:fichaId/manobras/:ordem - Atualizar manobra individual
 // ✅ Uses ordem (1-22) instead of individual ID
-app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
+app.put(
+  '/fichas-simulador/:fichaId/manobras/:ordem',
+  requireOperacoesFicha('update'),
+  async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const { fichaId, ordem } = c.req.param();
@@ -199,7 +214,7 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
 
 // POST /fichas-simulador/:id/popular-manobras
 // Novo padrão operacional: 18 técnicas + 15 NOTECHS fixos.
-app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
+app.post('/fichas-simulador/:id/popular-manobras', requireOperacoesFicha('create'), async (c) => {
   try {
     const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
     const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
@@ -267,7 +282,10 @@ app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
   }
 });
 
-app.post('/fichas-simulador/:id/gerar-qualificacao', async (c) => {
+app.post(
+  '/fichas-simulador/:id/gerar-qualificacao',
+  requireOperacoesFicha('issue'),
+  async (c) => {
   try {
     const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
     const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];

@@ -21,6 +21,20 @@ import {
   getEmployeeSectorAccess,
 } from '../../services/employee-sector-access';
 import { z } from 'zod';
+import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../services/operational-domain-access';
+
+// POST / (atribuir), POST /renovar, PUT/DELETE /renovacoes/:id all target a
+// qualificacoes_historico row that is either not created yet (atribuir) or
+// identified via a renovação id that isn't itself the historico id — there
+// is no single resourceId a static, route-level requireOperationalAccess
+// middleware could resolve a domain from without either (a) pinning to a
+// fixed domain like OPERACOES (wrong: a gestor de Manutenção must be able
+// to atribuir/renovar Manutenção-domain qualificações) or (b) doing the
+// same DB lookup the handler needs anyway. So each handler below resolves
+// AND validates the real domain (from the qualificacao_tipo's categoria)
+// and setor (from the target funcionário) inline via
+// assertQualificacaoAtribuicaoWithinOperationalScope (Item 3) — no route-
+// level operational guard is registered for these four routes.
 
 const router = new Hono<{ Bindings: Env }>();
 
@@ -120,7 +134,7 @@ async function renovacaoPertenceEmpresa(
 ) {
   return db
     .prepare(
-      `SELECT qr.id, f.id as funcionario_id
+      `SELECT qr.id, f.id as funcionario_id, qh.qualificacao_id
        FROM qualificacoes_renovacoes qr
        INNER JOIN qualificacoes_historico qh ON qh.id = qr.qualificacao_historico_id
        INNER JOIN funcionarios f ON f.id = qh.funcionario_id
@@ -132,7 +146,7 @@ async function renovacaoPertenceEmpresa(
        LIMIT 1`,
     )
     .bind(renovacaoId, empresaId)
-    .first();
+    .first<{ id: number; funcionario_id: number; qualificacao_id: number | null }>();
 }
 
 // ===== ENDPOINTS =====
@@ -192,6 +206,18 @@ router.post(
       return c.json({ success: false, error: 'Tipo de qualificação não encontrado' }, 404);
     }
 
+    // Item 3: resolve+validate domain (from tipo's categoria) and setor
+    // (from o funcionário) before the first mutation — no-op in legacy
+    // mode, fail-closed when the RBAC is active.
+    await assertQualificacaoAtribuicaoWithinOperationalScope({
+      db,
+      empresaId: tenantCtx.empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+      qualificacaoTipoId: tipoId,
+      funcionarioId: data.funcionario_id,
+    });
+
     // Validar datas
     if (new Date(data.data_vencimento) <= new Date(data.data_realizacao)) {
       return c.json(
@@ -248,7 +274,7 @@ router.post(
   auth(),
   requireRole('admin', 'manager'),
   safe(async (c) => {
-    const db = c.env.DB;
+    const db: D1Database = c.env.DB;
     const tenantCtx = getTenantContext(c);
     const body = await c.req.json();
 
@@ -262,10 +288,10 @@ router.post(
 
     const data = parsed.data;
 
-    // Verificar se qualificação existe (e capturar funcionario_id para verificação de escopo)
+    // Verificar se qualificação existe (e capturar funcionario_id/qualificacao_id para verificação de escopo)
     const qual = await db
       .prepare(
-        `SELECT qh.id, f.id as funcionario_id
+        `SELECT qh.id, f.id as funcionario_id, qh.qualificacao_id
          FROM qualificacoes_historico qh
          INNER JOIN funcionarios f ON f.id = qh.funcionario_id
          WHERE qh.id = ?
@@ -275,17 +301,29 @@ router.post(
          LIMIT 1`,
       )
       .bind(data.qualificacao_historico_id, tenantCtx.empresaId)
-      .first();
+      .first<{ id: number; funcionario_id: number; qualificacao_id: number | null }>();
     if (!qual) {
       return c.json({ success: false, error: 'Qualificação não encontrada' }, 404);
     }
 
     // Verificar escopo setorial: gestor restrito não pode renovar qualificação de funcionário fora do seu escopo
     const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
+    const qualFuncId = Number(qual.funcionario_id || 0);
     if (access.mode === 'restricted') {
-      const qualFuncId = Number((qual as any)?.funcionario_id || 0);
       await assertFuncionarioInScope(db, tenantCtx.empresaId, qualFuncId, access);
     }
+
+    // Item 3: same domain+setor resolution as atribuir, using the EXISTING
+    // historico row's own qualificacao_id/funcionario_id (a renovação is
+    // itself a mutation on that historico row's lifecycle).
+    await assertQualificacaoAtribuicaoWithinOperationalScope({
+      db,
+      empresaId: tenantCtx.empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+      qualificacaoTipoId: Number(qual.qualificacao_id || 0) || null,
+      funcionarioId: qualFuncId || null,
+    });
 
     // Criar registro de renovação
     const result = await db
@@ -391,8 +429,17 @@ router.put(
     // Verificar escopo setorial
     const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
     if (access.mode === 'restricted') {
-      await assertFuncionarioInScope(db, tenantCtx.empresaId, Number((existing as any)?.funcionario_id || 0), access);
+      await assertFuncionarioInScope(db, tenantCtx.empresaId, Number(existing?.funcionario_id || 0), access);
     }
+
+    await assertQualificacaoAtribuicaoWithinOperationalScope({
+      db,
+      empresaId: tenantCtx.empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+      qualificacaoTipoId: Number(existing?.qualificacao_id || 0) || null,
+      funcionarioId: Number(existing?.funcionario_id || 0) || null,
+    });
 
     const updateParts: string[] = [];
     const binds: unknown[] = [];
@@ -464,8 +511,17 @@ router.delete(
     // Verificar escopo setorial
     const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
     if (access.mode === 'restricted') {
-      await assertFuncionarioInScope(db, tenantCtx.empresaId, Number((existing as any)?.funcionario_id || 0), access);
+      await assertFuncionarioInScope(db, tenantCtx.empresaId, Number(existing?.funcionario_id || 0), access);
     }
+
+    await assertQualificacaoAtribuicaoWithinOperationalScope({
+      db,
+      empresaId: tenantCtx.empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+      qualificacaoTipoId: Number(existing?.qualificacao_id || 0) || null,
+      funcionarioId: Number(existing?.funcionario_id || 0) || null,
+    });
 
     const result = await db
       .prepare(

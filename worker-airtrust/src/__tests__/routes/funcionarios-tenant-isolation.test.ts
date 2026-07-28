@@ -185,6 +185,13 @@ function createMockEnv(options?: { funcionarioColumns?: string[] }) {
       const executeFirst = async (args: unknown[]) => {
         calls.push({ query, args, method: 'first' });
 
+        // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant
+        // (RBAC disabled) for every empresa in this test, which doesn't
+        // exercise domain-RBAC behavior.
+        if (query.includes('FROM empresas WHERE id')) {
+          return { operational_domain_rbac_enabled: 0 };
+        }
+
         if (query.includes('FROM funcionarios') && query.includes('WHERE id = ?')) {
           const id = Number(args[0]);
           const usesTenant = query.includes('empresa_id = ?');
@@ -365,11 +372,30 @@ describe('funcionarios tenant isolation', () => {
 
     const response = await request('/api/funcionarios/101', env, 1, {
       method: 'DELETE',
-      headers: { ...jsonHeaders, 'x-test-role': 'manager' },
+      headers: { ...jsonHeaders, 'x-test-role': 'viewer' },
     });
 
     expect(response.status).toBe(403);
     expect(runs).toHaveLength(0);
+  });
+
+  // gestor-operational-autonomy: widened from admin-only to admin+manager —
+  // a GESTOR must not depend on an ADMINISTRADOR for routine exclusão
+  // within their own setores (requireOperacoesFuncionario is the actual
+  // per-setor/domain scoping gate, and is a no-op while the tenant's
+  // operational_domain_rbac_enabled flag is off, which is the default this
+  // mock env exercises).
+  it('manager consegue DELETE (autonomia operacional do gestor)', async () => {
+    const { env, runs } = createMockEnv();
+
+    const response = await request('/api/funcionarios/101', env, 1, {
+      method: 'DELETE',
+      headers: { ...jsonHeaders, 'x-test-role': 'manager' },
+    });
+
+    expect(response.status).toBe(200);
+    const softDelete = runs.find((run) => run.query.trimStart().startsWith('UPDATE funcionarios'));
+    expect(softDelete?.query).toContain('WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL');
   });
 
   // ── B2: matrícula por empresa ──────────────────────────────────

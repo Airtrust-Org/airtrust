@@ -10,10 +10,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
-import {
-  sanitizeModeloSessaoObservacoesForStorage,
-  validateModeloSessaoObservacoesInput,
-} from '../../../src/shared/simuladores/modelos-sessao-observacoes';
+import { sanitizeModeloSessaoObservacoesForStorage, validateModeloSessaoObservacoesInput } from '../../../src/shared/simuladores/modelos-sessao-observacoes';
 import {
   TipoSessaoSchema,
   ModeloSessaoSchema,
@@ -23,6 +20,8 @@ import {
   listarTiposCheckPorIds,
   normalizeModeloAeronave,
 } from './simuladores-shared';
+import { requireRole } from '../middleware/rbac';
+import { requireOperacoes } from './simuladores-modelos-rbac';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -226,7 +225,7 @@ app.get('/tipos-sessao/:id', async (c) => {
 });
 
 // POST /api/simuladores/tipos-sessao - Criar tipo de sessão
-app.post('/tipos-sessao', async (c) => {
+app.post('/tipos-sessao', requireRole('admin', 'manager'), requireOperacoes('create'), async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const parsed = TipoSessaoSchema.safeParse(await c.req.json());
@@ -281,7 +280,7 @@ app.post('/tipos-sessao', async (c) => {
 });
 
 // PUT /api/simuladores/tipos-sessao/:id - Atualizar tipo de sessão
-app.put('/tipos-sessao/:id', async (c) => {
+app.put('/tipos-sessao/:id', requireRole('admin', 'manager'), requireOperacoes('update'), async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
@@ -348,7 +347,7 @@ app.put('/tipos-sessao/:id', async (c) => {
 });
 
 // DELETE /api/simuladores/tipos-sessao/:id - Excluir tipo de sessão (soft delete)
-app.delete('/tipos-sessao/:id', async (c) => {
+app.delete('/tipos-sessao/:id', requireRole('admin', 'manager'), requireOperacoes('delete'), async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const denied = requireAdminForDelete(c);
@@ -833,7 +832,7 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
 });
 
 // PUT /api/simuladores/modelos-sessao/:id/manobras/reordenar - Reordenar manobras do modelo
-app.put('/modelos-sessao/:id/manobras/reordenar', async (c) => {
+app.put('/modelos-sessao/:id/manobras/reordenar', requireRole('admin', 'manager'), requireOperacoes('update'), async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
@@ -891,7 +890,7 @@ app.put('/modelos-sessao/:id/manobras/reordenar', async (c) => {
 });
 
 // DELETE /api/simuladores/modelos-sessao/:id/manobras/:manobraId - Remover vínculo de manobra
-app.delete('/modelos-sessao/:id/manobras/:manobraId', async (c) => {
+app.delete('/modelos-sessao/:id/manobras/:manobraId', requireRole('admin', 'manager'), requireOperacoes('delete'), async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
@@ -934,7 +933,7 @@ app.delete('/modelos-sessao/:id/manobras/:manobraId', async (c) => {
 });
 
 // POST /api/simuladores/modelos-sessao - Criar novo modelo
-app.post('/modelos-sessao', async (c) => {
+app.post('/modelos-sessao', requireRole('admin', 'manager'), requireOperacoes('create'), async (c) => {
   console.log('🔍 [MODELOS] POST /modelos-sessao chamado');
   try {
     const empresaId = getEmpresaIdFromRequest(c);
@@ -1113,7 +1112,7 @@ app.post('/modelos-sessao', async (c) => {
 });
 
 // POST /api/simuladores/modelos-sessao/:id/manobras - Adicionar manobras em lote
-app.post('/modelos-sessao/:id/manobras', async (c) => {
+app.post('/modelos-sessao/:id/manobras', requireRole('admin', 'manager'), requireOperacoes('create'), async (c) => {
   console.log('🔍 [MODELOS] POST /modelos-sessao/:id/manobras chamado');
   try {
     const empresaId = getEmpresaIdFromRequest(c);
@@ -1208,7 +1207,7 @@ app.post('/modelos-sessao/:id/manobras', async (c) => {
 });
 
 // POST /api/simuladores/modelos-sessao/:id/clonar - Clonar modelo com checks e manobras
-app.post('/modelos-sessao/:id/clonar', async (c) => {
+app.post('/modelos-sessao/:id/clonar', requireRole('admin', 'manager'), requireOperacoes('create'), async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
@@ -1346,7 +1345,7 @@ app.post('/modelos-sessao/:id/clonar', async (c) => {
 });
 
 // POST /api/simuladores/modelos-sessao/importar-relacoes - Importar relações modelo-manobra
-app.post('/modelos-sessao/importar-relacoes', async (c) => {
+app.post('/modelos-sessao/importar-relacoes', requireRole('admin', 'manager'), requireOperacoes('import'), async (c) => {
   try {
     const empresaId = getEmpresaIdFromRequest(c);
     await normalizeModelosSessaoModeloAeronave(c.env.DB, empresaId);
@@ -1680,7 +1679,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
 });
 
 // PUT /api/simuladores/modelos-sessao/:id - Atualizar modelo
-app.put('/modelos-sessao/:id', async (c) => {
+app.put('/modelos-sessao/:id', requireRole('admin', 'manager'), requireOperacoes('update'), async (c) => {
   console.log('🔍 [MODELOS] PUT /modelos-sessao/:id chamado');
   try {
     const empresaId = getEmpresaIdFromRequest(c);
@@ -1882,7 +1881,7 @@ app.put('/modelos-sessao/:id', async (c) => {
 });
 
 // DELETE /api/simuladores/modelos-sessao/:id - Excluir modelo (soft delete)
-app.delete('/modelos-sessao/:id', async (c) => {
+app.delete('/modelos-sessao/:id', requireRole('admin', 'manager'), requireOperacoes('delete'), async (c) => {
   console.log('🔍 [MODELOS] DELETE /modelos-sessao/:id chamado');
   try {
     const empresaId = getEmpresaIdFromRequest(c);

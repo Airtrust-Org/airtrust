@@ -39,6 +39,11 @@ function createSyncDb(overrides: Record<string, unknown> = {}) {
   const db = {
     _calls: syncCalls,
     prepare: vi.fn((query: string) => {
+      // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+      if (query.includes('FROM empresas WHERE id')) {
+        return { bind: (..._a: unknown[]) => ({ first: async () => ({ operational_domain_rbac_enabled: 0 }) }) };
+      }
+
       // ── Track sync UPDATE on fichas_sessao ──────────────────────────
       if (query.includes('UPDATE fichas_sessao') && query.includes('SET instrutor_id')) {
         return {
@@ -167,6 +172,7 @@ describe('PUT /sessoes/:id — guardrail is_instrutor bloqueia não-instrutor', 
     const session = { ...DEFAULT_SESSION, instrutor_id: 15, examinador_id: 33, is_check: 1 };
     const db = {
       prepare: vi.fn((query: string) => {
+        if (query.includes('FROM empresas WHERE id')) { return { bind: (..._a: unknown[]) => ({ first: async () => ({ operational_domain_rbac_enabled: 0 }) }) }; }
         if (query.includes('PRAGMA table_info')) { const pr = { first: async () => null, all: async () => ({ results: [{ name: 'id' }, { name: 'is_instrutor' }] }), run: async () => ({ meta: { changes: 0 } }) }; return { ...pr, bind: (..._a: unknown[]) => pr }; }
         if (query.includes('SELECT * FROM simulador_agendamentos WHERE id=?') && query.includes('deleted_at IS NULL')) return { bind: (_id: unknown, _empId: unknown) => ({ first: async () => ({ ...session }) }) };
         if (query.includes('COALESCE(is_instrutor')) return { bind: (_id: unknown) => ({ first: async () => ({ is_instrutor: 0 }) }) };

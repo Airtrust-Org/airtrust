@@ -44,6 +44,10 @@ function createDbWithoutSimuladoresEmpresaId() {
       queries.push(query);
 
       const first = async () => {
+        // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+        if (query.includes('FROM empresas WHERE id')) {
+          return { operational_domain_rbac_enabled: 0 };
+        }
         if (query.includes('SELECT COUNT(DISTINCT id) AS total') && query.includes('FROM funcionarios')) {
           // instrutor (41) + participante (42): 2 distinct funcionários no tenant.
           return { total: 2 };

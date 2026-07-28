@@ -13,6 +13,19 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { audit, getFuncId } from './simuladores-shared';
+import {
+  requireOperationalAccess,
+  skipOperationalGuardForRoles,
+} from '../services/operational-domain-access';
+
+// Fichas de sessão de simulador são fixed-domain OPERACOES — see
+// docs/rbac/gestor-operational-autonomy.md. This guard does NOT block based
+// on record status (signed/finalized) — only on domain/setor access.
+const requireOperacoesFicha = (action: 'create' | 'update' | 'cancel') =>
+  skipOperationalGuardForRoles(
+    ['instructor', 'student'],
+    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' }),
+  );
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -261,7 +274,7 @@ async function getUsuarioDoFuncionario(
   return row?.user_id || null;
 }
 
-app.post('/fichas/:id/edicoes', async (c) => {
+app.post('/fichas/:id/edicoes', requireOperacoesFicha('create'), async (c) => {
   try {
     const fichaId = c.req.param('id');
     const userId = String((c as any).get('userId') || '');
@@ -526,7 +539,7 @@ app.get('/fichas-edicoes', async (c) => {
   }
 });
 
-app.post('/fichas-edicoes/:edicaoId/aprovar', async (c) => {
+app.post('/fichas-edicoes/:edicaoId/aprovar', requireOperacoesFicha('update'), async (c) => {
   try {
     const role = (c as any).get('userRole');
     if (!canManageEdits(role)) return c.json({ success: false, error: 'Acesso negado' }, 403);
@@ -646,7 +659,7 @@ app.post('/fichas-edicoes/:edicaoId/aprovar', async (c) => {
   }
 });
 
-app.post('/fichas-edicoes/:edicaoId/rejeitar', async (c) => {
+app.post('/fichas-edicoes/:edicaoId/rejeitar', requireOperacoesFicha('cancel'), async (c) => {
   try {
     const role = (c as any).get('userRole');
     if (!canManageEdits(role)) return c.json({ success: false, error: 'Acesso negado' }, 403);

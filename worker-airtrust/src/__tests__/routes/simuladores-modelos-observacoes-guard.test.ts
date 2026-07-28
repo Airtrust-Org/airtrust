@@ -63,6 +63,9 @@ function createDbMock() {
         bind(...args: unknown[]) {
           return {
             async first<T>() {
+              if (sql.includes('FROM empresas WHERE id')) {
+                return { operational_domain_rbac_enabled: 0 } as unknown as T;
+              }
               if (
                 sql ===
                 'SELECT id FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?'

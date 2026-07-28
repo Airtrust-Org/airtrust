@@ -100,6 +100,10 @@ function makeDbWithHistorico(opts: {
     const bindFn = (...args: unknown[]) => ({
       run: vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 999 } }),
       first: vi.fn().mockImplementation(async () => {
+        // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+        if (query.includes('FROM empresas WHERE id')) {
+          return { operational_domain_rbac_enabled: 0 };
+        }
         // historico tenant check
         if (query.includes('qualificacoes_historico qh') && query.includes('f.empresa_id')) {
           if (args[0] === empresaId && args[1] === historicoId) {

@@ -37,6 +37,8 @@ import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 import { sendSimulatorSessionEmailNotifications } from '../services/simuladores-session-notifications';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
+import { assertFuncionarioIdsWithinOperationalScope, normalizeTenantRole } from '../services/operational-domain-access';
+import { requireOperacoesSessao, buildOperationalSessaoReadFilter, narrowSetorIdsForOperationalDomain } from './simuladores-sessoes-rbac';
 
 const app = new Hono<{ Bindings: Env }>();
 // Todos os endpoints de sessões requerem autenticação
@@ -136,11 +138,20 @@ async function resolveSessaoReadAccess(
   }
 
   if (access.mode === 'restricted') {
+    const ctxForRole = c as { get: (k: string) => unknown };
+    const role = String(ctxForRole.get('userRole') || '');
+    const effectiveSetorIds = await narrowSetorIdsForOperationalDomain({
+      db: c.env.DB,
+      empresaId,
+      userId: Number(ctxForRole.get('userId') || 0),
+      role,
+      legacySetorIds: access.setorIds,
+    });
     const inScope = await areFuncionariosInsideSetorScope(
       c.env.DB,
       empresaId,
       linkedFuncionarioIds,
-      access.setorIds,
+      effectiveSetorIds,
     );
     return inScope ? { actorFuncionarioId: null, canViewAllRelatedData: true } : null;
   }
@@ -295,6 +306,14 @@ app.get('/agendamentos', async (c) => {
     if (empresaId) {
       query += ' AND sa.empresa_id = ?';
       params.push(empresaId);
+    }
+
+    // Item 1: narrows a gestor's list to sessões with a participant in scope.
+    if (empresaId) {
+      const opFilter = await buildOperationalSessaoReadFilter({ db: c.env.DB, empresaId: Number(empresaId), userId: Number(userId), role });
+      if (opFilter.blocked) return c.json({ success: true, data: [] });
+      query += opFilter.clause;
+      params.push(...opFilter.bindings);
     }
 
     // ── Filtro por perfil ─────────────────────────────────────────────────────
@@ -583,6 +602,14 @@ app.get('/sessoes', async (c) => {
       params.push(empresaId);
     }
 
+    // Item 1: same restriction as the full mode, for summary mode.
+    if (empresaId) {
+      const opFilter = await buildOperationalSessaoReadFilter({ db: c.env.DB, empresaId: Number(empresaId), userId: Number(userId), role });
+      if (opFilter.blocked) return c.json({ success: true, data: [] });
+      query += opFilter.clause;
+      params.push(...opFilter.bindings);
+    }
+
     // ── Filtro por perfil ─────────────────────────────────────────────────────
     if (!isFullAccessRole(role)) {
       const funcId = await getFuncId(c.env.DB, userId, String(empresaId ?? ''));
@@ -662,7 +689,7 @@ app.get('/sessoes', async (c) => {
  * Criar nova sessão com participantes e fichas automáticas
  * Versão 2.0 - Com auto-população de manobras
  */
-app.post('/sessoes', async (c) => {
+app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
@@ -768,6 +795,17 @@ app.post('/sessoes', async (c) => {
         400,
       );
     }
+
+    // Item 5: validate every new participante's setor (not instrutor_id/examinador_id).
+    await assertFuncionarioIdsWithinOperationalScope({
+      db: c.env.DB,
+      empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+      funcionarioIds: (participantes as Array<{ funcionario_id?: unknown }>)
+        .map((part) => Number(part?.funcionario_id))
+        .filter((value) => Number.isFinite(value) && value > 0),
+    });
 
     // ── Guardrail: validar papéis de instrutor e examinador ──────────────────
     // O instrutor deve ter flag is_instrutor. O examinador deve ter flag
@@ -1621,7 +1659,7 @@ app.get('/sessoes/:id/fichas', async (c) => {
   }
 });
 
-app.post('/sessoes/:id/notificacoes', async (c) => {
+app.post('/sessoes/:id/notificacoes', requireOperacoesSessao('create'), async (c) => {
   try {
     const sessaoId = c.req.param('id');
     const body = (await c.req.json().catch(() => ({}))) as {

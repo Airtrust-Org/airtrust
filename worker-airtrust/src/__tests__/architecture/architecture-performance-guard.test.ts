@@ -13,6 +13,10 @@ const LARGE_FILE_LINE_CAPS = {
   // Cap raised 2026-06-30: counted 2884 (pre-existing growth).
   'services/sigvoos-frms.ts': 2884,
   // Cap raised 2026-07-09: counted 3000 lines (addition of new integration handlers, canonical training categories, and specific logic for fmt/classif columns).
+  // RBAC additions from gestor-operational-domain-rbac (domain resolution
+  // at create time, read-scope filtering, schema-drift defenses) were
+  // extracted into routes/lms-cursos-rbac.ts to restore this cap — see
+  // docs/rbac/gestor-operational-autonomy.md.
   'routes/lms-cursos.ts': 3000,
   // Cap raised 2026-06-29: counted 2277 (pre-existing growth).
   'routes/escalas-alocacoes.ts': 2277,

@@ -34,6 +34,23 @@ import {
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../../services/employee-sector-access';
+import {
+  requireOperationalAccess,
+  resolveOperationalAccess,
+  isValidOperationalDomain,
+  resolveOperationalReadScope,
+  appendOperationalReadFilter,
+  assertOperationalAccess,
+  normalizeTenantRole,
+} from '../../services/operational-domain-access';
+
+// Tipo de qualificação domain varies per row (via categoria.dominio_codigo).
+// update/delete resolve the domain dynamically from the existing row via
+// this static middleware. 'create' has no row yet — POST / resolves the
+// domain inline instead, from the request payload's own categoria_id
+// (already validated before insert as categoriaCanonica) — see below.
+const requireOperacoesTipo = (action: 'update' | 'delete') =>
+  requireOperationalAccess({ action, resourceType: 'qualificacao_tipo' });
 
 type TipoAtualizadoRow = {
   id: number;
@@ -460,17 +477,17 @@ async function resolveCategoriaCanonica(
   empresaId: number,
   categoriaId?: number | null,
   categoriaLegada?: string | null,
-): Promise<{ id: number; nome: string } | null> {
+): Promise<{ id: number; nome: string; dominio_codigo: string | null } | null> {
   if (categoriaId) {
     return db
       .prepare(
-        `SELECT id, nome
+        `SELECT id, nome, dominio_codigo
            FROM qualificacoes_categorias
           WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
           LIMIT 1`,
       )
       .bind(categoriaId, empresaId)
-      .first<{ id: number; nome: string }>();
+      .first<{ id: number; nome: string; dominio_codigo: string | null }>();
   }
 
   // Compatibility only: a legacy client can name an already canonical category,
@@ -478,7 +495,7 @@ async function resolveCategoriaCanonica(
   if (!categoriaLegada?.trim()) return null;
   return db
     .prepare(
-      `SELECT id, nome
+      `SELECT id, nome, dominio_codigo
          FROM qualificacoes_categorias
         WHERE empresa_id = ?
           AND ativo = 1
@@ -487,7 +504,7 @@ async function resolveCategoriaCanonica(
         LIMIT 1`,
     )
     .bind(empresaId, categoriaLegada)
-    .first<{ id: number; nome: string }>();
+    .first<{ id: number; nome: string; dominio_codigo: string | null }>();
 }
 
 async function listTipoSetores(
@@ -659,6 +676,20 @@ router.get(
     const conditions = ['qt.deleted_at IS NULL', 'qt.empresa_id = ?', setorScope.clause];
     const bindings: unknown[] = [empresaId, ...setorScope.bindings];
 
+    // Item 1 (read-side filtering): tipos de qualificação são conteúdo
+    // compartilhado por categoria — uma vez com RBAC ativo, um gestor só
+    // deve listar tipos cuja categoria esteja classificada em um dos seus
+    // domínios. No-op em modo legado / para admin/instrutor/aluno.
+    if (columnsSupport.hasCategoriaId) {
+      const readScope = await resolveOperationalReadScope({
+        db,
+        empresaId,
+        userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+        userRole: (c.get as (k: string) => unknown)('userRole'),
+      });
+      appendOperationalReadFilter(conditions, bindings, readScope, { domainColumn: 'qc.dominio_codigo' });
+    }
+
     if (categoriaId > 0) {
       conditions.push('qc.id = ?');
       bindings.push(categoriaId);
@@ -760,6 +791,22 @@ router.get(
       return c.json({ success: false, error: 'Tipo não encontrado' }, 404);
     }
 
+    // Item 1 (read-side filtering): direct-ID access must also respect
+    // domain classification once RBAC is active, not just legacy setor
+    // scope. Scoped to 'manager' only — admin/instrutor/aluno keep their
+    // existing access model unchanged (same principle as Item 4).
+    if (normalizeTenantRole((c.get as (k: string) => unknown)('userRole')) === 'manager') {
+      await assertOperationalAccess({
+        db,
+        empresaId,
+        userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+        userRole: (c.get as (k: string) => unknown)('userRole'),
+        action: 'view',
+        resourceType: 'qualificacao_tipo',
+        resourceId: Number(id),
+      });
+    }
+
     return c.json({ success: true, data: enrichTipoRow(tipo) });
   }),
 );
@@ -811,7 +858,7 @@ router.get(
 router.post(
   '/',
   auth(),
-  requireRole('admin'),
+  requireRole('admin', 'manager'),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
@@ -846,6 +893,32 @@ router.post(
       return c.json({ success: false, error: 'Categoria canônica não encontrada ou inativa' }, 404);
     }
     const categoria = categoriaCanonica.nome;
+
+    // Bloqueador 4: resolve the domain from the payload's own categoria
+    // (already validated above) instead of pinning creation to a fixed
+    // domain — a gestor de Manutenção creating a Manutenção-domain tipo
+    // must not be blocked. Uses resolveOperationalAccess directly (not the
+    // assertOperationalAccess/requireOperationalAccess wrappers) because
+    // those require an explicit domain string when there's no resourceId
+    // to resolve one from — exactly the create-time gap this fixes.
+    const operationalAccess = await resolveOperationalAccess({
+      db,
+      empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+    });
+    if (operationalAccess.enabled) {
+      const categoriaDomain = categoriaCanonica.dominio_codigo;
+      if (categoriaDomain !== null && !isValidOperationalDomain(categoriaDomain)) {
+        return c.json({ success: false, error: 'Domínio da categoria é inválido' }, 422);
+      }
+      if (!categoriaDomain || !operationalAccess.domains.includes(categoriaDomain)) {
+        forbidden(
+          'Categoria sem domínio classificado ou fora do seu escopo — acesso negado (fail-closed)',
+          categoriaDomain ? 'OPERATIONAL_DOMAIN_ACCESS_DENIED' : 'RESOURCE_DOMAIN_UNCLASSIFIED',
+        );
+      }
+    }
 
     // Verificar duplicidade
     const existing = await db
@@ -1052,7 +1125,8 @@ router.post(
 router.put(
   '/:id',
   auth(),
-  requireRole('admin'),
+  requireRole('admin', 'manager'),
+  requireOperacoesTipo('update'),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
@@ -1145,6 +1219,31 @@ router.put(
       : null;
     if (categoriaFoiInformada && !categoriaCanonica) {
       return c.json({ success: false, error: 'Categoria canônica não encontrada ou inativa' }, 404);
+    }
+    // Bloqueador 4: requireOperacoesTipo('update') already validated the
+    // gestor has access to this tipo's CURRENT (origin) domain. When the
+    // update also changes the category, validate the DESTINATION domain
+    // too — otherwise a gestor could move a tipo into a domain outside
+    // their own scope.
+    if (categoriaCanonica) {
+      const operationalAccess = await resolveOperationalAccess({
+        db,
+        empresaId,
+        userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+        userRole: (c.get as (k: string) => unknown)('userRole'),
+      });
+      if (operationalAccess.enabled) {
+        const destinoDominio = categoriaCanonica.dominio_codigo;
+        if (destinoDominio !== null && !isValidOperationalDomain(destinoDominio)) {
+          return c.json({ success: false, error: 'Domínio da categoria de destino é inválido' }, 422);
+        }
+        if (!destinoDominio || !operationalAccess.domains.includes(destinoDominio)) {
+          forbidden(
+            'Categoria de destino sem domínio classificado ou fora do seu escopo — acesso negado (fail-closed)',
+            destinoDominio ? 'OPERATIONAL_DOMAIN_ACCESS_DENIED' : 'RESOURCE_DOMAIN_UNCLASSIFIED',
+          );
+        }
+      }
     }
     const categoriaFinal = categoriaCanonica?.nome ?? String(rowAtual?.categoria || '');
     // Formato não é mais atualizado, mesmo se enviado pelo client.
@@ -1544,7 +1643,8 @@ router.put(
 router.put(
   '/:id/setores',
   auth(),
-  requireRole('admin'),
+  requireRole('admin', 'manager'),
+  requireOperacoesTipo('update'),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
@@ -1598,7 +1698,8 @@ router.put(
 router.delete(
   '/:id',
   auth(),
-  requireRole('admin'),
+  requireRole('admin', 'manager'),
+  requireOperacoesTipo('delete'),
   safe(async (c) => {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);

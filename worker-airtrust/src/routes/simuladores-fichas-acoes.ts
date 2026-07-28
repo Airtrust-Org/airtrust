@@ -21,6 +21,19 @@ import {
   isInstructorSpecialSession,
   normalizeInstructionSeatValue,
 } from '../../../src/shared/simuladores/ficha-header';
+import {
+  requireOperationalAccess,
+  skipOperationalGuardForRoles,
+} from '../services/operational-domain-access';
+
+// Fichas de sessão de simulador são fixed-domain OPERACOES — see
+// docs/rbac/gestor-operational-autonomy.md. This guard does NOT block based
+// on record status (signed/finalized) — only on domain/setor access.
+const requireOperacoesFicha = (action: 'complete' | 'cancel') =>
+  skipOperationalGuardForRoles(
+    ['instructor', 'student'],
+    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' }),
+  );
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -275,6 +288,14 @@ async function criarNotificacaoFicha(
   }
 }
 
+// Signing a ficha is a personal, identity-gated action (ALUNO signs their
+// own ficha, INSTRUTOR signs as evaluator) authorized by the ownership
+// checks below (STUDENT_SIGNATURE_FORBIDDEN etc.), not an admin/gestor
+// operational-management action — requireRole/requireOperacoesFicha do NOT
+// belong here; adding them would block legitimate students/instructors
+// from signing their own work, which is outside the scope of this RBAC
+// (gestor-operational-autonomy is about admin vs gestor separation, not
+// about revoking existing self-service actions).
 app.post('/fichas/:id/assinar', async (c) => {
   try {
     const id = c.req.param('id');
@@ -537,7 +558,7 @@ app.post('/fichas/:id/assinar', async (c) => {
 });
 
 // POST /fichas/:id/arquivar - Archive ficha to Pasta Virtual
-app.post('/fichas/:id/arquivar', async (c) => {
+app.post('/fichas/:id/arquivar', requireOperacoesFicha('cancel'), async (c) => {
   try {
     const ctx = c as unknown as { get: (k: string) => unknown };
     const userId = String(ctx.get('userId') || '');

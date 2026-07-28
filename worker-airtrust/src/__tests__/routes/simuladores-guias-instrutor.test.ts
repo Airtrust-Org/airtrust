@@ -169,6 +169,9 @@ function createMockEnv(guias: GuiaRow[]) {
           return binder;
         },
         async first<T = unknown>(): Promise<T | null> {
+          if (sql.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 } as unknown as T;
+          }
           if (sql.includes('FROM modelos_aeronave')) {
             return { id: 1, nome: 'AW139', codigo: 'AW139' } as unknown as T;
           }
@@ -431,6 +434,9 @@ describe('simuladores-guias-instrutor — segurança e isolamento', () => {
             return binder;
           },
           async first<T = unknown>(): Promise<T | null> {
+            if (sql.includes('FROM empresas WHERE id')) {
+              return { operational_domain_rbac_enabled: 0 } as unknown as T;
+            }
             if (sql.includes('FROM modelos_aeronave')) {
               return { id: 1, nome: 'AW139', codigo: 'AW139' } as unknown as T;
             }

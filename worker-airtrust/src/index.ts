@@ -66,6 +66,8 @@ import { lookup } from './routes/lookup';
 import funcoes from './routes/funcoes';
 import setores from './routes/setores';
 import setoresGestores from './routes/setores-gestores';
+import adminOperationalDomainRbac from './routes/admin-operational-domain-rbac';
+import meOperationalAccess from './routes/me-operational-access';
 import matrizTreinamento from './routes/matriz-treinamento';
 import aeronaves from './routes/aeronaves';
 import modelosAeronave from './routes/modelos-aeronave';
@@ -482,6 +484,8 @@ app.route('/api/setores', setores);
  * DELETE /api/setores-gestores/:id
  */
 app.route('/api/setores-gestores', setoresGestores);
+app.route('/api/admin/operational-domain-rbac', adminOperationalDomainRbac);
+app.route('/api/me/operational-access', meOperationalAccess);
 
 /**
  * Matriz de Treinamento por Função

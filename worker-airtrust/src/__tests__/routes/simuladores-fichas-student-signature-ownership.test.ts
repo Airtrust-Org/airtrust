@@ -10,9 +10,13 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-vi.mock('../../middleware/tenant', () => ({
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
   getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
-}));
+  };
+});
 
 vi.mock('../../services/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
@@ -36,6 +40,14 @@ vi.mock('../../routes/simuladores-shared', async () => {
 
 // ── Import after mocks ───────────────────────────────────────────────────────
 import simuladoresFichasRoutes from '../../routes/simuladores-fichas';
+import { errorHandler } from '../../middleware/error-handler';
+
+// Bloqueador 5 closure: requireRole now legitimately throws ApiError for
+// unauthorized roles on these routes. Registering the real error handler
+// on this bare router (tested via .fetch() directly, bypassing the
+// parent app's global app.onError) turns that into the proper JSON
+// status code instead of Hono's generic 500.
+simuladoresFichasRoutes.onError(errorHandler);
 
 function createDb() {
   const fichaRow = {

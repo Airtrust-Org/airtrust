@@ -53,6 +53,21 @@ import {
 import fichasSimuladorRoutes from './simuladores-fichas-simulador';
 import fichasAcoesRoutes from './simuladores-fichas-acoes';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
+import {
+  requireOperationalAccess,
+  skipOperationalGuardForRoles,
+  resolveOperationalReadScope,
+  normalizeTenantRole,
+} from '../services/operational-domain-access';
+
+// Fichas de sessão de simulador são fixed-domain OPERACOES — see
+// docs/rbac/gestor-operational-autonomy.md. This guard does NOT block based
+// on record status (signed/finalized) — only on domain/setor access.
+const requireOperacoesFicha = (action: 'create' | 'update' | 'delete' | 'export') =>
+  skipOperationalGuardForRoles(
+    ['instructor', 'student'],
+    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' }),
+  );
 
 const app = new Hono<{ Bindings: Env }>();
 // Todos os endpoints de fichas requerem autenticação
@@ -202,6 +217,31 @@ async function areFuncionariosInsideSetorScope(
 
   const allowed = await getAllowedFuncionariosBySetorScope(db, empresaId, ids, setorIds);
   return ids.every((id) => allowed.has(id));
+}
+
+/**
+ * Item 1 (read-side filtering): narrows a legacy `access.setorIds` scope
+ * (from getEmployeeSectorAccess) down to setores with a classified domain,
+ * once the tenant's RBAC is active and the caller is a gestor. No-op
+ * (returns the legacy setorIds unchanged) for admin/instrutor/aluno, or
+ * while RBAC is disabled — same rule as resolveOperationalReadScope,
+ * applied everywhere this file already does a setor-scoped fichas read.
+ */
+async function effectiveFichaSetorIds(params: {
+  db: D1Database;
+  empresaId: number;
+  userId: number;
+  role: string;
+  legacySetorIds: number[];
+}): Promise<number[]> {
+  if (normalizeTenantRole(params.role) !== 'manager') return params.legacySetorIds;
+  const readScope = await resolveOperationalReadScope({
+    db: params.db,
+    empresaId: params.empresaId,
+    userId: params.userId,
+    userRole: params.role,
+  });
+  return readScope.restricted ? readScope.setorIds : params.legacySetorIds;
 }
 
 function extractIsoDateOnly(value?: string | null): string | null {
@@ -621,11 +661,26 @@ app.get('/fichas', async (c) => {
 
     let data = r.results || [];
     if (access.mode === 'restricted') {
+      // Item 1 (read-side filtering): once RBAC is active, a gestor's
+      // legacy setor scope must be additionally narrowed to setores with a
+      // classified domain — same rule as resolveOperationalReadScope.
+      let effectiveSetorIds = access.setorIds;
+      if (normalizeTenantRole(role) === 'manager') {
+        const readScope = await resolveOperationalReadScope({
+          db: c.env.DB,
+          empresaId: tenantEmpresaId,
+          userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+          userRole: role,
+        });
+        if (readScope.restricted) {
+          effectiveSetorIds = readScope.setorIds;
+        }
+      }
       const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
         c.env.DB,
         tenantEmpresaId,
         data.map((row: any) => row?.colaborador_id_aluno),
-        access.setorIds,
+        effectiveSetorIds,
       );
       data = data.filter((row: any) => allowedAlunoIds.has(Number(row?.colaborador_id_aluno || 0)));
     }
@@ -637,7 +692,7 @@ app.get('/fichas', async (c) => {
   }
 });
 
-app.post('/fichas', async (c) => {
+app.post('/fichas', requireOperacoesFicha('create'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
@@ -888,11 +943,18 @@ app.get('/fichas/:id', async (c) => {
     // ─────────────────────────────────────────────────────────────────────────
 
     if (access.mode === 'restricted') {
+      const effectiveSetorIds = await effectiveFichaSetorIds({
+        db: c.env.DB,
+        empresaId: tenantEmpresaId,
+        userId: Number(userId),
+        role,
+        legacySetorIds: access.setorIds,
+      });
       const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
         c.env.DB,
         tenantEmpresaId,
         [Number(f.colaborador_id_aluno || 0)],
-        access.setorIds,
+        effectiveSetorIds,
       );
       if (!allowedAlunoIds.has(Number(f.colaborador_id_aluno || 0))) {
         return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
@@ -1133,6 +1195,10 @@ app.get('/fichas/:id', async (c) => {
  * POST /fichas/:id/pdf
  * Gerar PDF da ficha de treinamento
  */
+// Exporting a ficha's PDF is a self-service action gated by the route's own
+// ownership check (getEmployeeSectorAccess below — the aluno/instrutor of
+// THAT ficha can export their own record), not an admin/gestor operational-
+// management action — requireRole/requireOperacoesFicha do NOT belong here.
 app.post('/fichas/:id/pdf', async (c) => {
   try {
     const fichaId = c.req.param('id');
@@ -1237,11 +1303,18 @@ app.post('/fichas/:id/pdf', async (c) => {
 
     // ── Verificar acesso por setor ───────────────────────────────────────────
     if (access.mode === 'restricted') {
+      const effectiveSetorIds = await effectiveFichaSetorIds({
+        db: c.env.DB,
+        empresaId: tenantEmpresaId,
+        userId: Number(userId),
+        role,
+        legacySetorIds: access.setorIds,
+      });
       const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
         c.env.DB,
         tenantEmpresaId,
         [Number(f.colaborador_id_aluno || 0)],
-        access.setorIds,
+        effectiveSetorIds,
       );
       if (!allowedAlunoIds.has(Number(f.colaborador_id_aluno || 0))) {
         return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
@@ -1461,7 +1534,7 @@ app.post('/fichas/:id/pdf', async (c) => {
   }
 });
 
-app.put('/fichas/:id', async (c) => {
+app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
   try {
     const id = c.req.param('id');
     const userId = getContextUserId(c);
@@ -1757,7 +1830,7 @@ app.put('/fichas/:id', async (c) => {
   }
 });
 
-app.delete('/fichas/:id', async (c) => {
+app.delete('/fichas/:id', requireOperacoesFicha('delete'), async (c) => {
   try {
     const denied = requireAdminForDelete(c);
     if (denied) return denied;

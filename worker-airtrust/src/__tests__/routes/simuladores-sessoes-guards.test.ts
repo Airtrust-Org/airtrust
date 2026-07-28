@@ -40,6 +40,15 @@ vi.mock('../../middleware/auth', () => ({
 
 import simuladoresSessoesRoutes from '../../routes/simuladores-sessoes';
 import simuladoresFichasRoutes from '../../routes/simuladores-fichas';
+import { errorHandler } from '../../middleware/error-handler';
+
+// Bloqueador 5 closure: requireRole now legitimately throws ApiError for
+// unauthorized roles on these routes. Registering the real error handler
+// on this bare router (tested via .fetch() directly, bypassing the
+// parent app's global app.onError) turns that into the proper JSON
+// status code instead of Hono's generic 500.
+simuladoresSessoesRoutes.onError(errorHandler);
+simuladoresFichasRoutes.onError(errorHandler);
 
 type SessionDbOptions = {
   throwOnSelect?: boolean;
@@ -48,6 +57,11 @@ type SessionDbOptions = {
 function createSessionDb(opts: SessionDbOptions = {}) {
   const db = {
     prepare: vi.fn((query: string) => {
+      // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+      if (query.includes('FROM empresas WHERE id')) {
+        return { bind: (..._a: unknown[]) => ({ first: async () => ({ operational_domain_rbac_enabled: 0 }) }) };
+      }
+
       if (
         query.includes(
           'SELECT * FROM simulador_agendamentos WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
@@ -96,9 +110,11 @@ function createSessionDb(opts: SessionDbOptions = {}) {
 
 function createEmptyDb() {
   return {
-    prepare: vi.fn((_query: string) => ({
+    prepare: vi.fn((query: string) => ({
       bind: (..._args: unknown[]) => ({
-        first: async () => null,
+        first: async () =>
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          query.includes('FROM empresas WHERE id') ? { operational_domain_rbac_enabled: 0 } : null,
         all: async () => ({ results: [] }),
         run: async () => ({ meta: { changes: 0, last_row_id: 0 } }),
       }),

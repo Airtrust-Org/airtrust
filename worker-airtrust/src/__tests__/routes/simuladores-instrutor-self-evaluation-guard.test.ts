@@ -39,10 +39,14 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-vi.mock('../../middleware/tenant', () => ({
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
   getTenantContext: (c: any) => ({ empresaId: Number(c.get('empresaId') || 6) }),
   getEmpresaId: (c: any) => Number(c.get('empresaId') || 6),
-}));
+  };
+});
 
 vi.mock('../../services/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
@@ -67,6 +71,10 @@ function createDbMock() {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (query.includes("PRAGMA table_info('funcionarios')")) return null;
           return null;
         },

@@ -37,6 +37,13 @@ import {
   looksLikePdf,
   sha256Hex,
 } from '../lib/guias-instrutor/storage';
+import { requireOperationalAccess } from '../services/operational-domain-access';
+
+// Guias de instrutor são fixed-domain OPERACOES — see
+// docs/rbac/gestor-operational-autonomy.md. Additive to the existing
+// requireGuiaInstrutorManage() capability check — never replaces it.
+const requireOperacoesGuia = (action: 'create' | 'update' | 'publish' | 'unpublish') =>
+  requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_guia_instrutor' });
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -461,7 +468,7 @@ app.get('/guias-instrutor/:id/download', requireGuiaInstrutorRead(), (c) =>
 // ADMINISTRAÇÃO — gestor/admin autorizado da empresa ativa
 // ─────────────────────────────────────────────────────────────────────────
 
-app.post('/guias-instrutor', requireGuiaInstrutorManage(), async (c) => {
+app.post('/guias-instrutor', requireGuiaInstrutorManage(), requireOperacoesGuia('create'), async (c) => {
   const { empresaId } = getTenantContext(c);
   const userId = normalizeContextUserId(c.get('userId'));
 
@@ -505,7 +512,7 @@ app.post('/guias-instrutor', requireGuiaInstrutorManage(), async (c) => {
   return c.json({ success: true, data: { id: guiaId } }, 201);
 });
 
-app.put('/guias-instrutor/:id', requireGuiaInstrutorManage(), async (c) => {
+app.put('/guias-instrutor/:id', requireGuiaInstrutorManage(), requireOperacoesGuia('update'), async (c) => {
   const { empresaId } = getTenantContext(c);
   const userId = normalizeContextUserId(c.get('userId'));
   const id = Number(c.req.param('id'));
@@ -599,7 +606,11 @@ app.put('/guias-instrutor/:id', requireGuiaInstrutorManage(), async (c) => {
  * autocorrigem numa nova tentativa, já que a chave R2 é determinística
  * (mesma versão ⇒ mesma chave ⇒ sobrescreve o objeto órfão).
  */
-app.post('/guias-instrutor/:id/versoes', requireGuiaInstrutorManage(), async (c) => {
+app.post(
+  '/guias-instrutor/:id/versoes',
+  requireGuiaInstrutorManage(),
+  requireOperacoesGuia('create'),
+  async (c) => {
   const { empresaId } = getTenantContext(c);
   const userId = normalizeContextUserId(c.get('userId'));
   const baseId = Number(c.req.param('id'));
@@ -770,7 +781,11 @@ app.post('/guias-instrutor/:id/versoes', requireGuiaInstrutorManage(), async (c)
   }
 });
 
-app.post('/guias-instrutor/:id/validar-html', requireGuiaInstrutorManage(), async (c) => {
+app.post(
+  '/guias-instrutor/:id/validar-html',
+  requireGuiaInstrutorManage(),
+  requireOperacoesGuia('update'),
+  async (c) => {
   const { empresaId } = getTenantContext(c);
   const userId = normalizeContextUserId(c.get('userId'));
   const id = Number(c.req.param('id'));
@@ -815,7 +830,11 @@ app.post('/guias-instrutor/:id/validar-html', requireGuiaInstrutorManage(), asyn
   });
 });
 
-app.post('/guias-instrutor/:id/ativar', requireGuiaInstrutorManage(), async (c) => {
+app.post(
+  '/guias-instrutor/:id/ativar',
+  requireGuiaInstrutorManage(),
+  requireOperacoesGuia('publish'),
+  async (c) => {
   const { empresaId } = getTenantContext(c);
   const userId = normalizeContextUserId(c.get('userId'));
   const id = Number(c.req.param('id'));
@@ -892,7 +911,11 @@ app.post('/guias-instrutor/:id/ativar', requireGuiaInstrutorManage(), async (c) 
   return c.json({ success: true, data: { id, status: 'ATIVO' } });
 });
 
-app.post('/guias-instrutor/:id/desativar', requireGuiaInstrutorManage(), async (c) => {
+app.post(
+  '/guias-instrutor/:id/desativar',
+  requireGuiaInstrutorManage(),
+  requireOperacoesGuia('unpublish'),
+  async (c) => {
   const { empresaId } = getTenantContext(c);
   const userId = normalizeContextUserId(c.get('userId'));
   const id = Number(c.req.param('id'));

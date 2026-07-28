@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
-vi.mock('../../middleware/tenant', () => ({
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
   getEmpresaId: () => 6,
-}));
+  };
+});
 
 vi.mock('../../routes/simuladores-fichas-helpers', () => ({
   gerarQualificacaoDaFicha: vi.fn(),
@@ -21,6 +25,14 @@ vi.mock('../../utils/ficha-availability', () => ({
 }));
 
 import simuladoresFichasSimuladorRoutes from '../../routes/simuladores-fichas-simulador';
+import { errorHandler } from '../../middleware/error-handler';
+
+// Bloqueador 5 closure: requireRole now legitimately throws ApiError for
+// unauthorized roles on these routes. Registering the real error handler
+// on this bare router (tested via .fetch() directly, bypassing the
+// parent app's global app.onError) turns that into the proper JSON
+// status code instead of Hono's generic 500.
+simuladoresFichasSimuladorRoutes.onError(errorHandler);
 
 function normalizeSql(query: string): string {
   return query.replace(/\s+/g, ' ').trim();
@@ -42,6 +54,10 @@ function createDbMock(options?: {
         bind(...args: unknown[]) {
           return {
             async first<T>() {
+            // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+            if (sql.includes('FROM empresas WHERE id')) {
+              return { operational_domain_rbac_enabled: 0 } as T;
+            }
             if (
               sql ===
               'SELECT * FROM fichas_sessao_manobras WHERE ficha_id=? AND ordem=? AND deleted_at IS NULL'

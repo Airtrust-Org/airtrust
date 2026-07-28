@@ -160,6 +160,10 @@ const AdminPermissoes = lazyWithRetry(
   () => import('./pages/admin/PermissoesPage'),
   'AdminPermissoes',
 );
+const AdminOperationalDomainRbac = lazyWithRetry(
+  () => import('./pages/admin/OperationalDomainRbacPage'),
+  'AdminOperationalDomainRbac',
+);
 // Escalas (Planejamento de Escala Mensal)
 const EscalasMensais = lazyWithRetry(
   () => import('./pages/escalas/EscalasMensais'),
@@ -374,6 +378,14 @@ export default function App() {
                         element={
                           <ProtectedRoute>
                             <AdminPermissoes />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/admin/operational-domain-rbac"
+                        element={
+                          <ProtectedRoute>
+                            <AdminOperationalDomainRbac />
                           </ProtectedRoute>
                         }
                       />

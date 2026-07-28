@@ -10,9 +10,13 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-vi.mock('../../middleware/tenant', () => ({
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
   getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
-}));
+  };
+});
 
 vi.mock('../../services/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
@@ -59,6 +63,10 @@ function createDbMock(options?: {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (query.includes('COALESCE(sa.data, fs.data_sessao) as data_sessao')) {
             return {
               data_sessao: options?.sessionDate || '2026-06-16',

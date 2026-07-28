@@ -64,6 +64,9 @@ function createDbMock() {
               return { results: [] } as T;
             },
             async first<T>() {
+              if (sql.includes('FROM empresas WHERE id')) {
+                return { operational_domain_rbac_enabled: 0 } as unknown as T;
+              }
               // 1. Validar tenant, inativo e VOO do tipo principal
               if (sql.includes('FROM qualificacoes_tipos qt') && sql.includes('JOIN qualificacoes_categorias') && sql.includes('WHERE qt.id = ?')) {
                 const tipoId = args[0] as number;

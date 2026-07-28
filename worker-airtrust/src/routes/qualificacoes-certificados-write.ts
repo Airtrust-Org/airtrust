@@ -20,6 +20,15 @@ import {
   resolveCertificadoContext,
 } from './qualificacoes-certificados-helpers';
 import { generateCertificateForHistorico, buildCertificadoR2Key } from '../services/generate-certificate';
+import { requireOperationalAccess } from '../services/operational-domain-access';
+
+// Certificado é resolvido dinamicamente para OPERACOES por resourceType
+// (via qualificacoes_historico → categoria.dominio_codigo) — see
+// docs/rbac/gestor-operational-autonomy.md. :id in these routes is the
+// historico id, which resolveResourceDomain('qualificacao_certificado', id)
+// resolves through the same qualificacoes_historico lookup.
+const requireOperacoesCertificado = (action: 'issue' | 'create') =>
+  requireOperationalAccess({ action, resourceType: 'qualificacao_certificado' });
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -36,6 +45,7 @@ app.post(
   '/historico/:id/certificados/gerar',
   auth(),
   requireRole('admin', 'manager'),
+  requireOperacoesCertificado('issue'),
   async (c) => {
     const id = parseInt(c.req.param('id'));
     const empresaId = getEmpresaId(c);
@@ -193,6 +203,7 @@ app.post(
   '/historico/:id/certificados/upload',
   auth(),
   requireRole('admin', 'manager'),
+  requireOperacoesCertificado('create'),
   async (c) => {
     const db = c.env.DB;
     const bucket = c.env.BUCKET;

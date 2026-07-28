@@ -31,6 +31,7 @@ describe('Simuladores Modelos N+1 Characterization', () => {
       const q = query.toUpperCase();
       const mockResult = {
         first: async () => {
+          if (q.includes('FROM EMPRESAS WHERE ID')) return { operational_domain_rbac_enabled: 0 };
           if (q.includes('FROM TIPOS_SESSAO')) return { id: 1 };
           if (q.includes('FROM MODELOS_SESSAO')) return { id: 1, codigo: 'MOD', nome: 'Modelo' };
           if (q.includes('FROM MANOBRAS')) return { id: 2, codigo: 'MAN', nome: 'Manobra' };

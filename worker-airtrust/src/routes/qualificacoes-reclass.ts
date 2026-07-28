@@ -13,6 +13,20 @@ import type { Env, ApiResponse, QualificacaoReclassQueueItem } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { requireRole } from '../middleware/rbac';
+import { requireOperationalAccess } from '../services/operational-domain-access';
+
+// Reclassification mutates an existing qualificacoes_historico row (its
+// target tipo), so it's resourceType 'qualificacao_historico' — domain
+// resolves dynamically from that row's own categoria.dominio_codigo. The
+// route param is :historicoId, not :id, so resolveResourceId is explicit
+// (the guard's default resolver only reads c.req.param('id')).
+const requireOperacoesReclass = (action: 'update') =>
+  requireOperationalAccess({
+    action,
+    resourceType: 'qualificacao_historico',
+    resolveResourceId: (c) => Number(c.req.param('historicoId')) || null,
+  });
+
 // Simple CSV escape
 function csvEscape(v: unknown): string {
   if (v === null || v === undefined) return '';
@@ -110,7 +124,12 @@ app.get('/progresso', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // PATCH /:historicoId - aplicar reclassificação
-app.patch('/:historicoId', auth(), requireRole('admin', 'manager'), async (c) => {
+app.patch(
+  '/:historicoId',
+  auth(),
+  requireRole('admin', 'manager'),
+  requireOperacoesReclass('update'),
+  async (c) => {
   const { empresaId } = getTenantContext(c);
   const db = c.env.DB;
   const historicoIdRaw = c.req.param('historicoId');

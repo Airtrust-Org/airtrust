@@ -40,6 +40,22 @@ import {
   realizarG1SemPendente,
 } from '../../services/qualificacoes-g1-sem';
 import { ensureCertificateForQualification } from '../../services/ensure-certificate';
+import { requireOperationalAccess } from '../../services/operational-domain-access';
+
+// Qualificação histórico domain varies per row (via categoria.dominio_codigo
+// — can be OPERACOES, MANUTENCAO, etc.), so actions on an EXISTING record
+// resolve their domain dynamically from the resource itself. Only 'create'
+// has no existing row to resolve from; it's pinned to OPERACOES as a known
+// residual limitation (see docs/rbac/gestor-operational-autonomy.md §Riscos
+// residuais) — a gestor de Manutenção creating a new histórico via this
+// endpoint would need the domain resolved from the payload's categoria_id
+// instead, which this pass does not implement.
+const requireOperacoesHistorico = (
+  action: 'create' | 'update' | 'delete' | 'reissue' | 'complete' | 'cancel',
+) =>
+  action === 'create'
+    ? requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'qualificacao_historico' })
+    : requireOperationalAccess({ action, resourceType: 'qualificacao_historico' });
 
 const writeRouter = new Hono<{ Bindings: Env }>();
 
@@ -121,6 +137,7 @@ writeRouter.post(
   '/:id/renovar',
   auth(),
   requireRole('admin', 'manager'),
+  requireOperacoesHistorico('reissue'),
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
@@ -500,6 +517,7 @@ writeRouter.post(
   '/',
   auth(),
   requireRole('admin', 'manager'),
+  requireOperacoesHistorico('create'),
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
@@ -893,6 +911,7 @@ writeRouter.put(
   '/:id',
   auth(),
   requireRole('admin', 'manager'),
+  requireOperacoesHistorico('update'),
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
@@ -1117,6 +1136,7 @@ writeRouter.patch(
   '/:id/reagendar',
   auth(),
   requireRole('admin', 'manager'),
+  requireOperacoesHistorico('update'),
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
@@ -1245,6 +1265,7 @@ writeRouter.post(
   '/:id/confirmar',
   auth(),
   requireRole('admin', 'manager'),
+  requireOperacoesHistorico('complete'),
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
@@ -1385,6 +1406,7 @@ writeRouter.patch(
   '/:id/cancelar',
   auth(),
   requireRole('admin', 'manager'),
+  requireOperacoesHistorico('cancel'),
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
@@ -1455,6 +1477,7 @@ writeRouter.delete(
   '/:id',
   auth(),
   requireRole('admin', 'manager'),
+  requireOperacoesHistorico('delete'),
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);

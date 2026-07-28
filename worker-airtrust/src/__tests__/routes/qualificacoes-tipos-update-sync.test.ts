@@ -77,10 +77,18 @@ type QueryHandler = {
   all?: (args: unknown[]) => Promise<unknown> | unknown;
 };
 
+// This suite doesn't exercise the operational-domain RBAC feature — it's a
+// legacy-tenant test, so the flag query resolves to 0 (disabled) by
+// default, same as any tenant that hasn't opted into the new RBAC.
+const DEFAULT_HANDLERS: Array<[string, QueryHandler]> = [
+  ['operational_domain_rbac_enabled', { first: () => ({ operational_domain_rbac_enabled: 0 }) }],
+];
+
 function createMockDb(handlers: Array<[string, QueryHandler]>) {
   const calls: Array<{ query: string; args: unknown[]; method: 'first' | 'run' | 'all' | 'batch' }> =
     [];
   const normalizeSql = (value: string) => value.replace(/\s+/g, ' ').trim();
+  const allHandlers = [...handlers, ...DEFAULT_HANDLERS];
 
   const makeBoundStatement = (query: string, args: unknown[]) => ({
     __sql: query,
@@ -90,7 +98,7 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
   const db = {
     prepare: vi.fn((query: string) => {
       const normalizedQuery = normalizeSql(query);
-      const entry = handlers.find(([matcher]) => normalizedQuery.includes(normalizeSql(matcher)));
+      const entry = allHandlers.find(([matcher]) => normalizedQuery.includes(normalizeSql(matcher)));
       if (!entry) {
         throw new Error(`Unhandled query: ${query}`);
       }
@@ -148,8 +156,8 @@ describe('qualificacoes tipos update sync', () => {
   it('recalcula historicos por id e por codigo legado, invalida stats e retorna contagens', async () => {
     const { db, calls } = createMockDb([
       [
-        'SELECT id, nome FROM qualificacoes_categorias',
-        { first: (args) => ({ id: 3, nome: args[1] }) },
+        'FROM qualificacoes_categorias',
+        { first: (args) => ({ id: 3, nome: args[1], dominio_codigo: null }) },
       ],
       [
         "PRAGMA table_info('qualificacoes_tipos')",
@@ -336,8 +344,8 @@ describe('qualificacoes tipos update sync', () => {
   it('faz soft-delete do curso LMS quando categoria sai de EAD para não-EAD', async () => {
     const { db } = createMockDb([
       [
-        'SELECT id, nome FROM qualificacoes_categorias',
-        { first: (args) => ({ id: 3, nome: args[1] }) },
+        'FROM qualificacoes_categorias',
+        { first: (args) => ({ id: 3, nome: args[1], dominio_codigo: null }) },
       ],
       [
         "PRAGMA table_info('qualificacoes_tipos')",

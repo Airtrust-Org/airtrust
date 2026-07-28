@@ -112,6 +112,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0448_simuladores_matriz_aw139_sk76_gera_qualificacao.sql',
     '0448_simuladores_matriz_aw139_sk76_gera_qualificacao_rollback.sql',
   ],
+  '0452': [
+    '0452_operational_domain_rbac.sql',
+    '0452_operational_domain_rbac_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -236,7 +240,10 @@ describe('migration governance', () => {
     // requires for AW139/S-76 inicial/periodico/semestral checks).
     // Ratchet raised 2026-07-27: 0450 qualificacoes_category_only
     // (migrates EAD-formato types to categoria-only, sets formato_id=NULL).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(450);
+    // Ratchet raised 2026-07-28: 0452 operational_domain_rbac (dominios
+    // catalog + additive domain-classification columns + per-tenant
+    // rollout flag, see docs/rbac/gestor-operational-autonomy.md).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(452);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 

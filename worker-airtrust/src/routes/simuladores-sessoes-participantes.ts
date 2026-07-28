@@ -14,6 +14,36 @@ import {
   getSimuladorModeloAeronave,
   resolveTemplateIdSessao,
 } from './simuladores-shared';
+import {
+  requireOperationalAccess,
+  skipOperationalGuardForRoles,
+  assertFuncionarioIdsWithinOperationalScope,
+} from '../services/operational-domain-access';
+
+// Participantes/checks de sessão de simulador são fixed-domain OPERACOES —
+// see docs/rbac/gestor-operational-autonomy.md.
+//
+// Item 5: adding ONE new participante is a per-participant operation, not
+// a whole-session one — it must not require the gestor to already control
+// every OTHER existing participant of the session. So creation only does
+// the coarse OPERACOES domain check here; the new participante's own
+// setor is validated inline in the handler below via
+// assertFuncionarioIdsWithinOperationalScope, against just that one
+// funcionario_id.
+const requireOperacoesParticipanteCreate = () =>
+  skipOperationalGuardForRoles(
+    ['instructor', 'student'],
+    requireOperationalAccess({ domain: 'OPERACOES', action: 'create' }),
+  );
+
+// Editing/removing an EXISTING participante validates only that
+// participante's own setor (resourceType 'simulador_sessao_participante'),
+// not the whole session's participant list.
+const requireOperacoesParticipante = (action: 'update' | 'delete') =>
+  skipOperationalGuardForRoles(
+    ['instructor', 'student'],
+    requireOperationalAccess({ action, resourceType: 'simulador_sessao_participante' }),
+  );
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -123,7 +153,7 @@ app.get('/sessoes/:id/participantes', async (c) => {
   }
 });
 
-app.post('/sessoes/:id/participantes', async (c) => {
+app.post('/sessoes/:id/participantes', requireOperacoesParticipanteCreate(), async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const sid = c.req.param('id');
@@ -138,6 +168,18 @@ app.post('/sessoes/:id/participantes', async (c) => {
     if (!funcionarioValido) {
       return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
     }
+
+    // Item 5: per-participant operation — validate only this new
+    // participante's own setor, not the whole session's participant list.
+    await assertFuncionarioIdsWithinOperationalScope({
+      db: c.env.DB,
+      empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+      funcionarioIds: [Number(b.funcionario_id)].filter(
+        (value) => Number.isFinite(value) && value > 0,
+      ),
+    });
 
     const partUuid = crypto.randomUUID();
     const r = await c.env.DB.prepare(
@@ -168,7 +210,7 @@ app.post('/sessoes/:id/participantes', async (c) => {
   }
 });
 
-app.put('/participantes/:id', async (c) => {
+app.put('/participantes/:id', requireOperacoesParticipante('update'), async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
@@ -206,7 +248,7 @@ app.put('/participantes/:id', async (c) => {
   }
 });
 
-app.delete('/participantes/:id', async (c) => {
+app.delete('/participantes/:id', requireOperacoesParticipante('delete'), async (c) => {
   try {
     const denied = requireAdminForDelete(c);
     if (denied) return denied;

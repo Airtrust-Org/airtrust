@@ -147,6 +147,11 @@ function createSimuladoresDb() {
         first: async <T = unknown>() => {
           logs.push({ sql: normalized, binds, method: 'first' });
 
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (normalized.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 } as unknown as T;
+          }
+
           if (
             normalized.includes(
               'FROM simulador_agendamentos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',

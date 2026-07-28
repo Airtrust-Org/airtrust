@@ -118,6 +118,11 @@ function createMockEnv() {
         __sql: query,
         __args: args,
         first: async () => {
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
+
           if (query.includes("sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'")) {
             return { name: 'qualificacoes_tipos_setores' };
           }

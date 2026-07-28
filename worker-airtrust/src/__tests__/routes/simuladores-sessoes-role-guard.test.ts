@@ -25,6 +25,10 @@ import simuladoresSessoesRoutes from '../../routes/simuladores-sessoes';
 function createDb(isInstrutor: number) {
   const db = {
     prepare: vi.fn((query: string) => {
+      // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+      if (query.includes('FROM empresas WHERE id')) {
+        return { bind: (..._a: unknown[]) => ({ first: async () => ({ operational_domain_rbac_enabled: 0 }) }) };
+      }
       // PRAGMA - direct .all()
       if (query.includes('PRAGMA table_info')) {
         const pragmaResult = {

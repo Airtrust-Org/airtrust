@@ -88,6 +88,18 @@ ensure_sqlite_column "qualificacoes_tipos" "carga_horaria_inicial" "REAL"
 ensure_sqlite_column "qualificacoes_tipos" "carga_horaria_recorrente" "REAL"
 ensure_sqlite_column "qualificacoes_historico" "renovacao_de" "INTEGER DEFAULT NULL"
 
+# Migration 0452 (gestor-operational-domain-rbac): the RBAC guard queries
+# empresas.operational_domain_rbac_enabled on every request. empresas
+# already exists at this point (from schema-local.sql), so this can be
+# ensured here; lms_cursos doesn't exist yet until the LMS_MIGRATIONS loop
+# below runs (0335_lms_cursos.sql creates it) — its dominio_codigo column
+# is ensured further down, right after that loop. Default 0 keeps this
+# smoke test's tenant in legacy mode, matching every other tenant that
+# hasn't activated the flag.
+ensure_sqlite_column "empresas" "operational_domain_rbac_enabled" "INTEGER NOT NULL DEFAULT 0"
+ensure_sqlite_column "qualificacoes_categorias" "dominio_codigo" "TEXT"
+ensure_sqlite_column "qualificacoes_tipos" "categoria_id" "INTEGER REFERENCES qualificacoes_categorias(id)"
+
 printf 'setup:lms:local: ensuring local qualificacoes formatos bootstrap\n'
 sqlite3 "$SQLITE_FILE" <<'SQL'
 CREATE TABLE IF NOT EXISTS qualificacoes_formatos (
@@ -172,6 +184,7 @@ for migration_file in "${LMS_MIGRATIONS[@]}"; do
 done
 
 ensure_sqlite_column "lms_cursos" "formato_id" "INTEGER REFERENCES qualificacoes_formatos(id)"
+ensure_sqlite_column "lms_cursos" "dominio_codigo" "TEXT"
 
 printf 'setup:lms:local: applying synthetic LMS smoke seed\n'
 sqlite3 "$SQLITE_FILE" < "$SEED_FILE"

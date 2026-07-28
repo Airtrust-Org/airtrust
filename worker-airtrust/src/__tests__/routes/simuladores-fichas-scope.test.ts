@@ -17,9 +17,13 @@ vi.mock('../../services/employee-sector-access', () => ({
   getEmployeeSectorAccess: (...args: unknown[]) => getEmployeeSectorAccessMock(...args),
 }));
 
-vi.mock('../../middleware/tenant', () => ({
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
   getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
-}));
+  };
+});
 
 vi.mock('../../routes/simuladores-shared', async () => {
   const actual = await vi.importActual('../../routes/simuladores-shared');
@@ -45,6 +49,14 @@ vi.mock('../../routes/simuladores-fichas-helpers', () => ({
 }));
 
 import simuladoresFichasRoutes from '../../routes/simuladores-fichas';
+import { errorHandler } from '../../middleware/error-handler';
+
+// Bloqueador 5 closure: requireRole now legitimately throws ApiError for
+// unauthorized roles on these routes. Registering the real error handler
+// on this bare router (tested via .fetch() directly, bypassing the
+// parent app's global app.onError) turns that into the proper JSON
+// status code instead of Hono's generic 500.
+simuladoresFichasRoutes.onError(errorHandler);
 
 type FichaRow = {
   id: number;
@@ -102,6 +114,10 @@ function createFichasDb(options?: { instructorMetaTableMissing?: boolean }) {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
           if (query.includes('FROM fichas_sessao_instrutor_meta')) {
             // Regression: some environments (e.g. staging before migration
             // 0429_instructor_event_models is applied) don't have this table

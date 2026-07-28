@@ -28,6 +28,22 @@ vi.mock('@/react-app/hooks/useAuth', () => ({
   useAuth: () => authState,
 }));
 
+// This suite exercises legacy funcionarios.view/role-based ProtectedRoute
+// gating — unrelated to the operational-domain RBAC gate, which stays
+// disabled (legacy behavior) by default here.
+vi.mock('@/react-app/hooks/useOperationalAccess', () => ({
+  useOperationalAccess: () => ({
+    enabled: false,
+    domains: [],
+    setor_ids: [],
+    actions: {},
+    canOperate: () => false,
+    hasDomain: () => false,
+    isLoading: false,
+    isAuthenticated: true,
+  }),
+}));
+
 vi.mock('@/react-app/i18n/useLanguage', () => ({
   useLanguage: () => ({
     t: (key: string) =>

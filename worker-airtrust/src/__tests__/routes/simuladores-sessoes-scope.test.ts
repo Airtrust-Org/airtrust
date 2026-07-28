@@ -66,6 +66,14 @@ vi.mock('../../services/simuladores-session-notifications', () => ({
 }));
 
 import simuladoresSessoesRoutes from '../../routes/simuladores-sessoes';
+import { errorHandler } from '../../middleware/error-handler';
+
+// Bloqueador 5 closure: requireRole now legitimately throws ApiError for
+// unauthorized roles on these routes. Registering the real error handler
+// on this bare router (tested via .fetch() directly, bypassing the
+// parent app's global app.onError) turns that into the proper JSON
+// status code instead of Hono's generic 500.
+simuladoresSessoesRoutes.onError(errorHandler);
 
 const FUNCIONARIO_SETORES = new Map<number, number>([
   [201, 10],
@@ -79,6 +87,11 @@ function createSessoesDb() {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
+          if (query.includes('FROM empresas WHERE id')) {
+            return { operational_domain_rbac_enabled: 0 };
+          }
+
           if (query === 'PRAGMA table_info(simulador_agendamentos)') {
             return null;
           }

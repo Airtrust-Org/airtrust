@@ -9,6 +9,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
+import { requireOperacoesCurso, applyLmsCursosDomainReadFilter, assertLmsCursoDetailDomainAccess, resolveAndValidateCursoDominioCodigo } from './lms-cursos-rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 import {
   employeeSectorSql,
@@ -163,14 +164,17 @@ async function getCourseSetorSchema(db: D1Database): Promise<{
   hasCursoSetores: boolean;
   hasQualificacaoTipoSetores: boolean;
   hasLmsCursosFormato: boolean;
+  hasLmsCursosDominioCodigo: boolean;
 }> {
-  const [hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato] = await Promise.all([
-    tableExists(db, 'lms_cursos_setores'),
-    tableExists(db, 'qualificacoes_tipos_setores'),
-    hasColumn(db, 'lms_cursos', 'formato_id'),
-  ]);
+  const [hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato, hasLmsCursosDominioCodigo] =
+    await Promise.all([
+      tableExists(db, 'lms_cursos_setores'),
+      tableExists(db, 'qualificacoes_tipos_setores'),
+      hasColumn(db, 'lms_cursos', 'formato_id'),
+      hasColumn(db, 'lms_cursos', 'dominio_codigo'), // migration 0452, same schema-drift defense as formato_id
+    ]);
 
-  return { hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato };
+  return { hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato, hasLmsCursosDominioCodigo };
 }
 
 function assertSetorIdsWithinWriteScope(access: EmployeeSectorAccess, setorIds: number[]): void {
@@ -674,6 +678,7 @@ const CursoCreateSchema = z.object({
   publicado: binaryFlagWithDefault(0),
   setor_ids: setorIdsSchema,
   formato_id: z.number().int().positive().nullable().optional(),
+  dominio_codigo: z.string().trim().min(1).optional().nullable(),
 });
 
 const CursoUpdateSchema = z.object({
@@ -1613,6 +1618,10 @@ app.get('/', async (c) => {
     }
   }
 
+  const domainFilter = await applyLmsCursosDomainReadFilter({ db, empresaId, c, hasLmsCursosDominioCodigo: courseSetorSchema.hasLmsCursosDominioCodigo });
+  where += domainFilter.clause;
+  binds.push(...(domainFilter.bindings as (string | number)[]));
+
   const matriculaScope = buildMatriculaEmployeeScope(access, 'm');
   const setoresJsonExpr = courseSetorSchema.hasCursoSetores
     ? `(SELECT json_group_array(json_object('id', s.id, 'nome', s.nome))
@@ -1998,6 +2007,8 @@ app.get('/:id{[0-9]+}', async (c) => {
     }
   }
 
+  await assertLmsCursoDetailDomainAccess({ db, empresaId, c, cursoId });
+
   const setoresJson = curso.setores_json as string | null;
   const { setores_json: _, ...cursoRest } = curso;
   const data = {
@@ -2043,6 +2054,9 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     setorIds,
     qualificacaoTipoId: resolvedQualificacaoTipoId,
   });
+
+  const cursoDominioCodigo = await resolveAndValidateCursoDominioCodigo({ db, empresaId, c, explicitDominioCodigo: d.dominio_codigo, resolvedQualificacaoTipoId });
+
   if (setorIds.length > 0) {
     await validateSetorIds(db, empresaId, setorIds);
   }
@@ -2086,6 +2100,10 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   if (courseSetorSchema.hasLmsCursosFormato) {
     insertCols.push('formato_id');
     insertVals.push(d.formato_id ?? null);
+  }
+  if (courseSetorSchema.hasLmsCursosDominioCodigo) {
+    insertCols.push('dominio_codigo');
+    insertVals.push(cursoDominioCodigo);
   }
   const result = await db
     .prepare(
@@ -2189,7 +2207,7 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
 
 // ── Editar curso ─────────────────────────────────────────────────────────────
 
-app.put('/:id', requireRole('admin', 'manager'), async (c) => {
+app.put('/:id', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2430,7 +2448,7 @@ app.post('/sync-ead', requireRole('admin', 'manager'), async (c) => {
 
 // ── Upload endpoints (specific paths before generic /:id) ─────────────────────
 
-app.post('/:id/thumbnail-upload', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/thumbnail-upload', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2466,7 +2484,7 @@ app.post('/:id/thumbnail-upload', requireRole('admin', 'manager'), async (c) => 
 // Content-Type: application/octet-stream (body = zip raw bytes)
 // ou multipart/form-data com campo "file"
 
-app.post('/:id/content-upload/init', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/content-upload/init', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2495,7 +2513,7 @@ app.post('/:id/content-upload/init', requireRole('admin', 'manager'), async (c) 
   });
 });
 
-app.post('/:id/content-upload/file', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/content-upload/file', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2532,7 +2550,7 @@ app.post('/:id/content-upload/file', requireRole('admin', 'manager'), async (c) 
   });
 });
 
-app.post('/:id/content-upload/complete', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/content-upload/complete', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2579,7 +2597,7 @@ app.post('/:id/content-upload/complete', requireRole('admin', 'manager'), async 
   });
 });
 
-app.post('/:id/scorm-upload', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/scorm-upload', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2655,7 +2673,7 @@ app.post('/:id/scorm-upload', requireRole('admin', 'manager'), async (c) => {
 // POST /api/lms/cursos/:id/upload/h5p
 // O .h5p é um ZIP renomeado — extraímos e guardamos no R2 sob lms/h5p/{empresa_id}/{curso_id}/
 
-app.post('/:id/upload/h5p', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/upload/h5p', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2741,7 +2759,7 @@ app.post('/:id/upload/h5p', requireRole('admin', 'manager'), async (c) => {
 });
 
 // Alias para compatibilidade com prompt 2.4: /upload/scorm
-app.post('/:id/upload/scorm', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/upload/scorm', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   // Forward to /:id/scorm-upload handler logic inline (avoid duplication by delegating)
   c.req.param = Object.assign(c.req.param.bind(c.req), { bind: c.req.param.bind(c.req) });
   // Re-dispatch via internal redirect is not Hono-native; instead we call the existing handler
@@ -2790,7 +2808,7 @@ function guessMime(filename: string): string {
 
 const LMS_PDF_MAX_BYTES = 200 * 1024 * 1024; // 200 MB
 
-app.post('/:id/upload/pdf', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/upload/pdf', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2847,7 +2865,7 @@ app.post('/:id/upload/pdf', requireRole('admin', 'manager'), async (c) => {
 
 const LMS_PPTX_MAX_BYTES = 200 * 1024 * 1024; // 200 MB
 
-app.post('/:id/upload/pptx', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/upload/pptx', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2927,7 +2945,7 @@ app.post('/:id/upload/pptx', requireRole('admin', 'manager'), async (c) => {
 // ── Desativar (soft delete) ──────────────────────────────────────────────────
 // MUST BE LAST: generic /:id route needs to come after all specific /:id/path routes
 
-app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+app.delete('/:id', requireRole('admin', 'manager'), requireOperacoesCurso('delete'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));

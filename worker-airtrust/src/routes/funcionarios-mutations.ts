@@ -15,6 +15,20 @@ import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import {
+  requireOperationalAccess,
+  assertSetorWithinOperationalScope,
+} from '../services/operational-domain-access';
+
+// A funcionário's domain comes from their own setor (setores.dominio_codigo),
+// which varies per employee. update/delete resolve it dynamically from the
+// target funcionário (:id). POST / (create) and the DESTINATION setor of a
+// setor transfer have no existing funcionário/resourceId to resolve a
+// domain from — those are validated inline via
+// assertSetorWithinOperationalScope against the setor in the request
+// payload itself (Item 3).
+const requireOperacoesFuncionario = (action: 'update' | 'delete') =>
+  requireOperationalAccess({ action, resourceType: 'funcionario' });
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { syncFuncionarioCertificacoes } from '../services/sync-certificacoes-funcionarios';
 import { publishDomainEvent } from '../shared/domainEvents';
@@ -137,6 +151,17 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
   if (access.mode === 'restricted' && !access.setorIds.includes(Number(setorPayload.setorId || 0))) {
     forbidden('Gestor só pode criar funcionários nos setores vinculados', 'SETOR_FORA_DO_ESCOPO');
   }
+
+  // Item 3: resolve+validate the new employee's domain from the setor in
+  // the create payload itself — no-op in legacy mode, fail-closed when the
+  // RBAC is active and the setor is missing/unclassified/out of scope.
+  await assertSetorWithinOperationalScope({
+    db,
+    empresaId,
+    userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+    userRole: (c.get as (k: string) => unknown)('userRole'),
+    setorId: setorPayload.setorId,
+  });
 
   // Verificar se matricula já existe no tenant (APENAS se fornecida)
   if (body.matricula) {
@@ -292,7 +317,7 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
  *
  * RBAC: admin, manager
  */
-app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+app.put('/:id', auth(), requireRole('admin', 'manager'), requireOperacoesFuncionario('update'), async (c) => {
   const db = c.env.DB;
   const id = parseInt(c.req.param('id'));
   const body = await c.req.json();
@@ -390,6 +415,17 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
         'SETOR_FORA_DO_ESCOPO',
       );
     }
+    // Item 3: the route's requireOperacoesFuncionario('update') guard above
+    // already validated the ORIGIN domain+setor from the funcionário's
+    // current record. The DESTINATION setor is part of THIS request body
+    // and has no resourceId to resolve from, so it's validated inline here.
+    await assertSetorWithinOperationalScope({
+      db,
+      empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+      setorId: setorPayload.setorId,
+    });
     addUpdate('setor', setorPayload.setorNome);
     addUpdate('setor_id', setorPayload.setorId);
   }
@@ -627,9 +663,17 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
  * DELETE /api/funcionarios/:id
  * Remove funcionário (soft delete)
  *
- * RBAC: apenas admin
+ * RBAC: admin, ou manager dentro do seu escopo de domínio/setor (ver
+ * requireOperacoesFuncionario abaixo).
  */
-app.delete('/:id', auth(), requireRole('admin'), async (c) => {
+// Widened from admin-only to admin+manager per gestor-operational-autonomy:
+// a GESTOR must not depend on an ADMINISTRADOR for routine exclusão within
+// their own setores. requireOperacoesFuncionario('delete') is the actual
+// scoping gate — while the tenant's operational_domain_rbac_enabled flag is
+// off (default), it is a no-op and this route stays admin+manager exactly
+// as any other funcionários mutation; while on, a manager can only delete
+// funcionários whose setor is in their managed, domain-classified scope.
+app.delete('/:id', auth(), requireRole('admin', 'manager'), requireOperacoesFuncionario('delete'), async (c) => {
   const db = c.env.DB;
   const id = parseInt(c.req.param('id'));
 

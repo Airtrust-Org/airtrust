@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { Ban } from 'lucide-react';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useOperationalAccess, type OperationalDomain } from '@/react-app/hooks/useOperationalAccess';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
 import { canSeeDevelopmentModules } from '@/react-app/lib/development-module-nav';
 import {
@@ -9,6 +10,18 @@ import {
   getModuleKeyForPath,
   requiresRestrictedDevelopmentModuleAccess,
 } from '@/react-app/lib/module-access';
+
+// Modules whose visibility is additionally narrowed by operational domain
+// once a tenant's operational_domain_rbac_enabled flag is on — see
+// docs/rbac/gestor-operational-autonomy.md. MRO is a frontend prototype
+// (mocked data, no backend persistence — see src/react-app/pages/mro/) that
+// is nonetheless classified MANUTENCAO for this gate: a gestor without the
+// MANUTENCAO domain should not see it, even though nothing there writes
+// real operational data. This map stays intentionally tiny — extend it only
+// for modules with a real, decided domain classification, not speculatively.
+const DOMAIN_GATED_MODULES: Record<string, OperationalDomain> = {
+  mro: 'MANUTENCAO',
+};
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -69,6 +82,7 @@ export default function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, user, empresas = [], empresaAtualId = null } = useAuth();
   const { can } = usePermissions();
+  const operationalAccess = useOperationalAccess();
   const location = useLocation();
   const { t } = useLanguage();
 
@@ -133,6 +147,27 @@ export default function ProtectedRoute({
             className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
             Voltar ao dashboard
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  const gatedDomain = moduleKey ? DOMAIN_GATED_MODULES[moduleKey] : undefined;
+  if (gatedDomain && operationalAccess.enabled && !operationalAccess.hasDomain(gatedDomain)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm max-w-md w-full text-center">
+          <Ban className="w-14 h-14 text-red-500 mb-4 mx-auto" />
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">
+            {t('protected.denied.title')}
+          </h2>
+          <p className="text-sm text-slate-600 mb-6">{t('protected.denied.description')}</p>
+          <a
+            href="/"
+            className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            {t('protected.denied.backHome')}
           </a>
         </div>
       </div>

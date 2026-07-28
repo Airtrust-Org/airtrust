@@ -38,6 +38,12 @@ import {
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
+import {
+  resolveOperationalReadScope,
+  appendOperationalReadFilter,
+  assertOperationalAccess,
+  normalizeTenantRole,
+} from '../services/operational-domain-access';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -193,6 +199,33 @@ app.get('/', auth(), async (c) => {
   whereClausesQuery.push(sectorScope.clause);
   whereClausesCount.push(sectorScope.clause);
   bindings.push(...sectorScope.bindings);
+
+  // Item 1 (read-side filtering): once a tenant's operational-domain RBAC
+  // is active, a gestor's setor_id-based scope above must additionally
+  // exclude setores this gestor manages but that have no domain classified
+  // — an unclassified setor's funcionários must not leak into the list just
+  // because the setor itself is theirs. No-op for admin/instrutor/aluno,
+  // and no-op entirely while the tenant's RBAC is disabled.
+  if (hasSetorId) {
+    const readScope = await resolveOperationalReadScope({
+      db,
+      empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: (c.get as (k: string) => unknown)('userRole'),
+    });
+    const readConditionsQuery: string[] = [];
+    const readConditionsCount: string[] = [];
+    const readBindings: unknown[] = [];
+    appendOperationalReadFilter(readConditionsQuery, readBindings, readScope, {
+      setorColumn: 'f.setor_id',
+    });
+    if (readConditionsQuery.length > 0) {
+      appendOperationalReadFilter(readConditionsCount, [], readScope, { setorColumn: 'setor_id' });
+      whereClausesQuery.push(...readConditionsQuery);
+      whereClausesCount.push(...readConditionsCount);
+      bindings.push(...readBindings);
+    }
+  }
 
   // Busca textual
   if (search) {
@@ -1011,6 +1044,29 @@ app.get('/:id', auth(), async (c) => {
     .first<{ id: number }>();
   if (!inScope?.id) {
     forbidden('Acesso negado ao funcionário solicitado', 'FUNCIONARIO_OUT_OF_SCOPE');
+  }
+
+  // Item 1 (read-side filtering): reuses the same domain+setor resolution
+  // already used by requireOperacoesFuncionario('update'/'delete') in
+  // funcionarios-mutations.ts, but for a 'view' action — a gestor's legacy
+  // setor scope above says the funcionário's setor is theirs to manage, but
+  // once RBAC is active that setor must ALSO have a classified domain the
+  // gestor holds. Scoped to 'manager' only: this endpoint is reachable by
+  // instrutor/aluno/other roles for their own established (non-domain)
+  // access reasons, and must not be newly blocked by a domain check that
+  // was never meant to govern them (same principle as Item 4's
+  // skipOperationalGuardForRoles for sessões/fichas).
+  const requestUserRole = (c.get as (k: string) => unknown)('userRole');
+  if (normalizeTenantRole(requestUserRole) === 'manager') {
+    await assertOperationalAccess({
+      db,
+      empresaId,
+      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+      userRole: requestUserRole,
+      action: 'view',
+      resourceType: 'funcionario',
+      resourceId: id,
+    });
   }
 
   // Descobrir schema real

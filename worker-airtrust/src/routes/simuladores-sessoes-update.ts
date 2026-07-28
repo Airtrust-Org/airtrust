@@ -39,6 +39,17 @@ import {
 } from './simuladores-shared';
 import { getTenantContext } from '../middleware/tenant';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
+import {
+  requireOperationalAccess,
+  skipOperationalGuardForRoles,
+} from '../services/operational-domain-access';
+
+// Sessões de simulador são fixed-domain OPERACOES — see docs/rbac/gestor-operational-autonomy.md.
+const requireOperacoesSessao = (action: 'update' | 'delete') =>
+  skipOperationalGuardForRoles(
+    ['instructor', 'student'],
+    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_sessao' }),
+  );
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -46,7 +57,7 @@ async function runUpdate(db: D1Database, sql: string, ...args: unknown[]) {
   return db.prepare(sql).bind(...args).run();
 }
 
-app.put('/sessoes/:id', async (c) => {
+app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
@@ -1101,7 +1112,7 @@ app.put('/sessoes/:id', async (c) => {
   }
 });
 
-app.delete('/sessoes/:id', async (c) => {
+app.delete('/sessoes/:id', requireOperacoesSessao('delete'), async (c) => {
   try {
     const denied = requireAdminForDelete(c);
     if (denied) return denied;

@@ -168,6 +168,16 @@ function createCompatDb(options: {
         };
       }
 
+      // This suite doesn't exercise the operational-domain RBAC feature —
+      // legacy tenant, flag resolves to 0 (disabled).
+      if (query.includes('operational_domain_rbac_enabled')) {
+        return {
+          bind: (..._args: unknown[]) => ({
+            first: async () => ({ operational_domain_rbac_enabled: 0 }),
+          }),
+        };
+      }
+
       throw new Error(`Unhandled query in lms compat test: ${query}`);
     }),
   } as unknown as D1Database;
