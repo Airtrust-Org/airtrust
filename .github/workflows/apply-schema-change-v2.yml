@@ -114,7 +114,8 @@ jobs:
             --production > schema-check.json
           status="$(node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('schema-check.json','utf8'));console.log(d.status)")"
           if [[ "$status" != "PASS" ]]; then
-            echo "Current schema contract must be PASS before applying a change." >&2
+            cat schema-check.json >echo "Current schema contract must be PASS before applying a change." >&22
+            echo "Current schema contract must be PASS before applying a change." >echo "Current schema contract must be PASS before applying a change." >&22
             exit 1
           fi
 
