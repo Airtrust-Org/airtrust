@@ -65,11 +65,12 @@ describe('deploy-staging.yml — static guards', () => {
       '^[0-9a-fA-F]{40}$',
       '^[1-9][0-9]*$',
       '/pulls/${prNumber}',
-      "pr.state !== 'open'",
       "pr.base?.ref !== 'main'",
-      'pr.head?.sha?.toLowerCase() !== releaseSha',
-      'pr.head?.repo?.full_name !== repo',
-      'pr.head?.repo?.fork',
+      'PR_FROM_FORK_REJECTED',
+      'OPEN_PR_HEAD_MISMATCH',
+      'MERGED_PR_SHA_MISMATCH',
+      'RELEASE_SHA_NOT_CURRENT_MAIN',
+      'PR_NOT_OPEN_OR_MERGED',
       '/git/commits/${releaseSha}',
     ]) {
       expect(workflow).toContain(token);

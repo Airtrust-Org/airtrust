@@ -163,10 +163,18 @@ jobs:
             return response.json();
           }
           const pr = await get(`/repos/${repo}/pulls/${prNumber}`);
-          if (pr.state !== 'open') throw new Error('PR must be open.');
           if (pr.base?.ref !== 'main') throw new Error('PR base must be main.');
-          if (pr.head?.sha?.toLowerCase() !== releaseSha) throw new Error('release_sha must exactly match PR head.sha.');
-          if (pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork) throw new Error('PR must originate in this repository, never a fork.');
+          if (pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork) throw new Error('PR_FROM_FORK_REJECTED');
+
+          if (pr.state === 'open') {
+            if (pr.head?.sha?.toLowerCase() !== releaseSha) throw new Error('OPEN_PR_HEAD_MISMATCH');
+          } else if (pr.merged === true) {
+            if (pr.merge_commit_sha?.toLowerCase() !== releaseSha) throw new Error('MERGED_PR_SHA_MISMATCH');
+            const mainRef = await get(`/repos/${repo}/git/refs/heads/main`);
+            if (mainRef.object?.sha?.toLowerCase() !== releaseSha) throw new Error('RELEASE_SHA_NOT_CURRENT_MAIN');
+          } else {
+            throw new Error('PR_NOT_OPEN_OR_MERGED');
+          }
           const commit = await get(`/repos/${repo}/git/commits/${releaseSha}`);
           if (!commit?.sha) throw new Error('release_sha does not exist in this repository.');
           const permission = await get(`/repos/${repo}/collaborators/${actor}/permission`);
@@ -174,12 +182,12 @@ jobs:
             throw new Error('Workflow actor must have write, maintain, or admin permission.');
           }
           const checks = await get(`/repos/${repo}/commits/${releaseSha}/check-runs?per_page=100`);
-          if (!Array.isArray(checks.check_runs) || checks.check_runs.length === 0) throw new Error('No check runs found for release_sha.');
+          if (!Array.isArray(checks.check_runs) || checks.check_runs.length === 0) throw new Error('RELEASE_CHECKS_NOT_GREEN');
           const badCheck = checks.check_runs.find((check) => check.status !== 'completed' || check.conclusion !== 'success');
-          if (badCheck) throw new Error(`Check ${badCheck.name} is not completed successfully.`);
+          if (badCheck) throw new Error('RELEASE_CHECKS_NOT_GREEN');
           const statuses = await get(`/repos/${repo}/commits/${releaseSha}/status`);
           if (statuses.statuses.length > 0 && statuses.statuses.some((status) => status.state !== 'success')) {
-            throw new Error('Commit status checks are not all successful.');
+            throw new Error('RELEASE_CHECKS_NOT_GREEN');
           }
           })().catch((error) => {
             console.error(`Reviewed PR release guard failed: ${error.message}`);
