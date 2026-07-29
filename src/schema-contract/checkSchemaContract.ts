@@ -643,8 +643,8 @@ export function runSchemaContractCheck(input: {
         );
 
     return evaluateContract(contract, snapshot, input.options ?? { allowExtraColumns: true });
-  } catch (error: any) {
-    const message = error instanceof Error ? error.message + (error.stderr ? '\\nSTDERR: ' + error.stderr.toString() : '') + (error.stdout ? '\\nSTDOUT: ' + error.stdout.toString() : '') : String(error);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       status: 'FAIL',
       schemaHash: 'invalid',

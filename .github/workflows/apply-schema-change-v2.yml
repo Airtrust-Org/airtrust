@@ -102,20 +102,38 @@ jobs:
             exit 1
           fi
 
+      - name: Guard D1 migration token
+        shell: bash
+        env:
+          CLOUDFLARE_D1_MIGRATION_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDFLARE_D1_MIGRATION_API_TOKEN}" ]]; then
+            echo "PRODUCTION_D1_MIGRATION_TOKEN_MISSING" >&2
+            exit 1
+          fi
+
       - name: Validate current schema contract
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts \
             --contract docs/database/schema-contracts/production-d1-baseline-v2.json \
-            --production | tee schema-check.json
+            --production > schema-check.json
           status="$(node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('schema-check.json','utf8'));console.log(d.status)")"
           if [[ "$status" != "PASS" ]]; then
-            cat schema-check.json >echo "Current schema contract must be PASS before applying a change." >&22
-            echo "Current schema contract must be PASS before applying a change." >echo "Current schema contract must be PASS before applying a change." >&22
+            node -e "
+              const fs = require('fs');
+              const data = JSON.parse(fs.readFileSync('schema-check.json', 'utf8'));
+              console.error(JSON.stringify({
+                status: data.status,
+                errors: data.issues ?? data.errors ?? data.failures ?? []
+              }, null, 2));
+            "
+            echo "Current schema contract must be PASS before applying a change." >&2
             exit 1
           fi
 
@@ -123,7 +141,7 @@ jobs:
         shell: bash
         working-directory: worker-airtrust
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -138,7 +156,7 @@ jobs:
         shell: bash
         working-directory: worker-airtrust
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -150,7 +168,7 @@ jobs:
         shell: bash
         working-directory: worker-airtrust
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -160,15 +178,23 @@ jobs:
       - name: Post-validate contract
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts \
             --contract docs/database/schema-contracts/production-d1-baseline-v2.json \
-            --production | tee schema-post-check.json
+            --production > schema-post-check.json
           status="$(node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('schema-post-check.json','utf8'));console.log(d.status)")"
           if [[ "$status" != "PASS" ]]; then
+            node -e "
+              const fs = require('fs');
+              const data = JSON.parse(fs.readFileSync('schema-post-check.json', 'utf8'));
+              console.error(JSON.stringify({
+                status: data.status,
+                errors: data.issues ?? data.errors ?? data.failures ?? []
+              }, null, 2));
+            "
             echo "Post-apply contract validation failed." >&2
             exit 1
           fi

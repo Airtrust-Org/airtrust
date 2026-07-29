@@ -7,12 +7,13 @@
 const GENERIC_TOKEN_REF = /secrets(?:\.CLOUDFLARE_API_TOKEN\b|\['CLOUDFLARE_API_TOKEN'\]|\["CLOUDFLARE_API_TOKEN"\])/;
 const WORKER_TOKEN_REF = /secrets(?:\.CLOUDFLARE_WORKER_API_TOKEN\b|\['CLOUDFLARE_WORKER_API_TOKEN'\]|\["CLOUDFLARE_WORKER_API_TOKEN"\])/;
 const PAGES_TOKEN_REF = /secrets(?:\.CLOUDFLARE_PAGES_API_TOKEN\b|\['CLOUDFLARE_PAGES_API_TOKEN'\]|\["CLOUDFLARE_PAGES_API_TOKEN"\])/;
+const D1_MIGRATION_TOKEN_REF = /secrets(?:\.CLOUDFLARE_D1_MIGRATION_API_TOKEN\b|\['CLOUDFLARE_D1_MIGRATION_API_TOKEN'\]|\["CLOUDFLARE_D1_MIGRATION_API_TOKEN"\])/;
 const SMOKE_EMAIL_REF = /secrets(?:\.STAGING_SMOKE_EMAIL\b|\['STAGING_SMOKE_EMAIL'\]|\["STAGING_SMOKE_EMAIL"\])/;
 const SMOKE_PASSWORD_REF = /secrets(?:\.STAGING_SMOKE_PASSWORD\b|\['STAGING_SMOKE_PASSWORD'\]|\["STAGING_SMOKE_PASSWORD"\])/;
 const ACCOUNT_ID_REF = /secrets(?:\.CLOUDFLARE_ACCOUNT_ID\b|\['CLOUDFLARE_ACCOUNT_ID'\]|\["CLOUDFLARE_ACCOUNT_ID"\])/;
 
 const SCOPED_SECRET_REF = new RegExp(
-  [WORKER_TOKEN_REF, PAGES_TOKEN_REF, SMOKE_EMAIL_REF, SMOKE_PASSWORD_REF].map((r) => r.source).join('|'),
+  [WORKER_TOKEN_REF, PAGES_TOKEN_REF, D1_MIGRATION_TOKEN_REF, SMOKE_EMAIL_REF, SMOKE_PASSWORD_REF].map((r) => r.source).join('|'),
 );
 
 const CREATE_TOKEN_INSTRUCTION =
@@ -28,6 +29,7 @@ const INTERNAL_VARS = [
   'CLOUDFLARE_API_TOKEN',
   'CLOUDFLARE_WORKER_API_TOKEN',
   'CLOUDFLARE_PAGES_API_TOKEN',
+  'CLOUDFLARE_D1_MIGRATION_API_TOKEN',
   'CLOUDFLARE_ACCOUNT_ID',
   'STAGING_SMOKE_EMAIL',
   'STAGING_SMOKE_PASSWORD'
@@ -107,9 +109,9 @@ function getSteps(blockText) {
 export function checkWorkflowContent(fileName, content) {
   const violations = [];
 
-  if (GENERIC_TOKEN_REF.test(content) && !fileName.endsWith('apply-schema-change-v2.yml')) {
+  if (GENERIC_TOKEN_REF.test(content)) {
     violations.push(
-      `${fileName}: references secrets.CLOUDFLARE_API_TOKEN directly. Use CLOUDFLARE_WORKER_API_TOKEN or CLOUDFLARE_PAGES_API_TOKEN instead.`,
+      `${fileName}: references secrets.CLOUDFLARE_API_TOKEN directly. Use CLOUDFLARE_WORKER_API_TOKEN, CLOUDFLARE_PAGES_API_TOKEN, or CLOUDFLARE_D1_MIGRATION_API_TOKEN instead.`,
     );
   }
 
@@ -147,14 +149,26 @@ export function checkWorkflowContent(fileName, content) {
 
     const usesWorkerToken = WORKER_TOKEN_REF.test(job.text);
     const usesPagesToken = PAGES_TOKEN_REF.test(job.text);
+    const usesD1Token = D1_MIGRATION_TOKEN_REF.test(job.text);
     const usesSmokeEmail = SMOKE_EMAIL_REF.test(job.text);
     const usesSmokePassword = SMOKE_PASSWORD_REF.test(job.text);
+    
+    const isSchemaJob = /schema|d1|apply|migration|preflight|postcondition|backup/i.test(haystack);
 
+    if (usesD1Token && !isSchemaJob) {
+      violations.push(`${fileName}: job "${job.id}" looks like it is not a schema/D1 job but references CLOUDFLARE_D1_MIGRATION_API_TOKEN.`);
+    }
     if (isWorkerJob && usesPagesToken) {
       violations.push(`${fileName}: job "${job.id}" looks like a Worker job but references CLOUDFLARE_PAGES_API_TOKEN.`);
     }
     if (isPagesJob && usesWorkerToken) {
       violations.push(`${fileName}: job "${job.id}" looks like a Pages job but references CLOUDFLARE_WORKER_API_TOKEN.`);
+    }
+    if (isWorkerJob && usesD1Token) {
+      violations.push(`${fileName}: job "${job.id}" looks like a Worker job but references CLOUDFLARE_D1_MIGRATION_API_TOKEN.`);
+    }
+    if (isPagesJob && usesD1Token) {
+      violations.push(`${fileName}: job "${job.id}" looks like a Pages job but references CLOUDFLARE_D1_MIGRATION_API_TOKEN.`);
     }
 
     if (SCOPED_SECRET_REF.test(job.text) && !hasEnvironmentDeclaration(job.text)) {
@@ -173,8 +187,13 @@ export function checkWorkflowContent(fileName, content) {
     }
 
     for (const step of getSteps(job.text)) {
-      if (WORKER_TOKEN_REF.test(step) && PAGES_TOKEN_REF.test(step)) {
-        violations.push(`${fileName}: job "${job.id}" has a step combining CLOUDFLARE_WORKER_API_TOKEN and CLOUDFLARE_PAGES_API_TOKEN.`);
+      let tokensUsed = 0;
+      if (WORKER_TOKEN_REF.test(step)) tokensUsed++;
+      if (PAGES_TOKEN_REF.test(step)) tokensUsed++;
+      if (D1_MIGRATION_TOKEN_REF.test(step)) tokensUsed++;
+      
+      if (tokensUsed > 1) {
+        violations.push(`${fileName}: job "${job.id}" has a step combining multiple scoped tokens (WORKER, PAGES, or D1_MIGRATION).`);
       }
     }
   }

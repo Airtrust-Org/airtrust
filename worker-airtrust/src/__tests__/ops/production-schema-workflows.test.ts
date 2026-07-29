@@ -43,3 +43,30 @@ describe('apply-schema-change-v2.yml — controlled single-file apply', () => {
     expect(workflow).not.toMatch(/d1\s+migrations\s+apply/);
   });
 });
+
+describe('security token guard — least privilege', () => {
+  const applySchema = readWorkflow('apply-schema-change-v2.yml');
+  const deployAirtrust = readWorkflow('deploy-airtrust.yml');
+
+  it('forbids generic CLOUDFLARE_API_TOKEN usage directly', () => {
+    expect(applySchema).not.toMatch(/secrets\.CLOUDFLARE_API_TOKEN/);
+    expect(deployAirtrust).not.toMatch(/secrets\.CLOUDFLARE_API_TOKEN/);
+  });
+
+  it('schema workflow requires D1 migration token and fail-closed gate', () => {
+    expect(applySchema).toContain('secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+    expect(applySchema).toContain('PRODUCTION_D1_MIGRATION_TOKEN_MISSING');
+    expect(applySchema).not.toMatch(/CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  });
+
+  it('deploy-airtrust continues using only Worker and Pages tokens', () => {
+    expect(deployAirtrust).toContain('secrets.CLOUDFLARE_WORKER_API_TOKEN');
+    expect(deployAirtrust).toContain('secrets.CLOUDFLARE_PAGES_API_TOKEN');
+    expect(deployAirtrust).not.toContain('secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+  });
+
+  it('error handling blocks do not contain corrupt redirections', () => {
+    expect(applySchema).not.toContain('>echo');
+    expect(applySchema).not.toContain('>&22');
+  });
+});
