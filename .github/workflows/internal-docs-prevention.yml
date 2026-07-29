@@ -1,0 +1,38 @@
+name: Internal Docs Prevention Check
+
+on:
+  push:
+    branches: [ main, production, staging ]
+  pull_request:
+    branches: [ main, production, staging ]
+
+jobs:
+  check-internal-docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Run Internal Docs Check Tests
+      run: |
+        chmod +x ./scripts/ci-internal-docs-check.sh
+        ./scripts/ci-internal-docs-check.sh --test
+        
+    - name: Run Internal Docs Check
+      run: ./scripts/ci-internal-docs-check.sh
+      
+    - name: Comment PR if internal docs found
+      if: failure() && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      continue-on-error: true
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '❌ **DEPLOY BLOQUEADO** - Documentação interna sensível detectada!\n\n🚫 Este PR contém documentos de auditoria, ofícios regulatórios ou conteúdo interno que não devem ir para repositório público.\n\n🧹 Remova todos os documentos bloqueados antes de aprovar este PR.'
+          })
