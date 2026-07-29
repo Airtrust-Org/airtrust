@@ -202,7 +202,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
 
   try {
     const body = await c.req.json();
-    const { nome, descricao, cor } = body;
+    const { nome, descricao, cor, ativo } = body;
 
     // Verificar se categoria existe
     const existing = await db
@@ -278,6 +278,11 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     if (cor !== undefined) {
       updates.push('cor = ?');
       params.push(cor);
+    }
+
+    if (ativo !== undefined) {
+      updates.push('ativo = ?');
+      params.push(ativo ? 1 : 0);
     }
 
     if (updates.length === 0) {
