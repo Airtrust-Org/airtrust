@@ -316,7 +316,7 @@ jobs:
           real_bundle_dir="$(mktemp -d ./.tmp-worker-bundle-XXXXXX)"
           echo "real_bundle_dir=$real_bundle_dir" >> "$GITHUB_OUTPUT"
           npx --no-install wrangler deploy --env production --config wrangler.production.toml --outdir "$real_bundle_dir" 2>&1 | tee "$RUNNER_TEMP/worker-deploy.log"
-          version_id="$(node scripts/parse-worker-version-id.mjs "$RUNNER_TEMP/worker-deploy.log")"
+          version_id="$(node ../scripts/parse-worker-version-id.mjs "$RUNNER_TEMP/worker-deploy.log")"
           # Empty string (not a placeholder) when the log line is missing — the
           # attestation maps empty to null. Never emit "unavailable".
           echo "worker_version_id=${version_id}" >> "$GITHUB_OUTPUT"
