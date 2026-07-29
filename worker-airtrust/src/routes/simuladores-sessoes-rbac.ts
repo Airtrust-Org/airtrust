@@ -7,16 +7,12 @@
  */
 import {
   requireOperationalAccess,
-  skipOperationalGuardForRoles,
   resolveOperationalReadScope,
   normalizeTenantRole,
 } from '../services/operational-domain-access';
 
 export const requireOperacoesSessao = (action: 'create' | 'update' | 'delete') =>
-  skipOperationalGuardForRoles(
-    ['instructor', 'student'],
-    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_sessao' }),
-  );
+  requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_sessao' });
 
 /**
  * Item 1 (read-side filtering): GET /sessoes treats GESTOR/MANAGER as

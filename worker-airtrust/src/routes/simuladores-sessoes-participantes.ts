@@ -16,7 +16,6 @@ import {
 } from './simuladores-shared';
 import {
   requireOperationalAccess,
-  skipOperationalGuardForRoles,
   assertFuncionarioIdsWithinOperationalScope,
 } from '../services/operational-domain-access';
 
@@ -31,19 +30,13 @@ import {
 // assertFuncionarioIdsWithinOperationalScope, against just that one
 // funcionario_id.
 const requireOperacoesParticipanteCreate = () =>
-  skipOperationalGuardForRoles(
-    ['instructor', 'student'],
-    requireOperationalAccess({ domain: 'OPERACOES', action: 'create' }),
-  );
+  requireOperationalAccess({ domain: 'OPERACOES', action: 'create', resourceType: 'simulador_sessao_participante' });
 
 // Editing/removing an EXISTING participante validates only that
 // participante's own setor (resourceType 'simulador_sessao_participante'),
 // not the whole session's participant list.
 const requireOperacoesParticipante = (action: 'update' | 'delete') =>
-  skipOperationalGuardForRoles(
-    ['instructor', 'student'],
-    requireOperationalAccess({ action, resourceType: 'simulador_sessao_participante' }),
-  );
+  requireOperationalAccess({ action, resourceType: 'simulador_sessao_participante' });
 
 const app = new Hono<{ Bindings: Env }>();
 

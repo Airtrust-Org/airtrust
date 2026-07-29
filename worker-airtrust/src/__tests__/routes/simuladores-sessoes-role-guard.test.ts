@@ -24,6 +24,7 @@ import simuladoresSessoesRoutes from '../../routes/simuladores-sessoes';
 /** Creates a D1 mock that responds to PRAGMA, is_instrutor check, and common queries */
 function createDb(isInstrutor: number) {
   const db = {
+    batch: async () => [{ meta: { changes: 1 } }],
     prepare: vi.fn((query: string) => {
       // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
       if (query.includes('FROM empresas WHERE id')) {

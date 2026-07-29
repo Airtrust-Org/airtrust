@@ -15,17 +15,13 @@ import { getEmpresaId } from '../middleware/tenant';
 import { audit, getFuncId } from './simuladores-shared';
 import {
   requireOperationalAccess,
-  skipOperationalGuardForRoles,
-} from '../services/operational-domain-access';
+  } from '../services/operational-domain-access';
 
 // Fichas de sessão de simulador são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md. This guard does NOT block based
 // on record status (signed/finalized) — only on domain/setor access.
 const requireOperacoesFicha = (action: 'create' | 'update' | 'cancel') =>
-  skipOperationalGuardForRoles(
-    ['instructor', 'student'],
-    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' }),
-  );
+  requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' });
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());

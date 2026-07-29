@@ -41,15 +41,11 @@ import { getTenantContext } from '../middleware/tenant';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
 import {
   requireOperationalAccess,
-  skipOperationalGuardForRoles,
-} from '../services/operational-domain-access';
+  } from '../services/operational-domain-access';
 
 // Sessões de simulador são fixed-domain OPERACOES — see docs/rbac/gestor-operational-autonomy.md.
 const requireOperacoesSessao = (action: 'update' | 'delete') =>
-  skipOperationalGuardForRoles(
-    ['instructor', 'student'],
-    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_sessao' }),
-  );
+  requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_sessao' });
 
 const app = new Hono<{ Bindings: Env }>();
 

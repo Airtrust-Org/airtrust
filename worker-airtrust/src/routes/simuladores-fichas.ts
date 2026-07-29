@@ -55,7 +55,6 @@ import fichasAcoesRoutes from './simuladores-fichas-acoes';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 import {
   requireOperationalAccess,
-  skipOperationalGuardForRoles,
   resolveOperationalReadScope,
   normalizeTenantRole,
 } from '../services/operational-domain-access';
@@ -64,10 +63,7 @@ import {
 // docs/rbac/gestor-operational-autonomy.md. This guard does NOT block based
 // on record status (signed/finalized) — only on domain/setor access.
 const requireOperacoesFicha = (action: 'create' | 'update' | 'delete' | 'export') =>
-  skipOperationalGuardForRoles(
-    ['instructor', 'student'],
-    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' }),
-  );
+  requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' });
 
 const app = new Hono<{ Bindings: Env }>();
 // Todos os endpoints de fichas requerem autenticação

@@ -615,6 +615,62 @@ export function requireOperationalAccess(
         : Number(c.req.param('id')) || null;
     }
 
+    // ── Pedagogical Bypass for Instructors / Students ──
+    // Se o usuário for o instrutor/examinador ou aluno vinculado ao recurso (ação pedagógica legítima),
+    // ele ignora a guarda gerencial e prossegue.
+    if (['simulador_sessao', 'simulador_ficha', 'simulador_sessao_participante'].includes(options.resourceType || '')) {
+      const funcRow = await c.env.DB.prepare(
+        `SELECT f.id FROM usuarios u 
+         JOIN funcionarios f ON f.id = u.funcionario_id 
+         WHERE u.id = ? AND f.empresa_id = ? AND (u.deleted_at IS NULL OR u.deleted_at = 0) AND f.deleted_at IS NULL LIMIT 1`
+      ).bind(userId, empresaId).first<{id: number}>();
+      
+      const funcId = funcRow ? Number(funcRow.id) : 0;
+      if (funcId > 0) {
+        let isPedagogical = false;
+        if (options.resourceType === 'simulador_sessao') {
+          if (options.action === 'create') {
+            const body = await c.req.raw.clone().json().catch(() => ({})) as Record<string, unknown>;
+            isPedagogical = Number(body.instrutor_id) === funcId || Number(body.examinador_id) === funcId;
+          } else if (resourceId) {
+            const row = await c.env.DB.prepare(
+              'SELECT instrutor_id, examinador_id FROM simulador_agendamentos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL'
+            ).bind(resourceId, empresaId).first<{ instrutor_id: number | null, examinador_id: number | null }>();
+            if (row) isPedagogical = row.instrutor_id === funcId || row.examinador_id === funcId;
+          }
+        } else if (options.resourceType === 'simulador_ficha' && resourceId) {
+          const row = await c.env.DB.prepare(
+            `SELECT sa.instrutor_id, sa.examinador_id, fs.colaborador_id_aluno
+             FROM fichas_sessao fs
+             LEFT JOIN simulador_agendamentos sa ON sa.id = fs.sessao_id AND sa.empresa_id = fs.empresa_id
+             WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`
+          ).bind(resourceId, empresaId).first<{ instrutor_id: number | null, examinador_id: number | null, colaborador_id_aluno: number | null }>();
+          if (row) isPedagogical = row.instrutor_id === funcId || row.examinador_id === funcId || row.colaborador_id_aluno === funcId;
+        } else if (options.resourceType === 'simulador_sessao_participante') {
+          if (options.action === 'create') {
+            const row = await c.env.DB.prepare(
+              'SELECT instrutor_id, examinador_id FROM simulador_agendamentos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL'
+            ).bind(Number(c.req.param('id') || 0), empresaId).first<{ instrutor_id: number | null, examinador_id: number | null }>();
+            if (row) isPedagogical = row.instrutor_id === funcId || row.examinador_id === funcId;
+          } else if (resourceId) {
+            const row = await c.env.DB.prepare(
+              `SELECT sa.instrutor_id, sa.examinador_id
+               FROM sessoes_participantes sp
+               INNER JOIN simulador_agendamentos sa ON sa.id = sp.sessao_id AND sa.empresa_id = ?
+               WHERE sp.id = ? AND sp.deleted_at IS NULL`
+            ).bind(empresaId, resourceId).first<{ instrutor_id: number | null, examinador_id: number | null }>();
+            if (row) isPedagogical = row.instrutor_id === funcId || row.examinador_id === funcId;
+          }
+        }
+
+        if (isPedagogical) {
+          await next();
+          return;
+        }
+      }
+    }
+    // ────────────────────────────────────────────────────────
+
     await assertOperationalAccess({
       db: c.env.DB,
       empresaId,
@@ -634,43 +690,7 @@ export function isValidOperationalDomain(value: unknown): value is OperationalDo
   return typeof value === 'string' && (OPERATIONAL_DOMAINS as readonly string[]).includes(value);
 }
 
-/**
- * Wraps a middleware so it's skipped entirely for the given (normalized)
- * roles — the wrapped middleware's `next()` is called immediately instead.
- *
- * Used specifically for simuladores-sessoes*.ts / simuladores-fichas*.ts:
- * those routes have their OWN pre-existing, role-aware access model
- * (isFullAccess/isFullAccessRole/resolveFichaScope) where INSTRUTOR and
- * ALUNO are first-class actors with real, existing actions on their own
- * sessions/fichas (instructor fills out/evaluates a ficha, aluno signs
- * their own record) — that model is untouched by this RBAC and remains
- * the sole authority for those roles. The operational-domain-access guard
- * is specifically the GESTOR/ADMINISTRADOR autonomy layer; it must never
- * additionally restrict instructor/student actions that already work
- * today, in either legacy or activated mode. This is NOT a generic
- * escape hatch — it's scoped to exactly the routes that already have an
- * equivalent, working authorization path for these roles.
- */
-export function skipOperationalGuardForRoles(
-  roles: string[],
-  middleware: MiddlewareHandler<{ Bindings: Env }>,
-): MiddlewareHandler<{ Bindings: Env }> {
-  // Deliberately lazy: this factory runs at route-registration time (i.e.
-  // module import time, since callers do `app.put('/x', requireOperacoesX(...), ...)`
-  // at the top level), which is before any per-request context exists and,
-  // in some tests, before a partial mock of middleware/tenant has settled.
-  // normalizeTenantRole must only be called inside the returned handler,
-  // at actual request time.
-  return async (c, next) => {
-    const userRole = (c.get as (key: string) => unknown)('userRole');
-    const skipRoles = new Set(roles.map((role) => normalizeTenantRole(role)));
-    if (skipRoles.has(normalizeTenantRole(userRole))) {
-      await next();
-      return;
-    }
-    await middleware(c, next);
-  };
-}
+
 
 /**
  * Item 5 / create-time equivalent: validates that every funcionário in

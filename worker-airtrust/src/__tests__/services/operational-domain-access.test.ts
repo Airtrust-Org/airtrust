@@ -5,7 +5,6 @@ import {
   assertOperationalAccess,
   resolveResourceDomain,
   requireOperationalAccess,
-  skipOperationalGuardForRoles,
 } from '../../services/operational-domain-access';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -860,99 +859,6 @@ describe('requireOperationalAccess middleware', () => {
       headers: { 'x-empresa-id': '2', 'x-user-id': '100', 'x-user-role': 'gestor' },
     }, { DB: db } as unknown as Env);
     expect(res.status).toBe(200);
-  });
-});
-
-describe('skipOperationalGuardForRoles (Item 4 — instrutor/aluno em sessões/fichas)', () => {
-  function buildApp() {
-    const app = new Hono<{ Bindings: Env }>();
-    app.onError(errorHandler);
-    app.use('*', async (c, next) => {
-      c.set('empresaId' as never, Number(c.req.header('x-empresa-id')) as never);
-      c.set('userId' as never, Number(c.req.header('x-user-id')) as never);
-      c.set('userRole' as never, (c.req.header('x-user-role') || 'gestor') as never);
-      await next();
-    });
-    const guarded = skipOperationalGuardForRoles(
-      ['instructor', 'student'],
-      requireOperationalAccess({
-        domain: 'OPERACOES',
-        action: 'update',
-        resourceType: 'simulador_ficha',
-      }),
-    );
-    app.put('/fichas/:id', guarded, (c) => c.json({ success: true }));
-    return app;
-  }
-
-  it('instrutor passa direto (guarda pulada) mesmo sem domínio/setor atribuído, com flag ativa', async () => {
-    const db = makeDb();
-    const app = buildApp();
-    const res = await app.request(
-      '/fichas/3000',
-      {
-        method: 'PUT',
-        // user 999 has no setores_gestores row at all — would be denied by
-        // the domain guard if it applied, proving the skip is real, not a
-        // coincidental pass.
-        headers: { 'x-empresa-id': '2', 'x-user-id': '999', 'x-user-role': 'instrutor' },
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(res.status).toBe(200);
-  });
-
-  it('aluno passa direto (guarda pulada) mesmo sem domínio/setor atribuído, com flag ativa', async () => {
-    const db = makeDb();
-    const app = buildApp();
-    const res = await app.request(
-      '/fichas/3000',
-      {
-        method: 'PUT',
-        headers: { 'x-empresa-id': '2', 'x-user-id': '999', 'x-user-role': 'aluno' },
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(res.status).toBe(200);
-  });
-
-  it('gestor continua passando pela guarda normalmente (não é pulada para gestor)', async () => {
-    const db = makeDb();
-    const app = buildApp();
-    const allowed = await app.request(
-      '/fichas/3000',
-      {
-        method: 'PUT',
-        headers: { 'x-empresa-id': '2', 'x-user-id': '100', 'x-user-role': 'gestor' },
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(allowed.status).toBe(200);
-
-    const denied = await app.request(
-      '/fichas/3001',
-      {
-        method: 'PUT',
-        // setor 14 (ficha 3001's aluno) is outside user 100's scope (only setor 10).
-        headers: { 'x-empresa-id': '2', 'x-user-id': '100', 'x-user-role': 'gestor' },
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(denied.status).toBe(403);
-  });
-
-  it('administrador sem atribuição continua negado (skip é só para instrutor/aluno)', async () => {
-    const db = makeDb();
-    const app = buildApp();
-    const res = await app.request(
-      '/fichas/3000',
-      {
-        method: 'PUT',
-        headers: { 'x-empresa-id': '2', 'x-user-id': '103', 'x-user-role': 'admin' },
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(res.status).toBe(403);
   });
 });
 

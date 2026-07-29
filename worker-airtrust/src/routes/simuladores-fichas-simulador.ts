@@ -20,16 +20,12 @@ import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 import { buildOperationalFichaManobras, FICHA_TECNICAS_PADRAO_LIMITE } from '../constants/notechs';
 import {
   requireOperationalAccess,
-  skipOperationalGuardForRoles,
-} from '../services/operational-domain-access';
+  } from '../services/operational-domain-access';
 
 // Fichas de sessão de simulador são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md.
 const requireOperacoesFicha = (action: 'update' | 'create' | 'issue') =>
-  skipOperationalGuardForRoles(
-    ['instructor', 'student'],
-    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' }),
-  );
+  requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' });
 
 const app = new Hono<{ Bindings: Env }>();
 

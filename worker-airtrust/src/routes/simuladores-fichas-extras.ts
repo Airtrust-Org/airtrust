@@ -16,16 +16,12 @@ import { audit } from './simuladores-shared';
 import { createLogger, toError } from '../utils/logger';
 import {
   requireOperationalAccess,
-  skipOperationalGuardForRoles,
-} from '../services/operational-domain-access';
+  } from '../services/operational-domain-access';
 
 // Fichas de sessão de simulador são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md.
 const requireOperacoesFicha = (action: 'create') =>
-  skipOperationalGuardForRoles(
-    ['instructor', 'student'],
-    requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' }),
-  );
+  requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' });
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
