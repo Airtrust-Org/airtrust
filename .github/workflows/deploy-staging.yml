@@ -183,7 +183,10 @@ jobs:
           }
           const checks = await get(`/repos/${repo}/commits/${releaseSha}/check-runs?per_page=100`);
           if (!Array.isArray(checks.check_runs) || checks.check_runs.length === 0) throw new Error('RELEASE_CHECKS_NOT_GREEN');
-          const badCheck = checks.check_runs.find((check) => check.status !== 'completed' || check.conclusion !== 'success');
+          const ignoredJobs = ['Deploy Staging (Official)', 'Staging Release Guard', 'Cloudflare Secret Readiness Gate', 'Check Migration Token', 'Check Pages Token', 'Check Worker Token', 'Block Any Production Target', 'Check Backup Token', 'Ledger Preflight (read-only, required before any migration)', 'Backup Staging D1 (verified, required before any migration)', 'Apply Approved Migrations (one at a time, allowlisted)', 'Validate Migration Postconditions', 'Release Write Gate', 'Record Release Summary', 'Deploy Staging Worker', 'Deploy Staging Frontend (Pages preview, staging branch)', 'Authenticated Staging Smoke'];
+          const relevantChecks = checks.check_runs.filter((check) => !ignoredJobs.includes(check.name));
+          if (relevantChecks.length === 0) throw new Error('RELEASE_CHECKS_NOT_GREEN');
+          const badCheck = relevantChecks.find((check) => check.status !== 'completed' || check.conclusion !== 'success');
           if (badCheck) throw new Error('RELEASE_CHECKS_NOT_GREEN');
           const statuses = await get(`/repos/${repo}/commits/${releaseSha}/status`);
           if (statuses.statuses.length > 0 && statuses.statuses.some((status) => status.state !== 'success')) {

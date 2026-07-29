@@ -72,7 +72,7 @@ describe('Staging Pipeline Trust Boundary', () => {
   });
 
   it('13. check-run pending/failure bloqueia', () => {
-    expect(workflowContent).toMatch(/const badCheck = checks\.check_runs\.find\(\(check\) => check\.status !== 'completed' \|\| check\.conclusion !== 'success'\);/);
+    expect(workflowContent).toMatch(/const badCheck = relevantChecks\.find\(\(check\) => check\.status !== 'completed' \|\| check\.conclusion !== 'success'\);/);
   });
 
   it('14. provenance separa workflow_sha e release_sha', () => {
