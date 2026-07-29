@@ -111,7 +111,7 @@ jobs:
           set -euo pipefail
           node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts \
             --contract docs/database/schema-contracts/production-d1-baseline-v2.json \
-            --production > schema-check.json
+            --production | tee schema-check.json
           status="$(node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('schema-check.json','utf8'));console.log(d.status)")"
           if [[ "$status" != "PASS" ]]; then
             cat schema-check.json >echo "Current schema contract must be PASS before applying a change." >&22
@@ -166,7 +166,7 @@ jobs:
           set -euo pipefail
           node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts \
             --contract docs/database/schema-contracts/production-d1-baseline-v2.json \
-            --production > schema-post-check.json
+            --production | tee schema-post-check.json
           status="$(node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('schema-post-check.json','utf8'));console.log(d.status)")"
           if [[ "$status" != "PASS" ]]; then
             echo "Post-apply contract validation failed." >&2
