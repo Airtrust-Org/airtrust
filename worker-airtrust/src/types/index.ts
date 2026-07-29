@@ -45,6 +45,8 @@ export interface Env {
   AIRTRUST_SOURCE_TREE?: string;
   AIRTRUST_WORKER_BUNDLE_SHA256?: string;
   AIRTRUST_RELEASE_MANIFEST_SHA256?: string;
+  // Legacy Pages/Worker version ID
+  CF_DEPLOYMENT_ID?: string;
   // Dev helpers
   ENABLE_DEV_AUTH_BYPASS?: string; // 'true' apenas em development via .dev.vars
   // Executor controlado da importação da matriz de simuladores AW139/S-76

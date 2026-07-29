@@ -48,12 +48,12 @@ if (!legacy.includes('BLOCKED') || legacy.includes('npx wrangler deploy --env st
   fail('legacy deploy-staging.sh must remain blocked and must not call wrangler deploy');
 }
 
-const systemRoutes = readFileSync(join(ROOT, 'worker-airtrust/src/routes/system.ts'), 'utf8');
-if (!systemRoutes.includes("return 'unversioned-remote'")) {
-  fail('getCanonicalVersion must return unversioned-remote for unstamped staging/production');
+const systemRoutes = readFileSync(join(ROOT, 'worker-airtrust/src/services/release-metadata.ts'), 'utf8');
+if (!systemRoutes.includes("version = 'unversioned-remote'") && !systemRoutes.includes('version = "unversioned-remote"')) {
+  fail('getReleaseMetadata must return unversioned-remote for unstamped staging/production');
 }
-if (!systemRoutes.includes("return 'dev-local'")) {
-  fail('getCanonicalVersion must still allow dev-local for local/development');
+if (!systemRoutes.includes("version = 'dev-local'") && !systemRoutes.includes('version = "dev-local"')) {
+  fail('getReleaseMetadata must still allow dev-local for local/development');
 }
 
 if (failures.length > 0) {

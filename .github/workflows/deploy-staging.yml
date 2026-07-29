@@ -701,7 +701,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version_id="$(sed -n 's/.*Worker Version ID: //p' "$RUNNER_TEMP/worker-deploy-staging.log" | tail -n1)"
+          version_id="$(node scripts/parse-worker-version-id.mjs "$RUNNER_TEMP/worker-deploy-staging.log")"
           echo "worker_version_id=${version_id:-unavailable}" >> "$GITHUB_OUTPUT"
 
       - name: Smoke provenance (version endpoint must match SHA, never dev-local/latest/empty)

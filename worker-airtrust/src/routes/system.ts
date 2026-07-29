@@ -3,93 +3,7 @@ import type { Env, Variables } from '../types';
 
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
-const INVALID_DEPLOY_METADATA = new Set([
-  '',
-  'managed-by-script',
-  '__build_version__',
-  '__app_version__',
-  'null',
-  'undefined',
-  'unknown',
-]);
-
-function sanitizeDeployMetadata(value: string | undefined | null): string | null {
-  const normalized = String(value || '').trim();
-  if (!normalized) return null;
-  if (INVALID_DEPLOY_METADATA.has(normalized.toLowerCase())) {
-    return null;
-  }
-  return normalized;
-}
-
-/**
- * Retorna a versão canónica de deployment usada por todos os endpoints de sistema.
- * Centralizada para garantir que /api/version, /api/health, /api/status sempre concordem.
- *
- * Ordem de precedência:
- * 1. APP_VERSION (injetado pelo deploy script no wrangler.toml [vars])
- * 2. CF_DEPLOYMENT_ID (fallback Cloudflare)
- * 3. Ambiente remoto (staging/production) sem stamp → 'unversioned-remote'
- *    (nunca 'dev-local' em deploy remoto)
- * 4. 'dev-local' (somente execução local / ENVIRONMENT ausente ou development)
- */
-export function getCanonicalVersion(env: Env): string {
-  const raw = env as unknown as Record<string, string>;
-  const stamped =
-    sanitizeDeployMetadata(raw.APP_VERSION) || sanitizeDeployMetadata(raw.CF_DEPLOYMENT_ID);
-  if (stamped) return stamped;
-
-  const environment = String(raw.ENVIRONMENT || '')
-    .trim()
-    .toLowerCase();
-  if (environment === 'staging' || environment === 'production') {
-    return 'unversioned-remote';
-  }
-
-  return 'dev-local';
-}
-
-export function getCanonicalBuildTime(env: Env): string | null {
-  const raw = env as unknown as Record<string, string>;
-  return sanitizeDeployMetadata(raw.APP_BUILD_TIME);
-}
-
-export function getWorkerVersionMetadata(env: Env): {
-  id: string | null;
-  tag: string | null;
-  timestamp: string | null;
-} {
-  const metadata = env.CF_VERSION_METADATA;
-  return {
-    id: sanitizeDeployMetadata(metadata?.id),
-    tag: sanitizeDeployMetadata(metadata?.tag),
-    timestamp: sanitizeDeployMetadata(metadata?.timestamp),
-  };
-}
-
-/**
- * Provenance chain computed by the deploy pipeline itself (source SHA/tree,
- * worker bundle hash, release manifest hash). This is deliberately distinct
- * from getWorkerVersionMetadata(): that one is Cloudflare's own runtime
- * identity for the Worker Version; this one is what the pipeline that BUILT
- * the bundle claims about it. Neither alone proves the other — together with
- * repeated matching responses across probes, this is "pipeline-attested"
- * evidence, not a Cloudflare-side cryptographic guarantee that the exact
- * bytes it serves match this hash (see docs/ops/STAGING_RUNTIME_FORENSICS_2026-07-18.md).
- */
-export function getProvenanceChain(env: Env): {
-  sourceSha: string | null;
-  sourceTree: string | null;
-  workerBundleSha256: string | null;
-  releaseManifestSha256: string | null;
-} {
-  return {
-    sourceSha: sanitizeDeployMetadata(env.AIRTRUST_SOURCE_SHA),
-    sourceTree: sanitizeDeployMetadata(env.AIRTRUST_SOURCE_TREE),
-    workerBundleSha256: sanitizeDeployMetadata(env.AIRTRUST_WORKER_BUNDLE_SHA256),
-    releaseManifestSha256: sanitizeDeployMetadata(env.AIRTRUST_RELEASE_MANIFEST_SHA256),
-  };
-}
+import { getReleaseMetadata } from '../services/release-metadata';
 
 /**
  * Aplica headers no-cache para impedir que o CDN do Cloudflare sirva
@@ -161,17 +75,16 @@ export function registerSystemRoutes(app: SystemApp) {
     }
 
     // 3. Métricas básicas — versão canónica partilhada com /api/version
-    const workerVersion = getWorkerVersionMetadata(c.env);
-    const provenance = getProvenanceChain(c.env);
+    const metadata = getReleaseMetadata(c.env);
     const stats = {
       timestamp: new Date().toISOString(),
-      environment: c.env.ENVIRONMENT || 'unknown',
-      version: getCanonicalVersion(c.env),
-      workerVersionId: workerVersion.id,
-      deploymentTag: workerVersion.tag,
-      sourceSha: provenance.sourceSha,
-      workerBundleSha256: provenance.workerBundleSha256,
-      releaseManifestSha256: provenance.releaseManifestSha256,
+      environment: metadata.environment,
+      version: metadata.version,
+      workerVersionId: metadata.workerVersionId,
+      deploymentTag: metadata.deploymentTag,
+      sourceSha: metadata.sourceSha,
+      workerBundleSha256: metadata.workerBundleSha256,
+      releaseManifestSha256: metadata.releaseManifestSha256,
       region: c.req.header('CF-IPCountry') || 'unknown',
     };
 
@@ -207,28 +120,22 @@ export function registerSystemRoutes(app: SystemApp) {
   app.get('/api/version', (c) => {
     setNoCacheHeaders(c);
 
-    const environment = c.env.ENVIRONMENT || 'development';
-    const deploymentId = getCanonicalVersion(c.env);
-    const workerVersion = getWorkerVersionMetadata(c.env);
-    const provenance = getProvenanceChain(c.env);
-
-    const builtAt =
-      environment === 'development' ? new Date().toISOString() : getCanonicalBuildTime(c.env);
+    const metadata = getReleaseMetadata(c.env);
 
     return c.json({
       success: true,
       data: {
-        version: deploymentId,
-        environment,
-        builtAt,
-        deploymentId,
-        workerVersionId: workerVersion.id,
-        deploymentTag: workerVersion.tag,
-        workerVersionCreatedAt: workerVersion.timestamp,
-        sourceSha: provenance.sourceSha,
-        sourceTree: provenance.sourceTree,
-        workerBundleSha256: provenance.workerBundleSha256,
-        releaseManifestSha256: provenance.releaseManifestSha256,
+        version: metadata.version,
+        environment: metadata.environment,
+        builtAt: metadata.buildTime,
+        deploymentId: metadata.version,
+        workerVersionId: metadata.workerVersionId,
+        deploymentTag: metadata.deploymentTag,
+        workerVersionCreatedAt: metadata.workerVersionCreatedAt,
+        sourceSha: metadata.sourceSha,
+        sourceTree: metadata.sourceTree,
+        workerBundleSha256: metadata.workerBundleSha256,
+        releaseManifestSha256: metadata.releaseManifestSha256,
       },
     });
   });
@@ -241,12 +148,14 @@ export function registerSystemRoutes(app: SystemApp) {
   app.get('/api/status', (c) => {
     setNoCacheHeaders(c);
 
+    const metadata = getReleaseMetadata(c.env);
+
     return c.json({
       success: true,
-      backend_version: getCanonicalVersion(c.env),
+      backend_version: metadata.version,
       // opcional: configure FRONT_VERSION no deploy para refletir a versão do front
       frontend_version: (c.env as unknown as Record<string, string>).FRONT_VERSION || null,
-      environment: c.env.ENVIRONMENT || 'development',
+      environment: metadata.environment,
       timestamp: new Date().toISOString(),
     });
   });

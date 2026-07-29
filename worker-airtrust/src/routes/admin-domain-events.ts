@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { getCanonicalVersion } from './system';
+import { getReleaseMetadata } from '../services/release-metadata';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -93,7 +93,7 @@ app.get('/integracoes/health', async (c) => {
       eventos_recentes: eventos.results || [],
       pasta_virtual_jobs: jobs.results || [],
       qualificacoes_pendencias: pendencias.results || [],
-      version: getCanonicalVersion(c.env),
+      version: getReleaseMetadata(c.env).version,
     },
   });
 });

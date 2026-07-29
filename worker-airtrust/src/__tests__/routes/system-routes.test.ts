@@ -60,7 +60,7 @@ describe('system routes extraction', () => {
         database: { status: 'ok' },
       },
       stats: {
-        environment: 'unknown',
+        environment: 'development',
         version: 'dev-local',
       },
     });

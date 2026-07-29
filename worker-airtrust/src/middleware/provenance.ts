@@ -1,11 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
-import {
-  getCanonicalBuildTime,
-  getCanonicalVersion,
-  getProvenanceChain,
-  getWorkerVersionMetadata,
-} from '../routes/system';
+import { getReleaseMetadata } from '../services/release-metadata';
 
 /**
  * Identifies the exact deployed Worker on every response — including 404s
@@ -24,25 +19,23 @@ export function provenanceHeadersMiddleware(): MiddlewareHandler<{ Bindings: Env
   return async (c, next) => {
     await next();
 
-    const worker = getWorkerVersionMetadata(c.env);
-    const provenance = getProvenanceChain(c.env);
+    const metadata = getReleaseMetadata(c.env);
 
-    c.header('X-AirTrust-App-Version', getCanonicalVersion(c.env));
-    c.header('X-AirTrust-Environment', c.env.ENVIRONMENT || 'development');
+    c.header('X-AirTrust-App-Version', metadata.version);
+    c.header('X-AirTrust-Environment', metadata.environment);
 
-    if (worker.id) c.header('X-AirTrust-Worker-Version', worker.id);
-    if (worker.tag) c.header('X-AirTrust-Deployment-Tag', worker.tag);
+    if (metadata.workerVersionId) c.header('X-AirTrust-Worker-Version', metadata.workerVersionId);
+    if (metadata.deploymentTag) c.header('X-AirTrust-Deployment-Tag', metadata.deploymentTag);
 
-    const buildTime = getCanonicalBuildTime(c.env);
-    if (buildTime) c.header('X-AirTrust-Build-Time', buildTime);
+    if (metadata.buildTime) c.header('X-AirTrust-Build-Time', metadata.buildTime);
 
-    if (provenance.sourceSha) c.header('X-AirTrust-Source-SHA', provenance.sourceSha);
-    if (provenance.sourceTree) c.header('X-AirTrust-Source-Tree', provenance.sourceTree);
-    if (provenance.workerBundleSha256) {
-      c.header('X-AirTrust-Worker-Bundle-SHA256', provenance.workerBundleSha256);
+    if (metadata.sourceSha) c.header('X-AirTrust-Source-SHA', metadata.sourceSha);
+    if (metadata.sourceTree) c.header('X-AirTrust-Source-Tree', metadata.sourceTree);
+    if (metadata.workerBundleSha256) {
+      c.header('X-AirTrust-Worker-Bundle-SHA256', metadata.workerBundleSha256);
     }
-    if (provenance.releaseManifestSha256) {
-      c.header('X-AirTrust-Release-Manifest-SHA256', provenance.releaseManifestSha256);
+    if (metadata.releaseManifestSha256) {
+      c.header('X-AirTrust-Release-Manifest-SHA256', metadata.releaseManifestSha256);
     }
   };
 }
