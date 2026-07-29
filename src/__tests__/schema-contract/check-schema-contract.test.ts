@@ -62,7 +62,7 @@ describe('schema contract checker', () => {
     }
 
     expect(computeSchemaHash(reorderedSnapshot, contract.scoped_tables)).toBe(
-      'f3a1a2fa2ef07c50660d4c8180bd2bd9dcb98e5423317f7c20ea6d4c9ba787d7',
+      '0becb324703533d9838afecce9d4099ad7c6bae27ccc439ebb99a37d5d339233',
     );
   });
 

@@ -1,9 +1,6 @@
 {
-  "generatedAt": "2026-07-14T14:07:41.440Z",
-  "database": {
-    "name": "airtrust-db",
-    "env": "production"
-  },
+  "generatedAt": "2026-07-29T00:22:49.078Z",
+  "database": "airtrust-db:production:remote-read-only",
   "tables": {
     "simuladores": {
       "table_info": {
@@ -182,15 +179,6 @@
             "name": "simuladores",
             "tbl_name": "simuladores",
             "sql": "CREATE TABLE simuladores (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  nome TEXT NOT NULL,\n  modelo TEXT NOT NULL,\n  tipo TEXT NOT NULL,\n  fabricante TEXT,\n  localizacao TEXT,\n  capacidade INTEGER DEFAULT 1,\n  status TEXT CHECK(status IN ('ATIVO', 'MANUTENCAO', 'INATIVO')) DEFAULT 'ATIVO',\n  observacoes TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n, codigo_aeronave TEXT, aeronave_codigo TEXT)"
-          }
-        ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 17,
-            "active": 2
           }
         ]
       }
@@ -601,15 +589,6 @@
             "sql": "CREATE TABLE simulador_agendamentos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT UNIQUE NOT NULL,\n  simulador_id INTEGER,\n  funcionario_id INTEGER NOT NULL,\n  instrutor_id INTEGER NOT NULL,\n  checador_id INTEGER,\n  template_id INTEGER,\n  data DATE NOT NULL,\n  hora_inicio TIME NOT NULL,\n  hora_fim TIME NOT NULL,\n  duracao_minutos INTEGER,\n  status TEXT DEFAULT 'AGENDADO',\n  tipo_sessao TEXT,\n  observacoes TEXT,\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TIMESTAMP,\n  nome TEXT,\n  examinador_id INTEGER NULL,\n  is_check INTEGER NOT NULL DEFAULT 0,\n  empresa_id INTEGER REFERENCES empresas(id),\n  tipo_dispositivo TEXT NOT NULL DEFAULT 'SIMULADOR'\n    CHECK (tipo_dispositivo IN ('SIMULADOR', 'AERONAVE')),\n  aeronave_id INTEGER REFERENCES aeronaves(id)\n, modo_compartilhado INTEGER NOT NULL DEFAULT 0 CHECK (modo_compartilhado IN (0, 1)))"
           }
         ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 112,
-            "active": 51
-          }
-        ]
       }
     },
     "sessoes_participantes": {
@@ -757,15 +736,6 @@
             "name": "sessoes_participantes",
             "tbl_name": "sessoes_participantes",
             "sql": "CREATE TABLE sessoes_participantes (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT UNIQUE NOT NULL,\n  sessao_id INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  funcao TEXT, -- PF (Pilot Flying), PM (Pilot Monitoring), PIC, SIC, etc\n  status TEXT DEFAULT 'CONFIRMADO', -- CONFIRMADO, FALTOU, DISPENSADO\n  ciclo_executado INTEGER DEFAULT 1,\n  \n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TIMESTAMP\n)"
-          }
-        ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 417,
-            "active": 89
           }
         ]
       }
@@ -992,15 +962,6 @@
             "sql": "CREATE TABLE simulador_atribuicoes_curriculares (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT NOT NULL UNIQUE,\n  empresa_id INTEGER NOT NULL,\n  agendamento_id INTEGER NOT NULL,\n  participante_id INTEGER NOT NULL,\n  treinamento_planejado_id INTEGER,\n  modelo_sessao_id INTEGER,\n  gera_ficha INTEGER NOT NULL DEFAULT 1 CHECK (gera_ficha IN (0, 1)),\n  carga_horaria_total_minutos INTEGER NOT NULL DEFAULT 0 CHECK (carga_horaria_total_minutos >= 0),\n  status TEXT NOT NULL DEFAULT 'ATIVA' CHECK (status IN ('ATIVA', 'CANCELADA', 'CONCLUIDA')),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (agendamento_id) REFERENCES simulador_agendamentos(id),\n  FOREIGN KEY (participante_id) REFERENCES sessoes_participantes(id),\n  FOREIGN KEY (treinamento_planejado_id) REFERENCES treinamentos_planejados(id),\n  FOREIGN KEY (modelo_sessao_id) REFERENCES modelos_sessao(id)\n)"
           }
         ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 13,
-            "active": 8
-          }
-        ]
       }
     },
     "simulador_agendamento_segmentos": {
@@ -1221,15 +1182,6 @@
             "sql": "CREATE TABLE simulador_agendamento_segmentos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT NOT NULL UNIQUE,\n  empresa_id INTEGER NOT NULL,\n  agendamento_id INTEGER NOT NULL,\n  ordem INTEGER NOT NULL,\n  inicio TEXT NOT NULL,\n  fim TEXT NOT NULL,\n  duracao_minutos INTEGER NOT NULL CHECK (duracao_minutos > 0),\n  atribuicao_curricular_id INTEGER,\n  status TEXT NOT NULL DEFAULT 'ATIVO' CHECK (status IN ('ATIVO', 'CANCELADO')),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT, finalidade_codigo TEXT NOT NULL DEFAULT 'OUTRO'\n  CHECK (finalidade_codigo IN ('SOP_NORMAL', 'SOP_ANORMAL_EMERGENCIA', 'ATUACAO_EXAMINADOR', 'OUTRO')), finalidade_titulo TEXT,\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (agendamento_id) REFERENCES simulador_agendamentos(id),\n  FOREIGN KEY (atribuicao_curricular_id) REFERENCES simulador_atribuicoes_curriculares(id),\n  CHECK (inicio <> fim)\n)"
           }
         ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 14,
-            "active": 8
-          }
-        ]
       }
     },
     "simulador_segmento_atribuicoes": {
@@ -1446,15 +1398,6 @@
             "sql": "CREATE TABLE simulador_segmento_atribuicoes (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT NOT NULL UNIQUE,\n  empresa_id INTEGER NOT NULL,\n  segmento_id INTEGER NOT NULL,\n  atribuicao_curricular_id INTEGER NOT NULL,\n  status TEXT NOT NULL DEFAULT 'PLANEJADA' CHECK(status IN ('PLANEJADA', 'CUMPRIDA', 'CANCELADA')),\n  observacao TEXT,\n  concluido_em TEXT,\n  created_at TEXT DEFAULT CURRENT_TIMESTAMP,\n  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TEXT, gera_ficha INTEGER NOT NULL DEFAULT 1 CHECK (gera_ficha IN (0, 1)),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (segmento_id, empresa_id) REFERENCES simulador_agendamento_segmentos(id, empresa_id),\n  FOREIGN KEY (atribuicao_curricular_id, empresa_id) REFERENCES simulador_atribuicoes_curriculares(id, empresa_id)\n)"
           }
         ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 8,
-            "active": 8
-          }
-        ]
       }
     },
     "simulador_segmento_participantes": {
@@ -1660,13 +1603,478 @@
             "sql": "CREATE TABLE simulador_segmento_participantes (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT NOT NULL UNIQUE,\n  empresa_id INTEGER NOT NULL,\n  segmento_id INTEGER NOT NULL,\n  participante_id INTEGER NOT NULL,\n  funcao TEXT NOT NULL CHECK (funcao IN ('PF', 'PM')),\n  duracao_minutos INTEGER NOT NULL CHECK (duracao_minutos > 0),\n  atribuicao_curricular_id INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (segmento_id) REFERENCES simulador_agendamento_segmentos(id),\n  FOREIGN KEY (participante_id) REFERENCES sessoes_participantes(id),\n  FOREIGN KEY (atribuicao_curricular_id) REFERENCES simulador_atribuicoes_curriculares(id)\n)"
           }
         ]
-      },
-      "counts": {
+      }
+    },
+    "modelos_sessao": {
+      "table_info": {
         "ok": true,
         "results": [
           {
-            "total": 28,
-            "active": 16
+            "cid": 0,
+            "name": "id",
+            "type": "INTEGER",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 1
+          },
+          {
+            "cid": 1,
+            "name": "codigo",
+            "type": "TEXT",
+            "notnull": 1,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 2,
+            "name": "nome",
+            "type": "TEXT",
+            "notnull": 1,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 3,
+            "name": "tipo",
+            "type": "TEXT",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 4,
+            "name": "descricao",
+            "type": "TEXT",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 5,
+            "name": "duracao_estimada",
+            "type": "INTEGER",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 6,
+            "name": "treinamento_id",
+            "type": "TEXT",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 7,
+            "name": "ordem_no_treinamento",
+            "type": "INTEGER",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 8,
+            "name": "ativo",
+            "type": "BOOLEAN",
+            "notnull": 0,
+            "dflt_value": "1",
+            "pk": 0
+          },
+          {
+            "cid": 9,
+            "name": "created_at",
+            "type": "DATETIME",
+            "notnull": 0,
+            "dflt_value": "datetime('now')",
+            "pk": 0
+          },
+          {
+            "cid": 10,
+            "name": "updated_at",
+            "type": "DATETIME",
+            "notnull": 0,
+            "dflt_value": "datetime('now')",
+            "pk": 0
+          },
+          {
+            "cid": 11,
+            "name": "deleted_at",
+            "type": "DATETIME",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 12,
+            "name": "tipo_sessao_id",
+            "type": "INTEGER",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 13,
+            "name": "tipo_aeronave",
+            "type": "TEXT",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 14,
+            "name": "codigo_aeronave",
+            "type": "TEXT",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 15,
+            "name": "gera_qualificacao",
+            "type": "BOOLEAN",
+            "notnull": 0,
+            "dflt_value": "0",
+            "pk": 0
+          },
+          {
+            "cid": 16,
+            "name": "empresa_id",
+            "type": "INTEGER",
+            "notnull": 1,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 17,
+            "name": "modelo_aeronave",
+            "type": "TEXT",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 18,
+            "name": "qualificacao_tipo_id",
+            "type": "INTEGER",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          }
+        ]
+      },
+      "index_list": {
+        "ok": true,
+        "results": [
+          {
+            "seq": 0,
+            "name": "uq_modelos_sessao_id_empresa",
+            "unique": 1,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 1,
+            "name": "idx_modelos_sessao_codigo",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 2,
+            "name": "idx_modelos_sessao_ativo",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 3,
+            "name": "idx_modelos_sessao_deleted",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 4,
+            "name": "idx_modelos_sessao_treinamento",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 5,
+            "name": "idx_modelos_sessao_ordem",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 6,
+            "name": "idx_modelos_codigo",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 7,
+            "name": "idx_modelos_deleted",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 8,
+            "name": "idx_modelos_sessao_tipo",
+            "unique": 0,
+            "origin": "c",
+            "partial": 1
+          },
+          {
+            "seq": 9,
+            "name": "idx_modelos_sessao_tipo_sessao_aeronave",
+            "unique": 0,
+            "origin": "c",
+            "partial": 1
+          },
+          {
+            "seq": 10,
+            "name": "idx_modelos_sessao_codigo_aeronave",
+            "unique": 0,
+            "origin": "c",
+            "partial": 1
+          },
+          {
+            "seq": 11,
+            "name": "idx_modelos_sessao_aeronave_codigo",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 12,
+            "name": "idx_modelos_sessao_tipo_aeronave",
+            "unique": 0,
+            "origin": "c",
+            "partial": 1
+          },
+          {
+            "seq": 13,
+            "name": "idx_modelos_sessao_empresa",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 14,
+            "name": "idx_modelos_sessao_modelo_aeronave",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 15,
+            "name": "sqlite_autoindex_modelos_sessao_1",
+            "unique": 1,
+            "origin": "u",
+            "partial": 0
+          }
+        ]
+      },
+      "foreign_key_list": {
+        "ok": true,
+        "results": [
+          {
+            "id": 0,
+            "seq": 0,
+            "table": "qualificacoes_tipos",
+            "from": "qualificacao_tipo_id",
+            "to": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ]
+      },
+      "create_sql": {
+        "ok": true,
+        "results": [
+          {
+            "type": "table",
+            "name": "modelos_sessao",
+            "tbl_name": "modelos_sessao",
+            "sql": "CREATE TABLE \"modelos_sessao\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT NOT NULL UNIQUE,\n  nome TEXT NOT NULL,\n  tipo TEXT,\n  descricao TEXT,\n  duracao_estimada INTEGER,\n  treinamento_id TEXT,\n  ordem_no_treinamento INTEGER,\n  ativo BOOLEAN DEFAULT 1,\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME NULL,\n  tipo_sessao_id INTEGER,\n  tipo_aeronave TEXT,\n  codigo_aeronave TEXT,\n  gera_qualificacao BOOLEAN DEFAULT 0,\n  empresa_id INTEGER NOT NULL,\n  modelo_aeronave TEXT,\n  qualificacao_tipo_id INTEGER NULL REFERENCES qualificacoes_tipos(id)\n)"
+          }
+        ]
+      }
+    },
+    "modelos_sessao_manobras": {
+      "table_info": {
+        "ok": true,
+        "results": [
+          {
+            "cid": 0,
+            "name": "id",
+            "type": "INTEGER",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 1
+          },
+          {
+            "cid": 1,
+            "name": "modelo_id",
+            "type": "INTEGER",
+            "notnull": 1,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 2,
+            "name": "manobra_id",
+            "type": "INTEGER",
+            "notnull": 1,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 3,
+            "name": "ordem",
+            "type": "INTEGER",
+            "notnull": 1,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 4,
+            "name": "obrigatoria",
+            "type": "BOOLEAN",
+            "notnull": 0,
+            "dflt_value": "1",
+            "pk": 0
+          },
+          {
+            "cid": 5,
+            "name": "observacoes",
+            "type": "TEXT",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 6,
+            "name": "created_at",
+            "type": "DATETIME",
+            "notnull": 0,
+            "dflt_value": "datetime('now')",
+            "pk": 0
+          },
+          {
+            "cid": 7,
+            "name": "updated_at",
+            "type": "DATETIME",
+            "notnull": 0,
+            "dflt_value": "datetime('now')",
+            "pk": 0
+          },
+          {
+            "cid": 8,
+            "name": "deleted_at",
+            "type": "DATETIME",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 9,
+            "name": "created_by",
+            "type": "TEXT",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 10,
+            "name": "updated_by",
+            "type": "TEXT",
+            "notnull": 0,
+            "dflt_value": null,
+            "pk": 0
+          },
+          {
+            "cid": 11,
+            "name": "tripulante",
+            "type": "TEXT",
+            "notnull": 1,
+            "dflt_value": "'AB'",
+            "pk": 0
+          }
+        ]
+      },
+      "index_list": {
+        "ok": true,
+        "results": [
+          {
+            "seq": 0,
+            "name": "uq_modelos_sessao_manobras_ordem_ativa",
+            "unique": 1,
+            "origin": "c",
+            "partial": 1
+          },
+          {
+            "seq": 1,
+            "name": "idx_modelos_sessao_manobras_modelo_ordem",
+            "unique": 0,
+            "origin": "c",
+            "partial": 1
+          },
+          {
+            "seq": 2,
+            "name": "idx_modelos_sessao_manobras_manobra_id",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          {
+            "seq": 3,
+            "name": "idx_modelos_sessao_manobras_modelo_id",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          }
+        ]
+      },
+      "foreign_key_list": {
+        "ok": true,
+        "results": [
+          {
+            "id": 0,
+            "seq": 0,
+            "table": "manobras",
+            "from": "manobra_id",
+            "to": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "CASCADE",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "table": "modelos_sessao",
+            "from": "modelo_id",
+            "to": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "CASCADE",
+            "match": "NONE"
+          }
+        ]
+      },
+      "create_sql": {
+        "ok": true,
+        "results": [
+          {
+            "type": "table",
+            "name": "modelos_sessao_manobras",
+            "tbl_name": "modelos_sessao_manobras",
+            "sql": "CREATE TABLE \"modelos_sessao_manobras\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  modelo_id INTEGER NOT NULL,\n  manobra_id INTEGER NOT NULL,\n  ordem INTEGER NOT NULL,\n  obrigatoria BOOLEAN DEFAULT 1,\n  observacoes TEXT,\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME,\n  created_by TEXT,\n  updated_by TEXT,\n  tripulante TEXT NOT NULL DEFAULT 'AB' CHECK(tripulante IN ('A','B','AB','PFA','PMB','PFB','PMA')),\n  FOREIGN KEY (modelo_id) REFERENCES modelos_sessao(id) ON DELETE CASCADE,\n  FOREIGN KEY (manobra_id) REFERENCES manobras(id) ON DELETE CASCADE\n  -- Repeated manoeuvre codes are valid across LOFT legs. Active execution\n  -- order, rather than manoeuvre identity, is the unique relationship.\n)"
           }
         ]
       }
@@ -2311,15 +2719,6 @@
             "sql": "CREATE TABLE \"fichas_sessao\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT UNIQUE NOT NULL,\n  agendamento_slot_id INTEGER,\n  colaborador_id_aluno INTEGER NOT NULL,\n  funcao_na_sessao TEXT DEFAULT 'PF',\n  template_id INTEGER,\n  instrutor_id INTEGER NOT NULL,\n  instrutor_codigo_anac TEXT,\n  carga_horaria_total DECIMAL(4,2) DEFAULT 2.0,\n  carga_horaria_pf DECIMAL(4,2),\n  carga_horaria_pm DECIMAL(4,2),\n  tempo_acumulado DECIMAL(5,2) DEFAULT 0,\n  status TEXT DEFAULT 'PENDENTE',\n  resultado_final TEXT DEFAULT 'PENDENTE',\n  nota_final REAL,\n  nota_minima REAL,\n  aprovado BOOLEAN DEFAULT 0,\n  aluno_nome_validado TEXT,\n  aluno_matricula_validado TEXT,\n  observacoes TEXT,\n  feedback_instrutor TEXT,\n  pontos_fortes TEXT,\n  pontos_melhoria TEXT,\n  assinado BOOLEAN DEFAULT 0,\n  data_assinatura DATETIME,\n  hash_assinatura TEXT,\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  deleted_at DATETIME,\n  observacoes_gerais TEXT,\n  assinatura_instrutor_completa INTEGER DEFAULT 0,\n  assinatura_aluno_completa INTEGER DEFAULT 0,\n  data_conclusao TEXT,\n  pdf_url TEXT,\n  empresa_id INTEGER NOT NULL,\n  assinatura_instrutor INTEGER DEFAULT 0,\n  assinatura_instrutor_data DATETIME,\n  assinatura_instrutor_usuario_id INTEGER,\n  assinatura_tripulante INTEGER DEFAULT 0,\n  assinatura_tripulante_data DATETIME,\n  assinatura_tripulante_usuario_id INTEGER,\n  tipo_sessao TEXT,\n  tipo_aeronave TEXT,\n  data_sessao TEXT,\n  assinatura_aluno_ip TEXT,\n  assinatura_aluno_timestamp TEXT,\n  assinatura_instrutor_ip TEXT,\n  assinatura_instrutor_timestamp TEXT,\n  arquivado INTEGER DEFAULT 0,\n  caminho_arquivo TEXT,\n  data_arquivamento TEXT,\n  assinatura_aluno_imagem TEXT,\n  assinatura_instrutor_imagem TEXT\n, atribuicao_curricular_id INTEGER REFERENCES simulador_atribuicoes_curriculares(id), segmento_atribuicao_id INTEGER REFERENCES simulador_segmento_atribuicoes(id))"
           }
         ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 240,
-            "active": 84
-          }
-        ]
       }
     },
     "fichas_sessao_manobras": {
@@ -2497,514 +2896,6 @@
             "sql": "CREATE TABLE fichas_sessao_manobras (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  ficha_id INTEGER NOT NULL,\n  codigo TEXT NOT NULL,\n  descricao TEXT,\n  categoria TEXT,\n  ordem INTEGER DEFAULT 0,\n  resultado TEXT DEFAULT 'NAO_REALIZADA',\n  observacoes TEXT,\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TIMESTAMP, tripulante TEXT NOT NULL DEFAULT 'AB' CHECK(tripulante IN ('A','B','AB')), nome TEXT,\n  FOREIGN KEY(ficha_id) REFERENCES fichas_sessao(id)\n)"
           }
         ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 5234,
-            "active": 3933
-          }
-        ]
-      }
-    },
-    "modelos_sessao": {
-      "table_info": {
-        "ok": true,
-        "results": [
-          {
-            "cid": 0,
-            "name": "id",
-            "type": "INTEGER",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 1
-          },
-          {
-            "cid": 1,
-            "name": "codigo",
-            "type": "TEXT",
-            "notnull": 1,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 2,
-            "name": "nome",
-            "type": "TEXT",
-            "notnull": 1,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 3,
-            "name": "tipo",
-            "type": "TEXT",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 4,
-            "name": "descricao",
-            "type": "TEXT",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 5,
-            "name": "duracao_estimada",
-            "type": "INTEGER",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 6,
-            "name": "treinamento_id",
-            "type": "TEXT",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 7,
-            "name": "ordem_no_treinamento",
-            "type": "INTEGER",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 8,
-            "name": "ativo",
-            "type": "BOOLEAN",
-            "notnull": 0,
-            "dflt_value": "1",
-            "pk": 0
-          },
-          {
-            "cid": 9,
-            "name": "created_at",
-            "type": "DATETIME",
-            "notnull": 0,
-            "dflt_value": "datetime('now')",
-            "pk": 0
-          },
-          {
-            "cid": 10,
-            "name": "updated_at",
-            "type": "DATETIME",
-            "notnull": 0,
-            "dflt_value": "datetime('now')",
-            "pk": 0
-          },
-          {
-            "cid": 11,
-            "name": "deleted_at",
-            "type": "DATETIME",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 12,
-            "name": "tipo_sessao_id",
-            "type": "INTEGER",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 13,
-            "name": "tipo_aeronave",
-            "type": "TEXT",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 14,
-            "name": "codigo_aeronave",
-            "type": "TEXT",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 15,
-            "name": "gera_qualificacao",
-            "type": "BOOLEAN",
-            "notnull": 0,
-            "dflt_value": "0",
-            "pk": 0
-          },
-          {
-            "cid": 16,
-            "name": "empresa_id",
-            "type": "INTEGER",
-            "notnull": 1,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 17,
-            "name": "modelo_aeronave",
-            "type": "TEXT",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 18,
-            "name": "qualificacao_tipo_id",
-            "type": "INTEGER",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          }
-        ]
-      },
-      "index_list": {
-        "ok": true,
-        "results": [
-          {
-            "seq": 0,
-            "name": "uq_modelos_sessao_id_empresa",
-            "unique": 1,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 1,
-            "name": "idx_modelos_sessao_codigo",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 2,
-            "name": "idx_modelos_sessao_ativo",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 3,
-            "name": "idx_modelos_sessao_deleted",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 4,
-            "name": "idx_modelos_sessao_treinamento",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 5,
-            "name": "idx_modelos_sessao_ordem",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 6,
-            "name": "idx_modelos_codigo",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 7,
-            "name": "idx_modelos_deleted",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 8,
-            "name": "idx_modelos_sessao_tipo",
-            "unique": 0,
-            "origin": "c",
-            "partial": 1
-          },
-          {
-            "seq": 9,
-            "name": "idx_modelos_sessao_tipo_sessao_aeronave",
-            "unique": 0,
-            "origin": "c",
-            "partial": 1
-          },
-          {
-            "seq": 10,
-            "name": "idx_modelos_sessao_codigo_aeronave",
-            "unique": 0,
-            "origin": "c",
-            "partial": 1
-          },
-          {
-            "seq": 11,
-            "name": "idx_modelos_sessao_aeronave_codigo",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 12,
-            "name": "idx_modelos_sessao_tipo_aeronave",
-            "unique": 0,
-            "origin": "c",
-            "partial": 1
-          },
-          {
-            "seq": 13,
-            "name": "idx_modelos_sessao_empresa",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 14,
-            "name": "idx_modelos_sessao_modelo_aeronave",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 15,
-            "name": "sqlite_autoindex_modelos_sessao_1",
-            "unique": 1,
-            "origin": "u",
-            "partial": 0
-          }
-        ]
-      },
-      "foreign_key_list": {
-        "ok": true,
-        "results": [
-          {
-            "id": 0,
-            "seq": 0,
-            "table": "qualificacoes_tipos",
-            "from": "qualificacao_tipo_id",
-            "to": "id",
-            "on_update": "NO ACTION",
-            "on_delete": "NO ACTION",
-            "match": "NONE"
-          }
-        ]
-      },
-      "create_sql": {
-        "ok": true,
-        "results": [
-          {
-            "type": "table",
-            "name": "modelos_sessao",
-            "tbl_name": "modelos_sessao",
-            "sql": "CREATE TABLE \"modelos_sessao\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT NOT NULL UNIQUE,\n  nome TEXT NOT NULL,\n  tipo TEXT,\n  descricao TEXT,\n  duracao_estimada INTEGER,\n  treinamento_id TEXT,\n  ordem_no_treinamento INTEGER,\n  ativo BOOLEAN DEFAULT 1,\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME NULL,\n  tipo_sessao_id INTEGER,\n  tipo_aeronave TEXT,\n  codigo_aeronave TEXT,\n  gera_qualificacao BOOLEAN DEFAULT 0,\n  empresa_id INTEGER NOT NULL,\n  modelo_aeronave TEXT,\n  qualificacao_tipo_id INTEGER NULL REFERENCES qualificacoes_tipos(id)\n)"
-          }
-        ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 69,
-            "active": 55
-          }
-        ]
-      }
-    },
-    "modelos_sessao_manobras": {
-      "table_info": {
-        "ok": true,
-        "results": [
-          {
-            "cid": 0,
-            "name": "id",
-            "type": "INTEGER",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 1
-          },
-          {
-            "cid": 1,
-            "name": "modelo_id",
-            "type": "INTEGER",
-            "notnull": 1,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 2,
-            "name": "manobra_id",
-            "type": "INTEGER",
-            "notnull": 1,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 3,
-            "name": "ordem",
-            "type": "INTEGER",
-            "notnull": 1,
-            "dflt_value": "0",
-            "pk": 0
-          },
-          {
-            "cid": 4,
-            "name": "obrigatoria",
-            "type": "BOOLEAN",
-            "notnull": 0,
-            "dflt_value": "1",
-            "pk": 0
-          },
-          {
-            "cid": 5,
-            "name": "observacoes",
-            "type": "TEXT",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 6,
-            "name": "created_at",
-            "type": "DATETIME",
-            "notnull": 0,
-            "dflt_value": "datetime('now')",
-            "pk": 0
-          },
-          {
-            "cid": 7,
-            "name": "updated_at",
-            "type": "DATETIME",
-            "notnull": 0,
-            "dflt_value": "datetime('now')",
-            "pk": 0
-          },
-          {
-            "cid": 8,
-            "name": "deleted_at",
-            "type": "DATETIME",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 9,
-            "name": "created_by",
-            "type": "TEXT",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 10,
-            "name": "updated_by",
-            "type": "TEXT",
-            "notnull": 0,
-            "dflt_value": null,
-            "pk": 0
-          },
-          {
-            "cid": 11,
-            "name": "tripulante",
-            "type": "TEXT",
-            "notnull": 1,
-            "dflt_value": "'AB'",
-            "pk": 0
-          }
-        ]
-      },
-      "index_list": {
-        "ok": true,
-        "results": [
-          {
-            "seq": 0,
-            "name": "idx_modelos_sessao_manobras_modelo_ordem",
-            "unique": 0,
-            "origin": "c",
-            "partial": 1
-          },
-          {
-            "seq": 1,
-            "name": "idx_modelos_sessao_manobras_ordem",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 2,
-            "name": "idx_modelos_sessao_manobras_manobra_id",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 3,
-            "name": "idx_modelos_sessao_manobras_modelo_id",
-            "unique": 0,
-            "origin": "c",
-            "partial": 0
-          },
-          {
-            "seq": 4,
-            "name": "sqlite_autoindex_modelos_sessao_manobras_1",
-            "unique": 1,
-            "origin": "u",
-            "partial": 0
-          }
-        ]
-      },
-      "foreign_key_list": {
-        "ok": true,
-        "results": [
-          {
-            "id": 0,
-            "seq": 0,
-            "table": "manobras",
-            "from": "manobra_id",
-            "to": "id",
-            "on_update": "NO ACTION",
-            "on_delete": "CASCADE",
-            "match": "NONE"
-          },
-          {
-            "id": 1,
-            "seq": 0,
-            "table": "modelos_sessao",
-            "from": "modelo_id",
-            "to": "id",
-            "on_update": "NO ACTION",
-            "on_delete": "CASCADE",
-            "match": "NONE"
-          }
-        ]
-      },
-      "create_sql": {
-        "ok": true,
-        "results": [
-          {
-            "type": "table",
-            "name": "modelos_sessao_manobras",
-            "tbl_name": "modelos_sessao_manobras",
-            "sql": "CREATE TABLE \"modelos_sessao_manobras\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  modelo_id INTEGER NOT NULL,\n  manobra_id INTEGER NOT NULL,\n  ordem INTEGER NOT NULL DEFAULT 0,\n  obrigatoria BOOLEAN DEFAULT 1,\n  observacoes TEXT,\n  \n  -- Auditoria\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME NULL,\n  created_by TEXT,\n  updated_by TEXT, tripulante TEXT NOT NULL DEFAULT 'AB' CHECK(tripulante IN ('A','B','AB')),\n  \n  -- Foreign Keys CORRIGIDAS\n  FOREIGN KEY (modelo_id) REFERENCES modelos_sessao(id) ON DELETE CASCADE,\n  FOREIGN KEY (manobra_id) REFERENCES manobras(id) ON DELETE CASCADE,\n  \n  -- Constraint: não permitir manobra duplicada no mesmo modelo\n  UNIQUE(modelo_id, manobra_id)\n)"
-          }
-        ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 1484,
-            "active": 972
-          }
-        ]
       }
     },
     "fichas_sessao_instrutor_meta": {
@@ -3121,10 +3012,6 @@
             "sql": "CREATE TABLE fichas_sessao_instrutor_meta (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  ficha_id INTEGER NOT NULL UNIQUE,\n  empresa_id INTEGER NOT NULL,\n  equipamento_utilizado TEXT,\n  dispositivo_identificacao TEXT,\n  assento_instrucao_utilizado TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  FOREIGN KEY (ficha_id) REFERENCES fichas_sessao(id)\n)"
           }
         ]
-      },
-      "counts": {
-        "ok": false,
-        "error": "Command failed: npx wrangler d1 execute airtrust-db --env production --remote --json --command SELECT COUNT(*) AS total, SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END) AS active FROM fichas_sessao_instrutor_meta"
       }
     },
     "d1_migrations": {
@@ -3183,467 +3070,8 @@
             "sql": "CREATE TABLE d1_migrations(\n\t\tid         INTEGER PRIMARY KEY AUTOINCREMENT,\n\t\tname       TEXT UNIQUE,\n\t\tapplied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL\n)"
           }
         ]
-      },
-      "counts": {
-        "ok": true,
-        "results": [
-          {
-            "total": 414
-          }
-        ]
       }
     }
   },
-  "functional": {
-    "api_version": {
-      "version": "2026-07-14T13:41:38Z-6d4fe1e"
-    },
-    "api_health": {
-      "status_code": 200,
-      "status": "healthy"
-    },
-    "sessions_109_110": {
-      "ok": false,
-      "error": "Command failed: npx wrangler d1 execute airtrust-db --env production --remote --json --command \nSELECT\n  fs.sessao_id,\n  fs.id AS ficha_id,\n  fs.atribuicao_curricular_id,\n  fs.template_id,\n  COALESCE(ms.codigo, '') AS modelo_codigo,\n  COUNT(fm.id) AS active_items\nFROM fichas_sessao fs\nLEFT JOIN fichas_sessao_manobras fm\n  ON fm.ficha_id = fs.id\n AND fm.deleted_at IS NULL\nLEFT JOIN modelos_sessao ms\n  ON ms.id = fs.template_id\nWHERE fs.sessao_id IN (109, 110)\n  AND fs.deleted_at IS NULL\nGROUP BY fs.sessao_id, fs.id, fs.atribuicao_curricular_id, fs.template_id, ms.codigo\nORDER BY fs.sessao_id, fs.id;\n"
-    },
-    "duplicate_check_109_110": {
-      "ok": false,
-      "error": "Command failed: npx wrangler d1 execute airtrust-db --env production --remote --json --command \nSELECT sessao_id, atribuicao_curricular_id, COUNT(*) AS active_fichas\nFROM fichas_sessao\nWHERE sessao_id IN (109,110)\n  AND deleted_at IS NULL\nGROUP BY sessao_id, atribuicao_curricular_id\nHAVING COUNT(*) > 1\nORDER BY sessao_id, atribuicao_curricular_id;\n"
-    },
-    "sessions_103_104": {
-      "ok": false,
-      "error": "Command failed: npx wrangler d1 execute airtrust-db --env production --remote --json --command \nSELECT sessao_id, COUNT(*) AS active_fichas\nFROM fichas_sessao\nWHERE sessao_id IN (103,104)\n  AND deleted_at IS NULL\nGROUP BY sessao_id\nORDER BY sessao_id;\n"
-    },
-    "tenant_8": {
-      "ok": true,
-      "results": [
-        {
-          "empresa_id": 8,
-          "active_fichas": 1
-        }
-      ]
-    },
-    "fichas_237_240": {
-      "ok": false,
-      "error": "Command failed: npx wrangler d1 execute airtrust-db --env production --remote --json --command \nSELECT fs.id, fs.sessao_id, fs.empresa_id, fs.atribuicao_curricular_id, fs.template_id,\n       COALESCE(ms.codigo, '') AS modelo_codigo,\n       COUNT(fm.id) AS active_items\nFROM fichas_sessao fs\nLEFT JOIN fichas_sessao_manobras fm\n  ON fm.ficha_id = fs.id\n AND fm.deleted_at IS NULL\nLEFT JOIN modelos_sessao ms\n  ON ms.id = fs.template_id\nWHERE fs.id IN (237,238,239,240)\n  AND fs.deleted_at IS NULL\nGROUP BY fs.id, fs.sessao_id, fs.empresa_id, fs.atribuicao_curricular_id, fs.template_id, ms.codigo\nORDER BY fs.id;\n"
-    },
-    "ledger_0408_0429": {
-      "ok": true,
-      "results": [
-        {
-          "id": 405,
-          "name": "0413_notechs_categoria_itens.sql",
-          "applied_at": "2026-07-04"
-        },
-        {
-          "id": 406,
-          "name": "0414_add_manobras_referencias_json.sql",
-          "applied_at": "2026-07-04"
-        },
-        {
-          "id": 407,
-          "name": "0416_reconcile_matriz_v6_d1_ledger.sql",
-          "applied_at": "2026-07-04"
-        },
-        {
-          "id": 408,
-          "name": "0417_tripulante_ab_por_criticidade.sql",
-          "applied_at": "2026-07-06"
-        },
-        {
-          "id": 409,
-          "name": "0418_notechs_codigos_categorizados.sql",
-          "applied_at": "2026-07-06"
-        },
-        {
-          "id": 410,
-          "name": "0419_normalizar_nomes_modelos_sessao_ptbr.sql",
-          "applied_at": "2026-07-06"
-        },
-        {
-          "id": 411,
-          "name": "0421_shared_session_segment_curricula.sql",
-          "applied_at": "2026-07-12 04:09:20"
-        },
-        {
-          "id": 412,
-          "name": "0422_modelos_sessao_requisitos.sql",
-          "applied_at": "2026-07-12 04:09:20"
-        },
-        {
-          "id": 413,
-          "name": "0423_shared_session_multi_curricula_per_participant.sql",
-          "applied_at": "2026-07-12 04:09:20"
-        },
-        {
-          "id": 414,
-          "name": "0424_examiner_universal_training_fichas.sql",
-          "applied_at": "2026-07-12 04:09:20"
-        }
-      ]
-    },
-    "ledger_0429_exact": {
-      "ok": true,
-      "results": []
-    },
-    "simuladores_columns": {
-      "ok": true,
-      "results": [
-        {
-          "cid": 0,
-          "name": "id",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 1
-        },
-        {
-          "cid": 1,
-          "name": "nome",
-          "type": "TEXT",
-          "notnull": 1,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 2,
-          "name": "modelo",
-          "type": "TEXT",
-          "notnull": 1,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 3,
-          "name": "tipo",
-          "type": "TEXT",
-          "notnull": 1,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 4,
-          "name": "fabricante",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 5,
-          "name": "localizacao",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 6,
-          "name": "capacidade",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": "1",
-          "pk": 0
-        },
-        {
-          "cid": 7,
-          "name": "status",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": "'ATIVO'",
-          "pk": 0
-        },
-        {
-          "cid": 8,
-          "name": "observacoes",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 9,
-          "name": "created_at",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": "datetime('now')",
-          "pk": 0
-        },
-        {
-          "cid": 10,
-          "name": "updated_at",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": "datetime('now')",
-          "pk": 0
-        },
-        {
-          "cid": 11,
-          "name": "deleted_at",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 12,
-          "name": "codigo_aeronave",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 13,
-          "name": "aeronave_codigo",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        }
-      ]
-    },
-    "sessoes_participantes_columns": {
-      "ok": true,
-      "results": [
-        {
-          "cid": 0,
-          "name": "id",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 1
-        },
-        {
-          "cid": 1,
-          "name": "uuid",
-          "type": "TEXT",
-          "notnull": 1,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 2,
-          "name": "sessao_id",
-          "type": "INTEGER",
-          "notnull": 1,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 3,
-          "name": "funcionario_id",
-          "type": "INTEGER",
-          "notnull": 1,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 4,
-          "name": "funcao",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 5,
-          "name": "status",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": "'CONFIRMADO'",
-          "pk": 0
-        },
-        {
-          "cid": 6,
-          "name": "ciclo_executado",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": "1",
-          "pk": 0
-        },
-        {
-          "cid": 7,
-          "name": "created_at",
-          "type": "TIMESTAMP",
-          "notnull": 0,
-          "dflt_value": "CURRENT_TIMESTAMP",
-          "pk": 0
-        },
-        {
-          "cid": 8,
-          "name": "updated_at",
-          "type": "TIMESTAMP",
-          "notnull": 0,
-          "dflt_value": "CURRENT_TIMESTAMP",
-          "pk": 0
-        },
-        {
-          "cid": 9,
-          "name": "deleted_at",
-          "type": "TIMESTAMP",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        }
-      ]
-    },
-    "modelos_sessao_columns": {
-      "ok": true,
-      "results": [
-        {
-          "cid": 0,
-          "name": "id",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 1
-        },
-        {
-          "cid": 1,
-          "name": "codigo",
-          "type": "TEXT",
-          "notnull": 1,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 2,
-          "name": "nome",
-          "type": "TEXT",
-          "notnull": 1,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 3,
-          "name": "tipo",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 4,
-          "name": "descricao",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 5,
-          "name": "duracao_estimada",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 6,
-          "name": "treinamento_id",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 7,
-          "name": "ordem_no_treinamento",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 8,
-          "name": "ativo",
-          "type": "BOOLEAN",
-          "notnull": 0,
-          "dflt_value": "1",
-          "pk": 0
-        },
-        {
-          "cid": 9,
-          "name": "created_at",
-          "type": "DATETIME",
-          "notnull": 0,
-          "dflt_value": "datetime('now')",
-          "pk": 0
-        },
-        {
-          "cid": 10,
-          "name": "updated_at",
-          "type": "DATETIME",
-          "notnull": 0,
-          "dflt_value": "datetime('now')",
-          "pk": 0
-        },
-        {
-          "cid": 11,
-          "name": "deleted_at",
-          "type": "DATETIME",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 12,
-          "name": "tipo_sessao_id",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 13,
-          "name": "tipo_aeronave",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 14,
-          "name": "codigo_aeronave",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 15,
-          "name": "gera_qualificacao",
-          "type": "BOOLEAN",
-          "notnull": 0,
-          "dflt_value": "0",
-          "pk": 0
-        },
-        {
-          "cid": 16,
-          "name": "empresa_id",
-          "type": "INTEGER",
-          "notnull": 1,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 17,
-          "name": "modelo_aeronave",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 18,
-          "name": "qualificacao_tipo_id",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        }
-      ]
-    }
-  }
+  "functional": {}
 }

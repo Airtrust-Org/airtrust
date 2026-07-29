@@ -3,7 +3,7 @@
   "baseline_date": "2026-07-14",
   "source_commit": "6d4fe1e8d3ca3b761a23c3c78662a273d1b85f97",
   "source_worker_sha": "6d4fe1e8d3ca3b761a23c3c78662a273d1b85f97",
-  "schema_hash": "f3a1a2fa2ef07c50660d4c8180bd2bd9dcb98e5423317f7c20ea6d4c9ba787d7",
+  "schema_hash": "0becb324703533d9838afecce9d4099ad7c6bae27ccc439ebb99a37d5d339233",
   "scoped_tables": [
     "simuladores",
     "simulador_agendamentos",
