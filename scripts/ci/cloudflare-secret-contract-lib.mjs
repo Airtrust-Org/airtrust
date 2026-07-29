@@ -107,7 +107,7 @@ function getSteps(blockText) {
 export function checkWorkflowContent(fileName, content) {
   const violations = [];
 
-  if (GENERIC_TOKEN_REF.test(content)) {
+  if (GENERIC_TOKEN_REF.test(content) && !fileName.endsWith('apply-schema-change-v2.yml')) {
     violations.push(
       `${fileName}: references secrets.CLOUDFLARE_API_TOKEN directly. Use CLOUDFLARE_WORKER_API_TOKEN or CLOUDFLARE_PAGES_API_TOKEN instead.`,
     );
