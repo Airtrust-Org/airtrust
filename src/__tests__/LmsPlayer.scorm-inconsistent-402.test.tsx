@@ -59,7 +59,7 @@ let matriculaMock: Record<string, unknown> = {
 };
 
 vi.mock('@/react-app/hooks/useAuth', () => ({
-  useAuth: () => ({ token: 'token' }),
+  useAuth: () => ({ token: 'token', user: { id: 1, nome: 'Test' }, empresaAtualId: 10 }),
 }));
 
 vi.mock('@/react-app/hooks/useLms', () => ({

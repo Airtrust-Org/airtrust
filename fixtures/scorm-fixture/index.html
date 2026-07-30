@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCORM Test Fixture</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; }
+    .container { max-width: 800px; margin: 2rem auto; padding: 1rem; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+    button { background: #3b82f6; color: white; border: none; border-radius: 8px; padding: 0.6rem 1.2rem; cursor: pointer; font-size: 14px; margin: 0.25rem; }
+    button:hover { background: #2563eb; }
+    button.secondary { background: #475569; }
+    button.secondary:hover { background: #64748b; }
+    button.success { background: #16a34a; }
+    button.success:hover { background: #15803d; }
+    button.danger { background: #dc2626; }
+    button.danger:hover { background: #b91c1c; }
+    .status { font-size: 13px; color: #94a3b8; margin-top: 0.5rem; }
+    iframe { width: 100%; height: 300px; border: 1px solid #334155; border-radius: 8px; background: white; }
+    .slide-controls { display: flex; gap: 0.5rem; align-items: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 style="font-size: 1.5rem; margin-bottom: 1rem;">🧪 SCORM Test Fixture</h1>
+
+    <div class="card">
+      <h2 style="font-size: 1rem; margin-bottom: 0.75rem;">Progress Controls</h2>
+      <div id="progress-section">
+        <button onclick="saveProgress(25, '1/4')">Save 25% (Slide 1/4)</button>
+        <button onclick="saveProgress(50, '2/4')">Save 50% (Slide 2/4)</button>
+        <button onclick="saveProgress(75, '3/4')">Save 75% (Slide 3/4)</button>
+        <button onclick="saveProgress(100, '4/4')" class="success">Save 100% (Slide 4/4)</button>
+      </div>
+      <div class="status" id="progress-status">No progress saved yet.</div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size: 1rem; margin-bottom: 0.75rem;">Completion Controls</h2>
+      <div>
+        <button onclick="markComplete()" class="success">Mark Complete (passed)</button>
+        <button onclick="markFailed()" class="danger">Mark Failed</button>
+      </div>
+      <div class="status" id="completion-status">Status: incomplete</div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size: 1rem; margin-bottom: 0.75rem;">Rapid Progress (Stress Test)</h2>
+      <div>
+        <button onclick="rapidProgress()">Fire 5 rapid progress saves</button>
+        <button onclick="rapidProgress(10)">Fire 10 rapid progress saves</button>
+      </div>
+      <div class="status" id="rapid-status"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size: 1rem; margin-bottom: 0.75rem;">Content Frame</h2>
+      <iframe id="content-frame" src="slides/slide-01.html"></iframe>
+      <div class="slide-controls" style="margin-top: 0.5rem;">
+        <button onclick="navigateSlide(-1)" class="secondary">← Prev</button>
+        <span id="slide-indicator" style="font-size: 13px;">Slide 1/3</span>
+        <button onclick="navigateSlide(1)">Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/scorm-api.js"></script>
+  <script>
+    var currentSlide = 1;
+    var totalSlides = 3;
+
+    // Initialize SCORM
+    if (window.API) {
+      window.API.LMSInitialize('');
+    }
+
+    function getLocation() {
+      return currentSlide + '/' + totalSlides;
+    }
+
+    function saveProgress(pct, location) {
+      if (!window.API) return;
+      window.API.LMSSetValue('cmi.core.lesson_location', location || getLocation());
+      window.API.LMSSetValue('cmi.core.score.raw', String(pct));
+      window.API.LMSCommit('');
+      document.getElementById('progress-status').textContent =
+        'Progress: ' + pct + '% at ' + (location || getLocation()) + ' — ' + new Date().toISOString();
+    }
+
+    function markComplete() {
+      if (!window.API) return;
+      window.API.LMSSetValue('cmi.core.lesson_status', 'passed');
+      window.API.LMSSetValue('cmi.core.lesson_location', getLocation());
+      window.API.LMSCommit('');
+      document.getElementById('completion-status').textContent = 'Status: passed';
+    }
+
+    function markFailed() {
+      if (!window.API) return;
+      window.API.LMSSetValue('cmi.core.lesson_status', 'failed');
+      window.API.LMSCommit('');
+      document.getElementById('completion-status').textContent = 'Status: failed';
+    }
+
+    function rapidProgress(count) {
+      count = count || 5;
+      var status = document.getElementById('rapid-status');
+      status.textContent = 'Firing ' + count + ' rapid saves...';
+      for (var i = 0; i < count; i++) {
+        setTimeout(function() {
+          saveProgress(10 + Math.floor(Math.random() * 90), getLocation());
+        }, i * 100);
+      }
+      setTimeout(function() {
+        status.textContent = 'Done. ' + count + ' saves fired.';
+      }, count * 100 + 200);
+    }
+
+    function navigateSlide(dir) {
+      var next = currentSlide + dir;
+      if (next < 1 || next > totalSlides) return;
+      currentSlide = next;
+      var frame = document.getElementById('content-frame');
+      frame.src = 'slides/slide-0' + currentSlide + '.html';
+      document.getElementById('slide-indicator').textContent = 'Slide ' + currentSlide + '/' + totalSlides;
+      saveProgress(Math.round((currentSlide / totalSlides) * 100), getLocation());
+    }
+  </script>
+</body>
+</html>

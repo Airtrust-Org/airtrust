@@ -99,7 +99,7 @@ function parseSlideLocation(
 export default function LmsPlayer() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, user, empresaAtualId } = useAuth();
   const [searchParams] = useSearchParams();
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -159,10 +159,51 @@ export default function LmsPlayer() {
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
-  const launchUrl =
-    launchToken && matricula && matricula.tipo_conteudo !== 'h5p'
-      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(launchToken)}${reviewParam ? '&review=1' : ''}`
-      : null;
+  // ── Session identity ──────────────────────────────────────────────
+  // Freeze the launch URL per logical session so the iframe is never
+  // recreated during progress saves, refetches, or token rotations.
+  //
+  // Included in identity:
+  //   - matricula ID
+  //   - review mode
+  //   - authenticated user ID
+  //   - current tenant (empresa)
+  //
+  // NOT included (must NOT recreate the iframe):
+  //   - progresso_pct, lesson_location, status, updated_at, nota
+  //   - token value, timestamp
+  const sessionKey = `${id}:${reviewParam ? 'review' : 'normal'}:${user?.id ?? 'anon'}:${empresaAtualId ?? 'none'}`;
+  const sessionKeyRef = useRef<string | null>(null);
+  const stableLaunchUrlRef = useRef<string | null>(null);
+
+  // Previous session key — used to detect REAL session transitions for
+  // iframeLoaded reset (not initial mount).
+  const prevSessionKeyRef = useRef<string | null>(null);
+
+  const launchUrl = (() => {
+    // Wait until both launchToken AND matricula are available.
+    // Freezing before matricula loads would permanently lock null
+    // (race: token arrives before the query resolves).
+    if (!launchToken || !matricula) {
+      return null;
+    }
+
+    // Non-SCORM content types are redirected — no iframe needed.
+    if (matricula.tipo_conteudo === 'h5p') {
+      return null;
+    }
+
+    // New session detected → freeze the URL.
+    if (sessionKeyRef.current !== sessionKey) {
+      sessionKeyRef.current = sessionKey;
+      const url = `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(launchToken)}${reviewParam ? '&review=1' : ''}`;
+      stableLaunchUrlRef.current = url;
+      return url;
+    }
+
+    // Same session → return the frozen URL unchanged.
+    return stableLaunchUrlRef.current;
+  })();
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
 
   function invalidateLmsDashboardCaches() {
@@ -236,15 +277,30 @@ export default function LmsPlayer() {
     };
   }, [qc, token]);
 
+  // Reset iframeLoaded only when the session identity actually changes
+  // (new matricula, review toggle, user switch, or tenant switch).
+  // Never reset during progress saves, refetches, or token rotations.
   useEffect(() => {
-    setIframeLoaded(false);
-  }, [launchUrl]);
+    const prev = prevSessionKeyRef.current;
+    // Only reset when transitioning FROM one valid session TO another.
+    // prev === null means first mount — the loading overlay already shows.
+    if (prev !== null && prev !== sessionKey) {
+      setIframeLoaded(false);
+    }
+    prevSessionKeyRef.current = sessionKey;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionKey]);
 
   useEffect(() => {
+    // Set launchToken exactly once per component mount.
+    // Token rotation is delivered via postMessage (syncFrameToken) —
+    // the iframe src never changes.
+    //
+    // Do NOT clear launchToken when playerToken disappears:
+    // that destroys the iframe. Session expiry is handled by the
+    // render guard below (!token && !playerToken).
     if (playerToken && !launchToken) {
       setLaunchToken(playerToken);
-    } else if (!playerToken && launchToken) {
-      setLaunchToken(null);
     }
   }, [playerToken, launchToken]);
 
