@@ -293,6 +293,27 @@ router.get(
       'qualificacoes_categorias',
       'empresa_id',
     );
+
+    const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
+    const categoriaJoinClause = hasCategoriaIdColumn
+      ? `LEFT JOIN qualificacoes_categorias qc
+           ON (qc.id = COALESCE(qh.categoria_id, qt.categoria_id) 
+               OR (COALESCE(qh.categoria_id, qt.categoria_id) IS NULL AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))))
+          AND qc.deleted_at IS NULL
+          ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`
+      : `LEFT JOIN qualificacoes_categorias qc
+           ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
+          AND qc.deleted_at IS NULL
+          ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`;
+
+    const baseFromAndJoins = `FROM qualificacoes_historico qh
+      LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+        AND f.deleted_at IS NULL
+        AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+      LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
+      ${categoriaJoinClause}`;
+
     const {
       operationalCurrentQualificationPredicate,
       renewedQualificationPredicate,
@@ -519,12 +540,7 @@ router.get(
         END) as vencidas,
         SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
         SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
-      FROM qualificacoes_historico qh
-      LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
-        AND f.deleted_at IS NULL
-        AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
-      LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
+      ${baseFromAndJoins}
       WHERE ${whereClause}`;
 
       const statsResult = await db
@@ -537,12 +553,7 @@ router.get(
       const globalCountsQuery = `SELECT
         SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
         SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
-      FROM qualificacoes_historico qh
-      LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
-        AND f.deleted_at IS NULL
-        AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
-      LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
+      ${baseFromAndJoins}
       WHERE ${nonStatusWhere}`;
 
       const globalCountsResult = await db
@@ -560,12 +571,7 @@ router.get(
       };
     } else {
       const totalOnlyQuery = `SELECT COUNT(*) as total
-      FROM qualificacoes_historico qh
-      LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
-        AND f.deleted_at IS NULL
-        AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
-      LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
+      ${baseFromAndJoins}
       WHERE ${whereClause}`;
 
       const totalOnlyResult = await db
@@ -642,17 +648,8 @@ router.get(
       qh.status AS qualificacao_status,
       qh.tipo_treinamento,
       qh.carga_horaria
-    FROM qualificacoes_historico qh
-    LEFT JOIN funcionarios f ON f.id = qh.funcionario_id 
-      AND f.deleted_at IS NULL 
-      AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-    LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+    ${baseFromAndJoins}
     LEFT JOIN documentos cert_doc ON cert_doc.id = qh.certificado_arquivo_id AND cert_doc.deleted_at IS NULL
-    LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
-    LEFT JOIN qualificacoes_categorias qc
-      ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
-     AND qc.deleted_at IS NULL
-     ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}
     WHERE ${whereClause}
     ORDER BY ${buildOrderByClause(orderBy, order)}
     LIMIT ? OFFSET ?`;
@@ -809,6 +806,30 @@ router.get(
     const { renewedQualificationPredicate, activeRenewedQualificationPredicate } =
       buildRenewalSqlPredicates(hasRenovacaoDe);
 
+    const hasCategoriaEmpresaId = await hasTableColumn(
+      db,
+      'qualificacoes_categorias',
+      'empresa_id',
+    );
+    const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
+    const categoriaJoinClause = hasCategoriaIdColumn
+      ? `LEFT JOIN qualificacoes_categorias qc
+           ON (qc.id = COALESCE(qh.categoria_id, qt.categoria_id) 
+               OR (COALESCE(qh.categoria_id, qt.categoria_id) IS NULL AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))))
+          AND qc.deleted_at IS NULL
+          ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`
+      : `LEFT JOIN qualificacoes_categorias qc
+           ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
+          AND qc.deleted_at IS NULL
+          ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`;
+
+    const baseFromAndJoins = `FROM qualificacoes_historico qh
+      LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+        AND f.deleted_at IS NULL
+        AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+      ${categoriaJoinClause}`;
+
     // Item 1 (read-side filtering — contagem): once RBAC is active, a
     // gestor's stats must also be narrowed to setores with a classified
     // domain, not just the legacy setor scope. No-op in legacy mode / for
@@ -824,7 +845,8 @@ router.get(
     appendOperationalReadFilter(statsConditions, statsReadBindings, readScope, {
       setorColumn: 'f.setor_id',
     });
-    const statsExtraClause = statsConditions.length > 0 ? ` AND ${statsConditions.join(' AND ')}` : '';
+    const statsExtraClause =
+      statsConditions.length > 0 ? ` AND ${statsConditions.join(' AND ')}` : '';
 
     const statsResult = await db
       .prepare(
@@ -846,11 +868,8 @@ router.get(
           ELSE 0
         END) as vencidas,
         SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas
-      FROM qualificacoes_historico qh
-      JOIN funcionarios f ON f.id = qh.funcionario_id
+      ${baseFromAndJoins}
       WHERE qh.deleted_at IS NULL
-        AND f.deleted_at IS NULL
-        AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND f.empresa_id = ?
         AND ${employeeScope.clause}${statsExtraClause}`,
       )
@@ -892,6 +911,28 @@ router.get(
       activeRenewedQualificationPredicate,
       activePlannedQualificationPredicate,
     } = buildRenewalSqlPredicates(hasRenovacaoDe);
+
+    const hasCategoriaEmpresaId = await hasTableColumn(
+      db,
+      'qualificacoes_categorias',
+      'empresa_id',
+    );
+    const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
+    const categoriaJoinClause = hasCategoriaIdColumn
+      ? `LEFT JOIN qualificacoes_categorias qc
+           ON (qc.id = COALESCE(qh.categoria_id, qt.categoria_id) 
+               OR (COALESCE(qh.categoria_id, qt.categoria_id) IS NULL AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))))
+          AND qc.deleted_at IS NULL
+          ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`
+      : `LEFT JOIN qualificacoes_categorias qc
+           ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
+          AND qc.deleted_at IS NULL
+          ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`;
+
+    const baseFromAndJoins = `FROM qualificacoes_historico qh
+      JOIN funcionarios f ON f.id = qh.funcionario_id
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+      ${categoriaJoinClause}`;
 
     const whereClauses: string[] = [
       'qh.deleted_at IS NULL',
@@ -962,8 +1003,7 @@ router.get(
             SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 ELSE 0 END) as vencidas,
             SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
             SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
-          FROM qualificacoes_historico qh
-          JOIN funcionarios f ON f.id = qh.funcionario_id
+          ${baseFromAndJoins}
           WHERE ${whereClause}`;
 
       // M-4: registrar promise para partilhar entre requests concorrentes
@@ -1064,9 +1104,7 @@ router.get(
                   SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 ELSE 0 END) AS vencidas,
                   SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1 ELSE 0 END) AS vencendo,
                   SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1 ELSE 0 END) AS validas
-             FROM qualificacoes_historico qh
-             JOIN funcionarios f ON f.id = qh.funcionario_id
-             LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+             ${baseFromAndJoins}
              WHERE ${whereClause}
              GROUP BY qt.categoria
              ORDER BY total DESC
