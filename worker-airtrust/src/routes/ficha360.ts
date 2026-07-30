@@ -18,6 +18,7 @@ import {
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
+import { resolveLmsEffectiveProgress } from '../services/lms-progress-guardrails';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -122,7 +123,9 @@ function normalizeOptionalText(value: unknown): string | null {
   return text ? text : null;
 }
 
-function inferTreinamentoVooTipoSessao(row: Record<string, unknown>): 'SIMULADOR' | 'AERONAVE' | null {
+function inferTreinamentoVooTipoSessao(
+  row: Record<string, unknown>,
+): 'SIMULADOR' | 'AERONAVE' | null {
   if (parseNullableInteger(row.aeronave_id) !== null) return 'AERONAVE';
   if (parseNullableInteger(row.simulador_id) !== null) return 'SIMULADOR';
 
@@ -204,9 +207,10 @@ async function getTreinamentoVooPontosAtencao(
   const instrutorJoin = fichasCols.has('instrutor_id')
     ? 'LEFT JOIN funcionarios instrutor ON fs.instrutor_id = instrutor.id AND instrutor.deleted_at IS NULL'
     : '';
-  const modeloJoin = modelosCols.size > 0 && fichasCols.has('tipo_sessao')
-    ? `LEFT JOIN modelos_sessao ms ON fs.tipo_sessao = ms.codigo ${modelosCols.has('deleted_at') ? 'AND ms.deleted_at IS NULL' : ''}`
-    : '';
+  const modeloJoin =
+    modelosCols.size > 0 && fichasCols.has('tipo_sessao')
+      ? `LEFT JOIN modelos_sessao ms ON fs.tipo_sessao = ms.codigo ${modelosCols.has('deleted_at') ? 'AND ms.deleted_at IS NULL' : ''}`
+      : '';
 
   const notaGeralExpr = fichasCols.has('nota_geral')
     ? 'fs.nota_geral'
@@ -315,7 +319,8 @@ async function getTreinamentoVooPontosAtencao(
       data: normalizeOptionalText(row.data_sessao),
       tipo_sessao: inferTreinamentoVooTipoSessao(row),
       recurso_nome: normalizeOptionalText(row.recurso_nome),
-      modelo_sessao: normalizeOptionalText(row.modelo_sessao) ?? normalizeOptionalText(row.tipo_sessao_codigo),
+      modelo_sessao:
+        normalizeOptionalText(row.modelo_sessao) ?? normalizeOptionalText(row.tipo_sessao_codigo),
       instrutor_nome: normalizeOptionalText(row.instrutor_nome),
       nota_geral: parseTrainingScore(row.nota_geral),
       status: getTrainingAttentionSessionStatus(row),
@@ -819,7 +824,9 @@ export async function getFicha360(db: D1Database, funcionarioId: number, empresa
           ).results || [];
 
     // 4. Requisitos de compliance para a função do funcionário
-    const funcao = (funcionarioNormalizado as Record<string, unknown>).funcao as string | undefined || 'Piloto';
+    const funcao =
+      ((funcionarioNormalizado as Record<string, unknown>).funcao as string | undefined) ||
+      'Piloto';
     let requisitos: unknown[] = [];
     try {
       const reqCols = await getTableColumns(db, 'requisitos_compliance');
@@ -998,12 +1005,25 @@ export async function getFicha360(db: D1Database, funcionarioId: number, empresa
       funcionarioEmpresaId,
     );
 
+    // Enriquecer cada treinamento com progresso_efetivo e completion_state
+    const treinamentosEnriquecidos = (treinamentos as Record<string, unknown>[]).map((t) => {
+      const effectiveProgress = resolveLmsEffectiveProgress({
+        status: t.status as string | null,
+        progressoBruto: t.progresso_pct as number | null,
+      });
+      return {
+        ...t,
+        progresso_efetivo: effectiveProgress.progresso_efetivo,
+        completion_state: effectiveProgress.completion_state,
+      };
+    });
+
     return {
       funcionario: funcionarioNormalizado,
       qualificacoes,
       qualificacoes_historico: qualificacoesHistorico,
       licencas,
-      treinamentos,
+      treinamentos: treinamentosEnriquecidos,
       treinamentos_planejados: treinamentosPlanejados,
       requisitos,
       simulador: {

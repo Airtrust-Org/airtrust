@@ -11,11 +11,13 @@ import { auth } from '../middleware/auth';
 import { hasRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
-import { createLmsQualificationOnCompletion } from '../services/lms-qualification';
+import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
+import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import {
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
+  resolveLmsEffectiveProgress,
 } from '../services/lms-progress-guardrails';
 import { logAudit } from '../utils/db';
 import type { Env } from '../types';
@@ -220,13 +222,14 @@ app.post('/xapi/statements', async (c) => {
       `
       SELECT m.id, m.funcionario_id, m.status, m.empresa_id, m.progresso_pct, m.score_final,
         m.qualificacao_historico_id,
-        c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+        c.id AS curso_id, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
         c.titulo AS curso_titulo,
         c.scorm_mastery_score,
         qt.codigo AS qualificacao_codigo,
         qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria,
-        qt.validade AS qualificacao_validade
+        qt.validade AS qualificacao_validade,
+        qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
       FROM lms_matriculas m
       JOIN lms_cursos c ON c.id = m.curso_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
@@ -242,6 +245,7 @@ app.post('/xapi/statements', async (c) => {
       progresso_pct: number | null;
       score_final: number | null;
       qualificacao_historico_id: number | null;
+      curso_id: number;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
@@ -250,6 +254,7 @@ app.post('/xapi/statements', async (c) => {
       qualificacao_nome: string | null;
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
+      qualificacao_vencimento_fim_mes: VencimentoMode | null;
     }>();
 
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
@@ -314,18 +319,19 @@ app.post('/xapi/statements', async (c) => {
       (isCompletedVerb(verbId) && !completionExplicitlyFalse && !successExplicitlyFalse));
   const shouldReprovar = isFailure && !resultSuccess;
 
-  let novoStatus = matricula.status;
   let qualificacaoGerada: Record<string, unknown> | null = null;
   const statusAnterior = matricula.status;
 
+  let statusSemConclusao = matricula.status;
   if (matricula.status === 'NAO_INICIADO') {
-    novoStatus = mergeMonotonicMatriculaStatus(matricula.status, 'EM_ANDAMENTO');
+    statusSemConclusao = mergeMonotonicMatriculaStatus(matricula.status, 'EM_ANDAMENTO');
   }
 
+  let novoStatus = statusSemConclusao;
   if (shouldConcluir) {
-    novoStatus = mergeMonotonicMatriculaStatus(novoStatus, 'CONCLUIDO');
+    novoStatus = mergeMonotonicMatriculaStatus(statusSemConclusao, 'CONCLUIDO');
   } else if (shouldReprovar) {
-    novoStatus = mergeMonotonicMatriculaStatus(novoStatus, 'REPROVADO');
+    novoStatus = mergeMonotonicMatriculaStatus(statusSemConclusao, 'REPROVADO');
   }
 
   // Calcular progresso a partir do score se disponível
@@ -337,10 +343,60 @@ app.post('/xapi/statements', async (c) => {
       ? mergeMonotonicNumber(matricula.progresso_pct, Math.round((scoreRaw / scoreMax) * 100))
       : undefined;
 
-  // Atualizar matrícula
-  if (novoStatus !== matricula.status || progressoPct !== undefined) {
+  // Toda transição real para CONCLUIDO deve passar pelo serviço canônico,
+  // independentemente de já existir qualificacao_historico_id vinculado.
+  // O Histórico existente será validado e reutilizado atomicamente.
+  const isNewCompletion = novoStatus === 'CONCLUIDO' && statusAnterior !== 'CONCLUIDO';
+  let qualificationFailed = false;
+  let statusFinal = novoStatus;
+
+  if (isNewCompletion) {
+    const dataConclusaoQualificacao = new Date().toISOString().slice(0, 10);
+    const mergedScore = mergeMonotonicNumber(
+      matricula.score_final as number | null | undefined,
+      scoreRaw ?? null,
+    );
+    try {
+      const result = await completeLmsMatricula({
+        db,
+        empresaId,
+        matriculaId: stmt.matricula_id,
+        funcionarioId: matricula.funcionario_id,
+        cursoId: matricula.curso_id,
+        cursoTitulo: matricula.curso_titulo,
+        gerarQualificacaoAoConcluir: matricula.gerar_qualificacao_ao_concluir === 1,
+        qualificacaoTipoId: matricula.qualificacao_tipo_id,
+        qualificacaoCodigo: matricula.qualificacao_codigo,
+        qualificacaoNome: matricula.qualificacao_nome ?? matricula.curso_titulo,
+        qualificacaoCategoria: matricula.qualificacao_categoria,
+        validade: matricula.qualificacao_validade,
+        vencimentoFimMes: matricula.qualificacao_vencimento_fim_mes,
+        dataConclusao: dataConclusaoQualificacao,
+        existingHistoricoId: matricula.qualificacao_historico_id,
+        progressoPct: 100,
+        scoreFinal: mergedScore,
+        action: 'LMS_MATRICULA_CONCLUIDA',
+        actorUserId: getCallerUserId(c),
+        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
+        userAgent: c.req.header('user-agent') ?? undefined,
+      });
+      if (result.qualificacaoHistoricoId) {
+        qualificacaoGerada = {
+          qualificacao_id: result.qualificacaoHistoricoId,
+          qualificacao_historico_id: result.qualificacaoHistoricoId,
+        };
+      }
+    } catch (e) {
+      if (!(e instanceof LmsCompletionRejectedError)) throw e;
+      qualificationFailed = true;
+      statusFinal = statusSemConclusao;
+      console.error('[LMS xAPI] Conclusão rejeitada (batch revertido):', e);
+    }
+  } else if (statusFinal !== matricula.status || progressoPct !== undefined) {
+    // Sem transição para CONCLUIDO nesta chamada (progresso parcial,
+    // REPROVADO, ou já CONCLUIDO antes): mantém a atualização direta.
     const dataConclusao =
-      novoStatus === 'CONCLUIDO' || novoStatus === 'REPROVADO'
+      statusFinal === 'CONCLUIDO' || statusFinal === 'REPROVADO'
         ? new Date().toISOString().slice(0, 10)
         : null;
     await db
@@ -361,7 +417,7 @@ app.post('/xapi/statements', async (c) => {
       `,
       )
       .bind(
-        novoStatus,
+        statusFinal,
         progressoPct ?? null,
         dataConclusao,
         mergeMonotonicNumber(matricula.score_final as number | null | undefined, scoreRaw ?? null),
@@ -374,36 +430,7 @@ app.post('/xapi/statements', async (c) => {
     await syncMatriculaCycleFromMatricula(db, { matriculaId: stmt.matricula_id });
   }
 
-  // Disparar qualificação automática se concluído
-  if (
-    shouldConcluir &&
-    matricula.gerar_qualificacao_ao_concluir === 1 &&
-    matricula.qualificacao_tipo_id
-  ) {
-    try {
-      const dataConclusao = new Date().toISOString().slice(0, 10);
-      const historicoId = await createLmsQualificationOnCompletion({
-        db,
-        matriculaId: stmt.matricula_id,
-        empresaId,
-        funcionarioId: matricula.funcionario_id,
-        cursoTitulo: matricula.curso_titulo,
-        qualificacaoTipoId: matricula.qualificacao_tipo_id,
-        qualificacaoCodigo: matricula.qualificacao_codigo,
-        qualificacaoNome: matricula.qualificacao_nome ?? matricula.curso_titulo,
-        qualificacaoCategoria: matricula.qualificacao_categoria,
-        validade: matricula.qualificacao_validade,
-        dataConclusao,
-        existingHistoricoId: matricula.qualificacao_historico_id,
-      });
-      qualificacaoGerada = {
-        qualificacao_id: historicoId,
-        qualificacao_historico_id: historicoId,
-      };
-    } catch (e) {
-      console.error('[LMS xAPI] Erro ao gerar qualificação automática:', e);
-    }
-  }
+  novoStatus = statusFinal;
 
   if (novoStatus !== statusAnterior) {
     const action =
@@ -427,6 +454,37 @@ app.post('/xapi/statements', async (c) => {
     });
   }
 
+  const effectiveProgress = resolveLmsEffectiveProgress({
+    status: novoStatus,
+    progressoBruto: progressoPct ?? matricula.progresso_pct,
+  });
+
+  if (qualificationFailed) {
+    // Qualificação exigida e não garantida: erro HTTP sanitizado, nunca 200
+    // com qualification_failed:true. O statement xAPI já foi persistido
+    // (trilha de auditoria bruta preservada); a conclusão não foi.
+    return c.json(
+      {
+        success: false,
+        error:
+          'Não foi possível confirmar a qualificação exigida por este curso. A matrícula não foi concluída — tente novamente.',
+        code: 'LMS_QUALIFICATION_COMPLETION_FAILED',
+        data: {
+          statement_id: statementId,
+          matricula_id: stmt.matricula_id,
+          verb_id: verbId,
+          novo_status: novoStatus,
+          progresso_bruto: effectiveProgress.progresso_bruto,
+          progresso_efetivo: effectiveProgress.progresso_efetivo,
+          completion_state: effectiveProgress.completion_state,
+          completion_reason_code: effectiveProgress.completion_reason_code,
+          qualificacao_gerada: null,
+        },
+      },
+      409,
+    );
+  }
+
   return c.json(
     {
       success: true,
@@ -435,6 +493,10 @@ app.post('/xapi/statements', async (c) => {
         matricula_id: stmt.matricula_id,
         verb_id: verbId,
         novo_status: novoStatus,
+        progresso_bruto: effectiveProgress.progresso_bruto,
+        progresso_efetivo: effectiveProgress.progresso_efetivo,
+        completion_state: effectiveProgress.completion_state,
+        completion_reason_code: effectiveProgress.completion_reason_code,
         qualificacao_gerada: qualificacaoGerada,
       },
     },

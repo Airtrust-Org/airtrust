@@ -196,7 +196,10 @@ export default function LmsCursoDetalhe() {
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <div className="grid gap-0 xl:grid-cols-[1.05fr_0.95fr]">
             <div className="border-b border-slate-200 p-4 xl:border-b-0 xl:border-r dark:border-slate-700">
-              <LmsCourseArtwork curso={curso} progress={matricula?.progresso_pct} />
+              <LmsCourseArtwork
+                curso={curso}
+                progress={matricula ? (matricula.progresso_efetivo ?? matricula.progresso_pct) : undefined}
+              />
             </div>
 
             <div className="flex flex-col p-6">
@@ -255,13 +258,13 @@ export default function LmsCursoDetalhe() {
                       </p>
                     </div>
                     <p className="text-2xl font-semibold text-slate-950 dark:text-slate-100">
-                      {matricula.progresso_pct}%
+                      {matricula.progresso_efetivo ?? matricula.progresso_pct}%
                     </p>
                   </div>
                   <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700">
                     <div
                       className="h-full rounded-full bg-slate-950"
-                      style={{ width: `${matricula.progresso_pct}%` }}
+                      style={{ width: `${matricula.progresso_efetivo ?? matricula.progresso_pct}%` }}
                     />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">

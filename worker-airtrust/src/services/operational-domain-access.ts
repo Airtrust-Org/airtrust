@@ -805,6 +805,81 @@ export interface OperationalReadScope {
 
 const UNRESTRICTED_READ_SCOPE: OperationalReadScope = { restricted: false, domains: [], setorIds: [] };
 
+export type ManagedSectorDomainReason =
+  | 'MANAGED_SECTOR_DOMAIN'
+  | 'QUALIFICATION_SECTOR_LINK'
+  | 'AMBIGUOUS_UNCLASSIFIED';
+
+export interface ManagedSectorDomainResolution {
+  setorId: number;
+  domain: OperationalDomain | null;
+  reason: ManagedSectorDomainReason;
+}
+
+/**
+ * Resolve o domínio operacional de um setor GERIDO (setores_gestores ativo)
+ * quando setores.dominio_codigo está NULL — causa raiz confirmada da
+ * investigação "ADMIN vê nove registros, GESTOR Operações vê só três": um
+ * setor legitimamente gerido some do read scope só por falta de
+ * classificação de domínio (ver resolveOperationalReadScope).
+ *
+ * Fallback canônico (nunca inventa/adivinha, nunca libera em ambiguidade):
+ *   1. setores.dominio_codigo, se classificado — MANAGED_SECTOR_DOMAIN.
+ *   2. domínio das qualificações vinculadas a este setor via
+ *      qualificacoes_tipos_setores, SE E SOMENTE SE todas apontarem para o
+ *      MESMO domínio único — QUALIFICATION_SECTOR_LINK. Duas qualificações
+ *      do mesmo setor com domínios diferentes é uma inconsistência de dado,
+ *      não motivo para adivinhar; fica bloqueado.
+ *   3. Caso contrário — AMBIGUOUS_UNCLASSIFIED, sempre fail-closed (nenhum
+ *      domínio resolvido, setor continua fora do read scope).
+ *
+ * Uma quarta via (transversalidade formal, setor marcado explicitamente como
+ * "atende todos os domínios") ainda não tem coluna própria no schema
+ * (setores não tem is_transversal) — não implementada aqui para não inventar
+ * uma regra sem lastro de dado; ver observação no relatório de entrega.
+ */
+export async function resolveManagedSectorDomainFallback(
+  db: D1Database,
+  empresaId: number,
+  setorId: number,
+  activeCodes: Set<OperationalDomain>,
+): Promise<ManagedSectorDomainResolution> {
+  const setor = await db
+    .prepare(
+      `SELECT dominio_codigo FROM setores WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(setorId, empresaId)
+    .first<{ dominio_codigo: string | null }>();
+
+  if (setor?.dominio_codigo && activeCodes.has(setor.dominio_codigo as OperationalDomain)) {
+    return { setorId, domain: setor.dominio_codigo as OperationalDomain, reason: 'MANAGED_SECTOR_DOMAIN' };
+  }
+
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT qc.dominio_codigo AS dominio_codigo
+         FROM qualificacoes_tipos_setores qts
+         JOIN qualificacoes_tipos qt ON qt.id = qts.tipo_id AND qt.deleted_at IS NULL
+         LEFT JOIN qualificacoes_categorias qc ON qc.id = qt.categoria_id
+        WHERE qts.setor_id = ? AND qts.empresa_id = ? AND qts.deleted_at IS NULL`,
+    )
+    .bind(setorId, empresaId)
+    .all<{ dominio_codigo: string | null }>();
+
+  const linkedDomains = new Set(
+    (rows.results || [])
+      .map((row) => row.dominio_codigo)
+      .filter((d): d is string => Boolean(d) && activeCodes.has(d as OperationalDomain)),
+  );
+
+  if (linkedDomains.size === 1) {
+    const [only] = linkedDomains;
+    return { setorId, domain: only as OperationalDomain, reason: 'QUALIFICATION_SECTOR_LINK' };
+  }
+
+  return { setorId, domain: null, reason: 'AMBIGUOUS_UNCLASSIFIED' };
+}
+
 /**
  * Item 1: read-side counterpart to resolveOperationalAccess. ADMINISTRADOR
  * and every non-gestor role (instrutor, aluno, editor, viewer) already have
@@ -832,11 +907,7 @@ export async function resolveOperationalReadScope(params: {
   // access.setorIds is the gestor's FULL managed-setor list, including any
   // setor that has no domain classified yet — resolveOperationalAccess
   // keeps that list intact because the mutation guard checks domain and
-  // setor separately. For reads there's no per-row domain check to fall
-  // back on, so this narrows setorIds down to only the ones that are
-  // actually classified — an unclassified managed setor must not leak its
-  // funcionários/históricos into a gestor's read scope just because the
-  // setor itself is otherwise theirs to manage.
+  // setor separately.
   const placeholders = access.setorIds.map(() => '?').join(', ');
   const classified = await params.db
     .prepare(
@@ -847,9 +918,36 @@ export async function resolveOperationalReadScope(params: {
     .bind(params.empresaId, ...access.setorIds)
     .all<{ id: number }>();
 
-  const setorIds = (classified.results || []).map((row) => row.id);
+  const classifiedIds = new Set((classified.results || []).map((row) => row.id));
+  const unclassifiedManagedIds = access.setorIds.filter((id) => !classifiedIds.has(id));
 
-  return { restricted: true, domains: access.domains, setorIds };
+  const setorIds = [...classifiedIds];
+  const domains = new Set(access.domains);
+
+  // Setores geridos SEM domínio classificado: tenta a resolução canônica de
+  // fallback antes de excluir. Ambiguidade permanece fail-closed (excluído).
+  if (unclassifiedManagedIds.length > 0) {
+    const activeCodes = await activeDomainCodes(params.db);
+    for (const setorId of unclassifiedManagedIds) {
+      const resolution = await resolveManagedSectorDomainFallback(
+        params.db,
+        params.empresaId,
+        setorId,
+        activeCodes,
+      );
+      if (resolution.domain && resolution.reason === 'QUALIFICATION_SECTOR_LINK') {
+        // Só amplia o setorIds (visibilidade individual, setor-scoped) — NUNCA
+        // o domains[] usado pelo filtro domainColumn (catálogo compartilhado,
+        // visível tenant-wide para o domínio inteiro). O fallback infere o
+        // domínio a partir de UM setor específico; ele não é uma prova de que
+        // a gestora tem autoridade sobre TODO o catálogo daquele domínio —
+        // apenas sobre os registros do próprio setor que ela já gerencia.
+        setorIds.push(setorId);
+      }
+    }
+  }
+
+  return { restricted: true, domains: [...domains], setorIds };
 }
 
 /**

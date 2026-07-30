@@ -6,41 +6,43 @@ import type { Env } from '../../types';
 const {
   ensureMatriculaCycleMock,
   syncMatriculaCycleFromMatriculaMock,
-  createLmsQualificationOnCompletionMock,
   logAuditMock,
   sendEmailMock,
 } = vi.hoisted(() => ({
   ensureMatriculaCycleMock: vi.fn(),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
-  createLmsQualificationOnCompletionMock: vi.fn(),
   logAuditMock: vi.fn(),
   sendEmailMock: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (
-    c: {
-      req: { header: (name: string) => string | undefined };
-      set: (key: string, value: unknown) => void;
-      json: (body: unknown, status?: number) => Response;
-    },
-    next: () => Promise<void>,
-  ) => {
-    if (!c.req.header('authorization')) {
-      return c.json({ success: false, error: 'Unauthorized' }, 401);
-    }
+  auth:
+    () =>
+    async (
+      c: {
+        req: { header: (name: string) => string | undefined };
+        set: (key: string, value: unknown) => void;
+        json: (body: unknown, status?: number) => Response;
+      },
+      next: () => Promise<void>,
+    ) => {
+      if (!c.req.header('authorization')) {
+        return c.json({ success: false, error: 'Unauthorized' }, 401);
+      }
 
-    c.set('userId', 42);
-    c.set('userRole', c.req.header('x-test-role') ?? 'admin');
-    await next();
-  },
+      c.set('userId', 42);
+      c.set('userRole', c.req.header('x-test-role') ?? 'admin');
+      await next();
+    },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
   hasRole: (rawRole: unknown, ...allowedRoles: string[]) =>
     allowedRoles.some(
       (allowedRole) =>
-        String(rawRole ?? '').trim().toLowerCase() === allowedRole.trim().toLowerCase(),
+        String(rawRole ?? '')
+          .trim()
+          .toLowerCase() === allowedRole.trim().toLowerCase(),
     ),
   requireRole:
     (...allowedRoles: string[]) =>
@@ -70,15 +72,15 @@ vi.mock('../../routes/escalas-shared', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
-vi.mock('../../services/lms-qualification', () => ({
-  createLmsQualificationOnCompletion: createLmsQualificationOnCompletionMock,
-}));
-
 vi.mock('../../services/lms-matricula-cycle', () => ({
   ensureMatriculaCycle: ensureMatriculaCycleMock,
-  hasActiveMatriculaCycle: (record: { status?: string | null; deleted_at?: string | null } | null) =>
+  hasActiveMatriculaCycle: (
+    record: { status?: string | null; deleted_at?: string | null } | null,
+  ) =>
     Boolean(
-      record && !record.deleted_at && ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(record.status)),
+      record &&
+      !record.deleted_at &&
+      ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(record.status)),
     ),
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
 }));
@@ -267,7 +269,11 @@ function makeRollbackRequest(
   });
 }
 
-async function fetchDryRunReference(app: Hono<{ Bindings: Env }>, db: D1Database, body?: Record<string, unknown>) {
+async function fetchDryRunReference(
+  app: Hono<{ Bindings: Env }>,
+  db: D1Database,
+  body?: Record<string, unknown>,
+) {
   const response = await app.fetch(
     makeDryRunRequest({
       target_lesson_location: '113/405',
@@ -288,7 +294,6 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
     vi.clearAllMocks();
     ensureMatriculaCycleMock.mockResolvedValue(undefined);
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
-    createLmsQualificationOnCompletionMock.mockResolvedValue(null);
     logAuditMock.mockResolvedValue(undefined);
     sendEmailMock.mockResolvedValue(true);
   });
@@ -299,7 +304,10 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
       ['FROM lms_matriculas m', { first: () => state.enrollment }],
       ['INSERT INTO audit_logs', { run: () => ({ meta: { changes: 1, last_row_id: 7001 } }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
     ]);
     const app = createApp(db);
     const dryRunReference = await fetchDryRunReference(app, db);
@@ -345,7 +353,10 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
       ['FROM lms_matriculas m', { first: () => state.enrollment }],
       ['INSERT INTO audit_logs', { run: () => ({ meta: { changes: 1, last_row_id: 7001 } }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
     ]);
     const app = createApp(db);
     const dryRunReference = await fetchDryRunReference(app, db);
@@ -383,7 +394,10 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
       ['FROM lms_matriculas m', { first: () => makeScormEnrollment() }],
       ['INSERT INTO audit_logs', { run: () => ({ meta: { changes: 1, last_row_id: 7001 } }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
     ]);
     const app = createApp(db);
     const dryRunReference = await fetchDryRunReference(app, db);
@@ -402,15 +416,20 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
     );
 
     expect(response.status).toBe(200);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
   });
 
   it('apply nao altera score', async () => {
     const { db, calls } = createMockDb([
-      ['FROM lms_matriculas m', { first: () => makeScormEnrollment({ score_raw: 91, score_scaled: 0.91 }) }],
+      [
+        'FROM lms_matriculas m',
+        { first: () => makeScormEnrollment({ score_raw: 91, score_scaled: 0.91 }) },
+      ],
       ['INSERT INTO audit_logs', { run: () => ({ meta: { changes: 1, last_row_id: 7001 } }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
     ]);
     const app = createApp(db);
     const dryRunReference = await fetchDryRunReference(app, db);
@@ -439,7 +458,10 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
       ['FROM lms_matriculas m', { first: () => makeScormEnrollment() }],
       ['INSERT INTO audit_logs', { run: () => ({ meta: { changes: 1, last_row_id: 7001 } }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
     ]);
     const app = createApp(db);
     const dryRunReference = await fetchDryRunReference(app, db);
@@ -574,10 +596,16 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
 
   it('suspend_data forte nao e apagado', async () => {
     const { db, calls } = createMockDb([
-      ['FROM lms_matriculas m', { first: () => makeScormEnrollment({ suspend_data: 'forte-123' }) }],
+      [
+        'FROM lms_matriculas m',
+        { first: () => makeScormEnrollment({ suspend_data: 'forte-123' }) },
+      ],
       ['INSERT INTO audit_logs', { run: () => ({ meta: { changes: 1, last_row_id: 7001 } }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
     ]);
     const app = createApp(db);
     const dryRunReference = await fetchDryRunReference(app, db);
@@ -606,7 +634,10 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
       ['FROM lms_matriculas m', { first: () => state.enrollment }],
       ['INSERT INTO audit_logs', { run: () => ({ meta: { changes: 1, last_row_id: 7001 } }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
     ]);
     const app = createApp(db);
     const dryRunReference = await fetchDryRunReference(app, db);
@@ -641,7 +672,10 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
       ['FROM lms_matriculas m', { first: () => makeScormEnrollment() }],
       ['INSERT INTO audit_logs', { run: () => ({ meta: { changes: 1, last_row_id: 8123 } }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
     ]);
     const app = createApp(db);
     const dryRunReference = await fetchDryRunReference(app, db);
@@ -719,7 +753,17 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
       },
     };
     const { db, calls } = createMockDb([
-      ['FROM lms_matriculas m', { first: () => makeScormEnrollment({ progresso_pct: 28, ultimo_slide: 113, cmi_json: appliedSnapshot.scorm.cmi_json }) }],
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () =>
+            makeScormEnrollment({
+              progresso_pct: 28,
+              ultimo_slide: 113,
+              cmi_json: appliedSnapshot.scorm.cmi_json,
+            }),
+        },
+      ],
       [
         'FROM audit_logs',
         {
@@ -735,7 +779,10 @@ describe('lms matriculas progress recovery apply and rollback endpoints', () => 
         },
       ],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
       ['INSERT INTO audit_logs', { run: () => ({ meta: { changes: 1, last_row_id: 9002 } }) }],
     ]);
 

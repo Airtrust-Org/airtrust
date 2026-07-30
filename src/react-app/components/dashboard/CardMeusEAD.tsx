@@ -35,15 +35,48 @@ import {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * data_vencimento_qualificacao é uma data civil (YYYY-MM-DD), sem componente de
+ * hora. Comparar via `new Date(iso).getTime() - Date.now()` mistura uma data
+ * civil (interpretada como meia-noite UTC) com um instante real: em fusos com
+ * offset negativo (ex.: America/Sao_Paulo, UTC-3), o próprio dia do vencimento
+ * já aparecia como "vencido" horas antes da meia-noite local. A comparação
+ * correta é civil-a-civil, tratando o dia do vencimento como ainda válido.
+ */
+function parseIsoDateOnlyToUtcMs(dataIso: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dataIso);
+  if (!match) return null;
+  const [, y, m, d] = match;
+  return Date.UTC(Number(y), Number(m) - 1, Number(d));
+}
+
+function getTodaySaoPauloUtcMs(): number {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const y = Number(parts.find((p) => p.type === 'year')?.value);
+  const m = Number(parts.find((p) => p.type === 'month')?.value);
+  const d = Number(parts.find((p) => p.type === 'day')?.value);
+  return Date.UTC(y, m - 1, d);
+}
+
 function diasParaVencer(dataIso: string | null): number | null {
   if (!dataIso) return null;
-  const diff = new Date(dataIso).getTime() - Date.now();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  const targetMs = parseIsoDateOnlyToUtcMs(dataIso);
+  if (targetMs === null) return null;
+  const todayMs = getTodaySaoPauloUtcMs();
+  return Math.round((targetMs - todayMs) / (1000 * 60 * 60 * 24));
 }
 
 function formatarData(iso: string | null): string {
   if (!iso) return '—';
-  return new Intl.DateTimeFormat('pt-BR').format(new Date(iso));
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!match) return '—';
+  const [, y, m, d] = match;
+  return `${d}/${m}/${y}`;
 }
 
 function statusLabel(s: LmsMatriculaEAD['status']) {
@@ -139,7 +172,13 @@ function LinhaMatricula({
   const btnCls = getLmsActionButtonClasses(matricula.status);
   const btnLabel = getLmsActionLabel(matricula.status);
   const progressFillCls = getLmsProgressBarFillClasses(matricula.status);
-  const progressLabel = getLmsProgressLabel(matricula.status, matricula.progresso_pct ?? 0);
+  // Nunca usar progresso_pct bruto diretamente como exibição — só CONCLUIDO
+  // é 100%; progresso_efetivo (do backend) já aplica essa regra.
+  const progressoExibido = matricula.progresso_efetivo ?? matricula.progresso_pct ?? 0;
+  const progressLabel = getLmsProgressLabel(matricula.status, progressoExibido);
+  // Fallback para respostas antigas sem certificate_state: preserva o
+  // comportamento anterior (AVAILABLE quando tem_certificado=1).
+  const certificateState = matricula.certificate_state ?? (matricula.tem_certificado === 1 ? 'AVAILABLE' : 'NOT_REQUIRED');
 
   return (
     <div
@@ -179,10 +218,25 @@ function LinhaMatricula({
             {statusLabel(matricula.status)}
           </span>
 
-          {/* certificado ou ação principal */}
+          {/* ação principal + certificado (conclusão) */}
           <div className="shrink-0 flex items-center gap-2">
-            {matricula.tem_certificado === 1 ? (
-              <BotaoCertificado matricula={matricula} />
+            {concluido ? (
+              <>
+                <button
+                  onClick={onAbrir}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${btnCls}`}
+                >
+                  {btnLabel}
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                {certificateState === 'AVAILABLE' ? (
+                  <BotaoCertificado matricula={matricula} />
+                ) : certificateState === 'PENDING' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    Certificado em processamento
+                  </span>
+                ) : null}
+              </>
             ) : (
               <button
                 onClick={onAbrir}
@@ -207,7 +261,7 @@ function LinhaMatricula({
           <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden max-w-[160px] sm:max-w-[220px]">
             <div
               className={`h-full rounded-full transition-all ${progressFillCls}`}
-              style={{ width: `${Math.min(matricula.progresso_pct ?? 0, 100)}%` }}
+              style={{ width: `${Math.min(progressoExibido, 100)}%` }}
             />
           </div>
           <span className="text-xs text-slate-500">{progressLabel}</span>

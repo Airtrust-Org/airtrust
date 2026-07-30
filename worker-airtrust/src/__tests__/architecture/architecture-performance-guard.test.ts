@@ -25,11 +25,22 @@ const LARGE_FILE_LINE_CAPS = {
   // Cap raised 2026-07-08: counted 3760 (qualificacao_historico_status added to
   // satisfy ConsolidatedTrainingItem — BUG-011 Stage 3 fix, not a mask).
   'routes/treinamentos-planejados.ts': 3760,
-  // Cap raised 2026-07-20: counted 3296 (fix/lms-tenant-sector-scoped-visibility —
-  // added manager sector-scope guard to GET/PATCH-status/DELETE matrícula endpoints
-  // so a sector-restricted manager can no longer read/cancel/alter another
-  // sector's matrícula by id).
-  'routes/lms-matriculas.ts': 3296,
+  // Cap raised 2026-07-30: counted 3507 (hotfix/lms-compliance-final — all four
+  // completion call sites (scorm/commit, xapi/statements, POST /:id/finalizar,
+  // PATCH /:id/status) now delegate the entire completion write (Histórico,
+  // vínculo, ciclo, matrícula, auditoria) to the canonical, atomic
+  // completeLmsMatricula service (db.batch()) instead of ad-hoc
+  // try/catch-and-continue; qualification-creation failures reject the whole
+  // batch and surface as explicit LMS_QUALIFICATION_COMPLETION_FAILED (409),
+  // including on scorm/commit and xapi/statements, which previously returned
+  // 200 with qualification_failed:true; progresso_efetivo/completion_state
+  // wired into /minhas, /minhas-ead, /:id, /curso/:id and PATCH /:id/status;
+  // qualification_link_state and certificate_state exposed for the
+  // CardMeusEAD Rever/certificate UI).
+  // Cap raised 2026-07-30: counted 3558 (PR #548 hardening — curso_id added
+  // to SCORM/finalizar/PATCH queries; gerar_qualificacao_ao_concluir added to
+  // PATCH status query; canonical completion params expanded; lint fix).
+  'routes/lms-matriculas.ts': 3558,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   'routes/frms-fadiga-checkin.ts': 2021,
   // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.
@@ -53,8 +64,10 @@ const SQL_PREPARE_CAPS = {
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.
   // +10 prepare calls for schema introspection guards (migration-0390 compatibility).
   'routes/treinamentos-planejados.ts': 56,
-  // Acknowledged growth (2026-06-29): auto-cert hooks added 2 .prepare() calls via ensureCertificateForQualification.
-  'routes/lms-matriculas.ts': 47,
+  // Cap raised 2026-07-30 (hotfix/lms-compliance-final): +1 .prepare() for the
+  // resolveLmsEffectiveProgress-enriched /minhas-ead and /curso/:id mapping
+  // plus the observações UPDATE split out of the canonical completion path.
+  'routes/lms-matriculas.ts': 48,
 } as const;
 
 const HIGH_SQL_LIMIT_CAPS = {
@@ -205,7 +218,9 @@ describe('architecture and performance guardrails', () => {
       .filter(({ selectStarCount }) => selectStarCount > 0)
       .sort((a, b) => a.file.localeCompare(b.file));
 
-    expect(criticalScope.map(({ file }) => file)).toEqual(Object.keys(CRITICAL_SELECT_STAR_CAPS).sort());
+    expect(criticalScope.map(({ file }) => file)).toEqual(
+      Object.keys(CRITICAL_SELECT_STAR_CAPS).sort(),
+    );
 
     for (const { file, selectStarCount } of criticalScope) {
       expect(selectStarCount).toBeLessThanOrEqual(

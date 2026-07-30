@@ -122,7 +122,7 @@ export function parseScormLocationPair(location: unknown): { current: number; to
   return { current: marker.current, total: marker.total };
 }
 
-function clampPct(value: number) {
+export function clampPct(value: number) {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
@@ -554,5 +554,97 @@ export function buildScormCompletionDiagnostic(params: {
     final_commit_observed: finalCommitObserved,
     has_runtime_evidence: hasRuntimeEvidence,
     commit_event: normalizeCommitEvent(params.commitEvent),
+  };
+}
+
+// ── Progresso efetivo (99/100) ──────────────────────────────────────────────
+//
+// Regra: apenas matrícula canonicamente CONCLUIDA reporta 100%. Qualquer outro
+// status — inclusive progresso bruto 100 sem conclusão aceita (SCORM final
+// commit ausente, xAPI sem completion aceito etc.) — é limitado a 99% para
+// impedir qualificação/certificado/validade prematuros. Ver PENDING_FINAL_STEP.
+
+export type LmsCompletionState =
+  | 'COMPLETED'
+  | 'PENDING_FINAL_STEP'
+  | 'IN_PROGRESS'
+  | 'NOT_STARTED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export type LmsCompletionReasonCode =
+  | 'MATRICULA_CONCLUIDA'
+  | 'MATRICULA_CANCELADA'
+  | 'MATRICULA_REPROVADA'
+  | 'MATRICULA_NAO_INICIADA'
+  | 'MATRICULA_EM_ANDAMENTO'
+  | 'PROGRESS_100_WITHOUT_ACCEPTED_COMPLETION';
+
+export interface LmsEffectiveProgressResult {
+  progresso_bruto: number;
+  progresso_efetivo: number;
+  completion_state: LmsCompletionState;
+  completion_reason_code: LmsCompletionReasonCode;
+}
+
+export function resolveLmsEffectiveProgress(params: {
+  status: Nullable<string>;
+  progressoBruto: Nullable<number>;
+}): LmsEffectiveProgressResult {
+  const status = normalizeMatriculaStatus(params.status);
+  const rawInput = Number(params.progressoBruto);
+  const progressoBruto = Number.isFinite(rawInput) ? clampPct(rawInput) : 0;
+
+  if (status === 'CONCLUIDO') {
+    return {
+      progresso_bruto: progressoBruto,
+      progresso_efetivo: 100,
+      completion_state: 'COMPLETED',
+      completion_reason_code: 'MATRICULA_CONCLUIDA',
+    };
+  }
+
+  if (status === 'CANCELADO') {
+    return {
+      progresso_bruto: progressoBruto,
+      progresso_efetivo: Math.min(progressoBruto, 99),
+      completion_state: 'CANCELLED',
+      completion_reason_code: 'MATRICULA_CANCELADA',
+    };
+  }
+
+  if (status === 'REPROVADO') {
+    return {
+      progresso_bruto: progressoBruto,
+      progresso_efetivo: Math.min(progressoBruto, 99),
+      completion_state: 'FAILED',
+      completion_reason_code: 'MATRICULA_REPROVADA',
+    };
+  }
+
+  if (status === 'NAO_INICIADO') {
+    return {
+      progresso_bruto: progressoBruto,
+      progresso_efetivo: 0,
+      completion_state: 'NOT_STARTED',
+      completion_reason_code: 'MATRICULA_NAO_INICIADA',
+    };
+  }
+
+  // EM_ANDAMENTO (e qualquer status legado não canônico é tratado como em andamento).
+  if (progressoBruto >= 100) {
+    return {
+      progresso_bruto: progressoBruto,
+      progresso_efetivo: 99,
+      completion_state: 'PENDING_FINAL_STEP',
+      completion_reason_code: 'PROGRESS_100_WITHOUT_ACCEPTED_COMPLETION',
+    };
+  }
+
+  return {
+    progresso_bruto: progressoBruto,
+    progresso_efetivo: Math.min(progressoBruto, 99),
+    completion_state: 'IN_PROGRESS',
+    completion_reason_code: 'MATRICULA_EM_ANDAMENTO',
   };
 }

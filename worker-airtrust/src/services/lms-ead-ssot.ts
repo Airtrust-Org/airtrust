@@ -152,7 +152,7 @@ async function fetchQualificacaoTipo(
     hasCategoriaId && hasCategoriaDominio ? 'qc.dominio_codigo' : 'NULL';
   const dominioJoin =
     hasCategoriaId && hasCategoriaDominio
-      ? 'LEFT JOIN qualificacoes_categorias qc ON qc.id = qualificacoes_tipos.categoria_id'
+      ? 'LEFT JOIN qualificacoes_categorias qc ON qc.id = qualificacoes_tipos.categoria_id AND qc.deleted_at IS NULL AND qc.ativo = 1'
       : '';
 
   return db

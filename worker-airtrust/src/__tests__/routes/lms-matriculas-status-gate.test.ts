@@ -12,12 +12,12 @@ import type { Env } from '../../types';
 const {
   hasRoleMock,
   syncMatriculaCycleFromMatriculaMock,
-  createLmsQualificationOnCompletionMock,
+  completeLmsMatriculaMock,
   logAuditMock,
 } = vi.hoisted(() => ({
   hasRoleMock: vi.fn().mockReturnValue(true),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
-  createLmsQualificationOnCompletionMock: vi.fn(),
+  completeLmsMatriculaMock: vi.fn(),
   logAuditMock: vi.fn(),
 }));
 
@@ -40,9 +40,15 @@ vi.mock('../../routes/escalas-shared', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
-vi.mock('../../services/lms-qualification', () => ({
-  createLmsQualificationOnCompletion: createLmsQualificationOnCompletionMock,
-}));
+vi.mock('../../services/lms-completion', async () => {
+  const actual = await vi.importActual<typeof import('../../services/lms-completion')>(
+    '../../services/lms-completion',
+  );
+  return {
+    ...actual,
+    completeLmsMatricula: completeLmsMatriculaMock,
+  };
+});
 
 vi.mock('../../services/lms-matricula-cycle', () => ({
   ensureMatriculaCycle: vi.fn(),
@@ -146,7 +152,11 @@ describe('PATCH /:id/status — qualification gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
-    createLmsQualificationOnCompletionMock.mockResolvedValue(999);
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created',
+      qualificacaoHistoricoId: 999,
+      matriculaId: 200,
+    });
     logAuditMock.mockResolvedValue(undefined);
     hasRoleMock.mockReturnValue(true); // default: admin
   });
@@ -169,7 +179,7 @@ describe('PATCH /:id/status — qualification gate', () => {
 
     // nenhuma escrita no banco
     expect(writes).toHaveLength(0);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   // ── 2. Admin CONCLUIDO + SCORM + sem evidência → 409 ──────────────────────
@@ -191,7 +201,7 @@ describe('PATCH /:id/status — qualification gate', () => {
 
     // nenhuma escrita: matrícula não foi alterada, qualificação não gerada
     expect(writes).toHaveLength(0);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
 
     // audit registrado como SCORM_COMPLETION_REJECTED
     expect(logAuditMock).toHaveBeenCalledWith(
@@ -230,7 +240,7 @@ describe('PATCH /:id/status — qualification gate', () => {
 
     expect(res.status).toBe(409);
     expect(writes).toHaveLength(0);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   it('rejeita 409 quando ha candidate auditavel sem passed/completed explicito', async () => {
@@ -272,7 +282,7 @@ describe('PATCH /:id/status — qualification gate', () => {
       explicit_completion: false,
     });
     expect(writes).toHaveLength(0);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   // ── 4. Admin CONCLUIDO + SCORM + evidência robusta → 200 + qualificação ───
@@ -298,7 +308,7 @@ describe('PATCH /:id/status — qualification gate', () => {
     const { db, writes } = createMockDb([
       ['c.tipo_conteudo, c.scorm_mastery_score', { first: () => scormMatriculaWithQual }],
       ['FROM lms_progresso_scorm', { first: () => scormConcluido }],
-      ['data_conclusao = COALESCE', {}], // UPDATE
+      ['SET observacoes = ?', {}], // UPDATE de observações após conclusão via serviço canônico (mocado)
       ['SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?', { first: () => updatedMatricula }],
     ]);
 
@@ -312,8 +322,8 @@ describe('PATCH /:id/status — qualification gate', () => {
     expect(writes.some((q) => q.includes('UPDATE'))).toBe(true);
 
     // qualificação gerada
-    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
-    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledWith(
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledWith(
       expect.objectContaining({
         matriculaId: 200,
         qualificacaoTipoId: 7,
@@ -343,7 +353,7 @@ describe('PATCH /:id/status — qualification gate', () => {
     const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO' });
 
     expect(res.status).toBe(200);
-    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
   });
 
   // ── 6. Manager pode alterar status não-CONCLUIDO sem gate ─────────────────
@@ -362,13 +372,18 @@ describe('PATCH /:id/status — qualification gate', () => {
     const res = await patchStatus(makeApp(), db, 200, { status: 'EM_ANDAMENTO' });
 
     expect(res.status).toBe(200);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   // ── 7. Manager CONCLUIDO sem qualificação vinculada → gate admin não dispara
 
   it('manager pode CONCLUIDO quando curso nao tem qualificacao vinculada (gate admin nao dispara)', async () => {
     hasRoleMock.mockReturnValue(false); // manager
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_not_required',
+      qualificacaoHistoricoId: null,
+      matriculaId: 200,
+    });
 
     const semQual = { ...scormMatriculaWithQual, qualificacao_tipo_id: null };
     const updatedSemQual = { ...semQual, status: 'CONCLUIDO' };
@@ -384,15 +399,17 @@ describe('PATCH /:id/status — qualification gate', () => {
           suspend_data: null, cmi_json: null,
         }),
       }],
-      ['data_conclusao = COALESCE', {}],
       ['SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?', { first: () => updatedSemQual }],
     ]);
 
     const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO' });
 
     expect(res.status).toBe(200);
-    // sem qualificacao_tipo_id → qualificação não é gerada
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    // sem qualificacao_tipo_id → serviço canônico é chamado, mas com
+    // gerarQualificacaoAoConcluir:false, então não minta qualificação.
+    expect(completeLmsMatriculaMock).toHaveBeenCalledWith(
+      expect.objectContaining({ gerarQualificacaoAoConcluir: false }),
+    );
   });
 
   // ── 8. Status CANCELADO não dispara nenhum gate ────────────────────────────
@@ -411,6 +428,6 @@ describe('PATCH /:id/status — qualification gate', () => {
     const res = await patchStatus(makeApp(), db, 200, { status: 'CANCELADO' });
 
     expect(res.status).toBe(200);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 });

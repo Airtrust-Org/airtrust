@@ -50,6 +50,12 @@ export interface Fixtures {
     categoria_id?: number | null;
     deleted_at?: string | null;
   }>;
+  qualificacoesTiposSetores?: Array<{
+    tipo_id: number;
+    setor_id: number;
+    empresa_id: number;
+    deleted_at?: string | null;
+  }>;
   qualificacoesHistorico?: Array<{
     id: number;
     empresa_id: number;
@@ -320,6 +326,28 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
         )
         .map((s) => ({ id: s.id }));
       return { all: rows };
+    }
+
+    // operational-domain-access.ts: resolveManagedSectorDomainFallback's
+    // qualificacoes_tipos_setores → categoria domain lookup
+    if (sql.includes('FROM qualificacoes_tipos_setores qts')) {
+      const [setorId, empresaId] = args as [number, number];
+      const links = (f.qualificacoesTiposSetores || []).filter(
+        (qts) => qts.setor_id === setorId && qts.empresa_id === empresaId && !qts.deleted_at,
+      );
+      const domains = new Set(
+        links
+          .map((link) => {
+            const tipo = (f.qualificacoesTipos || []).find(
+              (qt) => qt.id === link.tipo_id && qt.empresa_id === empresaId && !qt.deleted_at,
+            );
+            if (!tipo || tipo.categoria_id == null) return null;
+            const categoria = (f.qualificacoesCategorias || []).find((qc) => qc.id === tipo.categoria_id);
+            return categoria?.dominio_codigo ?? null;
+          })
+          .filter((d): d is string => Boolean(d)),
+      );
+      return { all: [...domains].map((dominio_codigo) => ({ dominio_codigo })) };
     }
 
     // operational-domain-access.ts: assertSetorWithinOperationalScope

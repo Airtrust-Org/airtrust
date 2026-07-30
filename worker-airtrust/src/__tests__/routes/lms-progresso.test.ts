@@ -3,11 +3,11 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 
 const {
-  createLmsQualificationOnCompletionMock,
+  completeLmsMatriculaMock,
   syncMatriculaCycleFromMatriculaMock,
   logAuditMock,
 } = vi.hoisted(() => ({
-  createLmsQualificationOnCompletionMock: vi.fn(),
+  completeLmsMatriculaMock: vi.fn(),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
   logAuditMock: vi.fn(),
 }));
@@ -26,9 +26,15 @@ vi.mock('../../routes/escalas-shared', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
-vi.mock('../../services/lms-qualification', () => ({
-  createLmsQualificationOnCompletion: createLmsQualificationOnCompletionMock,
-}));
+vi.mock('../../services/lms-completion', async () => {
+  const actual = await vi.importActual<typeof import('../../services/lms-completion')>(
+    '../../services/lms-completion',
+  );
+  return {
+    ...actual,
+    completeLmsMatricula: completeLmsMatriculaMock,
+  };
+});
 
 vi.mock('../../services/lms-matricula-cycle', () => ({
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
@@ -39,6 +45,7 @@ vi.mock('../../utils/db', () => ({
 }));
 
 import lmsProgressoRoutes from '../../routes/lms-progresso';
+import { LmsCompletionRejectedError } from '../../services/lms-completion';
 
 type QueryHandler = {
   first?: (args: unknown[]) => Promise<unknown> | unknown;
@@ -89,7 +96,11 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
 describe('lms progresso xapi router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createLmsQualificationOnCompletionMock.mockResolvedValue(9001);
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created',
+      qualificacaoHistoricoId: 9001,
+      matriculaId: 10,
+    });
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
     logAuditMock.mockResolvedValue(undefined);
   });
@@ -166,18 +177,96 @@ describe('lms progresso xapi router', () => {
       },
     });
 
-    const updateCall = calls.find(
-      (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
+    // A persistência da conclusão (status/progresso/Histórico/ciclo/auditoria)
+    // é delegada inteiramente ao serviço canônico — não há mais um UPDATE
+    // direto de lms_matriculas nesta rota para o caminho de conclusão.
+    expect(calls.some((call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'))).toBe(
+      false,
     );
-    expect(updateCall?.args[0]).toBe('CONCLUIDO');
-    expect(updateCall?.args[1]).toBe(100);
-    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledWith(
+    expect(completeLmsMatriculaMock).toHaveBeenCalledWith(
       expect.objectContaining({
         matriculaId: 10,
         funcionarioId: 77,
         qualificacaoTipoId: 55,
       }),
     );
+  });
+
+  it('does NOT mark CONCLUIDO when the required qualification creation fails', async () => {
+    completeLmsMatriculaMock.mockRejectedValueOnce(
+      new LmsCompletionRejectedError('Falha ao concluir matrícula: qualificação não pôde ser garantida'),
+    );
+
+    const matriculaUpdateCalls: unknown[][] = [];
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 10,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            empresa_id: 1,
+            qualificacao_historico_id: null,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 55,
+            curso_titulo: 'FDM - Flight Data Monitoring',
+            qualificacao_codigo: 'FDM_FLIGHT_DATA_MONITORING',
+            qualificacao_nome: 'FDM - Flight Data Monitoring',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      ['INSERT INTO lms_xapi_statements', { run: () => ({ meta: { changes: 1, last_row_id: 502 } }) }],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: (args) => {
+            matriculaUpdateCalls.push(args);
+            return { meta: { changes: 1 } };
+          },
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@airtrust.online' },
+          verb: {
+            id: 'http://adlnet.gov/expapi/verbs/completed',
+            display: { 'en-US': 'completed' },
+          },
+          object: { id: 'h5p:20', objectType: 'Activity' },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    // Falha obrigatória: erro HTTP sanitizado, NUNCA 201 com qualification_failed:true.
+    expect(response.status).toBe(409);
+    const json = (await response.json()) as {
+      success: boolean;
+      code: string;
+      data: { novo_status: string; qualificacao_gerada: unknown };
+    };
+    expect(json.success).toBe(false);
+    expect(json.code).toBe('LMS_QUALIFICATION_COMPLETION_FAILED');
+    expect(json.data.qualificacao_gerada).toBeNull();
+    expect(json.data.novo_status).not.toBe('CONCLUIDO');
+
+    // A matrícula nunca deve ser persistida como CONCLUIDO quando a qualificação
+    // exigida falhou — o batch inteiro reverteu, então nenhum UPDATE direto
+    // de lms_matriculas acontece fora do serviço canônico (mocado e rejeitado).
+    expect(matriculaUpdateCalls).toHaveLength(0);
   });
 
   it('does not regress a completed matrícula on later failed xAPI statements', async () => {
@@ -261,7 +350,7 @@ describe('lms progresso xapi router', () => {
     expect(updateCall?.args[0]).toBe('CONCLUIDO');
     expect(updateCall?.args[1]).toBe(100);
     expect(updateCall?.args[3]).toBe(92);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   it('blocks completion when score is below scorm_mastery_score (BUG-006)', async () => {
@@ -338,7 +427,7 @@ describe('lms progresso xapi router', () => {
     expect((body.data as Record<string, unknown>).qualificacao_gerada).toBeNull();
 
     // Qualification should NOT be generated
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   it('allows completion when score meets scorm_mastery_score', async () => {
@@ -418,7 +507,7 @@ describe('lms progresso xapi router', () => {
       },
     });
 
-    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
   });
 
   it('blocks completion on completed verb without score when mastery=70 (score required)', async () => {
@@ -473,7 +562,7 @@ describe('lms progresso xapi router', () => {
     const body = await response.json() as Record<string, unknown>;
     expect((body.data as Record<string, unknown>).novo_status).not.toBe('CONCLUIDO');
     expect((body.data as Record<string, unknown>).qualificacao_gerada).toBeNull();
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   it('allows completion when score equals mastery (raw=70, max=100, mastery=70)', async () => {
@@ -518,7 +607,7 @@ describe('lms progresso xapi router', () => {
     await expect(response.json()).resolves.toMatchObject({
       success: true, data: { novo_status: 'CONCLUIDO' },
     });
-    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).toHaveBeenCalled();
   });
 
   it('allows completion when scaled=0.7 with mastery=70', async () => {
@@ -651,6 +740,6 @@ describe('lms progresso xapi router', () => {
     const body = await response.json() as Record<string, unknown>;
     expect((body.data as Record<string, unknown>).novo_status).not.toBe('CONCLUIDO');
     expect((body.data as Record<string, unknown>).qualificacao_gerada).toBeNull();
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 });

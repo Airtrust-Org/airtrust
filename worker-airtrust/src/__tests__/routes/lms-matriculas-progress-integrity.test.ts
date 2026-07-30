@@ -6,13 +6,13 @@ import type { Env } from '../../types';
 const {
   ensureMatriculaCycleMock,
   syncMatriculaCycleFromMatriculaMock,
-  createLmsQualificationOnCompletionMock,
+  completeLmsMatriculaMock,
   logAuditMock,
   sendEmailMock,
 } = vi.hoisted(() => ({
   ensureMatriculaCycleMock: vi.fn(),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
-  createLmsQualificationOnCompletionMock: vi.fn(),
+  completeLmsMatriculaMock: vi.fn(),
   logAuditMock: vi.fn(),
   sendEmailMock: vi.fn(),
 }));
@@ -36,9 +36,15 @@ vi.mock('../../routes/escalas-shared', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
-vi.mock('../../services/lms-qualification', () => ({
-  createLmsQualificationOnCompletion: createLmsQualificationOnCompletionMock,
-}));
+vi.mock('../../services/lms-completion', async () => {
+  const actual = await vi.importActual<typeof import('../../services/lms-completion')>(
+    '../../services/lms-completion',
+  );
+  return {
+    ...actual,
+    completeLmsMatricula: completeLmsMatriculaMock,
+  };
+});
 
 vi.mock('../../services/lms-matricula-cycle', () => ({
   ensureMatriculaCycle: ensureMatriculaCycleMock,
@@ -114,7 +120,11 @@ describe('lms matriculas progress integrity', () => {
     vi.clearAllMocks();
     ensureMatriculaCycleMock.mockResolvedValue(undefined);
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
-    createLmsQualificationOnCompletionMock.mockResolvedValue(null);
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_not_required',
+      qualificacaoHistoricoId: null,
+      matriculaId: 0,
+    });
     logAuditMock.mockResolvedValue(undefined);
     sendEmailMock.mockResolvedValue(true);
   });
@@ -644,7 +654,7 @@ describe('lms matriculas progress integrity', () => {
   });
 
   it('conclui commit SCORM 1.2 quando lesson_status=completed e score atende mastery', async () => {
-    const { db, calls } = createMockDb([
+    const { db } = createMockDb([
       [
         'FROM lms_matriculas m',
         {
@@ -687,7 +697,11 @@ describe('lms matriculas progress integrity', () => {
       ],
     ]);
 
-    createLmsQualificationOnCompletionMock.mockResolvedValue(9001);
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created',
+      qualificacaoHistoricoId: 9001,
+      matriculaId: 163,
+    });
 
     const app = new Hono<{ Bindings: Env }>();
     app.route('/', lmsMatriculasRoutes);
@@ -724,17 +738,13 @@ describe('lms matriculas progress integrity', () => {
       },
     });
 
-    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledWith(
+    expect(completeLmsMatriculaMock).toHaveBeenCalledWith(
       expect.objectContaining({
         matriculaId: 163,
         qualificacaoTipoId: 125,
+        progressoPct: 100,
       }),
     );
-    const matriculaUpdate = calls.find(
-      (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
-    );
-    expect(matriculaUpdate?.args[0]).toBe('CONCLUIDO');
-    expect(matriculaUpdate?.args[1]).toBe(100);
   });
 
   it('conclui commit SCORM 2004 quando completion_status=completed e success_status=passed', async () => {
@@ -892,7 +902,7 @@ describe('lms matriculas progress integrity', () => {
       },
     });
 
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
     const matriculaUpdate = calls.find(
       (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
     );
@@ -1004,7 +1014,7 @@ describe('lms matriculas progress integrity', () => {
         },
       },
     });
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
     expect(logAuditMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -1083,11 +1093,15 @@ describe('lms matriculas progress integrity', () => {
         },
       },
     });
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   it('rejeita finalizacao manual quando ha apenas candidate auditavel sem passed/completed explicito', async () => {
-    createLmsQualificationOnCompletionMock.mockResolvedValue(9001);
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created',
+      qualificacaoHistoricoId: 9001,
+      matriculaId: 401,
+    });
 
     const { db, calls } = createMockDb([
       [
@@ -1164,14 +1178,18 @@ describe('lms matriculas progress integrity', () => {
         },
       },
     });
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
     expect(calls.some((call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'))).toBe(
       false,
     );
   });
 
   it('preserva a finalizacao manual de conteudo nao-scorm usada pelos players PDF e PPTX', async () => {
-    createLmsQualificationOnCompletionMock.mockResolvedValue(9100);
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created',
+      qualificacaoHistoricoId: 9100,
+      matriculaId: 402,
+    });
 
     const { db } = createMockDb([
       [
@@ -1233,7 +1251,7 @@ describe('lms matriculas progress integrity', () => {
         },
       },
     });
-    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
   });
 
   it('nao usa a nota do quiz como progresso quando o pacote informa localizacao real', async () => {
@@ -1304,7 +1322,7 @@ describe('lms matriculas progress integrity', () => {
       },
     });
     // A matrícula não pode ser marcada como concluída por nota alta.
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
     const matriculaUpdate = calls.find(
       (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
     );

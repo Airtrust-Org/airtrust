@@ -30,24 +30,24 @@ const {
   logAuditMock,
 } = vi.hoisted(() => ({
   hasRoleMock: vi.fn().mockReturnValue(true),
-  getEmployeeSectorAccessMock: vi.fn(async (): Promise<TestEmployeeSectorAccess> => ({
-    mode: 'all',
-    setorIds: [],
-  })),
+  getEmployeeSectorAccessMock: vi.fn(
+    async (): Promise<TestEmployeeSectorAccess> => ({
+      mode: 'all',
+      setorIds: [],
+    }),
+  ),
   assertFuncionarioInScopeMock: vi.fn(async () => undefined),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
   logAuditMock: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
-      c.set('userId', 42);
-      c.set('userRole', 'manager');
-      c.set('funcionarioId', null);
-      await next();
-    },
+  auth: () => async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
+    c.set('userId', 42);
+    c.set('userRole', 'manager');
+    c.set('funcionarioId', null);
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
@@ -57,10 +57,6 @@ vi.mock('../../middleware/rbac', () => ({
 
 vi.mock('../../routes/escalas-shared', () => ({
   getEmpresaIdSafe: () => 1,
-}));
-
-vi.mock('../../services/lms-qualification', () => ({
-  createLmsQualificationOnCompletion: vi.fn(),
 }));
 
 vi.mock('../../services/lms-matricula-cycle', () => ({
@@ -130,7 +126,11 @@ function makeApp() {
 }
 
 function getDetalhe(app: Hono<{ Bindings: Env }>, db: D1Database, id: number) {
-  return app.fetch(new Request(`http://localhost/${id}`, { method: 'GET' }), { DB: db } as Env, {} as ExecutionContext);
+  return app.fetch(
+    new Request(`http://localhost/${id}`, { method: 'GET' }),
+    { DB: db } as Env,
+    {} as ExecutionContext,
+  );
 }
 
 function patchStatus(app: Hono<{ Bindings: Env }>, db: D1Database, id: number, body: object) {
@@ -146,7 +146,11 @@ function patchStatus(app: Hono<{ Bindings: Env }>, db: D1Database, id: number, b
 }
 
 function deleteMatricula(app: Hono<{ Bindings: Env }>, db: D1Database, id: number) {
-  return app.fetch(new Request(`http://localhost/${id}`, { method: 'DELETE' }), { DB: db } as Env, {} as ExecutionContext);
+  return app.fetch(
+    new Request(`http://localhost/${id}`, { method: 'DELETE' }),
+    { DB: db } as Env,
+    {} as ExecutionContext,
+  );
 }
 
 const matriculaOutOfScope = {
@@ -190,9 +194,7 @@ describe('LMS matrículas — manager sector-scope enforcement', () => {
       forbidden('Acesso negado ao funcionário solicitado', 'FUNCIONARIO_OUT_OF_SCOPE');
     });
 
-    const { db } = createMockDb([
-      ['FROM lms_matriculas m', { first: () => matriculaOutOfScope }],
-    ]);
+    const { db } = createMockDb([['FROM lms_matriculas m', { first: () => matriculaOutOfScope }]]);
 
     const res = await getDetalhe(makeApp(), db, 500);
 
@@ -209,9 +211,7 @@ describe('LMS matrículas — manager sector-scope enforcement', () => {
     getEmployeeSectorAccessMock.mockResolvedValue({ mode: 'restricted', setorIds: [1] });
     assertFuncionarioInScopeMock.mockResolvedValue(undefined);
 
-    const { db } = createMockDb([
-      ['FROM lms_matriculas m', { first: () => matriculaOutOfScope }],
-    ]);
+    const { db } = createMockDb([['FROM lms_matriculas m', { first: () => matriculaOutOfScope }]]);
 
     const res = await getDetalhe(makeApp(), db, 500);
 
@@ -222,9 +222,7 @@ describe('LMS matrículas — manager sector-scope enforcement', () => {
     hasRoleMock.mockReturnValue(true); // admin
     getEmployeeSectorAccessMock.mockResolvedValue({ mode: 'all', setorIds: [] });
 
-    const { db } = createMockDb([
-      ['FROM lms_matriculas m', { first: () => matriculaOutOfScope }],
-    ]);
+    const { db } = createMockDb([['FROM lms_matriculas m', { first: () => matriculaOutOfScope }]]);
 
     const res = await getDetalhe(makeApp(), db, 500);
 
@@ -241,7 +239,10 @@ describe('LMS matrículas — manager sector-scope enforcement', () => {
     });
 
     const { db, writes } = createMockDb([
-      ['c.tipo_conteudo, c.scorm_mastery_score', { first: () => ({ ...matriculaOutOfScope, id: 500 }) }],
+      [
+        'c.tipo_conteudo, c.scorm_mastery_score',
+        { first: () => ({ ...matriculaOutOfScope, id: 500 }) },
+      ],
     ]);
 
     const res = await patchStatus(makeApp(), db, 500, { status: 'EM_ANDAMENTO' });

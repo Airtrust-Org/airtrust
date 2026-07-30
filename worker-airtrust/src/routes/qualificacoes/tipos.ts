@@ -469,7 +469,8 @@ function buildCategoriaJoin(hasCategoriaId: boolean): string {
   return `LEFT JOIN qualificacoes_categorias qc
     ON ${hasCategoriaId ? 'qc.id = qt.categoria_id' : 'qc.nome = qt.categoria'}
    AND qc.empresa_id = qt.empresa_id
-   AND qc.deleted_at IS NULL`;
+   AND qc.deleted_at IS NULL
+   AND qc.ativo = 1`;
 }
 
 async function resolveCategoriaCanonica(

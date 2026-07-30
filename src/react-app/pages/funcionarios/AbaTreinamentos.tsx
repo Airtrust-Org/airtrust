@@ -6,6 +6,7 @@ type Treinamento = {
   id: number;
   status: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'REPROVADO' | 'CANCELADO';
   progresso_pct: number;
+  progresso_efetivo?: number;
   data_conclusao?: string | null;
   prazo_conclusao?: string | null;
   titulo: string;
@@ -256,7 +257,7 @@ export default function AbaTreinamentos({
                       </td>
                       <td className="px-4 py-3 text-slate-600">{tipoLabel(item.tipo_conteudo)}</td>
                       <td className="px-4 py-3 text-right font-medium text-slate-700">
-                        {Number(item.progresso_pct || 0)}%
+                        {Number(item.progresso_efetivo ?? item.progresso_pct ?? 0)}%
                       </td>
                       <td className="px-4 py-3">
                         <span

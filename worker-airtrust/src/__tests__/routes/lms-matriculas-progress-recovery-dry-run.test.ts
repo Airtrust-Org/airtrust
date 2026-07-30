@@ -6,41 +6,43 @@ import type { Env } from '../../types';
 const {
   ensureMatriculaCycleMock,
   syncMatriculaCycleFromMatriculaMock,
-  createLmsQualificationOnCompletionMock,
   logAuditMock,
   sendEmailMock,
 } = vi.hoisted(() => ({
   ensureMatriculaCycleMock: vi.fn(),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
-  createLmsQualificationOnCompletionMock: vi.fn(),
   logAuditMock: vi.fn(),
   sendEmailMock: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (
-    c: {
-      req: { header: (name: string) => string | undefined };
-      set: (key: string, value: unknown) => void;
-      json: (body: unknown, status?: number) => Response;
-    },
-    next: () => Promise<void>,
-  ) => {
-    if (!c.req.header('authorization')) {
-      return c.json({ success: false, error: 'Unauthorized' }, 401);
-    }
+  auth:
+    () =>
+    async (
+      c: {
+        req: { header: (name: string) => string | undefined };
+        set: (key: string, value: unknown) => void;
+        json: (body: unknown, status?: number) => Response;
+      },
+      next: () => Promise<void>,
+    ) => {
+      if (!c.req.header('authorization')) {
+        return c.json({ success: false, error: 'Unauthorized' }, 401);
+      }
 
-    c.set('userId', 42);
-    c.set('userRole', c.req.header('x-test-role') ?? 'admin');
-    await next();
-  },
+      c.set('userId', 42);
+      c.set('userRole', c.req.header('x-test-role') ?? 'admin');
+      await next();
+    },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
   hasRole: (rawRole: unknown, ...allowedRoles: string[]) =>
     allowedRoles.some(
       (allowedRole) =>
-        String(rawRole ?? '').trim().toLowerCase() === allowedRole.trim().toLowerCase(),
+        String(rawRole ?? '')
+          .trim()
+          .toLowerCase() === allowedRole.trim().toLowerCase(),
     ),
   requireRole:
     (...allowedRoles: string[]) =>
@@ -70,14 +72,16 @@ vi.mock('../../routes/escalas-shared', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
-vi.mock('../../services/lms-qualification', () => ({
-  createLmsQualificationOnCompletion: createLmsQualificationOnCompletionMock,
-}));
-
 vi.mock('../../services/lms-matricula-cycle', () => ({
   ensureMatriculaCycle: ensureMatriculaCycleMock,
-  hasActiveMatriculaCycle: (record: { status?: string | null; deleted_at?: string | null } | null) =>
-    Boolean(record && !record.deleted_at && ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(record.status))),
+  hasActiveMatriculaCycle: (
+    record: { status?: string | null; deleted_at?: string | null } | null,
+  ) =>
+    Boolean(
+      record &&
+      !record.deleted_at &&
+      ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(record.status)),
+    ),
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
 }));
 
@@ -143,23 +147,25 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
   return { db, calls };
 }
 
-function makeScormEnrollment(overrides: Partial<{
-  id: number;
-  status: string;
-  progresso_pct: number | null;
-  ultimo_slide: number | null;
-  qualificacao_historico_id: number | null;
-  curso_titulo: string;
-  tipo_conteudo: string | null;
-  lesson_status: string | null;
-  completion_status: string | null;
-  success_status: string | null;
-  score_raw: number | null;
-  score_max: number | null;
-  score_scaled: number | null;
-  suspend_data: string | null;
-  cmi_json: string | null;
-}> = {}) {
+function makeScormEnrollment(
+  overrides: Partial<{
+    id: number;
+    status: string;
+    progresso_pct: number | null;
+    ultimo_slide: number | null;
+    qualificacao_historico_id: number | null;
+    curso_titulo: string;
+    tipo_conteudo: string | null;
+    lesson_status: string | null;
+    completion_status: string | null;
+    success_status: string | null;
+    score_raw: number | null;
+    score_max: number | null;
+    score_scaled: number | null;
+    suspend_data: string | null;
+    cmi_json: string | null;
+  }> = {},
+) {
   return {
     id: 332,
     status: 'EM_ANDAMENTO',
@@ -219,7 +225,6 @@ describe('lms matriculas progress recovery dry-run endpoint', () => {
     vi.clearAllMocks();
     ensureMatriculaCycleMock.mockResolvedValue(undefined);
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
-    createLmsQualificationOnCompletionMock.mockResolvedValue(null);
     logAuditMock.mockResolvedValue(undefined);
     sendEmailMock.mockResolvedValue(true);
   });
@@ -508,7 +513,6 @@ describe('lms matriculas progress recovery dry-run endpoint', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
   });
 
   it('dry-run não altera matrícula', async () => {

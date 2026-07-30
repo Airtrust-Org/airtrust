@@ -111,6 +111,11 @@ export interface LmsMatricula {
   gerar_qualificacao_ao_concluir?: 0 | 1;
   publicado?: 0 | 1;
   completion_diagnostic?: LmsCompletionDiagnostic | null;
+  /** Progresso efetivo (resolveLmsEffectiveProgress) — só 100 quando status é CONCLUIDO. Preferir sobre progresso_pct bruto para exibição. */
+  progresso_efetivo?: number;
+  progresso_bruto?: number;
+  completion_state?: 'COMPLETED' | 'PENDING_FINAL_STEP' | 'IN_PROGRESS' | 'NOT_STARTED' | 'FAILED' | 'CANCELLED';
+  completion_reason_code?: string;
 }
 
 export interface LmsProgresso {
@@ -685,6 +690,15 @@ export function useMinhasMatriculas() {
 export interface LmsMatriculaEAD extends LmsMatricula {
   data_vencimento_qualificacao: string | null;
   tem_certificado: 0 | 1;
+  /** LINKED = Histórico atual vinculado; LINK_PENDING = sem vínculo (nunca exibir Vencido). */
+  qualification_link_state?: 'LINKED' | 'LINK_PENDING';
+  /** AVAILABLE = certificado pronto; PENDING = concluído mas certificado ainda gerando; NOT_REQUIRED = curso não gera certificado. */
+  certificate_state?: 'AVAILABLE' | 'PENDING' | 'NOT_REQUIRED';
+  /** Progresso efetivo (resolveLmsEffectiveProgress) — só 100 quando status é CONCLUIDO. Usar para exibição, nunca progresso_pct bruto diretamente. */
+  progresso_efetivo?: number;
+  progresso_bruto?: number;
+  completion_state?: 'COMPLETED' | 'PENDING_FINAL_STEP' | 'IN_PROGRESS' | 'NOT_STARTED' | 'FAILED' | 'CANCELLED';
+  completion_reason_code?: string;
 }
 
 export function useMinhasEAD() {

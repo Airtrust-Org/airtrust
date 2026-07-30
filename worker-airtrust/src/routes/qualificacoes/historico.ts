@@ -300,10 +300,12 @@ router.get(
            ON (qc.id = COALESCE(qh.categoria_id, qt.categoria_id) 
                OR (COALESCE(qh.categoria_id, qt.categoria_id) IS NULL AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))))
           AND qc.deleted_at IS NULL
+          AND qc.ativo = 1
           ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`
       : `LEFT JOIN qualificacoes_categorias qc
            ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
           AND qc.deleted_at IS NULL
+          AND qc.ativo = 1
           ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`;
 
     const baseFromAndJoins = `FROM qualificacoes_historico qh
@@ -645,6 +647,13 @@ router.get(
       END AS certificado_url,
       qc.cor AS categoria_cor,
       qc.id AS categoria_id,
+      qc.nome AS categoria_nome,
+      CASE
+        WHEN qc.id IS NULL THEN 'UNRESOLVED'
+        WHEN qh.categoria_id IS NOT NULL THEN 'HISTORICO_CATEGORIA_ID'
+        WHEN qt.categoria_id IS NOT NULL THEN 'TIPO_CATEGORIA_ID'
+        ELSE 'NAME_MATCH'
+      END AS categoria_resolution_state,
       qh.status AS qualificacao_status,
       qh.tipo_treinamento,
       qh.carga_horaria
@@ -817,10 +826,12 @@ router.get(
            ON (qc.id = COALESCE(qh.categoria_id, qt.categoria_id) 
                OR (COALESCE(qh.categoria_id, qt.categoria_id) IS NULL AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))))
           AND qc.deleted_at IS NULL
+          AND qc.ativo = 1
           ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`
       : `LEFT JOIN qualificacoes_categorias qc
            ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
           AND qc.deleted_at IS NULL
+          AND qc.ativo = 1
           ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`;
 
     const baseFromAndJoins = `FROM qualificacoes_historico qh
@@ -923,10 +934,12 @@ router.get(
            ON (qc.id = COALESCE(qh.categoria_id, qt.categoria_id) 
                OR (COALESCE(qh.categoria_id, qt.categoria_id) IS NULL AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))))
           AND qc.deleted_at IS NULL
+          AND qc.ativo = 1
           ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`
       : `LEFT JOIN qualificacoes_categorias qc
            ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
           AND qc.deleted_at IS NULL
+          AND qc.ativo = 1
           ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`;
 
     const baseFromAndJoins = `FROM qualificacoes_historico qh

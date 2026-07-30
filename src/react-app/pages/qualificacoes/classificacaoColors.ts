@@ -26,7 +26,12 @@ const FORMAT_COLOR_FALLBACKS: Record<string, string> = {
 
 const CATEGORY_COLOR_FALLBACKS: Record<string, string> = {
   CHECK: '#10B981',
-  EAD: '#EAB308',
+  // Sem fallback fixo para EAD: a cor canônica vem de categoria_cor,
+  // resolvida no backend a partir do registro real em qualificacoes_categorias
+  // (empresa 6 = azul). Inventar um fallback aqui mascarava divergências reais
+  // de categoria/cor e produzia "EAD amarelo" mesmo quando o registro correto
+  // era azul — sem esse fallback, a ausência de categoria_cor cai no neutro
+  // (DEFAULT_TEXT_HEX) em vez de uma cor errada.
   EXAME: '#A855F7',
   LICENCA: '#2563EB',
   OUTROS: '#6B7280',

@@ -23,23 +23,22 @@ import type { Env } from '../../types';
 const {
   ensureMatriculaCycleMock,
   syncMatriculaCycleFromMatriculaMock,
-  createLmsQualificationOnCompletionMock,
   logAuditMock,
   sendEmailMock,
 } = vi.hoisted(() => ({
   ensureMatriculaCycleMock: vi.fn(),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
-  createLmsQualificationOnCompletionMock: vi.fn(),
   logAuditMock: vi.fn(),
   sendEmailMock: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
-    c.set('userId', 42);
-    c.set('userRole', 'admin');
-    await next();
-  },
+  auth:
+    () => async (c: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
+      c.set('userId', 42);
+      c.set('userRole', 'admin');
+      await next();
+    },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
@@ -51,10 +50,6 @@ vi.mock('../../middleware/rbac', () => ({
 
 vi.mock('../../routes/escalas-shared', () => ({
   getEmpresaIdSafe: () => 1,
-}));
-
-vi.mock('../../services/lms-qualification', () => ({
-  createLmsQualificationOnCompletion: createLmsQualificationOnCompletionMock,
 }));
 
 vi.mock('../../services/lms-matricula-cycle', () => ({
@@ -107,13 +102,21 @@ function makeTestEnv(handlers: Array<[string, QueryHandler]>) {
 }
 
 const MATRICULA_CONCLUIDA = {
-  id: 1, empresa_id: 1, funcionario_id: 99,
-  status: 'CONCLUIDO', progresso_pct: 100, tentativas: 1,
+  id: 1,
+  empresa_id: 1,
+  funcionario_id: 99,
+  status: 'CONCLUIDO',
+  progresso_pct: 100,
+  tentativas: 1,
   qualificacao_historico_id: null,
-  scorm_mastery_score: 70, gerar_qualificacao_ao_concluir: 0,
-  qualificacao_tipo_id: null, curso_titulo: 'Teste SCORM',
-  qualificacao_codigo: null, qualificacao_nome: null,
-  qualificacao_categoria: null, qualificacao_validade: null,
+  scorm_mastery_score: 70,
+  gerar_qualificacao_ao_concluir: 0,
+  qualificacao_tipo_id: null,
+  curso_titulo: 'Teste SCORM',
+  qualificacao_codigo: null,
+  qualificacao_nome: null,
+  qualificacao_categoria: null,
+  qualificacao_validade: null,
 };
 
 function makeCommit(body: Record<string, unknown>) {
@@ -129,7 +132,6 @@ describe('lms matriculas concluido guard', () => {
     vi.clearAllMocks();
     ensureMatriculaCycleMock.mockResolvedValue(undefined);
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
-    createLmsQualificationOnCompletionMock.mockResolvedValue(null);
   });
 
   // ─── T1: Bloqueia downgrade CONCLUIDO → incomplete ───────────────────────
@@ -140,16 +142,20 @@ describe('lms matriculas concluido guard', () => {
       ['FROM lms_progresso_scorm', { first: () => null }],
     ]);
 
-    const response = await app.fetch(makeCommit({
-      matricula_id: 1,
-      lesson_status: 'incomplete',
-      completion_status: 'incomplete',
-      score_raw: 30,
-      score_max: 100,
-    }), { DB: db } as Env, {} as ExecutionContext);
+    const response = await app.fetch(
+      makeCommit({
+        matricula_id: 1,
+        lesson_status: 'incomplete',
+        completion_status: 'incomplete',
+        score_raw: 30,
+        score_max: 100,
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
 
     expect(response.status).toBe(200);
-    const json = await response.json() as ScormCommitBody;
+    const json = (await response.json()) as ScormCommitBody;
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBe(true);
     expect(json.data.status).toBe('CONCLUIDO');
@@ -165,15 +171,19 @@ describe('lms matriculas concluido guard', () => {
       ['FROM lms_progresso_scorm', { first: () => null }],
     ]);
 
-    const response = await app.fetch(makeCommit({
-      matricula_id: 1,
-      lesson_status: 'failed',
-      score_raw: 20,
-      score_max: 100,
-    }), { DB: db } as Env, {} as ExecutionContext);
+    const response = await app.fetch(
+      makeCommit({
+        matricula_id: 1,
+        lesson_status: 'failed',
+        score_raw: 20,
+        score_max: 100,
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
 
     expect(response.status).toBe(200);
-    const json = await response.json() as ScormCommitBody;
+    const json = (await response.json()) as ScormCommitBody;
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBe(true);
     expect(json.data.status).toBe('CONCLUIDO');
@@ -187,13 +197,17 @@ describe('lms matriculas concluido guard', () => {
       ['FROM lms_progresso_scorm', { first: () => null }],
     ]);
 
-    const response = await app.fetch(makeCommit({
-      matricula_id: 1,
-      completion_status: 'not attempted',
-    }), { DB: db } as Env, {} as ExecutionContext);
+    const response = await app.fetch(
+      makeCommit({
+        matricula_id: 1,
+        completion_status: 'not attempted',
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
 
     expect(response.status).toBe(200);
-    const json = await response.json() as ScormCommitBody;
+    const json = (await response.json()) as ScormCommitBody;
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBe(true);
     expect(json.data.status).toBe('CONCLUIDO');
@@ -204,27 +218,41 @@ describe('lms matriculas concluido guard', () => {
   it('permite commit SCORM sem lesson_status em matricula CONCLUIDO (atualização segura)', async () => {
     const { app, db } = makeTestEnv([
       ['FROM lms_matriculas m', { first: () => MATRICULA_CONCLUIDA }],
-      ['FROM lms_progresso_scorm', {
-        first: () => ({
-          lesson_status: 'passed', completion_status: 'completed',
-          success_status: 'passed', score_raw: 90, score_max: 100,
-          score_min: 0, score_scaled: 0.9,
-          session_time: null, total_time: null,
-          suspend_data: 'data', launch_data: null, cmi_json: null,
-        }),
-      }],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => ({
+            lesson_status: 'passed',
+            completion_status: 'completed',
+            success_status: 'passed',
+            score_raw: 90,
+            score_max: 100,
+            score_min: 0,
+            score_scaled: 0.9,
+            session_time: null,
+            total_time: null,
+            suspend_data: 'data',
+            launch_data: null,
+            cmi_json: null,
+          }),
+        },
+      ],
       ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1 } }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 0 } }) }],
     ]);
 
-    const response = await app.fetch(makeCommit({
-      matricula_id: 1,
-      suspend_data: 'updated-bookmark',
-      session_time: 'PT30S',
-    }), { DB: db } as Env, {} as ExecutionContext);
+    const response = await app.fetch(
+      makeCommit({
+        matricula_id: 1,
+        suspend_data: 'updated-bookmark',
+        session_time: 'PT30S',
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
 
     expect(response.status).toBe(200);
-    const json = await response.json() as ScormCommitBody;
+    const json = (await response.json()) as ScormCommitBody;
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBeFalsy();
   });
@@ -236,34 +264,51 @@ describe('lms matriculas concluido guard', () => {
     const updateBindCalls: unknown[][] = [];
     const { app, db } = makeTestEnv([
       ['FROM lms_matriculas m', { first: () => MATRICULA_CONCLUIDA }],
-      ['FROM lms_progresso_scorm', {
-        first: () => ({
-          lesson_status: 'passed', completion_status: 'completed',
-          success_status: 'passed', score_raw: 90, score_max: 100,
-          score_min: 0, score_scaled: 0.9,
-          session_time: null, total_time: null,
-          suspend_data: 'data', launch_data: null, cmi_json: null,
-        }),
-      }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1 } }) }],
-      ['UPDATE lms_matriculas', {
-        run: (args) => {
-          updateBindCalls.push(args);
-          return { meta: { changes: 0 } };
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => ({
+            lesson_status: 'passed',
+            completion_status: 'completed',
+            success_status: 'passed',
+            score_raw: 90,
+            score_max: 100,
+            score_min: 0,
+            score_scaled: 0.9,
+            session_time: null,
+            total_time: null,
+            suspend_data: 'data',
+            launch_data: null,
+            cmi_json: null,
+          }),
         },
-      }],
+      ],
+      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1 } }) }],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: (args) => {
+            updateBindCalls.push(args);
+            return { meta: { changes: 0 } };
+          },
+        },
+      ],
     ]);
 
-    const response = await app.fetch(makeCommit({
-      matricula_id: 1,
-      lesson_status: 'passed',
-      completion_status: 'completed',
-      score_raw: 95,
-      score_max: 100,
-    }), { DB: db } as Env, {} as ExecutionContext);
+    const response = await app.fetch(
+      makeCommit({
+        matricula_id: 1,
+        lesson_status: 'passed',
+        completion_status: 'completed',
+        score_raw: 95,
+        score_max: 100,
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
 
     expect(response.status).toBe(200);
-    const json = await response.json() as ScormCommitBody;
+    const json = (await response.json()) as ScormCommitBody;
     expect(json.success).toBe(true);
     expect(json.data.ignoredDowngrade).toBeFalsy();
 
@@ -272,6 +317,5 @@ describe('lms matriculas concluido guard', () => {
     expect(novoStatusArg).toBe('CONCLUIDO');
     expect(dataConclusaoArg).toBeNull();
     expect(tentativasIncrementArg).toBe(0);
-    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
   });
 });

@@ -45,9 +45,14 @@ function formatDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString('pt-BR');
 }
 
-function getMatriculaProgress(matricula: Pick<LmsMatricula, 'progresso_pct' | 'status'>): number {
-  if (typeof matricula.progresso_pct === 'number' && Number.isFinite(matricula.progresso_pct)) {
-    return Math.min(100, Math.max(0, Math.round(matricula.progresso_pct)));
+function getMatriculaProgress(
+  matricula: Pick<LmsMatricula, 'progresso_pct' | 'progresso_efetivo' | 'status'>,
+): number {
+  // progresso_efetivo (backend) nunca reporta 100% fora de status CONCLUIDO —
+  // preferir sempre que presente; progresso_pct bruto é só fallback legado.
+  const value = matricula.progresso_efetivo ?? matricula.progresso_pct;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(100, Math.max(0, Math.round(value)));
   }
 
   switch (matricula.status) {

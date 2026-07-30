@@ -69,6 +69,14 @@ function buildFixtures(): Fixtures {
       { empresa_id: 2, setor_id: 10, usuario_id: 107, ativo: 1 }, // aluno
       { empresa_id: 2, setor_id: 10, usuario_id: 108, ativo: 1 }, // usuario
       { empresa_id: 2, setor_id: 10, usuario_id: 109, ativo: 1 }, // compliance (alias canônico de manager)
+      // 110 — gestor de dois setores geridos ativos, mas um deles (12) está
+      // SEM dominio_codigo classificado. Reproduz a investigação "ADMIN vê 9,
+      // GESTOR Operações vê 3": o setor 12 é legitimamente gerido (linha
+      // ativa em setores_gestores) mas some do read scope por falta de
+      // classificação de domínio — não por bug de lógica, mas por dado
+      // incompleto em setores.dominio_codigo.
+      { empresa_id: 2, setor_id: 10, usuario_id: 110, ativo: 1 },
+      { empresa_id: 2, setor_id: 12, usuario_id: 110, ativo: 1 },
     ],
     qualificacoesCategorias: [
       { id: 1, empresa_id: 2, ativo: 1, dominio_codigo: 'OPERACOES' },
@@ -112,8 +120,8 @@ function buildFixtures(): Fixtures {
   };
 }
 
-function makeDb(): TestD1 {
-  return createFixtureDb(buildFixtures());
+function makeDb(overrides: Partial<Fixtures> = {}): TestD1 {
+  return createFixtureDb({ ...buildFixtures(), ...overrides });
 }
 
 describe('resolveOperationalAccess', () => {
@@ -1210,6 +1218,122 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
     expect(scope.restricted).toBe(true);
     expect(scope.domains.sort()).toEqual(['MANUTENCAO', 'OPERACOES']);
     expect(scope.setorIds.sort()).toEqual([10, 11]);
+  });
+
+  it('setor gerido sem domínio E sem qualificação vinculada permanece AMBIGUOUS_UNCLASSIFIED — fail-closed, nunca libera adivinhando', async () => {
+    const db = makeDb();
+    const { resolveOperationalAccess, resolveOperationalReadScope } = await import(
+      '../../services/operational-domain-access'
+    );
+
+    // O gestor 110 gerencia setores 10 (OPERACOES, classificado) e 12 (sem
+    // dominio_codigo, sem nenhuma qualificação vinculada) — ambos com linha
+    // ativa em setores_gestores, portanto ambos legitimamente "geridos".
+    const access = await resolveOperationalAccess({
+      db: db as unknown as D1Database,
+      empresaId: 2,
+      userId: 110,
+      userRole: 'gestor',
+    });
+    expect(access.setorIds.sort()).toEqual([10, 12]);
+
+    const scope = await resolveOperationalReadScope({
+      db: db as unknown as D1Database,
+      empresaId: 2,
+      userId: 110,
+      userRole: 'gestor',
+    });
+
+    // O setor 12 continua fora do read scope: sem dominio_codigo E sem
+    // nenhum vínculo qualificacoes_tipos_setores para inferir o domínio —
+    // AMBIGUOUS_UNCLASSIFIED nunca libera. Causa raiz confirmada da
+    // investigação "ADMIN vê 9, GESTOR vê 3": é uma lacuna de classificação
+    // de dado (setores.dominio_codigo), não um bug do RBAC.
+    expect(scope.restricted).toBe(true);
+    expect(scope.setorIds).toEqual([10]);
+    expect(scope.setorIds).not.toContain(12);
+  });
+
+  it('setor gerido sem domínio classificado, mas com qualificação vinculada de domínio único, é resolvido via QUALIFICATION_SECTOR_LINK', async () => {
+    const db = makeDb({
+      qualificacoesTiposSetores: [
+        // qualificacoes_tipos id=1 (empresa 2) → categoria_id=1 → OPERACOES
+        { tipo_id: 1, setor_id: 12, empresa_id: 2, deleted_at: null },
+      ],
+    });
+    const { resolveOperationalReadScope } = await import('../../services/operational-domain-access');
+
+    const scope = await resolveOperationalReadScope({
+      db: db as unknown as D1Database,
+      empresaId: 2,
+      userId: 110,
+      userRole: 'gestor',
+    });
+
+    // Setor 12 agora é visível no read scope (setorIds) porque foi resolvido
+    // via qualificação vinculada — mas o domains[] permanece só com o que já
+    // era classificado (OPERACOES, do setor 10). O fallback nunca amplia o
+    // filtro por domínio inteiro (catálogo tenant-wide) — só a visibilidade
+    // pontual do setor específico que a gestora já gerencia.
+    expect(scope.restricted).toBe(true);
+    expect(scope.setorIds.sort()).toEqual([10, 12]);
+    expect(scope.domains).toEqual(['OPERACOES']);
+  });
+
+  it('setor gerido com qualificações vinculadas de domínios DIFERENTES continua bloqueado (ambiguidade real, nunca adivinha)', async () => {
+    const db = makeDb({
+      qualificacoesTiposSetores: [
+        { tipo_id: 1, setor_id: 12, empresa_id: 2, deleted_at: null }, // categoria 1 → OPERACOES
+        { tipo_id: 2, setor_id: 12, empresa_id: 2, deleted_at: null }, // categoria 2 → MANUTENCAO
+      ],
+    });
+    const { resolveOperationalReadScope } = await import('../../services/operational-domain-access');
+
+    const scope = await resolveOperationalReadScope({
+      db: db as unknown as D1Database,
+      empresaId: 2,
+      userId: 110,
+      userRole: 'gestor',
+    });
+
+    expect(scope.setorIds).not.toContain(12);
+  });
+
+  it('QUALIFICATION_SECTOR_LINK nunca vaza entre tenants: vínculo de outra empresa não resolve o setor', async () => {
+    const db = makeDb({
+      // O vínculo existe, mas para empresa_id=3 — o setor 12 é da empresa 2.
+      qualificacoesTiposSetores: [{ tipo_id: 1, setor_id: 12, empresa_id: 3, deleted_at: null }],
+    });
+    const { resolveOperationalReadScope } = await import('../../services/operational-domain-access');
+
+    const scope = await resolveOperationalReadScope({
+      db: db as unknown as D1Database,
+      empresaId: 2,
+      userId: 110,
+      userRole: 'gestor',
+    });
+
+    expect(scope.setorIds).not.toContain(12);
+  });
+
+  it('resolveManagedSectorDomainFallback: setor de outro tenant nunca resolve, mesmo com o mesmo ID', async () => {
+    const db = makeDb();
+    const { resolveManagedSectorDomainFallback, activeDomainCodes } = await import(
+      '../../services/operational-domain-access'
+    );
+    const activeCodes = await activeDomainCodes(db as unknown as D1Database);
+
+    // Setor 20 existe, mas pertence à empresa 3 — consultando pela empresa 2
+    // (tenant errado) deve falhar fechado, nunca vazar o domínio real.
+    const resolution = await resolveManagedSectorDomainFallback(
+      db as unknown as D1Database,
+      2,
+      20,
+      activeCodes,
+    );
+
+    expect(resolution.domain).toBeNull();
+    expect(resolution.reason).toBe('AMBIGUOUS_UNCLASSIFIED');
   });
 });
 

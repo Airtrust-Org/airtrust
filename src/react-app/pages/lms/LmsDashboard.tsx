@@ -408,7 +408,7 @@ export default function LmsDashboard() {
                         <div className="mt-1.5 h-1.5 w-32 rounded-full bg-slate-200 dark:bg-slate-700">
                           <div
                             className="h-full rounded-full bg-primary"
-                            style={{ width: `${item.progresso_pct}%` }}
+                            style={{ width: `${item.progresso_efetivo ?? item.progresso_pct}%` }}
                           />
                         </div>
                       </div>

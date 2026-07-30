@@ -16,6 +16,12 @@ DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
+  # audit_logs: o serviço canônico de conclusão LMS (completeLmsMatricula)
+  # grava a auditoria DENTRO do mesmo db.batch() da conclusão — não é mais um
+  # logAudit() best-effort tolerável sem a tabela. Sem isto, POST
+  # /matriculas/:id/finalizar (e os demais endpoints de conclusão) falham
+  # com "no such table: audit_logs" e o smoke quebra.
+  "$WORKER_DIR/migrations/0332_create_audit_logs_compatible.sql"
   "$WORKER_DIR/migrations/0335_lms_cursos.sql"
   "$WORKER_DIR/migrations/0336_lms_matriculas.sql"
   "$WORKER_DIR/migrations/0337_lms_progresso_scorm.sql"

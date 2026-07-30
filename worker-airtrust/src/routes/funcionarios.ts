@@ -44,6 +44,7 @@ import {
   assertOperationalAccess,
   normalizeTenantRole,
 } from '../services/operational-domain-access';
+import { resolveLmsEffectiveProgress } from '../services/lms-progress-guardrails';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -1193,9 +1194,22 @@ app.get('/:id', auth(), async (c) => {
     .bind(id, getEmpresaId(c), id, getEmpresaId(c))
     .all<Record<string, unknown>>();
 
+  // Enriquecer treinamentos com progresso_efetivo e completion_state
+  const treinamentosEnriquecidos = (treinamentos.results ?? []).map((t) => {
+    const effectiveProgress = resolveLmsEffectiveProgress({
+      status: t.status as string | null,
+      progressoBruto: t.progresso_pct as number | null,
+    });
+    return {
+      ...t,
+      progresso_efetivo: effectiveProgress.progresso_efetivo,
+      completion_state: effectiveProgress.completion_state,
+    };
+  });
+
   const response: ApiResponse = {
     success: true,
-    data: { ...funcionario, treinamentos: treinamentos.results },
+    data: { ...funcionario, treinamentos: treinamentosEnriquecidos },
   };
 
   return c.json(response);

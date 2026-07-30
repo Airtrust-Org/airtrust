@@ -294,10 +294,13 @@ function impactsCompliance(
   );
 }
 
-function getEnrollmentProgress(matricula?: Pick<LmsMatricula, 'progresso_pct' | 'status'> | null) {
+function getEnrollmentProgress(
+  matricula?: Pick<LmsMatricula, 'progresso_pct' | 'progresso_efetivo' | 'status'> | null,
+) {
   if (!matricula) return 0;
-  if (typeof matricula.progresso_pct === 'number' && Number.isFinite(matricula.progresso_pct)) {
-    return Math.min(100, Math.max(0, Math.round(matricula.progresso_pct)));
+  const value = matricula.progresso_efetivo ?? matricula.progresso_pct;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(100, Math.max(0, Math.round(value)));
   }
 
   switch (matricula.status) {
@@ -1362,7 +1365,7 @@ function CourseCard({
         <div className="relative">
           <LmsCourseArtwork
             curso={curso}
-            progress={!canManage ? matricula?.progresso_pct : undefined}
+            progress={!canManage ? (matricula ? getEnrollmentProgress(matricula) : undefined) : undefined}
           />
           <div className="pointer-events-none absolute top-2 right-2 z-10">
             <LmsStatPill status={statusMeta} />

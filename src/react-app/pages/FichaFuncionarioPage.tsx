@@ -110,6 +110,8 @@ interface TreinamentoLms {
   tipo_conteudo?: 'scorm' | 'h5p' | 'video' | 'pdf' | 'pptx' | null;
   status: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'REPROVADO' | 'CANCELADO';
   progresso_pct: number;
+  progresso_efetivo?: number;
+  completion_state?: string;
   data_matricula?: string | null;
   data_inicio?: string | null;
   data_conclusao?: string | null;
@@ -174,7 +176,9 @@ interface Ficha360Data {
     fichas: SimuladorFicha[];
   };
   auditoria: AuditoriaEvento[];
-  treinamento_voo_pontos_atencao?: import('@/react-app/components/funcionarios/Ficha360TreinamentoVooSection').TreinamentoVooPontosAtencaoData | null;
+  treinamento_voo_pontos_atencao?:
+    | import('@/react-app/components/funcionarios/Ficha360TreinamentoVooSection').TreinamentoVooPontosAtencaoData
+    | null;
 }
 
 interface MatrizRequisito {
@@ -455,8 +459,9 @@ export default function FichaFuncionarioPage() {
     requestedFuncionarioId > 0 &&
     (!frmsSnapshotMeta?.forced_funcionario_id ||
       frmsSnapshotMeta.forced_funcionario_id === requestedFuncionarioId);
-  const fortnightIndicator =
-    shouldExposeFortnightIndicator ? fortnightSnapshotItem?.fortnight_indicator ?? null : null;
+  const fortnightIndicator = shouldExposeFortnightIndicator
+    ? (fortnightSnapshotItem?.fortnight_indicator ?? null)
+    : null;
 
   useEffect(() => {
     const tabFromUrl = normalizeFichaTab(searchParams.get('tab'));
@@ -488,7 +493,9 @@ export default function FichaFuncionarioPage() {
         }
 
         const fichaJson = await fichaRes.json();
-        const matrizRes = await fetchWithAuth(`${API_BASE_URL}/matriz-treinamento/requisitos/${id}`);
+        const matrizRes = await fetchWithAuth(
+          `${API_BASE_URL}/matriz-treinamento/requisitos/${id}`,
+        );
         let matrizJson: { data?: MatrizRequisito[] } = {};
 
         if (!matrizRes.ok) {
@@ -509,7 +516,6 @@ export default function FichaFuncionarioPage() {
       }
     })();
   }, [id]);
-
 
   const qualificacoes = ficha?.qualificacoes ?? [];
   const qualificacoesHistorico = ficha?.qualificacoes_historico ?? [];
@@ -732,212 +738,212 @@ export default function FichaFuncionarioPage() {
         {/* === ABA RESUMO === */}
         {tab === 'resumo' && (
           <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {/* Card 1: Situação de requisitos */}
-            <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 text-base font-semibold text-gray-800">
-                Situação de Requisitos da Matriz da Função
-              </h3>
-              {requisitosFuncao.length === 0 ? (
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                    <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" />
-                    <div>
-                      <p className="text-sm font-semibold text-amber-800">
-                        Nenhum requisito de matriz configurado para a função
-                      </p>
-                      <p className="mt-0.5 text-xs text-amber-700">
-                        A função &quot;{f.funcao}&quot; não possui requisitos ativos na matriz de
-                        treinamento. Nesse cenário, o funcionário deve aparecer sem pendências.
-                      </p>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {/* Card 1: Situação de requisitos */}
+              <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-gray-800">
+                  Situação de Requisitos da Matriz da Função
+                </h3>
+                {requisitosFuncao.length === 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" />
+                      <div>
+                        <p className="text-sm font-semibold text-amber-800">
+                          Nenhum requisito de matriz configurado para a função
+                        </p>
+                        <p className="mt-0.5 text-xs text-amber-700">
+                          A função &quot;{f.funcao}&quot; não possui requisitos ativos na matriz de
+                          treinamento. Nesse cenário, o funcionário deve aparecer sem pendências.
+                        </p>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/matriz-treinamento')}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                    >
+                      <Settings className="h-4 w-4" />
+                      Configurar matriz da função
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/matriz-treinamento')}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                  >
-                    <Settings className="h-4 w-4" />
-                    Configurar matriz da função
-                  </button>
-                </div>
-              ) : (
-                <ul className="space-y-2">
-                  {requisitosFuncao.map((req) => (
-                    <li
-                      key={req.matriz_id}
-                      className={`flex items-center justify-between rounded-xl border px-4 py-3 ${
-                        req.status === 'EM_DIA' && Number(req.dias_para_vencer ?? 9999) > 30
-                          ? 'border-emerald-200 bg-emerald-50'
-                          : req.status === 'EM_DIA'
-                            ? 'border-amber-200 bg-amber-50'
-                            : 'border-red-200 bg-red-50'
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <p
-                          className={`text-sm font-medium ${
-                            req.status === 'EM_DIA' && Number(req.dias_para_vencer ?? 9999) > 30
-                              ? 'text-emerald-900'
-                              : req.status === 'EM_DIA'
-                                ? 'text-amber-900'
-                                : 'text-red-900'
-                          }`}
-                        >
-                          {req.qualificacao_tipo_nome ?? 'Requisito sem nome'}
-                        </p>
-                        <p
-                          className={`text-xs ${
-                            req.status === 'EM_DIA' && Number(req.dias_para_vencer ?? 9999) > 30
-                              ? 'text-emerald-700'
-                              : req.status === 'EM_DIA'
-                                ? 'text-amber-700'
-                                : 'text-red-700'
-                          }`}
-                        >
-                          Código {req.qualificacao_tipo_codigo ?? '-'} · Obrigatoriedade{' '}
-                          {req.obrigatoriedade ?? '-'}
-                        </p>
-                      </div>
-                      <div className="ml-4">
-                        {badgeStatusRequisito(
-                          req.status === 'EM_DIA'
-                            ? Number(req.dias_para_vencer ?? 9999) <= 30
-                              ? 'risco'
-                              : 'ok'
-                            : 'faltando',
-                          req.dias_para_vencer as number | null | undefined,
-                        )}
-                      </div>
-                    </li>
-                  ))}
+                ) : (
+                  <ul className="space-y-2">
+                    {requisitosFuncao.map((req) => (
+                      <li
+                        key={req.matriz_id}
+                        className={`flex items-center justify-between rounded-xl border px-4 py-3 ${
+                          req.status === 'EM_DIA' && Number(req.dias_para_vencer ?? 9999) > 30
+                            ? 'border-emerald-200 bg-emerald-50'
+                            : req.status === 'EM_DIA'
+                              ? 'border-amber-200 bg-amber-50'
+                              : 'border-red-200 bg-red-50'
+                        }`}
+                      >
+                        <div className="flex-1">
+                          <p
+                            className={`text-sm font-medium ${
+                              req.status === 'EM_DIA' && Number(req.dias_para_vencer ?? 9999) > 30
+                                ? 'text-emerald-900'
+                                : req.status === 'EM_DIA'
+                                  ? 'text-amber-900'
+                                  : 'text-red-900'
+                            }`}
+                          >
+                            {req.qualificacao_tipo_nome ?? 'Requisito sem nome'}
+                          </p>
+                          <p
+                            className={`text-xs ${
+                              req.status === 'EM_DIA' && Number(req.dias_para_vencer ?? 9999) > 30
+                                ? 'text-emerald-700'
+                                : req.status === 'EM_DIA'
+                                  ? 'text-amber-700'
+                                  : 'text-red-700'
+                            }`}
+                          >
+                            Código {req.qualificacao_tipo_codigo ?? '-'} · Obrigatoriedade{' '}
+                            {req.obrigatoriedade ?? '-'}
+                          </p>
+                        </div>
+                        <div className="ml-4">
+                          {badgeStatusRequisito(
+                            req.status === 'EM_DIA'
+                              ? Number(req.dias_para_vencer ?? 9999) <= 30
+                                ? 'risco'
+                                : 'ok'
+                              : 'faltando',
+                            req.dias_para_vencer as number | null | undefined,
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Card 2: Dados do funcionário */}
+              <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-gray-800">Dados do Funcionário</h3>
+                <dl className="space-y-2 text-sm text-gray-700">
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">CPF:</dt>
+                    <dd>{f.cpf}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Data de Nascimento:</dt>
+                    <dd>{formatarData(f.nascimento)}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Data de Admissão:</dt>
+                    <dd>{formatarData(f.admissao)}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Status:</dt>
+                    <dd>
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          (f.status || '').toUpperCase() === 'ATIVO'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {f.status}
+                      </span>
+                    </dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Função:</dt>
+                    <dd>{f.funcao}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Base:</dt>
+                    <dd>{f.base ?? '-'}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Aeronave:</dt>
+                    <dd>{f.aeronave ?? '-'}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Licença principal:</dt>
+                    <dd>{f.licenca ?? '-'}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Atualizado em:</dt>
+                    <dd>{formatarDataHora(f.updated_at)}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-gray-800">Panorama Integrado</h3>
+                <dl className="space-y-2 text-sm text-gray-700">
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Qualificações:</dt>
+                    <dd>{qualificacoesTecnicas.length}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Licenças formais:</dt>
+                    <dd>{ficha.licencas.length}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Licenças no histórico:</dt>
+                    <dd>{licencasHistorico.length}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Treinamentos no LMS:</dt>
+                    <dd>
+                      {ficha.treinamentos.length} total · {treinamentosLmsConcluidos} concluídos ·{' '}
+                      {treinamentosImportadosEdapp} legado EdApp
+                    </dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Histórico operacional:</dt>
+                    <dd>{treinamentosHistorico.length}</dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Simulador:</dt>
+                    <dd>
+                      {simuladorSessoes.length} sessões · {simuladorFichas.length} fichas
+                    </dd>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <dt className="font-medium text-gray-500">Auditoria recente:</dt>
+                    <dd>{auditoriaRecente.length} eventos</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-gray-800">Alertas e Leitura</h3>
+                <ul className="space-y-3 text-sm text-gray-700">
+                  <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    {qualificacoesVencidas > 0
+                      ? `${qualificacoesVencidas} qualificação(ões) técnica(s) vencida(s).`
+                      : 'Nenhuma qualificação vencida no histórico atual.'}
+                  </li>
+                  <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    {qualificacoesEmRisco > 0
+                      ? `${qualificacoesEmRisco} qualificação(ões) vencem nos próximos 30 dias.`
+                      : 'Sem qualificações em risco imediato.'}
+                  </li>
+                  <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    {requisitosFuncao.length > 0
+                      ? `${requisitosFuncao.length} requisito(s) ativos na matriz da função.`
+                      : `Função ${f.funcao} sem requisitos ativos na matriz de treinamento.`}
+                  </li>
+                  <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    {ficha.treinamentos.length > 0
+                      ? `${treinamentosNativosLms} matrícula(s) nativa(s) e ${treinamentosImportadosEdapp} registro(s) legado(s) do EdApp vinculados ao funcionário.`
+                      : 'Sem registros LMS vinculados; treinamentos atuais vêm do histórico operacional.'}
+                  </li>
                 </ul>
-              )}
+              </div>
             </div>
 
-            {/* Card 2: Dados do funcionário */}
-            <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 text-base font-semibold text-gray-800">Dados do Funcionário</h3>
-              <dl className="space-y-2 text-sm text-gray-700">
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">CPF:</dt>
-                  <dd>{f.cpf}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Data de Nascimento:</dt>
-                  <dd>{formatarData(f.nascimento)}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Data de Admissão:</dt>
-                  <dd>{formatarData(f.admissao)}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Status:</dt>
-                  <dd>
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        (f.status || '').toUpperCase() === 'ATIVO'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}
-                    >
-                      {f.status}
-                    </span>
-                  </dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Função:</dt>
-                  <dd>{f.funcao}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Base:</dt>
-                  <dd>{f.base ?? '-'}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Aeronave:</dt>
-                  <dd>{f.aeronave ?? '-'}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Licença principal:</dt>
-                  <dd>{f.licenca ?? '-'}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Atualizado em:</dt>
-                  <dd>{formatarDataHora(f.updated_at)}</dd>
-                </div>
-              </dl>
-            </div>
-
-            <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 text-base font-semibold text-gray-800">Panorama Integrado</h3>
-              <dl className="space-y-2 text-sm text-gray-700">
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Qualificações:</dt>
-                  <dd>{qualificacoesTecnicas.length}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Licenças formais:</dt>
-                  <dd>{ficha.licencas.length}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Licenças no histórico:</dt>
-                  <dd>{licencasHistorico.length}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Treinamentos no LMS:</dt>
-                  <dd>
-                    {ficha.treinamentos.length} total · {treinamentosLmsConcluidos} concluídos ·{' '}
-                    {treinamentosImportadosEdapp} legado EdApp
-                  </dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Histórico operacional:</dt>
-                  <dd>{treinamentosHistorico.length}</dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Simulador:</dt>
-                  <dd>
-                    {simuladorSessoes.length} sessões · {simuladorFichas.length} fichas
-                  </dd>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <dt className="font-medium text-gray-500">Auditoria recente:</dt>
-                  <dd>{auditoriaRecente.length} eventos</dd>
-                </div>
-              </dl>
-            </div>
-
-            <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 text-base font-semibold text-gray-800">Alertas e Leitura</h3>
-              <ul className="space-y-3 text-sm text-gray-700">
-                <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  {qualificacoesVencidas > 0
-                    ? `${qualificacoesVencidas} qualificação(ões) técnica(s) vencida(s).`
-                    : 'Nenhuma qualificação vencida no histórico atual.'}
-                </li>
-                <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  {qualificacoesEmRisco > 0
-                    ? `${qualificacoesEmRisco} qualificação(ões) vencem nos próximos 30 dias.`
-                    : 'Sem qualificações em risco imediato.'}
-                </li>
-                <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  {requisitosFuncao.length > 0
-                    ? `${requisitosFuncao.length} requisito(s) ativos na matriz da função.`
-                    : `Função ${f.funcao} sem requisitos ativos na matriz de treinamento.`}
-                </li>
-                <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  {ficha.treinamentos.length > 0
-                    ? `${treinamentosNativosLms} matrícula(s) nativa(s) e ${treinamentosImportadosEdapp} registro(s) legado(s) do EdApp vinculados ao funcionário.`
-                    : 'Sem registros LMS vinculados; treinamentos atuais vêm do histórico operacional.'}
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <FortnightConsolidatedPanel
-            indicator={fortnightIndicator}
-            loading={loadingFrmsSnapshot}
-          />
+            <FortnightConsolidatedPanel
+              indicator={fortnightIndicator}
+              loading={loadingFrmsSnapshot}
+            />
           </div>
         )}
 
@@ -1273,12 +1279,14 @@ export default function FichaFuncionarioPage() {
                         <div className="flex items-center gap-2">
                           <div className="h-1.5 w-20 rounded-full bg-slate-100">
                             <div
-                              className={`h-full rounded-full ${treinamento.progresso_pct >= 100 ? 'bg-emerald-500' : treinamento.progresso_pct > 0 ? 'bg-amber-500' : 'bg-slate-300'}`}
-                              style={{ width: `${treinamento.progresso_pct}%` }}
+                              className={`h-full rounded-full ${(treinamento.progresso_efetivo ?? treinamento.progresso_pct) >= 100 ? 'bg-emerald-500' : (treinamento.progresso_efetivo ?? treinamento.progresso_pct) > 0 ? 'bg-amber-500' : 'bg-slate-300'}`}
+                              style={{
+                                width: `${treinamento.progresso_efetivo ?? treinamento.progresso_pct}%`,
+                              }}
                             />
                           </div>
                           <span className="text-xs text-slate-500">
-                            {treinamento.progresso_pct}%
+                            {treinamento.progresso_efetivo ?? treinamento.progresso_pct}%
                           </span>
                         </div>
                       </td>
@@ -1497,7 +1505,6 @@ export default function FichaFuncionarioPage() {
               </span>
             </div>
 
-
             <div className="grid gap-4 lg:grid-cols-2">
               {/* Sessões */}
               <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -1631,7 +1638,10 @@ export default function FichaFuncionarioPage() {
               <button
                 type="button"
                 onClick={() => {
-                  const pasta360Url = buildPasta360Url(f.id, { tab: 'pasta', origem: 'ficha-funcionario' });
+                  const pasta360Url = buildPasta360Url(f.id, {
+                    tab: 'pasta',
+                    origem: 'ficha-funcionario',
+                  });
                   if (pasta360Url) navigate(pasta360Url);
                 }}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
