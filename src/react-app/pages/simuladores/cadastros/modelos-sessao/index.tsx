@@ -7,6 +7,10 @@ import { ArrowLeft, Plus, Trash2, X, ChevronUp, ChevronDown, Inbox } from 'lucid
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { getColorByIndex } from '@/react-app/utils/colorPalette';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
+import {
+  filterCompatibleChecks,
+} from '@/react-app/utils/checkCompatibility';
+import { isQualificationCheck } from '@/react-app/utils/isQualificationCheck';
 
 interface TipoSessao {
   id: number;
@@ -34,8 +38,9 @@ interface QualificacaoTipo {
   id: number;
   codigo: string;
   nome: string;
-  is_check?: number;
-  categoria?: string;
+  /** Normalizado via isQualificationCheck — pode ser number | boolean | string | null */
+  is_check?: number | boolean | string | null;
+  categoria?: string | null;
   validade?: number;
 }
 
@@ -234,7 +239,13 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       const resCheck = await fetch(checkUrl, { headers: _authH() as Record<string, string> });
       const dataCheck = await resCheck.json();
       if (dataCheck.success) {
-        setTiposCheckFAP(sortData(dataCheck.data || []));
+        const todos: QualificacaoTipo[] = [...(dataVoo.data || []), ...(dataCheck.data || [])];
+        const uniqueTodos = Array.from(new Map(todos.map(item => [item.id, item])).values());
+        
+        // Usar helper normalizado: aceita is_check=1, is_check=true, categoria='CHECK' (case-insensitive)
+        setTiposCheckFAP(sortData(uniqueTodos.filter(isQualificationCheck)));
+        // Qualificação principal: tudo que NÃO é check
+        setQualificacoesTipos(sortData(uniqueTodos.filter((q) => !isQualificationCheck(q))));
       }
     } catch (err) {
       console.error('Erro ao carregar qualificações:', err);
@@ -323,9 +334,9 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       );
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
-        setChecksIdsModelo(
-          data.data.map((c: { id: number }) => c.id),
-        );
+        // Carregar todos os IDs vinculados sem filtro de aeronave — preservar seleções existentes.
+        // O filtro de compatibilidade é aplicado apenas na UI (checksCompativeis).
+        setChecksIdsModelo(data.data.map((c: { id: number }) => Number(c.id)));
       }
     } catch (err) {
       console.error('Erro ao carregar checks do modelo:', err);
@@ -381,6 +392,11 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
   const salvar = async () => {
     if (!codigo || !nome) {
       toast.warning('Preencha código e nome do modelo');
+      return;
+    }
+    
+    if (geraQualificacao && checksIncompativeis.length > 0) {
+      toast.warning('Remova os checks incompatíveis antes de salvar.');
       return;
     }
 
@@ -558,6 +574,22 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
   // (e.g. `@M2026.07-V2`, `@M2026.07-REMEDIATION-<uuid>`) that must never
   // reach the user. `codigo_canonico` is the clean, user-facing code.
   const codigoExibicao = useCallback((m: ModeloSessao) => m.codigo_canonico || m.codigo, []);
+
+  // Checks compatíveis com o equipamento selecionado no modal — derivado uma única vez
+  const checksCompativeis = useMemo(
+    () =>
+      [...filterCompatibleChecks(tiposCheckFAP, tipoAeronave)].sort((a, b) =>
+        codeCollator.compare(a.codigo, b.codigo),
+      ),
+    [tiposCheckFAP, tipoAeronave, codeCollator],
+  );
+
+  const checksIncompativeis = useMemo(() => {
+    return checksIdsModelo
+      .filter((id) => !checksCompativeis.some((c) => c.id === id))
+      .map((id) => tiposCheckFAP.find((c) => c.id === id) || qualificacoesTipos.find((q) => q.id === id))
+      .filter(Boolean) as QualificacaoTipo[];
+  }, [checksIdsModelo, checksCompativeis, tiposCheckFAP, qualificacoesTipos]);
 
   const modelosFiltrados = useMemo(() => {
     const filtrados = modelos.filter((m) => {
@@ -1028,17 +1060,20 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                     </p>
                   </div>
 
-                  {tiposCheckFAP.length > 0 && (
+                  {checksCompativeis.length > 0 && (
                     <div>
                       <label className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-2">
-                        Checks FAP Padrão desta Sessão
+                        Checks FAP Padrão desta Sessão{' '}
+                        <span className="font-normal text-green-700 dark:text-green-400">
+                          ({checksCompativeis.length})
+                        </span>
                       </label>
                       <p className="text-xs text-green-700 dark:text-green-400 mb-2">
                         Estes checks FAP serão pré-selecionados ao criar uma sessão com este modelo.
                         As FAPs aprovadas também geram qualificações automáticas.
                       </p>
                       <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                        {tiposCheckFAP.map((check) => (
+                        {checksCompativeis.map((check) => (
                           <label
                             key={check.id}
                             className="flex items-center gap-2 p-2 hover:bg-green-100 dark:hover:bg-green-500/20 rounded cursor-pointer"
@@ -1067,6 +1102,39 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                             </div>
                           </label>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {checksIncompativeis.length > 0 && (
+                    <div className="mt-4 p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <label className="block text-sm font-semibold text-red-900 dark:text-red-300 mb-1">
+                            Atenção: Checks Incompatíveis Detectados
+                          </label>
+                          <p className="text-xs text-red-700 dark:text-red-400 mb-2">
+                            O modelo de aeronave selecionado ({tipoAeronave}) não é compatível com os seguintes checks já vinculados:
+                          </p>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {checksIncompativeis.map((check) => (
+                              <span key={check.id} className="text-xs font-mono bg-red-200 dark:bg-red-500/30 text-red-800 dark:text-red-300 px-1.5 py-0.5 rounded">
+                                {check.codigo}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-sm transition-colors"
+                          onClick={() => {
+                            setChecksIdsModelo((prev) =>
+                              prev.filter((id) => !checksIncompativeis.some((c) => c.id === id)),
+                            );
+                          }}
+                        >
+                          Remover checks incompatíveis
+                        </Button>
                       </div>
                     </div>
                   )}

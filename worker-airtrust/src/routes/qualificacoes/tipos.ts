@@ -676,6 +676,17 @@ router.get(
     const conditions = ['qt.deleted_at IS NULL', 'qt.empresa_id = ?', setorScope.clause];
     const bindings: unknown[] = [empresaId, ...setorScope.bindings];
 
+    const ativoRaw = c.req.query('ativo');
+    if (ativoRaw !== undefined && ativoRaw !== null) {
+      if (ativoRaw === '1' || ativoRaw === 'true') {
+        conditions.push('qt.ativo = 1');
+      } else if (ativoRaw === '0' || ativoRaw === 'false') {
+        conditions.push('qt.ativo = 0');
+      } else {
+        return c.json({ success: false, error: 'Parâmetro ativo inválido. Use 1, 0, true ou false.' }, 400);
+      }
+    }
+
     // Item 1 (read-side filtering): tipos de qualificação são conteúdo
     // compartilhado por categoria — uma vez com RBAC ativo, um gestor só
     // deve listar tipos cuja categoria esteja classificada em um dos seus
