@@ -29,6 +29,36 @@ describe('fichaModeloPdf PTO Rev10 compatibility', () => {
     expect(data.manobras[18]?.descricao).toContain('equipe');
   });
 
+  it('prints the canonical one-hour examiner duration', () => {
+    const data = buildFichaModeloPdfData(
+      {
+        id: 601,
+        codigo: 'EXA-01/04@PTO-REV10-2026-07-30-V1',
+        codigo_canonico: 'EXA-01/04',
+        nome: 'Treinamento Prático de Examinador 1/4',
+      },
+      [],
+    );
+
+    expect(data.sessao_codigo).toBe('EXA-01/04');
+    expect(data.sessao_titulo_linha1).toBe('Treinamento Prático de Examinador 1/4');
+    expect(data.carga_horaria_total).toBe('60 minutos');
+  });
+
+  it('prints the canonical instructor loads without assuming 120 minutes', () => {
+    const first = buildFichaModeloPdfData(
+      { id: 602, codigo: 'INST-E01@V2', codigo_canonico: 'INST-E01', nome: 'Instrutor 1/2' },
+      [],
+    );
+    const second = buildFichaModeloPdfData(
+      { id: 603, codigo: 'INST-E02@V2', codigo_canonico: 'INST-E02', nome: 'Instrutor 2/2' },
+      [],
+    );
+
+    expect(first.carga_horaria_total).toBe('60 minutos');
+    expect(second.carga_horaria_total).toBe('120 minutos');
+  });
+
   it('keeps legacy NOTECHS codes only for an explicitly non-versioned historical fixture', () => {
     const data = buildFichaModeloPdfData(
       { id: 1, codigo: 'LEGACY-SESSION', nome: 'Sessão histórica' },
