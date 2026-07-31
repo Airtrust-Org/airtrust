@@ -18,7 +18,7 @@ describe('LMS asset security contract', () => {
     expect(source).toContain("token_type: 'lms_asset'");
     expect(source).toContain("asset_scope: 'course_assets'");
     expect(source).toContain('HttpOnly;');
-    expect(source).toContain('appendAssetTokenCookie(headers, assetToken)');
+    expect(source).toContain('appendAssetTokenCookie(headers, token, c.req.raw)');
     expect(source).not.toContain('appendAssetTokenCookie(headers, requestToken)');
   });
 
