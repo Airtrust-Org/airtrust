@@ -23,7 +23,7 @@ vi.mock('../../middleware/tenant', () => ({
 
 vi.mock('../../utils/auditoria', () => ({
   registrarAuditoria: vi.fn().mockResolvedValue(undefined),
-  extrairUsuarioAuditoria: () => ({ usuario_id: 99, usuario_nome: 'teste' }),
+  extrairUsuarioAuditoria: () => ({ usuario_id: (globalThis as any).__mockUserId ?? 99, usuario_nome: 'teste' }),
 }));
 
 import router from '../../routes/admin-operational-domain-rbac';
@@ -95,6 +95,7 @@ function buildApp() {
 describe('admin operational-domain-rbac readiness + activation', () => {
   beforeEach(() => {
     currentEmpresaId = 2;
+    (globalThis as any).__mockUserId = 99;
   });
 
   it('tenant pronto reporta ready=true e zero bloqueios', async () => {
@@ -183,6 +184,7 @@ describe('admin operational-domain-rbac readiness + activation', () => {
 describe('admin operational-domain-rbac classification (Item 2 - Atomic Fail-Closed)', () => {
   beforeEach(() => {
     currentEmpresaId = 3;
+    (globalThis as any).__mockUserId = 99;
   });
 
   it('1, 15. classifica qualificacao_tipo de null para OPERACOES atômico', async () => {
@@ -318,32 +320,75 @@ describe('admin operational-domain-rbac classification (Item 2 - Atomic Fail-Clo
     expect(db.fixtures.qualificacoesTipos!.find(t => t.id === 40)?.dominio_codigo).toBeNull();
   });
 
-  it('13. falha na transação não deixa o UPDATE persistido', async () => {
+  it('13. falha na transação atômica reverte o UPDATE e não deixa sujeira (rollback real D1)', async () => {
     const db = buildDb();
-    const originalBatch = db.batch;
-    db.batch = vi.fn().mockRejectedValue(new Error('Simulated D1 batch failure'));
+    
+    // Forçamos o usuario_id para 999 para acionar a falha controlada no fixture-d1
+    (globalThis as any).__mockUserId = 999;
     
     const app = buildApp();
     const res = await app.request('/api/admin/operational-domain-rbac/classify', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'OPERACOES' })
     }, { DB: db } as unknown as Env);
+    
     expect(res.status).toBe(500);
-    db.batch = originalBatch;
+    // Verifica rollback completo na fixture de memória
+    expect(db.fixtures.qualificacoesTipos!.find(t => t.id === 40)?.dominio_codigo).toBeNull();
+    // Nenhuma auditoria
+    expect(db.fixtures.auditoria!.length).toBe(0);
   });
 
-  it('14. se UPDATE meta.changes !== 1, lança 500 sem persistir falsa auditoria', async () => {
+  it('14. UPDATE otimista com zero linhas não gera auditoria falsa', async () => {
     const db = buildDb();
-    const originalBatch = db.batch;
-    db.batch = vi.fn().mockResolvedValue([{ meta: { changes: 0 } }, { meta: { changes: 1 } }]);
+    
+    // Simula que o recurso não existe ou o domínio esperado já mudou concorrentemente
+    // A rota vai ler o banco e encontrar dominio_codigo: null
+    // Mas vamos alterar na fixture logo depois, ANTES da rota chamar batch!
+    const originalPrepare = db.prepare;
+    db.prepare = (sql: string) => {
+      // Quando a rota preparar o batch, o tipo já mudou no BD real:
+      if (sql.includes('UPDATE')) {
+        db.fixtures.qualificacoesTipos!.find(t => t.id === 40)!.dominio_codigo = 'JA_MUDOU';
+      }
+      return originalPrepare(sql);
+    };
     
     const app = buildApp();
     const res = await app.request('/api/admin/operational-domain-rbac/classify', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'OPERACOES' })
     }, { DB: db } as unknown as Env);
-    expect(res.status).toBe(500);
-    db.batch = originalBatch;
+    
+    // A API deve notar que as meta.changes do UPDATE foram zero (devido ao AND dominio_codigo IS ?)
+    expect(res.status).toBe(409);
+    
+    // O valor fica o alterado pela concorrência
+    expect(db.fixtures.qualificacoesTipos!.find(t => t.id === 40)?.dominio_codigo).toBe('JA_MUDOU');
+    
+    // Fundamental: nenhuma auditoria foi gerada, porque changes() no BD era 0.
+    expect(db.fixtures.auditoria!.length).toBe(0);
+  });
+
+  it('18. concorrência que deleta o recurso antes do UPDATE', async () => {
+    const db = buildDb();
+    
+    const originalPrepare = db.prepare;
+    db.prepare = (sql: string) => {
+      if (sql.includes('UPDATE')) {
+        db.fixtures.qualificacoesTipos!.find(t => t.id === 40)!.deleted_at = '2023-01-01T00:00:00Z';
+      }
+      return originalPrepare(sql);
+    };
+    
+    const app = buildApp();
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'OPERACOES' })
+    }, { DB: db } as unknown as Env);
+    
+    expect(res.status).toBe(409);
+    expect(db.fixtures.auditoria!.length).toBe(0);
   });
 });
 

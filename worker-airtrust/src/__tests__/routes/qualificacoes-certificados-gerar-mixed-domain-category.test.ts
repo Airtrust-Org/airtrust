@@ -18,6 +18,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
+import adminRouter from '../../routes/admin-operational-domain-rbac';
 import type { Env } from '../../types';
 import { createFixtureDb, type Fixtures } from '../helpers/fixture-d1';
 import { errorHandler } from '../../middleware/error-handler';
@@ -262,7 +263,16 @@ function makeRouteDb(fixtures: Fixtures) {
     return fixtureDb.prepare(sql);
   };
 
-  return { prepare } as unknown as D1Database;
+  return {
+    prepare,
+    batch: async (statements: any[]) => {
+      const results = [];
+      for (const stmt of statements) {
+        results.push(await stmt.run());
+      }
+      return results;
+    }
+  } as unknown as D1Database;
 }
 
 describe('POST /historico/:id/certificados/gerar — categoria mista (tipo "EAD" real) com override por tipo', () => {
@@ -446,4 +456,72 @@ describe('POST /historico/:id/certificados/gerar — categoria mista (tipo "EAD"
     expect(res.status).not.toBe(201);
     expect(generateCertMock).not.toHaveBeenCalled();
   });
+
+  it('INTEGRADO: rollback do admin reverte o tipo para fail-closed e corta acesso instantaneamente', async () => {
+    // 1 e 2. Tipo já está em categoria mista com override OPERACOES (id=9001) no fixture
+    const f = buildFixtures();
+    const db = makeRouteDb(f);
+    const app = makeApp(db);
+
+    // 3. gestor corretamente escopado gera certificado: HTTP 201
+    let res = await app.request('/historico/80001/certificados/gerar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-empresa-id': '50',
+        'x-test-user-id': '6001', // gestor OPERACOES
+        'x-test-role': 'gestor',
+      },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(201);
+    expect(generateCertMock).toHaveBeenCalledOnce();
+    generateCertMock.mockClear();
+
+    // 4. admin chama o endpoint real de rollback
+    const classifyRes = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-empresa-id': '50',
+        'x-test-user-id': '6003', // admin
+        'x-test-role': 'admin',
+      },
+      body: JSON.stringify({
+        resource_type: 'qualificacao_tipo',
+        resource_id: 9001,
+        dominio_codigo: null,
+      }),
+    });
+
+    // 5. confirmar que o rollback retornou 200
+    // 5. confirmar que o rollback retornou 200
+    expect(classifyRes.status).toBe(200);
+    
+    // (Opcional) Podemos provar que persistiu null via fixture?
+    // O mock UPDATE no makeRouteDb seta a propriedade do fixture no escopo:
+    expect(f.qualificacoesTipos![0].dominio_codigo).toBeNull();
+
+    // 6. repetir a mesma geração de certificado
+    res = await app.request('/historico/80001/certificados/gerar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-empresa-id': '50',
+        'x-test-user-id': '6001',
+        'x-test-role': 'gestor',
+      },
+      body: JSON.stringify({}),
+    });
+
+    // 7. confirmar: HTTP 403, code = CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { success: boolean; code?: string };
+    expect(json.success).toBe(false);
+    expect(json.code).toBe('CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED');
+
+    // 8. confirmar que generateCertificateForHistorico não foi chamado depois do rollback
+    expect(generateCertMock).not.toHaveBeenCalled();
+  });
 });
+

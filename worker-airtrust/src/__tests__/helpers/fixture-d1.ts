@@ -150,6 +150,8 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     ...fixtures,
   };
 
+  let lastChanges = 0;
+
   function execute(sql: string, args: unknown[]): unknown {
     // employee-sector-access.ts: tableHasColumn('setores_gestores', 'usuario_id'/'gestor_id')
     if (sql.includes('pragma_table_info(')) {
@@ -485,26 +487,26 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     }
     // admin-operational-domain-rbac.ts: POST /classify — the actual write
     if (sql.includes('UPDATE setores SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId] = args as [string, number, number];
-      const row = f.setores.find((s) => s.id === id && s.empresa_id === empresaId);
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
+      const row = f.setores.find((s) => s.id === id && s.empresa_id === empresaId && !s.deleted_at && (oldDomain === undefined || s.dominio_codigo === oldDomain || (s.dominio_codigo == null && oldDomain == null)));
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
     if (sql.includes('UPDATE qualificacoes_categorias SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId] = args as [string, number, number];
-      const row = f.qualificacoesCategorias!.find((c) => c.id === id && c.empresa_id === empresaId);
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
+      const row = f.qualificacoesCategorias!.find((c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at && (oldDomain === undefined || c.dominio_codigo === oldDomain || (c.dominio_codigo == null && oldDomain == null)));
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
     if (sql.includes('UPDATE lms_cursos SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId] = args as [string, number, number];
-      const row = f.lmsCursos!.find((c) => c.id === id && c.empresa_id === empresaId);
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
+      const row = f.lmsCursos!.find((c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at && (oldDomain === undefined || c.dominio_codigo === oldDomain || (c.dominio_codigo == null && oldDomain == null)));
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
     if (sql.includes('UPDATE qualificacoes_tipos SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId] = args as [string, number, number];
-      const row = f.qualificacoesTipos!.find((t) => t.id === id && t.empresa_id === empresaId);
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
+      const row = f.qualificacoesTipos!.find((t) => t.id === id && t.empresa_id === empresaId && !t.deleted_at && (oldDomain === undefined || t.dominio_codigo === oldDomain || (t.dominio_codigo == null && oldDomain == null)));
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
@@ -596,8 +598,11 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     }
 
     if (sql.includes('INSERT INTO auditoria')) {
-      if (args[4] === 'fail_audit_injection') {
+      if (args[0] === 999) {
         throw new Error('Simulated audit insert failure');
+      }
+      if (sql.includes('changes()') && sql.includes('1') && lastChanges !== 1) {
+        return { run: { changes: 0 } };
       }
       f.auditoria!.push({
         usuario_id: args[0] as string | null,
@@ -629,8 +634,10 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       },
       run: async () => {
         const result = execute(sql, boundArgs) as { run?: { changes: number } };
+        const changes = result.run?.changes ?? 0;
+        lastChanges = changes;
         return {
-          meta: { changes: result.run?.changes ?? 0, last_row_id: 0 },
+          meta: { changes, last_row_id: 0 },
         };
       },
     };
@@ -640,16 +647,19 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     fixtures: f,
     prepare: (sql: string) => makeStatement(sql, []),
     batch: async (statements: D1LikeStatement[]) => {
-      // Very naive transactional behavior: if any statement throws, the updates applied so far are NOT rolled back
-      // in this simple memory mock, but in the tests we will construct the failure case such that it fails early
-      // or we can test the behavior appropriately.
-      // D1 transactions are atomic, but we aren't doing deep cloning here.
-      // For the tests (which use isolated instances or rollback manually), it's sufficient.
+      // D1 transactions are atomic. We capture a snapshot of the memory state
+      // and restore it completely if ANY statement throws, simulating real atomic rollback.
+      const snapshot = JSON.stringify(f);
       const results = [];
-      for (const stmt of statements) {
-        results.push(await stmt.run());
+      try {
+        for (const stmt of statements) {
+          results.push(await stmt.run());
+        }
+        return results;
+      } catch (error) {
+        Object.assign(f, JSON.parse(snapshot));
+        throw error;
       }
-      return results;
     },
   };
 }

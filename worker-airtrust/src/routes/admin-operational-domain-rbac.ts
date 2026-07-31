@@ -341,15 +341,16 @@ router.post('/classify', async (c) => {
   const ua = extrairUsuarioAuditoria(c);
 
   const updateStmt = db
-    .prepare(`UPDATE ${table} SET dominio_codigo = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`)
-    .bind(dominioCodigo, resourceId, empresaId);
+    .prepare(`UPDATE ${table} SET dominio_codigo = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND dominio_codigo IS ?`)
+    .bind(dominioCodigo, resourceId, empresaId, existing.dominio_codigo);
 
   const auditStmt = db
     .prepare(
       `INSERT INTO auditoria (
         usuario_id, usuario_nome, acao, tabela_afetada, registro_id,
         dados_antes, dados_depois, ip_address, user_agent, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      WHERE (SELECT changes()) = 1`
     )
     .bind(
       ua.usuario_id ?? null,
@@ -366,9 +367,10 @@ router.post('/classify', async (c) => {
   try {
     const results = await db.batch([updateStmt, auditStmt]);
     if (!results[0]?.meta || results[0].meta.changes !== 1) {
-      throw new Error('Falha de concorrência ou registro removido durante a transação');
+      throw new ApiError('Conflito: recurso modificado ou indisponível', 409, 'CLASSIFY_CONFLICT');
     }
   } catch (error) {
+    if (error instanceof ApiError) throw error;
     console.error('[Classify] Falha na classificação atômica:', error);
     throw new ApiError(
       'Falha interna ao aplicar classificação (transação abortada)',
