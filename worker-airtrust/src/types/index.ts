@@ -62,6 +62,9 @@ export interface Env {
   // acima — nunca toca a resolução original, só cria overlays append-only e
   // versões COMPENSATE. Disabled by default.
   ENABLE_SIMULADORES_MATRIZ_REMEDIATION_EXECUTOR?: string;
+  // One-off EAD incident executor. It remains closed unless deliberately
+  // enabled for the reviewed execution window.
+  ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR?: string;
   USE_INTEGRATED_VIEW?: string; // 'true' habilita uso da view integrada
   USE_QUALIFICACOES_VIEW?: string; // deprecated (view removida); ignorado
   // Migração arquitetural SIGVOOS→Controle de Voos→FRMS (shadow-mode, ver docs/frms-controle-voos-migracao.md)

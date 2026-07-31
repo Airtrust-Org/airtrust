@@ -424,13 +424,7 @@ async function resolveEadQualificacaoBinding(
     throw new ApiError('Tipo de qualificação não encontrado para esta empresa.', 404);
   }
 
-  // Backward compat: accept formato_codigo='EAD' until all tenants are migrated by 0450.
-  const isEadBackwardCompat =
-    tipo.formato_codigo != null
-      ? String(tipo.formato_codigo).trim().toUpperCase() === 'EAD'
-      : false;
-
-  if (!isEadCategoria(tipo.categoria) && !isEadBackwardCompat) {
+  if (!isEadCategoria(tipo.categoria)) {
     throw new ApiError(
       `O curso LMS só pode ser vinculado a tipos de qualificação EAD. "${tipo.nome}" está na categoria ${tipo.categoria ?? 'sem categoria'} / formato ${tipo.formato_codigo ?? 'sem formato'}.`,
       400,
@@ -2099,7 +2093,8 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   ];
   if (courseSetorSchema.hasLmsCursosFormato) {
     insertCols.push('formato_id');
-    insertVals.push(d.formato_id ?? null);
+    // Old clients can submit it, but format is inert after category-only.
+    insertVals.push(null);
   }
   if (courseSetorSchema.hasLmsCursosDominioCodigo) {
     insertCols.push('dominio_codigo');
@@ -2320,7 +2315,10 @@ app.put('/:id', requireRole('admin', 'manager'), requireOperacoesCurso('update')
     'ativo',
     'version_tag',
   ];
-  if (courseSetorSchema.hasLmsCursosFormato) updateKeys.push('formato_id');
+  if (courseSetorSchema.hasLmsCursosFormato && isEadCourse) {
+    map.formato_id = null;
+    updateKeys.push('formato_id');
+  }
   for (const key of updateKeys) {
     if (key in map && map[key] !== undefined) {
       sets.push(`${key} = ?`);

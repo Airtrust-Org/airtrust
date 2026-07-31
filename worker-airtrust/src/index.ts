@@ -133,6 +133,7 @@ import { adminPerfisRoutes } from './routes/admin-perfis';
 import adminSimuladoresMatrizExecutorRoutes from './routes/admin-simuladores-matriz-executor';
 import adminSimuladoresGuiasRelinkExecutorRoutes from './routes/admin-simuladores-guias-relink-executor';
 import adminSimuladoresMatrizRemediationExecutorRoutes from './routes/admin-simuladores-matriz-remediation-executor';
+import adminEadCategoryReconciliationRoutes from './routes/admin-ead-category-reconciliation';
 import lmsCursosRoutes from './routes/lms-cursos';
 import lmsMatriculasRoutes from './routes/lms-matriculas';
 import lmsAssetsRoutes from './routes/lms-assets';
@@ -425,6 +426,11 @@ app.use(
   rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'simuladores-matriz-remediation' }),
 );
 app.route('/api/admin/simuladores-matriz-remediation', adminSimuladoresMatrizRemediationExecutorRoutes);
+app.use(
+  '/api/admin/ead-category-reconciliation/*',
+  rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'ead-category-reconciliation' }),
+);
+app.route('/api/admin/ead-category-reconciliation', adminEadCategoryReconciliationRoutes);
 app.route('/api/preferencias', preferenciasRoutes);
 
 /**
@@ -812,7 +818,7 @@ app.get('/api/sessoes', auth(), async (c) => {
     // Tentar query simples sem JOIN
     const result = await db
       .prepare(
-	        `SELECT id, funcionario_id, modelo_aeronave_id, data_sessao, tipo, 
+	        `SELECT id, funcionario_id, modelo_aeronave_id, data_sessao, tipo,
 	                status, observacoes, created_at, updated_at
 	         FROM sessoes
 	         WHERE deleted_at IS NULL

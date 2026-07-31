@@ -10,8 +10,8 @@ function makeTipoRow() {
     codigo: 'EMERG-001',
     nome: 'Emergências Gerais',
     descricao: 'Curso EAD',
-    categoria: 'Treinamento Teórico',
-    formato_id: 2,
+    categoria: 'EAD',
+    formato_id: null,
     formato_codigo: 'EAD',
     conteudo_programatico: 'Conteúdo',
     observacoes: null,
@@ -29,8 +29,8 @@ function makeCourseRow(overrides: Record<string, unknown> = {}) {
     qualificacao_tipo_id: 10,
     titulo: 'Emergências Gerais',
     descricao: 'Curso EAD',
-    categoria: 'Treinamento Teórico',
-    formato_id: 2,
+    categoria: 'EAD',
+    formato_id: null,
     formato_codigo: 'EAD',
     carga_horaria_minutos: 480,
     conteudo_programatico: 'Conteúdo',
@@ -72,6 +72,10 @@ function createMockDb(courseCandidates: Array<Record<string, unknown>>) {
             return { id: 2 };
           }
 
+          if (query.includes('FROM qualificacoes_categorias')) {
+            return null;
+          }
+
           return null;
         },
         all: async () => {
@@ -79,6 +83,10 @@ function createMockDb(courseCandidates: Array<Record<string, unknown>>) {
 
           if (query.includes('FROM lms_cursos') && query.includes('progressos_scorm_total')) {
             return { results: courseCandidates };
+          }
+
+          if (query.includes('FROM qualificacoes_categorias')) {
+            return { results: [{ id: 13 }] };
           }
 
           return { results: [] };
@@ -110,9 +118,13 @@ describe('lms-ead-ssot', () => {
 
     expect(cursoId).toBe(44);
     expect(insertCalled.value).toBe(false);
-    expect(calls.some((call) => call.query.includes('UPDATE lms_cursos') && call.method === 'run')).toBe(
-      true,
+    expect(
+      calls.some((call) => call.query.includes('UPDATE lms_cursos') && call.method === 'run'),
+    ).toBe(true);
+    const update = calls.find(
+      (call) => call.query.includes('UPDATE lms_cursos') && call.method === 'run',
     );
+    expect(update?.query).toContain('formato_id = NULL');
   });
 
   it('prefere o curso original com assets e matrículas ao shell vazio mais novo', async () => {

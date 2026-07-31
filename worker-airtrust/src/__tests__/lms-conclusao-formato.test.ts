@@ -38,26 +38,23 @@ describe('LMS — isEadCategoria / isEadFormato', () => {
     });
   });
 
-  describe('isEadFormato (pós-0412)', () => {
-    it('usa formato_codigo quando disponível', () => {
-      expect(isEadFormato({ formato_codigo: 'EAD' })).toBe(true);
+  describe('isEadFormato (compatibilidade category-only)', () => {
+    it('ignora formato_codigo legado', () => {
+      expect(isEadFormato({ formato_codigo: 'EAD' })).toBe(false);
       expect(isEadFormato({ formato_codigo: 'PRESENCIAL' })).toBe(false);
       expect(isEadFormato({ formato_codigo: 'SIMULADOR' })).toBe(false);
       expect(isEadFormato({ formato_codigo: 'NAO_CLASSIFICADO' })).toBe(false);
     });
 
-    it('fallback para isEadCategoria quando formato_codigo ausente', () => {
+    it('usa somente categoria', () => {
       expect(isEadFormato({ categoria: 'EAD' })).toBe(true);
       expect(isEadFormato({ categoria: 'TREINAMENTO EAD' })).toBe(true);
       expect(isEadFormato({ categoria: 'PRESENCIAL' })).toBe(false);
     });
 
-    it('formato_codigo tem precedência sobre categoria', () => {
-      // Se formato_codigo=NÃO_EAD mas categoria=EAD, ganha o formato
-      expect(isEadFormato({ formato_codigo: 'PRESENCIAL', categoria: 'EAD' })).toBe(false);
-      expect(isEadFormato({ formato_codigo: 'EAD', categoria: 'TREINAMENTO TEORICO' })).toBe(
-        true,
-      );
+    it('formato_codigo não tem precedência sobre categoria', () => {
+      expect(isEadFormato({ formato_codigo: 'PRESENCIAL', categoria: 'EAD' })).toBe(true);
+      expect(isEadFormato({ formato_codigo: 'EAD', categoria: 'TREINAMENTO TEORICO' })).toBe(false);
     });
 
     it('trata null/undefined com segurança', () => {
@@ -100,8 +97,8 @@ describe('LMS — tipo_conteudo vs formato_id — separação conceitual', () =>
     //   - formato_id: FK → qualificacoes_formatos (EAD/PRESENCIAL/etc)
     //   - tipo_conteudo: string livre (scorm/h5p/pdf/pptx/video)
     const colunasLmsCursos = [
-      'tipo_conteudo',   // mídia técnica — SEMPRE preservada
-      'formato_id',       // formato da qualificação — adicionado por 0412
+      'tipo_conteudo', // mídia técnica — SEMPRE preservada
+      'formato_id', // formato da qualificação — adicionado por 0412
     ];
     // Ambas devem existir como colunas independentes
     expect(colunasLmsCursos).toContain('tipo_conteudo');
@@ -118,8 +115,8 @@ describe('LMS — conclusão → qualificacoes_historico', () => {
 
     const cursoLms = {
       id: 1,
-      tipo_conteudo: 'scorm',      // mídia do player
-      formato_id: 1,                // FK → qualificacoes_formatos (EAD)
+      tipo_conteudo: 'scorm', // mídia do player
+      formato_id: 1, // FK → qualificacoes_formatos (EAD)
       qualificacao_tipo_id: 42,
     };
 
@@ -127,7 +124,7 @@ describe('LMS — conclusão → qualificacoes_historico', () => {
       id: 42,
       nome: 'CRM Treinamento Teórico',
       categoria: 'EAD',
-      formato_id: 1,                // mesmo formato EAD
+      formato_id: 1, // mesmo formato EAD
       formato_codigo: 'EAD',
     };
 
@@ -136,7 +133,7 @@ describe('LMS — conclusão → qualificacoes_historico', () => {
 
     // tipo_conteudo do curso NÃO interfere na determinação do formato
     expect(cursoLms.tipo_conteudo).toBe('scorm');
-    expect(isEadFormato({ formato_codigo: 'EAD' })).toBe(true);
+    expect(isEadFormato({ categoria: 'EAD', formato_codigo: 'EAD' })).toBe(true);
 
     // O histórico gerado deve referenciar o formato pela FK, não pelo tipo_conteudo
     const historicoGerado = {

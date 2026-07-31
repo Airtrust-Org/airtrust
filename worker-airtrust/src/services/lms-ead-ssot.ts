@@ -88,17 +88,28 @@ export function isEadCategoria(categoria: string | null | undefined) {
   return normalized === 'EAD' || normalized === 'TREINAMENTO EAD';
 }
 
-/** @deprecated Kept only to avoid breaking cached worker bundles during rollout. */
+/** Compatibility name only; legacy format is never a functional classifier. */
 export function isEadFormato(tipo: {
   formato_codigo?: string | null;
   categoria?: string | null;
 }): boolean {
-  // Legacy precedence: formato_codigo wins if explicitly provided
-  const fc = tipo.formato_codigo;
-  if (fc != null) {
-    return String(fc).trim().toUpperCase() === 'EAD';
-  }
   return isEadCategoria(tipo.categoria);
+}
+
+async function resolveCanonicalEadCategoriaId(db: D1Database, empresaId: number) {
+  const result = await db
+    .prepare(
+      `SELECT id FROM qualificacoes_categorias
+        WHERE empresa_id = ? AND deleted_at IS NULL AND ativo = 1
+          AND UPPER(TRIM(nome)) = 'EAD'
+        ORDER BY id ASC LIMIT 2`,
+    )
+    .bind(empresaId)
+    .all<{ id: number }>();
+  const rows = result.results ?? [];
+  if (rows.length !== 1)
+    throw new Error(`Categoria EAD canônica inválida para empresa_id=${empresaId}`);
+  return Number(rows[0].id);
 }
 
 function hoursToMinutes(value: number | null | undefined) {
@@ -130,7 +141,10 @@ function resolveCourseMinutesFromTipo(tipo: QualificacaoTipoEadRow) {
 
 async function hasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
   try {
-    const { results } = await db.prepare(`PRAGMA table_info(${table})`).bind().all<{ name: string }>();
+    const { results } = await db
+      .prepare(`PRAGMA table_info(${table})`)
+      .bind()
+      .all<{ name: string }>();
     return (results || []).some((row) => row?.name === column);
   } catch {
     return false;
@@ -148,8 +162,7 @@ async function fetchQualificacaoTipo(
   // in older/frozen fixture schemas, so both joins are defensive.
   const hasCategoriaId = await hasColumn(db, 'qualificacoes_tipos', 'categoria_id');
   const hasCategoriaDominio = await hasColumn(db, 'qualificacoes_categorias', 'dominio_codigo');
-  const dominioSelect =
-    hasCategoriaId && hasCategoriaDominio ? 'qc.dominio_codigo' : 'NULL';
+  const dominioSelect = hasCategoriaId && hasCategoriaDominio ? 'qc.dominio_codigo' : 'NULL';
   const dominioJoin =
     hasCategoriaId && hasCategoriaDominio
       ? 'LEFT JOIN qualificacoes_categorias qc ON qc.id = qualificacoes_tipos.categoria_id AND qc.deleted_at IS NULL AND qc.ativo = 1'
@@ -347,10 +360,7 @@ async function findExistingEadQualificacaoTipoByName(
         WHERE qualificacoes_tipos.empresa_id = ?
           AND qualificacoes_tipos.deleted_at IS NULL
           AND UPPER(TRIM(qualificacoes_tipos.nome)) = UPPER(TRIM(?))
-          AND (
-            UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
-            OR UPPER(TRIM(COALESCE(categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
-          )`,
+          AND UPPER(TRIM(COALESCE(categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')`,
     )
     .bind(empresaId, nome)
     .all<{
@@ -439,22 +449,6 @@ async function resolveUniqueQualificacaoTipoCode(
   return `EAD_${empresaId}_${Date.now()}`;
 }
 
-async function resolveEadFormatoId(db: D1Database, empresaId: number) {
-  const row = await db
-    .prepare(
-      `SELECT id
-         FROM qualificacoes_formatos
-        WHERE empresa_id = ?
-          AND deleted_at IS NULL
-          AND UPPER(TRIM(codigo)) = 'EAD'
-        LIMIT 1`,
-    )
-    .bind(empresaId)
-    .first<{ id: number }>();
-
-  return row?.id ?? null;
-}
-
 export async function syncLmsCourseFromQualificacaoTipo(
   db: D1Database,
   params: { empresaId: number; qualificacaoTipoId: string | number },
@@ -477,7 +471,6 @@ export async function syncLmsCourseFromQualificacaoTipo(
   const titulo = tipo.nome.trim();
   const descricao = normalizeNullableText(tipo.descricao);
   const categoria = CANONICAL_TRAINING_CATEGORY;
-  const formatoId = normalizeNullableNumber(tipo.formato_id) ?? (await resolveEadFormatoId(db, params.empresaId));
   const conteudoProgramatico = normalizeNullableText(tipo.conteudo_programatico);
   const observacoes = normalizeNullableText(tipo.observacoes);
   const cargaInicial = normalizeNullableNumber(tipo.carga_horaria_inicial);
@@ -501,7 +494,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
             SET titulo = ?,
                 descricao = ?,
                 categoria = ?,
-                formato_id = ?,
+                formato_id = NULL,
                 carga_horaria_minutos = ?,
                 conteudo_programatico = ?,
                 observacoes = ?,
@@ -519,7 +512,6 @@ export async function syncLmsCourseFromQualificacaoTipo(
         titulo,
         descricao,
         categoria,
-        formatoId,
         cargaMinutos,
         conteudoProgramatico,
         observacoes,
@@ -568,7 +560,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
       titulo,
       descricao,
       categoria,
-      formatoId,
+      null,
       cargaMinutos,
       tipo.id,
       conteudoProgramatico,
@@ -611,8 +603,8 @@ export async function ensureQualificacaoTipoForCurso(
     const cargaPadrao =
       cargaRecorrente ?? cargaInicial ?? minutesToHours(curso.carga_horaria_minutos);
     const codigo = await resolveUniqueQualificacaoTipoCode(db, params.empresaId, curso.titulo);
-    const formatoId =
-      normalizeNullableNumber(curso.formato_id) ?? (await resolveEadFormatoId(db, params.empresaId));
+    const categoriaId = await resolveCanonicalEadCategoriaId(db, params.empresaId);
+    const hasCategoriaId = await hasColumn(db, 'qualificacoes_tipos', 'categoria_id');
 
     const insert = await db
       .prepare(
@@ -623,6 +615,7 @@ export async function ensureQualificacaoTipoForCurso(
            nome,
            descricao,
            categoria,
+           ${hasCategoriaId ? 'categoria_id,' : ''}
            formato_id,
            carga_horaria,
            carga_horaria_inicial,
@@ -646,7 +639,8 @@ export async function ensureQualificacaoTipoForCurso(
         curso.titulo.trim(),
         normalizeNullableText(curso.descricao),
         CANONICAL_TRAINING_CATEGORY,
-        formatoId,
+        ...(hasCategoriaId ? [categoriaId] : []),
+        null,
         cargaPadrao,
         cargaInicial,
         cargaRecorrente,
@@ -803,8 +797,8 @@ export async function syncQualificacaoTipoFromCurso(
     cargaInicial;
   const cargaPadrao =
     cargaRecorrente ?? cargaInicial ?? minutesToHours(curso.carga_horaria_minutos);
-  const formatoId =
-    normalizeNullableNumber(curso.formato_id) ?? (await resolveEadFormatoId(db, params.empresaId));
+  const categoriaId = await resolveCanonicalEadCategoriaId(db, params.empresaId);
+  const hasCategoriaId = await hasColumn(db, 'qualificacoes_tipos', 'categoria_id');
 
   await db
     .prepare(
@@ -812,7 +806,8 @@ export async function syncQualificacaoTipoFromCurso(
           SET nome = ?,
               descricao = ?,
               categoria = ?,
-              formato_id = ?,
+              ${hasCategoriaId ? 'categoria_id = ?,' : ''}
+              formato_id = NULL,
               conteudo_programatico = ?,
               observacoes = ?,
               carga_horaria = ?,
@@ -827,7 +822,7 @@ export async function syncQualificacaoTipoFromCurso(
       curso.titulo.trim(),
       normalizeNullableText(curso.descricao),
       CANONICAL_TRAINING_CATEGORY,
-      formatoId,
+      ...(hasCategoriaId ? [categoriaId] : []),
       normalizeNullableText(curso.conteudo_programatico),
       normalizeNullableText(curso.observacoes),
       cargaPadrao,

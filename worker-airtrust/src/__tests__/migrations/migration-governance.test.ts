@@ -243,7 +243,7 @@ describe('migration governance', () => {
     // Ratchet raised 2026-07-28: 0452 operational_domain_rbac (dominios
     // catalog + additive domain-classification columns + per-tenant
     // rollout flag, see docs/rbac/gestor-operational-autonomy.md).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(452);
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(453);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
