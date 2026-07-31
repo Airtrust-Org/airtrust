@@ -22,6 +22,15 @@ test('staging stamps only staging and preserves production byte-for-byte', () =>
   assert.equal(section(result, 'production'), section(source, 'production'));
 });
 
+test('keeps the reviewed EAD reconciliation executor enabled in both official remote environments', () => {
+  for (const environment of ['staging', 'production']) {
+    assert.match(
+      section(source, environment),
+      /ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"/,
+    );
+  }
+});
+
 test('applies extraVars provenance stamps to the target environment only', () => {
   const result = patchWranglerEnvVars(source, {
     environment: 'staging',

@@ -78,6 +78,9 @@ CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
 # staging, escondendo o toggle "Sessão compartilhada" já implementado e
 # testado em ModalNovaSessao/SharedSessionForm).
 SIMULATOR_SHARED_SESSIONS_ENABLED = "true"
+# One-off EAD incident executor. The endpoint remains fail-closed after its
+# single reviewed run; this non-secret flag only permits the official executor.
+ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env staging
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env staging
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env staging
@@ -117,6 +120,9 @@ APP_BUILD_TIME = "managed-by-script"
 SIMULATOR_SHARED_SESSIONS_ENABLED = "true"
 # Feature flag: SIGVOOS shadow compare read-only (2026-06-30 controlled activation)
 CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
+# One-off EAD incident executor. The endpoint remains fail-closed after its
+# single reviewed run; this non-secret flag only permits the official executor.
+ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env production
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env production
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env production
