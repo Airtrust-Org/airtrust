@@ -27,6 +27,72 @@ jobs:
           git apply --check "$RUNNER_TEMP/agent-finalize.patch"
           git apply "$RUNNER_TEMP/agent-finalize.patch"
 
+          # Apply the final review corrections discovered after the transport
+          # payload was generated: one TypeScript quoting fix plus stricter
+          # cleanup/sanitization in the read-only D1 restore drill.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          security_test = Path('worker-airtrust/src/__tests__/routes/lms-assets-security.test.ts')
+          text = security_test.read_text()
+          text = text.replace(
+              "expect(source).toContain('token_type: \\\\'lms_asset\\\\'');",
+              "expect(source).toContain(\"token_type: 'lms_asset'\");",
+          )
+          text = text.replace(
+              "expect(source).toContain('asset_scope: \\\\'course_assets\\\\'');",
+              "expect(source).toContain(\"asset_scope: 'course_assets'\");",
+          )
+          security_test.write_text(text)
+
+          drill = Path('.github/workflows/d1-production-backup-restore-drill.yml')
+          text = drill.read_text()
+          old = '''          mkdir -p "$out_dir"
+          node scripts/production/backup-production-d1-readonly.mjs \\
+            --config worker-airtrust/wrangler.toml \\
+            --env production \\
+            --out-dir "$out_dir" > "$report"
+          jq -e '.ok == true' "$report" >/dev/null
+          jq -e '.restored_sqlite.integrity_check == "ok"' "$report" >/dev/null
+          jq -e '.policy.outside_git == true and .policy.uploaded_to_git == false and .policy.uploaded_to_r2 == false' "$report" >/dev/null
+          rm -rf "$out_dir"
+'''
+          new = '''          mkdir -p "$out_dir"
+          trap 'rm -rf "$out_dir"' EXIT
+          raw_report="$RUNNER_TEMP/d1-production-backup-restore-report.raw.json"
+          node scripts/production/backup-production-d1-readonly.mjs \\
+            --config worker-airtrust/wrangler.toml \\
+            --env production \\
+            --out-dir "$out_dir" > "$raw_report"
+          jq -e '.ok == true' "$raw_report" >/dev/null
+          jq -e '.restored_sqlite.integrity_check == "ok"' "$raw_report" >/dev/null
+          jq -e '.policy.outside_git == true and .policy.uploaded_to_git == false and .policy.uploaded_to_r2 == false' "$raw_report" >/dev/null
+          jq '{
+            ok, generated_at, git_head,
+            backup: {bytes: .backup.bytes, sha256: .backup.sha256},
+            restored_sqlite, policy
+          }' "$raw_report" > "$report"
+          rm -f "$raw_report"
+'''
+          if old not in text:
+              raise SystemExit('expected D1 drill block not found')
+          drill.write_text(text.replace(old, new))
+
+          drill_test = Path('worker-airtrust/src/__tests__/ops/d1-production-backup-restore-workflow.test.ts')
+          text = drill_test.read_text()
+          text = text.replace(
+              "expect(workflow).toContain('rm -rf \\\"$out_dir\\\"');",
+              "expect(workflow).toContain(\"trap 'rm -rf \\\"$out_dir\\\"' EXIT\");",
+          )
+          text = text.replace(
+              "    expect(workflow).not.toContain('airtrust-db-production-backup-*.sql');\n",
+              "    expect(workflow).not.toContain('airtrust-db-production-backup-*.sql');\n"
+              "    expect(workflow).toContain('backup: {bytes: .backup.bytes, sha256: .backup.sha256}');\n"
+              "    expect(workflow).not.toContain('target: .target');\n",
+          )
+          drill_test.write_text(text)
+          PY
+
           rm -rf \
             .github/agent-finalize \
             .github/agent-finalize.patch \
