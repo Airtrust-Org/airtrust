@@ -43,29 +43,8 @@ jobs:
 
           player = Path('src/react-app/pages/lms/LmsPlayer.tsx')
           text = player.read_text()
-          old = """  useEffect(() => {
-            if (!playerToken || !matricula || matricula.tipo_conteudo === 'h5p') {
-              setAssetSessionReady(false);
-              return;
-            }
-
-            let cancelled = false;
-          """
-          new = """  useEffect(() => {
-            if (!matricula || matricula.tipo_conteudo === 'h5p') {
-              setAssetSessionReady(false);
-              return;
-            }
-
-            // A transient access-token refresh must not tear down an already
-            // established asset session. The short-lived HttpOnly asset cookie
-            // remains valid, while a real logout is handled by the auth guard below.
-            if (!playerToken) {
-              return;
-            }
-
-            let cancelled = false;
-          """
+          old = "    if (!playerToken || !matricula || matricula.tipo_conteudo === 'h5p') {\n      setAssetSessionReady(false);\n      return;\n    }\n\n    let cancelled = false;"
+          new = "    if (!matricula || matricula.tipo_conteudo === 'h5p') {\n      setAssetSessionReady(false);\n      return;\n    }\n\n    // A transient access-token refresh must not tear down an already\n    // established asset session. The short-lived HttpOnly asset cookie\n    // remains valid, while a real logout is handled by the auth guard below.\n    if (!playerToken) {\n      return;\n    }\n\n    let cancelled = false;"
           if old not in text:
               raise SystemExit('player asset-session anchor not found')
           player.write_text(text.replace(old, new, 1))
