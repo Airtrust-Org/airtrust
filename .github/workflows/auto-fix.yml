@@ -2,35 +2,43 @@ name: Auto-fix ESLint & Prettier on PR
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-    types:
-      - synchronize
-
-permissions:
-  contents: write
 
 jobs:
   autofix:
-    if: github.head_ref == 'agent/audit-critical-high-hardening-20260731'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout audit branch
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: agent/audit-critical-high-hardening-20260731
           fetch-depth: 0
 
-      - name: Merge canonical main
-        shell: bash
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint fix
         run: |
-          git fetch origin main
-          if git merge-base --is-ancestor origin/main HEAD; then
-            echo "Branch already contains canonical main"
-            exit 0
+          npx eslint "./src/**/*.{js,jsx,ts,tsx}" --fix || true
+
+      - name: Run Prettier write
+        run: |
+          npx prettier --write "src/**/*.{js,jsx,ts,tsx,css,md,json}" "worker-airtrust/src/**/*.{js,ts,json}" || true
+
+      - name: Commit and push fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- src worker-airtrust/src
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: apply eslint --fix and prettier formatting [skip ci]" || true
+            git push origin HEAD:${{ github.head_ref }}
           fi
-          git config user.name "airtrust-agent"
-          git config user.email "airtrust-agent@users.noreply.github.com"
-          git merge --no-ff --no-edit origin/main
-          git push origin HEAD:agent/audit-critical-high-hardening-20260731
