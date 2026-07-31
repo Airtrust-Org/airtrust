@@ -7,11 +7,13 @@ const workflow = readFileSync(
   'utf8',
 );
 
-describe('D1 production backup/restore drill workflow', () => {
-  it('is manual, production-gated and read-only', () => {
+describe('D1 production export/restore drill workflow', () => {
+  it('is manual, production-gated and restricted to a maintenance window', () => {
     expect(workflow).toContain('workflow_dispatch:');
     expect(workflow).toContain('environment: production');
-    expect(workflow).toContain('D1_PRODUCTION_BACKUP_RESTORE_DRILL');
+    expect(workflow).toContain('D1_PRODUCTION_EXPORT_MAINTENANCE_WINDOW');
+    expect(workflow).toContain('MAINTENANCE_WINDOW_CONFIRMED=true');
+    expect(workflow).toContain('A full D1 export can temporarily block database requests');
     expect(workflow).toContain('backup-production-d1-readonly.mjs');
     expect(workflow).not.toContain('wrangler d1 execute');
   });
