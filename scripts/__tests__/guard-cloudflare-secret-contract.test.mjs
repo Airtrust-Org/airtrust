@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
@@ -53,7 +54,11 @@ describe('cloudflare-secret-contract-lib: checkWorkflowContent', () => {
       'CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}',
     );
     const violations = checkWorkflowContent('fixture.yml', content);
-    assert.ok(violations.some((v) => v.includes('looks like a Worker job but references CLOUDFLARE_PAGES_API_TOKEN')));
+    assert.ok(
+      violations.some((v) =>
+        v.includes('looks like a Worker job but references CLOUDFLARE_PAGES_API_TOKEN'),
+      ),
+    );
   });
 
   it('flags a Pages job that reads the Worker token', () => {
@@ -70,7 +75,11 @@ jobs:
         run: echo ok
 `;
     const violations = checkWorkflowContent('fixture.yml', content);
-    assert.ok(violations.some((v) => v.includes('looks like a Pages job but references CLOUDFLARE_WORKER_API_TOKEN')));
+    assert.ok(
+      violations.some((v) =>
+        v.includes('looks like a Pages job but references CLOUDFLARE_WORKER_API_TOKEN'),
+      ),
+    );
   });
 
   it('flags a step that combines Worker and Pages tokens', () => {
@@ -88,7 +97,7 @@ jobs:
         run: echo ok
 `;
     const violations = checkWorkflowContent('fixture.yml', content);
-    assert.ok(violations.some((v) => v.includes('combining CLOUDFLARE_WORKER_API_TOKEN and CLOUDFLARE_PAGES_API_TOKEN')));
+    assert.ok(violations.some((v) => v.includes('combining multiple scoped tokens')));
   });
 
   it('flags instructions to create a new token as the fix', () => {
@@ -214,7 +223,9 @@ jobs:
         run: echo "$CLOUDFLARE_WORKER_API_TOKEN"
 `;
     const violations = checkWorkflowContent('fixture.yml', content);
-    assert.ok(violations.some((v) => v.includes('echoes/prints a Cloudflare token or smoke credential')));
+    assert.ok(
+      violations.some((v) => v.includes('echoes/prints a Cloudflare token or smoke credential')),
+    );
   });
 
   it('flags printenv', () => {
@@ -225,7 +236,11 @@ jobs:
     steps:
       - run: printenv
 `;
-    assert.ok(checkWorkflowContent('fixture.yml', content).some(v => v.includes('echoes/prints a Cloudflare token or smoke credential')));
+    assert.ok(
+      checkWorkflowContent('fixture.yml', content).some((v) =>
+        v.includes('echoes/prints a Cloudflare token or smoke credential'),
+      ),
+    );
   });
 
   it('flags bare shell env command', () => {
@@ -237,7 +252,11 @@ jobs:
       - run: |
           env
 `;
-    assert.ok(checkWorkflowContent('fixture.yml', content).some(v => v.includes('echoes/prints a Cloudflare token or smoke credential')));
+    assert.ok(
+      checkWorkflowContent('fixture.yml', content).some((v) =>
+        v.includes('echoes/prints a Cloudflare token or smoke credential'),
+      ),
+    );
   });
 
   it('flags set -x', () => {
@@ -248,7 +267,11 @@ jobs:
     steps:
       - run: set -x
 `;
-    assert.ok(checkWorkflowContent('fixture.yml', content).some(v => v.includes('echoes/prints a Cloudflare token or smoke credential')));
+    assert.ok(
+      checkWorkflowContent('fixture.yml', content).some((v) =>
+        v.includes('echoes/prints a Cloudflare token or smoke credential'),
+      ),
+    );
   });
 
   it('flags os.environ full dump in python', () => {
@@ -259,7 +282,11 @@ jobs:
     steps:
       - run: python3 -c "import os; print(os.environ)"
 `;
-    assert.ok(checkWorkflowContent('fixture.yml', content).some(v => v.includes('echoes/prints a Cloudflare token or smoke credential')));
+    assert.ok(
+      checkWorkflowContent('fixture.yml', content).some((v) =>
+        v.includes('echoes/prints a Cloudflare token or smoke credential'),
+      ),
+    );
   });
 
   it('flags os.environ specific token dump in python', () => {
@@ -270,7 +297,11 @@ jobs:
     steps:
       - run: python3 -c "import os; print(os.environ['CLOUDFLARE_WORKER_API_TOKEN'])"
 `;
-    assert.ok(checkWorkflowContent('fixture.yml', content).some(v => v.includes('echoes/prints a Cloudflare token or smoke credential')));
+    assert.ok(
+      checkWorkflowContent('fixture.yml', content).some((v) =>
+        v.includes('echoes/prints a Cloudflare token or smoke credential'),
+      ),
+    );
   });
 
   it('passes --env production without false positive', () => {
@@ -350,6 +381,21 @@ jobs:
 });
 
 describe('guard:cloudflare-secret-contract (CLI)', () => {
+  it('recognizes the EAD reconciliation as a D1 job with tokens isolated by step', () => {
+    const workflow = readFileSync(join(ROOT, '.github/workflows/ead-reconciliation.yml'), 'utf8');
+    assert.match(workflow, /^  d1-reconciliation:\n    name: D1 EAD Reconciliation$/m);
+    assert.match(
+      workflow,
+      /name: Verify backup Wrangler access[\s\S]*?CLOUDFLARE_D1_BACKUP_API_TOKEN/,
+    );
+    assert.match(
+      workflow,
+      /name: Apply Reconciliation to remote D1[\s\S]*?CLOUDFLARE_D1_MIGRATION_API_TOKEN/,
+    );
+    assert.doesNotMatch(workflow, /^    CLOUDFLARE_API_TOKEN:/m);
+    assert.deepEqual(checkWorkflowContent('ead-reconciliation.yml', workflow), []);
+  });
+
   it('passes against the current repository workflows', () => {
     const result = spawnSync('node', ['scripts/ci/guard-cloudflare-secret-contract.mjs'], {
       cwd: ROOT,

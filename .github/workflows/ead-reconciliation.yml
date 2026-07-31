@@ -7,32 +7,28 @@ on:
         description: 'Target environment'
         required: true
         type: choice
-        options:
-          - staging
-          - production
+        options: [staging, production]
       mode:
         description: 'Execution mode'
         required: true
         type: choice
-        options:
-          - dry-run
-          - apply
+        options: [dry-run, apply]
       expected_sha:
         description: 'Expected main HEAD SHA (production only)'
         required: false
         type: string
       confirmation:
-        description: 'Confirmation phrase (EAD_STAGING_DRY_RUN / EAD_STAGING_APPLY / EAD_PRODUCTION_DRY_RUN / EAD_PRODUCTION_APPLY)'
+        description: 'Confirmation phrase'
         required: true
         type: string
 
 jobs:
-  reconcile:
+  d1-reconciliation:
+    name: D1 EAD Reconciliation
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.environment }}
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
@@ -50,135 +46,109 @@ jobs:
           EXPECTED_UPPER=$(echo "$EXPECTED_CONFIRM" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
           if [[ "${{ inputs.confirmation }}" != "$EXPECTED_UPPER" ]]; then
             echo "Expected confirmation: $EXPECTED_UPPER" >&2
-            echo "Received: ${{ inputs.confirmation }}" >&2
             exit 1
           fi
-          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
-            echo "CLOUDFLARE_API_TOKEN is empty" >&2
+          if [[ "${{ inputs.environment }}" != "staging" && "${{ inputs.environment }}" != "production" ]]; then
+            echo "Unsupported environment" >&2
+            exit 1
+          fi
+          if [[ "${{ inputs.mode }}" != "dry-run" && "${{ inputs.mode }}" != "apply" ]]; then
+            echo "Unsupported mode" >&2
             exit 1
           fi
           if [[ -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
-            echo "CLOUDFLARE_ACCOUNT_ID is empty" >&2
+            echo "CLOUDFLARE_ACCOUNT_ID_MISSING" >&2
             exit 1
           fi
-          echo "✓ Credentials present (values not shown)"
           if [[ "${{ inputs.environment }}" == "production" ]]; then
             if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-              echo "Production must run from refs/heads/main. Current: $GITHUB_REF" >&2
+              echo "Production must run from refs/heads/main" >&2
               exit 1
             fi
-            if [[ -z "${{ inputs.expected_sha }}" ]]; then
-              echo "expected_sha is required for production" >&2
+            if [[ -z "${{ inputs.expected_sha }}" || "$(git rev-parse HEAD)" != "${{ inputs.expected_sha }}" ]]; then
+              echo "Production expected_sha mismatch" >&2
               exit 1
             fi
-            CURRENT_SHA=$(git rev-parse HEAD)
-            if [[ "$CURRENT_SHA" != "${{ inputs.expected_sha }}" ]]; then
-              echo "SHA mismatch: expected ${{ inputs.expected_sha }}, current $CURRENT_SHA" >&2
-              exit 1
-            fi
-            echo "✓ Production SHA verified: $CURRENT_SHA"
           fi
 
-      - name: Verify Wrangler access
+      - name: Check backup token presence
+        env:
+          CLOUDFLARE_D1_BACKUP_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
         run: |
-          npx wrangler whoami
-          echo "✓ Wrangler authenticated"
+          if [[ -z "$CLOUDFLARE_D1_BACKUP_API_TOKEN" ]]; then
+            echo "D1_BACKUP_TOKEN_MISSING_${{ inputs.environment }}" | tr '[:lower:]' '[:upper:]' >&2
+            exit 1
+          fi
+
+      - name: Check migration token presence
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          CLOUDFLARE_D1_MIGRATION_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+        run: |
+          if [[ -z "$CLOUDFLARE_D1_MIGRATION_API_TOKEN" ]]; then
+            echo "D1_MIGRATION_TOKEN_MISSING_${{ inputs.environment }}" | tr '[:lower:]' '[:upper:]' >&2
+            exit 1
+          fi
+
+      - name: Verify backup Wrangler access
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+        run: npx wrangler whoami
 
       - name: Export D1 Backup (${{ inputs.environment }})
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
         run: |
           TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
           BACKUP_FILE="airtrust-db-${{ inputs.environment }}-${TIMESTAMP}.sql"
-          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
-          echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
-
-          if [[ "${{ inputs.environment }}" == "staging" ]]; then
-            DB_NAME="airtrust-db-staging-baseline-20260701"
-            npx wrangler d1 export "$DB_NAME" --remote --output "$BACKUP_FILE"
-          else
-            DB_NAME="airtrust-db"
-            npx wrangler d1 export "$DB_NAME" --remote --output "$BACKUP_FILE"
-          fi
-
-          SIZE=$(wc -c < "$BACKUP_FILE")
-          SHA=$(shasum -a 256 "$BACKUP_FILE" | cut -d' ' -f1)
-          echo "BACKUP_SIZE=$SIZE" >> $GITHUB_ENV
-          echo "BACKUP_SHA=$SHA" >> $GITHUB_ENV
-          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
-          echo "Backup: $BACKUP_FILE ($SIZE bytes, SHA256: $SHA)"
+          if [[ "${{ inputs.environment }}" == "staging" ]]; then DB_NAME="airtrust-db-staging-baseline-20260701"; else DB_NAME="airtrust-db"; fi
+          npx wrangler d1 export "$DB_NAME" --remote --output "$BACKUP_FILE"
+          echo "TIMESTAMP=$TIMESTAMP" >> "$GITHUB_ENV"
+          echo "BACKUP_FILE=$BACKUP_FILE" >> "$GITHUB_ENV"
+          echo "BACKUP_SHA=$(shasum -a 256 "$BACKUP_FILE" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "DB_NAME=$DB_NAME" >> "$GITHUB_ENV"
 
       - name: Create temp SQLite from backup
         run: |
           TEMP_DB="ead-temp-$TIMESTAMP.sqlite"
-          echo "TEMP_DB=$TEMP_DB" >> $GITHUB_ENV
           sqlite3 "$TEMP_DB" < "$BACKUP_FILE"
-          echo "✓ SQLite created: $TEMP_DB"
+          echo "TEMP_DB=$TEMP_DB" >> "$GITHUB_ENV"
 
-      - name: Run Reconciliation dry-run (local SQLite)
-        run: |
-          node scripts/ead-reconcile.mjs \
-            --db-file "$TEMP_DB" \
-            --dry-run \
-            --manifest "manifest-${{ inputs.environment }}.json" \
-            --apply-sql-output "apply-${{ inputs.environment }}.sql" \
-            --rollback-output "rollback-${{ inputs.environment }}.sql"
+      - name: Run reconciliation dry-run (local SQLite)
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: node scripts/ead-reconcile.mjs --db-file "$TEMP_DB" --dry-run --manifest "manifest-${{ inputs.environment }}.json" --apply-sql-output "apply-${{ inputs.environment }}.sql" --rollback-output "rollback-${{ inputs.environment }}.sql"
 
       - name: Validate manifest (tenant scope, allowlist)
         run: |
-          if [[ ! -s "apply-${{ inputs.environment }}.sql" ]]; then
-            echo "No changes needed — database already reconciled."
-            echo "NO_CHANGES=true" >> $GITHUB_ENV
-            exit 0
-          fi
-          echo "NO_CHANGES=false" >> $GITHUB_ENV
-
-          # Validate no cross-tenant references
-          if grep -q "empresa_id = [^6]" "apply-${{ inputs.environment }}.sql"; then
-            echo "CROSS-TENANT REFERENCE DETECTED in apply SQL — aborting" >&2
-            exit 1
-          fi
-
-          # Validate no dangerous operations
-          if grep -qiE "DELETE|DROP|ALTER" "apply-${{ inputs.environment }}.sql"; then
-            echo "DANGEROUS OPERATION in apply SQL — aborting" >&2
-            exit 1
-          fi
-
-          echo "✓ Manifest validated: tenant-scoped, no dangerous ops"
-          echo "Operations to apply:"
-          cat "apply-${{ inputs.environment }}.sql"
+          TOTAL_OPERATIONS=$(node -e "const data=require('./manifest-${{ inputs.environment }}.json'); if (!Number.isInteger(data.total_operations) || data.total_operations < 0) process.exit(1); process.stdout.write(String(data.total_operations))")
+          echo "TOTAL_OPERATIONS=$TOTAL_OPERATIONS" >> "$GITHUB_ENV"
+          if [[ "$TOTAL_OPERATIONS" == "0" ]]; then echo "NO_CHANGES=true" >> "$GITHUB_ENV"; exit 0; fi
+          echo "NO_CHANGES=false" >> "$GITHUB_ENV"
+          if grep -qiE '(^|[^A-Z_])(DELETE|DROP|ALTER|INSERT)([^A-Z_]|$)' "apply-${{ inputs.environment }}.sql"; then echo "Disallowed SQL operation" >&2; exit 1; fi
+          if grep -qE '^UPDATE (qualificacoes_categorias|qualificacoes_tipos|qualificacoes_historico) ' "apply-${{ inputs.environment }}.sql"; then true; else echo "No allowlisted UPDATE found" >&2; exit 1; fi
+          if grep -qvE '^(--|UPDATE (qualificacoes_categorias|qualificacoes_tipos|qualificacoes_historico) .*empresa_id = 6.*deleted_at IS NULL.*;)$' "apply-${{ inputs.environment }}.sql"; then echo "SQL escaped the allowlist or tenant predicate" >&2; exit 1; fi
 
       - name: Apply Reconciliation to remote D1 (${{ inputs.environment }})
         if: ${{ inputs.mode == 'apply' && env.NO_CHANGES != 'true' }}
-        run: |
-          echo "Applying reconciliation to $DB_NAME..."
-          npx wrangler d1 execute "$DB_NAME" --remote --file "apply-${{ inputs.environment }}.sql"
-          echo "✓ Applied"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+        run: npx wrangler d1 execute "$DB_NAME" --remote --file "apply-${{ inputs.environment }}.sql"
 
-      - name: Post-apply verification
+      - name: Post-apply re-export and idempotency verification
         if: ${{ inputs.mode == 'apply' && env.NO_CHANGES != 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          ENVIRONMENT: ${{ inputs.environment }}
         run: |
-          # Re-export and verify
           VERIFY_FILE="airtrust-db-${{ inputs.environment }}-verify-${TIMESTAMP}.sql"
           npx wrangler d1 export "$DB_NAME" --remote --output "$VERIFY_FILE"
-
-          VERIFY_DB="ead-verify-${TIMESTAMP}.sqlite"
+          VERIFY_DB="ead-verify-$TIMESTAMP.sqlite"
           sqlite3 "$VERIFY_DB" < "$VERIFY_FILE"
+          node scripts/ead-reconcile.mjs --db-file "$VERIFY_DB" --dry-run --manifest "manifest-verify-${{ inputs.environment }}.json" --apply-sql-output "apply-verify-${{ inputs.environment }}.sql"
+          node -e "const data=require('./manifest-verify-${{ inputs.environment }}.json'); if (data.total_operations !== 0) process.exit(1)"
 
-          # Run reconciliation again — should produce zero changes
-          node scripts/ead-reconcile.mjs \
-            --db-file "$VERIFY_DB" \
-            --dry-run \
-            --manifest "manifest-verify-${{ inputs.environment }}.json" \
-            --apply-sql-output "apply-verify-${{ inputs.environment }}.sql"
-
-          if [[ -s "apply-verify-${{ inputs.environment }}.sql" ]]; then
-            echo "IDEMPOTENCY CHECK FAILED — reconciliation still produces changes after apply" >&2
-            cat "apply-verify-${{ inputs.environment }}.sql"
-            exit 1
-          fi
-          echo "✓ Idempotency verified: second run produces zero changes"
-
-      - name: Upload Artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ead-reconciliation-${{ inputs.environment }}-${{ inputs.mode }}-${{ env.TIMESTAMP }}
@@ -187,11 +157,3 @@ jobs:
             apply-*.sql
             rollback-*.sql
           retention-days: 7
-
-      - name: Skip apply (dry-run mode)
-        if: ${{ inputs.mode == 'dry-run' }}
-        run: |
-          echo "=== DRY-RUN COMPLETE ==="
-          echo "Environment: ${{ inputs.environment }}"
-          echo "Backup SHA-256: $BACKUP_SHA"
-          echo "Review the manifest and apply SQL, then re-run with --mode apply"
