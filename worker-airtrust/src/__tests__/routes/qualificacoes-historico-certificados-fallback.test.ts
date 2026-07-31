@@ -75,6 +75,8 @@ vi.mock('../../routes/qualificacoes/historico-helpers', () => ({
   SORTABLE_COLUMNS: new Set(['data_vencimento']),
   MODELO_AERONAVE_EXPR: 'f.modelo_aeronave_id',
   calcularDataVencimento: ({ dataConclusao }: { dataConclusao: string }) => dataConclusao,
+  buildCategoriaResolutionJoinClause: () => `LEFT JOIN qualificacoes_categorias qh_categoria_ref ON qh_categoria_ref.id = qh.categoria_id LEFT JOIN qualificacoes_categorias qt_categoria_ref ON qt_categoria_ref.id = qt.categoria_id LEFT JOIN qualificacoes_categorias qc ON qc.id = COALESCE(qh.categoria_id, qt.categoria_id)`,
+  categoriaCandidatosAtivosExpr: () => '1',
 }));
 
 vi.mock('../../services/employee-sector-access', async (importOriginal) => {

@@ -413,6 +413,62 @@ export function buildOrderByClause(orderBy: string, order: string): string {
   return `${column} ${direction}`;
 }
 
+/**
+ * Resolves a qualification category without allowing a name match to fan out
+ * one history row into several rows.  `qc` is the only resolved category;
+ * the two reference joins exist solely to make inconsistent legacy data
+ * observable to the caller.
+ */
+export function buildCategoriaResolutionJoinClause(
+  hasTipoCategoriaId: boolean,
+  hasCategoriaEmpresaId: boolean,
+): string {
+  const targetName = `UPPER(TRIM(COALESCE(NULLIF(qh.categoria, ''), NULLIF(qt.categoria, ''), '')))`;
+  const tenant = hasCategoriaEmpresaId ? 'empresa_id = f.empresa_id' : '1 = 1';
+  const tipoReference = hasTipoCategoriaId ? 'qt.categoria_id' : 'NULL';
+
+  return `
+    LEFT JOIN qualificacoes_categorias qh_categoria_ref
+      ON qh_categoria_ref.id = qh.categoria_id
+      AND qh_categoria_ref.deleted_at IS NULL
+      AND qh_categoria_ref.${tenant}
+    LEFT JOIN qualificacoes_categorias qt_categoria_ref
+      ON qt_categoria_ref.id = ${tipoReference}
+      AND qt_categoria_ref.deleted_at IS NULL
+      AND qt_categoria_ref.${tenant}
+    LEFT JOIN qualificacoes_categorias qc
+      ON qc.id = (
+        SELECT candidate.id
+        FROM qualificacoes_categorias candidate
+        WHERE candidate.deleted_at IS NULL
+          AND candidate.ativo = 1
+          AND candidate.empresa_id = f.empresa_id
+          AND (
+            (${targetName} <> ''
+              AND UPPER(TRIM(candidate.nome)) = ${targetName}
+              AND 1 = (
+                SELECT COUNT(*)
+                FROM qualificacoes_categorias candidate_count
+                WHERE candidate_count.deleted_at IS NULL
+                  AND candidate_count.ativo = 1
+                  AND candidate_count.empresa_id = f.empresa_id
+                  AND UPPER(TRIM(candidate_count.nome)) = ${targetName}
+              ))
+            OR (${targetName} = '' AND candidate.id = COALESCE(qh.categoria_id, ${tipoReference}))
+          )
+      )`;
+}
+
+export function categoriaCandidatosAtivosExpr(hasCategoriaEmpresaId: boolean): string {
+  const tenant = hasCategoriaEmpresaId ? 'candidate_count.empresa_id = f.empresa_id' : '1 = 1';
+  return `(SELECT COUNT(*)
+    FROM qualificacoes_categorias candidate_count
+    WHERE candidate_count.deleted_at IS NULL
+      AND candidate_count.ativo = 1
+      AND ${tenant}
+      AND UPPER(TRIM(candidate_count.nome)) = UPPER(TRIM(COALESCE(NULLIF(qh.categoria, ''), NULLIF(qt.categoria, '')))))`;
+}
+
 export function safe(fn: (c: Context<{ Bindings: Env }>) => Promise<Response> | Response) {
   return async (c: Context<{ Bindings: Env }>) => {
     try {
