@@ -44,6 +44,16 @@ describe('safe staging D1 schema change', () => {
     expect(runner).not.toContain('--file="../$migration_path"');
   });
 
+  it('reports an already-applied rerun without inventing a recovery point', () => {
+    const alreadyAppliedIndex = runner.indexOf('MIGRATION_ALREADY_APPLIED_AND_VALIDATED');
+    const recoveryIndex = runner.indexOf('d1 time-travel info');
+
+    expect(alreadyAppliedIndex).toBeGreaterThan(-1);
+    expect(alreadyAppliedIndex).toBeLessThan(recoveryIndex);
+    expect(runner).toContain('RECOVERY_TIMESTAMP_UTC=NOT_REQUIRED_ALREADY_APPLIED');
+    expect(runner).toContain('RECOVERY_POINT_CAPTURED=false');
+  });
+
   it('fails closed on target, path, confirmation and postconditions', () => {
     expect(runner).toContain('BLOCKED_PRODUCTION_DB_ID');
     expect(runner).toContain('expected_path="release/worker-airtrust/migrations/$migration_basename"');
