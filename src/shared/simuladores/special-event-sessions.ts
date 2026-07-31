@@ -214,7 +214,9 @@ export function normalizeSpecialEventSessionCode(
   code: string | null | undefined,
 ): SpecialEventSessionCode | null {
   const normalized = String(code || '').trim().toUpperCase() as SpecialEventSessionCode;
-  return Object.hasOwn(SPECIAL_EVENT_SESSION_DEFINITIONS, normalized) ? normalized : null;
+  return Object.prototype.hasOwnProperty.call(SPECIAL_EVENT_SESSION_DEFINITIONS, normalized)
+    ? normalized
+    : null;
 }
 
 export function getSpecialEventSessionDefinition(
