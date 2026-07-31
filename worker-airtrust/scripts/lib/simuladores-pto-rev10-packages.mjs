@@ -59,6 +59,7 @@ function stripProvenance(value) {
 
 export function durationMinutesFromCanonicalLoad(load) {
   const value = nonEmpty(load, 'carga_sessao');
+  if (value === '1 hora') return 60;
   if (value === '2 horas') return 120;
   if (value === '3 horas') return 180;
   if (value.startsWith('4 horas por tripulação:')) return 240;
@@ -121,6 +122,69 @@ function verifyPackageFiles(packageDir, packageManifest, aircraft) {
   }
 }
 
+const FUNCTIONAL_SESSION_DEFINITIONS = Object.freeze({
+  'INST-E01': {
+    titulo: 'Treinamento Prático de Instrutor 1/2 — Procedimentos Normais e Técnica de Instrução',
+    programa: 'Treinamento de Instrutor',
+    natureza: 'Instrução prática',
+    tipo_estruturado: 'INSTRUTOR',
+    carga_sessao: '1 hora',
+    duracao_estimada_minutos: 60,
+    ordem_curricular: 1,
+    legacy_source_codes: [],
+  },
+  'INST-E02': {
+    titulo: 'Treinamento Prático de Instrutor 2/2 — Procedimentos Anormais, Emergências e Atuação Integrada do Instrutor',
+    programa: 'Treinamento de Instrutor',
+    natureza: 'Instrução prática',
+    tipo_estruturado: 'INSTRUTOR',
+    carga_sessao: '2 horas',
+    duracao_estimada_minutos: 120,
+    ordem_curricular: 2,
+    legacy_source_codes: [],
+  },
+  'EXA-01/04': {
+    titulo: 'Treinamento Prático de Examinador 1/4 — Procedimentos Normais e Condução sem Coaching',
+    programa: 'Treinamento de Examinador',
+    natureza: 'Instrução prática',
+    tipo_estruturado: 'EXAMINADOR',
+    carga_sessao: '1 hora',
+    duracao_estimada_minutos: 60,
+    ordem_curricular: 3,
+    legacy_source_codes: ['EXA-E01', 'EXA-V01'],
+  },
+  'EXA-02/04': {
+    titulo: 'Treinamento Prático de Examinador 2/4 — Procedimentos Não Normais e Avaliação',
+    programa: 'Treinamento de Examinador',
+    natureza: 'Instrução prática',
+    tipo_estruturado: 'EXAMINADOR',
+    carga_sessao: '1 hora',
+    duracao_estimada_minutos: 60,
+    ordem_curricular: 4,
+    legacy_source_codes: ['EXA-V02'],
+  },
+  'EXA-03/04': {
+    titulo: 'Treinamento Prático de Examinador 3/4 — Emergências, Intervenção e Segurança',
+    programa: 'Treinamento de Examinador',
+    natureza: 'Instrução prática',
+    tipo_estruturado: 'EXAMINADOR',
+    carga_sessao: '1 hora',
+    duracao_estimada_minutos: 60,
+    ordem_curricular: 5,
+    legacy_source_codes: ['EXA-E02', 'EXA-V03'],
+  },
+  'EXA-04/04': {
+    titulo: 'Treinamento Prático de Examinador 4/4 — Condução Integral do Exame',
+    programa: 'Treinamento de Examinador',
+    natureza: 'Instrução prática',
+    tipo_estruturado: 'EXAMINADOR',
+    carga_sessao: '1 hora',
+    duracao_estimada_minutos: 60,
+    ordem_curricular: 6,
+    legacy_source_codes: ['EXA-V04'],
+  },
+});
+
 function normalizeFunctionalCatalog(raw) {
   const codes = raw.codigos_canonicos.map((item) => ({
     codigo: nonEmpty(item.codigo, 'instrutor_examinador/código'),
@@ -128,13 +192,51 @@ function normalizeFunctionalCatalog(raw) {
     nome: nonEmpty(item.atividade, `instrutor_examinador/${item.codigo}/atividade`),
     regra_codigo_tecnico: String(item.regra_codigo_tecnico || '').trim(),
   }));
+  const catalogByCode = new Map(codes.map((item) => [item.codigo, item]));
   const relations = (raw.relacoes_por_sessao || []).map((item) => ({
     sessao: nonEmpty(item.sessao, 'instrutor_examinador/sessão'),
     ordem: integer(item.ordem, `${item.sessao}/ordem`),
     codigo: nonEmpty(item.codigo, `${item.sessao}/código`),
     nome: nonEmpty(item.atividade, `${item.sessao}/${item.codigo}/atividade`),
   }));
-  return { regra: String(raw.regra || '').trim(), codigos: codes, relacoes: relations };
+  const bySession = new Map();
+  for (const relation of relations) {
+    const catalogItem = catalogByCode.get(relation.codigo);
+    if (!catalogItem || catalogItem.nome !== relation.nome) {
+      fail(`${relation.sessao}/${relation.codigo}: catálogo funcional divergente`);
+    }
+    if (!bySession.has(relation.sessao)) bySession.set(relation.sessao, []);
+    bySession.get(relation.sessao).push({
+      ordem: relation.ordem,
+      codigo: relation.codigo,
+      nome: relation.nome,
+      tripulante: 'AB',
+      fase: '',
+      tipo_conteudo: 'COMPETENCIA_FUNCIONAL',
+    });
+  }
+  const expectedSessionCodes = Object.keys(FUNCTIONAL_SESSION_DEFINITIONS);
+  if (bySession.size !== expectedSessionCodes.length) {
+    fail(`esperadas ${expectedSessionCodes.length} sessões INST/EXA; encontradas ${bySession.size}`);
+  }
+  const sessoes = expectedSessionCodes.map((codigo) => {
+    const definition = FUNCTIONAL_SESSION_DEFINITIONS[codigo];
+    const items = [...(bySession.get(codigo) || [])].sort((left, right) => left.ordem - right.ordem);
+    if (items.length !== 18 || items.some((item, index) => item.ordem !== index + 1)) {
+      fail(`${codigo}: exige 18 posições funcionais 1..18`);
+    }
+    return {
+      codigo,
+      ...definition,
+      itens_tecnicos: items,
+    };
+  });
+  return {
+    regra: String(raw.regra || '').trim(),
+    codigos: codes,
+    relacoes: relations,
+    sessoes,
+  };
 }
 
 export function loadCanonicalAircraftPackage({ aircraft, packageDir, packageManifest, expected }) {
@@ -182,10 +284,7 @@ export function loadCanonicalAircraftPackage({ aircraft, packageDir, packageMani
     const session = nonEmpty(raw.sessao, `${aircraft}/matriz_tecnica/sessão`);
     if (!technicalBySession.has(session)) technicalBySession.set(session, []);
     const code = nonEmpty(raw.codigo, `${aircraft}/${session}/código`);
-    const name = nonEmpty(
-      raw.manobra_procedimento,
-      `${aircraft}/${session}/${code}/manobra_procedimento`,
-    );
+    const name = nonEmpty(raw.manobra_procedimento, `${aircraft}/${session}/${code}/manobra_procedimento`);
     if (name !== nonEmpty(raw.descricao_canonica, `${aircraft}/${session}/${code}/descricao_canonica`)) {
       fail(`${aircraft}/${session}/${code}: manobra_procedimento diverge da descrição canônica`);
     }
@@ -228,10 +327,7 @@ export function loadCanonicalAircraftPackage({ aircraft, packageDir, packageMani
     codigo: nonEmpty(item.codigo, `${aircraft}/NOTECHS/código`),
     nome: nonEmpty(item.competencia, `${aircraft}/${item.codigo}/competência`),
     categoria: nonEmpty(item.categoria, `${aircraft}/${item.codigo}/categoria`),
-    evidencia_observavel: nonEmpty(
-      item.evidencia_observavel,
-      `${aircraft}/${item.codigo}/evidência`,
-    ),
+    evidencia_observavel: nonEmpty(item.evidencia_observavel, `${aircraft}/${item.codigo}/evidência`),
     ordem: 1001 + index,
   }));
   if (new Set(canonicalNotechs.map((item) => item.codigo)).size !== 15) {
@@ -286,6 +382,9 @@ export function buildOperationalProjection({ manifest, aw139Dir, s76Dir }) {
   }
 
   const functional = aw139.instrutor_examinador;
+  if (functional.sessoes.length !== totals.sessoes_instrutor_examinador) {
+    fail('total de sessões instrutor/examinador');
+  }
   if (functional.codigos.length !== totals.codigos_instrutor_examinador) {
     fail('total de códigos instrutor/examinador');
   }
@@ -306,23 +405,24 @@ export function buildOperationalProjection({ manifest, aw139Dir, s76Dir }) {
         s76.sessoes.reduce((sum, session) => sum + session.itens_tecnicos.length, 0),
       notechs_links: (aw139.sessoes.length + s76.sessoes.length) * 15,
       notechs: aw139.notechs.length,
+      functional_sessions: functional.sessoes.length,
       functional_codes: functional.codigos.length,
       functional_links: functional.relacoes.length,
+      all_sessions: aw139.sessoes.length + s76.sessoes.length + functional.sessoes.length,
+      all_technical_links:
+        aw139.sessoes.reduce((sum, session) => sum + session.itens_tecnicos.length, 0) +
+        s76.sessoes.reduce((sum, session) => sum + session.itens_tecnicos.length, 0) +
+        functional.relacoes.length,
+      all_notechs_links:
+        (aw139.sessoes.length + s76.sessoes.length + functional.sessoes.length) * 15,
     },
     policy: manifest.policy,
     notechs: aw139.notechs,
     aeronaves: {
-      AW139: {
-        aeronave: 'AW139',
-        sessoes: aw139.sessoes,
-        catalogo_manobras: aw139.catalogo_manobras,
-      },
-      S76: {
-        aeronave: 'S76',
-        sessoes: s76.sessoes,
-        catalogo_manobras: s76.catalogo_manobras,
-      },
+      AW139: { aeronave: 'AW139', sessoes: aw139.sessoes, catalogo_manobras: aw139.catalogo_manobras },
+      S76: { aeronave: 'S76', sessoes: s76.sessoes, catalogo_manobras: s76.catalogo_manobras },
     },
+    sessoes_funcionais: functional.sessoes,
     instrutor_examinador: functional,
   };
 }
