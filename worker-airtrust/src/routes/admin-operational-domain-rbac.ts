@@ -268,11 +268,18 @@ router.get('/unclassified', async (c) => {
   });
 });
 
-const classifySchema = z.object({
-  resource_type: z.enum(['setor', 'categoria', 'curso', 'qualificacao_tipo']),
-  resource_id: z.number().int().positive(),
-  dominio_codigo: z.string().trim().min(1).nullable(),
-});
+const classifySchema = z.discriminatedUnion('resource_type', [
+  z.object({
+    resource_type: z.enum(['setor', 'categoria', 'curso']),
+    resource_id: z.number().int().positive(),
+    dominio_codigo: z.string().trim().min(1),
+  }),
+  z.object({
+    resource_type: z.literal('qualificacao_tipo'),
+    resource_id: z.number().int().positive(),
+    dominio_codigo: z.string().trim().min(1).nullable(),
+  }),
+]);
 
 const CLASSIFIABLE_TABLES: Record<
   'setor' | 'categoria' | 'curso' | 'qualificacao_tipo',
@@ -331,21 +338,44 @@ router.post('/classify', async (c) => {
     notFound(`${resourceType} não encontrado(a) nesta empresa`);
   }
 
-  await db
-    .prepare(`UPDATE ${table} SET dominio_codigo = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`)
-    .bind(dominioCodigo, resourceId, empresaId)
-    .run();
-
   const ua = extrairUsuarioAuditoria(c);
-  await registrarAuditoria({
-    db,
-    tabela: table,
-    acao: 'UPDATE',
-    registro_id: resourceId,
-    dados_anteriores: { dominio_codigo: existing.dominio_codigo },
-    dados_novos: { dominio_codigo: dominioCodigo },
-    ...ua,
-  });
+
+  const updateStmt = db
+    .prepare(`UPDATE ${table} SET dominio_codigo = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`)
+    .bind(dominioCodigo, resourceId, empresaId);
+
+  const auditStmt = db
+    .prepare(
+      `INSERT INTO auditoria (
+        usuario_id, usuario_nome, acao, tabela_afetada, registro_id,
+        dados_antes, dados_depois, ip_address, user_agent, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
+    )
+    .bind(
+      ua.usuario_id ?? null,
+      ua.usuario_nome ?? null,
+      'UPDATE',
+      table,
+      String(resourceId),
+      JSON.stringify({ dominio_codigo: existing.dominio_codigo }),
+      JSON.stringify({ dominio_codigo: dominioCodigo }),
+      ua.ip_address ?? null,
+      ua.user_agent ?? null
+    );
+
+  try {
+    const results = await db.batch([updateStmt, auditStmt]);
+    if (!results[0]?.meta || results[0].meta.changes !== 1) {
+      throw new Error('Falha de concorrência ou registro removido durante a transação');
+    }
+  } catch (error) {
+    console.error('[Classify] Falha na classificação atômica:', error);
+    throw new ApiError(
+      'Falha interna ao aplicar classificação (transação abortada)',
+      500,
+      'CLASSIFY_TRANSACTION_FAILED'
+    );
+  }
 
   return c.json({
     success: true,
