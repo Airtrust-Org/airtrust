@@ -49,6 +49,7 @@ export default function LmsPreviewPlayer() {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [previewToken, setPreviewToken] = useState<string | null>(() => getAccessToken() ?? token);
+  const [assetSessionReady, setAssetSessionReady] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [pptxViewerSession, setPptxViewerSession] = useState<PptxViewerSession | null>(null);
   const [slides, setSlides] = useState<ParsedSlide[] | null>(null);
@@ -60,8 +61,8 @@ export default function LmsPreviewPlayer() {
   const { data: curso, isLoading } = useLmsCurso(id);
   const previewType = curso?.tipo_conteudo ?? null;
   const launchUrl =
-    previewType === 'scorm' && previewToken && id
-      ? `${API_BASE_URL}/lms/scorm/preview/${id}?token=${encodeURIComponent(previewToken)}`
+    previewType === 'scorm' && assetSessionReady && id
+      ? `${API_BASE_URL}/lms/scorm/preview/${id}`
       : null;
 
   useEffect(() => {
@@ -94,6 +95,35 @@ export default function LmsPreviewPlayer() {
       window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged as EventListener);
     };
   }, [token]);
+
+  useEffect(() => {
+    if (previewType !== 'scorm' || !previewToken || !id) {
+      setAssetSessionReady(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function syncAssetSession() {
+      try {
+        const response = await fetchWithAuth('/api/lms/assets/session', {
+          method: 'POST',
+          body: JSON.stringify({ curso_id: id, preview: true }),
+        });
+        if (!cancelled) setAssetSessionReady(response.ok);
+      } catch {
+        if (!cancelled) setAssetSessionReady(false);
+      }
+    }
+
+    void syncAssetSession();
+    const intervalId = window.setInterval(() => void syncAssetSession(), 10 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [id, previewToken, previewType]);
 
   useEffect(() => {
     setIframeLoaded(false);

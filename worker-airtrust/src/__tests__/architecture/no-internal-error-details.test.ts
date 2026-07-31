@@ -6,10 +6,7 @@ import { jsonInternalError } from '../../middleware/response';
 
 const routesDir = join(process.cwd(), 'src', 'routes');
 
-const excludedPathFragments = [
-  'admin-manual-migrations.ts',
-  'migrations.ts',
-];
+const excludedPathFragments: string[] = [];
 
 function listRouteFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {

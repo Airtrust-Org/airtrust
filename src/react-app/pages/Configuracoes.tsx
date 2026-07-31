@@ -4,7 +4,6 @@ import {
   Database,
   Globe,
   FileText,
-  AlertTriangle,
   Layers,
   Plug,
   Settings2,
@@ -15,7 +14,6 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 import AppLayout from '../components/AppLayout';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
-import { DangerZone } from '../components/admin/DangerZone';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
 
@@ -80,7 +78,6 @@ export default function Configuracoes() {
     | 'importacao'
     | 'integracoes'
     | 'sistema'
-    | 'danger-zone'
     | 'usuarios'
     | 'setores-gestores'
     | 'matriz-treinamento'
@@ -116,17 +113,12 @@ export default function Configuracoes() {
       setActiveTab('cadastros');
       return;
     }
-
-    if (activeTab === 'danger-zone' && !isAdmin) {
-      setActiveTab('cadastros');
-    }
   }, [
     activeTab,
     canAccessCompanyManagement,
     canManageBackup,
     canManageOperationalSettings,
     canManageUsers,
-    isAdmin,
   ]);
 
   return (
@@ -266,20 +258,6 @@ export default function Configuracoes() {
               {t('settings.tab.system')}
             </button>
           )}
-
-          {isAdmin && (
-            <button
-              onClick={() => setActiveTab('danger-zone')}
-              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-                activeTab === 'danger-zone'
-                  ? 'border-red-600 text-red-600 dark:text-red-400'
-                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <AlertTriangle className="w-4 h-4" />
-              {t('settings.tab.dangerZone')}
-            </button>
-          )}
         </div>
         </div>
       </div>
@@ -347,9 +325,6 @@ export default function Configuracoes() {
           />
         </Suspense>
       )}
-
-      {/* Tab: Danger Zone */}
-      {isAdmin && activeTab === 'danger-zone' && <DangerZone />}
     </AppLayout>
   );
 }

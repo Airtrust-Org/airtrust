@@ -75,13 +75,9 @@ describe('runtime DDL hardening', () => {
 // Each entry requires justification. New entries force a code-review decision.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Files with DDL that are explicitly accounted for.
-// - admin-manual-migrations.ts / migrations.ts: historical one-off migration runners,
-//   gated by ENABLE_MANUAL_MIGRATIONS; never run unless explicitly enabled in .dev.vars.
+// Files with DDL text that are explicitly accounted for.
 // - qualificacoes/shared.ts: "ALTER TABLE" appears only inside a JSDoc comment (no-op, R09 RESOLVED).
 const KNOWN_DDL_FILES = new Set([
-  'routes/admin-manual-migrations.ts',
-  'routes/migrations.ts',
   'routes/qualificacoes/shared.ts',
 ]);
 
@@ -134,8 +130,6 @@ describe('broad runtime DDL guard', () => {
 
   it('pins the known-DDL-files allowlist — changes here require explicit justification', () => {
     expect([...KNOWN_DDL_FILES].sort()).toEqual([
-      'routes/admin-manual-migrations.ts',
-      'routes/migrations.ts',
       'routes/qualificacoes/shared.ts',
     ]);
   });

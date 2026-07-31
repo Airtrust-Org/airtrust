@@ -110,7 +110,6 @@ export interface Env {
   LOCAL_MAINTENANCE_RUNTIME?: string;
 
   // Gate for historical one-off admin migration endpoints (never set in production/staging)
-  ENABLE_MANUAL_MIGRATIONS?: string;
   // Gate for certificate/admin debug endpoints (never set in production/staging)
   ENABLE_ADMIN_DEBUG_ROUTES?: string;
   // Feature flag for additive shared simulator session backend
@@ -341,8 +340,10 @@ export interface JwtPayload {
   email: string;
   role?: string;
   token_type?: 'access' | 'lms_asset';
-  asset_scope?: 'pptx_viewer';
+  asset_scope?: 'pptx_viewer' | 'course_assets';
   asset_curso_id?: number;
+  asset_matricula_id?: number;
+  asset_preview?: boolean;
   nome?: string;
   empresa_id?: number; // Multi-tenant: ID da empresa ativa
   empresas?: number[]; // Lista de empresas que o usuário tem acesso

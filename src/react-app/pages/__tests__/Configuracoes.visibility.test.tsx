@@ -13,10 +13,6 @@ vi.mock('../../components/AppLayout', () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
-vi.mock('../../components/admin/DangerZone', () => ({
-  DangerZone: () => <div>danger-zone</div>,
-}));
-
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => authMock(),
 }));
@@ -42,7 +38,6 @@ vi.mock('../../i18n/useLanguage', () => ({
         'settings.tab.imports': 'Importações e Exportações',
         'settings.tab.integrations': 'Integrações',
         'settings.tab.system': 'Sistema',
-        'settings.tab.dangerZone': 'Zona de Perigo',
       })[key] ?? key,
   }),
 }));
@@ -74,7 +69,6 @@ describe('Configuracoes visibility', () => {
     expect(screen.queryByRole('button', { name: 'Empresas' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Usuários' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Backup' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Zona de Perigo' })).toBeNull();
 
     expect(screen.getByRole('button', { name: 'Cadastros' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Gestores por Setor' })).toBeInTheDocument();
@@ -102,6 +96,5 @@ describe('Configuracoes visibility', () => {
     expect(screen.getByRole('button', { name: 'Empresas' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Usuários' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Backup' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Zona de Perigo' })).toBeInTheDocument();
   });
 });

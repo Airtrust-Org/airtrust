@@ -111,7 +111,7 @@ export default function LmsPlayer() {
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
-  const [launchToken, setLaunchToken] = useState<string | null>(null);
+  const [assetSessionReady, setAssetSessionReady] = useState(false);
   const [completionState, setCompletionState] = useState<
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
   >('idle');
@@ -181,10 +181,9 @@ export default function LmsPlayer() {
   const prevSessionKeyRef = useRef<string | null>(null);
 
   const launchUrl = (() => {
-    // Wait until both launchToken AND matricula are available.
-    // Freezing before matricula loads would permanently lock null
-    // (race: token arrives before the query resolves).
-    if (!launchToken || !matricula) {
+    // The iframe URL never carries the access token. A short-lived,
+    // HttpOnly cookie is established before the URL becomes available.
+    if (!assetSessionReady || !matricula) {
       return null;
     }
 
@@ -196,7 +195,7 @@ export default function LmsPlayer() {
     // New session detected → freeze the URL.
     if (sessionKeyRef.current !== sessionKey) {
       sessionKeyRef.current = sessionKey;
-      const url = `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(launchToken)}${reviewParam ? '&review=1' : ''}`;
+      const url = `${API_BASE_URL}/lms/scorm/launch/${id}${reviewParam ? '?review=1' : ''}`;
       stableLaunchUrlRef.current = url;
       return url;
     }
@@ -292,17 +291,33 @@ export default function LmsPlayer() {
   }, [sessionKey]);
 
   useEffect(() => {
-    // Set launchToken exactly once per component mount.
-    // Token rotation is delivered via postMessage (syncFrameToken) —
-    // the iframe src never changes.
-    //
-    // Do NOT clear launchToken when playerToken disappears:
-    // that destroys the iframe. Session expiry is handled by the
-    // render guard below (!token && !playerToken).
-    if (playerToken && !launchToken) {
-      setLaunchToken(playerToken);
+    if (!playerToken || !matricula || matricula.tipo_conteudo === 'h5p') {
+      setAssetSessionReady(false);
+      return;
     }
-  }, [playerToken, launchToken]);
+
+    let cancelled = false;
+
+    async function syncAssetSession() {
+      try {
+        const response = await fetchWithAuth('/api/lms/assets/session', {
+          method: 'POST',
+          body: JSON.stringify({ matricula_id: id }),
+        });
+        if (!cancelled) setAssetSessionReady(response.ok);
+      } catch {
+        if (!cancelled) setAssetSessionReady(false);
+      }
+    }
+
+    void syncAssetSession();
+    const intervalId = window.setInterval(() => void syncAssetSession(), 10 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [id, matricula?.id, matricula?.tipo_conteudo, playerToken, sessionKey]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);

@@ -85,7 +85,7 @@ vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost:8787/api',
   AUTH_TOKEN_CHANGED_EVENT: 'airtrust-auth-token-changed',
   ensureValidAccessToken: vi.fn(async () => 'token'),
-  fetchWithAuth: vi.fn(),
+  fetchWithAuth: vi.fn(async () => ({ ok: true })),
   getAccessToken: () => 'token',
 }));
 
@@ -159,7 +159,9 @@ describe('LmsPlayer — matrícula 402 (SCORM_STATUS_INCONSISTENT)', () => {
     // Não há botão de finalizar manual para renderizar/clicar; garantimos
     // que nenhuma chamada de rede a /finalizar acontece espontaneamente.
     await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(fetchWithAuth).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(fetchWithAuth).mock.calls.some(([url]) => String(url).includes('/finalizar')),
+    ).toBe(false);
   });
 
   it('preserva 100%, localização 70/70 e nota — não zera o progresso', () => {
