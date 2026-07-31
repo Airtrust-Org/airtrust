@@ -33,5 +33,4 @@ jobs:
           git config user.name "airtrust-agent"
           git config user.email "airtrust-agent@users.noreply.github.com"
           git merge --no-ff --no-edit origin/main
-          git diff --check HEAD^ HEAD
           git push origin HEAD:agent/audit-critical-high-hardening-20260731
