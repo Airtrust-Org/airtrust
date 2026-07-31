@@ -24,10 +24,14 @@ describe('PTO Rev10 local applicator guard', () => {
     );
   });
 
-  it('requires an explicit local-only confirmation for write mode', () => {
+  it('requires an explicit local-only confirmation and the 0440 ledger lifecycle', () => {
     expect(source).toContain("const APPLY_CONFIRMATION = 'APLICAR_PTO_REV10_LOCAL'");
     expect(source).toContain("if (confirmation !== APPLY_CONFIRMATION)");
     expect(source).toContain("const dbPath = arg(argv, '--d1-local')");
+    expect(source).toContain("'DRY_RUN'");
+    expect(source).toContain("status='APPLYING'");
+    expect(source).toContain("status='APPLIED'");
+    expect(source).toContain('applied_counts_json');
     expect(source).not.toMatch(/spawnSync\(['\"]wrangler['\"]/);
   });
 
