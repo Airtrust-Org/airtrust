@@ -51,7 +51,7 @@ jobs:
           PY
 
           git diff --check
-          git add src/react-app/pages/lms/LmsPlayer.tsx src/react-app/pages/lms/LmsPreviewPlayer.tsx
+          git add -f src/react-app/pages/lms/LmsPlayer.tsx src/react-app/pages/lms/LmsPreviewPlayer.tsx
           git diff --cached --check
           git config user.name "airtrust-agent"
           git config user.email "airtrust-agent@users.noreply.github.com"
