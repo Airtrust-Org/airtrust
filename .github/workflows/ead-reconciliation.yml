@@ -47,7 +47,7 @@ jobs:
       - name: Validate inputs and prerequisites
         run: |
           EXPECTED_CONFIRM="EAD_${{ inputs.environment }}_${{ inputs.mode }}"
-          EXPECTED_UPPER=$(echo "$EXPECTED_CONFIRM" | tr '[:lower:]' '[:upper:]')
+          EXPECTED_UPPER=$(echo "$EXPECTED_CONFIRM" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
           if [[ "${{ inputs.confirmation }}" != "$EXPECTED_UPPER" ]]; then
             echo "Expected confirmation: $EXPECTED_UPPER" >&2
             echo "Received: ${{ inputs.confirmation }}" >&2
