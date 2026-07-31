@@ -3,9 +3,9 @@ import crypto from 'node:crypto';
 export const PTO_REV10_PLAN_SCHEMA_VERSION = 1;
 export const PTO_REV10_PLAN_KIND = 'PTO_REV10_SIMULATORS';
 export const PTO_REV10_EXPECTED_PLAN_TOTALS = Object.freeze({
-  models: 66,
-  links: 1188,
-  notechs_links: 990,
+  models: 72,
+  links: 1296,
+  notechs_links: 1080,
   functional_codes: 94,
 });
 
@@ -81,8 +81,8 @@ export function assertPtoRev10Plan(plan) {
     throw new Error('catálogo funcional de instrutor/examinador incompleto');
   }
 
-  const codes = new Set(plan.models.map((model) => model.codigo));
-  if (codes.size !== plan.models.length) throw new Error('modelo canônico duplicado');
+  const modelCodes = new Set(plan.models.map((model) => model.codigo));
+  if (modelCodes.size !== plan.models.length) throw new Error('modelo canônico duplicado');
   for (const model of plan.models) {
     if (!model.codigo || !model.titulo || !model.tipo_estruturado || !model.carga_sessao) {
       throw new Error('modelo sem metadados canônicos obrigatórios');
@@ -98,7 +98,9 @@ export function assertPtoRev10Plan(plan) {
     }
   }
   for (const item of plan.items) {
-    if (!codes.has(item.modelo)) throw new Error(`vínculo aponta para modelo ausente: ${item.modelo}`);
+    if (!modelCodes.has(item.modelo)) {
+      throw new Error(`vínculo aponta para modelo ausente: ${item.modelo}`);
+    }
     if (!item.codigo || !item.nome || !item.categoria) {
       throw new Error(`${item.modelo}/${item.ordem}: vínculo técnico incompleto`);
     }
@@ -114,11 +116,26 @@ export function assertPtoRev10Plan(plan) {
     }
     functionalCodes.add(item.codigo);
   }
+  const functionalModelCodes = new Set(
+    plan.models
+      .filter((model) => model.tipo_estruturado === 'INSTRUTOR' || model.tipo_estruturado === 'EXAMINADOR')
+      .map((model) => model.codigo),
+  );
+  if (functionalModelCodes.size !== 6) {
+    throw new Error('esperadas 6 sessões canônicas de instrutor/examinador');
+  }
+  const functionalItemCodes = new Set(
+    plan.items
+      .filter((item) => functionalModelCodes.has(item.modelo))
+      .map((item) => item.codigo),
+  );
+  for (const code of functionalCodes) {
+    if (!functionalItemCodes.has(code)) {
+      throw new Error(`código funcional sem vínculo de sessão: ${code}`);
+    }
+  }
 
-  const requestedCodes = new Set([
-    ...plan.items.map((item) => item.codigo),
-    ...plan.functional_catalog.map((item) => item.codigo),
-  ]);
+  const requestedCodes = new Set(plan.items.map((item) => item.codigo));
   if (!Array.isArray(plan.manobra_resolution) || plan.manobra_resolution.length !== requestedCodes.size) {
     throw new Error('resolução de manobras incompleta');
   }
@@ -135,6 +152,38 @@ export function assertPtoRev10Plan(plan) {
   return true;
 }
 
+function appendSession({ models, items, session, aircraft, catalogByCode, reference }) {
+  models.push({
+    codigo: session.codigo,
+    titulo: session.titulo,
+    programa: session.programa,
+    natureza: session.natureza,
+    tipo_estruturado: session.tipo_estruturado,
+    carga_sessao: session.carga_sessao,
+    duracao_estimada_minutos: session.duracao_estimada_minutos,
+    ordem_curricular: session.ordem_curricular,
+    aeronave: aircraft,
+    tipo_dispositivo: 'SIMULADOR',
+  });
+  for (const item of session.itens_tecnicos) {
+    const catalog = catalogByCode.get(item.codigo);
+    if (!catalog) throw new Error(`${session.codigo}: código fora do catálogo ${item.codigo}`);
+    items.push({
+      modelo: session.codigo,
+      ordem: item.ordem,
+      codigo: item.codigo,
+      nome: item.nome,
+      execucao_pf: item.tripulante || 'AB',
+      categoria: catalog.categoria || catalog.familia || 'GERAL',
+      fase_voo: item.fase || catalog.fase || null,
+      tipo_conteudo: item.tipo_conteudo || catalog.tipo_conteudo || null,
+      aeronave: aircraft,
+      desempenho_esperado: item.nome,
+      referencia_tecnica: reference,
+    });
+  }
+}
+
 export function projectionToPlanPayload({
   projection,
   empresaId,
@@ -146,6 +195,9 @@ export function projectionToPlanPayload({
   if (!projection?.aeronaves?.AW139 || !projection?.aeronaves?.S76) {
     throw new Error('projeção PTO Rev10 inválida');
   }
+  if (!Array.isArray(projection.sessoes_funcionais) || projection.sessoes_funcionais.length !== 6) {
+    throw new Error('projeção sem as 6 sessões canônicas de instrutor/examinador');
+  }
   if (Number(projection.empresa_alvo) !== Number(empresaId)) {
     throw new Error('tenant da projeção diverge');
   }
@@ -155,35 +207,14 @@ export function projectionToPlanPayload({
   for (const [aircraft, data] of Object.entries(projection.aeronaves)) {
     const catalogByCode = new Map(data.catalogo_manobras.map((item) => [item.codigo, item]));
     for (const session of data.sessoes) {
-      models.push({
-        codigo: session.codigo,
-        titulo: session.titulo,
-        programa: session.programa,
-        natureza: session.natureza,
-        tipo_estruturado: session.tipo_estruturado,
-        carga_sessao: session.carga_sessao,
-        duracao_estimada_minutos: session.duracao_estimada_minutos,
-        ordem_curricular: session.ordem_curricular,
-        aeronave: aircraft === 'S76' ? 'SK76' : aircraft,
-        tipo_dispositivo: 'SIMULADOR',
+      appendSession({
+        models,
+        items,
+        session,
+        aircraft: aircraft === 'S76' ? 'SK76' : aircraft,
+        catalogByCode,
+        reference: projection.fonte_normativa,
       });
-      for (const item of session.itens_tecnicos) {
-        const catalog = catalogByCode.get(item.codigo);
-        if (!catalog) throw new Error(`${session.codigo}: código fora do catálogo ${item.codigo}`);
-        items.push({
-          modelo: session.codigo,
-          ordem: item.ordem,
-          codigo: item.codigo,
-          nome: item.nome,
-          execucao_pf: item.tripulante,
-          categoria: catalog.categoria || catalog.familia || 'GERAL',
-          fase_voo: item.fase || catalog.fase || null,
-          tipo_conteudo: item.tipo_conteudo || catalog.tipo_conteudo || null,
-          aeronave: aircraft === 'S76' ? 'SK76' : aircraft,
-          desempenho_esperado: item.nome,
-          referencia_tecnica: projection.fonte_normativa,
-        });
-      }
     }
   }
 
@@ -191,12 +222,25 @@ export function projectionToPlanPayload({
     codigo: item.codigo,
     nome: item.nome,
     categoria: item.categoria,
-    aeronave: 'N/A',
+    aeronave: null,
     tipo_conteudo: 'COMPETENCIA_FUNCIONAL',
     desempenho_esperado: item.nome,
     referencia_tecnica: projection.fonte_normativa,
     regra_codigo_tecnico: item.regra_codigo_tecnico || null,
   }));
+  const functionalCatalogByCode = new Map(
+    functionalCatalog.map((item) => [item.codigo, item]),
+  );
+  for (const session of projection.sessoes_funcionais) {
+    appendSession({
+      models,
+      items,
+      session,
+      aircraft: null,
+      catalogByCode: functionalCatalogByCode,
+      reference: projection.fonte_normativa,
+    });
+  }
 
   const sourceHashes = {};
   for (const [aircraft, packageInfo] of Object.entries(projection.source_packages || {})) {
@@ -221,10 +265,10 @@ export function projectionToPlanPayload({
     notechs: projection.notechs,
     functional_catalog: functionalCatalog,
     instructor_examiner: {
-      status: 'CATALOG_IMPORTED_SESSION_LINKS_PENDING',
+      status: 'IMPORTED',
+      sessions: projection.sessoes_funcionais.length,
       codes: functionalCatalog.length,
-      links_pending: projection.instrutor_examinador?.relacoes?.length || 0,
-      pending_reason: 'Os pacotes não fornecem título, carga e natureza completos para os seis modelos de sessão.',
+      links: projection.instrutor_examinador?.relacoes?.length || 0,
     },
     manobra_resolution: manobraResolution,
     safeguards: [
@@ -233,8 +277,8 @@ export function projectionToPlanPayload({
       'fichas e sessões realizadas não são atualizadas nem excluídas',
       'modelos atuais são versionados, nunca sobrescritos',
       'modelos personalizados não mapeados permanecem intocados',
-      '18 itens técnicos e 15 NOTECHS por sessão',
-      '94 códigos funcionais são importados no catálogo sem inventar seis modelos de sessão',
+      '72 sessões, cada uma com 18 itens técnicos e 15 NOTECHS',
+      '6 sessões INST/EXA e 108 vínculos importados da matriz canônica',
       'carga_sessao é a única fonte de duração',
     ],
   };
