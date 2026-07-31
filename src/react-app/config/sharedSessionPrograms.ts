@@ -3,7 +3,7 @@
  *
  * The PTO Rev10 examiner program has four canonical one-hour sessions. The
  * two physical reservations remain grouped as event 1 (sessions 1/4 and 2/4)
- * and event 2 (sessions 3/4 and 4/4). Legacy EXA-E*/EXA-V* codes remain
+ * and event 2 (sessions 3/4 and 4/4). Legacy EXA event and EXA-V codes remain
  * recognized only to hydrate historical records.
  */
 
