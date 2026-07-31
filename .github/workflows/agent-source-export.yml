@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - agent/audit-critical-high-hardening-20260731
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   export-source:
+    if: github.head_ref == 'agent/audit-critical-high-hardening-20260731' || github.ref_name == 'agent/audit-critical-high-hardening-20260731'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
