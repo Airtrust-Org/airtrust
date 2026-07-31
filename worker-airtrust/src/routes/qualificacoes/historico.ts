@@ -295,12 +295,26 @@ router.get(
     );
 
     const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
+    // The ON clause resolves the canonical active category with this precedence:
+    // 1. Match by categoria_id (from historico or tipo), but ONLY if active.
+    //    If the pointed category is inactive, the ID branch silently fails
+    //    and the name-based fallback takes over — this fixes the bug where
+    //    tipos pointing to different (active vs inactive) EAD categories
+    //    produced different colors for the same qualification concept.
+    // 2. Fallback: name match triggers when either categoria_id IS NULL or
+    //    the pointed category is inactive (checked via NOT EXISTS subquery).
+    //    Both branches require ativo=1, deleted_at IS NULL, empresa match.
     const categoriaJoinClause = hasCategoriaIdColumn
       ? `LEFT JOIN qualificacoes_categorias qc
-           ON (qc.id = COALESCE(qh.categoria_id, qt.categoria_id) 
-               OR (COALESCE(qh.categoria_id, qt.categoria_id) IS NULL AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))))
+           ON ((qc.id = COALESCE(qh.categoria_id, qt.categoria_id) AND qc.ativo = 1)
+               OR ((COALESCE(qh.categoria_id, qt.categoria_id) IS NULL
+                    OR NOT EXISTS (SELECT 1 FROM qualificacoes_categorias qc_chk
+                                   WHERE qc_chk.id = COALESCE(qh.categoria_id, qt.categoria_id)
+                                     AND qc_chk.deleted_at IS NULL AND qc_chk.ativo = 1
+                                     ${hasCategoriaEmpresaId ? 'AND qc_chk.empresa_id = f.empresa_id' : ''}))
+                   AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
+                   AND qc.ativo = 1))
           AND qc.deleted_at IS NULL
-          AND qc.ativo = 1
           ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`
       : `LEFT JOIN qualificacoes_categorias qc
            ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
@@ -821,12 +835,26 @@ router.get(
       'empresa_id',
     );
     const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
+    // The ON clause resolves the canonical active category with this precedence:
+    // 1. Match by categoria_id (from historico or tipo), but ONLY if active.
+    //    If the pointed category is inactive, the ID branch silently fails
+    //    and the name-based fallback takes over — this fixes the bug where
+    //    tipos pointing to different (active vs inactive) EAD categories
+    //    produced different colors for the same qualification concept.
+    // 2. Fallback: name match triggers when either categoria_id IS NULL or
+    //    the pointed category is inactive (checked via NOT EXISTS subquery).
+    //    Both branches require ativo=1, deleted_at IS NULL, empresa match.
     const categoriaJoinClause = hasCategoriaIdColumn
       ? `LEFT JOIN qualificacoes_categorias qc
-           ON (qc.id = COALESCE(qh.categoria_id, qt.categoria_id) 
-               OR (COALESCE(qh.categoria_id, qt.categoria_id) IS NULL AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))))
+           ON ((qc.id = COALESCE(qh.categoria_id, qt.categoria_id) AND qc.ativo = 1)
+               OR ((COALESCE(qh.categoria_id, qt.categoria_id) IS NULL
+                    OR NOT EXISTS (SELECT 1 FROM qualificacoes_categorias qc_chk
+                                   WHERE qc_chk.id = COALESCE(qh.categoria_id, qt.categoria_id)
+                                     AND qc_chk.deleted_at IS NULL AND qc_chk.ativo = 1
+                                     ${hasCategoriaEmpresaId ? 'AND qc_chk.empresa_id = f.empresa_id' : ''}))
+                   AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
+                   AND qc.ativo = 1))
           AND qc.deleted_at IS NULL
-          AND qc.ativo = 1
           ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`
       : `LEFT JOIN qualificacoes_categorias qc
            ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
@@ -929,12 +957,26 @@ router.get(
       'empresa_id',
     );
     const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
+    // The ON clause resolves the canonical active category with this precedence:
+    // 1. Match by categoria_id (from historico or tipo), but ONLY if active.
+    //    If the pointed category is inactive, the ID branch silently fails
+    //    and the name-based fallback takes over — this fixes the bug where
+    //    tipos pointing to different (active vs inactive) EAD categories
+    //    produced different colors for the same qualification concept.
+    // 2. Fallback: name match triggers when either categoria_id IS NULL or
+    //    the pointed category is inactive (checked via NOT EXISTS subquery).
+    //    Both branches require ativo=1, deleted_at IS NULL, empresa match.
     const categoriaJoinClause = hasCategoriaIdColumn
       ? `LEFT JOIN qualificacoes_categorias qc
-           ON (qc.id = COALESCE(qh.categoria_id, qt.categoria_id) 
-               OR (COALESCE(qh.categoria_id, qt.categoria_id) IS NULL AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))))
+           ON ((qc.id = COALESCE(qh.categoria_id, qt.categoria_id) AND qc.ativo = 1)
+               OR ((COALESCE(qh.categoria_id, qt.categoria_id) IS NULL
+                    OR NOT EXISTS (SELECT 1 FROM qualificacoes_categorias qc_chk
+                                   WHERE qc_chk.id = COALESCE(qh.categoria_id, qt.categoria_id)
+                                     AND qc_chk.deleted_at IS NULL AND qc_chk.ativo = 1
+                                     ${hasCategoriaEmpresaId ? 'AND qc_chk.empresa_id = f.empresa_id' : ''}))
+                   AND UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
+                   AND qc.ativo = 1))
           AND qc.deleted_at IS NULL
-          AND qc.ativo = 1
           ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}`
       : `LEFT JOIN qualificacoes_categorias qc
            ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
