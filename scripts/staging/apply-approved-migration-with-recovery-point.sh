@@ -130,6 +130,8 @@ ledger_count="$(read_ledger_count)"
 if [[ "$ledger_count" == "1" ]]; then
   validate_postconditions
   echo "MIGRATION_ALREADY_APPLIED_AND_VALIDATED=$migration_basename"
+  echo "RECOVERY_TIMESTAMP_UTC=NOT_REQUIRED_ALREADY_APPLIED"
+  echo "RECOVERY_POINT_CAPTURED=false"
   exit 0
 fi
 if [[ "$ledger_count" != "0" ]]; then
