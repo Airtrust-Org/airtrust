@@ -13,6 +13,8 @@ const SESSION_TYPES = Object.freeze({
     ordem: 70,
   },
   NOTURNO: { codigo: 'P10-NOT', nome: 'Treinamento noturno PTO Rev10', ordem: 80 },
+  INSTRUTOR: { codigo: 'P10-INS', nome: 'Treinamento de Instrutor PTO Rev10', ordem: 90 },
+  EXAMINADOR: { codigo: 'P10-EXA', nome: 'Treinamento de Examinador PTO Rev10', ordem: 100 },
 });
 
 function fail(message) {
@@ -21,6 +23,10 @@ function fail(message) {
 
 function esc(value) {
   return String(value).replace(/'/g, "''");
+}
+
+function sqlText(value) {
+  return value == null ? 'NULL' : `'${esc(value)}'`;
 }
 
 function chunk(values, size) {
@@ -62,7 +68,7 @@ function modelRowsFromPlan({ plan, maxVersionByCode }) {
         natureza: String(model.natureza),
         cargaSessao: String(model.carga_sessao),
         duracao: Number(model.duracao_estimada_minutos),
-        aeronave: String(model.aeronave),
+        aeronave: model.aeronave == null ? null : String(model.aeronave),
         ordemCurricular: Number(model.ordem_curricular),
         previousId: previous ? Number(previous.modelo_id) : null,
         versionNumber,
@@ -76,11 +82,6 @@ function modelRowsFromPlan({ plan, maxVersionByCode }) {
     });
 }
 
-/**
- * Pure DML builder. It only writes the curriculum catalog/version tables;
- * historical agendamentos, fichas, signatures and evaluations are never
- * referenced by any generated statement.
- */
 export function buildPtoRev10ModelAndLinkStatements({
   plan,
   empresaId,
@@ -112,7 +113,7 @@ export function buildPtoRev10ModelAndLinkStatements({
     ${modelRows
       .map((model) => {
         const description = `Programa: ${model.programa}; natureza: ${model.natureza}; carga: ${model.cargaSessao}`;
-        return `('${esc(model.codigoFisico)}','${esc(model.titulo)}','${esc(model.tipoDispositivo)}','${esc(description)}',${model.duracao},1,(SELECT id FROM tipos_sessao WHERE empresa_id=${empresaId} AND codigo='${esc(model.tipoSessaoCodigo)}' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1),'${esc(model.aeronave)}',${empresaId},CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`;
+        return `('${esc(model.codigoFisico)}','${esc(model.titulo)}','${esc(model.tipoDispositivo)}','${esc(description)}',${model.duracao},1,(SELECT id FROM tipos_sessao WHERE empresa_id=${empresaId} AND codigo='${esc(model.tipoSessaoCodigo)}' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1),${sqlText(model.aeronave)},${empresaId},CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`;
       })
       .join(',\n    ')};`);
 
@@ -125,7 +126,7 @@ export function buildPtoRev10ModelAndLinkStatements({
       .join(',\n    ')}
   )`;
 
-  const linksCte = (items) => `_links(codigo_canonico,ordem,manobra_codigo,execucao_pf,fase_voo,tipo_conteudo,nome) AS (VALUES
+  const linkCte = (items) => `_links(codigo_canonico,ordem,manobra_codigo,execucao_pf,fase_voo,tipo_conteudo,nome) AS (VALUES
     ${items
       .map(
         (item) =>
@@ -135,7 +136,7 @@ export function buildPtoRev10ModelAndLinkStatements({
   )`;
 
   for (const items of chunk(plan.items, LINKS_CHUNK_SIZE)) {
-    const links = linksCte(items);
+    const links = linkCte(items);
     statements.push(`WITH ${modelsCte}, ${links}
       INSERT INTO modelos_sessao_manobras(
         modelo_id,manobra_id,ordem,obrigatoria,tripulante,observacoes,created_at,updated_at
