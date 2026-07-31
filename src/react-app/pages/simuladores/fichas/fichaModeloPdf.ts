@@ -102,7 +102,7 @@ export function buildFichaModeloPdfData(
     horario_fim: '',
     simulador: '',
     simulador_modelo: modelo.modelo_aeronave || undefined,
-    carga_horaria_total: specialDefinition ? '120 minutos' : '',
+    carga_horaria_total: specialDefinition ? `${specialDefinition.durationMinutes} minutos` : '',
     carga_horaria_pf: '',
     carga_horaria_pm: '',
     status: 'MODELO',
