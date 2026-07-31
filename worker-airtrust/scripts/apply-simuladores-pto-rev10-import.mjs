@@ -210,9 +210,7 @@ function assertPostconditions(dbPath, plan, empresaId) {
     )[0]?.c || 0,
   );
   if (currentCount !== plan.totals.models) {
-    fail(
-      `pós-condição: esperados ${plan.totals.models} modelos correntes; encontrados ${currentCount}`,
-    );
+    fail(`pós-condição: esperados ${plan.totals.models} modelos correntes; encontrados ${currentCount}`);
   }
 
   const invalidLinkCounts = sqliteJson(
@@ -259,12 +257,33 @@ function assertPostconditions(dbPath, plan, empresaId) {
   }
 }
 
+export function classifyExistingPtoRev10Import(existingImport, planSha256) {
+  if (!existingImport) return 'NEW';
+  if (
+    existingImport.status === 'APPLIED' &&
+    String(existingImport.plan_sha256 || '') === String(planSha256 || '')
+  ) {
+    return 'IDEMPOTENT_APPLIED';
+  }
+  return 'CONFLICT';
+}
+
 export function applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmation }) {
   assertRequiredSchema(dbPath);
   assertPtoRev10Plan(plan);
   const empresaId = Number(plan.empresa_id);
   const tenant = sqliteJson(dbPath, `SELECT id FROM empresas WHERE id=${empresaId}`);
   if (tenant.length !== 1) fail('tenant inexistente');
+
+  const existingImport = sqliteJson(
+    dbPath,
+    `SELECT uuid,status,plan_sha256 FROM simuladores_matriz_imports WHERE uuid='${esc(importUuid)}'`,
+  )[0];
+  const existingState = classifyExistingPtoRev10Import(existingImport, plan.plan_sha256);
+  if (existingState === 'IDEMPOTENT_APPLIED') {
+    return { ok: true, idempotent: true, status: 'APPLIED' };
+  }
+  if (existingState === 'CONFLICT') fail('import-uuid já utilizado');
 
   const fingerprint = loadPtoRev10Fingerprint(dbPath, empresaId);
   if (fingerprint.fingerprint !== plan.base_fingerprint) fail('fingerprint divergente');
@@ -286,15 +305,6 @@ export function applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmati
     };
   }
   if (confirmation !== APPLY_CONFIRMATION) fail('confirmação explícita de apply local ausente');
-
-  const existingImport = sqliteJson(
-    dbPath,
-    `SELECT uuid,status,plan_sha256 FROM simuladores_matriz_imports WHERE uuid='${esc(importUuid)}'`,
-  )[0];
-  if (existingImport?.status === 'APPLIED' && existingImport.plan_sha256 === plan.plan_sha256) {
-    return { ok: true, idempotent: true, status: 'APPLIED' };
-  }
-  if (existingImport) fail('import-uuid já utilizado');
 
   const { existingResolutionByCode, manobraById } = gatherResolutionState(
     dbPath,
