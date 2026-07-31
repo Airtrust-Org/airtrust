@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { FrmsFilterProvider, useFrmsFilters } from '../../pages/frms/components/FrmsFilterContext';
 import FrmsFilterChips from '../../pages/frms/components/FrmsFilterChips';
+import FrmsFilters from '../../pages/frms/components/FrmsFilters';
 
 // Helper to read filter state
 function FilterReader() {
@@ -108,5 +109,25 @@ describe('FrmsFilterChips', () => {
     fireEvent.click(screen.getByTestId('add-status'));
     // Chip renders the label "Crítico" (not the key CRITICO)
     expect(screen.getByText('Crítico')).toBeDefined();
+  });
+});
+
+describe('FrmsFilters', () => {
+  it('exposes an accessible clear control and clears the search', () => {
+    render(
+      <FrmsFilterProvider>
+        <FrmsFilters />
+      </FrmsFilterProvider>,
+    );
+
+    const input = screen.getByTestId('frms-filtro-nome') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Carlos' } });
+
+    const clearButton = screen.getByRole('button', { name: 'Limpar busca' });
+    expect(clearButton).toHaveAttribute('type', 'button');
+    expect(clearButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+
+    fireEvent.click(clearButton);
+    expect(input.value).toBe('');
   });
 });

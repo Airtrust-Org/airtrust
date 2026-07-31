@@ -100,8 +100,9 @@ export default function SeletorFuncionario({ value, onChange, required = false, 
             onClick={handleClear}
             className="p-1 hover:bg-primary/20 rounded"
             title="Remover seleção"
+            aria-label="Remover seleção"
           >
-            <X className="w-4 h-4 text-gray-600" />
+            <X className="w-4 h-4 text-gray-600" aria-hidden="true" />
           </button>
         </div>
       ) : (
