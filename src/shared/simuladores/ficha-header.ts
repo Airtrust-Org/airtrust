@@ -118,10 +118,8 @@ export interface FichaHeaderTitle {
 
 const FICHA_HEADER_TITLE_FIXO = 'FICHA DE TREINAMENTO DE VOO';
 
-// title1 é sempre o texto fixo abaixo — inclusive para sessões especiais
-// (examinador/instrutor). O código e o nome específicos da sessão (incluindo,
-// para sessões especiais, o headerTitle que as identifica, ex.: "Treinamento
-// Prático de Examinador 1/2") ficam em title2, no formato "<código> — <nome>".
+// title1 é sempre o texto fixo abaixo — inclusive para sessões especiais.
+// Código e nome específicos ficam em title2 no formato "<código> — <nome>".
 export function buildFichaHeaderTitle(params: BuildFichaHeaderTitleParams): FichaHeaderTitle {
   const specialDefinition = getSpecialEventSessionDefinition(params.sessaoCodigo);
 
@@ -138,8 +136,8 @@ export function buildFichaHeaderRows(params: BuildFichaHeaderRowsParams): FichaH
   const horario = joinScheduleRange(params.horarioInicio, params.horarioFim);
   const simulador = String(params.simuladorDisplayName || '').trim();
 
-  if (specialDefinition?.kind === 'instructor') {
-    return [
+  if (specialDefinition) {
+    const identityRows: FichaHeaderRow[] = [
       [
         { label: 'Data', value: String(params.data || '').trim() },
         { label: 'Horário', value: horario },
@@ -148,25 +146,42 @@ export function buildFichaHeaderRows(params: BuildFichaHeaderRowsParams): FichaH
       ],
       [
         {
-          label: specialDefinition.participantLabel || 'Instrutor-aluno',
+          label: specialDefinition.participantLabel,
           value: String(params.tripulanteNome || '').trim(),
         },
         { label: 'ANAC', value: String(params.tripulanteCodigoAnac || '').trim() },
         {
-          label: specialDefinition.supervisorLabel || 'Instrutor supervisor',
+          label: specialDefinition.supervisorLabel,
           value: String(params.instrutorNome || '').trim(),
         },
         { label: 'ANAC', value: String(params.instrutorCodigoAnac || '').trim() },
       ],
+    ];
+
+    if (specialDefinition.kind === 'instructor') {
+      return [
+        ...identityRows,
+        [
+          { label: 'Simulador', value: simulador },
+          {
+            label: 'Dispositivo/Matrícula',
+            value: String(params.dispositivoIdentificacao || '').trim(),
+          },
+          {
+            label: 'Assento',
+            value: getInstructionSeatLabel(params.assentoInstrucaoUtilizado),
+          },
+        ],
+      ];
+    }
+
+    return [
+      ...identityRows,
       [
         { label: 'Simulador', value: simulador },
         {
           label: 'Dispositivo/Matrícula',
           value: String(params.dispositivoIdentificacao || '').trim(),
-        },
-        {
-          label: 'Assento',
-          value: getInstructionSeatLabel(params.assentoInstrucaoUtilizado),
         },
       ],
     ];
