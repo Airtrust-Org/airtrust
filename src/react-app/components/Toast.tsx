@@ -111,12 +111,13 @@ function ToastItem({ toast, onClose }: ToastProps) {
       {getIcon()}
       <p className="flex-1 text-sm font-medium">{toast.message}</p>
       <button
+        type="button"
         onClick={handleClose}
         className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
         aria-label="Fechar notificação"
         title="Fechar (ESC)"
       >
-        <X className="w-4 h-4" />
+        <X className="w-4 h-4" aria-hidden="true" />
       </button>
     </div>
   );
@@ -127,15 +128,13 @@ interface ToastContainerProps {
   onClose: (id: string) => void;
 }
 
-// ===== TOAST CONTAINER WITH ARIA LIVE REGION =====
+// ===== TOAST CONTAINER AS A NAMED REGION =====
 export function ToastContainer({ toasts, onClose }: ToastContainerProps) {
   return (
     <div
       className="fixed top-4 right-4 z-50 flex flex-col items-end pointer-events-none"
       role="region"
       aria-label="Notificações"
-      aria-live="polite"
-      aria-atomic="false"
     >
       {toasts.map((toast) => (
         <div key={toast.id} className="pointer-events-auto">
