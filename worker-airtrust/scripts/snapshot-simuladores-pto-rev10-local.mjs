@@ -44,6 +44,21 @@ function tableExists(dbPath, tableName) {
   return rows.length === 1;
 }
 
+const FUNCTIONAL_MODEL_CODES = [
+  'INST-E01',
+  'INST-E02',
+  'EXA-E01',
+  'EXA-E02',
+  'EXA-V01',
+  'EXA-V02',
+  'EXA-V03',
+  'EXA-V04',
+  'EXA-01/04',
+  'EXA-02/04',
+  'EXA-03/04',
+  'EXA-04/04',
+];
+
 export function collectPtoRev10LocalTenantState(dbPath, empresaId) {
   if (!fs.existsSync(dbPath)) fail('D1 local inexistente');
   if (!Number.isInteger(empresaId) || empresaId <= 0) fail('empresa_id inválido');
@@ -102,6 +117,21 @@ export function collectPtoRev10LocalTenantState(dbPath, empresaId) {
       ORDER BY ms.id`,
   );
   if (activeAircraftModels.length === 0) fail('tenant sem catálogo ativo AW139/S-76');
+  const functionalCodesSql = FUNCTIONAL_MODEL_CODES.map((code) => `'${code}'`).join(',');
+  const activeFunctionalModels = sqliteJson(
+    dbPath,
+    `SELECT ms.id,
+            ms.codigo,
+            COALESCE(msv.codigo_canonico,ms.codigo) AS codigo_canonico,
+            COALESCE(ms.modelo_aeronave,'') AS modelo_aeronave,
+            CASE WHEN msv.is_current=1 THEN 1 ELSE 0 END AS is_current_version
+       FROM modelos_sessao ms
+       LEFT JOIN modelos_sessao_versionamento msv
+         ON msv.modelo_id=ms.id AND msv.empresa_id=ms.empresa_id AND msv.is_current=1
+      WHERE ms.empresa_id=${empresaId} AND ms.ativo=1 AND ms.deleted_at IS NULL
+        AND (ms.codigo IN (${functionalCodesSql}) OR msv.codigo_canonico IN (${functionalCodesSql}))
+      ORDER BY ms.id`,
+  );
 
   return {
     empresa_id: empresaId,
@@ -110,6 +140,7 @@ export function collectPtoRev10LocalTenantState(dbPath, empresaId) {
     all_manoeuvres: resolvedManoeuvres,
     links,
     active_aircraft_models: activeAircraftModels,
+    active_functional_models: activeFunctionalModels,
     migration_state: {
       has_0440: has0440,
       has_0441: has0441,
@@ -150,6 +181,7 @@ export function runCli(argv = process.argv) {
         out,
         empresa_id: empresaId,
         active_aircraft_models: state.active_aircraft_models.length,
+        active_functional_models: state.active_functional_models.length,
         manoeuvres: state.resolved_manoeuvres.length,
         links: state.links.length,
       },
