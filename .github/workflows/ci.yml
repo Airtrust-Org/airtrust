@@ -166,10 +166,11 @@ jobs:
           git apply --check .github/agent-finalize-supplement.patch
           git apply .github/agent-finalize-supplement.patch
 
-          # GitHub's workflow token cannot update workflow files. Preserve the
-          # current workflow tree for this push; the connected GitHub app will
-          # apply the reviewed workflow changes immediately afterward.
+          # Preserve all currently tracked workflows and remove the new
+          # workflow from this token-limited push. The connected GitHub app
+          # applies the reviewed workflow changes immediately afterward.
           git checkout HEAD -- .github/workflows
+          rm -f .github/workflows/d1-production-backup-restore-drill.yml
 
           rm -rf \
             .github/agent-finalize \
