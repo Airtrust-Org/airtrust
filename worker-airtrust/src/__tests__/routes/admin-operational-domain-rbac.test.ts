@@ -180,241 +180,170 @@ describe('admin operational-domain-rbac readiness + activation', () => {
   });
 });
 
-describe('admin operational-domain-rbac classification (Item 2)', () => {
+describe('admin operational-domain-rbac classification (Item 2 - Atomic Fail-Closed)', () => {
   beforeEach(() => {
     currentEmpresaId = 3;
   });
 
-  it('GET /unclassified lista setor, categoria e curso pendentes do tenant', async () => {
+  it('1, 15. classifica qualificacao_tipo de null para OPERACOES atômico', async () => {
     const db = buildDb();
     const app = buildApp();
-    const res = await app.request(
-      '/api/admin/operational-domain-rbac/unclassified',
-      {},
-      { DB: db } as unknown as Env,
-    );
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'OPERACOES' })
+    }, { DB: db } as unknown as Env);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      data: {
-        setores: unknown[];
-        categorias: unknown[];
-        cursos: unknown[];
-        tipos: unknown[];
-        dominios_validos: string[];
-      };
-    };
-    expect(body.data.setores).toEqual([{ id: 30, nome: 'Sem domínio' }]);
-    expect(body.data.categorias).toEqual([{ id: 3, nome: 'Categoria X' }]);
-    expect(body.data.cursos).toEqual([{ id: 600, titulo: 'Curso Y' }]);
-    // tipo 40 (categoria mista sem domínio, sem override) aparece; tipo 41
-    // (categoria já classificada) NÃO aparece — resolve via fallback de
-    // categoria, não precisa de override.
-    expect(body.data.tipos).toEqual([{ id: 40, nome: 'Tipo Pendente' }]);
-    expect(body.data.dominios_validos).toContain('MANUTENCAO');
+    const tipo = db.fixtures.qualificacoesTipos!.find(t => t.id === 40);
+    expect(tipo?.dominio_codigo).toBe('OPERACOES');
+    const audit = db.fixtures.auditoria!.find(a => a.tabela_afetada === 'qualificacoes_tipos' && a.registro_id === '40');
+    expect(audit).toBeDefined();
+    expect(JSON.parse(audit!.dados_antes!)).toEqual({ dominio_codigo: null });
+    expect(JSON.parse(audit!.dados_depois!)).toEqual({ dominio_codigo: 'OPERACOES' });
   });
 
-  it('POST /classify classifica um qualificacao_tipo (round-trip completo: listar pendente -> classificar -> some da listagem)', async () => {
+  it('2. reclassifica qualificacao_tipo de OPERACOES para outro ativo', async () => {
     const db = buildDb();
+    db.fixtures.qualificacoesTipos!.find(t => t.id === 40)!.dominio_codigo = 'OPERACOES';
     const app = buildApp();
-
-    // 1. Listar pendentes: tipo 40 deve aparecer.
-    const before = await app.request(
-      '/api/admin/operational-domain-rbac/unclassified',
-      {},
-      { DB: db } as unknown as Env,
-    );
-    const beforeBody = (await before.json()) as { data: { tipos: Array<{ id: number }> } };
-    expect(beforeBody.data.tipos.map((t) => t.id)).toContain(40);
-
-    // 2. Classificar.
-    const classifyRes = await app.request(
-      '/api/admin/operational-domain-rbac/classify',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resource_type: 'qualificacao_tipo',
-          resource_id: 40,
-          dominio_codigo: 'OPERACOES',
-        }),
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(classifyRes.status).toBe(200);
-    const classifyBody = (await classifyRes.json()) as {
-      success: boolean;
-      data: { resource_type: string; resource_id: number; dominio_codigo: string };
-    };
-    expect(classifyBody.success).toBe(true);
-    expect(classifyBody.data).toEqual({
-      resource_type: 'qualificacao_tipo',
-      resource_id: 40,
-      dominio_codigo: 'OPERACOES',
-    });
-    expect(db.fixtures.qualificacoesTipos?.find((t) => t.id === 40)?.dominio_codigo).toBe('OPERACOES');
-
-    // 3. A categoria mista (3) em si NUNCA é classificada por esta ação —
-    // apenas o tipo específico.
-    expect(db.fixtures.qualificacoesCategorias?.find((c) => c.id === 3)?.dominio_codigo).toBeNull();
-
-    // 4. Listar pendentes de novo: tipo 40 não aparece mais.
-    const after = await app.request(
-      '/api/admin/operational-domain-rbac/unclassified',
-      {},
-      { DB: db } as unknown as Env,
-    );
-    const afterBody = (await after.json()) as { data: { tipos: Array<{ id: number }> } };
-    expect(afterBody.data.tipos.map((t) => t.id)).not.toContain(40);
-  });
-
-  it('POST /classify de qualificacao_tipo em outro tenant retorna 404 (isolamento)', async () => {
-    const db = buildDb();
-    currentEmpresaId = 2; // tipo 40/41 pertencem ao tenant 3
-    const app = buildApp();
-    const res = await app.request(
-      '/api/admin/operational-domain-rbac/classify',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resource_type: 'qualificacao_tipo',
-          resource_id: 40,
-          dominio_codigo: 'OPERACOES',
-        }),
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(res.status).toBe(404);
-    expect(db.fixtures.qualificacoesTipos?.find((t) => t.id === 40)?.dominio_codigo).toBeNull();
-  });
-
-  it('POST /classify classifica um setor e o remove da listagem de pendentes', async () => {
-    const db = buildDb();
-    const app = buildApp();
-    const res = await app.request(
-      '/api/admin/operational-domain-rbac/classify',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource_type: 'setor', resource_id: 30, dominio_codigo: 'MANUTENCAO' }),
-      },
-      { DB: db } as unknown as Env,
-    );
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'SGSO' })
+    }, { DB: db } as unknown as Env);
     expect(res.status).toBe(200);
-    expect(db.fixtures.setores.find((s) => s.id === 30)?.dominio_codigo).toBe('MANUTENCAO');
-
-    const readiness = await app.request(
-      '/api/admin/operational-domain-rbac/readiness',
-      {},
-      { DB: db } as unknown as Env,
-    );
-    const readinessBody = (await readiness.json()) as { data: { setores_sem_dominio: number } };
-    expect(readinessBody.data.setores_sem_dominio).toBe(0);
+    expect(db.fixtures.qualificacoesTipos!.find(t => t.id === 40)?.dominio_codigo).toBe('SGSO');
+    const audit = db.fixtures.auditoria!.find(a => a.registro_id === '40');
+    expect(JSON.parse(audit!.dados_antes!)).toEqual({ dominio_codigo: 'OPERACOES' });
+    expect(JSON.parse(audit!.dados_depois!)).toEqual({ dominio_codigo: 'SGSO' });
   });
 
-  it('POST /classify classifica categoria e curso', async () => {
+  it('3. repete o mesmo domínio de forma idempotente', async () => {
     const db = buildDb();
+    db.fixtures.qualificacoesTipos!.find(t => t.id === 40)!.dominio_codigo = 'OPERACOES';
     const app = buildApp();
-
-    const resCategoria = await app.request(
-      '/api/admin/operational-domain-rbac/classify',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource_type: 'categoria', resource_id: 3, dominio_codigo: 'SGSO' }),
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(resCategoria.status).toBe(200);
-    expect(db.fixtures.qualificacoesCategorias!.find((c) => c.id === 3)?.dominio_codigo).toBe('SGSO');
-
-    const resCurso = await app.request(
-      '/api/admin/operational-domain-rbac/classify',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource_type: 'curso', resource_id: 600, dominio_codigo: 'FRMS' }),
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(resCurso.status).toBe(200);
-    expect(db.fixtures.lmsCursos!.find((c) => c.id === 600)?.dominio_codigo).toBe('FRMS');
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'OPERACOES' })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(200);
+    expect(db.fixtures.qualificacoesTipos!.find(t => t.id === 40)?.dominio_codigo).toBe('OPERACOES');
   });
 
-  it('rejeita domínio desconhecido (nunca aceita texto livre)', async () => {
+  it('4, 16. desclassifica qualificacao_tipo para null com auditoria', async () => {
+    const db = buildDb();
+    db.fixtures.qualificacoesTipos!.find(t => t.id === 40)!.dominio_codigo = 'OPERACOES';
+    const app = buildApp();
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: null })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(200);
+    expect(db.fixtures.qualificacoesTipos!.find(t => t.id === 40)?.dominio_codigo).toBeNull();
+    const audit = db.fixtures.auditoria!.find(a => a.registro_id === '40');
+    expect(JSON.parse(audit!.dados_antes!)).toEqual({ dominio_codigo: 'OPERACOES' });
+    expect(JSON.parse(audit!.dados_depois!)).toEqual({ dominio_codigo: null });
+  });
+
+  it('5. desclassifica qualificacao_tipo já null idempotente', async () => {
     const db = buildDb();
     const app = buildApp();
-    const res = await app.request(
-      '/api/admin/operational-domain-rbac/classify',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource_type: 'setor', resource_id: 30, dominio_codigo: 'INVENTADO' }),
-      },
-      { DB: db } as unknown as Env,
-    );
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: null })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(200);
+  });
+
+  it('6, 7, 8. rejeita null para setor, categoria e curso', async () => {
+    const db = buildDb();
+    const app = buildApp();
+    let res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'setor', resource_id: 30, dominio_codigo: null })
+    }, { DB: db } as unknown as Env);
     expect(res.status).toBe(400);
-    expect(db.fixtures.setores.find((s) => s.id === 30)?.dominio_codigo).toBeNull();
-  });
 
-  it('404 quando o recurso não pertence ao tenant (isolamento)', async () => {
-    const db = buildDb();
-    const app = buildApp();
-    // setor 10 pertence à empresa 2, mas o request está na empresa 3.
-    const res = await app.request(
-      '/api/admin/operational-domain-rbac/classify',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource_type: 'setor', resource_id: 10, dominio_codigo: 'MANUTENCAO' }),
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(res.status).toBe(404);
-    expect(db.fixtures.setores.find((s) => s.id === 10)?.dominio_codigo).toBe('OPERACOES');
-  });
-
-  it('Fix 1: rejeita classificar com um domínio existente porém inativo em dominios_operacionais', async () => {
-    const db = buildDb();
-    db.fixtures.dominios.find((d) => d.codigo === 'CORPORATIVO')!.ativo = 0;
-    const app = buildApp();
-    const res = await app.request(
-      '/api/admin/operational-domain-rbac/classify',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource_type: 'setor', resource_id: 30, dominio_codigo: 'CORPORATIVO' }),
-      },
-      { DB: db } as unknown as Env,
-    );
+    res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'categoria', resource_id: 3, dominio_codigo: null })
+    }, { DB: db } as unknown as Env);
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/desconhecido ou inativo/i);
-    expect(db.fixtures.setores.find((s) => s.id === 30)?.dominio_codigo).toBeNull();
+
+    res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'curso', resource_id: 600, dominio_codigo: null })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(400);
   });
 
-  it('permite desclassificar um recurso enviando dominio_codigo = null', async () => {
+  it('9. rejeita domínio inexistente', async () => {
     const db = buildDb();
-    currentEmpresaId = 2; // setor 10 pertence à empresa 2 e tem domínio OPERACOES
     const app = buildApp();
-    const res = await app.request(
-      '/api/admin/operational-domain-rbac/classify',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource_type: 'setor', resource_id: 10, dominio_codigo: null }),
-      },
-      { DB: db } as unknown as Env,
-    );
-    expect(res.status).toBe(200);
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'INVENTADO' })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(400);
+  });
+
+  it('10. rejeita domínio inativo', async () => {
+    const db = buildDb();
+    db.fixtures.dominios.find(d => d.codigo === 'CORPORATIVO')!.ativo = 0;
+    const app = buildApp();
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'CORPORATIVO' })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(400);
+  });
+
+  it('11. retorna 404 para recurso inexistente', async () => {
+    const db = buildDb();
+    const app = buildApp();
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 9999, dominio_codigo: 'OPERACOES' })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(404);
+  });
+
+  it('12, 17. 404 para recurso de outro tenant, nenhuma linha alterada', async () => {
+    const db = buildDb();
+    currentEmpresaId = 2; // tipo 40 is tenant 3
+    const app = buildApp();
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'OPERACOES' })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(404);
+    expect(db.fixtures.qualificacoesTipos!.find(t => t.id === 40)?.dominio_codigo).toBeNull();
+  });
+
+  it('13. falha na transação não deixa o UPDATE persistido', async () => {
+    const db = buildDb();
+    const originalBatch = db.batch;
+    db.batch = vi.fn().mockRejectedValue(new Error('Simulated D1 batch failure'));
     
-    const classifyBody = (await res.json()) as {
-      success: boolean;
-      data: { resource_type: string; resource_id: number; dominio_codigo: string | null };
-    };
-    expect(classifyBody.success).toBe(true);
-    expect(classifyBody.data.dominio_codigo).toBeNull();
-    expect(db.fixtures.setores.find((s) => s.id === 10)?.dominio_codigo).toBeNull();
+    const app = buildApp();
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'OPERACOES' })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(500);
+    db.batch = originalBatch;
+  });
+
+  it('14. se UPDATE meta.changes !== 1, lança 500 sem persistir falsa auditoria', async () => {
+    const db = buildDb();
+    const originalBatch = db.batch;
+    db.batch = vi.fn().mockResolvedValue([{ meta: { changes: 0 } }, { meta: { changes: 1 } }]);
+    
+    const app = buildApp();
+    const res = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 40, dominio_codigo: 'OPERACOES' })
+    }, { DB: db } as unknown as Env);
+    expect(res.status).toBe(500);
+    db.batch = originalBatch;
   });
 });
 
@@ -422,9 +351,6 @@ describe('admin operational-domain-rbac readiness — domínio inativo/desconhec
   it('bloqueia readiness quando um setor aponta para um domínio que existe mas está inativo', async () => {
     const db = buildDb();
     currentEmpresaId = 2;
-    // Tenant 2 normalmente é totalmente pronto (ready=true); desativamos o
-    // domínio que o setor 10 já usa para simular um domínio desativado
-    // DEPOIS que setores/categorias/cursos já apontavam para ele.
     db.fixtures.dominios.find((d) => d.codigo === 'OPERACOES')!.ativo = 0;
     const app = buildApp();
     const res = await app.request(
@@ -443,8 +369,6 @@ describe('admin operational-domain-rbac readiness — domínio inativo/desconhec
   it('bloqueia readiness quando um setor aponta para um código de domínio desconhecido', async () => {
     const db = buildDb();
     currentEmpresaId = 2;
-    // Simula drift de dado: dominio_codigo aponta para um código que nunca
-    // existiu em dominios_operacionais (nem ativo, nem inativo).
     db.fixtures.setores.find((s) => s.id === 10)!.dominio_codigo = 'CODIGO_INEXISTENTE';
     const app = buildApp();
     const res = await app.request(

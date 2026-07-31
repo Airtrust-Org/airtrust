@@ -38,6 +38,42 @@ vi.mock('../../middleware/auth', () => ({
 vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return { ...actual, getEmpresaId: (c: any) => Number(c.get('empresaId') || 0) };
+
+  it('DEPOIS do rollback do admin: a mesma requisição (antes autorizada) falha com CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED', async () => {
+    const db = makeRouteDb(buildFixtures());
+    const app = makeApp(db);
+
+    // 1. Rollback do override via endpoint admin (simula desclassificação humana)
+    const classifyRes = await app.request('/api/admin/operational-domain-rbac/classify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-empresa-id': '50',
+        'x-test-user-id': '6003', // Admin
+        'x-test-role': 'admin'
+      },
+      body: JSON.stringify({ resource_type: 'qualificacao_tipo', resource_id: 9001, dominio_codigo: null }),
+    });
+    expect(classifyRes.status).toBe(200);
+
+    // 2. Tentar gerar certificado novamente com gestor de OPERACOES
+    const res = await app.request('/historico/80001/certificados/gerar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-empresa-id': '50',
+        'x-test-user-id': '6001',
+        'x-test-role': 'gestor',
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { success: boolean; code?: string };
+    expect(json.success).toBe(false);
+    expect(json.code).toBe('CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED');
+    expect(generateCertMock).not.toHaveBeenCalled();
+  });
 });
 
 vi.mock('../../middleware/rbac', () => ({
@@ -72,6 +108,7 @@ vi.mock('../../routes/qualificacoes-certificados-helpers', async (importOriginal
 });
 
 import certificadosWriteRouter from '../../routes/qualificacoes-certificados-write';
+import adminRbacRouter from '../../routes/admin-operational-domain-rbac';
 
 // ── Fixtures reproducing the real-shaped incident ───────────────────────────
 //
@@ -170,6 +207,7 @@ function makeApp(dbMock: D1Database) {
     await next();
   });
   app.route('/', certificadosWriteRouter);
+  app.route('/api/admin/operational-domain-rbac', adminRbacRouter);
   // The RBAC guard's ApiError is thrown from MIDDLEWARE (before the route
   // handler's own try/catch), so it must be caught by the same global
   // error handler production registers in index.ts — without it, Hono's

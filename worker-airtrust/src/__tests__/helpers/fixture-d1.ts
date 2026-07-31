@@ -102,6 +102,17 @@ export interface Fixtures {
   }>;
   usuarios?: Array<{ id: number; email?: string; deleted_at?: string | null }>;
   usuariosEmpresas?: Array<{ usuario_id: number; empresa_id: number; role: string }>;
+  auditoria?: Array<{
+    usuario_id?: string | null;
+    usuario_nome?: string | null;
+    acao?: string | null;
+    tabela_afetada?: string | null;
+    registro_id?: string | null;
+    dados_antes?: string | null;
+    dados_depois?: string | null;
+    ip_address?: string | null;
+    user_agent?: string | null;
+  }>;
 }
 
 interface D1LikeStatement {
@@ -113,6 +124,7 @@ interface D1LikeStatement {
 
 export interface TestD1 {
   prepare: (sql: string) => D1LikeStatement;
+  batch: (statements: D1LikeStatement[]) => Promise<Array<{ meta: { changes: number; last_row_id: number } }>>;
   fixtures: Fixtures;
 }
 
@@ -134,6 +146,7 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     sessoesParticipantes: [],
     usuarios: [],
     usuariosEmpresas: [],
+    auditoria: [],
     ...fixtures,
   };
 
@@ -574,13 +587,30 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       return { first: { n } };
     }
 
-    // admin-operational-domain-rbac.ts: activate/deactivate
     if (sql.includes('UPDATE empresas SET operational_domain_rbac_enabled')) {
       const enabled = sql.includes('= 1') ? 1 : 0;
       const [empresaId] = args as [number];
       const empresa = f.empresas.find((e) => e.id === empresaId);
       if (empresa) empresa.operational_domain_rbac_enabled = enabled as 0 | 1;
       return { run: { changes: empresa ? 1 : 0 } };
+    }
+
+    if (sql.includes('INSERT INTO auditoria')) {
+      if (args[4] === 'fail_audit_injection') {
+        throw new Error('Simulated audit insert failure');
+      }
+      f.auditoria!.push({
+        usuario_id: args[0] as string | null,
+        usuario_nome: args[1] as string | null,
+        acao: args[2] as string | null,
+        tabela_afetada: args[3] as string | null,
+        registro_id: args[4] as string | null,
+        dados_antes: args[5] as string | null,
+        dados_depois: args[6] as string | null,
+        ip_address: args[7] as string | null,
+        user_agent: args[8] as string | null,
+      });
+      return { run: { changes: 1 } };
     }
 
     throw new Error(`fixture-d1: unrecognized query — ${sql}`);
@@ -609,6 +639,18 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
   return {
     fixtures: f,
     prepare: (sql: string) => makeStatement(sql, []),
+    batch: async (statements: D1LikeStatement[]) => {
+      // Very naive transactional behavior: if any statement throws, the updates applied so far are NOT rolled back
+      // in this simple memory mock, but in the tests we will construct the failure case such that it fails early
+      // or we can test the behavior appropriately.
+      // D1 transactions are atomic, but we aren't doing deep cloning here.
+      // For the tests (which use isolated instances or rollback manually), it's sufficient.
+      const results = [];
+      for (const stmt of statements) {
+        results.push(await stmt.run());
+      }
+      return results;
+    },
   };
 }
 
