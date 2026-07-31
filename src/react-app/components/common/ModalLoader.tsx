@@ -13,10 +13,22 @@ function ModalLoadingFallback({ isOpen }: { isOpen: boolean }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg p-6 shadow-xl">
+    <div
+      className="fixed inset-0 z-modal flex items-center justify-center bg-black/50"
+      role="presentation"
+    >
+      <div
+        className="bg-white rounded-lg p-6 shadow-xl"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        aria-busy="true"
+      >
         <div className="flex items-center gap-3">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+          <div
+            className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"
+            aria-hidden="true"
+          />
           <span className="text-gray-700">Carregando...</span>
         </div>
       </div>
