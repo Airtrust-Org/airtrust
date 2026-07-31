@@ -26,6 +26,16 @@ describe('PTO Rev10 special instructor/examiner sessions', () => {
     }
   });
 
+  it('keeps the short header title distinct from the full canonical title', () => {
+    const definition = getSpecialEventSessionDefinition('EXA-04/04');
+
+    expect(definition?.headerTitle).toBe('Treinamento Prático de Examinador 4/4');
+    expect(definition?.headerSubtitle).toBe('Condução Integral do Exame');
+    expect(definition?.fullTitle).toBe(
+      'Treinamento Prático de Examinador 4/4 — Condução Integral do Exame',
+    );
+  });
+
   it('uses the canonical instructor loads from the matrix', () => {
     expect(getSpecialEventSessionDefinition('INST-E01')?.durationMinutes).toBe(60);
     expect(getSpecialEventSessionDefinition('INST-E02')?.durationMinutes).toBe(120);
