@@ -1,10 +1,15 @@
-name: D1 Production Backup Restore Drill
+name: D1 Production Export Restore Drill (Maintenance Window)
+
+# A full D1 export can temporarily block database requests. This workflow is
+# therefore NOT a prerequisite for routine Schema V2 changes and must run only
+# in an explicitly approved production maintenance window. Routine schema
+# changes capture a Time Travel recovery timestamp in apply-schema-change-v2.yml.
 
 on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: 'Type D1_PRODUCTION_BACKUP_RESTORE_DRILL'
+        description: 'Type D1_PRODUCTION_EXPORT_MAINTENANCE_WINDOW'
         required: true
         type: string
 
@@ -13,16 +18,17 @@ permissions:
 
 jobs:
   backup-restore-drill:
-    name: Export and Restore Production D1 Read-only
+    name: Export and Restore Production D1 in Maintenance Window
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Validate confirmation
+      - name: Validate maintenance-window confirmation
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-          test "$CONFIRMATION" = "D1_PRODUCTION_BACKUP_RESTORE_DRILL"
+          test "$CONFIRMATION" = "D1_PRODUCTION_EXPORT_MAINTENANCE_WINDOW"
+          echo "MAINTENANCE_WINDOW_CONFIRMED=true"
 
       - name: Checkout canonical source
         uses: actions/checkout@v4
