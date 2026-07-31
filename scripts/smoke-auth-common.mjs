@@ -198,7 +198,13 @@ async function fetchJson(url, options = {}) {
     throw new Error(`${url} retornou corpo nao JSON (${response.status})`);
   }
 
-  return { status: response.status, json };
+  // Convert Headers to plain object for downstream consumers
+  const headers = {};
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+
+  return { status: response.status, json, headers };
 }
 
 function extractCount(payload, rows) {
@@ -263,14 +269,20 @@ function decodeJwtPayload(token) {
 
 async function login(baseUrl, email, password) {
   let response;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 5; attempt++) {
     response = await fetchJson(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, senha: password }),
     });
-    if (response.status !== 429 || attempt === 3) break;
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    if (response.status !== 429) break;
+    // Respect Retry-After header; fallback to exponential backoff (5, 10, 20, 40s)
+    const retryAfter = response.headers?.['retry-after'];
+    const delayMs = retryAfter
+      ? Number(retryAfter) * 1000
+      : Math.min(5000 * Math.pow(2, attempt - 1), 60000);
+    console.warn(`login 429 (attempt ${attempt}/5), waiting ${Math.round(delayMs / 1000)}s`);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 
   assert(response.status === 200, `login retornou ${response.status}`);
