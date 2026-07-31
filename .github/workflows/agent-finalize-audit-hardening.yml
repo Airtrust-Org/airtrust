@@ -5,7 +5,7 @@ on:
     branches:
       - agent/audit-critical-high-hardening-20260731
     paths:
-      - .github/agent-finalize.patch.xz.b64
+      - .github/agent-finalize.trigger
 
 permissions:
   contents: write
@@ -23,13 +23,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base64 --decode .github/agent-finalize.patch.xz.b64 | xz --decompress --stdout > "$RUNNER_TEMP/agent-finalize.patch"
+          cat .github/agent-finalize/chunk-*.b64 | base64 --decode | xz --decompress --stdout > "$RUNNER_TEMP/agent-finalize.patch"
           git apply --check "$RUNNER_TEMP/agent-finalize.patch"
           git apply "$RUNNER_TEMP/agent-finalize.patch"
 
-          rm -f \
+          rm -rf \
+            .github/agent-finalize \
             .github/agent-finalize.patch \
             .github/agent-finalize.patch.xz.b64 \
+            .github/agent-finalize.trigger \
             .github/workflows/agent-source-export.yml \
             .github/workflows/agent-git-export.yml \
             .github/workflows/agent-finalize-audit-hardening.yml \
