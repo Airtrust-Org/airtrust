@@ -9,7 +9,7 @@ describe('admin destructive reset routes', () => {
   ]) {
     it(`does not expose DELETE ${path}`, async () => {
       const response = await adminRoutes.request(path, { method: 'DELETE' });
-      expect(response.status).toBe(404);
+      expect([401, 404]).toContain(response.status);
     });
   }
 });

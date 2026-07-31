@@ -408,9 +408,14 @@ app.post('/assets/session', auth(), async (c) => {
     throw new ApiError('Token de acesso inválido', 401);
   }
 
-  const body = await c.req
-    .json<{ matricula_id?: number; curso_id?: number; preview?: boolean }>()
-    .catch(() => ({}));
+  type AssetSessionRequest = {
+    matricula_id?: number;
+    curso_id?: number;
+    preview?: boolean;
+  };
+  const body: AssetSessionRequest = await c.req
+    .json<AssetSessionRequest>()
+    .catch((): AssetSessionRequest => ({}));
   const empresaId = Number(accessPayload.empresa_id ?? 0);
   const matriculaId = Number(body.matricula_id ?? 0);
   const requestedCursoId = Number(body.curso_id ?? 0);
