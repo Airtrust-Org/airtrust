@@ -124,12 +124,15 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
             />
             {filters.busca && (
               <button
+                type="button"
                 onClick={() => {
                   setFilter('busca', '');
                 }}
                 className="absolute right-2 top-1/2 -translate-y-1/2"
+                aria-label="Limpar busca"
+                title="Limpar busca"
               >
-                <X className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600" />
+                <X className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600" aria-hidden="true" />
               </button>
             )}
           </div>
