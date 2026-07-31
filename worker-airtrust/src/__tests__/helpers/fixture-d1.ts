@@ -48,6 +48,10 @@ export interface Fixtures {
     id: number;
     empresa_id: number;
     categoria_id?: number | null;
+    /** Explicit per-tipo domain override (migration 0454) — see resolveResourceDomain's precedence. */
+    dominio_codigo?: string | null;
+    nome?: string | null;
+    ativo?: 0 | 1;
     deleted_at?: string | null;
   }>;
   qualificacoesTiposSetores?: Array<{
@@ -61,6 +65,8 @@ export interface Fixtures {
     empresa_id: number;
     categoria_id?: number | null;
     funcionario_id?: number | null;
+    /** FK to qualificacoesTipos — used by resolveResourceDomain's snapshot-vs-tipo classification fallback. */
+    qualificacao_id?: number | null;
     deleted_at?: string | null;
   }>;
   lmsCursos?: Array<{
@@ -96,6 +102,17 @@ export interface Fixtures {
   }>;
   usuarios?: Array<{ id: number; email?: string; deleted_at?: string | null }>;
   usuariosEmpresas?: Array<{ usuario_id: number; empresa_id: number; role: string }>;
+  auditoria?: Array<{
+    usuario_id?: string | null;
+    usuario_nome?: string | null;
+    acao?: string | null;
+    tabela_afetada?: string | null;
+    registro_id?: string | null;
+    dados_antes?: string | null;
+    dados_depois?: string | null;
+    ip_address?: string | null;
+    user_agent?: string | null;
+  }>;
 }
 
 interface D1LikeStatement {
@@ -107,6 +124,7 @@ interface D1LikeStatement {
 
 export interface TestD1 {
   prepare: (sql: string) => D1LikeStatement;
+  batch: (statements: D1LikeStatement[]) => Promise<Array<{ meta: { changes: number; last_row_id: number } }>>;
   fixtures: Fixtures;
 }
 
@@ -128,8 +146,11 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     sessoesParticipantes: [],
     usuarios: [],
     usuariosEmpresas: [],
+    auditoria: [],
     ...fixtures,
   };
+
+  let lastChanges = 0;
 
   function execute(sql: string, args: unknown[]): unknown {
     // employee-sector-access.ts: tableHasColumn('setores_gestores', 'usuario_id'/'gestor_id')
@@ -141,7 +162,17 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     // schema-drift checks (Item 3) — fixtures always model the modern
     // schema, so these report the columns as present.
     if (sql.includes('PRAGMA table_info(qualificacoes_tipos)')) {
-      return { all: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'categoria_id' }] };
+      // Fixtures always model the modern schema (post migration 0454):
+      // dominio_codigo is the explicit, optional per-tipo override used to
+      // disambiguate tipos under a mixed-domain categoria (e.g. "EAD").
+      return {
+        all: [
+          { name: 'id' },
+          { name: 'empresa_id' },
+          { name: 'categoria_id' },
+          { name: 'dominio_codigo' },
+        ],
+      };
     }
     if (sql.includes('PRAGMA table_info(qualificacoes_categorias)')) {
       return { all: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'dominio_codigo' }] };
@@ -225,15 +256,29 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       const hist = f.qualificacoesHistorico!.find(
         (h) => h.id === id && h.empresa_id === empresaId && !h.deleted_at,
       );
-      const categoria = hist?.categoria_id
+      const categoriaHist = hist?.categoria_id
         ? f.qualificacoesCategorias!.find((c) => c.id === hist.categoria_id)
+        : null;
+      // Mirrors resolveResourceDomain's COALESCE(qc_hist, qt.dominio_codigo, qc_tipo):
+      // 1) historico's own categoria snapshot, 2) explicit per-tipo override
+      // (migration 0454 — disambiguates a mixed-domain categoria like "EAD"),
+      // 3) the tipo's own categoria as a stale-snapshot fallback.
+      const tipo = hist?.qualificacao_id
+        ? f.qualificacoesTipos!.find((t) => t.id === hist.qualificacao_id && !t.deleted_at)
+        : null;
+      const categoriaTipo = tipo?.categoria_id
+        ? f.qualificacoesCategorias!.find((c) => c.id === tipo.categoria_id)
         : null;
       const funcionario = hist?.funcionario_id
         ? f.funcionarios!.find((fn) => fn.id === hist.funcionario_id)
         : null;
       return {
         first: hist
-          ? { dominio_codigo: categoria?.dominio_codigo ?? null, setor_id: funcionario?.setor_id ?? null }
+          ? {
+              dominio_codigo:
+                categoriaHist?.dominio_codigo ?? tipo?.dominio_codigo ?? categoriaTipo?.dominio_codigo ?? null,
+              setor_id: funcionario?.setor_id ?? null,
+            }
           : null,
       };
     }
@@ -403,6 +448,22 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
         .map((c) => ({ id: c.id, titulo: c.titulo ?? null }));
       return { all: rows };
     }
+    // admin-operational-domain-rbac.ts: GET /unclassified — tipos genuinely
+    // blocked (no per-tipo override AND their own categoria unclassified).
+    if (sql.includes('FROM qualificacoes_tipos tipo') && sql.includes('ORDER BY tipo.nome')) {
+      const [empresaId] = args as [number];
+      const rows = f.qualificacoesTipos!
+        .filter(
+          (t) => t.empresa_id === empresaId && (t.ativo ?? 1) === 1 && !t.deleted_at && !t.dominio_codigo,
+        )
+        .filter((t) => {
+          if (!t.categoria_id) return true;
+          const categoria = f.qualificacoesCategorias!.find((c) => c.id === t.categoria_id);
+          return !categoria?.dominio_codigo;
+        })
+        .map((t) => ({ id: t.id, nome: t.nome ?? null }));
+      return { all: rows };
+    }
 
     // admin-operational-domain-rbac.ts: POST /classify — fetch-before-update
     if (sql.includes('SELECT id, dominio_codigo FROM setores')) {
@@ -417,22 +478,35 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       );
       return { first: row ? { id: row.id, dominio_codigo: row.dominio_codigo ?? null } : null };
     }
+    if (sql.includes('SELECT id, dominio_codigo FROM qualificacoes_tipos')) {
+      const [id, empresaId] = args as [number, number];
+      const row = f.qualificacoesTipos!.find(
+        (t) => t.id === id && t.empresa_id === empresaId && !t.deleted_at,
+      );
+      return { first: row ? { id: row.id, dominio_codigo: row.dominio_codigo ?? null } : null };
+    }
     // admin-operational-domain-rbac.ts: POST /classify — the actual write
     if (sql.includes('UPDATE setores SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId] = args as [string, number, number];
-      const row = f.setores.find((s) => s.id === id && s.empresa_id === empresaId);
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
+      const row = f.setores.find((s) => s.id === id && s.empresa_id === empresaId && !s.deleted_at && (oldDomain === undefined || s.dominio_codigo === oldDomain || (s.dominio_codigo == null && oldDomain == null)));
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
     if (sql.includes('UPDATE qualificacoes_categorias SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId] = args as [string, number, number];
-      const row = f.qualificacoesCategorias!.find((c) => c.id === id && c.empresa_id === empresaId);
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
+      const row = f.qualificacoesCategorias!.find((c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at && (oldDomain === undefined || c.dominio_codigo === oldDomain || (c.dominio_codigo == null && oldDomain == null)));
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
     if (sql.includes('UPDATE lms_cursos SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId] = args as [string, number, number];
-      const row = f.lmsCursos!.find((c) => c.id === id && c.empresa_id === empresaId);
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
+      const row = f.lmsCursos!.find((c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at && (oldDomain === undefined || c.dominio_codigo === oldDomain || (c.dominio_codigo == null && oldDomain == null)));
+      if (row) row.dominio_codigo = dominioCodigo;
+      return { run: { changes: row ? 1 : 0 } };
+    }
+    if (sql.includes('UPDATE qualificacoes_tipos SET dominio_codigo')) {
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
+      const row = f.qualificacoesTipos!.find((t) => t.id === id && t.empresa_id === empresaId && !t.deleted_at && (oldDomain === undefined || t.dominio_codigo === oldDomain || (t.dominio_codigo == null && oldDomain == null)));
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
@@ -515,13 +589,33 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       return { first: { n } };
     }
 
-    // admin-operational-domain-rbac.ts: activate/deactivate
     if (sql.includes('UPDATE empresas SET operational_domain_rbac_enabled')) {
       const enabled = sql.includes('= 1') ? 1 : 0;
       const [empresaId] = args as [number];
       const empresa = f.empresas.find((e) => e.id === empresaId);
       if (empresa) empresa.operational_domain_rbac_enabled = enabled as 0 | 1;
       return { run: { changes: empresa ? 1 : 0 } };
+    }
+
+    if (sql.includes('INSERT INTO auditoria')) {
+      if (args[0] === 999) {
+        throw new Error('Simulated audit insert failure');
+      }
+      if (sql.includes('changes()') && sql.includes('1') && lastChanges !== 1) {
+        return { run: { changes: 0 } };
+      }
+      f.auditoria!.push({
+        usuario_id: args[0] as string | null,
+        usuario_nome: args[1] as string | null,
+        acao: args[2] as string | null,
+        tabela_afetada: args[3] as string | null,
+        registro_id: args[4] as string | null,
+        dados_antes: args[5] as string | null,
+        dados_depois: args[6] as string | null,
+        ip_address: args[7] as string | null,
+        user_agent: args[8] as string | null,
+      });
+      return { run: { changes: 1 } };
     }
 
     throw new Error(`fixture-d1: unrecognized query — ${sql}`);
@@ -540,8 +634,10 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       },
       run: async () => {
         const result = execute(sql, boundArgs) as { run?: { changes: number } };
+        const changes = result.run?.changes ?? 0;
+        lastChanges = changes;
         return {
-          meta: { changes: result.run?.changes ?? 0, last_row_id: 0 },
+          meta: { changes, last_row_id: 0 },
         };
       },
     };
@@ -550,6 +646,21 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
   return {
     fixtures: f,
     prepare: (sql: string) => makeStatement(sql, []),
+    batch: async (statements: D1LikeStatement[]) => {
+      // D1 transactions are atomic. We capture a snapshot of the memory state
+      // and restore it completely if ANY statement throws, simulating real atomic rollback.
+      const snapshot = JSON.stringify(f);
+      const results = [];
+      try {
+        for (const stmt of statements) {
+          results.push(await stmt.run());
+        }
+        return results;
+      } catch (error) {
+        Object.assign(f, JSON.parse(snapshot));
+        throw error;
+      }
+    },
   };
 }
 

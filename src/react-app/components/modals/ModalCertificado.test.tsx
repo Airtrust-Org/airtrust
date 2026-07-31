@@ -143,4 +143,101 @@ describe('ModalCertificado', () => {
       'falha pdf',
     );
   });
+
+  describe('Gerar Certificado — contrato de erro do backend', () => {
+    function mockGerarResponse(body: Record<string, unknown>, status: number) {
+      vi.mocked(apiFetch).mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/certificados/gerar')) {
+          return new Response(JSON.stringify(body), {
+            status,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ success: true, data: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      });
+    }
+
+    it('exibe a mensagem específica quando o backend nega por RBAC (CERTIFICATE_ACCESS_DENIED)', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockGerarResponse(
+        {
+          success: false,
+          error: 'Você não tem permissão para emitir certificados para esta qualificação.',
+          code: 'CERTIFICATE_ACCESS_DENIED',
+          requestId: 'req-teste-403',
+        },
+        403,
+      );
+
+      renderModal();
+      await screen.findByText('Nenhum certificado cadastrado');
+      fireEvent.click(screen.getByRole('button', { name: 'Gerar Certificado' }));
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          '❌ Erro: Você não tem permissão para emitir certificados para esta qualificação.',
+        );
+      });
+
+      // O código e o requestId (topo do corpo, sem camada de remapeamento)
+      // devem chegar ao log de correlação, provando que o contrato real
+      // (apiFetch cru, não o httpClient compartilhado) é lido corretamente.
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[ModalCertificado] Erro ao gerar certificado:',
+        expect.objectContaining({
+          code: 'CERTIFICATE_ACCESS_DENIED',
+          requestId: 'req-teste-403',
+        }),
+      );
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('exibe a mensagem específica quando o domínio da qualificação não está classificado', async () => {
+      mockGerarResponse(
+        {
+          success: false,
+          error:
+            'Esta qualificação ainda não possui um domínio operacional classificado. Não é possível emitir o certificado até a classificação ser corrigida.',
+          code: 'CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED',
+          requestId: 'req-teste-unclassified',
+        },
+        403,
+      );
+
+      renderModal();
+      await screen.findByText('Nenhum certificado cadastrado');
+      fireEvent.click(screen.getByRole('button', { name: 'Gerar Certificado' }));
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          '❌ Erro: Esta qualificação ainda não possui um domínio operacional classificado. Não é possível emitir o certificado até a classificação ser corrigida.',
+        );
+      });
+    });
+
+    it('usa a mensagem de fallback local quando o backend envia código sem mensagem', async () => {
+      mockGerarResponse(
+        {
+          success: false,
+          code: 'CERTIFICATE_TEMPLATE_NOT_CONFIGURED',
+          requestId: 'req-teste-fallback',
+        },
+        422,
+      );
+
+      renderModal();
+      await screen.findByText('Nenhum certificado cadastrado');
+      fireEvent.click(screen.getByRole('button', { name: 'Gerar Certificado' }));
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          '❌ Erro: Nenhum template de certificado está configurado para esta empresa. Configure um template antes de gerar certificados.',
+        );
+      });
+    });
+  });
 });

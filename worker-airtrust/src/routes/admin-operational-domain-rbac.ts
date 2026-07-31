@@ -187,15 +187,36 @@ router.get('/readiness', async (c) => {
   return c.json({ success: true, data: report });
 });
 
+async function tableHasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
+  try {
+    const info = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+    return (info.results || []).some((row) => row?.name === column);
+  } catch {
+    return false;
+  }
+}
+
 // ===== GET /api/admin/operational-domain-rbac/unclassified =====
 // Lists every setor/categoria/curso still missing a domain classification,
 // for the minimal admin UI (Item 2) — the counterpart to the readiness
 // counters above, giving an admin what to actually click on to fix them.
+//
+// tipos (migration 0454): unlike setores/categorias/cursos, a tipo's
+// dominio_codigo is an OPTIONAL override, not a mandatory classification —
+// most tipos correctly resolve their domain via their categoria and never
+// need one. Listing "every tipo without an override" would be noise (it'd
+// include nearly the whole catalog). Instead this lists only tipos that
+// are GENUINELY blocked end-to-end: no override AND their own categoria is
+// also unclassified — i.e. exactly the tipos resolveResourceDomain would
+// fail closed on today, the same definition of "unclassified" used by the
+// readiness counters and by this same listing for setores/categorias/cursos.
 router.get('/unclassified', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
 
-  const [setores, categorias, cursos] = await Promise.all([
+  const tiposHasDominioOverride = await tableHasColumn(db, 'qualificacoes_tipos', 'dominio_codigo');
+
+  const [setores, categorias, cursos, tipos] = await Promise.all([
     db
       .prepare(
         `SELECT id, nome FROM setores
@@ -220,6 +241,19 @@ router.get('/unclassified', async (c) => {
       )
       .bind(empresaId)
       .all<{ id: number; titulo: string | null }>(),
+    tiposHasDominioOverride
+      ? db
+          .prepare(
+            `SELECT tipo.id, tipo.nome FROM qualificacoes_tipos tipo
+               LEFT JOIN qualificacoes_categorias categoria_do_tipo ON categoria_do_tipo.id = tipo.categoria_id
+              WHERE tipo.empresa_id = ? AND tipo.ativo = 1 AND tipo.deleted_at IS NULL
+                AND tipo.dominio_codigo IS NULL
+                AND (tipo.categoria_id IS NULL OR categoria_do_tipo.dominio_codigo IS NULL)
+              ORDER BY tipo.nome`,
+          )
+          .bind(empresaId)
+          .all<{ id: number; nome: string | null }>()
+      : Promise.resolve({ results: [] as Array<{ id: number; nome: string | null }> }),
   ]);
 
   return c.json({
@@ -229,20 +263,38 @@ router.get('/unclassified', async (c) => {
       setores: setores.results || [],
       categorias: categorias.results || [],
       cursos: cursos.results || [],
+      tipos: tipos.results || [],
     },
   });
 });
 
-const classifySchema = z.object({
-  resource_type: z.enum(['setor', 'categoria', 'curso']),
-  resource_id: z.number().int().positive(),
-  dominio_codigo: z.string().trim().min(1),
-});
+const classifySchema = z.discriminatedUnion('resource_type', [
+  z.object({
+    resource_type: z.enum(['setor', 'categoria', 'curso']),
+    resource_id: z.number().int().positive(),
+    dominio_codigo: z.string().trim().min(1),
+  }),
+  z.object({
+    resource_type: z.literal('qualificacao_tipo'),
+    resource_id: z.number().int().positive(),
+    dominio_codigo: z.string().trim().min(1).nullable(),
+  }),
+]);
 
-const CLASSIFIABLE_TABLES: Record<'setor' | 'categoria' | 'curso', { table: string; label: string }> = {
+const CLASSIFIABLE_TABLES: Record<
+  'setor' | 'categoria' | 'curso' | 'qualificacao_tipo',
+  { table: string; label: string }
+> = {
   setor: { table: 'setores', label: 'nome' },
   categoria: { table: 'qualificacoes_categorias', label: 'nome' },
   curso: { table: 'lms_cursos', label: 'titulo' },
+  // Per-tipo override (migration 0454) — see the module docstring above
+  // resolveResourceDomain('qualificacao_historico' | 'qualificacao_certificado')
+  // in operational-domain-access.ts for the resolution precedence this
+  // feeds into. Reserved for tipos whose owning categoria is genuinely
+  // mixed-domain (e.g. a delivery-modality category like "EAD") — never a
+  // substitute for classifying a homogeneous categoria directly.
+  qualificacao_tipo: { table: 'qualificacoes_tipos', label: 'nome' },
 };
 
 // ===== POST /api/admin/operational-domain-rbac/classify =====
@@ -250,7 +302,7 @@ const CLASSIFIABLE_TABLES: Record<'setor' | 'categoria' | 'curso', { table: stri
 // canonical domains to a setor/categoria/curso — the functional
 // counterpart to Item 2, so classification never requires direct DB
 // editing. Never accepts free text: dominio_codigo must be one of the
-// catalog's canonical codes.
+// catalog's canonical codes, or null to rollback an override.
 router.post('/classify', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
@@ -266,12 +318,14 @@ router.post('/classify', async (c) => {
   // ativo=1), not just the static 5-code list — a domain that exists in
   // the catalog but was deactivated must be just as unusable for new
   // classifications as one that never existed.
-  const activeCodes = await activeDomainCodes(db);
-  if (!activeCodes.has(dominioCodigo as OperationalDomain)) {
-    badRequest(
-      `Domínio operacional desconhecido ou inativo: ${dominioCodigo}`,
-      'UNKNOWN_OR_INACTIVE_OPERATIONAL_DOMAIN',
-    );
+  if (dominioCodigo !== null) {
+    const activeCodes = await activeDomainCodes(db);
+    if (!activeCodes.has(dominioCodigo as OperationalDomain)) {
+      badRequest(
+        `Domínio operacional desconhecido ou inativo: ${dominioCodigo}`,
+        'UNKNOWN_OR_INACTIVE_OPERATIONAL_DOMAIN',
+      );
+    }
   }
 
   const { table } = CLASSIFIABLE_TABLES[resourceType];
@@ -284,21 +338,46 @@ router.post('/classify', async (c) => {
     notFound(`${resourceType} não encontrado(a) nesta empresa`);
   }
 
-  await db
-    .prepare(`UPDATE ${table} SET dominio_codigo = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`)
-    .bind(dominioCodigo, resourceId, empresaId)
-    .run();
-
   const ua = extrairUsuarioAuditoria(c);
-  await registrarAuditoria({
-    db,
-    tabela: table,
-    acao: 'UPDATE',
-    registro_id: resourceId,
-    dados_anteriores: { dominio_codigo: existing.dominio_codigo },
-    dados_novos: { dominio_codigo: dominioCodigo },
-    ...ua,
-  });
+
+  const updateStmt = db
+    .prepare(`UPDATE ${table} SET dominio_codigo = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND dominio_codigo IS ?`)
+    .bind(dominioCodigo, resourceId, empresaId, existing.dominio_codigo);
+
+  const auditStmt = db
+    .prepare(
+      `INSERT INTO auditoria (
+        usuario_id, usuario_nome, acao, tabela_afetada, registro_id,
+        dados_antes, dados_depois, ip_address, user_agent, created_at
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      WHERE (SELECT changes()) = 1`
+    )
+    .bind(
+      ua.usuario_id ?? null,
+      ua.usuario_nome ?? null,
+      'UPDATE',
+      table,
+      String(resourceId),
+      JSON.stringify({ dominio_codigo: existing.dominio_codigo }),
+      JSON.stringify({ dominio_codigo: dominioCodigo }),
+      ua.ip_address ?? null,
+      ua.user_agent ?? null
+    );
+
+  try {
+    const results = await db.batch([updateStmt, auditStmt]);
+    if (!results[0]?.meta || results[0].meta.changes !== 1) {
+      throw new ApiError('Conflito: recurso modificado ou indisponível', 409, 'CLASSIFY_CONFLICT');
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error('[Classify] Falha na classificação atômica:', error);
+    throw new ApiError(
+      'Falha interna ao aplicar classificação (transação abortada)',
+      500,
+      'CLASSIFY_TRANSACTION_FAILED'
+    );
+  }
 
   return c.json({
     success: true,

@@ -551,13 +551,15 @@ describe('scripts/staging/apply-approved-migrations.sh — guards', () => {
     }
   });
 
-  it('allowlists 0452/0453 narrowly and invokes their read-only postcondition validators', () => {
+  it('allowlists 0452/0453/0454 narrowly and invokes their read-only postcondition validators', () => {
     const source = readFileSync(join(ROOT, 'scripts/staging/apply-approved-migrations.sh'), 'utf8');
     expect(source).toContain('0452_operational_domain_rbac.sql');
     expect(source).toContain('0453_ead_category_reconciliation_executor.sql');
-    expect(source).toContain('RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453"');
+    expect(source).toContain('0454_qualificacoes_tipos_dominio_override.sql');
+    expect(source).toContain('RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454"');
     expect(source).toContain('validate-0452-postconditions.sh');
     expect(source).toContain('validate-0453-postconditions.sh');
+    expect(source).toContain('validate-0454-postconditions.sh');
     expect(source).not.toContain('APPROVED_MIGRATIONS=("*")');
   });
 

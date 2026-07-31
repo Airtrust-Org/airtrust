@@ -1,0 +1,95 @@
+-- Migration 0454: Per-tipo operational-domain override for qualificações
+--
+-- Context (certificate-generation incident, gestor-operational-autonomy
+-- RBAC — docs/rbac/gestor-operational-autonomy.md): empresa 6's "EAD"
+-- categoria (qualificacoes_categorias.id = 13) is a DELIVERY MODALITY
+-- (distance-learning format), not a homogeneous functional domain — a
+-- read-only production audit confirmed its ~30 active qualificacoes_tipos
+-- span genuinely different real domains: crew/general-aviation content
+-- ("Conhecimentos Gerais da Aeronave", "Emergências Gerais", "PBN", "EFB",
+-- CFIT — OPERACOES-flavored), SGSO-flavored content ("SGSO", "SGSO para
+-- Manutenção"), and clearly MANUTENCAO-flavored content ("MOM", "MCQ",
+-- "MGM", "AW139 - Manutenção", "HUMS-VXP", "PT6C-67C - Manutenção",
+-- "Inspeção IIO & APRS", "Integração / Doutrinação de Manutenção", etc).
+--
+-- Because the category is genuinely mixed, assigning ONE dominio_codigo to
+-- the whole category (qualificacoes_categorias.id = 13) would misclassify
+-- roughly a third of its tipos. This migration instead adds an EXPLICIT,
+-- OPTIONAL, per-tipo override — populated ONLY by a human/product decision
+-- via the same administrative classification mechanism already used for
+-- setores/categorias/cursos (see admin-operational-domain-rbac.ts), never
+-- inferred automatically and never defaulted to any domain.
+--
+-- Resolution precedence after this migration (see
+-- resolveResourceDomain('qualificacao_historico' | 'qualificacao_certificado')
+-- in operational-domain-access.ts):
+--   1. qualificacoes_historico.categoria_id -> its own categoria's dominio_codigo
+--      (the historico's own snapshot, when classified)
+--   2. qualificacoes_tipos.dominio_codigo (THIS column — an explicit,
+--      per-tipo override; NULL means "no override", not "OPERACOES")
+--   3. qualificacoes_tipos.categoria_id -> that categoria's dominio_codigo
+--      (existing fallback for a stale/missing historico snapshot, added in
+--      a prior pass of this same fix)
+--   4. fail closed (RESOURCE_DOMAIN_UNCLASSIFIED)
+--
+-- SAFE ON APPLY: the new column defaults to NULL for every existing row —
+-- grants no new access, widens no privilege, and does not touch any
+-- existing data (categoria_id, categoria, dominio_codigo on
+-- qualificacoes_categorias, or anything belonging to the separate EAD
+-- category/color/link reconciliation workstream — see
+-- docs/ops/EAD_CATEGORY_RECONCILIATION_MANIFEST.md and
+-- docs/operacoes/ead-category-reconciliation.md, neither modified here).
+--
+-- NOT APPLIED to staging or production by this change — additive DDL only,
+-- committed to this repository for review. Actually classifying any
+-- specific tipo (setting a non-NULL dominio_codigo) is a real, tenant-scoped
+-- product decision (which of ~30 tipos is OPERACOES vs MANUTENCAO vs SGSO)
+-- that requires explicit human authorization and domain expertise this
+-- change does not presume to have.
+--
+-- PRODUCTION PATH: this repository's production database is governed by
+-- Schema V2 (baseline_id + change_id + file_hash + plan_hash via
+-- .github/workflows/apply-schema-change-v2.yml), NOT
+-- scripts/apply-migration-production.sh — that wrapper is for the legacy
+-- migration-file path and is not how production changes are actually
+-- applied. The Schema V2 artifact for this exact DDL lives at
+-- worker-airtrust/schema-v2/changes/0454_qualificacoes_tipos_dominio_override.sql,
+-- with its own execution plan in
+-- docs/ops/production-certificados-0454-schema-v2.md (change_id
+-- 'qualificacoes-tipos-dominio-override-0454') — mirroring the precedent
+-- already used for 0452 and 0453. STAGING is applied via the allowlisted
+-- runner scripts/staging/apply-approved-migrations.sh (this file has been
+-- added to its APPROVED_MIGRATIONS/RELEASE_PREFLIGHT_SCOPE), validated by
+-- scripts/staging/validate-0454-postconditions.sh. Once the column exists
+-- in a given environment, actual classification of any specific tipo goes
+-- through POST /api/admin/operational-domain-rbac/classify
+-- (resource_type='qualificacao_tipo') — never a manual remote UPDATE, and
+-- never this migration/schema-v2 file itself (which performs no DML).
+--
+-- OPERATIONAL MARKERS (guard:operational-sql-sources):
+--   source_reference:
+--     Read-only production audit of qualificacoes_categorias.id = 13 and
+--     its linked qualificacoes_tipos for empresa 6, performed during review
+--     of PR (certificate-generation incident / gestor-operational-autonomy
+--     RBAC). No DML in this migration — pure additive DDL.
+--   operational_decision:
+--     Add an explicit, nullable, per-tipo domain override column. Do NOT
+--     assign qualificacoes_categorias.id=13 (EAD) a single dominio_codigo —
+--     proven mixed by the audit above. Do NOT infer any tipo's domain from
+--     its name, its funcionário's setor, or any heuristic — every row
+--     starts NULL and stays NULL until a human classifies it via the
+--     existing admin tool.
+--   dry_run_required:
+--     Run once against a local D1 copy (ALTER TABLE ADD COLUMN + CREATE
+--     INDEX are idempotent-safe via the runner/ledger applying once).
+--     Confirm PRAGMA table_info(qualificacoes_tipos) shows the new column
+--     with default NULL and every existing row unaffected.
+--   rollback_plan_required:
+--     See 0454_qualificacoes_tipos_dominio_override_rollback.sql — drops
+--     the new column/index only, additive-only reversal, no data loss
+--     beyond the (empty, until classified) override values themselves.
+
+ALTER TABLE qualificacoes_tipos ADD COLUMN dominio_codigo TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_qualificacoes_tipos_dominio_codigo
+  ON qualificacoes_tipos(dominio_codigo);
