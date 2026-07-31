@@ -4,6 +4,7 @@ export const PTO_REV10_EXPECTED_PLAN_TOTALS: Readonly<{
   models: number;
   links: number;
   notechs_links: number;
+  functional_codes: number;
 }>;
 export function stableJson(value: unknown): string;
 export function sha256(value: unknown): string;
