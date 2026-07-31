@@ -1,5 +1,5 @@
 /**
- * Construtor de dados da ficha-modelo V6.2 (18 técnicas + 15 NOTECHS).
+ * Construtor de dados da ficha-modelo PTO Rev10 (18 técnicas + 15 NOTECHS).
  * Não gera PDF diretamente — monta o FichaPDFData consumido pelo
  * renderer oficial gerarPDFFichaCliente() em
  * src/react-app/services/pdf-ficha-client.ts. Único caminho de código
@@ -9,11 +9,13 @@
 import type { FichaPDFData } from '@/react-app/services/pdf-ficha-client';
 import { getSpecialEventSessionDefinition } from '@/shared/simuladores/special-event-sessions';
 import { resolveModeloSessaoObservacoesOverride } from '@/shared/simuladores/modelos-sessao-observacoes';
-import { NOTECHS_ITENS } from './notechs';
+import { NOTECHS_CANONICAL_ITEMS } from '@/shared/simuladores/notechs-canonical';
+import { NOTECHS_ITENS as LEGACY_NOTECHS_ITEMS } from './notechs';
 
 export interface ModeloSessaoResumo {
   id: number;
   codigo: string;
+  codigo_canonico?: string | null;
   nome: string;
   tipo_sessao_nome?: string;
   modelo_aeronave?: string;
@@ -31,6 +33,10 @@ export interface ModeloSessaoManobra {
 
 export const FICHA_MODELO_TECNICAS_PREVIEW_LIMIT = 18;
 
+function canonicalModelCode(modelo: ModeloSessaoResumo): string {
+  return String(modelo.codigo_canonico || modelo.codigo || '').trim();
+}
+
 function sanitizeFilePart(value: string): string {
   return value
     .normalize('NFD')
@@ -42,7 +48,8 @@ function sanitizeFilePart(value: string): string {
 }
 
 export function buildFichaModeloPdfFileName(modelo: ModeloSessaoResumo): string {
-  const base = sanitizeFilePart(`${modelo.codigo}-${modelo.nome}`) || `MODELO-${modelo.id}`;
+  const base =
+    sanitizeFilePart(`${canonicalModelCode(modelo)}-${modelo.nome}`) || `MODELO-${modelo.id}`;
   return `FICHA-MODELO-${base}.pdf`;
 }
 
@@ -51,25 +58,36 @@ export function buildFichaModeloPdfData(
   manobras: ModeloSessaoManobra[],
   logoUrl?: string,
 ): FichaPDFData {
-  const specialDefinition = getSpecialEventSessionDefinition(modelo.codigo);
+  const codigoCanonico = canonicalModelCode(modelo);
+  const specialDefinition = getSpecialEventSessionDefinition(codigoCanonico);
   const sessaoTitulo =
-    specialDefinition?.fullTitle || [modelo.codigo, modelo.nome].filter(Boolean).join(' - ');
+    specialDefinition?.fullTitle || [codigoCanonico, modelo.nome].filter(Boolean).join(' - ');
   const tecnicasPreview = [...manobras]
     .sort((a, b) => a.ordem - b.ordem)
     .slice(0, FICHA_MODELO_TECNICAS_PREVIEW_LIMIT);
-  const notechsPreview = NOTECHS_ITENS.map((item) => ({
-    ordem: item.ordem,
-    nome: item.tituloPt,
-    descricao: item.tituloEn,
-    codigo: item.codigo,
-    resultado: null,
-    observacoes: '',
-    tripulante: 'AB' as const,
-  }));
+  const notechsPreview = modelo.codigo_canonico
+    ? NOTECHS_CANONICAL_ITEMS.map((item) => ({
+        ordem: item.ordem,
+        nome: item.nome,
+        descricao: item.evidenciaObservavel,
+        codigo: item.codigo,
+        resultado: null,
+        observacoes: '',
+        tripulante: 'AB' as const,
+      }))
+    : LEGACY_NOTECHS_ITEMS.map((item) => ({
+        ordem: item.ordem,
+        nome: item.tituloPt,
+        descricao: item.tituloEn,
+        codigo: item.codigo,
+        resultado: null,
+        observacoes: '',
+        tripulante: 'AB' as const,
+      }));
 
   return {
     fichaId: `modelo-${modelo.id}`,
-    sessao_codigo: modelo.codigo,
+    sessao_codigo: codigoCanonico,
     sessao_titulo: sessaoTitulo,
     sessao_nome: modelo.nome,
     sessao_titulo_linha1: specialDefinition?.headerTitle,
@@ -82,10 +100,6 @@ export function buildFichaModeloPdfData(
     data: '',
     horario_inicio: '',
     horario_fim: '',
-    // Ficha-modelo (curricular, sem sessão real agendada): não há dispositivo/
-    // simulador específico atribuído, então o campo Simulador fica em branco
-    // como os demais campos da ficha em branco. O modelo de aeronave da
-    // fixture vai para simulador_modelo, que alimenta o campo "Modelo".
     simulador: '',
     simulador_modelo: modelo.modelo_aeronave || undefined,
     carga_horaria_total: specialDefinition ? '120 minutos' : '',
@@ -101,19 +115,21 @@ export function buildFichaModeloPdfData(
     fileName: buildFichaModeloPdfFileName(modelo),
     manobras: tecnicasPreview
       .map((manobra) => {
-        // Override de texto por vínculo modelo↔manobra (modelos_sessao_manobras.observacoes),
-        // não confundir com o campo `observacoes` da ficha impressa abaixo (nota do avaliador).
         const override = resolveModeloSessaoObservacoesOverride(manobra.observacoes);
-        const nome = override || manobra.manobra_nome || manobra.manobra_descricao || manobra.manobra_codigo || '';
-        const descricao = override || manobra.manobra_descricao || manobra.manobra_nome || '';
+        const nome =
+          override ||
+          manobra.manobra_nome ||
+          manobra.manobra_descricao ||
+          manobra.manobra_codigo ||
+          '';
+        const descricao =
+          override || manobra.manobra_descricao || manobra.manobra_nome || '';
         return {
           ordem: manobra.ordem,
           nome,
           descricao,
           codigo: manobra.manobra_codigo || '',
           resultado: null,
-          // Ficha modelo (impressão em branco): não exibe metadados internos
-          // (tipo_item, fase_voo, carater, fap_refs, matriz_v6_modelo) nas observações.
           observacoes: '',
           tripulante: manobra.tripulante || 'AB',
         };
