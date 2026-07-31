@@ -6,6 +6,7 @@ export const PTO_REV10_EXPECTED_PLAN_TOTALS = Object.freeze({
   models: 66,
   links: 1188,
   notechs_links: 990,
+  functional_codes: 94,
 });
 
 export function stableJson(value) {
@@ -73,6 +74,12 @@ export function assertPtoRev10Plan(plan) {
   if (!Array.isArray(plan.notechs) || plan.notechs.length !== 15) {
     throw new Error('catálogo NOTECHS do plano incompleto');
   }
+  if (
+    !Array.isArray(plan.functional_catalog) ||
+    plan.functional_catalog.length !== plan.totals.functional_codes
+  ) {
+    throw new Error('catálogo funcional de instrutor/examinador incompleto');
+  }
 
   const codes = new Set(plan.models.map((model) => model.codigo));
   if (codes.size !== plan.models.length) throw new Error('modelo canônico duplicado');
@@ -97,7 +104,21 @@ export function assertPtoRev10Plan(plan) {
     }
   }
 
-  const requestedCodes = new Set(plan.items.map((item) => item.codigo));
+  const functionalCodes = new Set();
+  for (const item of plan.functional_catalog) {
+    if (!item?.codigo || !item?.nome || !item?.categoria) {
+      throw new Error('item funcional de instrutor/examinador incompleto');
+    }
+    if (functionalCodes.has(item.codigo)) {
+      throw new Error(`código funcional duplicado: ${item.codigo}`);
+    }
+    functionalCodes.add(item.codigo);
+  }
+
+  const requestedCodes = new Set([
+    ...plan.items.map((item) => item.codigo),
+    ...plan.functional_catalog.map((item) => item.codigo),
+  ]);
   if (!Array.isArray(plan.manobra_resolution) || plan.manobra_resolution.length !== requestedCodes.size) {
     throw new Error('resolução de manobras incompleta');
   }
@@ -166,6 +187,17 @@ export function projectionToPlanPayload({
     }
   }
 
+  const functionalCatalog = (projection.instrutor_examinador?.codigos || []).map((item) => ({
+    codigo: item.codigo,
+    nome: item.nome,
+    categoria: item.categoria,
+    aeronave: 'N/A',
+    tipo_conteudo: 'COMPETENCIA_FUNCIONAL',
+    desempenho_esperado: item.nome,
+    referencia_tecnica: projection.fonte_normativa,
+    regra_codigo_tecnico: item.regra_codigo_tecnico || null,
+  }));
+
   const sourceHashes = {};
   for (const [aircraft, packageInfo] of Object.entries(projection.source_packages || {})) {
     sourceHashes[`${aircraft}/ZIP`] = packageInfo.zip_sha256;
@@ -187,10 +219,12 @@ export function projectionToPlanPayload({
     models,
     items,
     notechs: projection.notechs,
+    functional_catalog: functionalCatalog,
     instructor_examiner: {
-      status: projection.policy?.instructor_examiner_session_models,
-      codes: projection.instrutor_examinador?.codigos?.length || 0,
-      links: projection.instrutor_examinador?.relacoes?.length || 0,
+      status: 'CATALOG_IMPORTED_SESSION_LINKS_PENDING',
+      codes: functionalCatalog.length,
+      links_pending: projection.instrutor_examinador?.relacoes?.length || 0,
+      pending_reason: 'Os pacotes não fornecem título, carga e natureza completos para os seis modelos de sessão.',
     },
     manobra_resolution: manobraResolution,
     safeguards: [
@@ -198,7 +232,9 @@ export function projectionToPlanPayload({
       'somente D1 local no aplicador',
       'fichas e sessões realizadas não são atualizadas nem excluídas',
       'modelos atuais são versionados, nunca sobrescritos',
+      'modelos personalizados não mapeados permanecem intocados',
       '18 itens técnicos e 15 NOTECHS por sessão',
+      '94 códigos funcionais são importados no catálogo sem inventar seis modelos de sessão',
       'carga_sessao é a única fonte de duração',
     ],
   };
