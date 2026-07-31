@@ -5,7 +5,7 @@ on:
     branches:
       - agent/audit-critical-high-hardening-20260731
     paths:
-      - .github/agent-finalize.patch
+      - .github/agent-finalize.patch.xz.b64
 
 permissions:
   contents: write
@@ -19,15 +19,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply reviewed patch and remove temporary files
+      - name: Decode and apply reviewed patch
         shell: bash
         run: |
           set -euo pipefail
-          git apply --check .github/agent-finalize.patch
-          git apply .github/agent-finalize.patch
+          base64 --decode .github/agent-finalize.patch.xz.b64 | xz --decompress --stdout > "$RUNNER_TEMP/agent-finalize.patch"
+          git apply --check "$RUNNER_TEMP/agent-finalize.patch"
+          git apply "$RUNNER_TEMP/agent-finalize.patch"
 
           rm -f \
             .github/agent-finalize.patch \
+            .github/agent-finalize.patch.xz.b64 \
             .github/workflows/agent-source-export.yml \
             .github/workflows/agent-git-export.yml \
             .github/workflows/agent-finalize-audit-hardening.yml \
