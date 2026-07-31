@@ -1,0 +1,32 @@
+name: Agent Source Export
+
+on:
+  push:
+    branches:
+      - agent/audit-critical-high-hardening-20260731
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git --exclude=airtrust-source.tar.gz -czf airtrust-source.tar.gz .
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-source-${{ github.sha }}
+          path: airtrust-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
