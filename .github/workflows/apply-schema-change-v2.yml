@@ -164,6 +164,24 @@ jobs:
           npx wrangler d1 execute airtrust-db --env production --remote --json --command "SELECT * FROM airtrust_schema_baselines_v2 ORDER BY id;" > "$RUNNER_TEMP/schema-v2-backup/baselines.json"
           npx wrangler d1 execute airtrust-db --env production --remote --json --command "SELECT * FROM airtrust_schema_changes_v2 ORDER BY id;" > "$RUNNER_TEMP/schema-v2-backup/changes.json"
 
+      - name: Capture D1 Time Travel recovery point
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          recovery_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          recovery_output="$RUNNER_TEMP/d1-time-travel-info.txt"
+          npx wrangler d1 time-travel info airtrust-db \
+            --env production \
+            --timestamp="$recovery_timestamp" > "$recovery_output"
+          test -s "$recovery_output"
+          echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp"
+          echo "RECOVERY_POINT_CAPTURED=true"
+          rm -f "$recovery_output"
+
       - name: Apply one schema file
         shell: bash
         working-directory: worker-airtrust
