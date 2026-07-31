@@ -42,7 +42,10 @@ export function findProgramByCodigo(
 ): SharedSessionProgramDefinition | null {
   const normalized = normalizeCodigo(codigo);
   if (!normalized) return null;
+
   return (
-    SHARED_SESSION_PROGRAMS.find((program) => programCodigos(program).includes(normalized)) || null
+    SHARED_SESSION_PROGRAMS.find((program) =>
+      programCodigos(program).some((programCodigo) => programCodigo === normalized),
+    ) || null
   );
 }
