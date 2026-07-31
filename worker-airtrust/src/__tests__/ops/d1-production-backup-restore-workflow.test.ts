@@ -16,6 +16,19 @@ describe('D1 production backup/restore drill workflow', () => {
     expect(workflow).not.toContain('wrangler d1 execute');
   });
 
+  it('installs the declared Wrangler dependency and fails clearly when credentials are missing', () => {
+    const installIndex = workflow.indexOf('- name: Install root dependencies');
+    const exportIndex = workflow.indexOf(
+      '- name: Export production D1 and restore into disposable SQLite',
+    );
+
+    expect(installIndex).toBeGreaterThan(-1);
+    expect(workflow).toContain('run: npm ci');
+    expect(exportIndex).toBeGreaterThan(installIndex);
+    expect(workflow).toContain('PRODUCTION_D1_BACKUP_TOKEN_MISSING');
+    expect(workflow).toContain('CLOUDFLARE_ACCOUNT_ID_MISSING');
+  });
+
   it('restores into disposable SQLite and never uploads the dump', () => {
     expect(workflow).toContain('integrity_check == "ok"');
     expect(workflow).toContain("trap 'rm -rf \"$out_dir\"' EXIT");
