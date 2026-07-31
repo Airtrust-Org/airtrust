@@ -1,7 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { BaseModal } from './BaseModal';
+
+const getBackdrop = () =>
+  document.body.querySelector('[aria-hidden="true"].absolute.inset-0') as HTMLElement | null;
 
 describe('BaseModal', () => {
   it('nao fecha ao clicar dentro do conteudo e fecha ao clicar no backdrop', () => {
@@ -17,7 +20,7 @@ describe('BaseModal', () => {
 
     // O modal e renderizado via portal em document.body, entao a busca precisa
     // ocorrer no documento inteiro, nao apenas no container local do render().
-    const backdrop = document.body.querySelector('[aria-hidden="true"]');
+    const backdrop = getBackdrop();
     expect(backdrop).not.toBeNull();
 
     fireEvent.click(backdrop as HTMLElement);
@@ -32,7 +35,7 @@ describe('BaseModal', () => {
       </BaseModal>,
     );
 
-    const backdrop = document.body.querySelector('[aria-hidden="true"]');
+    const backdrop = getBackdrop();
     expect(backdrop).not.toBeNull();
 
     fireEvent.click(backdrop as HTMLElement);
@@ -93,5 +96,52 @@ describe('BaseModal', () => {
     // container local do render().
     expect(container.contains(dialog)).toBe(false);
     expect(document.body.contains(dialog)).toBe(true);
+  });
+
+  it('associa titulo e subtitulo com ids unicos em modais simultaneos', () => {
+    render(
+      <>
+        <BaseModal
+          isOpen
+          onClose={() => undefined}
+          title="Primeiro modal"
+          subtitle="Primeira descricao"
+        >
+          <div>Primeiro conteudo</div>
+        </BaseModal>
+        <BaseModal
+          isOpen
+          onClose={() => undefined}
+          title="Segundo modal"
+          subtitle="Segunda descricao"
+        >
+          <div>Segundo conteudo</div>
+        </BaseModal>
+      </>,
+    );
+
+    const dialogs = screen.getAllByRole('dialog');
+    const firstTitle = within(dialogs[0]).getByText('Primeiro modal');
+    const firstSubtitle = within(dialogs[0]).getByText('Primeira descricao');
+    const secondTitle = within(dialogs[1]).getByText('Segundo modal');
+    const secondSubtitle = within(dialogs[1]).getByText('Segunda descricao');
+
+    expect(dialogs[0]).toHaveAttribute('aria-labelledby', firstTitle.id);
+    expect(dialogs[0]).toHaveAttribute('aria-describedby', firstSubtitle.id);
+    expect(dialogs[1]).toHaveAttribute('aria-labelledby', secondTitle.id);
+    expect(dialogs[1]).toHaveAttribute('aria-describedby', secondSubtitle.id);
+    expect(firstTitle.id).not.toBe(secondTitle.id);
+    expect(firstSubtitle.id).not.toBe(secondSubtitle.id);
+  });
+
+  it('fornece nome acessivel para modal sem titulo visivel', () => {
+    render(
+      <BaseModal isOpen onClose={() => undefined} ariaLabel="Detalhes operacionais">
+        <div>Conteudo sem cabecalho</div>
+      </BaseModal>,
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Detalhes operacionais' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Fechar' })).toBeVisible();
   });
 });
