@@ -12,6 +12,15 @@ import {
 
 const tempDirs: string[] = [];
 
+const FUNCTIONAL_SESSION_CODES = [
+  'INST-E01',
+  'INST-E02',
+  'EXA-01/04',
+  'EXA-02/04',
+  'EXA-03/04',
+  'EXA-04/04',
+];
+
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -22,8 +31,51 @@ function writeJson(dir: string, name: string, value: unknown): string {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
+function buildFunctionalFixture() {
+  const instructorCodes = Array.from({ length: 34 }, (_, index) => ({
+    codigo: `INST-ACT-${String(index + 1).padStart(3, '0')}`,
+    categoria: 'Instrutor',
+    atividade: `Atividade de instrutor ${index + 1}`,
+    regra_codigo_tecnico: 'Registrar também o código técnico aplicável.',
+  }));
+  const examinerCodes = Array.from({ length: 60 }, (_, index) => ({
+    codigo: `EXA-ACT-${String(index + 1).padStart(3, '0')}`,
+    categoria: 'Examinador',
+    atividade: `Atividade de examinador ${index + 1}`,
+    regra_codigo_tecnico: 'Registrar também o código técnico aplicável.',
+  }));
+  const catalog = [...instructorCodes, ...examinerCodes];
+  const byCode = new Map(catalog.map((item) => [item.codigo, item]));
+  const relations = [];
+  for (let sessionIndex = 0; sessionIndex < FUNCTIONAL_SESSION_CODES.length; sessionIndex += 1) {
+    const sessionCode = FUNCTIONAL_SESSION_CODES[sessionIndex];
+    for (let itemIndex = 0; itemIndex < 18; itemIndex += 1) {
+      let code: string;
+      if (sessionCode === 'INST-E01') {
+        code = instructorCodes[itemIndex].codigo;
+      } else if (sessionCode === 'INST-E02') {
+        code = instructorCodes[(18 + itemIndex) % instructorCodes.length].codigo;
+      } else {
+        const examinerSessionIndex = sessionIndex - 2;
+        code = examinerCodes[(examinerSessionIndex * 18 + itemIndex) % examinerCodes.length].codigo;
+      }
+      relations.push({
+        sessao: sessionCode,
+        ordem: itemIndex + 1,
+        codigo: code,
+        atividade: byCode.get(code)!.atividade,
+      });
+    }
+  }
+  return {
+    regra: 'Regra de teste',
+    codigos_canonicos: catalog,
+    relacoes_por_sessao: relations,
+  };
+}
+
 describe('PTO Rev10 package loader', () => {
-  it('maps only canonical operational fields and strips historical provenance', () => {
+  it('maps canonical aircraft and functional sessions and strips provenance', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pto-rev10-'));
     tempDirs.push(dir);
 
@@ -86,15 +138,7 @@ describe('PTO Rev10 package loader', () => {
     files['catalogo_codigos_instrutor_examinador.json'] = writeJson(
       dir,
       'catalogo_codigos_instrutor_examinador.json',
-      {
-        regra: 'Regra de teste',
-        codigos_canonicos: [
-          { codigo: 'INST-ACT-001', categoria: 'Instrutor', atividade: 'Planejamento' },
-        ],
-        relacoes_por_sessao: [
-          { sessao: 'INST-E01', ordem: 1, codigo: 'INST-ACT-001', atividade: 'Planejamento' },
-        ],
-      },
+      buildFunctionalFixture(),
     );
     files['MAPEAMENTO_IMPORTACAO_AIRTRUST.json'] = writeJson(
       dir,
@@ -125,12 +169,19 @@ describe('PTO Rev10 package loader', () => {
     expect(result.sessoes[0].itens_tecnicos[0].tripulante).toBe('A');
     expect(result.sessoes[0].itens_tecnicos[17].tripulante).toBe('B');
     expect(result.sessoes[0].legacy_source_codes).toEqual(['LEGACY-01']);
+    expect(result.instrutor_examinador.codigos).toHaveLength(94);
+    expect(result.instrutor_examinador.relacoes).toHaveLength(108);
+    expect(result.instrutor_examinador.sessoes).toHaveLength(6);
+    expect(result.instrutor_examinador.sessoes[0].codigo).toBe('INST-E01');
+    expect(result.instrutor_examinador.sessoes[0].duracao_estimada_minutos).toBe(60);
+    expect(result.instrutor_examinador.sessoes.at(-1).codigo).toBe('EXA-04/04');
     expect(JSON.stringify(result)).not.toContain('codigo_anterior');
     expect(JSON.stringify(result)).not.toContain('descricao_anterior');
     expect(JSON.stringify(result)).not.toContain('alias_substituicao');
   });
 
   it('centralizes canonical loads without inferring them from titles', () => {
+    expect(durationMinutesFromCanonicalLoad('1 hora')).toBe(60);
     expect(durationMinutesFromCanonicalLoad('2 horas')).toBe(120);
     expect(durationMinutesFromCanonicalLoad('3 horas')).toBe(180);
     expect(durationMinutesFromCanonicalLoad('90 minutos (mínimo)')).toBe(90);
