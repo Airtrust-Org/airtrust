@@ -416,7 +416,7 @@ describe('admin backfill-session-checks tenant scope', () => {
     const legacyPayload = JSON.parse(String(legacyAudit?.binds[6]));
     expect(legacyPayload).toMatchObject({
       modelos_checks_inseridos: 1,
-      agendamentos_linkados: 1,
+      agendamentos_associados: 1,
       checks_criados: 1,
       resultados_criados: 2,
       error_count: 0,
@@ -434,6 +434,7 @@ describe('admin backfill-session-checks tenant scope', () => {
     expect(canonicalMetadata).toMatchObject({
       operation: 'BACKFILL_SESSION_CHECKS',
       scope: 'tenant',
+      count: 5,
     });
   });
 
