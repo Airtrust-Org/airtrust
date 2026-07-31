@@ -42,6 +42,66 @@ describe('apply-schema-change-v2.yml — controlled single-file apply', () => {
     expect(workflow).toContain('change not already applied');
     expect(workflow).not.toMatch(/d1\s+migrations\s+apply/);
   });
+
+  it('runs the exact read-only 0453 validator after that Schema V2 change', () => {
+    expect(workflow).toContain("inputs.change_id == 'ead-category-reconciliation-executor-0453'");
+    expect(workflow).toContain('validate-ead-category-reconciliation-executor-0453.sh');
+  });
+});
+
+describe('EAD reconciliation ledger Schema V2 change 0453', () => {
+  const sql = readFileSync(
+    join(ROOT, 'worker-airtrust/schema-v2/changes/ead-category-reconciliation-executor-0453.sql'),
+    'utf8',
+  );
+  const stagingSql = readFileSync(
+    join(ROOT, 'worker-airtrust/migrations/0453_ead_category_reconciliation_executor.sql'),
+    'utf8',
+  );
+  const validator = readFileSync(
+    join(ROOT, 'scripts/schema-v2/validate-ead-category-reconciliation-executor-0453.sh'),
+    'utf8',
+  );
+  const normalizeSql = (source: string) =>
+    source
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('--'))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  it('is additive-only and semantically equivalent to staging', () => {
+    for (const token of [
+      'ead_category_reconciliation_runs',
+      'CHECK (empresa_id = 6)',
+      "status IN ('APPLIED', 'ROLLED_BACK')",
+      'idx_ead_category_reconciliation_single_active',
+    ]) {
+      expect(sql).toContain(token);
+      expect(stagingSql).toContain(token);
+    }
+    expect(
+      sql
+        .split('\n')
+        .filter((line) => !line.trimStart().startsWith('--'))
+        .join('\n'),
+    ).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER)\b/i);
+    expect(normalizeSql(sql)).toBe(normalizeSql(stagingSql));
+  });
+
+  it('post-validates columns, constraints, partial index, and the empty ledger read-only', () => {
+    for (const token of [
+      'PRAGMA table_info(ead_category_reconciliation_runs)',
+      'CHECK (empresa_id = 6)',
+      'idx_ead_category_reconciliation_single_active',
+      'SELECT COUNT(*) AS n FROM ead_category_reconciliation_runs',
+    ]) {
+      expect(validator).toContain(token);
+    }
+    expect(validator).not.toMatch(
+      /--file|\bd1\s+migrations\s+apply|\b(INSERT|UPDATE|DELETE|DROP|ALTER)\s+(INTO|FROM|TABLE)/i,
+    );
+  });
 });
 
 describe('security token guard — least privilege', () => {
@@ -56,7 +116,9 @@ describe('security token guard — least privilege', () => {
   it('schema workflow requires D1 migration token and fail-closed gate', () => {
     expect(applySchema).toContain('secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN');
     expect(applySchema).toContain('PRODUCTION_D1_MIGRATION_TOKEN_MISSING');
-    expect(applySchema).not.toMatch(/CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+    expect(applySchema).not.toMatch(
+      /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/,
+    );
   });
 
   it('deploy-airtrust continues using only Worker and Pages tokens', () => {

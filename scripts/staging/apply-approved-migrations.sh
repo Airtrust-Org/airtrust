@@ -24,8 +24,8 @@ trap 'rm -f "$PREFLIGHT_OUTPUT"' EXIT
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_MIGRATION_APPLY"
-APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql")
-RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452"
+APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql" "0453_ead_category_reconciliation_executor.sql")
+RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453"
 
 apply=false
 backup_file=""
@@ -137,6 +137,9 @@ if [[ "$migration_basename" == "0424_examiner_universal_training_fichas.sql" ]];
 fi
 if [[ "$migration_basename" == "0452_operational_domain_rbac.sql" ]]; then
   bash "$ROOT/scripts/staging/validate-0452-postconditions.sh" --target="$db_name"
+fi
+if [[ "$migration_basename" == "0453_ead_category_reconciliation_executor.sql" ]]; then
+  bash "$ROOT/scripts/staging/validate-0453-postconditions.sh" --target="$db_name"
 fi
 
 echo "MIGRATION_APPLIED_AND_VALIDATED=$migration_basename"

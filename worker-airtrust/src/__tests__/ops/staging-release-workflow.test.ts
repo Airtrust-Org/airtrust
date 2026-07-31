@@ -110,7 +110,6 @@ describe('deploy-staging.yml — static guards', () => {
     expect(workflow).not.toMatch(/node release\/scripts/);
   });
 
-
   it('keeps workflow and release provenance distinct', () => {
     expect(workflow).toContain('workflow_sha');
     expect(workflow).toContain('release_sha');
@@ -538,19 +537,27 @@ describe('scripts/staging/apply-approved-migrations.sh — guards', () => {
         '--migration=release/worker-airtrust/migrations/0424_examiner_universal_training_fichas.sql',
       ]);
       expect(resultCorrectPath.status).not.toBe(0);
-      expect((resultCorrectPath.stdout + resultCorrectPath.stderr).toLowerCase()).toContain('backup');
+      expect((resultCorrectPath.stdout + resultCorrectPath.stderr).toLowerCase()).toContain(
+        'backup',
+      );
     } finally {
-      try { rmSync(sqlFile, { force: true }); } catch {}
-      if (createdDir) try { rmSync(join(ROOT, 'release'), { recursive: true, force: true }); } catch {}
+      try {
+        rmSync(sqlFile, { force: true });
+      } catch {}
+      if (createdDir)
+        try {
+          rmSync(join(ROOT, 'release'), { recursive: true, force: true });
+        } catch {}
     }
   });
 
-
-  it('allowlists 0452 narrowly and invokes its read-only postcondition validator', () => {
+  it('allowlists 0452/0453 narrowly and invokes their read-only postcondition validators', () => {
     const source = readFileSync(join(ROOT, 'scripts/staging/apply-approved-migrations.sh'), 'utf8');
     expect(source).toContain('0452_operational_domain_rbac.sql');
-    expect(source).toContain('RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452"');
+    expect(source).toContain('0453_ead_category_reconciliation_executor.sql');
+    expect(source).toContain('RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453"');
     expect(source).toContain('validate-0452-postconditions.sh');
+    expect(source).toContain('validate-0453-postconditions.sh');
     expect(source).not.toContain('APPROVED_MIGRATIONS=("*")');
   });
 
@@ -681,6 +688,36 @@ describe('scripts/staging/validate-0452-postconditions.sh — staging-only read-
   });
 });
 
+describe('scripts/staging/validate-0453-postconditions.sh — staging-only read-only guard', () => {
+  it('fails closed without an explicit staging target', () => {
+    const result = runScript('bash', ['scripts/staging/validate-0453-postconditions.sh']);
+    expect(result.status).not.toBe(0);
+  });
+
+  it('checks the ledger schema, partial unique index, and empty pre-run state without DML', () => {
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/validate-0453-postconditions.sh'),
+      'utf8',
+    );
+    const executable = stripComments(source);
+    for (const token of [
+      'ead_category_reconciliation_runs',
+      'idx_ead_category_reconciliation_single_active',
+      'CHECK (empresa_id = 6)',
+      'APPLIED',
+      'ROLLED_BACK',
+      'PRAGMA table_info(ead_category_reconciliation_runs)',
+      'SELECT COUNT(*) AS n FROM ead_category_reconciliation_runs',
+      'qualificacoes_categorias',
+      'qualificacoes_tipos',
+      'historico_qualificacoes',
+      'lms_cursos',
+    ])
+      expect(source).toContain(token);
+    expect(executable).not.toMatch(/\b(INSERT|UPDATE|DELETE|ALTER|DROP)\b/);
+  });
+});
+
 describe('deploy-staging.yml — no free-text workflow_dispatch input spliced directly into a run: body', () => {
   it('every `run:` step block references inputs/github context only via env:, never via ${{ }} inline', () => {
     const workflow = readWorkflow();
@@ -690,7 +727,9 @@ describe('deploy-staging.yml — no free-text workflow_dispatch input spliced di
     // generated shell script before bash parses it — splicing free-text
     // workflow_dispatch input there is a script-injection hole).
     const runBlocks = [
-      ...workflow.matchAll(/run:\s*\|\n([\s\S]*?)(?=\n\s{0,10}- name:|\n\s{0,10}- id:|\n\s{0,8}[a-z0-9-]+:\n|$)/g),
+      ...workflow.matchAll(
+        /run:\s*\|\n([\s\S]*?)(?=\n\s{0,10}- name:|\n\s{0,10}- id:|\n\s{0,8}[a-z0-9-]+:\n|$)/g,
+      ),
     ].map((m) => m[1]);
     expect(runBlocks.length).toBeGreaterThan(5);
     for (const block of runBlocks) {
@@ -750,7 +789,10 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
   const workflow = readWorkflow();
 
   it('1. guard não acessa secrets de staging', () => {
-    const guardJob = workflow.slice(workflow.indexOf('\n  guard:'), workflow.indexOf('\n  production-target-guard:'));
+    const guardJob = workflow.slice(
+      workflow.indexOf('\n  guard:'),
+      workflow.indexOf('\n  production-target-guard:'),
+    );
     expect(guardJob).not.toContain('CLOUDFLARE_D1_BACKUP_API_TOKEN');
     expect(guardJob).not.toContain('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
     expect(guardJob).not.toContain('CLOUDFLARE_WORKER_API_TOKEN');
@@ -758,19 +800,31 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
   });
 
   it('2. cada secret é lido em job independente com environment staging', () => {
-    const backupJob = workflow.slice(workflow.indexOf('\n  check-d1-backup-token:'), workflow.indexOf('\n  check-d1-migration-token:'));
+    const backupJob = workflow.slice(
+      workflow.indexOf('\n  check-d1-backup-token:'),
+      workflow.indexOf('\n  check-d1-migration-token:'),
+    );
     expect(backupJob).toContain('environment: staging');
     expect(backupJob).toContain('secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN');
 
-    const migrationJob = workflow.slice(workflow.indexOf('\n  check-d1-migration-token:'), workflow.indexOf('\n  check-worker-token:'));
+    const migrationJob = workflow.slice(
+      workflow.indexOf('\n  check-d1-migration-token:'),
+      workflow.indexOf('\n  check-worker-token:'),
+    );
     expect(migrationJob).toContain('environment: staging');
     expect(migrationJob).toContain('secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN');
 
-    const workerJob = workflow.slice(workflow.indexOf('\n  check-worker-token:'), workflow.indexOf('\n  check-pages-token:'));
+    const workerJob = workflow.slice(
+      workflow.indexOf('\n  check-worker-token:'),
+      workflow.indexOf('\n  check-pages-token:'),
+    );
     expect(workerJob).toContain('environment: staging');
     expect(workerJob).toContain('secrets.CLOUDFLARE_WORKER_API_TOKEN');
 
-    const pagesJob = workflow.slice(workflow.indexOf('\n  check-pages-token:'), workflow.indexOf('\n  cloudflare-secret-readiness-gate:'));
+    const pagesJob = workflow.slice(
+      workflow.indexOf('\n  check-pages-token:'),
+      workflow.indexOf('\n  cloudflare-secret-readiness-gate:'),
+    );
     expect(pagesJob).toContain('environment: staging');
     expect(pagesJob).toContain('secrets.CLOUDFLARE_PAGES_API_TOKEN');
   });
@@ -815,46 +869,83 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
   });
 
   it('5. secret ausente bloqueia antes de qualquer deploy', () => {
-    const readinessGate = workflow.slice(workflow.indexOf('\n  cloudflare-secret-readiness-gate:'), workflow.indexOf('\n  backup:'));
+    const readinessGate = workflow.slice(
+      workflow.indexOf('\n  cloudflare-secret-readiness-gate:'),
+      workflow.indexOf('\n  backup:'),
+    );
     expect(readinessGate).toContain('secret_gate_ok=$ok');
-    const writeGate = workflow.slice(workflow.indexOf('\n  release-write-gate:'), workflow.indexOf('\n  deploy-worker:'));
-    expect(writeGate).toContain('needs: [cloudflare-secret-readiness-gate, backup, preflight, apply-migrations, postconditions]');
-    expect(writeGate).toContain('SECRET_GATE_OK: ${{ needs.cloudflare-secret-readiness-gate.outputs.secret_gate_ok }}');
+    const writeGate = workflow.slice(
+      workflow.indexOf('\n  release-write-gate:'),
+      workflow.indexOf('\n  deploy-worker:'),
+    );
+    expect(writeGate).toContain(
+      'needs: [cloudflare-secret-readiness-gate, backup, preflight, apply-migrations, postconditions]',
+    );
+    expect(writeGate).toContain(
+      'SECRET_GATE_OK: ${{ needs.cloudflare-secret-readiness-gate.outputs.secret_gate_ok }}',
+    );
     expect(writeGate).toContain('if [[ "$SECRET_GATE_OK" != "true" ]]; then');
   });
 
   it('6/7/8. condicionalidade dos inputs para a validação dos tokens', () => {
-    const readinessGate = workflow.slice(workflow.indexOf('\n  cloudflare-secret-readiness-gate:'), workflow.indexOf('\n  backup:'));
+    const readinessGate = workflow.slice(
+      workflow.indexOf('\n  cloudflare-secret-readiness-gate:'),
+      workflow.indexOf('\n  backup:'),
+    );
     expect(readinessGate).toContain('if [[ "$APPLY_MIGRATIONS" == "true" ]]; then');
-    expect(readinessGate).toContain('if [[ "$DEPLOY_WORKER" == "true" && "$WORKER_TOKEN_RESULT" != "success" ]]');
-    expect(readinessGate).toContain('if [[ "$DEPLOY_FRONTEND" == "true" && "$PAGES_TOKEN_RESULT" != "success" ]]');
+    expect(readinessGate).toContain(
+      'if [[ "$DEPLOY_WORKER" == "true" && "$WORKER_TOKEN_RESULT" != "success" ]]',
+    );
+    expect(readinessGate).toContain(
+      'if [[ "$DEPLOY_FRONTEND" == "true" && "$PAGES_TOKEN_RESULT" != "success" ]]',
+    );
   });
 
   it('9/10. postconditions intera sobre APPROVED_MIGRATIONS e usa script flexível', () => {
-    const postconditionsJob = workflow.slice(workflow.indexOf('\n  postconditions:'), workflow.indexOf('\n  release-write-gate:'));
+    const postconditionsJob = workflow.slice(
+      workflow.indexOf('\n  postconditions:'),
+      workflow.indexOf('\n  release-write-gate:'),
+    );
     expect(postconditionsJob).toContain('for migration in $APPROVED_MIGRATIONS; do');
-    expect(postconditionsJob).toContain('validator="scripts/staging/validate-${prefix}-postconditions.sh"');
+    expect(postconditionsJob).toContain(
+      'validator="scripts/staging/validate-${prefix}-postconditions.sh"',
+    );
     expect(postconditionsJob).toContain('bash "$validator" --target="${ALLOWED_STAGING_DB_NAME}"');
     expect(postconditionsJob).not.toContain('validate-0452-postconditions.sh');
   });
 
   it('11/12/13. smoke aguarda Worker e Pages de forma segura', () => {
-    const smokeJob = workflow.slice(workflow.indexOf('\n  smoke:'), workflow.indexOf('\n  summary:'));
-    expect(smokeJob).toContain('needs: [guard, production-target-guard, release-write-gate, deploy-worker, deploy-frontend]');
-    expect(smokeJob).toContain('(inputs.deploy_worker == false || needs.deploy-worker.result == \'success\')');
-    expect(smokeJob).toContain('(inputs.deploy_frontend == false || needs.deploy-frontend.result == \'success\')');
+    const smokeJob = workflow.slice(
+      workflow.indexOf('\n  smoke:'),
+      workflow.indexOf('\n  summary:'),
+    );
+    expect(smokeJob).toContain(
+      'needs: [guard, production-target-guard, release-write-gate, deploy-worker, deploy-frontend]',
+    );
+    expect(smokeJob).toContain(
+      "(inputs.deploy_worker == false || needs.deploy-worker.result == 'success')",
+    );
+    expect(smokeJob).toContain(
+      "(inputs.deploy_frontend == false || needs.deploy-frontend.result == 'success')",
+    );
     expect(smokeJob).toContain('!failure()');
-    expect(smokeJob).toContain('needs.release-write-gate.outputs.write_gate_ok == \'true\'');
+    expect(smokeJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
   });
 
   it('14. apply_migrations=false + write_gate_ok=true permite Worker e Pages (sobrevive a skips intencionais)', () => {
-    const workerJob = workflow.slice(workflow.indexOf('\n  deploy-worker:'), workflow.indexOf('\n  deploy-frontend:'));
+    const workerJob = workflow.slice(
+      workflow.indexOf('\n  deploy-worker:'),
+      workflow.indexOf('\n  deploy-frontend:'),
+    );
     expect(workerJob).toContain('always()');
     expect(workerJob).toContain('!cancelled()');
     expect(workerJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
     expect(workerJob).toContain('inputs.deploy_worker');
 
-    const frontendJob = workflow.slice(workflow.indexOf('\n  deploy-frontend:'), workflow.indexOf('\n  smoke:'));
+    const frontendJob = workflow.slice(
+      workflow.indexOf('\n  deploy-frontend:'),
+      workflow.indexOf('\n  smoke:'),
+    );
     expect(frontendJob).toContain('always()');
     expect(frontendJob).toContain('!cancelled()');
     expect(frontendJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
@@ -862,17 +953,26 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
   });
 
   it('15. write_gate_ok=false ou cancelled bloqueia Worker e Pages', () => {
-    const workerJob = workflow.slice(workflow.indexOf('\n  deploy-worker:'), workflow.indexOf('\n  deploy-frontend:'));
+    const workerJob = workflow.slice(
+      workflow.indexOf('\n  deploy-worker:'),
+      workflow.indexOf('\n  deploy-frontend:'),
+    );
     expect(workerJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
     expect(workerJob).toContain('!cancelled()');
 
-    const frontendJob = workflow.slice(workflow.indexOf('\n  deploy-frontend:'), workflow.indexOf('\n  smoke:'));
+    const frontendJob = workflow.slice(
+      workflow.indexOf('\n  deploy-frontend:'),
+      workflow.indexOf('\n  smoke:'),
+    );
     expect(frontendJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
     expect(frontendJob).toContain('!cancelled()');
   });
 
   it('16. smoke roda após Worker e Pages verdes, bloqueado após falha', () => {
-    const smokeJob = workflow.slice(workflow.indexOf('\n  smoke:'), workflow.indexOf('\n  summary:'));
+    const smokeJob = workflow.slice(
+      workflow.indexOf('\n  smoke:'),
+      workflow.indexOf('\n  summary:'),
+    );
     expect(smokeJob).toContain("needs.deploy-worker.result == 'success'");
     expect(smokeJob).toContain("needs.deploy-frontend.result == 'success'");
     expect(smokeJob).toContain('!failure()');
@@ -880,4 +980,3 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
     expect(smokeJob).toContain("needs.release-write-gate.outputs.write_gate_ok == 'true'");
   });
 });
-
