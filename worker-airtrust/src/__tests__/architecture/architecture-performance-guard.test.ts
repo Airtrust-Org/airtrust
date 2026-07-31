@@ -43,8 +43,10 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/lms-matriculas.ts': 3558,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   'routes/frms-fadiga-checkin.ts': 2021,
-  // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.
-  'routes/lms-assets.ts': 2400,
+  // Cap raised 2026-07-31: counted 2548 after scoped short-lived asset sessions,
+  // request-aware cookie policy and CSP hardening in PR #565. Extraction remains
+  // a follow-up and is not mixed into this security hotfix.
+  'routes/lms-assets.ts': 2550,
   // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
   // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,
   // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.
