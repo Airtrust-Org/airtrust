@@ -6,6 +6,13 @@ on:
       - agent/audit-critical-high-hardening-20260731
     paths:
       - .github/agent-finalize.trigger
+      - .github/workflows/agent-finalize-audit-hardening.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/agent-finalize.trigger
+      - .github/workflows/agent-finalize-audit-hardening.yml
 
 permissions:
   contents: write
@@ -17,12 +24,14 @@ jobs:
       - name: Checkout isolated branch
         uses: actions/checkout@v4
         with:
+          ref: agent/audit-critical-high-hardening-20260731
           fetch-depth: 0
 
       - name: Decode and apply reviewed patch
         shell: bash
         run: |
           set -euo pipefail
+          test -f .github/agent-finalize.trigger
           cat .github/agent-finalize/chunk-*.b64 | base64 --decode | xz --decompress --stdout > "$RUNNER_TEMP/agent-finalize.patch"
           git apply --check "$RUNNER_TEMP/agent-finalize.patch"
           git apply "$RUNNER_TEMP/agent-finalize.patch"
