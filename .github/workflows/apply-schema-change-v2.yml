@@ -206,3 +206,11 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-ead-category-reconciliation-executor-0453.sh --target=airtrust-db
+
+      - name: Post-validate qualificacoes_tipos domain override 0454
+        if: ${{ inputs.change_id == 'qualificacoes-tipos-dominio-override-0454' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-qualificacoes-tipos-dominio-override-0454.sh --target=airtrust-db

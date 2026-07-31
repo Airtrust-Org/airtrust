@@ -22,6 +22,65 @@ import {
 } from '@/react-app/utils/pdfPreview';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
 
+/**
+ * Erro de API tipado para as chamadas deste modal. `requestJson` popula
+ * `code`/`requestId` diretamente dos campos de MESMO NÍVEL (top-level) do
+ * corpo JSON retornado pelo backend — este componente usa `apiFetch`
+ * diretamente (não o `httpClient`/`apiClient` compartilhado, cujo campo
+ * `.code` de nível superior é remapeado para o status HTTP numérico; ver
+ * `src/react-app/services/http-client.ts`), então o contrato aqui É
+ * exatamente o que a rota do worker envia: `{ success, error, code,
+ * requestId }` sem nenhuma camada de remapeamento no meio.
+ */
+class CertificadoApiError extends Error {
+  code?: string;
+  requestId?: string;
+  /** Mensagem específica enviada pelo backend no corpo (`error`/`message`), sem nenhum fallback genérico aplicado ainda. Vazia quando o backend não enviou uma. */
+  serverMessage?: string;
+
+  constructor(
+    message: string,
+    options?: { code?: string; requestId?: string; serverMessage?: string },
+  ) {
+    super(message);
+    this.name = 'CertificadoApiError';
+    this.code = options?.code;
+    this.requestId = options?.requestId;
+    this.serverMessage = options?.serverMessage;
+  }
+}
+
+// Mensagens específicas por código sanitizado retornado por
+// POST /historico/:id/certificados/gerar (ver worker
+// qualificacoes-certificados-write.ts). Usadas apenas como fallback: a
+// mensagem que o backend envia em `error` já é específica por código e é
+// preferida sempre que presente.
+const GERAR_CERTIFICADO_ERROR_MESSAGES: Record<string, string> = {
+  CERTIFICATE_HISTORY_NOT_FOUND: 'Qualificação não encontrada para esta empresa.',
+  CERTIFICATE_TEMPLATE_NOT_CONFIGURED:
+    'Nenhum template de certificado está configurado para esta empresa. Configure um template antes de gerar certificados.',
+  CERTIFICATE_BROWSER_RENDERING_NOT_CONFIGURED:
+    'A geração de PDF não está configurada neste ambiente. Contate o suporte técnico.',
+  CERTIFICATE_BROWSER_RENDERING_FAILED:
+    'Falha ao gerar o PDF do certificado. Tente novamente em instantes.',
+  CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED:
+    'Esta qualificação ainda não possui um domínio operacional classificado. Solicite a um administrador que corrija a classificação antes de emitir o certificado.',
+  CERTIFICATE_ACCESS_DENIED: 'Você não tem permissão para emitir certificados para esta qualificação.',
+  CERTIFICATE_STORAGE_FAILED: 'Falha ao salvar o certificado no armazenamento. Tente novamente.',
+  CERTIFICATE_PERSISTENCE_FAILED: 'Falha ao registrar o certificado gerado. Tente novamente.',
+};
+
+function resolveGerarCertificadoMensagem(err: unknown): string {
+  if (err instanceof CertificadoApiError) {
+    if (err.serverMessage) return err.serverMessage;
+    if (err.code && GERAR_CERTIFICADO_ERROR_MESSAGES[err.code]) {
+      return GERAR_CERTIFICADO_ERROR_MESSAGES[err.code];
+    }
+    return err.message;
+  }
+  return err instanceof Error ? err.message : 'Erro desconhecido';
+}
+
 export interface ModalCertificadoProps {
   isOpen: boolean;
   onClose: () => void;
@@ -153,15 +212,17 @@ export function ModalCertificado({
       : await response.text().catch(() => '');
 
     if (!response.ok) {
-      const errorMessage =
-        typeof payload === 'object' && payload
-          ? String(
-              ('error' in payload && payload.error) ||
-                ('message' in payload && payload.message) ||
-                `Erro na requisição (${response.status})`,
-            )
-          : `Erro na requisição (${response.status})`;
-      throw new Error(errorMessage);
+      const body = typeof payload === 'object' && payload ? (payload as Record<string, unknown>) : {};
+      const serverMessage =
+        typeof body.error === 'string' && body.error.trim()
+          ? body.error
+          : typeof body.message === 'string' && body.message.trim()
+            ? body.message
+            : undefined;
+      const code = typeof body.code === 'string' ? body.code : undefined;
+      const requestId = typeof body.requestId === 'string' ? body.requestId : undefined;
+      const fallbackMessage = serverMessage || `Erro na requisição (${response.status})`;
+      throw new CertificadoApiError(fallbackMessage, { code, requestId, serverMessage });
     }
 
     return payload as T;
@@ -284,8 +345,10 @@ export function ModalCertificado({
         }
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
-      console.error('[ModalCertificado] Erro ao gerar certificado:', err);
+      const msg = resolveGerarCertificadoMensagem(err);
+      const code = err instanceof CertificadoApiError ? err.code : undefined;
+      const requestId = err instanceof CertificadoApiError ? err.requestId : undefined;
+      console.error('[ModalCertificado] Erro ao gerar certificado:', { code, requestId, message: msg });
       toast.error(`❌ Erro: ${msg}`);
     } finally {
       setLoading(false);

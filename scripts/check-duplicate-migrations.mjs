@@ -99,6 +99,10 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0452_operational_domain_rbac.sql',
     '0452_operational_domain_rbac_rollback.sql',
   ],
+  '0454': [
+    '0454_qualificacoes_tipos_dominio_override.sql',
+    '0454_qualificacoes_tipos_dominio_override_rollback.sql',
+  ],
 };
 
 // Sufixos que denunciam um arquivo operacional (consulta manual read-only:
