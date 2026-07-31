@@ -336,12 +336,22 @@ export function applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmati
     `INSERT INTO simuladores_matriz_imports(
        uuid,empresa_id,versao_matriz,schema_version,status,plan_sha256,source_hashes_json,base_fingerprint,expected_counts_json
      ) VALUES(
-       '${esc(importUuid)}',${empresaId},'${esc(plan.versao_matriz)}',${Number(plan.schema_version)},'APPLYING','${esc(plan.plan_sha256)}','${esc(JSON.stringify(plan.source_hashes))}','${esc(plan.base_fingerprint)}','${esc(JSON.stringify(plan.totals))}'
+       '${esc(importUuid)}',${empresaId},'${esc(plan.versao_matriz)}',${Number(plan.schema_version)},'DRY_RUN','${esc(plan.plan_sha256)}','${esc(JSON.stringify(plan.source_hashes))}','${esc(plan.base_fingerprint)}','${esc(JSON.stringify(plan.totals))}'
      );`,
+    `UPDATE simuladores_matriz_imports SET status='APPLYING'
+      WHERE uuid='${esc(importUuid)}' AND status='DRY_RUN';`,
     ...resolutionStatements,
     ...supersededStatements,
     ...modelStatements,
-    `UPDATE simuladores_matriz_imports SET status='APPLIED',applied_at=CURRENT_TIMESTAMP
+    `UPDATE simuladores_matriz_imports
+        SET status='APPLIED',
+            applied_at=CURRENT_TIMESTAMP,
+            applied_counts_json='${esc(
+              JSON.stringify({
+                ...plan.totals,
+                unique_manoeuvres: plan.manobra_resolution.length,
+              }),
+            )}'
       WHERE uuid='${esc(importUuid)}' AND status='APPLYING';`,
     'COMMIT;',
   ];
