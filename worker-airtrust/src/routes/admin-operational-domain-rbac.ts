@@ -271,7 +271,7 @@ router.get('/unclassified', async (c) => {
 const classifySchema = z.object({
   resource_type: z.enum(['setor', 'categoria', 'curso', 'qualificacao_tipo']),
   resource_id: z.number().int().positive(),
-  dominio_codigo: z.string().trim().min(1),
+  dominio_codigo: z.string().trim().min(1).nullable(),
 });
 
 const CLASSIFIABLE_TABLES: Record<
@@ -295,7 +295,7 @@ const CLASSIFIABLE_TABLES: Record<
 // canonical domains to a setor/categoria/curso — the functional
 // counterpart to Item 2, so classification never requires direct DB
 // editing. Never accepts free text: dominio_codigo must be one of the
-// catalog's canonical codes.
+// catalog's canonical codes, or null to rollback an override.
 router.post('/classify', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
@@ -311,12 +311,14 @@ router.post('/classify', async (c) => {
   // ativo=1), not just the static 5-code list — a domain that exists in
   // the catalog but was deactivated must be just as unusable for new
   // classifications as one that never existed.
-  const activeCodes = await activeDomainCodes(db);
-  if (!activeCodes.has(dominioCodigo as OperationalDomain)) {
-    badRequest(
-      `Domínio operacional desconhecido ou inativo: ${dominioCodigo}`,
-      'UNKNOWN_OR_INACTIVE_OPERATIONAL_DOMAIN',
-    );
+  if (dominioCodigo !== null) {
+    const activeCodes = await activeDomainCodes(db);
+    if (!activeCodes.has(dominioCodigo as OperationalDomain)) {
+      badRequest(
+        `Domínio operacional desconhecido ou inativo: ${dominioCodigo}`,
+        'UNKNOWN_OR_INACTIVE_OPERATIONAL_DOMAIN',
+      );
+    }
   }
 
   const { table } = CLASSIFIABLE_TABLES[resourceType];

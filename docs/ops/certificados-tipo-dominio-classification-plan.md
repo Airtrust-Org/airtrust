@@ -92,18 +92,12 @@ Content-Type: application/json
 ## Rollback
 ```
 POST /api/admin/operational-domain-rbac/classify
-{ "resource_type": "qualificacao_tipo", "resource_id": 19, "dominio_codigo": "<valor anterior ou reexecutar com o mesmo mecanismo>" }
+{ "resource_type": "qualificacao_tipo", "resource_id": 19, "dominio_codigo": null }
 ```
-Como o endpoint não aceita `NULL` diretamente (zod `min(1)`), reverter para
-"não classificado" requer uma linha de banco direta e auditada
-(`UPDATE qualificacoes_tipos SET dominio_codigo = NULL WHERE id = 19 AND empresa_id = 6`)
-executada pelo mesmo caminho controlado (nunca uma UPDATE manual solta) —
-**item de melhoria identificado, não implementado nesta PR**: o endpoint
-`/classify` poderia aceitar `dominio_codigo: null` explicitamente para
-permitir desclassificação sem fallback a SQL direto. Registrado aqui como
-lacuna conhecida, não bloqueante para este plano (reverter classificação é
-raro e, quando necessário, pode ser feito via migração adicional revisada,
-como qualquer outra correção de dado).
+O endpoint `/classify` agora aceita `dominio_codigo: null` explicitamente
+para permitir desclassificação sem fallback a SQL direto. Esta ação fará
+com que o tipo volte a ser resolvido pelo fallback de categoria (ou falhe
+fechado se a categoria não possuir domínio).
 
 ## Escopo RBAC do usuário real que executa a ação original (certificado)
 Ver relatório separado (fora de conteúdo versionado) com a consulta

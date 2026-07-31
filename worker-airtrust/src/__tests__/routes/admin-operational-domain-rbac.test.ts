@@ -392,6 +392,30 @@ describe('admin operational-domain-rbac classification (Item 2)', () => {
     expect(body.error).toMatch(/desconhecido ou inativo/i);
     expect(db.fixtures.setores.find((s) => s.id === 30)?.dominio_codigo).toBeNull();
   });
+
+  it('permite desclassificar um recurso enviando dominio_codigo = null', async () => {
+    const db = buildDb();
+    currentEmpresaId = 2; // setor 10 pertence à empresa 2 e tem domínio OPERACOES
+    const app = buildApp();
+    const res = await app.request(
+      '/api/admin/operational-domain-rbac/classify',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resource_type: 'setor', resource_id: 10, dominio_codigo: null }),
+      },
+      { DB: db } as unknown as Env,
+    );
+    expect(res.status).toBe(200);
+    
+    const classifyBody = (await res.json()) as {
+      success: boolean;
+      data: { resource_type: string; resource_id: number; dominio_codigo: string | null };
+    };
+    expect(classifyBody.success).toBe(true);
+    expect(classifyBody.data.dominio_codigo).toBeNull();
+    expect(db.fixtures.setores.find((s) => s.id === 10)?.dominio_codigo).toBeNull();
+  });
 });
 
 describe('admin operational-domain-rbac readiness — domínio inativo/desconhecido em uso (Fix 2)', () => {

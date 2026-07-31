@@ -61,12 +61,26 @@ Nenhum DML.
 - O contrato de schema (`production-d1-baseline-v2.json`) permanece `PASS` (fora de escopo para esta tabela, mas a checagem genérica do workflow roda mesmo assim).
 - O ledger `airtrust_schema_changes_v2` contém exatamente a entrada `qualificacoes-tipos-dominio-override-0454`.
 
-## Backup
-Padrão do workflow `apply-schema-change-v2.yml`: snapshot de
-`airtrust_schema_baselines_v2` e `airtrust_schema_changes_v2` antes da
-aplicação (etapa "Backup current governance snapshot").
+## Backup e Restore (Mecanismo Canônico Completo)
+O workflow `apply-schema-change-v2.yml` realiza apenas o snapshot do ledger de governança (`airtrust_schema_baselines_v2`, `airtrust_schema_changes_v2`). **Isso não substitui o backup completo do banco.**
 
-## Rollback
+**Antes de aplicar a migration, o operador deve OBRIGATORIAMENTE:**
+1. **Identificação Inequívoca:** O alvo é `airtrust-db` (Produção), ID `7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae`.
+2. **Executar Backup Canônico:** Gerar o dump validado através do script oficial (somente leitura):
+   ```bash
+   node scripts/production/backup-production-d1-readonly.mjs
+   ```
+3. **Evidência:** Anexar o output contendo o hash SHA-256 e integridade (`integrity_check: ok`) na PR/Issue de aprovação da mudança.
+
+**Procedimento Exato de Restore:**
+A restauração oficial, caso haja falha (ex: DDL aplicado e ledger não inserido, índice criado parcialmente, classificação incorreta que afete outras entidades), utiliza **Cloudflare D1 Time Travel** como caminho primário:
+1. Obter o timestamp exato do início da operação (via Cloudflare Dashboard ou logs locais do backup).
+2. O engenheiro autorizado executa o restore:
+   ```bash
+   npx wrangler d1 time-travel restore airtrust-db --timestamp="<UTC_TIMESTAMP>"
+   ```
+3. Se o Time Travel estiver indisponível, o arquivo local gerado pelo script canônico servirá como fallback absoluto (via `wrangler d1 execute`).
+4. **Validação do Restore:** Verificar via `PRAGMA table_info(qualificacoes_tipos)` que a coluna `dominio_codigo` foi removida, e consultar `airtrust_schema_changes_v2` para garantir que o change_id 0454 não consta no ledger.
 Ver `worker-airtrust/migrations/0454_qualificacoes_tipos_dominio_override_rollback.sql`
 — **NEUTRALIZA, NÃO REMOVE** a coluna (mesmo precedente de 0452: SQLite
 `ALTER TABLE ... DROP COLUMN` falha neste banco por um trigger legado não
