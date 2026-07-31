@@ -116,6 +116,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0452_operational_domain_rbac.sql',
     '0452_operational_domain_rbac_rollback.sql',
   ],
+  '0454': [
+    '0454_qualificacoes_tipos_dominio_override.sql',
+    '0454_qualificacoes_tipos_dominio_override_rollback.sql',
+  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
@@ -243,7 +247,13 @@ describe('migration governance', () => {
     // Ratchet raised 2026-07-28: 0452 operational_domain_rbac (dominios
     // catalog + additive domain-classification columns + per-tenant
     // rollout flag, see docs/rbac/gestor-operational-autonomy.md).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(453);
+    // Ratchet raised 2026-07-31: 0454 qualificacoes_tipos_dominio_override
+    // (additive, nullable per-tipo domain override — disambiguates a
+    // mixed-domain/delivery-modality categoria like "EAD", populated only
+    // via the existing admin classification tool; see
+    // docs/rbac/gestor-operational-autonomy.md and the certificate-
+    // generation incident fix).
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(454);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 

@@ -234,15 +234,25 @@ router.get('/unclassified', async (c) => {
 });
 
 const classifySchema = z.object({
-  resource_type: z.enum(['setor', 'categoria', 'curso']),
+  resource_type: z.enum(['setor', 'categoria', 'curso', 'qualificacao_tipo']),
   resource_id: z.number().int().positive(),
   dominio_codigo: z.string().trim().min(1),
 });
 
-const CLASSIFIABLE_TABLES: Record<'setor' | 'categoria' | 'curso', { table: string; label: string }> = {
+const CLASSIFIABLE_TABLES: Record<
+  'setor' | 'categoria' | 'curso' | 'qualificacao_tipo',
+  { table: string; label: string }
+> = {
   setor: { table: 'setores', label: 'nome' },
   categoria: { table: 'qualificacoes_categorias', label: 'nome' },
   curso: { table: 'lms_cursos', label: 'titulo' },
+  // Per-tipo override (migration 0454) — see the module docstring above
+  // resolveResourceDomain('qualificacao_historico' | 'qualificacao_certificado')
+  // in operational-domain-access.ts for the resolution precedence this
+  // feeds into. Reserved for tipos whose owning categoria is genuinely
+  // mixed-domain (e.g. a delivery-modality category like "EAD") — never a
+  // substitute for classifying a homogeneous categoria directly.
+  qualificacao_tipo: { table: 'qualificacoes_tipos', label: 'nome' },
 };
 
 // ===== POST /api/admin/operational-domain-rbac/classify =====

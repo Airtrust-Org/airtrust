@@ -48,6 +48,8 @@ export interface Fixtures {
     id: number;
     empresa_id: number;
     categoria_id?: number | null;
+    /** Explicit per-tipo domain override (migration 0454) — see resolveResourceDomain's precedence. */
+    dominio_codigo?: string | null;
     deleted_at?: string | null;
   }>;
   qualificacoesTiposSetores?: Array<{
@@ -143,7 +145,17 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     // schema-drift checks (Item 3) — fixtures always model the modern
     // schema, so these report the columns as present.
     if (sql.includes('PRAGMA table_info(qualificacoes_tipos)')) {
-      return { all: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'categoria_id' }] };
+      // Fixtures always model the modern schema (post migration 0454):
+      // dominio_codigo is the explicit, optional per-tipo override used to
+      // disambiguate tipos under a mixed-domain categoria (e.g. "EAD").
+      return {
+        all: [
+          { name: 'id' },
+          { name: 'empresa_id' },
+          { name: 'categoria_id' },
+          { name: 'dominio_codigo' },
+        ],
+      };
     }
     if (sql.includes('PRAGMA table_info(qualificacoes_categorias)')) {
       return { all: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'dominio_codigo' }] };
@@ -230,9 +242,10 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       const categoriaHist = hist?.categoria_id
         ? f.qualificacoesCategorias!.find((c) => c.id === hist.categoria_id)
         : null;
-      // Fallback mirrors resolveResourceDomain's COALESCE(qc_hist, qc_tipo):
-      // when the historico's own categoria_id snapshot is missing/unclassified,
-      // resolve via the qualificação tipo's LIVE categoria instead.
+      // Mirrors resolveResourceDomain's COALESCE(qc_hist, qt.dominio_codigo, qc_tipo):
+      // 1) historico's own categoria snapshot, 2) explicit per-tipo override
+      // (migration 0454 — disambiguates a mixed-domain categoria like "EAD"),
+      // 3) the tipo's own categoria as a stale-snapshot fallback.
       const tipo = hist?.qualificacao_id
         ? f.qualificacoesTipos!.find((t) => t.id === hist.qualificacao_id && !t.deleted_at)
         : null;
@@ -245,7 +258,8 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       return {
         first: hist
           ? {
-              dominio_codigo: categoriaHist?.dominio_codigo ?? categoriaTipo?.dominio_codigo ?? null,
+              dominio_codigo:
+                categoriaHist?.dominio_codigo ?? tipo?.dominio_codigo ?? categoriaTipo?.dominio_codigo ?? null,
               setor_id: funcionario?.setor_id ?? null,
             }
           : null,

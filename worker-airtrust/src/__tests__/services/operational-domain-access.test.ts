@@ -902,6 +902,160 @@ describe('resolveResourceDomain — fallback de classificação qh.categoria_id 
   });
 });
 
+describe('resolveResourceDomain — override explícito por tipo (migration 0454, categoria mista)', () => {
+  // Reproduz a causa raiz REAL confirmada por auditoria read-only em
+  // produção: a categoria "EAD" (empresa 6) é uma modalidade de entrega,
+  // não um domínio funcional homogêneo — seus ~30 tipos ativos cobrem
+  // conteúdo genuinamente OPERACOES, MANUTENCAO e SGSO. O fallback
+  // qh.categoria_id -> qt.categoria_id (bloco de testes anterior) NÃO
+  // resolve este caso porque tanto o histórico quanto o tipo apontam para
+  // a MESMA categoria mista, ainda sem dominio_codigo. A resolução correta
+  // aqui é um override explícito por tipo (nunca a categoria inteira).
+  function fixturesComCategoriaMista(): Fixtures {
+    const base = buildFixtures();
+    return {
+      ...base,
+      qualificacoesCategorias: [
+        ...base.qualificacoesCategorias!,
+        // categoria 4: mista, como a "EAD" real — nunca recebe dominio_codigo.
+        { id: 4, empresa_id: 2, ativo: 1, dominio_codigo: null },
+      ],
+      qualificacoesTipos: [
+        ...(base.qualificacoesTipos || []),
+        // tipo 20: pertence à categoria mista, COM override explícito (simula
+        // uma classificação humana real via o endpoint administrativo).
+        { id: 20, empresa_id: 2, categoria_id: 4, dominio_codigo: 'OPERACOES' },
+        // tipo 21: mesma categoria mista, SEM override — deve continuar
+        // fail-closed.
+        { id: 21, empresa_id: 2, categoria_id: 4, dominio_codigo: null },
+      ],
+      qualificacoesHistorico: [
+        ...(base.qualificacoesHistorico || []),
+        // historico 2010: snapshot ausente, tipo COM override -> resolve OPERACOES.
+        { id: 2010, empresa_id: 2, categoria_id: null, qualificacao_id: 20, funcionario_id: 1 },
+        // historico 2011: snapshot ausente, tipo da MESMA categoria mista mas
+        // SEM override -> permanece fail-closed (nenhuma classificação
+        // automática por nome/categoria/setor).
+        { id: 2011, empresa_id: 2, categoria_id: null, qualificacao_id: 21, funcionario_id: 1 },
+      ],
+    };
+  }
+
+  it('resolve o domínio via override explícito do tipo quando a categoria é mista/não classificada', async () => {
+    const db = createFixtureDb(fixturesComCategoriaMista());
+    const result = await resolveResourceDomain(
+      db as unknown as D1Database,
+      2,
+      'qualificacao_certificado',
+      2010,
+    );
+    expect(result.domain).toBe('OPERACOES');
+  });
+
+  it('sem override no tipo, permanece fail-closed mesmo pertencendo à mesma categoria mista', async () => {
+    const db = createFixtureDb(fixturesComCategoriaMista());
+    const result = await resolveResourceDomain(
+      db as unknown as D1Database,
+      2,
+      'qualificacao_certificado',
+      2011,
+    );
+    expect(result.domain).toBeNull();
+  });
+
+  it('assertOperationalAccess autoriza gestor corretamente escopado via override de tipo', async () => {
+    const db = createFixtureDb(fixturesComCategoriaMista());
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 100, // gestor do setor 10 (OPERACOES)
+        userRole: 'gestor',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 2010,
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('gestor de domínio diferente continua bloqueado mesmo com o tipo classificado via override', async () => {
+    const db = createFixtureDb(fixturesComCategoriaMista());
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 105, // apenas setor 13 (MANUTENCAO, inativo — sem acesso a nenhum domínio)
+        userRole: 'gestor',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 2010,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('admin sem setores_gestores continua sem wildcard mesmo com o tipo classificado via override', async () => {
+    const db = createFixtureDb(fixturesComCategoriaMista());
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 103, // administrador sistêmico, sem setores_gestores
+        userRole: 'admin',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 2010,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'OPERATIONAL_DOMAIN_ACCESS_DENIED' });
+  });
+
+  it('tenant que ainda não aplicou a migration 0454 (coluna ausente) não quebra — a query nunca referencia qt.dominio_codigo', async () => {
+    // Feature-detection real, com um mock mínimo que de fato interpreta o
+    // texto da query (fixture-d1 não faz isso — sempre calcula sua própria
+    // resposta pré-computada independente do SQL exato, então não serve
+    // para provar ESTA propriedade específica: que a query em si nunca
+    // referencia a coluna quando tableHasColumn reporta ausência).
+    const queries: string[] = [];
+    const stubDb = {
+      prepare: (sql: string) => ({
+        bind: (..._args: unknown[]) => ({
+          all: async () => {
+            queries.push(sql);
+            if (sql.includes('PRAGMA table_info(qualificacoes_tipos)')) {
+              // Coluna dominio_codigo AUSENTE — simula ambiente pré-0454.
+              return { results: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'categoria_id' }] };
+            }
+            return { results: [] };
+          },
+          first: async () => {
+            queries.push(sql);
+            if (sql.includes('FROM qualificacoes_historico qh')) {
+              // Nunca deveria ser alcançado com qt.dominio_codigo no SELECT
+              // quando a coluna não existe — a asserção abaixo confirma isso
+              // inspecionando o texto de `sql` diretamente.
+              return { dominio_codigo: null, setor_id: 10 };
+            }
+            return null;
+          },
+        }),
+        all: async () => {
+          queries.push(sql);
+          if (sql.includes('PRAGMA table_info(qualificacoes_tipos)')) {
+            return { results: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'categoria_id' }] };
+          }
+          return { results: [] };
+        },
+      }),
+    } as unknown as D1Database;
+
+    await resolveResourceDomain(stubDb, 2, 'qualificacao_certificado', 2010);
+
+    const historicoQuery = queries.find((q) => q.includes('FROM qualificacoes_historico qh'));
+    expect(historicoQuery).toBeDefined();
+    expect(historicoQuery).not.toContain('qt.dominio_codigo');
+    expect(historicoQuery).toContain('qc_tipo.dominio_codigo');
+  });
+});
+
 describe('setor-level authorization within the same domain (Bloqueador 3)', () => {
   // Setores 10 e 14 são AMBOS OPERACOES no tenant 2 — user 100 gerencia
   // apenas o setor 10. Cada teste abaixo prova que o domínio sozinho não

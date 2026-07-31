@@ -353,26 +353,52 @@ export async function resolveResourceDomain(
       // so assertOperationalAccess's setorIds check (below) actually
       // narrows access to the gestor's own setor, not merely their domain.
       //
-      // Classification-resolution fallback (certificate-generation
-      // incident): qh.categoria_id is only a SNAPSHOT taken at write time
-      // (migration 0412's one-time backfill, or whatever a given INSERT
-      // path happened to populate) — it can be NULL on a historico row even
-      // when the qualificação tipo it belongs to (qh.qualificacao_id ->
-      // qualificacoes_tipos.categoria_id) IS currently classified. That is
-      // a stale/missing-snapshot gap, not an authorization decision, so
-      // resolution here prefers the historico's own snapshot when
-      // classified and falls back to the tipo's LIVE classification
-      // otherwise — mirroring the same "canonical source over a possibly
-      // stale copy" pattern already used for setor domain resolution (see
-      // resolveManagedSectorDomainFallback below). This does NOT widen any
-      // privilege and does NOT invent a domain for a genuinely unclassified
-      // category: if the tipo's own categoria also has no dominio_codigo
-      // (e.g. a legacy category residue), COALESCE still yields NULL and
-      // the caller fails closed exactly as before — classifying that
-      // category is a separate, explicit data decision outside this guard.
+      // Classification-resolution precedence (certificate-generation
+      // incident). A read-only production audit found the categoria that
+      // triggered the original incident ("EAD") is a DELIVERY MODALITY, not
+      // a homogeneous functional domain — its ~30 active tipos for that
+      // tenant genuinely span OPERACOES, MANUTENCAO, and SGSO content.
+      // Assigning that categoria a single dominio_codigo would misclassify
+      // a third of its tipos, so resolution here never does that. Instead,
+      // in order:
+      //   1. qh.categoria_id -> qc_hist.dominio_codigo — the historico's own
+      //      snapshot (migration 0412's one-time backfill, or whatever a
+      //      given INSERT path populated), when classified.
+      //   2. qt.dominio_codigo (migration 0454) — an EXPLICIT, OPTIONAL,
+      //      per-tipo override, populated ONLY by a human via the existing
+      //      admin classification tool (POST /api/admin/operational-domain
+      //      -rbac/classify, resource_type='qualificacao_tipo'), never
+      //      inferred and never defaulted. This is what actually
+      //      disambiguates a tipo that belongs to a mixed-domain categoria
+      //      like "EAD" — see CLASSIFIABLE_TABLES in
+      //      admin-operational-domain-rbac.ts.
+      //   3. qt.categoria_id -> qc_tipo.dominio_codigo — fallback for a
+      //      stale/missing historico snapshot when the tipo's OWN categoria
+      //      is unambiguous (a homogeneous categoria, unlike EAD), mirroring
+      //      the same "canonical source over a possibly stale copy" pattern
+      //      already used for setor domain resolution (see
+      //      resolveManagedSectorDomainFallback below).
+      //   4. NULL -> fail closed (RESOURCE_DOMAIN_UNCLASSIFIED).
+      // None of these steps widen any privilege or invent a domain: a
+      // genuinely unclassified tipo/categoria (no override, no categoria
+      // domain) still resolves to NULL and the caller still fails closed
+      // for every role, including admin — classifying that tipo or
+      // categoria is a separate, explicit, human/product decision made
+      // through the admin tool, not through this guard.
+      // Feature-detected: migration 0454 (qualificacoes_tipos.dominio_codigo)
+      // may not be applied yet in every environment. Never assume the
+      // column exists — degrade to the pre-0454 precedence (steps 1+3
+      // only) rather than throwing "no such column" and breaking every
+      // certificate/historico authorization check for tenants that haven't
+      // applied it yet.
+      const tiposHasDominioOverride = await tableHasColumn(db, 'qualificacoes_tipos', 'dominio_codigo');
+      const dominioSelect = tiposHasDominioOverride
+        ? 'COALESCE(qc_hist.dominio_codigo, qt.dominio_codigo, qc_tipo.dominio_codigo)'
+        : 'COALESCE(qc_hist.dominio_codigo, qc_tipo.dominio_codigo)';
+
       const row = await db
         .prepare(
-          `SELECT COALESCE(qc_hist.dominio_codigo, qc_tipo.dominio_codigo) AS dominio_codigo,
+          `SELECT ${dominioSelect} AS dominio_codigo,
                   f.setor_id AS setor_id
              FROM qualificacoes_historico qh
              LEFT JOIN qualificacoes_categorias qc_hist ON qc_hist.id = qh.categoria_id
