@@ -8,10 +8,10 @@
  * - Slots: title, subtitle, children, footer
  * - Variantes de tamanho: sm | md | lg | xl | full
  * - Fecha com Escape e clique no backdrop
- * - Acessibilidade: role="dialog", aria-modal, focus trap básico
+ * - Acessibilidade: role="dialog", aria-modal e associações ARIA únicas
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
@@ -21,6 +21,8 @@ export interface BaseModalProps {
   onClose: () => void;
   title?: string;
   subtitle?: string;
+  /** Nome acessível usado quando o modal não possui título visível. */
+  ariaLabel?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
@@ -43,6 +45,7 @@ export function BaseModal({
   onClose,
   title,
   subtitle,
+  ariaLabel = 'Janela de diálogo',
   children,
   footer,
   size = 'md',
@@ -51,6 +54,8 @@ export function BaseModal({
   className,
 }: BaseModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const subtitleId = useId();
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (disableBackdropClose) return;
@@ -102,7 +107,9 @@ export function BaseModal({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? 'modal-title' : undefined}
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={subtitle ? subtitleId : undefined}
+        aria-label={!title ? ariaLabel : undefined}
         className={cn(
           'relative my-auto w-full animate-scale-in rounded-2xl bg-white shadow-2xl',
           'flex flex-col',
@@ -119,21 +126,22 @@ export function BaseModal({
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
             <div className="flex-1 min-w-0">
               {title && (
-                <h2
-                  id="modal-title"
-                  className="text-base font-semibold text-slate-900 leading-tight"
-                >
+                <h2 id={titleId} className="text-base font-semibold text-slate-900 leading-tight">
                   {title}
                 </h2>
               )}
-              {subtitle && <p className="mt-0.5 text-sm text-slate-500 leading-snug">{subtitle}</p>}
+              {subtitle && (
+                <p id={subtitleId} className="mt-0.5 text-sm text-slate-500 leading-snug">
+                  {subtitle}
+                </p>
+              )}
             </div>
             <button
               onClick={onClose}
               className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
               aria-label="Fechar"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         )}
@@ -145,7 +153,7 @@ export function BaseModal({
             className="absolute right-4 top-4 z-10 rounded-lg p-1.5 text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
             aria-label="Fechar"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
 
