@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const files = [
   'src/routes/auth.ts',
-  // admin.ts is read-only after destructive maintenance routes were removed.
+  'src/routes/admin.ts',
   'src/routes/assets.ts',
   'src/routes/empresas.ts',
 ];
