@@ -33,6 +33,7 @@ describe('PTO Rev10 superseded-model scope', () => {
           ],
         },
       },
+      sessoes_funcionais: [],
     };
 
     expect(selectSupersededPtoRev10Models(active, projection)).toEqual([
@@ -58,9 +59,33 @@ describe('PTO Rev10 superseded-model scope', () => {
             ],
           },
         },
+        sessoes_funcionais: [],
       },
     );
 
     expect(result.map((row) => row.id)).toEqual([20]);
+  });
+
+  it('retires the old two-event examiner models but keeps unrelated functional models', () => {
+    const result = selectSupersededPtoRev10Models(
+      [
+        { id: 30, codigo: 'EXA-E01', codigo_canonico: 'EXA-E01' },
+        { id: 31, codigo: 'EXA-E02', codigo_canonico: 'EXA-E02' },
+        { id: 32, codigo: 'EXA-V04', codigo_canonico: 'EXA-V04' },
+        { id: 33, codigo: 'CRED-EXA', codigo_canonico: 'CRED-EXA' },
+        { id: 34, codigo: 'INST-E01', codigo_canonico: 'INST-E01' },
+      ],
+      {
+        aeronaves: {},
+        sessoes_funcionais: [
+          { codigo: 'EXA-01/04', legacy_source_codes: ['EXA-E01', 'EXA-V01'] },
+          { codigo: 'EXA-03/04', legacy_source_codes: ['EXA-E02', 'EXA-V03'] },
+          { codigo: 'EXA-04/04', legacy_source_codes: ['EXA-V04'] },
+          { codigo: 'INST-E01', legacy_source_codes: [] },
+        ],
+      },
+    );
+
+    expect(result.map((row) => row.id)).toEqual([30, 31, 32]);
   });
 });
