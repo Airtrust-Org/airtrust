@@ -71,3 +71,5 @@ jobs:
           git config user.email "airtrust-agent@users.noreply.github.com"
           git commit -m "fix(lms): preserve scoped asset session during token refresh"
           git push origin HEAD:agent/audit-critical-high-hardening-20260731
+
+# Triggered after initial registration on the branch.
