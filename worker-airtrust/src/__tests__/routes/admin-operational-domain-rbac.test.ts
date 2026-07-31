@@ -62,6 +62,16 @@ function buildFixtures(): Fixtures {
       { id: 1, empresa_id: 2, ativo: 1, dominio_codigo: 'OPERACOES' },
       // Tenant 3: categoria sem domínio
       { id: 3, empresa_id: 3, ativo: 1, dominio_codigo: null, nome: 'Categoria X' },
+      // Tenant 3: categoria já classificada, própria do tenant 3.
+      { id: 4, empresa_id: 3, ativo: 1, dominio_codigo: 'MANUTENCAO', nome: 'Categoria Classificada T3' },
+    ],
+    qualificacoesTipos: [
+      // Tenant 3: tipo pertencente à categoria mista (3, sem domínio),
+      // sem override próprio — genuinamente bloqueado (migration 0454).
+      { id: 40, empresa_id: 3, categoria_id: 3, dominio_codigo: null, nome: 'Tipo Pendente', ativo: 1 },
+      // Tenant 3: tipo com categoria JÁ classificada (herda via fallback,
+      // não deve aparecer como pendente).
+      { id: 41, empresa_id: 3, categoria_id: 4, dominio_codigo: null, nome: 'Tipo OK via categoria', ativo: 1 },
     ],
     lmsCursos: [
       { id: 500, empresa_id: 2, dominio_codigo: 'OPERACOES' },
@@ -185,12 +195,97 @@ describe('admin operational-domain-rbac classification (Item 2)', () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      data: { setores: unknown[]; categorias: unknown[]; cursos: unknown[]; dominios_validos: string[] };
+      data: {
+        setores: unknown[];
+        categorias: unknown[];
+        cursos: unknown[];
+        tipos: unknown[];
+        dominios_validos: string[];
+      };
     };
     expect(body.data.setores).toEqual([{ id: 30, nome: 'Sem domínio' }]);
     expect(body.data.categorias).toEqual([{ id: 3, nome: 'Categoria X' }]);
     expect(body.data.cursos).toEqual([{ id: 600, titulo: 'Curso Y' }]);
+    // tipo 40 (categoria mista sem domínio, sem override) aparece; tipo 41
+    // (categoria já classificada) NÃO aparece — resolve via fallback de
+    // categoria, não precisa de override.
+    expect(body.data.tipos).toEqual([{ id: 40, nome: 'Tipo Pendente' }]);
     expect(body.data.dominios_validos).toContain('MANUTENCAO');
+  });
+
+  it('POST /classify classifica um qualificacao_tipo (round-trip completo: listar pendente -> classificar -> some da listagem)', async () => {
+    const db = buildDb();
+    const app = buildApp();
+
+    // 1. Listar pendentes: tipo 40 deve aparecer.
+    const before = await app.request(
+      '/api/admin/operational-domain-rbac/unclassified',
+      {},
+      { DB: db } as unknown as Env,
+    );
+    const beforeBody = (await before.json()) as { data: { tipos: Array<{ id: number }> } };
+    expect(beforeBody.data.tipos.map((t) => t.id)).toContain(40);
+
+    // 2. Classificar.
+    const classifyRes = await app.request(
+      '/api/admin/operational-domain-rbac/classify',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resource_type: 'qualificacao_tipo',
+          resource_id: 40,
+          dominio_codigo: 'OPERACOES',
+        }),
+      },
+      { DB: db } as unknown as Env,
+    );
+    expect(classifyRes.status).toBe(200);
+    const classifyBody = (await classifyRes.json()) as {
+      success: boolean;
+      data: { resource_type: string; resource_id: number; dominio_codigo: string };
+    };
+    expect(classifyBody.success).toBe(true);
+    expect(classifyBody.data).toEqual({
+      resource_type: 'qualificacao_tipo',
+      resource_id: 40,
+      dominio_codigo: 'OPERACOES',
+    });
+    expect(db.fixtures.qualificacoesTipos?.find((t) => t.id === 40)?.dominio_codigo).toBe('OPERACOES');
+
+    // 3. A categoria mista (3) em si NUNCA é classificada por esta ação —
+    // apenas o tipo específico.
+    expect(db.fixtures.qualificacoesCategorias?.find((c) => c.id === 3)?.dominio_codigo).toBeNull();
+
+    // 4. Listar pendentes de novo: tipo 40 não aparece mais.
+    const after = await app.request(
+      '/api/admin/operational-domain-rbac/unclassified',
+      {},
+      { DB: db } as unknown as Env,
+    );
+    const afterBody = (await after.json()) as { data: { tipos: Array<{ id: number }> } };
+    expect(afterBody.data.tipos.map((t) => t.id)).not.toContain(40);
+  });
+
+  it('POST /classify de qualificacao_tipo em outro tenant retorna 404 (isolamento)', async () => {
+    const db = buildDb();
+    currentEmpresaId = 2; // tipo 40/41 pertencem ao tenant 3
+    const app = buildApp();
+    const res = await app.request(
+      '/api/admin/operational-domain-rbac/classify',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resource_type: 'qualificacao_tipo',
+          resource_id: 40,
+          dominio_codigo: 'OPERACOES',
+        }),
+      },
+      { DB: db } as unknown as Env,
+    );
+    expect(res.status).toBe(404);
+    expect(db.fixtures.qualificacoesTipos?.find((t) => t.id === 40)?.dominio_codigo).toBeNull();
   });
 
   it('POST /classify classifica um setor e o remove da listagem de pendentes', async () => {

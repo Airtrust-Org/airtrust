@@ -50,6 +50,8 @@ export interface Fixtures {
     categoria_id?: number | null;
     /** Explicit per-tipo domain override (migration 0454) — see resolveResourceDomain's precedence. */
     dominio_codigo?: string | null;
+    nome?: string | null;
+    ativo?: 0 | 1;
     deleted_at?: string | null;
   }>;
   qualificacoesTiposSetores?: Array<{
@@ -431,6 +433,22 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
         .map((c) => ({ id: c.id, titulo: c.titulo ?? null }));
       return { all: rows };
     }
+    // admin-operational-domain-rbac.ts: GET /unclassified — tipos genuinely
+    // blocked (no per-tipo override AND their own categoria unclassified).
+    if (sql.includes('FROM qualificacoes_tipos tipo') && sql.includes('ORDER BY tipo.nome')) {
+      const [empresaId] = args as [number];
+      const rows = f.qualificacoesTipos!
+        .filter(
+          (t) => t.empresa_id === empresaId && (t.ativo ?? 1) === 1 && !t.deleted_at && !t.dominio_codigo,
+        )
+        .filter((t) => {
+          if (!t.categoria_id) return true;
+          const categoria = f.qualificacoesCategorias!.find((c) => c.id === t.categoria_id);
+          return !categoria?.dominio_codigo;
+        })
+        .map((t) => ({ id: t.id, nome: t.nome ?? null }));
+      return { all: rows };
+    }
 
     // admin-operational-domain-rbac.ts: POST /classify — fetch-before-update
     if (sql.includes('SELECT id, dominio_codigo FROM setores')) {
@@ -442,6 +460,13 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       const [id, empresaId] = args as [number, number];
       const row = f.qualificacoesCategorias!.find(
         (c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at,
+      );
+      return { first: row ? { id: row.id, dominio_codigo: row.dominio_codigo ?? null } : null };
+    }
+    if (sql.includes('SELECT id, dominio_codigo FROM qualificacoes_tipos')) {
+      const [id, empresaId] = args as [number, number];
+      const row = f.qualificacoesTipos!.find(
+        (t) => t.id === id && t.empresa_id === empresaId && !t.deleted_at,
       );
       return { first: row ? { id: row.id, dominio_codigo: row.dominio_codigo ?? null } : null };
     }
@@ -461,6 +486,12 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     if (sql.includes('UPDATE lms_cursos SET dominio_codigo')) {
       const [dominioCodigo, id, empresaId] = args as [string, number, number];
       const row = f.lmsCursos!.find((c) => c.id === id && c.empresa_id === empresaId);
+      if (row) row.dominio_codigo = dominioCodigo;
+      return { run: { changes: row ? 1 : 0 } };
+    }
+    if (sql.includes('UPDATE qualificacoes_tipos SET dominio_codigo')) {
+      const [dominioCodigo, id, empresaId] = args as [string, number, number];
+      const row = f.qualificacoesTipos!.find((t) => t.id === id && t.empresa_id === empresaId);
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }

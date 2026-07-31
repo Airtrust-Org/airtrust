@@ -119,6 +119,10 @@ function buildFixtures(): Fixtures {
       { id: 500, empresa_id: 50, nome: 'Tripulação Fictícia', ativo: 1, dominio_codigo: 'OPERACOES' },
       { id: 501, empresa_id: 50, nome: 'Manutenção Fictícia', ativo: 1, dominio_codigo: 'MANUTENCAO' },
       { id: 502, empresa_id: 51, nome: 'Setor de outro tenant', ativo: 1, dominio_codigo: 'OPERACOES' },
+      // Segundo setor OPERACOES do MESMO tenant/domínio que 500, mas
+      // DIFERENTE — usado para provar que o escopo é por setor, não apenas
+      // por domínio (o gestor 6001 gerencia somente o setor 500).
+      { id: 503, empresa_id: 50, nome: 'Tripulação Fictícia B (mesmo domínio, outro setor)', ativo: 1, dominio_codigo: 'OPERACOES' },
     ],
     setoresGestores: [
       // gestor 6001: gerencia SOMENTE o setor 500 (OPERACOES)
@@ -151,7 +155,9 @@ function buildFixtures(): Fixtures {
     funcionarios: [
       { id: 7001, empresa_id: 50, setor_id: 500 },
       { id: 7002, empresa_id: 50, setor_id: 501 },
-      { id: 7003, empresa_id: 50, setor_id: 500 },
+      // setor 503: mesmo domínio (OPERACOES) que 500, mas um setor
+      // DIFERENTE que o gestor 6001 não gerencia.
+      { id: 7003, empresa_id: 50, setor_id: 503 },
     ],
   };
 }
@@ -291,16 +297,22 @@ describe('POST /historico/:id/certificados/gerar — categoria mista (tipo "EAD"
       headers: {
         'Content-Type': 'application/json',
         'x-test-empresa-id': '50',
-        'x-test-user-id': '6001', // só gerencia o setor 500; historico 80002 é do funcionario do setor 500 gerido por OUTRO gestor (7003) — mas aqui usamos o MESMO setor_id 500 para o funcionário 7003, então este teste prova apenas domínio; o teste de setor cruzado real está coberto em operational-domain-access.test.ts (Bloqueador 3).
+        // gestor 6001 só gerencia o setor 500; historico 80002 pertence ao
+        // funcionário 7003, que está no setor 503 — MESMO domínio
+        // (OPERACOES) do tipo classificado via override, mas um setor
+        // DIFERENTE e fora do escopo de 6001. O override de domínio no
+        // tipo nunca substitui a checagem de setor.
+        'x-test-user-id': '6001',
         'x-test-role': 'gestor',
       },
       body: JSON.stringify({}),
     });
 
-    // Ambos setor 500 -> autorizado (mesmo setor, mesmo domínio). Este teste
-    // documenta que o override não interfere no caminho feliz repetido.
-    expect(res.status).toBe(201);
-    expect(generateCertMock).toHaveBeenCalledOnce();
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { success: boolean; code?: string };
+    expect(json.success).toBe(false);
+    expect(json.code).toBe('CERTIFICATE_ACCESS_DENIED');
+    expect(generateCertMock).not.toHaveBeenCalled();
   });
 
   it('gestor de domínio DIFERENTE (MANUTENCAO) é bloqueado mesmo com o tipo classificado como OPERACOES', async () => {

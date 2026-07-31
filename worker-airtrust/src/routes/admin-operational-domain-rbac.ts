@@ -187,15 +187,36 @@ router.get('/readiness', async (c) => {
   return c.json({ success: true, data: report });
 });
 
+async function tableHasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
+  try {
+    const info = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+    return (info.results || []).some((row) => row?.name === column);
+  } catch {
+    return false;
+  }
+}
+
 // ===== GET /api/admin/operational-domain-rbac/unclassified =====
 // Lists every setor/categoria/curso still missing a domain classification,
 // for the minimal admin UI (Item 2) — the counterpart to the readiness
 // counters above, giving an admin what to actually click on to fix them.
+//
+// tipos (migration 0454): unlike setores/categorias/cursos, a tipo's
+// dominio_codigo is an OPTIONAL override, not a mandatory classification —
+// most tipos correctly resolve their domain via their categoria and never
+// need one. Listing "every tipo without an override" would be noise (it'd
+// include nearly the whole catalog). Instead this lists only tipos that
+// are GENUINELY blocked end-to-end: no override AND their own categoria is
+// also unclassified — i.e. exactly the tipos resolveResourceDomain would
+// fail closed on today, the same definition of "unclassified" used by the
+// readiness counters and by this same listing for setores/categorias/cursos.
 router.get('/unclassified', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
 
-  const [setores, categorias, cursos] = await Promise.all([
+  const tiposHasDominioOverride = await tableHasColumn(db, 'qualificacoes_tipos', 'dominio_codigo');
+
+  const [setores, categorias, cursos, tipos] = await Promise.all([
     db
       .prepare(
         `SELECT id, nome FROM setores
@@ -220,6 +241,19 @@ router.get('/unclassified', async (c) => {
       )
       .bind(empresaId)
       .all<{ id: number; titulo: string | null }>(),
+    tiposHasDominioOverride
+      ? db
+          .prepare(
+            `SELECT tipo.id, tipo.nome FROM qualificacoes_tipos tipo
+               LEFT JOIN qualificacoes_categorias categoria_do_tipo ON categoria_do_tipo.id = tipo.categoria_id
+              WHERE tipo.empresa_id = ? AND tipo.ativo = 1 AND tipo.deleted_at IS NULL
+                AND tipo.dominio_codigo IS NULL
+                AND (tipo.categoria_id IS NULL OR categoria_do_tipo.dominio_codigo IS NULL)
+              ORDER BY tipo.nome`,
+          )
+          .bind(empresaId)
+          .all<{ id: number; nome: string | null }>()
+      : Promise.resolve({ results: [] as Array<{ id: number; nome: string | null }> }),
   ]);
 
   return c.json({
@@ -229,6 +263,7 @@ router.get('/unclassified', async (c) => {
       setores: setores.results || [],
       categorias: categorias.results || [],
       cursos: cursos.results || [],
+      tipos: tipos.results || [],
     },
   });
 });
