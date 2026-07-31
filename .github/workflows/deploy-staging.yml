@@ -353,8 +353,8 @@ jobs:
 
   backup:
     name: Backup Staging D1 (verified, required before any migration)
-    needs: [guard, production-target-guard]
-    if: ${{ inputs.apply_migrations }}
+    needs: [guard, production-target-guard, cloudflare-secret-readiness-gate]
+    if: ${{ inputs.apply_migrations && needs.cloudflare-secret-readiness-gate.outputs.secret_gate_ok == 'true' }}
     runs-on: ubuntu-latest
     environment: staging
     outputs:
