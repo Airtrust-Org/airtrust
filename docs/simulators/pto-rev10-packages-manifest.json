@@ -11,6 +11,7 @@
     "vinculos_notechs_aw139": 465,
     "vinculos_notechs_s76": 525,
     "notechs_canonicos": 15,
+    "sessoes_instrutor_examinador": 6,
     "codigos_instrutor_examinador": 94,
     "vinculos_instrutor_examinador": 108
   },
@@ -54,6 +55,7 @@
       "alias_substituicao"
     ],
     "preserve_historical_sheets": true,
-    "instructor_examiner_session_models": "PENDING_COMPLETE_SESSION_METADATA"
+    "instructor_examiner_session_models": "CANONICAL_6_SESSIONS_IMPORTED",
+    "preserve_legacy_examiner_models_as_history": true
   }
 }
