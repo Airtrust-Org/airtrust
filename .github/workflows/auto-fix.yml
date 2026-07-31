@@ -2,6 +2,11 @@ name: Auto-fix ESLint & Prettier on PR
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
   push:
     branches:
       - agent/audit-critical-high-hardening-20260731
@@ -13,6 +18,7 @@ permissions:
 
 jobs:
   autofix:
+    if: github.event_name != 'pull_request' || github.head_ref == 'agent/audit-critical-high-hardening-20260731'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
