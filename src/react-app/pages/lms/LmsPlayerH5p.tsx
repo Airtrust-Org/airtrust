@@ -124,7 +124,10 @@ export default function LmsPlayerH5p() {
           return;
         }
 
-        const response = await fetchWithAuth('/api/lms/assets/session', { method: 'POST' });
+        const response = await fetchWithAuth('/api/lms/assets/session', {
+          method: 'POST',
+          body: JSON.stringify({ matricula_id: id }),
+        });
         if (!cancelled) {
           setAssetSessionReady(response.ok);
         }

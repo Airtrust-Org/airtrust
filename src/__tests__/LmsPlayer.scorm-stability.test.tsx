@@ -87,7 +87,7 @@ vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost:8787/api',
   AUTH_TOKEN_CHANGED_EVENT: 'airtrust-auth-token-changed',
   ensureValidAccessToken: ensureValidAccessTokenMock,
-  fetchWithAuth: vi.fn(),
+  fetchWithAuth: vi.fn(async () => ({ ok: true })),
   getAccessToken: getAccessTokenMock,
 }));
 
@@ -167,7 +167,8 @@ describe('LmsPlayer — session stability audit (PR #506)', () => {
       await waitForIframe(result.container);
       // URL uses the token from useAuth fallback
       expect(getSrc(result.container)).toContain('/lms/scorm/launch/42');
-      expect(getSrc(result.container)).toContain('token=token-test');
+      expect(getSrc(result.container)).toContain('/lms/scorm/launch/42');
+      expect(getSrc(result.container)).not.toContain('token=');
     });
   });
 
@@ -218,7 +219,7 @@ describe('LmsPlayer — session stability audit (PR #506)', () => {
       await waitFor(() => expect(getAccessTokenMock).toHaveBeenCalled());
 
       expect(getSrc(container)).toBe(src);
-      expect(getSrc(container)).toContain('token=token-test');
+      expect(getSrc(container)).not.toContain('token=');
     });
 
     it('6. token ausente transitoriamente: iframe permanece', async () => {

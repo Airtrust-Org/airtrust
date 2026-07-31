@@ -1,0 +1,79 @@
+name: D1 Production Backup Restore Drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type D1_PRODUCTION_BACKUP_RESTORE_DRILL'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  backup-restore-drill:
+    name: Export and Restore Production D1 Read-only
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "D1_PRODUCTION_BACKUP_RESTORE_DRILL"
+
+      - name: Checkout canonical source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require canonical main
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "main"
+          test "$(git status --porcelain)" = ""
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install SQLite
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+
+      - name: Export production D1 and restore into disposable SQLite
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          out_dir="$RUNNER_TEMP/airtrust-d1-production-drill"
+          report="$RUNNER_TEMP/d1-production-backup-restore-report.json"
+          mkdir -p "$out_dir"
+          trap 'rm -rf "$out_dir"' EXIT
+          raw_report="$RUNNER_TEMP/d1-production-backup-restore-report.raw.json"
+          node scripts/production/backup-production-d1-readonly.mjs \
+            --config worker-airtrust/wrangler.toml \
+            --env production \
+            --out-dir "$out_dir" > "$raw_report"
+          jq -e '.ok == true' "$raw_report" >/dev/null
+          jq -e '.restored_sqlite.integrity_check == "ok"' "$raw_report" >/dev/null
+          jq -e '.policy.outside_git == true and .policy.uploaded_to_git == false and .policy.uploaded_to_r2 == false' "$raw_report" >/dev/null
+          jq '{
+            ok, generated_at, git_head,
+            backup: {bytes: .backup.bytes, sha256: .backup.sha256},
+            restored_sqlite, policy
+          }' "$raw_report" > "$report"
+          rm -f "$raw_report"
+
+      - name: Upload sanitized drill report only
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-production-backup-restore-report-${{ github.sha }}
+          path: ${{ runner.temp }}/d1-production-backup-restore-report.json
+          if-no-files-found: error
+          retention-days: 30

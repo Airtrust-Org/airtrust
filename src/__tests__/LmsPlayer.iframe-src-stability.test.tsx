@@ -48,7 +48,7 @@ vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost:8787/api',
   AUTH_TOKEN_CHANGED_EVENT: 'airtrust-auth-token-changed',
   ensureValidAccessToken: ensureValidAccessTokenMock,
-  fetchWithAuth: vi.fn(),
+  fetchWithAuth: vi.fn(async () => ({ ok: true })),
   getAccessToken: getAccessTokenMock,
 }));
 
@@ -85,7 +85,8 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
     });
 
     const initialSrc = iframe!.getAttribute('src');
-    expect(initialSrc).toContain('token=token-initial');
+    expect(initialSrc).toContain('/lms/scorm/launch/42');
+    expect(initialSrc).not.toContain('token=');
 
     // Simula rotação real de token (novo valor, não apenas reafirmação do mesmo).
     ensureValidAccessTokenMock.mockResolvedValue('token-rotated');
@@ -105,7 +106,7 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
     const iframeAfter = container.querySelector('iframe');
     expect(iframeAfter).not.toBeNull();
     expect(iframeAfter!.getAttribute('src')).toBe(initialSrc);
-    expect(iframeAfter!.getAttribute('src')).toContain('token=token-initial');
+    expect(iframeAfter!.getAttribute('src')).not.toContain('token=');
   });
 
   it('mantém o iframe montado quando o token desaparece (sessão não encerrada)', async () => {

@@ -12,20 +12,22 @@ import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from './escalas-shared';
 import type { Env, JwtPayload } from '../types';
+import {
+  buildLmsContentSecurityPolicy,
+} from '../lib/lms/security-headers';
 
 const app = new Hono<{ Bindings: Env }>();
 
-const LMS_FRAME_ANCESTORS = [
-  "'self'",
-  'https://airtrust.online',
-  'https://www.airtrust.online',
-  'https://*.airtrust.pages.dev',
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-].join(' ');
 const LMS_ASSET_TOKEN_COOKIE = 'airtrust_lms_asset_token';
 const LMS_ASSET_TOKEN_MAX_AGE_SECONDS = 15 * 60;
 const LMS_PPTX_VIEWER_TOKEN_MAX_AGE_SECONDS = 5 * 60;
+
+type LmsTokenSource = 'authorization' | 'cookie' | 'query';
+
+type ResolvedLmsToken = {
+  token: string;
+  source: LmsTokenSource;
+};
 
 function shouldUseSecureAssetCookie(request: Request): boolean {
   const valuesToInspect = [
@@ -263,15 +265,29 @@ function isPreviewAllowedRole(rawRole: unknown): boolean {
   return ['admin', 'administrador', 'manager', 'gestor'].includes(role);
 }
 
-function getRequestToken(request: Request): string {
+function getAuthorizationToken(request: Request): string {
   const authHeader = request.headers.get('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7);
   }
 
-  const tokenFromQuery = new URL(request.url).searchParams.get('token')?.trim();
-  if (tokenFromQuery) {
-    return tokenFromQuery;
+  throw new ApiError('Não autenticado', 401);
+}
+
+function getRequestToken(
+  request: Request,
+  options: { allowScopedQuery?: boolean } = {},
+): ResolvedLmsToken {
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    return { token: authHeader.slice(7), source: 'authorization' };
+  }
+
+  if (options.allowScopedQuery) {
+    const tokenFromQuery = new URL(request.url).searchParams.get('token')?.trim();
+    if (tokenFromQuery) {
+      return { token: tokenFromQuery, source: 'query' };
+    }
   }
 
   const cookieHeader = request.headers.get('Cookie') ?? '';
@@ -281,30 +297,58 @@ function getRequestToken(request: Request): string {
     const tokenFromCookie = rawValue.join('=').trim();
     if (!tokenFromCookie) break;
     try {
-      return decodeURIComponent(tokenFromCookie);
+      return { token: decodeURIComponent(tokenFromCookie), source: 'cookie' };
     } catch {
       break;
     }
   }
 
-  if (!authHeader?.startsWith('Bearer ')) {
-    throw new ApiError('Não autenticado', 401);
-  }
-
-  return authHeader.slice(7);
+  throw new ApiError('Não autenticado', 401);
 }
 
-async function authenticateLmsAssetRequest(env: Env, request: Request) {
+async function authenticateLmsAssetRequest(
+  env: Env,
+  request: Request,
+  options: { allowScopedQuery?: boolean } = {},
+) {
   if (!env.JWT_SECRET) {
     throw new ApiError('Configuração do servidor inválida', 500);
   }
 
-  const payload = await verifyJWT(getRequestToken(request), env.JWT_SECRET);
+  const resolved = getRequestToken(request, options);
+  const payload = await verifyJWT(resolved.token, env.JWT_SECRET);
   if (!payload) {
     throw new ApiError('Token inválido ou expirado', 401);
   }
 
+  if (resolved.source !== 'authorization' && payload.token_type !== 'lms_asset') {
+    throw new ApiError('Token de asset inválido', 401);
+  }
+
   return payload;
+}
+
+function assertCourseAssetToken(
+  payload: JwtPayload,
+  cursoId: number,
+  options: { matriculaId?: number; preview?: boolean } = {},
+) {
+  if (payload.token_type !== 'lms_asset') return;
+
+  if (payload.asset_scope !== 'course_assets' || Number(payload.asset_curso_id ?? 0) !== cursoId) {
+    throw new ApiError('Token de asset inválido para este curso', 403);
+  }
+
+  if (
+    options.matriculaId != null &&
+    Number(payload.asset_matricula_id ?? 0) !== options.matriculaId
+  ) {
+    throw new ApiError('Token de asset inválido para esta matrícula', 403);
+  }
+
+  if (options.preview === true && payload.asset_preview !== true) {
+    throw new ApiError('Token de asset inválido para pré-visualização', 403);
+  }
 }
 
 function assertPptxViewerAssetToken(payload: JwtPayload, cursoId: number) {
@@ -328,7 +372,7 @@ function appendAssetTokenCookie(headers: Headers, token: string, request: Reques
 
   headers.append(
     'Set-Cookie',
-    `${LMS_ASSET_TOKEN_COOKIE}=${encodeURIComponent(token)}; Path=/api/lms/; Max-Age=${LMS_ASSET_TOKEN_MAX_AGE_SECONDS}; ${sameSiteDirective}`,
+    `${LMS_ASSET_TOKEN_COOKIE}=${encodeURIComponent(token)}; Path=/api/lms/; Max-Age=${LMS_ASSET_TOKEN_MAX_AGE_SECONDS}; HttpOnly; ${sameSiteDirective}`,
   );
 }
 
@@ -353,7 +397,105 @@ function buildAssetHeaders(
 }
 
 app.post('/assets/session', auth(), async (c) => {
-  const token = getRequestToken(c.req.raw);
+  const jwtSecret = c.env.JWT_SECRET;
+  if (!jwtSecret) {
+    throw new ApiError('Configuração do servidor inválida', 500);
+  }
+
+  const accessToken = getAuthorizationToken(c.req.raw);
+  const accessPayload = await verifyJWT(accessToken, jwtSecret);
+  if (!accessPayload || (accessPayload.token_type && accessPayload.token_type !== 'access')) {
+    throw new ApiError('Token de acesso inválido', 401);
+  }
+
+  type AssetSessionRequest = {
+    matricula_id?: number;
+    curso_id?: number;
+    preview?: boolean;
+  };
+  const body: AssetSessionRequest = await c.req
+    .json<AssetSessionRequest>()
+    .catch((): AssetSessionRequest => ({}));
+  const empresaId = Number(accessPayload.empresa_id ?? 0);
+  const matriculaId = Number(body.matricula_id ?? 0);
+  const requestedCursoId = Number(body.curso_id ?? 0);
+  const preview = body.preview === true;
+
+  if (!empresaId) {
+    throw new ApiError('Empresa não identificada no token', 401);
+  }
+
+  let cursoId = 0;
+  let scopedMatriculaId: number | undefined;
+
+  if (matriculaId > 0) {
+    const matricula = await c.env.DB
+      .prepare(
+        `SELECT m.id, m.curso_id, m.funcionario_id, m.status, c.ativo, c.publicado
+           FROM lms_matriculas m
+           JOIN lms_cursos c
+             ON c.id = m.curso_id
+            AND c.empresa_id = m.empresa_id
+            AND c.deleted_at IS NULL
+          WHERE m.id = ?
+            AND m.empresa_id = ?
+            AND m.deleted_at IS NULL`,
+      )
+      .bind(matriculaId, empresaId)
+      .first<{
+        id: number;
+        curso_id: number;
+        funcionario_id: number;
+        status: string;
+        ativo: number;
+        publicado: number;
+      }>();
+
+    if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
+
+    const canManage = isPrivilegedRole(accessPayload.role);
+    const callerFuncionarioId = Number(accessPayload.funcionario_id ?? 0);
+    if (!canManage) {
+      if (!callerFuncionarioId || callerFuncionarioId !== matricula.funcionario_id) {
+        throw new ApiError('Acesso negado', 403);
+      }
+      if (matricula.ativo !== 1 || matricula.publicado !== 1 || matricula.status === 'CANCELADO') {
+        throw new ApiError('Curso não disponível para este usuário', 403);
+      }
+    }
+
+    cursoId = matricula.curso_id;
+    scopedMatriculaId = matricula.id;
+  } else if (preview && requestedCursoId > 0) {
+    if (!isPreviewAllowedRole(accessPayload.role)) {
+      throw new ApiError('Acesso negado', 403);
+    }
+    await ensureCourseAssetAccess(c.env.DB, accessPayload, empresaId, requestedCursoId);
+    cursoId = requestedCursoId;
+  } else {
+    throw new ApiError('Informe matricula_id ou curso_id com preview=true', 400);
+  }
+
+  const { token } = await generateJWT(
+    {
+      sub: Number(accessPayload.sub),
+      email: accessPayload.email,
+      role: accessPayload.role,
+      token_type: 'lms_asset',
+      asset_scope: 'course_assets',
+      asset_curso_id: cursoId,
+      asset_matricula_id: scopedMatriculaId,
+      asset_preview: preview || undefined,
+      empresa_id: empresaId,
+      empresas: accessPayload.empresas,
+      permissions: accessPayload.permissions,
+      funcionario_id: accessPayload.funcionario_id ?? null,
+      nome: accessPayload.nome,
+    },
+    jwtSecret,
+    LMS_ASSET_TOKEN_MAX_AGE_SECONDS,
+  );
+
   const headers = new Headers({
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-cache, no-store',
@@ -363,10 +505,22 @@ app.post('/assets/session', auth(), async (c) => {
   });
   appendAssetTokenCookie(headers, token, c.req.raw);
 
-  return new Response(JSON.stringify({ success: true, data: { active: true } }), {
-    status: 200,
-    headers,
-  });
+  return new Response(
+    JSON.stringify({
+      success: true,
+      data: {
+        active: true,
+        expiresIn: LMS_ASSET_TOKEN_MAX_AGE_SECONDS,
+        cursoId,
+        matriculaId: scopedMatriculaId ?? null,
+        preview,
+      },
+    }),
+    {
+      status: 200,
+      headers,
+    },
+  );
 });
 
 app.get('/pptx/viewer/:cursoId', async (c) => {
@@ -512,6 +666,12 @@ async function ensureH5pAssetAccess(
     throw new ApiError('Conteúdo H5P não encontrado', 404);
   }
 
+  if (h5p.curso_id) {
+    assertCourseAssetToken(payload, h5p.curso_id);
+  } else if (payload.token_type === 'lms_asset') {
+    throw new ApiError('Token de asset sem curso associado', 403);
+  }
+
   const tokenEmpresaId = Number(payload.empresa_id ?? 0);
   if (!tokenEmpresaId || tokenEmpresaId !== Number(h5p.empresa_id)) {
     throw new ApiError('Acesso negado', 403);
@@ -553,7 +713,7 @@ function buildProtectedLaunchHeaders(
   return new Headers({
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-cache, no-store',
-    'Content-Security-Policy': `frame-ancestors ${LMS_FRAME_ANCESTORS}`,
+    'Content-Security-Policy': buildLmsContentSecurityPolicy(),
     'Access-Control-Allow-Origin': resolveAllowedOrigin(origin, corsOrigins),
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Headers':
@@ -569,6 +729,7 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
   const payload = await authenticateLmsAssetRequest(c.env, c.req.raw);
   const empresaId = c.req.param('empresa_id');
   const cursoId = c.req.param('curso_id');
+  assertCourseAssetToken(payload, Number(cursoId));
   const cacheBuster = new URL(c.req.url).searchParams.get('airtrust_scorm')?.trim() || null;
   await ensureCourseAssetAccess(c.env.DB, payload, Number(empresaId), Number(cursoId));
   const wildcard = extractAssetPathFromRequest(
@@ -639,6 +800,7 @@ app.get('/scorm/assets-by-curso/:cursoId/*', async (c) => {
     .bind(Number(cursoIdParam))
     .first<{ id: number; empresa_id: number }>();
   if (!curso) return c.text('Not found', 404);
+  assertCourseAssetToken(payload, curso.id);
   await ensureCourseAssetAccess(db, payload, curso.empresa_id, curso.id);
 
   const { object: foundObject, resolvedKey } = await resolveScormObject(
@@ -739,20 +901,10 @@ app.get('/course-assets/:cursoId/thumbnail', async (c) => {
 });
 
 // ── Página de lançamento SCORM ────────────────────────────────────────────────
-// Requer Authorization: Bearer e devolve HTML pronto para ser carregado via fetch autenticado.
+// Requer cookie de asset escopado (ou Authorization em clientes internos controlados).
 
 app.get('/scorm/launch/:matricula_id', async (c) => {
-  const rawToken = getRequestToken(c.req.raw);
-
-  const jwtSecret = c.env.JWT_SECRET;
-  if (!jwtSecret) {
-    return new Response('Configuração do servidor inválida', { status: 500 });
-  }
-
-  const payload = await verifyJWT(rawToken, jwtSecret);
-  if (!payload) {
-    return new Response('Token inválido ou expirado', { status: 401 });
-  }
+  const payload = await authenticateLmsAssetRequest(c.env, c.req.raw);
 
   const empresaId = getEmpresaIdOptional(c) || Number(payload.empresa_id ?? 0);
   if (!empresaId) {
@@ -789,6 +941,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     }>();
 
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
+  assertCourseAssetToken(payload, matricula.curso_id, { matriculaId: matricula.id });
   const callerFuncionarioId =
     typeof payload.funcionario_id === 'number' && payload.funcionario_id > 0
       ? payload.funcionario_id
@@ -857,7 +1010,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     titulo: matricula.titulo,
     launchUrl,
     commitUrl,
-    token: rawToken,
+    token: '',
     isScorm2004,
     initialCmiJson,
     hasResumeState,
@@ -866,7 +1019,6 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   });
 
   const headers = buildProtectedLaunchHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'));
-  appendAssetTokenCookie(headers, rawToken, c.req.raw);
 
   return new Response(html, {
     status: 200,
@@ -877,17 +1029,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
 // ── Pré-visualização SCORM para admin/gestor (sem matrícula) ────────────────
 
 app.get('/scorm/preview/:curso_id', async (c) => {
-  const rawToken = getRequestToken(c.req.raw);
-
-  const jwtSecret = c.env.JWT_SECRET;
-  if (!jwtSecret) {
-    return new Response('Configuração do servidor inválida', { status: 500 });
-  }
-
-  const payload = await verifyJWT(rawToken, jwtSecret);
-  if (!payload) {
-    return new Response('Token inválido ou expirado', { status: 401 });
-  }
+  const payload = await authenticateLmsAssetRequest(c.env, c.req.raw);
 
   if (!isPreviewAllowedRole(payload.role)) {
     return new Response('Acesso negado', { status: 403 });
@@ -915,6 +1057,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
     }>();
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
+  assertCourseAssetToken(payload, curso.id, { preview: true });
   if (!curso.scorm_launch_file)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
 
@@ -936,14 +1079,13 @@ app.get('/scorm/preview/:curso_id', async (c) => {
     titulo: `${curso.titulo} · Pré-visualização`,
     launchUrl,
     commitUrl: null,
-    token: rawToken,
+    token: '',
     isScorm2004,
     previewMode: true,
     assetCacheBuster: Date.now().toString(36),
   });
 
   const headers = buildProtectedLaunchHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'));
-  appendAssetTokenCookie(headers, rawToken, c.req.raw);
 
   return new Response(html, {
     status: 200,
@@ -1237,6 +1379,10 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         resolve(TOKEN || null);
       }, 1500);
     });
+  }
+
+  if (!PREVIEW_MODE) {
+    requestFreshToken('launch');
   }
 
   var statusHideTimer = null;
@@ -2363,7 +2509,9 @@ app.get('/pdf/asset/:cursoId', async (c) => {
 // ── Servir arquivo PPTX do R2 ────────────────────────────────────────────────
 app.get('/pptx/asset/:cursoId', async (c) => {
   const db = c.env.DB;
-  const payload = (await authenticateLmsAssetRequest(c.env, c.req.raw)) as JwtPayload;
+  const payload = (await authenticateLmsAssetRequest(c.env, c.req.raw, {
+    allowScopedQuery: true,
+  })) as JwtPayload;
   const cursoId = Number(c.req.param('cursoId'));
   const empresaId = Number(payload.empresa_id ?? 0);
 

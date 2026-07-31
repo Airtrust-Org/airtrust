@@ -69,7 +69,7 @@ vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost:8787/api',
   AUTH_TOKEN_CHANGED_EVENT: 'airtrust-auth-token-changed',
   ensureValidAccessToken: vi.fn(async () => 'token'),
-  fetchWithAuth: vi.fn(),
+  fetchWithAuth: vi.fn(async () => ({ ok: true })),
   getAccessToken: () => 'token',
 }));
 

@@ -279,8 +279,6 @@ describe('Tenant SQL Guardrail — Regression Prevention', () => {
       'qualificacoes/validacao.ts',
       'qualificacoes-certificados-admin.ts', // receives empresa via callers
       // Admin/platform-only (cross-tenant intentional)
-      'migrations.ts',
-      'admin-manual-migrations.ts',
       'admin-domain-events.ts',
       'admin-perfis.ts',
       'admin.ts',

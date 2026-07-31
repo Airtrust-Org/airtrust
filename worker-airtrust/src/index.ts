@@ -36,6 +36,7 @@ import { errorHandler } from './middleware/error-handler';
 import { auth } from './middleware/auth';
 import { cacheControl } from './middleware/cache';
 import { noCacheMiddleware } from './middleware/no-cache';
+import { buildLmsContentSecurityPolicy } from './lib/lms/security-headers';
 import { provenanceHeadersMiddleware } from './middleware/provenance';
 import { requestIdMiddleware } from './middleware/requestId';
 import { rateLimiter, rateLimitPresets } from './middleware/rate-limit';
@@ -220,11 +221,8 @@ app.use('*', async (c, next) => {
   c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
   if (isScormRoute) {
-    // SCORM/H5P: permite embedding em iframe e scripts inline
-    c.header(
-      'Content-Security-Policy',
-      "frame-ancestors *; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; default-src 'self' blob: data: https: http:",
-    );
+    // SCORM/H5P: política única e restrita às origens oficiais do AirTrust.
+    c.header('Content-Security-Policy', buildLmsContentSecurityPolicy());
   } else {
     c.header('X-Frame-Options', 'DENY');
     c.header(
@@ -869,23 +867,12 @@ app.route('/api/qualificacoes-historico/auditoria', auditoriaRoutes);
 app.route('/api/qualificacoes-historico/deduplicate', deduplicateRoutes);
 
 /**
- * Rotas Administrativas (DANGER ZONE)
- * DELETE /api/admin/reset/funcionarios
- * DELETE /api/admin/reset/qualificacoes-tipos
- * DELETE /api/admin/reset/qualificacoes-historico
- * GET    /api/admin/actions
+ * Rotas administrativas não destrutivas.
+ * Operações históricas de reset e migrations manuais foram removidas do runtime.
  */
 import adminRoutes from './routes/admin';
 app.use('/api/admin/*', auth(), requireRole('admin'));
 app.route('/api/admin', adminRoutes);
-
-/**
- * Rotas de Migrações Manuais
- * POST /api/migrations/fix-integer-ids
- */
-import migrationsRoutes from './routes/migrations';
-app.use('/api/migrations/*', auth(), requireRole('admin'));
-app.route('/api/migrations', migrationsRoutes);
 
 // NOTA: Rotas EdApp já montadas em /api/integracoes/edapp via edappRouter (linha 480)
 // Arquivo integracoes/edapp.ts mantido como referência mas não utilizado

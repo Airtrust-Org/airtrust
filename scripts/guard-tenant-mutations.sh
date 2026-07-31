@@ -10,8 +10,6 @@ echo "🔎 Verificando endpoints de mutação sem proteção de tenant..."
 # Ex: auth, arquivos puramente publicos, migrations manuais, etc.
 ALLOWLIST=(
   "auth.ts"
-  "admin-manual-migrations.ts"
-  "migrations.ts"
   "public.ts" "public-routes.ts"
   "frms-relatorios-config.ts"
   "backup.ts"

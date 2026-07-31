@@ -194,7 +194,7 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       expect(text).toContain('Empresa não identificada');
     });
 
-    it('sets the asset cookie with SameSite=None; Secure on a non-local (staging/prod-like) request', async () => {
+    it('sets the scoped asset-session cookie with SameSite=None; Secure on a non-local request', async () => {
       verifyJWTMock.mockResolvedValue({
         empresa_id: 6,
         funcionario_id: 42,
@@ -212,23 +212,22 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
               empresa_id: 6,
               status: 'EM_ANDAMENTO',
               curso_id: 99,
-              titulo: 'Curso SCORM Teste',
-              scorm_versao: '1.2',
-              scorm_package_r2_prefix: null,
-              scorm_launch_file: 'index.html',
               ativo: 1,
               publicado: 1,
             }),
           },
         ],
-        ['lms_progresso_scorm', { first: () => null }],
-        ['lms_matricula_ciclos', { first: () => ({ id: 44 }) }],
       ]);
 
       const app = createApp();
       const response = await app.fetch(
-        new Request('https://airtrust-api-staging.airtrust.workers.dev/scorm/launch/77', {
-          headers: { Authorization: 'Bearer test.jwt.token' },
+        new Request('https://airtrust-api-staging.airtrust.workers.dev/assets/session', {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer test.jwt.token',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ matricula_id: 77 }),
         }),
         makeEnv(db),
         {} as ExecutionContext,

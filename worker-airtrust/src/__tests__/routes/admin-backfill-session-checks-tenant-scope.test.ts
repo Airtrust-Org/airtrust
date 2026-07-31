@@ -301,6 +301,14 @@ function createBackfillDb(state: MockState): D1Database {
         async run() {
           state.writes.push({ sql, binds });
 
+          const normalizedWriteSql = sql.toUpperCase();
+          if (
+            normalizedWriteSql.startsWith('INSERT INTO AUDITORIA') ||
+            normalizedWriteSql.startsWith('INSERT INTO AUDIT_EVENTS_V2')
+          ) {
+            return { success: true, meta: { changes: 1, last_row_id: 9999 } };
+          }
+
           if (sql.startsWith('INSERT INTO modelos_sessao_checks')) {
             const [modeloId, qualificacaoTipoId] = binds.map(Number);
             state.modeloChecks.add(modeloCheckKey(modeloId, qualificacaoTipoId));
@@ -389,7 +397,45 @@ describe('admin backfill-session-checks tenant scope', () => {
     );
     expect(state.sessaoChecks.some((item) => item.sessao_id === 301)).toBe(false);
     expect(Array.from(state.resultados).sort()).toEqual([1, 3]);
-    expect(state.writes.some((write) => write.binds.includes(101) || write.binds.includes(301))).toBe(false);
+
+    const businessWrites = state.writes.filter((write) => {
+      const normalizedWriteSql = write.sql.toUpperCase();
+      return (
+        !normalizedWriteSql.startsWith('INSERT INTO AUDITORIA') &&
+        !normalizedWriteSql.startsWith('INSERT INTO AUDIT_EVENTS_V2')
+      );
+    });
+    expect(
+      businessWrites.some((write) => write.binds.includes(101) || write.binds.includes(301)),
+    ).toBe(false);
+
+    const legacyAudit = state.writes.find((write) =>
+      write.sql.toUpperCase().startsWith('INSERT INTO AUDITORIA'),
+    );
+    expect(legacyAudit).toBeDefined();
+    const legacyPayload = JSON.parse(String(legacyAudit?.binds[6]));
+    expect(legacyPayload).toMatchObject({
+      modelos_checks_inseridos: 1,
+      agendamentos_associados: 1,
+      checks_criados: 1,
+      resultados_criados: 2,
+      error_count: 0,
+    });
+
+    const canonicalAudit = state.writes.find((write) =>
+      write.sql.toUpperCase().startsWith('INSERT INTO AUDIT_EVENTS_V2'),
+    );
+    expect(canonicalAudit).toBeDefined();
+    expect(canonicalAudit?.binds[1]).toBe(10);
+    expect(canonicalAudit?.binds[2]).toBe(10);
+    expect(canonicalAudit?.binds[13]).toBe('ADMIN_OPERATION');
+    expect(canonicalAudit?.binds[14]).toBe('BACKFILL_SESSION_CHECKS');
+    const canonicalMetadata = JSON.parse(String(canonicalAudit?.binds[20]));
+    expect(canonicalMetadata).toMatchObject({
+      operation: 'BACKFILL_SESSION_CHECKS',
+      scope: 'tenant',
+      count: 5,
+    });
   });
 
   it('mantem idempotencia dentro do tenant', async () => {
