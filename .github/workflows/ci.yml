@@ -138,7 +138,7 @@ jobs:
           ref: agent/audit-critical-high-hardening-20260731
           fetch-depth: 0
 
-      - name: Apply reviewed patch and remove transport files
+      - name: Apply reviewed code patch
         shell: bash
         run: |
           set -euo pipefail
@@ -166,8 +166,10 @@ jobs:
           git apply --check .github/agent-finalize-supplement.patch
           git apply .github/agent-finalize-supplement.patch
 
-          git fetch origin main
-          git checkout origin/main -- .github/workflows/ci.yml
+          # GitHub's workflow token cannot update workflow files. Preserve the
+          # current workflow tree for this push; the connected GitHub app will
+          # apply the reviewed workflow changes immediately afterward.
+          git checkout HEAD -- .github/workflows
 
           rm -rf \
             .github/agent-finalize \
@@ -175,9 +177,6 @@ jobs:
             .github/agent-finalize.patch.xz.b64 \
             .github/agent-finalize-supplement.patch \
             .github/agent-finalize.trigger \
-            .github/workflows/agent-source-export.yml \
-            .github/workflows/agent-git-export.yml \
-            .github/workflows/agent-finalize-audit-hardening.yml \
             docs/.agent-export-placeholder \
             docs/.agent-git-trigger \
             docs/.agent-pr-placeholder
