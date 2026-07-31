@@ -291,8 +291,15 @@ export default function LmsPlayer() {
   }, [sessionKey]);
 
   useEffect(() => {
-    if (!playerToken || !matricula || matricula.tipo_conteudo === 'h5p') {
+    if (!matricula || matricula.tipo_conteudo === 'h5p') {
       setAssetSessionReady(false);
+      return;
+    }
+
+    // A transient access-token refresh must not tear down an already
+    // established asset session. The short-lived HttpOnly asset cookie
+    // remains valid, while a real logout is handled by the auth guard below.
+    if (!playerToken) {
       return;
     }
 

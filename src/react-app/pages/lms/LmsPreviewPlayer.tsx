@@ -18,6 +18,7 @@ import {
   API_BASE_URL,
   AUTH_TOKEN_CHANGED_EVENT,
   ensureValidAccessToken,
+  fetchWithAuth,
   getAccessToken,
 } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
