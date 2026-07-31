@@ -25,12 +25,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tar --exclude=.git --exclude=airtrust-source.tar.gz -czf airtrust-source.tar.gz .
+          git archive --format=tar.gz --output="$RUNNER_TEMP/airtrust-source.tar.gz" HEAD
 
       - name: Upload source archive
         uses: actions/upload-artifact@v4
         with:
           name: agent-source-${{ github.sha }}
-          path: airtrust-source.tar.gz
+          path: ${{ runner.temp }}/airtrust-source.tar.gz
           if-no-files-found: error
           retention-days: 1
