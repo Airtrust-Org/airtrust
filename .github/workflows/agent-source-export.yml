@@ -4,33 +4,29 @@ on:
   push:
     branches:
       - agent/audit-critical-high-hardening-20260731
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: read
 
 jobs:
   export-source:
-    if: github.head_ref == 'agent/audit-critical-high-hardening-20260731' || github.ref_name == 'agent/audit-critical-high-hardening-20260731'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout branch
+      - name: Checkout branch with history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Create source archive
+      - name: Create Git metadata archive
         shell: bash
         run: |
           set -euo pipefail
-          git archive --format=tar.gz --output="$RUNNER_TEMP/airtrust-source.tar.gz" HEAD
+          tar -czf "$RUNNER_TEMP/airtrust-git-metadata.tar.gz" .git
 
-      - name: Upload source archive
+      - name: Upload Git metadata archive
         uses: actions/upload-artifact@v4
         with:
-          name: agent-source-${{ github.sha }}
-          path: ${{ runner.temp }}/airtrust-source.tar.gz
+          name: agent-git-${{ github.sha }}
+          path: ${{ runner.temp }}/airtrust-git-metadata.tar.gz
           if-no-files-found: error
           retention-days: 1
