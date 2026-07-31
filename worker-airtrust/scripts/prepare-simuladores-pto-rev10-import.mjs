@@ -30,6 +30,32 @@ function readJson(filePath, label) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
+/**
+ * Select only models whose legacy identity is explicitly named by the
+ * canonical packages. Unrelated/custom AW139 or S-76 models are never
+ * inactivated merely because their code is absent from the new curriculum.
+ */
+export function selectSupersededPtoRev10Models(activeAircraftModels, projection) {
+  const explicitLegacyCodes = new Set(
+    Object.values(projection?.aeronaves || {}).flatMap((aircraft) =>
+      (aircraft.sessoes || []).flatMap((session) => session.legacy_source_codes || []),
+    ),
+  );
+
+  return activeAircraftModels
+    .filter(
+      (row) =>
+        explicitLegacyCodes.has(String(row.codigo || '').trim()) ||
+        explicitLegacyCodes.has(String(row.codigo_canonico || '').trim()),
+    )
+    .map((row) => ({
+      id: Number(row.id),
+      codigo: String(row.codigo || '').trim(),
+      codigo_canonico: String(row.codigo_canonico || row.codigo || '').trim(),
+    }))
+    .sort((left, right) => left.id - right.id);
+}
+
 export function preparePtoRev10Plan({
   manifest,
   aw139Dir,
@@ -75,14 +101,7 @@ export function preparePtoRev10Plan({
   ) {
     fail('snapshot com modelo ativo inválido');
   }
-  const canonicalCodes = new Set(
-    Object.values(projection.aeronaves).flatMap((aircraft) =>
-      aircraft.sessoes.map((session) => session.codigo),
-    ),
-  );
-  const supersededModels = activeAircraftModels
-    .filter((row) => !row.is_current_version || !canonicalCodes.has(row.codigo_canonico))
-    .map((row) => ({ id: row.id, codigo: row.codigo, codigo_canonico: row.codigo_canonico }));
+  const supersededModels = selectSupersededPtoRev10Models(activeAircraftModels, projection);
   const catalogFingerprint = sha256(activeAircraftModels);
 
   const fingerprint = buildTenantFingerprint({
