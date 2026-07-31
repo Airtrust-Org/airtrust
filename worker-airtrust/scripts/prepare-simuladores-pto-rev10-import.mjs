@@ -30,19 +30,29 @@ function readJson(filePath, label) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-/**
- * Select only models whose legacy identity is explicitly named by the
- * canonical packages. Unrelated/custom AW139 or S-76 models are never
- * inactivated merely because their code is absent from the new curriculum.
- */
-export function selectSupersededPtoRev10Models(activeAircraftModels, projection) {
-  const explicitLegacyCodes = new Set(
-    Object.values(projection?.aeronaves || {}).flatMap((aircraft) =>
-      (aircraft.sessoes || []).flatMap((session) => session.legacy_source_codes || []),
-    ),
-  );
+function normalizedModel(row) {
+  return {
+    id: Number(row.id),
+    codigo: String(row.codigo || '').trim(),
+    codigo_canonico: String(row.codigo_canonico || row.codigo || '').trim(),
+    modelo_aeronave: String(row.modelo_aeronave || row.tipo_aeronave || '')
+      .trim()
+      .toUpperCase()
+      .replace('S76', 'SK76'),
+    is_current_version: Number(row.is_current_version || 0) === 1,
+  };
+}
 
-  return activeAircraftModels
+export function selectSupersededPtoRev10Models(activeModels, projection) {
+  const aircraftLegacyCodes = Object.values(projection?.aeronaves || {}).flatMap((aircraft) =>
+    (aircraft.sessoes || []).flatMap((session) => session.legacy_source_codes || []),
+  );
+  const functionalLegacyCodes = (projection?.sessoes_funcionais || []).flatMap(
+    (session) => session.legacy_source_codes || [],
+  );
+  const explicitLegacyCodes = new Set([...aircraftLegacyCodes, ...functionalLegacyCodes]);
+
+  return activeModels
     .filter(
       (row) =>
         explicitLegacyCodes.has(String(row.codigo || '').trim()) ||
@@ -82,26 +92,21 @@ export function preparePtoRev10Plan({
     fail('snapshot sem catálogo ativo AW139/S-76');
   }
   const activeAircraftModels = tenantState.active_aircraft_models
-    .map((row) => ({
-      id: Number(row.id),
-      codigo: String(row.codigo || '').trim(),
-      codigo_canonico: String(row.codigo_canonico || row.codigo || '').trim(),
-      modelo_aeronave: String(row.modelo_aeronave || row.tipo_aeronave || '')
-        .trim()
-        .toUpperCase()
-        .replace('S76', 'SK76'),
-      is_current_version: Number(row.is_current_version || 0) === 1,
-    }))
+    .map(normalizedModel)
     .filter((row) => row.modelo_aeronave === 'AW139' || row.modelo_aeronave === 'SK76')
     .sort((left, right) => left.id - right.id);
+  const activeFunctionalModels = (tenantState.active_functional_models || [])
+    .map(normalizedModel)
+    .sort((left, right) => left.id - right.id);
+  const allActiveRelevantModels = [...activeAircraftModels, ...activeFunctionalModels];
   if (
-    activeAircraftModels.some(
+    allActiveRelevantModels.some(
       (row) => !Number.isInteger(row.id) || row.id <= 0 || !row.codigo || !row.codigo_canonico,
     )
   ) {
     fail('snapshot com modelo ativo inválido');
   }
-  const supersededModels = selectSupersededPtoRev10Models(activeAircraftModels, projection);
+  const supersededModels = selectSupersededPtoRev10Models(allActiveRelevantModels, projection);
   const catalogFingerprint = sha256(activeAircraftModels);
 
   const fingerprint = buildTenantFingerprint({
@@ -112,7 +117,7 @@ export function preparePtoRev10Plan({
     migrationState: tenantState.migration_state,
   }).fingerprint;
 
-  const projectionItems = Object.values(projection.aeronaves).flatMap((aircraft) =>
+  const aircraftItems = Object.values(projection.aeronaves).flatMap((aircraft) =>
     aircraft.sessoes.flatMap((session) =>
       session.itens_tecnicos.map((item) => {
         const catalog = aircraft.catalogo_manobras.find((entry) => entry.codigo === item.codigo);
@@ -131,6 +136,27 @@ export function preparePtoRev10Plan({
       }),
     ),
   );
+  const functionalCatalogByCode = new Map(
+    (projection.instrutor_examinador?.codigos || []).map((item) => [item.codigo, item]),
+  );
+  const functionalItems = projection.sessoes_funcionais.flatMap((session) =>
+    session.itens_tecnicos.map((item) => {
+      const catalog = functionalCatalogByCode.get(item.codigo);
+      if (!catalog) fail(`${session.codigo}: catálogo funcional ausente para ${item.codigo}`);
+      return {
+        modelo: session.codigo,
+        codigo: item.codigo,
+        nome: item.nome,
+        categoria: catalog.categoria,
+        aeronave: null,
+        fase_voo: null,
+        tipo_conteudo: 'COMPETENCIA_FUNCIONAL',
+        desempenho_esperado: item.nome,
+        referencia_tecnica: projection.fonte_normativa,
+      };
+    }),
+  );
+  const projectionItems = [...aircraftItems, ...functionalItems];
 
   const manobraResolution = buildManoeuvreResolutionEntries({
     empresaId,
