@@ -352,11 +352,32 @@ export async function resolveResourceDomain(
       // domain matches. Resolve the owning funcionário's setor here too,
       // so assertOperationalAccess's setorIds check (below) actually
       // narrows access to the gestor's own setor, not merely their domain.
+      //
+      // Classification-resolution fallback (certificate-generation
+      // incident): qh.categoria_id is only a SNAPSHOT taken at write time
+      // (migration 0412's one-time backfill, or whatever a given INSERT
+      // path happened to populate) — it can be NULL on a historico row even
+      // when the qualificação tipo it belongs to (qh.qualificacao_id ->
+      // qualificacoes_tipos.categoria_id) IS currently classified. That is
+      // a stale/missing-snapshot gap, not an authorization decision, so
+      // resolution here prefers the historico's own snapshot when
+      // classified and falls back to the tipo's LIVE classification
+      // otherwise — mirroring the same "canonical source over a possibly
+      // stale copy" pattern already used for setor domain resolution (see
+      // resolveManagedSectorDomainFallback below). This does NOT widen any
+      // privilege and does NOT invent a domain for a genuinely unclassified
+      // category: if the tipo's own categoria also has no dominio_codigo
+      // (e.g. a legacy category residue), COALESCE still yields NULL and
+      // the caller fails closed exactly as before — classifying that
+      // category is a separate, explicit data decision outside this guard.
       const row = await db
         .prepare(
-          `SELECT qc.dominio_codigo AS dominio_codigo, f.setor_id AS setor_id
+          `SELECT COALESCE(qc_hist.dominio_codigo, qc_tipo.dominio_codigo) AS dominio_codigo,
+                  f.setor_id AS setor_id
              FROM qualificacoes_historico qh
-             LEFT JOIN qualificacoes_categorias qc ON qc.id = qh.categoria_id
+             LEFT JOIN qualificacoes_categorias qc_hist ON qc_hist.id = qh.categoria_id
+             LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+             LEFT JOIN qualificacoes_categorias qc_tipo ON qc_tipo.id = qt.categoria_id
              LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id
             WHERE qh.id = ? AND qh.empresa_id = ? AND qh.deleted_at IS NULL
             LIMIT 1`,

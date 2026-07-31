@@ -61,6 +61,8 @@ export interface Fixtures {
     empresa_id: number;
     categoria_id?: number | null;
     funcionario_id?: number | null;
+    /** FK to qualificacoesTipos — used by resolveResourceDomain's snapshot-vs-tipo classification fallback. */
+    qualificacao_id?: number | null;
     deleted_at?: string | null;
   }>;
   lmsCursos?: Array<{
@@ -225,15 +227,27 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       const hist = f.qualificacoesHistorico!.find(
         (h) => h.id === id && h.empresa_id === empresaId && !h.deleted_at,
       );
-      const categoria = hist?.categoria_id
+      const categoriaHist = hist?.categoria_id
         ? f.qualificacoesCategorias!.find((c) => c.id === hist.categoria_id)
+        : null;
+      // Fallback mirrors resolveResourceDomain's COALESCE(qc_hist, qc_tipo):
+      // when the historico's own categoria_id snapshot is missing/unclassified,
+      // resolve via the qualificação tipo's LIVE categoria instead.
+      const tipo = hist?.qualificacao_id
+        ? f.qualificacoesTipos!.find((t) => t.id === hist.qualificacao_id && !t.deleted_at)
+        : null;
+      const categoriaTipo = tipo?.categoria_id
+        ? f.qualificacoesCategorias!.find((c) => c.id === tipo.categoria_id)
         : null;
       const funcionario = hist?.funcionario_id
         ? f.funcionarios!.find((fn) => fn.id === hist.funcionario_id)
         : null;
       return {
         first: hist
-          ? { dominio_codigo: categoria?.dominio_codigo ?? null, setor_id: funcionario?.setor_id ?? null }
+          ? {
+              dominio_codigo: categoriaHist?.dominio_codigo ?? categoriaTipo?.dominio_codigo ?? null,
+              setor_id: funcionario?.setor_id ?? null,
+            }
           : null,
       };
     }

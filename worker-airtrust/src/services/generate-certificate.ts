@@ -20,13 +20,44 @@ import {
   buildConteudoProgramaticoCertificadoHtml,
   buildDescricaoSectionHtml,
   getCertificadosStorageColumns,
-  insertCertificadoNaPastaVirtual,
   backfillCertificadoAtualNaPastaVirtual,
   resolveImageDataUrl,
   resolveConteudoProgramaticoCertificado,
   resolveInstrutorCertificadoData,
   resolveFuncionarioInstrutorNaEmpresa,
 } from '../routes/qualificacoes-certificados-helpers';
+
+// ── Erros tipados ──────────────────────────────────────────────────────────────
+
+/**
+ * Códigos de erro sanitizados retornados pela geração de certificado.
+ * Nenhuma mensagem associada a estes códigos deve conter stack traces, SQL,
+ * tokens ou outros detalhes internos — apenas texto seguro para exibição
+ * ao usuário final. O route handler (qualificacoes-certificados-write.ts)
+ * mapeia cada código para o status HTTP apropriado.
+ */
+export const CERTIFICATE_ERROR_CODES = [
+  'CERTIFICATE_HISTORY_NOT_FOUND',
+  'CERTIFICATE_TEMPLATE_NOT_CONFIGURED',
+  'CERTIFICATE_BROWSER_RENDERING_NOT_CONFIGURED',
+  'CERTIFICATE_BROWSER_RENDERING_FAILED',
+  'CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED',
+  'CERTIFICATE_ACCESS_DENIED',
+  'CERTIFICATE_STORAGE_FAILED',
+  'CERTIFICATE_PERSISTENCE_FAILED',
+] as const;
+
+export type CertificateErrorCode = (typeof CERTIFICATE_ERROR_CODES)[number];
+
+export class CertificateGenerationError extends Error {
+  public readonly code: CertificateErrorCode;
+
+  constructor(code: CertificateErrorCode, message: string) {
+    super(message);
+    this.name = 'CertificateGenerationError';
+    this.code = code;
+  }
+}
 
 // ── Helpers locais ─────────────────────────────────────────────────────────────
 
@@ -226,7 +257,10 @@ export async function generateCertificateForHistorico(
     .first()) as any;
 
   if (!qualificacao) {
-    throw new Error(`Qualificação não encontrada: historicoId=${historicoId} empresaId=${empresaId}`);
+    throw new CertificateGenerationError(
+      'CERTIFICATE_HISTORY_NOT_FOUND',
+      'Qualificação não encontrada para esta empresa.',
+    );
   }
 
   const participanteCertificado = paraInstrutor
@@ -384,14 +418,16 @@ export async function generateCertificateForHistorico(
   }
 
   if (!templateHtml?.trim()) {
-    throw new Error(
-      `Nenhum template ativo encontrado para a empresa ${qualificacaoEmpresaId}. Geração interrompida.`,
+    throw new CertificateGenerationError(
+      'CERTIFICATE_TEMPLATE_NOT_CONFIGURED',
+      'Nenhum template de certificado ativo está configurado para esta empresa.',
     );
   }
 
   if (!env.CF_ACCOUNT_ID || !env.CF_BROWSER_API_TOKEN) {
-    throw new Error(
-      'Cloudflare Browser Rendering não está configurado. Geração interrompida.',
+    throw new CertificateGenerationError(
+      'CERTIFICATE_BROWSER_RENDERING_NOT_CONFIGURED',
+      'A geração de PDF (Cloudflare Browser Rendering) não está configurada para este ambiente.',
     );
   }
 
@@ -454,7 +490,10 @@ export async function generateCertificateForHistorico(
   });
 
   if (!result.success || !result.pdfBytes) {
-    throw new Error(`Browser Rendering falhou: ${result.error}`);
+    throw new CertificateGenerationError(
+      'CERTIFICATE_BROWSER_RENDERING_FAILED',
+      'Falha ao renderizar o PDF do certificado.',
+    );
   }
 
   const pdfBytes = result.pdfBytes;
@@ -462,7 +501,10 @@ export async function generateCertificateForHistorico(
   // Validar magic bytes
   const magicStr = String.fromCharCode(...Array.from(new Uint8Array(pdfBytes.slice(0, 4))));
   if (!magicStr.startsWith('%PDF')) {
-    throw new Error('PDF gerado com magic bytes inválidos.');
+    throw new CertificateGenerationError(
+      'CERTIFICATE_BROWSER_RENDERING_FAILED',
+      'O PDF gerado é inválido (magic bytes incorretos).',
+    );
   }
 
   // ── Resolver funcionario de destino antes do upload (necessário para a R2 key) ──
@@ -489,20 +531,42 @@ export async function generateCertificateForHistorico(
 
   // ── Upload R2 ────────────────────────────────────────────────────────────────
   // Key é tenant-scoped e não contém PII (sem CPF/nome no path).
+  // Ordem exigida: PDF gerado -> R2 -> D1 (em lote, quando possível). Se o D1
+  // falhar após o R2 já ter sido escrito, o objeto recém-criado é removido do
+  // R2 antes de propagar o erro — nunca deixamos um PDF orfão em storage sem
+  // registro correspondente em documentos/qualificacoes_historico.
   const r2Key = buildCertificadoR2Key(qualificacaoEmpresaId, targetFuncionarioId, historicoId, uuid);
-  await bucket.put(r2Key, pdfBytes, {
-    httpMetadata: { contentType: 'application/pdf' },
-    customMetadata: {
-      tipo: 'CERTIFICADO_QUALIFICACAO',
-      codigo: qualificacao.qualificacao_codigo || qualificacao.codigo,
-      historico_id: String(historicoId),
-      data_referencia: dataBase.toISOString(),
-      origem: 'auto-gerado',
-      gerado_em: new Date().toISOString(),
-    },
-  });
 
-  // ── Persistir no D1 ──────────────────────────────────────────────────────────
+  try {
+    await bucket.put(r2Key, pdfBytes, {
+      httpMetadata: { contentType: 'application/pdf' },
+      customMetadata: {
+        tipo: 'CERTIFICADO_QUALIFICACAO',
+        codigo: qualificacao.qualificacao_codigo || qualificacao.codigo,
+        historico_id: String(historicoId),
+        data_referencia: dataBase.toISOString(),
+        origem: 'auto-gerado',
+        gerado_em: new Date().toISOString(),
+      },
+    });
+  } catch (e) {
+    console.error('[generate-certificate] Falha ao gravar PDF no R2:', e);
+    throw new CertificateGenerationError(
+      'CERTIFICATE_STORAGE_FAILED',
+      'Falha ao salvar o certificado no armazenamento.',
+    );
+  }
+
+  // ── Persistir no D1 (atômico via db.batch) ──────────────────────────────────
+  // documentos + pasta_virtual + qualificacoes_historico precisam commitar
+  // juntos ou nenhum deles — usamos db.batch([...]), o mesmo padrão
+  // transacional já usado em outros fluxos deste worker (ex.:
+  // controle-voos-rdv-workflow.ts, sigvoos-frms.ts) para writes que devem
+  // ser tudo-ou-nada. A ligação com `documentos` (cujo id só existe DEPOIS
+  // do INSERT) é feita via subquery correlacionada por `r2_key`, que é
+  // único por definição (contém o uuid gerado acima) — isso evita depender
+  // de um valor de auto-incremento que ainda não existe no momento em que
+  // as statements são preparadas.
   const storageColumns = await getCertificadosStorageColumns(db);
   await backfillCertificadoAtualNaPastaVirtual(db, storageColumns, {
     historicoId,
@@ -511,7 +575,9 @@ export async function generateCertificateForHistorico(
     empresaId: qualificacaoEmpresaId,
   });
 
-  const insertResult = await db
+  const numeroCertificado = nomeArquivo.replace('.pdf', '');
+
+  const insertDocumentoStmt = db
     .prepare(
       storageColumns.documentosHasEmpresaId
         ? `INSERT INTO documentos (
@@ -544,44 +610,119 @@ export async function generateCertificateForHistorico(
             r2Key,
             `Certificado automático gerado em ${new Date().toLocaleDateString('pt-BR')}`,
           ]),
+    );
+
+  const pastaVirtualColumns = ['funcionario_id'];
+  const pastaVirtualValues = ['?'];
+  const pastaVirtualBindings: Array<string | number | null> = [targetFuncionarioId];
+
+  if (storageColumns.pastaVirtualHasDocumentoId) {
+    pastaVirtualColumns.push('documento_id');
+    pastaVirtualValues.push('(SELECT id FROM documentos WHERE r2_key = ?)');
+    pastaVirtualBindings.push(r2Key);
+  }
+  if (storageColumns.pastaVirtualHasCertificacaoId) {
+    pastaVirtualColumns.push('certificacao_id');
+    pastaVirtualValues.push('?');
+    pastaVirtualBindings.push(historicoId);
+  }
+  if (storageColumns.pastaVirtualHasEmpresaId) {
+    pastaVirtualColumns.push('empresa_id');
+    pastaVirtualValues.push('?');
+    pastaVirtualBindings.push(qualificacaoEmpresaId);
+  }
+  pastaVirtualColumns.push(
+    'tipo_documento',
+    'categoria',
+    'caminho_arquivo',
+    'nome_arquivo',
+    'dataupload',
+    'descricao',
+    'created_at',
+  );
+  pastaVirtualValues.push('?', '?', '?', '?', "datetime('now')", '?', "datetime('now')");
+  pastaVirtualBindings.push(
+    'CERTIFICADO',
+    'Certificados de Qualificação',
+    r2Key,
+    nomeArquivo,
+    `Certificado ${qualificacao.qualificacao_codigo || qualificacao.codigo} - ${
+      participanteCertificado?.nome || qualificacao.funcionario_nome
+    }`,
+  );
+
+  const insertPastaVirtualStmt = db
+    .prepare(
+      `INSERT INTO pasta_virtual (${pastaVirtualColumns.join(', ')}) VALUES (${pastaVirtualValues.join(', ')})`,
     )
-    .run();
+    .bind(...pastaVirtualBindings);
 
-  const documentoId = Number(insertResult.meta.last_row_id || 0);
-  if (!documentoId) {
-    throw new Error('Falha ao inserir documento no D1: last_row_id inválido.');
-  }
-
-  try {
-    await insertCertificadoNaPastaVirtual(db, storageColumns, {
-      funcionarioId: targetFuncionarioId,
-      documentoId,
-      historicoId,
-      empresaId: qualificacaoEmpresaId,
-      r2Key,
-      nomeArquivo,
-      descricao: `Certificado ${qualificacao.qualificacao_codigo || qualificacao.codigo} - ${
-        participanteCertificado?.nome || qualificacao.funcionario_nome
-      }`,
-    });
-  } catch (e) {
-    console.error('[generate-certificate] Erro ao inserir na pasta_virtual:', e);
-    // Não falhar o processo todo por isso
-  }
-
-  const numeroCertificado = nomeArquivo.replace('.pdf', '');
-  await db
+  const updateHistoricoStmt = db
     .prepare(
       `UPDATE qualificacoes_historico
-         SET certificado_arquivo_id = ?,
-             arquivo_url = ?,
-             numero_certificado = ?,
-             updated_at = datetime('now')
-         WHERE id = ?
-           AND empresa_id = ?`,
+          SET certificado_arquivo_id = (SELECT id FROM documentos WHERE r2_key = ?),
+              arquivo_url = '/api/pasta-virtual/stream/' || (SELECT id FROM documentos WHERE r2_key = ?),
+              numero_certificado = ?,
+              updated_at = datetime('now')
+        WHERE id = ?
+          AND empresa_id = ?`,
     )
-    .bind(documentoId, `/api/pasta-virtual/stream/${documentoId}`, numeroCertificado, historicoId, qualificacaoEmpresaId)
-    .run();
+    .bind(r2Key, r2Key, numeroCertificado, historicoId, qualificacaoEmpresaId);
+
+  let batchResults: Awaited<ReturnType<typeof db.batch>>;
+  try {
+    batchResults = await db.batch([insertDocumentoStmt, insertPastaVirtualStmt, updateHistoricoStmt]);
+  } catch (e) {
+    console.error('[generate-certificate] Falha no batch D1 (documento+pasta_virtual+historico), revertendo R2:', e);
+    try {
+      await bucket.delete(r2Key);
+    } catch (cleanupErr) {
+      console.error('[generate-certificate] Falha ao remover objeto R2 após erro de persistência:', cleanupErr);
+    }
+    throw new CertificateGenerationError(
+      'CERTIFICATE_PERSISTENCE_FAILED',
+      'Falha ao registrar o certificado gerado.',
+    );
+  }
+
+  const [documentoResult, pastaVirtualResult, historicoUpdateResult] = batchResults;
+  const documentoId = Number(documentoResult.meta.last_row_id || 0);
+
+  // D1's batch() commits the whole set atomically ONLY when a statement
+  // throws — a syntactically valid UPDATE/INSERT that simply matches zero
+  // rows still "succeeds" and is still committed. Treat that as a failure
+  // just the same, and explicitly remove everything we just wrote (D1 rows
+  // keyed by the unique r2Key, plus the R2 object) so no residue survives
+  // pointing at a certificate that was never fully linked.
+  const persistedSuccessfully =
+    documentoId > 0 &&
+    Number(pastaVirtualResult.meta.changes || 0) === 1 &&
+    Number(historicoUpdateResult.meta.changes || 0) === 1;
+
+  if (!persistedSuccessfully) {
+    console.error('[generate-certificate] Persistência incompleta após batch — revertendo resíduo D1 + R2:', {
+      documentoId,
+      pastaVirtualChanges: pastaVirtualResult.meta.changes,
+      historicoChanges: historicoUpdateResult.meta.changes,
+    });
+    try {
+      await db.batch([
+        db.prepare('DELETE FROM pasta_virtual WHERE caminho_arquivo = ?').bind(r2Key),
+        db.prepare('DELETE FROM documentos WHERE r2_key = ?').bind(r2Key),
+      ]);
+    } catch (cleanupErr) {
+      console.error('[generate-certificate] Falha ao reverter resíduo D1:', cleanupErr);
+    }
+    try {
+      await bucket.delete(r2Key);
+    } catch (cleanupErr) {
+      console.error('[generate-certificate] Falha ao remover objeto R2 após erro de persistência:', cleanupErr);
+    }
+    throw new CertificateGenerationError(
+      'CERTIFICATE_PERSISTENCE_FAILED',
+      'Falha ao registrar o certificado gerado.',
+    );
+  }
 
   try {
     await registrarAuditoria({

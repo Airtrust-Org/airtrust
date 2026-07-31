@@ -705,6 +705,203 @@ describe('assertOperationalAccess', () => {
   });
 });
 
+describe('qualificacao_certificado — contrato admin/gestor preservado (sem carve-out)', () => {
+  // Regressão explícita do incidente de revisão da PR: um bypass de RBAC
+  // para admin em 'qualificacao_certificado' foi implementado e REMOVIDO
+  // após revisão independente apontar que contradizia
+  // docs/rbac/gestor-operational-autonomy.md (administrador sem atribuição
+  // de setor não recebe NENHUM acesso operacional; quando atribuído, recebe
+  // exatamente o mesmo escopo do gestor — nunca mais). Estes testes provam
+  // que o contrato documentado está intacto para este resourceType
+  // especificamente, o mesmo que foi indevidamente amplia do antes.
+
+  it('administrador sistêmico sem atribuição NÃO recebe acesso a qualificacao_certificado', async () => {
+    const db = makeDb();
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 103, // administrador sistêmico, sem setores_gestores (ver fixture)
+        userRole: 'admin',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 1000, // OPERACOES, setor 10 — classificado normalmente
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'OPERATIONAL_DOMAIN_ACCESS_DENIED' });
+  });
+
+  it('administrador também gestor recebe exatamente o escopo do gestor (nunca mais)', async () => {
+    const db = makeDb();
+    // userId 104: admin também gestor do setor 10 (OPERACOES) apenas.
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 104,
+        userRole: 'admin',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 1000, // OPERACOES, setor 10 — dentro do escopo
+      }),
+    ).resolves.toBeDefined();
+
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 104,
+        userRole: 'admin',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 1001, // MANUTENCAO — fora do escopo do admin/gestor 104
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'OPERATIONAL_DOMAIN_ACCESS_DENIED' });
+  });
+
+  it('gestor (não admin) fail-closed para domínio não classificado — igual para admin', async () => {
+    const db = makeDb();
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 101,
+        userRole: 'gestor',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 1002, // categoria_id NULL, qualificacao_id ausente — sem fallback possível
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'RESOURCE_DOMAIN_UNCLASSIFIED' });
+
+    // Recurso não classificado falha com o mesmo código para admin sem
+    // atribuição — nenhum tratamento especial por papel neste ponto.
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 103,
+        userRole: 'admin',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 1002,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'RESOURCE_DOMAIN_UNCLASSIFIED' });
+  });
+
+  it('gestor continua restrito por setor mesmo dentro do domínio correto', async () => {
+    const db = makeDb();
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 100, // only setor 10 (OPERACOES)
+        userRole: 'gestor',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 1003, // OPERACOES, setor 14 (different setor, same domain)
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'RESOURCE_SETOR_OUT_OF_SCOPE' });
+  });
+});
+
+describe('resolveResourceDomain — fallback de classificação qh.categoria_id -> qt.categoria_id', () => {
+  // Corrige uma lacuna de dado real (não uma política de acesso): qh.categoria_id
+  // é um SNAPSHOT gravado no momento da escrita (backfill único da migration
+  // 0412, ou o que cada caminho de INSERT tiver populado) e pode ficar NULL
+  // mesmo quando a qualificacao_tipo à qual o histórico pertence está
+  // classificada normalmente. Este fallback resolve pela classificação ATUAL
+  // do tipo quando o snapshot do histórico está ausente/não-classificado —
+  // sem inventar domínio para uma categoria genuinamente não classificada.
+  function fixturesComFallback(): Fixtures {
+    const base = buildFixtures();
+    return {
+      ...base,
+      qualificacoesTipos: [
+        ...(base.qualificacoesTipos || []),
+        // tipo 10: classificado (OPERACOES via categoria 1)
+        { id: 10, empresa_id: 2, categoria_id: 1 },
+        // tipo 11: aponta para uma categoria SEM dominio_codigo (residuo tipo "EAD")
+        { id: 11, empresa_id: 2, categoria_id: 3 },
+      ],
+      qualificacoesHistorico: [
+        ...(base.qualificacoesHistorico || []),
+        // historico 2000: snapshot NULL, mas o tipo (10) está classificado -> fallback resolve OPERACOES
+        { id: 2000, empresa_id: 2, categoria_id: null, qualificacao_id: 10, funcionario_id: 1 },
+        // historico 2001: snapshot classificado (MANUTENCAO, categoria 2) e tipo aponta para OUTRA
+        // categoria (OPERACOES, categoria 1) — o snapshot da própria linha deve vencer (COALESCE
+        // prioriza qc_hist antes de qc_tipo).
+        { id: 2001, empresa_id: 2, categoria_id: 2, qualificacao_id: 10, funcionario_id: 1 },
+        // historico 2002: snapshot NULL E tipo aponta para categoria também não classificada
+        // (categoria 3) — reproduz o incidente real (categoria "EAD" sem dominio_codigo):
+        // deve permanecer fail-closed, o fallback não inventa domínio.
+        { id: 2002, empresa_id: 2, categoria_id: null, qualificacao_id: 11, funcionario_id: 1 },
+      ],
+    };
+  }
+
+  it('usa a classificação do tipo quando o snapshot do histórico está ausente', async () => {
+    const db = createFixtureDb(fixturesComFallback());
+    const result = await resolveResourceDomain(
+      db as unknown as D1Database,
+      2,
+      'qualificacao_historico',
+      2000,
+    );
+    expect(result.domain).toBe('OPERACOES');
+  });
+
+  it('prioriza o snapshot do próprio histórico quando classificado, mesmo se o tipo aponta para outro domínio', async () => {
+    const db = createFixtureDb(fixturesComFallback());
+    const result = await resolveResourceDomain(
+      db as unknown as D1Database,
+      2,
+      'qualificacao_historico',
+      2001,
+    );
+    expect(result.domain).toBe('MANUTENCAO');
+  });
+
+  it('permanece fail-closed quando nem o snapshot nem o tipo têm domínio classificado (reproduz o incidente EAD)', async () => {
+    const db = createFixtureDb(fixturesComFallback());
+    const result = await resolveResourceDomain(
+      db as unknown as D1Database,
+      2,
+      'qualificacao_certificado',
+      2002,
+    );
+    expect(result.domain).toBeNull();
+  });
+
+  it('assertOperationalAccess autoriza emissão de certificado via fallback de classificação do tipo', async () => {
+    const db = createFixtureDb(fixturesComFallback());
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 100, // gestor do setor 10 (OPERACOES)
+        userRole: 'gestor',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 2000,
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('assertOperationalAccess continua fail-closed quando nem histórico nem tipo têm domínio (nenhum bypass de admin)', async () => {
+    const db = createFixtureDb(fixturesComFallback());
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 103, // admin sem atribuição — sem carve-out
+        userRole: 'admin',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 2002,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+});
+
 describe('setor-level authorization within the same domain (Bloqueador 3)', () => {
   // Setores 10 e 14 são AMBOS OPERACOES no tenant 2 — user 100 gerencia
   // apenas o setor 10. Cada teste abaixo prova que o domínio sozinho não

@@ -4,11 +4,12 @@
  * POST /historico/:id/certificados/upload
  */
 
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import type { Env, ApiResponse } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import { ApiError } from '../middleware/error-handler';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { gerarNomeArquivoPadronizado } from '../utils/nomenclatura-padronizada';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
@@ -19,7 +20,11 @@ import {
   backfillCertificadoAtualNaPastaVirtual,
   resolveCertificadoContext,
 } from './qualificacoes-certificados-helpers';
-import { generateCertificateForHistorico, buildCertificadoR2Key } from '../services/generate-certificate';
+import {
+  generateCertificateForHistorico,
+  buildCertificadoR2Key,
+  CertificateGenerationError,
+} from '../services/generate-certificate';
 import { requireOperationalAccess } from '../services/operational-domain-access';
 
 // Certificado é resolvido dinamicamente para OPERACOES por resourceType
@@ -27,8 +32,53 @@ import { requireOperationalAccess } from '../services/operational-domain-access'
 // docs/rbac/gestor-operational-autonomy.md. :id in these routes is the
 // historico id, which resolveResourceDomain('qualificacao_certificado', id)
 // resolves through the same qualificacoes_historico lookup.
-const requireOperacoesCertificado = (action: 'issue' | 'create') =>
-  requireOperationalAccess({ action, resourceType: 'qualificacao_certificado' });
+//
+// Sanitized, certificate-specific mapping for the 403s the RBAC guard can
+// throw for this resourceType. Kept local to this route (not renamed inside
+// operational-domain-access.ts, which is shared by many resource types) so
+// the "Gerar Certificado" modal gets a specific, actionable code without
+// touching the generic RBAC vocabulary used elsewhere.
+const CERTIFICATE_RBAC_CODE_MAP: Record<string, { code: string; message: string }> = {
+  RESOURCE_DOMAIN_UNCLASSIFIED: {
+    code: 'CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED',
+    message:
+      'Esta qualificação ainda não possui um domínio operacional classificado. Não é possível emitir o certificado até a classificação ser corrigida.',
+  },
+  OPERATIONAL_DOMAIN_ACCESS_DENIED: {
+    code: 'CERTIFICATE_ACCESS_DENIED',
+    message: 'Você não tem permissão para emitir certificados para esta qualificação.',
+  },
+  RESOURCE_SETOR_OUT_OF_SCOPE: {
+    code: 'CERTIFICATE_ACCESS_DENIED',
+    message: 'Você não tem permissão para emitir certificados para esta qualificação.',
+  },
+  RESOURCE_DOMAIN_MISMATCH: {
+    code: 'CERTIFICATE_ACCESS_DENIED',
+    message: 'Você não tem permissão para emitir certificados para esta qualificação.',
+  },
+};
+
+const requireOperacoesCertificado = (
+  action: 'issue' | 'create',
+): MiddlewareHandler<{ Bindings: Env }> => {
+  const inner = requireOperationalAccess({ action, resourceType: 'qualificacao_certificado' });
+  return async (c, next) => {
+    try {
+      await inner(c, next);
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.statusCode === 403 &&
+        error.code &&
+        CERTIFICATE_RBAC_CODE_MAP[error.code]
+      ) {
+        const mapped = CERTIFICATE_RBAC_CODE_MAP[error.code];
+        throw new ApiError(mapped.message, 403, mapped.code);
+      }
+      throw error;
+    }
+  };
+};
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -180,16 +230,53 @@ app.post(
 
       return c.json(response, 201);
     } catch (error: unknown) {
+      const requestId =
+        ((c.get as (key: string) => unknown)('requestId') as string | undefined) || undefined;
+
+      if (error instanceof CertificateGenerationError) {
+        console.error('❌ [GERAR PDF] Erro:', { requestId, code: error.code, message: error.message });
+        const statusByCode: Record<string, 404 | 422 | 503 | 502 | 500> = {
+          CERTIFICATE_HISTORY_NOT_FOUND: 404,
+          CERTIFICATE_TEMPLATE_NOT_CONFIGURED: 422,
+          CERTIFICATE_BROWSER_RENDERING_NOT_CONFIGURED: 503,
+          CERTIFICATE_BROWSER_RENDERING_FAILED: 502,
+          CERTIFICATE_STORAGE_FAILED: 502,
+          CERTIFICATE_PERSISTENCE_FAILED: 500,
+        };
+        return c.json(
+          {
+            success: false,
+            error: error.message,
+            code: error.code,
+            requestId,
+          },
+          statusByCode[error.code] || 500,
+        );
+      }
+
+      if (error instanceof ApiError) {
+        console.error('❌ [GERAR PDF] Erro:', { requestId, code: error.code, message: error.message });
+        return c.json(
+          {
+            success: false,
+            error: error.message,
+            code: error.code,
+            requestId,
+          },
+          error.statusCode as 400 | 403 | 404 | 500,
+        );
+      }
+
       const msg = error instanceof Error ? error.message : String(error);
-      console.error('❌ [GERAR PDF] Erro:', msg);
-      const is404 = msg.includes('não encontrada') || msg.includes('not found');
+      console.error('❌ [GERAR PDF] Erro inesperado:', { requestId, message: msg });
       return c.json(
         {
           success: false,
-          error: is404 ? msg : 'Erro ao gerar certificado',
+          error: 'Erro ao gerar certificado',
           code: 'INTERNAL_ERROR',
+          requestId,
         },
-        is404 ? 404 : 500,
+        500,
       );
     }
   },
