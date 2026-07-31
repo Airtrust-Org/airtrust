@@ -2,58 +2,43 @@ name: Auto-fix ESLint & Prettier on PR
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-    types:
-      - synchronize
-  push:
-    branches:
-      - agent/audit-critical-high-hardening-20260731
-    paths:
-      - .github/workflows/auto-fix.yml
-
-permissions:
-  contents: write
 
 jobs:
   autofix:
-    if: github.event_name != 'pull_request' || github.head_ref == 'agent/audit-critical-high-hardening-20260731'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: agent/audit-critical-high-hardening-20260731
           fetch-depth: 0
 
-      - name: Apply reviewed LMS fixes
-        shell: bash
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint fix
         run: |
-          python - <<'PY'
-          from pathlib import Path
+          npx eslint "./src/**/*.{js,jsx,ts,tsx}" --fix || true
 
-          preview = Path('src/react-app/pages/lms/LmsPreviewPlayer.tsx')
-          text = preview.read_text()
-          old = "  ensureValidAccessToken,\n  getAccessToken,\n"
-          new = "  ensureValidAccessToken,\n  fetchWithAuth,\n  getAccessToken,\n"
-          if old not in text:
-              raise SystemExit('preview import anchor not found')
-          preview.write_text(text.replace(old, new, 1))
+      - name: Run Prettier write
+        run: |
+          npx prettier --write "src/**/*.{js,jsx,ts,tsx,css,md,json}" "worker-airtrust/src/**/*.{js,ts,json}" || true
 
-          player = Path('src/react-app/pages/lms/LmsPlayer.tsx')
-          text = player.read_text()
-          old = "    if (!playerToken || !matricula || matricula.tipo_conteudo === 'h5p') {\n      setAssetSessionReady(false);\n      return;\n    }\n\n    let cancelled = false;"
-          new = "    if (!matricula || matricula.tipo_conteudo === 'h5p') {\n      setAssetSessionReady(false);\n      return;\n    }\n\n    // A transient access-token refresh must not tear down an already\n    // established asset session. The short-lived HttpOnly asset cookie\n    // remains valid, while a real logout is handled by the auth guard below.\n    if (!playerToken) {\n      return;\n    }\n\n    let cancelled = false;"
-          if old not in text:
-              raise SystemExit('player asset-session anchor not found')
-          player.write_text(text.replace(old, new, 1))
-          PY
-
-          git diff --check
-          git add -f src/react-app/pages/lms/LmsPlayer.tsx src/react-app/pages/lms/LmsPreviewPlayer.tsx
-          git diff --cached --check
-          git config user.name "airtrust-agent"
-          git config user.email "airtrust-agent@users.noreply.github.com"
-          git commit -m "fix(lms): preserve scoped asset session during token refresh"
-          git push origin HEAD:agent/audit-critical-high-hardening-20260731
+      - name: Commit and push fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- src worker-airtrust/src
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: apply eslint --fix and prettier formatting [skip ci]" || true
+            git push origin HEAD:${{ github.head_ref }}
+          fi
