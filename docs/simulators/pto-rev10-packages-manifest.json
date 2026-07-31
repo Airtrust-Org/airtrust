@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "versao_matriz": "PTO-REV10-2026-07-30",
+  "fonte_normativa": "PRG-OPS-001 - Programa de Treinamento Operacional - Revisão 10",
+  "empresa_alvo": 6,
+  "expected_totals": {
+    "sessoes_aw139": 31,
+    "sessoes_s76": 35,
+    "vinculos_tecnicos_aw139": 558,
+    "vinculos_tecnicos_s76": 630,
+    "vinculos_notechs_aw139": 465,
+    "vinculos_notechs_s76": 525,
+    "notechs_canonicos": 15,
+    "codigos_instrutor_examinador": 94,
+    "vinculos_instrutor_examinador": 108
+  },
+  "packages": {
+    "AW139": {
+      "zip_sha256": "fcd358cd8149cd7bec826a274ff470f3d304e4d3f968d3b46b99354f18639318",
+      "files": {
+        "sessoes.json": "21c747d7f619f137bd8dcc7e624550e9fa064bedaefe0f2cc840136406feefd8",
+        "matriz_tecnica.json": "94550f8d30d8e642b3c7a84d1e89afd9fca9e959e7d73cbab2287eac2589fcfc",
+        "catalogo_codigos.json": "f2ab3ce78e400285e874a211e0b44aaa850899542bf4736c69ad9b9d420a7d8b",
+        "catalogo_notechs.json": "b902e884aed184a4d9f9bb41a1c46227cff73143712486f9694c633b205de209",
+        "matriz_notechs.json": "8704d8c16c4cf0c8f49af7a14bfc95aa4adcecee61a7b00d817b7aa130a246b9",
+        "catalogo_codigos_instrutor_examinador.json": "a19d31243370c9a9b5fff673dfa6dd2c31a6bc14c51cfe52c64432c1b8318d8d",
+        "MAPEAMENTO_IMPORTACAO_AIRTRUST.json": "41712df950ddc42001051422c64e5be527095ee317b023eab6a3b056400d9736",
+        "VALIDACAO_PTO_REV10.json": "b1d192f2109818fad1b51343b82e64f767eb9886612c1ded5d8a27159ef33d9d"
+      }
+    },
+    "S76": {
+      "zip_sha256": "a30b004f6e4b1c26b9775ace27b18f6f593e0a9af9ef118fb1598fefed1db385",
+      "files": {
+        "sessoes.json": "693eb55bafd73473bae22019062ebfee50a824fe87fca90983a431bf00c237d7",
+        "matriz_tecnica.json": "45a6a56581820e6d0e1ec2447ee5a8cd07d526b8977c209456624e9fd4cbc83b",
+        "catalogo_codigos.json": "83263c0e02c26efed0f67fa9e183d1dd02e243a8ce37c4d5035fe60559732af0",
+        "catalogo_notechs.json": "b902e884aed184a4d9f9bb41a1c46227cff73143712486f9694c633b205de209",
+        "matriz_notechs.json": "f514a36b68ed378305c3a6aec8871a933aa2299bde2b20248bb80953d928cb32",
+        "catalogo_codigos_instrutor_examinador.json": "a19d31243370c9a9b5fff673dfa6dd2c31a6bc14c51cfe52c64432c1b8318d8d",
+        "MAPEAMENTO_IMPORTACAO_AIRTRUST.json": "9cca2f57db534b14770841f8cdad2183c7bc819b4f401f4d3cdf753a2ea640d8",
+        "VALIDACAO_PTO_REV10.json": "2b1d7fc0baceea386f3a1d7a86c07a151b6e75655a6e672115cba1cc0812d88e"
+      }
+    }
+  },
+  "policy": {
+    "technical_items_per_session": 18,
+    "notechs_items_per_session": 15,
+    "operational_description_field": "manobra_procedimento",
+    "operational_load_field": "carga_sessao",
+    "provenance_fields_not_imported": [
+      "sessao_anterior",
+      "codigo_anterior",
+      "descricao_anterior",
+      "alias_substituicao"
+    ],
+    "preserve_historical_sheets": true,
+    "instructor_examiner_session_models": "PENDING_COMPLETE_SESSION_METADATA"
+  }
+}
