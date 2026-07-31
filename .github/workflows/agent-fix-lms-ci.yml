@@ -1,0 +1,73 @@
+name: Agent Final LMS CI Fix
+
+on:
+  push:
+    branches:
+      - agent/audit-critical-high-hardening-20260731
+    paths:
+      - .github/workflows/agent-fix-lms-ci.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/audit-critical-high-hardening-20260731
+          fetch-depth: 0
+
+      - name: Apply reviewed fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          preview = Path('src/react-app/pages/lms/LmsPreviewPlayer.tsx')
+          text = preview.read_text()
+          old = "  ensureValidAccessToken,\n  getAccessToken,\n"
+          new = "  ensureValidAccessToken,\n  fetchWithAuth,\n  getAccessToken,\n"
+          if old not in text:
+              raise SystemExit('preview import anchor not found')
+          preview.write_text(text.replace(old, new, 1))
+
+          player = Path('src/react-app/pages/lms/LmsPlayer.tsx')
+          text = player.read_text()
+          old = """  useEffect(() => {
+            if (!playerToken || !matricula || matricula.tipo_conteudo === 'h5p') {
+              setAssetSessionReady(false);
+              return;
+            }
+
+            let cancelled = false;
+          """
+          new = """  useEffect(() => {
+            if (!matricula || matricula.tipo_conteudo === 'h5p') {
+              setAssetSessionReady(false);
+              return;
+            }
+
+            // A transient access-token refresh must not tear down an already
+            // established asset session. The short-lived HttpOnly asset cookie
+            // remains valid, while a real logout is handled by the auth guard below.
+            if (!playerToken) {
+              return;
+            }
+
+            let cancelled = false;
+          """
+          if old not in text:
+              raise SystemExit('player asset-session anchor not found')
+          player.write_text(text.replace(old, new, 1))
+          PY
+
+          git diff --check
+          git diff --exit-code -- .github/workflows/agent-fix-lms-ci.yml
+          git add src/react-app/pages/lms/LmsPlayer.tsx src/react-app/pages/lms/LmsPreviewPlayer.tsx
+          git diff --cached --check
+          git config user.name "airtrust-agent"
+          git config user.email "airtrust-agent@users.noreply.github.com"
+          git commit -m "fix(lms): preserve scoped asset session during token refresh"
+          git push origin HEAD:agent/audit-critical-high-hardening-20260731
