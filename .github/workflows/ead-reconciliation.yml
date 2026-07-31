@@ -92,7 +92,7 @@ jobs:
           echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
 
           if [[ "${{ inputs.environment }}" == "staging" ]]; then
-            DB_NAME="airtrust-db-staging"
+            DB_NAME="airtrust-db-staging-baseline-20260701"
             npx wrangler d1 export "$DB_NAME" --remote --output "$BACKUP_FILE"
           else
             DB_NAME="airtrust-db"
