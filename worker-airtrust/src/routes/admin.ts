@@ -11,6 +11,12 @@ import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import adminDomainEventsRoutes from './admin-domain-events';
 import { backfillSessionChecks } from '../services/backfill-session-checks';
+import {
+  buildAuditMetadata,
+  buildLegacyAuditoriaActor,
+  buildLegacyAuditPayload,
+} from '../lib/audit/context';
+import { recordLegacyAndCanonicalAudit } from '../lib/audit/record-legacy-and-canonical-audit';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -115,6 +121,47 @@ app.post('/backfill-session-checks', auth(), adminOnly(), async (c) => {
 
   try {
     const resultado = await backfillSessionChecks(c.env.DB, tenantScope.empresaId);
+    const actorUserId = Number(c.get('userId') || 0) || null;
+    const actorEmpresaId = Number(c.get('empresaId') || 0) || tenantScope.empresaId;
+    const actorRole = typeof c.get('userRole') === 'string' ? String(c.get('userRole')) : null;
+    const counts = {
+      modelos_checks_inseridos: resultado.modelos_checks_inseridos,
+      agendamentos_linkados: resultado.agendamentos_linkados,
+      checks_criados: resultado.checks_criados,
+      resultados_criados: resultado.resultados_criados,
+      error_count: resultado.erros.length,
+    };
+    const auditMetadata = buildAuditMetadata(c, {
+      operation: 'BACKFILL_SESSION_CHECKS',
+      scope: 'tenant',
+      ...counts,
+    });
+
+    await recordLegacyAndCanonicalAudit({
+      db: c.env.DB,
+      legacyAuditoria: {
+        tabela: 'admin_backfill_session_checks',
+        acao: 'BULK_UPDATE',
+        registro_id: tenantScope.empresaId,
+        dados_novos: buildLegacyAuditPayload(c, counts, auditMetadata),
+        ...buildLegacyAuditoriaActor(c),
+      },
+      canonicalEvent: {
+        empresaId: tenantScope.empresaId,
+        targetEmpresaId: tenantScope.empresaId,
+        actorUserId,
+        actorEmpresaId,
+        actorRole,
+        eventCategory: 'ADMIN_OPERATION',
+        eventAction: 'BACKFILL_SESSION_CHECKS',
+        entityType: 'admin_backfill_session_checks',
+        entityId: tenantScope.empresaId,
+        riskLevel: 'high',
+        metadata: auditMetadata,
+        retentionClass: 'SECURITY_LONG',
+      },
+    });
+
     return c.json({ success: true, data: resultado });
   } catch (error) {
     console.error('[ADMIN] Erro no backfill:', error);
