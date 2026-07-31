@@ -4,15 +4,13 @@
  * aqui testamos apenas o fluxo de controle (outcomes, retry, rejeição).
  */
 import { describe, expect, it, vi } from 'vitest';
-import {
-  completeLmsMatricula,
-  LmsCompletionRejectedError,
-} from '../../services/lms-completion';
+import { completeLmsMatricula, LmsCompletionRejectedError } from '../../services/lms-completion';
 
 function makeFakeDb(options: {
   historicoLookup?: () => { id: number } | null;
   cycleLookup?: () => { id: number } | null;
   maxCiclo?: number;
+  categoryLookup?: () => Record<string, unknown> | null;
   batchImpl?: (statements: unknown[]) => Promise<unknown>;
 }) {
   const batchCalls: unknown[][] = [];
@@ -22,6 +20,18 @@ function makeFakeDb(options: {
     prepare: vi.fn((sql: string) => ({
       bind: (...args: unknown[]) => ({
         first: async () => {
+          if (sql.includes('FROM qualificacoes_tipos qt')) {
+            return options.categoryLookup
+              ? options.categoryLookup()
+              : {
+                  tipo_categoria: 'EAD',
+                  categoria_id: 13,
+                  categoria_nome: 'EAD',
+                  categoria_empresa_id: 6,
+                  categoria_ativo: 1,
+                  categoria_deleted_at: null,
+                };
+          }
           if (sql.includes('FROM qualificacoes_historico') && sql.includes('data_conclusao = ?')) {
             return options.historicoLookup ? options.historicoLookup() : null;
           }
@@ -31,7 +41,7 @@ function makeFakeDb(options: {
           if (sql.includes('MAX(numero_ciclo)')) {
             return { max_numero: options.maxCiclo ?? 0 };
           }
-          if (sql.includes("COALESCE(renovada, 0) = 0")) {
+          if (sql.includes('COALESCE(renovada, 0) = 0')) {
             return null;
           }
           return null;
@@ -66,7 +76,8 @@ function baseParams(db: D1Database, overrides: Record<string, unknown> = {}) {
     qualificacaoTipoId: 55,
     qualificacaoCodigo: 'QUAL-X',
     qualificacaoNome: 'Qualificação X',
-    qualificacaoCategoria: 'TREINAMENTO',
+    qualificacaoCategoriaId: 13,
+    qualificacaoCategoria: 'EAD',
     validade: 12,
     dataConclusao: '2026-07-30',
     existingHistoricoId: null,
@@ -170,5 +181,57 @@ describe('completeLmsMatricula', () => {
       LmsCompletionRejectedError,
     );
     expect(batchAttempt).toBe(1);
+  });
+
+  it.each([
+    [
+      'categoria Teórico',
+      {
+        categoria_id: 3,
+        categoria_nome: 'Treinamento Teórico',
+        categoria_ativo: 1,
+        categoria_empresa_id: 6,
+        categoria_deleted_at: null,
+      },
+    ],
+    [
+      'categoria ausente',
+      {
+        categoria_id: null,
+        categoria_nome: null,
+        categoria_ativo: null,
+        categoria_empresa_id: null,
+        categoria_deleted_at: null,
+      },
+    ],
+    [
+      'categoria inativa',
+      {
+        categoria_id: 13,
+        categoria_nome: 'EAD',
+        categoria_ativo: 0,
+        categoria_empresa_id: 6,
+        categoria_deleted_at: null,
+      },
+    ],
+    [
+      'categoria de outro tenant',
+      {
+        categoria_id: 13,
+        categoria_nome: 'EAD',
+        categoria_ativo: 1,
+        categoria_empresa_id: 7,
+        categoria_deleted_at: null,
+      },
+    ],
+  ])('rejeita conclusão EAD com %s', async (_scenario, category) => {
+    const db = makeFakeDb({
+      categoryLookup: () => ({ tipo_categoria: 'EAD', ...category }),
+    });
+
+    await expect(completeLmsMatricula(baseParams(db) as never)).rejects.toMatchObject({
+      code: 'LMS_EAD_CATEGORY_MAPPING_INVALID',
+    });
+    expect((db as unknown as { __batchCalls: unknown[][] }).__batchCalls).toHaveLength(0);
   });
 });

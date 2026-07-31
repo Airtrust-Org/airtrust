@@ -30,11 +30,12 @@ CREATE TABLE qualificacoes_historico (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   empresa_id INTEGER NOT NULL,
   funcionario_id INTEGER NOT NULL,
-  qualificacao_id INTEGER,
-  qualificacao_codigo TEXT,
-  tipo_codigo TEXT,
-  codigo TEXT,
-  categoria TEXT,
+    qualificacao_id INTEGER,
+    qualificacao_codigo TEXT,
+    tipo_codigo TEXT,
+    codigo TEXT,
+    categoria_id INTEGER,
+    categoria TEXT,
   data_conclusao TEXT,
   data_vencimento TEXT,
   validade_meses INTEGER,
@@ -118,6 +119,7 @@ function baseParams(overrides: Partial<Parameters<typeof buildCompletionBatchSta
     qualificacaoTipoId: 55,
     qualificacaoCodigo: 'QUAL-X',
     qualificacaoNome: 'Qualificação X',
+    qualificacaoCategoriaId: 13,
     qualificacaoCategoria: 'TREINAMENTO',
     validade: 12,
     vencimentoFimMes: 0 as const,
@@ -166,6 +168,7 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
 
     const historico = querySql(dbPath, 'SELECT * FROM qualificacoes_historico;');
     expect(historico).toHaveLength(1);
+    expect((historico[0] as Record<string, unknown>).categoria_id).toBe(13);
 
     const ciclo = querySql(dbPath, 'SELECT * FROM lms_matricula_ciclos;');
     expect(ciclo).toHaveLength(1);

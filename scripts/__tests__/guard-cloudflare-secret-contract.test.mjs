@@ -381,18 +381,15 @@ jobs:
 });
 
 describe('guard:cloudflare-secret-contract (CLI)', () => {
-  it('recognizes the EAD reconciliation as a D1 job with tokens isolated by step', () => {
+  it('recognizes the EAD reconciliation as a D1 job using only the canonical Worker token', () => {
     const workflow = readFileSync(join(ROOT, '.github/workflows/ead-reconciliation.yml'), 'utf8');
     assert.match(workflow, /^  d1-reconciliation:\n    name: D1 EAD Reconciliation$/m);
     assert.match(
       workflow,
-      /name: Verify backup Wrangler access[\s\S]*?CLOUDFLARE_D1_BACKUP_API_TOKEN/,
+      /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_WORKER_API_TOKEN \}\}/,
     );
-    assert.match(
-      workflow,
-      /name: Apply Reconciliation to remote D1[\s\S]*?CLOUDFLARE_D1_MIGRATION_API_TOKEN/,
-    );
-    assert.doesNotMatch(workflow, /^    CLOUDFLARE_API_TOKEN:/m);
+    assert.match(workflow, /Verify read-only D1 access[\s\S]*?SELECT 1 AS d1_read_only_access/);
+    assert.doesNotMatch(workflow, /CLOUDFLARE_D1_(BACKUP|MIGRATION)_API_TOKEN/);
     assert.deepEqual(checkWorkflowContent('ead-reconciliation.yml', workflow), []);
   });
 

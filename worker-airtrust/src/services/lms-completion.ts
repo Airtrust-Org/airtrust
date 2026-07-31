@@ -76,6 +76,8 @@ export interface CompleteLmsMatriculaParams {
   qualificacaoCodigo: string | null;
   qualificacaoNome: string | null;
   qualificacaoCategoria: string | null;
+  /** Canonical category row, resolved from the tenant-scoped qualification type. */
+  qualificacaoCategoriaId?: number | null;
   validade: number | null;
   vencimentoFimMes?: VencimentoMode | null;
   dataConclusao: string;
@@ -103,6 +105,81 @@ interface PreBatchState {
   anteriorAtivaObservacoes: string | null;
   currentCycleId: number | null;
   nextNumeroCiclo: number;
+}
+
+function isEadCategory(value: string | null | undefined): boolean {
+  const normalized = String(value ?? '')
+    .trim()
+    .toUpperCase();
+  return normalized === 'EAD' || normalized === 'TREINAMENTO EAD';
+}
+
+/**
+ * Resolves the category from the persisted qualification type, never from a
+ * course payload. EAD is intentionally fail-closed: a completion cannot
+ * create or reuse a history until it is tied to active category 13 in tenant 6.
+ */
+async function resolveCompletionCategory(
+  db: D1Database,
+  empresaId: number,
+  qualificacaoTipoId: number,
+): Promise<{ id: number | null; nome: string | null }> {
+  const row = await db
+    .prepare(
+      `SELECT qt.categoria AS tipo_categoria,
+              qc.id AS categoria_id,
+              qc.nome AS categoria_nome,
+              qc.empresa_id AS categoria_empresa_id,
+              qc.ativo AS categoria_ativo,
+              qc.deleted_at AS categoria_deleted_at
+         FROM qualificacoes_tipos qt
+         LEFT JOIN qualificacoes_categorias qc
+           ON qc.id = qt.categoria_id
+          AND qc.empresa_id = qt.empresa_id
+          AND qc.deleted_at IS NULL
+         WHERE qt.id = ?
+           AND qt.empresa_id = ?
+           AND qt.deleted_at IS NULL
+         LIMIT 1`,
+    )
+    .bind(qualificacaoTipoId, empresaId)
+    .first<{
+      tipo_categoria: string | null;
+      categoria_id: number | null;
+      categoria_nome: string | null;
+      categoria_empresa_id: number | null;
+      categoria_ativo: number | null;
+      categoria_deleted_at: string | null;
+    }>();
+
+  if (!row) {
+    throw new LmsCompletionRejectedError(
+      'Tipo de qualificação não pertence à empresa da matrícula',
+      'LMS_QUALIFICATION_MAPPING_INVALID',
+    );
+  }
+
+  if (!isEadCategory(row.tipo_categoria)) {
+    return { id: row.categoria_id ?? null, nome: row.categoria_nome ?? row.tipo_categoria ?? null };
+  }
+
+  const isCanonicalEad =
+    empresaId === 6 &&
+    row.categoria_id === 13 &&
+    row.categoria_empresa_id === 6 &&
+    row.categoria_deleted_at === null &&
+    row.categoria_ativo === 1 &&
+    String(row.categoria_nome ?? '')
+      .trim()
+      .toUpperCase() === 'EAD';
+  if (!isCanonicalEad) {
+    throw new LmsCompletionRejectedError(
+      'Tipo EAD sem vínculo à categoria EAD canônica ativa da empresa',
+      'LMS_EAD_CATEGORY_MAPPING_INVALID',
+    );
+  }
+
+  return { id: 13, nome: 'EAD' };
 }
 
 /**
@@ -243,6 +320,7 @@ export function buildCompletionBatchStatements(
   pre: PreBatchState,
 ): { sql: string; args: unknown[] }[] {
   const qualificacaoCodigo = params.qualificacaoCodigo ?? params.qualificacaoNome ?? '';
+  const qualificacaoCategoriaId = params.qualificacaoCategoriaId ?? null;
   const statements: { sql: string; args: unknown[] }[] = [];
   const needsInsert = !pre.existingHistoricoId;
 
@@ -259,16 +337,17 @@ export function buildCompletionBatchStatements(
     statements.push({
       sql: `INSERT INTO qualificacoes_historico (
               funcionario_id, qualificacao_id, qualificacao_codigo, tipo_codigo, codigo,
-              categoria, data_conclusao, data_vencimento, validade_meses, observacoes,
+              categoria_id, categoria, data_conclusao, data_vencimento, validade_meses, observacoes,
               empresa_id, tipo, status, renovacao_de, lms_matricula_id, origem_tipo,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LMS', datetime('now'), datetime('now'))`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LMS', datetime('now'), datetime('now'))`,
       args: [
         params.funcionarioId,
         params.qualificacaoTipoId,
         qualificacaoCodigo,
         'TREINAMENTO',
         qualificacaoCodigo,
+        qualificacaoCategoriaId,
         params.qualificacaoCategoria ?? 'TREINAMENTO',
         params.dataConclusao,
         dataVencimento,
@@ -319,6 +398,23 @@ export function buildCompletionBatchStatements(
         pre.anteriorAtivaId,
         params.empresaId,
         params.funcionarioId,
+      ],
+    });
+  }
+
+  // This also repairs the target when a completion retries against a history
+  // created by an older bundle. The type/category lookup above makes EAD's
+  // category 13 a transaction precondition, rather than a display fallback.
+  if (qualificacaoCategoriaId !== null) {
+    statements.push({
+      sql: `UPDATE qualificacoes_historico
+               SET categoria_id = ?, categoria = ?, updated_at = datetime('now')
+             WHERE id = ${historicoIdSubquery} AND empresa_id = ? AND deleted_at IS NULL`,
+      args: [
+        qualificacaoCategoriaId,
+        params.qualificacaoCategoria ?? 'TREINAMENTO',
+        ...historicoIdArgs,
+        params.empresaId,
       ],
     });
   }
@@ -539,9 +635,30 @@ export async function completeLmsMatricula(
 
   // ────────────────────────────────────────────────────────────────────────
 
-  const pre = await readPreBatchState(db, params, qualificacaoCodigo);
+  let category: { id: number | null; nome: string | null };
+  try {
+    category = await resolveCompletionCategory(db, params.empresaId, params.qualificacaoTipoId);
+  } catch (error) {
+    const rejected =
+      error instanceof LmsCompletionRejectedError
+        ? error
+        : new LmsCompletionRejectedError(
+            'Falha ao resolver a categoria canônica da qualificação',
+            'LMS_QUALIFICATION_MAPPING_INVALID',
+            error,
+          );
+    await logRejectionAudit(db, params, rejected.message);
+    throw rejected;
+  }
+  const paramsWithCanonicalCategory: CompleteLmsMatriculaParams = {
+    ...params,
+    qualificacaoCategoriaId: category.id,
+    qualificacaoCategoria: category.nome ?? params.qualificacaoCategoria,
+  };
+
+  const pre = await readPreBatchState(db, paramsWithCanonicalCategory, qualificacaoCodigo);
   const wasReuse = pre.existingHistoricoId != null;
-  const statements = buildCompletionBatchStatements(params, pre);
+  const statements = buildCompletionBatchStatements(paramsWithCanonicalCategory, pre);
 
   try {
     await db.batch(statements.map((s) => db.prepare(s.sql).bind(...s.args)));
@@ -549,9 +666,12 @@ export async function completeLmsMatricula(
     if (isConcurrentQualificationUniqueConstraint(error)) {
       // Corrida perdida: outra requisição inseriu primeiro. O batch inteiro
       // desta requisição foi revertido pelo D1 — retry único como reuso.
-      const retryPre = await readPreBatchState(db, params, qualificacaoCodigo);
+      const retryPre = await readPreBatchState(db, paramsWithCanonicalCategory, qualificacaoCodigo);
       if (retryPre.existingHistoricoId) {
-        const retryStatements = buildCompletionBatchStatements(params, retryPre);
+        const retryStatements = buildCompletionBatchStatements(
+          paramsWithCanonicalCategory,
+          retryPre,
+        );
         try {
           await db.batch(retryStatements.map((s) => db.prepare(s.sql).bind(...s.args)));
           return {

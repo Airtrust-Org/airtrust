@@ -81,6 +81,31 @@ function addOperation(operations, { table, id, set, previous, reason, preconditi
   operations.push({ table, id, previous, expected: set, reason, precondition });
 }
 
+function eadHistoricCorrection(row) {
+  const set = {};
+  const previous = {};
+  if (row.categoria_id !== CATEGORY_ID) {
+    set.categoria_id = CATEGORY_ID;
+    previous.categoria_id = row.categoria_id;
+  }
+  if (
+    String(row.historico_categoria ?? '')
+      .trim()
+      .toUpperCase() !== CATEGORY_NAME
+  ) {
+    set.categoria = CATEGORY_NAME;
+    previous.categoria = row.historico_categoria;
+  }
+  if (!Object.keys(set).length) return null;
+  return {
+    set,
+    previous,
+    precondition: Object.entries(previous)
+      .map(([column, value]) => priorCondition(column, value))
+      .join(' AND '),
+  };
+}
+
 function updateSql(table, id, set, where) {
   const assignments = Object.entries(set)
     .map(([column, value]) => `${column} = ${sqlLiteral(value)}`)
@@ -196,7 +221,7 @@ function main() {
 
     const romuloRows = runSqlite(
       dbFile,
-      `SELECT qh.id, qh.empresa_id AS historico_empresa_id, qh.categoria_id, qh.deleted_at AS historico_deleted_at, f.id AS funcionario_id, f.empresa_id AS funcionario_empresa_id, f.nome AS funcionario_nome, f.codigo_anac, f.deleted_at AS funcionario_deleted_at, qt.id AS tipo_id, qt.empresa_id AS tipo_empresa_id, qt.categoria AS tipo_categoria, qt.deleted_at AS tipo_deleted_at FROM qualificacoes_historico qh LEFT JOIN funcionarios f ON f.id = qh.funcionario_id LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id WHERE qh.id IN (${ROMULO_IDS.join(',')}) ORDER BY qh.id`,
+      `SELECT qh.id, qh.empresa_id AS historico_empresa_id, qh.categoria_id, qh.categoria AS historico_categoria, qh.deleted_at AS historico_deleted_at, f.id AS funcionario_id, f.empresa_id AS funcionario_empresa_id, f.nome AS funcionario_nome, f.codigo_anac, f.deleted_at AS funcionario_deleted_at, qt.id AS tipo_id, qt.empresa_id AS tipo_empresa_id, qt.categoria AS tipo_categoria, qt.deleted_at AS tipo_deleted_at FROM qualificacoes_historico qh LEFT JOIN funcionarios f ON f.id = qh.funcionario_id LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id WHERE qh.id IN (${ROMULO_IDS.join(',')}) ORDER BY qh.id`,
     );
     const romuloById = new Map(romuloRows.map((row) => [row.id, row]));
     for (const id of ROMULO_IDS) {
@@ -218,16 +243,13 @@ function main() {
         failClosed(
           `Rômulo historic ${id} failed tenant, identity, active-state, or EAD evidence validation`,
         );
-      if (row.categoria_id !== CATEGORY_ID) {
-        const set = { categoria_id: CATEGORY_ID };
-        const previous = { categoria_id: row.categoria_id };
+      const correction = eadHistoricCorrection(row);
+      if (correction) {
         addOperation(operations, {
           table: 'qualificacoes_historico',
           id,
-          set,
-          previous,
+          ...correction,
           reason: 'verified Rômulo EAD historic',
-          precondition: priorCondition('categoria_id', row.categoria_id),
         });
       } else {
         ignored.push({
@@ -240,18 +262,16 @@ function main() {
 
     const otherHistorics = runSqlite(
       dbFile,
-      `SELECT qh.id, qh.categoria_id, qt.id AS tipo_id, qt.codigo AS tipo_codigo, qt.nome AS tipo_nome FROM qualificacoes_historico qh INNER JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id WHERE qh.empresa_id = ${EMPRESA_ID} AND qh.deleted_at IS NULL AND qt.empresa_id = ${EMPRESA_ID} AND qt.deleted_at IS NULL AND UPPER(TRIM(qt.categoria)) = 'EAD' AND (qh.categoria_id IS NULL OR qh.categoria_id != ${CATEGORY_ID}) AND qh.id NOT IN (${ROMULO_IDS.join(',')}) ORDER BY qh.id`,
+      `SELECT qh.id, qh.categoria_id, qh.categoria AS historico_categoria, qt.id AS tipo_id, qt.codigo AS tipo_codigo, qt.nome AS tipo_nome FROM qualificacoes_historico qh INNER JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id WHERE qh.empresa_id = ${EMPRESA_ID} AND qh.deleted_at IS NULL AND qt.empresa_id = ${EMPRESA_ID} AND qt.deleted_at IS NULL AND UPPER(TRIM(qt.categoria)) = 'EAD' AND (qh.categoria_id IS NULL OR qh.categoria_id != ${CATEGORY_ID} OR UPPER(TRIM(COALESCE(qh.categoria, ''))) != 'EAD') AND qh.id NOT IN (${ROMULO_IDS.join(',')}) ORDER BY qh.id`,
     );
     for (const historic of otherHistorics) {
-      const set = { categoria_id: CATEGORY_ID };
-      const previous = { categoria_id: historic.categoria_id };
+      const correction = eadHistoricCorrection(historic);
+      if (!correction) continue;
       addOperation(operations, {
         table: 'qualificacoes_historico',
         id: historic.id,
-        set,
-        previous,
+        ...correction,
         reason: `verified EAD historic via type ${historic.tipo_id} (${historic.tipo_codigo}: ${historic.tipo_nome})`,
-        precondition: priorCondition('categoria_id', historic.categoria_id),
       });
     }
 

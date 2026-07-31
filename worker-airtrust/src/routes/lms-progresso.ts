@@ -227,6 +227,7 @@ app.post('/xapi/statements', async (c) => {
         c.scorm_mastery_score,
         qt.codigo AS qualificacao_codigo,
         qt.nome AS qualificacao_nome,
+        qt.categoria_id AS qualificacao_categoria_id,
         qt.categoria AS qualificacao_categoria,
         qt.validade AS qualificacao_validade,
         qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
@@ -252,6 +253,7 @@ app.post('/xapi/statements', async (c) => {
       scorm_mastery_score: number | null;
       qualificacao_codigo: string | null;
       qualificacao_nome: string | null;
+      qualificacao_categoria_id: number | null;
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
       qualificacao_vencimento_fim_mes: VencimentoMode | null;
@@ -368,6 +370,7 @@ app.post('/xapi/statements', async (c) => {
         qualificacaoTipoId: matricula.qualificacao_tipo_id,
         qualificacaoCodigo: matricula.qualificacao_codigo,
         qualificacaoNome: matricula.qualificacao_nome ?? matricula.curso_titulo,
+        qualificacaoCategoriaId: matricula.qualificacao_categoria_id,
         qualificacaoCategoria: matricula.qualificacao_categoria,
         validade: matricula.qualificacao_validade,
         vencimentoFimMes: matricula.qualificacao_vencimento_fim_mes,
