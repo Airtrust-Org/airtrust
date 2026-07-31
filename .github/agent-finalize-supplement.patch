@@ -1,0 +1,62 @@
+diff --git a/.github/workflows/d1-production-backup-restore-drill.yml b/.github/workflows/d1-production-backup-restore-drill.yml
+index c1fd47f26f299769f96f333f2d49b62452265bf4..2244704df0c59d428113d217b1d3f26051e7a874 100644
+--- a/.github/workflows/d1-production-backup-restore-drill.yml
++++ b/.github/workflows/d1-production-backup-restore-drill.yml
+@@ -54,14 +54,21 @@ jobs:
+           out_dir="$RUNNER_TEMP/airtrust-d1-production-drill"
+           report="$RUNNER_TEMP/d1-production-backup-restore-report.json"
+           mkdir -p "$out_dir"
++          trap 'rm -rf "$out_dir"' EXIT
++          raw_report="$RUNNER_TEMP/d1-production-backup-restore-report.raw.json"
+           node scripts/production/backup-production-d1-readonly.mjs \
+             --config worker-airtrust/wrangler.toml \
+             --env production \
+-            --out-dir "$out_dir" > "$report"
+-          jq -e '.ok == true' "$report" >/dev/null
+-          jq -e '.restored_sqlite.integrity_check == "ok"' "$report" >/dev/null
+-          jq -e '.policy.outside_git == true and .policy.uploaded_to_git == false and .policy.uploaded_to_r2 == false' "$report" >/dev/null
+-          rm -rf "$out_dir"
++            --out-dir "$out_dir" > "$raw_report"
++          jq -e '.ok == true' "$raw_report" >/dev/null
++          jq -e '.restored_sqlite.integrity_check == "ok"' "$raw_report" >/dev/null
++          jq -e '.policy.outside_git == true and .policy.uploaded_to_git == false and .policy.uploaded_to_r2 == false' "$raw_report" >/dev/null
++          jq '{
++            ok, generated_at, git_head,
++            backup: {bytes: .backup.bytes, sha256: .backup.sha256},
++            restored_sqlite, policy
++          }' "$raw_report" > "$report"
++          rm -f "$raw_report"
+ 
+       - name: Upload sanitized drill report only
+         uses: actions/upload-artifact@v4
+diff --git a/worker-airtrust/src/__tests__/ops/d1-production-backup-restore-workflow.test.ts b/worker-airtrust/src/__tests__/ops/d1-production-backup-restore-workflow.test.ts
+index e28094b7b7495674e2bfe3afb1166e1e6737abbd..1f0ff9d312c46ca1b7befac657651168a4f34f11 100644
+--- a/worker-airtrust/src/__tests__/ops/d1-production-backup-restore-workflow.test.ts
++++ b/worker-airtrust/src/__tests__/ops/d1-production-backup-restore-workflow.test.ts
+@@ -18,8 +18,10 @@ describe('D1 production backup/restore drill workflow', () => {
+ 
+   it('restores into disposable SQLite and never uploads the dump', () => {
+     expect(workflow).toContain('integrity_check == "ok"');
+-    expect(workflow).toContain('rm -rf "$out_dir"');
++    expect(workflow).toContain("trap 'rm -rf \"$out_dir\"' EXIT");
+     expect(workflow).toContain('d1-production-backup-restore-report.json');
+     expect(workflow).not.toContain('airtrust-db-production-backup-*.sql');
++    expect(workflow).toContain('backup: {bytes: .backup.bytes, sha256: .backup.sha256}');
++    expect(workflow).not.toContain('target: .target');
+   });
+ });
+diff --git a/worker-airtrust/src/__tests__/routes/lms-assets-security.test.ts b/worker-airtrust/src/__tests__/routes/lms-assets-security.test.ts
+index f34c3c26f34270e693eb3ab303f7b3ebc9557628..9d56280f8cac635bafb842ab33acbd3550f6b794 100644
+--- a/worker-airtrust/src/__tests__/routes/lms-assets-security.test.ts
++++ b/worker-airtrust/src/__tests__/routes/lms-assets-security.test.ts
+@@ -15,8 +15,8 @@ describe('LMS asset security contract', () => {
+ 
+   it('stores only a short-lived HttpOnly asset token in the LMS cookie', () => {
+     const source = readFileSync(join(process.cwd(), 'src', 'routes', 'lms-assets.ts'), 'utf8');
+-    expect(source).toContain('token_type: \\'lms_asset\\'');
+-    expect(source).toContain('asset_scope: \\'course_assets\\'');
++    expect(source).toContain("token_type: 'lms_asset'");
++    expect(source).toContain("asset_scope: 'course_assets'");
+     expect(source).toContain('HttpOnly;');
+     expect(source).not.toContain('appendAssetTokenCookie(headers, rawToken');
+   });
