@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+# Applies one allowlisted staging D1 migration only after capturing a D1 Time
+# Travel recovery point. Full D1 exports are intentionally excluded from this
+# routine path because exports can temporarily make the database unavailable.
+set -euo pipefail
+umask 077
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+
+ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
+ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
+BLOCKED_PRODUCTION_DB_ID="7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
+CONFIRMATION_PHRASE="AIRTRUST_STAGING_SCHEMA_CHANGE"
+APPROVED_MIGRATIONS=(
+  "0453_ead_category_reconciliation_executor.sql"
+  "0454_qualificacoes_tipos_dominio_override.sql"
+)
+RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454"
+
+apply=false
+migration_arg=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --apply) apply=true ;;
+    --migration=*) migration_arg="${arg#*=}" ;;
+    *) echo "ERROR: argumento desconhecido: $arg" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -z "$migration_arg" ]]; then
+  echo "ERROR: use --migration=<arquivo.sql>." >&2
+  exit 1
+fi
+
+migration_basename="$(basename "$migration_arg")"
+is_approved=false
+for approved in "${APPROVED_MIGRATIONS[@]}"; do
+  [[ "$migration_basename" == "$approved" ]] && is_approved=true
+done
+if ! $is_approved; then
+  echo "ERROR: migration fora da allowlist: $migration_basename" >&2
+  exit 1
+fi
+
+migration_path="$migration_arg"
+expected_path="release/worker-airtrust/migrations/$migration_basename"
+if [[ "$migration_path" != "$expected_path" ]]; then
+  echo "ERROR: caminho inválido; esperado $expected_path" >&2
+  exit 1
+fi
+if [[ -L "$migration_path" || ! -f "$migration_path" ]]; then
+  echo "ERROR: migration ausente ou symlink recusado: $migration_path" >&2
+  exit 1
+fi
+if ! git -C release diff --quiet -- "worker-airtrust/migrations/$migration_basename" || \
+   ! git -C release diff --cached --quiet -- "worker-airtrust/migrations/$migration_basename"; then
+  echo "ERROR: migration possui alteração local não commitada." >&2
+  exit 1
+fi
+
+release_sha="$(git -C release rev-parse HEAD)"
+if command -v shasum >/dev/null 2>&1; then
+  sql_sha256="$(shasum -a 256 "$migration_path" | awk '{print $1}')"
+else
+  sql_sha256="$(sha256sum "$migration_path" | awk '{print $1}')"
+fi
+
+db_name="${STAGING_D1_NAME:-$ALLOWED_DB_NAME}"
+db_id="${STAGING_D1_ID:-$ALLOWED_DB_ID}"
+if [[ "$db_name" != "$ALLOWED_DB_NAME" || "$db_id" != "$ALLOWED_DB_ID" ]]; then
+  echo "ERROR: alvo não corresponde ao D1 de staging permitido." >&2
+  exit 1
+fi
+if [[ "$db_id" == "$BLOCKED_PRODUCTION_DB_ID" ]]; then
+  echo "ERROR: ID de produção recusado." >&2
+  exit 1
+fi
+
+printf 'MIGRATION=%s\nRELEASE_SHA=%s\nSQL_SHA256=%s\nTARGET_DB=%s\n' \
+  "$migration_basename" "$release_sha" "$sql_sha256" "$db_name"
+
+preflight_output="$(mktemp -t airtrust-staging-preflight.XXXXXXXX)"
+recovery_output="$(mktemp -t airtrust-staging-recovery.XXXXXXXX)"
+ledger_output="$(mktemp -t airtrust-staging-ledger.XXXXXXXX)"
+combined_sql="$(mktemp -t airtrust-staging-migration-ledger.XXXXXXXX.sql)"
+trap 'rm -f "$preflight_output" "$recovery_output" "$ledger_output" "$combined_sql"' EXIT
+
+validate_postconditions() {
+  case "$migration_basename" in
+    0453_ead_category_reconciliation_executor.sql)
+      bash scripts/staging/validate-0453-postconditions.sh --target="$db_name"
+      ;;
+    0454_qualificacoes_tipos_dominio_override.sql)
+      bash scripts/staging/validate-0454-postconditions.sh --target="$db_name"
+      ;;
+  esac
+}
+
+read_ledger_count() {
+  local ledger_sql
+  ledger_sql="SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$migration_basename';"
+  (
+    cd worker-airtrust
+    npx wrangler d1 execute "$db_name" --remote --json --command "$ledger_sql" > "$ledger_output"
+  )
+  node - "$ledger_output" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+const count = Number(parsed?.[0]?.results?.[0]?.count);
+if (!Number.isInteger(count) || count < 0) {
+  throw new Error('LEDGER_COUNT_INVALID');
+}
+process.stdout.write(String(count));
+NODE
+}
+
+echo "Executando preflight de ledger somente leitura..."
+if ! node scripts/staging/migration-ledger-preflight.mjs \
+  --scope="$RELEASE_PREFLIGHT_SCOPE" > "$preflight_output"; then
+  echo "ERROR: preflight de ledger recusou a alteração." >&2
+  cat "$preflight_output" >&2
+  exit 1
+fi
+echo "PREFLIGHT_OK=true"
+
+ledger_count="$(read_ledger_count)"
+if [[ "$ledger_count" == "1" ]]; then
+  validate_postconditions
+  echo "MIGRATION_ALREADY_APPLIED_AND_VALIDATED=$migration_basename"
+  exit 0
+fi
+if [[ "$ledger_count" != "0" ]]; then
+  echo "ERROR: ledger contém $ledger_count entradas para $migration_basename; esperado 0 ou 1." >&2
+  exit 1
+fi
+
+if ! $apply; then
+  echo "DRY_RUN=true"
+  exit 0
+fi
+if [[ "${CONFIRM_STAGING_SCHEMA_CHANGE:-}" != "$CONFIRMATION_PHRASE" ]]; then
+  echo "ERROR: confirmação operacional ausente ou incorreta." >&2
+  exit 1
+fi
+
+node --input-type=module - "$migration_path" "$migration_basename" "$combined_sql" <<'NODE'
+import { readFileSync, writeFileSync } from 'node:fs';
+import { buildLedgerAppliedSql } from './worker-airtrust/scripts/lib/migration-remote-apply.mjs';
+
+const [migrationPath, migrationName, outputPath] = process.argv.slice(2);
+const migrationSql = readFileSync(migrationPath, 'utf8');
+const combined = buildLedgerAppliedSql({ migrationSql, migrationName });
+writeFileSync(outputPath, combined, { encoding: 'utf8', mode: 0o600 });
+NODE
+
+test -s "$combined_sql"
+
+recovery_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+echo "Capturando ponto de recuperação D1 Time Travel..."
+(
+  cd worker-airtrust
+  npx wrangler d1 time-travel info "$db_name" \
+    --timestamp="$recovery_timestamp" \
+    --json > "$recovery_output"
+)
+test -s "$recovery_output"
+node - "$recovery_output" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+const serialized = JSON.stringify(parsed);
+if (!/bookmark/i.test(serialized)) {
+  throw new Error('TIME_TRAVEL_BOOKMARK_NOT_CONFIRMED');
+}
+NODE
+# The bookmark itself is deliberately never printed. The UTC timestamp is the
+# operator-facing rollback reference and can deterministically retrieve it.
+echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp"
+echo "RECOVERY_POINT_CAPTURED=true"
+
+apply_status=0
+(
+  cd worker-airtrust
+  npx wrangler d1 execute "$db_name" --remote --file="$combined_sql"
+) || apply_status=$?
+if [[ $apply_status -ne 0 ]]; then
+  echo "MIGRATION_FAILED=$migration_basename" >&2
+  exit "$apply_status"
+fi
+
+ledger_count="$(read_ledger_count)"
+if [[ "$ledger_count" != "1" ]]; then
+  echo "ERROR: migration executada sem entrada única no ledger ($ledger_count)." >&2
+  exit 1
+fi
+echo "LEDGER_ENTRY_CONFIRMED=$migration_basename"
+
+validate_postconditions
+
+echo "MIGRATION_APPLIED_AND_VALIDATED=$migration_basename"
