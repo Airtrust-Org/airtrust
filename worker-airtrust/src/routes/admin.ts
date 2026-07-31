@@ -126,7 +126,7 @@ app.post('/backfill-session-checks', auth(), adminOnly(), async (c) => {
     const actorRole = typeof c.get('userRole') === 'string' ? String(c.get('userRole')) : null;
     const counts = {
       modelos_checks_inseridos: resultado.modelos_checks_inseridos,
-      agendamentos_linkados: resultado.agendamentos_linkados,
+      agendamentos_associados: resultado.agendamentos_linkados,
       checks_criados: resultado.checks_criados,
       resultados_criados: resultado.resultados_criados,
       error_count: resultado.erros.length,
@@ -134,6 +134,11 @@ app.post('/backfill-session-checks', auth(), adminOnly(), async (c) => {
     const auditMetadata = buildAuditMetadata(c, {
       operation: 'BACKFILL_SESSION_CHECKS',
       scope: 'tenant',
+      count:
+        resultado.modelos_checks_inseridos +
+        resultado.agendamentos_linkados +
+        resultado.checks_criados +
+        resultado.resultados_criados,
       ...counts,
     });
 
