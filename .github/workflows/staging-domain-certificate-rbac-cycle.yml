@@ -9,8 +9,10 @@ on:
       - 'scripts/staging/run-domain-certificate-smoke-with-rbac-cycle.mjs'
       - 'scripts/staging/qa-sector-domain-plan.mjs'
       - 'scripts/staging/seed-qa-admin-operational-grant.mjs'
+      - 'scripts/staging/seed-qa-certificate-domain-candidate.mjs'
       - 'scripts/__tests__/staging-domain-rbac-cycle.test.mjs'
       - 'scripts/__tests__/staging-qa-admin-operational-grant.test.mjs'
+      - 'scripts/__tests__/staging-qa-certificate-domain-candidate.test.mjs'
 
 concurrency:
   group: staging-domain-certificate-rbac-cycle
@@ -67,6 +69,7 @@ jobs:
         run: |
           node --test scripts/__tests__/staging-domain-rbac-cycle.test.mjs
           node --test scripts/__tests__/staging-qa-admin-operational-grant.test.mjs
+          node --test scripts/__tests__/staging-qa-certificate-domain-candidate.test.mjs
 
       - name: Provision exact synthetic QA admin-sector grant
         env:
@@ -75,6 +78,14 @@ jobs:
           CONFIRM_STAGING_QA_GRANT: AIRTRUST_STAGING_QA_GRANT
           QA_GRANT_REPORT_PATH: ${{ runner.temp }}/staging-qa-admin-operational-grant.json
         run: node scripts/staging/seed-qa-admin-operational-grant.mjs --apply
+
+      - name: Provision synthetic unclassified certificate candidate
+        env:
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+          STAGING_D1_ID: ${{ env.ALLOWED_STAGING_DB_ID }}
+          CONFIRM_STAGING_QA_CERT_CANDIDATE: AIRTRUST_STAGING_QA_CERT_CANDIDATE
+          QA_CERT_CANDIDATE_REPORT_PATH: ${{ runner.temp }}/staging-qa-certificate-domain-candidate.json
+        run: node scripts/staging/seed-qa-certificate-domain-candidate.mjs --apply
 
       - name: Run temporary RBAC cycle and certificate smoke
         env:
@@ -85,6 +96,7 @@ jobs:
         env:
           SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
           QA_GRANT_REPORT_PATH: ${{ runner.temp }}/staging-qa-admin-operational-grant.json
+          QA_CERT_CANDIDATE_REPORT_PATH: ${{ runner.temp }}/staging-qa-certificate-domain-candidate.json
           D1_RESULT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-d1.json
         shell: bash
         run: |
@@ -93,11 +105,16 @@ jobs:
           const fs = require('fs');
           const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
           const grant = JSON.parse(fs.readFileSync(process.env.QA_GRANT_REPORT_PATH, 'utf8'));
+          const candidateFixture = JSON.parse(fs.readFileSync(process.env.QA_CERT_CANDIDATE_REPORT_PATH, 'utf8'));
           const typeId = Number(report?.candidate?.typeId);
           const historyId = Number(report?.candidate?.historyId);
           const documentId = Number(report?.certificate?.documentId);
           if (grant?.success !== true || grant?.retained !== true) throw new Error('QA_ADMIN_GRANT_NOT_RETAINED');
           if (Number(grant?.after?.active_relation_count) !== 1) throw new Error('QA_ADMIN_GRANT_POSTCONDITION_FAILED');
+          if (candidateFixture?.success !== true) throw new Error('QA_CERT_CANDIDATE_NOT_PROVISIONED');
+          if (Number(candidateFixture?.after?.type_count) !== 1 || Number(candidateFixture?.after?.history_count) !== 1) {
+            throw new Error('QA_CERT_CANDIDATE_POSTCONDITION_FAILED');
+          }
           if (report?.success !== true) throw new Error('SMOKE_REPORT_NOT_SUCCESSFUL');
           if (report?.rbacActivation?.restored !== true) throw new Error('RBAC_STATE_NOT_RESTORED');
           if (!Array.isArray(report?.auth?.domains) || !report.auth.domains.includes('OPERACOES')) {
@@ -154,10 +171,11 @@ jobs:
                 AND sg.deleted_at IS NULL) AS qa_admin_grant_count;"
           npx wrangler d1 execute "$ALLOWED_STAGING_DB_NAME" --remote --command "$SQL" --json > "$D1_RESULT_PATH"
 
-          node - <<'NODE'
-          const fs = require('fs');
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import { parseWranglerJson } from './scripts/staging/seed-qa-admin-operational-grant.mjs';
           const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
-          const raw = JSON.parse(fs.readFileSync(process.env.D1_RESULT_PATH, 'utf8'));
+          const raw = parseWranglerJson(fs.readFileSync(process.env.D1_RESULT_PATH, 'utf8'));
           const row = Array.isArray(raw) ? raw[0]?.results?.[0] : raw?.results?.[0];
           if (!row) throw new Error('D1_POSTCONDITION_ROW_MISSING');
           if (row.current_domain !== null) throw new Error(`CLASSIFICATION_ROLLBACK_FAILED:${row.current_domain}`);
@@ -176,6 +194,7 @@ jobs:
           name: staging-domain-certificate-rbac-cycle-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/staging-qa-admin-operational-grant.json
+            ${{ runner.temp }}/staging-qa-certificate-domain-candidate.json
             ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
             ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-d1.json
           if-no-files-found: warn
@@ -201,13 +220,14 @@ jobs:
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/body.md" <<EOF
-          ## Staging synthetic QA grant + RBAC cycle + certificate smoke
+          ## Staging synthetic QA grant + candidate + RBAC cycle + certificate smoke
 
           - run: https://github.com/$REPOSITORY/actions/runs/$RUN_ID
           - source SHA: \`$SOURCE_SHA\`
           - result: **$RESULT**
           - QA sector classification: audited API, exact synthetic allowlist, retained as seed readiness
           - QA admin operational grant: exact synthetic fixture relation, idempotent and retained
+          - certificate candidate: exact synthetic type/history, deliberately unclassified between runs
           - temporary RBAC and qualification-type override restoration: enforced by workflow and D1 postconditions
           - target: staging synthetic QA only
           - production action: none
