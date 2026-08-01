@@ -17,7 +17,8 @@ export default defineConfig({
       NODE_ENV: 'test',
       DISABLE_AUTH: 'true',
       VITEST: 'true',
-      VITE_API_URL: 'https://airtrust-api-production.airtrust.workers.dev/api',
+      // Porta de descarte local: qualquer chamada não mockada falha sem alcançar rede externa.
+      VITE_API_URL: 'http://127.0.0.1:9/api',
     },
     include: [
       'src/**/__tests__/**/*.test.ts',
