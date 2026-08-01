@@ -49,11 +49,7 @@ function readAtRef(repoRoot, ref, filePath) {
 }
 
 function dependencySnapshotHash(packageJson, packageLock) {
-  return createHash('sha256')
-    .update(packageJson)
-    .update('\0')
-    .update(packageLock)
-    .digest('hex');
+  return createHash('sha256').update(packageJson).update('\0').update(packageLock).digest('hex');
 }
 
 function materializeWorkspace(root, packageJson, packageLock) {
@@ -63,18 +59,14 @@ function materializeWorkspace(root, packageJson, packageLock) {
 }
 
 function runNpmAudit(workspaceDir) {
-  const result = run(
-    'npm',
-    ['audit', '--json', '--package-lock-only', '--ignore-scripts'],
-    {
-      cwd: workspaceDir,
-      env: {
-        ...process.env,
-        npm_config_fund: 'false',
-        npm_config_update_notifier: 'false',
-      },
+  const result = run('npm', ['audit', '--json', '--package-lock-only', '--ignore-scripts'], {
+    cwd: workspaceDir,
+    env: {
+      ...process.env,
+      npm_config_fund: 'false',
+      npm_config_update_notifier: 'false',
     },
-  );
+  });
 
   let report;
   try {
@@ -153,8 +145,7 @@ function auditWorkspaceDelta({ repoRoot, baseSha, headSha, workspace }) {
   const headLock = readAtRef(repoRoot, headSha, workspace.lockPath);
 
   if (
-    dependencySnapshotHash(basePackage, baseLock) ===
-    dependencySnapshotHash(headPackage, headLock)
+    dependencySnapshotHash(basePackage, baseLock) === dependencySnapshotHash(headPackage, headLock)
   ) {
     return {
       workspace: workspace.name,
@@ -185,12 +176,7 @@ function auditWorkspaceDelta({ repoRoot, baseSha, headSha, workspace }) {
   }
 }
 
-export function runCriticalDeltaAudit({
-  repoRoot,
-  baseSha,
-  headSha,
-  workspaces = WORKSPACES,
-}) {
+export function runCriticalDeltaAudit({ repoRoot, baseSha, headSha, workspaces = WORKSPACES }) {
   assertCommitSha(baseSha, 'baseSha');
   assertCommitSha(headSha, 'headSha');
 
