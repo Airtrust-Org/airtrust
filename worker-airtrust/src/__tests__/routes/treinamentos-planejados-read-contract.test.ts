@@ -56,8 +56,7 @@ function isQualificationListQuery(query: string): boolean {
 
 function isSimulatorListQuery(query: string): boolean {
   return (
-    query.includes('FROM simulador_agendamentos sa') &&
-    query.includes('sa.data AS data_prevista')
+    query.includes('FROM simulador_agendamentos sa') && query.includes('sa.data AS data_prevista')
   );
 }
 
@@ -235,9 +234,7 @@ describe('treinamentos planejados consolidated read contract', () => {
       },
     });
 
-    const turmaCall = calls.find(
-      (call) => call.method === 'all' && isTurmaListQuery(call.query),
-    );
+    const turmaCall = calls.find((call) => call.method === 'all' && isTurmaListQuery(call.query));
     expect(turmaCall?.query).toContain('date(t.data_prevista) >= date(?)');
     expect(turmaCall?.query).toContain('date(t.data_prevista) <= date(?)');
     expect(turmaCall?.args).toEqual([1, '2028-02-01', '2028-02-29']);
@@ -260,19 +257,14 @@ describe('treinamentos planejados consolidated read contract', () => {
       },
     });
 
-    const turmaCall = calls.find(
-      (call) => call.method === 'all' && isTurmaListQuery(call.query),
-    );
+    const turmaCall = calls.find((call) => call.method === 'all' && isTurmaListQuery(call.query));
     expect(turmaCall?.args).toEqual([1]);
   });
 
   it('trata source=TREINAMENTOS sem consultar sessoes de simulador', async () => {
     const { db, calls } = createReadDb();
 
-    const response = await request(
-      '/treinamentos/planejados?source=treinamentos',
-      db,
-    );
+    const response = await request('/treinamentos/planejados?source=treinamentos', db);
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as Record<string, unknown>;
