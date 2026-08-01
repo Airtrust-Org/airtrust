@@ -1,0 +1,99 @@
+name: Staging Domain Readiness Inspection
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/staging-domain-readiness-inspection.yml'
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+  ALLOWED_STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+  BLOCKED_PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+
+jobs:
+  staging-d1-readiness-inspection:
+    name: Staging D1 Readiness Inspection
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Assert read-only staging target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_ONLY" >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo "D1_CREDENTIALS_MISSING" >&2; exit 1; }
+          [[ "$ALLOWED_STAGING_DB_ID" != "$BLOCKED_PRODUCTION_DB_ID" ]] || { echo "PRODUCTION_DB_REJECTED" >&2; exit 1; }
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Query synthetic readiness read-only
+        env:
+          RESULT_PATH: ${{ runner.temp }}/staging-domain-readiness.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          SQL="SELECT
+            (SELECT COUNT(*) FROM empresas WHERE deleted_at IS NULL) AS active_tenant_count,
+            (SELECT COUNT(*) FROM setores WHERE ativo = 1 AND deleted_at IS NULL AND dominio_codigo IS NULL) AS setores_sem_dominio,
+            (SELECT COUNT(*) FROM qualificacoes_categorias WHERE ativo = 1 AND deleted_at IS NULL AND dominio_codigo IS NULL) AS categorias_sem_dominio,
+            (SELECT COUNT(*) FROM lms_cursos WHERE deleted_at IS NULL AND dominio_codigo IS NULL) AS cursos_sem_dominio;"
+          npx --prefix worker-airtrust wrangler d1 execute "$ALLOWED_STAGING_DB_NAME" --remote --command "$SQL" --json > "$RESULT_PATH"
+          npx --prefix worker-airtrust wrangler d1 execute "$ALLOWED_STAGING_DB_NAME" --remote --command "SELECT empresa_id, id, codigo, nome FROM setores WHERE ativo = 1 AND deleted_at IS NULL AND dominio_codigo IS NULL ORDER BY empresa_id, nome" --json > "${RESULT_PATH%.json}-setores.json"
+
+      - name: Upload sanitized inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-domain-readiness-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/staging-domain-readiness.json
+            ${{ runner.temp }}/staging-domain-readiness-setores.json
+          retention-days: 14
+
+  record-inspection:
+    name: Record Readiness Inspection
+    needs: staging-d1-readiness-inspection
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Comment incident
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.staging-d1-readiness-inspection.result }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/body.md" <<EOF
+          ## Staging domain readiness inspection
+
+          - run: https://github.com/$REPOSITORY/actions/runs/$RUN_ID
+          - source SHA: \`$SOURCE_SHA\`
+          - result: **$RESULT**
+          - operation: read-only D1 SELECT
+          - artifact: \`staging-domain-readiness-$RUN_ID\`
+          - production action: none
+          EOF
+          gh issue comment 568 --repo "$REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
