@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# source_reference: scripts/schema-local.sql and the versioned LMS migrations listed below.
+# operational_decision: local-only fail-closed bootstrap; remote D1/R2 targets are prohibited.
+# dry_run_required: false; every wrangler invocation is explicitly constrained by --local.
+# rollback_plan_required: remove worker-airtrust/.wrangler/state and rerun with --reset.
 
 set -euo pipefail
 
