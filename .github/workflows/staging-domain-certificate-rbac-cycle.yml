@@ -10,6 +10,7 @@ on:
       - 'scripts/staging/qa-sector-domain-plan.mjs'
       - 'scripts/staging/seed-qa-admin-operational-grant.mjs'
       - 'scripts/staging/seed-qa-certificate-domain-candidate.mjs'
+      - 'worker-airtrust/src/routes/admin-operational-domain-rbac.ts'
       - 'scripts/__tests__/staging-domain-rbac-cycle.test.mjs'
       - 'scripts/__tests__/staging-qa-admin-operational-grant.test.mjs'
       - 'scripts/__tests__/staging-qa-certificate-domain-candidate.test.mjs'
@@ -88,35 +89,41 @@ jobs:
         run: node scripts/staging/seed-qa-certificate-domain-candidate.mjs --apply
 
       - name: Run temporary RBAC cycle and certificate smoke
+        id: smoke
+        continue-on-error: true
         env:
           SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
         run: node scripts/staging/run-domain-certificate-smoke-with-rbac-cycle.mjs
 
       - name: Verify restored state and persisted certificate evidence read-only
+        if: always()
         env:
           SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
           QA_GRANT_REPORT_PATH: ${{ runner.temp }}/staging-qa-admin-operational-grant.json
           QA_CERT_CANDIDATE_REPORT_PATH: ${{ runner.temp }}/staging-qa-certificate-domain-candidate.json
           D1_RESULT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-d1.json
+          SMOKE_STEP_OUTCOME: ${{ steps.smoke.outcome }}
         shell: bash
         run: |
           set -euo pipefail
           node - <<'NODE'
           const fs = require('fs');
+          for (const path of [process.env.SMOKE_REPORT_PATH, process.env.QA_GRANT_REPORT_PATH, process.env.QA_CERT_CANDIDATE_REPORT_PATH]) {
+            if (!path || !fs.existsSync(path)) throw new Error(`POSTCONDITION_INPUT_MISSING:${path || 'unset'}`);
+          }
           const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
           const grant = JSON.parse(fs.readFileSync(process.env.QA_GRANT_REPORT_PATH, 'utf8'));
           const candidateFixture = JSON.parse(fs.readFileSync(process.env.QA_CERT_CANDIDATE_REPORT_PATH, 'utf8'));
           const typeId = Number(report?.candidate?.typeId);
           const historyId = Number(report?.candidate?.historyId);
-          const documentId = Number(report?.certificate?.documentId);
+          const documentId = Number(report?.certificate?.documentId || 0);
           if (grant?.success !== true || grant?.retained !== true) throw new Error('QA_ADMIN_GRANT_NOT_RETAINED');
           if (Number(grant?.after?.active_relation_count) !== 1) throw new Error('QA_ADMIN_GRANT_POSTCONDITION_FAILED');
           if (candidateFixture?.success !== true) throw new Error('QA_CERT_CANDIDATE_NOT_PROVISIONED');
           if (Number(candidateFixture?.after?.type_count) !== 1 || Number(candidateFixture?.after?.history_count) !== 1) {
             throw new Error('QA_CERT_CANDIDATE_POSTCONDITION_FAILED');
           }
-          if (report?.success !== true) throw new Error('SMOKE_REPORT_NOT_SUCCESSFUL');
-          if (report?.rbacActivation?.restored !== true) throw new Error('RBAC_STATE_NOT_RESTORED');
+          if (report?.rbacActivation?.restored !== true) throw new Error('RBAC_STATE_NOT_RESTORED_IN_REPORT');
           if (!Array.isArray(report?.auth?.domains) || !report.auth.domains.includes('OPERACOES')) {
             throw new Error('QA_ADMIN_OPERATIONS_ACCESS_MISSING');
           }
@@ -130,13 +137,20 @@ jobs:
               throw new Error('QA_SECTOR_BOOTSTRAP_NOT_READY');
             }
           }
-          if (report?.rollback?.success !== true) throw new Error('CLASSIFICATION_NOT_ROLLED_BACK');
-          for (const [name, value] of Object.entries({ typeId, historyId, documentId })) {
+          for (const [name, value] of Object.entries({ typeId, historyId })) {
             if (!Number.isInteger(value) || value <= 0) throw new Error(`${name.toUpperCase()}_INVALID`);
           }
+          if (!Number.isInteger(documentId) || documentId < 0) throw new Error('DOCUMENTID_INVALID');
           fs.writeFileSync(
             process.env.RUNNER_TEMP + '/postcondition-values.json',
-            JSON.stringify({ typeId, historyId, documentId }),
+            JSON.stringify({
+              typeId,
+              historyId,
+              documentId,
+              smokeSuccess: report?.success === true,
+              smokeError: String(report?.error || ''),
+              smokeStepOutcome: String(process.env.SMOKE_STEP_OUTCOME || ''),
+            }),
             { mode: 0o600 },
           );
           NODE
@@ -146,8 +160,13 @@ jobs:
           DOCUMENT_ID=$(node -p "require(process.env.RUNNER_TEMP + '/postcondition-values.json').documentId")
           SQL="SELECT
             (SELECT dominio_codigo FROM qualificacoes_tipos WHERE id = $TYPE_ID AND deleted_at IS NULL) AS current_domain,
+            (SELECT updated_at FROM qualificacoes_tipos WHERE id = $TYPE_ID AND deleted_at IS NULL) AS current_type_updated_at,
             (SELECT certificado_arquivo_id FROM qualificacoes_historico WHERE id = $HISTORY_ID AND deleted_at IS NULL) AS linked_document_id,
             (SELECT COUNT(*) FROM documentos WHERE id = $DOCUMENT_ID AND deleted_at IS NULL) AS document_count,
+            (SELECT COUNT(*) FROM auditoria
+              WHERE tabela_afetada = 'qualificacoes_tipos'
+                AND registro_id = CAST($TYPE_ID AS TEXT)
+                AND created_at >= datetime('now', '-30 minutes')) AS recent_type_audit_count,
             (SELECT operational_domain_rbac_enabled FROM empresas
               WHERE codigo = 'qa_examiner_training' AND deleted_at IS NULL) AS rbac_enabled,
             (SELECT COUNT(*) FROM setores s
@@ -175,15 +194,42 @@ jobs:
           import fs from 'node:fs';
           import { parseWranglerJson } from './scripts/staging/seed-qa-admin-operational-grant.mjs';
           const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
+          const values = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/postcondition-values.json', 'utf8'));
           const raw = parseWranglerJson(fs.readFileSync(process.env.D1_RESULT_PATH, 'utf8'));
           const row = Array.isArray(raw) ? raw[0]?.results?.[0] : raw?.results?.[0];
           if (!row) throw new Error('D1_POSTCONDITION_ROW_MISSING');
-          if (row.current_domain !== null) throw new Error(`CLASSIFICATION_ROLLBACK_FAILED:${row.current_domain}`);
-          if (Number(row.linked_document_id) !== Number(report.certificate.documentId)) throw new Error('HISTORY_DOCUMENT_LINK_MISMATCH');
-          if (Number(row.document_count) !== 1) throw new Error('DOCUMENT_ROW_MISSING');
-          if (Number(row.rbac_enabled) !== 0) throw new Error(`RBAC_RESTORE_FAILED:${row.rbac_enabled}`);
-          if (Number(row.classified_sector_count) !== 3) throw new Error(`QA_SECTOR_BASELINE_INVALID:${row.classified_sector_count}`);
-          if (Number(row.qa_admin_grant_count) !== 1) throw new Error('QA_ADMIN_GRANT_D1_MISMATCH');
+
+          const diagnostic = {
+            success: report?.success === true,
+            smokeStepOutcome: values.smokeStepOutcome,
+            smokeError: values.smokeError || null,
+            typeClassification: row.current_domain,
+            recentTypeAuditCount: Number(row.recent_type_audit_count || 0),
+            certificateDocumentId: Number(report?.certificate?.documentId || 0),
+            linkedDocumentId: Number(row.linked_document_id || 0),
+            documentCount: Number(row.document_count || 0),
+            rbacEnabled: Number(row.rbac_enabled),
+            classifiedSectorCount: Number(row.classified_sector_count),
+            qaAdminGrantCount: Number(row.qa_admin_grant_count),
+          };
+          console.log(JSON.stringify(diagnostic));
+
+          const errors = [];
+          if (row.current_domain !== null) errors.push(`CLASSIFICATION_ROLLBACK_FAILED:${row.current_domain}`);
+          if (Number(row.rbac_enabled) !== 0) errors.push(`RBAC_RESTORE_FAILED:${row.rbac_enabled}`);
+          if (Number(row.classified_sector_count) !== 3) errors.push(`QA_SECTOR_BASELINE_INVALID:${row.classified_sector_count}`);
+          if (Number(row.qa_admin_grant_count) !== 1) errors.push('QA_ADMIN_GRANT_D1_MISMATCH');
+
+          if (report?.success === true) {
+            if (report?.rollback?.success !== true) errors.push('CLASSIFICATION_NOT_ROLLED_BACK');
+            if (!Number.isInteger(values.documentId) || values.documentId <= 0) errors.push('DOCUMENT_ID_INVALID');
+            if (Number(row.linked_document_id) !== values.documentId) errors.push('HISTORY_DOCUMENT_LINK_MISMATCH');
+            if (Number(row.document_count) !== 1) errors.push('DOCUMENT_ROW_MISSING');
+          } else {
+            errors.push(`SMOKE_REPORT_NOT_SUCCESSFUL:${values.smokeError || 'unknown'}`);
+          }
+
+          if (errors.length > 0) throw new Error(errors.join(';'));
           console.log(JSON.stringify({ success: true, rbacRestored: true, typeClassificationRolledBack: true, qaSectorClassificationsRetained: true, qaAdminOperationalGrantRetained: true, certificateLinked: true }));
           NODE
 
@@ -228,7 +274,7 @@ jobs:
           - QA sector classification: audited API, exact synthetic allowlist, retained as seed readiness
           - QA admin operational grant: exact synthetic fixture relation, idempotent and retained
           - certificate candidate: exact synthetic type/history, deliberately unclassified between runs
-          - temporary RBAC and qualification-type override restoration: enforced by workflow and D1 postconditions
+          - temporary RBAC and qualification-type override restoration: enforced by workflow and D1 postconditions, including failure paths
           - target: staging synthetic QA only
           - production action: none
           EOF
