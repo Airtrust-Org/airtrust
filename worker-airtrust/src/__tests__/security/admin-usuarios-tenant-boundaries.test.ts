@@ -21,6 +21,12 @@ describe('admin usuarios P0 security boundaries', () => {
     );
   });
 
+  it('fails closed when platform access cannot resolve one target company', () => {
+    expect(source).toContain('async function resolveTargetAccess(');
+    expect(source).toContain('AMBIGUOUS_TARGET_TENANT');
+    expect(source).toContain('target.accessed_cross_tenant');
+  });
+
   it('evaluates the final membership after deletion inside the atomic batch', () => {
     const deletion = source.slice(
       source.indexOf("protectedAdminUsuariosRoutes.delete('/:id'"),
