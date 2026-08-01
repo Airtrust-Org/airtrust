@@ -40,12 +40,13 @@ describe('staging Browser Rendering runtime sync', () => {
     expect(workflow).not.toContain('--env production');
   });
 
-  it('preflights a credential against Cloudflare Browser Rendering before installation', () => {
+  it('preflights only a dedicated credential against Cloudflare Browser Rendering', () => {
     expect(workflow).toContain('/browser-rendering/pdf');
     expect(workflow).toContain("head -c 4 \"$pdf\" | grep -q '^%PDF'");
     expect(workflow).toContain('BROWSER_TOKEN_CANONICAL');
     expect(workflow).toContain('BROWSER_TOKEN_ALIAS');
-    expect(workflow).toContain('worker-token-fallback');
+    expect(workflow).not.toContain('worker-token-fallback');
+    expect(workflow).not.toContain('validate_candidate worker');
     expect(workflow).toContain('STAGING_BROWSER_TOKEN_MISSING_OR_UNAUTHORIZED');
   });
 
