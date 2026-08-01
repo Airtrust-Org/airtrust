@@ -24,8 +24,8 @@ env:
   BLOCKED_PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
 
 jobs:
-  synthetic-domain-certificate:
-    name: Synthetic QA Domain + Certificate E2E
+  synthetic-domain-certificate-d1-postconditions:
+    name: Synthetic QA Domain + Certificate D1 Postconditions
     runs-on: ubuntu-latest
     environment: staging
     env:
@@ -182,7 +182,7 @@ jobs:
               fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
               NODE
             else
-              echo "- smoke report unavailable" 
+              echo "- smoke report unavailable"
             fi
             echo "- production action: none"
           } >> "$GITHUB_STEP_SUMMARY"
