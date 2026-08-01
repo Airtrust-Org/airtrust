@@ -33,8 +33,6 @@ jobs:
       QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
-      D1_RESULT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-d1.json
     steps:
       - name: Checkout reviewed main
         uses: actions/checkout@v4
@@ -62,9 +60,14 @@ jobs:
         run: npm ci
 
       - name: Run temporary RBAC cycle and certificate smoke
+        env:
+          SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
         run: node scripts/staging/run-domain-certificate-smoke-with-rbac-cycle.mjs
 
       - name: Verify restored state and persisted certificate evidence read-only
+        env:
+          SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
+          D1_RESULT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-d1.json
         shell: bash
         run: |
           set -euo pipefail
