@@ -126,6 +126,7 @@ describe('GET /qualificacoes/historico RBAC (SQLite Real)', () => {
     );
 
     mockEnv = {
+      ENVIRONMENT: 'test',
       DB: {
         prepare: (query: string) => ({
           all: async () => {
