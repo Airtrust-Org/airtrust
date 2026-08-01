@@ -135,7 +135,7 @@ require_migration_recorded() {
 record_local_migration() {
   local migration_name="$1"
   sqlite3 "$SQLITE_FILE" \
-    "INSERT INTO d1_migrations (name, applied_at) VALUES ('$migration_name', datetime('now'));"
+    "INSERT INTO d1_migrations (name) VALUES ('$migration_name');"
 }
 
 apply_local_migration() {
@@ -162,6 +162,7 @@ apply_local_migration() {
 for table_name in d1_migrations empresas setores qualificacoes_tipos qualificacoes_historico qualificacoes_categorias; do
   require_sqlite_table "$table_name"
 done
+require_sqlite_column "d1_migrations" "name"
 
 printf 'setup:lms:local: ensuring local LMS metadata columns\n'
 ensure_sqlite_column "qualificacoes_tipos" "conteudo_programatico" "TEXT"
