@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
+type MockAuthContext = {
+  set: (key: string, value: unknown) => void;
+};
+
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
+  auth: () => async (c: MockAuthContext, next: () => Promise<void>) => {
     c.set('userId', 99);
     c.set('userRole', 'admin');
     c.set('empresaId', 1);
@@ -16,7 +20,7 @@ vi.mock('../../middleware/tenant', () => ({
 }));
 
 vi.mock('../../middleware/rbac', () => ({
-  requireRole: () => async (_c: any, next: () => Promise<void>) => next(),
+  requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
 vi.mock('../../services/employee-sector-access', () => ({
