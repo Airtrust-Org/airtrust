@@ -39,10 +39,7 @@ test('excludes generated dependency and build directories', () => {
 });
 
 test('resolves explicit, environment and GitHub base refs in priority order', () => {
-  assert.equal(
-    resolveBaseRef({ GITHUB_BASE_REF: 'release' }, 'origin/custom'),
-    'origin/custom',
-  );
+  assert.equal(resolveBaseRef({ GITHUB_BASE_REF: 'release' }, 'origin/custom'), 'origin/custom');
   assert.equal(
     resolveBaseRef(
       { GUARD_LINT_DELTA_BASE_REF: 'origin/develop', GITHUB_BASE_REF: 'main' },
@@ -50,9 +47,6 @@ test('resolves explicit, environment and GitHub base refs in priority order', ()
     ),
     'origin/develop',
   );
-  assert.equal(
-    resolveBaseRef({ GITHUB_BASE_REF: 'release' }, undefined),
-    'origin/release',
-  );
+  assert.equal(resolveBaseRef({ GITHUB_BASE_REF: 'release' }, undefined), 'origin/release');
   assert.equal(resolveBaseRef({}, undefined), 'origin/main');
 });
