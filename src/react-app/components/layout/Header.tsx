@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bell, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/react-app/hooks/useAuth';
@@ -10,6 +10,10 @@ export const Header: React.FC = () => {
   const { user, logout, empresas = [], empresaAtualId = null } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
   const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
   const modulosAtivos = empresaAtual?.modulos_ativos;
 
@@ -36,95 +40,195 @@ export const Header: React.FC = () => {
     window.location.href = '/';
   };
 
+  const handleMenuKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    closeMenu: () => void,
+    triggerRef: React.RefObject<HTMLButtonElement | null>,
+  ) => {
+    const items = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+    );
+    if (items.length === 0) return;
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        items[(currentIndex + 1 + items.length) % items.length]?.focus();
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        items[(currentIndex - 1 + items.length) % items.length]?.focus();
+        break;
+      case 'Home':
+        event.preventDefault();
+        items[0]?.focus();
+        break;
+      case 'End':
+        event.preventDefault();
+        items.at(-1)?.focus();
+        break;
+      case 'Escape':
+        event.preventDefault();
+        closeMenu();
+        triggerRef.current?.focus();
+        break;
+      case 'Tab':
+        closeMenu();
+        break;
+      default:
+        break;
+    }
+  };
+
+  useEffect(() => {
+    if (profileDropdownOpen) {
+      profileMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    }
+  }, [profileDropdownOpen]);
+
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      mobileMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    }
+  }, [mobileMenuOpen]);
+
   return (
     <>
-    <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-slate-200 px-3 sm:px-4 md:px-8 py-0 bg-white shadow-sm">
-      <div className="flex items-center gap-2 sm:gap-4 text-slate-800">
-        {/* Logo */}
-        <div className="w-6 h-6 sm:w-7 sm:h-7 text-primary flex-shrink-0">
-          <svg fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M21.435 15.51a8.318 8.318 0 0 1-3.213 1.834l-7.22-7.22 1.834-3.213a8.318 8.318 0 0 1 8.599 8.599Zm-18.87 2.155a8.318 8.318 0 0 1 8.599-8.599l1.834 3.213-7.22 7.22a8.318 8.318 0 0 1-3.213-1.834ZM12 24a12 12 0 1 1 0-24 12 12 0 0 1 0 24Z"></path>
-          </svg>
-        </div>
-        <h2 className="text-slate-800 text-base sm:text-lg font-bold leading-tight tracking-[-0.015em]">
-          AirTrust
-        </h2>
-      </div>
-
-      {/* Desktop Navigation */}
-      <div className="hidden md:flex flex-1 justify-center items-center gap-2">
-        {navItems.map((item) => (
-          <button
-            key={item.path}
-            onClick={() => navigate(item.path)}
-            className={isActive(item.path) ? 'nav-link-active' : 'nav-link'}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Right side - Icons and Profile */}
-      <div className="flex items-center gap-2 sm:gap-4">
-        <div className="hidden sm:flex gap-2">
-          <button className="flex cursor-pointer items-center justify-center overflow-hidden rounded-full h-9 w-9 sm:h-10 sm:w-10 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
-            <Bell className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => navigate('/configuracoes/certificado')}
-            className="flex cursor-pointer items-center justify-center overflow-hidden rounded-full h-9 w-9 sm:h-10 sm:w-10 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
+      <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-3 py-0 shadow-sm sm:px-4 md:px-8">
+        <div className="flex items-center gap-2 text-slate-800 sm:gap-4">
+          <div className="h-6 w-6 flex-shrink-0 text-primary sm:h-7 sm:w-7">
+            <svg
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path d="M21.435 15.51a8.318 8.318 0 0 1-3.213 1.834l-7.22-7.22 1.834-3.213a8.318 8.318 0 0 1 8.599 8.599Zm-18.87 2.155a8.318 8.318 0 0 1 8.599-8.599l1.834 3.213-7.22 7.22a8.318 8.318 0 0 1-3.213-1.834ZM12 24a12 12 0 1 1 0-24 12 12 0 0 1 0 24Z"></path>
+            </svg>
+          </div>
+          <h2 className="text-base font-bold leading-tight tracking-[-0.015em] text-slate-800 sm:text-lg">
+            AirTrust
+          </h2>
         </div>
 
-        {/* Profile Dropdown */}
-        <div className="relative hidden sm:block">
-          <button
-            onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs sm:text-sm transition-transform hover:scale-105"
-          >
-            {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-          </button>
+        <div className="hidden flex-1 items-center justify-center gap-2 md:flex">
+          {navItems.map((item) => (
+            <button
+              type="button"
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              className={isActive(item.path) ? 'nav-link-active' : 'nav-link'}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
 
-          {profileDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-2 z-50">
-              <div className="px-4 py-2 border-b border-slate-200">
-                <p className="text-sm font-medium text-slate-900">{user?.name || 'Usuário'}</p>
-                <p className="text-xs text-slate-500">{user?.email || 'Email'}</p>
-              </div>
-              <button
-                onClick={() => {
-                  navigate('/configuracoes/certificado');
-                  setProfileDropdownOpen(false);
-                }}
-                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="hidden gap-2 sm:flex">
+            <button
+              type="button"
+              className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 sm:h-10 sm:w-10"
+              aria-label="Notificações"
+              title="Notificações"
+            >
+              <Bell className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/configuracoes/certificado')}
+              className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 sm:h-10 sm:w-10"
+              aria-label="Configurações"
+              title="Configurações"
+            >
+              <Settings className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="relative hidden sm:block">
+            <button
+              ref={profileButtonRef}
+              id="profile-menu-button"
+              type="button"
+              onClick={() => setProfileDropdownOpen((open) => !open)}
+              className="flex aspect-square h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 bg-cover bg-center bg-no-repeat text-xs font-bold text-white transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 sm:h-10 sm:w-10 sm:text-sm"
+              aria-label="Menu do perfil"
+              title="Menu do perfil"
+              aria-expanded={profileDropdownOpen}
+              aria-haspopup="menu"
+              aria-controls="profile-menu"
+            >
+              {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+            </button>
+
+            {profileDropdownOpen && (
+              <div
+                ref={profileMenuRef}
+                id="profile-menu"
+                role="menu"
+                aria-orientation="vertical"
+                aria-labelledby="profile-menu-button"
+                onKeyDown={(event) =>
+                  handleMenuKeyDown(event, () => setProfileDropdownOpen(false), profileButtonRef)
+                }
+                className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-slate-200 bg-white py-2 shadow-lg"
               >
-                <Settings className="w-4 h-4" />
-                Configurações
-              </button>
-              <div className="px-4 py-2 text-xs text-amber-600 bg-amber-50 rounded mb-2">
-                ⚠️ Login desativado (dev mode)
+                <div role="none" className="border-b border-slate-200 px-4 py-2">
+                  <p className="text-sm font-medium text-slate-900">{user?.name || 'Usuário'}</p>
+                  <p className="text-xs text-slate-500">{user?.email || 'Email'}</p>
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    navigate('/configuracoes/certificado');
+                    setProfileDropdownOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  <Settings className="h-4 w-4" aria-hidden="true" />
+                  Configurações
+                </button>
+                <div
+                  role="none"
+                  className="mb-2 rounded bg-amber-50 px-4 py-2 text-xs text-amber-600"
+                >
+                  ⚠️ Login desativado (dev mode)
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-100"
+                >
+                  Reload
+                </button>
               </div>
-              <button
-                onClick={handleLogout}
-                className="w-full text-left px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 flex items-center gap-2"
-              >
-                Reload
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-      </div>
-
-        {/* Mobile Menu Button */}
         <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 transition-colors ml-2"
-          aria-label="Menu"
+          ref={mobileMenuButtonRef}
+          id="mobile-menu-button"
+          type="button"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+          className="ml-2 flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 md:hidden"
+          aria-label="Menu principal"
+          title="Menu principal"
+          aria-expanded={mobileMenuOpen}
+          aria-haspopup="menu"
+          aria-controls="mobile-navigation-menu"
         >
-          <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            className="h-5 w-5 text-slate-700"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
             {mobileMenuOpen ? (
               <path
                 strokeLinecap="round"
@@ -142,23 +246,34 @@ export const Header: React.FC = () => {
             )}
           </svg>
         </button>
-    </header>
+      </header>
 
-    {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <>
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-black/20 z-40 md:hidden" 
-            onClick={() => setMobileMenuOpen(false)}
+          <div
+            className="fixed inset-0 z-40 bg-black/20 md:hidden"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              mobileMenuButtonRef.current?.focus();
+            }}
           />
-          
-          {/* Menu Drawer */}
-          <div className="md:hidden fixed top-[57px] left-0 right-0 bottom-0 bg-white z-40 overflow-y-auto shadow-2xl animate-in slide-in-from-top-4">
-            {/* User Profile Section - Mobile */}
-            <div className="border-b border-slate-200 p-4 bg-gradient-to-br from-blue-50 to-indigo-50">
+          <div
+            ref={mobileMenuRef}
+            id="mobile-navigation-menu"
+            role="menu"
+            aria-orientation="vertical"
+            aria-labelledby="mobile-menu-button"
+            onKeyDown={(event) =>
+              handleMenuKeyDown(event, () => setMobileMenuOpen(false), mobileMenuButtonRef)
+            }
+            className="fixed bottom-0 left-0 right-0 top-[57px] z-40 overflow-y-auto bg-white shadow-2xl animate-in slide-in-from-top-4 md:hidden"
+          >
+            <div
+              role="none"
+              className="border-b border-slate-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4"
+            >
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-base shadow-md">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-base font-bold text-white shadow-md">
                   {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 </div>
                 <div>
@@ -168,16 +283,21 @@ export const Header: React.FC = () => {
               </div>
             </div>
 
-            {/* Navigation Links */}
-            <nav className="flex flex-col gap-1 p-3">
+            <nav
+              role="none"
+              className="flex flex-col gap-1 p-3"
+              aria-label="Navegação principal móvel"
+            >
               {navItems.map((item) => (
                 <button
+                  type="button"
+                  role="menuitem"
                   key={item.path}
                   onClick={() => {
                     navigate(item.path);
                     setMobileMenuOpen(false);
                   }}
-                  className={`text-left px-4 py-3.5 rounded-lg font-medium transition-all ${
+                  className={`rounded-lg px-4 py-3.5 text-left font-medium transition-all ${
                     isActive(item.path)
                       ? 'bg-primary text-white shadow-sm'
                       : 'text-slate-700 hover:bg-slate-100 active:bg-slate-200'
@@ -188,33 +308,35 @@ export const Header: React.FC = () => {
               ))}
             </nav>
 
-            {/* Mobile Actions */}
-            <div className="border-t border-slate-200 p-3 space-y-2">
+            <div role="none" className="space-y-2 border-t border-slate-200 p-3">
               <button
+                type="button"
+                role="menuitem"
                 onClick={() => {
                   navigate('/configuracoes/certificado');
                   setMobileMenuOpen(false);
                 }}
-                className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 active:bg-slate-200 rounded-lg flex items-center gap-3 transition-colors"
+                className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200"
               >
-                <Settings className="w-5 h-5" />
+                <Settings className="h-5 w-5" aria-hidden="true" />
                 Configurações
               </button>
               <button
+                type="button"
+                role="menuitem"
                 onClick={() => {
                   navigate('/configuracoes/certificado');
                   setMobileMenuOpen(false);
                 }}
-                className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 active:bg-slate-200 rounded-lg flex items-center gap-3 transition-colors"
+                className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200"
               >
-                <Bell className="w-5 h-5" />
+                <Bell className="h-5 w-5" aria-hidden="true" />
                 Notificações
               </button>
             </div>
 
-            {/* Dev Mode Warning */}
-            <div className="p-3">
-              <div className="px-3 py-2 text-xs text-amber-600 bg-amber-50 rounded-lg border border-amber-200">
+            <div role="none" className="p-3">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-600">
                 ⚠️ Login desativado (dev mode)
               </div>
             </div>
