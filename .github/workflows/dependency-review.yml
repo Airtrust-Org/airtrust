@@ -30,6 +30,16 @@ jobs:
           cache: npm
       - name: Test dependency delta guard
         run: node --test scripts/__tests__/audit-critical-delta.test.mjs
+      - name: Show canonical Prettier delta
+        run: |
+          npx --yes prettier@3.9.6 --write \
+            .github/dependabot.yml \
+            scripts/__tests__/audit-critical-delta.test.mjs \
+            scripts/ci/audit-critical-delta.mjs
+          git diff -- \
+            .github/dependabot.yml \
+            scripts/__tests__/audit-critical-delta.test.mjs \
+            scripts/ci/audit-critical-delta.mjs
       - name: Reject newly introduced critical vulnerabilities
         run: node scripts/ci/audit-critical-delta.mjs "$BASE_SHA" "$HEAD_SHA"
         env:
