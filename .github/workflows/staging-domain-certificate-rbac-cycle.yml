@@ -1,0 +1,154 @@
+name: Staging Domain Certificate RBAC Cycle
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/staging-domain-certificate-rbac-cycle.yml'
+      - 'scripts/staging/run-domain-certificate-smoke-with-rbac-cycle.mjs'
+
+concurrency:
+  group: staging-domain-certificate-rbac-cycle
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  ALLOWED_STAGING_HOST: airtrust-api-staging.airtrust.workers.dev
+  ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+  ALLOWED_STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+  BLOCKED_PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+
+jobs:
+  staging-rbac-cycle-d1-postconditions:
+    name: Synthetic QA RBAC Cycle + Certificate D1 Postconditions
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout reviewed main
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Assert staging-only targets and credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_ONLY" >&2; exit 1; }
+          [[ -n "$QA_EXAMINER_ADMIN_EMAIL" && -n "$QA_EXAMINER_ADMIN_PASSWORD" ]] || { echo "QA_CREDENTIALS_MISSING" >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo "D1_CREDENTIALS_MISSING" >&2; exit 1; }
+          node - <<'NODE'
+          const url = new URL(process.env.STAGING_API_BASE_URL);
+          if (url.hostname !== process.env.ALLOWED_STAGING_HOST) throw new Error('STAGING_HOST_REJECTED');
+          if (url.hostname === 'api.airtrust.online' || url.hostname.includes('production')) throw new Error('PRODUCTION_HOST_REJECTED');
+          if (process.env.ALLOWED_STAGING_DB_ID === process.env.BLOCKED_PRODUCTION_DB_ID) throw new Error('PRODUCTION_DB_REJECTED');
+          NODE
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run temporary RBAC cycle and certificate smoke
+        env:
+          SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
+        run: node scripts/staging/run-domain-certificate-smoke-with-rbac-cycle.mjs
+
+      - name: Verify restored state and persisted certificate evidence read-only
+        env:
+          SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
+          D1_RESULT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-d1.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
+          const typeId = Number(report?.candidate?.typeId);
+          const historyId = Number(report?.candidate?.historyId);
+          const documentId = Number(report?.certificate?.documentId);
+          if (report?.success !== true) throw new Error('SMOKE_REPORT_NOT_SUCCESSFUL');
+          if (report?.rbacActivation?.restored !== true) throw new Error('RBAC_STATE_NOT_RESTORED');
+          if (report?.rollback?.success !== true) throw new Error('CLASSIFICATION_NOT_ROLLED_BACK');
+          for (const [name, value] of Object.entries({ typeId, historyId, documentId })) {
+            if (!Number.isInteger(value) || value <= 0) throw new Error(`${name.toUpperCase()}_INVALID`);
+          }
+          fs.writeFileSync(
+            process.env.RUNNER_TEMP + '/postcondition-values.json',
+            JSON.stringify({ typeId, historyId, documentId }),
+            { mode: 0o600 },
+          );
+          NODE
+
+          TYPE_ID=$(node -p "require(process.env.RUNNER_TEMP + '/postcondition-values.json').typeId")
+          HISTORY_ID=$(node -p "require(process.env.RUNNER_TEMP + '/postcondition-values.json').historyId")
+          DOCUMENT_ID=$(node -p "require(process.env.RUNNER_TEMP + '/postcondition-values.json').documentId")
+          SQL="SELECT
+            (SELECT dominio_codigo FROM qualificacoes_tipos WHERE id = $TYPE_ID AND deleted_at IS NULL) AS current_domain,
+            (SELECT certificado_arquivo_id FROM qualificacoes_historico WHERE id = $HISTORY_ID AND deleted_at IS NULL) AS linked_document_id,
+            (SELECT COUNT(*) FROM documentos WHERE id = $DOCUMENT_ID AND deleted_at IS NULL) AS document_count;"
+          npx wrangler d1 execute "$ALLOWED_STAGING_DB_NAME" --remote --command "$SQL" --json > "$D1_RESULT_PATH"
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
+          const raw = JSON.parse(fs.readFileSync(process.env.D1_RESULT_PATH, 'utf8'));
+          const row = Array.isArray(raw) ? raw[0]?.results?.[0] : raw?.results?.[0];
+          if (!row) throw new Error('D1_POSTCONDITION_ROW_MISSING');
+          if (row.current_domain !== null) throw new Error(`CLASSIFICATION_ROLLBACK_FAILED:${row.current_domain}`);
+          if (Number(row.linked_document_id) !== Number(report.certificate.documentId)) throw new Error('HISTORY_DOCUMENT_LINK_MISMATCH');
+          if (Number(row.document_count) !== 1) throw new Error('DOCUMENT_ROW_MISSING');
+          console.log(JSON.stringify({ success: true, rbacRestored: true, classificationRolledBack: true, certificateLinked: true }));
+          NODE
+
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-domain-certificate-rbac-cycle-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
+            ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-d1.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  record-incident-result:
+    name: Record RBAC Cycle Result
+    needs: staging-rbac-cycle-d1-postconditions
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Comment incident
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.staging-rbac-cycle-d1-postconditions.result }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/body.md" <<EOF
+          ## Staging synthetic RBAC cycle + certificate smoke
+
+          - run: https://github.com/$REPOSITORY/actions/runs/$RUN_ID
+          - source SHA: \`$SOURCE_SHA\`
+          - result: **$RESULT**
+          - temporary RBAC/classification restoration: enforced by workflow
+          - target: staging synthetic QA only
+          - production action: none
+          EOF
+          gh issue comment 568 --repo "$REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
