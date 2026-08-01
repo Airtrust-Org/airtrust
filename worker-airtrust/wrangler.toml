@@ -84,7 +84,6 @@ ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env staging
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env staging
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env staging
-# EdApp Integration: configurar via wrangler secret put EDAPP_* --env staging
 
 [[env.staging.r2_buckets]]
 binding = "BUCKET"
@@ -127,8 +126,6 @@ ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env production
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env production
 
-# EdApp Integration: configurar via wrangler secret put EDAPP_* --env production
-
 [[env.production.r2_buckets]]
 binding = "BUCKET"
 bucket_name = "airtrust-storage"
@@ -144,12 +141,12 @@ migrations_dir = "./migrations"
 binding = "AI"
 
 # ===== CRON TRIGGERS (PRODUÇÃO) =====
-# EdApp reconciliation: a cada 10 minutos
+# Dispatcher de manutenção: a cada 10 minutos
 # Notificações + FRMS: diariamente às 8h UTC (5h BRT)
 # Backups: diário 3h, semanal domingo 4h, mensal dia 1 às 5h
 [env.production.triggers]
 crons = [
-  "*/10 * * * *",  # EdApp reconciliation fallback
+  "*/10 * * * *",  # Dispatcher de manutenção programada
   "0 8 * * *",      # Notificações diárias + stats + FRMS
   "0 3 * * *",      # Backup diário 3h UTC
   "0 4 * * SUN",    # Backup semanal domingo 4h UTC

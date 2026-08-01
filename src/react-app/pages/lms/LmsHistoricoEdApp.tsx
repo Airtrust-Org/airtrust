@@ -31,7 +31,7 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   },
   PENDENTE_VINCULO: {
     label: 'Pendente Vínculo',
-    className: 'bg-rose-50 text-rose-700 border-rose-200',
+    className: 'bg-rose-50 text-rose-600 border-rose-200',
   },
 };
 
@@ -69,18 +69,22 @@ function formatDatetime(str: string | null | undefined) {
 }
 
 export default function LmsHistoricoEdApp() {
-  const navigate = useNavigate();
   const { isAdmin, isGestor } = usePermissions();
   const canManage = isAdmin || isGestor;
-
-  const [q, setQ] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const LIMIT = 50;
 
   if (!canManage) {
     return <Navigate to="/lms/dashboard" replace />;
   }
+
+  return <LmsHistoricoEdAppContent canManage={canManage} />;
+}
+
+function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
+  const navigate = useNavigate();
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const LIMIT = 50;
 
   const { data: summary } = useLmsEdappLegacySummary(canManage);
   const { data, isLoading } = useLmsHistoricoEdApp({
@@ -105,8 +109,9 @@ export default function LmsHistoricoEdApp() {
     const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `edapp-historico-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `edapp-historico-pagina-${page}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
+    URL.revokeObjectURL(a.href);
   }
 
   function handleSearch(value: string) {
@@ -131,10 +136,11 @@ export default function LmsHistoricoEdApp() {
               <button
                 onClick={exportCsv}
                 disabled={rows.length === 0}
+                title="Exporta somente os registros exibidos na página atual"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 <Download className="h-3.5 w-3.5" />
-                Exportar CSV
+                Exportar página CSV
               </button>
               <button
                 onClick={() => navigate('/lms/dashboard')}
@@ -151,7 +157,6 @@ export default function LmsHistoricoEdApp() {
           <LmsModuleTabs canManage={canManage} />
 
           <div className="space-y-5 p-5 sm:p-6">
-            {/* Resumo stats */}
             {summary && (
               <div className="flex flex-wrap gap-2">
                 <LmsSummaryTag
@@ -197,20 +202,18 @@ export default function LmsHistoricoEdApp() {
               </div>
             )}
 
-            {/* Aviso compliance */}
             <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
               <p className="text-xs text-amber-800 dark:text-amber-300">
                 Esta tela é <strong>somente histórica</strong>. A integração ativa com EdApp foi
-                descontinuada e os registros preservados aqui são imutáveis para evidência de
-                treinamento. Use a aba <strong>Relatórios</strong> para análises operacionais atuais
-                do LMS.
+                descontinuada e os registros permanecem preservados como evidência de treinamento.
+                Eventuais reconciliações devem seguir processo controlado e auditável. Use a aba{' '}
+                <strong>Relatórios</strong> para análises operacionais atuais do LMS.
               </p>
             </div>
 
-            {/* Filtros */}
             <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <div className="relative min-w-[200px] max-w-sm flex-1">
                 <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
@@ -246,8 +249,7 @@ export default function LmsHistoricoEdApp() {
               </p>
             </div>
 
-            {/* Tabela */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
               {isLoading ? (
                 <div className="flex justify-center p-12">
                   <Loader2 className="h-8 w-8 animate-spin text-slate-300 dark:text-slate-600" />
@@ -264,7 +266,7 @@ export default function LmsHistoricoEdApp() {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                       <tr>
                         <th className="px-6 py-3 text-left">Funcionário</th>
                         <th className="px-4 py-3 text-left">Curso EdApp</th>
@@ -278,16 +280,17 @@ export default function LmsHistoricoEdApp() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {rows.map((row: LmsHistoricoEdApp) => (
-                        <tr key={row.id} className="hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/50">
+                        <tr
+                          key={row.id}
+                          className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                        >
                           <td className="px-6 py-3">
                             {row.funcionario_id ? (
                               <button
-                                onClick={() =>
-                                  navigate(`/funcionarios/${row.funcionario_id}/ficha`)
-                                }
-                                className="text-left group"
+                                onClick={() => navigate(`/funcionarios/${row.funcionario_id}/ficha`)}
+                                className="group text-left"
                               >
-                                <p className="font-medium text-slate-900 group-hover:text-primary transition-colors dark:text-slate-100">
+                                <p className="font-medium text-slate-900 transition-colors group-hover:text-primary dark:text-slate-100">
                                   {row.funcionario_nome ?? '—'}
                                 </p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -300,19 +303,21 @@ export default function LmsHistoricoEdApp() {
                                 <p className="font-medium text-rose-700 dark:text-rose-300">
                                   {row.funcionario_nome ?? '—'}
                                 </p>
-                                <p className="text-xs text-rose-400 dark:text-rose-500">Não vinculado</p>
+                                <p className="text-xs text-rose-400 dark:text-rose-500">
+                                  Não vinculado
+                                </p>
                               </div>
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <p className="font-medium text-slate-800 leading-snug dark:text-slate-200">
+                            <p className="font-medium leading-snug text-slate-800 dark:text-slate-200">
                               {row.curso_titulo ?? '—'}
                             </p>
                             {row.curso_categoria && (
                               <p className="text-xs text-slate-400">{row.curso_categoria}</p>
                             )}
                             {row.edapp_course_id && (
-                              <p className="text-xs text-slate-400 font-mono dark:text-slate-500">
+                              <p className="font-mono text-xs text-slate-400 dark:text-slate-500">
                                 ID: {row.edapp_course_id}
                               </p>
                             )}
@@ -326,7 +331,7 @@ export default function LmsHistoricoEdApp() {
                                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                                   {row.progresso_pct}%
                                 </span>
-                                <div className="w-16 bg-slate-200 rounded-full h-1 dark:bg-slate-700">
+                                <div className="h-1 w-16 rounded-full bg-slate-200 dark:bg-slate-700">
                                   <div
                                     className="h-1 rounded-full bg-primary"
                                     style={{ width: `${Math.min(row.progresso_pct, 100)}%` }}
@@ -354,7 +359,7 @@ export default function LmsHistoricoEdApp() {
                               <span className="text-slate-400">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-slate-600 text-xs">
+                          <td className="px-4 py-3 text-xs text-slate-600">
                             {formatDate(row.data_conclusao)}
                             {row.completed_at && row.completed_at !== row.data_conclusao && (
                               <p className="text-slate-400">{formatDatetime(row.completed_at)}</p>
@@ -379,7 +384,6 @@ export default function LmsHistoricoEdApp() {
               )}
             </div>
 
-            {/* Paginação */}
             {pages > 1 && (
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-500 dark:text-slate-400">

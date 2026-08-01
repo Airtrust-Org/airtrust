@@ -10,7 +10,7 @@ import {
   Network,
   BookOpen,
 } from 'lucide-react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import AppLayout from '../components/AppLayout';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
@@ -22,9 +22,9 @@ const Cadastros = lazyWithRetry(
   'ConfiguracoesCadastrosTab',
 );
 const BackupPage = lazyWithRetry(() => import('./Configuracoes/Backup'), 'ConfiguracoesBackupTab');
-const EdAppIntegration = lazyWithRetry(
-  () => import('../components/integracoes/EdAppIntegration'),
-  'ConfiguracoesEdAppIntegrationTab',
+const SigvoosIntegration = lazyWithRetry(
+  () => import('../components/integracoes/SigvoosIntegration'),
+  'ConfiguracoesSigvoosIntegrationTab',
 );
 const GestaoEmpresas = lazyWithRetry(
   () =>
@@ -135,130 +135,130 @@ export default function Configuracoes() {
       <div className="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-200 dark:border-slate-800">
           <div className="flex overflow-x-auto" role="tablist">
-          {canAccessCompanyManagement && (
+            {canAccessCompanyManagement && (
+              <button
+                onClick={() => setActiveTab('empresas')}
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                  activeTab === 'empresas'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Globe className="w-4 h-4" />
+                {t('settings.tab.companies')}
+              </button>
+            )}
+
+            {canManageUsers && (
+              <button
+                onClick={() => setActiveTab('usuarios')}
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                  activeTab === 'usuarios'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                {t('settings.tab.users')}
+              </button>
+            )}
+
             <button
-              onClick={() => setActiveTab('empresas')}
+              onClick={() => setActiveTab('cadastros')}
               className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-                activeTab === 'empresas'
+                activeTab === 'cadastros'
                   ? 'border-primary text-blue-600 dark:text-blue-300'
                   : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
               }`}
             >
-              <Globe className="w-4 h-4" />
-              {t('settings.tab.companies')}
+              <Layers className="w-4 h-4" />
+              {t('settings.tab.registry')}
             </button>
-          )}
 
-          {canManageUsers && (
-            <button
-              onClick={() => setActiveTab('usuarios')}
-              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-                activeTab === 'usuarios'
-                  ? 'border-primary text-blue-600 dark:text-blue-300'
-                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              {t('settings.tab.users')}
-            </button>
-          )}
+            {canManageOperationalSettings && (
+              <button
+                onClick={() => setActiveTab('setores-gestores')}
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                  activeTab === 'setores-gestores'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Network className="w-4 h-4" />
+                Gestores por Setor
+              </button>
+            )}
 
-          <button
-            onClick={() => setActiveTab('cadastros')}
-            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-              activeTab === 'cadastros'
-                ? 'border-primary text-blue-600 dark:text-blue-300'
-                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            {t('settings.tab.registry')}
-          </button>
+            {canManageMatriz && (
+              <button
+                onClick={() => setActiveTab('matriz-treinamento')}
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                  activeTab === 'matriz-treinamento'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <BookOpen className="w-4 h-4" />
+                Matriz de Treinamentos
+              </button>
+            )}
 
-          {canManageOperationalSettings && (
-            <button
-              onClick={() => setActiveTab('setores-gestores')}
-              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-                activeTab === 'setores-gestores'
-                  ? 'border-primary text-blue-600 dark:text-blue-300'
-                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Network className="w-4 h-4" />
-              Gestores por Setor
-            </button>
-          )}
+            {canManageBackup && (
+              <button
+                onClick={() => setActiveTab('backup')}
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                  activeTab === 'backup'
+                    ? 'border-primary bg-slate-50 text-primary font-semibold'
+                    : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <Database className="w-4 h-4" />
+                {t('settings.tab.backup')}
+              </button>
+            )}
 
-          {canManageMatriz && (
-            <button
-              onClick={() => setActiveTab('matriz-treinamento')}
-              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-                activeTab === 'matriz-treinamento'
-                  ? 'border-primary text-blue-600 dark:text-blue-300'
-                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              Matriz de Treinamentos
-            </button>
-          )}
+            {canManageOperationalSettings && (
+              <button
+                onClick={() => setActiveTab('importacao')}
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                  activeTab === 'importacao'
+                    ? 'border-primary bg-slate-50 text-primary font-semibold'
+                    : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                {t('settings.tab.imports')}
+              </button>
+            )}
 
-          {canManageBackup && (
-            <button
-              onClick={() => setActiveTab('backup')}
-              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-                activeTab === 'backup'
-                  ? 'border-primary bg-slate-50 text-primary font-semibold'
-                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-            >
-              <Database className="w-4 h-4" />
-              {t('settings.tab.backup')}
-            </button>
-          )}
+            {canManageOperationalSettings && (
+              <button
+                onClick={() => setActiveTab('integracoes')}
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                  activeTab === 'integracoes'
+                    ? 'border-primary bg-slate-50 text-primary font-semibold'
+                    : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <Plug className="w-4 h-4" />
+                {t('settings.tab.integrations')}
+              </button>
+            )}
 
-          {canManageOperationalSettings && (
-            <button
-              onClick={() => setActiveTab('importacao')}
-              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-                activeTab === 'importacao'
-                  ? 'border-primary bg-slate-50 text-primary font-semibold'
-                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              {t('settings.tab.imports')}
-            </button>
-          )}
-
-          {canManageOperationalSettings && (
-            <button
-              onClick={() => setActiveTab('integracoes')}
-              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-                activeTab === 'integracoes'
-                  ? 'border-primary bg-slate-50 text-primary font-semibold'
-                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-            >
-              <Plug className="w-4 h-4" />
-              {t('settings.tab.integrations')}
-            </button>
-          )}
-
-          {canManageOperationalSettings && (
-            <button
-              onClick={() => setActiveTab('sistema')}
-              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-                activeTab === 'sistema'
-                  ? 'border-primary text-blue-600 dark:text-blue-300'
-                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Settings2 className="w-4 h-4" />
-              {t('settings.tab.system')}
-            </button>
-          )}
-        </div>
+            {canManageOperationalSettings && (
+              <button
+                onClick={() => setActiveTab('sistema')}
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                  activeTab === 'sistema'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Settings2 className="w-4 h-4" />
+                {t('settings.tab.system')}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -301,7 +301,7 @@ export default function Configuracoes() {
       {/* Tab: Integrações */}
       {canManageOperationalSettings && activeTab === 'integracoes' && (
         <Suspense fallback={tabFallback}>
-          <EdAppIntegration />
+          <SigvoosIntegration />
         </Suspense>
       )}
 
