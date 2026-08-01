@@ -78,21 +78,25 @@ export const Calendar: React.FC<CalendarProps> = ({ events, onEventClick, onDate
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={handlePrevMonth}
-              className="p-2 hover:bg-slate-100 rounded-md transition-colors"
+              className="rounded-md p-2 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
               title="Mês anterior"
+              aria-label="Mês anterior"
             >
-              <ChevronLeft size={20} className="text-slate-600" />
+              <ChevronLeft size={20} className="text-slate-600" aria-hidden="true" />
             </button>
             <h2 className="text-lg font-semibold text-slate-800 w-40 text-center">
               {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
             </h2>
             <button
+              type="button"
               onClick={handleNextMonth}
-              className="p-2 hover:bg-slate-100 rounded-md transition-colors"
+              className="rounded-md p-2 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
               title="Próximo mês"
+              aria-label="Próximo mês"
             >
-              <ChevronRight size={20} className="text-slate-600" />
+              <ChevronRight size={20} className="text-slate-600" aria-hidden="true" />
             </button>
           </div>
 
