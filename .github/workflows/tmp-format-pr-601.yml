@@ -1,0 +1,41 @@
+name: Temporary Format PR 601
+
+on:
+  push:
+    branches:
+      - fix/audit-tenant-schema-guard-20260801
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Format exact files
+        run: |
+          npx --yes prettier@3.9.6 --write -- \
+            worker-airtrust/src/__tests__/routes/qualificacoes-historico-rbac-sqlite.test.ts \
+            worker-airtrust/src/middleware/tenant.ts
+
+      - name: Upload formatted files
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-601-formatted-files
+          path: |
+            worker-airtrust/src/__tests__/routes/qualificacoes-historico-rbac-sqlite.test.ts
+            worker-airtrust/src/middleware/tenant.ts
+          if-no-files-found: error
+          retention-days: 1
