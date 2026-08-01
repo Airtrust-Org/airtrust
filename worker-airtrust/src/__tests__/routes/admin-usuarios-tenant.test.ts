@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * BUG-AIRTRUST-002 — Admin Usuarios Tenant Isolation Tests
  *
