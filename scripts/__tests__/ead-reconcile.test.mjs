@@ -68,7 +68,7 @@ function createFixture() {
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('ead-reconcile', () => {
-  it('reconciles only verified empresa 6 EAD records with the legal tenant name, is idempotent, and rolls back exactly', () => {
+  it('reconciles only verified empresa 6 EAD records when the display name is non-abbreviated, is idempotent, and rolls back exactly', () => {
     createFixture();
     runReconciler();
     const initialManifest = JSON.parse(readFileSync(manifest, 'utf8'));
