@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 
 /**
- * Staging-only wrapper that temporarily activates operational-domain RBAC
- * through the official audited admin API when the synthetic QA tenant is
- * ready but still disabled. The original state is restored in finally.
+ * Staging-only wrapper that prepares the synthetic QA tenant, temporarily
+ * activates operational-domain RBAC, runs the certificate smoke, and restores
+ * the original RBAC state in finally.
+ *
+ * Missing domain assignments for the known synthetic QA sectors are a seed
+ * readiness defect, not temporary test data. They are classified once through
+ * the audited admin API and intentionally retained. The qualification-type
+ * override exercised by the delegated smoke remains temporary and is rolled
+ * back there.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -18,6 +24,7 @@ import {
   logout,
   maskEmail,
 } from '../smoke-auth-common.mjs';
+import { planQaSectorClassifications } from './qa-sector-domain-plan.mjs';
 import { runSmoke } from './smoke-operational-domain-certificate.mjs';
 
 const DEFAULT_BASE_URL = 'https://airtrust-api-staging.airtrust.workers.dev';
@@ -56,19 +63,107 @@ function readExistingReport() {
   }
 }
 
-function writeAugmentedReport(report, rbacActivation, error) {
+function writeAugmentedReport(report, rbacActivation, qaSectorBootstrap, error) {
   writeFileSync(
     REPORT_PATH,
     `${JSON.stringify(
       {
         ...report,
         rbacActivation,
-        ...(error ? { error: error instanceof Error ? error.message : String(error), success: false } : {}),
+        qaSectorBootstrap,
+        ...(error
+          ? { error: error instanceof Error ? error.message : String(error), success: false }
+          : {}),
       },
       null,
       2,
     )}\n`,
   );
+}
+
+async function getReadiness(baseUrl, token) {
+  const response = await authJson(baseUrl, token, '/api/admin/operational-domain-rbac/readiness');
+  assert(
+    response.status === 200 && response.json?.success === true,
+    `readiness retornou ${response.status}`,
+  );
+  return readinessSummary(response.json.data);
+}
+
+async function classifySector(baseUrl, token, sector) {
+  const response = await authJson(baseUrl, token, '/api/admin/operational-domain-rbac/classify', {
+    method: 'POST',
+    body: JSON.stringify({
+      resource_type: 'setor',
+      resource_id: sector.id,
+      dominio_codigo: sector.domain,
+    }),
+  });
+  assert(
+    response.status === 200 && response.json?.success === true,
+    `classificação do setor QA ${sector.id} retornou ${response.status}`,
+  );
+}
+
+async function ensureQaSectorReadiness(baseUrl, token, initialReadiness) {
+  const bootstrap = {
+    attempted: false,
+    retained: true,
+    readinessBefore: initialReadiness,
+    classifications: [],
+    readinessAfter: initialReadiness,
+  };
+
+  if (initialReadiness.ready) return bootstrap;
+
+  assert(
+    initialReadiness.setores_sem_dominio > 0 &&
+      initialReadiness.categorias_sem_dominio === 0 &&
+      initialReadiness.gestores_sem_setor === 0 &&
+      initialReadiness.cursos_sem_classificacao === 0 &&
+      initialReadiness.dominios_desconhecidos_em_uso === 0 &&
+      initialReadiness.dominios_inativos_em_uso === 0,
+    `tenant QA possui bloqueios além dos setores sintéticos esperados: ${initialReadiness.bloqueios.join('; ') || 'sem detalhe'}`,
+  );
+
+  const unclassifiedResponse = await authJson(
+    baseUrl,
+    token,
+    '/api/admin/operational-domain-rbac/unclassified',
+  );
+  assert(
+    unclassifiedResponse.status === 200 && unclassifiedResponse.json?.success === true,
+    `unclassified retornou ${unclassifiedResponse.status}`,
+  );
+
+  const data = unclassifiedResponse.json.data || {};
+  const categorias = Array.isArray(data.categorias) ? data.categorias : [];
+  const cursos = Array.isArray(data.cursos) ? data.cursos : [];
+  assert(categorias.length === 0, 'bootstrap QA recusado: existem categorias sem domínio');
+  assert(cursos.length === 0, 'bootstrap QA recusado: existem cursos sem domínio');
+
+  const sectors = planQaSectorClassifications(Array.isArray(data.setores) ? data.setores : []);
+  assert(
+    sectors.length === initialReadiness.setores_sem_dominio,
+    `contagem de setores divergente: readiness=${initialReadiness.setores_sem_dominio}, unclassified=${sectors.length}`,
+  );
+  assert(
+    sectors.length > 0,
+    'readiness indicou setores pendentes, mas unclassified não retornou nenhum',
+  );
+
+  bootstrap.attempted = true;
+  for (const sector of sectors) {
+    await classifySector(baseUrl, token, sector);
+    bootstrap.classifications.push(sector);
+  }
+
+  bootstrap.readinessAfter = await getReadiness(baseUrl, token);
+  assert(
+    bootstrap.readinessAfter.ready,
+    `tenant QA continuou bloqueado após classificar setores sintéticos: ${bootstrap.readinessAfter.bloqueios.join('; ') || 'sem detalhe'}`,
+  );
+  return bootstrap;
 }
 
 async function setRbacState(baseUrl, token, enabled) {
@@ -105,6 +200,13 @@ export async function runWithRbacCycle() {
     restored: false,
     finalEnabled: null,
   };
+  let qaSectorBootstrap = {
+    attempted: false,
+    retained: true,
+    readinessBefore: null,
+    classifications: [],
+    readinessAfter: null,
+  };
 
   let token = null;
   let refreshToken = null;
@@ -119,20 +221,9 @@ export async function runWithRbacCycle() {
     cycle.initialEnabled = initialAccess.enabled === true;
 
     if (!cycle.initialEnabled) {
-      const readinessResponse = await authJson(
-        baseUrl,
-        token,
-        '/api/admin/operational-domain-rbac/readiness',
-      );
-      assert(
-        readinessResponse.status === 200 && readinessResponse.json?.success === true,
-        `readiness retornou ${readinessResponse.status}`,
-      );
-      cycle.readiness = readinessSummary(readinessResponse.json.data);
-      assert(
-        cycle.readiness.ready,
-        `tenant QA não está pronto para ativação temporária: ${cycle.readiness.bloqueios.join('; ') || 'bloqueios não detalhados'}`,
-      );
+      cycle.readiness = await getReadiness(baseUrl, token);
+      qaSectorBootstrap = await ensureQaSectorReadiness(baseUrl, token, cycle.readiness);
+      cycle.readiness = qaSectorBootstrap.readinessAfter;
 
       cycle.activationAttempted = true;
       await setRbacState(baseUrl, token, true);
@@ -153,7 +244,8 @@ export async function runWithRbacCycle() {
         assert(cycle.finalEnabled === false, 'RBAC não voltou ao estado desativado original');
         cycle.restored = true;
       } catch (restoreError) {
-        cycle.restoreError = restoreError instanceof Error ? restoreError.message : String(restoreError);
+        cycle.restoreError =
+          restoreError instanceof Error ? restoreError.message : String(restoreError);
         primaryError = new Error(
           `${primaryError ? `${primaryError instanceof Error ? primaryError.message : String(primaryError)}; ` : ''}RBAC_RESTORE_CRITICAL: ${cycle.restoreError}`,
         );
@@ -171,13 +263,14 @@ export async function runWithRbacCycle() {
       }
     }
 
-    writeAugmentedReport(readExistingReport(), cycle, primaryError);
+    writeAugmentedReport(readExistingReport(), cycle, qaSectorBootstrap, primaryError);
   }
 
   if (primaryError) throw primaryError;
   console.log(
     JSON.stringify({
       success: true,
+      qaSectorBootstrapApplied: qaSectorBootstrap.classifications.length,
       activatedTemporarily: cycle.activatedTemporarily,
       rbacRestored: cycle.restored,
       finalEnabled: cycle.finalEnabled,
