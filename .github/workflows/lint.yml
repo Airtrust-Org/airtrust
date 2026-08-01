@@ -38,14 +38,20 @@ jobs:
         run: node --test scripts/__tests__/lint-format-delta-guard.test.mjs
       - name: Run risk-based test delta guard tests
         run: node --test scripts/__tests__/risk-test-delta-guard.test.mjs
-      - name: Show canonical Prettier diff for characterization tests
+      - name: Format characterization tests canonically
         run: |
-          npx --yes prettier@3.9.6 --write \
+          npx --yes prettier@3.9.6 --write -- \
             worker-airtrust/src/__tests__/routes/treinamentos-planejados-read-contract.test.ts \
             worker-airtrust/src/__tests__/routes/treinamentos-planejados-read-scope.test.ts
-          git diff -- \
-            worker-airtrust/src/__tests__/routes/treinamentos-planejados-read-contract.test.ts \
+      - name: Upload canonical formatted tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-573-prettier-output
+          path: |
+            worker-airtrust/src/__tests__/routes/treinamentos-planejados-read-contract.test.ts
             worker-airtrust/src/__tests__/routes/treinamentos-planejados-read-scope.test.ts
+          if-no-files-found: error
+          retention-days: 1
       - name: Block new ESLint and Prettier violations
         run: node scripts/guard-lint-format-delta.mjs
       - name: Require focused tests for high-risk runtime changes
