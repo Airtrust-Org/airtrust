@@ -131,6 +131,16 @@ jobs:
             (SELECT dominio_codigo FROM qualificacoes_tipos WHERE id = $TYPE_ID AND deleted_at IS NULL) AS current_domain,
             (SELECT certificado_arquivo_id FROM qualificacoes_historico WHERE id = $HISTORY_ID AND deleted_at IS NULL) AS linked_document_id,
             (SELECT COUNT(*) FROM documentos WHERE id = $DOCUMENT_ID AND deleted_at IS NULL) AS document_count,
+            (SELECT operational_domain_rbac_enabled FROM empresas
+              WHERE codigo = 'qa_examiner_training' AND deleted_at IS NULL) AS rbac_enabled,
+            (SELECT COUNT(*) FROM setores s
+              INNER JOIN empresas emp ON emp.id = s.empresa_id
+              WHERE emp.codigo = 'qa_examiner_training'
+                AND emp.deleted_at IS NULL
+                AND ((s.codigo = 'QA-SETOR-EXA' AND s.dominio_codigo = 'OPERACOES')
+                  OR (s.codigo LIKE 'AIRTRUST-QA-FINAL-%-OPS' AND s.dominio_codigo = 'OPERACOES')
+                  OR (s.codigo LIKE 'AIRTRUST-QA-FINAL-%-MNT' AND s.dominio_codigo = 'MANUTENCAO'))
+                AND s.deleted_at IS NULL) AS classified_sector_count,
             (SELECT COUNT(*)
                FROM setores_gestores sg
                INNER JOIN usuarios u ON u.id = sg.usuario_id
@@ -153,6 +163,8 @@ jobs:
           if (row.current_domain !== null) throw new Error(`CLASSIFICATION_ROLLBACK_FAILED:${row.current_domain}`);
           if (Number(row.linked_document_id) !== Number(report.certificate.documentId)) throw new Error('HISTORY_DOCUMENT_LINK_MISMATCH');
           if (Number(row.document_count) !== 1) throw new Error('DOCUMENT_ROW_MISSING');
+          if (Number(row.rbac_enabled) !== 0) throw new Error(`RBAC_RESTORE_FAILED:${row.rbac_enabled}`);
+          if (Number(row.classified_sector_count) !== 3) throw new Error(`QA_SECTOR_BASELINE_INVALID:${row.classified_sector_count}`);
           if (Number(row.qa_admin_grant_count) !== 1) throw new Error('QA_ADMIN_GRANT_D1_MISMATCH');
           console.log(JSON.stringify({ success: true, rbacRestored: true, typeClassificationRolledBack: true, qaSectorClassificationsRetained: true, qaAdminOperationalGrantRetained: true, certificateLinked: true }));
           NODE
@@ -196,7 +208,7 @@ jobs:
           - result: **$RESULT**
           - QA sector classification: audited API, exact synthetic allowlist, retained as seed readiness
           - QA admin operational grant: exact synthetic fixture relation, idempotent and retained
-          - temporary RBAC and qualification-type override restoration: enforced by workflow
+          - temporary RBAC and qualification-type override restoration: enforced by workflow and D1 postconditions
           - target: staging synthetic QA only
           - production action: none
           EOF
