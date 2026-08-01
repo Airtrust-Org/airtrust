@@ -21,7 +21,7 @@ describe('admin usuarios P0 security boundaries', () => {
     );
   });
 
-  it('fails closed when platform access cannot resolve one target company', () => {
+  it('fails closed when platform access cannot resolve an unambiguous target company', () => {
     expect(source).toContain('async function resolveTargetAccess(');
     expect(source).toContain('AMBIGUOUS_TARGET_TENANT');
     expect(source).toContain('target.accessed_cross_tenant');
