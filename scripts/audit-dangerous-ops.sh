@@ -468,7 +468,7 @@ self_protected_pin() {
       echo "2ded4dd62b005f00d0ff9b69a4e2632ef3a9f250226e797535629e5a51bf54e6"
       ;;
     ".github/workflows/apply-schema-change-v2.yml")
-      echo "d46f533b651a9bcda70deb33bb509f84a252cadf0a98cf27e5ce49e28e9cd2f1"
+      echo "21c520eb487e6b9142b3c7508ab5aaaa529652ea01be62b10778bc73803e4b59"
       ;;
     "scripts/apply-migration-production.sh")
       echo "45eec03f36070cdb1fafe8c6afad05cb25e86d171b93e449ce367966291ae995"

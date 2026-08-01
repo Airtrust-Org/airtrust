@@ -13,7 +13,7 @@ describe('deploy-airtrust.yml — production schema hard block', () => {
 
   it('keeps workflow_dispatch but hard-fails legacy migrations', () => {
     expect(workflow).toContain('run_migrations:');
-    expect(workflow).toContain('LEGACY_MIGRATION_RUNNER_DISABLED_USE_SCHEMA_V2');
+    expect(workflow).toContain('scripts/ci/validate-production-deploy-dispatch.mjs');
     expect(workflow).not.toMatch(/wrangler d1 migrations apply/);
   });
 
@@ -39,7 +39,7 @@ describe('apply-schema-change-v2.yml — controlled single-file apply', () => {
 
   it('applies exactly one allowlisted file under worker-airtrust/schema-v2/', () => {
     expect(workflow).toContain('worker-airtrust/schema-v2/');
-    expect(workflow).toContain('change not already applied');
+    expect(workflow).toContain('change is already applied.');
     expect(workflow).not.toMatch(/d1\s+migrations\s+apply/);
   });
 
@@ -147,15 +147,17 @@ describe('qualificacoes_tipos domain override Schema V2 change 0454', () => {
     // ADD COLUMN (e.g. no ALTER ... DROP COLUMN, no ALTER ... RENAME).
     expect(executableStatements).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP)\b/i);
     expect(executableStatements).toMatch(/ALTER TABLE qualificacoes_tipos ADD COLUMN/i);
-    expect(
-      (executableStatements.match(/\bALTER\s+TABLE\b/gi) || []).every((_, i) => i === 0),
-    ).toBe(true);
+    expect((executableStatements.match(/\bALTER\s+TABLE\b/gi) || []).every((_, i) => i === 0)).toBe(
+      true,
+    );
     expect(normalizeSql(sql)).toBe(normalizeSql(stagingSql));
   });
 
   it('the migration comments point at the Schema V2 production path, not the legacy wrapper', () => {
     expect(stagingSql).toContain('Schema V2');
-    expect(stagingSql).toContain('worker-airtrust/schema-v2/changes/0454_qualificacoes_tipos_dominio_override.sql');
+    expect(stagingSql).toContain(
+      'worker-airtrust/schema-v2/changes/0454_qualificacoes_tipos_dominio_override.sql',
+    );
     expect(stagingSql).toContain('qualificacoes-tipos-dominio-override-0454');
     // The old, incorrect pointer to the raw migration-file production
     // wrapper must not remain unqualified — it may still be mentioned to

@@ -35,6 +35,9 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-airtrust-production
   cancel-in-progress: false
@@ -61,46 +64,18 @@ jobs:
     steps:
       - name: Validate production dispatch inputs
         shell: bash
+        env:
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          DISPATCH_DEPLOY_WORKER: ${{ inputs.deploy_worker }}
+          DISPATCH_DEPLOY_PAGES: ${{ inputs.deploy_pages }}
+          DISPATCH_RUN_MIGRATIONS: ${{ inputs.run_migrations }}
+          DISPATCH_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          DISPATCH_REASON: ${{ inputs.reason }}
+          DISPATCH_CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
         run: |
           set -euo pipefail
-          reason="${{ inputs.reason }}"
-
-          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
-            echo "Deploy AirTrust only runs from refs/heads/main. Current ref: ${{ github.ref }}" >&2
-            exit 1
-          fi
-
-          if [[ "${{ inputs.deploy_worker }}" != "true" && "${{ inputs.deploy_pages }}" != "true" ]]; then
-            echo "Select at least one target: deploy_worker=true or deploy_pages=true." >&2
-            exit 1
-          fi
-
-          if [[ "${{ inputs.confirm_production }}" != "${PRODUCTION_CONFIRMATION}" ]]; then
-            echo "confirm_production must be ${PRODUCTION_CONFIRMATION}." >&2
-            exit 1
-          fi
-
-          if [[ -z "${{ inputs.reason }}" ]]; then
-            echo "reason is required." >&2
-            exit 1
-          fi
-
-          if [[ -n "${{ inputs.expected_sha }}" && "${{ inputs.expected_sha }}" != "${{ github.sha }}" ]]; then
-            echo "expected_sha does not match github.sha." >&2
-            echo "expected_sha: ${{ inputs.expected_sha }}" >&2
-            echo "github.sha:   ${{ github.sha }}" >&2
-            exit 1
-          fi
-
-          if [[ "${{ inputs.run_migrations }}" == "true" && "${{ inputs.deploy_worker }}" != "true" ]]; then
-            echo "run_migrations=true requires deploy_worker=true." >&2
-            exit 1
-          fi
-
-          if [[ "${{ inputs.run_migrations }}" == "true" ]]; then
-            echo "LEGACY_MIGRATION_RUNNER_DISABLED_USE_SCHEMA_V2" >&2
-            exit 1
-          fi
+          node scripts/ci/validate-production-deploy-dispatch.mjs
 
       - name: Compute release version
         id: version
@@ -181,13 +156,6 @@ jobs:
 
       - name: Prepare worker config
         shell: bash
-        # Section-aware stamp of the [env.production.vars] APP_VERSION/APP_BUILD_TIME.
-        # The previous inline node used a first-match /m regex over the whole
-        # wrangler.toml, which stamped the *staging* APP_VERSION line (it appears
-        # before production) and left production as "managed-by-script" ->
-        # "unversioned-remote" at runtime. patch-wrangler-env-vars.mjs is
-        # section-scoped and unit-tested (scripts/__tests__/patch-wrangler-env-vars.test.mjs),
-        # the same helper the staging deploy uses.
         run: |
           set -euo pipefail
           node scripts/lib/patch-wrangler-env-vars.mjs \
@@ -201,23 +169,10 @@ jobs:
         id: provenance
         shell: bash
         working-directory: worker-airtrust
-        # Provenance parity with staging: stamps the source SHA/tree, the Worker
-        # bundle SHA-256, and the release manifest SHA-256 into
-        # [env.production.vars] so /api/health and /api/version can surface them
-        # and the hardened post-deploy smoke can require them. Without this the
-        # provenance chain stays "managed-by-script" (== null at runtime) and the
-        # hardened smoke would (correctly) refuse to certify the deploy.
-        #
-        # The pre-deploy release manifest is finalized HERE (workerVersionId=null)
-        # and uploaded before the real deploy so evidence survives a later
-        # deploy/smoke failure.
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          # Unique, never-reused output dir — a fixed/reusable bundle path is
-          # exactly what let a stale tracked bundle answer requests in the
-          # 2026-07-18 incident. Always created fresh and removed by the trap.
           bundle_dir="$(mktemp -d ./.tmp-worker-bundle-XXXXXX)"
           trap 'rm -rf "$bundle_dir"' EXIT
 
@@ -230,17 +185,12 @@ jobs:
           fi
           bundle_sha256="$(shasum -a 256 "$bundle_file" | awk '{print $1}')"
           source_sha="$SOURCE_SHA"
-          # Tree SHA is a distinct git object from the commit SHA. Never substitute
-          # github.sha here — that historical bug made sourceTree == sourceSha.
           source_tree="$(git -C .. rev-parse 'HEAD^{tree}')"
           if [[ "$source_tree" == "$source_sha" ]]; then
             echo "source_tree unexpectedly equals source_sha; refusing ambiguous provenance" >&2
             exit 1
           fi
 
-          # First pass: stamp source SHA/tree + bundle hash. Config hash is
-          # computed over the result of this pass, then stamped in a second,
-          # minimal pass — the manifest never has to include its own hash.
           node ../scripts/lib/patch-wrangler-env-vars.mjs \
             wrangler.production.toml wrangler.production.toml production \
             "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" \
@@ -249,7 +199,6 @@ jobs:
           config_pre_manifest_sha256="$(shasum -a 256 wrangler.production.toml | awk '{print $1}')"
 
           manifest_file="../airtrust-production-release-manifest.json"
-          trap 'rm -rf "$bundle_dir"' EXIT
           FIELDS="$(node -e 'console.log(JSON.stringify({
             repository: "airtrustsystem-alt/airtrust",
             environment: "production",
@@ -293,9 +242,6 @@ jobs:
             echo "- wrangler config final SHA-256: \`$config_final_sha256\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Evidence must exist before the real deploy so a later failure cannot
-      # erase the pre-deploy manifest. Job failure is preserved by later steps
-      # using if: always() without force-success.
       - name: Upload release manifest (pre-deploy)
         if: ${{ success() }}
         uses: actions/upload-artifact@v4
@@ -317,8 +263,6 @@ jobs:
           echo "real_bundle_dir=$real_bundle_dir" >> "$GITHUB_OUTPUT"
           npx --no-install wrangler deploy --env production --config wrangler.production.toml --outdir "$real_bundle_dir" 2>&1 | tee "$RUNNER_TEMP/worker-deploy.log"
           version_id="$(node ../scripts/parse-worker-version-id.mjs "$RUNNER_TEMP/worker-deploy.log")"
-          # Empty string (not a placeholder) when the log line is missing — the
-          # attestation maps empty to null. Never emit "unavailable".
           echo "worker_version_id=${version_id}" >> "$GITHUB_OUTPUT"
 
       - name: Compare real deploy bundle hash
@@ -332,11 +276,6 @@ jobs:
         run: |
           set -euo pipefail
           trap 'rm -rf "$REAL_BUNDLE_DIR"' EXIT
-          # Detection, not prevention: the vars (including the published bundle
-          # hash) are already uploaded by the time this runs. A mismatch means
-          # this deploy's published hash is unverified/wrong and the run must be
-          # treated as suspect (redeploy or roll back), not that the bad value
-          # never shipped.
           real_bundle_file="$(find "$REAL_BUNDLE_DIR" -maxdepth 1 -name '*.js' | sort | head -n1)"
           if [[ -z "$real_bundle_file" ]]; then
             echo "No bundled Worker module captured from the real deploy." >&2
@@ -352,20 +291,6 @@ jobs:
         id: smoke
         if: ${{ steps.bundle_compare.outcome == 'success' }}
         shell: bash
-        # Fails the deploy (exit != 0) unless EVERY provenance/identity/security
-        # invariant holds: /api/health 200, environment=production, APP_VERSION
-        # == expected release (never a placeholder), non-empty workerVersionId,
-        # X-AirTrust-Worker-Version / X-AirTrust-Source-SHA headers present and
-        # matching, bundle + manifest hashes present, protected route -> 401,
-        # maintenance route -> 404 (not 403), and no localhost debug-route leak.
-        # Transient propagation failures (connection refused, timeout,
-        # 502/503/504, stale version/SHA/provenance while the edge catches up)
-        # retry with a fixed backoff, bounded by BOTH SMOKE_MAX_RETRIES and
-        # SMOKE_MAX_TOTAL_MS. Security/identity invariants (wrong 401/404,
-        # wrong environment, persistent SHA mismatch, localhost leak) fail
-        # immediately and are never retried. Logic and negative-path proofs
-        # live in scripts/smoke-production-postdeploy.mjs (unit-tested in
-        # scripts/__tests__/smoke-production-postdeploy.test.mjs).
         env:
           PROD_API_BASE_URL: https://api.airtrust.online
           EXPECTED_APP_VERSION: ${{ needs.guard.outputs.app_version }}
@@ -394,9 +319,6 @@ jobs:
             echo "- UTC: \`${{ needs.guard.outputs.release_utc }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Attestation must survive deploy/smoke failure. Booleans come from real
-      # step outcomes — never hardcoded true. A failed prior step still fails
-      # the job; this step does not mask that.
       - name: Create release attestation
         id: attestation
         if: ${{ always() && steps.provenance.outcome == 'success' }}
@@ -414,8 +336,6 @@ jobs:
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
         run: |
           set -euo pipefail
-          # Recompute tree SHA in this step and refuse any env wiring that
-          # substituted the commit SHA (the bug that set SOURCE_TREE=github.sha).
           tree_sha="$(git rev-parse 'HEAD^{tree}')"
           if [[ -z "${SOURCE_TREE}" || "${SOURCE_TREE}" != "${tree_sha}" ]]; then
             echo "SOURCE_TREE env ('${SOURCE_TREE}') != git rev-parse 'HEAD^{tree}' ('${tree_sha}')" >&2
@@ -525,9 +445,11 @@ jobs:
       - name: Capture pages release metadata
         id: capture
         shell: bash
+        env:
+          COMMAND_OUTPUT: ${{ steps.pages.outputs.command-output }}
         run: |
           set -euo pipefail
-          pages_url="$(printf '%s\n' "${{ steps.pages.outputs.command-output }}" | grep -Eo 'https://[^ ]+' | tail -n1 || true)"
+          pages_url="$(printf '%s\n' "$COMMAND_OUTPUT" | grep -Eo 'https://[^ ]+' | tail -n1 || true)"
           echo "pages_url=${pages_url:-https://airtrust.online/login}" >> "$GITHUB_OUTPUT"
 
       - name: Smoke Pages

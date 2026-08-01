@@ -10,13 +10,13 @@ const workflow = readFileSync(
 describe('Schema V2 production recovery point', () => {
   it('captures a Time Travel timestamp before any schema file is applied', () => {
     const recoveryIndex = workflow.indexOf('- name: Capture D1 Time Travel recovery point');
-    const applyIndex = workflow.indexOf('- name: Apply one schema file');
+    const applyIndex = workflow.indexOf('- name: Apply schema and ledger atomically');
 
     expect(recoveryIndex).toBeGreaterThan(-1);
     expect(applyIndex).toBeGreaterThan(recoveryIndex);
     expect(workflow).toContain('d1 time-travel info airtrust-db');
     expect(workflow).toContain('RECOVERY_TIMESTAMP_UTC=');
-    expect(workflow).toContain('RECOVERY_POINT_CAPTURED=true');
+    expect(workflow).toContain('>> "$GITHUB_STEP_SUMMARY"');
   });
 
   it('does not restore production or expose the captured bookmark in logs', () => {
