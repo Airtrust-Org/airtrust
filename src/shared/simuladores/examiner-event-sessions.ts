@@ -1,19 +1,23 @@
 export {
   getExaminerEventSessionDefinition,
   splitExaminerTechnicalBlocks,
+  type CanonicalExaminerSessionCode,
   type ExaminerEventSessionCode,
+  type LegacyExaminerEventSessionCode,
   type SpecialTechnicalBlockDefinition as ExaminerTechnicalBlockDefinition,
   type SpecialEventSessionDefinition as ExaminerEventSessionDefinition,
 } from './special-event-sessions';
 
-import { getExaminerEventSessionDefinition } from './special-event-sessions';
+import {
+  getExaminerEventSessionDefinition,
+  type ExaminerEventSessionCode,
+} from './special-event-sessions';
 
 export function normalizeExaminerEventSessionCode(
   code: string | null | undefined,
-): 'EXA-E01' | 'EXA-E02' | null {
+): ExaminerEventSessionCode | null {
   const normalized = String(code || '').trim().toUpperCase();
-  if (getExaminerEventSessionDefinition(normalized)) {
-    return normalized as 'EXA-E01' | 'EXA-E02';
-  }
-  return null;
+  return getExaminerEventSessionDefinition(normalized)
+    ? (normalized as ExaminerEventSessionCode)
+    : null;
 }

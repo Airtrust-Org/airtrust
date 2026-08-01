@@ -1,79 +1,51 @@
-# Fichas canônicas de treinamento prático de examinador
+# Fichas canônicas de treinamento prático de examinador — PTO Rev10
 
-Migration ativa: `worker-airtrust/migrations/0425_examiner_event_models_and_assignment_owned_fichas.sql`.
+A matriz canônica PTO Revisão 10 substitui, para novos treinamentos, a estrutura anterior de dois eventos curriculares de 120 minutos por quatro sessões curriculares de 60 minutos.
 
-## Modelos canônicos
+## Modelos canônicos atuais
 
 | Código | Nome canônico | Duração curricular |
-|---|---|---|
-| `EXA-E01` | `Treinamento Prático de Examinador 1/2 — SOP Normal e Condução Inicial / SOP Anormal e Avaliação` | 120 minutos |
-| `EXA-E02` | `Treinamento Prático de Examinador 2/2 — Emergência, Intervenção e Segurança / Atuação Integrada do Examinador` | 120 minutos |
+|---|---|---:|
+| `EXA-01/04` | Treinamento Prático de Examinador 1/4 — Procedimentos Normais e Condução sem Coaching | 60 minutos |
+| `EXA-02/04` | Treinamento Prático de Examinador 2/4 — Procedimentos Não Normais e Avaliação | 60 minutos |
+| `EXA-03/04` | Treinamento Prático de Examinador 3/4 — Emergências, Intervenção e Segurança | 60 minutos |
+| `EXA-04/04` | Treinamento Prático de Examinador 4/4 — Condução Integral do Exame | 60 minutos |
 
-Os códigos `EXA-V01..EXA-V04` permanecem apenas como legado histórico e ficam
-`ativo = 0`. Novos agendamentos compartilhados usam somente `EXA-E01` e
-`EXA-E02`.
+Os modelos `EXA-E01`, `EXA-E02` e `EXA-V01..EXA-V04` permanecem reconhecidos exclusivamente para leitura e preservação do histórico. Não são apagados nem regravados, mas não devem ser selecionados em novos treinamentos após a publicação da matriz PTO Rev10.
 
-## Estrutura operacional
+## Organização dos eventos físicos
 
-- Cada evento físico dura 120 minutos.
-- Cada evento gera exatamente 1 ficha curricular de 120 minutos.
-- A ficha pertence à `atribuicao_curricular_id`, não a um segmento isolado.
-- A carga horária da ficha é a união dos segmentos operacionais ligados à mesma atribuição.
-- O histórico de fichas antigas não é regravado.
+As quatro sessões curriculares podem ser executadas em dois eventos físicos:
 
-## Cabeçalho obrigatório do PDF
+- Evento 1: `EXA-01/04` e `EXA-02/04`;
+- Evento 2: `EXA-03/04` e `EXA-04/04`.
 
-### EXA-E01
+Cada sessão curricular mantém identidade, código, duração e ficha próprios. A associação ao mesmo evento físico não transforma duas sessões de 60 minutos em um único modelo curricular de 120 minutos.
 
-Linha 1:
-`Treinamento Prático de Examinador 1/2`
-
-Linha 2:
-`SOP Normal e Condução Inicial / SOP Anormal e Avaliação`
-
-Linha 3:
-`Duração curricular: 120 minutos`
-
-### EXA-E02
-
-Linha 1:
-`Treinamento Prático de Examinador 2/2`
-
-Linha 2:
-`Emergência, Intervenção e Segurança / Atuação Integrada do Examinador`
-
-Linha 3:
-`Duração curricular: 120 minutos`
-
-## Metadados obrigatórios na ficha/PDF
-
-- código `EXA-E01` ou `EXA-E02`;
-- equipamento utilizado;
-- participante avaliado;
-- instrutor supervisor;
-- duração curricular de 120 minutos.
-
-## Grade técnica
+## Estrutura de cada ficha
 
 Cada ficha mantém exatamente:
 
-- 18 itens técnicos;
+- 18 itens técnicos/funcionais da sessão;
 - 15 NOTECHS canônicos;
 - total de 33 itens.
 
-Os 18 itens técnicos são sempre exibidos em 2 blocos de 9:
+Os 15 NOTECHS aparecem depois dos 18 itens técnicos/funcionais.
 
-### EXA-E01
+## Cabeçalho obrigatório do PDF
 
-- Bloco A — SOP Normal e Condução Inicial
-- Bloco B — SOP Anormal e Avaliação
+A ficha deve exibir:
 
-### EXA-E02
+- o código canônico da sessão (`EXA-01/04` a `EXA-04/04`);
+- o título canônico correspondente;
+- duração curricular de 60 minutos;
+- equipamento utilizado;
+- examinador-aluno;
+- examinador supervisor.
 
-- Bloco A — Emergência, Intervenção e Segurança
-- Bloco B — Atuação Integrada do Examinador
+## Preservação histórica
 
-Os 15 NOTECHS canônicos aparecem depois dos 18 técnicos.
+Fichas, avaliações, assinaturas, agendamentos e qualificações já realizadas com modelos antigos permanecem inalterados. O versionamento cria os modelos novos e desativa apenas as identidades legadas expressamente substituídas pela matriz canônica.
 
 ## Exclusões explícitas
 

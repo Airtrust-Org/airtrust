@@ -150,7 +150,7 @@ describe('fichaModeloPdf', () => {
     expect(dados.carga_horaria_total).toBe('120 minutos');
   });
 
-  it('preenche cabeçalho canônico e duração de 120 minutos para INST-E01', () => {
+  it('preenche cabeçalho canônico e duração de 60 minutos para INST-E01', () => {
     const dados = buildFichaModeloPdfData(
       {
         id: 42,
@@ -168,10 +168,8 @@ describe('fichaModeloPdf', () => {
 
     expect(dados.sessao_codigo).toBe('INST-E01');
     expect(dados.sessao_titulo_linha1).toBe('Treinamento Prático de Instrutor 1/2');
-    expect(dados.sessao_titulo_linha2).toBe(
-      'Procedimentos Normais e Técnica de Instrução / Procedimentos Anormais e Gerenciamento do Erro',
-    );
-    expect(dados.carga_horaria_total).toBe('120 minutos');
+    expect(dados.sessao_titulo_linha2).toBe('Procedimentos Normais e Técnica de Instrução');
+    expect(dados.carga_horaria_total).toBe('60 minutos');
   });
 
   it('nunca confunde Modelo (aeronave) com Simulador (dispositivo), mesmo com valores propositalmente distintos', () => {

@@ -1,4 +1,12 @@
-export type ExaminerEventSessionCode = 'EXA-E01' | 'EXA-E02';
+export type CanonicalExaminerSessionCode =
+  | 'EXA-01/04'
+  | 'EXA-02/04'
+  | 'EXA-03/04'
+  | 'EXA-04/04';
+export type LegacyExaminerEventSessionCode = 'EXA-E01' | 'EXA-E02';
+export type ExaminerEventSessionCode =
+  | CanonicalExaminerSessionCode
+  | LegacyExaminerEventSessionCode;
 export type InstructorEventSessionCode = 'INST-E01' | 'INST-E02';
 export type SpecialEventSessionCode = ExaminerEventSessionCode | InstructorEventSessionCode;
 
@@ -15,10 +23,11 @@ export interface SpecialEventSessionDefinition {
   headerTitle: string;
   headerSubtitle: string;
   fullTitle: string;
-  durationMinutes: 120;
+  durationMinutes: number;
   participantLabel: string;
   supervisorLabel: string;
   hideTripulanteBadge: true;
+  legacy?: boolean;
   technicalBlocks: readonly [SpecialTechnicalBlockDefinition, SpecialTechnicalBlockDefinition?];
 }
 
@@ -26,6 +35,85 @@ const SPECIAL_EVENT_SESSION_DEFINITIONS: Record<
   SpecialEventSessionCode,
   SpecialEventSessionDefinition
 > = {
+  'EXA-01/04': {
+    code: 'EXA-01/04',
+    kind: 'examiner',
+    headerTitle: 'Treinamento Prático de Examinador 1/4',
+    headerSubtitle: 'Procedimentos Normais e Condução sem Coaching',
+    fullTitle:
+      'Treinamento Prático de Examinador 1/4 — Procedimentos Normais e Condução sem Coaching',
+    durationMinutes: 60,
+    participantLabel: 'Examinador-aluno',
+    supervisorLabel: 'Examinador supervisor',
+    hideTripulanteBadge: true,
+    technicalBlocks: [
+      {
+        id: 'A',
+        title: 'Sessão 1 — Procedimentos Normais e Condução sem Coaching',
+        startOrder: 1,
+        endOrder: 18,
+      },
+    ],
+  },
+  'EXA-02/04': {
+    code: 'EXA-02/04',
+    kind: 'examiner',
+    headerTitle: 'Treinamento Prático de Examinador 2/4',
+    headerSubtitle: 'Procedimentos Não Normais e Avaliação',
+    fullTitle:
+      'Treinamento Prático de Examinador 2/4 — Procedimentos Não Normais e Avaliação',
+    durationMinutes: 60,
+    participantLabel: 'Examinador-aluno',
+    supervisorLabel: 'Examinador supervisor',
+    hideTripulanteBadge: true,
+    technicalBlocks: [
+      {
+        id: 'A',
+        title: 'Sessão 2 — Procedimentos Não Normais e Avaliação',
+        startOrder: 1,
+        endOrder: 18,
+      },
+    ],
+  },
+  'EXA-03/04': {
+    code: 'EXA-03/04',
+    kind: 'examiner',
+    headerTitle: 'Treinamento Prático de Examinador 3/4',
+    headerSubtitle: 'Emergências, Intervenção e Segurança',
+    fullTitle:
+      'Treinamento Prático de Examinador 3/4 — Emergências, Intervenção e Segurança',
+    durationMinutes: 60,
+    participantLabel: 'Examinador-aluno',
+    supervisorLabel: 'Examinador supervisor',
+    hideTripulanteBadge: true,
+    technicalBlocks: [
+      {
+        id: 'A',
+        title: 'Sessão 3 — Emergências, Intervenção e Segurança',
+        startOrder: 1,
+        endOrder: 18,
+      },
+    ],
+  },
+  'EXA-04/04': {
+    code: 'EXA-04/04',
+    kind: 'examiner',
+    headerTitle: 'Treinamento Prático de Examinador 4/4',
+    headerSubtitle: 'Condução Integral do Exame',
+    fullTitle: 'Treinamento Prático de Examinador 4/4 — Condução Integral do Exame',
+    durationMinutes: 60,
+    participantLabel: 'Examinador-aluno',
+    supervisorLabel: 'Examinador supervisor',
+    hideTripulanteBadge: true,
+    technicalBlocks: [
+      {
+        id: 'A',
+        title: 'Sessão 4 — Condução Integral do Exame',
+        startOrder: 1,
+        endOrder: 18,
+      },
+    ],
+  },
   'EXA-E01': {
     code: 'EXA-E01',
     kind: 'examiner',
@@ -37,6 +125,7 @@ const SPECIAL_EVENT_SESSION_DEFINITIONS: Record<
     participantLabel: 'Participante',
     supervisorLabel: 'Supervisor',
     hideTripulanteBadge: true,
+    legacy: true,
     technicalBlocks: [
       {
         id: 'A',
@@ -63,6 +152,7 @@ const SPECIAL_EVENT_SESSION_DEFINITIONS: Record<
     participantLabel: 'Participante',
     supervisorLabel: 'Supervisor',
     hideTripulanteBadge: true,
+    legacy: true,
     technicalBlocks: [
       {
         id: 'A',
@@ -82,25 +172,18 @@ const SPECIAL_EVENT_SESSION_DEFINITIONS: Record<
     code: 'INST-E01',
     kind: 'instructor',
     headerTitle: 'Treinamento Prático de Instrutor 1/2',
-    headerSubtitle:
-      'Procedimentos Normais e Técnica de Instrução / Procedimentos Anormais e Gerenciamento do Erro',
+    headerSubtitle: 'Procedimentos Normais e Técnica de Instrução',
     fullTitle:
-      'Treinamento Prático de Instrutor 1/2 — Procedimentos Normais e Técnica de Instrução / Procedimentos Anormais e Gerenciamento do Erro',
-    durationMinutes: 120,
+      'Treinamento Prático de Instrutor 1/2 — Procedimentos Normais e Técnica de Instrução',
+    durationMinutes: 60,
     participantLabel: 'Instrutor-aluno',
     supervisorLabel: 'Instrutor supervisor',
     hideTripulanteBadge: true,
     technicalBlocks: [
       {
         id: 'A',
-        title: 'Módulo 1 — Procedimentos Normais e Técnica de Instrução',
+        title: 'Sessão 1 — Procedimentos Normais e Técnica de Instrução',
         startOrder: 1,
-        endOrder: 9,
-      },
-      {
-        id: 'B',
-        title: 'Módulo 2 — Procedimentos Anormais e Gerenciamento do Erro',
-        startOrder: 10,
         endOrder: 18,
       },
     ],
@@ -109,9 +192,9 @@ const SPECIAL_EVENT_SESSION_DEFINITIONS: Record<
     code: 'INST-E02',
     kind: 'instructor',
     headerTitle: 'Treinamento Prático de Instrutor 2/2',
-    headerSubtitle: 'Emergências, Intervenção e Atuação Integrada do Instrutor',
+    headerSubtitle: 'Procedimentos Anormais, Emergências e Atuação Integrada do Instrutor',
     fullTitle:
-      'Treinamento Prático de Instrutor 2/2 — Emergências, Intervenção e Atuação Integrada do Instrutor',
+      'Treinamento Prático de Instrutor 2/2 — Procedimentos Anormais, Emergências e Atuação Integrada do Instrutor',
     durationMinutes: 120,
     participantLabel: 'Instrutor-aluno',
     supervisorLabel: 'Instrutor supervisor',
@@ -119,7 +202,7 @@ const SPECIAL_EVENT_SESSION_DEFINITIONS: Record<
     technicalBlocks: [
       {
         id: 'A',
-        title: 'Módulo 3 — Emergências, Intervenção e Atuação Integrada',
+        title: 'Sessão 2 — Procedimentos Anormais, Emergências e Atuação Integrada',
         startOrder: 1,
         endOrder: 18,
       },
@@ -130,16 +213,10 @@ const SPECIAL_EVENT_SESSION_DEFINITIONS: Record<
 export function normalizeSpecialEventSessionCode(
   code: string | null | undefined,
 ): SpecialEventSessionCode | null {
-  const normalized = String(code || '').trim().toUpperCase();
-  if (
-    normalized === 'EXA-E01' ||
-    normalized === 'EXA-E02' ||
-    normalized === 'INST-E01' ||
-    normalized === 'INST-E02'
-  ) {
-    return normalized;
-  }
-  return null;
+  const normalized = String(code || '').trim().toUpperCase() as SpecialEventSessionCode;
+  return Object.prototype.hasOwnProperty.call(SPECIAL_EVENT_SESSION_DEFINITIONS, normalized)
+    ? normalized
+    : null;
 }
 
 export function getSpecialEventSessionDefinition(
