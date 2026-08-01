@@ -1,9 +1,10 @@
 import '@testing-library/jest-dom';
+import * as matchers from '@testing-library/jest-dom/matchers';
 import { expect, afterEach, beforeEach, afterAll, beforeAll, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { server } from './mocks/server';
 
-expect.extend(require('@testing-library/jest-dom/matchers'));
+expect.extend(matchers);
 
 const BLOCKED_AIRTRUST_HOSTS = new Set([
   'airtrust.online',
@@ -90,4 +91,7 @@ const localStorageMock = {
   removeItem: vi.fn(),
   clear: vi.fn(),
 };
-global.localStorage = localStorageMock as any;
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: localStorageMock,
+});
