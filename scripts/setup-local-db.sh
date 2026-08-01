@@ -11,7 +11,7 @@
 #   1. Aplica scripts/schema-local.sql somente em banco novo
 #   2. Aplica migrations locais exigidas pelo app atual
 #   3. Registra cada migration somente após execução bem-sucedida
-#   4. Aplica seeds sintéticos versionados via sqlite3
+#   4. Valida contratos mínimos antes de aplicar seeds sintéticos
 # ============================================================
 set -euo pipefail
 
@@ -32,6 +32,7 @@ LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 APP_MIGRATIONS=(
   "$WORKER_DIR/migrations/0289_security_rate_limit_and_token_blocklist.sql"
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
+  "$WORKER_DIR/migrations/0332_create_audit_logs_compatible.sql"
   "$WORKER_DIR/migrations/0335_lms_cursos.sql"
   "$WORKER_DIR/migrations/0336_lms_matriculas.sql"
   "$WORKER_DIR/migrations/0337_lms_progresso_scorm.sql"
@@ -47,6 +48,8 @@ APP_MIGRATIONS=(
   "$WORKER_DIR/migrations/0347_lms_cursos_content_filename.sql"
   "$WORKER_DIR/migrations/0360_matriz_treinamento_funcao.sql"
   "$WORKER_DIR/migrations/0389_platform_roles_support_access_foundation.sql"
+  # 0390_training_class_management.sql é incompatível com o snapshot local
+  # versionado e não pertence ao contrato mínimo deste bootstrap.
   "$WORKER_DIR/migrations/0394_tenant_scope_catalogos_f5.sql"
   "$WORKER_DIR/migrations/0413_notechs_categoria_itens.sql"
   "$WORKER_DIR/migrations/0414_add_manobras_referencias_json.sql"
@@ -137,6 +140,12 @@ migration_recorded() {
   [[ "$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM d1_migrations WHERE name='$migration_name';")" == "1" ]]
 }
 
+require_migration_recorded() {
+  local migration_name="$1"
+  migration_recorded "$migration_name" \
+    || error "Ledger local sem migration aplicada com sucesso: $migration_name"
+}
+
 record_local_migration() {
   local migration_name="$1"
   sqlite3 "$SQLITE_FILE" \
@@ -164,7 +173,7 @@ apply_local_migration() {
   success "Migration aplicada: $migration_name"
 }
 
-for table_name in d1_migrations empresas funcionarios audit_logs manobras manobras_categorias; do
+for table_name in d1_migrations empresas funcionarios manobras manobras_categorias; do
   require_sqlite_table "$table_name"
 done
 
@@ -178,10 +187,19 @@ for migration_file in "${CONTROLE_VOOS_MIGRATIONS[@]}"; do
   apply_local_migration "$migration_file"
 done
 
-for table_name in lms_cursos lms_matriculas lms_progresso_scorm cv_voos notechs_categorias notechs_itens; do
+for migration_file in "${APP_MIGRATIONS[@]}" "${CONTROLE_VOOS_MIGRATIONS[@]}"; do
+  require_migration_recorded "$(basename "$migration_file")"
+done
+
+for table_name in audit_logs lms_cursos lms_matriculas lms_progresso_scorm cv_voos notechs_categorias notechs_itens; do
   require_sqlite_table "$table_name"
 done
-require_sqlite_column manobras referencias_json
+
+for column_name in empresa_id usuario_id acao tabela registro_id created_at; do
+  require_sqlite_column "audit_logs" "$column_name"
+done
+require_sqlite_column "lms_cursos" "conteudo_arquivo_nome"
+require_sqlite_column "manobras" "referencias_json"
 
 info "Aplicando seed sintético de desenvolvimento..."
 if sqlite3 "$SQLITE_FILE" < "$SEED_FILE" 2>/dev/null; then
