@@ -297,6 +297,36 @@ const CLASSIFIABLE_TABLES: Record<
   qualificacao_tipo: { table: 'qualificacoes_tipos', label: 'nome' },
 };
 
+interface ClassificationBatchResultLike {
+  success?: boolean;
+  meta?: {
+    changes?: number;
+    rows_written?: number;
+  };
+}
+
+/**
+ * The audit INSERT is guarded by SQLite changes() = 1 and runs immediately
+ * after the CAS UPDATE in the same D1 batch. Therefore an inserted audit row
+ * is the transaction's durable proof that exactly one resource row changed.
+ *
+ * Real staging run 30707062822 proved that D1 can report meta.changes = 0 for
+ * the first statement even though both the UPDATE and audit INSERT committed.
+ * Using the audit statement avoids returning a false 409 after a committed
+ * classification while preserving true CAS conflicts (both statements write 0).
+ */
+export function classificationBatchHasAuditedWrite(
+  results: readonly ClassificationBatchResultLike[],
+): boolean {
+  const updateResult = results[0];
+  const auditResult = results[1];
+  if (updateResult?.success === false || auditResult?.success === false) return false;
+
+  const auditChanges = Number(auditResult?.meta?.changes ?? 0);
+  const auditRowsWritten = Number(auditResult?.meta?.rows_written ?? 0);
+  return auditChanges === 1 || auditRowsWritten === 1;
+}
+
 // ===== POST /api/admin/operational-domain-rbac/classify =====
 // Admin-only, tenant-scoped, audited way to assign one of the five
 // canonical domains to a setor/categoria/curso — the functional
@@ -330,7 +360,9 @@ router.post('/classify', async (c) => {
 
   const { table } = CLASSIFIABLE_TABLES[resourceType];
   const existing = await db
-    .prepare(`SELECT id, dominio_codigo FROM ${table} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+    .prepare(
+      `SELECT id, dominio_codigo FROM ${table} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
     .bind(resourceId, empresaId)
     .first<{ id: number; dominio_codigo: string | null }>();
 
@@ -341,7 +373,9 @@ router.post('/classify', async (c) => {
   const ua = extrairUsuarioAuditoria(c);
 
   const updateStmt = db
-    .prepare(`UPDATE ${table} SET dominio_codigo = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND dominio_codigo IS ?`)
+    .prepare(
+      `UPDATE ${table} SET dominio_codigo = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND dominio_codigo IS ?`,
+    )
     .bind(dominioCodigo, resourceId, empresaId, existing.dominio_codigo);
 
   const auditStmt = db
@@ -350,7 +384,7 @@ router.post('/classify', async (c) => {
         usuario_id, usuario_nome, acao, tabela_afetada, registro_id,
         dados_antes, dados_depois, ip_address, user_agent, created_at
       ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-      WHERE (SELECT changes()) = 1`
+      WHERE (SELECT changes()) = 1`,
     )
     .bind(
       ua.usuario_id ?? null,
@@ -361,12 +395,12 @@ router.post('/classify', async (c) => {
       JSON.stringify({ dominio_codigo: existing.dominio_codigo }),
       JSON.stringify({ dominio_codigo: dominioCodigo }),
       ua.ip_address ?? null,
-      ua.user_agent ?? null
+      ua.user_agent ?? null,
     );
 
   try {
     const results = await db.batch([updateStmt, auditStmt]);
-    if (!results[0]?.meta || results[0].meta.changes !== 1) {
+    if (!classificationBatchHasAuditedWrite(results)) {
       throw new ApiError('Conflito: recurso modificado ou indisponível', 409, 'CLASSIFY_CONFLICT');
     }
   } catch (error) {
@@ -375,7 +409,7 @@ router.post('/classify', async (c) => {
     throw new ApiError(
       'Falha interna ao aplicar classificação (transação abortada)',
       500,
-      'CLASSIFY_TRANSACTION_FAILED'
+      'CLASSIFY_TRANSACTION_FAILED',
     );
   }
 
@@ -414,7 +448,10 @@ router.post('/activate', async (c) => {
     ...ua,
   });
 
-  return c.json({ success: true, data: { empresa_id: empresaId, operational_domain_rbac_enabled: true } });
+  return c.json({
+    success: true,
+    data: { empresa_id: empresaId, operational_domain_rbac_enabled: true },
+  });
 });
 
 // ===== POST /api/admin/operational-domain-rbac/deactivate =====
@@ -437,7 +474,10 @@ router.post('/deactivate', async (c) => {
     ...ua,
   });
 
-  return c.json({ success: true, data: { empresa_id: empresaId, operational_domain_rbac_enabled: false } });
+  return c.json({
+    success: true,
+    data: { empresa_id: empresaId, operational_domain_rbac_enabled: false },
+  });
 });
 
 export default router;
