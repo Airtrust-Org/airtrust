@@ -3,6 +3,10 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
 
+type MockAuthContext = {
+  set: (key: string, value: unknown) => void;
+};
+
 const { accessState, filterRequestedSetorIdsByAccessMock } = vi.hoisted(() => ({
   accessState: {
     current: {
@@ -20,7 +24,7 @@ const { accessState, filterRequestedSetorIdsByAccessMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
+  auth: () => async (c: MockAuthContext, next: () => Promise<void>) => {
     c.set('userId', 99);
     c.set('userRole', accessState.current.mode === 'all' ? 'admin' : 'manager');
     c.set('empresaId', 1);
@@ -33,7 +37,7 @@ vi.mock('../../middleware/tenant', () => ({
 }));
 
 vi.mock('../../middleware/rbac', () => ({
-  requireRole: () => async (_c: any, next: () => Promise<void>) => next(),
+  requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
 vi.mock('../../services/employee-sector-access', () => ({
