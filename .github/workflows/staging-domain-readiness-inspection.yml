@@ -24,7 +24,6 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      RESULT_PATH: ${{ runner.temp }}/staging-domain-readiness.json
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -46,6 +45,8 @@ jobs:
         run: npm --prefix worker-airtrust ci
 
       - name: Query synthetic readiness read-only
+        env:
+          RESULT_PATH: ${{ runner.temp }}/staging-domain-readiness.json
         shell: bash
         run: |
           set -euo pipefail
