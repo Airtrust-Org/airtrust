@@ -1,0 +1,161 @@
+name: Staging Browser Rendering Runtime Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/staging-browser-rendering-runtime-sync.yml'
+      - 'worker-airtrust/src/__tests__/ops/staging-browser-rendering-runtime-sync.test.ts'
+
+concurrency:
+  group: staging-browser-rendering-runtime-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  STAGING_WORKER_NAME: airtrust-api-staging
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+  ALLOWED_STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+  BLOCKED_PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+  BLOCKED_PRODUCTION_HOST: api.airtrust.online
+
+jobs:
+  synchronize-browser-runtime:
+    name: Validate and synchronize staging Browser Rendering runtime
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout reviewed main
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Assert staging-only target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_ONLY" >&2; exit 1; }
+          [[ "$STAGING_API_BASE_URL" == "https://airtrust-api-staging.airtrust.workers.dev" ]] || { echo "STAGING_HOST_REJECTED" >&2; exit 1; }
+          [[ "$STAGING_API_BASE_URL" != *"$BLOCKED_PRODUCTION_HOST"* ]] || { echo "PRODUCTION_HOST_REJECTED" >&2; exit 1; }
+          [[ "$ALLOWED_STAGING_DB_ID" != "$BLOCKED_PRODUCTION_DB_ID" ]] || { echo "PRODUCTION_DB_REJECTED" >&2; exit 1; }
+          python3 scripts/staging/assert-staging-worker-targets.py \
+            --config worker-airtrust/wrangler.toml \
+            --allowed-worker-name "$STAGING_WORKER_NAME" \
+            --blocked-production-worker-name airtrust-api-production \
+            --allowed-db-name "$ALLOWED_STAGING_DB_NAME" \
+            --allowed-db-id "$ALLOWED_STAGING_DB_ID" \
+            --blocked-production-db-id "$BLOCKED_PRODUCTION_DB_ID" \
+            --allowed-bucket-name airtrust-storage-staging \
+            --blocked-production-bucket-name airtrust-storage \
+            --blocked-production-host "$BLOCKED_PRODUCTION_HOST"
+
+      - name: Install Worker dependencies
+        run: npm ci
+        working-directory: worker-airtrust
+
+      - name: Validate Browser Rendering and synchronize runtime secrets
+        shell: bash
+        env:
+          DEPLOY_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BROWSER_TOKEN_CANONICAL: ${{ secrets.CF_BROWSER_API_TOKEN }}
+          BROWSER_TOKEN_ALIAS: ${{ secrets.CLOUDFLARE_BROWSER_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DEPLOY_API_TOKEN" ]] || { echo "CLOUDFLARE_WORKER_API_TOKEN_MISSING" >&2; exit 1; }
+          [[ -n "$ACCOUNT_ID" ]] || { echo "CLOUDFLARE_ACCOUNT_ID_MISSING" >&2; exit 1; }
+
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          before_json="$tmpdir/version-before.json"
+          selected_token_file="$tmpdir/browser-token"
+          chmod 700 "$tmpdir"
+
+          curl -fsS "$STAGING_API_BASE_URL/api/version" -o "$before_json"
+          before_identity="$(node - "$before_json" <<'NODE'
+          const fs = require('fs');
+          const body = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const data = body?.data;
+          if (body?.success !== true || data?.environment !== 'staging') throw new Error('STAGING_VERSION_INVALID');
+          for (const key of ['version', 'sourceSha', 'sourceTree', 'workerBundleSha256']) {
+            if (!String(data?.[key] || '').trim()) throw new Error(`STAGING_VERSION_${key.toUpperCase()}_MISSING`);
+          }
+          process.stdout.write(JSON.stringify({
+            version: data.version,
+            sourceSha: data.sourceSha,
+            sourceTree: data.sourceTree,
+            workerBundleSha256: data.workerBundleSha256,
+          }));
+          NODE
+          )"
+
+          validate_candidate() {
+            local label="$1"
+            local token="$2"
+            local pdf="$tmpdir/${label}.pdf"
+            local status
+            [[ -n "$token" ]] || return 1
+            status="$(curl -sS -o "$pdf" -w '%{http_code}' \
+              -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/browser-rendering/pdf" \
+              -H "Authorization: Bearer $token" \
+              -H 'Accept: application/pdf' \
+              -H 'Content-Type: application/json' \
+              --data '{"html":"<html><body>AirTrust staging browser readiness</body></html>","pdfOptions":{"format":"a4"}}' || true)"
+            if [[ "$status" == "200" ]] && head -c 4 "$pdf" | grep -q '^%PDF'; then
+              printf '%s' "$token" > "$selected_token_file"
+              chmod 600 "$selected_token_file"
+              echo "Browser Rendering credential accepted: $label"
+              return 0
+            fi
+            echo "Browser Rendering credential rejected: $label (HTTP ${status:-000})" >&2
+            return 1
+          }
+
+          if validate_candidate canonical "$BROWSER_TOKEN_CANONICAL"; then
+            :
+          elif validate_candidate alias "$BROWSER_TOKEN_ALIAS"; then
+            :
+          elif validate_candidate worker-token-fallback "$DEPLOY_API_TOKEN"; then
+            :
+          else
+            echo "STAGING_BROWSER_TOKEN_MISSING_OR_UNAUTHORIZED" >&2
+            exit 1
+          fi
+
+          browser_token="$(cat "$selected_token_file")"
+          export CLOUDFLARE_API_TOKEN="$DEPLOY_API_TOKEN"
+          export CLOUDFLARE_ACCOUNT_ID="$ACCOUNT_ID"
+          printf '%s' "$ACCOUNT_ID" | npx --prefix worker-airtrust wrangler secret put CF_ACCOUNT_ID --env staging --config worker-airtrust/wrangler.toml >/dev/null
+          printf '%s' "$browser_token" | npx --prefix worker-airtrust wrangler secret put CF_BROWSER_API_TOKEN --env staging --config worker-airtrust/wrangler.toml >/dev/null
+          unset browser_token
+
+          after_json="$tmpdir/version-after.json"
+          matched=false
+          for _ in $(seq 1 6); do
+            curl -fsS "$STAGING_API_BASE_URL/api/version" -o "$after_json" || true
+            if node - "$before_identity" "$after_json" <<'NODE'
+          const fs = require('fs');
+          const expected = JSON.parse(process.argv[2]);
+          const body = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+          const data = body?.data;
+          if (body?.success !== true || data?.environment !== 'staging') process.exit(1);
+          for (const [key, value] of Object.entries(expected)) {
+            if (data?.[key] !== value) process.exit(1);
+          }
+          NODE
+            then
+              matched=true
+              break
+            fi
+            sleep 5
+          done
+          [[ "$matched" == "true" ]] || { echo "STAGING_CODE_IDENTITY_CHANGED_AFTER_SECRET_SYNC" >&2; exit 1; }
+          echo "STAGING_BROWSER_RENDERING_RUNTIME_READY"
