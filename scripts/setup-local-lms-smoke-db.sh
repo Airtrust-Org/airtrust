@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# source_reference: scripts/schema-local.sql and the versioned LMS migrations listed below.
+# operational_decision: local-only fail-closed bootstrap; remote D1/R2 targets are prohibited.
+# dry_run_required: false; every wrangler invocation is explicitly constrained by --local.
+# rollback_plan_required: remove worker-airtrust/.wrangler/state and rerun with --reset.
 
 set -euo pipefail
 
@@ -16,11 +20,8 @@ DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
-  # audit_logs: o serviço canônico de conclusão LMS (completeLmsMatricula)
-  # grava a auditoria DENTRO do mesmo db.batch() da conclusão — não é mais um
-  # logAudit() best-effort tolerável sem a tabela. Sem isto, POST
-  # /matriculas/:id/finalizar (e os demais endpoints de conclusão) falham
-  # com "no such table: audit_logs" e o smoke quebra.
+  # completeLmsMatricula grava audit_logs no mesmo db.batch() da conclusão.
+  # O snapshot local não possui essa tabela; ela deve ser criada antes do smoke.
   "$WORKER_DIR/migrations/0332_create_audit_logs_compatible.sql"
   "$WORKER_DIR/migrations/0335_lms_cursos.sql"
   "$WORKER_DIR/migrations/0336_lms_matriculas.sql"
@@ -39,7 +40,8 @@ LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0350_lms_composite_deleted_at_indexes.sql"
   "$WORKER_DIR/migrations/0360_matriz_treinamento_funcao.sql"
   "$WORKER_DIR/migrations/0389_platform_roles_support_access_foundation.sql"
-  "$WORKER_DIR/migrations/0390_training_class_management.sql"
+  # 0390_training_class_management.sql é incompatível com o snapshot local
+  # versionado e não é necessário para o fluxo LMS coberto por este smoke.
   "$WORKER_DIR/migrations/0407_qualificacoes_tipos_setores.sql"
   "$WORKER_DIR/migrations/0408_lms_cursos_setores.sql"
   "$WORKER_DIR/migrations/0409_lms_cursos_setores_backfill.sql"
@@ -58,50 +60,115 @@ command -v sqlite3 >/dev/null 2>&1 || error "sqlite3 not found"
 [[ -f "$SCHEMA_FILE" ]] || error "schema-local.sql not found in $SCRIPT_DIR"
 [[ -f "$SEED_FILE" ]] || error "seed-local-lms-smoke.sql not found in $SCRIPT_DIR"
 
+for migration_file in "${LMS_MIGRATIONS[@]}"; do
+  [[ -f "$migration_file" ]] || error "migration not found: $migration_file"
+done
+
 if [[ "${1:-}" == "--reset" ]] || [[ ! -d "$LOCAL_STATE_DIR" ]]; then
   rm -rf "$LOCAL_STATE_DIR"
 fi
 
 cd "$ROOT_DIR"
 
-printf 'setup:lms:local: applying versioned local schema\n'
-if ! npx wrangler d1 execute "$DB_NAME" \
-  --config "$DEV_CONFIG" \
-  --local \
-  --file "$SCHEMA_FILE" \
-  >/dev/null 2>&1; then
-  printf 'setup:lms:local: schema returned warnings; continuing\n' >&2
+find_local_sqlite() {
+  local database_dir="$LOCAL_STATE_DIR/v3/d1/miniflare-D1DatabaseObject"
+  [[ -d "$database_dir" ]] || return 0
+  find "$database_dir" -name "*.sqlite" ! -name "*-shm" ! -name "*-wal" 2>/dev/null | head -n 1
+}
+
+apply_local_schema() {
+  printf 'setup:lms:local: applying versioned local schema\n'
+  if ! npx wrangler d1 execute "$DB_NAME" \
+    --config "$DEV_CONFIG" \
+    --local \
+    --file "$SCHEMA_FILE"; then
+    error "base schema apply failed; refusing to continue with a partial smoke database"
+  fi
+}
+
+SQLITE_FILE="$(find_local_sqlite)"
+if [[ -n "$SQLITE_FILE" ]]; then
+  printf 'setup:lms:local: existing local database found; base schema not reapplied\n'
+else
+  apply_local_schema
+  SQLITE_FILE="$(find_local_sqlite)"
 fi
 
-SQLITE_FILE="$(find "$LOCAL_STATE_DIR/v3/d1/miniflare-D1DatabaseObject" \
-  -name "*.sqlite" ! -name "*-shm" ! -name "*-wal" 2>/dev/null | head -n 1)"
-
 [[ -n "$SQLITE_FILE" ]] || error "local SQLite file not found after schema apply"
+
+require_sqlite_table() {
+  local table_name="$1"
+  local total
+  total="$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='$table_name';")"
+  [[ "$total" == "1" ]] || error "schema contract missing table $table_name; rerun with --reset"
+}
+
+require_sqlite_column() {
+  local table_name="$1"
+  local column_name="$2"
+  sqlite3 "$SQLITE_FILE" "PRAGMA table_info($table_name);" | awk -F'|' '{ print $2 }' | grep -qx "$column_name" \
+    || error "schema contract missing column $table_name.$column_name; rerun with --reset"
+}
 
 ensure_sqlite_column() {
   local table_name="$1"
   local column_name="$2"
   local column_definition="$3"
 
+  require_sqlite_table "$table_name"
   if ! sqlite3 "$SQLITE_FILE" "PRAGMA table_info($table_name);" | awk -F'|' '{ print $2 }' | grep -qx "$column_name"; then
     sqlite3 "$SQLITE_FILE" "ALTER TABLE $table_name ADD COLUMN $column_name $column_definition;"
   fi
 }
+
+migration_recorded() {
+  local migration_name="$1"
+  [[ "$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM d1_migrations WHERE name='$migration_name';")" == "1" ]]
+}
+
+require_migration_recorded() {
+  local migration_name="$1"
+  migration_recorded "$migration_name" \
+    || error "local migration ledger missing successful migration: $migration_name"
+}
+
+record_local_migration() {
+  local migration_name="$1"
+  sqlite3 "$SQLITE_FILE" \
+    "INSERT INTO d1_migrations (name) VALUES ('$migration_name');"
+}
+
+apply_local_migration() {
+  local migration_file="$1"
+  local migration_name
+  migration_name="$(basename "$migration_file")"
+
+  if migration_recorded "$migration_name"; then
+    printf 'setup:lms:local: migration already recorded: %s\n' "$migration_name"
+    return 0
+  fi
+
+  if ! npx wrangler d1 execute "$DB_NAME" \
+    --config "$DEV_CONFIG" \
+    --local \
+    --file "$migration_file"; then
+    error "migration failed: $migration_name; local ledger was not updated"
+  fi
+
+  record_local_migration "$migration_name"
+  printf 'setup:lms:local: migration applied: %s\n' "$migration_name"
+}
+
+for table_name in d1_migrations empresas setores qualificacoes_tipos qualificacoes_historico qualificacoes_categorias; do
+  require_sqlite_table "$table_name"
+done
+require_sqlite_column "d1_migrations" "name"
 
 printf 'setup:lms:local: ensuring local LMS metadata columns\n'
 ensure_sqlite_column "qualificacoes_tipos" "conteudo_programatico" "TEXT"
 ensure_sqlite_column "qualificacoes_tipos" "carga_horaria_inicial" "REAL"
 ensure_sqlite_column "qualificacoes_tipos" "carga_horaria_recorrente" "REAL"
 ensure_sqlite_column "qualificacoes_historico" "renovacao_de" "INTEGER DEFAULT NULL"
-
-# Migration 0452 (gestor-operational-domain-rbac): the RBAC guard queries
-# empresas.operational_domain_rbac_enabled on every request. empresas
-# already exists at this point (from schema-local.sql), so this can be
-# ensured here; lms_cursos doesn't exist yet until the LMS_MIGRATIONS loop
-# below runs (0335_lms_cursos.sql creates it) — its dominio_codigo column
-# is ensured further down, right after that loop. Default 0 keeps this
-# smoke test's tenant in legacy mode, matching every other tenant that
-# hasn't activated the flag.
 ensure_sqlite_column "empresas" "operational_domain_rbac_enabled" "INTEGER NOT NULL DEFAULT 0"
 ensure_sqlite_column "qualificacoes_categorias" "dominio_codigo" "TEXT"
 ensure_sqlite_column "qualificacoes_categorias" "empresa_id" "INTEGER REFERENCES empresas(id)"
@@ -180,18 +247,25 @@ ensure_sqlite_column "qualificacoes_historico" "categoria_codigo" "TEXT"
 
 printf 'setup:lms:local: applying LMS migrations locally\n'
 for migration_file in "${LMS_MIGRATIONS[@]}"; do
-  [[ -f "$migration_file" ]] || error "migration not found: $migration_file"
-  if ! npx wrangler d1 execute "$DB_NAME" \
-    --config "$DEV_CONFIG" \
-    --local \
-    --file "$migration_file" \
-    >/dev/null 2>&1; then
-    printf 'setup:lms:local: migration returned warnings: %s\n' "$(basename "$migration_file")" >&2
-  fi
+  apply_local_migration "$migration_file"
+done
+
+for migration_file in "${LMS_MIGRATIONS[@]}"; do
+  require_migration_recorded "$(basename "$migration_file")"
+done
+
+for table_name in audit_logs lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores lms_cursos_setores; do
+  require_sqlite_table "$table_name"
+done
+
+for column_name in empresa_id usuario_id acao tabela registro_id created_at; do
+  require_sqlite_column "audit_logs" "$column_name"
 done
 
 ensure_sqlite_column "lms_cursos" "formato_id" "INTEGER REFERENCES qualificacoes_formatos(id)"
 ensure_sqlite_column "lms_cursos" "dominio_codigo" "TEXT"
+require_sqlite_column "lms_cursos" "conteudo_arquivo_nome"
+require_sqlite_column "lms_matriculas" "ultimo_slide"
 
 printf 'setup:lms:local: applying synthetic LMS smoke seed\n'
 sqlite3 "$SQLITE_FILE" < "$SEED_FILE"
