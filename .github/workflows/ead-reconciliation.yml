@@ -101,7 +101,7 @@ jobs:
 
       - name: Record backup checksum
         run: |
-          node -e "const fs=require('fs'); fs.writeFileSync('backup-${{ inputs.environment }}.json', JSON.stringify({environment:'${{ inputs.environment }}', database:'$DB_NAME', backup_file:'$BACKUP_FILE', sha256:'$BACKUP_SHA'}, null, 2) + '\n')"
+          node -e "const fs=require('fs'); fs.writeFileSync('backup-${{ inputs.environment }}.json', JSON.stringify({environment:'${{ inputs.environment }}', database:'$DB_NAME', backup_file:'$BACKUP_FILE', sha256:'$BACKUP_SHA'}, null, 2) + '\\n')"
 
       - name: Create temp SQLite from backup
         run: |
