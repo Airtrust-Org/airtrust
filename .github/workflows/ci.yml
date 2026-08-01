@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -8,31 +10,120 @@ permissions:
   contents: read
 
 jobs:
-  repair-tenant-fixture:
-    if: github.head_ref == 'fix/audit-tenant-schema-guard-20260801'
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    env:
+      VITE_API_URL: http://127.0.0.1:8787
     steps:
-      - name: Checkout branch
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          ref: fix/audit-tenant-schema-guard-20260801
-      - name: Commit exact fixture repair
-        shell: bash
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: GitHub Actions context guard
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('worker-airtrust/src/__tests__/routes/qualificacoes-historico-rbac-sqlite.test.ts')
-          source = path.read_text()
-          old = "    mockEnv = {\n      DB: {"
-          new = "    mockEnv = {\n      ENVIRONMENT: 'test',\n      DB: {"
-          if old not in source:
-              raise SystemExit('fixture already repaired or marker missing')
-          path.write_text(source.replace(old, new, 1))
-          PY
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add worker-airtrust/src/__tests__/routes/qualificacoes-historico-rbac-sqlite.test.ts
-          git commit -m "test(security): declare local tenant fixture environment"
-          git push origin HEAD:fix/audit-tenant-schema-guard-20260801
+          node scripts/ci/check-github-workflow-contexts.mjs
+          node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
+
+      - name: Install
+        run: npm ci
+
+      - name: URL guard
+        run: npm run lint:api-base
+        env:
+          CI: true
+          VITE_API_URL: http://127.0.0.1:8787
+
+      - name: Build
+        run: npm run build
+
+  worker-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: cd worker-airtrust && npm ci
+
+      - name: Worker typecheck
+        run: cd worker-airtrust && npx tsc --noEmit
+
+      - name: Worker unit tests
+        run: cd worker-airtrust && npx vitest run
+
+  lms-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: Install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y sqlite3
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: cd worker-airtrust && npm ci
+
+      - name: Write local dev vars
+        run: |
+          JWT_SECRET="$(openssl rand -hex 32)"
+          cat > worker-airtrust/.dev.vars <<EOF
+          JWT_SECRET=$JWT_SECRET
+          EOF
+
+      - name: Setup local database
+        run: npm run setup:lms:local:reset
+
+      - name: Run integrity guardrails
+        run: npm run integrity:ci
+
+      - name: Start local worker
+        run: |
+          npm run dev:worker:local > /tmp/airtrust-worker.log 2>&1 &
+          echo $! > /tmp/airtrust-worker.pid
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8787/api/health >/dev/null; then
+              echo "Local worker ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/airtrust-worker.log
+          exit 1
+
+      - name: Run LMS smoke
+        run: npm run smoke:lms:local
+
+      - name: Worker log on failure
+        if: failure()
+        run: cat /tmp/airtrust-worker.log || true
+
+      - name: Stop local worker
+        if: always()
+        run: |
+          if [ -f /tmp/airtrust-worker.pid ]; then
+            kill "$(cat /tmp/airtrust-worker.pid)" || true
+          fi
+          rm -f worker-airtrust/.dev.vars
