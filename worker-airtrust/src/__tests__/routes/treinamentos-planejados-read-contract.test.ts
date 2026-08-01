@@ -315,7 +315,13 @@ describe('treinamentos planejados consolidated read contract', () => {
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
-      data: { items: Array<{ source: string; data_prevista: string; hora_inicio: string | null }> };
+      data: {
+        items: Array<{
+          source: string;
+          data_prevista: string;
+          hora_inicio: string | null;
+        }>;
+      };
     };
 
     expect(body.data.items.map((item) => item.source)).toEqual([
