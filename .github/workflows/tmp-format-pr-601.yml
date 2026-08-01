@@ -1,15 +1,15 @@
 name: Temporary Format PR 601
 
 on:
-  push:
-    branches:
-      - fix/audit-tenant-schema-guard-20260801
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
   format:
+    if: github.head_ref == 'fix/audit-tenant-schema-guard-20260801'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
