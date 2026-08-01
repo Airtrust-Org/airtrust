@@ -91,6 +91,7 @@ jobs:
           JWT_SECRET="$(openssl rand -hex 32)"
           cat > worker-airtrust/.dev.vars <<EOF
           JWT_SECRET=$JWT_SECRET
+          ENVIRONMENT=development
           EOF
 
       - name: Setup local database
