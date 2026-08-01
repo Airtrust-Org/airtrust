@@ -1,321 +1,134 @@
-# 🚀 CI/CD - Deploy Automático
+# AirTrust — CI/CD e operação de releases
 
-**Data de Implementação:** 21/10/2025  
-**Status:** ✅ Ativo
+**Status:** documento operacional vigente  
+**Repositório oficial:** `airtrustsystem-alt/airtrust`  
+**Branch oficial:** `main`  
+**Atualizado em:** 2026-08-01
 
----
+> O código e os workflows versionados no SHA executado, as proteções da branch, os GitHub Environments e o `CLAUDE.md` prevalecem sobre este resumo. Esta página não autoriza merge, migration, escrita em D1/R2 ou deploy.
 
-## 📋 Como Funciona
+## 1. Fonte de verdade e fluxo de mudança
 
-A cada `git push` na branch `main`:
+- `origin/main` é a fonte oficial do sistema.
+- Toda alteração deve ser preparada em branch própria e integrada por pull request.
+- Não editar nem publicar diretamente a partir de uma cópia local desatualizada.
+- Depois que a `main` avançar, atualizar a branch, revisar semanticamente o delta recebido e repetir os testes proporcionais.
+- O HEAD revisado deve ser o mesmo HEAD validado pela CI.
+- Um check verde isolado, uma PR aprovada ou um merge não equivalem a release concluída.
 
-1. ✅ **Testes** - Roda testes automatizados
-2. ✅ **Build** - Compila o projeto
-3. ✅ **Deploy Worker** - Atualiza backend na Cloudflare
-4. ✅ **Validação** - Testa endpoints em produção
-5. ✅ **Notificação** - Informa resultado no GitHub
+## 2. Validação de pull request
 
-**Tempo total:** ~5 minutos
+Os checks efetivos são definidos por `.github/workflows/` e pelas regras de proteção da `main`. Antes do merge:
 
----
+1. todos os checks obrigatórios devem estar concluídos e verdes;
+2. nenhuma thread bloqueante pode permanecer aberta;
+3. o delta deve ter sido revisado no HEAD atual;
+4. conflitos devem ser resolvidos semanticamente, sem restaurar código antigo;
+5. testes focados e suítes afetadas devem ser repetidos após rebase ou correção;
+6. mudanças de alto risco devem comprovar isolamento tenant, RBAC, integridade de dados e rollback aplicável.
 
-## 🔧 Workflows
-
-### 1. Deploy Automático
-**Arquivo:** `.github/workflows/deploy.yml`  
-**Trigger:** Push na branch `main`  
-**Jobs:**
-- 🧪 Test & Build
-- 🔧 Deploy Worker
-- ✅ Validate Deployment
-
-### 2. Validação de PR
-**Arquivo:** `.github/workflows/pr-check.yml`  
-**Trigger:** Abertura/atualização de Pull Request  
-**Jobs:**
-- 🧪 Check PR (lint + build)
-
----
-
-## 🔐 Secrets Necessários
-
-Configure em: `https://github.com/fp-daumas/airtrust-v1/settings/secrets/actions`
-
-### CLOUDFLARE_API_TOKEN
-- **Descrição:** Token de API da Cloudflare
-- **Como obter:**
-  1. Acesse: https://dash.cloudflare.com/profile/api-tokens
-  2. Clique em "Create Token"
-  3. Use template "Edit Cloudflare Workers"
-  4. Adicione permissões para D1 e Pages
-  5. Copie o token gerado
-
-### CLOUDFLARE_ACCOUNT_ID
-- **Valor:** `4dca4e5fddc6a351651dd224f456586f`
-- **Descrição:** ID da conta Cloudflare
-
----
-
-## 🌐 URLs de Produção
-
-### Backend (Worker)
-- **URL:** https://0199d03e-fe13-77d7-a6e7-7d94d446894b.airtrust.workers.dev
-- **Health Check:** `/api/v2/health`
-- **Deploy:** Automático via GitHub Actions
-
-### Frontend (Pages)
-- **URL:** https://main.airtrust.pages.dev
-- **Deploy:** Automático via Cloudflare Pages
-
-### Monitoramento
-- **GitHub Actions:** https://github.com/fp-daumas/airtrust-v1/actions
-- **Cloudflare Dashboard:** https://dash.cloudflare.com
-
----
-
-## ⏱️ Tempo de Deploy
-
-| Etapa | Tempo | Descrição |
-|-------|-------|-----------|
-| Checkout | ~10s | Clone do repositório |
-| Install | ~30s | Instalação de dependências |
-| Lint | ~20s | Verificação de código |
-| Tests | ~30s | Testes automatizados |
-| Build | ~60s | Compilação do projeto |
-| Deploy | ~90s | Upload para Cloudflare |
-| Validate | ~20s | Testes de produção |
-| **TOTAL** | **~5min** | Tempo total do pipeline |
-
----
-
-## 🚀 Como Usar
-
-### Deploy Automático
+Comandos locais usuais, conforme o escopo:
 
 ```bash
-# 1. Fazer alterações no código
-git add .
-git commit -m "feat: nova funcionalidade"
-
-# 2. Push (triggera deploy automático!)
-git push origin main
-
-# 3. Acompanhar em:
-# https://github.com/fp-daumas/airtrust-v1/actions
+npm ci
+npm run typecheck
+npm run typecheck:worker
+npm run lint
+npm run test:run
+npm run test:worker
+npm run build
 ```
 
-### Deploy Manual
+A existência desses comandos não substitui os checks exigidos pelo GitHub.
 
-```bash
-# Trigger manual via GitHub Actions
-# Acesse: Actions → Deploy AirTrust → Run workflow
-```
+## 3. Staging
 
-### Criar Pull Request
+O caminho oficial de publicação controlada é o workflow:
 
-```bash
-# 1. Criar branch
-git checkout -b feature/nova-funcionalidade
+- `.github/workflows/deploy-staging.yml` — **Deploy Staging (Official)**.
 
-# 2. Fazer alterações
-git add .
-git commit -m "feat: adicionar funcionalidade X"
+O contrato exato de inputs, permissões, targets e validações é o arquivo versionado no SHA executado. Em especial:
 
-# 3. Push
-git push origin feature/nova-funcionalidade
+- a execução deve apontar para uma PR aberta e para o SHA exato revisado;
+- Worker, frontend, migrations e smokes são alvos explícitos e independentes;
+- o workflow deve permanecer fail-closed para banco e host de produção;
+- migrations de staging só podem usar arquivos allowlisted e revisados;
+- qualquer escrita exige preflight, ponto de recuperação aplicável, ledger e pós-condições;
+- o resultado deve registrar run ID, SHA, versão publicada e evidência funcional.
 
-# 4. Criar PR no GitHub
-# Validação automática será executada
-```
+Não repetir migration já aplicada. Uma reexecução deve confirmar ledger e pós-condições sem criar nova escrita indevida.
 
----
+## 4. Produção
 
-## ❌ Em Caso de Falha
+Os caminhos oficiais de produção são separados:
 
-### Workflow Falhou
+- `.github/workflows/apply-schema-change-v2.yml` — **Apply Schema Change V2**, para mudanças governadas de schema;
+- `.github/workflows/deploy-airtrust.yml` — **Deploy AirTrust**, para Worker e Pages.
 
-1. **Verificar logs:**
-   - Acesse: https://github.com/fp-daumas/airtrust-v1/actions
-   - Clique no workflow que falhou
-   - Veja os logs de cada job
+Nunca tratar `git push main` como deploy de produção. A publicação depende de dispatch explícito, SHA esperado, confirmação, GitHub Environment e demais gates do workflow.
 
-2. **Causas comuns:**
-   - ❌ Erro de build (código com erro)
-   - ❌ Testes falhando
-   - ❌ Secrets não configurados
-   - ❌ API da Cloudflare indisponível
+Antes de qualquer ação de produção, confirmar:
 
-3. **Correção:**
-   - Corrigir o problema localmente
-   - Fazer novo commit
-   - Push novamente (triggera novo deploy)
+- SHA exato autorizado e CI verde;
+- branch e repositório oficiais;
+- backup ou ponto D1 Time Travel quando aplicável;
+- baseline, change ID, hashes, plano e ledger para Schema V2;
+- rollback ou neutralização documentada;
+- ausência de migration legada não governada;
+- Worker, API e UI publicados no SHA esperado;
+- health, version, provenance e smoke funcional;
+- validação do caso real, dos artefatos e dos dados relacionados;
+- ausência de regressão relevante.
 
-### Rollback
+Não executar SQL manual em produção quando houver workflow, endpoint ou executor governado para a operação.
 
-Se o deploy causou problemas:
+## 5. Dados, migrations e credenciais
 
-```bash
-# 1. Reverter commit
-git revert HEAD
-git push origin main
+- Produção contém dados reais e deve ser tratada como ambiente regulado.
+- Nunca incluir tokens, secrets, IDs internos sensíveis ou instruções de obtenção de credenciais em documentação pública.
+- Credenciais devem permanecer nos GitHub Environments ou secrets exigidos pelos workflows.
+- Falta de secret, divergência de SHA, falha de backup ou target incorreto deve interromper a execução de forma fail-closed.
+- Migration não autorizada deve permanecer não executada; não criar atalho manual para contornar o gate.
+- Um arquivo marcado como não aplicável à produção não pode ser liberado por flag de runtime.
 
-# 2. Ou fazer rollback manual
-npm run deploy  # Deploy da versão anterior
-```
+## 6. Falhas, rollback e recuperação
 
----
+Diante de falha:
 
-## 📊 Monitoramento
+1. identificar o workflow, job e step exatos;
+2. confirmar se houve escrita em banco, publicação ou alteração de artefato;
+3. não repetir a execução com os mesmos inputs incorretos;
+4. corrigir a causa mínima no repositório;
+5. executar primeiro o teste que reproduz a falha e depois a suíte afetada;
+6. executar uma nova CI completa somente quando necessário;
+7. usar o caminho oficial de rollback ou recuperação;
+8. registrar SHA, run ID, impacto, restauração e validação final.
 
-### GitHub Actions
+Para código, o rollback deve usar o mecanismo oficial de release ou um novo commit revisado. Para D1, usar o ponto de recuperação e o procedimento aprovado do change correspondente. `npm run deploy` não é um atalho autorizado de rollback de produção.
 
-- **URL:** https://github.com/fp-daumas/airtrust-v1/actions
-- **Badge:** ![Deploy Status](https://github.com/fp-daumas/airtrust-v1/actions/workflows/deploy.yml/badge.svg)
+## 7. Ordem de precedência operacional
 
-### Cloudflare
+Use, nesta ordem:
 
-- **Workers:** https://dash.cloudflare.com/workers
-- **Pages:** https://dash.cloudflare.com/pages
-- **Analytics:** Disponível no dashboard
+1. workflow versionado no SHA que será executado;
+2. branch protections e GitHub Environment aplicáveis;
+3. `CLAUDE.md` e contratos de release/schema do repositório;
+4. issue ou PR operacional ativo;
+5. esta página.
 
-### Health Checks
+Links e instruções referentes ao antigo repositório `fp-daumas/airtrust-v1`, ao workflow inexistente `.github/workflows/deploy.yml`, a deploy automático por push, a endpoints antigos ou a desativação informal da CI são obsoletos e não devem ser usados.
 
-```bash
-# Worker
-curl https://0199d03e-fe13-77d7-a6e7-7d94d446894b.airtrust.workers.dev/api/v2/health
+## 8. Critério de encerramento
 
-# Resposta esperada:
-# {"status":"ok","timestamp":"2025-10-21T22:10:00.000Z"}
-```
+Uma frente operacional só termina quando:
 
----
+- a causa foi corrigida;
+- o código foi integrado na `main` correta;
+- migrations necessárias foram aplicadas pelo mecanismo oficial;
+- o ambiente correto foi publicado;
+- versão e proveniência foram confirmadas;
+- o caso real foi validado;
+- artefatos e dados relacionados foram verificados;
+- não houve regressão relevante.
 
-## 🔧 Manutenção
-
-### Atualizar Workflow
-
-```bash
-# Editar workflow
-nano .github/workflows/deploy.yml
-
-# Commit e push
-git add .github/workflows/deploy.yml
-git commit -m "chore: atualizar workflow CI/CD"
-git push origin main
-```
-
-### Adicionar Novo Job
-
-```yaml
-new-job:
-  name: 🆕 New Job
-  needs: test-and-build
-  runs-on: ubuntu-latest
-  steps:
-    - name: Do something
-      run: echo "Hello!"
-```
-
-### Desabilitar CI/CD
-
-```bash
-# Renomear workflows
-mv .github/workflows/deploy.yml .github/workflows/deploy.yml.disabled
-mv .github/workflows/pr-check.yml .github/workflows/pr-check.yml.disabled
-
-# Commit
-git add .github/workflows/
-git commit -m "chore: desabilitar CI/CD temporariamente"
-git push origin main
-```
-
----
-
-## 📝 Boas Práticas
-
-### Commits
-
-```bash
-# Use conventional commits
-feat: nova funcionalidade
-fix: correção de bug
-docs: atualização de documentação
-chore: tarefas de manutenção
-test: adicionar testes
-refactor: refatoração de código
-```
-
-### Pull Requests
-
-1. ✅ Sempre criar PR para mudanças importantes
-2. ✅ Aguardar validação automática passar
-3. ✅ Revisar código antes de merge
-4. ✅ Merge apenas se CI passar
-
-### Deploy
-
-1. ✅ Testar localmente antes de push
-2. ✅ Verificar logs do CI/CD
-3. ✅ Monitorar produção após deploy
-4. ✅ Ter plano de rollback pronto
-
----
-
-## 🎯 Próximas Melhorias
-
-### Planejado
-
-- [ ] Adicionar testes E2E
-- [ ] Implementar code coverage
-- [ ] Deploy staging automático
-- [ ] Notificações no Slack/Discord
-- [ ] Análise de segurança (Snyk)
-- [ ] Performance monitoring
-- [ ] Automated rollback
-
-### Em Consideração
-
-- [ ] Deploy preview para PRs
-- [ ] Testes de carga
-- [ ] Monitoramento de custos
-- [ ] Backup automático antes de deploy
-
----
-
-## 📚 Recursos
-
-### Documentação
-
-- **GitHub Actions:** https://docs.github.com/actions
-- **Cloudflare Workers:** https://developers.cloudflare.com/workers/
-- **Wrangler:** https://developers.cloudflare.com/workers/wrangler/
-
-### Suporte
-
-- **Issues:** https://github.com/fp-daumas/airtrust-v1/issues
-- **Discussions:** https://github.com/fp-daumas/airtrust-v1/discussions
-
----
-
-## ✅ Checklist de Configuração
-
-### Inicial
-- [x] Criar pasta `.github/workflows/`
-- [x] Criar `deploy.yml`
-- [x] Criar `pr-check.yml`
-- [ ] Configurar `CLOUDFLARE_API_TOKEN`
-- [ ] Configurar `CLOUDFLARE_ACCOUNT_ID`
-- [ ] Testar primeiro deploy
-- [ ] Adicionar badge ao README
-
-### Validação
-- [ ] Deploy automático funcionando
-- [ ] PR check funcionando
-- [ ] Health checks passando
-- [ ] Notificações ativas
-
----
-
-**Última atualização:** 21/10/2025  
-**Mantido por:** Equipe AirTrust  
-**Status:** ✅ Ativo e funcional
+PR verde, merge isolado, deploy isolado ou health check isolado não encerram um incidente.
