@@ -63,7 +63,7 @@ jobs:
         run: cd worker-airtrust && npx tsc --noEmit
 
       - name: Worker unit tests
-        run: cd worker-airtrust && npx vitest run
+        run: cd worker-airtrust && npx vitest run --bail=1 --silent
 
   lms-smoke:
     runs-on: ubuntu-latest
