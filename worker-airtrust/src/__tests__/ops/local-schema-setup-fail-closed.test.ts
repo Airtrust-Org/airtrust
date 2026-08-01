@@ -54,6 +54,12 @@ describe('local D1 setup scripts', () => {
     expect(source).not.toMatch(/migration (returned warnings|aplicada com avisos)/i);
   });
 
+  it.each(setupScripts)('%s verifies the local migration ledger', (scriptPath) => {
+    const source = readScript(scriptPath);
+    expect(source).toContain('require_migration_recorded');
+    expect(source).toContain('migration_recorded "$migration_name"');
+  });
+
   it.each(setupScripts)('%s validates tables and columns explicitly', (scriptPath) => {
     const source = readScript(scriptPath);
     expect(source).toContain('require_sqlite_table');
@@ -63,24 +69,32 @@ describe('local D1 setup scripts', () => {
   it('creates LMS tables before validating their contract', () => {
     const source = readScript(lmsSetup);
     const applyIndex = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
-    const contractIndex = source.indexOf('for table_name in lms_cursos');
+    const contractIndex = source.indexOf('for table_name in audit_logs lms_cursos');
 
     expect(applyIndex).toBeGreaterThan(-1);
     expect(contractIndex).toBeGreaterThan(applyIndex);
   });
 
-  it('adopts baseline-owned audit logs instead of replaying their migration', () => {
+  it('creates audit logs through migration before validating their contract', () => {
     const source = readScript(lmsSetup);
-    const baselineContract = source.indexOf('qualificacoes_categorias audit_logs; do');
-    const migrationLoop = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
+    const migrationIndex = source.indexOf('0332_create_audit_logs_compatible.sql');
+    const applyIndex = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
+    const contractIndex = source.indexOf('for table_name in audit_logs lms_cursos');
 
-    expect(source).not.toContain('0332_create_audit_logs_compatible.sql');
-    expect(baselineContract).toBeGreaterThan(-1);
-    expect(migrationLoop).toBeGreaterThan(baselineContract);
+    expect(migrationIndex).toBeGreaterThan(-1);
+    expect(applyIndex).toBeGreaterThan(migrationIndex);
+    expect(contractIndex).toBeGreaterThan(applyIndex);
+    expect(source).not.toContain('qualificacoes_categorias audit_logs; do');
   });
 
-  it('does not replay the incompatible training-class migration in LMS smoke', () => {
-    const source = readScript(lmsSetup);
-    expect(source).not.toContain('0390_training_class_management.sql');
+  it.each(setupScripts)('%s excludes the incompatible training-class migration', (scriptPath) => {
+    const source = readScript(scriptPath);
+    expect(source).not.toContain('$WORKER_DIR/migrations/0390_training_class_management.sql');
+  });
+
+  it.each(setupScripts)('%s validates the canonical LMS content filename column', (scriptPath) => {
+    const source = readScript(scriptPath);
+    expect(source).toContain('require_sqlite_column "lms_cursos" "conteudo_arquivo_nome"');
+    expect(source).not.toContain('require_sqlite_column "lms_cursos" "content_filename"');
   });
 });
