@@ -63,10 +63,20 @@ describe('local D1 setup scripts', () => {
   it('creates LMS tables before validating their contract', () => {
     const source = readScript(lmsSetup);
     const applyIndex = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
-    const contractIndex = source.indexOf('for table_name in audit_logs lms_cursos');
+    const contractIndex = source.indexOf('for table_name in lms_cursos');
 
     expect(applyIndex).toBeGreaterThan(-1);
     expect(contractIndex).toBeGreaterThan(applyIndex);
+  });
+
+  it('adopts baseline-owned audit logs instead of replaying their migration', () => {
+    const source = readScript(lmsSetup);
+    const baselineContract = source.indexOf('qualificacoes_categorias audit_logs; do');
+    const migrationLoop = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
+
+    expect(source).not.toContain('0332_create_audit_logs_compatible.sql');
+    expect(baselineContract).toBeGreaterThan(-1);
+    expect(migrationLoop).toBeGreaterThan(baselineContract);
   });
 
   it('does not replay the incompatible training-class migration in LMS smoke', () => {
