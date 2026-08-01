@@ -1,0 +1,39 @@
+name: Record Staging Browser Rendering Runtime Result
+
+on:
+  workflow_run:
+    workflows:
+      - Staging Browser Rendering Runtime Sync
+    types:
+      - completed
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  record-incident-result:
+    if: ${{ github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment sanitized result on incident
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RESULT: ${{ github.event.workflow_run.conclusion }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/body.md" <<EOF
+          ## Staging Browser Rendering runtime sync
+
+          - run: https://github.com/$REPOSITORY/actions/runs/$RUN_ID
+          - source SHA: \`$SOURCE_SHA\`
+          - result: **$RESULT**
+          - target: Worker de staging somente
+          - runtime secrets: nomes canônicos, valores não registrados
+          - production action: none
+          EOF
+          gh issue comment 568 --repo "$REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
