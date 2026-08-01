@@ -1,0 +1,199 @@
+name: Staging Domain Certificate Smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/staging-domain-certificate-smoke.yml'
+      - 'scripts/staging/smoke-operational-domain-certificate.mjs'
+      - 'scripts/staging/__tests__/smoke-operational-domain-certificate.test.mjs'
+
+concurrency:
+  group: staging-domain-certificate-smoke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  ALLOWED_STAGING_HOST: airtrust-api-staging.airtrust.workers.dev
+  ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+  ALLOWED_STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+  BLOCKED_PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+
+jobs:
+  synthetic-domain-certificate:
+    name: Synthetic QA Domain + Certificate E2E
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Assert staging-only execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_ONLY" >&2; exit 1; }
+          node - <<'NODE'
+          const value = String(process.env.STAGING_API_BASE_URL || '').trim();
+          const url = new URL(value);
+          if (url.hostname !== process.env.ALLOWED_STAGING_HOST) {
+            throw new Error(`STAGING_HOST_REJECTED:${url.hostname}`);
+          }
+          if (url.hostname === 'api.airtrust.online' || url.hostname.includes('production')) {
+            throw new Error('PRODUCTION_HOST_REJECTED');
+          }
+          NODE
+          [[ "$ALLOWED_STAGING_DB_ID" != "$BLOCKED_PRODUCTION_DB_ID" ]] || { echo "PRODUCTION_DB_REJECTED" >&2; exit 1; }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run focused candidate-selection tests
+        run: npx vitest run scripts/staging/__tests__/smoke-operational-domain-certificate.test.mjs
+
+      - name: Run synthetic classification and certificate smoke
+        env:
+          SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-smoke-report.json
+        run: node scripts/staging/smoke-operational-domain-certificate.mjs
+
+      - name: Verify rollback, audit trail, and D1 linkage read-only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-smoke-report.json
+          D1_RESULT_PATH: ${{ runner.temp }}/staging-domain-certificate-d1-postconditions.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "D1_TOKEN_MISSING" >&2; exit 1; }
+          eval "$(node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
+          const values = {
+            TYPE_ID: Number(report?.candidate?.typeId),
+            HISTORY_ID: Number(report?.candidate?.historyId),
+            DOCUMENT_ID: Number(report?.certificate?.documentId),
+            USER_ID: Number(report?.auth?.userId),
+            STARTED_AT: String(report?.startedAtUtc || ''),
+          };
+          for (const [key, value] of Object.entries(values)) {
+            if (key === 'STARTED_AT') {
+              if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) throw new Error(`${key}_INVALID`);
+              console.log(`${key}=${JSON.stringify(value)}`);
+            } else {
+              if (!Number.isInteger(value) || value <= 0) throw new Error(`${key}_INVALID`);
+              console.log(`${key}=${value}`);
+            }
+          }
+          NODE
+          )"
+
+          SQL="SELECT
+            (SELECT dominio_codigo FROM qualificacoes_tipos WHERE id = $TYPE_ID AND deleted_at IS NULL) AS current_domain,
+            (SELECT certificado_arquivo_id FROM qualificacoes_historico WHERE id = $HISTORY_ID AND deleted_at IS NULL) AS linked_document_id,
+            (SELECT COUNT(*) FROM documentos WHERE id = $DOCUMENT_ID AND deleted_at IS NULL) AS document_count,
+            (SELECT COUNT(*) FROM auditoria
+              WHERE usuario_id = $USER_ID
+                AND tabela_afetada = 'qualificacoes_tipos'
+                AND registro_id = CAST($TYPE_ID AS TEXT)
+                AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '$STARTED_AT', '-5 minutes')) AS audit_count,
+            (SELECT COUNT(*) FROM auditoria
+              WHERE usuario_id = $USER_ID
+                AND tabela_afetada = 'qualificacoes_tipos'
+                AND registro_id = CAST($TYPE_ID AS TEXT)
+                AND json_extract(dados_antes, '$.dominio_codigo') IS NULL
+                AND json_extract(dados_depois, '$.dominio_codigo') = 'OPERACOES'
+                AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '$STARTED_AT', '-5 minutes')) AS apply_audit_count,
+            (SELECT COUNT(*) FROM auditoria
+              WHERE usuario_id = $USER_ID
+                AND tabela_afetada = 'qualificacoes_tipos'
+                AND registro_id = CAST($TYPE_ID AS TEXT)
+                AND json_extract(dados_antes, '$.dominio_codigo') = 'OPERACOES'
+                AND json_extract(dados_depois, '$.dominio_codigo') IS NULL
+                AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '$STARTED_AT', '-5 minutes')) AS rollback_audit_count;"
+
+          npx wrangler d1 execute "$ALLOWED_STAGING_DB_NAME" --remote --command "$SQL" --json > "$D1_RESULT_PATH"
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const raw = JSON.parse(fs.readFileSync(process.env.D1_RESULT_PATH, 'utf8'));
+          const row = Array.isArray(raw)
+            ? (raw[0]?.results?.[0] || raw[0] || null)
+            : (raw?.results?.[0] || null);
+          if (!row) throw new Error('D1_POSTCONDITION_ROW_MISSING');
+          if (row.current_domain !== null) throw new Error(`CLASSIFICATION_ROLLBACK_FAILED:${row.current_domain}`);
+          const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
+          if (Number(row.linked_document_id) !== Number(report.certificate.documentId)) {
+            throw new Error('HISTORY_DOCUMENT_LINK_MISMATCH');
+          }
+          if (Number(row.document_count) !== 1) throw new Error('DOCUMENT_ROW_MISSING');
+          if (Number(row.audit_count) < 2) throw new Error('AUDIT_TRAIL_INCOMPLETE');
+          if (Number(row.apply_audit_count) < 1) throw new Error('APPLY_AUDIT_MISSING');
+          if (Number(row.rollback_audit_count) < 1) throw new Error('ROLLBACK_AUDIT_MISSING');
+          console.log(JSON.stringify({
+            success: true,
+            classificationRolledBack: true,
+            historyDocumentLinked: true,
+            auditApplyRecorded: true,
+            auditRollbackRecorded: true,
+          }));
+          NODE
+
+      - name: Write sanitized summary
+        if: always()
+        env:
+          SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-smoke-report.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Synthetic staging domain/certificate validation"
+            echo ""
+            echo "- source SHA: \`$GITHUB_SHA\`"
+            echo "- target host: \`$ALLOWED_STAGING_HOST\`"
+            echo "- target D1: \`$ALLOWED_STAGING_DB_NAME\` / \`$ALLOWED_STAGING_DB_ID\`"
+            if [[ -s "$SMOKE_REPORT_PATH" ]]; then
+              node - <<'NODE'
+              const fs = require('fs');
+              const r = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
+              const lines = [
+                `- smoke success: ${r.success === true}`,
+                `- temporary classification applied: ${r.classification?.applied === true}`,
+                `- temporary classification rolled back: ${r.rollback?.success === true}`,
+                `- post-rollback fail-closed: ${r.rollback?.postRollbackFailClosed === true}`,
+                `- certificate idempotent: ${r.certificate?.idempotent === true}`,
+                `- PDF signature valid: ${r.certificate?.pdfSignature === true}`,
+                `- history linkage valid: ${r.certificate?.historyListLinked === true}`,
+                `- employee folder linkage valid: ${r.certificate?.employeeFolderLinked === true}`,
+              ];
+              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
+              NODE
+            else
+              echo "- smoke report unavailable" 
+            fi
+            echo "- production action: none"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-domain-certificate-smoke-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/staging-domain-certificate-smoke-report.json
+            ${{ runner.temp }}/staging-domain-certificate-d1-postconditions.json
+          if-no-files-found: warn
+          retention-days: 14
