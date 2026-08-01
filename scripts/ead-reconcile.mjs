@@ -149,7 +149,7 @@ function main() {
 
     const empresa = queryOne(
       dbFile,
-      `SELECT id, nome, deleted_at FROM empresas WHERE id = ${EMPRESA_ID}`,
+      `SELECT id, deleted_at FROM empresas WHERE id = ${EMPRESA_ID}`,
     );
     if (!empresa || empresa.deleted_at !== null) {
       failClosed('Empresa 6 is missing or deleted');
