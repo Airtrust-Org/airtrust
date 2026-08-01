@@ -440,9 +440,11 @@ export function AdvancedDataTable({
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-3 text-neutral-400 hover:text-neutral-600"
+                className="absolute right-3 top-3 text-neutral-400 hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded"
+                aria-label="Limpar busca"
+                title="Limpar busca"
               >
-                <X className={iconWrappers.sm} />
+                <X className={iconWrappers.sm} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -622,19 +624,21 @@ export function AdvancedDataTable({
                         {onView && (
                           <button
                             onClick={() => onView(itemId)}
-                            className="text-primary hover:text-primary transition-colors"
+                            className="text-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded p-1"
                             title="Visualizar"
+                            aria-label="Visualizar"
                           >
-                            <Eye className={iconWrappers.sm} />
+                            <Eye className={iconWrappers.sm} aria-hidden="true" />
                           </button>
                         )}
                         {onEdit && (
                           <button
                             onClick={() => onEdit(itemId)}
-                            className="text-primary-600 hover:text-primary-800 transition-colors"
+                            className="text-primary-600 hover:text-primary-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded p-1"
                             title="Editar"
+                            aria-label="Editar"
                           >
-                            <Edit2 className={iconWrappers.sm} />
+                            <Edit2 className={iconWrappers.sm} aria-hidden="true" />
                           </button>
                         )}
                         {onDelete && (
@@ -644,10 +648,11 @@ export function AdvancedDataTable({
                                 onDelete(itemId);
                               }
                             }}
-                            className="text-red-600 hover:text-red-800 transition-colors"
+                            className="text-red-600 hover:text-red-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 rounded p-1"
                             title="Deletar"
+                            aria-label="Deletar"
                           >
-                            <Trash2 className={iconWrappers.sm} />
+                            <Trash2 className={iconWrappers.sm} aria-hidden="true" />
                           </button>
                         )}
                       </div>
@@ -674,9 +679,11 @@ export function AdvancedDataTable({
                 onPageChange?.(currentPage - 1);
               }}
               disabled={currentPage === 1}
-              className="p-2 hover:bg-neutral-200 disabled:opacity-50 rounded transition"
+              className="p-2 hover:bg-neutral-200 disabled:opacity-50 rounded transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+              aria-label="Página anterior"
+              title="Página anterior"
             >
-              <ChevronLeft className={iconWrappers.sm} />
+              <ChevronLeft className={iconWrappers.sm} aria-hidden="true" />
             </button>
 
             <div className="flex items-center gap-2">
@@ -706,9 +713,11 @@ export function AdvancedDataTable({
                 onPageChange?.(currentPage + 1);
               }}
               disabled={currentPage >= totalPages}
-              className="p-2 hover:bg-neutral-200 disabled:opacity-50 rounded transition"
+              className="p-2 hover:bg-neutral-200 disabled:opacity-50 rounded transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+              aria-label="Próxima página"
+              title="Próxima página"
             >
-              <ChevronRight className={iconWrappers.sm} />
+              <ChevronRight className={iconWrappers.sm} aria-hidden="true" />
             </button>
 
             <select
