@@ -22,35 +22,33 @@ vi.mock('../../middleware/auth', () => {
   };
 
   return {
-    auth:
-      () =>
-      async (c: any, next: () => Promise<void>) => {
-        const authHeader = c.req.header('Authorization');
-        if (!authHeader) {
-          return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
-        }
+    auth: () => async (c: any, next: () => Promise<void>) => {
+      const authHeader = c.req.header('Authorization');
+      if (!authHeader) {
+        return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
+      }
 
-        const callerId = Number(c.req.header('x-test-user-id') || 0);
-        const callerRole = c.req.header('x-test-user-role') || 'viewer';
-        const callerEmpresaId = Number(c.req.header('x-test-empresa-id') || 0);
+      const callerId = Number(c.req.header('x-test-user-id') || 0);
+      const callerRole = c.req.header('x-test-user-role') || 'viewer';
+      const callerEmpresaId = Number(c.req.header('x-test-empresa-id') || 0);
 
-        c.set('userId', callerId);
-        c.set('userEmail', `user${callerId}@test.com`);
-        c.set('userRole', callerRole);
-        c.set('empresaId', callerEmpresaId);
+      c.set('userId', callerId);
+      c.set('userEmail', `user${callerId}@test.com`);
+      c.set('userRole', callerRole);
+      c.set('empresaId', callerEmpresaId);
 
-        // Set tenant context (simulating what tenantMiddleware would do)
-        c.set('tenantContext', {
-          empresaId: callerEmpresaId,
-          empresaCodigo: `empresa-${callerEmpresaId}`,
-          empresaNome: `Empresa ${callerEmpresaId}`,
-          role: callerRoleToTenantRole(callerRole),
-          plano: 'pro',
-          permissions: [],
-        });
+      // Set tenant context (simulating what tenantMiddleware would do)
+      c.set('tenantContext', {
+        empresaId: callerEmpresaId,
+        empresaCodigo: `empresa-${callerEmpresaId}`,
+        empresaNome: `Empresa ${callerEmpresaId}`,
+        role: callerRoleToTenantRole(callerRole),
+        plano: 'pro',
+        permissions: [],
+      });
 
-        await next();
-      },
+      await next();
+    },
   };
 });
 
@@ -72,26 +70,24 @@ vi.mock('../../middleware/tenant', () => {
   };
 
   return {
-    tenantMiddleware:
-      () =>
-      async (c: any, next: () => Promise<void>) => {
-        const empresaId = Number(c.get('empresaId') || 0);
-        if (!empresaId) {
-          return c.json({ success: false, error: 'Tenant não identificado' }, 401);
-        }
+    tenantMiddleware: () => async (c: any, next: () => Promise<void>) => {
+      const empresaId = Number(c.get('empresaId') || 0);
+      if (!empresaId) {
+        return c.json({ success: false, error: 'Tenant não identificado' }, 401);
+      }
 
-        const role = callerRoleToTenantRole(c.get('userRole'));
+      const role = callerRoleToTenantRole(c.get('userRole'));
 
-        c.set('tenantContext', {
-          empresaId,
-          empresaCodigo: `empresa-${empresaId}`,
-          empresaNome: `Empresa ${empresaId}`,
-          role,
-          plano: 'pro',
-          permissions: [],
-        });
-        await next();
-      },
+      c.set('tenantContext', {
+        empresaId,
+        empresaCodigo: `empresa-${empresaId}`,
+        empresaNome: `Empresa ${empresaId}`,
+        role,
+        plano: 'pro',
+        permissions: [],
+      });
+      await next();
+    },
     getTenantContext: (c: any) => {
       const ctx = c.get('tenantContext');
       if (!ctx) throw new Error('TENANT_NOT_CONFIGURED');
@@ -111,7 +107,7 @@ vi.mock('../../utils/logger', () => ({
     warn: () => {},
     error: () => {},
   }),
-  toError: (e: any) => e instanceof Error ? e : new Error(String(e)),
+  toError: (e: any) => (e instanceof Error ? e : new Error(String(e))),
 }));
 
 vi.mock('../../utils/security', () => ({
@@ -176,61 +172,57 @@ function createDb(opts: TestDbOpts = {}): D1Database {
     callerEmpresaId = 1,
   } = opts;
 
+  const memberships = new Set<number>();
+  if (targetExists && (targetHasVinculo || targetEmpresaId !== callerEmpresaId)) {
+    memberships.add(targetEmpresaId);
+  }
+
   const db = {
     prepare: (sql: string) => {
       const stmt: D1PreparedStatement = {
         _sql: sql,
         bind: (...args: unknown[]) => {
-          // Store the bound values for conditional logic
-          (stmt as any)._binds = args;
+          (stmt as D1PreparedStatement & { _binds?: unknown[] })._binds = args;
           return stmt;
         },
         first: async <T>() => {
           const s = sql.toLowerCase();
+          const bounds = (stmt as D1PreparedStatement & { _binds?: unknown[] })._binds || [];
 
-          // usuarios_empresas vinculacao check (must be checked before from usuarios)
-          if (s.includes('usuarios_empresas') && s.includes('select 1 from')) {
-            const bounds = (stmt as any)._binds || [];
-            const queriedEmpresaId = Number(bounds[1] || 0);
-            if (targetHasVinculo && queriedEmpresaId === targetEmpresaId) {
-              return { '1': 1 } as unknown as T;
-            }
-            return null;
-          }
-
-          // User existence/detail queries — match any query that selects from usuarios
-          if (s.includes('from usuarios') && s.includes('deleted_at')) {
-            if (!targetExists) return null;
-            const bounds = (stmt as any)._binds || [];
-            const queriedId = Number(bounds[0] || 0);
-            const hasEmail = s.includes('u.email');
-            const hasFuncionarioId = s.includes('funcionario_id');
-            if (hasEmail && hasFuncionarioId) {
-              // Detailed query
+          if (s.includes('inner join usuarios_empresas ue') && s.includes('membership_count')) {
+            if (s.includes('ue.empresa_id = ?')) {
+              const queriedEmpresaId = Number(bounds[0] || 0);
+              const queriedId = Number(bounds[1] || 0);
+              if (!targetExists || !memberships.has(queriedEmpresaId)) return null;
               return {
                 id: queriedId,
-                email: `user${queriedId}@test.com`,
-                nome: `User ${queriedId}`,
                 perfil: targetPerfil,
-                active: 1,
-                funcionario_id: null,
-                funcionario_nome: null,
-                empresa_id: targetEmpresaId,
-                created_at: '2024-01-01',
-                last_login: null,
-              } as unknown as T;
+                membership_count: memberships.size,
+              } as T;
             }
-            // Simple existence check
+
+            const queriedId = Number(bounds[0] || 0);
+            const resolvedEmpresaId = [...memberships][0];
+            if (!targetExists || resolvedEmpresaId === undefined) return null;
             return {
               id: queriedId,
               perfil: targetPerfil,
-            } as unknown as T;
+              empresa_id: resolvedEmpresaId,
+              membership_count: memberships.size,
+            } as T;
           }
 
-          // Usuário detalhado com subquery
+          if (s.includes('usuarios_empresas') && s.includes('select 1 from')) {
+            const queriedEmpresaId = Number(bounds[1] || 0);
+            return memberships.has(queriedEmpresaId) ? ({ '1': 1 } as T) : null;
+          }
+
+          if (s.includes('select case when not exists')) {
+            return { identity_deactivated: memberships.size === 0 ? 1 : 0 } as T;
+          }
+
           if (s.includes('(select empresa_id from usuarios_empresas')) {
             if (!targetExists) return null;
-            const bounds = (stmt as any)._binds || [];
             const queriedId = Number(bounds[0] || 0);
             return {
               id: queriedId,
@@ -243,21 +235,38 @@ function createDb(opts: TestDbOpts = {}): D1Database {
               empresa_id: targetEmpresaId,
               created_at: '2024-01-01',
               last_login: null,
-            } as unknown as T;
+            } as T;
+          }
+
+          if (s.includes('from usuarios') && s.includes('deleted_at')) {
+            if (!targetExists) return null;
+            const queriedId = Number(bounds[0] || 0);
+            const hasEmail = s.includes('u.email');
+            const hasFuncionarioId = s.includes('funcionario_id');
+            if (hasEmail && hasFuncionarioId) {
+              return {
+                id: queriedId,
+                email: `user${queriedId}@test.com`,
+                nome: `User ${queriedId}`,
+                perfil: targetPerfil,
+                active: 1,
+                funcionario_id: null,
+                funcionario_nome: null,
+                empresa_id: targetEmpresaId,
+                created_at: '2024-01-01',
+                last_login: null,
+              } as T;
+            }
+            return { id: queriedId, perfil: targetPerfil } as T;
           }
 
           return null;
         },
         all: async <T>() => {
           const s = sql.toLowerCase();
-
-          if (s.includes('usuario_permissoes')) {
+          if (s.includes('usuario_permissoes') || s.includes('user_platform_roles')) {
             return { results: [] as T[] };
           }
-          if (s.includes('user_platform_roles')) {
-            return { results: [] as T[] };
-          }
-          // List users query
           if (s.includes('from usuarios u') && s.includes('inner join usuarios_empresas')) {
             if (!targetExists) return { results: [] as T[] };
             return {
@@ -280,23 +289,34 @@ function createDb(opts: TestDbOpts = {}): D1Database {
               ] as unknown as T[],
             };
           }
-          // Funcionarios sem usuario
-          if (s.includes('funcionarios_sem_usuario')) {
-            return { results: [] as T[] };
-          }
-
           return { results: [] as T[] };
         },
         run: async () => {
-          const s = sql;
-          // INSERT returns last_row_id for user creation
-          if (s.includes('INSERT INTO usuarios')) {
+          const s = sql.toLowerCase();
+          const bounds = (stmt as D1PreparedStatement & { _binds?: unknown[] })._binds || [];
+          if (s.includes('delete from usuarios_empresas')) {
+            memberships.delete(Number(bounds[1] || 0));
+          }
+          if (s.includes('insert into usuarios')) {
             return { meta: { last_row_id: 300 } };
           }
           return { meta: {} };
         },
       };
       return stmt;
+    },
+    batch: async (statements: D1PreparedStatement[]) => {
+      const results: Array<{ success: boolean; results: unknown[] }> = [];
+      for (const statement of statements) {
+        if (statement._sql.trim().toLowerCase().startsWith('select')) {
+          const row = await statement.first<unknown>();
+          results.push({ success: true, results: row ? [row] : [] });
+        } else {
+          await statement.run();
+          results.push({ success: true, results: [] });
+        }
+      }
+      return results;
     },
   };
 
@@ -404,7 +424,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json() as Record<string, unknown>;
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -444,7 +464,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json() as Record<string, unknown>;
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -485,7 +505,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json() as Record<string, unknown>;
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -525,7 +545,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json() as Record<string, unknown>;
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -548,7 +568,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json() as Record<string, unknown>;
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -573,7 +593,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json() as Record<string, unknown>;
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(false);
       expect(body.code || body.error).toMatch(/WRONG_TENANT|CROSS_TENANT|FORBIDDEN/i);
     });
@@ -672,7 +692,7 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(403);
-      const body = await response.json() as Record<string, unknown>;
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.code || body.error).toMatch(/INVALID_TENANT_CONTEXT/i);
     });
 
