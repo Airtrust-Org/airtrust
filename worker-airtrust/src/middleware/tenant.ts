@@ -11,10 +11,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { Env, Variables } from '../types';
 import { AppError } from '../utils/errors';
 import { hasUsuariosEmpresasTable } from '../utils/db-schema';
-import {
-  isPlatformAdminAccess,
-  resolvePlatformAccessState,
-} from '../lib/rbac/platform-access';
+import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 
 function isDevAuthBypassEnabled(env: Env): boolean {
   return env.ENVIRONMENT === 'development' && env.ENABLE_DEV_AUTH_BYPASS === 'true';
