@@ -7,6 +7,10 @@ const workflow = readFileSync(
   join(ROOT, '.github/workflows/staging-browser-rendering-runtime-sync.yml'),
   'utf8',
 );
+const resultWorkflow = readFileSync(
+  join(ROOT, '.github/workflows/staging-browser-rendering-runtime-result.yml'),
+  'utf8',
+);
 
 describe('staging Browser Rendering runtime sync', () => {
   it('runs only after a reviewed merge to main changes this controlled workflow', () => {
@@ -65,5 +69,17 @@ describe('staging Browser Rendering runtime sync', () => {
     }
     expect(workflow).toContain('STAGING_CODE_IDENTITY_CHANGED_AFTER_SECRET_SYNC');
     expect(workflow).toContain('STAGING_BROWSER_RENDERING_RUNTIME_READY');
+  });
+
+  it('records only a sanitized completion result on the incident', () => {
+    expect(resultWorkflow).toContain('workflow_run:');
+    expect(resultWorkflow).toContain('Staging Browser Rendering Runtime Sync');
+    expect(resultWorkflow).toContain("github.event.workflow_run.head_branch == 'main'");
+    expect(resultWorkflow).toContain('issues: write');
+    expect(resultWorkflow).toContain('gh issue comment 568');
+    expect(resultWorkflow).toContain('github.event.workflow_run.id');
+    expect(resultWorkflow).toContain('github.event.workflow_run.conclusion');
+    expect(resultWorkflow).not.toContain('actions/checkout');
+    expect(resultWorkflow).not.toContain('secrets.');
   });
 });
