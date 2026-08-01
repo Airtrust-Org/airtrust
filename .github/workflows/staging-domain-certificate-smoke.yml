@@ -86,7 +86,6 @@ jobs:
             TYPE_ID: Number(report?.candidate?.typeId),
             HISTORY_ID: Number(report?.candidate?.historyId),
             DOCUMENT_ID: Number(report?.certificate?.documentId),
-            USER_ID: Number(report?.auth?.userId),
             STARTED_AT: String(report?.startedAtUtc || ''),
           };
           for (const [key, value] of Object.entries(values)) {
@@ -106,20 +105,17 @@ jobs:
             (SELECT certificado_arquivo_id FROM qualificacoes_historico WHERE id = $HISTORY_ID AND deleted_at IS NULL) AS linked_document_id,
             (SELECT COUNT(*) FROM documentos WHERE id = $DOCUMENT_ID AND deleted_at IS NULL) AS document_count,
             (SELECT COUNT(*) FROM auditoria
-              WHERE usuario_id = $USER_ID
-                AND tabela_afetada = 'qualificacoes_tipos'
+              WHERE tabela_afetada = 'qualificacoes_tipos'
                 AND registro_id = CAST($TYPE_ID AS TEXT)
                 AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '$STARTED_AT', '-5 minutes')) AS audit_count,
             (SELECT COUNT(*) FROM auditoria
-              WHERE usuario_id = $USER_ID
-                AND tabela_afetada = 'qualificacoes_tipos'
+              WHERE tabela_afetada = 'qualificacoes_tipos'
                 AND registro_id = CAST($TYPE_ID AS TEXT)
                 AND json_extract(dados_antes, '$.dominio_codigo') IS NULL
                 AND json_extract(dados_depois, '$.dominio_codigo') = 'OPERACOES'
                 AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '$STARTED_AT', '-5 minutes')) AS apply_audit_count,
             (SELECT COUNT(*) FROM auditoria
-              WHERE usuario_id = $USER_ID
-                AND tabela_afetada = 'qualificacoes_tipos'
+              WHERE tabela_afetada = 'qualificacoes_tipos'
                 AND registro_id = CAST($TYPE_ID AS TEXT)
                 AND json_extract(dados_antes, '$.dominio_codigo') = 'OPERACOES'
                 AND json_extract(dados_depois, '$.dominio_codigo') IS NULL
