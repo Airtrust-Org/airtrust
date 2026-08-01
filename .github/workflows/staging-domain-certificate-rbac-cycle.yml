@@ -8,7 +8,9 @@ on:
       - '.github/workflows/staging-domain-certificate-rbac-cycle.yml'
       - 'scripts/staging/run-domain-certificate-smoke-with-rbac-cycle.mjs'
       - 'scripts/staging/qa-sector-domain-plan.mjs'
+      - 'scripts/staging/seed-qa-admin-operational-grant.mjs'
       - 'scripts/__tests__/staging-domain-rbac-cycle.test.mjs'
+      - 'scripts/__tests__/staging-qa-admin-operational-grant.test.mjs'
 
 concurrency:
   group: staging-domain-certificate-rbac-cycle
@@ -61,8 +63,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test synthetic QA bootstrap allowlist
-        run: node --test scripts/__tests__/staging-domain-rbac-cycle.test.mjs
+      - name: Test synthetic QA bootstrap allowlists
+        run: |
+          node --test scripts/__tests__/staging-domain-rbac-cycle.test.mjs
+          node --test scripts/__tests__/staging-qa-admin-operational-grant.test.mjs
+
+      - name: Provision exact synthetic QA admin-sector grant
+        env:
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+          STAGING_D1_ID: ${{ env.ALLOWED_STAGING_DB_ID }}
+          CONFIRM_STAGING_QA_GRANT: AIRTRUST_STAGING_QA_GRANT
+          QA_GRANT_REPORT_PATH: ${{ runner.temp }}/staging-qa-admin-operational-grant.json
+        run: node scripts/staging/seed-qa-admin-operational-grant.mjs --apply
 
       - name: Run temporary RBAC cycle and certificate smoke
         env:
@@ -72,6 +84,7 @@ jobs:
       - name: Verify restored state and persisted certificate evidence read-only
         env:
           SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
+          QA_GRANT_REPORT_PATH: ${{ runner.temp }}/staging-qa-admin-operational-grant.json
           D1_RESULT_PATH: ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-d1.json
         shell: bash
         run: |
@@ -79,11 +92,18 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
+          const grant = JSON.parse(fs.readFileSync(process.env.QA_GRANT_REPORT_PATH, 'utf8'));
           const typeId = Number(report?.candidate?.typeId);
           const historyId = Number(report?.candidate?.historyId);
           const documentId = Number(report?.certificate?.documentId);
+          if (grant?.success !== true || grant?.retained !== true) throw new Error('QA_ADMIN_GRANT_NOT_RETAINED');
+          if (Number(grant?.after?.active_relation_count) !== 1) throw new Error('QA_ADMIN_GRANT_POSTCONDITION_FAILED');
           if (report?.success !== true) throw new Error('SMOKE_REPORT_NOT_SUCCESSFUL');
           if (report?.rbacActivation?.restored !== true) throw new Error('RBAC_STATE_NOT_RESTORED');
+          if (!Array.isArray(report?.auth?.domains) || !report.auth.domains.includes('OPERACOES')) {
+            throw new Error('QA_ADMIN_OPERATIONS_ACCESS_MISSING');
+          }
+          if (Number(report?.auth?.managedSetorCount) < 1) throw new Error('QA_ADMIN_MANAGED_SECTOR_MISSING');
           if (report?.qaSectorBootstrap?.retained !== true) throw new Error('QA_SECTOR_BOOTSTRAP_RETENTION_UNCONFIRMED');
           if (report?.qaSectorBootstrap?.attempted === true) {
             if (!Array.isArray(report.qaSectorBootstrap.classifications) || report.qaSectorBootstrap.classifications.length === 0) {
@@ -110,7 +130,18 @@ jobs:
           SQL="SELECT
             (SELECT dominio_codigo FROM qualificacoes_tipos WHERE id = $TYPE_ID AND deleted_at IS NULL) AS current_domain,
             (SELECT certificado_arquivo_id FROM qualificacoes_historico WHERE id = $HISTORY_ID AND deleted_at IS NULL) AS linked_document_id,
-            (SELECT COUNT(*) FROM documentos WHERE id = $DOCUMENT_ID AND deleted_at IS NULL) AS document_count;"
+            (SELECT COUNT(*) FROM documentos WHERE id = $DOCUMENT_ID AND deleted_at IS NULL) AS document_count,
+            (SELECT COUNT(*)
+               FROM setores_gestores sg
+               INNER JOIN usuarios u ON u.id = sg.usuario_id
+               INNER JOIN empresas emp ON emp.id = sg.empresa_id
+               INNER JOIN setores s ON s.id = sg.setor_id AND s.empresa_id = emp.id
+              WHERE LOWER(TRIM(u.email)) = 'qa-examiner-admin@staging.airtrust.invalid'
+                AND emp.codigo = 'qa_examiner_training'
+                AND s.codigo = 'QA-SETOR-EXA'
+                AND s.dominio_codigo = 'OPERACOES'
+                AND sg.ativo = 1
+                AND sg.deleted_at IS NULL) AS qa_admin_grant_count;"
           npx wrangler d1 execute "$ALLOWED_STAGING_DB_NAME" --remote --command "$SQL" --json > "$D1_RESULT_PATH"
 
           node - <<'NODE'
@@ -122,7 +153,8 @@ jobs:
           if (row.current_domain !== null) throw new Error(`CLASSIFICATION_ROLLBACK_FAILED:${row.current_domain}`);
           if (Number(row.linked_document_id) !== Number(report.certificate.documentId)) throw new Error('HISTORY_DOCUMENT_LINK_MISMATCH');
           if (Number(row.document_count) !== 1) throw new Error('DOCUMENT_ROW_MISSING');
-          console.log(JSON.stringify({ success: true, rbacRestored: true, typeClassificationRolledBack: true, qaSectorClassificationsRetained: true, certificateLinked: true }));
+          if (Number(row.qa_admin_grant_count) !== 1) throw new Error('QA_ADMIN_GRANT_D1_MISMATCH');
+          console.log(JSON.stringify({ success: true, rbacRestored: true, typeClassificationRolledBack: true, qaSectorClassificationsRetained: true, qaAdminOperationalGrantRetained: true, certificateLinked: true }));
           NODE
 
       - name: Upload sanitized evidence
@@ -131,6 +163,7 @@ jobs:
         with:
           name: staging-domain-certificate-rbac-cycle-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/staging-qa-admin-operational-grant.json
             ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-report.json
             ${{ runner.temp }}/staging-domain-certificate-rbac-cycle-d1.json
           if-no-files-found: warn
@@ -156,12 +189,13 @@ jobs:
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/body.md" <<EOF
-          ## Staging synthetic QA bootstrap + RBAC cycle + certificate smoke
+          ## Staging synthetic QA grant + RBAC cycle + certificate smoke
 
           - run: https://github.com/$REPOSITORY/actions/runs/$RUN_ID
           - source SHA: \`$SOURCE_SHA\`
           - result: **$RESULT**
           - QA sector classification: audited API, exact synthetic allowlist, retained as seed readiness
+          - QA admin operational grant: exact synthetic fixture relation, idempotent and retained
           - temporary RBAC and qualification-type override restoration: enforced by workflow
           - target: staging synthetic QA only
           - production action: none
