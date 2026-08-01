@@ -1,6 +1,7 @@
 # Cloudflare Pages SPA Redirects
-# Preservar API e assets sem reescrita
-/api/* /api/:splat 200
+# Assets e service worker permanecem estáticos. A API usa exclusivamente o
+# domínio canônico configurado no frontend. O fail-closed de /api e /api/* é
+# implementado por Pages Functions, porque _redirects não suporta status 404.
 /assets/* /assets/:splat 200
 /sw.js /sw.js 200
 

@@ -12,7 +12,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Content-Security-Policy: default-src 'self' blob:; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: https: blob:; font-src 'self' data: https: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; connect-src 'self' https: http: ws: wss: blob:; worker-src 'self' blob:; form-action 'self'; manifest-src 'self'; frame-src 'self' blob: https://api.airtrust.online https://airtrust-api-production.airtrust.workers.dev https://airtrust-api.workers.dev https://*.airtrust.com.br https://view.officeapps.live.com http://localhost:8787
+  Content-Security-Policy: default-src 'self' blob:; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: https: blob:; font-src 'self' data: https: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' blob:; connect-src 'self' https://api.airtrust.online https://airtrust-api-staging.airtrust.workers.dev; worker-src 'self' blob:; form-action 'self'; manifest-src 'self'; frame-src 'self' blob: https://api.airtrust.online https://airtrust-api-staging.airtrust.workers.dev https://view.officeapps.live.com
 
 # ===== HTML - NUNCA CACHEAR =====
 # Garante que usuários sempre vejam a versão mais recente do app
@@ -120,7 +120,12 @@
 /robots.txt
   Cache-Control: public, max-age=3600
 
-# ===== API PROXY (se houver) - CACHE CURTO =====
+# Pages não é proxy autenticado da API. Este bloco é fail-closed para qualquer
+# requisição /api/* que alcance a superfície Pages por engano.
 /api/*
-  Cache-Control: public, max-age=300, s-maxage=300
-  Vary: Authorization
+  Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0
+  CDN-Cache-Control: no-store
+  Cloudflare-CDN-Cache-Control: no-store
+  Pragma: no-cache
+  Expires: 0
+  Vary: Authorization, Cookie
