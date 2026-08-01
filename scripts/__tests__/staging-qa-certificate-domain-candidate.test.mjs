@@ -1,5 +1,5 @@
 // source_reference: regression coverage for the staging-only candidate required
-// by issue #568 runs 30703547716 and 30706103939.
+// by issue #568 runs 30703547716, 30706103939 and 30706766016.
 // operational_decision: validate generated SQL as inert text; no database call.
 // dry_run_required: tests do not execute DML.
 // rollback_plan_required: rollback SQL is asserted to target only the exact QA
@@ -113,10 +113,16 @@ test('adapts empresas_config SQL when legacy staging has no deleted_at', () => {
     legacyConfigColumns,
     ['id', 'cpf', 'updated_at'],
   );
-  const configSection = sql.match(/UPDATE empresas_config[\s\S]*?UPDATE qualificacoes_tipos/)?.[0];
-  assert.ok(configSection);
-  assert.doesNotMatch(configSection, /deleted_at/);
-  assert.match(configSection, /certificado_template_html/);
+  const configUpdateAssignments = sql.match(
+    /UPDATE empresas_config\nSET ([\s\S]*?)\nWHERE empresa_id/,
+  )?.[1];
+  const configInsertColumns = sql.match(/INSERT INTO empresas_config \(([^)]*)\)/)?.[1];
+  assert.ok(configUpdateAssignments);
+  assert.ok(configInsertColumns);
+  assert.doesNotMatch(configUpdateAssignments, /\bdeleted_at\b/);
+  assert.doesNotMatch(configInsertColumns, /\bdeleted_at\b/);
+  assert.match(configUpdateAssignments, /certificado_template_html/);
+  assert.match(configInsertColumns, /certificado_template_html/);
 });
 
 test('rollback is limited to the exact synthetic type and history', () => {
