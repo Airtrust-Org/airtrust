@@ -11,6 +11,10 @@ const runner = readFileSync(
   join(ROOT, 'scripts/staging/apply-approved-migration-with-recovery-point.sh'),
   'utf8',
 );
+const validate0453 = readFileSync(
+  join(ROOT, 'scripts/staging/validate-0453-postconditions.sh'),
+  'utf8',
+);
 
 describe('safe staging D1 schema change', () => {
   it('is manual, staging-gated and limited to the two EAD incident migrations', () => {
@@ -61,6 +65,12 @@ describe('safe staging D1 schema change', () => {
     expect(runner).toContain('migration-ledger-preflight.mjs');
     expect(runner).toContain('validate-0453-postconditions.sh');
     expect(runner).toContain('validate-0454-postconditions.sh');
+  });
+
+  it('validates the canonical qualifications history table name', () => {
+    expect(validate0453).toContain("'qualificacoes_historico'");
+    expect(validate0453).toContain('"qualificacoes_historico"');
+    expect(validate0453).not.toContain('historico_qualificacoes');
   });
 
   it('keeps the reviewed open-PR anchor and green-check guard', () => {
