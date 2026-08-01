@@ -1,7 +1,7 @@
 // source_reference: regression coverage for the staging-only synthetic QA
 // operational grant provisioner.
-// operational_decision: inspect generated SQL without executing any database
-// operation; the test itself is read-only.
+// operational_decision: inspect generated SQL and CLI parsing without executing
+// any database operation; the test itself is read-only.
 // dry_run_required: all generated DML remains an inert string in this test.
 // rollback_plan_required: no state is created by this test; rollback coverage
 // verifies that the operational script targets only the exact QA relation.
@@ -14,6 +14,7 @@ import {
   buildQaGrantPreflightSql,
   buildQaGrantRollbackSql,
   extractQaGrantRow,
+  parseWranglerJson,
   QA_GRANT_CONSTANTS,
   validateQaGrantTarget,
 } from '../staging/seed-qa-admin-operational-grant.mjs';
@@ -98,4 +99,20 @@ test('extracts the first D1 result row and fails closed without one', () => {
     active_relation_count: 1,
   });
   assert.throws(() => extractQaGrantRow([]), /QA_GRANT_D1_ROW_MISSING/);
+});
+
+test('parses plain and Wrangler-decorated JSON output', () => {
+  const payload = [{ results: [{ active_relation_count: 0 }] }];
+  assert.deepEqual(parseWranglerJson(JSON.stringify(payload)), payload);
+  assert.deepEqual(
+    parseWranglerJson(
+      `├ Checking for updates...\n└ Wrangler ready\n${JSON.stringify(payload, null, 2)}`,
+    ),
+    payload,
+  );
+  assert.deepEqual(
+    parseWranglerJson(`\u001b[36mWrangler\u001b[0m\n${JSON.stringify(payload)}`),
+    payload,
+  );
+  assert.throws(() => parseWranglerJson('├ Checking only'), /QA_GRANT_WRANGLER_JSON_INVALID/);
 });
