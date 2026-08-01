@@ -191,3 +191,33 @@ jobs:
             ${{ runner.temp }}/staging-domain-certificate-d1-postconditions.json
           if-no-files-found: warn
           retention-days: 14
+
+  record-incident-result:
+    name: Record Staging Smoke Result
+    needs: synthetic-domain-certificate-d1-postconditions
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Comment incident with run identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.synthetic-domain-certificate-d1-postconditions.result }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/body.md" <<EOF
+          ## Staging synthetic domain/certificate smoke
+
+          - run: https://github.com/$REPOSITORY/actions/runs/$RUN_ID
+          - source SHA: \`$SOURCE_SHA\`
+          - result: **$RESULT**
+          - target: staging synthetic QA only
+          - production action: none
+          EOF
+          gh issue comment 568 --repo "$REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
