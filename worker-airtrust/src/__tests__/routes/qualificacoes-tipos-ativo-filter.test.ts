@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ExecutionContext } from '@cloudflare/workers-types';
 import app from '../../index';
@@ -14,7 +15,7 @@ vi.mock('../../middleware/auth', () => ({
 vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (c: any, next: () => Promise<void>) => {
     await next();
-  }
+  },
 }));
 
 describe('GET /qualificacoes/tipos com filtro ativo', () => {
@@ -30,7 +31,7 @@ describe('GET /qualificacoes/tipos com filtro ativo', () => {
     executedBindings = [];
     mockRun = vi.fn().mockResolvedValue({ success: true });
     mockAll = vi.fn().mockResolvedValue({
-      results: [{ id: 1, codigo: 'Q1', ativo: 1 }]
+      results: [{ id: 1, codigo: 'Q1', ativo: 1 }],
     });
   });
 
@@ -40,6 +41,7 @@ describe('GET /qualificacoes/tipos com filtro ativo', () => {
     return app.fetch(
       req,
       {
+        ENVIRONMENT: 'test',
         DB: {
           prepare: (sql: string) => {
             executedSql.push(sql);
@@ -50,21 +52,21 @@ describe('GET /qualificacoes/tipos com filtro ativo', () => {
               },
               all: mockAll,
               run: mockRun,
-              first: () => ({ id: 1, status: 'ATIVA' })
+              first: () => ({ id: 1, status: 'ATIVA' }),
             };
             return stmt;
-          }
-        }
+          },
+        },
       } as any,
       {
         waitUntil: vi.fn(),
         passThroughOnException: vi.fn(),
-      } as unknown as ExecutionContext
+      } as unknown as ExecutionContext,
     );
   };
 
   const getQueryConditions = () => {
-    const sql = executedSql.find(s => s.includes('FROM qualificacoes_tipos qt'));
+    const sql = executedSql.find((s) => s.includes('FROM qualificacoes_tipos qt'));
     return sql || '';
   };
 
@@ -112,7 +114,7 @@ describe('GET /qualificacoes/tipos com filtro ativo', () => {
     const data = await res.json<{ success: boolean; error: string }>();
     expect(data.success).toBe(false);
     expect(data.error).toContain('inválido');
-    expect(executedSql.some(sql => sql.includes('SELECT qt.id'))).toBe(false); // consulta principal não executada
+    expect(executedSql.some((sql) => sql.includes('SELECT qt.id'))).toBe(false); // consulta principal não executada
   });
 
   it('valor inválido retorna 400 antes de consultar o banco (ex: ativo=sim)', async () => {
@@ -120,7 +122,7 @@ describe('GET /qualificacoes/tipos com filtro ativo', () => {
     expect(res.status).toBe(400);
     const data = await res.json<{ success: boolean; error: string }>();
     expect(data.success).toBe(false);
-    expect(executedSql.some(sql => sql.includes('SELECT qt.id'))).toBe(false);
+    expect(executedSql.some((sql) => sql.includes('SELECT qt.id'))).toBe(false);
   });
 
   it('empresa_id correto está nos bindings (tenant isolation)', async () => {

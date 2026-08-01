@@ -11,13 +11,26 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { Env, Variables } from '../types';
 import { AppError } from '../utils/errors';
 import { hasUsuariosEmpresasTable } from '../utils/db-schema';
-import {
-  isPlatformAdminAccess,
-  resolvePlatformAccessState,
-} from '../lib/rbac/platform-access';
+import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 
 function isDevAuthBypassEnabled(env: Env): boolean {
   return env.ENVIRONMENT === 'development' && env.ENABLE_DEV_AUTH_BYPASS === 'true';
+}
+
+export function allowsLegacyTenantSchema(environment: unknown): boolean {
+  const normalized = String(environment || '')
+    .trim()
+    .toLowerCase();
+  return normalized === 'development' || normalized === 'test';
+}
+
+export function assertTenantMembershipSchemaReady(
+  environment: unknown,
+  hasMembershipTable: boolean,
+): void {
+  if (!allowsLegacyTenantSchema(environment) && !hasMembershipTable) {
+    throw new AppError('Schema de vínculo empresarial indisponível', 503, 'SCHEMA_NOT_READY');
+  }
 }
 
 // ============================================
@@ -121,14 +134,15 @@ export function normalizeTenantRole(role: unknown): TenantContext['role'] {
  */
 export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
   const handler: MiddlewareHandler<{ Bindings: Env; Variables: Variables }> = async (c, next) => {
+    const db = c.env.DB;
+    const useUsuariosEmpresas = await hasUsuariosEmpresasTable(db);
+    assertTenantMembershipSchemaReady(c.env.ENVIRONMENT, useUsuariosEmpresas);
     const devBypass = isDevAuthBypassEnabled(c.env);
 
     if (devBypass) {
       const userIdRaw = c.get('userId');
       const userId = typeof userIdRaw === 'string' ? Number(userIdRaw) : (userIdRaw as number);
 
-      const db = c.env.DB;
-      const useUsuariosEmpresas = await hasUsuariosEmpresasTable(db);
       const fallbackTenant = useUsuariosEmpresas
         ? await db
             .prepare(
@@ -226,8 +240,6 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
     }
 
     // Buscar dados da empresa e permissões do usuário
-    const db = c.env.DB;
-    const useUsuariosEmpresas = await hasUsuariosEmpresasTable(db);
 
     const result = useUsuariosEmpresas
       ? await db
