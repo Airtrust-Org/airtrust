@@ -63,6 +63,13 @@ describe('ConfirmDeleteModal accessibility', () => {
     const confirmButton = screen.getByRole('button', { name: 'Excluir' });
 
     expect(closeButton).toHaveAttribute('type', 'button');
+    expect(closeButton).toHaveAttribute('title', 'Fechar confirmação');
+    expect(closeButton).toHaveClass(
+      'focus-visible:outline-none',
+      'focus-visible:ring-2',
+      'focus-visible:ring-primary-500',
+      'focus-visible:ring-offset-2',
+    );
     expect(cancelButton).toHaveAttribute('type', 'button');
     expect(confirmButton).toHaveAttribute('type', 'button');
     expect(closeButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');

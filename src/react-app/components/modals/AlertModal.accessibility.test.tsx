@@ -39,6 +39,13 @@ describe('AlertModal accessibility', () => {
     const dialog = screen.getByRole('alertdialog');
 
     expect(closeButton).toHaveAttribute('type', 'button');
+    expect(closeButton).toHaveAttribute('title', 'Fechar');
+    expect(closeButton).toHaveClass(
+      'focus-visible:outline-none',
+      'focus-visible:ring-2',
+      'focus-visible:ring-primary-500',
+      'focus-visible:ring-offset-2',
+    );
     expect(confirmButton).toHaveAttribute('type', 'button');
     expect(closeButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     expect(dialog.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(2);

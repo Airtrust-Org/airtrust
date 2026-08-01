@@ -49,8 +49,9 @@ export default function AlertModal({
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition"
+            className="rounded-lg p-1 text-gray-400 transition hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
             aria-label="Fechar"
+            title="Fechar"
           >
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
