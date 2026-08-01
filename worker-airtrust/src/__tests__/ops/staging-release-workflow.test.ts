@@ -712,7 +712,7 @@ describe('scripts/staging/validate-0453-postconditions.sh — staging-only read-
       'SELECT COUNT(*) AS n FROM ead_category_reconciliation_runs',
       'qualificacoes_categorias',
       'qualificacoes_tipos',
-      'historico_qualificacoes',
+      'qualificacoes_historico',
       'lms_cursos',
     ])
       expect(source).toContain(token);
