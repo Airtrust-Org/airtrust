@@ -16,7 +16,6 @@ DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
-  "$WORKER_DIR/migrations/0332_create_audit_logs_compatible.sql"
   "$WORKER_DIR/migrations/0335_lms_cursos.sql"
   "$WORKER_DIR/migrations/0336_lms_matriculas.sql"
   "$WORKER_DIR/migrations/0337_lms_progresso_scorm.sql"
@@ -145,7 +144,7 @@ apply_local_migration() {
   printf 'setup:lms:local: migration applied: %s\n' "$migration_name"
 }
 
-for table_name in d1_migrations empresas setores qualificacoes_tipos qualificacoes_historico qualificacoes_categorias; do
+for table_name in d1_migrations empresas setores qualificacoes_tipos qualificacoes_historico qualificacoes_categorias audit_logs; do
   require_sqlite_table "$table_name"
 done
 
@@ -235,7 +234,7 @@ for migration_file in "${LMS_MIGRATIONS[@]}"; do
   apply_local_migration "$migration_file"
 done
 
-for table_name in audit_logs lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores lms_cursos_setores; do
+for table_name in lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores lms_cursos_setores; do
   require_sqlite_table "$table_name"
 done
 
