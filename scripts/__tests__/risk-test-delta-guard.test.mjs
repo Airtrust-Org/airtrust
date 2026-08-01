@@ -78,6 +78,20 @@ test('requires a focused release safety test or smoke', () => {
   );
 });
 
+test('classifies protected release workflows as release-safety changes', () => {
+  assert.throws(
+    () => assertRiskTestCoverage(['.github/workflows/deploy-production.yml']),
+    /release-safety/,
+  );
+
+  assert.doesNotThrow(() =>
+    assertRiskTestCoverage([
+      '.github/workflows/deploy-production.yml',
+      'scripts/__tests__/deploy-production.test.mjs',
+    ]),
+  );
+});
+
 test('resolves explicit, environment and GitHub base refs in priority order', () => {
   assert.equal(resolveBaseRef({ GITHUB_BASE_REF: 'release' }, 'origin/custom'), 'origin/custom');
   assert.equal(
