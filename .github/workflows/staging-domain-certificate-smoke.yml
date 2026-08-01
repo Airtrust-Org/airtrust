@@ -74,54 +74,52 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           SMOKE_REPORT_PATH: ${{ runner.temp }}/staging-domain-certificate-smoke-report.json
+          POSTCONDITION_SQL_PATH: ${{ runner.temp }}/staging-domain-certificate-postconditions.sql
           D1_RESULT_PATH: ${{ runner.temp }}/staging-domain-certificate-d1-postconditions.json
         shell: bash
         run: |
           set -euo pipefail
           [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "D1_TOKEN_MISSING" >&2; exit 1; }
-          eval "$(node - <<'NODE'
+
+          node - <<'NODE'
           const fs = require('fs');
           const report = JSON.parse(fs.readFileSync(process.env.SMOKE_REPORT_PATH, 'utf8'));
-          const values = {
-            TYPE_ID: Number(report?.candidate?.typeId),
-            HISTORY_ID: Number(report?.candidate?.historyId),
-            DOCUMENT_ID: Number(report?.certificate?.documentId),
-            STARTED_AT: String(report?.startedAtUtc || ''),
-          };
-          for (const [key, value] of Object.entries(values)) {
-            if (key === 'STARTED_AT') {
-              if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) throw new Error(`${key}_INVALID`);
-              console.log(`${key}=${JSON.stringify(value)}`);
-            } else {
-              if (!Number.isInteger(value) || value <= 0) throw new Error(`${key}_INVALID`);
-              console.log(`${key}=${value}`);
-            }
+          const typeId = Number(report?.candidate?.typeId);
+          const historyId = Number(report?.candidate?.historyId);
+          const documentId = Number(report?.certificate?.documentId);
+          for (const [key, value] of Object.entries({ typeId, historyId, documentId })) {
+            if (!Number.isInteger(value) || value <= 0) throw new Error(`${key.toUpperCase()}_INVALID`);
           }
-          NODE
-          )"
-
-          SQL="SELECT
-            (SELECT dominio_codigo FROM qualificacoes_tipos WHERE id = $TYPE_ID AND deleted_at IS NULL) AS current_domain,
-            (SELECT certificado_arquivo_id FROM qualificacoes_historico WHERE id = $HISTORY_ID AND deleted_at IS NULL) AS linked_document_id,
-            (SELECT COUNT(*) FROM documentos WHERE id = $DOCUMENT_ID AND deleted_at IS NULL) AS document_count,
+          const started = new Date(String(report?.startedAtUtc || ''));
+          if (!Number.isFinite(started.getTime())) throw new Error('STARTED_AT_INVALID');
+          const startedAt = started.toISOString();
+          const sql = `SELECT
+            (SELECT dominio_codigo FROM qualificacoes_tipos WHERE id = ${typeId} AND deleted_at IS NULL) AS current_domain,
+            (SELECT certificado_arquivo_id FROM qualificacoes_historico WHERE id = ${historyId} AND deleted_at IS NULL) AS linked_document_id,
+            (SELECT COUNT(*) FROM documentos WHERE id = ${documentId} AND deleted_at IS NULL) AS document_count,
             (SELECT COUNT(*) FROM auditoria
               WHERE tabela_afetada = 'qualificacoes_tipos'
-                AND registro_id = CAST($TYPE_ID AS TEXT)
-                AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '$STARTED_AT', '-5 minutes')) AS audit_count,
+                AND registro_id = CAST(${typeId} AS TEXT)
+                AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '${startedAt}', '-5 minutes')) AS audit_count,
             (SELECT COUNT(*) FROM auditoria
               WHERE tabela_afetada = 'qualificacoes_tipos'
-                AND registro_id = CAST($TYPE_ID AS TEXT)
+                AND registro_id = CAST(${typeId} AS TEXT)
                 AND json_extract(dados_antes, '$.dominio_codigo') IS NULL
                 AND json_extract(dados_depois, '$.dominio_codigo') = 'OPERACOES'
-                AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '$STARTED_AT', '-5 minutes')) AS apply_audit_count,
+                AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '${startedAt}', '-5 minutes')) AS apply_audit_count,
             (SELECT COUNT(*) FROM auditoria
               WHERE tabela_afetada = 'qualificacoes_tipos'
-                AND registro_id = CAST($TYPE_ID AS TEXT)
+                AND registro_id = CAST(${typeId} AS TEXT)
                 AND json_extract(dados_antes, '$.dominio_codigo') = 'OPERACOES'
                 AND json_extract(dados_depois, '$.dominio_codigo') IS NULL
-                AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '$STARTED_AT', '-5 minutes')) AS rollback_audit_count;"
+                AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', '${startedAt}', '-5 minutes')) AS rollback_audit_count;`;
+          fs.writeFileSync(process.env.POSTCONDITION_SQL_PATH, `${sql}\n`, { mode: 0o600 });
+          NODE
 
-          npx wrangler d1 execute "$ALLOWED_STAGING_DB_NAME" --remote --command "$SQL" --json > "$D1_RESULT_PATH"
+          npx wrangler d1 execute "$ALLOWED_STAGING_DB_NAME" \
+            --remote \
+            --file "$POSTCONDITION_SQL_PATH" \
+            --json > "$D1_RESULT_PATH"
 
           node - <<'NODE'
           const fs = require('fs');
