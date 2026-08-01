@@ -84,9 +84,7 @@ export const Header: React.FC = () => {
 
   useEffect(() => {
     if (profileDropdownOpen) {
-      profileMenuRef.current
-        ?.querySelector<HTMLButtonElement>('[role="menuitem"]')
-        ?.focus();
+      profileMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
     }
   }, [profileDropdownOpen]);
 
@@ -173,11 +171,7 @@ export const Header: React.FC = () => {
                 aria-orientation="vertical"
                 aria-labelledby="profile-menu-button"
                 onKeyDown={(event) =>
-                  handleMenuKeyDown(
-                    event,
-                    () => setProfileDropdownOpen(false),
-                    profileButtonRef,
-                  )
+                  handleMenuKeyDown(event, () => setProfileDropdownOpen(false), profileButtonRef)
                 }
                 className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-slate-200 bg-white py-2 shadow-lg"
               >
@@ -197,7 +191,10 @@ export const Header: React.FC = () => {
                   <Settings className="h-4 w-4" aria-hidden="true" />
                   Configurações
                 </button>
-                <div role="none" className="mb-2 rounded bg-amber-50 px-4 py-2 text-xs text-amber-600">
+                <div
+                  role="none"
+                  className="mb-2 rounded bg-amber-50 px-4 py-2 text-xs text-amber-600"
+                >
                   ⚠️ Login desativado (dev mode)
                 </div>
                 <button
@@ -271,7 +268,10 @@ export const Header: React.FC = () => {
             }
             className="fixed bottom-0 left-0 right-0 top-[57px] z-40 overflow-y-auto bg-white shadow-2xl animate-in slide-in-from-top-4 md:hidden"
           >
-            <div role="none" className="border-b border-slate-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+            <div
+              role="none"
+              className="border-b border-slate-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4"
+            >
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-base font-bold text-white shadow-md">
                   {user?.name?.charAt(0)?.toUpperCase() || 'U'}
@@ -283,7 +283,11 @@ export const Header: React.FC = () => {
               </div>
             </div>
 
-            <nav role="none" className="flex flex-col gap-1 p-3" aria-label="Navegação principal móvel">
+            <nav
+              role="none"
+              className="flex flex-col gap-1 p-3"
+              aria-label="Navegação principal móvel"
+            >
               {navItems.map((item) => (
                 <button
                   type="button"
