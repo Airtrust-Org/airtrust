@@ -16,6 +16,9 @@ DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
+  # completeLmsMatricula grava audit_logs no mesmo db.batch() da conclusão.
+  # O snapshot local não possui essa tabela; ela deve ser criada antes do smoke.
+  "$WORKER_DIR/migrations/0332_create_audit_logs_compatible.sql"
   "$WORKER_DIR/migrations/0335_lms_cursos.sql"
   "$WORKER_DIR/migrations/0336_lms_matriculas.sql"
   "$WORKER_DIR/migrations/0337_lms_progresso_scorm.sql"
@@ -33,6 +36,8 @@ LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0350_lms_composite_deleted_at_indexes.sql"
   "$WORKER_DIR/migrations/0360_matriz_treinamento_funcao.sql"
   "$WORKER_DIR/migrations/0389_platform_roles_support_access_foundation.sql"
+  # 0390_training_class_management.sql é incompatível com o snapshot local
+  # versionado e não é necessário para o fluxo LMS coberto por este smoke.
   "$WORKER_DIR/migrations/0407_qualificacoes_tipos_setores.sql"
   "$WORKER_DIR/migrations/0408_lms_cursos_setores.sql"
   "$WORKER_DIR/migrations/0409_lms_cursos_setores_backfill.sql"
@@ -117,6 +122,12 @@ migration_recorded() {
   [[ "$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM d1_migrations WHERE name='$migration_name';")" == "1" ]]
 }
 
+require_migration_recorded() {
+  local migration_name="$1"
+  migration_recorded "$migration_name" \
+    || error "local migration ledger missing successful migration: $migration_name"
+}
+
 record_local_migration() {
   local migration_name="$1"
   sqlite3 "$SQLITE_FILE" \
@@ -144,7 +155,7 @@ apply_local_migration() {
   printf 'setup:lms:local: migration applied: %s\n' "$migration_name"
 }
 
-for table_name in d1_migrations empresas setores qualificacoes_tipos qualificacoes_historico qualificacoes_categorias audit_logs; do
+for table_name in d1_migrations empresas setores qualificacoes_tipos qualificacoes_historico qualificacoes_categorias; do
   require_sqlite_table "$table_name"
 done
 
@@ -234,13 +245,21 @@ for migration_file in "${LMS_MIGRATIONS[@]}"; do
   apply_local_migration "$migration_file"
 done
 
-for table_name in lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores lms_cursos_setores; do
+for migration_file in "${LMS_MIGRATIONS[@]}"; do
+  require_migration_recorded "$(basename "$migration_file")"
+done
+
+for table_name in audit_logs lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores lms_cursos_setores; do
   require_sqlite_table "$table_name"
+done
+
+for column_name in empresa_id usuario_id acao tabela registro_id created_at; do
+  require_sqlite_column "audit_logs" "$column_name"
 done
 
 ensure_sqlite_column "lms_cursos" "formato_id" "INTEGER REFERENCES qualificacoes_formatos(id)"
 ensure_sqlite_column "lms_cursos" "dominio_codigo" "TEXT"
-require_sqlite_column "lms_cursos" "content_filename"
+require_sqlite_column "lms_cursos" "conteudo_arquivo_nome"
 require_sqlite_column "lms_matriculas" "ultimo_slide"
 
 printf 'setup:lms:local: applying synthetic LMS smoke seed\n'
