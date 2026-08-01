@@ -29,10 +29,10 @@ jobs:
     environment:
       name: ${{ inputs.environment }}
     env:
-      # Wrangler's runtime variable is intentionally mapped from the one
-      # canonical, environment-scoped Worker credential. It is not a GitHub
-      # secret named CLOUDFLARE_API_TOKEN.
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+      # Wrangler's runtime variable is intentionally mapped from the
+      # canonical, environment-scoped D1 migration credential that already
+      # backs the repository's successful controlled D1 workflows.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
@@ -75,10 +75,10 @@ jobs:
             fi
           fi
 
-      - name: Check canonical Worker token presence
+      - name: Check canonical D1 migration token presence
         run: |
           if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
-            echo "CLOUDFLARE_WORKER_API_TOKEN_MISSING_${{ inputs.environment }}" | tr '[:lower:]' '[:upper:]' >&2
+            echo "CLOUDFLARE_D1_MIGRATION_API_TOKEN_MISSING_${{ inputs.environment }}" | tr '[:lower:]' '[:upper:]' >&2
             exit 1
           fi
 
@@ -101,7 +101,7 @@ jobs:
 
       - name: Record backup checksum
         run: |
-          node -e "const fs=require('fs'); fs.writeFileSync('backup-${{ inputs.environment }}.json', JSON.stringify({environment:'${{ inputs.environment }}', database:'$DB_NAME', backup_file:'$BACKUP_FILE', sha256:'$BACKUP_SHA'}, null, 2) + '\\n')"
+          node -e "const fs=require('fs'); fs.writeFileSync('backup-${{ inputs.environment }}.json', JSON.stringify({environment:'${{ inputs.environment }}', database:'$DB_NAME', backup_file:'$BACKUP_FILE', sha256:'$BACKUP_SHA'}, null, 2) + '\n')"
 
       - name: Create temp SQLite from backup
         run: |
