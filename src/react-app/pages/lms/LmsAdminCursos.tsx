@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
-  ArrowRight,
   BadgeCheck,
   BookOpen,
   CheckCircle2,
@@ -24,7 +23,6 @@ import {
   type LmsCurso,
   type TipoConteudo,
   useDeleteCurso,
-  useImportLmsEdappLegacy,
   useLmsCursos,
   useLmsEdappLegacySummary,
   useSyncEadCursos,
@@ -39,8 +37,10 @@ import {
   LmsSummaryTag,
   LmsSurface,
 } from './lmsUi';
-import { getAdminCoursePreviewPath, supportsAdminCoursePreview as supportsContentPreview } from './lmsAdminPreview';
-
+import {
+  getAdminCoursePreviewPath,
+  supportsAdminCoursePreview as supportsContentPreview,
+} from './lmsAdminPreview';
 
 function impactsCompliance(
   curso: Pick<LmsCurso, 'gerar_qualificacao_ao_concluir' | 'qualificacao_tipo_nome'>,
@@ -79,7 +79,6 @@ const adminDangerActionButtonClass =
 export default function LmsAdminCursos() {
   const navigate = useNavigate();
   const syncEad = useSyncEadCursos();
-  const importEdappLegacy = useImportLmsEdappLegacy();
   const updateCurso = useUpdateCurso();
   const deleteCurso = useDeleteCurso();
   const [search, setSearch] = useState('');
@@ -96,15 +95,6 @@ export default function LmsAdminCursos() {
     updated: number;
     skipped: number;
   } | null>(null);
-  const [lastLegacyImportSummary, setLastLegacyImportSummary] = useState<{
-    at: string;
-    inseridos: number;
-    atualizados: number;
-    ignorados_sem_funcionario: number;
-    lotes: number;
-    pendentes_restantes: number;
-    erros: number;
-  } | null>(null);
 
   const setor_ids = sectorFilter !== 'all' ? [Number(sectorFilter)] : undefined;
   const { data: publishedCoursesResponse, isLoading: loadingPublishedCourses } = useLmsCursos({
@@ -117,7 +107,7 @@ export default function LmsAdminCursos() {
     limit: 300,
     setor_ids,
   });
-  const { data: legacySummary, refetch: refetchLegacySummary } = useLmsEdappLegacySummary();
+  const { data: legacySummary } = useLmsEdappLegacySummary();
 
   const courses = useMemo(() => {
     const byId = new Map<number, LmsCurso>();
@@ -189,71 +179,6 @@ export default function LmsAdminCursos() {
     }
   }
 
-  async function handleImportEdappLegacy() {
-    try {
-      const aggregated = {
-        inseridos: 0,
-        atualizados: 0,
-        ignorados_sem_funcionario: 0,
-        erros: 0,
-      };
-      let lotes = 0;
-      let pendentesRestantes = legacySummary?.pendentes_importacao ?? Number.POSITIVE_INFINITY;
-
-      while (lotes < 20) {
-        const result = await importEdappLegacy.mutateAsync({ limit: 1000 });
-        lotes++;
-        aggregated.inseridos += result.inseridos;
-        aggregated.atualizados += result.atualizados;
-        aggregated.ignorados_sem_funcionario += result.ignorados_sem_funcionario;
-        aggregated.erros += result.erros;
-
-        const refreshed = await refetchLegacySummary();
-        pendentesRestantes = refreshed.data?.pendentes_importacao ?? 0;
-
-        if (pendentesRestantes <= 0 || result.analisados === 0 || result.erros > 0) {
-          break;
-        }
-      }
-
-      setLastLegacyImportSummary({
-        at: new Date().toISOString(),
-        inseridos: aggregated.inseridos,
-        atualizados: aggregated.atualizados,
-        ignorados_sem_funcionario: aggregated.ignorados_sem_funcionario,
-        lotes,
-        pendentes_restantes: Number.isFinite(pendentesRestantes) ? pendentesRestantes : 0,
-        erros: aggregated.erros,
-      });
-
-      if (pendentesRestantes > 0) {
-        toast.warning(
-          `Importação parcial do legado EdApp: ${aggregated.inseridos} novo(s), ${aggregated.atualizados} atualizado(s) e ${pendentesRestantes} pendente(s) restantes.`,
-        );
-      } else {
-        toast.success(
-          `Histórico EdApp importado em ${lotes} lote(s): ${aggregated.inseridos} novo(s), ${aggregated.atualizados} atualizado(s).`,
-        );
-      }
-
-      if (aggregated.ignorados_sem_funcionario > 0) {
-        toast.warning(
-          `${aggregated.ignorados_sem_funcionario} evento(s) ficaram sem vínculo de funcionário e precisam de mapeamento.`,
-        );
-      }
-
-      if (aggregated.erros > 0) {
-        toast.error(
-          `${aggregated.erros} evento(s) falharam durante a importação. Reexecute a operação para continuar do ponto salvo.`,
-        );
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Erro ao importar histórico legado do EdApp',
-      );
-    }
-  }
-
   async function handleTogglePublication(curso: LmsCurso) {
     try {
       await updateCurso.mutateAsync({ id: curso.id, publicado: curso.publicado ? 0 : 1 });
@@ -306,13 +231,9 @@ export default function LmsAdminCursos() {
                 <BadgeCheck className="h-4 w-4" />
                 Sincronizar EAD
               </Button>
-              <Button
-                variant="secondary"
-                onClick={() => void handleImportEdappLegacy()}
-                loading={importEdappLegacy.isPending}
-              >
-                <ArrowRight className="h-4 w-4" />
-                Importar legado EdApp
+              <Button variant="secondary" onClick={() => navigate('/lms/historico-edapp')}>
+                <BookOpen className="h-4 w-4" />
+                Histórico EdApp
               </Button>
             </>
           }
@@ -391,51 +312,30 @@ export default function LmsAdminCursos() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-400">
-                        Legado EdApp
+                        Legado EdApp somente leitura
                       </p>
                       {legacySummary ? (
                         <>
                           <span className="inline-flex rounded-full border border-amber-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                            {legacySummary.total_importado} importado(s)
+                            {legacySummary.total_importado} registro(s)
                           </span>
-                          <span className="inline-flex rounded-full border border-amber-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                            {legacySummary.pendentes_importacao} pendente(s)
-                          </span>
+                          {legacySummary.total_pendentes_vinculo > 0 ? (
+                            <span className="inline-flex rounded-full border border-rose-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                              {legacySummary.total_pendentes_vinculo} vínculo(s) pendente(s)
+                            </span>
+                          ) : null}
                         </>
                       ) : null}
                     </div>
                     <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
-                      {lastLegacyImportSummary
-                        ? `Última importação em ${new Date(lastLegacyImportSummary.at).toLocaleString('pt-BR')} · ${lastLegacyImportSummary.inseridos} novo(s), ${lastLegacyImportSummary.atualizados} atualizado(s) em ${lastLegacyImportSummary.lotes} lote(s).`
-                        : legacySummary
-                          ? `${legacySummary.total_funcionarios} funcionário(s) cobertos e ${legacySummary.total_sem_curso_lms} sem curso LMS vinculado.`
-                          : 'Importe o legado do EdApp para preservar conclusões históricas dentro do LMS interno.'}
+                      {legacySummary
+                        ? `${legacySummary.total_funcionarios} funcionário(s), ${legacySummary.total_cursos} curso(s) e ${legacySummary.total_com_qualificacao} registro(s) vinculados a qualificações.`
+                        : 'Conclusões importadas permanecem preservadas para auditoria e consulta. A integração e a importação EdApp foram encerradas.'}
                     </p>
-                    {lastLegacyImportSummary?.ignorados_sem_funcionario ? (
-                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                        {lastLegacyImportSummary.ignorados_sem_funcionario} evento(s) ainda sem
-                        vínculo de funcionário.
-                      </p>
-                    ) : null}
-                    {lastLegacyImportSummary && lastLegacyImportSummary.pendentes_restantes > 0 ? (
-                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                        {lastLegacyImportSummary.pendentes_restantes} evento(s) seguem na fila de
-                        importação.
-                      </p>
-                    ) : null}
-                    {lastLegacyImportSummary?.erros ? (
-                      <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
-                        {lastLegacyImportSummary.erros} evento(s) falharam nesta execução.
-                      </p>
-                    ) : null}
                   </div>
-                  <Button
-                    variant="secondary"
-                    onClick={() => void handleImportEdappLegacy()}
-                    loading={importEdappLegacy.isPending}
-                  >
-                    <ArrowRight className="h-4 w-4" />
-                    Importar legado EdApp
+                  <Button variant="secondary" onClick={() => navigate('/lms/historico-edapp')}>
+                    <BookOpen className="h-4 w-4" />
+                    Abrir histórico
                   </Button>
                 </div>
 
@@ -502,15 +402,25 @@ export default function LmsAdminCursos() {
                 <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
                   {isLoading ? (
                     <div className="overflow-hidden">
-                      <div className="bg-slate-50 px-4 py-3 grid grid-cols-6 gap-4 border-b border-slate-100 dark:bg-slate-800 dark:border-slate-700">
+                      <div className="grid grid-cols-6 gap-4 border-b border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
                         {[...Array(6)].map((_, i) => (
-                          <div key={i} className="h-3 rounded bg-slate-200 animate-pulse dark:bg-slate-700" />
+                          <div
+                            key={i}
+                            className="h-3 animate-pulse rounded bg-slate-200 dark:bg-slate-700"
+                          />
                         ))}
                       </div>
                       {[...Array(5)].map((_, i) => (
-                        <div key={i} className="px-4 py-4 grid grid-cols-6 gap-4 border-b border-slate-50 dark:border-slate-800">
+                        <div
+                          key={i}
+                          className="grid grid-cols-6 gap-4 border-b border-slate-50 px-4 py-4 dark:border-slate-800"
+                        >
                           {[...Array(6)].map((_, j) => (
-                            <div key={j} className="h-4 rounded bg-slate-100 animate-pulse dark:bg-slate-700" style={{ width: `${55 + Math.sin(i + j) * 20}%` }} />
+                            <div
+                              key={j}
+                              className="h-4 animate-pulse rounded bg-slate-100 dark:bg-slate-700"
+                              style={{ width: `${55 + Math.sin(i + j) * 20}%` }}
+                            />
                           ))}
                         </div>
                       ))}
@@ -544,11 +454,16 @@ export default function LmsAdminCursos() {
                             const critical = impactsCompliance(curso);
 
                             return (
-                              <tr key={curso.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                              <tr
+                                key={curso.id}
+                                className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50"
+                              >
                                 <td className="px-4 py-3 align-top">
                                   <div className="min-w-[260px]">
                                     <div className="flex items-start gap-2">
-                                      <p className="font-semibold text-slate-900 dark:text-slate-100">{curso.titulo}</p>
+                                      <p className="font-semibold text-slate-900 dark:text-slate-100">
+                                        {curso.titulo}
+                                      </p>
                                       {critical ? (
                                         <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                                           <BadgeCheck className="h-3 w-3" />
