@@ -30,6 +30,8 @@ import {
 const DEFAULT_BASE_URL = 'https://airtrust-api-staging.airtrust.workers.dev';
 const TARGET_DOMAIN = 'OPERACOES';
 const REPORT_PATH = process.env.SMOKE_REPORT_PATH || 'staging-domain-certificate-smoke-report.json';
+const MAX_UNCLASSIFIED_TYPES_TO_SCAN = 10;
+const MAX_HISTORIES_PER_TYPE = 5;
 
 function asRows(payload) {
   return Array.isArray(payload?.data) ? payload.data : [];
@@ -130,30 +132,38 @@ async function discoverCandidate(baseUrl, token, managedSetorIds) {
 
   const unclassifiedTypes = asRows({ data: unclassifiedResponse.json?.data?.tipos });
   assert(unclassifiedTypes.length > 0, 'tenant QA sem tipo genuinamente não classificado');
+  const typesToScan = unclassifiedTypes.slice(0, MAX_UNCLASSIFIED_TYPES_TO_SCAN);
   const typeRows = asRows(typesResponse.json);
   const historiesByType = new Map();
 
-  for (const entry of unclassifiedTypes) {
+  for (const entry of typesToScan) {
     const typeId = positiveInt(entry?.id);
     if (!typeId) continue;
     const historiesResponse = await authJson(
       baseUrl,
       token,
-      `/api/qualificacoes/historico?tipo_id=${typeId}&limit=100&stats=false&orderBy=created_at&order=DESC`,
+      `/api/qualificacoes/historico?tipo_id=${typeId}&limit=${MAX_HISTORIES_PER_TYPE}&stats=false&orderBy=created_at&order=DESC`,
     );
     if (historiesResponse.status !== 200 || historiesResponse.json?.success !== true) continue;
 
-    const enriched = [];
-    for (const history of asRows(historiesResponse.json)) {
-      const employeeId = positiveInt(history?.funcionario_id);
-      if (!employeeId) continue;
-      const setorId = await loadEmployeeSetor(baseUrl, token, employeeId);
-      enriched.push({ ...history, funcionario_setor_id: setorId });
-    }
-    historiesByType.set(typeId, enriched);
+    const historyRows = asRows(historiesResponse.json).slice(0, MAX_HISTORIES_PER_TYPE);
+    const enriched = await Promise.all(
+      historyRows.map(async (history) => {
+        const employeeId = positiveInt(history?.funcionario_id);
+        if (!employeeId) return null;
+        const setorId = await loadEmployeeSetor(baseUrl, token, employeeId);
+        return { ...history, funcionario_setor_id: setorId };
+      }),
+    );
+    historiesByType.set(typeId, enriched.filter(Boolean));
   }
 
-  return selectCandidate({ unclassifiedTypes, typeRows, historiesByType, managedSetorIds });
+  return selectCandidate({
+    unclassifiedTypes: typesToScan,
+    typeRows,
+    historiesByType,
+    managedSetorIds,
+  });
 }
 
 async function classify(baseUrl, token, typeId, domain) {
