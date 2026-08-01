@@ -153,7 +153,7 @@ require_migration_recorded() {
 record_local_migration() {
   local migration_name="$1"
   sqlite3 "$SQLITE_FILE" \
-    "INSERT INTO d1_migrations (name, applied_at) VALUES ('$migration_name', datetime('now'));"
+    "INSERT INTO d1_migrations (name) VALUES ('$migration_name');"
 }
 
 apply_local_migration() {
@@ -180,6 +180,7 @@ apply_local_migration() {
 for table_name in d1_migrations empresas funcionarios manobras manobras_categorias; do
   require_sqlite_table "$table_name"
 done
+require_sqlite_column "d1_migrations" "name"
 
 info "Aplicando migrations incrementais do app..."
 for migration_file in "${APP_MIGRATIONS[@]}"; do
