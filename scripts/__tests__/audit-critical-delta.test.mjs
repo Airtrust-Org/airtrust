@@ -54,11 +54,7 @@ test('uses an aggregate signature for package-reference criticals', () => {
 
 test('returns only critical signatures introduced by the head snapshot', () => {
   const base = new Set(['root|alpha|1|<2', 'worker|beta|2|<3']);
-  const head = new Set([
-    'root|alpha|1|<2',
-    'worker|beta|2|<3',
-    'root|gamma|3|<4',
-  ]);
+  const head = new Set(['root|alpha|1|<2', 'worker|beta|2|<3', 'root|gamma|3|<4']);
 
   assert.deepEqual(findNewCriticalSignatures(base, head), ['root|gamma|3|<4']);
 });
