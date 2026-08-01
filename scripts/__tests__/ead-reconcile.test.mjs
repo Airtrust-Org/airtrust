@@ -54,7 +54,7 @@ function createFixture() {
     CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, nome TEXT, codigo_anac TEXT, deleted_at TEXT);
     CREATE TABLE qualificacoes_tipos (id INTEGER PRIMARY KEY, empresa_id INTEGER, categoria_id INTEGER, categoria TEXT, codigo TEXT, nome TEXT, deleted_at TEXT);
     CREATE TABLE qualificacoes_historico (id INTEGER PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER, qualificacao_id INTEGER, categoria_id INTEGER, categoria TEXT, deleted_at TEXT);
-    INSERT INTO empresas VALUES (6, 'Costa do Sol', NULL), (7, 'Tenant de teste', NULL);
+    INSERT INTO empresas VALUES (6, 'Costa do Sol Táxi Aéreo', NULL), (7, 'Tenant de teste', NULL);
     INSERT INTO qualificacoes_categorias VALUES (13, 6, 'EAD', '#0000FF', 0, NULL), (3, 6, 'Treinamento Teórico', '#999999', 1, NULL);
     INSERT INTO funcionarios VALUES (1, 6, 'Rômulo Harfield Castanheira de Menezes', '15722-4', NULL), (2, 6, 'Outro EAD', '000', NULL), (3, 7, 'Isolado', '999', NULL);
     INSERT INTO qualificacoes_tipos VALUES (100, 6, NULL, 'EAD', 'EAD-001', 'Curso EAD', NULL), (101, 6, 3, 'EAD', 'EAD-002', 'Curso LMS EAD', NULL), (110, 6, 3, 'Treinamento Teórico', 'TEO-001', 'Teórico legítimo', NULL), (200, 7, 3, 'EAD', 'TENANT-001', 'EAD isolado', NULL);
@@ -68,7 +68,7 @@ function createFixture() {
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('ead-reconcile', () => {
-  it('reconciles only verified Costa do Sol EAD records, is idempotent, and rolls back exactly', () => {
+  it('reconciles only verified empresa 6 EAD records with the legal tenant name, is idempotent, and rolls back exactly', () => {
     createFixture();
     runReconciler();
     const initialManifest = JSON.parse(readFileSync(manifest, 'utf8'));

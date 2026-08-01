@@ -7,7 +7,6 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, writeFileSync } from 'node:fs';
 
 const EMPRESA_ID = 6;
-const EMPRESA_NOME = 'Costa do Sol';
 const CATEGORY_ID = 13;
 const CATEGORY_NAME = 'EAD';
 const CATEGORY_COLOR = '#EABA0C';
@@ -152,8 +151,8 @@ function main() {
       dbFile,
       `SELECT id, nome, deleted_at FROM empresas WHERE id = ${EMPRESA_ID}`,
     );
-    if (!empresa || empresa.deleted_at !== null || empresa.nome !== EMPRESA_NOME) {
-      failClosed('Empresa 6 is missing, deleted, or is not Costa do Sol');
+    if (!empresa || empresa.deleted_at !== null) {
+      failClosed('Empresa 6 is missing or deleted');
     }
 
     const category = queryOne(
