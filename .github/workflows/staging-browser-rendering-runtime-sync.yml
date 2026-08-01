@@ -123,8 +123,6 @@ jobs:
             :
           elif validate_candidate alias "$BROWSER_TOKEN_ALIAS"; then
             :
-          elif validate_candidate worker-token-fallback "$DEPLOY_API_TOKEN"; then
-            :
           else
             echo "STAGING_BROWSER_TOKEN_MISSING_OR_UNAUTHORIZED" >&2
             exit 1
@@ -133,8 +131,10 @@ jobs:
           browser_token="$(cat "$selected_token_file")"
           export CLOUDFLARE_API_TOKEN="$DEPLOY_API_TOKEN"
           export CLOUDFLARE_ACCOUNT_ID="$ACCOUNT_ID"
-          printf '%s' "$ACCOUNT_ID" | npx --prefix worker-airtrust wrangler secret put CF_ACCOUNT_ID --env staging --config worker-airtrust/wrangler.toml >/dev/null
-          printf '%s' "$browser_token" | npx --prefix worker-airtrust wrangler secret put CF_BROWSER_API_TOKEN --env staging --config worker-airtrust/wrangler.toml >/dev/null
+          pushd worker-airtrust >/dev/null
+          printf '%s' "$ACCOUNT_ID" | npx wrangler secret put CF_ACCOUNT_ID --env staging --config wrangler.toml >/dev/null
+          printf '%s' "$browser_token" | npx wrangler secret put CF_BROWSER_API_TOKEN --env staging --config wrangler.toml >/dev/null
+          popd >/dev/null
           unset browser_token
 
           after_json="$tmpdir/version-after.json"
