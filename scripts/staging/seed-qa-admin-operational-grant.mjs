@@ -175,6 +175,31 @@ export function extractQaGrantRow(payload) {
   return row;
 }
 
+export function parseWranglerJson(rawOutput) {
+  const raw = String(rawOutput || '')
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .trim();
+  if (!raw) throw new Error('QA_GRANT_WRANGLER_JSON_EMPTY');
+
+  const candidates = [raw];
+  const lines = raw.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trimStart();
+    if (line.startsWith('[') || line.startsWith('{')) {
+      candidates.push(lines.slice(index).join('\n').trim());
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Wrangler may prefix --json output with update-status decoration.
+    }
+  }
+  throw new Error('QA_GRANT_WRANGLER_JSON_INVALID');
+}
+
 function executeWranglerJson(dbName, args) {
   const result = spawnSync('npx', ['wrangler', 'd1', 'execute', dbName, '--remote', ...args, '--json'], {
     cwd: join(process.cwd(), 'worker-airtrust'),
@@ -185,7 +210,7 @@ function executeWranglerJson(dbName, args) {
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || 'wrangler d1 execute falhou');
   }
-  return JSON.parse(result.stdout || '[]');
+  return parseWranglerJson(result.stdout);
 }
 
 function assertPreflight(row) {
