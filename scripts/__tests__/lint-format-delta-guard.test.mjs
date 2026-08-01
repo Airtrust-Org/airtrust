@@ -29,10 +29,7 @@ test('selects only supported existing files and deduplicates them', () => {
 
 test('excludes generated dependency and build directories', () => {
   const cwd = fixture(['node_modules/pkg/a.js', 'dist/a.js', 'src/a.js']);
-  const selected = selectDeltaFiles(
-    ['node_modules/pkg/a.js', 'dist/a.js', 'src/a.js'],
-    cwd,
-  );
+  const selected = selectDeltaFiles(['node_modules/pkg/a.js', 'dist/a.js', 'src/a.js'], cwd);
 
   assert.deepEqual(selected.eslintFiles, ['src/a.js']);
   assert.deepEqual(selected.prettierFiles, ['src/a.js']);
