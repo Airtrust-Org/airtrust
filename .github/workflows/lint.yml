@@ -2,9 +2,9 @@ name: Lint and Prettier Check
 
 on:
   pull_request:
-    paths: ["**/*"]
+    paths: ['**/*']
   push:
-    branches: [ main, chore/** ]
+    branches: [main, chore/**]
 
 jobs:
   lint:
@@ -17,7 +17,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
       - name: Install dependencies
         run: npm ci
       - name: Ensure base ref is available for delta guards
@@ -31,6 +31,10 @@ jobs:
         run: node --test scripts/__tests__/migration-no-go-guard.test.mjs
       - name: Run TypeScript delta guard tests
         run: node --test scripts/__tests__/typescript-delta-guard.test.mjs
+      - name: Run lint and format delta guard tests
+        run: node --test scripts/__tests__/lint-format-delta-guard.test.mjs
+      - name: Block new ESLint and Prettier violations
+        run: node scripts/guard-lint-format-delta.mjs
       - name: Run dangerous-ops guard (self-protected invariants)
         run: npm run ops:guard
       - name: Run self-protected invariant mutation tests
@@ -40,4 +44,4 @@ jobs:
       - name: Inventory legacy ESLint baseline
         run: npx eslint "./src/**/*.{js,jsx,ts,tsx}" --max-warnings=0 || true
       - name: Inventory legacy Prettier baseline
-        run: npx prettier --check . || true
+        run: npx --yes prettier@3.9.6 --check . || true
