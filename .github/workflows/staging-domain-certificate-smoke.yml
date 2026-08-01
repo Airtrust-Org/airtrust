@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/staging-domain-certificate-smoke.yml'
       - 'scripts/staging/smoke-operational-domain-certificate.mjs'
+      - 'scripts/staging/vitest.config.mjs'
       - 'scripts/staging/__tests__/smoke-operational-domain-certificate.test.mjs'
 
 concurrency:
@@ -62,7 +63,7 @@ jobs:
         run: npm ci
 
       - name: Run focused candidate-selection tests
-        run: npx vitest run scripts/staging/__tests__/smoke-operational-domain-certificate.test.mjs
+        run: npx vitest run --config scripts/staging/vitest.config.mjs scripts/staging/__tests__/smoke-operational-domain-certificate.test.mjs
 
       - name: Run synthetic classification and certificate smoke
         env:
