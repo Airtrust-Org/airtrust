@@ -60,6 +60,15 @@ describe('local D1 setup scripts', () => {
     expect(source).toContain('migration_recorded "$migration_name"');
   });
 
+  it.each(setupScripts)('%s validates legacy migration ledger shape before use', (scriptPath) => {
+    const source = readScript(scriptPath);
+    const body = functionBody(source, 'record_local_migration');
+
+    expect(source).toContain('require_sqlite_column "d1_migrations" "name"');
+    expect(body).toContain('INSERT INTO d1_migrations (name) VALUES');
+    expect(body).not.toContain('(name, applied_at)');
+  });
+
   it.each(setupScripts)('%s validates tables and columns explicitly', (scriptPath) => {
     const source = readScript(scriptPath);
     expect(source).toContain('require_sqlite_table');
