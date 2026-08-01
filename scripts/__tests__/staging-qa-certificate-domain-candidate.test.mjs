@@ -1,5 +1,5 @@
 // source_reference: regression coverage for the staging-only candidate required
-// by issue #568 run 30703547716.
+// by issue #568 runs 30703547716 and 30706103939.
 // operational_decision: validate generated SQL as inert text; no database call.
 // dry_run_required: tests do not execute DML.
 // rollback_plan_required: rollback SQL is asserted to target only the exact QA
@@ -92,6 +92,33 @@ test('builds an idempotent unclassified candidate without undefined SQL', () => 
   assert.doesNotMatch(sql, /7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae/);
 });
 
+test('adapts empresas_config SQL when legacy staging has no deleted_at', () => {
+  const legacyConfigColumns = [
+    'id',
+    'empresa_id',
+    'certificado_template_html',
+    'timezone',
+    'idioma',
+    'created_at',
+    'updated_at',
+  ];
+  const postcondition = buildCandidatePostconditionSql(legacyConfigColumns);
+  assert.doesNotMatch(postcondition, /ec\.deleted_at/);
+  assert.match(postcondition, /ec\.certificado_template_html/);
+
+  const sql = buildCandidateSql(
+    TYPE_COLUMNS,
+    HISTORY_COLUMNS,
+    'apply',
+    legacyConfigColumns,
+    ['id', 'cpf', 'updated_at'],
+  );
+  const configSection = sql.match(/UPDATE empresas_config[\s\S]*?UPDATE qualificacoes_tipos/)?.[0];
+  assert.ok(configSection);
+  assert.doesNotMatch(configSection, /deleted_at/);
+  assert.match(configSection, /certificado_template_html/);
+});
+
 test('rollback is limited to the exact synthetic type and history', () => {
   const sql = buildCandidateSql(TYPE_COLUMNS, HISTORY_COLUMNS, 'rollback');
   assert.match(sql, /^UPDATE qualificacoes_historico/m);
@@ -118,5 +145,15 @@ test('fails closed when required schema columns are absent', () => {
   assert.throws(
     () => buildCandidateSql(TYPE_COLUMNS, ['id', 'funcionario_id'], 'apply'),
     /QA_CERT_SCHEMA_MISSING:qualificacoes_historico\.qualificacao_id/,
+  );
+  assert.throws(
+    () =>
+      buildCandidateSql(
+        TYPE_COLUMNS,
+        HISTORY_COLUMNS,
+        'apply',
+        ['id', 'empresa_id'],
+      ),
+    /QA_CERT_SCHEMA_MISSING:empresas_config\.certificado_template_html/,
   );
 });
