@@ -1,0 +1,37 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - worker-airtrust/package.json
+      - worker-airtrust/package-lock.json
+      - scripts/ci/audit-critical-delta.mjs
+      - scripts/__tests__/audit-critical-delta.test.mjs
+      - .github/workflows/dependency-review.yml
+      - .github/dependabot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full comparison history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - name: Test dependency delta guard
+        run: node --test scripts/__tests__/audit-critical-delta.test.mjs
+      - name: Reject newly introduced critical vulnerabilities
+        run: node scripts/ci/audit-critical-delta.mjs "$BASE_SHA" "$HEAD_SHA"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
