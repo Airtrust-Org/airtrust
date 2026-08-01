@@ -4,36 +4,39 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
 jobs:
   check:
     name: 🧪 Check PR
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
-      
+
       - name: 📦 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version-file: '.node-version'
           cache: 'npm'
-      
+
       - name: 📚 Install dependencies
         run: npm ci
-      
+
       - name: 🔍 Lint
         run: npm run lint || echo "⚠️ Lint não configurado"
         continue-on-error: true
         env:
           CI: true
           VITE_API_URL: http://127.0.0.1:8787
-      
+
       - name: 🏗️ Build
         run: npm run build
         env:
           VITE_API_URL: http://127.0.0.1:8787
-      
+
       - name: ✅ PR is valid
         run: |
           echo "✅ ================================"
