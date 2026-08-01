@@ -1,3 +1,11 @@
+// source_reference: regression coverage for the staging-only synthetic QA
+// operational grant provisioner.
+// operational_decision: inspect generated SQL without executing any database
+// operation; the test itself is read-only.
+// dry_run_required: all generated DML remains an inert string in this test.
+// rollback_plan_required: no state is created by this test; rollback coverage
+// verifies that the operational script targets only the exact QA relation.
+
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
