@@ -69,6 +69,14 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0367_classificar_dificuldade_sk76_restantes.sql',
     '0367_sk76_reaquisicao_experiencia_recente.sql',
   ],
+  '0418': [
+    '0418_notechs_codigos_categorizados.sql',
+    '0418_notechs_codigos_categorizados_rollback.sql',
+  ],
+  '0419': [
+    '0419_normalizar_nomes_modelos_sessao_ptbr.sql',
+    '0419_normalizar_nomes_modelos_sessao_ptbr_rollback.sql',
+  ],
   '0420': [
     '0420_notificacoes_log_add_empresa_id.sql',
     '0420_notificacoes_log_add_empresa_id_preflight_audit.sql',
@@ -95,10 +103,7 @@ const HISTORICAL_DUPLICATE_PREFIX_ALLOWLIST = {
     '0448_simuladores_matriz_aw139_sk76_gera_qualificacao.sql',
     '0448_simuladores_matriz_aw139_sk76_gera_qualificacao_rollback.sql',
   ],
-  '0452': [
-    '0452_operational_domain_rbac.sql',
-    '0452_operational_domain_rbac_rollback.sql',
-  ],
+  '0452': ['0452_operational_domain_rbac.sql', '0452_operational_domain_rbac_rollback.sql'],
   '0454': [
     '0454_qualificacoes_tipos_dominio_override.sql',
     '0454_qualificacoes_tipos_dominio_override_rollback.sql',
