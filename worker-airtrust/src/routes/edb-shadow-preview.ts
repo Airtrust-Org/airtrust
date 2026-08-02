@@ -8,6 +8,7 @@ import {
   EdbShadowPreviewError,
   loadEdbShadowPreview,
 } from '../services/edb/control-flight-shadow-preview';
+import { loadEdbShadowPreliminaryAssessment } from '../services/edb/control-flight-shadow-assessment';
 
 const edbShadowPreview = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -29,6 +30,17 @@ function parseFlightId(value: string): number {
     throw new ApiError('Voo invalido', 400, 'EDB_SHADOW_PREVIEW_INVALID_FLIGHT_ID');
   }
   return flightId;
+}
+
+function mapPreviewError(error: unknown, fallbackCode: string): never {
+  if (error instanceof EdbShadowPreviewError) {
+    const message =
+      error.code === 'FLIGHT_NOT_FOUND'
+        ? 'Voo nao encontrado'
+        : 'Preview eDB indisponivel por inconsistencia de escopo';
+    throw new ApiError(message, error.status, `EDB_SHADOW_PREVIEW_${error.code}`);
+  }
+  throw new ApiError('Preview eDB indisponivel', 500, fallbackCode);
 }
 
 edbShadowPreview.get(
@@ -58,14 +70,24 @@ edbShadowPreview.get(
         },
       });
     } catch (error) {
-      if (error instanceof EdbShadowPreviewError) {
-        const message =
-          error.code === 'FLIGHT_NOT_FOUND'
-            ? 'Voo nao encontrado'
-            : 'Preview eDB indisponivel por inconsistencia de escopo';
-        throw new ApiError(message, error.status, `EDB_SHADOW_PREVIEW_${error.code}`);
-      }
-      throw new ApiError('Preview eDB indisponivel', 500, 'EDB_SHADOW_PREVIEW_FAILED');
+      return mapPreviewError(error, 'EDB_SHADOW_PREVIEW_FAILED');
+    }
+  },
+);
+
+edbShadowPreview.get(
+  '/shadow-assessment/:flightId',
+  auth(),
+  requireEdbShadowPreviewAccess(),
+  async (c) => {
+    const tenantId = getEmpresaId(c);
+    const flightId = parseFlightId(c.req.param('flightId'));
+
+    try {
+      const assessment = await loadEdbShadowPreliminaryAssessment(c.env.DB, tenantId, flightId);
+      return c.json({ success: true, data: assessment });
+    } catch (error) {
+      return mapPreviewError(error, 'EDB_SHADOW_ASSESSMENT_FAILED');
     }
   },
 );
