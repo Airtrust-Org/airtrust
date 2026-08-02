@@ -2,58 +2,63 @@ name: Demo Data Prevention Check
 
 on:
   push:
-    branches: [ main, master, production, staging ]
+    branches: [main, master, production, staging]
   pull_request:
-    branches: [ main, master, production, staging ]
+    branches: [main, master, production, staging]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   check-demo-data:
     runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Make scripts executable
-      run: |
-        chmod +x ./scripts/ci-demo-data-check.sh
-        chmod +x ./scripts/production-audit-check.sh
-        
-    - name: Lint code
-      run: npm run lint
-      env:
-        CI: true
-        VITE_API_URL: http://127.0.0.1:8787
-      
-    - name: Build application
-      run: npm run build
-      env:
-        VITE_API_URL: http://127.0.0.1:8787
+    timeout-minutes: 30
 
-    - name: Run Demo Data Check
-      run: npm run check:demo-data
-      
-    - name: Comment PR if demo data found
-      if: failure() && github.event_name == 'pull_request'
-      uses: actions/github-script@v7
-      continue-on-error: true
-      with:
-        script: |
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: '❌ **DEPLOY BLOQUEADO** - Dados demo/teste detectados!\n\n🚫 Este PR contém dados de demonstração que não devem ir para produção.\n\n📋 Verifique:\n- Arquivos CSV de teste\n- Fixtures com dados demo\n- Scripts de seed ativos\n- Dados hardcodados no código\n\n🧹 Remova todos os dados demo antes de aprovar este PR.'
-          })
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Make scripts executable
+        run: |
+          chmod +x ./scripts/ci-demo-data-check.sh
+          chmod +x ./scripts/production-audit-check.sh
+
+      - name: Lint code
+        run: npm run lint
+        env:
+          CI: true
+          VITE_API_URL: http://127.0.0.1:8787
+
+      - name: Build application
+        run: npm run build
+        env:
+          VITE_API_URL: http://127.0.0.1:8787
+
+      - name: Run Demo Data Check
+        run: npm run check:demo-data
+
+      - name: Comment PR if demo data found
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **DEPLOY BLOQUEADO** - Dados demo/teste detectados!\n\n🚫 Este PR contém dados de demonstração que não devem ir para produção.\n\n📋 Verifique:\n- Arquivos CSV de teste\n- Fixtures com dados demo\n- Scripts de seed ativos\n- Dados hardcodados no código\n\n🧹 Remova todos os dados demo antes de aprovar este PR.'
+            })

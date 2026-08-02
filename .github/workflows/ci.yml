@@ -12,6 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       VITE_API_URL: http://127.0.0.1:8787
     steps:
@@ -26,6 +27,7 @@ jobs:
 
       - name: GitHub Actions context guard
         run: |
+          node --test scripts/ci/check-github-workflow-contexts.test.mjs
           node scripts/ci/check-github-workflow-contexts.mjs
           node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
 
@@ -43,6 +45,7 @@ jobs:
 
   worker-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,6 +70,7 @@ jobs:
 
   lms-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -119,6 +123,15 @@ jobs:
       - name: Worker log on failure
         if: failure()
         run: cat /tmp/airtrust-worker.log || true
+
+      - name: Upload worker log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lms-smoke-worker-log
+          path: /tmp/airtrust-worker.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Stop local worker
         if: always()

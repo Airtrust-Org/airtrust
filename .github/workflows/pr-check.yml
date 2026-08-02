@@ -11,6 +11,7 @@ jobs:
   check:
     name: 🧪 Check PR
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: 📥 Checkout code
@@ -26,8 +27,7 @@ jobs:
         run: npm ci
 
       - name: 🔍 Lint
-        run: npm run lint || echo "⚠️ Lint não configurado"
-        continue-on-error: true
+        run: npm run lint
         env:
           CI: true
           VITE_API_URL: http://127.0.0.1:8787
