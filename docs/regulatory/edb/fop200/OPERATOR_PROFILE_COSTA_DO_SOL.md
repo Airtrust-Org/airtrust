@@ -17,9 +17,13 @@
 
 ## Fontes de verificação
 
-1. Portaria ANAC nº 12.859/SPO, de 19 de outubro de 2023 — revisão 33 do COA.
-2. Portaria ANAC nº 8.225/SPO, de 2 de junho de 2022 — cumprimento dos requisitos para exploração de serviços aéreos.
-3. Migração interna `0226_restore_costa_do_sol_and_user_tenant_enforcement.sql` — vínculo do tenant AirTrust `empresa_id = 6` com a Costa do Sol.
+1. Portaria ANAC nº 12.859/SPO, de 19 de outubro de 2023 — revisão 33 do COA:  
+   https://www.anac.gov.br/assuntos/legislacao/legislacao-1/portarias/2023/portaria-12859
+2. Portaria ANAC nº 8.225/SPO, de 2 de junho de 2022 — cumprimento dos requisitos para exploração de serviços aéreos:  
+   https://www.anac.gov.br/assuntos/legislacao/legislacao-1/portarias/2022/portaria-8225
+3. Página oficial das Especificações Operativas, a ser consultada novamente no dia do protocolo:  
+   https://www.gov.br/anac/pt-br/eo
+4. Migração interna `0226_restore_costa_do_sol_and_user_tenant_enforcement.sql` — vínculo do tenant AirTrust `empresa_id = 6` com a Costa do Sol.
 
 ## Regra de precedência
 
