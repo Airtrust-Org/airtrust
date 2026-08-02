@@ -19,11 +19,7 @@ import ControleVoosBreadcrumb from './components/ControleVoosBreadcrumb';
 const SHADOW_NOTICE = 'NÃO OFICIAL — PROTÓTIPO SHADOW — SEM VALOR REGULATÓRIO';
 
 type SourceKind =
-  | 'AIRTRUST_MANUAL'
-  | 'AIRTRUST_CONTROL_FLIGHTS'
-  | 'SIGVOOS'
-  | 'MAINTENANCE_SYSTEM'
-  | 'UNKNOWN';
+  'AIRTRUST_MANUAL' | 'AIRTRUST_CONTROL_FLIGHTS' | 'SIGVOOS' | 'MAINTENANCE_SYSTEM' | 'UNKNOWN';
 
 type FieldSourceValue = {
   kind: SourceKind;
@@ -192,7 +188,8 @@ const FINDING_LABELS: Record<string, string> = {
 const ERROR_COPY: Record<ViewError, { title: string; message: string }> = {
   access_denied: {
     title: 'Acesso negado',
-    message: 'Seu perfil não possui a permissão existente exigida para consultar o protótipo shadow.',
+    message:
+      'Seu perfil não possui a permissão existente exigida para consultar o protótipo shadow.',
   },
   not_found: {
     title: 'Voo não encontrado no tenant atual',
@@ -205,7 +202,8 @@ const ERROR_COPY: Record<ViewError, { title: string; message: string }> = {
   },
   contract_incompatible: {
     title: 'Contrato incompatível',
-    message: 'A resposta recebida não corresponde ao contrato edb.draft.v1 esperado pela interface.',
+    message:
+      'A resposta recebida não corresponde ao contrato edb.draft.v1 esperado pela interface.',
   },
   draft_unavailable: {
     title: 'Rascunho indisponível',
@@ -439,7 +437,11 @@ function provenanceFor(
   if (!source || source.kind === 'UNKNOWN') {
     return { kind: 'incomplete', label: 'Procedência incompleta' };
   }
-  return { kind: 'transcribed', label: 'Dado transcrito da fonte', source: sourceLabel(source.kind) };
+  return {
+    kind: 'transcribed',
+    label: 'Dado transcrito da fonte',
+    source: sourceLabel(source.kind),
+  };
 }
 
 function ProvenanceBadge({
@@ -517,27 +519,117 @@ function legFields(leg: DraftLeg, index: number): DisplayField[] {
     { label: 'Origem', value: leg.origin, path: `${base}.origin`, source: leg.source },
     { label: 'Destino', value: leg.destination, path: `${base}.destination`, source: leg.source },
     { label: 'Fuso', value: leg.timezone, path: `${base}.timezone`, source: leg.source },
-    { label: 'Natureza', value: leg.flightNatureCode, path: `${base}.flightNatureCode`, source: leg.source },
-    { label: 'Motor ligado', value: leg.engineStartTime, path: `${base}.engineStartTime`, source: leg.source },
+    {
+      label: 'Natureza',
+      value: leg.flightNatureCode,
+      path: `${base}.flightNatureCode`,
+      source: leg.source,
+    },
+    {
+      label: 'Motor ligado',
+      value: leg.engineStartTime,
+      path: `${base}.engineStartTime`,
+      source: leg.source,
+    },
     { label: 'Decolagem', value: leg.takeoffTime, path: `${base}.takeoffTime`, source: leg.source },
     { label: 'Pouso', value: leg.landingTime, path: `${base}.landingTime`, source: leg.source },
-    { label: 'Motor desligado', value: leg.engineShutdownTime, path: `${base}.engineShutdownTime`, source: leg.source },
-    { label: 'Tempo block', value: formatMinutes(leg.times.blockMinutes), path: `${base}.times.blockMinutes`, source: leg.source },
-    { label: 'Tempo de voo', value: formatMinutes(leg.times.takeoffToLandingMinutes), path: `${base}.times.takeoffToLandingMinutes`, source: leg.source },
-    { label: 'Diurno', value: formatMinutes(leg.times.dayMinutes), path: `${base}.times.dayMinutes`, source: leg.source },
-    { label: 'Noturno', value: formatMinutes(leg.times.nightMinutes), path: `${base}.times.nightMinutes`, source: leg.source },
-    { label: 'VFR', value: formatMinutes(leg.times.vfrMinutes), path: `${base}.times.vfrMinutes`, source: leg.source },
-    { label: 'IFR real', value: formatMinutes(leg.times.ifrActualMinutes), path: `${base}.times.ifrActualMinutes`, source: leg.source },
-    { label: 'IFR simulado', value: formatMinutes(leg.times.ifrSimulatedMinutes), path: `${base}.times.ifrSimulatedMinutes`, source: leg.source },
-    { label: 'Pousos diurnos', value: leg.dayLandings, path: `${base}.dayLandings`, source: leg.source },
-    { label: 'Pousos noturnos', value: leg.nightLandings, path: `${base}.nightLandings`, source: leg.source },
+    {
+      label: 'Motor desligado',
+      value: leg.engineShutdownTime,
+      path: `${base}.engineShutdownTime`,
+      source: leg.source,
+    },
+    {
+      label: 'Tempo block',
+      value: formatMinutes(leg.times.blockMinutes),
+      path: `${base}.times.blockMinutes`,
+      source: leg.source,
+    },
+    {
+      label: 'Tempo de voo',
+      value: formatMinutes(leg.times.takeoffToLandingMinutes),
+      path: `${base}.times.takeoffToLandingMinutes`,
+      source: leg.source,
+    },
+    {
+      label: 'Diurno',
+      value: formatMinutes(leg.times.dayMinutes),
+      path: `${base}.times.dayMinutes`,
+      source: leg.source,
+    },
+    {
+      label: 'Noturno',
+      value: formatMinutes(leg.times.nightMinutes),
+      path: `${base}.times.nightMinutes`,
+      source: leg.source,
+    },
+    {
+      label: 'VFR',
+      value: formatMinutes(leg.times.vfrMinutes),
+      path: `${base}.times.vfrMinutes`,
+      source: leg.source,
+    },
+    {
+      label: 'IFR real',
+      value: formatMinutes(leg.times.ifrActualMinutes),
+      path: `${base}.times.ifrActualMinutes`,
+      source: leg.source,
+    },
+    {
+      label: 'IFR simulado',
+      value: formatMinutes(leg.times.ifrSimulatedMinutes),
+      path: `${base}.times.ifrSimulatedMinutes`,
+      source: leg.source,
+    },
+    {
+      label: 'Pousos diurnos',
+      value: leg.dayLandings,
+      path: `${base}.dayLandings`,
+      source: leg.source,
+    },
+    {
+      label: 'Pousos noturnos',
+      value: leg.nightLandings,
+      path: `${base}.nightLandings`,
+      source: leg.source,
+    },
     { label: 'Ciclos', value: leg.cycles, path: `${base}.cycles`, source: leg.source },
-    { label: 'Combustível inicial', value: formatQuantity(leg.fuelAtEngineStart.value, leg.fuelAtEngineStart.unit), path: `${base}.fuelAtEngineStart.value`, source: leg.fuelAtEngineStart.source },
-    { label: 'Combustível final', value: formatQuantity(leg.fuelAtEngineShutdown.value, leg.fuelAtEngineShutdown.unit), path: `${base}.fuelAtEngineShutdown.value`, source: leg.fuelAtEngineShutdown.source },
-    { label: 'Combustível consumido', value: formatQuantity(leg.fuelConsumed.value, leg.fuelConsumed.unit), path: `${base}.fuelConsumed.value`, source: leg.fuelConsumed.source },
-    { label: 'Combustível adicionado', value: formatQuantity(leg.fuelAdded.value, leg.fuelAdded.unit), path: `${base}.fuelAdded.value`, source: leg.fuelAdded.source },
-    { label: 'Passageiros / POB', value: leg.personsOnBoard, path: `${base}.personsOnBoard`, source: leg.source },
-    { label: 'Carga', value: formatQuantity(leg.payload, leg.payloadUnit), path: `${base}.payload`, source: leg.source },
+    {
+      label: 'Combustível inicial',
+      value: formatQuantity(leg.fuelAtEngineStart.value, leg.fuelAtEngineStart.unit),
+      path: `${base}.fuelAtEngineStart.value`,
+      source: leg.fuelAtEngineStart.source,
+    },
+    {
+      label: 'Combustível final',
+      value: formatQuantity(leg.fuelAtEngineShutdown.value, leg.fuelAtEngineShutdown.unit),
+      path: `${base}.fuelAtEngineShutdown.value`,
+      source: leg.fuelAtEngineShutdown.source,
+    },
+    {
+      label: 'Combustível consumido',
+      value: formatQuantity(leg.fuelConsumed.value, leg.fuelConsumed.unit),
+      path: `${base}.fuelConsumed.value`,
+      source: leg.fuelConsumed.source,
+    },
+    {
+      label: 'Combustível adicionado',
+      value: formatQuantity(leg.fuelAdded.value, leg.fuelAdded.unit),
+      path: `${base}.fuelAdded.value`,
+      source: leg.fuelAdded.source,
+    },
+    {
+      label: 'Passageiros / POB',
+      value: leg.personsOnBoard,
+      path: `${base}.personsOnBoard`,
+      source: leg.source,
+    },
+    {
+      label: 'Carga',
+      value: formatQuantity(leg.payload, leg.payloadUnit),
+      path: `${base}.payload`,
+      source: leg.source,
+    },
   ];
 }
 
@@ -601,24 +693,89 @@ export default function EdbShadowPrototype() {
 
   const summaryFields: DisplayField[] = preview
     ? [
-        { label: 'Operador', value: preview.draft.operator.legalName, path: 'operator.legalName', source: sourceByPath.get('operator.legalName') },
-        { label: 'Matrícula', value: preview.draft.aircraft.registration, path: 'aircraft.registration', source: sourceByPath.get('aircraft.registration') },
-        { label: 'Modelo', value: preview.draft.aircraft.model, path: 'aircraft.model', source: sourceByPath.get('aircraft.model') },
-        { label: 'Fabricante', value: preview.draft.aircraft.manufacturer, path: 'aircraft.manufacturer', source: sourceByPath.get('aircraft.manufacturer') },
-        { label: 'Data operacional', value: preview.draft.legs[0]?.operationalDate || null, path: 'legs.0.operationalDate', source: preview.draft.legs[0]?.source },
-        { label: 'Etapas', value: preview.draft.legs.length, path: 'legs', source: sourceByPath.get('legs') },
-        { label: 'Volume', value: preview.draft.volumeNumber, path: 'volumeNumber', source: sourceByPath.get('volumeNumber') },
-        { label: 'Criado em', value: preview.draft.createdAt, path: 'createdAt', source: sourceByPath.get('createdAt') },
+        {
+          label: 'Operador',
+          value: preview.draft.operator.legalName,
+          path: 'operator.legalName',
+          source: sourceByPath.get('operator.legalName'),
+        },
+        {
+          label: 'Matrícula',
+          value: preview.draft.aircraft.registration,
+          path: 'aircraft.registration',
+          source: sourceByPath.get('aircraft.registration'),
+        },
+        {
+          label: 'Modelo',
+          value: preview.draft.aircraft.model,
+          path: 'aircraft.model',
+          source: sourceByPath.get('aircraft.model'),
+        },
+        {
+          label: 'Fabricante',
+          value: preview.draft.aircraft.manufacturer,
+          path: 'aircraft.manufacturer',
+          source: sourceByPath.get('aircraft.manufacturer'),
+        },
+        {
+          label: 'Data operacional',
+          value: preview.draft.legs[0]?.operationalDate || null,
+          path: 'legs.0.operationalDate',
+          source: preview.draft.legs[0]?.source,
+        },
+        {
+          label: 'Etapas',
+          value: preview.draft.legs.length,
+          path: 'legs',
+          source: sourceByPath.get('legs'),
+        },
+        {
+          label: 'Volume',
+          value: preview.draft.volumeNumber,
+          path: 'volumeNumber',
+          source: sourceByPath.get('volumeNumber'),
+        },
+        {
+          label: 'Criado em',
+          value: preview.draft.createdAt,
+          path: 'createdAt',
+          source: sourceByPath.get('createdAt'),
+        },
       ]
     : [];
 
   const technicalFields: DisplayField[] = preview
     ? [
-        { label: 'Última intervenção', value: preview.draft.technicalStatus.lastMaintenanceIntervention, path: 'technicalStatus.lastMaintenanceIntervention', source: preview.draft.technicalStatus.source },
-        { label: 'Próxima intervenção', value: preview.draft.technicalStatus.nextMaintenanceIntervention, path: 'technicalStatus.nextMaintenanceIntervention', source: preview.draft.technicalStatus.source },
-        { label: 'Horas restantes', value: preview.draft.technicalStatus.airframeHoursRemaining, path: 'technicalStatus.airframeHoursRemaining', source: preview.draft.technicalStatus.source },
-        { label: 'Referência de retorno ao serviço', value: preview.draft.technicalStatus.returnToServiceReference, path: 'technicalStatus.returnToServiceReference', source: preview.draft.technicalStatus.source },
-        { label: 'Discrepâncias abertas', value: preview.draft.technicalStatus.openDiscrepancyCount, path: 'technicalStatus.openDiscrepancyCount', source: preview.draft.technicalStatus.source },
+        {
+          label: 'Última intervenção',
+          value: preview.draft.technicalStatus.lastMaintenanceIntervention,
+          path: 'technicalStatus.lastMaintenanceIntervention',
+          source: preview.draft.technicalStatus.source,
+        },
+        {
+          label: 'Próxima intervenção',
+          value: preview.draft.technicalStatus.nextMaintenanceIntervention,
+          path: 'technicalStatus.nextMaintenanceIntervention',
+          source: preview.draft.technicalStatus.source,
+        },
+        {
+          label: 'Horas restantes',
+          value: preview.draft.technicalStatus.airframeHoursRemaining,
+          path: 'technicalStatus.airframeHoursRemaining',
+          source: preview.draft.technicalStatus.source,
+        },
+        {
+          label: 'Referência de retorno ao serviço',
+          value: preview.draft.technicalStatus.returnToServiceReference,
+          path: 'technicalStatus.returnToServiceReference',
+          source: preview.draft.technicalStatus.source,
+        },
+        {
+          label: 'Discrepâncias abertas',
+          value: preview.draft.technicalStatus.openDiscrepancyCount,
+          path: 'technicalStatus.openDiscrepancyCount',
+          source: preview.draft.technicalStatus.source,
+        },
       ]
     : [];
 
@@ -726,8 +883,8 @@ export default function EdbShadowPrototype() {
                         Dados incompletos
                       </h2>
                       <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
-                        O rascunho possui {preview.findings.length} alerta(s) ou campo(s) ausente(s).
-                        Nenhum valor foi presumido.
+                        O rascunho possui {preview.findings.length} alerta(s) ou campo(s)
+                        ausente(s). Nenhum valor foi presumido.
                       </p>
                     </div>
                   </div>
@@ -883,8 +1040,8 @@ export default function EdbShadowPrototype() {
                     <Database className="h-5 w-5 text-blue-600" /> Procedência
                   </h2>
                   <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                    Referências internas e identificadores de registros não são exibidos. A interface
-                    apresenta apenas a categoria de origem necessária à revisão.
+                    Referências internas e identificadores de registros não são exibidos. A
+                    interface apresenta apenas a categoria de origem necessária à revisão.
                   </p>
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
                     <span className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">

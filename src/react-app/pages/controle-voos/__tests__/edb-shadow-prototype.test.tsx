@@ -252,7 +252,11 @@ describe('protótipo eDB shadow', () => {
   it('mostra acesso negado sem expor detalhes técnicos', async () => {
     vi.mocked(fetchWithAuth).mockResolvedValueOnce(
       jsonResponse(
-        { success: false, error: 'Permissao insuficiente', code: 'EDB_SHADOW_PREVIEW_RBAC_FORBIDDEN' },
+        {
+          success: false,
+          error: 'Permissao insuficiente',
+          code: 'EDB_SHADOW_PREVIEW_RBAC_FORBIDDEN',
+        },
         false,
         403,
       ),
@@ -268,7 +272,11 @@ describe('protótipo eDB shadow', () => {
   it('trata voo ausente e tentativa fora do tenant com a mesma resposta segura', async () => {
     vi.mocked(fetchWithAuth).mockResolvedValueOnce(
       jsonResponse(
-        { success: false, error: 'Voo nao encontrado', code: 'EDB_SHADOW_PREVIEW_FLIGHT_NOT_FOUND' },
+        {
+          success: false,
+          error: 'Voo nao encontrado',
+          code: 'EDB_SHADOW_PREVIEW_FLIGHT_NOT_FOUND',
+        },
         false,
         404,
       ),
@@ -280,7 +288,9 @@ describe('protótipo eDB shadow', () => {
     await waitFor(() =>
       expect(screen.getByText('Voo não encontrado no tenant atual')).toBeInTheDocument(),
     );
-    expect(screen.getByText(/não existe ou não pertence ao escopo empresarial/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/não existe ou não pertence ao escopo empresarial/i),
+    ).toBeInTheDocument();
   });
 
   it('mostra contrato incompatível para resposta fora de edb.draft.v1', async () => {
