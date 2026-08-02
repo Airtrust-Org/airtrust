@@ -202,6 +202,11 @@ build/
 /debug-*.png
 /*.traineddata
 
+# Local root debug/API artifacts
+/list.json
+/list2.json
+/criar-token.html
+
 # Local AI/agent tooling
 .agents/
 .claude/skills/
