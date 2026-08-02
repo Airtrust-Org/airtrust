@@ -1,0 +1,39 @@
+name: Temporary format eDB shadow review
+
+on:
+  push:
+    branches:
+      - feat/edb-shadow-pic-review-evidence-20260802
+    paths:
+      - .github/workflows/tmp-format-edb-shadow-review.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/edb-shadow-pic-review-evidence-20260802
+          fetch-depth: 0
+      - name: Format focused delta and remove temporary workflow
+        run: |
+          npx --yes prettier@3.9.6 --write -- \
+            src/react-app/pages/controle-voos/EdbShadowReviewEvidencePanel.tsx \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-review-evidence.test.tsx \
+            worker-airtrust/src/__tests__/services/edb-shadow-review-evidence.test.ts \
+            worker-airtrust/src/routes/edb-shadow-preview.ts \
+            worker-airtrust/src/services/edb/shadow-review-evidence.ts
+          git rm .github/workflows/tmp-format-edb-shadow-review.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/react-app/pages/controle-voos/EdbShadowReviewEvidencePanel.tsx \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-review-evidence.test.tsx \
+            worker-airtrust/src/__tests__/services/edb-shadow-review-evidence.test.ts \
+            worker-airtrust/src/routes/edb-shadow-preview.ts \
+            worker-airtrust/src/services/edb/shadow-review-evidence.ts
+          git commit -m "style(edb): format shadow review evidence"
+          git push origin HEAD:feat/edb-shadow-pic-review-evidence-20260802
