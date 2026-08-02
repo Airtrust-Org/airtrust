@@ -1,0 +1,29 @@
+name: Temporary sync eDB shadow review with main
+
+on:
+  push:
+    branches:
+      - feat/edb-shadow-pic-review-evidence-20260802
+    paths:
+      - .github/workflows/tmp-sync-edb-shadow-review-main.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/edb-shadow-pic-review-evidence-20260802
+          fetch-depth: 0
+      - name: Merge current main and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge --no-edit origin/main
+          git rm .github/workflows/tmp-sync-edb-shadow-review-main.yml
+          git commit -m "chore(ci): remove temporary main sync workflow"
+          git push origin HEAD:feat/edb-shadow-pic-review-evidence-20260802
