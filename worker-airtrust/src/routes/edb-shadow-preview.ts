@@ -17,11 +17,7 @@ function requireEdbShadowPreviewAccess(): MiddlewareHandler<{
 }> {
   return async (c, next) => {
     if (!checkPermission(c, 'manager')) {
-      throw new ApiError(
-        'Permissao insuficiente',
-        403,
-        'EDB_SHADOW_PREVIEW_RBAC_FORBIDDEN',
-      );
+      throw new ApiError('Permissao insuficiente', 403, 'EDB_SHADOW_PREVIEW_RBAC_FORBIDDEN');
     }
     await next();
   };
@@ -67,17 +63,9 @@ edbShadowPreview.get(
           error.code === 'FLIGHT_NOT_FOUND'
             ? 'Voo nao encontrado'
             : 'Preview eDB indisponivel por inconsistencia de escopo';
-        throw new ApiError(
-          message,
-          error.status,
-          `EDB_SHADOW_PREVIEW_${error.code}`,
-        );
+        throw new ApiError(message, error.status, `EDB_SHADOW_PREVIEW_${error.code}`);
       }
-      throw new ApiError(
-        'Preview eDB indisponivel',
-        500,
-        'EDB_SHADOW_PREVIEW_FAILED',
-      );
+      throw new ApiError('Preview eDB indisponivel', 500, 'EDB_SHADOW_PREVIEW_FAILED');
     }
   },
 );
