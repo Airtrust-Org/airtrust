@@ -1,8 +1,10 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Env } from '../../types';
+import type { Env, Variables } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
+
+type TestContext = Context<{ Bindings: Env; Variables: Variables }>;
 
 const { getScormRowsMock } = vi.hoisted(() => ({
   getScormRowsMock: vi.fn(),
@@ -11,7 +13,7 @@ const { getScormRowsMock } = vi.hoisted(() => ({
 vi.mock('../../middleware/auth', () => ({
   auth:
     () =>
-    async (c: any, next: () => Promise<void>) => {
+    async (c: TestContext, next: () => Promise<void>) => {
       if (!c.req.header('Authorization')) {
         return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
       }
@@ -24,12 +26,13 @@ vi.mock('../../middleware/auth', () => ({
 vi.mock('../../middleware/rbac', () => ({
   requireRole:
     () =>
-    async (_c: any, next: () => Promise<void>) =>
+    async (_c: TestContext, next: () => Promise<void>) =>
       next(),
 }));
 
 vi.mock('../../routes/escalas-shared', () => ({
-  getEmpresaIdSafe: (c: any) => Number(c.req.header('x-test-empresa-id') || c.get('empresaId') || 0),
+  getEmpresaIdSafe: (c: TestContext) =>
+    Number(c.req.header('x-test-empresa-id') || c.get('empresaId') || 0),
 }));
 
 vi.mock('../../services/employee-sector-access', () => ({
