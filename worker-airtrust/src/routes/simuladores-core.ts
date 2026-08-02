@@ -21,7 +21,7 @@ import fichas from './simuladores-fichas';
 import fichasEdicoes from './simuladores-fichas-edicoes';
 import fichasExtras from './simuladores-fichas-extras';
 import modelos from './simuladores-modelos';
-import catalogo from './simuladores-catalogo';
+import catalogo from './simuladores-catalogo-secured';
 import relatorios from './simuladores-relatorios';
 import guiasInstrutor from './simuladores-guias-instrutor';
 
