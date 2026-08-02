@@ -6,6 +6,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { forbidden } from './error-handler';
+import { enforceLegacyTenantBoundaries } from './legacy-tenant-boundaries';
 import { normalizeTenantRole } from './tenant';
 
 function isDevAuthBypassEnabled(env: Env): boolean {
@@ -68,6 +69,7 @@ export function requireRole(...roles: UserRole[]): MiddlewareHandler<{ Bindings:
       throw forbidden(`Permissão negada. Acesso restrito a: ${roles.join(', ')}`, 'RBAC_FORBIDDEN');
     }
 
+    await enforceLegacyTenantBoundaries(c);
     await next();
   };
 }

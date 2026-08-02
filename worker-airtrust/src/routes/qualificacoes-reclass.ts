@@ -130,79 +130,82 @@ app.patch(
   requireRole('admin', 'manager'),
   requireOperacoesReclass('update'),
   async (c) => {
-  const { empresaId } = getTenantContext(c);
-  const db = c.env.DB;
-  const historicoIdRaw = c.req.param('historicoId');
-  const historicoId = parseInt(historicoIdRaw, 10);
-  if (isNaN(historicoId)) {
-    return c.json({ success: false, error: 'historicoId inválido' }, 400);
-  }
-  let body: { target_tipo_id?: string; reason?: string } = {};
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ success: false, error: 'JSON inválido' }, 400);
-  }
-  if (!body.target_tipo_id) {
-    return c.json({ success: false, error: 'target_tipo_id é obrigatório' }, 400);
-  }
+    const { empresaId } = getTenantContext(c);
+    const db = c.env.DB;
+    const historicoIdRaw = c.req.param('historicoId');
+    const historicoId = parseInt(historicoIdRaw, 10);
+    if (isNaN(historicoId)) {
+      return c.json({ success: false, error: 'historicoId inválido' }, 400);
+    }
+    let body: { target_tipo_id?: string; reason?: string } = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ success: false, error: 'JSON inválido' }, 400);
+    }
+    if (!body.target_tipo_id) {
+      return c.json({ success: false, error: 'target_tipo_id é obrigatório' }, 400);
+    }
 
-  // Tenant guard: verify historico belongs to user's empresa
-  const tenantCheck = await db
-    .prepare(
-      `SELECT h.id FROM qualificacoes_historico h
+    // Tenant guard: verify historico belongs to user's empresa
+    const tenantCheck = await db
+      .prepare(
+        `SELECT h.id FROM qualificacoes_historico h
        JOIN funcionarios f ON f.id = h.funcionario_id
        WHERE h.id = ? AND f.empresa_id = ? AND h.deleted_at IS NULL LIMIT 1`,
-    )
-    .bind(historicoId, empresaId)
-    .first();
-  if (!tenantCheck) {
-    return c.json({ success: false, error: 'Histórico não encontrado' }, 404);
-  }
+      )
+      .bind(historicoId, empresaId)
+      .first();
+    if (!tenantCheck) {
+      return c.json({ success: false, error: 'Histórico não encontrado' }, 404);
+    }
 
-  // Validar existência do tipo
-  const tipoExists = await db
-    .prepare('SELECT id FROM qualificacoes_tipos WHERE id = ? AND deleted_at IS NULL LIMIT 1')
-    .bind(body.target_tipo_id)
-    .first();
-  if (!tipoExists) {
-    return c.json({ success: false, error: 'Tipo alvo não encontrado' }, 404);
-  }
-  // Validar existência fila
-  const queueRow = await db
-    .prepare(
-      'SELECT id, status FROM qualificacoes_historico_reclass_queue WHERE historico_id = ? LIMIT 1',
-    )
-    .bind(historicoId)
-    .first<{ id: number; status: string }>();
-  if (!queueRow) {
-    return c.json({ success: false, error: 'Registro não está na fila' }, 404);
-  }
-  if (queueRow.status !== 'PENDING') {
-    return c.json({ success: false, error: 'Registro já processado' }, 409);
-  }
-  // Aplicar - trigger cuidará da atualização em qualificacoes_historico
-  const upd = await db
-    .prepare(
-      `UPDATE qualificacoes_historico_reclass_queue
+    // Validar existência do tipo dentro do tenant autenticado
+    const tipoExists = await db
+      .prepare(
+        'SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+      )
+      .bind(body.target_tipo_id, empresaId)
+      .first();
+    if (!tipoExists) {
+      return c.json({ success: false, error: 'Tipo alvo não encontrado' }, 404);
+    }
+    // Validar existência fila
+    const queueRow = await db
+      .prepare(
+        'SELECT id, status FROM qualificacoes_historico_reclass_queue WHERE historico_id = ? LIMIT 1',
+      )
+      .bind(historicoId)
+      .first<{ id: number; status: string }>();
+    if (!queueRow) {
+      return c.json({ success: false, error: 'Registro não está na fila' }, 404);
+    }
+    if (queueRow.status !== 'PENDING') {
+      return c.json({ success: false, error: 'Registro já processado' }, 409);
+    }
+    // Aplicar - trigger cuidará da atualização em qualificacoes_historico
+    const upd = await db
+      .prepare(
+        `UPDATE qualificacoes_historico_reclass_queue
        SET target_tipo_id = ?, status='APPLIED', reason = COALESCE(?, reason), updated_at = datetime('now')
        WHERE historico_id = ? AND status='PENDING'`,
-    )
-    .bind(body.target_tipo_id, body.reason || null, historicoId)
-    .run();
-  if (upd.meta.changes === 0) {
-    return c.json({ success: false, error: 'Falha ao aplicar reclassificação' }, 500);
-  }
-  // Retornar linha atualizada do histórico
-  const updatedHistorico = await db
-    .prepare(
-      `SELECT h.id, h.funcionario_id, h.qualificacao_id, h.codigo, h.categoria, h.data_conclusao, h.data_vencimento
+      )
+      .bind(body.target_tipo_id, body.reason || null, historicoId)
+      .run();
+    if (upd.meta.changes === 0) {
+      return c.json({ success: false, error: 'Falha ao aplicar reclassificação' }, 500);
+    }
+    // Retornar linha atualizada do histórico
+    const updatedHistorico = await db
+      .prepare(
+        `SELECT h.id, h.funcionario_id, h.qualificacao_id, h.codigo, h.categoria, h.data_conclusao, h.data_vencimento
        FROM qualificacoes_historico h WHERE h.id = ? LIMIT 1`,
-    )
-    .bind(historicoId)
-    .first();
-  return c.json({ success: true, data: updatedHistorico, message: 'Reclassificação aplicada' });
-});
+      )
+      .bind(historicoId)
+      .first();
+    return c.json({ success: true, data: updatedHistorico, message: 'Reclassificação aplicada' });
+  },
+);
 
 // GET /sugestoes/:historicoId - heurísticas simples
 // Estratégia: pegar categoria (sempre TREINAMENTO no colapso atual), listar tipos da mesma categoria
@@ -232,13 +235,15 @@ app.get('/sugestoes/:historicoId', auth(), requireRole('admin', 'manager'), asyn
     }>();
   if (!base) return c.json({ success: false, error: 'Histórico não encontrado' }, 404);
   const categoria = base.categoria || 'TREINAMENTO';
-  // Coletar tipos da mesma categoria
+  // Coletar tipos da mesma categoria e do mesmo tenant
   const { results: tipos } = await db
     .prepare(
       `SELECT id, nome, codigo, categoria, validade
-       FROM qualificacoes_tipos WHERE deleted_at IS NULL AND categoria = ? ORDER BY validade DESC, nome ASC LIMIT 200`,
+       FROM qualificacoes_tipos
+       WHERE empresa_id = ? AND deleted_at IS NULL AND categoria = ?
+       ORDER BY validade DESC, nome ASC LIMIT 200`,
     )
-    .bind(categoria)
+    .bind(empresaId, categoria)
     .all<{
       id: string;
       nome: string;
