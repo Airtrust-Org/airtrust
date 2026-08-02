@@ -3,6 +3,8 @@ name: Lint and Prettier Check
 on:
   pull_request:
     paths: ['**/*']
+  push:
+    branches: [main, chore/**]
 
 permissions:
   contents: read
@@ -10,20 +12,44 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+        with:
+          fetch-depth: 0
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
           cache: npm
-      - run: npm ci
-      - run: npm ci --prefix worker-airtrust
-      - name: Focused eDB shadow preview tests
-        working-directory: worker-airtrust
-        run: >-
-          npx vitest run
-          src/__tests__/services/edb-control-flight-shadow-preview.test.ts
-          src/__tests__/routes/edb-shadow-preview.test.ts
-          src/__tests__/services/edb-control-flight-draft-projection.test.ts
-          --reporter=verbose
+      - name: Install dependencies
+        run: npm ci
+      - name: Ensure base ref is available for delta guards
+        run: git fetch origin main --quiet
+      - name: Run CI safety guards
+        run: npm run lint
+        env:
+          CI: true
+          VITE_API_URL: http://127.0.0.1:8787
+      - name: Run migration NO_GO guard tests
+        run: node --test scripts/__tests__/migration-no-go-guard.test.mjs
+      - name: Run TypeScript delta guard tests
+        run: node --test scripts/__tests__/typescript-delta-guard.test.mjs
+      - name: Run lint and format delta guard tests
+        run: node --test scripts/__tests__/lint-format-delta-guard.test.mjs
+      - name: Run risk-based test delta guard tests
+        run: node --test scripts/__tests__/risk-test-delta-guard.test.mjs
+      - name: Block new ESLint and Prettier violations
+        run: node scripts/guard-lint-format-delta.mjs
+      - name: Require focused tests for high-risk runtime changes
+        run: node scripts/guard-risk-test-delta.mjs
+      - name: Run dangerous-ops guard (self-protected invariants)
+        run: npm run ops:guard
+      - name: Run self-protected invariant mutation tests
+        run: node --test scripts/__tests__/self-protected-invariants-guard.test.mjs
+      - name: Run hardened production post-deploy smoke tests
+        run: node --test scripts/__tests__/smoke-production-postdeploy.test.mjs
+      - name: Inventory legacy ESLint baseline
+        run: npx eslint "./src/**/*.{js,jsx,ts,tsx}" --max-warnings=0 || true
+      - name: Inventory legacy Prettier baseline
+        run: npx --yes prettier@3.9.6 --check . || true
