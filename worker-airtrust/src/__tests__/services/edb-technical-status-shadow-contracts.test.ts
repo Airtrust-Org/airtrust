@@ -251,10 +251,7 @@ describe('eDB technical status shadow contracts', () => {
 
   it('accepts a deferred item with an authorization reference and remaining limit', () => {
     const input = buildValidTechnicalStatus();
-    setDiscrepancy(input, 'DEFERRED', [
-      buildDiscrepancyDeclaration(),
-      buildDeferredEvent(),
-    ]);
+    setDiscrepancy(input, 'DEFERRED', [buildDiscrepancyDeclaration(), buildDeferredEvent()]);
 
     const findings = validateEdbTechnicalStatusShadow(
       createEdbTechnicalStatusShadowSnapshot(input),
@@ -392,9 +389,7 @@ describe('eDB technical status shadow contracts', () => {
     expect(snapshot.discrepancies[0].events[0].description).toBe(
       'Synthetic discrepancy operational content',
     );
-    expect(snapshot.discrepancies[0].events[1].description).toBe(
-      'Synthetic corrected content',
-    );
+    expect(snapshot.discrepancies[0].events[1].description).toBe('Synthetic corrected content');
     expect(codes).not.toContain('TECHNICAL_CORRECTION_TARGET_REQUIRED');
     expect(codes).not.toContain('TECHNICAL_CORRECTION_TARGET_NOT_FOUND');
     expect(codes).not.toContain('TECHNICAL_CORRECTION_TARGET_NOT_EARLIER');

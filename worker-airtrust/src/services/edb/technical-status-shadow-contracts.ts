@@ -7,18 +7,11 @@ import { edbFieldSourceSchema } from './domain-contracts';
  * It intentionally contains no signature material, authenticated-user shortcut,
  * official maintenance release, persistence model or route contract.
  */
-export const EDB_TECHNICAL_STATUS_SHADOW_SCHEMA_VERSION =
-  'edb.technical-status.shadow.v1' as const;
+export const EDB_TECHNICAL_STATUS_SHADOW_SCHEMA_VERSION = 'edb.technical-status.shadow.v1' as const;
 
-export const edbTechnicalInformationStateSchema = z.enum([
-  'IMPORTED',
-  'DECLARED',
-  'UNCONFIRMED',
-]);
+export const edbTechnicalInformationStateSchema = z.enum(['IMPORTED', 'DECLARED', 'UNCONFIRMED']);
 
-export type EdbTechnicalInformationState = z.infer<
-  typeof edbTechnicalInformationStateSchema
->;
+export type EdbTechnicalInformationState = z.infer<typeof edbTechnicalInformationStateSchema>;
 
 export const edbTechnicalAircraftStatusSchema = z.enum([
   'SERVICEABLE',
@@ -27,15 +20,9 @@ export const edbTechnicalAircraftStatusSchema = z.enum([
   'UNKNOWN',
 ]);
 
-export const edbTechnicalLimitUnitSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(32)
-  .nullable();
+export const edbTechnicalLimitUnitSchema = z.string().trim().min(1).max(32).nullable();
 
-const nullableTrimmedText = (max: number) =>
-  z.string().trim().min(1).max(max).nullable();
+const nullableTrimmedText = (max: number) => z.string().trim().min(1).max(max).nullable();
 
 const evidenceReferenceSchema = z.string().trim().min(1).max(160);
 
@@ -65,11 +52,7 @@ export const edbTechnicalPersonSchema = z
 
 export const edbTechnicalFutureSignatureSchema = z
   .object({
-    state: z.enum([
-      'NOT_REQUESTED',
-      'PENDING_FUTURE_OFFICIAL_ACT',
-      'NOT_APPLICABLE',
-    ]),
+    state: z.enum(['NOT_REQUESTED', 'PENDING_FUTURE_OFFICIAL_ACT', 'NOT_APPLICABLE']),
     purpose: z.enum([
       'DISCREPANCY_RECORD',
       'CORRECTIVE_ACTION',
@@ -179,12 +162,7 @@ export const edbTechnicalDiscrepancyEventSchema = z
 export const edbTechnicalDiscrepancySchema = z
   .object({
     discrepancyId: z.string().uuid(),
-    status: z.enum([
-      'OPEN',
-      'CORRECTIVE_ACTION_DECLARED',
-      'DEFERRED',
-      'UNCONFIRMED',
-    ]),
+    status: z.enum(['OPEN', 'CORRECTIVE_ACTION_DECLARED', 'DEFERRED', 'UNCONFIRMED']),
     events: z.array(edbTechnicalDiscrepancyEventSchema).min(1),
   })
   .strict();
@@ -214,16 +192,10 @@ export const edbTechnicalStatusShadowSchema = z
   })
   .strict();
 
-export type EdbTechnicalStatusShadow = z.infer<
-  typeof edbTechnicalStatusShadowSchema
->;
+export type EdbTechnicalStatusShadow = z.infer<typeof edbTechnicalStatusShadowSchema>;
 
 export type EdbTechnicalStatusShadowSeverity =
-  | 'CRITICAL'
-  | 'HIGH'
-  | 'MEDIUM'
-  | 'LOW'
-  | 'OBSERVATION';
+  'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'OBSERVATION';
 
 export type EdbTechnicalStatusShadowFindingCode =
   | 'TECHNICAL_LAST_INTERVENTION_REQUIRED'
@@ -259,12 +231,7 @@ export interface EdbTechnicalStatusShadowFinding {
   path: string;
 }
 
-const KNOWN_LIMIT_UNITS = new Set([
-  'HOURS',
-  'CYCLES',
-  'CALENDAR_DAYS',
-  'LANDINGS',
-]);
+const KNOWN_LIMIT_UNITS = new Set(['HOURS', 'CYCLES', 'CALENDAR_DAYS', 'LANDINGS']);
 
 function addFinding(
   findings: EdbTechnicalStatusShadowFinding[],
@@ -280,18 +247,16 @@ function hasOrganizationIdentification(
 ): boolean {
   return Boolean(
     organization?.organizationReference ||
-      organization?.legalName ||
-      organization?.authorizationReference,
+    organization?.legalName ||
+    organization?.authorizationReference,
   );
 }
 
-function hasPersonIdentification(
-  person: z.infer<typeof edbTechnicalPersonSchema> | null,
-): boolean {
+function hasPersonIdentification(person: z.infer<typeof edbTechnicalPersonSchema> | null): boolean {
   return Boolean(
     person?.displayName &&
-      (person.personReference || person.licenseOrCanac) &&
-      person.roleOrPrerogative,
+    (person.personReference || person.licenseOrCanac) &&
+    person.roleOrPrerogative,
   );
 }
 
@@ -303,12 +268,7 @@ function validateSourceAndEvidence(
   path: string,
 ): void {
   if (source.kind === 'UNKNOWN') {
-    addFinding(
-      findings,
-      'TECHNICAL_SOURCE_UNKNOWN',
-      'MEDIUM',
-      `${path}.source.kind`,
-    );
+    addFinding(findings, 'TECHNICAL_SOURCE_UNKNOWN', 'MEDIUM', `${path}.source.kind`);
   }
 
   if (informationState !== 'UNCONFIRMED' && !source.reference) {
@@ -321,12 +281,7 @@ function validateSourceAndEvidence(
   }
 
   if (informationState !== 'UNCONFIRMED' && evidenceReferences.length === 0) {
-    addFinding(
-      findings,
-      'TECHNICAL_EVIDENCE_REQUIRED',
-      'MEDIUM',
-      `${path}.evidenceReferences`,
-    );
+    addFinding(findings, 'TECHNICAL_EVIDENCE_REQUIRED', 'MEDIUM', `${path}.evidenceReferences`);
   }
 }
 
@@ -334,9 +289,7 @@ function validateLimits(
   findings: EdbTechnicalStatusShadowFinding[],
   limits: Array<z.infer<typeof edbTechnicalLimitSchema>>,
   path: string,
-  missingCode:
-    | 'TECHNICAL_LIMIT_REQUIRED'
-    | 'TECHNICAL_DEFERRED_LIMIT_REQUIRED',
+  missingCode: 'TECHNICAL_LIMIT_REQUIRED' | 'TECHNICAL_DEFERRED_LIMIT_REQUIRED',
 ): void {
   if (limits.length === 0 || limits.every((limit) => limit.value === null)) {
     addFinding(findings, missingCode, 'HIGH', path);
@@ -344,12 +297,7 @@ function validateLimits(
 
   for (const [index, limit] of limits.entries()) {
     if (limit.unit && !KNOWN_LIMIT_UNITS.has(limit.unit.toUpperCase())) {
-      addFinding(
-        findings,
-        'TECHNICAL_LIMIT_UNIT_UNKNOWN',
-        'MEDIUM',
-        `${path}.${index}.unit`,
-      );
+      addFinding(findings, 'TECHNICAL_LIMIT_UNIT_UNKNOWN', 'MEDIUM', `${path}.${index}.unit`);
     }
   }
 }
@@ -360,31 +308,16 @@ function validateMaintenanceActor(
   path: string,
 ): void {
   if (!act || act.kind === 'NONE') {
-    addFinding(
-      findings,
-      'TECHNICAL_MAINTENANCE_ACT_REQUIRED',
-      'HIGH',
-      path,
-    );
+    addFinding(findings, 'TECHNICAL_MAINTENANCE_ACT_REQUIRED', 'HIGH', path);
     return;
   }
 
   if (!hasOrganizationIdentification(act.organization)) {
-    addFinding(
-      findings,
-      'TECHNICAL_ORGANIZATION_REQUIRED',
-      'HIGH',
-      `${path}.organization`,
-    );
+    addFinding(findings, 'TECHNICAL_ORGANIZATION_REQUIRED', 'HIGH', `${path}.organization`);
   }
 
   if (!hasPersonIdentification(act.person)) {
-    addFinding(
-      findings,
-      'TECHNICAL_PERSON_IDENTIFICATION_REQUIRED',
-      'HIGH',
-      `${path}.person`,
-    );
+    addFinding(findings, 'TECHNICAL_PERSON_IDENTIFICATION_REQUIRED', 'HIGH', `${path}.person`);
   }
 }
 
@@ -398,12 +331,7 @@ export function validateEdbTechnicalStatusShadow(
   const findings: EdbTechnicalStatusShadowFinding[] = [];
 
   if (!status.lastIntervention) {
-    addFinding(
-      findings,
-      'TECHNICAL_LAST_INTERVENTION_REQUIRED',
-      'HIGH',
-      'lastIntervention',
-    );
+    addFinding(findings, 'TECHNICAL_LAST_INTERVENTION_REQUIRED', 'HIGH', 'lastIntervention');
   } else {
     validateSourceAndEvidence(
       findings,
@@ -415,12 +343,7 @@ export function validateEdbTechnicalStatusShadow(
   }
 
   if (!status.nextIntervention) {
-    addFinding(
-      findings,
-      'TECHNICAL_NEXT_INTERVENTION_REQUIRED',
-      'HIGH',
-      'nextIntervention',
-    );
+    addFinding(findings, 'TECHNICAL_NEXT_INTERVENTION_REQUIRED', 'HIGH', 'nextIntervention');
   } else {
     if (!status.nextIntervention.reference) {
       addFinding(
@@ -458,18 +381,14 @@ export function validateEdbTechnicalStatusShadow(
   const importedStatuses = new Set(
     status.statusAssertions
       .filter(
-        (assertion) =>
-          assertion.informationState === 'IMPORTED' &&
-          assertion.status !== 'UNKNOWN',
+        (assertion) => assertion.informationState === 'IMPORTED' && assertion.status !== 'UNKNOWN',
       )
       .map((assertion) => assertion.status),
   );
   const declaredStatuses = new Set(
     status.statusAssertions
       .filter(
-        (assertion) =>
-          assertion.informationState === 'DECLARED' &&
-          assertion.status !== 'UNKNOWN',
+        (assertion) => assertion.informationState === 'DECLARED' && assertion.status !== 'UNKNOWN',
       )
       .map((assertion) => assertion.status),
   );
@@ -479,31 +398,17 @@ export function validateEdbTechnicalStatusShadow(
     declaredStatuses.size > 0 &&
     [...importedStatuses].some((value) => !declaredStatuses.has(value))
   ) {
-    addFinding(
-      findings,
-      'TECHNICAL_STATUS_SOURCE_CONFLICT',
-      'CRITICAL',
-      'statusAssertions',
-    );
+    addFinding(findings, 'TECHNICAL_STATUS_SOURCE_CONFLICT', 'CRITICAL', 'statusAssertions');
   }
 
   for (const [discrepancyIndex, discrepancy] of status.discrepancies.entries()) {
     const discrepancyPath = `discrepancies.${discrepancyIndex}`;
 
     if (discrepancy.status === 'OPEN') {
-      addFinding(
-        findings,
-        'TECHNICAL_DISCREPANCY_OPEN',
-        'HIGH',
-        `${discrepancyPath}.status`,
-      );
+      addFinding(findings, 'TECHNICAL_DISCREPANCY_OPEN', 'HIGH', `${discrepancyPath}.status`);
     }
 
-    if (
-      !discrepancy.events.some(
-        (event) => event.eventType === 'DISCREPANCY_DECLARED',
-      )
-    ) {
+    if (!discrepancy.events.some((event) => event.eventType === 'DISCREPANCY_DECLARED')) {
       addFinding(
         findings,
         'TECHNICAL_DISCREPANCY_DECLARATION_REQUIRED',
@@ -519,21 +424,11 @@ export function validateEdbTechnicalStatusShadow(
       const eventPath = `${discrepancyPath}.events.${eventIndex}`;
 
       if (eventIds.has(event.eventId)) {
-        addFinding(
-          findings,
-          'TECHNICAL_EVENT_ID_DUPLICATED',
-          'HIGH',
-          `${eventPath}.eventId`,
-        );
+        addFinding(findings, 'TECHNICAL_EVENT_ID_DUPLICATED', 'HIGH', `${eventPath}.eventId`);
       }
 
       if (event.sequence <= previousSequence) {
-        addFinding(
-          findings,
-          'TECHNICAL_EVENT_SEQUENCE_INVALID',
-          'HIGH',
-          `${eventPath}.sequence`,
-        );
+        addFinding(findings, 'TECHNICAL_EVENT_SEQUENCE_INVALID', 'HIGH', `${eventPath}.sequence`);
       }
 
       if (event.eventType === 'CORRECTION_DECLARED') {
@@ -545,9 +440,7 @@ export function validateEdbTechnicalStatusShadow(
             `${eventPath}.supersedesEventId`,
           );
         } else if (
-          !discrepancy.events.some(
-            (candidate) => candidate.eventId === event.supersedesEventId,
-          )
+          !discrepancy.events.some((candidate) => candidate.eventId === event.supersedesEventId)
         ) {
           addFinding(
             findings,
@@ -580,11 +473,7 @@ export function validateEdbTechnicalStatusShadow(
             `${eventPath}.correctiveAction.description`,
           );
         }
-        validateMaintenanceActor(
-          findings,
-          event.maintenanceAct,
-          `${eventPath}.maintenanceAct`,
-        );
+        validateMaintenanceActor(findings, event.maintenanceAct, `${eventPath}.maintenanceAct`);
       }
 
       if (event.eventType === 'DEFERRED_ITEM_DECLARED') {
@@ -606,9 +495,7 @@ export function validateEdbTechnicalStatusShadow(
           !event.deferredItem?.dueAt &&
           (!event.deferredItem ||
             event.deferredItem.remainingLimits.length === 0 ||
-            event.deferredItem.remainingLimits.every(
-              (limit) => limit.value === null,
-            ))
+            event.deferredItem.remainingLimits.every((limit) => limit.value === null))
         ) {
           addFinding(
             findings,
@@ -618,12 +505,8 @@ export function validateEdbTechnicalStatusShadow(
           );
         }
         if (event.deferredItem) {
-          for (const [limitIndex, limit] of
-            event.deferredItem.remainingLimits.entries()) {
-            if (
-              limit.unit &&
-              !KNOWN_LIMIT_UNITS.has(limit.unit.toUpperCase())
-            ) {
+          for (const [limitIndex, limit] of event.deferredItem.remainingLimits.entries()) {
+            if (limit.unit && !KNOWN_LIMIT_UNITS.has(limit.unit.toUpperCase())) {
               addFinding(
                 findings,
                 'TECHNICAL_LIMIT_UNIT_UNKNOWN',
@@ -633,11 +516,7 @@ export function validateEdbTechnicalStatusShadow(
             }
           }
         }
-        validateMaintenanceActor(
-          findings,
-          event.maintenanceAct,
-          `${eventPath}.maintenanceAct`,
-        );
+        validateMaintenanceActor(findings, event.maintenanceAct, `${eventPath}.maintenanceAct`);
       }
 
       if (event.eventType === 'RETURN_TO_SERVICE_DECLARED') {
@@ -668,12 +547,7 @@ export function validateEdbTechnicalStatusShadow(
   }
 
   if (status.picAwareness.state === 'PENDING') {
-    addFinding(
-      findings,
-      'TECHNICAL_PIC_AWARENESS_PENDING',
-      'HIGH',
-      'picAwareness.state',
-    );
+    addFinding(findings, 'TECHNICAL_PIC_AWARENESS_PENDING', 'HIGH', 'picAwareness.state');
   }
 
   return findings;
@@ -682,8 +556,6 @@ export function validateEdbTechnicalStatusShadow(
 /**
  * Parses and deep-clones the input into the non-official shadow contract.
  */
-export function createEdbTechnicalStatusShadowSnapshot(
-  input: unknown,
-): EdbTechnicalStatusShadow {
+export function createEdbTechnicalStatusShadowSnapshot(input: unknown): EdbTechnicalStatusShadow {
   return edbTechnicalStatusShadowSchema.parse(input);
 }
