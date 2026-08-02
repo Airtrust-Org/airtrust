@@ -305,15 +305,140 @@ export async function getExpiracaoRows(
   return results.results || [];
 }
 
+type ScormConclusaoInconsistenteLightRow = {
+  matricula_id: number;
+  funcionario_id: number;
+  funcionario_nome: string;
+  funcao: string | null;
+  curso_id: number;
+  curso_titulo: string;
+  status: string;
+  progresso_pct: number;
+  scorm_mastery_score: number | null;
+  lesson_status: string | null;
+  completion_status: string | null;
+  success_status: string | null;
+  score_raw: number | null;
+  score_max: number | null;
+  score_scaled: number | null;
+  session_time: string | null;
+  total_time: string | null;
+  last_commit_at: string | null;
+  cursor_last_commit_at: string;
+  cursor_matricula_updated_at: string;
+};
+
+type ScormRuntimePayloadRow = {
+  matricula_id: number;
+  suspend_data: string | null;
+  cmi_json: string | null;
+};
+
+type ScormListCursor = {
+  lastCommitAt: string;
+  matriculaUpdatedAt: string;
+  matriculaId: number;
+};
+
+export type ScormConclusaoInconsistentePage = {
+  rows: ScormConclusaoInconsistenteRow[];
+  nextCursor: string | null;
+};
+
+export type ScormConclusaoInconsistenteOptions = {
+  limit?: number;
+  cursor?: string | null;
+};
+
+const SCORM_LIST_DEFAULT_LIMIT = 100;
+const SCORM_LIST_MAX_LIMIT = 200;
+
+function resolveScormListLimit(value: number | undefined): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return SCORM_LIST_DEFAULT_LIMIT;
+  return Math.min(Math.floor(parsed), SCORM_LIST_MAX_LIMIT);
+}
+
+function invalidScormCursor(): Error & { code: 'INVALID_SCORM_CURSOR' } {
+  const error = new Error('Cursor SCORM inválido') as Error & {
+    code: 'INVALID_SCORM_CURSOR';
+  };
+  error.code = 'INVALID_SCORM_CURSOR';
+  return error;
+}
+
+function encodeScormListCursor(row: ScormConclusaoInconsistenteLightRow): string {
+  const payload: ScormListCursor = {
+    lastCommitAt: row.cursor_last_commit_at,
+    matriculaUpdatedAt: row.cursor_matricula_updated_at,
+    matriculaId: row.matricula_id,
+  };
+  return btoa(JSON.stringify(payload))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function decodeScormListCursor(raw: string | null | undefined): ScormListCursor | null {
+  if (!raw) return null;
+
+  try {
+    const normalized = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const parsed = JSON.parse(atob(padded)) as Partial<ScormListCursor>;
+    if (
+      typeof parsed.lastCommitAt !== 'string' ||
+      typeof parsed.matriculaUpdatedAt !== 'string' ||
+      !Number.isInteger(parsed.matriculaId) ||
+      Number(parsed.matriculaId) <= 0
+    ) {
+      throw invalidScormCursor();
+    }
+    return parsed as ScormListCursor;
+  } catch (error) {
+    if ((error as { code?: string }).code === 'INVALID_SCORM_CURSOR') throw error;
+    throw invalidScormCursor();
+  }
+}
+
 export async function getScormConclusaoInconsistenteRows(
   db: D1Database,
   empresaId: number,
   setorIds: number[] = [],
-): Promise<ScormConclusaoInconsistenteRow[]> {
+  options: ScormConclusaoInconsistenteOptions = {},
+): Promise<ScormConclusaoInconsistentePage> {
   assertEmpresaId(empresaId);
   const setorFilter = buildCourseSetorFilter('c', setorIds);
+  const limit = resolveScormListLimit(options.limit);
+  const cursor = decodeScormListCursor(options.cursor);
+  const cursorClause = cursor
+    ? `AND (
+        COALESCE(p.last_commit_at, '') < ?
+        OR (
+          COALESCE(p.last_commit_at, '') = ?
+          AND COALESCE(m.updated_at, '') < ?
+        )
+        OR (
+          COALESCE(p.last_commit_at, '') = ?
+          AND COALESCE(m.updated_at, '') = ?
+          AND m.id < ?
+        )
+      )`
+    : '';
+  const cursorBindings = cursor
+    ? [
+        cursor.lastCommitAt,
+        cursor.lastCommitAt,
+        cursor.matriculaUpdatedAt,
+        cursor.lastCommitAt,
+        cursor.matriculaUpdatedAt,
+        cursor.matriculaId,
+      ]
+    : [];
 
-  const results = await db
+  // Phase 1: tenant, employee/sector scope, diagnostic pre-filter and keyset
+  // pagination are applied without materializing suspend_data or cmi_json.
+  const lightResults = await db
     .prepare(
       `
       SELECT
@@ -334,9 +459,9 @@ export async function getScormConclusaoInconsistenteRows(
         p.score_scaled,
         p.session_time,
         p.total_time,
-        p.suspend_data,
-        p.cmi_json,
-        p.last_commit_at
+        p.last_commit_at,
+        COALESCE(p.last_commit_at, '') AS cursor_last_commit_at,
+        COALESCE(m.updated_at, '') AS cursor_matricula_updated_at
       FROM lms_matriculas m
       JOIN lms_cursos c
         ON c.id = m.curso_id
@@ -355,36 +480,64 @@ export async function getScormConclusaoInconsistenteRows(
         AND m.deleted_at IS NULL
         AND c.tipo_conteudo = 'scorm'
         AND m.status <> 'CONCLUIDO'
+        AND LOWER(TRIM(COALESCE(p.lesson_status, ''))) NOT IN ('passed', 'completed', 'failed')
+        AND LOWER(TRIM(COALESCE(p.success_status, ''))) <> 'failed'
+        AND NOT (
+          LOWER(TRIM(COALESCE(p.completion_status, ''))) = 'completed'
+          AND LOWER(TRIM(COALESCE(p.success_status, ''))) IN ('', 'passed', 'unknown')
+        )
+        AND (
+          COALESCE(m.progresso_pct, 0) >= 99
+          OR p.cmi_json IS NOT NULL
+          OR COALESCE(p.score_scaled, -2) >= 0.95
+          OR (p.score_raw IS NOT NULL AND p.score_max > 0 AND (p.score_raw * 1.0 / p.score_max) >= 0.95)
+          OR (p.score_raw >= 95 AND (p.score_max IS NULL OR p.score_max <= 0))
+        )
         ${setorFilter.clause}
-      ORDER BY p.last_commit_at DESC, m.updated_at DESC
+        ${cursorClause}
+      ORDER BY
+        COALESCE(p.last_commit_at, '') DESC,
+        COALESCE(m.updated_at, '') DESC,
+        m.id DESC
+      LIMIT ?
       `,
     )
-    .bind(empresaId, ...setorFilter.bindings)
-    .all<{
-      matricula_id: number;
-      funcionario_id: number;
-      funcionario_nome: string;
-      funcao: string | null;
-      curso_id: number;
-      curso_titulo: string;
-      status: string;
-      progresso_pct: number;
-      scorm_mastery_score: number | null;
-      lesson_status: string | null;
-      completion_status: string | null;
-      success_status: string | null;
-      score_raw: number | null;
-      score_max: number | null;
-      score_scaled: number | null;
-      session_time: string | null;
-      total_time: string | null;
-      suspend_data: string | null;
-      cmi_json: string | null;
-      last_commit_at: string | null;
-    }>();
+    .bind(
+      empresaId,
+      ...setorFilter.bindings,
+      ...cursorBindings,
+      limit + 1,
+    )
+    .all<ScormConclusaoInconsistenteLightRow>();
 
-  return (results.results || [])
+  const scannedRows = lightResults.results || [];
+  const pageRows = scannedRows.slice(0, limit);
+  const nextCursor =
+    scannedRows.length > limit && pageRows.length > 0
+      ? encodeScormListCursor(pageRows[pageRows.length - 1]!)
+      : null;
+
+  if (pageRows.length === 0) return { rows: [], nextCursor };
+
+  // Phase 2: one tenant-scoped batch query loads payloads only for the bounded
+  // page. This deliberately avoids a per-row/N+1 fetch.
+  const placeholders = pageRows.map(() => '?').join(',');
+  const payloadResults = await db
+    .prepare(
+      `SELECT matricula_id, suspend_data, cmi_json
+         FROM lms_progresso_scorm
+        WHERE empresa_id = ?
+          AND matricula_id IN (${placeholders})`,
+    )
+    .bind(empresaId, ...pageRows.map((row) => row.matricula_id))
+    .all<ScormRuntimePayloadRow>();
+  const payloadByMatricula = new Map(
+    (payloadResults.results || []).map((row) => [row.matricula_id, row]),
+  );
+
+  const rows = pageRows
     .map((row) => {
+      const payload = payloadByMatricula.get(row.matricula_id);
       const diagnostic = buildScormCompletionDiagnostic({
         lessonStatus: row.lesson_status,
         completionStatus: row.completion_status,
@@ -394,8 +547,8 @@ export async function getScormConclusaoInconsistenteRows(
         scoreScaled: row.score_scaled,
         masteryScore: row.scorm_mastery_score,
         progressoPct: row.progresso_pct,
-        cmiJson: row.cmi_json,
-        suspendData: row.suspend_data,
+        cmiJson: payload?.cmi_json ?? null,
+        suspendData: payload?.suspend_data ?? null,
         sessionTime: row.session_time,
         totalTime: row.total_time,
       });
@@ -425,4 +578,6 @@ export async function getScormConclusaoInconsistenteRows(
           row.diagnostic_code === 'SCORM_STATUS_INCONSISTENT' ||
           row.diagnostic_code === 'SCORM_FINAL_COMMIT_MISSING'),
     );
+
+  return { rows, nextCursor };
 }
