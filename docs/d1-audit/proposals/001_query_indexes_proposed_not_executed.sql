@@ -1,0 +1,37 @@
+-- AIRTRUST — PROPOSTAS DOCUMENTAIS DE ÍNDICES D1
+-- Revisão: 2026-08-01
+-- Base: ecc37ec94f1a53533eb6f5f74bcbc3282d7e91d8
+-- Status: DOCUMENTAÇÃO SOMENTE; ARQUIVO INTEGRALMENTE NÃO EXECUTÁVEL.
+--
+-- Não existe statement SQL ativo neste arquivo.
+-- Este arquivo não integra worker-airtrust/migrations e não autoriza migration.
+-- Nenhuma proposta pode ser aplicada sem PR própria, Schema V2, ledger,
+-- nome livre, query final, EXPLAIN, métricas autorizadas de staging,
+-- plano de rollback e gates oficiais de release.
+--
+-- PROPOSTA M1 — AUDITORIA, SOMENTE APÓS TOP-N E CHUNKING
+-- CREATE INDEX idx_auditoria_tabela_registro_created_id
+--   ON auditoria(tabela_afetada, registro_id, created_at DESC, id DESC);
+--
+-- PROPOSTA M2 — TREINAMENTOS, SOMENTE APÓS ESTABILIZAR FILTROS
+-- CREATE INDEX idx_tp_empresa_status_data_hora_id
+--   ON treinamentos_planejados(
+--     empresa_id, status, data_prevista, hora_inicio, id
+--   ) WHERE deleted_at IS NULL;
+--
+-- PROPOSTA M3 — HOSPEDAGEM, SOMENTE APÓS PAGINAÇÃO E MÉTRICAS
+-- CREATE INDEX idx_hospedagem_empresa_checkin_id
+--   ON hospedagem(empresa_id, data_checkin DESC, id DESC)
+--   WHERE deleted_at IS NULL;
+--
+-- PROPOSTA M4 — LMS, SOMENTE APÓS CARDINALIDADE REAL
+-- CREATE INDEX idx_lms_empresa_expiracao_status_id
+--   ON lms_matriculas(empresa_id, data_expiracao, status, id)
+--   WHERE deleted_at IS NULL AND data_expiracao IS NOT NULL;
+--
+-- CANDIDATOS A REMOÇÃO FUTURA, NÃO EXECUTAR
+-- DROP INDEX idx_token_blocklist_jti;
+-- DROP INDEX idx_rate_limit_store_key_window_start;
+--
+-- Não executar PRAGMA, CREATE INDEX, DROP INDEX, migration, deploy ou backfill
+-- a partir deste arquivo.

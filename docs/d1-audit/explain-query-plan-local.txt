@@ -1,0 +1,33 @@
+AirTrust — EXPLAIN QUERY PLAN local
+Data da revisão: 2026-08-01
+SHA-base do código revisado: ecc37ec94f1a53533eb6f5f74bcbc3282d7e91d8
+PR relacionada de hospedagem: #664
+Candidato final da #664: d10d93d571d04f34c1fcaacaf1ef8dd5a6d53951
+
+Escopo
+- Experimento em SQLite efêmero.
+- Nenhum D1/R2 remoto foi consultado ou alterado.
+- Nenhuma migration ou índice real foi aplicado.
+- Evidência direcional; não substitui cardinalidade ou métricas de staging.
+
+Auditoria, índice atual
+SEARCH auditoria USING INDEX idx_auditoria_tabela (tabela_afetada=?)
+USE TEMP B-TREE FOR ORDER BY
+
+Auditoria, índice conceitual composto
+SEARCH auditoria USING INDEX idx_auditoria_tabela_registro_created_id
+  (tabela_afetada=? AND registro_id=?)
+USE TEMP B-TREE FOR ORDER BY
+
+Treinamentos, índices atuais
+SEARCH treinamentos_planejados USING INDEX idx_treinamentos_empresa
+  (empresa_id=?)
+USE TEMP B-TREE FOR ORDER BY
+
+Treinamentos, índice conceitual composto
+SEARCH treinamentos_planejados USING INDEX idx_tp_empresa_status_data_hora_id
+  (empresa_id=? AND status=?)
+USE TEMP B-TREE FOR LAST 2 TERMS OF ORDER BY
+
+Conclusão
+Corrigir chunking, overfetch e expressões da query antes de converter qualquer proposta em migration.
