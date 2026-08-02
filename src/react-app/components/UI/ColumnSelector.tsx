@@ -55,9 +55,14 @@ export function ColumnSelector({
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
         className="gap-2"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
       >
         <span>Colunas</span>
-        <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
+        <ChevronDown
+          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
+          aria-hidden="true"
+        />
       </Button>
 
       {isOpen && (

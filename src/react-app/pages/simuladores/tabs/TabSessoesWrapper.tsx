@@ -3,29 +3,37 @@
  * Padronizado com SimuladoresLayout
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type ComponentProps } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { toast } from 'sonner';
-import { isSameStatus } from '@/react-app/types/simuladores';
 import { SimuladoresCard } from '../components/SimuladoresLayout';
-import SessaoCard, { Sessao } from '@/react-app/components/simuladores/SessaoCard';
+import SessaoCard, { type Sessao } from '@/react-app/components/simuladores/SessaoCard';
 import ModalNovaSessao from '@/react-app/components/modals/ModalNovaSessao';
 import { Calendar, Plus, BarChart3, Award, X, TrendingUp, Search, Loader2 } from 'lucide-react';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import ConfirmDeleteModal from '@/react-app/components/modals/ConfirmDeleteModal';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
+import {
+  computeSessaoStats,
+  filterAndSortSessoes,
+  getLocalDateKey,
+  getProximasSessoes,
+  getSessoesRecentes,
+} from './tabSessoesDerived';
+
+type SessaoParaEditar = NonNullable<ComponentProps<typeof ModalNovaSessao>['sessao']>;
 
 export default function TabSessoesWrapper() {
   const navigate = useNavigate();
   const { isAluno, isInstrutor } = usePermissions();
   const readOnly = isAluno || isInstrutor;
   const [sessoes, setSessoes] = useState<Sessao[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<string>('');
   const [busca, setBusca] = useState('');
   const [modalNovaSessaoOpen, setModalNovaSessaoOpen] = useState(false);
-  const [sessaoParaEditar, setSessaoParaEditar] = useState<Sessao | null>(null);
+  const [sessaoParaEditar, setSessaoParaEditar] = useState<SessaoParaEditar | null>(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: number; nome: string } | null>(
     null,
   );
@@ -52,10 +60,10 @@ export default function TabSessoesWrapper() {
         limit: '120',
       });
 
-      const _st = getAccessToken();
+      const token = getAccessToken();
       const res = await fetch(`${API_BASE_URL}/simuladores/sessoes?${params}`, {
         headers: {
-          ...(_st ? { Authorization: `Bearer ${_st}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
       const data = await res.json();
@@ -75,37 +83,40 @@ export default function TabSessoesWrapper() {
   }, [fetchSessoes]);
 
   const handleEditarSessao = (id: number) => {
-    const sessao = sessoes.find((s) => s.id === id);
-    if (sessao) {
-      // Converter Sessao para SessaoParaEditar para compatibilidade com ModalNovaSessao
-      const sessaoParaEditar = {
-        id: sessao.id,
-        modo_compartilhado: sessao.modo_compartilhado,
-        template_id: (sessao as any).template_id ?? null,
-        simulador_id: sessao.simulador_id,
-        simulador_nome: sessao.simulador_nome,
-        simulador_modelo: sessao.simulador_modelo, // necessário para filtrar checks por modelo de aeronave
-        data: sessao.data,
-        horario_inicio: sessao.horario_inicio,
-        horario_fim: sessao.horario_fim,
-        instrutor_id: sessao.instrutor_id,
-        instrutor_nome: sessao.instrutor_nome,
-        examinador_id: sessao.examinador_id ?? null, // necessário para pré-selecionar examinador e checks
-        tipo_sessao: sessao.tipo_sessao,
-        tema_sessao: sessao.tema_sessao,
-        observacoes: sessao.observacoes,
-        participantes: sessao.participantes.map((p) => ({
-          funcionario_id: p.funcionario_id,
-          funcao: p.funcao as 'PIC' | 'SIC',
-        })),
-      };
-      setSessaoParaEditar(sessaoParaEditar as any);
-      setModalNovaSessaoOpen(true);
-    }
+    const sessao = sessoes.find((item) => item.id === id);
+    if (!sessao) return;
+
+    const templateId =
+      'template_id' in sessao && typeof sessao.template_id === 'number' ? sessao.template_id : null;
+
+    const sessaoEditavel: SessaoParaEditar = {
+      id: sessao.id,
+      modo_compartilhado: sessao.modo_compartilhado,
+      template_id: templateId,
+      simulador_id: sessao.simulador_id,
+      simulador_nome: sessao.simulador_nome,
+      simulador_modelo: sessao.simulador_modelo,
+      data: sessao.data,
+      horario_inicio: sessao.horario_inicio,
+      horario_fim: sessao.horario_fim,
+      instrutor_id: sessao.instrutor_id,
+      instrutor_nome: sessao.instrutor_nome,
+      examinador_id: sessao.examinador_id ?? null,
+      tipo_sessao: sessao.tipo_sessao,
+      tema_sessao: sessao.tema_sessao,
+      observacoes: sessao.observacoes,
+      participantes: sessao.participantes.map((participante) => ({
+        funcionario_id: participante.funcionario_id,
+        funcao: participante.funcao,
+      })),
+    };
+
+    setSessaoParaEditar(sessaoEditavel);
+    setModalNovaSessaoOpen(true);
   };
 
   const handleDeletarSessao = (id: number) => {
-    const sessao = sessoes.find((s) => s.id === id);
+    const sessao = sessoes.find((item) => item.id === id);
     if (sessao) {
       setShowConfirmDelete({
         id: sessao.id,
@@ -132,7 +143,7 @@ export default function TabSessoesWrapper() {
         const sessaoRemovida = sessoes.find((sessao) => sessao.id === id);
 
         // Optimistic update - remover da lista imediatamente
-        setSessoes((prev) => prev.filter((s) => s.id !== id));
+        setSessoes((previous) => previous.filter((sessao) => sessao.id !== id));
 
         emitirEventoModulo({
           modulo: 'simuladores',
@@ -159,86 +170,47 @@ export default function TabSessoesWrapper() {
     }
   };
 
-  // Estatisticas
-  const stats = {
-    total: sessoes.length,
-    agendadas: sessoes.filter((s) => isSameStatus(s.status, 'AGENDADO')).length,
-    emAndamento: sessoes.filter((s) => isSameStatus(s.status, 'EM_ANDAMENTO')).length,
-    concluidas: sessoes.filter((s) => isSameStatus(s.status, 'CONCLUIDO')).length,
-    canceladas: sessoes.filter((s) => isSameStatus(s.status, 'CANCELADO')).length,
-  };
-
-  // Sessoes filtradas
-  const sessoesFiltradas = sessoes
-    .filter((s) => {
-      if (filtroStatus && !isSameStatus(s.status, filtroStatus)) return false;
-      if (busca) {
-        const searchLower = busca.toLowerCase();
-        return (
-          s.simulador_nome?.toLowerCase().includes(searchLower) ||
-          s.instrutor_nome?.toLowerCase().includes(searchLower) ||
-          s.tipo_sessao?.toLowerCase().includes(searchLower) ||
-          s.participantes?.some((p) => p.funcionario_nome?.toLowerCase().includes(searchLower))
-        );
-      }
-      return true;
-    })
-    .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-
-  // Helper para verificar datas
-  const isFutureOrToday = (dateStr: string) => {
-    if (!dateStr) return false;
-
-    // Obter data de hoje em formato YYYY-MM-DD (local)
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${year}-${month}-${day}`;
-
-    // Comparação de strings funciona bem para formato ISO YYYY-MM-DD
-    // Ex: "2026-01-10" >= "2026-01-09"
-    return dateStr >= todayStr;
-  };
-
-  // Proximas sessoes (Apenas AGENDADO e datas futuras/hoje)
-  const proximasSessoes = useMemo(() => {
-    return sessoesFiltradas
-      .filter((s) => isSameStatus(s.status, 'AGENDADO') && isFutureOrToday(s.data))
-      .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
-      .slice(0, 5);
-  }, [sessoesFiltradas]);
-
-  // Sessoes recentes (STATUS != AGENDADO ou datas passadas)
-  const sessoesRecentes = useMemo(() => {
-    return sessoesFiltradas
-      .filter((s) => !isSameStatus(s.status, 'AGENDADO') || !isFutureOrToday(s.data))
-      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-      .slice(0, 10);
-  }, [sessoesFiltradas]);
+  const stats = useMemo(() => computeSessaoStats(sessoes), [sessoes]);
+  const sessoesFiltradas = useMemo(
+    () => filterAndSortSessoes(sessoes, filtroStatus, busca),
+    [sessoes, filtroStatus, busca],
+  );
+  const todayKey = getLocalDateKey();
+  const proximasSessoes = useMemo(
+    () => getProximasSessoes(sessoesFiltradas, todayKey),
+    [sessoesFiltradas, todayKey],
+  );
+  const sessoesRecentes = useMemo(
+    () => getSessoesRecentes(sessoesFiltradas, todayKey),
+    [sessoesFiltradas, todayKey],
+  );
 
   return (
     <div className="space-y-4">
       {/* Cards de Estatisticas */}
       <SimuladoresCard className="p-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div
-            className={`rounded-lg border p-4 cursor-pointer transition-all hover:shadow-md ${
+          <button
+            type="button"
+            aria-pressed={!filtroStatus}
+            className={`rounded-lg border p-4 cursor-pointer text-left transition-all hover:shadow-md ${
               !filtroStatus ? 'border-blue-500 ring-2 ring-blue-100' : 'border-gray-200 bg-white'
             }`}
             onClick={() => setFiltroStatus('')}
           >
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-gray-500" />
+              <BarChart3 className="w-5 h-5 text-gray-500" aria-hidden="true" />
               <div>
                 <p className="text-xs text-gray-500 font-medium">Total</p>
                 <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
               </div>
             </div>
-          </div>
+          </button>
 
-          <div
-            className={`rounded-lg border p-4 cursor-pointer transition-all hover:shadow-md ${
+          <button
+            type="button"
+            aria-pressed={filtroStatus === 'AGENDADO'}
+            className={`rounded-lg border p-4 cursor-pointer text-left transition-all hover:shadow-md ${
               filtroStatus === 'AGENDADO'
                 ? 'border-blue-500 ring-2 ring-blue-100'
                 : 'border-blue-200 bg-blue-50'
@@ -246,16 +218,18 @@ export default function TabSessoesWrapper() {
             onClick={() => setFiltroStatus(filtroStatus === 'AGENDADO' ? '' : 'AGENDADO')}
           >
             <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-600" />
+              <Calendar className="w-5 h-5 text-blue-600" aria-hidden="true" />
               <div>
                 <p className="text-xs text-blue-600 font-medium">Agendadas</p>
                 <p className="text-2xl font-bold text-blue-700">{stats.agendadas}</p>
               </div>
             </div>
-          </div>
+          </button>
 
-          <div
-            className={`rounded-lg border p-4 cursor-pointer transition-all hover:shadow-md ${
+          <button
+            type="button"
+            aria-pressed={filtroStatus === 'EM_ANDAMENTO'}
+            className={`rounded-lg border p-4 cursor-pointer text-left transition-all hover:shadow-md ${
               filtroStatus === 'EM_ANDAMENTO'
                 ? 'border-amber-500 ring-2 ring-amber-100'
                 : 'border-amber-200 bg-amber-50'
@@ -263,16 +237,18 @@ export default function TabSessoesWrapper() {
             onClick={() => setFiltroStatus(filtroStatus === 'EM_ANDAMENTO' ? '' : 'EM_ANDAMENTO')}
           >
             <div className="flex items-center gap-2">
-              <Loader2 className="w-5 h-5 text-amber-600" />
+              <Loader2 className="w-5 h-5 text-amber-600" aria-hidden="true" />
               <div>
                 <p className="text-xs text-amber-600 font-medium">Em Andamento</p>
                 <p className="text-2xl font-bold text-amber-700">{stats.emAndamento}</p>
               </div>
             </div>
-          </div>
+          </button>
 
-          <div
-            className={`rounded-lg border p-4 cursor-pointer transition-all hover:shadow-md ${
+          <button
+            type="button"
+            aria-pressed={filtroStatus === 'CONCLUIDO'}
+            className={`rounded-lg border p-4 cursor-pointer text-left transition-all hover:shadow-md ${
               filtroStatus === 'CONCLUIDO'
                 ? 'border-emerald-500 ring-2 ring-emerald-100'
                 : 'border-emerald-200 bg-emerald-50'
@@ -280,13 +256,13 @@ export default function TabSessoesWrapper() {
             onClick={() => setFiltroStatus(filtroStatus === 'CONCLUIDO' ? '' : 'CONCLUIDO')}
           >
             <div className="flex items-center gap-2">
-              <Award className="w-5 h-5 text-emerald-600" />
+              <Award className="w-5 h-5 text-emerald-600" aria-hidden="true" />
               <div>
                 <p className="text-xs text-emerald-600 font-medium">Concluídas</p>
                 <p className="text-2xl font-bold text-emerald-700">{stats.concluidas}</p>
               </div>
             </div>
-          </div>
+          </button>
         </div>
       </SimuladoresCard>
 
@@ -295,12 +271,16 @@ export default function TabSessoesWrapper() {
         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
           {/* Busca */}
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+              aria-hidden="true"
+            />
             <input
               type="text"
+              aria-label="Buscar sessões"
               placeholder="Buscar por simulador, instrutor ou participante..."
               value={busca}
-              onChange={(e) => setBusca(e.target.value)}
+              onChange={(event) => setBusca(event.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-transparent transition-all"
             />
           </div>
@@ -309,6 +289,7 @@ export default function TabSessoesWrapper() {
           {(filtroStatus || busca) && (
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={() => {
                   setFiltroStatus('');
                   setBusca('');
@@ -326,7 +307,7 @@ export default function TabSessoesWrapper() {
       <SimuladoresCard padding="none">
         {sessoesFiltradas.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4">
-            <Calendar className="w-16 h-16 text-gray-300 mb-4" />
+            <Calendar className="w-16 h-16 text-gray-300 mb-4" aria-hidden="true" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               {filtroStatus || busca ? 'Nenhuma sessão encontrada' : 'Nenhuma sessão agendada'}
             </h3>
@@ -337,10 +318,11 @@ export default function TabSessoesWrapper() {
             </p>
             {!filtroStatus && !busca && !readOnly && (
               <button
+                type="button"
                 onClick={() => setModalNovaSessaoOpen(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4" aria-hidden="true" />
                 Nova Sessão
               </button>
             )}
@@ -352,7 +334,7 @@ export default function TabSessoesWrapper() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-blue-600" />
+                    <Calendar className="w-5 h-5 text-blue-600" aria-hidden="true" />
                     Próximas Sessões
                   </h3>
                   <span className="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-medium">
@@ -386,20 +368,22 @@ export default function TabSessoesWrapper() {
                   {filtroStatus ? (
                     <>
                       {filtroStatus === 'AGENDADO' && (
-                        <Calendar className="w-5 h-5 text-blue-600" />
+                        <Calendar className="w-5 h-5 text-blue-600" aria-hidden="true" />
                       )}
                       {filtroStatus === 'EM_ANDAMENTO' && (
-                        <Loader2 className="w-5 h-5 text-amber-600" />
+                        <Loader2 className="w-5 h-5 text-amber-600" aria-hidden="true" />
                       )}
                       {filtroStatus === 'CONCLUIDO' && (
-                        <Award className="w-5 h-5 text-emerald-600" />
+                        <Award className="w-5 h-5 text-emerald-600" aria-hidden="true" />
                       )}
-                      {filtroStatus === 'CANCELADO' && <X className="w-5 h-5 text-red-600" />}
+                      {filtroStatus === 'CANCELADO' && (
+                        <X className="w-5 h-5 text-red-600" aria-hidden="true" />
+                      )}
                       Sessões {filtroStatus.replace('_', ' ').toLowerCase()}
                     </>
                   ) : (
                     <>
-                      <TrendingUp className="w-5 h-5 text-gray-600" />
+                      <TrendingUp className="w-5 h-5 text-gray-600" aria-hidden="true" />
                       Histórico Recente
                     </>
                   )}

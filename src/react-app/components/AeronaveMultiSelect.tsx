@@ -16,16 +16,16 @@ interface AeronaveMultiSelectProps {
   placeholder?: string;
 }
 
-export default function AeronaveMultiSelect({ 
-  value, 
-  onChange, 
-  className 
+export default function AeronaveMultiSelect({
+  value,
+  onChange,
+  className,
 }: AeronaveMultiSelectProps) {
   const { data: aeronaves } = useApi<Aeronave[]>('/api/aeronaves');
   const [isOpen, setIsOpen] = useState(false);
 
-  const selectedAeronaves = aeronaves?.filter(a => value.includes(a.id)) || [];
-  const availableAeronaves = aeronaves?.filter(a => !value.includes(a.id)) || [];
+  const selectedAeronaves = aeronaves?.filter((a) => value.includes(a.id)) || [];
+  const availableAeronaves = aeronaves?.filter((a) => !value.includes(a.id)) || [];
 
   const handleSelect = (aeronaveId: number) => {
     onChange([...value, aeronaveId]);
@@ -33,7 +33,7 @@ export default function AeronaveMultiSelect({
   };
 
   const handleRemove = (aeronaveId: number) => {
-    onChange(value.filter(id => id !== aeronaveId));
+    onChange(value.filter((id) => id !== aeronaveId));
   };
 
   return (
@@ -50,8 +50,9 @@ export default function AeronaveMultiSelect({
               type="button"
               onClick={() => handleRemove(aeronave.id)}
               className="ml-1 text-primary hover:text-primary transition-colors flex-shrink-0"
+              aria-label="Remover aeronave"
             >
-              <X className="w-3 h-3" />
+              <X className="w-3 h-3" aria-hidden="true" />
             </button>
           </span>
         ))}
@@ -62,12 +63,15 @@ export default function AeronaveMultiSelect({
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white text-sm"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
       >
         {selectedAeronaves.length === 0 ? (
           <span className="text-gray-500 truncate block">Selecione aeronaves qualificadas</span>
         ) : (
           <span className="text-gray-700 truncate block">
-            {selectedAeronaves.length} aeronave{selectedAeronaves.length > 1 ? 's' : ''} selecionada{selectedAeronaves.length > 1 ? 's' : ''}
+            {selectedAeronaves.length} aeronave{selectedAeronaves.length > 1 ? 's' : ''} selecionada
+            {selectedAeronaves.length > 1 ? 's' : ''}
           </span>
         )}
       </button>
@@ -98,12 +102,7 @@ export default function AeronaveMultiSelect({
       )}
 
       {/* Click outside to close */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-0"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
+      {isOpen && <div className="fixed inset-0 z-0" onClick={() => setIsOpen(false)} />}
     </div>
   );
 }
