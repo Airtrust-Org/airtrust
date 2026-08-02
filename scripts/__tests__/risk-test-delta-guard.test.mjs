@@ -50,11 +50,98 @@ test('requires certificate-specific tests instead of an unrelated test', () => {
   );
 });
 
+test('requires focused qualification and simulator tests', () => {
+  assert.throws(
+    () => assertRiskTestCoverage(['worker-airtrust/src/routes/qualificacoes.ts']),
+    /qualification-history/,
+  );
+  assert.throws(
+    () => assertRiskTestCoverage(['src/react-app/services/qualificacoes/index.ts']),
+    /qualification-history/,
+  );
+  assert.throws(
+    () => assertRiskTestCoverage(['worker-airtrust/src/routes/simuladores-fichas.ts']),
+    /simulator-fichas/,
+  );
+  assert.throws(
+    () => assertRiskTestCoverage(['src/services/simuladores.service.ts']),
+    /simulator-fichas/,
+  );
+  assert.throws(
+    () => assertRiskTestCoverage(['src/react-app/components/modelos/ReordenarManobras.tsx']),
+    /simulator-fichas/,
+  );
+
+  assert.doesNotThrow(() =>
+    assertRiskTestCoverage([
+      'worker-airtrust/src/routes/qualificacoes.ts',
+      'src/react-app/services/qualificacoes/index.ts',
+      'worker-airtrust/src/__tests__/qualificacoes-historico.test.ts',
+      'worker-airtrust/src/routes/simuladores-fichas.ts',
+      'src/services/simuladores.service.ts',
+      'src/react-app/components/modelos/ReordenarManobras.tsx',
+      'worker-airtrust/src/__tests__/simuladores-fichas.test.ts',
+    ]),
+  );
+});
+
 test('accepts focused LMS and EdApp tests for historical LMS changes', () => {
   assert.doesNotThrow(() =>
     assertRiskTestCoverage([
       'worker-airtrust/src/routes/lms-edapp-legado.ts',
       'worker-airtrust/src/routes/__tests__/lms-edapp-readonly-contract.test.ts',
+    ]),
+  );
+});
+
+test('requires FRMS and cron tests, including overlapping boundaries', () => {
+  assert.throws(
+    () => assertRiskTestCoverage(['worker-airtrust/src/cron/frms-daily-check.ts']),
+    /frms-safety/,
+  );
+
+  const results = assertRiskTestCoverage([
+    'worker-airtrust/src/cron/frms-daily-check.ts',
+    'worker-airtrust/src/__tests__/cron/frms-daily-cron.test.ts',
+  ]);
+
+  assert.deepEqual(
+    results.map((result) => result.id),
+    ['frms-safety', 'scheduled-jobs'],
+  );
+  assert.ok(results.every((result) => result.covered));
+});
+
+test('requires focused migration tests for SQL migrations', () => {
+  assert.throws(
+    () => assertRiskTestCoverage(['worker-airtrust/migrations/0450_example.sql']),
+    /migration-contract/,
+  );
+
+  assert.doesNotThrow(() =>
+    assertRiskTestCoverage([
+      'worker-airtrust/migrations/0450_example.sql',
+      'worker-airtrust/src/__tests__/migrations/0450-example.test.ts',
+    ]),
+  );
+});
+
+test('requires focused document and destructive-operation tests', () => {
+  assert.throws(
+    () => assertRiskTestCoverage(['worker-airtrust/src/services/pdf-generator.ts']),
+    /document-generation/,
+  );
+  assert.throws(
+    () => assertRiskTestCoverage(['worker-airtrust/src/routes/admin.ts']),
+    /destructive-operations/,
+  );
+
+  assert.doesNotThrow(() =>
+    assertRiskTestCoverage([
+      'worker-airtrust/src/services/pdf-generator.ts',
+      'worker-airtrust/src/__tests__/services/pdf-generation.test.ts',
+      'worker-airtrust/src/routes/admin.ts',
+      'worker-airtrust/src/__tests__/routes/admin-destructive-ops.test.ts',
     ]),
   );
 });
