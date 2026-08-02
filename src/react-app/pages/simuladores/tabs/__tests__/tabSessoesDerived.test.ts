@@ -81,6 +81,22 @@ describe('tabSessoesDerived', () => {
     expect(getSessoesRecentes(sessoes, '2026-08-02').map((sessao) => sessao.id)).toEqual([2, 1]);
   });
 
+  it('preserva o desempate original entre sessões do mesmo dia', () => {
+    const sessoes = filterAndSortSessoes(
+      [
+        buildSessao(1, '2026-08-04', 'AGENDADO', { horario_inicio: '15:00' }),
+        buildSessao(2, '2026-08-04', 'AGENDADO', { horario_inicio: '09:00' }),
+        buildSessao(3, '2026-08-03', 'AGENDADO'),
+      ],
+      '',
+      '',
+    );
+
+    expect(getProximasSessoes(sessoes, '2026-08-02').map((sessao) => sessao.id)).toEqual([
+      3, 1, 2,
+    ]);
+  });
+
   it('não altera a lista original', () => {
     const sessoes = [
       buildSessao(1, '2026-08-01', 'AGENDADO'),
