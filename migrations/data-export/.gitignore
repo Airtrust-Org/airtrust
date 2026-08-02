@@ -1,0 +1,4 @@
+# Legacy scripts previously wrote raw D1 exports here.
+# Keep the directory inert and prevent accidental staging of generated data.
+*
+!.gitignore
