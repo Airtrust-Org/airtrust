@@ -73,6 +73,10 @@ AIRTRUST_RELEASE_MANIFEST_SHA256 = "managed-by-script"
 CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
+# Protótipo eDB shadow: somente staging, allowlist explícita e sem suporte a `all`.
+# Costa do Sol é o tenant canônico empresa_id=6. Remover/limpar esta variável
+# desativa todas as rotas e a capability no próximo deploy de configuração.
+EDB_SHADOW_PILOT_TENANTS = "6"
 # Feature flag: shared simulator sessions (paridade com produção; ausente
 # aqui fazia /api/capabilities retornar simulador_shared_sessions=false em
 # staging, escondendo o toggle "Sessão compartilhada" já implementado e

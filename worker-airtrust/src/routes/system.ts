@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
 import edbShadowPreviewRoutes from './edb-shadow-preview';
+import { checkPermission, getEmpresaId } from '../middleware/tenant';
+import { ApiError } from '../middleware/error-handler';
+import { isEdbShadowPilotEnabledForTenant } from '../lib/edb/edb-shadow-pilot-flag';
 
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
@@ -24,6 +27,36 @@ function setNoCacheHeaders(c: { header: (name: string, value: string) => void })
  * Paths e contratos preservados do index.ts original.
  */
 export function registerSystemRoutes(app: SystemApp) {
+  app.get('/api/edb/capability', (c) => {
+    const tenantId = getEmpresaId(c);
+    const enabled =
+      checkPermission(c, 'manager') && isEdbShadowPilotEnabledForTenant(c.env, tenantId);
+
+    return c.json({
+      success: true,
+      data: {
+        enabled,
+        classification: 'NON_OFFICIAL_SHADOW_PILOT_CAPABILITY',
+        officialLogbook: false,
+        replacesPaper: false,
+      },
+    });
+  });
+
+  app.use('/api/edb/*', async (c, next) => {
+    if (new URL(c.req.url).pathname === '/api/edb/capability') {
+      await next();
+      return;
+    }
+
+    const tenantId = getEmpresaId(c);
+    if (!isEdbShadowPilotEnabledForTenant(c.env, tenantId)) {
+      throw new ApiError('Recurso indisponivel', 404, 'EDB_SHADOW_PILOT_NOT_ENABLED');
+    }
+
+    await next();
+  });
+
   app.route('/api/edb', edbShadowPreviewRoutes);
 
   /**
