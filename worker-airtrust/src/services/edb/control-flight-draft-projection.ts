@@ -9,6 +9,8 @@ type Nullable<T> = T | null;
 
 type ControlFlightOrigin = 'MANUAL' | 'SIGVOOS' | string;
 
+const MAX_RDV_SUMMARY_LENGTH = 4000;
+
 export interface ControlFlightLegSource {
   id: number;
   empresa_id: number;
@@ -60,6 +62,15 @@ export interface ControlFlightConflictSource {
   status: 'ABERTO' | 'RESOLVIDO' | 'IGNORADO';
 }
 
+export interface ControlFlightRdvSource {
+  id: number;
+  empresa_id: number;
+  voo_id: number;
+  ocorrencias: Nullable<string>;
+  divergencias: Nullable<string>;
+  updated_at: Nullable<string>;
+}
+
 export interface ControlFlightDraftProjectionInput {
   draftId: string;
   tenantId: number;
@@ -88,6 +99,7 @@ export interface ControlFlightDraftProjectionInput {
   legs: ControlFlightLegSource[];
   crew: ControlFlightCrewSource[];
   conflicts?: ControlFlightConflictSource[];
+  rdv?: Nullable<ControlFlightRdvSource>;
   technicalStatus: {
     lastMaintenanceIntervention: Nullable<string>;
     nextMaintenanceIntervention: Nullable<string>;
@@ -107,6 +119,8 @@ export type ControlFlightProjectionFindingCode =
   | 'FUEL_CONSUMPTION_UNAVAILABLE'
   | 'FUEL_UNIT_UNKNOWN'
   | 'PAYLOAD_UNIT_UNKNOWN'
+  | 'RDV_SUMMARY_WITHOUT_LEG'
+  | 'RDV_TEXT_TOO_LONG'
   | 'SOURCE_CONFLICT_OPEN'
   | 'TIMEZONE_REQUIRED';
 
@@ -115,9 +129,19 @@ export interface ControlFlightProjectionFinding {
   path: string;
 }
 
+export interface ControlFlightProjectionFieldSource {
+  path: string;
+  source: {
+    kind: 'AIRTRUST_CONTROL_FLIGHTS';
+    reference: string;
+    observedAt?: string;
+  };
+}
+
 export interface ControlFlightDraftProjectionResult {
   draft: EdbDraft;
   findings: ControlFlightProjectionFinding[];
+  fieldSources: ControlFlightProjectionFieldSource[];
 }
 
 export class ControlFlightProjectionError extends Error {
@@ -148,6 +172,14 @@ function normalizeClockTime(value: Nullable<string>): Nullable<string> {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+function clockTimeToMinutes(value: Nullable<string>): Nullable<number> {
+  const normalized = normalizeClockTime(value);
+  if (!normalized) return null;
+
+  const [hours, minutes] = normalized.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
 function durationToMinutes(value: Nullable<string>): Nullable<number> {
   const normalized = normalizeText(value);
   if (!normalized) return null;
@@ -160,6 +192,72 @@ function durationToMinutes(value: Nullable<string>): Nullable<number> {
   if (!Number.isSafeInteger(hours) || minutes > 59) return null;
 
   return hours * 60 + minutes;
+}
+
+function addDaysToOperationalDate(value: string, days: number): string {
+  if (days === 0) return value;
+
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return value;
+  }
+
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function deriveLegOperationalDates(
+  legs: ControlFlightLegSource[],
+  baseOperationalDate: string,
+): string[] {
+  let previousClockMinutes: Nullable<number> = null;
+  let previousDayOffset = 0;
+
+  return legs.map((leg) => {
+    const clocks = [
+      leg.horario_motor_ligado,
+      leg.horario_decolagem,
+      leg.horario_pouso,
+      leg.horario_motor_desligado,
+    ]
+      .map(clockTimeToMinutes)
+      .filter((value): value is number => value !== null);
+
+    let legDayOffset = previousDayOffset;
+
+    if (clocks.length > 0) {
+      let eventDayOffset = previousDayOffset;
+      if (previousClockMinutes !== null && clocks[0] < previousClockMinutes) {
+        eventDayOffset += 1;
+      }
+
+      legDayOffset = eventDayOffset;
+      let lastClockMinutes = clocks[0];
+
+      for (const clockMinutes of clocks.slice(1)) {
+        if (clockMinutes < lastClockMinutes) {
+          eventDayOffset += 1;
+        }
+        lastClockMinutes = clockMinutes;
+      }
+
+      previousClockMinutes = lastClockMinutes;
+      previousDayOffset = eventDayOffset;
+    }
+
+    return addDaysToOperationalDate(baseOperationalDate, legDayOffset);
+  });
 }
 
 function mapCrewFunction(value: Nullable<string>): Nullable<EdbCrewFunction> {
@@ -216,6 +314,15 @@ function assertScope(input: ControlFlightDraftProjectionInput): void {
     }
   }
 
+  if (input.rdv) {
+    if (input.rdv.empresa_id !== input.tenantId) {
+      throw new ControlFlightProjectionError('TENANT_MISMATCH');
+    }
+    if (input.rdv.voo_id !== input.flightId) {
+      throw new ControlFlightProjectionError('FLIGHT_MISMATCH');
+    }
+  }
+
   const legIds = new Set(input.legs.map((leg) => leg.id));
   const crewIds = new Set(input.crew.map((member) => member.id));
 
@@ -241,6 +348,22 @@ function addFinding(
   path: string,
 ): void {
   findings.push({ code, path });
+}
+
+function normalizeRdvSummary(
+  value: Nullable<string>,
+  path: string,
+  findings: ControlFlightProjectionFinding[],
+): Nullable<string> {
+  const normalized = normalizeText(value);
+  if (!normalized) return null;
+
+  if (normalized.length > MAX_RDV_SUMMARY_LENGTH) {
+    addFinding(findings, 'RDV_TEXT_TOO_LONG', path);
+    return null;
+  }
+
+  return normalized;
 }
 
 function projectCrew(
@@ -278,6 +401,8 @@ export function projectControlFlightToEdbDraft(
   assertScope(input);
 
   const findings: ControlFlightProjectionFinding[] = [];
+  const fieldSources: ControlFlightProjectionFieldSource[] = [];
+
   if (!normalizeText(input.timezone)) {
     addFinding(findings, 'TIMEZONE_REQUIRED', 'timezone');
   }
@@ -300,102 +425,148 @@ export function projectControlFlightToEdbDraft(
     }
   }
 
-  const legs = [...input.legs]
-    .sort((left, right) => left.numero_etapa - right.numero_etapa)
-    .map((leg, legIndex) => {
-      const blockMinutes = durationToMinutes(leg.tempo_total);
-      const takeoffToLandingMinutes = durationToMinutes(leg.tempo_decolagem_pouso);
-      const ifrActualMinutes = durationToMinutes(leg.tempo_ifr);
-      const nightMinutes = durationToMinutes(leg.tempo_noturno);
+  const rdvOccurrenceSummary = normalizeRdvSummary(
+    input.rdv?.ocorrencias ?? null,
+    'rdv.ocorrencias',
+    findings,
+  );
+  const rdvTechnicalDiscrepancySummary = normalizeRdvSummary(
+    input.rdv?.divergencias ?? null,
+    'rdv.divergencias',
+    findings,
+  );
 
-      const durationValues = [
-        [leg.tempo_total, blockMinutes, 'times.blockMinutes'],
-        [leg.tempo_decolagem_pouso, takeoffToLandingMinutes, 'times.takeoffToLandingMinutes'],
-        [leg.tempo_ifr, ifrActualMinutes, 'times.ifrActualMinutes'],
-        [leg.tempo_noturno, nightMinutes, 'times.nightMinutes'],
-      ] as const;
+  const sortedLegs = [...input.legs].sort((left, right) => left.numero_etapa - right.numero_etapa);
+  const operationalDates = deriveLegOperationalDates(sortedLegs, input.operationalDate);
+  const finalLegIndex = sortedLegs.length - 1;
 
-      for (const [sourceValue, parsedValue, path] of durationValues) {
-        if (normalizeText(sourceValue) && parsedValue === null) {
-          addFinding(findings, 'DURATION_INVALID', `legs.${legIndex}.${path}`);
-        }
+  if (
+    finalLegIndex < 0 &&
+    (rdvOccurrenceSummary !== null || rdvTechnicalDiscrepancySummary !== null)
+  ) {
+    addFinding(findings, 'RDV_SUMMARY_WITHOUT_LEG', 'rdv');
+  }
+
+  const legs = sortedLegs.map((leg, legIndex) => {
+    const blockMinutes = durationToMinutes(leg.tempo_total);
+    const takeoffToLandingMinutes = durationToMinutes(leg.tempo_decolagem_pouso);
+    const ifrActualMinutes = durationToMinutes(leg.tempo_ifr);
+    const nightMinutes = durationToMinutes(leg.tempo_noturno);
+
+    const durationValues = [
+      [leg.tempo_total, blockMinutes, 'times.blockMinutes'],
+      [leg.tempo_decolagem_pouso, takeoffToLandingMinutes, 'times.takeoffToLandingMinutes'],
+      [leg.tempo_ifr, ifrActualMinutes, 'times.ifrActualMinutes'],
+      [leg.tempo_noturno, nightMinutes, 'times.nightMinutes'],
+    ] as const;
+
+    for (const [sourceValue, parsedValue, path] of durationValues) {
+      if (normalizeText(sourceValue) && parsedValue === null) {
+        addFinding(findings, 'DURATION_INVALID', `legs.${legIndex}.${path}`);
       }
+    }
 
-      const fuelUnit = mapFuelUnit(leg.unidade_combustivel);
-      if (normalizeText(leg.unidade_combustivel) && fuelUnit === null) {
-        addFinding(findings, 'FUEL_UNIT_UNKNOWN', `legs.${legIndex}.fuelAtEngineStart.unit`);
-      }
+    const fuelUnit = mapFuelUnit(leg.unidade_combustivel);
+    if (normalizeText(leg.unidade_combustivel) && fuelUnit === null) {
+      addFinding(findings, 'FUEL_UNIT_UNKNOWN', `legs.${legIndex}.fuelAtEngineStart.unit`);
+    }
 
-      const fuelConsumed =
-        leg.combustivel_inicio !== null &&
-        leg.combustivel_fim !== null &&
-        leg.combustivel_inicio >= leg.combustivel_fim
-          ? leg.combustivel_inicio - leg.combustivel_fim
-          : null;
+    const fuelConsumed =
+      leg.combustivel_inicio !== null &&
+      leg.combustivel_fim !== null &&
+      leg.combustivel_inicio >= leg.combustivel_fim
+        ? leg.combustivel_inicio - leg.combustivel_fim
+        : null;
 
-      if (
-        (leg.combustivel_inicio !== null || leg.combustivel_fim !== null) &&
-        fuelConsumed === null
-      ) {
-        addFinding(findings, 'FUEL_CONSUMPTION_UNAVAILABLE', `legs.${legIndex}.fuelConsumed.value`);
-      }
+    if (
+      (leg.combustivel_inicio !== null || leg.combustivel_fim !== null) &&
+      fuelConsumed === null
+    ) {
+      addFinding(findings, 'FUEL_CONSUMPTION_UNAVAILABLE', `legs.${legIndex}.fuelConsumed.value`);
+    }
 
-      if (leg.payload !== null) {
-        addFinding(findings, 'PAYLOAD_UNIT_UNKNOWN', `legs.${legIndex}.payloadUnit`);
-      }
+    if (leg.payload !== null) {
+      addFinding(findings, 'PAYLOAD_UNIT_UNKNOWN', `legs.${legIndex}.payloadUnit`);
+    }
 
-      const source = {
-        kind: mapSourceKind(leg.origem_dados),
-        reference: `cv_voo_etapas:${leg.id}`,
-        observedAt: leg.sigvoos_importado_em ?? undefined,
-      };
+    const source = {
+      kind: mapSourceKind(leg.origem_dados),
+      reference: `cv_voo_etapas:${leg.id}`,
+      observedAt: leg.sigvoos_importado_em ?? undefined,
+    };
 
-      const fuelQuantity = (value: Nullable<number>) => ({
-        value,
-        unit: fuelUnit,
-        source,
-      });
-
-      return {
-        sequence: leg.numero_etapa,
-        operationalDate: input.operationalDate,
-        origin: normalizeText(leg.origem_icao)?.toUpperCase() ?? null,
-        destination: normalizeText(leg.destino_icao)?.toUpperCase() ?? null,
-        timezone: normalizeText(input.timezone),
-        engineStartTime: normalizeClockTime(leg.horario_motor_ligado),
-        takeoffTime: normalizeClockTime(leg.horario_decolagem),
-        landingTime: normalizeClockTime(leg.horario_pouso),
-        engineShutdownTime: normalizeClockTime(leg.horario_motor_desligado),
-        times: {
-          blockMinutes,
-          takeoffToLandingMinutes,
-          dayMinutes: null,
-          nightMinutes,
-          vfrMinutes: null,
-          ifrActualMinutes,
-          ifrSimulatedMinutes: null,
-        },
-        dayLandings: leg.pousos_diurnos,
-        nightLandings: leg.pousos_noturnos,
-        cycles: leg.starts,
-        fuelAtEngineStart: fuelQuantity(leg.combustivel_inicio),
-        fuelAtEngineShutdown: fuelQuantity(leg.combustivel_fim),
-        fuelConsumed: fuelQuantity(fuelConsumed),
-        fuelAdded: fuelQuantity(null),
-        personsOnBoard: leg.pax,
-        payload: leg.payload,
-        payloadUnit: null,
-        flightNatureCode: normalizeText(input.flightNatureCode),
-        crew: projectCrew(
-          input.crew.filter((member) => member.etapa_id === leg.id),
-          findings,
-          legIndex,
-        ),
-        occurrenceSummary: null,
-        technicalDiscrepancySummary: null,
-        source,
-      };
+    const fuelQuantity = (value: Nullable<number>) => ({
+      value,
+      unit: fuelUnit,
+      source,
     });
+
+    const isFinalLeg = legIndex === finalLegIndex;
+
+    return {
+      sequence: leg.numero_etapa,
+      operationalDate: operationalDates[legIndex],
+      origin: normalizeText(leg.origem_icao)?.toUpperCase() ?? null,
+      destination: normalizeText(leg.destino_icao)?.toUpperCase() ?? null,
+      timezone: normalizeText(input.timezone),
+      engineStartTime: normalizeClockTime(leg.horario_motor_ligado),
+      takeoffTime: normalizeClockTime(leg.horario_decolagem),
+      landingTime: normalizeClockTime(leg.horario_pouso),
+      engineShutdownTime: normalizeClockTime(leg.horario_motor_desligado),
+      times: {
+        blockMinutes,
+        takeoffToLandingMinutes,
+        dayMinutes: null,
+        nightMinutes,
+        vfrMinutes: null,
+        ifrActualMinutes,
+        ifrSimulatedMinutes: null,
+      },
+      dayLandings: leg.pousos_diurnos,
+      nightLandings: leg.pousos_noturnos,
+      cycles: leg.starts,
+      fuelAtEngineStart: fuelQuantity(leg.combustivel_inicio),
+      fuelAtEngineShutdown: fuelQuantity(leg.combustivel_fim),
+      fuelConsumed: fuelQuantity(fuelConsumed),
+      fuelAdded: fuelQuantity(null),
+      personsOnBoard: leg.pax,
+      payload: leg.payload,
+      payloadUnit: null,
+      flightNatureCode: normalizeText(input.flightNatureCode),
+      crew: projectCrew(
+        input.crew.filter((member) => member.etapa_id === leg.id),
+        findings,
+        legIndex,
+      ),
+      occurrenceSummary: isFinalLeg ? rdvOccurrenceSummary : null,
+      technicalDiscrepancySummary: isFinalLeg ? rdvTechnicalDiscrepancySummary : null,
+      source,
+    };
+  });
+
+  if (input.rdv && finalLegIndex >= 0) {
+    const rdvSource = {
+      kind: 'AIRTRUST_CONTROL_FLIGHTS' as const,
+      reference: `cv_rdv_operacional:${input.rdv.id}`,
+      ...(normalizeText(input.rdv.updated_at)
+        ? { observedAt: normalizeText(input.rdv.updated_at) ?? undefined }
+        : {}),
+    };
+
+    if (rdvOccurrenceSummary !== null) {
+      fieldSources.push({
+        path: `legs.${finalLegIndex}.occurrenceSummary`,
+        source: rdvSource,
+      });
+    }
+
+    if (rdvTechnicalDiscrepancySummary !== null) {
+      fieldSources.push({
+        path: `legs.${finalLegIndex}.technicalDiscrepancySummary`,
+        source: rdvSource,
+      });
+    }
+  }
 
   const technicalSource = {
     kind: input.technicalStatus.sourceReference
@@ -427,5 +598,5 @@ export function projectControlFlightToEdbDraft(
     },
   });
 
-  return { draft, findings };
+  return { draft, findings, fieldSources };
 }
