@@ -403,7 +403,7 @@ function formatQuantity(value: number | null, unit: string | null): string | nul
 }
 
 function findingLabel(finding: Finding): string {
-  return FINDING_LABELS[finding.code] || finding.code.replaceAll('_', ' ').toLowerCase();
+  return FINDING_LABELS[finding.code] || finding.code.split('_').join(' ').toLowerCase();
 }
 
 function provenanceFor(
