@@ -1,10 +1,15 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import type { Hono } from 'hono';
 import type { Env } from '../types';
+import { runCorrelatedJob, type JobExecutionContext } from './job-correlation';
 
 export interface WorkerEntrypointOptions {
   onApiRequestBootstrap?: (env: Env) => Promise<void>;
-  onScheduled: (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => Promise<void>;
+  onScheduled: (
+    event: ScheduledEvent,
+    env: Env,
+    ctx: ExecutionContext,
+    jobContext: JobExecutionContext,
+  ) => Promise<void>;
 }
 
 export function assertSafeRuntimeConfig(env: Env): void {
@@ -35,7 +40,9 @@ export function createWorkerEntrypoint(
 
     async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
       assertSafeRuntimeConfig(env);
-      await options.onScheduled(event, env, ctx);
+      await runCorrelatedJob({ jobName: 'scheduled_handler' }, (jobContext) =>
+        options.onScheduled(event, env, ctx, jobContext),
+      );
     },
   };
 }
