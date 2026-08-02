@@ -18,7 +18,7 @@ import { useControleVoosDashboard } from '@/react-app/hooks/useControleVoos';
 import { formatTime, formatDate } from './data/controleVoosUtils';
 import ControleVoosDateControls from './components/ControleVoosDateControls';
 import { useControleVoosDate } from './hooks/useControleVoosDate';
-import EdbShadowPrototype from './EdbShadowPrototype';
+import EdbShadowPrototypeWithAssessment from './EdbShadowPrototypeWithAssessment';
 
 const DEMO_LINK_BADGE_CLASS =
   'rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300';
@@ -342,7 +342,7 @@ function ControleVoosDashboardContent() {
 export default function ControleVoosDashboard() {
   const [searchParams] = useSearchParams();
   if (searchParams.get('edb-shadow') === '1') {
-    return <EdbShadowPrototype />;
+    return <EdbShadowPrototypeWithAssessment />;
   }
   return <ControleVoosDashboardContent />;
 }
