@@ -45,9 +45,7 @@ function isDomainEventTipo(value: string): value is DomainEventTipo {
   return DOMAIN_EVENT_TYPES.some((candidate) => candidate === value);
 }
 
-app.use('*', requireRole('admin'));
-
-app.get('/domain-events', async (c) => {
+app.get('/domain-events', requireRole('admin'), async (c) => {
   const empresaId = getEmpresaId(c);
   const tipo = c.req.query('tipo');
   const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 200);
@@ -78,7 +76,7 @@ app.get('/domain-events', async (c) => {
   });
 });
 
-app.get('/integracoes/health', async (c) => {
+app.get('/integracoes/health', requireRole('admin'), async (c) => {
   const empresaId = getEmpresaId(c);
 
   const eventos = await c.env.DB.prepare(
@@ -129,7 +127,7 @@ app.get('/integracoes/health', async (c) => {
   });
 });
 
-app.post('/integracoes/test-event', async (c) => {
+app.post('/integracoes/test-event', requireRole('admin'), async (c) => {
   const empresaId = getEmpresaId(c);
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const { publishDomainEvent } = await import('../shared/domainEvents');
