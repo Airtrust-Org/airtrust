@@ -92,9 +92,7 @@ describe('tabSessoesDerived', () => {
       '',
     );
 
-    expect(getProximasSessoes(sessoes, '2026-08-02').map((sessao) => sessao.id)).toEqual([
-      3, 1, 2,
-    ]);
+    expect(getProximasSessoes(sessoes, '2026-08-02').map((sessao) => sessao.id)).toEqual([3, 1, 2]);
   });
 
   it('não altera a lista original', () => {
