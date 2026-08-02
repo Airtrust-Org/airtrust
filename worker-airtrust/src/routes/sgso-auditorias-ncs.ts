@@ -15,6 +15,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
+import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
 import type { Context } from 'hono';
@@ -22,6 +23,14 @@ import type { Context } from 'hono';
 type AppCtx = Context<{ Bindings: Env; Variables: { userId?: string } }>;
 
 const app = new Hono<{ Bindings: Env; Variables: { userId?: string } }>();
+const requireSgsoManager = requireRole('admin', 'manager');
+
+// These handlers live in the parent SGSO router, which mounts this sub-router first.
+// Registering the guards here keeps every regulated mutation behind the same RBAC policy.
+app.use('/relatos/:id/status', requireSgsoManager);
+app.use('/relatos/:id/avaliacao-risco', requireSgsoManager);
+app.use('/relatos/:id/acoes', requireSgsoManager);
+app.use('/acoes/:id', requireSgsoManager);
 
 function getUid(c: AppCtx): number {
   return Number(c.get('userId') ?? 0);
@@ -42,7 +51,7 @@ function sgsoErrorResponse(
   code: string,
   status: number = 500,
 ) {
-  const logger = createLogger(c as Record<string, any>, 'SgsoRoutes');
+  const logger = createLogger(c, 'SgsoRoutes');
   logger.error(message, toError(error), { route: c.req.path, status });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return c.json({ success: false, error: message, code }, status as any);
@@ -55,7 +64,7 @@ function sgsoErrorResponse(
 // GET /api/sgso/auditorias
 app.get('/auditorias', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as any);
+    const empresaId = getEmpresaId(c);
     const db = c.env.DB;
     const { status, page = '1', limit = '20' } = c.req.query();
     const pageNum = Math.max(1, parseInt(page));
@@ -94,15 +103,15 @@ app.get('/auditorias', async (c) => {
       data: rows.results,
       pagination: { page: pageNum, limit: limitNum, total: total?.n ?? 0 },
     });
-  } catch (err) {
+  } catch {
     return c.json({ success: false, error: 'Erro ao listar auditorias', code: 'SGSO_ERROR' }, 500);
   }
 });
 
 // POST /api/sgso/auditorias
-app.post('/auditorias', async (c) => {
+app.post('/auditorias', requireSgsoManager, async (c) => {
   try {
-    const empresaId = getEmpresaId(c as any);
+    const empresaId = getEmpresaId(c);
     const uid = getUid(c);
     const db = c.env.DB;
     const body = await c.req.json();
@@ -164,7 +173,7 @@ app.post('/auditorias', async (c) => {
 // GET /api/sgso/auditorias/:id
 app.get('/auditorias/:id', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as any);
+    const empresaId = getEmpresaId(c);
     const db = c.env.DB;
     const { id } = c.req.param();
 
@@ -203,9 +212,9 @@ app.get('/auditorias/:id', async (c) => {
 });
 
 // PATCH /api/sgso/auditorias/:id/item
-app.patch('/auditorias/:id/item', async (c) => {
+app.patch('/auditorias/:id/item', requireSgsoManager, async (c) => {
   try {
-    const empresaId = getEmpresaId(c as any);
+    const empresaId = getEmpresaId(c);
     const uid = getUid(c);
     const db = c.env.DB;
     const { id } = c.req.param();
@@ -351,9 +360,9 @@ app.patch('/auditorias/:id/item', async (c) => {
 });
 
 // POST /api/sgso/auditorias/:id/concluir
-app.post('/auditorias/:id/concluir', async (c) => {
+app.post('/auditorias/:id/concluir', requireSgsoManager, async (c) => {
   try {
-    const empresaId = getEmpresaId(c as any);
+    const empresaId = getEmpresaId(c);
     const db = c.env.DB;
     const { id } = c.req.param();
     const { observacoes_gerais } = (await c.req.json().catch(() => ({}))) as {
@@ -383,7 +392,7 @@ app.post('/auditorias/:id/concluir', async (c) => {
 // GET /api/sgso/nao-conformidades
 app.get('/nao-conformidades', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as any);
+    const empresaId = getEmpresaId(c);
     const db = c.env.DB;
     const { status, tipo, page = '1', limit = '20' } = c.req.query();
     const pageNum = Math.max(1, parseInt(page));
@@ -433,9 +442,9 @@ app.get('/nao-conformidades', async (c) => {
 });
 
 // POST /api/sgso/nao-conformidades
-app.post('/nao-conformidades', async (c) => {
+app.post('/nao-conformidades', requireSgsoManager, async (c) => {
   try {
-    const empresaId = getEmpresaId(c as any);
+    const empresaId = getEmpresaId(c);
     const uid = getUid(c);
     const db = c.env.DB;
     const body = await c.req.json();
@@ -520,9 +529,9 @@ app.post('/nao-conformidades', async (c) => {
 });
 
 // PATCH /api/sgso/nao-conformidades/:id
-app.patch('/nao-conformidades/:id', async (c) => {
+app.patch('/nao-conformidades/:id', requireSgsoManager, async (c) => {
   try {
-    const empresaId = getEmpresaId(c as any);
+    const empresaId = getEmpresaId(c);
     const uid = getUid(c);
     const db = c.env.DB;
     const { id } = c.req.param();
