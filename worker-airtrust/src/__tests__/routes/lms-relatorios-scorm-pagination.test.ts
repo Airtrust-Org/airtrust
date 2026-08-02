@@ -11,22 +11,18 @@ const { getScormRowsMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: TestContext, next: () => Promise<void>) => {
-      if (!c.req.header('Authorization')) {
-        return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
-      }
-      c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
-      c.set('userRole', 'admin');
-      await next();
-    },
+  auth: () => async (c: TestContext, next: () => Promise<void>) => {
+    if (!c.req.header('Authorization')) {
+      return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
+    }
+    c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
+    c.set('userRole', 'admin');
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
-  requireRole:
-    () =>
-    async (_c: TestContext, next: () => Promise<void>) => next(),
+  requireRole: () => async (_c: TestContext, next: () => Promise<void>) => next(),
 }));
 
 vi.mock('../../routes/escalas-shared', () => ({

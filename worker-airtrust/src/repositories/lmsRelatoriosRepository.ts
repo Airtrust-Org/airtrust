@@ -148,12 +148,16 @@ export async function getConformidadeRows(
           ON m.funcionario_id = f.id
           AND m.empresa_id = f.empresa_id
           AND m.deleted_at IS NULL
-          ${setorFilter.clause ? `AND EXISTS (
+          ${
+            setorFilter.clause
+              ? `AND EXISTS (
             SELECT 1 FROM lms_cursos c_sf
             WHERE c_sf.id = m.curso_id AND c_sf.empresa_id = m.empresa_id
               AND c_sf.deleted_at IS NULL
               ${setorFilter.clause}
-          )` : ''}
+          )`
+              : ''
+          }
         WHERE f.empresa_id = ?
           AND f.ativo = 1
           AND f.deleted_at IS NULL
@@ -373,10 +377,7 @@ function encodeScormListCursor(row: ScormConclusaoInconsistenteLightRow): string
     matriculaUpdatedAt: row.cursor_matricula_updated_at,
     matriculaId: row.matricula_id,
   };
-  return btoa(JSON.stringify(payload))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
+  return btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 function decodeScormListCursor(raw: string | null | undefined): ScormListCursor | null {
