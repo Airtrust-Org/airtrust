@@ -5,13 +5,10 @@ import {
 } from './shadow-divergence-engine';
 import { EDB_TECHNICAL_STATUS_SHADOW_SCHEMA_VERSION } from './technical-status-shadow-contracts';
 
-export const EDB_SHADOW_ASSESSMENT_SCHEMA_VERSION =
-  'edb.shadow-assessment.v1' as const;
+export const EDB_SHADOW_ASSESSMENT_SCHEMA_VERSION = 'edb.shadow-assessment.v1' as const;
 
 export type EdbShadowTechnicalAssessmentStatus =
-  | 'source_unavailable'
-  | 'requires_review'
-  | 'preliminarily_available';
+  'source_unavailable' | 'requires_review' | 'preliminarily_available';
 
 export interface EdbShadowPreliminaryAssessment {
   schemaVersion: typeof EDB_SHADOW_ASSESSMENT_SCHEMA_VERSION;
@@ -68,8 +65,7 @@ export async function loadEdbShadowPreliminaryAssessment(
     projectionFindings: preview.findings,
   });
 
-  const sourceAvailable =
-    preview.draft.technicalStatus.source.kind !== 'UNKNOWN';
+  const sourceAvailable = preview.draft.technicalStatus.source.kind !== 'UNKNOWN';
   const technicalFindingCodes = preview.findings
     .filter((finding) => finding.code.startsWith('TECHNICAL_'))
     .map((finding) => finding.code)
