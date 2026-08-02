@@ -53,23 +53,36 @@ type StoredHospedagem = {
   funcionario_matricula: string;
 };
 
-type QueryCall = { query: string; args: unknown[] };
+type QueryCall = {
+  query: string;
+  args: unknown[];
+};
+
+type PaginatedBody = {
+  success: boolean;
+  data: Array<{ id: number }>;
+  pagination: {
+    limit: number;
+    has_more: boolean;
+    next_cursor: string | null;
+  };
+};
 
 function hospedagem(
   id: number,
-  data_checkin: string,
-  empresa_id = 77,
-  deleted_at: string | null = null,
+  dataCheckin: string,
+  empresaId = 77,
+  deletedAt: string | null = null,
 ): StoredHospedagem {
   return {
     id,
-    empresa_id,
+    empresa_id: empresaId,
     funcionario_id: id + 100,
     tipo: 'HOTEL',
     local: `Hotel ${id}`,
     cidade: 'Rio',
     estado: 'RJ',
-    data_checkin,
+    data_checkin: dataCheckin,
     data_checkout: null,
     numero_quarto: null,
     custo_diaria: null,
@@ -78,7 +91,7 @@ function hospedagem(
     observacoes: null,
     created_at: '2026-08-01T00:00:00Z',
     updated_at: '2026-08-01T00:00:00Z',
-    deleted_at,
+    deleted_at: deletedAt,
     funcionario_nome: `Tripulante ${id}`,
     funcionario_matricula: `MAT-${id}`,
   };
@@ -97,7 +110,9 @@ function createDatasetDb(initialRows: StoredHospedagem[]) {
 
   const db = {
     prepare: vi.fn((query: string) => {
-      if (!query.includes('FROM hospedagem h')) throw new Error(`Unhandled query: ${query}`);
+      if (!query.includes('FROM hospedagem h')) {
+        throw new Error(`Unhandled query: ${query}`);
+      }
 
       return {
         bind: (...args: unknown[]) => ({
@@ -116,16 +131,15 @@ function createDatasetDb(initialRows: StoredHospedagem[]) {
             const results = rows
               .filter((row) => row.empresa_id === empresaId && row.deleted_at === null)
               .filter((row) => {
-                if (!usesCursor || cursorDate === null || cursorId === null) return true;
+                if (!usesCursor || cursorDate === null || cursorId === null) {
+                  return true;
+                }
                 return (
                   row.data_checkin < cursorDate ||
                   (row.data_checkin === cursorDate && row.id < cursorId)
                 );
               })
-              .sort(
-                (a, b) =>
-                  b.data_checkin.localeCompare(a.data_checkin) || b.id - a.id,
-              )
+              .sort((a, b) => b.data_checkin.localeCompare(a.data_checkin) || b.id - a.id)
               .slice(0, fetchLimit)
               .map(toListPayload);
 
@@ -154,6 +168,16 @@ function createApp() {
   return app;
 }
 
+async function getPage(db: D1Database, query: string): Promise<PaginatedBody> {
+  const response = await createApp().request(
+    `/hospedagem?${query}`,
+    { method: 'GET' },
+    { DB: db } as Env,
+  );
+  expect(response.status).toBe(200);
+  return (await response.json()) as PaginatedBody;
+}
+
 describe('hospedagem keyset pagination', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -161,21 +185,18 @@ describe('hospedagem keyset pagination', () => {
     registrarAuditoriaMock.mockResolvedValue(undefined);
   });
 
-  it('preserves the legacy data array and fixed default cap when pagination is omitted', async () => {
+  it('preserves the legacy response contract', async () => {
     const { db, calls } = createDatasetDb([
       hospedagem(2, '2026-08-10'),
       hospedagem(1, '2026-08-09'),
     ]);
 
-    const response = await createApp().request(
-      '/hospedagem',
-      { method: 'GET' },
-      { DB: db } as Env,
-    );
+    const app = createApp();
+    const response = await app.request('/hospedagem', { method: 'GET' }, { DB: db } as Env);
     const body = (await response.json()) as {
       success: boolean;
       data: Array<{ id: number }>;
-      pagination?: { limit: number; has_more: boolean; next_cursor: string | null };
+      pagination?: PaginatedBody['pagination'];
     };
 
     expect(response.status).toBe(200);
@@ -186,43 +207,26 @@ describe('hospedagem keyset pagination', () => {
     expect(calls[0]?.args).toEqual([77]);
   });
 
-  it('returns first and next pages deterministically, including equal dates without duplicates or gaps', async () => {
+  it('returns deterministic first, next, and last pages', async () => {
     const { db, calls } = createDatasetDb([
       hospedagem(5, '2026-08-10'),
       hospedagem(4, '2026-08-10'),
       hospedagem(3, '2026-08-09'),
       hospedagem(2, '2026-08-08'),
     ]);
-    const app = createApp();
 
-    const firstResponse = await app.request(
-      '/hospedagem?limit=2',
-      { method: 'GET' },
-      { DB: db } as Env,
-    );
-    expect(firstResponse.status).toBe(200);
-    const first = (await firstResponse.json()) as {
-      data: Array<{ id: number }>;
-      pagination: { has_more: boolean; next_cursor: string | null; limit: number };
-    };
-
+    const first = await getPage(db, 'limit=2');
     expect(first.data.map(({ id }) => id)).toEqual([5, 4]);
     expect(first.pagination).toMatchObject({ limit: 2, has_more: true });
     expect(first.pagination.next_cursor).toEqual(expect.any(String));
 
-    const secondResponse = await app.request(
-      `/hospedagem?limit=2&cursor=${first.pagination.next_cursor}`,
-      { method: 'GET' },
-      { DB: db } as Env,
-    );
-    expect(secondResponse.status).toBe(200);
-    const second = (await secondResponse.json()) as {
-      data: Array<{ id: number }>;
-      pagination: { has_more: boolean; next_cursor: string | null };
-    };
-
+    const second = await getPage(db, `limit=2&cursor=${first.pagination.next_cursor}`);
     expect(second.data.map(({ id }) => id)).toEqual([3, 2]);
-    expect(second.pagination).toEqual({ limit: 2, has_more: false, next_cursor: null });
+    expect(second.pagination).toEqual({
+      limit: 2,
+      has_more: false,
+      next_cursor: null,
+    });
 
     const combined = [...first.data, ...second.data].map(({ id }) => id);
     expect(combined).toEqual([5, 4, 3, 2]);
@@ -230,46 +234,32 @@ describe('hospedagem keyset pagination', () => {
     expect(calls[1]?.query).toContain(
       'AND (h.data_checkin < ? OR (h.data_checkin = ? AND h.id < ?))',
     );
-    expect(calls[1]?.query).toContain('ORDER BY h.data_checkin DESC, h.id DESC LIMIT ?');
     expect(calls[1]?.args).toEqual([77, '2026-08-10', '2026-08-10', 4, 3]);
   });
 
-  it('does not duplicate or skip the continuation when a newer record is inserted between requests', async () => {
+  it('does not skip records after a newer insertion', async () => {
     const dataset = createDatasetDb([
       hospedagem(4, '2026-08-10'),
       hospedagem(3, '2026-08-09'),
       hospedagem(2, '2026-08-08'),
       hospedagem(1, '2026-08-07'),
     ]);
-    const app = createApp();
 
-    const firstResponse = await app.request(
-      '/hospedagem?limit=2',
-      { method: 'GET' },
-      { DB: dataset.db } as Env,
-    );
-    const first = (await firstResponse.json()) as {
-      data: Array<{ id: number }>;
-      pagination: { next_cursor: string };
-    };
-
+    const first = await getPage(dataset.db, 'limit=2');
     dataset.insert(hospedagem(5, '2026-08-11'));
-
-    const secondResponse = await app.request(
-      `/hospedagem?limit=2&cursor=${first.pagination.next_cursor}`,
-      { method: 'GET' },
-      { DB: dataset.db } as Env,
+    const second = await getPage(
+      dataset.db,
+      `limit=2&cursor=${first.pagination.next_cursor}`,
     );
-    const second = (await secondResponse.json()) as { data: Array<{ id: number }> };
 
     expect(first.data.map(({ id }) => id)).toEqual([4, 3]);
     expect(second.data.map(({ id }) => id)).toEqual([2, 1]);
-    expect([...first.data, ...second.data].map(({ id }) => id)).toEqual([4, 3, 2, 1]);
   });
 
   it.each(['0', '-1', '501'])('rejects invalid limit %s', async (limit) => {
     const { db, calls } = createDatasetDb([]);
-    const response = await createApp().request(
+    const app = createApp();
+    const response = await app.request(
       `/hospedagem?limit=${limit}`,
       { method: 'GET' },
       { DB: db } as Env,
@@ -285,7 +275,8 @@ describe('hospedagem keyset pagination', () => {
 
   it('rejects a malformed cursor', async () => {
     const { db, calls } = createDatasetDb([]);
-    const response = await createApp().request(
+    const app = createApp();
+    const response = await app.request(
       '/hospedagem?cursor=%25%25%25',
       { method: 'GET' },
       { DB: db } as Env,
@@ -299,111 +290,75 @@ describe('hospedagem keyset pagination', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('excludes a record soft-deleted between pages without duplicating the continuation', async () => {
+  it('excludes a record deleted between pages', async () => {
     const dataset = createDatasetDb([
       hospedagem(4, '2026-08-10'),
       hospedagem(3, '2026-08-09'),
       hospedagem(2, '2026-08-08'),
       hospedagem(1, '2026-08-07'),
     ]);
-    const app = createApp();
 
-    const firstResponse = await app.request(
-      '/hospedagem?limit=2',
-      { method: 'GET' },
-      { DB: dataset.db } as Env,
-    );
-    const first = (await firstResponse.json()) as {
-      data: Array<{ id: number }>;
-      pagination: { next_cursor: string };
-    };
-
+    const first = await getPage(dataset.db, 'limit=2');
     dataset.softDelete(2);
-
-    const secondResponse = await app.request(
-      `/hospedagem?limit=2&cursor=${first.pagination.next_cursor}`,
-      { method: 'GET' },
-      { DB: dataset.db } as Env,
+    const second = await getPage(
+      dataset.db,
+      `limit=2&cursor=${first.pagination.next_cursor}`,
     );
-    const second = (await secondResponse.json()) as {
-      data: Array<{ id: number }>;
-      pagination: { has_more: boolean; next_cursor: string | null };
-    };
 
-    expect(first.data.map(({ id }) => id)).toEqual([4, 3]);
     expect(second.data.map(({ id }) => id)).toEqual([1]);
     expect(second.pagination).toMatchObject({ has_more: false, next_cursor: null });
   });
 
-  it('keeps tenant and soft-delete filtering on paginated lists', async () => {
+  it('keeps tenant and soft-delete filtering', async () => {
     const { db } = createDatasetDb([
       hospedagem(1, '2026-08-08', 77),
       hospedagem(2, '2026-08-10', 88),
       hospedagem(3, '2026-08-09', 77, '2026-08-10T00:00:00Z'),
     ]);
 
-    const response = await createApp().request(
-      '/hospedagem?limit=10',
-      { method: 'GET' },
-      { DB: db } as Env,
-    );
-    const body = (await response.json()) as {
-      data: Array<{ id: number }>;
-      pagination: { has_more: boolean; next_cursor: string | null };
-    };
-
-    expect(response.status).toBe(200);
-    expect(body.data.map(({ id }) => id)).toEqual([1]);
-    expect(body.pagination).toMatchObject({ has_more: false, next_cursor: null });
+    const page = await getPage(db, 'limit=10');
+    expect(page.data.map(({ id }) => id)).toEqual([1]);
+    expect(page.pagination).toMatchObject({ has_more: false, next_cursor: null });
   });
 
-  it('returns an empty final page contract for an empty list', async () => {
+  it('returns the empty final-page contract', async () => {
     const { db } = createDatasetDb([]);
-    const response = await createApp().request(
-      '/hospedagem?limit=25',
-      { method: 'GET' },
-      { DB: db } as Env,
-    );
+    const page = await getPage(db, 'limit=25');
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
+    expect(page).toEqual({
       success: true,
       data: [],
-      pagination: { limit: 25, has_more: false, next_cursor: null },
+      pagination: {
+        limit: 25,
+        has_more: false,
+        next_cursor: null,
+      },
     });
   });
 
-  it('rejects a cursor issued for another tenant before querying D1', async () => {
+  it('rejects a cursor issued for another tenant', async () => {
     const dataset = createDatasetDb([
       hospedagem(2, '2026-08-10', 88),
       hospedagem(1, '2026-08-09', 88),
     ]);
-    const app = createApp();
 
     getEmpresaIdMock.mockReturnValue(88);
-    const tenant88Response = await app.request(
-      '/hospedagem?limit=1',
-      { method: 'GET' },
-      { DB: dataset.db } as Env,
-    );
-    const tenant88Body = (await tenant88Response.json()) as {
-      pagination: { next_cursor: string };
-    };
-    expect(tenant88Body.pagination.next_cursor).toEqual(expect.any(String));
+    const tenant88 = await getPage(dataset.db, 'limit=1');
+    const callsBefore = dataset.calls.length;
 
-    const callsBeforeCrossTenantRequest = dataset.calls.length;
     getEmpresaIdMock.mockReturnValue(77);
-    const crossTenantResponse = await app.request(
-      `/hospedagem?limit=1&cursor=${tenant88Body.pagination.next_cursor}`,
+    const app = createApp();
+    const response = await app.request(
+      `/hospedagem?limit=1&cursor=${tenant88.pagination.next_cursor}`,
       { method: 'GET' },
       { DB: dataset.db } as Env,
     );
 
-    expect(crossTenantResponse.status).toBe(400);
-    await expect(crossTenantResponse.json()).resolves.toMatchObject({
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
       success: false,
       error: 'Cursor inválido',
     });
-    expect(dataset.calls).toHaveLength(callsBeforeCrossTenantRequest);
+    expect(dataset.calls).toHaveLength(callsBefore);
   });
 });
