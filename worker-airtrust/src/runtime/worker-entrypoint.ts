@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import type { Env } from '../types';
+import { runResilientScheduledJobs } from '../cron/resilient/scheduled-router';
 import { runCorrelatedJob, type JobExecutionContext } from './job-correlation';
 
 export interface WorkerEntrypointOptions {
@@ -41,7 +42,9 @@ export function createWorkerEntrypoint(
     async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
       assertSafeRuntimeConfig(env);
       await runCorrelatedJob({ jobName: 'scheduled_handler' }, (jobContext) =>
-        options.onScheduled(event, env, ctx, jobContext),
+        runResilientScheduledJobs(event, env, ctx, (legacyEvent, legacyEnv, legacyCtx) =>
+          options.onScheduled(legacyEvent, legacyEnv, legacyCtx, jobContext),
+        ),
       );
     },
   };
