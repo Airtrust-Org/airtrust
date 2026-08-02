@@ -5,7 +5,9 @@ import { errorHandler } from '../../middleware/error-handler';
 
 type TestContext = Context<{ Bindings: Env; Variables: Variables }>;
 
-const loadEdbShadowPreviewMock = vi.fn();
+const { loadEdbShadowPreviewMock } = vi.hoisted(() => ({
+  loadEdbShadowPreviewMock: vi.fn(),
+}));
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: TestContext, next: () => Promise<void>) => {
