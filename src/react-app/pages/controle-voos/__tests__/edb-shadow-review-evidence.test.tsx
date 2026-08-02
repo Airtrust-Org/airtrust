@@ -139,7 +139,9 @@ describe('EdbShadowReviewEvidencePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gerar evidência não oficial' }));
 
     expect(
-      await screen.findByText(/Não foi possível gerar a evidência\. Nenhum registro foi alterado\./),
+      await screen.findByText(
+        /Não foi possível gerar a evidência\. Nenhum registro foi alterado\./,
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/SQL secret/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/empresa_id/i)).not.toBeInTheDocument();

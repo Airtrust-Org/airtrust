@@ -108,11 +108,7 @@ edbShadowPreview.post(
     const parsed = edbShadowReviewInputSchema.safeParse(await c.req.json().catch(() => null));
 
     if (!parsed.success) {
-      throw new ApiError(
-        'Revisao shadow invalida',
-        400,
-        'EDB_SHADOW_REVIEW_INVALID_INPUT',
-      );
+      throw new ApiError('Revisao shadow invalida', 400, 'EDB_SHADOW_REVIEW_INVALID_INPUT');
     }
 
     try {

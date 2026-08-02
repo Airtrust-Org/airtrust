@@ -5,8 +5,7 @@ import {
 } from './control-flight-shadow-assessment';
 import { EDB_TECHNICAL_STATUS_SHADOW_SCHEMA_VERSION } from './technical-status-shadow-contracts';
 
-export const EDB_SHADOW_REVIEW_EVIDENCE_SCHEMA_VERSION =
-  'edb.shadow-review-evidence.v1' as const;
+export const EDB_SHADOW_REVIEW_EVIDENCE_SCHEMA_VERSION = 'edb.shadow-review-evidence.v1' as const;
 
 export const edbShadowReviewInputSchema = z
   .object({

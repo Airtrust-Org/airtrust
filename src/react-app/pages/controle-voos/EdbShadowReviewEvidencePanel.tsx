@@ -34,11 +34,7 @@ const evidenceSchema = z
       readinessScore: z.number(),
       readinessStatus: z.enum(['ready', 'review', 'not_ready']),
       maxSeverity: z.enum(['NONE', 'OBSERVATION', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
-      technicalStatus: z.enum([
-        'source_unavailable',
-        'requires_review',
-        'preliminarily_available',
-      ]),
+      technicalStatus: z.enum(['source_unavailable', 'requires_review', 'preliminarily_available']),
     }),
     notices: z.object({
       officialLogbook: z.literal(false),
@@ -220,10 +216,30 @@ export default function EdbShadowReviewEvidencePanel({ flightId }: { flightId: s
               Confirmações obrigatórias
             </legend>
             {[
-              ['paper', paperOfficial, setPaperOfficial, 'O Diário de Bordo em papel permanece oficial.'],
-              ['signature', notSignature, setNotSignature, 'Esta ação não é assinatura nem ciência oficial do PIC.'],
-              ['rts', noReturnToService, setNoReturnToService, 'Esta ação não autoriza retorno ao serviço ou liberação de voo.'],
-              ['repository', authorizedRepository, setAuthorizedRepository, 'A evidência será armazenada somente em repositório autorizado.'],
+              [
+                'paper',
+                paperOfficial,
+                setPaperOfficial,
+                'O Diário de Bordo em papel permanece oficial.',
+              ],
+              [
+                'signature',
+                notSignature,
+                setNotSignature,
+                'Esta ação não é assinatura nem ciência oficial do PIC.',
+              ],
+              [
+                'rts',
+                noReturnToService,
+                setNoReturnToService,
+                'Esta ação não autoriza retorno ao serviço ou liberação de voo.',
+              ],
+              [
+                'repository',
+                authorizedRepository,
+                setAuthorizedRepository,
+                'A evidência será armazenada somente em repositório autorizado.',
+              ],
             ].map(([id, checked, setter, label]) => (
               <label key={String(id)} className="flex items-start gap-2">
                 <input
@@ -273,7 +289,10 @@ export default function EdbShadowReviewEvidencePanel({ flightId }: { flightId: s
             </p>
           )}
           {state === 'error' && (
-            <p role="alert" className="flex items-center gap-2 text-sm text-red-700 dark:text-red-300">
+            <p
+              role="alert"
+              className="flex items-center gap-2 text-sm text-red-700 dark:text-red-300"
+            >
               <ShieldAlert className="h-4 w-4" /> Não foi possível gerar a evidência. Nenhum
               registro foi alterado.
             </p>

@@ -9,9 +9,8 @@ const { loadAssessmentMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../services/edb/control-flight-shadow-assessment', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('../../services/edb/control-flight-shadow-assessment')
-  >();
+  const actual =
+    await importOriginal<typeof import('../../services/edb/control-flight-shadow-assessment')>();
   return {
     ...actual,
     loadEdbShadowPreliminaryAssessment: loadAssessmentMock,
