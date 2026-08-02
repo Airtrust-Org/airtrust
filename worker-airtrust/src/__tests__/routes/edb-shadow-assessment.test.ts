@@ -159,6 +159,7 @@ describe('GET /api/edb/shadow-assessment/:flightId', () => {
         officialReferenceCompared: false,
         paperReferenceRequired: true,
         notices: {
+          officialLogbook: false,
           replacesPaper: false,
           authorizesReturnToService: false,
         },
