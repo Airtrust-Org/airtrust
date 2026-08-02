@@ -1,8 +1,72 @@
 import path from 'path';
 import { execSync } from 'child_process';
 import { defineConfig, loadEnv } from 'vite';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { assertDevProxyTargetIsSafe } from './src/react-app/config/devProxyGuard';
+
+type ManualChunkGroup = {
+  name: string;
+  packages: readonly string[];
+};
+
+const MANUAL_CHUNK_GROUPS: readonly ManualChunkGroup[] = [
+  { name: 'vendor', packages: ['react', 'react-dom', 'scheduler'] },
+  { name: 'router', packages: ['react-router', 'react-router-dom'] },
+  { name: 'query', packages: ['@tanstack/query-core', '@tanstack/react-query'] },
+  { name: 'charts', packages: ['recharts'] },
+  { name: 'pdf', packages: ['jspdf'] },
+  { name: 'capture', packages: ['html2canvas'] },
+  { name: 'excel', packages: ['xlsx'] },
+  { name: 'forms', packages: ['react-hook-form', 'zod'] },
+  {
+    name: 'dnd',
+    packages: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+  },
+];
+
+function isPackageModule(id: string, packageName: string): boolean {
+  const normalizedId = id.replace(/\\/g, '/');
+  return normalizedId.includes(`/node_modules/${packageName}/`);
+}
+
+function manualChunkForModule(id: string): string | undefined {
+  if (!id.includes('node_modules')) return undefined;
+
+  for (const group of MANUAL_CHUNK_GROUPS) {
+    if (group.packages.some((packageName) => isPackageModule(id, packageName))) {
+      return group.name;
+    }
+  }
+
+  return undefined;
+}
+
+function verifyVendorChunkPlugin(): Plugin {
+  return {
+    name: 'verify-vendor-chunk',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const vendorChunk = Object.values(bundle).find(
+        (output) => output.type === 'chunk' && output.name === 'vendor',
+      );
+
+      if (!vendorChunk || vendorChunk.type !== 'chunk') {
+        this.error('Expected a non-empty vendor chunk containing React and ReactDOM.');
+      }
+
+      const moduleIds = Object.keys(vendorChunk.modules);
+      const hasReact = moduleIds.some((id) => isPackageModule(id, 'react'));
+      const hasReactDom = moduleIds.some((id) => isPackageModule(id, 'react-dom'));
+
+      if (!hasReact || !hasReactDom || vendorChunk.code.trim().length < 1_024) {
+        this.error(
+          `Invalid vendor chunk: react=${hasReact}, react-dom=${hasReactDom}, bytes=${vendorChunk.code.length}.`,
+        );
+      }
+    },
+  };
+}
 
 function getBuildVersion(): string {
   const explicitVersion = process.env.APP_VERSION?.trim();
@@ -37,6 +101,7 @@ export default defineConfig(({ mode }) => {
           return html.replace('__BUILD_VERSION__', BUILD_VERSION);
         },
       },
+      verifyVendorChunkPlugin(),
     ],
     resolve: {
       alias: {
@@ -112,17 +177,9 @@ export default defineConfig(({ mode }) => {
           entryFileNames: 'assets/[name]-[hash].js',
           chunkFileNames: 'assets/[name]-[hash].js',
           assetFileNames: 'assets/[name]-[hash][extname]',
-          manualChunks: {
-            vendor: ['react', 'react-dom'],
-            router: ['react-router-dom'],
-            query: ['@tanstack/react-query'],
-            charts: ['recharts'],
-            pdf: ['jspdf'],
-            capture: ['html2canvas'],
-            excel: ['xlsx'],
-            forms: ['react-hook-form', 'zod'],
-            dnd: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
-          },
+          // Function form catches React 19 CommonJS proxy/virtual modules that the
+          // package-name object form can leave outside the intended vendor chunk.
+          manualChunks: manualChunkForModule,
         },
       },
     },
