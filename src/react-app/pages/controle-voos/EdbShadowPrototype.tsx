@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
