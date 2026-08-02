@@ -1,0 +1,119 @@
+name: Temporary eDB Shadow Analysis UI Integration
+
+on:
+  push:
+    branches:
+      - feat/edb-shadow-divergence-technical-ui-20260802
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/edb-shadow-divergence-technical-ui-20260802
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+
+      - name: Apply focused integration
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          page = Path('src/react-app/pages/controle-voos/EdbShadowPrototype.tsx')
+          text = page.read_text()
+
+          import_old = "import ControleVoosBreadcrumb from './components/ControleVoosBreadcrumb';\n"
+          import_new = import_old + "import EdbShadowAnalysisPanels from './EdbShadowAnalysisPanels';\n"
+          if text.count(import_old) != 1:
+              raise SystemExit('unexpected EdbShadowPrototype import anchor')
+          text = text.replace(import_old, import_new, 1)
+
+          render_old = '''              <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  Situação técnica — somente leitura
+'''
+          render_new = '''              <EdbShadowAnalysisPanels rawPreviewData={preview} />
+
+              <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  Situação técnica — somente leitura
+'''
+          if text.count(render_old) != 1:
+              raise SystemExit('unexpected EdbShadowPrototype render anchor')
+          page.write_text(text.replace(render_old, render_new, 1))
+
+          panels = Path('src/react-app/pages/controle-voos/EdbShadowAnalysisPanels.tsx')
+          text = panels.read_text()
+          text = text.replace(
+              "  const divergenceDeclared = Object.hasOwn(rawPreviewData, 'shadowDivergence');\n  const technicalDeclared = Object.hasOwn(rawPreviewData, 'technicalStatusShadow');\n  const findingsDeclared = Object.hasOwn(rawPreviewData, 'technicalStatusFindings');",
+              "  const divergenceDeclared = Object.prototype.hasOwnProperty.call(\n    rawPreviewData,\n    'shadowDivergence',\n  );\n  const technicalDeclared = Object.prototype.hasOwnProperty.call(\n    rawPreviewData,\n    'technicalStatusShadow',\n  );\n  const findingsDeclared = Object.prototype.hasOwnProperty.call(\n    rawPreviewData,\n    'technicalStatusFindings',\n  );",
+              1,
+          )
+          text = text.replace(
+              "  if (value.value !== null && !isFiniteNumber(value.value)) return null;",
+              "  if (\n    value.value !== null &&\n    (!isFiniteNumber(value.value) || value.value < 0)\n  ) {\n    return null;\n  }",
+              1,
+          )
+          unavailable_old = '''        <ContractUnavailable
+          invalid={parsed.technicalStatusInvalid}
+          subject="uma situação técnica shadow detalhada"
+        />
+      </section>
+'''
+          unavailable_new = '''        <ContractUnavailable
+          invalid={parsed.technicalStatusInvalid}
+          subject="uma situação técnica shadow detalhada"
+        />
+        {parsed.technicalFindingsInvalid && (
+          <div className="mt-3">
+            <ContractUnavailable invalid subject="achados técnicos sanitizados" />
+          </div>
+        )}
+      </section>
+'''
+          if text.count(unavailable_old) != 1:
+              raise SystemExit('unexpected technical unavailable anchor')
+          panels.write_text(text.replace(unavailable_old, unavailable_new, 1))
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Format focused files
+        run: |
+          npx prettier --write \
+            src/react-app/pages/controle-voos/EdbShadowPrototype.tsx \
+            src/react-app/pages/controle-voos/EdbShadowAnalysisPanels.tsx \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-analysis-panels.test.tsx
+
+      - name: Run focused tests
+        run: |
+          npx vitest run \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-analysis-panels.test.tsx \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-prototype.test.tsx
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit final scoped integration
+        run: |
+          rm .github/workflows/zz-apply-edb-shadow-analysis-ui-temp.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/react-app/pages/controle-voos/EdbShadowPrototype.tsx \
+            src/react-app/pages/controle-voos/EdbShadowAnalysisPanels.tsx \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-analysis-panels.test.tsx \
+            .github/workflows/zz-apply-edb-shadow-analysis-ui-temp.yml
+          git commit -m "feat(edb): integrate divergence readiness and technical shadow UI"
+          git push origin HEAD:feat/edb-shadow-divergence-technical-ui-20260802
