@@ -48,12 +48,14 @@ vi.mock('../../services/edb/control-flight-shadow-preview', async (importOrigina
   return { ...actual, loadEdbShadowPreview: loadPreviewMock };
 });
 
-import edbShadowPreviewRoutes from '../../routes/edb-shadow-preview';
+import { auth } from '../../middleware/auth';
+import { registerSystemRoutes } from '../../routes/system';
 
 function createApp() {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
   app.onError(errorHandler);
-  app.route('/api/edb', edbShadowPreviewRoutes);
+  app.use('/api/*', auth());
+  registerSystemRoutes(app);
   return app;
 }
 
