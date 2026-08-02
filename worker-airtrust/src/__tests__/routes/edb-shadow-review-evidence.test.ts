@@ -143,6 +143,7 @@ describe('POST /api/edb/shadow-review/:flightId/evidence', () => {
       data: {
         classification: 'NON_OFFICIAL_SHADOW_REVIEW_EVIDENCE',
         notices: {
+          officialLogbook: false,
           containsSignature: false,
           persistsInAirTrust: false,
           authorizesReturnToService: false,
