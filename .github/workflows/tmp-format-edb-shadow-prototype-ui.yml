@@ -1,0 +1,37 @@
+name: Temporary eDB Shadow Prototype UI Formatter
+
+on:
+  push:
+    branches:
+      - feat/edb-shadow-prototype-ui-20260802
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/edb-shadow-prototype-ui-20260802
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Format focused files
+        run: >-
+          npx --yes prettier@3.9.6 --write --
+          src/react-app/pages/controle-voos/EdbShadowPrototype.tsx
+          src/react-app/pages/controle-voos/__tests__/edb-shadow-prototype.test.tsx
+      - name: Commit formatting and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/tmp-format-edb-shadow-prototype-ui.yml
+          git add src/react-app/pages/controle-voos/EdbShadowPrototype.tsx
+          git add src/react-app/pages/controle-voos/__tests__/edb-shadow-prototype.test.tsx
+          git commit -m "style(edb): format shadow prototype UI"
+          git push origin HEAD:feat/edb-shadow-prototype-ui-20260802
