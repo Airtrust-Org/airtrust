@@ -38,11 +38,20 @@ if [[ ! -f "$migration_file" ]]; then
   exit 1
 fi
 
-# The simuladores matrix migrations 0440/0441/0442 must NEVER be applied through
-# this raw `d1 execute --remote --file` path: it does not update the
-# d1_migrations ledger, which is exactly the incident that this tooling exists
-# to prevent (0440 was applied here and left the ledger out of sync).
+# Migrations with known ledger or execution constraints must NEVER be applied
+# through this raw `d1 execute --remote --file` path. Each case below points to
+# the reviewed, ledger-aware path that must be prepared or used instead.
 case "$(basename "$migration_file")" in
+  0438_controle_voos_rdv_coordenacao_workflow.sql)
+    echo "ERROR: 0438 must not be applied via raw d1 execute." >&2
+    echo "Production is missing this schema, and raw execution would reproduce the" >&2
+    echo "schema/ledger drift already observed in staging because this path does not" >&2
+    echo "record the reviewed change in the Schema V2 ledger." >&2
+    echo "Prepare and review the Schema V2 bundle described in:" >&2
+    echo "  worker-airtrust/schema-v2/plans/0438-rdv-coordination-workflow-production.md" >&2
+    echo "Then apply it only through .github/workflows/apply-schema-change-v2.yml." >&2
+    exit 4
+    ;;
   0440_simuladores_matriz_versionada_metadata.sql)
     echo "ERROR: 0440 must not be (re)applied via raw d1 execute." >&2
     echo "It was already physically applied; reconcile its ledger entry with:" >&2
