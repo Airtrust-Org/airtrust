@@ -1,0 +1,313 @@
+name: Temporary Finalize eDB Shadow Divergence UI
+
+on:
+  push:
+    branches:
+      - feat/edb-shadow-divergence-technical-ui-20260802
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/edb-shadow-divergence-technical-ui-20260802
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+
+      - name: Apply focused integration fixes
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          prototype = Path('src/react-app/pages/controle-voos/EdbShadowPrototype.tsx')
+          text = prototype.read_text()
+          old_import = "import { type FormEvent, useMemo, useState } from 'react';"
+          new_import = "import { type FormEvent, type ReactNode, useMemo, useState } from 'react';"
+          if text.count(old_import) != 1:
+              raise SystemExit(f'prototype import anchor count={text.count(old_import)}')
+          text = text.replace(old_import, new_import, 1)
+
+          old_function = 'export default function EdbShadowPrototype() {'
+          new_function = '''type EdbShadowPrototypeProps = {
+            supplementalContent?: ReactNode;
+          };
+
+          export default function EdbShadowPrototype({
+            supplementalContent,
+          }: EdbShadowPrototypeProps = {}) {'''
+          if text.count(old_function) != 1:
+              raise SystemExit(f'prototype function anchor count={text.count(old_function)}')
+          text = text.replace(old_function, new_function, 1)
+
+          old_shell_end = '''          )}
+        </ControleVoosPageShell>'''
+          new_shell_end = '''          )}
+
+          {supplementalContent}
+        </ControleVoosPageShell>'''
+          if text.count(old_shell_end) != 1:
+              raise SystemExit(f'prototype shell anchor count={text.count(old_shell_end)}')
+          prototype.write_text(text.replace(old_shell_end, new_shell_end, 1))
+
+          wrapper = Path('src/react-app/pages/controle-voos/EdbShadowPrototypeWithAssessment.tsx')
+          text = wrapper.read_text()
+          parse_start = text.index('function parseAssessment(payload: unknown): AssessmentData | null {')
+          parse_end = text.index('\nfunction recommendationLabel', parse_start)
+          parse_replacement = r'''function parseAssessment(payload: unknown): AssessmentData | null {
+            if (!isRecord(payload) || payload.success !== true || !isRecord(payload.data)) return null;
+            const data = payload.data;
+            if (
+              data.schemaVersion !== 'edb.shadow-assessment.v1' ||
+              data.classification !== ASSESSMENT_CLASSIFICATION ||
+              data.officialReferenceCompared !== false ||
+              data.paperReferenceRequired !== true ||
+              data.comparisonBasis !== 'SELF_BASELINE_WITH_SANITIZED_PROJECTION_FINDINGS' ||
+              !isRecord(data.notices) ||
+              data.notices.officialLogbook !== false ||
+              data.notices.replacesPaper !== false ||
+              data.notices.containsSignature !== false ||
+              data.notices.persistsRegulatedRecord !== false ||
+              data.notices.authorizesReturnToService !== false ||
+              !isRecord(data.divergence) ||
+              !isRecord(data.technicalStatus)
+            ) {
+              return null;
+            }
+
+            const divergence = data.divergence;
+            const allowedRecommendations = new Set(['continue', 'review', 'stop']);
+            const allowedSeverities = new Set([
+              'NONE',
+              'OBSERVATION',
+              'LOW',
+              'MEDIUM',
+              'HIGH',
+              'CRITICAL',
+            ]);
+            const allowedCategories = new Set([
+              'FIELD_MISSING',
+              'VALUE_MISMATCH',
+              'UNIT_MISMATCH',
+              'TIMEZONE_MISMATCH',
+              'CREW_UNRESOLVED',
+              'LEG_MISSING',
+              'LEG_EXTRA',
+              'ROLE_UNMAPPED',
+              'PROVENANCE_CONFLICT',
+              'TECHNICAL_STATUS_MISMATCH',
+              'TENANT_SCOPE_ERROR',
+              'POSSIBLE_CRITICAL_DIVERGENCE',
+              'UNKNOWN_FIELD',
+            ]);
+            const allowedCauseCodes = new Set([
+              'SOURCE_MISSING',
+              'SOURCE_CONFLICT',
+              'MAPPING_ERROR',
+              'TIMEZONE_ERROR',
+              'UNIT_ERROR',
+              'IDENTITY_ERROR',
+              'TENANT_SCOPE_ERROR',
+              'TECHNICAL_STATUS_STALE',
+              'OFFLINE_PACKAGE_ERROR',
+              'SYNC_ERROR',
+              'USER_WORKFLOW_ERROR',
+              'MANUAL_PROCEDURE_GAP',
+              'TRAINING_GAP',
+              'REGULATORY_DECISION_PENDING',
+            ]);
+            const safePath = (value: unknown): value is string => {
+              if (typeof value !== 'string' || value.length === 0 || value.length > 180) return false;
+              const segments = value.split('.');
+              return (
+                segments.length <= 16 &&
+                segments.every((segment) => /^(?:[A-Za-z][A-Za-z0-9_-]{0,47}|\d{1,6})$/.test(segment))
+              );
+            };
+            const count = (value: unknown): value is number =>
+              Number.isInteger(value) && Number(value) >= 0;
+            const percent = (value: unknown): value is number =>
+              isNumber(value) && value >= 0 && value <= 100;
+
+            if (
+              typeof divergence.recommendation !== 'string' ||
+              !allowedRecommendations.has(divergence.recommendation) ||
+              typeof divergence.maxSeverity !== 'string' ||
+              !allowedSeverities.has(divergence.maxSeverity) ||
+              !Array.isArray(divergence.findings) ||
+              !isRecord(divergence.metrics) ||
+              !isRecord(divergence.readiness) ||
+              !isRecord(divergence.evidence) ||
+              typeof divergence.evidence.fingerprint !== 'string' ||
+              !/^fnv1a32:[0-9a-f]{8}$/.test(divergence.evidence.fingerprint)
+            ) {
+              return null;
+            }
+
+            for (const finding of divergence.findings) {
+              if (
+                !isRecord(finding) ||
+                typeof finding.category !== 'string' ||
+                !allowedCategories.has(finding.category) ||
+                typeof finding.severity !== 'string' ||
+                !allowedSeverities.has(finding.severity) ||
+                finding.severity === 'NONE' ||
+                typeof finding.causeCode !== 'string' ||
+                !allowedCauseCodes.has(finding.causeCode) ||
+                !safePath(finding.field)
+              ) {
+                return null;
+              }
+            }
+
+            for (const key of [
+              'comparisonFieldCount',
+              'matchingFieldCount',
+              'divergenceCount',
+              'completenessFindingCount',
+              'projectionFindingCount',
+              'unknownFieldCount',
+            ]) {
+              if (!count(divergence.metrics[key])) return null;
+            }
+            if (
+              !percent(divergence.readiness.score) ||
+              !percent(divergence.readiness.fieldAgreementPercent) ||
+              !percent(divergence.readiness.completenessPercent) ||
+              (divergence.readiness.status !== 'ready' &&
+                divergence.readiness.status !== 'review' &&
+                divergence.readiness.status !== 'not_ready')
+            ) {
+              return null;
+            }
+
+            const technicalStatus = data.technicalStatus;
+            if (
+              technicalStatus.targetSchemaVersion !== 'edb.technical-status.shadow.v1' ||
+              technicalStatus.officialEffect !== 'NONE' ||
+              typeof technicalStatus.sourceAvailable !== 'boolean' ||
+              technicalStatus.detailedContractLoaded !== false ||
+              technicalStatus.discrepancyDetailsAvailable !== false ||
+              (technicalStatus.status !== 'source_unavailable' &&
+                technicalStatus.status !== 'requires_review' &&
+                technicalStatus.status !== 'preliminarily_available') ||
+              !Array.isArray(technicalStatus.findingCodes) ||
+              technicalStatus.findingCodes.some(
+                (code) => typeof code !== 'string' || !/^[A-Z][A-Z0-9_]{0,95}$/.test(code),
+              )
+            ) {
+              return null;
+            }
+
+            return data as unknown as AssessmentData;
+          }
+          '''
+          text = text[:parse_start] + parse_replacement + text[parse_end:]
+
+          old_return = '''  return (
+            <>
+              <EdbShadowPrototype />
+              <AssessmentPanel flightId={flightId} />
+            </>
+          );'''
+          new_return = '''  return <EdbShadowPrototype supplementalContent={<AssessmentPanel flightId={flightId} />} />;'''
+          if text.count(old_return) != 1:
+              raise SystemExit(f'wrapper return anchor count={text.count(old_return)}')
+          wrapper.write_text(text.replace(old_return, new_return, 1))
+
+          test = Path('src/react-app/pages/controle-voos/__tests__/edb-shadow-assessment.test.tsx')
+          text = test.read_text()
+          first_import = "import { render, screen, waitFor } from '@testing-library/react';"
+          if text.count(first_import) != 1:
+              raise SystemExit('frontend test import anchor missing')
+          text = text.replace("import { render, screen, waitFor } from '@testing-library/react';", "import type { ReactNode } from 'react';\nimport { render, screen, waitFor } from '@testing-library/react';", 1)
+          old_mock = '''vi.mock('../EdbShadowPrototype', () => ({
+            default: () => <div>Protótipo base</div>,
+          }));'''
+          new_mock = '''vi.mock('../EdbShadowPrototype', () => ({
+            default: ({ supplementalContent }: { supplementalContent?: ReactNode }) => (
+              <>
+                <div>Protótipo base</div>
+                {supplementalContent}
+              </>
+            ),
+          }));'''
+          if text.count(old_mock) != 1:
+              raise SystemExit(f'frontend mock anchor count={text.count(old_mock)}')
+          text = text.replace(old_mock, new_mock, 1)
+          insert_at = text.rfind('\n});')
+          if insert_at < 0:
+              raise SystemExit('frontend test suite end not found')
+          extra_test = r'''
+
+            it('falha fechado quando o contrato da avaliação é incompatível', async () => {
+              const malformed = assessmentPayload();
+              malformed.data.divergence.recommendation = 'launch' as never;
+              vi.mocked(fetchWithAuth).mockResolvedValueOnce(response(malformed));
+              renderPage();
+
+              await waitFor(() =>
+                expect(screen.getByText(/avaliação preliminar indisponível/i)).toBeInTheDocument(),
+              );
+              expect(screen.queryByText(/launch/i)).not.toBeInTheDocument();
+            });
+          '''
+          test.write_text(text[:insert_at] + extra_test + text[insert_at:])
+          PY
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install Worker dependencies
+        run: cd worker-airtrust && npm ci
+
+      - name: Format focused files
+        run: |
+          npx prettier --write \
+            src/react-app/pages/controle-voos/EdbShadowPrototype.tsx \
+            src/react-app/pages/controle-voos/EdbShadowPrototypeWithAssessment.tsx \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-assessment.test.tsx \
+            worker-airtrust/src/__tests__/routes/edb-shadow-assessment.test.ts
+
+      - name: Run focused frontend tests
+        run: |
+          npx vitest run \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-assessment.test.tsx \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-prototype.test.tsx
+
+      - name: Run focused Worker tests
+        run: |
+          cd worker-airtrust
+          npx vitest run \
+            src/__tests__/services/edb-shadow-assessment.test.ts \
+            src/__tests__/routes/edb-shadow-assessment.test.ts \
+            src/__tests__/routes/edb-shadow-preview.test.ts
+
+      - name: Worker typecheck
+        run: cd worker-airtrust && npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit final scoped changes
+        run: |
+          rm .github/workflows/zz-finalize-edb-shadow-divergence-ui-temp.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/react-app/pages/controle-voos/EdbShadowPrototype.tsx \
+            src/react-app/pages/controle-voos/EdbShadowPrototypeWithAssessment.tsx \
+            src/react-app/pages/controle-voos/__tests__/edb-shadow-assessment.test.tsx \
+            worker-airtrust/src/__tests__/routes/edb-shadow-assessment.test.ts \
+            .github/workflows/zz-finalize-edb-shadow-divergence-ui-temp.yml
+          git commit -m "fix(edb): integrate and validate preliminary shadow assessment"
+          git push origin HEAD:feat/edb-shadow-divergence-technical-ui-20260802
