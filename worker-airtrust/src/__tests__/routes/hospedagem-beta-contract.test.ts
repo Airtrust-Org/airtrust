@@ -113,11 +113,7 @@ describe('hospedagem beta contract', () => {
     app.onError(errorHandler);
     app.route('/hospedagem', hospedagemRoutes);
 
-    const response = await app.request(
-      '/hospedagem?ativo=1',
-      { method: 'GET' },
-      { DB: db } as Env,
-    );
+    const response = await app.request('/hospedagem?ativo=1', { method: 'GET' }, { DB: db } as Env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -131,7 +127,9 @@ describe('hospedagem beta contract', () => {
       ],
     });
 
-    const listCall = calls.find((call) => call.method === 'all' && call.query.includes('FROM hospedagem h'));
+    const listCall = calls.find(
+      (call) => call.method === 'all' && call.query.includes('FROM hospedagem h'),
+    );
     expect(listCall?.args[0]).toBe(77);
   });
 
@@ -150,7 +148,7 @@ describe('hospedagem beta contract', () => {
         },
       ],
       [
-        'SELECT * FROM hospedagem WHERE id = ?',
+        'FROM hospedagem',
         {
           first: () => ({
             id: 12,
@@ -195,7 +193,9 @@ describe('hospedagem beta contract', () => {
       message: 'Hospedagem registrada com sucesso',
     });
 
-    const insertCall = calls.find((call) => call.method === 'run' && call.query.includes('INSERT INTO hospedagem'));
+    const insertCall = calls.find(
+      (call) => call.method === 'run' && call.query.includes('INSERT INTO hospedagem'),
+    );
     expect(insertCall?.args[0]).toBe(77);
     expect(insertCall?.args[1]).toBe(5);
     expect(registrarAuditoriaMock).toHaveBeenCalledWith(
