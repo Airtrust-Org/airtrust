@@ -69,7 +69,7 @@ describe('worker entrypoint runtime guard', () => {
     });
 
     await entrypoint.scheduled(
-      { cron: '0 8 * * *', scheduledTime: Date.now(), type: 'scheduled' } as ScheduledEvent,
+      { cron: '0 7 * * *', scheduledTime: Date.now(), type: 'scheduled' } as ScheduledEvent,
       createEnv({ ENVIRONMENT: 'development' }),
       {} as ExecutionContext,
     );
