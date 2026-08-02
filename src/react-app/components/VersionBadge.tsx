@@ -34,7 +34,7 @@ export function VersionBadge() {
     (DEPLOYMENT_VERSION && DEPLOYMENT_VERSION !== '0.0.0-dev' ? DEPLOYMENT_VERSION : 'unknown');
 
   const environment = apiData?.data?.environment || 'development';
-  const builtAt = apiData?.data?.builtAt;
+  const builtAt = apiData?.data?.builtAt ?? null;
 
   // Cores por ambiente
   const bgColor =
