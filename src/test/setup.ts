@@ -65,8 +65,35 @@ afterAll(() => {
   server.close();
 });
 
+let localStorageData = new Map<string, string>();
+
+const localStorageMock = {
+  getItem: vi.fn<(key: string) => string | null>(),
+  setItem: vi.fn<(key: string, value: string) => void>(),
+  removeItem: vi.fn<(key: string) => void>(),
+  clear: vi.fn<() => void>(),
+};
+
+function resetLocalStorageMock(): void {
+  localStorageData = new Map<string, string>();
+  localStorageMock.getItem
+    .mockReset()
+    .mockImplementation((key) => localStorageData.get(key) ?? null);
+  localStorageMock.setItem.mockReset().mockImplementation((key, value) => {
+    localStorageData.set(key, String(value));
+  });
+  localStorageMock.removeItem.mockReset().mockImplementation((key) => {
+    localStorageData.delete(key);
+  });
+  localStorageMock.clear.mockReset().mockImplementation(() => {
+    localStorageData.clear();
+  });
+}
+
+resetLocalStorageMock();
+
 beforeEach(() => {
-  // Reset de mocks globais se necessário
+  resetLocalStorageMock();
 });
 
 // Mock de window.matchMedia
@@ -84,13 +111,7 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
-// Mock de localStorage
-const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-};
+// Mock de localStorage com comportamento equivalente ao Storage do navegador.
 Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
   value: localStorageMock,
