@@ -48,7 +48,7 @@ export function registerSystemRoutes(app: SystemApp) {
         latency: Date.now() - dbStart,
       };
       if (dbTest?.test !== 1) overallHealthy = false;
-    } catch (error) {
+    } catch {
       checks.database = {
         status: 'error',
         error: 'Erro interno do servidor',
@@ -69,7 +69,7 @@ export function registerSystemRoutes(app: SystemApp) {
       } else {
         checks.storage = { status: 'ok', latency: 0 }; // R2 não configurado, não é erro
       }
-    } catch (error) {
+    } catch {
       checks.storage = {
         status: 'error',
         error: 'Erro interno do servidor',
