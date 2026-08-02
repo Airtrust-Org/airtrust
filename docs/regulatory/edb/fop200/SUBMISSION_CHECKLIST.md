@@ -11,20 +11,24 @@
 
 ## B. Dados do operador
 
-- [ ] Razão social conferida.
-- [ ] CNPJ conferido.
-- [ ] Número do COA conferido.
-- [ ] Base principal e contatos institucionais.
-- [ ] Representante legal.
-- [ ] Diretor de Operações.
-- [ ] Diretor de Manutenção ou responsável equivalente.
-- [ ] Gestor de Segurança Operacional.
-- [ ] Responsável pelo processo perante a ANAC.
-- [ ] Procurador com poderes, quando aplicável.
+- [x] Operador requerente definido: COSTA DO SOL TAXI AEREO S.A.
+- [x] Tenant AirTrust definido: `empresa_id = 6`.
+- [x] Razão social conferida na Portaria ANAC nº 12.859/SPO, de 19/10/2023.
+- [x] CNPJ conferido na mesma fonte: `11.223.764/0001-62`.
+- [ ] Reconfirmar revisão vigente do COA e obter cópia atual. Baseline público: `2013-05-00AO-01-04`, revisão 33, emitida em 17/10/2023.
+- [ ] Obter as Especificações Operativas vigentes.
+- [ ] Confirmar sede, endereço cadastral, base principal e contatos institucionais.
+- [ ] Identificar representante legal e comprovar poderes.
+- [ ] Identificar Diretor de Operações.
+- [ ] Identificar Diretor de Manutenção ou responsável equivalente.
+- [ ] Identificar Gestor de Segurança Operacional.
+- [ ] Definir responsável pelo processo perante a ANAC.
+- [ ] Identificar procurador com poderes, quando aplicável.
+- [ ] Confirmar que nenhum formulário utiliza o CNPJ técnico `00.000.000/0001-00` da migration 0226.
 
 ## C. Definição do primeiro escopo
 
-- [ ] Operador requerente identificado.
+- [x] Operador requerente identificado: Costa do Sol.
 - [ ] Modelos de aeronave candidatos identificados.
 - [ ] Matrículas candidatas listadas apenas como proposta, sem afirmar autorização.
 - [ ] Tipo de operação e perfil offshore descritos.
@@ -35,19 +39,20 @@
 
 ## D. Artefatos anexos
 
+- [x] Perfil do operador `OPERATOR_PROFILE_COSTA_DO_SOL.md` preparado.
 - [ ] FOP 200 oficial preenchido e assinado conforme exigido.
-- [ ] Carta de encaminhamento.
-- [ ] Nota conceitual `ANAC_EDB_FOP200_CONCEPT_NOTE_20260802.md` adaptada.
-- [ ] Baseline regulatório.
-- [ ] Matriz resumida de conformidade.
-- [ ] ADR da fronteira entre `cv_*` e registros regulados.
-- [ ] Mapa de campos e lacunas.
-- [ ] Threat model de assinatura.
-- [ ] Conceito PED/offline.
-- [ ] Fluxo de dados e diagrama de arquitetura.
-- [ ] Lista priorizada de perguntas.
-- [ ] Proposta de shadow mode com papel oficial.
-- [ ] Cronograma indicativo sem promessa de autorização.
+- [x] Carta de encaminhamento direcionada à Costa do Sol, ainda com campos de responsáveis e agenda pendentes.
+- [ ] Nota conceitual `ANAC_EDB_FOP200_CONCEPT_NOTE_20260802.md` adaptada ao escopo real de aeronaves e bases.
+- [x] Baseline regulatório.
+- [x] Matriz resumida de conformidade.
+- [x] ADR da fronteira entre `cv_*` e registros regulados.
+- [x] Mapa de campos e lacunas.
+- [x] Threat model de assinatura.
+- [x] Conceito PED/offline.
+- [ ] Fluxo de dados e diagrama de arquitetura em formato final de submissão.
+- [x] Lista priorizada de perguntas.
+- [x] Proposta de shadow mode com papel oficial.
+- [ ] Cronograma indicativo sem promessa de autorização, ajustado ao operador.
 
 ## E. Controle de alegações
 
