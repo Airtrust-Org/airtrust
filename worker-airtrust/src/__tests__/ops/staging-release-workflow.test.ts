@@ -138,6 +138,22 @@ describe('deploy-staging.yml — static guards', () => {
     expect(workflow).not.toMatch(/--branch=production/);
   });
 
+  it('builds the staging frontend with the staging API explicitly bound', () => {
+    const frontendJob = workflow.slice(
+      workflow.indexOf('\n  deploy-frontend:'),
+      workflow.indexOf('\n  smoke:'),
+    );
+    const buildStep = frontendJob.slice(
+      frontendJob.indexOf('- name: Build frontend against staging API'),
+      frontendJob.indexOf('- name: Stamp build version'),
+    );
+
+    expect(buildStep).toContain(
+      'VITE_API_URL: https://airtrust-api-staging.airtrust.workers.dev/api',
+    );
+    expect(buildStep).not.toContain('https://api.airtrust.online/api');
+  });
+
   it('validates staging worker targets with a structural parser instead of grepping the whole TOML file', () => {
     expect(workflow).toContain('python3 scripts/staging/assert-staging-worker-targets.py');
     expect(workflow).not.toContain(
@@ -543,11 +559,15 @@ describe('scripts/staging/apply-approved-migrations.sh — guards', () => {
     } finally {
       try {
         rmSync(sqlFile, { force: true });
-      } catch {}
+      } catch {
+        // Test cleanup is best effort.
+      }
       if (createdDir)
         try {
           rmSync(join(ROOT, 'release'), { recursive: true, force: true });
-        } catch {}
+        } catch {
+          // Test cleanup is best effort.
+        }
     }
   });
 
@@ -834,16 +854,14 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
   it('3. nenhum step combina Worker e Pages tokens', () => {
     // Assert no block contains both secrets in the whole workflow
     const lines = workflow.split('\n');
-    let currentJob = '';
     let currentJobText = '';
     for (const line of lines) {
-      if (line.match(/^  [a-zA-Z0-9-]+:/)) {
+      if (line.match(/^ {2}[a-zA-Z0-9-]+:/)) {
         if (currentJobText) {
           const hasWorker = currentJobText.includes('CLOUDFLARE_WORKER_API_TOKEN');
           const hasPages = currentJobText.includes('CLOUDFLARE_PAGES_API_TOKEN');
           expect(hasWorker && hasPages).toBe(false);
         }
-        currentJob = line;
         currentJobText = '';
       } else {
         currentJobText += line + '\n';
@@ -853,16 +871,14 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
 
   it('4. nenhum step combina backup e migration tokens', () => {
     const lines = workflow.split('\n');
-    let currentJob = '';
     let currentJobText = '';
     for (const line of lines) {
-      if (line.match(/^  [a-zA-Z0-9-]+:/)) {
+      if (line.match(/^ {2}[a-zA-Z0-9-]+:/)) {
         if (currentJobText) {
           const hasBackup = currentJobText.includes('CLOUDFLARE_D1_BACKUP_API_TOKEN');
           const hasMigrate = currentJobText.includes('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
           expect(hasBackup && hasMigrate).toBe(false);
         }
-        currentJob = line;
         currentJobText = '';
       } else {
         currentJobText += line + '\n';
