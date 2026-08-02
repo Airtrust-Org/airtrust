@@ -238,7 +238,7 @@ describe('scheduled Worker entrypoint', () => {
     const entrypoint = createWorkerEntrypoint({} as never, { onScheduled });
 
     await entrypoint.scheduled(
-      { cron: '0 8 * * *' } as ScheduledEvent,
+      { cron: '0 7 * * *' } as ScheduledEvent,
       { ENVIRONMENT: 'development' } as never,
       {} as ExecutionContext,
     );

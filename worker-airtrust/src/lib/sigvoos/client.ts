@@ -3,6 +3,9 @@ export const SIGVOOS_DEFAULT_SYSTEM = 'sigtrip';
 export const SIGVOOS_PASSWORD_MARKER = '__WORKER_ENCRYPTED__';
 export const SIGVOOS_PASSWORD_ENCRYPTED_PREFIX = 'enc:v1';
 
+const SIGVOOS_OPERATIONAL_SEARCH_ENDPOINT = '/relatorios/voos/tripulantes/etapas/pesquisa';
+const SIGVOOS_MAX_CLIENT_BATCH = 1000;
+
 export class SigvoosClientError extends Error {
   constructor(
     public code: string,
@@ -69,7 +72,10 @@ export async function encryptSigvoosPassword(plain: string, secret: string): Pro
   return `${SIGVOOS_PASSWORD_ENCRYPTED_PREFIX}:${encodeBase64(iv)}:${encodeBase64(new Uint8Array(encrypted))}`;
 }
 
-export async function decryptSigvoosPassword(cipherText: string, secret: string): Promise<string | null> {
+export async function decryptSigvoosPassword(
+  cipherText: string,
+  secret: string,
+): Promise<string | null> {
   if (!cipherText.startsWith(`${SIGVOOS_PASSWORD_ENCRYPTED_PREFIX}:`)) {
     return null;
   }
@@ -83,9 +89,59 @@ export async function decryptSigvoosPassword(cipherText: string, secret: string)
   return new TextDecoder().decode(decrypted);
 }
 
+function resolveRequestedSearchLimit(payload: Record<string, unknown>): number | null {
+  const raw = payload.limit ?? payload.page_size;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.min(SIGVOOS_MAX_CLIENT_BATCH, Math.max(1, Math.trunc(parsed)));
+}
+
+function capNestedSearchArrays(value: unknown, maxItems: number, depth = 0): unknown {
+  if (Array.isArray(value)) {
+    return value.slice(0, maxItems);
+  }
+  if (!value || typeof value !== 'object' || depth >= 3) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+      key,
+      capNestedSearchArrays(nested, maxItems, depth + 1),
+    ]),
+  );
+}
+
+/**
+ * A API SIGVOOS pode ignorar limit/page_size e devolver um período inteiro.
+ * Mantemos no máximo `limit + 1`: o item adicional funciona como sentinela para
+ * o paginador detectar resposta superdimensionada e interromper novas páginas.
+ */
+export function capSigvoosSearchPayload(
+  payload: Record<string, unknown>,
+  requestedLimit: number,
+): Record<string, unknown> {
+  const limit = Math.min(SIGVOOS_MAX_CLIENT_BATCH, Math.max(1, Math.trunc(requestedLimit)));
+  return capNestedSearchArrays(payload, limit + 1) as Record<string, unknown>;
+}
+
+function applyOperationalSearchCap(
+  endpoint: string,
+  requestPayload: Record<string, unknown>,
+  responsePayload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (endpoint !== SIGVOOS_OPERATIONAL_SEARCH_ENDPOINT) {
+    return responsePayload;
+  }
+  const requestedLimit = resolveRequestedSearchLimit(requestPayload);
+  return requestedLimit
+    ? capSigvoosSearchPayload(responsePayload, requestedLimit)
+    : responsePayload;
+}
+
 /**
  * SigvoosApiClient - Unified client for SIGVOOS integration.
- * 
+ *
  * DIRETRIZES DE USO (CONTRATO DE ARQUITETURA):
  * 1. Timeout com AbortController é permitido.
  * 2. Retry e backoff artificial continuam ESTRITAMENTE PROIBIDOS para evitar congestionamento na API de destino.
@@ -102,12 +158,16 @@ export class SigvoosApiClient {
     this.fetchImpl = options?.fetchImpl || fetch;
   }
 
-  public async fetchJson(url: string, init: RequestInit, timeoutMs = 8000): Promise<Record<string, unknown>> {
+  public async fetchJson(
+    url: string,
+    init: RequestInit,
+    timeoutMs = 8000,
+  ): Promise<Record<string, unknown>> {
     let lastError: Error | null = null;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      
+
       const response = await this.fetchImpl(url, { ...init, signal: controller.signal });
       clearTimeout(timeoutId);
 
@@ -128,22 +188,30 @@ export class SigvoosApiClient {
           throw new SigvoosClientError('SIGVOOS_UNAUTHORIZED', 'Unauthorized', 401);
         }
         if (response.status >= 500) {
-          throw new SigvoosClientError('SIGVOOS_SERVER_ERROR', `Server Error: ${response.status}`, response.status);
+          throw new SigvoosClientError(
+            'SIGVOOS_SERVER_ERROR',
+            `Server Error: ${response.status}`,
+            response.status,
+          );
         }
-        
+
         const sanitized = { ...parsed };
-        for (const k of Object.keys(sanitized)) {
-          if (/(token|senha|password|secret|credential|authorization|tkn|pwd)/i.test(k)) {
-            sanitized[k] = '[MASKED]';
+        for (const key of Object.keys(sanitized)) {
+          if (/(token|senha|password|secret|credential|authorization|tkn|pwd)/i.test(key)) {
+            sanitized[key] = '[MASKED]';
           }
         }
 
-        throw new SigvoosClientError('SIGVOOS_HTTP_ERROR', `HTTP ${response.status}: ${JSON.stringify(sanitized).slice(0, 300)}`, response.status);
+        throw new SigvoosClientError(
+          'SIGVOOS_HTTP_ERROR',
+          `HTTP ${response.status}: ${JSON.stringify(sanitized).slice(0, 300)}`,
+          response.status,
+        );
       }
 
       return parsed;
-    } catch (err: unknown) {
-      lastError = err instanceof Error ? err : new Error(String(err));
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error(String(error));
       if (lastError.name === 'AbortError') {
         throw new SigvoosClientError('SIGVOOS_TIMEOUT', 'Timeout ao acessar SIGVOOS');
       }
@@ -163,37 +231,30 @@ export class SigvoosApiClient {
       system: this.config.system || SIGVOOS_DEFAULT_SYSTEM,
     };
 
-    const res = await this.fetchJson(`${this.config.base_url.replace(/\/$/, '')}/get/token`, {
+    const response = await this.fetchJson(`${this.config.base_url.replace(/\/$/, '')}/get/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload),
     });
 
-    const token = res.accessToken || res.access_token || res.token;
+    const token = response.accessToken || response.access_token || response.token;
     if (typeof token !== 'string') {
       throw new SigvoosClientError('SIGVOOS_AUTH_FAILED', 'Token não retornado ou inválido.', 401);
     }
-    
+
     this.token = token;
     return token;
   }
 
-  public async postSearch(endpoint: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  public async postSearch(
+    endpoint: string,
+    payload: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     let token = await this.authenticate();
     try {
-      return await this.fetchJson(`${this.config.base_url.replace(/\/$/, '')}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-    } catch (err) {
-      if (err instanceof SigvoosClientError && err.code === 'SIGVOOS_UNAUTHORIZED') {
-        token = await this.authenticate(true);
-        return await this.fetchJson(`${this.config.base_url.replace(/\/$/, '')}${endpoint}`, {
+      const response = await this.fetchJson(
+        `${this.config.base_url.replace(/\/$/, '')}${endpoint}`,
+        {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -201,14 +262,32 @@ export class SigvoosApiClient {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
-        });
+        },
+      );
+      return applyOperationalSearchCap(endpoint, payload, response);
+    } catch (error) {
+      if (error instanceof SigvoosClientError && error.code === 'SIGVOOS_UNAUTHORIZED') {
+        token = await this.authenticate(true);
+        const response = await this.fetchJson(
+          `${this.config.base_url.replace(/\/$/, '')}${endpoint}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+          },
+        );
+        return applyOperationalSearchCap(endpoint, payload, response);
       }
-      throw err;
+      throw error;
     }
   }
 
   public formatSigvoosDate(isoDate: string): string {
-    if (!/\\d{4}-\\d{2}-\\d{2}/.test(isoDate)) return isoDate;
+    if (!/\d{4}-\d{2}-\d{2}/.test(isoDate)) return isoDate;
     const [year, month, day] = isoDate.split('-');
     return `${day}/${month}/${year}`;
   }

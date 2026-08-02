@@ -2,31 +2,35 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { buildQualificacoesEadRenovacaoAutomaticaQuery } from '../../cron/scheduled-handler';
+import { buildQualificacoesEadRenovacaoResilienteQuery } from '../../cron/resilient/ead-renewal';
 
 function compactSql(sql: string) {
   return sql.replace(/\s+/g, ' ').trim();
 }
 
 describe('renovacao automatica LMS por qualificacao EAD', () => {
-  it('inclui qualificacoes vencidas e vencendo em vez de apenas futuras', () => {
-    const sql = compactSql(buildQualificacoesEadRenovacaoAutomaticaQuery());
+  it('inclui vencidas e vencendo com paginação keyset', () => {
+    const sql = compactSql(buildQualificacoesEadRenovacaoResilienteQuery());
 
-    expect(sql).toContain("COALESCE(qh.renovada, 0) = 0");
+    expect(sql).toContain('COALESCE(qh.renovada, 0) = 0');
     expect(sql).toContain('AND NOT EXISTS ( SELECT 1 FROM qualificacoes_historico qh2');
     expect(sql).toContain(")) <= date('now', '+' || ? || ' days')");
     expect(sql).not.toContain("BETWEEN date('now')");
+    expect(sql).toContain('AND qh.id > ?');
+    expect(sql).toContain('ORDER BY qh.id ASC');
+    expect(sql).toContain('LIMIT ?');
   });
 
-  it('nao reusa reset destrutivo de matrícula no cron de renovação', () => {
+  it('repara ciclo e notificação após falha parcial sem reset destrutivo', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/cron/scheduled-handler.ts'),
+      resolve(process.cwd(), 'src/cron/resilient/ead-renewal.ts'),
       'utf8',
     );
 
     expect(source).not.toContain('resetMatriculaForNewCycle(');
-    expect(source).toContain('if (existente) {');
-    expect(source).toContain('continue;');
-    expect(source).toContain("origin: 'AUTO_RENOVACAO'");
+    expect(source).toContain('ensureMatriculaCycle(db');
+    expect(source).toContain('ensureRenewalNotification(db');
+    expect(source).toContain('MATRICULA_CYCLE_NOTIFICATION_READY');
+    expect(source).toContain('EXISTING_INACTIVE_PRESERVED');
   });
 });
