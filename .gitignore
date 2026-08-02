@@ -202,10 +202,15 @@ build/
 /debug-*.png
 /*.traineddata
 
-# Local root debug/API artifacts
+# Root-only local debug/API artifacts (never commit)
 /list.json
 /list2.json
 /criar-token.html
+/index-antigo.html
+/test-*.html
+/compare-qualificacoes.html
+/force-refresh.html
+/test-login.json
 
 # Local AI/agent tooling
 .agents/
