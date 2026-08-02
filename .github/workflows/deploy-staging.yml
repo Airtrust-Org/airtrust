@@ -757,6 +757,7 @@ jobs:
         working-directory: release
         env:
           VITE_APP_VERSION: ${{ needs.guard.outputs.app_version }}
+          VITE_API_URL: https://airtrust-api-staging.airtrust.workers.dev/api
           APP_VERSION: ${{ needs.guard.outputs.app_version }}
           APP_BUILD_TIME: ${{ needs.guard.outputs.build_time }}
           VITE_DEV_PROXY_TARGET: https://airtrust-api-staging.airtrust.workers.dev
@@ -832,7 +833,23 @@ jobs:
 
   summary:
     name: Record Release Summary
-    needs: [guard, check-d1-backup-token, check-d1-migration-token, check-worker-token, check-pages-token, cloudflare-secret-readiness-gate, backup, preflight, apply-migrations, postconditions, release-write-gate, deploy-worker, deploy-frontend, smoke]
+    needs:
+      [
+        guard,
+        check-d1-backup-token,
+        check-d1-migration-token,
+        check-worker-token,
+        check-pages-token,
+        cloudflare-secret-readiness-gate,
+        backup,
+        preflight,
+        apply-migrations,
+        postconditions,
+        release-write-gate,
+        deploy-worker,
+        deploy-frontend,
+        smoke,
+      ]
     if: always()
     runs-on: ubuntu-latest
     steps:

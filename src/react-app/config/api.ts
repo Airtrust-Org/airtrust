@@ -12,14 +12,18 @@
 
 import { apiFetch } from '@/react-app/lib/apiFetch';
 
+const STAGING_API_BASE_URL = 'https://airtrust-api-staging.airtrust.workers.dev/api';
 const PRODUCTION_API_BASE_URL = 'https://api.airtrust.online/api';
 
-function resolveApiBase(): string {
-  const envUrl = (import.meta as unknown as { env?: { VITE_API_URL?: string } })?.env?.VITE_API_URL;
-  const origin =
-    typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
-  const host = typeof window !== 'undefined' ? window.location.hostname : '';
-
+export function resolveApiBase({
+  envUrl = import.meta.env.VITE_API_URL,
+  origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '',
+  host = typeof window !== 'undefined' ? window.location.hostname : '',
+}: {
+  envUrl?: string;
+  origin?: string;
+  host?: string;
+} = {}): string {
   const normalizedEnvUrl = envUrl?.trim();
 
   // 🎯 LOCAL DEVELOPMENT: rota pelo proxy Vite → VITE_DEV_PROXY_TARGET (default: produção).
@@ -30,9 +34,9 @@ function resolveApiBase(): string {
 
   if (normalizedEnvUrl && normalizedEnvUrl.length > 0) return normalizedEnvUrl;
 
-  // 🎯 STAGING: main.airtrust.pages.dev → staging API (zero cache)
-  if (host === 'main.airtrust.pages.dev') {
-    return 'https://airtrust-api-staging.airtrust.workers.dev/api';
+  // 🎯 STAGING: Pages previews must never use the production API.
+  if (host === 'staging.airtrust.pages.dev' || host === 'main.airtrust.pages.dev') {
+    return STAGING_API_BASE_URL;
   }
 
   // 🚀 PRODUCTION: usar o dominio canonico da API
@@ -82,7 +86,9 @@ function safeLocalStorageRemove(key: string): void {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(key);
     }
-  } catch {}
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
 }
 
 function safeSessionStorageGet(key: string): string | null {
@@ -108,7 +114,9 @@ function safeSessionStorageRemove(key: string): void {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(key);
     }
-  } catch {}
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
 }
 
 function readPersistLoginPreference(): boolean {
@@ -457,10 +465,9 @@ export async function refreshAccessToken(): Promise<void> {
     if (error instanceof AuthRefreshError) {
       throw error;
     }
-    throw new AuthRefreshError(
-      error instanceof Error ? error.message : 'Refresh token failed',
-      { terminal: false },
-    );
+    throw new AuthRefreshError(error instanceof Error ? error.message : 'Refresh token failed', {
+      terminal: false,
+    });
   }
 }
 
