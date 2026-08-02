@@ -1,4 +1,5 @@
-import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import {
   Plane,
   FileText,
@@ -19,6 +20,7 @@ import { formatTime, formatDate } from './data/controleVoosUtils';
 import ControleVoosDateControls from './components/ControleVoosDateControls';
 import { useControleVoosDate } from './hooks/useControleVoosDate';
 import EdbShadowPrototypeWithAssessment from './EdbShadowPrototypeWithAssessment';
+import { isEdbShadowPilotEnabled } from '@/react-app/config/edbShadowPilot';
 
 const DEMO_LINK_BADGE_CLASS =
   'rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300';
@@ -33,7 +35,7 @@ function AlertIcon({ gravidade }: { gravidade: 'critico' | 'alerta' | 'info' }) 
   return <span className="mt-1.5 flex h-2 w-2 shrink-0 rounded-full bg-blue-500" />;
 }
 
-function ControleVoosDashboardContent() {
+function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: boolean }) {
   const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
   const { data: dashboard, isLoading, error } = useControleVoosDashboard(selectedDate);
 
@@ -183,12 +185,16 @@ function ControleVoosDashboardContent() {
                     label: 'Indisponibilidades',
                     preview: true,
                   },
-                  {
-                    to: '/controle-voos?edb-shadow=1',
-                    icon: <BookOpenCheck className="h-5 w-5 text-red-600" />,
-                    label: 'Protótipo eDB Shadow',
-                    preview: true,
-                  },
+                  ...(edbShadowEnabled
+                    ? [
+                        {
+                          to: '/controle-voos?edb-shadow=1',
+                          icon: <BookOpenCheck className="h-5 w-5 text-red-600" />,
+                          label: 'Protótipo eDB Shadow',
+                          preview: true,
+                        },
+                      ]
+                    : []),
                 ].map((link) => (
                   <Link
                     key={link.to}
@@ -341,8 +347,26 @@ function ControleVoosDashboardContent() {
 
 export default function ControleVoosDashboard() {
   const [searchParams] = useSearchParams();
+  const [edbShadowEnabled, setEdbShadowEnabled] = useState(false);
+  const [capabilityResolved, setCapabilityResolved] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void isEdbShadowPilotEnabled(true).then((enabled) => {
+      if (!active) return;
+      setEdbShadowEnabled(enabled);
+      setCapabilityResolved(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   if (searchParams.get('edb-shadow') === '1') {
+    if (!capabilityResolved) return null;
+    if (!edbShadowEnabled) return <Navigate to="/controle-voos" replace />;
     return <EdbShadowPrototypeWithAssessment />;
   }
-  return <ControleVoosDashboardContent />;
+
+  return <ControleVoosDashboardContent edbShadowEnabled={edbShadowEnabled} />;
 }
