@@ -63,7 +63,10 @@ describe('resilient scheduled router', () => {
       'utf8',
     );
 
-    expect(entrypoint).toContain('runResilientScheduledJobs(event, env, ctx, options.onScheduled)');
+    expect(entrypoint).toContain('runResilientScheduledJobs(event, env, ctx, (legacyEvent');
+    expect(entrypoint).toContain(
+      'options.onScheduled(legacyEvent, legacyEnv, legacyCtx, jobContext)',
+    );
     expect(router).toContain("const LEGACY_DELEGATED_CRON = '__airtrust_resilient_delegated__'");
     expect(router).toContain('Schema resiliente ausente; usando handler legado');
     expect(router).toContain('logCronHealthSnapshot(env.DB, logger, now)');
