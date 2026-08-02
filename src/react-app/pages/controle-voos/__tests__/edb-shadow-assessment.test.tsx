@@ -122,4 +122,16 @@ describe('integração visual da avaliação shadow', () => {
     expect(screen.queryByText(/SQL secret/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/empresa_id/i)).not.toBeInTheDocument();
   });
+
+  it('falha fechado quando o contrato da avaliação é incompatível', async () => {
+    const malformed = assessmentPayload();
+    Object.assign(malformed.data.divergence, { recommendation: 'launch' });
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce(response(malformed));
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText(/avaliação preliminar indisponível/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/launch/i)).not.toBeInTheDocument();
+  });
 });
