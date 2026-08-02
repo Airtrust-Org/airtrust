@@ -5,7 +5,7 @@ on:
     paths: ['**/*']
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   lint:
@@ -13,12 +13,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
           cache: npm
       - run: npm ci
-      - name: Print focused Prettier diff
+      - name: Format focused eDB files
         run: |
           npx --yes prettier@3.9.6 --write -- \
             worker-airtrust/src/__tests__/routes/edb-shadow-preview.test.ts \
@@ -26,10 +28,15 @@ jobs:
             worker-airtrust/src/routes/edb-shadow-preview.ts \
             worker-airtrust/src/routes/system.ts \
             worker-airtrust/src/services/edb/control-flight-shadow-preview.ts
-          git diff -- \
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- \
             worker-airtrust/src/__tests__/routes/edb-shadow-preview.test.ts \
             worker-airtrust/src/__tests__/services/edb-control-flight-shadow-preview.test.ts \
             worker-airtrust/src/routes/edb-shadow-preview.ts \
             worker-airtrust/src/routes/system.ts \
             worker-airtrust/src/services/edb/control-flight-shadow-preview.ts
-          exit 1
+          if ! git diff --cached --quiet; then
+            git commit -m "style(edb): apply canonical Prettier formatting"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
