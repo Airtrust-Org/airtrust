@@ -1,9 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { resolveE2EBaseUrl } from './e2e/config/resolve-base-url';
+
 /**
  * Configuração Playwright - AirTrust E2E Tests
  *
- * Testes automatizados completos de todos os modais e operações CRUD
+ * Testes automatizados completos de todos os modais e operações CRUD.
+ * Sem BASE_URL explícita, os testes apontam apenas para o servidor local.
+ * Produção exige também E2E_ALLOW_PRODUCTION=true.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -20,7 +24,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: process.env.BASE_URL || 'https://production.airtrust.pages.dev',
+    baseURL: resolveE2EBaseUrl(),
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
