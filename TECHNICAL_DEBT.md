@@ -1,390 +1,137 @@
-# AirTrust — Inventário de Dívida Técnica
+# AirTrust — Dívida Técnica e Riscos Residuais
 
-> **Versão do documento:** 1.1 | **Data:** 2026-07-14 | **HEAD:** `6d4fe1e8d`
+> **Snapshot:** 2026-08-02 (BRT)  
+> **Base verificada:** `ecf1c6106336fa177d9c6e215c1592c91ed85699` (`main`)  
+> **Repositório:** `airtrustsystem-alt/airtrust`  
+> **Uso:** fonte interna do Projeto AirTrust. O código, os contratos de schema e os workflows versionados prevalecem em caso de divergência.
 
----
+Este documento registra somente riscos residuais e decisões operacionais ainda válidas. Inventários antigos que misturavam itens resolvidos, hipóteses e código morto não devem ser usados como instrução de mudança sem nova verificação no `origin/main`.
 
-## Sumário
+## 1. Prioridade alta
 
-1. [Visão Geral](#1-visão-geral)
-2. [Erros TypeScript no Worker](#2-erros-typescript-no-worker)
-3. [Migrations com Número Duplicado](#3-migrations-com-número-duplicado)
-4. [Código Morto e Artefatos](#4-código-morto-e-artefatos)
-5. [Problemas de Configuração](#5-problemas-de-configuração)
-6. [Problemas de Build](#6-problemas-de-build)
-7. [Problemas de RBAC](#7-problemas-de-rbac)
-8. [Problemas de Auditoria e Dados](#8-problemas-de-auditoria-e-dados)
-9. [Bugs Latentes](#9-bugs-latentes)
-10. [Arquivos Não Comitados](#10-arquivos-não-comitados)
-11. [Matriz de Risco](#11-matriz-de-risco)
+### Rotas monolíticas
 
----
+LMS e Treinamentos Planejados ainda concentram SQL, validação e regra. A extração deve ser incremental, preservando contrato HTTP e testes.
 
-## 1. Visão Geral
+### Frontend duplicado
 
-Este documento cataloga toda a dívida técnica identificada no código do AirTrust
-em 2026-06-12. Os itens são classificados por severidade e risco de runtime.
+A SPA canônica convive com componentes em `src/components/**`. Exclusão prematura quebra imports via `@/`.
 
-### Resumo
+### Schema drift em fixtures
 
-| Categoria | Count | Severidade Máxima |
-|---|---|---|
-| Erros TypeScript | 20 | 🟡 MÉDIO |
-| Migrations duplicadas | 30 números | 🟡 MÉDIO |
-| Código morto | 2 | 🟢 BAIXO |
-| Problemas de config | 2 | 🔴 CRÍTICO |
-| Drift de schema | 2 | 🔴 CRÍTICO |
-| Problemas de build | 2 | 🟢 BAIXO |
-| Problemas de RBAC | 1 | 🟡 MÉDIO |
-| Problemas de auditoria | 2 | 🟡 MÉDIO |
-| Bugs latentes | 2 | 🔴 CRÍTICO |
-| Arquivos não comitados | 37 | 🟡 MÉDIO |
+Alguns bancos locais e smoke usam subconjuntos de migrations. Código defensivo e scripts de setup podem mascarar divergência. O contrato de schema deve ser a referência.
 
----
+### Histórico de migrations
 
-## 2. Erros TypeScript no Worker
+Há legado de prefixos duplicados e migrations antigas incompatíveis com práticas atuais. Não “limpar” retroativamente sem plano; usar Schema V2 e ledger.
 
-### 2.1 lms-matriculas.ts — 6 erros TS2552
+## 2. RBAC e multitenancy
 
-**Severidade**: 🟡 MÉDIO | **Risco de runtime**: 🟡 MÉDIO
+Riscos a acompanhar:
 
-```
-TS2552: Cannot find name 'dataExpiracao'. Did you mean 'data_expiracao'?
-```
+- ativação por tenant ainda exige classificação completa;
+- novos recursos podem nascer sem `dominio_codigo`;
+- qualquer rota nova pode esquecer read-side filtering;
+- fluxos de instrutor e aluno precisam de testes próprios;
+- mudanças em autenticação, role ou tenant devem preservar os guards já integrados.
 
-| Linha | Contexto |
-|---|---|
-| 765 | `sendMatriculaEmail` — ciclo reset path |
-| 824 | `sendMatriculaEmail` — new matricula path |
-| 890 | `sendMatriculaEmail` — existing matricula path |
-| 1005 | `sendMatriculaEmail` — batch: existing matricula with cycle |
-| 1061 | `sendMatriculaEmail` — batch: new matricula |
-| 1139 | `sendMatriculaEmail` — batch: concurrent update |
+## 3. Qualificações, EAD e certificados
 
-**Causa raiz**: Zod destructuring produz `data_expiracao` (snake_case), mas o código
-referencia `dataExpiracao` (camelCase).
+- dados históricos podem conter categoria textual e FK divergentes;
+- categoria inativa pode quebrar joins;
+- reconciliação deve ser executada e verificada, não apenas codificada;
+- certificado, ciclo e validade precisam permanecer sincronizados.
 
-**Impacto**: `dataExpiracao` seria `undefined` → emails de matrícula podem ser enviados
-sem data de expiração correta.
+### Validação pública de certificados
 
-**Solução**: Renomear variável no destructuring ou nas chamadas.
+`GET /api/certificados/validar/:hash` continua calculando o hash contra até 1.000 certificados carregados por uma consulta com múltiplos JOINs. A proteção por IP reduz abuso e custo acidental, mas não elimina a dívida estrutural.
 
----
+Próxima evolução correta:
 
-### 2.2 lms-relatorios.ts — Erros de import
+1. persistir o hash de validação em coluna própria;
+2. criar índice para lookup direto;
+3. executar backfill governado e verificável;
+4. substituir a varredura e o cálculo sequencial por consulta única;
+5. preservar compatibilidade com certificados já emitidos.
 
-**Severidade**: 🟡 MÉDIO | **Risco de runtime**: 🟢 BAIXO
+Essa evolução exige desenho de schema, migration/Schema V2, backfill, rollback e validação em staging. Não deve ser improvisada dentro de um hotfix de rate limit.
 
-O arquivo `lms-relatorios.ts` faz imports de módulos que podem não existir em todos
-os ambientes. Os relatórios são delegados para `repositories/lmsRelatoriosRepository.ts`.
+## 4. Infraestrutura e custo Cloudflare
 
----
+### Cron de dez minutos é funcional, não código morto
 
-### 2.3 setores-gestores.ts — Auditoria incompleta
+O trigger `*/10 * * * *` executa o dispatcher resiliente e aciona, entre outros fluxos, `runEadRenewalJob` e `runSigvoosFrmsJobs`. As rotas EdApp que retornam 410 não representam o comportamento do cron.
 
-**Severidade**: 🟢 BAIXO | **Risco de runtime**: 🟢 BAIXO
+Regras:
 
-Usa `dados_antigos` em vez de `dados_anteriores` para auditoria. Convenção de
-nomenclatura inconsistente — não quebra funcionalidade mas dificulta manutenção.
+- não remover o cron como “no-op”;
+- não usar inventários antigos que o associavam exclusivamente ao EdApp;
+- qualquer redução de cadência do EAD deve preservar a frequência necessária de SIGVOOS/FRMS;
+- alterar cadência somente com requisito operacional, métricas e teste do plano de execução.
 
----
+### Retenção de backups no R2
 
-### 2.4 qualificacoes-historico-ficha.ts:416 — Argumentos incorretos
+O código registra `retention_policy` e `expires_at`, mas não há purga versionada confirmada para os objetos de backup. Uma regra de lifecycle pode existir diretamente na Cloudflare e não aparecer no repositório.
 
-**Severidade**: 🔴 CRÍTICO | **Risco de runtime**: 🔴 CRÍTICO
+Antes de implementar exclusão:
 
-Chamada de função com 5 argumentos onde a assinatura espera 6. O argumento faltante
-pode causar comportamento incorreto ou erro em runtime.
+1. verificar a configuração remota do bucket em cada ambiente;
+2. inventariar os dois padrões de prefixo usados por backups;
+3. validar retenções de 30 dias, 1 ano e 7 anos;
+4. executar dry-run e exclusão paginada em staging;
+5. preservar manifests, checksums e capacidade de restore.
 
----
+A ausência de código não autoriza apagar objetos sem essa verificação.
 
-### 2.5 backup/orchestrator.ts — TypeError latente ✅ RESOLVIDO
+### Assets LMS
 
-**Resolvido em**: commit `da5177af` (2026-06-14)
+Rotas de assets SCORM, H5P e PPTX constam na allowlist global, mas exigem tokens/cookies de escopo e validam curso, matrícula, empresa e permissão antes da leitura do R2.
 
-O campo `uploaded` do R2 era passado diretamente para `.toISOString()`. Corrigido via
-`formatarUploadedAt()` que trata `Date`, string e unknown de forma segura.
-Digest placeholder `sha256-${uuid}-${Date.now()}` também substituído por SHA-256 real
-via `crypto.subtle.digest`. Teste unitário adicionado em
-`worker-airtrust/src/__tests__/services/backup-orchestrator.test.ts`.
+Não aplicar o rate limiter D1 a cada arquivo estático: um único curso pode carregar dezenas ou centenas de assets, gerando escrita D1 por arquivo e bloqueando uso legítimo. Para controle adicional de volume, preferir regras de edge/Cloudflare e limitar emissão de sessão, launch ou token.
 
-**Mitigação complementar em 2026-06-14**: restore drill local adicionado para
-verificar `checksum-manifest.json`, SHA-256/tamanho/presença de artefatos e falhas
-por corrupção/ausência/tamanho divergente, sem tocar produção ou D1 real. Ver
-`docs/BACKUP_RESTORE_DRILL.md` e
-`worker-airtrust/src/__tests__/services/backup-restore-drill.test.ts`.
+### `LIKE` com wildcard à esquerda
 
-**Limite remanescente**: ainda não é evidência regulatória completa; falta restore
-em staging descartável com verificação de domínio, `record_hash`, `manifest_hash` e
-chain quando Records Core existir.
+Filtros de cargo em rotas de escala usam padrões como `LIKE '%comandante%'`. O impacto atual é baixo para rosters pequenos, mas cresce linearmente com o headcount. Monitorar antes de normalizar campos ou criar estratégia indexável.
 
----
+### Worker único
 
-### 2.6 Outros erros TypeScript (7 adicionais)
+O Worker permanece monolítico. Isso não é dívida por si só. Separação só deve ocorrer quando métricas de bundle, cold start, ownership ou deploy justificarem a complexidade operacional adicional.
 
-| Arquivo | Erro | Linha |
-|---|---|---|
-| `treinamentos-planejados.ts` | TS2339: Property does not exist | — |
-| `notificacoes-convocacao.ts` | TS2345: Argument type mismatch | — |
-| `QualificacaoHistoricoImportacao` | TS2322: Type assignment error | — |
-| Demais rotas | Erros de tipo diversos | — |
+## 5. Simuladores
 
----
+- código físico/versionado versus código canônico;
+- modelos históricos e atuais convivem;
+- FAP/IFR e `gera_qualificacao` dependem de matriz correta;
+- PDFs e fichas oficiais exigem revisão antes de trocar código exibido;
+- multi-participante amplia complexidade de autorização.
 
-## 3. Migrations com Número Duplicado
+## 6. Observabilidade
 
-### 3.1 Duplicatas confirmadas
+A proveniência melhorou, mas deve ser usada consistentemente em diagnósticos. Health check sozinho não comprova correção de fluxo ou dados.
 
-| Número | Arquivo A | Arquivo B |
-|---|---|---|
-| **0332** | `0332_create_audit_logs_compatible.sql` | `0332_normalize_edapp_historical_renewals.sql` |
-| **0347** | `0347_lms_cursos_content_filename.sql` | `0347_lms_edapp_tenant_indexes.sql` |
-| **0367** | `0367_classificar_dificuldade_sk76_restantes.sql` | `0367_sk76_reaquisicao_experiencia_recente.sql` |
+## 7. Documentação
 
-### 3.2 Escala real
+Fontes de projeto ficam desatualizadas quando não estão ligadas a um SHA. Toda orientação operacional deve ser reconfirmada contra código, schema e workflows atuais antes de remoção de funcionalidade, migration ou mudança de infraestrutura.
 
-**30 números** apresentam duplicatas no diretório de migrations. A ordem de aplicação
-é determinada **alfabeticamente** pelo nome do arquivo, não pelo número.
+## 8. Estratégia recomendada
 
-### 3.3 Risco
+- correções pequenas e cirúrgicas;
+- uma PR por objetivo;
+- teste focado, suíte afetada e CI existente;
+- staging real quando houver infraestrutura, migration ou dados;
+- registrar dívida lateral sem ampliar hotfix;
+- atualizar fontes após marcos relevantes, não diariamente;
+- confirmar configuração remota antes de concluir que um recurso Cloudflare está órfão ou sem lifecycle.
 
-| Risco | Probabilidade | Impacto |
-|---|---|---|
-| Migration B dependente de A com mesmo número aplicada em ordem errada | 🟢 BAIXA (atualmente sem dependências cruzadas) | 🔴 ALTO (migration falha) |
-| Confusão na manutenção (qual arquivo editar?) | 🟡 MÉDIA | 🟡 MÉDIO |
-| Duplicatas futuras com dependências | 🟡 MÉDIA | 🔴 ALTO |
+## 9. Itens que não são dívida por si só
 
----
+- compatibilidade legada documentada;
+- tabelas compartilhadas sem `empresa_id` quando o contrato assim define;
+- guards rigorosos;
+- processo de aprovação de produção;
+- retenção de histórico;
+- allowlist pública acompanhada de autenticação própria por token;
+- nome histórico do banco de staging;
+- Worker monolítico.
 
-## 4. Código Morto e Artefatos
-
-### 4.1 edappRouter importado mas não montado
-
-**Severidade**: 🟢 BAIXO
-
-No `index.ts`:
-```typescript
-import { edappRouter } from './routes/integracoes_edapp';
-```
-
-Este router NUNCA é montado via `app.route()`. Todo o prefixo `/api/integracoes/edapp`
-é capturado por handlers 410 antes de chegar ao router.
-
-**Impacto**: Código morto. Ocupa ~1142 linhas no bundle.
-
-**Solução**: Remover o import e o arquivo `routes/integracoes_edapp.ts` após completar
-a migração de dados históricos.
-
-### 4.2 Cron EdApp reconciliation
-
-**Severidade**: 🟢 BAIXO
-
-O cron `*/10 * * * *` ainda está configurado no dashboard Cloudflare mas executa um
-no-op (a integração EdApp retorna 410).
-
-**Impacto**: Desperdício mínimo de recursos (executa a cada 10 minutos mas retorna
-imediatamente).
-
----
-
-## 5. Problemas de Configuração
-
-### 5.1 Vite proxy para produção por padrão
-
-**Severidade**: 🔴 CRÍTICO
-
-Em `vite.config.ts`:
-```typescript
-const apiUrl = env.VITE_API_URL || (mode === 'development' ? '' : 'https://api.airtrust.online/api');
-const devProxyTarget = env.VITE_DEV_PROXY_TARGET || 'http://localhost:8787';
-```
-
-Se `VITE_DEV_PROXY_TARGET` for definido como `https://api.airtrust.online/api` no
-`.env.local`, TODAS as requisições de dev vão para produção com credenciais reais.
-
-**Mitigação parcial**: Console warning quando o target contém `airtrust.online`.
-Mas não bloqueia.
-
-**Solução**: Adicionar confirmação interativa ou bloqueio hard em dev.
-
-### 5.2 .env.local não versionado mas pode conter alvo de produção
-
-**Severidade**: 🔴 CRÍTICO
-
-`.env.local` está no `.gitignore` mas não há validação de que as variáveis não
-apontam para produção. Um desenvolvedor pode acidentalmente configurar o proxy
-para produção e fazer alterações não intencionais.
-
-### 5.3 SCHEMA-DRIFT-001 — Drift entre produção, ledger e documentação
-
-**Severidade**: 🔴 CRÍTICO
-
-Produção auditada em 2026-07-14 diverge materialmente de `d1_migrations` e da documentação:
-
-- `0408`, `0410`, `0411`, `0412`, `0415`, `0420`, `0425` e `0428` aparecem aplicadas fora do ledger;
-- `0429` está parcialmente aplicada fora do ledger;
-- `simuladores` não possui `empresa_id`;
-- `sessoes_participantes` não possui `empresa_id`;
-- `modelos_sessao` usa `tipo_sessao_id`, não `tipo_sessao_codigo`.
-
-Mitigação adotada:
-- baseline formal versionado;
-- contrato de schema V2;
-- freeze de migrations históricas em produção.
-
-### 5.4 SCHEMA-LEDGER-V2-001 — Governança V2 ainda depende de disciplina operacional
-
-**Severidade**: 🟡 MÉDIO
-
-O ledger V2 resolve o replay cego do chain histórico, mas depende de:
-
-- hashes corretos de arquivo e plano;
-- execução de um único arquivo por vez;
-- validação obrigatória do contrato antes e depois da aplicação.
-
-Sem esse fluxo, o projeto volta a acumular drift fora de governança.
-
----
-
-## 6. Problemas de Build
-
-### 6.1 Duplicatas no dist/
-
-**Severidade**: 🟢 BAIXO
-
-O build produz duplicatas ocasionais:
-- `forms*.js` (2 cópias)
-- `capture*.js` (2 cópias)
-
-O script `remove-duplicate-build-assets.sh` faz a limpeza pós-build.
-
-**Causa**: Comportamento do Vite/Rollup em algumas configurações de chunks manuais.
-
----
-
-## 7. Problemas de RBAC
-
-### 7.1 instrutor = manager (over-provisioning)
-
-**Severidade**: 🟡 MÉDIO
-
-No mapeamento de roles:
-```typescript
-function normalizeRuntimeRole(role: unknown): string {
-  const normalized = normalizeAirtrustRole(role);
-  if (normalized === 'COMPLIANCE') return 'GESTOR';
-  if (normalized === 'EDITOR') return 'USUARIO';
-  return normalized;
-}
-```
-
-E no tenant middleware:
-```typescript
-// instrutor é mapeado para 'manager' (nível 80)
-case 'instrutor': case 'instructor': return 'INSTRUTOR';
-const ROLE_HIERARCHY = { ..., instructor: 60, ... };
-```
-
-Mas a função `normalizeRuntimeRole` mapeia `INSTRUTOR` para... precisa verificar.
-Se `INSTRUTOR` fica como `INSTRUTOR` (nível 60), está correto. Se é overridden para
-`GESTOR` (nível 80), há over-provisioning.
-
-**Impacto**: Instrutores podem ter acesso a funcionalidades de gestor que não deveriam.
-
----
-
-## 8. Problemas de Auditoria e Dados
-
-### 8.1 setores-gestores usa `dados_antigos` vs `dados_anteriores`
-
-**Severidade**: 🟢 BAIXO
-
-Inconsistência de nomenclatura em campos de auditoria. Não afeta funcionalidade,
-mas dificulta queries de auditoria cross-módulo.
-
-### 8.2 Rotas de manutenção sem auth explícita
-
-**Severidade**: 🟡 MÉDIO
-
-Rotas em `isPublicPath` que dependem apenas de `MAINTENANCE_SECRET`:
-- `POST /api/integracoes/sigvoos/maintenance/sincronizar-frms`
-- `POST /api/frms/maintenance/reprocessar-lote`
-- `POST /api/frms/maintenance/reprocessar-faixa`
-
-Se `MAINTENANCE_SECRET` vazar, essas rotas podem ser abusadas sem qualquer outra
-proteção.
-
-**Mitigação**: Timing-safe comparison do secret.
-
----
-
-## 9. Bugs Latentes
-
-### 9.1 backup/orchestrator.ts — TypeError + digest placeholder ✅ RESOLVIDO
-
-**Resolvido em**: commit `da5177af` (2026-06-14)
-
-Ambos os bugs corrigidos: `formatarUploadedAt` trata `Date`/string/unknown; digest
-usa SHA-256 real via Web Crypto API. Ver §2.5 e teste em
-`worker-airtrust/src/__tests__/services/backup-orchestrator.test.ts`.
-
-### 9.2 qualificacoes-historico-ficha.ts:416 — 5 args para função de 6
-
-**Severidade**: 🔴 CRÍTICO | **Risco de runtime**: 🔴 CRÍTICO
-
-Argumento faltante pode ser opcional no runtime mas a assinatura TypeScript exige 6.
-Erro de compilação que pode mascarar comportamento incorreto.
-
----
-
-## 10. Arquivos Não Comitados
-
-### 10.1 HEAD atual: `5be104893`
-
-37 arquivos com alterações não commitadas (ver `git status`):
-
-| Arquivo | Tipo |
-|---|---|
-| `docs/AIRTRUST_SECTOR_ACCESS_AUDIT_20260612.md` | Novo (untracked) |
-| `worker-airtrust/migrations/0406_sector_manager_access_control.sql` | Novo (untracked) |
-| `worker-airtrust/src/routes/relatorios.ts` | Novo (untracked) |
-
----
-
-## 11. Matriz de Risco
-
-| Item | Probabilidade | Impacto | Risco | Ação |
-|---|---|---|---|---|
-| Vite proxy → produção | 🟡 MÉDIA | 🔴 CRÍTICO | 🔴 CRÍTICO | Bloquear em dev |
-| `.toISOString()` em string | ✅ RESOLVIDO | — | — | Corrigido em da5177af |
-| 5 args → função de 6 | 🟡 MÉDIA | 🔴 CRÍTICO | 🔴 CRÍTICO | Corrigir imediatamente |
-| Migrations duplicadas (30) | 🟢 BAIXA | 🔴 ALTO | 🟡 MÉDIO | Renumber quando seguro |
-| Erros TS lms-matriculas (6) | 🟡 MÉDIA | 🟡 MÉDIO | 🟡 MÉDIO | Corrigir camelCase |
-| Rotas manutenção sem auth | 🟢 BAIXA | 🟡 MÉDIO | 🟢 BAIXO | Adicionar auth |
-| instrutor = manager RBAC | 🟡 MÉDIA | 🟡 MÉDIO | 🟡 MÉDIO | Revisar hierarquia |
-| Código morto EdApp | 🟢 BAIXA | 🟢 BAIXO | 🟢 BAIXO | Limpar após migração |
-| Duplicatas no dist/ | 🟡 MÉDIA | 🟢 BAIXO | 🟢 BAIXO | Investigar causa |
-| Auditoria inconsistente | 🟢 BAIXA | 🟢 BAIXO | 🟢 BAIXO | Padronizar naming |
-
----
-
-## Apêndice: Recomendações de Curto Prazo (Sprint Atual)
-
-### 🔴 Bloqueantes (corrigir antes do próximo deploy)
-
-1. ~~**backup/orchestrator.ts:318** — Remover `.toISOString()` em string~~ ✅ RESOLVIDO em da5177af
-2. **qualificacoes-historico-ficha.ts:416** — Corrigir número de argumentos
-3. **Vite proxy warning** — Adicionar bloqueio hard quando target aponta para produção
-
-### 🟡 Importantes (planejar para o próximo sprint)
-
-4. **lms-matriculas.ts** — Corrigir 6 erros `dataExpiracao` → `data_expiracao`
-5. **Migrations duplicadas** — Plano de renumber para as 30 duplicatas
-6. **Rotas de manutenção** — Adicionar fallback auth ou token dedicado
-
-### 🟢 Desejáveis (backlog)
-
-7. **EdApp cleanup** — Remover código morto após migração de dados
-8. **RBAC review** — Auditar permissões efetivas de cada role
-9. **Auditoria naming** — Padronizar `dados_antigos` → `dados_anteriores`
-10. **Build duplicates** — Investigar causa raiz no Vite/Rollup
+Só são dívida quando geram duplicação, ambiguidade, custo material comprovado ou impedem evolução segura.

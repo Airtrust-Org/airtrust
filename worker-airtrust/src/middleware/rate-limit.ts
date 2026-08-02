@@ -47,7 +47,10 @@ async function getRateLimitCountD1(
 
   // Limpeza probabilística: 2% das requisições purga entradas expiradas
   if (Math.random() < 0.02) {
-    db.prepare(`DELETE FROM rate_limit_store WHERE reset_at < ?`).bind(now).run().catch(() => {});
+    db.prepare(`DELETE FROM rate_limit_store WHERE reset_at < ?`)
+      .bind(now)
+      .run()
+      .catch(() => {});
   }
 
   const result = await db
@@ -136,9 +139,14 @@ export function rateLimiter(config: RateLimitConfig): MiddlewareHandler<{ Bindin
 }
 
 export const rateLimitPresets = {
-  login:   { maxRequests: 5,   windowSeconds: 60,  keyPrefix: 'login' },
-  api:     { maxRequests: 100, windowSeconds: 60,  keyPrefix: 'api' },
-  webhook: { maxRequests: 30,  windowSeconds: 60,  keyPrefix: 'webhook' },
-  upload:  { maxRequests: 10,  windowSeconds: 60,  keyPrefix: 'upload' },
-  export:  { maxRequests: 5,   windowSeconds: 60,  keyPrefix: 'export' },
+  login: { maxRequests: 5, windowSeconds: 60, keyPrefix: 'login' },
+  api: { maxRequests: 100, windowSeconds: 60, keyPrefix: 'api' },
+  webhook: { maxRequests: 30, windowSeconds: 60, keyPrefix: 'webhook' },
+  upload: { maxRequests: 10, windowSeconds: 60, keyPrefix: 'upload' },
+  export: { maxRequests: 5, windowSeconds: 60, keyPrefix: 'export' },
+  certificateValidation: {
+    maxRequests: 20,
+    windowSeconds: 60,
+    keyPrefix: 'certificate-validation',
+  },
 } as const;

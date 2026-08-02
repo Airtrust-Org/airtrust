@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { rateLimiter, rateLimitPresets } from '../../middleware/rate-limit';
 import type { Env } from '../../types';
 import { calcularDataVencimento } from '../../utils/qualificacoes-expiration';
 
@@ -60,7 +61,7 @@ function resolveCargaHorariaCertificado(params: {
  * Endpoint PÚBLICO (sem autenticação) para validar certificados
  * Retorna JSON com dados do certificado validado
  */
-validacao.get('/:hash', async (c) => {
+validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), async (c) => {
   const { hash } = c.req.param();
   const db = c.env.DB;
 
