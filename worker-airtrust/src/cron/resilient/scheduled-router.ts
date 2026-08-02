@@ -59,6 +59,17 @@ function isMissingCronStateSchema(error: unknown): boolean {
   );
 }
 
+export function buildCronStateSchemaProbeQuery(): string {
+  return `SELECT
+            EXISTS(SELECT 1 FROM cron_job_state LIMIT 1) AS state_available,
+            EXISTS(SELECT 1 FROM cron_job_items LIMIT 1) AS items_available,
+            EXISTS(SELECT 1 FROM cron_job_runs LIMIT 1) AS runs_available`;
+}
+
+async function assertCronStateSchemaAvailable(db: D1Database): Promise<void> {
+  await db.prepare(buildCronStateSchemaProbeQuery()).first();
+}
+
 export async function runResilientScheduledJobs(
   event: ScheduledEvent,
   env: Env,
@@ -75,6 +86,9 @@ export async function runResilientScheduledJobs(
   }
 
   try {
+    // O fallback precisa ser decidido antes de alertas, e-mails ou qualquer outro efeito colateral.
+    await assertCronStateSchemaAvailable(env.DB);
+
     if (plan.runDailyAlerts) {
       await alertasDiariosHandler(event, env);
     }
