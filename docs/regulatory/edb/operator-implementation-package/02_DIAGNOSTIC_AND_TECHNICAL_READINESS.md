@@ -1,306 +1,585 @@
 # Modelos — diagnóstico e prontidão técnica
 
-> **Uso:** aplicar ao operador real em ambiente documental controlado.  
+> **Uso:** aplicar ao operador real em ambiente documental controlado.
+>
 > **Restrição:** não inserir dados reais em cópias públicas deste modelo.
 
 ## 1. Questionário de diagnóstico
 
-### 1.1 Operador e governança
+### 1.1 Identificação do levantamento
 
-1. Qual é a razão social, designador, número do COA e estrutura de responsabilidades aplicável?
-2. Quem são o gestor responsável, Diretor de Operações, Diretor de Manutenção, GSO, TI, segurança da informação, treinamento e compliance?
-3. Quem será o patrocinador e quem poderá aceitar cada gate do projeto?
-4. Quais unidades, bases e organizações terceiras participarão?
-5. Quais processos dependem hoje do Diário de Bordo em papel?
-6. Quais riscos de mudança já foram identificados no SGSO?
-7. Há projetos paralelos que alterem frota, manuais, SIGVOOS, manutenção, EFB/PED ou infraestrutura?
+- Operador: `[OPERADOR]`
+- Responsável pelas respostas: `[NOME/FUNÇÃO]`
+- Entrevistadores: `[NOMES/FUNÇÕES]`
+- Período: `[DATA INICIAL/DATA FINAL]`
+- Versão: `[VERSÃO]`
+- Documentos de apoio: `[REFERÊNCIAS]`
+- Pendências de informação: `[LISTA]`
 
-### 1.2 Frota e bases
+### 1.2 Operador e governança
 
-1. Quais modelos, números de série e matrículas existem?
-2. Quais aeronaves são candidatas ao diagnóstico, shadow e futuro cutover?
-3. Quais aeronaves possuem particularidades de operação, manutenção ou conectividade?
-4. Quais bases são principais, remotas, offshore ou com conectividade limitada?
-5. Onde ficam os volumes em papel e como são movimentados?
-6. Existem aeronaves arrendadas, compartilhadas, transferidas ou em manutenção prolongada?
-7. Como são tratados mudança de marcas, proprietário e operador?
+- Qual é a razão social, o designador, o número do COA e a estrutura de responsabilidades
+  aplicável?
+- Quem são o gestor responsável, Diretor de Operações, Diretor de Manutenção, GSO, TI,
+  segurança da informação, treinamento e compliance?
+- Quem será o patrocinador e quem poderá aceitar cada gate do projeto?
+- Quais unidades, bases e organizações terceiras participarão?
+- Quais processos dependem hoje do Diário de Bordo em papel?
+- Quais riscos de mudança já foram identificados no SGSO?
+- Existem projetos paralelos que alterem frota, manuais, SIGVOOS, manutenção, EFB/PED ou
+  infraestrutura?
+- Quais fóruns internos aprovam mudança, risco, treinamento, manual, dispositivo e cutover?
 
-### 1.3 Processo atual em papel
+### 1.3 Frota e bases
 
-1. Quem abre, preenche, revisa, assina, contrassina, guarda e encerra volumes?
-2. Em que momento cada campo é preenchido?
-3. Como são tratadas múltiplas etapas, troca de tripulação e jornada atravessando meia-noite?
-4. Como são registradas correções, rasuras, addenda e reconstituições?
-5. Como são controlados saldos de horas, ciclos e pousos?
-6. Como são registradas discrepâncias, ações corretivas, ações retardadas e retorno ao serviço?
-7. Como o PIC toma ciência da situação técnica?
-8. Como é atendida uma fiscalização?
-9. Como são tratados perda, dano, indisponibilidade e reconstrução de volume?
-10. Quais divergências recorrentes já existem no processo em papel?
+- Quais modelos, números de série e matrículas existem?
+- Quais aeronaves são candidatas ao diagnóstico, shadow e futuro cutover?
+- Quais aeronaves possuem particularidades de operação, manutenção ou conectividade?
+- Quais bases são principais, remotas, offshore ou possuem conectividade limitada?
+- Onde ficam os volumes em papel e como são movimentados?
+- Existem aeronaves arrendadas, compartilhadas, transferidas ou em manutenção prolongada?
+- Como são tratadas mudanças de marcas, proprietário e operador?
+- Quais aeronaves possuem saldos, volumes ou situações técnicas que exigem reconciliação
+  especial?
 
-### 1.4 SIGVOOS, Controle de Voos e AirTrust
+### 1.4 Processo atual em papel
 
-1. Quais dados entram por integração, importação ou digitação manual?
-2. Qual sistema é fonte para cada campo?
-3. Como são identificadas procedência, horário de coleta, unidade e timezone?
-4. Existem conflitos entre SIGVOOS, RDV, coordenação e papel?
-5. Quais tabelas, relatórios ou telas são usadas operacionalmente?
-6. Quem pode corrigir dados e como a correção é rastreada?
-7. Quais integrações podem ficar indisponíveis e qual o comportamento esperado?
-8. Há dependência de dados de terceiros ou formatos não controlados?
-9. Quais dados não podem ser presumidos ou transformados silenciosamente?
+- Quem abre, preenche, revisa, assina, contrassina, guarda e encerra volumes?
+- Em que momento cada campo é preenchido?
+- Como são tratadas múltiplas etapas, troca de tripulação e jornada atravessando meia-noite?
+- Como são registradas correções, rasuras, addenda e reconstituições?
+- Como são controlados saldos de horas, ciclos e pousos?
+- Como são registradas discrepâncias, ações corretivas, ações retardadas e retorno ao serviço?
+- Como o PIC toma ciência da situação técnica?
+- Como é atendida uma fiscalização?
+- Como são tratados perda, dano, indisponibilidade e reconstrução de volume?
+- Quais divergências recorrentes já existem no processo em papel?
+- Quais campos são preenchidos por transcrição, cálculo, integração ou julgamento humano?
+- Quais exceções dependem de autorização de função específica?
 
-### 1.5 Manuais e documentos
+### 1.5 SIGVOOS, Controle de Voos e AirTrust
 
-1. Qual é a estrutura real do MGE/MGO e seus documentos associados?
-2. Onde estão hoje os procedimentos de Diário de Bordo, EFB/PED, manutenção, contingência, treinamento e fiscalização?
-3. Quais capítulos são aprovados e quais são aceitos?
-4. Quais formulários, listas de páginas efetivas e anexos controlados existem?
-5. Como revisões são aprovadas, distribuídas e colocadas em vigor?
-6. Quais documentos de manutenção cobrem situação técnica e RTS?
-7. Há MEL/NEF/ACR ou outro documento afetado pelo uso do PED/eDB?
-8. Quais contratos com fornecedores precisam ser revisados?
-9. Quais documentos não podem ser compartilhados com o AirTrust ou avaliador sem autorização específica?
+- Quais dados entram por integração, importação ou digitação manual?
+- Qual sistema é a fonte de cada campo?
+- Como são identificadas procedência, horário de coleta, unidade e timezone?
+- Existem conflitos entre SIGVOOS, RDV, coordenação e papel?
+- Quais tabelas, relatórios ou telas são usados operacionalmente?
+- Quem pode corrigir dados e como a correção é rastreada?
+- Quais integrações podem ficar indisponíveis e qual deve ser o comportamento?
+- Há dependência de dados de terceiros ou formatos não controlados?
+- Quais dados não podem ser presumidos ou transformados silenciosamente?
+- Como são tratados registros duplicados, atrasados ou fora de ordem?
+- Qual interface contém a informação canônica quando fontes discordam?
 
-### 1.6 Perfis, identidade e designações
+### 1.6 Manuais e documentos
 
-1. Quais perfis usarão o eDB: PIC, SIC, OCC, manutenção, designado do operador, administrador, auditor, fiscal interno, suporte?
-2. Como identidade, CANAC, função, licença, habilitação e prerrogativa são validadas?
-3. Quem designa e revoga usuários?
-4. Como são tratadas substituições, afastamentos e desligamentos?
-5. Existem usuários de organizações de manutenção terceiras?
-6. Como será segregado acesso de fiscalização?
-7. Há funções incompatíveis que exigem segregação de deveres?
-8. Quais decisões sobre assinatura permanecem pendentes?
+- Qual é a estrutura real do MGE, MGO e documentos associados?
+- Onde estão os procedimentos de Diário de Bordo, EFB/PED, manutenção, contingência,
+  treinamento e fiscalização?
+- Quais capítulos são aprovados e quais são aceitos?
+- Quais formulários, listas de páginas efetivas e anexos controlados existem?
+- Como revisões são aprovadas, distribuídas e colocadas em vigor?
+- Quais documentos de manutenção cobrem situação técnica e retorno ao serviço?
+- Há MEL, NEF, ACR ou outro documento afetado pelo uso do PED ou eDB?
+- Quais contratos com fornecedores precisam ser revisados?
+- Quais documentos não podem ser compartilhados com AirTrust ou avaliador sem autorização
+  específica?
+- Quais procedimentos reais diferem do texto atualmente controlado?
 
-### 1.7 Equipamentos, PED e conectividade
+### 1.7 Perfis, identidade e designações
 
-1. Quais dispositivos são usados ou pretendidos?
-2. Quem é proprietário, administrador e custodiante dos dispositivos?
-3. Há MDM, bloqueio, cifragem, atualização e revogação?
-4. Quais bases e rotas têm conectividade insuficiente?
-5. Qual é a autonomia, fonte de energia e equipamento reserva?
-6. Como são tratadas perda, furto, dano e troca de dispositivo?
-7. Existem restrições de uso em fases críticas do voo?
-8. Há determinação de não interferência e procedimento EFB/PED aplicável?
-9. Como são validados versão mínima, atualização e downgrade?
-10. Quais dados precisam permanecer disponíveis offline?
+- Quais perfis usarão o eDB: PIC, SIC, OCC, manutenção, designado do operador,
+  administrador, auditor, fiscal interno e suporte?
+- Como identidade, CANAC, função, licença, habilitação e prerrogativa são validadas?
+- Quem designa e revoga usuários?
+- Como são tratadas substituições, afastamentos e desligamentos?
+- Existem usuários de organizações de manutenção terceiras?
+- Como será segregado o acesso de fiscalização?
+- Há funções incompatíveis que exigem segregação de deveres?
+- Quais decisões sobre assinatura permanecem pendentes?
+- Quais funções podem corrigir, cancelar, reabrir, aprovar ou exportar registros?
+- Como serão tratadas contas de emergência e acesso privilegiado?
 
-### 1.8 Segurança, retenção e continuidade
+### 1.8 Equipamentos, PED e conectividade
 
-1. Qual política de IAM, logs, incidentes e acesso privilegiado existe?
-2. Quais dados são pessoais, operacionais, técnicos ou sigilosos?
-3. Onde os registros e evidências são armazenados?
-4. Qual retenção é exigida e quem responde por ela?
-5. Como funcionam backup, restauração, RTO, RPO e detecção de corrupção?
-6. Há cópia independente e teste periódico de restauração?
-7. Como ocorre transferência de propriedade, exportação e portabilidade?
-8. Qual o plano para descontinuidade do fornecedor?
-9. Como incidentes regulatórios serão comunicados?
-10. Quais fornecedores críticos e responsabilidades compartilhadas existem?
+- Quais dispositivos são usados ou pretendidos?
+- Quem é proprietário, administrador e custodiante dos dispositivos?
+- Há MDM, bloqueio, cifragem, atualização e revogação?
+- Quais bases e rotas possuem conectividade insuficiente?
+- Qual é a autonomia, fonte de energia e equipamento reserva?
+- Como são tratadas perda, furto, dano e troca de dispositivo?
+- Existem restrições de uso em fases críticas do voo?
+- Há determinação de não interferência e procedimento EFB/PED aplicável?
+- Como são validados versão mínima, atualização e downgrade?
+- Quais dados precisam permanecer disponíveis offline?
+- Qual é o tempo máximo aceitável sem sincronização?
+- Como o operador identifica dispositivo revogado, comprometido ou desatualizado?
 
-### 1.9 Treinamento e fatores humanos
+### 1.9 Manutenção
 
-1. Quais perfis precisam de treinamento inicial, diferenças e recorrente?
-2. Quais tarefas são críticas e quais erros previsíveis devem ser treinados?
-3. Como será avaliada competência prática?
-4. Há risco de duplicação de carga de trabalho durante o shadow?
-5. Como usuários reportarão dificuldade sem mascarar divergências?
-6. Quais mensagens, bloqueios e nomenclaturas podem induzir erro?
-7. Como será tratado treinamento de contingência e dispositivo reserva?
+- Quais organizações próprias e terceiras registram discrepâncias ou retorno ao serviço?
+- Como são validadas licença, habilitação, vínculo, função e prerrogativa?
+- Quais campos de situação técnica precisam estar disponíveis ao PIC?
+- Como são tratadas ações retardadas e itens com prazo ou limite?
+- Como são reconciliadas horas restantes, ciclos e intervenções?
+- Como a manutenção corrige registro sem eliminar o original?
+- Como uma organização terceirizada acessa apenas o escopo necessário?
+- Quais cenários exigem bloqueio e quais apenas alerta?
+- Como a aeronave é liberada quando integração ou dispositivo está indisponível?
 
-### 1.10 Riscos operacionais
+### 1.10 Segurança, retenção e continuidade
 
-Para cada perigo, registrar causa, consequência, barreiras atuais, risco inicial, ações, dono e risco residual.
+- Qual política de IAM, logs, incidentes e acesso privilegiado existe?
+- Quais dados são pessoais, operacionais, técnicos ou sigilosos?
+- Onde registros e evidências são armazenados?
+- Qual retenção é exigida e quem responde por ela?
+- Como funcionam backup, restauração, RTO, RPO e detecção de corrupção?
+- Há cópia independente e teste periódico de restauração?
+- Como ocorre transferência de propriedade, exportação e portabilidade?
+- Qual é o plano para descontinuidade do fornecedor?
+- Como incidentes regulatórios serão comunicados?
+- Quais fornecedores críticos e responsabilidades compartilhadas existem?
+- Como é testado o isolamento entre empresas?
+- Quais logs podem conter dados pessoais ou segredos e como são sanitizados?
 
-| ID | Perigo | Consequência | Barreiras atuais | Risco inicial | Ação | Dono | Risco residual |
-|---|---|---|---|---|---|---|---|
-| `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+### 1.11 Treinamento e fatores humanos
+
+- Quais perfis precisam de treinamento inicial, diferenças e recorrente?
+- Quais tarefas são críticas e quais erros previsíveis devem ser treinados?
+- Como será avaliada a competência prática?
+- Há risco de duplicação de carga de trabalho durante o shadow?
+- Como usuários reportarão dificuldade sem mascarar divergências?
+- Quais mensagens, bloqueios e nomenclaturas podem induzir erro?
+- Como será tratado treinamento de contingência e dispositivo reserva?
+- Como será verificada a compreensão de que o papel permanece oficial no shadow?
+- Quais mudanças exigem treinamento de diferenças antes de nova versão?
+
+### 1.12 Retenção documental e fiscalização
+
+- Quais registros devem permanecer pesquisáveis e exportáveis?
+- Por quanto tempo cada classe documental é retida?
+- Quem pode fornecer acesso ou pacote à fiscalização?
+- Como autenticidade, integridade, versão e cadeia de correções são verificadas?
+- Qual formato de exportação é necessário?
+- Como será evitada dependência exclusiva do fornecedor para acesso histórico?
+- Como são tratados encerramento do operador, transferência de aeronave e troca de
+  proprietário?
+
+### 1.13 Registro de risco operacional
+
+Repetir este bloco para cada perigo:
+
+- ID: `[IDENTIFICADOR]`
+- Perigo: `[DESCRIÇÃO]`
+- Causa: `[DESCRIÇÃO]`
+- Consequência: `[DESCRIÇÃO]`
+- Barreiras atuais: `[LISTA]`
+- Probabilidade inicial: `[CLASSIFICAÇÃO]`
+- Severidade inicial: `[CLASSIFICAÇÃO]`
+- Risco inicial: `[CLASSIFICAÇÃO]`
+- Ações adicionais: `[LISTA]`
+- Dono: `[RESPONSÁVEL]`
+- Prazo interno: `[DATA]`
+- Risco residual: `[CLASSIFICAÇÃO]`
+- Aceitador do risco: `[NOME/FUNÇÃO]`
+- Evidências: `[REFERÊNCIAS]`
 
 ## 2. Lista de documentos
 
 ### 2.1 Documentos do operador
 
-- [ ] COA e EO vigentes;
-- [ ] MGE/MGO e lista de páginas efetivas;
-- [ ] capítulos de Diário de Bordo e controle operacional;
-- [ ] manual/programa de manutenção e MGM equivalente;
-- [ ] programa de treinamento;
-- [ ] SGSO e gestão de mudança;
-- [ ] PRE/contingência;
-- [ ] MEL/NEF/ACR, se aplicável;
-- [ ] procedimentos EFB/PED;
-- [ ] formulários e modelos de Diário de Bordo;
-- [ ] designações de responsáveis e signatários;
-- [ ] políticas de segurança da informação e IAM;
-- [ ] plano de backup, DR, retenção e portabilidade;
-- [ ] contratos de manutenção e fornecedores críticos;
-- [ ] inventário de dispositivos;
-- [ ] registros de treinamento;
-- [ ] relatórios de auditoria, incidentes e divergências relevantes.
+- [ ] COA e EO vigentes.
+- [ ] MGE, MGO e lista de páginas efetivas.
+- [ ] Capítulos de Diário de Bordo e controle operacional.
+- [ ] Manual ou programa de manutenção e MGM equivalente.
+- [ ] Programa de treinamento.
+- [ ] SGSO e documentação de gestão de mudança.
+- [ ] PRE e planos de contingência.
+- [ ] MEL, NEF e ACR, quando aplicáveis.
+- [ ] Procedimentos EFB e PED.
+- [ ] Formulários e modelos do Diário de Bordo.
+- [ ] Designações de responsáveis e signatários.
+- [ ] Políticas de segurança da informação e IAM.
+- [ ] Plano de backup, DR, retenção e portabilidade.
+- [ ] Contratos de manutenção e fornecedores críticos.
+- [ ] Inventário de dispositivos.
+- [ ] Registros de treinamento.
+- [ ] Relatórios de auditoria, incidentes e divergências relevantes.
+- [ ] Procedimentos de fiscalização, exportação e guarda.
 
 ### 2.2 Documentos AirTrust
 
-- [ ] baseline e matriz regulatória;
-- [ ] ADR da fronteira regulada;
-- [ ] arquitetura e fluxos de dados;
-- [ ] contratos e schemas aplicáveis;
-- [ ] threat models;
-- [ ] matriz de controles e evidências;
-- [ ] inventário de dependências e fornecedores;
-- [ ] resultados de testes e CI;
-- [ ] release manifest e versão candidata;
-- [ ] procedimentos de suporte e incidente;
-- [ ] evidências de backup/restore;
-- [ ] manuais de administração, usuário e fiscalização, quando existentes;
-- [ ] protocolo e relatório de shadow;
-- [ ] lista de riscos residuais.
+- [ ] Baseline e matriz regulatória.
+- [ ] ADR da fronteira regulada.
+- [ ] Arquitetura e fluxos de dados.
+- [ ] Contratos e schemas aplicáveis.
+- [ ] Threat models.
+- [ ] Matriz de controles e evidências.
+- [ ] Inventário de dependências e fornecedores.
+- [ ] Resultados de testes e CI.
+- [ ] Release manifest e versão candidata.
+- [ ] Procedimentos de suporte e incidente.
+- [ ] Evidências de backup e restore.
+- [ ] Manuais de administração, usuário e fiscalização, quando existentes.
+- [ ] Protocolo e relatório de shadow.
+- [ ] Lista de riscos residuais.
+- [ ] Evidências de isolamento por tenant e controle de acesso.
 
 ### 2.3 Documentos regulatórios e de processo
 
-- [ ] FOP 200 oficial vigente;
-- [ ] carta e anexos auxiliares;
-- [ ] ata e registro de decisões da reunião prévia;
-- [ ] FOP 219, D-144-01 e FAI vigentes, quando aplicáveis;
-- [ ] comprovantes e números de processo;
-- [ ] orientações institucionais recebidas;
-- [ ] relatório independente e retestes;
-- [ ] atos, condições e escopo autorizativo;
-- [ ] plano de migração/cutover aprovado pelo operador.
+- [ ] FOP 200 oficial vigente.
+- [ ] Carta e anexos auxiliares.
+- [ ] Ata e registro de decisões da reunião prévia.
+- [ ] FOP 219, D-144-01 e FAI vigentes, quando aplicáveis.
+- [ ] Comprovantes e números de processo.
+- [ ] Orientações institucionais recebidas.
+- [ ] Relatório independente e retestes.
+- [ ] Atos, condições e escopo autorizativo.
+- [ ] Plano de migração e cutover aprovado pelo operador.
+- [ ] Registro de versões dos formulários oficiais usados.
 
-### 2.4 Controle da lista
+### 2.4 Controle individual de documento
 
-| Documento | Proprietário | Versão/data | Classificação | Local autorizado | Entregue? | Observação |
-|---|---|---|---|---|---|---|
-| `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+Repetir este bloco para cada documento:
+
+- Documento: `[TÍTULO]`
+- Proprietário: `[PARTE/FUNÇÃO]`
+- Versão e data: `[VERSÃO/DATA]`
+- Classificação: `[PÚBLICO/INTERNO/CONFIDENCIAL/RESTRITO]`
+- Local autorizado: `[REPOSITÓRIO]`
+- Entregue: `[SIM/NÃO/NÃO APLICÁVEL]`
+- Validação executada: `[DESCRIÇÃO]`
+- Observação: `[TEXTO]`
 
 ## 3. Matriz de treinamento
 
-| Perfil | Objetivos | Conteúdo mínimo | Ambiente | Avaliação | Critério de aprovação | Recorrência/gatilho | Evidência |
-|---|---|---|---|---|---|---|---|
-| PIC | revisar, decidir e confirmar registros | etapas, situação técnica, pendências, correção, offline, contingência | shadow/sintético | cenário completo | `[CRITÉRIO]` | mudança material/recorrente | registro individual |
-| SIC/outros | validar identificação e função | consulta, etapas, reporte, contingência | shadow/sintético | cenário por função | `[ ]` | mudança material | registro |
-| OCC/coordenação | gerir rascunhos e conflitos | procedência, campos ausentes, escalonamento, papel oficial | shadow | exercício de jornada | `[ ]` | mudança de workflow | registro |
-| Manutenção | registrar e validar situação técnica | discrepância, ação, RTS, terceiro, ciência PIC | shadow | cenário técnico | `[ ]` | mudança de processo | registro |
-| Designado do operador | cumprir contrassinatura e governança | fila, prazo, exceções, auditoria | shadow | exercício de pendências | `[ ]` | mudança regulatória | registro |
-| Administrador | administrar acesso e escopo | usuários, dispositivos, frota, volume, revogação, fiscal | sintético | laboratório | `[ ]` | mudança administrativa | registro |
-| Suporte/TI | responder a falhas | incidente, logs, restauração, segurança, evidência | staging/sintético | drill | `[ ]` | mudança crítica/drill | relatório |
-| Auditor/fiscal interno | verificar cadeia e exportação | pesquisa, versões, correções, impressão, exportação | shadow | amostra completa | `[ ]` | atualização do verificador | registro |
+### 3.1 Regras gerais
 
-### 3.1 Controle de turmas
+- cada perfil deve receber somente conteúdo compatível com suas funções;
+- treinamento teórico não substitui avaliação prática quando houver tarefa crítica;
+- o material deve indicar versão do sistema, ambiente e condição shadow ou oficial;
+- o método de assinatura somente será ensinado após decisão aplicável;
+- mudança material exige avaliação de diferenças antes da entrada em vigor;
+- registros reais de participantes devem permanecer em ambiente controlado.
 
-| Turma | Perfil | Participantes | Instrutor | Versão do material | Data | Resultado | Pendências |
-|---|---|---|---|---|---|---|---|
-| `[ ]` | `[ ]` | `[LOCAL CONTROLADO]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+### 3.2 PIC
+
+- Objetivos: revisar, decidir e confirmar registros dentro das prerrogativas aplicáveis.
+- Conteúdo mínimo: etapas, situação técnica, pendências, correção, offline e contingência.
+- Ambiente: shadow ou sintético antes de qualquer uso autorizado.
+- Avaliação: cenário completo.
+- Critério de aprovação: `[CRITÉRIO]`
+- Recorrência ou gatilho: mudança material e periodicidade definida pelo operador.
+- Evidência: registro individual e resultado prático.
+
+### 3.3 SIC e outros tripulantes
+
+- Objetivos: validar identificação, função, etapas e reporte.
+- Conteúdo mínimo: consulta, campos próprios, divergência e contingência.
+- Ambiente: shadow ou sintético.
+- Avaliação: cenário por função.
+- Critério de aprovação: `[CRITÉRIO]`
+- Recorrência ou gatilho: mudança material.
+- Evidência: registro individual.
+
+### 3.4 OCC e coordenação
+
+- Objetivos: gerir rascunhos, fontes, campos ausentes e conflitos.
+- Conteúdo mínimo: procedência, integração, escalonamento e papel oficial no shadow.
+- Ambiente: shadow.
+- Avaliação: exercício de jornada e exceções.
+- Critério de aprovação: `[CRITÉRIO]`
+- Recorrência ou gatilho: mudança de workflow.
+- Evidência: registro individual e cenário avaliado.
+
+### 3.5 Manutenção
+
+- Objetivos: registrar e validar situação técnica dentro das prerrogativas.
+- Conteúdo mínimo: discrepância, ação, retorno ao serviço, terceiro e ciência do PIC.
+- Ambiente: shadow.
+- Avaliação: cenário técnico.
+- Critério de aprovação: `[CRITÉRIO]`
+- Recorrência ou gatilho: mudança de processo ou requisito.
+- Evidência: registro individual e cenário avaliado.
+
+### 3.6 Designado do operador
+
+- Objetivos: cumprir governança, revisão e contrassinatura quando aplicável.
+- Conteúdo mínimo: fila, prazo, exceções, auditoria e segregação de deveres.
+- Ambiente: shadow.
+- Avaliação: exercício de pendências.
+- Critério de aprovação: `[CRITÉRIO]`
+- Recorrência ou gatilho: mudança regulatória ou de responsabilidade.
+- Evidência: registro individual.
+
+### 3.7 Administrador
+
+- Objetivos: administrar acesso, escopo e dispositivos sem ampliar privilégios indevidos.
+- Conteúdo mínimo: usuários, perfis, frota, volumes, revogação, auditoria e fiscalização.
+- Ambiente: sintético.
+- Avaliação: laboratório de administração.
+- Critério de aprovação: `[CRITÉRIO]`
+- Recorrência ou gatilho: mudança administrativa ou de segurança.
+- Evidência: registro individual e checklist.
+
+### 3.8 Suporte e TI
+
+- Objetivos: responder a falhas preservando fonte oficial, dados e evidências.
+- Conteúdo mínimo: incidente, logs, restauração, segurança, versão e escalonamento.
+- Ambiente: staging ou sintético.
+- Avaliação: drill.
+- Critério de aprovação: `[CRITÉRIO]`
+- Recorrência ou gatilho: mudança crítica e drill periódico.
+- Evidência: relatório do exercício.
+
+### 3.9 Auditor e fiscal interno
+
+- Objetivos: verificar cadeia, versão, correções, pesquisa e exportação.
+- Conteúdo mínimo: filtros, trilha, impressão, pacote verificável e acesso segregado.
+- Ambiente: shadow.
+- Avaliação: amostra completa.
+- Critério de aprovação: `[CRITÉRIO]`
+- Recorrência ou gatilho: atualização do verificador ou processo.
+- Evidência: registro individual.
+
+### 3.10 Controle de turma
+
+Repetir este bloco para cada turma:
+
+- Turma: `[IDENTIFICADOR]`
+- Perfil: `[PERFIL]`
+- Participantes: `[REFERÊNCIA A LISTA CONTROLADA]`
+- Instrutor: `[NOME/FUNÇÃO]`
+- Versão do material: `[VERSÃO]`
+- Ambiente: `[AMBIENTE]`
+- Data: `[DATA]`
+- Resultado: `[APROVADO/REPROVADO/PENDENTE]`
+- Pendências: `[LISTA]`
+- Evidência: `[REFERÊNCIA]`
 
 ## 4. Plano de contingência
 
 ### 4.1 Objetivo
 
-Manter a operação segura e a fonte oficial vigente durante falhas do AirTrust, dispositivos, conectividade, integrações ou dados.
+Manter a operação segura e a fonte oficial vigente durante falhas do AirTrust, dispositivos,
+conectividade, integrações ou dados.
 
 ### 4.2 Princípios
 
 - durante shadow, o papel permanece oficial e não pode ser prejudicado;
-- após futuro cutover, o procedimento aplicável deve refletir exatamente a autorização e os manuais vigentes;
+- após futuro cutover, o procedimento deve refletir exatamente a autorização e os manuais
+  vigentes;
 - nenhum usuário deve improvisar método de assinatura, transcrição ou liberação de voo;
-- toda contingência deve preservar evidência e permitir reconciliação sem sobrescrita silenciosa.
+- toda contingência deve preservar evidência e permitir reconciliação sem sobrescrita
+  silenciosa;
+- a autoridade para interromper, retomar ou reverter deve estar previamente designada.
 
-### 4.3 Cenários e respostas
+### 4.3 Worker ou API indisponível
 
-| Cenário | Detecção | Ação imediata | Fonte oficial | Escalonamento | Recuperação | Evidência |
-|---|---|---|---|---|---|---|
-| Worker/API indisponível | health/usuário | interromper fluxo afetado e aplicar procedimento vigente | papel no shadow | TI + gestor | restaurar e reconciliar | incidente/log sanitizado |
-| sem conectividade | dispositivo | usar procedimento offline aprovado ou papel vigente | conforme fase/autorização | operação + TI | sincronizar e verificar | registro de fila |
-| PED perdido/roubado | usuário | bloquear/revogar e usar reserva | conforme fase | segurança + operação | provisionar substituto | incidente |
-| pacote offline vencido/corrompido | validação local | não apresentar como válido | procedimento vigente | TI + operação | renovar pacote | evidência técnica |
-| integração SIGVOOS falha | monitoramento | marcar fonte ausente; não presumir dado | papel no shadow | OCC + TI | reprocessar com procedência | divergência |
-| dado técnico desatualizado | validação | bloquear cenário afetado | procedimento manutenção | manutenção + gestor | atualizar e retestar | incidente/divergência |
-| suspeita cross-tenant | alerta/teste | interromper imediatamente e conter acesso | papel no shadow | segurança + direção | investigar e corrigir | incidente crítico |
-| corrupção/perda de dados | verificação | congelar alterações e preservar evidência | procedimento vigente | TI + direção | restaurar/reconstituir | relatório DR |
-| credencial/signatário indisponível | usuário | não compartilhar credencial nem assinar por terceiro | procedimento vigente | gestor do perfil | restabelecer identidade | ticket |
-| divergência crítica | auditoria | suspender piloto/cenário | papel | gestor + GSO | corrigir e aprovar retomada | registro formal |
+- Detecção: health check, monitoração ou reporte de usuário.
+- Ação imediata: interromper o fluxo afetado e aplicar o procedimento vigente.
+- Fonte oficial no shadow: papel.
+- Escalonamento: TI, AirTrust e gestor do operador.
+- Recuperação: restaurar, validar integridade e reconciliar.
+- Evidência: incidente e logs sanitizados.
 
-### 4.4 Autoridade para interrupção e retomada
+### 4.4 Ausência de conectividade
 
-| Decisão | Autoridade primária | Consultados | Evidência necessária |
-|---|---|---|---|
-| interromper cenário | `[FUNÇÃO]` | AirTrust/GSO/área afetada | fato e risco identificado |
-| interromper ciclo | `[FUNÇÃO]` | comitê do projeto | incidente crítico/alto |
-| retomar cenário | `[FUNÇÃO]` | donos das ações | correção, teste e aceite |
-| acionar reversão após cutover | `[FUNÇÃO DO OPERADOR]` | AirTrust/ANAC conforme plano | critério formal atingido |
+- Detecção: dispositivo ou monitoração.
+- Ação imediata: usar procedimento offline aprovado ou papel vigente.
+- Fonte oficial: conforme fase e autorização.
+- Escalonamento: operação e TI.
+- Recuperação: sincronizar, verificar ordem e tratar conflitos.
+- Evidência: registro da fila, tempos e resultado.
 
-### 4.5 Drill
+### 4.5 PED perdido, furtado ou danificado
 
-| Drill | Frequência/gatilho | Participantes | Critério | Resultado | Ação |
-|---|---|---|---|---|---|
-| perda de rede | `[ ]` | `[ ]` | fluxo seguro e evidência preservada | `[ ]` | `[ ]` |
-| PED revogado | `[ ]` | `[ ]` | acesso bloqueado e reserva funcional | `[ ]` | `[ ]` |
-| restore | `[ ]` | `[ ]` | integridade e tempo medidos | `[ ]` | `[ ]` |
-| reconstituição | `[ ]` | `[ ]` | fontes e cadeia documentadas | `[ ]` | `[ ]` |
-| exportação fiscal | `[ ]` | `[ ]` | pacote verificável e tenant correto | `[ ]` | `[ ]` |
+- Detecção: usuário ou MDM.
+- Ação imediata: bloquear e revogar o dispositivo.
+- Fonte oficial: conforme fase e autorização.
+- Escalonamento: segurança, operação e TI.
+- Recuperação: provisionar equipamento reserva ou substituto.
+- Evidência: incidente e confirmação de revogação.
+
+### 4.6 Pacote offline vencido ou corrompido
+
+- Detecção: validação local.
+- Ação imediata: não apresentar o pacote como válido.
+- Fonte oficial: procedimento vigente.
+- Escalonamento: TI e operação.
+- Recuperação: renovar pacote e verificar integridade.
+- Evidência: diagnóstico e resultado do reteste.
+
+### 4.7 Falha de integração SIGVOOS
+
+- Detecção: monitoração, ausência de evento ou validação de procedência.
+- Ação imediata: marcar fonte ausente e não presumir dado.
+- Fonte oficial no shadow: papel.
+- Escalonamento: OCC e TI.
+- Recuperação: reprocessar com procedência preservada.
+- Evidência: divergência e log sanitizado.
+
+### 4.8 Situação técnica desatualizada
+
+- Detecção: comparação, validação ou reporte da manutenção.
+- Ação imediata: bloquear o cenário afetado.
+- Fonte oficial: procedimento de manutenção vigente.
+- Escalonamento: manutenção, operação e gestor.
+- Recuperação: atualizar, reconciliar e retestar.
+- Evidência: incidente ou divergência formal.
+
+### 4.9 Suspeita cross-tenant
+
+- Detecção: alerta, teste ou reporte.
+- Ação imediata: interromper imediatamente e conter acessos.
+- Fonte oficial no shadow: papel.
+- Escalonamento: segurança, direção, operador e AirTrust.
+- Recuperação: investigar, corrigir, executar revisão independente e retestar.
+- Evidência: incidente crítico e cadeia de preservação.
+
+### 4.10 Corrupção ou perda de dados
+
+- Detecção: verificação de integridade, auditoria ou falha de leitura.
+- Ação imediata: congelar alterações e preservar evidências.
+- Fonte oficial: procedimento vigente.
+- Escalonamento: TI, segurança, direção e áreas reguladas.
+- Recuperação: restaurar ou reconstituir sem apagar o histórico.
+- Evidência: relatório de DR e reconciliação.
+
+### 4.11 Credencial ou signatário indisponível
+
+- Detecção: usuário ou IAM.
+- Ação imediata: não compartilhar credencial nem assinar por terceiro.
+- Fonte oficial: procedimento vigente.
+- Escalonamento: gestor do perfil e suporte.
+- Recuperação: restabelecer identidade ou aplicar substituição formal.
+- Evidência: ticket e registro de designação.
+
+### 4.12 Divergência crítica
+
+- Detecção: comparação, auditoria ou incidente.
+- Ação imediata: suspender piloto ou cenário.
+- Fonte oficial no shadow: papel.
+- Escalonamento: gestor, GSO, área afetada e AirTrust.
+- Recuperação: corrigir, retestar e aprovar retomada.
+- Evidência: registro formal e decisão de retomada.
+
+### 4.13 Autoridade para interrupção e retomada
+
+- Autoridade para interromper cenário: `[FUNÇÃO]`
+- Autoridade para interromper ciclo: `[FUNÇÃO]`
+- Autoridade para aprovar retomada: `[FUNÇÃO]`
+- Autoridade para acionar reversão após cutover: `[FUNÇÃO DO OPERADOR]`
+- Consultados obrigatórios: `[LISTA]`
+- Evidência mínima para retomada: correção, teste, risco residual e aceite.
+
+### 4.14 Drills
+
+#### Perda de rede
+
+- Frequência ou gatilho: `[DEFINIR]`
+- Participantes: `[FUNÇÕES]`
+- Critério: fluxo seguro e evidência preservada.
+- Resultado: `[REGISTRAR]`
+- Ação: `[REGISTRAR]`
+
+#### PED revogado
+
+- Frequência ou gatilho: `[DEFINIR]`
+- Participantes: `[FUNÇÕES]`
+- Critério: acesso bloqueado e reserva funcional.
+- Resultado: `[REGISTRAR]`
+- Ação: `[REGISTRAR]`
+
+#### Restore
+
+- Frequência ou gatilho: `[DEFINIR]`
+- Participantes: `[FUNÇÕES]`
+- Critério: integridade, RTO e RPO medidos.
+- Resultado: `[REGISTRAR]`
+- Ação: `[REGISTRAR]`
+
+#### Reconstituição
+
+- Frequência ou gatilho: `[DEFINIR]`
+- Participantes: `[FUNÇÕES]`
+- Critério: fontes e cadeia documentadas.
+- Resultado: `[REGISTRAR]`
+- Ação: `[REGISTRAR]`
+
+#### Exportação fiscal
+
+- Frequência ou gatilho: `[DEFINIR]`
+- Participantes: `[FUNÇÕES]`
+- Critério: pacote verificável e tenant correto.
+- Resultado: `[REGISTRAR]`
+- Ação: `[REGISTRAR]`
 
 ## 5. Checklist de prontidão para shadow
 
 ### 5.1 Governança e regulatório
 
-- [ ] termo de abertura aprovado;
-- [ ] escopo do piloto por operador, modelo, matrícula e base definido;
-- [ ] papel confirmado como única fonte oficial;
-- [ ] shadow discutido no processo regulatório quando aplicável;
-- [ ] papéis, responsáveis e autoridades de interrupção designados;
-- [ ] tratamento de dados e repositório de evidências aprovados;
-- [ ] decisões pendentes marcadas como não implementáveis;
-- [ ] comunicação obrigatória preparada.
+- [ ] Termo de abertura aprovado.
+- [ ] Escopo por operador, modelo, matrícula e base definido.
+- [ ] Papel confirmado como única fonte oficial.
+- [ ] Shadow discutido no processo regulatório quando aplicável.
+- [ ] Papéis, responsáveis e autoridades de interrupção designados.
+- [ ] Tratamento de dados e repositório de evidências aprovados.
+- [ ] Decisões pendentes marcadas como não implementáveis.
+- [ ] Comunicação obrigatória preparada.
+- [ ] Riscos críticos e altos avaliados.
 
 ### 5.2 Dados e processos
 
-- [ ] cadastros de operador, proprietário, aeronave e tripulação saneados;
-- [ ] unidades, timezone e procedência validados;
-- [ ] fluxo atual em papel documentado;
-- [ ] interfaces e falhas esperadas mapeadas;
-- [ ] situações técnicas e organizações de manutenção conferidas;
-- [ ] amostra inicial reconciliada;
-- [ ] nenhuma transcrição automática mascara ausência de fonte.
+- [ ] Cadastros de operador, proprietário, aeronave e tripulação saneados.
+- [ ] Unidades, timezone e procedência validados.
+- [ ] Fluxo atual em papel documentado.
+- [ ] Interfaces e falhas esperadas mapeadas.
+- [ ] Situações técnicas e organizações de manutenção conferidas.
+- [ ] Amostra inicial reconciliada.
+- [ ] Nenhuma transcrição automática mascara ausência de fonte.
+- [ ] Regras de correção e conflito estão documentadas.
 
 ### 5.3 Acesso e segurança
 
-- [ ] tenant isolation testado;
-- [ ] perfis e menor privilégio revisados;
-- [ ] usuários de terceiros delimitados;
-- [ ] revogação testada;
-- [ ] logs sem token, segredo ou PII indevida;
-- [ ] exportação restrita ao tenant;
-- [ ] incident response e contatos ativos.
+- [ ] Isolamento por tenant testado.
+- [ ] Perfis e menor privilégio revisados.
+- [ ] Usuários de terceiros delimitados.
+- [ ] Revogação testada.
+- [ ] Logs sem token, segredo ou dado pessoal indevido.
+- [ ] Exportação restrita ao tenant.
+- [ ] Resposta a incidentes e contatos ativos.
+- [ ] Acesso privilegiado controlado e auditado.
 
 ### 5.4 Ambiente e dispositivos
 
-- [ ] ambiente e versão/commit identificados;
-- [ ] dados shadow visualmente marcados como não oficiais;
-- [ ] nenhuma tela/PDF declara uso oficial;
-- [ ] dispositivos inventariados e atualizados;
-- [ ] equipamento reserva disponível quando previsto;
-- [ ] conectividade e cenários offline testados;
-- [ ] backup e restauração do ambiente testados;
-- [ ] suporte durante a janela definido.
+- [ ] Ambiente e versão ou commit identificados.
+- [ ] Dados shadow visualmente marcados como não oficiais.
+- [ ] Nenhuma tela ou PDF declara uso oficial.
+- [ ] Dispositivos inventariados e atualizados.
+- [ ] Equipamento reserva disponível quando previsto.
+- [ ] Conectividade e cenários offline testados.
+- [ ] Backup e restauração do ambiente testados.
+- [ ] Suporte durante a janela definido.
+- [ ] Critérios de versão mínima e revogação validados.
 
 ### 5.5 Pessoas e treinamento
 
-- [ ] todos os participantes concluíram treinamento aplicável;
-- [ ] avaliações práticas aprovadas;
-- [ ] coordenação e manutenção conhecem a prevalência do papel;
-- [ ] tempo adicional do piloto foi previsto;
-- [ ] canais de dúvida e reporte foram comunicados;
-- [ ] critérios de interrupção são compreendidos.
+- [ ] Todos os participantes concluíram o treinamento aplicável.
+- [ ] Avaliações práticas foram aprovadas.
+- [ ] Coordenação e manutenção conhecem a prevalência do papel.
+- [ ] Tempo adicional do piloto foi previsto.
+- [ ] Canais de dúvida e reporte foram comunicados.
+- [ ] Critérios de interrupção são compreendidos.
+- [ ] Responsáveis por evidência conhecem o procedimento.
 
 ### 5.6 Decisão T1
 
-| Item | Resultado |
-|---|---|
-| riscos críticos abertos | `[ZERO/DETALHAR]` |
-| riscos altos abertos | `[ZERO/DETALHAR E BLOQUEAR]` |
-| pendências médias aceitas | `[LISTA]` |
-| evidências anexas | `[ÍNDICE]` |
-| decisão | `[PRONTO/NÃO PRONTO/PRONTO COM CONDIÇÕES]` |
-| aprovadores | `[NOMES/FUNÇÕES]` |
-| data | `[DATA]` |
+- Riscos críticos abertos: `[ZERO/DETALHAR]`
+- Riscos altos abertos: `[ZERO/DETALHAR E BLOQUEAR]`
+- Pendências médias aceitas: `[LISTA]`
+- Evidências anexas: `[ÍNDICE]`
+- Decisão: `[PRONTO/NÃO PRONTO/PRONTO COM CONDIÇÕES]`
+- Aprovadores: `[NOMES/FUNÇÕES]`
+- Data: `[DATA]`
+- Condições para avanço: `[LISTA]`
