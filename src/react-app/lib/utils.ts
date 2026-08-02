@@ -13,16 +13,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/**
- * Format currency values
- */
-export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-}
-
 function parseDateInput(value: string): Date {
   // IMPORTANT: date-only strings (YYYY-MM-DD) must be treated as local dates.
   // `new Date('YYYY-MM-DD')` is interpreted as UTC and can display as the previous day in Brazil.
@@ -53,31 +43,4 @@ export function formatDateTime(date: Date | string): string {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(d);
-}
-
-/**
- * Truncate text with ellipsis
- */
-export function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength) + '...';
-}
-
-/**
- * Sleep utility for async operations
- */
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Generate initials from name
- */
-export function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
 }
