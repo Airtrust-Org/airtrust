@@ -16,6 +16,12 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', auth());
 
+const HOSPEDAGEM_AUDIT_COLUMNS = `
+  id, empresa_id, funcionario_id, tipo, local, cidade, estado,
+  data_checkin, data_checkout, numero_quarto, custo_diaria, moeda,
+  escala_id, observacoes, created_at, updated_at, deleted_at
+`;
+
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
 const HospedagemCreateSchema = z.object({
@@ -57,10 +63,13 @@ app.get('/', async (c) => {
       h.data_checkin, h.data_checkout, h.numero_quarto,
       h.custo_diaria, h.moeda, h.escala_id, h.observacoes,
       h.created_at, h.updated_at,
-      f.nome   AS funcionario_nome,
+      f.nome AS funcionario_nome,
       f.matricula AS funcionario_matricula
     FROM hospedagem h
-    LEFT JOIN funcionarios f ON h.funcionario_id = f.id
+    LEFT JOIN funcionarios f
+      ON f.id = h.funcionario_id
+     AND f.empresa_id = h.empresa_id
+     AND f.deleted_at IS NULL
     WHERE h.deleted_at IS NULL
       AND h.empresa_id = ?
   `;
@@ -88,7 +97,7 @@ app.get('/', async (c) => {
     query += ' AND h.data_checkout IS NOT NULL';
   }
 
-  query += ' ORDER BY h.data_checkin DESC LIMIT 500';
+  query += ' ORDER BY h.data_checkin DESC, h.id DESC LIMIT 500';
 
   const result = await db
     .prepare(query)
@@ -111,9 +120,18 @@ app.get('/:id', async (c) => {
   const row = await db
     .prepare(
       `
-    SELECT h.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula
+    SELECT
+      h.id, h.empresa_id, h.funcionario_id, h.tipo, h.local, h.cidade, h.estado,
+      h.data_checkin, h.data_checkout, h.numero_quarto,
+      h.custo_diaria, h.moeda, h.escala_id, h.observacoes,
+      h.created_at, h.updated_at, h.deleted_at,
+      f.nome AS funcionario_nome,
+      f.matricula AS funcionario_matricula
     FROM hospedagem h
-    LEFT JOIN funcionarios f ON h.funcionario_id = f.id
+    LEFT JOIN funcionarios f
+      ON f.id = h.funcionario_id
+     AND f.empresa_id = h.empresa_id
+     AND f.deleted_at IS NULL
     WHERE h.id = ? AND h.empresa_id = ? AND h.deleted_at IS NULL
   `,
     )
@@ -164,14 +182,12 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   }
   const d = parsed.data;
 
-  // Validate funcionário exists in same empresa
   const func = await db
     .prepare('SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
     .bind(d.funcionario_id, empresa_id)
     .first();
   if (!func) return badRequest('Funcionário não encontrado');
 
-  // Date logic
   if (d.data_checkout && d.data_checkout < d.data_checkin) {
     return badRequest('Data de checkout não pode ser anterior ao checkin');
   }
@@ -204,7 +220,14 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     .run();
 
   const id = result.meta.last_row_id;
-  const created = await db.prepare('SELECT * FROM hospedagem WHERE id = ?').bind(id).first();
+  const created = await db
+    .prepare(
+      `SELECT ${HOSPEDAGEM_AUDIT_COLUMNS}
+         FROM hospedagem
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(id, empresa_id)
+    .first();
 
   await registrarAuditoria({
     db,
@@ -232,7 +255,11 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   if (isNaN(id)) return badRequest('ID inválido');
 
   const existing = await db
-    .prepare('SELECT * FROM hospedagem WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .prepare(
+      `SELECT ${HOSPEDAGEM_AUDIT_COLUMNS}
+         FROM hospedagem
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
     .bind(id, empresa_id)
     .first();
   if (!existing) return notFound('Hospedagem não encontrada');
@@ -269,11 +296,23 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   }
 
   await db
-    .prepare(`UPDATE hospedagem SET ${updates.join(', ')} WHERE id = ?`)
-    .bind(...bindings, id)
+    .prepare(
+      `UPDATE hospedagem
+          SET ${updates.join(', ')}
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(...bindings, id, empresa_id)
     .run();
 
-  const updated = await db.prepare('SELECT * FROM hospedagem WHERE id = ?').bind(id).first();
+  const updated = await db
+    .prepare(
+      `SELECT ${HOSPEDAGEM_AUDIT_COLUMNS}
+         FROM hospedagem
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(id, empresa_id)
+    .first();
+
   await registrarAuditoria({
     db,
     tabela: 'hospedagem',
@@ -302,7 +341,11 @@ app.patch('/:id/checkout', requireRole('admin', 'manager'), async (c) => {
   if (isNaN(id)) return badRequest('ID inválido');
 
   const existing = await db
-    .prepare('SELECT * FROM hospedagem WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .prepare(
+      `SELECT id, data_checkin, data_checkout
+         FROM hospedagem
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
     .bind(id, empresa_id)
     .first<HospedagemRow>();
   if (!existing) return notFound('Hospedagem não encontrada');
@@ -316,8 +359,12 @@ app.patch('/:id/checkout', requireRole('admin', 'manager'), async (c) => {
   }
 
   await db
-    .prepare("UPDATE hospedagem SET data_checkout = ?, updated_at = datetime('now') WHERE id = ?")
-    .bind(data_checkout, id)
+    .prepare(
+      `UPDATE hospedagem
+          SET data_checkout = ?, updated_at = datetime('now')
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(data_checkout, id, empresa_id)
     .run();
 
   return c.json({ success: true, message: 'Checkout registrado' } as ApiResponse);
@@ -333,16 +380,22 @@ app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
   if (isNaN(id)) return badRequest('ID inválido');
 
   const existing = await db
-    .prepare('SELECT * FROM hospedagem WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .prepare(
+      `SELECT ${HOSPEDAGEM_AUDIT_COLUMNS}
+         FROM hospedagem
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
     .bind(id, empresa_id)
     .first();
   if (!existing) return notFound('Hospedagem não encontrada');
 
   await db
     .prepare(
-      "UPDATE hospedagem SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+      `UPDATE hospedagem
+          SET deleted_at = datetime('now'), updated_at = datetime('now')
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
-    .bind(id)
+    .bind(id, empresa_id)
     .run();
 
   await registrarAuditoria({
