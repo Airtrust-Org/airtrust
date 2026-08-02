@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, BarChart3, Loader2, ShieldAlert, Wrench } from 'lucide-react';
+import {
+  AlertTriangle,
+  BarChart3,
+  Loader2,
+  ShieldAlert,
+  Wrench,
+} from 'lucide-react';
 import { z } from 'zod';
 import { fetchWithAuth } from '@/react-app/config/api';
 import EdbShadowPrototype from './EdbShadowPrototype';
@@ -35,7 +41,14 @@ const assessmentDataSchema = z
     divergence: z
       .object({
         recommendation: z.enum(['continue', 'review', 'stop']),
-        maxSeverity: z.enum(['NONE', 'OBSERVATION', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
+        maxSeverity: z.enum([
+          'NONE',
+          'OBSERVATION',
+          'LOW',
+          'MEDIUM',
+          'HIGH',
+          'CRITICAL',
+        ]),
         findings: z.array(assessmentFindingSchema),
         metrics: z
           .object({
@@ -55,7 +68,9 @@ const assessmentDataSchema = z
             completenessPercent: z.number().finite().min(0).max(100),
           })
           .strict(),
-        evidence: z.object({ fingerprint: z.string().regex(/^fnv1a32:[0-9a-f]{8}$/) }).strict(),
+        evidence: z
+          .object({ fingerprint: z.string().regex(/^fnv1a32:[0-9a-f]{8}$/) })
+          .strict(),
       })
       .passthrough(),
     technicalStatus: z
@@ -65,7 +80,11 @@ const assessmentDataSchema = z
         sourceAvailable: z.boolean(),
         detailedContractLoaded: z.literal(false),
         discrepancyDetailsAvailable: z.literal(false),
-        status: z.enum(['source_unavailable', 'requires_review', 'preliminarily_available']),
+        status: z.enum([
+          'source_unavailable',
+          'requires_review',
+          'preliminarily_available',
+        ]),
         findingCodes: z.array(z.string()),
       })
       .strict(),
@@ -83,13 +102,17 @@ function parseAssessment(payload: unknown): AssessmentData | null {
   return envelope.success ? envelope.data.data : null;
 }
 
-function recommendationLabel(value: AssessmentData['divergence']['recommendation']): string {
+function recommendationLabel(
+  value: AssessmentData['divergence']['recommendation'],
+): string {
   if (value === 'stop') return 'Interromper o caso';
   if (value === 'review') return 'Revisão necessária';
   return 'Pode seguir para comparação controlada';
 }
 
-function technicalStatusLabel(value: AssessmentData['technicalStatus']['status']): string {
+function technicalStatusLabel(
+  value: AssessmentData['technicalStatus']['status'],
+): string {
   if (value === 'source_unavailable') return 'Fonte técnica detalhada indisponível';
   if (value === 'requires_review') return 'Situação técnica requer revisão';
   return 'Situação técnica preliminar disponível';
@@ -256,7 +279,9 @@ function AssessmentPanel({ flightId }: { flightId: string }) {
             </div>
             <div className="flex justify-between gap-3">
               <dt>Detalhes de discrepâncias</dt>
-              <dd>{technicalStatus.discrepancyDetailsAvailable ? 'Disponíveis' : 'Não disponíveis'}</dd>
+              <dd>
+                {technicalStatus.discrepancyDetailsAvailable ? 'Disponíveis' : 'Não disponíveis'}
+              </dd>
             </div>
           </dl>
           <p className="mt-4 text-xs text-red-700 dark:text-red-300">
