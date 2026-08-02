@@ -59,7 +59,10 @@ export function ColumnSelector({
         aria-haspopup="true"
       >
         <span>Colunas</span>
-        <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} aria-hidden="true" />
+        <ChevronDown
+          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
+          aria-hidden="true"
+        />
       </Button>
 
       {isOpen && (

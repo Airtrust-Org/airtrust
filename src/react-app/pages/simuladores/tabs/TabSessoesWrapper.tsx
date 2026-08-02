@@ -3,14 +3,7 @@
  * Padronizado com SimuladoresLayout
  */
 
-import {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-  useRef,
-  type ComponentProps,
-} from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type ComponentProps } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { toast } from 'sonner';
@@ -94,9 +87,7 @@ export default function TabSessoesWrapper() {
     if (!sessao) return;
 
     const templateId =
-      'template_id' in sessao && typeof sessao.template_id === 'number'
-        ? sessao.template_id
-        : null;
+      'template_id' in sessao && typeof sessao.template_id === 'number' ? sessao.template_id : null;
 
     const sessaoEditavel: SessaoParaEditar = {
       id: sessao.id,

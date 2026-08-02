@@ -60,9 +60,7 @@ export function getProximasSessoes(
   limit = 5,
 ): Sessao[] {
   return sessoesFiltradas
-    .filter(
-      (sessao) => isSameStatus(sessao.status, 'AGENDADO') && sessao.data >= todayKey,
-    )
+    .filter((sessao) => isSameStatus(sessao.status, 'AGENDADO') && sessao.data >= todayKey)
     .reverse()
     .slice(0, limit);
 }
@@ -73,8 +71,6 @@ export function getSessoesRecentes(
   limit = 10,
 ): Sessao[] {
   return sessoesFiltradas
-    .filter(
-      (sessao) => !isSameStatus(sessao.status, 'AGENDADO') || sessao.data < todayKey,
-    )
+    .filter((sessao) => !isSameStatus(sessao.status, 'AGENDADO') || sessao.data < todayKey)
     .slice(0, limit);
 }

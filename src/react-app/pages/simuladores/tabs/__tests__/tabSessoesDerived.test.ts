@@ -59,9 +59,7 @@ describe('tabSessoesDerived', () => {
       buildSessao(3, '2026-08-02', 'CONCLUIDO', { tipo_sessao: 'Cheque Ana' }),
     ];
 
-    expect(filterAndSortSessoes(sessoes, '', ' ANA ').map((sessao) => sessao.id)).toEqual([
-      3, 1,
-    ]);
+    expect(filterAndSortSessoes(sessoes, '', ' ANA ').map((sessao) => sessao.id)).toEqual([3, 1]);
     expect(filterAndSortSessoes(sessoes, 'AGENDADO', '').map((sessao) => sessao.id)).toEqual([
       2, 1,
     ]);
@@ -79,12 +77,8 @@ describe('tabSessoesDerived', () => {
       '',
     );
 
-    expect(getProximasSessoes(sessoes, '2026-08-02').map((sessao) => sessao.id)).toEqual([
-      3, 4,
-    ]);
-    expect(getSessoesRecentes(sessoes, '2026-08-02').map((sessao) => sessao.id)).toEqual([
-      2, 1,
-    ]);
+    expect(getProximasSessoes(sessoes, '2026-08-02').map((sessao) => sessao.id)).toEqual([3, 4]);
+    expect(getSessoesRecentes(sessoes, '2026-08-02').map((sessao) => sessao.id)).toEqual([2, 1]);
   });
 
   it('não altera a lista original', () => {
