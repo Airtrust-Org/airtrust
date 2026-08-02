@@ -144,8 +144,7 @@ app.get('/', async (c) => {
   const limit = parseHospedagemLimit(rawLimit);
   const rawCursor = c.req.query('cursor');
   const paginationRequested = rawLimit !== undefined || rawCursor !== undefined;
-  const cursor =
-    rawCursor !== undefined ? decodeHospedagemCursor(rawCursor, empresa_id) : null;
+  const cursor = rawCursor !== undefined ? decodeHospedagemCursor(rawCursor, empresa_id) : null;
 
   if (limit === null) {
     return badRequest(`Limite deve ser um inteiro entre 1 e ${HOSPEDAGEM_MAX_LIMIT}`);
