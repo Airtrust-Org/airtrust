@@ -17,7 +17,7 @@ describe('FRMS resilient safety', () => {
 
   it('retoma no máximo um dia por execução e limita o catch-up a sete dias', () => {
     expect(resolveNextSigvoosDay('2026-07-30', null, '2026-08-02')).toBe('2026-07-31');
-    expect(resolveNextSigvoosDay('2026-06-01', null, '2026-08-02')).toBe('2026-07-27');
+    expect(resolveNextSigvoosDay('2026-06-01', null, '2026-08-02')).toBe('2026-07-26');
     expect(resolveNextSigvoosDay('2026-08-02', null, '2026-08-02')).toBeNull();
   });
 
