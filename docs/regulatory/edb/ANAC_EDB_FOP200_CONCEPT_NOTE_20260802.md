@@ -1,14 +1,14 @@
 # Nota Conceitual para Reunião Prévia — Diário de Bordo Digital AirTrust
 
-> **Versão:** 0.1 — 2026-08-02  
-> **Uso:** anexo preparatório ao FOP 200; preencher dados do operador antes do protocolo  
+> **Versão:** 0.2 — 2026-08-02  
+> **Uso:** anexo preparatório ao FOP 200 da Costa do Sol; reconfirmar documentos vigentes e completar responsáveis antes do protocolo  
 > **Status:** não submetido à ANAC
 
 ## 1. Solicitante
 
-- **Operador:** `[RAZÃO SOCIAL DO OPERADOR RBAC 135]`
-- **CNPJ:** `[CNPJ]`
-- **COA:** `[NÚMERO]`
+- **Operador:** COSTA DO SOL TAXI AEREO S.A.
+- **CNPJ:** `11.223.764/0001-62`
+- **COA publicado em 2023:** `2013-05-00AO-01-04`, revisão 33 — `[RECONFIRMAR REVISÃO VIGENTE]`
 - **Responsável perante a ANAC:** `[NOME/CARGO]`
 - **Fornecedor do software:** AirTrust
 - **Responsável técnico do software:** `[NOME/CARGO]`
@@ -16,11 +16,13 @@
 
 ## 2. Objeto da reunião
 
-Solicitar orientação prévia para o desenvolvimento, avaliação, ateste e futura autorização de uso de um sistema de Diário de Bordo Digital — eDB, integrado ao módulo Controle de Voos do AirTrust, destinado inicialmente a operações certificadas sob o RBAC nº 135.
+Solicitar orientação prévia para o desenvolvimento, avaliação, ateste e futura autorização de uso de um sistema de Diário de Bordo Digital — eDB, integrado ao módulo Controle de Voos do AirTrust, destinado inicialmente às operações da Costa do Sol certificadas sob o RBAC nº 135.
 
 O projeto não pretende utilizar o AirTrust como Diário de Bordo oficial antes da conclusão dos processos aplicáveis e da emissão do ato autorizativo. Durante desenvolvimento e avaliação, o Diário de Bordo em papel permanecerá como fonte oficial.
 
 ## 3. Escopo pretendido
+
+O primeiro escopo de modelos de aeronave, matrículas e bases operacionais será definido pela Costa do Sol e apresentado como proposta no FOP 200, sem extensão automática à totalidade da frota.
 
 ### Incluído
 
@@ -214,11 +216,12 @@ As evidências propostas incluem:
 
 ## 14. Anexos sugeridos
 
-1. baseline regulatório;
-2. matriz de conformidade;
-3. ADR arquitetural;
-4. mapa de campos e lacunas;
-5. plano de implementação;
-6. diagrama de arquitetura;
-7. roteiro preliminar de demonstração;
-8. cronograma indicativo sem compromisso de data de autorização.
+1. perfil do operador requerente;
+2. baseline regulatório;
+3. matriz de conformidade;
+4. ADR arquitetural;
+5. mapa de campos e lacunas;
+6. plano de implementação;
+7. diagrama de arquitetura;
+8. roteiro preliminar de demonstração;
+9. cronograma indicativo sem compromisso de data de autorização.
