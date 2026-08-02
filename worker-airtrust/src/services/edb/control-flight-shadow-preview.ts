@@ -60,7 +60,10 @@ export interface LoadEdbShadowPreviewOptions {
   draftId?: string;
 }
 
-function assertPositiveInteger(value: number, code: EdbShadowPreviewErrorCode): void {
+function assertPositiveInteger(
+  value: number,
+  code: EdbShadowPreviewErrorCode,
+): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw new EdbShadowPreviewError(code, 400);
   }
@@ -124,7 +127,10 @@ function buildProvenanceFindings(
   const findings: EdbShadowPreviewFinding[] = [];
   const flightOrigin = flight.origem_importacao?.trim().toUpperCase();
   if (flightOrigin !== 'MANUAL' && flightOrigin !== 'SIGVOOS') {
-    findings.push({ code: 'SOURCE_PROVENANCE_REQUIRED', path: 'sourceFlightReference' });
+    findings.push({
+      code: 'SOURCE_PROVENANCE_REQUIRED',
+      path: 'sourceFlightReference',
+    });
   }
 
   legs.forEach((leg, index) => {
@@ -141,7 +147,10 @@ function buildProvenanceFindings(
     }
   });
 
-  findings.push({ code: 'TECHNICAL_STATUS_SOURCE_UNAVAILABLE', path: 'technicalStatus.source' });
+  findings.push({
+    code: 'TECHNICAL_STATUS_SOURCE_UNAVAILABLE',
+    path: 'technicalStatus.source',
+  });
   return findings;
 }
 
@@ -198,17 +207,11 @@ export async function loadEdbShadowPreview(
     throw new EdbShadowPreviewError('FLIGHT_MISMATCH', 409);
   }
 
-  const [
-    legsResult,
-    crewResult,
-    conflictsResult,
-    rdv,
-    crewTenantMismatch,
-    crewLegMismatch,
-  ] = await Promise.all([
-    db
-      .prepare(
-        `
+  const [legsResult, crewResult, conflictsResult, rdv, crewTenantMismatch, crewLegMismatch] =
+    await Promise.all([
+      db
+        .prepare(
+          `
         SELECT
           id, empresa_id, voo_id, numero_etapa,
           origem_icao, destino_icao,
@@ -223,12 +226,12 @@ export async function loadEdbShadowPreview(
           AND deleted_at IS NULL
         ORDER BY numero_etapa ASC, id ASC
       `,
-      )
-      .bind(tenantId, flightId)
-      .all<ControlFlightLegSource>(),
-    db
-      .prepare(
-        `
+        )
+        .bind(tenantId, flightId)
+        .all<ControlFlightLegSource>(),
+      db
+        .prepare(
+          `
         SELECT
           t.id,
           t.empresa_id,
@@ -251,12 +254,12 @@ export async function loadEdbShadowPreview(
           AND t.deleted_at IS NULL
         ORDER BY t.etapa_id ASC, t.id ASC
       `,
-      )
-      .bind(tenantId, flightId)
-      .all<ControlFlightCrewSource>(),
-    db
-      .prepare(
-        `
+        )
+        .bind(tenantId, flightId)
+        .all<ControlFlightCrewSource>(),
+      db
+        .prepare(
+          `
         SELECT
           c.id,
           c.empresa_id,
@@ -295,12 +298,12 @@ export async function loadEdbShadowPreview(
           )
         ORDER BY c.id ASC
       `,
-      )
-      .bind(tenantId, flightId, tenantId, flightId, tenantId, flightId)
-      .all<ControlFlightConflictSource>(),
-    db
-      .prepare(
-        `
+        )
+        .bind(tenantId, flightId, tenantId, flightId, tenantId, flightId)
+        .all<ControlFlightConflictSource>(),
+      db
+        .prepare(
+          `
         SELECT
           id, empresa_id, voo_id, ocorrencias, divergencias, updated_at
         FROM cv_rdv_operacional
@@ -311,12 +314,12 @@ export async function loadEdbShadowPreview(
         ORDER BY id DESC
         LIMIT 1
       `,
-      )
-      .bind(tenantId, flightId)
-      .first<ControlFlightRdvSource>(),
-    db
-      .prepare(
-        `
+        )
+        .bind(tenantId, flightId)
+        .first<ControlFlightRdvSource>(),
+      db
+        .prepare(
+          `
         SELECT t.id
         FROM cv_voo_tripulantes t
         JOIN funcionarios f
@@ -328,12 +331,12 @@ export async function loadEdbShadowPreview(
           AND f.empresa_id <> ?
         LIMIT 1
       `,
-      )
-      .bind(tenantId, flightId, tenantId)
-      .first<ScopeViolationRow>(),
-    db
-      .prepare(
-        `
+        )
+        .bind(tenantId, flightId, tenantId)
+        .first<ScopeViolationRow>(),
+      db
+        .prepare(
+          `
         SELECT t.id
         FROM cv_voo_tripulantes t
         JOIN cv_voo_etapas e
@@ -348,10 +351,10 @@ export async function loadEdbShadowPreview(
           )
         LIMIT 1
       `,
-      )
-      .bind(tenantId, flightId, tenantId, flightId)
-      .first<ScopeViolationRow>(),
-  ]);
+        )
+        .bind(tenantId, flightId, tenantId, flightId)
+        .first<ScopeViolationRow>(),
+    ]);
 
   if (crewTenantMismatch) {
     throw new EdbShadowPreviewError('CREW_TENANT_MISMATCH', 409);
