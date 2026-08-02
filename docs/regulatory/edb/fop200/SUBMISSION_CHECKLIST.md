@@ -42,7 +42,8 @@
 - [x] Perfil do operador `OPERATOR_PROFILE_COSTA_DO_SOL.md` preparado.
 - [ ] FOP 200 oficial preenchido e assinado conforme exigido.
 - [x] Carta de encaminhamento direcionada à Costa do Sol, ainda com campos de responsáveis e agenda pendentes.
-- [ ] Nota conceitual `ANAC_EDB_FOP200_CONCEPT_NOTE_20260802.md` adaptada ao escopo real de aeronaves e bases.
+- [x] Nota conceitual `ANAC_EDB_FOP200_CONCEPT_NOTE_20260802.md` adaptada à Costa do Sol.
+- [ ] Completar na nota conceitual o escopo real de aeronaves, matrículas e bases.
 - [x] Baseline regulatório.
 - [x] Matriz resumida de conformidade.
 - [x] ADR da fronteira entre `cv_*` e registros regulados.
