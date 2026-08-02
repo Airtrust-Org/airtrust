@@ -70,11 +70,7 @@ describe('simulator catalog RBAC', () => {
 
   it.each(['admin', 'manager'])('allows %s through the mutation gate', async (role) => {
     const env = createEnv();
-    const response = await createApp(role).request(
-      '/api/simuladores/categorias',
-      jsonRequest,
-      env,
-    );
+    const response = await createApp(role).request('/api/simuladores/categorias', jsonRequest, env);
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ success: false });
@@ -82,11 +78,7 @@ describe('simulator catalog RBAC', () => {
 
   it('keeps authenticated catalog reads available to non-manager roles', async () => {
     const env = createEnv();
-    const response = await createApp('viewer').request(
-      '/api/simuladores/categorias',
-      {},
-      env,
-    );
+    const response = await createApp('viewer').request('/api/simuladores/categorias', {}, env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ success: true, data: [] });
