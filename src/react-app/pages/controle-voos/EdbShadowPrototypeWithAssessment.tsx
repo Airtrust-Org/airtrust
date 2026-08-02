@@ -4,6 +4,7 @@ import { AlertTriangle, BarChart3, Loader2, ShieldAlert, Wrench } from 'lucide-r
 import { z } from 'zod';
 import { fetchWithAuth } from '@/react-app/config/api';
 import EdbShadowPrototype from './EdbShadowPrototype';
+import EdbShadowReviewEvidencePanel from './EdbShadowReviewEvidencePanel';
 
 const ASSESSMENT_CLASSIFICATION = 'NON_OFFICIAL_PRELIMINARY_SHADOW_ASSESSMENT';
 
@@ -285,6 +286,7 @@ export default function EdbShadowPrototypeWithAssessment() {
     <>
       <EdbShadowPrototype />
       <AssessmentPanel flightId={flightId} />
+      <EdbShadowReviewEvidencePanel flightId={flightId} />
     </>
   );
 }
