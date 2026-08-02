@@ -1,8 +1,8 @@
 # AirTrust — Blueprint funcional mestre do produto e serviço eDB
 
 > **Data-base:** 2026-08-02 (BRT)  
-> **SHA-base:** `92a2c4eff992e91b659a04b1b3350961444e2999` (`origin/main`)  
-> **Status:** proposta funcional para revisão; não representa aprovação, ateste, aceitação ou autorização da ANAC  
+> **Base de consolidação:** `988d2844073bd3dfdf175b2260fe93eb8e7c7ae6` (`origin/main`)  
+> **Status:** blueprint funcional consolidado; capacidades não implementadas permanecem propostas e não representam aprovação, ateste, aceitação ou autorização da ANAC  
 > **Natureza:** arquitetura funcional, jornadas, estados, responsabilidades, capacidades e backlog  
 > **Escopo:** Diário de Bordo Digital para operadores, com aplicação inicial planejada a operador RBAC 135
 
@@ -45,6 +45,9 @@ Usar este blueprint em conjunto com:
 - `ANAC_EDB_REGULATORY_BASELINE_20260802.md`;
 - `ANAC_EDB_COMPLIANCE_MATRIX_20260802.csv`;
 - `ADR_EDB_REGULATED_RECORDS_BOUNDARY_20260802.md`;
+- `ADR_EDB_REGULATED_SCHEMA_D1_R2_READINESS_20260802.md`;
+- `EDB_FUNCTIONAL_BLUEPRINT_SCHEMA_ALIGNMENT_20260802.md`;
+- `EDB_FUNCTIONAL_BLUEPRINT_FIRST_OPERATOR_ALIGNMENT_20260802.md`;
 - `ANAC_EDB_RBAC135_SUBMISSION_PLAN_20260802.md`;
 - `ANAC_EDB_IMPLEMENTATION_PLAN_20260802.md`;
 - `ANAC_EDB_SIGNATURE_THREAT_MODEL_20260802.md`;
@@ -115,14 +118,19 @@ Propriedades:
 
 Responsável pelo acervo oficial, versões, volumes, termos, assinaturas, auditoria e integridade.
 
-Propriedades:
+Propriedades canônicas de arquitetura:
 
-- append-only após congelamento/assinatura;
-- snapshot independente de cadastro mutável;
-- versão e schema explícitos;
-- correção por nova versão;
-- retenção e exportação próprias;
-- acesso tenant-safe e por escopo autorizado.
+- **[C]** D1 é a fonte transacional dos fatos regulatórios estruturados;
+- **[C]** R2 armazena bytes, anexos e pacotes, sem ser fonte única de fato regulatório;
+- **[C]** cada versão congelada é completa, autossuficiente e independente de cadastro ou `cv_*` mutável;
+- **[C]** conteúdo original e versões históricas são append-only;
+- **[C]** correção, addendum e reconstituição criam nova versão com predecessor e motivo;
+- **[C]** o head corrente é transacional, separado da versão e protegido por geração esperada e idempotência;
+- **[C]** todas as relações reguladas preservam `empresa_id`, constraints cross-tenant e filtragem obrigatória no serviço;
+- **[C]** não existe delete funcional nem cadeia global por tenant no Schema V1;
+- **[C]** retenção, exportação, reconstituição e evidências de integridade possuem modelos próprios;
+- **[C]** acesso permanece tenant-safe e limitado ao escopo autorizado;
+- **[P]** schema, migration e runtime correspondentes serão implementados em frentes próprias.
 
 ### 5.4 Situação técnica
 
@@ -561,6 +569,18 @@ Escrita e assinatura offline permanecem `[D]` até método aceito.
 - `EDB-BR-028` — mudança material no método de cumprimento permanece fora do modo oficial até avaliação.
 - `EDB-BR-029` — perda ou corrupção não é tratada como simples restauração técnica; exige caso de reconstituição.
 - `EDB-BR-030` — nenhum fechamento do projeto ocorre antes de integração, autorização aplicável, cutover e validação real, quando esses marcos estiverem no escopo.
+- `EDB-BR-031` — D1 é a fonte dos fatos estruturados; R2 não é fonte única de fato regulatório.
+- `EDB-BR-032` — uma versão congelada é autossuficiente e não depende de leitura posterior de `cv_*` ou cadastro mutável.
+- `EDB-BR-033` — a versão corrente é indicada por head transacional separado com geração controlada.
+- `EDB-BR-034` — correção, addendum e reconstituição são versões distintas e preservam predecessor e motivo.
+- `EDB-BR-035` — toda relação regulada entre agregados deve manter o mesmo `empresa_id`.
+- `EDB-BR-036` — constraints de banco não dispensam autorização e filtro tenant-safe no serviço.
+- `EDB-BR-037` — objetos R2 usam chaves opacas e imutáveis, sem PII legível.
+- `EDB-BR-038` — objeto R2 só é associado após escrita e verificação; falha parcial gera órfão reconciliável, não exclusão automática.
+- `EDB-BR-039` — nenhuma evidência técnica de `shadow` é apresentada como método regulatório definitivo.
+- `EDB-BR-040` — comandos regulados críticos possuem idempotência e recibo persistido.
+- `EDB-BR-041` — o Schema V1 não cria cadeia global de escrita por tenant.
+- `EDB-BR-042` — o modo oficial exige validação de capacidade, throughput, retenção e DR além da existência do schema.
 
 ## 11. Matriz conceitual de permissões
 
@@ -874,14 +894,20 @@ Envelope sanitizado recomendado:
 
 ### 16.3 Records Core em staging
 
-- schema aditivo e tenant-safe;
-- snapshots imutáveis;
-- cadeia de versões;
-- volumes e termos;
-- correções preservando original;
-- assinatura de teste sem provider produtivo;
-- fiscalização e exportação verificáveis;
-- DR e restauração demonstrados;
+- schema aditivo, inerte e tenant-safe;
+- D1 contém todos os fatos estruturados necessários à leitura do registro;
+- snapshots históricos são autossuficientes e lidos sem consulta a `cv_*`;
+- volumes, termos, registros, versões e heads possuem relações cross-tenant protegidas;
+- duas correções concorrentes não criam dois heads válidos;
+- repetição de comando retorna o mesmo recibo sem duplicar efeitos;
+- correções, addenda e reconstituições preservam original, predecessor e motivo;
+- nenhuma rota funcional executa delete do acervo;
+- objetos R2 usam chave imutável, verificação antes do vínculo e reconciliação de órfãos;
+- fiscalização e exportação derivam do snapshot regulado;
+- Schema V2 e ledger reconhecem a migration futura;
+- rollback lógico preserva dados e desativa comportamento;
+- DR e restauração são demonstrados;
+- assinatura permanece apenas de teste, sem provider produtivo;
 - nenhuma ativação oficial.
 
 ### 16.4 Candidato à avaliação/submissão
@@ -1036,13 +1062,15 @@ Nenhuma parte deve ser descrita como substituta de outra.
 
 ## 19. Backlog funcional por ondas
 
-### Onda 0 — em execução
+### Onda 0 — concluída e integrada
 
-- preview read-only em runtime;
-- contratos shadow de situação técnica;
-- motor de divergências e prontidão;
-- readiness do schema D1/R2;
-- pacote de implantação do operador.
+- PR #711 — preview read-only em runtime;
+- PR #713 — motor de divergências e prontidão;
+- PR #715 — contratos shadow de situação técnica;
+- PR #714 — readiness do schema D1/R2;
+- PR #710 — pacote de implantação do operador.
+
+Essas integrações encerram os artefatos preparatórios da onda, sem iniciar migration, shadow pilot com dados reais ou modo oficial.
 
 ### Onda 1 — trabalho de baixo arrependimento
 
@@ -1059,9 +1087,9 @@ Pode avançar sem escolher método definitivo de assinatura:
 9. critérios de acessibilidade e fatores humanos do PED;
 10. plano de suporte e incidente do shadow pilot.
 
-### Onda 2 — após decisões arquiteturais
+### Onda 2 — após os gates de implementação do Records Core
 
-Depende de ADR aceito e revisão D1/R2:
+A arquitetura D1/R2 foi aceita e integrada pela PR #714. A execução continua bloqueada até os gates de schema inerte, Schema V2/ledger, testes de constraints e autorização específica:
 
 1. schema inerte do Records Core;
 2. versionamento e correções;
@@ -1115,17 +1143,17 @@ Não paralelizar decisões sobre:
 - acesso fiscal definitivo;
 - cutover.
 
-As cinco frentes atuais podem produzir insumos para este blueprint sem que este documento altere seus contratos ou arquivos.
+As frentes #711, #713, #715, #714 e #710 foram integradas e este blueprint incorpora seus resultados sem alterar os contratos implementados.
 
-A ordem recomendada de consolidação funcional é:
+A ordem recomendada para o próximo ciclo funcional é:
 
-1. incorporar os contratos puros;
-2. atualizar jornadas e regras afetadas;
-3. fechar RBAC conceitual;
-4. prototipar telas shadow;
-5. validar com operação, manutenção, segurança e treinamento;
-6. registrar perguntas para o FOP 200;
-7. somente depois converter decisões em schema e código regulado.
+1. concluir o diagnóstico verificável do primeiro operador;
+2. fechar RBAC conceitual por ator, aeronave, tarefa e período;
+3. prototipar e validar as jornadas shadow;
+4. fechar contratos de eventos, idempotência, versões e evidências;
+5. registrar e tratar as perguntas do FOP 200;
+6. preparar a futura migration aditiva e inerte em PR própria;
+7. manter assinatura, escrita offline e modo oficial nos gates regulatórios específicos.
 
 ## 21. Decisões pendentes
 
@@ -1143,7 +1171,7 @@ A ordem recomendada de consolidação funcional é:
 
 ### Do operador
 
-- primeiro operador e frota;
+- frota, matrículas, bases, responsáveis e escopo verificável da Costa do Sol;
 - papéis e designações;
 - manuais reais;
 - operação por base e tipo de missão;
@@ -1156,17 +1184,17 @@ A ordem recomendada de consolidação funcional é:
 
 ### Técnicas
 
-- D1 versus R2;
-- conteúdo canônico;
-- precisão e unidades;
-- timezone e quatro horários;
-- provider e gestão de chaves;
-- plataforma PED;
-- cache e cifragem local;
-- retenção e verificação de longo prazo;
+- algoritmo e canonicalização definitivos;
+- método de assinatura, não repúdio e trusted timestamp;
+- formato de envelopes binários e gestão de chaves;
+- plataforma, cache, cifragem e escrita PED/offline;
+- política final de bucket lock e verificação de longo prazo;
+- topologia física do modo oficial: D1 compartilhado, dedicado por operador ou por coorte;
+- sizing real do primeiro operador, capacidade e throughput;
+- RTO/RPO regulatório e drills;
 - portabilidade e verificador independente;
-- RTO/RPO e drills;
-- arquitetura de acesso fiscal.
+- forma definitiva de acesso fiscal;
+- parâmetros que dependem do FOP 200.
 
 ## 22. Fora do escopo deste blueprint
 

@@ -114,14 +114,14 @@ A fase seguinte do serviço deve produzir, no mínimo:
 
 Esses entregáveis pertencem ao diagnóstico do operador. Não devem ser confundidos com desenvolvimento do núcleo regulado.
 
-## 7. Dependências com as PRs atuais
+## 7. Componentes integrados relacionados
 
 - **#710 — pacote de implantação:** fornece os templates e o método de trabalho que deverão ser instanciados para a Costa do Sol.
 - **#711 — preview read-only:** poderá apoiar demonstração técnica futura, mas não deve ser ativado para dados reais sem autorização de ambiente e acesso.
 - **#713 — motor de divergências:** poderá produzir métricas sanitizadas no piloto, depois da definição do protocolo específico.
-- **#714 — readiness D1/R2:** orienta o futuro schema, mas não é necessário para iniciar o diagnóstico documental.
+- **#714 — readiness D1/R2:** estabelece a arquitetura canônica do futuro schema, sem autorizar migration.
 - **#715 — situação técnica shadow:** fornece linguagem e validações para cenários técnicos, ainda sem efeito oficial.
-- **#717 — blueprint:** consolida jornadas, estados, responsabilidades e backlog.
+- **#717 — blueprint:** consolida jornadas, estados, responsabilidades e backlog após essas integrações.
 
 ## 8. Próximo gate funcional
 

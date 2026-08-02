@@ -3,8 +3,8 @@
 > **Data-base:** 2026-08-02 (BRT)  
 > **Blueprint relacionado:** `EDB_FUNCTIONAL_PRODUCT_BLUEPRINT_20260802.md`  
 > **Fonte arquitetural:** PR #714 — `audit/edb-regulated-schema-readiness-20260802`  
-> **SHA da fonte:** `57737750051a29d0e03af67afc82e1ec546445b1`  
-> **Status:** alinhamento funcional provisório; torna-se canônico somente após integração da PR #714  
+> **Fonte integrada:** PR #714, merge `bb970278b1d685313e3d273aa3746eb526ca0d4d`  
+> **Status:** alinhamento arquitetural canônico; não autoriza schema executável, migration ou ativação  
 > **Natureza:** documentação; não implementa schema, migration, código, ambiente ou ativação
 
 ## 1. Finalidade
@@ -13,10 +13,10 @@ Este anexo registra o impacto funcional das decisões arquiteturais fechadas pel
 
 Ele evita dois erros:
 
-1. manter como decisão técnica aberta um tema já fechado no ADR draft da PR #714;
-2. tratar como capacidade implementada uma decisão que ainda não foi integrada à `main` nem materializada em migration.
+1. manter como decisão técnica aberta um tema já fechado e integrado pelo ADR da PR #714;
+2. tratar a decisão arquitetural canônica como capacidade já materializada em schema ou migration.
 
-Até o merge da PR #714, as decisões abaixo devem ser interpretadas como **[P — decisão arquitetural aprovada na frente, pendente de integração]**. Após o merge, podem ser promovidas a **[C]** na próxima revisão do blueprint.
+As decisões abaixo são **[C — arquitetura canônica integrada]**. A implementação do schema, da migration e das capacidades de runtime continua sujeita aos gates próprios e não decorre automaticamente deste documento.
 
 ## 2. Decisões que deixam de ser genericamente abertas
 
@@ -248,7 +248,7 @@ Além dos critérios já registrados no blueprint, o marco de Records Core em st
 
 ### Onda 0
 
-O item “readiness do schema D1/R2” passa a **concluído na frente**, pendente apenas de integração da PR #714.
+O item “readiness do schema D1/R2” está **concluído e integrado** pela PR #714.
 
 ### Onda 1
 
@@ -314,15 +314,15 @@ O modo oficial exige adicionalmente:
 - método de integridade e assinatura aceito;
 - autorização do operador e das aeronaves.
 
-## 11. Regra de consolidação
+## 11. Consolidação realizada
 
-Após o merge da PR #714:
+Com a integração da PR #714:
 
-1. promover as decisões arquiteturais deste anexo para `[C]`;
-2. incluir o ADR de readiness na lista principal de referências do blueprint;
-3. atualizar diretamente as seções 5.3, 8.3, 10, 16.3, 19, 20 e 21;
-4. remover este anexo na primeira revisão consolidada, ou mantê-lo somente como histórico de transição;
-5. não iniciar migration como efeito automático do merge documental.
+1. as decisões arquiteturais deste anexo são classificadas como `[C]`;
+2. o ADR de readiness integra as referências principais do blueprint;
+3. as seções afetadas do blueprint foram atualizadas para refletir a arquitetura canônica;
+4. este anexo permanece como registro de rastreabilidade da consolidação;
+5. nenhuma migration, ativação ou efeito oficial é iniciado pelo merge documental.
 
 ## 12. Fora do escopo
 
