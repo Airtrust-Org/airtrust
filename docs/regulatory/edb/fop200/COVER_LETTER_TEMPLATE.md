@@ -1,11 +1,11 @@
-# Minuta de carta de encaminhamento — reunião prévia eDB
+# Minuta de carta de encaminhamento — Costa do Sol — reunião prévia eDB
 
-> Substituir todos os campos entre colchetes. Esta carta acompanha o FOP 200 oficial e não o substitui.
+> Completar os campos entre colchetes. Reconfirmar a revisão vigente do COA e os poderes do signatário antes do protocolo. Esta carta acompanha o FOP 200 oficial e não o substitui.
 
 **À Agência Nacional de Aviação Civil — ANAC**  
-**Assunto:** Solicitação de reunião prévia — proposta de Diário de Bordo Digital — operador RBAC 135
+**Assunto:** Solicitação de reunião prévia — proposta de Diário de Bordo Digital — Costa do Sol Táxi Aéreo
 
-A **[RAZÃO SOCIAL]**, inscrita no CNPJ sob o nº **[CNPJ]**, titular do Certificado de Operador Aéreo nº **[COA]**, vem solicitar reunião prévia para apresentação e orientação acerca da futura implantação de um sistema de Diário de Bordo Digital — eDB, integrado à plataforma AirTrust.
+A **COSTA DO SOL TAXI AEREO S.A.**, inscrita no CNPJ sob o nº **11.223.764/0001-62**, titular do Certificado de Operador Aéreo nº **2013-05-00AO-01-04 [RECONFIRMAR REVISÃO VIGENTE]**, vem solicitar reunião prévia para apresentação e orientação acerca da futura implantação de um sistema de Diário de Bordo Digital — eDB, integrado à plataforma AirTrust.
 
 A proposta tem como objetivo substituir o Diário de Bordo impresso somente depois da conclusão dos processos regulatórios aplicáveis, do ateste ou aceitação do software para o escopo requerido, da aprovação ou aceitação dos procedimentos e manuais do operador e da correspondente alteração das Especificações Operativas.
 
@@ -29,7 +29,9 @@ A reunião pretende obter orientação, especialmente, sobre:
 - escopo dos manuais, demonstrações e treinamento;
 - estratégia de shadow mode, migração e cutover das aeronaves.
 
-Seguem anexos o FOP 200 oficial preenchido, a nota conceitual do projeto, o baseline regulatório, a matriz resumida de conformidade, os diagramas de arquitetura e a lista priorizada de questões.
+O primeiro escopo proposto abrangerá **[MODELO(S) DE AERONAVE]**, **[MATRÍCULA(S)]** e **[BASE(S) OPERACIONAL(IS)]**, sem antecipar autorização ou extensão automática à totalidade da frota da Costa do Sol.
+
+Seguem anexos o FOP 200 oficial preenchido, a nota conceitual do projeto, o perfil do operador, o baseline regulatório, a matriz resumida de conformidade, os diagramas de arquitetura e a lista priorizada de questões.
 
 São sugeridas as seguintes datas e horários para a reunião:
 
@@ -37,11 +39,12 @@ São sugeridas as seguintes datas e horários para a reunião:
 2. **[DATA/HORA/FUSO]**;
 3. **[DATA/HORA/FUSO]**.
 
-Participarão pela requerente e pelo fornecedor do sistema:
+Participarão pela Costa do Sol e pelo fornecedor do sistema:
 
-- **[NOME — FUNÇÃO — ORGANIZAÇÃO]**;
-- **[NOME — FUNÇÃO — ORGANIZAÇÃO]**;
-- **[NOME — FUNÇÃO — ORGANIZAÇÃO]**.
+- **[NOME — FUNÇÃO — COSTA DO SOL]**;
+- **[NOME — FUNÇÃO — COSTA DO SOL]**;
+- **[NOME — FUNÇÃO — AIRTRUST]**;
+- **[NOME — FUNÇÃO — ORGANIZAÇÃO, SE APLICÁVEL]**.
 
 O ponto focal para esta solicitação é **[NOME]**, **[CARGO]**, pelo e-mail **[E-MAIL]** e telefone **[TELEFONE]**.
 
@@ -49,5 +52,5 @@ Atenciosamente,
 
 **[NOME DO SIGNATÁRIO]**  
 **[CARGO/PODERES]**  
-**[RAZÃO SOCIAL]**  
+**COSTA DO SOL TAXI AEREO S.A.**  
 **[DATA]**
