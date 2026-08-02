@@ -27,6 +27,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Export exact Prettier output for SCORM diagnostic
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            worker-airtrust/src/__tests__/routes/lms-relatorios-scorm-pagination.test.ts
+            worker-airtrust/src/repositories/lmsRelatoriosRepository.ts
+          )
+          npx --yes prettier@3.9.6 --write "${files[@]}"
+          for file in "${files[@]}"; do
+            encoded="$(base64 -w0 "$file")"
+            body="PRETTIER_SCORM_FILE:${file}"$'\n'"${encoded}"
+            gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body"
+          done
+
       - name: Run tests
         run: npm run test:run
 
