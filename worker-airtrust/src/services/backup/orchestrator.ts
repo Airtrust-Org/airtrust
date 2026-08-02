@@ -16,6 +16,10 @@ interface Env {
   BUCKET: R2Bucket;
 }
 
+type AutomaticBackupType = 'DIARIO' | 'SEMANAL' | 'MENSAL';
+type BackupScope = 'SYSTEM_GLOBAL' | 'TENANT_SCOPED' | 'MODULAR' | 'GERAL';
+type BackupRow = Record<string, unknown>;
+
 // UUID generator simples (fallback para Workers sem crypto)
 function generateUUID(): string {
   // Implementação simplificada de UUID v4
@@ -33,6 +37,8 @@ interface CriarBackupOptions {
   usuarios_id?: number;
   descricao?: string;
   retention_policy?: '30_DIAS' | '1_ANO' | '7_ANOS';
+  backup_uuid?: string;
+  escopo?: BackupScope;
 }
 
 interface BackupMetrics {
@@ -57,9 +63,20 @@ export class BackupOrchestrator {
   constructor(private env: Env) {}
 
   /**
-   * Executa backup automático (cron)
+   * Executa backup automático (cron) com idempotência por tipo e dia UTC.
+   * O escopo é explicitamente sistêmico: não representa exportação de tenant.
    */
-  async executarBackupAutomatico(tipo: 'DIARIO' | 'SEMANAL' | 'MENSAL'): Promise<void> {
+  async executarBackupAutomatico(tipo: AutomaticBackupType): Promise<void> {
+    const triggeredBy = `CRON_${tipo}`;
+    const statusExistente = await this.obterStatusBackupAutomaticoDoDia(triggeredBy);
+
+    if (statusExistente && statusExistente !== 'FALHOU') {
+      console.warn(
+        `⏭️ Backup automático ${tipo} já registrado hoje com status ${statusExistente}; execução duplicada ignorada`,
+      );
+      return;
+    }
+
     console.log(`🔄 Iniciando backup automático: ${tipo}`);
 
     const retentionMap = {
@@ -71,13 +88,28 @@ export class BackupOrchestrator {
     const escopo = tipo === 'MENSAL' ? 'COMPLETO' : 'INCREMENTAL';
     const modulosParaBackup =
       tipo === 'MENSAL' ? TODOS_MODULOS : this.determinarModulosIncrementais();
+    const backupUuid = this.gerarUuidBackupAutomatico(tipo, statusExistente === 'FALHOU');
 
-    await this.executarBackupManual({
-      tipo: escopo === 'COMPLETO' ? 'COMPLETO' : 'INCREMENTAL',
-      modulos: modulosParaBackup,
-      triggered_by: `CRON_${tipo}`,
-      retention_policy: retentionMap[tipo],
-    });
+    try {
+      await this.executarBackupManual({
+        tipo: escopo === 'COMPLETO' ? 'COMPLETO' : 'INCREMENTAL',
+        modulos: modulosParaBackup,
+        triggered_by: triggeredBy,
+        retention_policy: retentionMap[tipo],
+        backup_uuid: backupUuid,
+        escopo: 'SYSTEM_GLOBAL',
+        descricao:
+          'Backup automático sistêmico para disaster recovery; não é exportação de tenant.',
+      });
+    } catch (error) {
+      if (this.isDuplicateBackupError(error)) {
+        console.warn(
+          `⏭️ Backup automático ${tipo} já iniciado por outra invocação; duplicata ignorada`,
+        );
+        return;
+      }
+      throw error;
+    }
   }
 
   /**
@@ -85,11 +117,12 @@ export class BackupOrchestrator {
    */
   async executarBackupManual(options: CriarBackupOptions): Promise<number> {
     const startTime = Date.now();
-    const backupUuid = generateUUID();
+    const backupUuid = options.backup_uuid || generateUUID();
 
     console.log(`📦 Criando backup: ${options.tipo}`, {
       uuid: backupUuid,
       modulos: options.modulos?.length || 'TODOS',
+      escopo: options.escopo || (options.modulos ? 'MODULAR' : 'GERAL'),
     });
 
     const modulosParaBackup = options.modulos || (TODOS_MODULOS as unknown as ModuloBackup[]);
@@ -99,7 +132,7 @@ export class BackupOrchestrator {
     const controlId = await this.criarRegistroControle({
       uuid: backupUuid,
       tipo: options.tipo,
-      escopo: options.modulos ? 'MODULAR' : 'GERAL',
+      escopo: options.escopo || (options.modulos ? 'MODULAR' : 'GERAL'),
       triggered_by: options.triggered_by,
       modulos_incluidos: JSON.stringify(modulosOrdenados),
       retention_policy: options.retention_policy || '7_ANOS',
@@ -169,17 +202,22 @@ export class BackupOrchestrator {
 
       // Exportar tabelas relacionadas
       const dadosRelacionados = await this.exportarTabelas([...config.tabelas_relacionadas]);
+      const tabelasExportadas = [
+        ...new Set([...Object.keys(dadosPrincipais), ...Object.keys(dadosRelacionados)]),
+      ];
 
       // Consolidar dados
       const backupData = {
         modulo,
-        versao: '1.0',
+        versao: '1.1',
         timestamp: new Date().toISOString(),
         tabelas_principais: dadosPrincipais,
         tabelas_relacionadas: dadosRelacionados,
         metadata: {
           total_registros:
             this.contarRegistros(dadosPrincipais) + this.contarRegistros(dadosRelacionados),
+          total_tabelas: tabelasExportadas.length,
+          tabelas_exportadas: tabelasExportadas,
           dependencias: config.dependencias,
         },
       };
@@ -202,40 +240,96 @@ export class BackupOrchestrator {
 
       return {
         totalRegistros: backupData.metadata.total_registros,
-        totalTabelas: config.tabelas_principais.length + config.tabelas_relacionadas.length,
+        totalTabelas: backupData.metadata.total_tabelas,
         tamanhoBytes: jsonString.length,
         duracaoSegundos: duracao,
       };
     } catch (error) {
       await this.logBackup(controlId, 'ERROR', `Falha no backup do módulo ${config.nome}`, {
-        detalhes: JSON.stringify(error),
+        detalhes: JSON.stringify({ error: this.formatarErro(error) }),
       });
       throw error;
     }
   }
 
   /**
-   * Exporta dados de tabelas
+   * Exporta dados de tabelas de forma fail-closed.
+   * Tabelas sem deleted_at são exportadas integralmente; tabela ausente ou erro SQL falha o backup.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async exportarTabelas(tabelas: string[]): Promise<Record<string, any[]>> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const resultado: Record<string, any[]> = {};
+  private async exportarTabelas(tabelas: string[]): Promise<Record<string, BackupRow[]>> {
+    const resultado: Record<string, BackupRow[]> = {};
 
     for (const tabela of tabelas) {
-      try {
-        const query = `SELECT * FROM ${tabela} WHERE deleted_at IS NULL`;
-        const { results } = await this.env.DB.prepare(query).all();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        resultado[tabela] = results as any[];
-      } catch {
-        // Tabela pode não existir ainda
-        console.warn(`Tabela ${tabela} não encontrada, pulando...`);
-        resultado[tabela] = [];
-      }
+      resultado[tabela] = await this.exportarTabela(tabela);
     }
 
     return resultado;
+  }
+
+  private async exportarTabela(tabela: string): Promise<BackupRow[]> {
+    this.validarNomeTabela(tabela);
+
+    try {
+      const { results: colunas } = await this.env.DB.prepare(`PRAGMA table_info("${tabela}")`).all<{
+        name?: string;
+      }>();
+
+      if (!colunas || colunas.length === 0) {
+        throw new Error('tabela não existe no schema ativo');
+      }
+
+      const nomesColunas = new Set(
+        colunas.map((coluna) => String(coluna.name || '').trim()).filter(Boolean),
+      );
+      const filtroSoftDelete = nomesColunas.has('deleted_at') ? ' WHERE "deleted_at" IS NULL' : '';
+      const query = `SELECT * FROM "${tabela}"${filtroSoftDelete}`;
+      const { results } = await this.env.DB.prepare(query).all<BackupRow>();
+
+      return results;
+    } catch (error) {
+      throw new Error(
+        `Falha ao exportar tabela configurada ${tabela}: ${this.formatarErro(error)}`,
+      );
+    }
+  }
+
+  private validarNomeTabela(tabela: string): void {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(tabela)) {
+      throw new Error(`Nome de tabela inválido na configuração de backup: ${tabela}`);
+    }
+  }
+
+  private async obterStatusBackupAutomaticoDoDia(triggeredBy: string): Promise<string | null> {
+    const row = await this.env.DB.prepare(
+      `SELECT status
+         FROM backups_controle
+        WHERE triggered_by = ?
+          AND date(created_at) = date('now')
+        ORDER BY id DESC
+        LIMIT 1`,
+    )
+      .bind(triggeredBy)
+      .first<{ status?: string }>();
+
+    return row?.status ? String(row.status) : null;
+  }
+
+  private gerarUuidBackupAutomatico(tipo: AutomaticBackupType, retry: boolean): string {
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
+    const base = `cron-${tipo.toLowerCase()}-${date}`;
+
+    if (!retry) return base;
+
+    const retrySlot = now.toISOString().slice(11, 16).replace(':', '');
+    return `${base}-retry-${retrySlot}`;
+  }
+
+  private isDuplicateBackupError(error: unknown): boolean {
+    const message = this.formatarErro(error).toLowerCase();
+    return (
+      message.includes('unique constraint failed') && message.includes('backups_controle.uuid')
+    );
   }
 
   private async listarObjetosR2(skipBackupObjects = false): Promise<R2BackupObject[]> {
@@ -396,7 +490,7 @@ export class BackupOrchestrator {
     const result = await this.env.DB.prepare(
       `
       INSERT INTO backups_controle (
-        uuid, tipo, escopo, triggered_by, modulos_incluidos, 
+        uuid, tipo, escopo, triggered_by, modulos_incluidos,
         retention_policy, expires_at, r2_bucket, r2_path, status, usuarios_id, descricao
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EM_PROGRESSO', ?, ?)
     `,
@@ -439,7 +533,6 @@ export class BackupOrchestrator {
   /**
    * Registra log de backup
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async logBackup(
     controlId: number,
     nivel: string,
@@ -472,8 +565,8 @@ export class BackupOrchestrator {
   private async finalizarBackup(controlId: number, dados: any): Promise<void> {
     await this.env.DB.prepare(
       `
-      UPDATE backups_controle 
-      SET status = ?, r2_checksum_sha256 = ?, duracao_segundos = ?, 
+      UPDATE backups_controle
+      SET status = ?, r2_checksum_sha256 = ?, duracao_segundos = ?,
           total_registros = ?, total_tabelas = ?, tamanho_bytes = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -502,8 +595,7 @@ export class BackupOrchestrator {
   /**
    * Conta registros em dataset
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private contarRegistros(dados: Record<string, any[]>): number {
+  private contarRegistros(dados: Record<string, BackupRow[]>): number {
     return Object.values(dados).reduce((sum, arr) => sum + arr.length, 0);
   }
 
