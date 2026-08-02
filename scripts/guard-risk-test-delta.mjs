@@ -28,6 +28,18 @@ export const RISK_RULES = [
     tests: [/(^|\/)(__tests__|tests)\/.*certificado.*\.test\.(ts|tsx|js|mjs)$/i],
   },
   {
+    id: 'qualification-history',
+    runtime: [
+      /^worker-airtrust\/src\/routes\/qualificacoes[^/]*\.ts$/,
+      /^worker-airtrust\/src\/services\/qualificac/i,
+      /^src\/react-app\/.*qualificac/i,
+      /^src\/services\/.*qualificac/i,
+    ],
+    tests: [
+      /(^|\/)(__tests__|tests)\/.*(qualificac|qualification|historico|history).*\.test\.(ts|tsx|js|mjs)$/i,
+    ],
+  },
+  {
     id: 'lms-history',
     runtime: [
       /^worker-airtrust\/src\/routes\/lms-[^/]*\.ts$/,
@@ -36,6 +48,60 @@ export const RISK_RULES = [
       /^src\/react-app\/hooks\/useLms\.ts$/,
     ],
     tests: [/(^|\/)(__tests__|tests)\/.*(lms|edapp|ead).*\.test\.(ts|tsx|js|mjs)$/i],
+  },
+  {
+    id: 'simulator-fichas',
+    runtime: [
+      /^worker-airtrust\/src\/routes\/simuladores[^/]*\.ts$/,
+      /^worker-airtrust\/src\/services\/simulador/i,
+      /^src\/react-app\/.*simulador/i,
+      /^src\/react-app\/components\/(modelos|fichas)\//i,
+      /^src\/services\/.*simulador/i,
+    ],
+    tests: [
+      /(^|\/)(__tests__|tests)\/.*(simulador|simulator|ficha|modelo-sessao).*\.test\.(ts|tsx|js|mjs)$/i,
+    ],
+  },
+  {
+    id: 'frms-safety',
+    runtime: [
+      /^worker-airtrust\/src\/(routes|services|lib|cron)\/.*frms[^/]*\.ts$/,
+      /^src\/react-app\/pages\/escalas\/.*frms[^/]*\.(ts|tsx)$/i,
+    ],
+    tests: [/(^|\/)(__tests__|tests)\/.*(frms|fadiga|fatigue|jornada).*\.test\.(ts|tsx|js|mjs)$/i],
+  },
+  {
+    id: 'scheduled-jobs',
+    runtime: [/^worker-airtrust\/src\/cron\//],
+    tests: [/(^|\/)(__tests__|tests)\/.*(cron|scheduled|job|notificac).*\.test\.(ts|tsx|js|mjs)$/i],
+  },
+  {
+    id: 'document-generation',
+    runtime: [
+      /^worker-airtrust\/src\/(routes|services)\/.*(documento|relatorio|pdf)[^/]*\.ts$/i,
+      /^src\/react-app\/.*(documento|relatorio|pdf)/i,
+    ],
+    tests: [
+      /(^|\/)(__tests__|tests)\/.*(documento|document|relatorio|report|pdf|certificado).*\.test\.(ts|tsx|js|mjs)$/i,
+    ],
+  },
+  {
+    id: 'migration-contract',
+    runtime: [/^worker-airtrust\/migrations\/.*\.sql$/],
+    tests: [
+      /^worker-airtrust\/src\/__tests__\/migrations\/.*\.test\.ts$/i,
+      /^scripts\/__tests__\/.*migration.*\.test\.mjs$/i,
+    ],
+  },
+  {
+    id: 'destructive-operations',
+    runtime: [
+      /^worker-airtrust\/src\/routes\/(admin|backup|maintenance|manutencao)[^/]*\.ts$/i,
+      /^worker-airtrust\/src\/services\/(backup|maintenance|manutencao)/i,
+    ],
+    tests: [
+      /(^|\/)(__tests__|tests)\/.*(admin|backup|destrutiv|delete|reset|maintenance|manutencao).*\.test\.(ts|tsx|js|mjs)$/i,
+    ],
   },
   {
     id: 'frontend-api-client',
