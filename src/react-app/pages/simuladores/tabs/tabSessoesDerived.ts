@@ -61,7 +61,7 @@ export function getProximasSessoes(
 ): Sessao[] {
   return sessoesFiltradas
     .filter((sessao) => isSameStatus(sessao.status, 'AGENDADO') && sessao.data >= todayKey)
-    .reverse()
+    .sort((left, right) => left.data.localeCompare(right.data))
     .slice(0, limit);
 }
 
