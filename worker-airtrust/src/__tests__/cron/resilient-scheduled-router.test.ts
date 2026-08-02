@@ -12,7 +12,10 @@ import {
   LMS_REMINDER_DISCOVERY_BATCH,
   LMS_REMINDER_PROCESS_BATCH,
 } from '../../cron/resilient/lms-reminders';
-import { getResilientCronPlan } from '../../cron/resilient/scheduled-router';
+import {
+  buildCronStateSchemaProbeQuery,
+  getResilientCronPlan,
+} from '../../cron/resilient/scheduled-router';
 import {
   resolveNextSigvoosDay,
   shouldRunSigvoosAtCurrentHour,
@@ -51,6 +54,24 @@ describe('resilient scheduled router', () => {
     expect(getResilientCronPlan('0 3 * * *').useResilientJobs).toBe(false);
     expect(getResilientCronPlan('0 4 * * SUN').useResilientJobs).toBe(false);
     expect(getResilientCronPlan('0 5 1 * *').useResilientJobs).toBe(false);
+  });
+
+  it('verifica todo o schema resiliente antes de qualquer efeito colateral', () => {
+    const sql = compactSql(buildCronStateSchemaProbeQuery());
+    expect(sql).toContain('FROM cron_job_state');
+    expect(sql).toContain('FROM cron_job_items');
+    expect(sql).toContain('FROM cron_job_runs');
+
+    const router = readFileSync(
+      resolve(process.cwd(), 'src/cron/resilient/scheduled-router.ts'),
+      'utf8',
+    );
+    const schemaProbeIndex = router.indexOf('await assertCronStateSchemaAvailable(env.DB)');
+    const dailyAlertsIndex = router.indexOf('await alertasDiariosHandler(event, env)');
+
+    expect(schemaProbeIndex).toBeGreaterThan(-1);
+    expect(dailyAlertsIndex).toBeGreaterThan(-1);
+    expect(schemaProbeIndex).toBeLessThan(dailyAlertsIndex);
   });
 
   it('ativa o roteador no entrypoint sem alterar os triggers oficiais', () => {
