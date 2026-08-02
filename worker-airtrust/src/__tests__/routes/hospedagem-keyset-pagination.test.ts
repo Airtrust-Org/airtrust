@@ -85,7 +85,9 @@ function hospedagem(
 }
 
 function toListPayload(row: StoredHospedagem) {
-  const { empresa_id: _empresaId, deleted_at: _deletedAt, ...payload } = row;
+  const { empresa_id, deleted_at, ...payload } = row;
+  void empresa_id;
+  void deleted_at;
   return payload;
 }
 
