@@ -1,0 +1,40 @@
+name: Temporary eDB Shadow Focused Test Diagnostic
+
+on:
+  push:
+    branches:
+      - feat/edb-shadow-prototype-ui-20260802
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/edb-shadow-prototype-ui-20260802
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Capture focused test output
+        shell: bash
+        run: |
+          set +e
+          npx vitest run src/react-app/pages/controle-voos/__tests__/edb-shadow-prototype.test.tsx --reporter=verbose > .edb-shadow-focused-test.log 2>&1
+          status=$?
+          echo "EXIT_STATUS=$status" >> .edb-shadow-focused-test.log
+          exit 0
+      - name: Commit diagnostic and self-remove
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/tmp-edb-shadow-focused-test-diagnostic.yml
+          git add .edb-shadow-focused-test.log
+          git commit -m "chore(test): capture focused eDB shadow failure"
+          git push origin HEAD:feat/edb-shadow-prototype-ui-20260802
