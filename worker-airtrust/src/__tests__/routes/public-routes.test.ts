@@ -116,4 +116,38 @@ describe('public routes extraction', () => {
       },
     });
   });
+
+  it('limita o proxy público de tradução por IP', async () => {
+    const app = createPublicApp();
+    const headers = {
+      'Content-Type': 'application/json',
+      'CF-Connecting-IP': '203.0.113.77',
+    };
+    const body = JSON.stringify({ text: 'Teste', from: 'pt', to: 'pt' });
+
+    for (let requestNumber = 1; requestNumber <= 20; requestNumber += 1) {
+      const response = await app.request('/api/public/translate', {
+        method: 'POST',
+        headers,
+        body,
+      });
+      expect(response.status).toBe(200);
+    }
+
+    const blocked = await app.request('/api/public/translate', {
+      method: 'POST',
+      headers,
+      body,
+    });
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('x-ratelimit-limit')).toBe('20');
+    expect(blocked.headers.get('x-ratelimit-remaining')).toBe('0');
+    expect(blocked.headers.get('retry-after')).toBe('60');
+    await expect(blocked.json()).resolves.toMatchObject({
+      success: false,
+      code: 'RATE_LIMIT_EXCEEDED',
+      retryAfter: 60,
+    });
+  });
 });

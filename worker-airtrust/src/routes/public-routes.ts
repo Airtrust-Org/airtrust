@@ -1,7 +1,14 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
+import { rateLimiter } from '../middleware/rate-limit';
 
 type PublicApp = Hono<{ Bindings: Env; Variables: Variables }>;
+
+const publicTranslateRateLimit = rateLimiter({
+  maxRequests: 20,
+  windowSeconds: 60,
+  keyPrefix: 'public-translate',
+});
 
 /**
  * Registra rotas públicas no app principal.
@@ -36,7 +43,7 @@ export function registerPublicRoutes(app: PublicApp) {
    * Tradução pública para fallback de i18n em runtime.
    * Uso principal: traduzir textos residuais hardcoded para EN quando idioma ativo = en-US.
    */
-  app.post('/api/public/translate', async (c) => {
+  app.post('/api/public/translate', publicTranslateRateLimit, async (c) => {
     const body = (await c.req.json().catch(() => null)) as {
       text?: string;
       from?: string;
@@ -123,7 +130,7 @@ export function registerPublicRoutes(app: PublicApp) {
           target: to,
         },
       });
-    } catch (error) {
+    } catch {
       return c.json(
         {
           success: false,
