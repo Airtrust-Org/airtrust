@@ -116,7 +116,7 @@ function buildCourseSetorFilter(
   };
 }
 
-// ── Queries ────────────────────────────────────────────────────────────────────
+// ── Queries ───────────────────────────────────────────────────────────────────
 
 /**
  * Conformidade por função (cargo).
@@ -502,12 +502,7 @@ export async function getScormConclusaoInconsistenteRows(
       LIMIT ?
       `,
     )
-    .bind(
-      empresaId,
-      ...setorFilter.bindings,
-      ...cursorBindings,
-      limit + 1,
-    )
+    .bind(empresaId, ...setorFilter.bindings, ...cursorBindings, limit + 1)
     .all<ScormConclusaoInconsistenteLightRow>();
 
   const scannedRows = lightResults.results || [];

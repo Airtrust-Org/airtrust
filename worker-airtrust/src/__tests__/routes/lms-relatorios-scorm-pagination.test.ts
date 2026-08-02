@@ -26,8 +26,7 @@ vi.mock('../../middleware/auth', () => ({
 vi.mock('../../middleware/rbac', () => ({
   requireRole:
     () =>
-    async (_c: TestContext, next: () => Promise<void>) =>
-      next(),
+    async (_c: TestContext, next: () => Promise<void>) => next(),
 }));
 
 vi.mock('../../routes/escalas-shared', () => ({

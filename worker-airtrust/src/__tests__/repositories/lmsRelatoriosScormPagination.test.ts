@@ -143,10 +143,7 @@ describe('getScormConclusaoInconsistenteRows lightweight pagination', () => {
     });
 
     expect(secondPage.rows.map((row) => row.matricula_id)).toEqual([2]);
-    expect([...firstPage.rows, ...secondPage.rows].map((row) => row.matricula_id)).toEqual([
-      3,
-      2,
-    ]);
+    expect([...firstPage.rows, ...secondPage.rows].map((row) => row.matricula_id)).toEqual([3, 2]);
     expect(
       new Set([...firstPage.rows, ...secondPage.rows].map((row) => row.matricula_id)).size,
     ).toBe(2);
