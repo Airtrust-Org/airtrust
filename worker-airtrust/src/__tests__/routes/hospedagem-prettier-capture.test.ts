@@ -1,17 +1,32 @@
-import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-hospedagem-prettier-'));
-let formattedRoute = '';
-let formattedTest = '';
+let routePatch = '';
+let testPatch = '';
 
 afterAll(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
+
+function diffFiles(source: string, formatted: string): string {
+  const result = spawnSync(
+    'diff',
+    ['-u', '--label', 'source', '--label', 'formatted', source, formatted],
+    { encoding: 'utf8' },
+  );
+  if (result.status !== 0 && result.status !== 1) {
+    throw new Error(result.stderr || 'diff failed');
+  }
+  return result.stdout;
+}
+
+function encode(content: string): string {
+  return Buffer.from(content, 'utf8').toString('base64');
+}
 
 beforeAll(() => {
   const routeSource = join(process.cwd(), 'src/routes/hospedagem.ts');
@@ -39,20 +54,16 @@ beforeAll(() => {
     { stdio: 'pipe' },
   );
 
-  formattedRoute = readFileSync(routeCopy, 'utf8');
-  formattedTest = readFileSync(testCopy, 'utf8');
+  routePatch = diffFiles(routeSource, routeCopy);
+  testPatch = diffFiles(testSource, testCopy);
 });
 
-function encode(content: string): string {
-  return gzipSync(Buffer.from(content, 'utf8')).toString('base64');
-}
-
-describe('capture canonical Prettier output', () => {
-  it('captures the route', () => {
-    expect.fail(`AIRTRUST_GZIP_ROUTE:${encode(formattedRoute)}`);
+describe('capture canonical Prettier patches', () => {
+  it('captures the route patch', () => {
+    expect.fail(`AIRTRUST_PATCH_ROUTE:${encode(routePatch)}`);
   });
 
-  it('captures the focused test', () => {
-    expect.fail(`AIRTRUST_GZIP_TEST:${encode(formattedTest)}`);
+  it('captures the focused-test patch', () => {
+    expect.fail(`AIRTRUST_PATCH_TEST:${encode(testPatch)}`);
   });
 });
