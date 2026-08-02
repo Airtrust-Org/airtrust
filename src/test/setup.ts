@@ -76,7 +76,9 @@ const localStorageMock = {
 
 function resetLocalStorageMock(): void {
   localStorageData = new Map<string, string>();
-  localStorageMock.getItem.mockReset().mockImplementation((key) => localStorageData.get(key) ?? null);
+  localStorageMock.getItem
+    .mockReset()
+    .mockImplementation((key) => localStorageData.get(key) ?? null);
   localStorageMock.setItem.mockReset().mockImplementation((key, value) => {
     localStorageData.set(key, String(value));
   });
