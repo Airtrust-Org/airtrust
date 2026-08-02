@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
+import edbShadowPreviewRoutes from './edb-shadow-preview';
 
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
@@ -23,6 +24,8 @@ function setNoCacheHeaders(c: { header: (name: string, value: string) => void })
  * Paths e contratos preservados do index.ts original.
  */
 export function registerSystemRoutes(app: SystemApp) {
+  app.route('/api/edb', edbShadowPreviewRoutes);
+
   /**
    * GET /api/health
    * Health check completo - verifica D1, R2, KV e métricas.
@@ -32,8 +35,7 @@ export function registerSystemRoutes(app: SystemApp) {
     setNoCacheHeaders(c);
 
     const startTime = Date.now();
-    const checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }> =
-      {};
+    const checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }> = {};
     let overallHealthy = true;
 
     // 1. Verificar D1 Database
@@ -45,7 +47,7 @@ export function registerSystemRoutes(app: SystemApp) {
         latency: Date.now() - dbStart,
       };
       if (dbTest?.test !== 1) overallHealthy = false;
-    } catch (error) {
+    } catch {
       checks.database = {
         status: 'error',
         error: 'Erro interno do servidor',
@@ -66,7 +68,7 @@ export function registerSystemRoutes(app: SystemApp) {
       } else {
         checks.storage = { status: 'ok', latency: 0 }; // R2 não configurado, não é erro
       }
-    } catch (error) {
+    } catch {
       checks.storage = {
         status: 'error',
         error: 'Erro interno do servidor',
