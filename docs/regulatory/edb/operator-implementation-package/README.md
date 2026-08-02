@@ -183,6 +183,7 @@ O cronograma deve usar dependências e gates, não promessas de datas regulatór
 - `02_DIAGNOSTIC_AND_TECHNICAL_READINESS.md`: questionário, documentos, treinamento, contingência e prontidão.
 - `03_SHADOW_PILOT_AND_READINESS_REPORTING.md`: roteiro, divergências e relatório de prontidão.
 - `04_CUTOVER_AND_SERVICE_CATALOG.md`: checklist de cutover, suporte, reversão, itens incluídos e exclusões.
+- `05_REGULATORY_AND_EVIDENCE_PLANNING.md`: FOP 200, decisões, matriz de requisitos, alteração de EO, manuais, evidências, avaliação e demonstração.
 
 ## 7. Convenções de preenchimento
 
