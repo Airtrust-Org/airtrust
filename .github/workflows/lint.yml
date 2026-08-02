@@ -24,6 +24,21 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Print focused Prettier diff
+        run: |
+          npx --yes prettier@3.9.6 --write -- \
+            worker-airtrust/src/__tests__/routes/edb-shadow-preview.test.ts \
+            worker-airtrust/src/__tests__/services/edb-control-flight-shadow-preview.test.ts \
+            worker-airtrust/src/routes/edb-shadow-preview.ts \
+            worker-airtrust/src/routes/system.ts \
+            worker-airtrust/src/services/edb/control-flight-shadow-preview.ts
+          git diff -- \
+            worker-airtrust/src/__tests__/routes/edb-shadow-preview.test.ts \
+            worker-airtrust/src/__tests__/services/edb-control-flight-shadow-preview.test.ts \
+            worker-airtrust/src/routes/edb-shadow-preview.ts \
+            worker-airtrust/src/routes/system.ts \
+            worker-airtrust/src/services/edb/control-flight-shadow-preview.ts
+          exit 1
       - name: Ensure base ref is available for delta guards
         run: git fetch origin main --quiet
       - name: Run CI safety guards
