@@ -9,6 +9,11 @@ import {
   loadEdbShadowPreview,
 } from '../services/edb/control-flight-shadow-preview';
 import { loadEdbShadowPreliminaryAssessment } from '../services/edb/control-flight-shadow-assessment';
+import {
+  createEdbShadowReviewEvidence,
+  edbShadowReviewInputSchema,
+  EdbShadowReviewEvidenceError,
+} from '../services/edb/shadow-review-evidence';
 
 const edbShadowPreview = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -88,6 +93,46 @@ edbShadowPreview.get(
       return c.json({ success: true, data: assessment });
     } catch (error) {
       return mapPreviewError(error, 'EDB_SHADOW_ASSESSMENT_FAILED');
+    }
+  },
+);
+
+edbShadowPreview.post(
+  '/shadow-review/:flightId/evidence',
+  auth(),
+  requireEdbShadowPreviewAccess(),
+  async (c) => {
+    const tenantId = getEmpresaId(c);
+    const userId = c.get('userId');
+    const flightId = parseFlightId(c.req.param('flightId'));
+    const parsed = edbShadowReviewInputSchema.safeParse(await c.req.json().catch(() => null));
+
+    if (!parsed.success) {
+      throw new ApiError(
+        'Revisao shadow invalida',
+        400,
+        'EDB_SHADOW_REVIEW_INVALID_INPUT',
+      );
+    }
+
+    try {
+      const evidence = await createEdbShadowReviewEvidence({
+        db: c.env.DB,
+        tenantId,
+        userId,
+        flightId,
+        review: parsed.data,
+      });
+      return c.json({ success: true, data: evidence });
+    } catch (error) {
+      if (error instanceof EdbShadowReviewEvidenceError) {
+        throw new ApiError(
+          'Revisao shadow bloqueada por criterio de seguranca',
+          error.status,
+          `EDB_SHADOW_REVIEW_${error.code}`,
+        );
+      }
+      return mapPreviewError(error, 'EDB_SHADOW_REVIEW_EVIDENCE_FAILED');
     }
   },
 );
