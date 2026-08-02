@@ -396,7 +396,8 @@ export function validateEdbTechnicalStatusShadow(
   if (
     importedStatuses.size > 0 &&
     declaredStatuses.size > 0 &&
-    [...importedStatuses].some((value) => !declaredStatuses.has(value))
+    (importedStatuses.size !== declaredStatuses.size ||
+      [...importedStatuses].some((value) => !declaredStatuses.has(value)))
   ) {
     addFinding(findings, 'TECHNICAL_STATUS_SOURCE_CONFLICT', 'CRITICAL', 'statusAssertions');
   }

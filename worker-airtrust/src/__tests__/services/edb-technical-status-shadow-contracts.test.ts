@@ -350,6 +350,17 @@ describe('eDB technical status shadow contracts', () => {
       {
         assertionId: '00000000-0000-4000-8000-000000000103',
         informationState: 'DECLARED',
+        status: 'SERVICEABLE',
+        source: {
+          kind: 'AIRTRUST_MANUAL',
+          reference: 'source:synthetic-declared-status',
+          observedAt: '2026-08-02T09:05:00-03:00',
+        },
+        evidenceReferences: ['evidence:synthetic-declared-status'],
+      },
+      {
+        assertionId: '00000000-0000-4000-8000-000000000104',
+        informationState: 'DECLARED',
         status: 'UNSERVICEABLE',
         source: { kind: 'UNKNOWN' },
         evidenceReferences: [],
