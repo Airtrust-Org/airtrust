@@ -119,9 +119,7 @@ function createDatasetDb(initialRows: StoredHospedagem[]) {
           all: async () => {
             calls.push({ query, args });
             const empresaId = Number(args[0]);
-            const fetchLimit = query.includes('LIMIT ?')
-              ? Number(args[args.length - 1])
-              : 500;
+            const fetchLimit = query.includes('LIMIT ?') ? Number(args[args.length - 1]) : 500;
             const usesCursor = query.includes(
               '(h.data_checkin < ? OR (h.data_checkin = ? AND h.id < ?))',
             );
@@ -169,11 +167,9 @@ function createApp() {
 }
 
 async function getPage(db: D1Database, query: string): Promise<PaginatedBody> {
-  const response = await createApp().request(
-    `/hospedagem?${query}`,
-    { method: 'GET' },
-    { DB: db } as Env,
-  );
+  const response = await createApp().request(`/hospedagem?${query}`, { method: 'GET' }, {
+    DB: db,
+  } as Env);
   expect(response.status).toBe(200);
   return (await response.json()) as PaginatedBody;
 }
@@ -247,10 +243,7 @@ describe('hospedagem keyset pagination', () => {
 
     const first = await getPage(dataset.db, 'limit=2');
     dataset.insert(hospedagem(5, '2026-08-11'));
-    const second = await getPage(
-      dataset.db,
-      `limit=2&cursor=${first.pagination.next_cursor}`,
-    );
+    const second = await getPage(dataset.db, `limit=2&cursor=${first.pagination.next_cursor}`);
 
     expect(first.data.map(({ id }) => id)).toEqual([4, 3]);
     expect(second.data.map(({ id }) => id)).toEqual([2, 1]);
@@ -259,11 +252,9 @@ describe('hospedagem keyset pagination', () => {
   it.each(['0', '-1', '501'])('rejects invalid limit %s', async (limit) => {
     const { db, calls } = createDatasetDb([]);
     const app = createApp();
-    const response = await app.request(
-      `/hospedagem?limit=${limit}`,
-      { method: 'GET' },
-      { DB: db } as Env,
-    );
+    const response = await app.request(`/hospedagem?limit=${limit}`, { method: 'GET' }, {
+      DB: db,
+    } as Env);
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
@@ -276,11 +267,9 @@ describe('hospedagem keyset pagination', () => {
   it('rejects a malformed cursor', async () => {
     const { db, calls } = createDatasetDb([]);
     const app = createApp();
-    const response = await app.request(
-      '/hospedagem?cursor=%25%25%25',
-      { method: 'GET' },
-      { DB: db } as Env,
-    );
+    const response = await app.request('/hospedagem?cursor=%25%25%25', { method: 'GET' }, {
+      DB: db,
+    } as Env);
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
@@ -300,10 +289,7 @@ describe('hospedagem keyset pagination', () => {
 
     const first = await getPage(dataset.db, 'limit=2');
     dataset.softDelete(2);
-    const second = await getPage(
-      dataset.db,
-      `limit=2&cursor=${first.pagination.next_cursor}`,
-    );
+    const second = await getPage(dataset.db, `limit=2&cursor=${first.pagination.next_cursor}`);
 
     expect(second.data.map(({ id }) => id)).toEqual([1]);
     expect(second.pagination).toMatchObject({ has_more: false, next_cursor: null });
