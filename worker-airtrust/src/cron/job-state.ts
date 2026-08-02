@@ -1,9 +1,4 @@
-export type CronJobOutcome =
-  | 'RUNNING'
-  | 'SUCCEEDED'
-  | 'PARTIAL'
-  | 'FAILED'
-  | 'SKIPPED_LEASE';
+export type CronJobOutcome = 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED' | 'SKIPPED_LEASE';
 
 export interface CronJobStateRow {
   job_name: string;
@@ -140,13 +135,7 @@ export async function acquireCronJobLease(
             OR lease_owner = ?
           )`,
     )
-    .bind(
-      input.owner,
-      `+${ttlSeconds} seconds`,
-      input.jobName,
-      input.scopeKey,
-      input.owner,
-    )
+    .bind(input.owner, `+${ttlSeconds} seconds`, input.jobName, input.scopeKey, input.owner)
     .run();
 
   return Number(acquired.meta.changes || 0) === 1;

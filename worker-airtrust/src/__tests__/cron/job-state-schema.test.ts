@@ -7,10 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { buildCronScopeKey, createCronLeaseOwner } from '../../cron/job-state';
 
 const ROOT = process.cwd();
-const migration = readFileSync(
-  join(ROOT, 'migrations/0451_cron_job_resilience_state.sql'),
-  'utf8',
-);
+const migration = readFileSync(join(ROOT, 'migrations/0451_cron_job_resilience_state.sql'), 'utf8');
 
 function runSqlite(dbPath: string, sql: string) {
   return spawnSync('sqlite3', ['-bail', dbPath], {
