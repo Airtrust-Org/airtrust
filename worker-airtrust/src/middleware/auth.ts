@@ -404,7 +404,12 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     // quando esse vínculo esperado não existe.
     let security: UserSecurityState;
     try {
-      security = await resolveUserSecurityState(c.env.DB, payload.sub, payload.empresa_id, payload.role ?? '');
+      security = await resolveUserSecurityState(
+        c.env.DB,
+        payload.sub,
+        payload.empresa_id,
+        payload.role ?? '',
+      );
     } catch (e) {
       console.error('[AUTH] Falha ao verificar estado do usuário:', (e as Error).message);
       return serviceUnavailable(
@@ -414,11 +419,17 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     }
 
     if (!security.found || !security.active) {
-      return unauthorized('Usuário inativo ou não encontrado. Faça login novamente.', 'USER_INACTIVE');
+      return unauthorized(
+        'Usuário inativo ou não encontrado. Faça login novamente.',
+        'USER_INACTIVE',
+      );
     }
 
     if (!security.hasMembership) {
-      return unauthorized('Usuário sem vínculo válido com o tenant do token.', 'TENANT_MEMBERSHIP_INVALID');
+      return unauthorized(
+        'Usuário sem vínculo válido com o tenant do token.',
+        'TENANT_MEMBERSHIP_INVALID',
+      );
     }
 
     c.set('userId', payload.sub);
@@ -480,7 +491,10 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
                   return;
                 }
               } catch (e) {
-                console.error('[OPTIONAL_AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
+                console.error(
+                  '[OPTIONAL_AUTH] Falha ao consultar token_blocklist:',
+                  (e as Error).message,
+                );
                 await next();
                 return;
               }
@@ -504,38 +518,6 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
         }
       }
     }
-    await next();
-  };
-  return handler as unknown as MiddlewareHandler<{ Bindings: Env }>;
-}
-
-/**
- * Role-based middleware - verifica se usuário tem role específico
- * @example
- * app.post('/admin', auth(), requireRole('admin'), handler);
- */
-export function requireRole(requiredRole: string): MiddlewareHandler<{ Bindings: Env }> {
-  const handler: MiddlewareHandler<{ Bindings: Env; Variables: Variables }> = async (c, next) => {
-    if (c.env.ENVIRONMENT !== 'development' && c.env.ENABLE_DEV_AUTH_BYPASS === 'true') {
-      throw new Error('ENABLE_DEV_AUTH_BYPASS nao pode ser usado fora de development');
-    }
-
-    const devBypass = isDevAuthBypassEnabled(c.env);
-
-    if (devBypass) {
-      return next();
-    }
-
-    const userRole = c.get('userRole');
-
-    if (!userRole) {
-      return unauthorized('Usuário não autenticado');
-    }
-
-    if (userRole !== requiredRole && userRole !== 'ADMIN') {
-      return unauthorized(`Acesso negado. Requer role: ${requiredRole}`);
-    }
-
     await next();
   };
   return handler as unknown as MiddlewareHandler<{ Bindings: Env }>;
