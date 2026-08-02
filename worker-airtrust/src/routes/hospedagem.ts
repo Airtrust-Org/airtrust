@@ -71,10 +71,7 @@ const HospedagemCursorSchema = z
   .strict();
 
 function encodeHospedagemCursor(cursor: HospedagemCursor): string {
-  return btoa(JSON.stringify(cursor))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
+  return btoa(JSON.stringify(cursor)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 function decodeHospedagemCursor(encoded: string, empresaId: number): HospedagemCursor | null {
