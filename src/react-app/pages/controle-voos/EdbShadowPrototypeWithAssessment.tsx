@@ -1,103 +1,86 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, BarChart3, Loader2, ShieldAlert, Wrench } from 'lucide-react';
+import { z } from 'zod';
 import { fetchWithAuth } from '@/react-app/config/api';
 import EdbShadowPrototype from './EdbShadowPrototype';
 
 const ASSESSMENT_CLASSIFICATION = 'NON_OFFICIAL_PRELIMINARY_SHADOW_ASSESSMENT';
 
-type AssessmentFinding = {
-  category: string;
-  severity: string;
-  causeCode: string;
-  field: string;
-};
+const assessmentFindingSchema = z
+  .object({
+    category: z.string(),
+    severity: z.string(),
+    causeCode: z.string(),
+    field: z.string(),
+  })
+  .strict();
 
-type AssessmentData = {
-  schemaVersion: 'edb.shadow-assessment.v1';
-  classification: typeof ASSESSMENT_CLASSIFICATION;
-  officialReferenceCompared: false;
-  paperReferenceRequired: true;
-  comparisonBasis: 'SELF_BASELINE_WITH_SANITIZED_PROJECTION_FINDINGS';
-  notices: {
-    officialLogbook: false;
-    replacesPaper: false;
-    containsSignature: false;
-    persistsRegulatedRecord: false;
-    authorizesReturnToService: false;
-  };
-  divergence: {
-    recommendation: 'continue' | 'review' | 'stop';
-    maxSeverity: 'NONE' | 'OBSERVATION' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-    findings: AssessmentFinding[];
-    metrics: {
-      comparisonFieldCount: number;
-      matchingFieldCount: number;
-      divergenceCount: number;
-      completenessFindingCount: number;
-      projectionFindingCount: number;
-      unknownFieldCount: number;
-    };
-    readiness: {
-      score: number;
-      status: 'ready' | 'review' | 'not_ready';
-      fieldAgreementPercent: number;
-      completenessPercent: number;
-    };
-    evidence: { fingerprint: string };
-  };
-  technicalStatus: {
-    targetSchemaVersion: 'edb.technical-status.shadow.v1';
-    officialEffect: 'NONE';
-    sourceAvailable: boolean;
-    detailedContractLoaded: false;
-    discrepancyDetailsAvailable: false;
-    status: 'source_unavailable' | 'requires_review' | 'preliminarily_available';
-    findingCodes: string[];
-  };
-};
+const assessmentDataSchema = z
+  .object({
+    schemaVersion: z.literal('edb.shadow-assessment.v1'),
+    classification: z.literal(ASSESSMENT_CLASSIFICATION),
+    officialReferenceCompared: z.literal(false),
+    paperReferenceRequired: z.literal(true),
+    comparisonBasis: z.literal('SELF_BASELINE_WITH_SANITIZED_PROJECTION_FINDINGS'),
+    notices: z
+      .object({
+        officialLogbook: z.literal(false),
+        replacesPaper: z.literal(false),
+        containsSignature: z.literal(false),
+        persistsRegulatedRecord: z.literal(false),
+        authorizesReturnToService: z.literal(false),
+      })
+      .strict(),
+    divergence: z
+      .object({
+        recommendation: z.enum(['continue', 'review', 'stop']),
+        maxSeverity: z.enum(['NONE', 'OBSERVATION', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
+        findings: z.array(assessmentFindingSchema),
+        metrics: z
+          .object({
+            comparisonFieldCount: z.number().finite().nonnegative(),
+            matchingFieldCount: z.number().finite().nonnegative(),
+            divergenceCount: z.number().finite().nonnegative(),
+            completenessFindingCount: z.number().finite().nonnegative(),
+            projectionFindingCount: z.number().finite().nonnegative(),
+            unknownFieldCount: z.number().finite().nonnegative(),
+          })
+          .strict(),
+        readiness: z
+          .object({
+            score: z.number().finite().min(0).max(100),
+            status: z.enum(['ready', 'review', 'not_ready']),
+            fieldAgreementPercent: z.number().finite().min(0).max(100),
+            completenessPercent: z.number().finite().min(0).max(100),
+          })
+          .strict(),
+        evidence: z.object({ fingerprint: z.string().regex(/^fnv1a32:[0-9a-f]{8}$/) }).strict(),
+      })
+      .passthrough(),
+    technicalStatus: z
+      .object({
+        targetSchemaVersion: z.literal('edb.technical-status.shadow.v1'),
+        officialEffect: z.literal('NONE'),
+        sourceAvailable: z.boolean(),
+        detailedContractLoaded: z.literal(false),
+        discrepancyDetailsAvailable: z.literal(false),
+        status: z.enum(['source_unavailable', 'requires_review', 'preliminarily_available']),
+        findingCodes: z.array(z.string()),
+      })
+      .strict(),
+  })
+  .strict();
 
+type AssessmentData = z.infer<typeof assessmentDataSchema>;
 type LoadState = 'idle' | 'loading' | 'loaded' | 'unavailable';
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
 function parseAssessment(payload: unknown): AssessmentData | null {
-  if (!isRecord(payload) || payload.success !== true || !isRecord(payload.data)) return null;
-  const data = payload.data;
-  if (
-    data.schemaVersion !== 'edb.shadow-assessment.v1' ||
-    data.classification !== ASSESSMENT_CLASSIFICATION ||
-    data.officialReferenceCompared !== false ||
-    data.paperReferenceRequired !== true ||
-    !isRecord(data.divergence) ||
-    !isRecord(data.technicalStatus)
-  ) {
-    return null;
-  }
-  const divergence = data.divergence;
-  if (
-    !isRecord(divergence.metrics) ||
-    !isRecord(divergence.readiness) ||
-    !isRecord(divergence.evidence) ||
-    !Array.isArray(divergence.findings) ||
-    !isNumber(divergence.metrics.divergenceCount) ||
-    !isNumber(divergence.metrics.completenessFindingCount) ||
-    !isNumber(divergence.metrics.projectionFindingCount) ||
-    !isNumber(divergence.readiness.score) ||
-    typeof divergence.readiness.status !== 'string' ||
-    typeof divergence.recommendation !== 'string' ||
-    typeof divergence.maxSeverity !== 'string' ||
-    typeof divergence.evidence.fingerprint !== 'string'
-  ) {
-    return null;
-  }
-  return data as unknown as AssessmentData;
+  const envelope = z
+    .object({ success: z.literal(true), data: assessmentDataSchema })
+    .strict()
+    .safeParse(payload);
+  return envelope.success ? envelope.data.data : null;
 }
 
 function recommendationLabel(value: AssessmentData['divergence']['recommendation']): string {
