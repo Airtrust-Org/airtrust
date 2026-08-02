@@ -20,6 +20,19 @@ import {
   sendConvocacaoInBatches,
 } from '../services/treinamentos-convocacao-email';
 import { normalizeTrainingStatusForCompatibility } from '../lib/status/status-codes';
+import {
+  chunkByBindBudget,
+  collectByBindChunks,
+  prepareByBindChunks,
+} from '../utils/d1-bind-chunks';
+import {
+  loadDiasByTreinamento,
+  loadInstrutoresByTreinamento,
+  loadParticipantesByTreinamento,
+  type DiaRow,
+  type InstrutorRow,
+  type ParticipanteRow,
+} from '../services/treinamentos-planejados-expansions';
 
 interface TreinamentoSchemaCapabilities {
   hasModalidade: boolean;
@@ -50,8 +63,8 @@ async function tableExists(db: D1Database, tableName: string): Promise<boolean> 
 
 async function hasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
   try {
-    const { results } = await db.prepare(`PRAGMA table_info(${table})`).all();
-    return (results || []).some((col: any) => col?.name === column);
+    const { results } = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+    return (results || []).some((col) => col?.name === column);
   } catch {
     return false;
   }
@@ -71,9 +84,7 @@ function parseRequestedSetorIds(rawSetorId?: string | null, rawSetorIds?: string
 
   return Array.from(
     new Set(
-      values
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0),
+      values.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0),
     ),
   );
 }
@@ -110,19 +121,29 @@ async function detectTreinamentoSchemaCapabilities(
   db: D1Database,
 ): Promise<TreinamentoSchemaCapabilities> {
   if (_capabilitiesCache) return _capabilitiesCache;
-  const [hasModalidade, hasCodigoTurma, hasDataInicio, hasDataFim, hasBase, hasSala, hasEquipamentoDescricao, hasLimiteParticipantes, hasQualificacoesTiposFormato, hasQualificacoesTiposCategoria] =
-    await Promise.all([
-      hasColumn(db, 'treinamentos_planejados', 'modalidade'),
-      hasColumn(db, 'treinamentos_planejados', 'codigo_turma'),
-      hasColumn(db, 'treinamentos_planejados', 'data_inicio'),
-      hasColumn(db, 'treinamentos_planejados', 'data_fim'),
-      hasColumn(db, 'treinamentos_planejados', 'base'),
-      hasColumn(db, 'treinamentos_planejados', 'sala'),
-      hasColumn(db, 'treinamentos_planejados', 'equipamento_descricao'),
-      hasColumn(db, 'treinamentos_planejados', 'limite_participantes'),
-      hasColumn(db, 'qualificacoes_tipos', 'formato_id'),
-      hasColumn(db, 'qualificacoes_tipos', 'categoria_id'),
-    ]);
+  const [
+    hasModalidade,
+    hasCodigoTurma,
+    hasDataInicio,
+    hasDataFim,
+    hasBase,
+    hasSala,
+    hasEquipamentoDescricao,
+    hasLimiteParticipantes,
+    hasQualificacoesTiposFormato,
+    hasQualificacoesTiposCategoria,
+  ] = await Promise.all([
+    hasColumn(db, 'treinamentos_planejados', 'modalidade'),
+    hasColumn(db, 'treinamentos_planejados', 'codigo_turma'),
+    hasColumn(db, 'treinamentos_planejados', 'data_inicio'),
+    hasColumn(db, 'treinamentos_planejados', 'data_fim'),
+    hasColumn(db, 'treinamentos_planejados', 'base'),
+    hasColumn(db, 'treinamentos_planejados', 'sala'),
+    hasColumn(db, 'treinamentos_planejados', 'equipamento_descricao'),
+    hasColumn(db, 'treinamentos_planejados', 'limite_participantes'),
+    hasColumn(db, 'qualificacoes_tipos', 'formato_id'),
+    hasColumn(db, 'qualificacoes_tipos', 'categoria_id'),
+  ]);
   const [hasInstrutoresTable, hasDiasTable] = await Promise.all([
     tableExists(db, 'treinamentos_instrutores'),
     tableExists(db, 'treinamentos_dias'),
@@ -171,8 +192,14 @@ const MODALIDADE_VALUES = [
 const RESULTADO_VALUES = ['APROVADO', 'REPROVADO', 'INCOMPLETO', 'CANCELADO'] as const;
 const diaSchema = z.object({
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  hora_inicio: z.string().regex(/^\d{2}:\d{2}$/).default('08:00'),
-  hora_fim: z.string().regex(/^\d{2}:\d{2}$/).default('17:00'),
+  hora_inicio: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('08:00'),
+  hora_fim: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('17:00'),
   local: z.string().trim().max(200).optional().nullable(),
   instrutor_id: z.number().int().positive().optional().nullable(),
   simulador_id: z.number().int().positive().optional().nullable(),
@@ -204,8 +231,14 @@ const eventoSchema = z.object({
   participante_ids: z.array(z.number().int().positive()).optional().default([]),
   codigo_turma: z.string().trim().max(80).optional().nullable(),
   modalidade: z.enum(MODALIDADE_VALUES).optional().default('TEORICO'),
-  data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  data_inicio: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  data_fim: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   base: z.string().trim().max(120).optional().nullable(),
   sala: z.string().trim().max(120).optional().nullable(),
   equipamento_descricao: z.string().trim().max(200).optional().nullable(),
@@ -235,7 +268,10 @@ const presencaSchema = z.object({
 const conclusaoParticipanteSchema = z.object({
   funcionario_id: z.number().int().positive(),
   resultado: z.enum(RESULTADO_VALUES),
-  data_conclusao_efetiva: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  data_conclusao_efetiva: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable(),
   nota: z.number().min(0).max(100).nullable().optional(),
   conceito: z.string().trim().max(100).nullable().optional(),
   observacoes: z.string().trim().max(4000).nullable().optional(),
@@ -245,7 +281,11 @@ const conclusaoLoteParticipanteSchema = z.object({
   funcionario_id: z.number().int().positive(),
   presente: z.boolean().nullable().optional(),
   resultado: z.enum(RESULTADO_VALUES).nullable().optional(),
-  data_conclusao_efetiva: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  data_conclusao_efetiva: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
   nota: z.number().min(0).max(100).nullable().optional(),
   conceito: z.string().trim().max(100).nullable().optional(),
   observacoes: z.string().trim().max(4000).nullable().optional(),
@@ -294,62 +334,6 @@ type EventoRow = {
   convocados_total: number | string | null;
   confirmados_total: number | string | null;
   presentes_total: number | string | null;
-};
-
-type ParticipanteRow = {
-  id: number;
-  treinamento_id: number;
-  funcionario_id: number;
-  funcionario_nome: string | null;
-  funcionario_guerra: string | null;
-  funcionario_matricula: string | null;
-  funcionario_email: string | null;
-  funcionario_setor: string | null;
-  funcionario_funcao: string | null;
-  confirmado: number | null;
-  presente: number | null;
-  aprovado: number | null;
-  nota: number | null;
-  observacoes: string | null;
-  qualificacao_historico_id: number | null;
-  qualificacao_historico_status: string | null;
-  status_participacao: string | null;
-  resultado: string | null;
-  conceito: string | null;
-  data_conclusao_efetiva: string | null;
-  concluido_em: string | null;
-};
-
-type DiaRow = {
-  id: number;
-  treinamento_id: number;
-  data: string;
-  hora_inicio: string;
-  hora_fim: string;
-  local: string | null;
-  instrutor_id: number | null;
-  instrutor_nome: string | null;
-  simulador_id: number | null;
-  aeronave_id: number | null;
-  sessao_id: number | null;
-  status: string;
-  observacoes: string | null;
-  presencas?: Array<{
-    participante_id: number;
-    funcionario_id: number;
-    status: string;
-    minutos_presentes: number | null;
-    observacoes: string | null;
-  }>;
-};
-
-type InstrutorRow = {
-  treinamento_id: number;
-  funcionario_id: number;
-  nome: string | null;
-  guerra: string | null;
-  papel: string;
-  principal: number;
 };
 
 type AuditoriaRow = {
@@ -455,32 +439,35 @@ async function resolveGestoresCcByParticipantes(
   let gestoresBase = gestoresCcAtivos;
 
   if (funcionarioIds.length > 0) {
-    const placeholders = funcionarioIds.map(() => '?').join(',');
-    const rows = await db
-      .prepare(
-        `
-        SELECT DISTINCT g.id
-          FROM funcionarios f
-          INNER JOIN setores_gestores sg
-            ON sg.setor_id = f.setor_id
-           AND sg.empresa_id = f.empresa_id
-           AND sg.deleted_at IS NULL
-           AND sg.ativo = 1
-          INNER JOIN notificacoes_convocacao_cc_gestores g
-            ON g.id = sg.gestor_id
-           AND g.empresa_id = f.empresa_id
-           AND g.deleted_at IS NULL
-           AND g.ativo = 1
-         WHERE f.empresa_id = ?
-           AND f.deleted_at IS NULL
-           AND f.id IN (${placeholders})
-        `,
-      )
-      .bind(empresaId, ...funcionarioIds)
-      .all<{ id: number }>();
+    const rows = await collectByBindChunks(funcionarioIds, 1, async (chunk) => {
+      const placeholders = chunk.map(() => '?').join(',');
+      const result = await db
+        .prepare(
+          `
+          SELECT DISTINCT g.id
+            FROM funcionarios f
+            INNER JOIN setores_gestores sg
+              ON sg.setor_id = f.setor_id
+             AND sg.empresa_id = f.empresa_id
+             AND sg.deleted_at IS NULL
+             AND sg.ativo = 1
+            INNER JOIN notificacoes_convocacao_cc_gestores g
+              ON g.id = sg.gestor_id
+             AND g.empresa_id = f.empresa_id
+             AND g.deleted_at IS NULL
+             AND g.ativo = 1
+           WHERE f.empresa_id = ?
+             AND f.deleted_at IS NULL
+             AND f.id IN (${placeholders})
+          `,
+        )
+        .bind(empresaId, ...chunk)
+        .all<{ id: number }>();
+      return result.results || [];
+    });
 
     const idsFromSetores = Array.from(
-      new Set((rows.results || []).map((row) => Number(row.id || 0)).filter((id) => id > 0)),
+      new Set(rows.map((row) => Number(row.id || 0)).filter((id) => id > 0)),
     );
 
     // Se houver mapeamento setor->gestor, restringe estritamente a ele.
@@ -511,7 +498,11 @@ function normalizePositiveIds(values: number[]): number[] {
 }
 
 function collectResourceIdsFromDias(
-  dias?: Array<{ simulador_id?: number | null; aeronave_id?: number | null; sessao_id?: number | null }>,
+  dias?: Array<{
+    simulador_id?: number | null;
+    aeronave_id?: number | null;
+    sessao_id?: number | null;
+  }>,
 ): { simuladorIds: number[]; aeronaveIds: number[]; sessaoIds: number[] } {
   const list = dias || [];
   return {
@@ -530,15 +521,18 @@ async function validateResourceTenant(
 ): Promise<string | null> {
   const unique = normalizePositiveIds(ids);
   if (unique.length === 0) return null;
-  const placeholders = unique.map(() => '?').join(', ');
-  const rows = await db
-    .prepare(
-      `SELECT id FROM ${table}
-        WHERE empresa_id = ? AND deleted_at IS NULL AND id IN (${placeholders})`,
-    )
-    .bind(empresaId, ...unique)
-    .all<{ id: number }>();
-  const valid = new Set((rows.results || []).map((row) => Number(row.id)));
+  const rows = await collectByBindChunks(unique, 1, async (chunk) => {
+    const placeholders = chunk.map(() => '?').join(', ');
+    const result = await db
+      .prepare(
+        `SELECT id FROM ${table}
+          WHERE empresa_id = ? AND deleted_at IS NULL AND id IN (${placeholders})`,
+      )
+      .bind(empresaId, ...chunk)
+      .all<{ id: number }>();
+    return result.results || [];
+  });
+  const valid = new Set(rows.map((row) => Number(row.id)));
   if (unique.some((id) => !valid.has(id))) {
     return `${label} inexistente ou pertencente a outro tenant`;
   }
@@ -574,16 +568,19 @@ async function validateTrainingReferences(params: {
   const instructorIds = normalizePositiveIds(params.instrutorIds || []);
   const employeeIds = normalizePositiveIds([...participantIds, ...instructorIds]);
   if (employeeIds.length > 0) {
-    const placeholders = employeeIds.map(() => '?').join(', ');
-    const rows = await db
-      .prepare(
-        `SELECT id
-           FROM funcionarios
-          WHERE empresa_id = ? AND deleted_at IS NULL AND id IN (${placeholders})`,
-      )
-      .bind(empresaId, ...employeeIds)
-      .all<{ id: number }>();
-    const validIds = new Set((rows.results || []).map((row) => Number(row.id)));
+    const rows = await collectByBindChunks(employeeIds, 1, async (chunk) => {
+      const placeholders = chunk.map(() => '?').join(', ');
+      const result = await db
+        .prepare(
+          `SELECT id
+             FROM funcionarios
+            WHERE empresa_id = ? AND deleted_at IS NULL AND id IN (${placeholders})`,
+        )
+        .bind(empresaId, ...chunk)
+        .all<{ id: number }>();
+      return result.results || [];
+    });
+    const validIds = new Set(rows.map((row) => Number(row.id)));
     if (participantIds.some((id) => !validIds.has(id))) {
       return 'Participante inexistente ou pertencente a outro tenant';
     }
@@ -594,8 +591,20 @@ async function validateTrainingReferences(params: {
 
   // B2: recursos referenciados nos dias da turma também precisam pertencer ao tenant.
   const resourceError =
-    (await validateResourceTenant(db, empresaId, 'simuladores', params.simuladorIds || [], 'Simulador')) ||
-    (await validateResourceTenant(db, empresaId, 'aeronaves', params.aeronaveIds || [], 'Aeronave')) ||
+    (await validateResourceTenant(
+      db,
+      empresaId,
+      'simuladores',
+      params.simuladorIds || [],
+      'Simulador',
+    )) ||
+    (await validateResourceTenant(
+      db,
+      empresaId,
+      'aeronaves',
+      params.aeronaveIds || [],
+      'Aeronave',
+    )) ||
     (await validateResourceTenant(
       db,
       empresaId,
@@ -651,26 +660,28 @@ async function replaceParticipantes(
     // rastreabilidade — o upsert idempotente (A4) lida com reentradas sem bloquear
     // reemissão.
     const participanteRowIds = rowsToDelete.map((row) => Number(row.id)).filter((v) => v > 0);
-    if (participanteRowIds.length > 0) {
-      const presencaPlaceholders = participanteRowIds.map(() => '?').join(', ');
-      await db
-        .prepare(
-          `DELETE FROM treinamentos_presencas WHERE participante_id IN (${presencaPlaceholders})`,
-        )
-        .bind(...participanteRowIds)
-        .run();
-    }
-
     const funcionarioIdsToDelete = rowsToDelete
       .map((row) => Number(row.funcionario_id))
       .filter((v) => v > 0);
-    const placeholders = funcionarioIdsToDelete.map(() => '?').join(', ');
-    await db
-      .prepare(
-        `DELETE FROM treinamentos_participantes WHERE treinamento_id = ? AND funcionario_id IN (${placeholders})`,
-      )
-      .bind(treinamentoId, ...funcionarioIdsToDelete)
-      .run();
+    const statements = [
+      ...prepareByBindChunks(participanteRowIds, 0, (chunk) => {
+        const placeholders = chunk.map(() => '?').join(', ');
+        return db
+          .prepare(`DELETE FROM treinamentos_presencas WHERE participante_id IN (${placeholders})`)
+          .bind(...chunk);
+      }),
+      ...prepareByBindChunks(funcionarioIdsToDelete, 1, (chunk) => {
+        const placeholders = chunk.map(() => '?').join(', ');
+        return db
+          .prepare(
+            `DELETE FROM treinamentos_participantes WHERE treinamento_id = ? AND funcionario_id IN (${placeholders})`,
+          )
+          .bind(treinamentoId, ...chunk);
+      }),
+    ];
+    if (statements.length > 0) {
+      await db.batch(statements);
+    }
   }
 
   const idsToInsert = ids.filter((id) => !existingIds.has(id));
@@ -787,232 +798,6 @@ async function loadParticipanteLinks(
     .all<{ funcionario_id: number; qualificacao_historico_id: number | null }>();
 
   return rows.results || [];
-}
-
-async function loadParticipantesByTreinamento(
-  db: D1Database,
-  empresaId: number,
-  treinamentoIds: number[],
-  scopedSetorIds: number[] | null,
-): Promise<Map<number, ParticipanteRow[]>> {
-  const map = new Map<number, ParticipanteRow[]>();
-  if (treinamentoIds.length === 0) return map;
-
-  const placeholders = treinamentoIds.map(() => '?').join(', ');
-  const query = `SELECT tp.id,
-                        tp.treinamento_id,
-                        tp.funcionario_id,
-                        f.nome AS funcionario_nome,
-                        f.guerra AS funcionario_guerra,
-                        f.matricula AS funcionario_matricula,
-                        f.email AS funcionario_email,
-                        f.setor AS funcionario_setor,
-                        f.funcao AS funcionario_funcao,
-                        tp.confirmado,
-                        tp.presente,
-                        tp.aprovado,
-                        tp.nota,
-                        tp.observacoes,
-                        tp.qualificacao_historico_id,
-                        qh.status AS qualificacao_historico_status,
-                        tp.status_participacao,
-                        tp.resultado,
-                        tp.conceito,
-                        tp.data_conclusao_efetiva,
-                        tp.concluido_em
-                   FROM treinamentos_participantes tp
-                   INNER JOIN treinamentos_planejados t ON t.id = tp.treinamento_id AND t.deleted_at IS NULL
-                   LEFT JOIN funcionarios f ON f.id = tp.funcionario_id AND f.deleted_at IS NULL
-                   LEFT JOIN qualificacoes_historico qh
-                     ON qh.id = tp.qualificacao_historico_id
-                    AND qh.empresa_id = t.empresa_id
-                    AND qh.deleted_at IS NULL
-                  WHERE t.empresa_id = ?
-                    AND tp.treinamento_id IN (${placeholders})
-                    ${
-                      scopedSetorIds === null
-                        ? ''
-                        : scopedSetorIds.length === 0
-                          ? 'AND 1 = 0'
-                          : `AND f.setor_id IN (${scopedSetorIds.map(() => '?').join(', ')})`
-                    }
-                  ORDER BY COALESCE(f.nome, ''), tp.funcionario_id`;
-
-  const rows = await db
-    .prepare(query)
-    .bind(empresaId, ...treinamentoIds, ...(scopedSetorIds === null ? [] : scopedSetorIds))
-    .all<ParticipanteRow>();
-
-  for (const row of rows.results || []) {
-    const treinamentoId = Number(row.treinamento_id);
-    const current = map.get(treinamentoId) || [];
-    current.push(row);
-    map.set(treinamentoId, current);
-  }
-
-  return map;
-}
-
-async function loadDiasByTreinamento(
-  db: D1Database,
-  empresaId: number,
-  treinamentoIds: number[],
-): Promise<Map<number, DiaRow[]>> {
-  const map = new Map<number, DiaRow[]>();
-  if (treinamentoIds.length === 0) return map;
-  const placeholders = treinamentoIds.map(() => '?').join(', ');
-  const rows = await db
-    .prepare(
-      `SELECT td.id, td.treinamento_id, td.data, td.hora_inicio, td.hora_fim, td.local,
-              td.instrutor_id, f.nome AS instrutor_nome, td.simulador_id, td.aeronave_id,
-              td.sessao_id, td.status, td.observacoes
-         FROM treinamentos_dias td
-         INNER JOIN treinamentos_planejados t
-           ON t.id = td.treinamento_id AND t.empresa_id = ? AND t.deleted_at IS NULL
-         LEFT JOIN funcionarios f ON f.id = td.instrutor_id AND f.deleted_at IS NULL
-        WHERE td.empresa_id = ? AND td.treinamento_id IN (${placeholders})
-          AND td.deleted_at IS NULL
-        ORDER BY td.data, td.hora_inicio, td.id`,
-    )
-    .bind(empresaId, empresaId, ...treinamentoIds)
-    .all<DiaRow>();
-  for (const row of rows.results || []) {
-    const current = map.get(Number(row.treinamento_id)) || [];
-    current.push(row);
-    map.set(Number(row.treinamento_id), current);
-  }
-
-  const fallbackRows = await db
-    .prepare(
-      `SELECT t.id * -1 AS id, t.id AS treinamento_id,
-              COALESCE(t.data_prevista, t.data_inicio, t.data_fim) AS data,
-              COALESCE(t.hora_inicio, '08:00') AS hora_inicio,
-              COALESCE(t.hora_fim, '17:00') AS hora_fim,
-              t.local,
-              t.instrutor_id,
-              f.nome AS instrutor_nome,
-              t.simulador_id,
-              t.aeronave_id,
-              t.sessao_id,
-              CASE
-                WHEN UPPER(COALESCE(t.status, 'PLANEJADO')) = 'CANCELADO' THEN 'CANCELADO'
-                ELSE 'ATIVO'
-              END AS status,
-              t.observacoes
-         FROM treinamentos_planejados t
-         LEFT JOIN funcionarios f ON f.id = t.instrutor_id AND f.deleted_at IS NULL
-        WHERE t.empresa_id = ? AND t.id IN (${placeholders})
-          AND t.deleted_at IS NULL
-          AND NOT EXISTS (
-            SELECT 1
-              FROM treinamentos_dias td
-             WHERE td.treinamento_id = t.id
-               AND td.empresa_id = t.empresa_id
-               AND td.deleted_at IS NULL
-          )
-        ORDER BY data, hora_inicio, treinamento_id`,
-    )
-    .bind(empresaId, ...treinamentoIds)
-    .all<DiaRow>();
-  for (const row of fallbackRows.results || []) {
-    const current = map.get(Number(row.treinamento_id)) || [];
-    current.push(row);
-    map.set(Number(row.treinamento_id), current);
-  }
-
-  const presencas = await db
-    .prepare(
-      `SELECT td.treinamento_id, pr.treinamento_dia_id, pr.participante_id,
-              tp.funcionario_id, pr.status, pr.minutos_presentes, pr.observacoes
-         FROM treinamentos_presencas pr
-         INNER JOIN treinamentos_dias td
-           ON td.id = pr.treinamento_dia_id AND td.empresa_id = ? AND td.deleted_at IS NULL
-         INNER JOIN treinamentos_participantes tp
-           ON tp.id = pr.participante_id AND tp.treinamento_id = td.treinamento_id
-        WHERE pr.empresa_id = ? AND td.treinamento_id IN (${placeholders})`,
-    )
-    .bind(empresaId, empresaId, ...treinamentoIds)
-    .all<{
-      treinamento_id: number;
-      treinamento_dia_id: number;
-      participante_id: number;
-      funcionario_id: number;
-      status: string;
-      minutos_presentes: number | null;
-      observacoes: string | null;
-    }>();
-  const presencasByDia = new Map<number, NonNullable<DiaRow['presencas']>>();
-  for (const row of presencas.results || []) {
-    const current = presencasByDia.get(Number(row.treinamento_dia_id)) || [];
-    current.push({
-      participante_id: Number(row.participante_id),
-      funcionario_id: Number(row.funcionario_id),
-      status: row.status,
-      minutos_presentes:
-        row.minutos_presentes === null ? null : Number(row.minutos_presentes),
-      observacoes: row.observacoes,
-    });
-    presencasByDia.set(Number(row.treinamento_dia_id), current);
-  }
-  for (const days of map.values()) {
-    for (const day of days) {
-      day.presencas = presencasByDia.get(Number(day.id)) || [];
-    }
-  }
-  return map;
-}
-
-async function loadInstrutoresByTreinamento(
-  db: D1Database,
-  empresaId: number,
-  treinamentoIds: number[],
-): Promise<Map<number, InstrutorRow[]>> {
-  const map = new Map<number, InstrutorRow[]>();
-  if (treinamentoIds.length === 0) return map;
-  const placeholders = treinamentoIds.map(() => '?').join(', ');
-  const rows = await db
-    .prepare(
-      `SELECT ti.treinamento_id, ti.funcionario_id, f.nome, f.guerra, ti.papel, ti.principal
-         FROM treinamentos_instrutores ti
-         INNER JOIN treinamentos_planejados t
-           ON t.id = ti.treinamento_id AND t.empresa_id = ? AND t.deleted_at IS NULL
-         LEFT JOIN funcionarios f ON f.id = ti.funcionario_id AND f.deleted_at IS NULL
-        WHERE ti.empresa_id = ? AND ti.treinamento_id IN (${placeholders})
-        ORDER BY ti.principal DESC, COALESCE(f.nome, ''), ti.funcionario_id`,
-    )
-    .bind(empresaId, empresaId, ...treinamentoIds)
-    .all<InstrutorRow>();
-  for (const row of rows.results || []) {
-    const current = map.get(Number(row.treinamento_id)) || [];
-    current.push(row);
-    map.set(Number(row.treinamento_id), current);
-  }
-
-  const fallbackRows = await db
-    .prepare(
-      `SELECT t.id AS treinamento_id, t.instrutor_id AS funcionario_id, f.nome, f.guerra,
-              'INSTRUTOR' AS papel, 1 AS principal
-         FROM treinamentos_planejados t
-         LEFT JOIN funcionarios f ON f.id = t.instrutor_id AND f.deleted_at IS NULL
-        WHERE t.empresa_id = ? AND t.id IN (${placeholders})
-          AND t.deleted_at IS NULL
-          AND t.instrutor_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1
-              FROM treinamentos_instrutores ti
-             WHERE ti.treinamento_id = t.id
-               AND ti.empresa_id = t.empresa_id
-          )
-        ORDER BY COALESCE(f.nome, ''), t.instrutor_id`,
-    )
-    .bind(empresaId, ...treinamentoIds)
-    .all<InstrutorRow>();
-  for (const row of fallbackRows.results || []) {
-    const current = map.get(Number(row.treinamento_id)) || [];
-    current.push(row);
-    map.set(Number(row.treinamento_id), current);
-  }
-  return map;
 }
 
 function serializeParticipante(row: ParticipanteRow) {
@@ -1146,6 +931,19 @@ function sortConsolidatedItems(items: ConsolidatedTrainingItem[]): ConsolidatedT
   });
 }
 
+function sortEventoRows(rows: EventoRow[]): EventoRow[] {
+  return [...rows].sort((left, right) => {
+    const byDate = String(left.data_prevista || '').localeCompare(
+      String(right.data_prevista || ''),
+    );
+    if (byDate) return byDate;
+    const byTime = String(left.hora_inicio || '00:00').localeCompare(
+      String(right.hora_inicio || '00:00'),
+    );
+    return byTime || Number(right.id) - Number(left.id);
+  });
+}
+
 async function listTreinamentosPlanejadosBase(
   db: D1Database,
   empresaId: number,
@@ -1171,7 +969,9 @@ async function listTreinamentosPlanejadosBase(
     capabilities.hasDataFim ? 't.data_fim' : 't.data_prevista AS data_fim',
     capabilities.hasBase ? 't.base' : 'NULL AS base',
     capabilities.hasSala ? 't.sala' : 'NULL AS sala',
-    capabilities.hasEquipamentoDescricao ? 't.equipamento_descricao' : 'NULL AS equipamento_descricao',
+    capabilities.hasEquipamentoDescricao
+      ? 't.equipamento_descricao'
+      : 'NULL AS equipamento_descricao',
     capabilities.hasLimiteParticipantes ? 't.limite_participantes' : 'NULL AS limite_participantes',
   ].join(',\n                    ');
 
@@ -1279,26 +1079,44 @@ async function listTreinamentosPlanejadosBase(
       params.push(fmtIdNum);
     }
   }
+
+  const runQuery = async (setorChunk: readonly number[] | null): Promise<EventoRow[]> => {
+    let chunkSql = sql;
+    const chunkParams = [...params];
+    if (setorChunk) {
+      const placeholders = setorChunk.map(() => '?').join(', ');
+      chunkSql += ` AND EXISTS (SELECT 1 FROM treinamentos_participantes tp3 INNER JOIN funcionarios f3 ON f3.id = tp3.funcionario_id AND f3.deleted_at IS NULL WHERE tp3.treinamento_id = t.id AND f3.setor_id IN (${placeholders}))`;
+      chunkParams.push(...setorChunk);
+    }
+    chunkSql += ` GROUP BY t.id
+                  ORDER BY date(t.data_prevista) ASC, COALESCE(t.hora_inicio, '00:00') ASC, t.id DESC
+                  LIMIT 400`;
+    const result = await db
+      .prepare(chunkSql)
+      .bind(...chunkParams)
+      .all<EventoRow>();
+    return result.results || [];
+  };
+
+  let eventoRows: EventoRow[];
   if (filters.scopedSetorIds !== null && filters.scopedSetorIds !== undefined) {
     if (filters.scopedSetorIds.length === 0) {
-      sql += ' AND 1 = 0';
+      eventoRows = [];
     } else {
-      const placeholders = filters.scopedSetorIds.map(() => '?').join(', ');
-      sql += ` AND EXISTS (SELECT 1 FROM treinamentos_participantes tp3 INNER JOIN funcionarios f3 ON f3.id = tp3.funcionario_id AND f3.deleted_at IS NULL WHERE tp3.treinamento_id = t.id AND f3.setor_id IN (${placeholders}))`;
-      params.push(...filters.scopedSetorIds);
+      const rowsById = new Map<number, EventoRow>();
+      const setorChunks = chunkByBindBudget(filters.scopedSetorIds, params.length);
+      for (const setorChunk of setorChunks) {
+        for (const row of await runQuery(setorChunk)) {
+          rowsById.set(Number(row.id), row);
+        }
+      }
+      eventoRows = sortEventoRows([...rowsById.values()]).slice(0, 400);
     }
+  } else {
+    eventoRows = await runQuery(null);
   }
 
-  sql += ` GROUP BY t.id
-           ORDER BY date(t.data_prevista) ASC, COALESCE(t.hora_inicio, '00:00') ASC, t.id DESC
-           LIMIT 400`;
-
-  const rows = await db
-    .prepare(sql)
-    .bind(...params)
-    .all<EventoRow>();
-
-  const ids = (rows.results || []).map((row) => Number(row.id));
+  const ids = eventoRows.map((row) => Number(row.id));
   const [participantes, dias, instrutores] = await Promise.all([
     loadParticipantesByTreinamento(db, empresaId, ids, filters.scopedSetorIds ?? null),
     capabilities.hasDiasTable
@@ -1309,7 +1127,7 @@ async function listTreinamentosPlanejadosBase(
       : Promise.resolve(new Map<number, InstrutorRow[]>()),
   ]);
 
-  return (rows.results || []).map((row) =>
+  return eventoRows.map((row) =>
     serializeEvento(
       row,
       participantes.get(Number(row.id)) || [],
@@ -1428,20 +1246,50 @@ async function loadStandalonePlannedQualificationItems(
       params.push(fmtIdNum);
     }
   }
+
+  const runQuery = async (
+    setorChunk: readonly number[] | null,
+  ): Promise<PlannedQualificationRow[]> => {
+    let chunkSql = sql;
+    const chunkParams = [...params];
+    if (setorChunk) {
+      chunkSql += ` AND f.setor_id IN (${setorChunk.map(() => '?').join(', ')})`;
+      chunkParams.push(...setorChunk);
+    }
+    chunkSql += ' ORDER BY date(qh.data_conclusao) ASC, qh.id ASC LIMIT 400';
+    const result = await db
+      .prepare(chunkSql)
+      .bind(...chunkParams)
+      .all<PlannedQualificationRow>();
+    return result.results || [];
+  };
+
+  let qualificationRows: PlannedQualificationRow[];
   if (filters.scopedSetorIds !== null && filters.scopedSetorIds !== undefined) {
     if (filters.scopedSetorIds.length === 0) {
-      sql += ' AND 1 = 0';
+      qualificationRows = [];
     } else {
-      sql += ` AND f.setor_id IN (${filters.scopedSetorIds.map(() => '?').join(', ')})`;
-      params.push(...filters.scopedSetorIds);
+      const rowsById = new Map<number, PlannedQualificationRow>();
+      const setorChunks = chunkByBindBudget(filters.scopedSetorIds, params.length);
+      for (const setorChunk of setorChunks) {
+        for (const row of await runQuery(setorChunk)) {
+          rowsById.set(Number(row.id), row);
+        }
+      }
+      qualificationRows = [...rowsById.values()]
+        .sort((left, right) => {
+          const byDate = String(left.data_planejada || '').localeCompare(
+            String(right.data_planejada || ''),
+          );
+          return byDate || Number(left.id) - Number(right.id);
+        })
+        .slice(0, 400);
     }
+  } else {
+    qualificationRows = await runQuery(null);
   }
 
-  sql += ' ORDER BY date(qh.data_conclusao) ASC, qh.id ASC LIMIT 400';
-
-  const rows = await db.prepare(sql).bind(...params).all<PlannedQualificationRow>();
-
-  return (rows.results || []).map((row) => {
+  return qualificationRows.map((row) => {
     const itemId = toVirtualId('QUALIFICACAO_PLANEJADA', Number(row.id));
     return {
       id: itemId,
@@ -1536,40 +1384,43 @@ async function loadSimulatorParticipantsBySessao(
   const map = new Map<number, SimulatorParticipantRow[]>();
   if (sessaoIds.length === 0) return map;
 
-  const placeholders = sessaoIds.map(() => '?').join(', ');
-  const rows = await db
-    .prepare(
-      `SELECT sp.sessao_id,
-              sp.funcionario_id,
-              f.nome AS funcionario_nome,
-              f.guerra AS funcionario_guerra,
-              f.matricula AS funcionario_matricula,
-              f.email AS funcionario_email,
-              f.setor AS funcionario_setor,
-              f.funcao AS funcionario_funcao,
-              qh.id AS qualificacao_historico_id
-         FROM sessoes_participantes sp
-         INNER JOIN simulador_agendamentos sa
-           ON sa.id = sp.sessao_id
-          AND sa.empresa_id = ?
-          AND sa.deleted_at IS NULL
-         LEFT JOIN funcionarios f
-           ON f.id = sp.funcionario_id
-          AND f.deleted_at IS NULL
-         LEFT JOIN qualificacoes_historico qh
-           ON qh.sessao_id = sp.sessao_id
-          AND qh.funcionario_id = sp.funcionario_id
-          AND qh.empresa_id = sa.empresa_id
-          AND qh.deleted_at IS NULL
-          AND COALESCE(qh.renovada, 0) = 0
-        WHERE sp.deleted_at IS NULL
-          AND sp.sessao_id IN (${placeholders})
-        ORDER BY sp.sessao_id, COALESCE(f.nome, ''), sp.funcionario_id`,
-    )
-    .bind(empresaId, ...sessaoIds)
-    .all<SimulatorParticipantRow>();
+  const rows = await collectByBindChunks(sessaoIds, 1, async (chunk) => {
+    const placeholders = chunk.map(() => '?').join(', ');
+    const result = await db
+      .prepare(
+        `SELECT sp.sessao_id,
+                sp.funcionario_id,
+                f.nome AS funcionario_nome,
+                f.guerra AS funcionario_guerra,
+                f.matricula AS funcionario_matricula,
+                f.email AS funcionario_email,
+                f.setor AS funcionario_setor,
+                f.funcao AS funcionario_funcao,
+                qh.id AS qualificacao_historico_id
+           FROM sessoes_participantes sp
+           INNER JOIN simulador_agendamentos sa
+             ON sa.id = sp.sessao_id
+            AND sa.empresa_id = ?
+            AND sa.deleted_at IS NULL
+           LEFT JOIN funcionarios f
+             ON f.id = sp.funcionario_id
+            AND f.deleted_at IS NULL
+           LEFT JOIN qualificacoes_historico qh
+             ON qh.sessao_id = sp.sessao_id
+            AND qh.funcionario_id = sp.funcionario_id
+            AND qh.empresa_id = sa.empresa_id
+            AND qh.deleted_at IS NULL
+            AND COALESCE(qh.renovada, 0) = 0
+          WHERE sp.deleted_at IS NULL
+            AND sp.sessao_id IN (${placeholders})
+          ORDER BY sp.sessao_id, COALESCE(f.nome, ''), sp.funcionario_id`,
+      )
+      .bind(empresaId, ...chunk)
+      .all<SimulatorParticipantRow>();
+    return result.results || [];
+  });
 
-  for (const row of rows.results || []) {
+  for (const row of rows) {
     const current = map.get(Number(row.sessao_id)) || [];
     current.push(row);
     map.set(Number(row.sessao_id), current);
@@ -1667,46 +1518,53 @@ async function loadSimulatorSessionItems(
            ORDER BY date(sa.data) ASC, COALESCE(sa.hora_inicio, '00:00') ASC, sa.id ASC
            LIMIT 400`;
 
-  const rows = await db.prepare(sql).bind(...params).all<SimulatorSessionRow>();
+  const rows = await db
+    .prepare(sql)
+    .bind(...params)
+    .all<SimulatorSessionRow>();
   const sessaoIds = (rows.results || []).map((row) => Number(row.id));
   const participantesMap = await loadSimulatorParticipantsBySessao(db, empresaId, sessaoIds);
 
   return (rows.results || []).flatMap((row): ConsolidatedTrainingItem[] => {
-      const normalizedStatus = normalizeTrainingStatusForCompatibility(row.status) || 'PLANEJADO';
-      if (filters.status && normalizedStatus !== normalizeTrainingStatusForCompatibility(filters.status)) {
-        return [];
-      }
+    const normalizedStatus = normalizeTrainingStatusForCompatibility(row.status) || 'PLANEJADO';
+    if (
+      filters.status &&
+      normalizedStatus !== normalizeTrainingStatusForCompatibility(filters.status)
+    ) {
+      return [];
+    }
 
-      const baseParticipantId = toVirtualId('SIMULADOR', Number(row.id));
-      const participantesRows = participantesMap.get(Number(row.id)) || [];
-      const participantes =
-        participantesRows.length > 0
-          ? participantesRows.map((participant, index) => ({
-              id: baseParticipantId - index,
-              treinamento_id: baseParticipantId,
-              funcionario_id: Number(participant.funcionario_id),
-              funcionario_nome: participant.funcionario_nome,
-              funcionario_guerra: participant.funcionario_guerra,
-              funcionario_matricula: participant.funcionario_matricula,
-              funcionario_email: participant.funcionario_email,
-              funcionario_setor: participant.funcionario_setor,
-              funcionario_funcao: participant.funcionario_funcao,
-              confirmado: true,
-              presente: null,
-              aprovado: null,
-              nota: null,
-              observacoes: null,
-              qualificacao_historico_id: participant.qualificacao_historico_id,
-              qualificacao_historico_status: null,
-              status_participacao: 'CONFIRMADO',
-              resultado: null,
-              conceito: null,
-              data_conclusao_efetiva: null,
-              concluido_em: null,
-            }))
-          : [];
+    const baseParticipantId = toVirtualId('SIMULADOR', Number(row.id));
+    const participantesRows = participantesMap.get(Number(row.id)) || [];
+    const participantes =
+      participantesRows.length > 0
+        ? participantesRows.map((participant, index) => ({
+            id: baseParticipantId - index,
+            treinamento_id: baseParticipantId,
+            funcionario_id: Number(participant.funcionario_id),
+            funcionario_nome: participant.funcionario_nome,
+            funcionario_guerra: participant.funcionario_guerra,
+            funcionario_matricula: participant.funcionario_matricula,
+            funcionario_email: participant.funcionario_email,
+            funcionario_setor: participant.funcionario_setor,
+            funcionario_funcao: participant.funcionario_funcao,
+            confirmado: true,
+            presente: null,
+            aprovado: null,
+            nota: null,
+            observacoes: null,
+            qualificacao_historico_id: participant.qualificacao_historico_id,
+            qualificacao_historico_status: null,
+            status_participacao: 'CONFIRMADO',
+            resultado: null,
+            conceito: null,
+            data_conclusao_efetiva: null,
+            concluido_em: null,
+          }))
+        : [];
 
-      return [{
+    return [
+      {
         id: baseParticipantId,
         empresa_id: Number(row.empresa_id),
         qualificacao_tipo_id: Number(row.linked_qualificacao_tipo_id || 0),
@@ -1729,7 +1587,9 @@ async function loadSimulatorSessionItems(
         updated_at: null,
         codigo_turma: null,
         modalidade:
-          String(row.tipo_dispositivo || '').toUpperCase() === 'AERONAVE' ? 'AERONAVE' : 'SIMULADOR',
+          String(row.tipo_dispositivo || '').toUpperCase() === 'AERONAVE'
+            ? 'AERONAVE'
+            : 'SIMULADOR',
         data_inicio: row.data_prevista,
         data_fim: row.data_prevista,
         base: null,
@@ -1787,8 +1647,9 @@ async function loadSimulatorSessionItems(
             ? 'Sessão em aeronave'
             : 'Sessão de simulador',
         read_only: true,
-      }];
-    });
+      },
+    ];
+  });
 }
 
 interface ListEventosDiagnostics {
@@ -1832,7 +1693,7 @@ async function listEventos(
 
   if (wantTurma) {
     try {
-      const turmaCapabilities = capabilities || await detectTreinamentoSchemaCapabilities(db);
+      const turmaCapabilities = capabilities || (await detectTreinamentoSchemaCapabilities(db));
       items.push(
         ...(await listTreinamentosPlanejadosBase(db, empresaId, filters, turmaCapabilities)),
       );
@@ -1845,9 +1706,7 @@ async function listEventos(
 
   if (!filters.treinamentoId && wantQualificacaoPlanejada) {
     try {
-      items.push(
-        ...(await loadStandalonePlannedQualificationItems(db, empresaId, filters)),
-      );
+      items.push(...(await loadStandalonePlannedQualificationItems(db, empresaId, filters)));
       diagnostics.qualificacao_planejada = 'ok';
     } catch (err) {
       console.error('[listEventos] QUALIFICACAO_PLANEJADA source failed:', err);
@@ -1857,9 +1716,7 @@ async function listEventos(
 
   if (!filters.treinamentoId && wantSimulador) {
     try {
-      items.push(
-        ...(await loadSimulatorSessionItems(db, empresaId, filters)),
-      );
+      items.push(...(await loadSimulatorSessionItems(db, empresaId, filters)));
       diagnostics.simulador = 'ok';
     } catch (err) {
       console.error('[listEventos] SIMULADOR source failed:', err);
@@ -1886,19 +1743,22 @@ async function loadAuditoriaByTreinamento(
   const map = new Map<number, AuditoriaRow[]>();
   if (treinamentoIds.length === 0) return map;
 
-  const placeholders = treinamentoIds.map(() => '?').join(', ');
-  const rows = await db
-    .prepare(
-      `SELECT id, acao, registro_id, usuario_nome, dados_antes, dados_depois, created_at
-         FROM auditoria
-        WHERE tabela_afetada = 'treinamentos_planejados'
-          AND registro_id IN (${placeholders})
-        ORDER BY datetime(created_at) DESC, id DESC`,
-    )
-    .bind(...treinamentoIds.map(String))
-    .all<AuditoriaRow>();
+  const rows = await collectByBindChunks(treinamentoIds, 0, async (chunk) => {
+    const placeholders = chunk.map(() => '?').join(', ');
+    const result = await db
+      .prepare(
+        `SELECT id, acao, registro_id, usuario_nome, dados_antes, dados_depois, created_at
+           FROM auditoria
+          WHERE tabela_afetada = 'treinamentos_planejados'
+            AND registro_id IN (${placeholders})
+          ORDER BY datetime(created_at) DESC, id DESC`,
+      )
+      .bind(...chunk.map(String))
+      .all<AuditoriaRow>();
+    return result.results || [];
+  });
 
-  for (const row of rows.results || []) {
+  for (const row of rows) {
     const treinamentoId = Number(row.registro_id);
     const current = map.get(treinamentoId) || [];
     current.push(row);
@@ -1917,19 +1777,24 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
     parseRequestedSetorIds(c.req.query('setor_id'), c.req.query('setor_ids')),
   );
   const capabilities = await detectTreinamentoSchemaCapabilities(db);
-  const { items, diagnostics } = await listEventos(db, empresaId, {
-    status: c.req.query('status'),
-    inicio: c.req.query('inicio'),
-    fim: c.req.query('fim'),
-    instrutorId: c.req.query('instrutor_id'),
-    funcionarioId: c.req.query('funcionario_id'),
-    busca: c.req.query('busca'),
-    source: c.req.query('source'),
-    scopedSetorIds,
-    categoriaId: c.req.query('categoria_id'),
-    formatoId: c.req.query('formato_id'),
-    qualificacaoTipoId: c.req.query('qualificacao_tipo_id'),
-  }, capabilities);
+  const { items, diagnostics } = await listEventos(
+    db,
+    empresaId,
+    {
+      status: c.req.query('status'),
+      inicio: c.req.query('inicio'),
+      fim: c.req.query('fim'),
+      instrutorId: c.req.query('instrutor_id'),
+      funcionarioId: c.req.query('funcionario_id'),
+      busca: c.req.query('busca'),
+      source: c.req.query('source'),
+      scopedSetorIds,
+      categoriaId: c.req.query('categoria_id'),
+      formatoId: c.req.query('formato_id'),
+      qualificacaoTipoId: c.req.query('qualificacao_tipo_id'),
+    },
+    capabilities,
+  );
 
   return c.json({
     success: true,
@@ -1937,7 +1802,7 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
       items,
       total: items.length,
     },
-    diagnostics: Object.values(diagnostics).some(v => v === 'error') ? diagnostics : undefined,
+    diagnostics: Object.values(diagnostics).some((v) => v === 'error') ? diagnostics : undefined,
   });
 });
 
@@ -1954,16 +1819,21 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
   const fim = c.req.query('fim') || monthRange?.fim || null;
   const capabilities = await detectTreinamentoSchemaCapabilities(db);
 
-  const { items } = await listEventos(db, empresaId, {
-    status: c.req.query('status'),
-    inicio,
-    fim,
-    instrutorId: c.req.query('instrutor_id'),
-    funcionarioId: c.req.query('funcionario_id'),
-    busca: c.req.query('busca'),
-    source: c.req.query('source'),
-    scopedSetorIds,
-  }, capabilities);
+  const { items } = await listEventos(
+    db,
+    empresaId,
+    {
+      status: c.req.query('status'),
+      inicio,
+      fim,
+      instrutorId: c.req.query('instrutor_id'),
+      funcionarioId: c.req.query('funcionario_id'),
+      busca: c.req.query('busca'),
+      source: c.req.query('source'),
+      scopedSetorIds,
+    },
+    capabilities,
+  );
 
   return c.json({
     success: true,
@@ -2081,7 +1951,7 @@ treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager')
   const instrutorIds = normalizePositiveIds([
     ...(input.instrutor_ids || []),
     ...(input.instrutor_id ? [input.instrutor_id] : []),
-    ...((input.dias || []).flatMap((dia) => (dia.instrutor_id ? [dia.instrutor_id] : []))),
+    ...(input.dias || []).flatMap((dia) => (dia.instrutor_id ? [dia.instrutor_id] : [])),
   ]);
   const referenceError = await validateTrainingReferences({
     db,
@@ -2095,13 +1965,16 @@ treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager')
     return c.json({ success: false, error: referenceError }, 400);
   }
   if (input.data_inicio && input.data_fim && input.data_fim < input.data_inicio) {
-    return c.json({ success: false, error: 'A data final deve ser igual ou posterior à inicial' }, 400);
+    return c.json(
+      { success: false, error: 'A data final deve ser igual ou posterior à inicial' },
+      400,
+    );
   }
-  if (
-    input.limite_participantes &&
-    participanteIds.length > input.limite_participantes
-  ) {
-    return c.json({ success: false, error: 'Quantidade de participantes excede o limite da turma' }, 400);
+  if (input.limite_participantes && participanteIds.length > input.limite_participantes) {
+    return c.json(
+      { success: false, error: 'Quantidade de participantes excede o limite da turma' },
+      400,
+    );
   }
   const dias =
     input.dias && input.dias.length > 0
@@ -2212,7 +2085,9 @@ treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager')
       'DELETE FROM treinamentos_instrutores WHERE treinamento_id = ? AND empresa_id = ?',
       [treinamentoId, empresaId],
     );
-    await safeRun('DELETE FROM treinamentos_participantes WHERE treinamento_id = ?', [treinamentoId]);
+    await safeRun('DELETE FROM treinamentos_participantes WHERE treinamento_id = ?', [
+      treinamentoId,
+    ]);
     await safeRun(
       `DELETE FROM qualificacoes_historico
         WHERE empresa_id = ? AND status = 'PLANEJADA' AND COALESCE(observacoes, '') LIKE ?`,
@@ -2283,7 +2158,10 @@ treinamentosPlanejadosRoutes.post(
       return c.json({ success: false, error: 'A turma já foi encerrada/concluída' }, 400);
     }
     if (item.participantes.length === 0) {
-      return c.json({ success: false, error: 'A turma não possui participantes matriculados' }, 400);
+      return c.json(
+        { success: false, error: 'A turma não possui participantes matriculados' },
+        400,
+      );
     }
 
     const body = (await c.req.json().catch(() => ({}))) as { gestores_cc_ids?: number[] };
@@ -2359,7 +2237,10 @@ treinamentosPlanejadosRoutes.post(
       return c.json({ success: false, error: 'A turma já foi encerrada/concluída' }, 400);
     }
     if (item.participantes.length === 0) {
-      return c.json({ success: false, error: 'A turma não possui participantes matriculados' }, 400);
+      return c.json(
+        { success: false, error: 'A turma não possui participantes matriculados' },
+        400,
+      );
     }
 
     const gestoresCcIdsInput = Array.isArray(body.gestores_cc_ids)
@@ -2594,7 +2475,7 @@ treinamentosPlanejadosRoutes.patch(
       instrutorIds: normalizePositiveIds([
         ...(input.instrutor_ids || []),
         ...(input.instrutor_id ? [input.instrutor_id] : []),
-        ...((input.dias || []).flatMap((dia) => (dia.instrutor_id ? [dia.instrutor_id] : []))),
+        ...(input.dias || []).flatMap((dia) => (dia.instrutor_id ? [dia.instrutor_id] : [])),
       ]),
       ...collectResourceIdsFromDias(input.dias),
     });
@@ -2608,12 +2489,12 @@ treinamentosPlanejadosRoutes.patch(
       );
     }
     if (input.dias?.some((dia) => dia.hora_fim <= dia.hora_inicio)) {
-      return c.json({ success: false, error: 'O horário final deve ser posterior ao inicial' }, 400);
+      return c.json(
+        { success: false, error: 'O horário final deve ser posterior ao inicial' },
+        400,
+      );
     }
-    if (
-      input.dias &&
-      new Set(input.dias.map((dia) => dia.data)).size !== input.dias.length
-    ) {
+    if (input.dias && new Set(input.dias.map((dia) => dia.data)).size !== input.dias.length) {
       return c.json({ success: false, error: 'Dias efetivos duplicados não são permitidos' }, 400);
     }
     if (
@@ -2629,7 +2510,10 @@ treinamentosPlanejadosRoutes.patch(
       input.participante_ids &&
       normalizePositiveIds(input.participante_ids).length > input.limite_participantes
     ) {
-      return c.json({ success: false, error: 'Quantidade de participantes excede o limite da turma' }, 400);
+      return c.json(
+        { success: false, error: 'Quantidade de participantes excede o limite da turma' },
+        400,
+      );
     }
     if (input.status === 'CONCLUIDO') {
       const { items } = await listEventos(db, empresaId, { treinamentoId });
@@ -3053,8 +2937,7 @@ treinamentosPlanejadosRoutes.get('/planejados/:id/conclusao/preview', async (c) 
         data_conclusao_efetiva: participante.data_conclusao_efetiva,
         qualificacao_historico_id: participante.qualificacao_historico_id,
         elegivel:
-          participante.resultado === 'APROVADO' &&
-          Boolean(participante.data_conclusao_efetiva),
+          participante.resultado === 'APROVADO' && Boolean(participante.data_conclusao_efetiva),
       })),
     },
   });
@@ -3093,16 +2976,15 @@ treinamentosPlanejadosRoutes.patch(
       return c.json({ success: false, error: 'Turma futura não pode ser concluída' }, 400);
     }
 
-    const payloadByFuncionario = new Map<
-      number,
-      z.infer<typeof conclusaoLoteParticipanteSchema>
-    >();
+    const payloadByFuncionario = new Map<number, z.infer<typeof conclusaoLoteParticipanteSchema>>();
     for (const participante of parsed.data.participantes) {
       payloadByFuncionario.set(participante.funcionario_id, participante);
     }
 
     const participantesAtuais = new Map(
-      treinamento.participantes.map((participante) => [participante.funcionario_id, participante] as const),
+      treinamento.participantes.map(
+        (participante) => [participante.funcionario_id, participante] as const,
+      ),
     );
     const participantesForaDaTurma = [...payloadByFuncionario.keys()].filter(
       (funcionarioId) => !participantesAtuais.has(funcionarioId),
@@ -3159,7 +3041,9 @@ treinamentosPlanejadosRoutes.patch(
 
         const aprovado = resultadoNormalizado === 'APROVADO' ? 1 : 0;
         if (
-          (participanteAtual.aprovado === null ? null : Number(participanteAtual.aprovado) === 1) !==
+          (participanteAtual.aprovado === null
+            ? null
+            : Number(participanteAtual.aprovado) === 1) !==
           (resultadoNormalizado === 'APROVADO')
         ) {
           updates.push('aprovado = ?');
@@ -3168,7 +3052,7 @@ treinamentosPlanejadosRoutes.patch(
 
         updates.push('data_conclusao_efetiva = ?');
         params.push(dataConclusaoEfetiva);
-        updates.push('concluido_em = datetime(\'now\')');
+        updates.push("concluido_em = datetime('now')");
         updates.push('concluido_por = ?');
         params.push(ua.usuario_id ?? null);
       }
@@ -3243,10 +3127,9 @@ treinamentosPlanejadosRoutes.patch(
 
     const beforeByFuncionario = participantesAtuais;
     const afterByFuncionario = new Map(
-      treinamentoAtualizado.participantes.map((participante) => [
-        participante.funcionario_id,
-        participante,
-      ] as const),
+      treinamentoAtualizado.participantes.map(
+        (participante) => [participante.funcionario_id, participante] as const,
+      ),
     );
 
     let criados = 0;
@@ -3303,8 +3186,9 @@ treinamentosPlanejadosRoutes.patch(
         status_turma: treinamentoAtualizado.status,
         resumo: {
           total_participantes: treinamentoAtualizado.participantes.length,
-          presentes: treinamentoAtualizado.participantes.filter((participante) => participante.presente)
-            .length,
+          presentes: treinamentoAtualizado.participantes.filter(
+            (participante) => participante.presente,
+          ).length,
           aprovados,
           reprovados: negativos,
           incompletos,
@@ -3572,17 +3456,14 @@ treinamentosPlanejadosRoutes.delete(
 //
 // ?dryRun=true — preview only, no mutations. Retorna turmas e contagem de participantes
 //                com/sem historico existente.
-treinamentosPlanejadosRoutes.post(
-  '/planejados/backfill-sync',
-  requireRole('admin'),
-  async (c) => {
-    const db = c.env.DB;
-    const empresaId = c.get('empresaId');
-    const url = new URL(c.req.url);
-    const dryRun = url.searchParams.get('dryRun') === 'true';
+treinamentosPlanejadosRoutes.post('/planejados/backfill-sync', requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = c.get('empresaId');
+  const url = new URL(c.req.url);
+  const dryRun = url.searchParams.get('dryRun') === 'true';
 
-    if (dryRun) {
-      try {
+  if (dryRun) {
+    try {
       // Carrega turmas ativas com participantes (mesmo critério do apply).
       const turmasInfo = await db
         .prepare(
@@ -3642,8 +3523,12 @@ treinamentosPlanejadosRoutes.post(
 
       // Agregação em JavaScript (evita GROUP BY que está causando erro no D1).
       const STATUS_CONCLUIDO = new Set([
-        'APROVADO', 'REPROVADO', 'CANCELADO',
-        'aprovado', 'reprovado', 'cancelado',
+        'APROVADO',
+        'REPROVADO',
+        'CANCELADO',
+        'aprovado',
+        'reprovado',
+        'cancelado',
       ]);
 
       type Contagem = {
@@ -3671,9 +3556,13 @@ treinamentosPlanejadosRoutes.post(
         }
       }
 
-      const infoMap = new Map(turmasInfo.results.map((t) => [t.id, t]));
       const turmas = turmasInfo.results.map((t) => {
-        const c = contagemMap.get(t.id) || { total: 0, comHistorico: 0, semHistorico: 0, concluidos: 0 };
+        const c = contagemMap.get(t.id) || {
+          total: 0,
+          comHistorico: 0,
+          semHistorico: 0,
+          concluidos: 0,
+        };
         return {
           turmaId: t.id,
           codigoTurma: t.codigo_turma ?? null,
@@ -3705,20 +3594,23 @@ treinamentosPlanejadosRoutes.post(
           turmas,
         },
       });
-      } catch (err) {
-        console.error('[backfill-sync dry-run]', err);
-        return c.json({
+    } catch (err) {
+      console.error('[backfill-sync dry-run]', err);
+      return c.json(
+        {
           success: false,
           error: 'Dry-run error: ' + (err instanceof Error ? err.message : String(err)),
           code: 'DRY_RUN_ERROR',
-        }, 500);
-      }
+        },
+        500,
+      );
     }
+  }
 
-    // Apply mode
-    const turmas = await db
-      .prepare(
-        `SELECT id FROM treinamentos_planejados
+  // Apply mode
+  const turmas = await db
+    .prepare(
+      `SELECT id FROM treinamentos_planejados
          WHERE empresa_id = ?
            AND deleted_at IS NULL
            AND status NOT IN ('CANCELADO', 'CONCLUIDO')
@@ -3728,32 +3620,31 @@ treinamentosPlanejadosRoutes.post(
              WHERE deleted_at IS NULL
            )
          ORDER BY id`,
-      )
-      .bind(empresaId)
-      .all<{ id: number }>();
+    )
+    .bind(empresaId)
+    .all<{ id: number }>();
 
-    const ids = turmas.results.map((r) => r.id as number);
-    let processadas = 0;
-    const erros: Array<{ id: number; erro: string }> = [];
+  const ids = turmas.results.map((r) => r.id as number);
+  let processadas = 0;
+  const erros: Array<{ id: number; erro: string }> = [];
 
-    for (const treinamentoId of ids) {
-      try {
-        await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
-        processadas++;
-      } catch (err) {
-        erros.push({ id: treinamentoId, erro: String(err) });
-      }
+  for (const treinamentoId of ids) {
+    try {
+      await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+      processadas++;
+    } catch (err) {
+      erros.push({ id: treinamentoId, erro: String(err) });
     }
+  }
 
-    return c.json({
-      success: true,
-      data: {
-        total: ids.length,
-        processadas,
-        erros,
-      },
-    });
-  },
-);
+  return c.json({
+    success: true,
+    data: {
+      total: ids.length,
+      processadas,
+      erros,
+    },
+  });
+});
 
 export default treinamentosPlanejadosRoutes;
