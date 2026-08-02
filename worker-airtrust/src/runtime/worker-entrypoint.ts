@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import type { Hono } from 'hono';
 import type { Env } from '../types';
 import { runCorrelatedJob, type JobExecutionContext } from './job-correlation';
