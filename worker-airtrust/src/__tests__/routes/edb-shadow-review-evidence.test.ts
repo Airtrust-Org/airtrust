@@ -164,4 +164,26 @@ describe('POST /api/edb/shadow-review/:flightId/evidence', () => {
     expect(response.status).toBe(400);
     expect(createEvidenceMock).not.toHaveBeenCalled();
   });
+
+  it('sanitizes unexpected failures without leaking payload or tenant data', async () => {
+    createEvidenceMock.mockRejectedValue(
+      Object.assign(new Error('SQL secret payload'), {
+        empresa_id: 7,
+        token: 'secret-token',
+      }),
+    );
+
+    const response = await createApp().request(
+      '/api/edb/shadow-review/42/evidence',
+      { method: 'POST', headers: headers(), body: JSON.stringify(body()) },
+      { DB: {} as D1Database } as Env,
+    );
+    const responseBody = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(responseBody).toContain('EDB_SHADOW_REVIEW_EVIDENCE_FAILED');
+    expect(responseBody).not.toContain('SQL secret');
+    expect(responseBody).not.toContain('empresa_id');
+    expect(responseBody).not.toContain('secret-token');
+  });
 });
