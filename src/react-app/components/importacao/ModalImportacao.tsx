@@ -13,7 +13,7 @@ type Etapa = 'upload' | 'validacao' | 'preview' | 'importando' | 'concluido';
 
 export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportacaoProps) {
   const [etapa, setEtapa] = useState<Etapa>('upload');
-  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [, setArquivo] = useState<File | null>(null);
   const [dados, setDados] = useState<Record<string, unknown>[]>([]);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [mode, setMode] = useState<MergeMode>('MESCLAR_INTELIGENTE');
@@ -165,8 +165,13 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
               Importe dados em massa via CSV ou Excel (Sistema v2.0)
             </p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <X size={24} />
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
+            aria-label="Fechar"
+            title="Fechar"
+          >
+            <X size={24} aria-hidden="true" />
           </button>
         </div>
 
