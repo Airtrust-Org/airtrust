@@ -436,9 +436,7 @@ export function projectControlFlightToEdbDraft(
     findings,
   );
 
-  const sortedLegs = [...input.legs].sort(
-    (left, right) => left.numero_etapa - right.numero_etapa,
-  );
+  const sortedLegs = [...input.legs].sort((left, right) => left.numero_etapa - right.numero_etapa);
   const operationalDates = deriveLegOperationalDates(sortedLegs, input.operationalDate);
   const finalLegIndex = sortedLegs.length - 1;
 
