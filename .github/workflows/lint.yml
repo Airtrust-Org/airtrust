@@ -3,40 +3,53 @@ name: Lint and Prettier Check
 on:
   pull_request:
     paths: ['**/*']
+  push:
+    branches: [main, chore/**]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
-      - uses: actions/setup-node@v4
+          fetch-depth: 0
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
           cache: npm
-      - run: npm ci
-      - name: Format focused eDB files
-        run: |
-          npx --yes prettier@3.9.6 --write -- \
-            worker-airtrust/src/__tests__/routes/edb-shadow-preview.test.ts \
-            worker-airtrust/src/__tests__/services/edb-control-flight-shadow-preview.test.ts \
-            worker-airtrust/src/routes/edb-shadow-preview.ts \
-            worker-airtrust/src/routes/system.ts \
-            worker-airtrust/src/services/edb/control-flight-shadow-preview.ts
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -- \
-            worker-airtrust/src/__tests__/routes/edb-shadow-preview.test.ts \
-            worker-airtrust/src/__tests__/services/edb-control-flight-shadow-preview.test.ts \
-            worker-airtrust/src/routes/edb-shadow-preview.ts \
-            worker-airtrust/src/routes/system.ts \
-            worker-airtrust/src/services/edb/control-flight-shadow-preview.ts
-          if ! git diff --cached --quiet; then
-            git commit -m "style(edb): apply canonical Prettier formatting"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
+      - name: Install dependencies
+        run: npm ci
+      - name: Ensure base ref is available for delta guards
+        run: git fetch origin main --quiet
+      - name: Run CI safety guards
+        run: npm run lint
+        env:
+          CI: true
+          VITE_API_URL: http://127.0.0.1:8787
+      - name: Run migration NO_GO guard tests
+        run: node --test scripts/__tests__/migration-no-go-guard.test.mjs
+      - name: Run TypeScript delta guard tests
+        run: node --test scripts/__tests__/typescript-delta-guard.test.mjs
+      - name: Run lint and format delta guard tests
+        run: node --test scripts/__tests__/lint-format-delta-guard.test.mjs
+      - name: Run risk-based test delta guard tests
+        run: node --test scripts/__tests__/risk-test-delta-guard.test.mjs
+      - name: Block new ESLint and Prettier violations
+        run: node scripts/guard-lint-format-delta.mjs
+      - name: Require focused tests for high-risk runtime changes
+        run: node scripts/guard-risk-test-delta.mjs
+      - name: Run dangerous-ops guard (self-protected invariants)
+        run: npm run ops:guard
+      - name: Run self-protected invariant mutation tests
+        run: node --test scripts/__tests__/self-protected-invariants-guard.test.mjs
+      - name: Run hardened production post-deploy smoke tests
+        run: node --test scripts/__tests__/smoke-production-postdeploy.test.mjs
+      - name: Inventory legacy ESLint baseline
+        run: npx eslint "./src/**/*.{js,jsx,ts,tsx}" --max-warnings=0 || true
+      - name: Inventory legacy Prettier baseline
+        run: npx --yes prettier@3.9.6 --check . || true
