@@ -28,6 +28,10 @@ import { describe, expect, it } from 'vitest';
  * `null` casts when narrowing the API envelope) and
  * ControleVoosRdvDetalhe.tsx (`String.prototype.replaceAll`, unavailable
  * under the configured `lib` target). Dropped the total from 318 to 310.
+ *
+ * 2026-08-02 (Frente 6 — build metadata boundary): normalized the absent
+ * VersionBadge query timestamp from `undefined` to its existing `null`
+ * contract, dropping the baseline from 310 to 309 errors.
  */
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
@@ -36,7 +40,6 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/components/FuncionarioCard.tsx': 5,
   'src/react-app/components/HomeRouter.tsx': 1,
   'src/react-app/components/OptimizedMainSidebar.tsx': 2,
-  'src/react-app/components/VersionBadge.tsx': 1,
   'src/react-app/components/admin/FuncoesManagement.tsx': 4,
   'src/react-app/components/dashboard/AlertWidget.tsx': 2,
   'src/react-app/components/dashboard/EnhancedMetricCard.tsx': 2,
