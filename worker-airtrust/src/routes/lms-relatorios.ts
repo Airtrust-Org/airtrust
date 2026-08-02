@@ -4,6 +4,7 @@
  */
 import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
+import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { requireRole } from '../middleware/rbac';
 import type { Env, Variables } from '../types';
@@ -32,6 +33,15 @@ function resolveRelatorioSetorIds(
   // restricted or self: intersect requested with allowed; if none requested, use all allowed
   if (requested.length === 0) return access.setorIds;
   return requested.filter((id) => access.setorIds.includes(id));
+}
+
+function resolveScormReportLimit(raw: string | undefined): number | undefined {
+  if (raw == null || raw === '') return undefined;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new ApiError('Limite de paginação inválido', 400);
+  }
+  return Math.min(parsed, 200);
 }
 
 app.get('/relatorios/conformidade', auth(), requireRole('admin', 'manager'), async (c) => {
@@ -79,10 +89,32 @@ app.get(
     const empresaId = getEmpresaIdSafe(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
     const setorIds = resolveRelatorioSetorIds(access, c.req.query('setor_ids'));
+    const rawCursor = c.req.query('cursor');
+    const rawLimit = c.req.query('limit');
+    const limit = resolveScormReportLimit(rawLimit);
 
-    const rows = await getScormConclusaoInconsistenteRows(db, empresaId, setorIds);
+    try {
+      // Preserve the existing call shape for requests without pagination params;
+      // the repository still enforces its safe default limit.
+      const result =
+        rawCursor || rawLimit
+          ? await getScormConclusaoInconsistenteRows(db, empresaId, setorIds, {
+              limit,
+              cursor: rawCursor,
+            })
+          : await getScormConclusaoInconsistenteRows(db, empresaId, setorIds);
+      // Compatibility with existing repository mocks while keeping the public
+      // response body unchanged: { success, data: [] }.
+      const page = Array.isArray(result) ? { rows: result, nextCursor: null } : result;
+      if (page.nextCursor) c.header('X-Next-Cursor', page.nextCursor);
 
-    return c.json({ success: true, data: rows });
+      return c.json({ success: true, data: page.rows });
+    } catch (error) {
+      if ((error as { code?: string }).code === 'INVALID_SCORM_CURSOR') {
+        throw new ApiError('Cursor de paginação inválido', 400);
+      }
+      throw error;
+    }
   },
 );
 
