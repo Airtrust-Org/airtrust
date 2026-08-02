@@ -32,12 +32,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          file=worker-airtrust/src/__tests__/routes/lms-relatorios-scorm-pagination.test.ts
-          npx --yes prettier@3.9.6 --write "$file" >/dev/null
-          echo PRETTIER_SCORM_ROUTE_BEGIN
-          base64 -w0 "$file"
-          echo
-          echo PRETTIER_SCORM_ROUTE_END
+          files=(
+            worker-airtrust/src/__tests__/routes/lms-relatorios-scorm-pagination.test.ts
+            worker-airtrust/src/repositories/lmsRelatoriosRepository.ts
+          )
+          npx --yes prettier@3.9.6 --write "${files[@]}" >/dev/null
+          echo PRETTIER_SCORM_DIFF_BEGIN
+          git diff -- "${files[@]}"
+          echo PRETTIER_SCORM_DIFF_END
           exit 1
 
       - name: Run tests
