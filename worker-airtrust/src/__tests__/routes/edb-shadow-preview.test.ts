@@ -44,8 +44,7 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   };
   return {
     ...actual,
-    getEmpresaId: (c: TestContext) =>
-      Number(c.get('tenantContext')?.empresaId || 0),
+    getEmpresaId: (c: TestContext) => Number(c.get('tenantContext')?.empresaId || 0),
     checkPermission: (c: TestContext, minimumRole: string) => {
       const role = String(c.get('tenantContext')?.role || 'viewer');
       return (hierarchy[role] || 0) >= (hierarchy[minimumRole] || 0);
@@ -54,9 +53,8 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
 });
 
 vi.mock('../../services/edb/control-flight-shadow-preview', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('../../services/edb/control-flight-shadow-preview')
-  >();
+  const actual =
+    await importOriginal<typeof import('../../services/edb/control-flight-shadow-preview')>();
   return {
     ...actual,
     loadEdbShadowPreview: loadEdbShadowPreviewMock,
@@ -185,9 +183,7 @@ describe('GET /api/edb/shadow-preview/:flightId', () => {
   });
 
   it('returns the same not-found response for a missing or cross-tenant flight', async () => {
-    loadEdbShadowPreviewMock.mockRejectedValue(
-      new EdbShadowPreviewError('FLIGHT_NOT_FOUND', 404),
-    );
+    loadEdbShadowPreviewMock.mockRejectedValue(new EdbShadowPreviewError('FLIGHT_NOT_FOUND', 404));
 
     const response = await createApp().request(
       '/api/edb/shadow-preview/42',
@@ -206,9 +202,7 @@ describe('GET /api/edb/shadow-preview/:flightId', () => {
     loadEdbShadowPreviewMock.mockRejectedValue(
       new EdbShadowPreviewError('CONFLICT_SCOPE_MISMATCH', 409),
     );
-    const consoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     try {
       const response = await createApp().request(
