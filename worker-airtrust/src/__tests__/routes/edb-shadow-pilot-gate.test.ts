@@ -72,7 +72,7 @@ function env(environment: 'development' | 'staging' | 'production', tenants = '6
     DB: {} as D1Database,
     ENVIRONMENT: environment,
     EDB_SHADOW_PILOT_TENANTS: tenants,
-  } as Env;
+  } as unknown as Env;
 }
 
 beforeEach(() => {
