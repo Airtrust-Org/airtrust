@@ -22,6 +22,87 @@ const HOSPEDAGEM_AUDIT_COLUMNS = `
   escala_id, observacoes, created_at, updated_at, deleted_at
 `;
 
+const HOSPEDAGEM_DEFAULT_LIMIT = 500;
+const HOSPEDAGEM_MAX_LIMIT = 500;
+const HOSPEDAGEM_CURSOR_MAX_LENGTH = 512;
+
+interface HospedagemListRow {
+  id: number;
+  funcionario_id: number;
+  tipo: string;
+  local: string;
+  cidade: string | null;
+  estado: string | null;
+  data_checkin: string;
+  data_checkout: string | null;
+  numero_quarto: string | null;
+  custo_diaria: number | null;
+  moeda: string;
+  escala_id: number | null;
+  observacoes: string | null;
+  created_at: string;
+  updated_at: string;
+  funcionario_nome: string | null;
+  funcionario_matricula: string | null;
+}
+
+interface HospedagemCursor {
+  v: 1;
+  e: number;
+  d: string;
+  i: number;
+}
+
+interface HospedagemListResponse extends ApiResponse<HospedagemListRow[]> {
+  pagination: {
+    limit: number;
+    has_more: boolean;
+    next_cursor: string | null;
+  };
+}
+
+const HospedagemCursorSchema = z
+  .object({
+    v: z.literal(1),
+    e: z.number().int().positive(),
+    d: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    i: z.number().int().positive(),
+  })
+  .strict();
+
+function encodeHospedagemCursor(cursor: HospedagemCursor): string {
+  return btoa(JSON.stringify(cursor)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodeHospedagemCursor(encoded: string, empresaId: number): HospedagemCursor | null {
+  if (
+    encoded.length === 0 ||
+    encoded.length > HOSPEDAGEM_CURSOR_MAX_LENGTH ||
+    !/^[A-Za-z0-9_-]+$/.test(encoded)
+  ) {
+    return null;
+  }
+
+  try {
+    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const parsed = HospedagemCursorSchema.safeParse(JSON.parse(atob(padded)));
+    if (!parsed.success || parsed.data.e !== empresaId) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function parseHospedagemLimit(rawLimit: string | undefined): number | null {
+  if (rawLimit === undefined) return HOSPEDAGEM_DEFAULT_LIMIT;
+  if (!/^\d+$/.test(rawLimit)) return null;
+
+  const limit = Number(rawLimit);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > HOSPEDAGEM_MAX_LIMIT) return null;
+  return limit;
+}
+
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
 const HospedagemCreateSchema = z.object({
@@ -56,6 +137,16 @@ app.get('/', async (c) => {
   const data_inicio = c.req.query('data_inicio');
   const data_fim = c.req.query('data_fim');
   const ativo = c.req.query('ativo'); // '1' = sem checkout, '0' = checkout já efetuado
+  const rawLimit = c.req.query('limit');
+  const limit = parseHospedagemLimit(rawLimit);
+  const rawCursor = c.req.query('cursor');
+  const paginationRequested = rawLimit !== undefined || rawCursor !== undefined;
+  const cursor = rawCursor !== undefined ? decodeHospedagemCursor(rawCursor, empresa_id) : null;
+
+  if (limit === null) {
+    return badRequest(`Limite deve ser um inteiro entre 1 e ${HOSPEDAGEM_MAX_LIMIT}`);
+  }
+  if (rawCursor !== undefined && !cursor) return badRequest('Cursor inválido');
 
   let query = `
     SELECT
@@ -96,15 +187,46 @@ app.get('/', async (c) => {
   } else if (ativo === '0') {
     query += ' AND h.data_checkout IS NOT NULL';
   }
+  if (cursor) {
+    query += ' AND (h.data_checkin < ? OR (h.data_checkin = ? AND h.id < ?))';
+    bindings.push(cursor.d, cursor.d, cursor.i);
+  }
 
-  query += ' ORDER BY h.data_checkin DESC, h.id DESC LIMIT 500';
+  if (paginationRequested) {
+    query += ' ORDER BY h.data_checkin DESC, h.id DESC LIMIT ?';
+    bindings.push(limit + 1);
+  } else {
+    query += ' ORDER BY h.data_checkin DESC, h.id DESC LIMIT 500';
+  }
 
   const result = await db
     .prepare(query)
     .bind(...bindings)
-    .all();
+    .all<HospedagemListRow>();
 
-  const response: ApiResponse = { success: true, data: result.results ?? [] };
+  const rows = result.results ?? [];
+  if (!paginationRequested) {
+    const response: ApiResponse<HospedagemListRow[]> = { success: true, data: rows };
+    return c.json(response);
+  }
+
+  const hasMore = rows.length > limit;
+  const data = rows.slice(0, limit);
+  const lastRow = data[data.length - 1];
+  const nextCursor =
+    hasMore && lastRow
+      ? encodeHospedagemCursor({ v: 1, e: empresa_id, d: lastRow.data_checkin, i: lastRow.id })
+      : null;
+
+  const response: HospedagemListResponse = {
+    success: true,
+    data,
+    pagination: {
+      limit,
+      has_more: hasMore,
+      next_cursor: nextCursor,
+    },
+  };
   return c.json(response);
 });
 
