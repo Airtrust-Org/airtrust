@@ -1,12 +1,14 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env, Variables } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
 
+type TestContext = Context<{ Bindings: Env; Variables: Variables }>;
+
 const loadEdbShadowPreviewMock = vi.fn();
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
+  auth: () => async (c: TestContext, next: () => Promise<void>) => {
     if (!c.req.header('Authorization')) {
       return c.json({ success: false, error: 'Token de autenticacao nao fornecido' }, 401);
     }
@@ -40,8 +42,8 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   };
   return {
     ...actual,
-    getEmpresaId: (c: any) => Number(c.get('tenantContext')?.empresaId || 0),
-    checkPermission: (c: any, minimumRole: string) => {
+    getEmpresaId: (c: TestContext) => Number(c.get('tenantContext')?.empresaId || 0),
+    checkPermission: (c: TestContext, minimumRole: string) => {
       const role = String(c.get('tenantContext')?.role || 'viewer');
       return (hierarchy[role] || 0) >= (hierarchy[minimumRole] || 0);
     },
@@ -111,6 +113,7 @@ beforeEach(() => {
       },
     },
     findings: [],
+    fieldSources: [],
   });
 });
 
@@ -160,6 +163,7 @@ describe('GET /api/edb/shadow-preview/:flightId', () => {
           status: 'shadow_draft',
           tenantId: 7,
         },
+        fieldSources: [],
       },
     });
   });
