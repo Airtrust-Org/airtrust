@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
+import edbShadowPreviewRoutes from './edb-shadow-preview';
 
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
@@ -23,6 +24,8 @@ function setNoCacheHeaders(c: { header: (name: string, value: string) => void })
  * Paths e contratos preservados do index.ts original.
  */
 export function registerSystemRoutes(app: SystemApp) {
+  app.route('/api/edb', edbShadowPreviewRoutes);
+
   /**
    * GET /api/health
    * Health check completo - verifica D1, R2, KV e métricas.
