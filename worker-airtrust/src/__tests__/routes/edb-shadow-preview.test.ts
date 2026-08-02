@@ -42,7 +42,8 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   };
   return {
     ...actual,
-    getEmpresaId: (c: TestContext) => Number(c.get('tenantContext')?.empresaId || 0),
+    getEmpresaId: (c: TestContext) =>
+      Number(c.get('tenantContext')?.empresaId || 0),
     checkPermission: (c: TestContext, minimumRole: string) => {
       const role = String(c.get('tenantContext')?.role || 'viewer');
       return (hierarchy[role] || 0) >= (hierarchy[minimumRole] || 0);
@@ -203,7 +204,9 @@ describe('GET /api/edb/shadow-preview/:flightId', () => {
     loadEdbShadowPreviewMock.mockRejectedValue(
       new EdbShadowPreviewError('CONFLICT_SCOPE_MISMATCH', 409),
     );
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
 
     try {
       const response = await createApp().request(
