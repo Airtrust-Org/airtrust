@@ -365,7 +365,7 @@ describe('useTablePreferences', () => {
 
     expect(screen.getByTestId('search-term')).toHaveTextContent('empresa 2 usuário 20');
     expect(localStorage.getItem(storageKey(2, 20))).toContain('empresa 2 usuário 20');
-    expect(localStorage.getItem(storageKey(1, 10))).not.toContain('resposta antiga');
+    expect(localStorage.getItem(storageKey(1, 10))).toBeNull();
     expect(putCalls()).toHaveLength(0);
   });
 
