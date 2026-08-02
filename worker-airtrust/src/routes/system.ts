@@ -10,9 +10,7 @@ import { getReleaseMetadata } from '../services/release-metadata';
  * Aplica headers no-cache para impedir que o CDN do Cloudflare sirva
  * respostas stale com versão antiga após um deploy.
  */
-function setNoCacheHeaders(c: {
-  header: (name: string, value: string) => void;
-}) {
+function setNoCacheHeaders(c: { header: (name: string, value: string) => void }) {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0');
   c.header('Pragma', 'no-cache');
   c.header('Expires', '0');
@@ -37,10 +35,7 @@ export function registerSystemRoutes(app: SystemApp) {
     setNoCacheHeaders(c);
 
     const startTime = Date.now();
-    const checks: Record<
-      string,
-      { status: 'ok' | 'error'; latency?: number; error?: string }
-    > = {};
+    const checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }> = {};
     let overallHealthy = true;
 
     // 1. Verificar D1 Database

@@ -32,8 +32,10 @@ export type EdbShadowPreviewFinding =
       path: string;
     };
 
-export interface EdbShadowPreviewResult
-  extends Omit<ControlFlightDraftProjectionResult, 'findings'> {
+export interface EdbShadowPreviewResult extends Omit<
+  ControlFlightDraftProjectionResult,
+  'findings'
+> {
   findings: EdbShadowPreviewFinding[];
 }
 
@@ -60,10 +62,7 @@ export interface LoadEdbShadowPreviewOptions {
   draftId?: string;
 }
 
-function assertPositiveInteger(
-  value: number,
-  code: EdbShadowPreviewErrorCode,
-): void {
+function assertPositiveInteger(value: number, code: EdbShadowPreviewErrorCode): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw new EdbShadowPreviewError(code, 400);
   }
@@ -425,10 +424,7 @@ export async function loadEdbShadowPreview(
 
   return {
     draft: projection.draft,
-    findings: [
-      ...projection.findings,
-      ...buildProvenanceFindings(flight, legs, crew),
-    ],
+    findings: [...projection.findings, ...buildProvenanceFindings(flight, legs, crew)],
     fieldSources: projection.fieldSources,
   };
 }
