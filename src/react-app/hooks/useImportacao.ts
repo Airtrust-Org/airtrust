@@ -30,7 +30,7 @@
 import { useState } from 'react';
 import Papa from 'papaparse';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
-import { importWithRetry } from '@/react-app/utils/lazyWithRetry';
+import { parseSpreadsheetFile } from '@/react-app/utils/parseSpreadsheetFile';
 
 // ===== TIPOS =====
 
@@ -47,6 +47,13 @@ export interface DetalheValidacao {
   linha: number;
   acao: 'CREATE' | 'UPDATE' | 'SKIP' | 'ERROR';
   mensagem?: string;
+  dados?: Record<string, unknown>;
+}
+
+interface ApiValidationError {
+  linha?: number;
+  mensagem?: string;
+  message?: string;
   dados?: Record<string, unknown>;
 }
 
@@ -75,80 +82,9 @@ export function useImportacao(entidade: Entidade) {
    */
   const parsearXLSX = async (file: File): Promise<Record<string, unknown>[]> => {
     try {
-      console.log('[parsearXLSX] Carregando XLSX...');
-      const XLSX = await importWithRetry(() => import('xlsx'), 'useImportacao_xlsx_parse', {
-        reloadOnChunkError: false,
-        maxAttempts: 2,
-      });
-
-      console.log('[parsearXLSX] Lendo arquivo:', file.name, 'Tamanho:', file.size);
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array', raw: false });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
-      console.log('[parsearXLSX] Planilhas encontradas:', workbook.SheetNames);
-
-      if (!worksheet) {
-        throw new Error('Arquivo Excel não contém nenhuma planilha');
-      }
-
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
-        header: 1,
-        defval: null,
-        raw: false,
-      });
-      const headerRow = rows[0] || [];
-      const headers = headerRow.map((cell) => String(cell ?? '').trim());
-
-      if (headers.length === 0) {
-        throw new Error('Arquivo Excel está vazio');
-      }
-
-      // Validar duplicatas
-      const seen = new Set<string>();
-      for (const header of headers) {
-        const normalized = header.toLowerCase().trim();
-        if (seen.has(normalized)) {
-          throw new Error(
-            `Coluna duplicada detectada: "${header}". Remova ou renomeie colunas duplicadas no Excel.`,
-          );
-        }
-        seen.add(normalized);
-      }
-
-      // Converter linhas para objetos
-      const data: Record<string, unknown>[] = [];
-      rows.slice(1).forEach((row) => {
-        const obj: Record<string, unknown> = {};
-        row.forEach((cell, index) => {
-          const key = headers[index];
-          if (!key) return;
-          let value: unknown = cell;
-          // Normalizar: strings vazias → null, trim strings
-          if (typeof value === 'string') {
-            const trimmed = value.trim();
-            value = trimmed === '' ? null : trimmed;
-          } else if (value === null || value === undefined) {
-            value = null;
-          }
-          obj[key] = value;
-        });
-        // Só adicionar linhas com pelo menos um campo não-nulo
-        if (Object.values(obj).some((v) => v !== null)) {
-          data.push(obj);
-        }
-      });
-
-      console.log('[parsearXLSX] Linhas parseadas:', data.length);
-      console.log('[parsearXLSX] Primeira linha:', data[0]);
-
-      if (data.length === 0) {
-        throw new Error('Arquivo Excel está vazio');
-      }
-
-      return data;
+      const { rows } = await parseSpreadsheetFile(file);
+      return rows;
     } catch (error) {
-      console.error('[parsearXLSX] Erro:', error);
       throw new Error(
         `Erro ao processar arquivo Excel: ${
           error instanceof Error ? error.message : 'Erro desconhecido'
@@ -197,12 +133,12 @@ export function useImportacao(entidade: Entidade) {
   const parsearArquivo = async (file: File): Promise<Record<string, unknown>[]> => {
     const extension = file.name.toLowerCase().split('.').pop();
 
-    if (extension === 'xlsx' || extension === 'xls') {
+    if (extension === 'xlsx') {
       return parsearXLSX(file);
     } else if (extension === 'csv') {
       return parsearCSV(file);
     } else {
-      throw new Error(`Formato de arquivo não suportado: .${extension}. Use .csv, .xlsx ou .xls`);
+      throw new Error(`Formato de arquivo não suportado: .${extension}. Use .csv ou .xlsx`);
     }
   };
 
@@ -316,7 +252,7 @@ export function useImportacao(entidade: Entidade) {
         mesclar: 0,
         pular: 0,
         erros: errorCount,
-        detalhes: (data.errors || []).map((err: any, idx: number) => ({
+        detalhes: (data.errors || []).map((err: ApiValidationError, idx: number) => ({
           linha: err.linha || idx + 1,
           acao: 'ERROR',
           mensagem: err.mensagem || err.message || 'Erro desconhecido',

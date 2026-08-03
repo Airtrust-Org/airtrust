@@ -1,9 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { parseSpreadsheetFile } from '@/react-app/utils/parseSpreadsheetFile';
 // 🚀 LAZY LOADING: XLSX carregado dinamicamente apenas quando necessário (importar/preview/export)
 import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+
+import type { SpreadsheetRow } from '@/react-app/utils/parseSpreadsheetFile';
+
+interface HistoricoImportacaoQualificacao {
+  id: string | number;
+  arquivo_nome?: string;
+  data_importacao?: string;
+  status?: string;
+  sucesso?: number;
+  total?: number;
+}
 
 interface ImportarQualificacoesProps {
   onImportSuccess?: () => void;
@@ -25,12 +37,13 @@ function mapearModoBackend(modo: ModoImportacao): ModoBackendImportacao {
   return 'MESCLAR_INTELIGENTE';
 }
 
-function normalizarErrosImportacao(rawErros: unknown): Array<{ linha: number; campo?: string; erro: string }> {
+function normalizarErrosImportacao(
+  rawErros: unknown,
+): Array<{ linha: number; campo?: string; erro: string }> {
   if (!Array.isArray(rawErros)) return [];
   return rawErros.map((item, index) => {
     const entry = (item || {}) as Record<string, unknown>;
-    const linha =
-      Number(entry.linha || entry.line || entry.row || 0) || index + 2;
+    const linha = Number(entry.linha || entry.line || entry.row || 0) || index + 2;
     const campo =
       typeof entry.campo === 'string'
         ? entry.campo
@@ -55,9 +68,9 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [resultado, setResultado] = useState<ResultadoImportacao | null>(null);
-  const [preview, setPreview] = useState<any[]>([]);
+  const [preview, setPreview] = useState<SpreadsheetRow[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [historico, setHistorico] = useState<any[]>([]);
+  const [historico, setHistorico] = useState<HistoricoImportacaoQualificacao[]>([]);
   const [modo, setModo] = useState<ModoImportacao>('atualizar_inteligente');
   const [validacao, setValidacao] = useState<{
     total: number;
@@ -65,26 +78,26 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
     erros: Array<{ linha: number; campo?: string; erro: string }>;
   }>({ total: 0, validos: 0, erros: [] });
 
-  useEffect(() => {
-    carregarHistorico();
-  }, []);
-
-  const carregarHistorico = async () => {
+  const carregarHistorico = useCallback(async () => {
     try {
       const API_URL = API_BASE_URL.replace('/api', '');
       const response = await fetch(`${API_URL}/api/qualificacoes/importacoes-historico?limit=10`);
       const data = await response.json();
       if (data.success) {
-        setHistorico(data.importacoes);
+        setHistorico(data.importacoes || []);
       }
     } catch (error) {
       console.error('Erro ao carregar histórico:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void carregarHistorico();
+  }, [carregarHistorico]);
 
   // Validação local dos dados
   const validarDadosLocalmente = (
-    jsonData: any[],
+    jsonData: SpreadsheetRow[],
   ): {
     total: number;
     validos: number;
@@ -92,12 +105,11 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
   } => {
     const erros: Array<{ linha: number; campo?: string; erro: string }> = [];
 
-    jsonData.forEach((row: any, index: number) => {
+    jsonData.forEach((row, index) => {
       const linha = index + 2; // +2 porque linha 1 é header, index começa em 0
 
       // Validar campos obrigatórios do fluxo /importacao v2 (histórico)
-      const cpf = String(row.funcionario_cpf || row.cpf || '')
-        .trim();
+      const cpf = String(row.funcionario_cpf || row.cpf || '').trim();
       const codigo = String(row.qualificacao_codigo || row.codigo || '')
         .trim()
         .toUpperCase();
@@ -133,18 +145,13 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
       setResultado(null);
 
       try {
-        const arrayBuffer = await selectedFile.arrayBuffer();
-        const XLSX = await import('xlsx');
-        const workbook = XLSX.read(arrayBuffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        const { rows: jsonData } = await parseSpreadsheetFile(selectedFile);
 
         // Validar dados localmente
         const validacaoLocal = validarDadosLocalmente(jsonData);
         setValidacao(validacaoLocal);
 
-        const previewData = jsonData.slice(0, 5).map((row: any) => {
+        const previewData = jsonData.slice(0, 5).map((row) => {
           const newRow = { ...row };
           Object.keys(newRow).forEach((key) => {
             const value = newRow[key];
@@ -180,13 +187,8 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const XLSX = await import('xlsx');
-      const workbook = XLSX.read(arrayBuffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      const rows = jsonData.map((row: any) => ({
+      const { rows: jsonData } = await parseSpreadsheetFile(file);
+      const rows = jsonData.map((row) => ({
         funcionario_cpf: String(row.funcionario_cpf || row.cpf || '').trim(),
         qualificacao_codigo: String(row.qualificacao_codigo || row.codigo || '')
           .trim()
@@ -219,11 +221,14 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
       });
       const validarData = await validarResponse.json();
       if (!validarResponse.ok) {
-        const errorMsg = validarData.error || `Erro ${validarResponse.status}: ${validarResponse.statusText}`;
+        const errorMsg =
+          validarData.error || `Erro ${validarResponse.status}: ${validarResponse.statusText}`;
         throw new Error(errorMsg);
       }
 
-      const errosValidacao = normalizarErrosImportacao(validarData.lista_erros || validarData.errors);
+      const errosValidacao = normalizarErrosImportacao(
+        validarData.lista_erros || validarData.errors,
+      );
       if (errosValidacao.length > 0 || validarData.success === false) {
         setResultado({
           total: Number(validarData.total || validarData.totalRows || rows.length),
@@ -250,11 +255,14 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
       });
       const executarData = await executarResponse.json();
       if (!executarResponse.ok) {
-        const errorMsg = executarData.error || `Erro ${executarResponse.status}: ${executarResponse.statusText}`;
+        const errorMsg =
+          executarData.error || `Erro ${executarResponse.status}: ${executarResponse.statusText}`;
         throw new Error(errorMsg);
       }
 
-      const errosExecucao = normalizarErrosImportacao(executarData.errors || executarData.lista_erros);
+      const errosExecucao = normalizarErrosImportacao(
+        executarData.errors || executarData.lista_erros,
+      );
       const sucesso = Number(executarData.inserted || 0) + Number(executarData.updated || 0);
 
       setResultado({
@@ -397,17 +405,10 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
 
           {/* Upload */}
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Selecionar Arquivo (.xlsx ou .xls)
-            </label>
+            <label className="block text-sm font-medium mb-2">Selecionar Arquivo (.xlsx)</label>
             <div className="flex items-center gap-3">
               <label className="flex-1 flex items-center justify-center  py-8 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary cursor-pointer transition">
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
+                <input type="file" accept=".xlsx" onChange={handleFileChange} className="hidden" />
                 <div className="text-center">
                   <Upload className="w-12 h-12 mx-auto mb-2 text-gray-400" />
                   <p className="text-sm text-gray-600">
@@ -438,7 +439,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                   name="modo"
                   value="preencher_vazios"
                   checked={modo === 'preencher_vazios'}
-                  onChange={(e) => setModo(e.target.value as any)}
+                  onChange={(e) => setModo(e.target.value as ModoImportacao)}
                   className="w-4 h-4"
                 />
                 <div>
@@ -459,7 +460,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                   name="modo"
                   value="atualizar_inteligente"
                   checked={modo === 'atualizar_inteligente'}
-                  onChange={(e) => setModo(e.target.value as any)}
+                  onChange={(e) => setModo(e.target.value as ModoImportacao)}
                   className="w-4 h-4"
                 />
                 <div>
@@ -480,7 +481,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                   name="modo"
                   value="substituir_tudo"
                   checked={modo === 'substituir_tudo'}
-                  onChange={(e) => setModo(e.target.value as any)}
+                  onChange={(e) => setModo(e.target.value as ModoImportacao)}
                   className="w-4 h-4"
                 />
                 <div>
@@ -568,7 +569,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                     <tbody className="bg-white">
                       {preview.map((row, i) => (
                         <tr key={i} className="border-t hover:bg-gray-50">
-                          {Object.values(row).map((val: any, j) => (
+                          {Object.values(row).map((val, j) => (
                             <td key={j} className="px-3 py-2 border">
                               {String(val)}
                             </td>
@@ -647,7 +648,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                         </tr>
                       </thead>
                       <tbody>
-                        {resultado.erros.map((erro: any, i: number) => (
+                        {resultado.erros.map((erro, i) => (
                           <tr key={i} className="border-b border-red-100">
                             <td className="p-2">{erro.linha}</td>
                             <td className="p-2">{erro.campo || '-'}</td>
@@ -671,7 +672,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
           <p className="text-gray-500 text-center py-8">Nenhuma importação realizada ainda</p>
         ) : (
           <div className="space-y-2">
-            {historico.map((imp: any) => (
+            {historico.map((imp) => (
               <div
                 key={imp.id}
                 className="border rounded-lg p-4 flex items-center justify-between hover:bg-gray-50"
@@ -679,7 +680,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                 <div>
                   <p className="font-semibold">{imp.arquivo_nome}</p>
                   <p className="text-sm text-gray-600">
-                    {new Date(imp.data_importacao).toLocaleString('pt-BR')}
+                    {new Date(imp.data_importacao || 0).toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div className="text-right">
@@ -688,8 +689,8 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                       imp.status === 'CONCLUIDA'
                         ? 'bg-green-100 text-green-800'
                         : imp.status === 'PARCIAL'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-red-100 text-red-800'
                     }`}
                   >
                     {imp.status}

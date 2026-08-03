@@ -3,6 +3,7 @@ import { API_BASE_URL } from '@/react-app/config/api';
 import { getAccessToken } from '@/react-app/config/api';
 import { Upload, CheckCircle, XCircle, AlertCircle, FileSpreadsheet, Download } from 'lucide-react';
 import { importWithRetry } from '@/react-app/utils/lazyWithRetry';
+import { parseSpreadsheetFile } from '@/react-app/utils/parseSpreadsheetFile';
 // 🚀 LAZY LOADING: XLSX carregado dinamicamente apenas quando necessário
 
 interface ResultadoImportacao {
@@ -99,17 +100,7 @@ export default function ImportarRelacoesInteligente({
     setResultado(null);
 
     try {
-      // 🚀 LAZY LOADING: Carrega XLSX apenas quando processar importação
-      const XLSX = await importWithRetry(() => import('xlsx'), 'ImportarRelacoes_xlsx_process', {
-        reloadOnChunkError: false,
-        maxAttempts: 2,
-      });
-
-      // Ler arquivo Excel
-      const data = await arquivo.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      const { rows: jsonData } = await parseSpreadsheetFile(arquivo);
 
       // Enviar para API
       const token = getAccessToken();
@@ -183,7 +174,7 @@ export default function ImportarRelacoesInteligente({
           <FileSpreadsheet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <input
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx"
             onChange={handleFileChange}
             className="hidden"
             id="file-upload"

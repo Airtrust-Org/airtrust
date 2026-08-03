@@ -1,18 +1,41 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { API_BASE_URL } from '@/react-app/config/api';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
+import { parseSpreadsheetFile } from '@/react-app/utils/parseSpreadsheetFile';
 // 🚀 LAZY LOADING: XLSX carregado apenas quando necessário
-import {
-  Upload,
-  Download,
-  FileSpreadsheet,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Clock,
-} from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, Clock } from 'lucide-react';
+
+import type { SpreadsheetRow } from '@/react-app/utils/parseSpreadsheetFile';
+
+interface ResultadoImportacaoSucesso {
+  sucesso: true;
+  total: number;
+  importados: number;
+  erros: number;
+  detalhes: string;
+}
+
+interface ResultadoImportacaoErro {
+  sucesso: false;
+  erro: string;
+  detalhes: string;
+}
+
+type ResultadoImportacaoPadrao = ResultadoImportacaoSucesso | ResultadoImportacaoErro;
+
+interface HistoricoImportacao {
+  arquivo_nome?: string;
+  nome?: string;
+  created_at?: string;
+  data?: string;
+  total_registros?: number;
+  total?: number;
+  importados?: number;
+  erros?: number;
+  status?: string;
+  sucesso?: boolean;
+}
 
 interface ImportacaoPadraoProps {
   titulo: string;
@@ -39,18 +62,14 @@ export default function ImportacaoPadrao({
 }: ImportacaoPadraoProps) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [resultado, setResultado] = useState<any>(null);
-  const [preview, setPreview] = useState<any[]>([]);
+  const [resultado, setResultado] = useState<ResultadoImportacaoPadrao | null>(null);
+  const [preview, setPreview] = useState<SpreadsheetRow[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [historico, setHistorico] = useState<any[]>([]);
+  const [historico, setHistorico] = useState<HistoricoImportacao[]>([]);
 
-  useEffect(() => {
-    if (historicoEndpoint) {
-      carregarHistorico();
-    }
-  }, [historicoEndpoint]);
+  const carregarHistorico = useCallback(async () => {
+    if (!historicoEndpoint) return;
 
-  const carregarHistorico = async () => {
     try {
       const API_URL = 'https://airtrust.airtrust.workers.dev';
       const response = await fetch(`${API_URL}${historicoEndpoint}?limit=10`);
@@ -61,7 +80,13 @@ export default function ImportacaoPadrao({
     } catch (error) {
       console.error('Erro ao carregar histórico:', error);
     }
-  };
+  }, [historicoEndpoint]);
+
+  useEffect(() => {
+    if (historicoEndpoint) {
+      void carregarHistorico();
+    }
+  }, [carregarHistorico, historicoEndpoint]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -70,14 +95,9 @@ export default function ImportacaoPadrao({
       setResultado(null);
 
       try {
-        const arrayBuffer = await selectedFile.arrayBuffer();
-        const XLSX = await import('xlsx');
-        const workbook = XLSX.read(arrayBuffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        const { rows: jsonData } = await parseSpreadsheetFile(selectedFile);
 
-        const previewData = jsonData.slice(0, 5).map((row: any) => {
+        const previewData = jsonData.slice(0, 5).map((row) => {
           const newRow = { ...row };
           Object.keys(newRow).forEach((key) => {
             const value = newRow[key];
@@ -112,15 +132,10 @@ export default function ImportacaoPadrao({
     setLoading(true);
 
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const XLSX = await import('xlsx');
-      const workbook = XLSX.read(arrayBuffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      const { rows: jsonData } = await parseSpreadsheetFile(file);
 
       if (jsonData.length > 0) {
-        const primeiraLinha: any = jsonData[0];
+        const primeiraLinha = jsonData[0];
         const colunasPresentes = Object.keys(primeiraLinha).map((k) => k.trim().toLowerCase());
         const colunasObrigatoriasLower = colunasObrigatorias.map((c) => c.toLowerCase());
         const colunasFaltando = colunasObrigatoriasLower.filter(
@@ -142,8 +157,8 @@ export default function ImportacaoPadrao({
         c.toLowerCase(),
       );
 
-      const processedData = jsonData.map((row: any) => {
-        const newRow: any = {};
+      const processedData = jsonData.map((row) => {
+        const newRow: SpreadsheetRow = {};
         Object.keys(row).forEach((key) => {
           const cleanKey = key.trim().toLowerCase();
           if (todasColunas.includes(cleanKey)) {
@@ -198,11 +213,11 @@ export default function ImportacaoPadrao({
           detalhes: data.detalhes || data.mensagem || '',
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('[IMPORT] Erro:', error);
       setResultado({
         sucesso: false,
-        erro: error.message || 'Erro ao processar importação',
+        erro: error instanceof Error ? error.message : 'Erro ao processar importação',
         detalhes: 'Verifique o console para mais detalhes',
       });
     } finally {
@@ -216,7 +231,6 @@ export default function ImportacaoPadrao({
       return;
     }
 
-    const todasColunas = [...colunasObrigatorias, ...colunasOpcionais];
     const templateData = [exemploColunas];
 
     const XLSX = await import('xlsx');
@@ -251,7 +265,7 @@ export default function ImportacaoPadrao({
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-5 text-center hover:border-blue-400 transition-colors">
           <input
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx"
             onChange={handleFileChange}
             className="hidden"
             id="file-upload"
@@ -261,7 +275,7 @@ export default function ImportacaoPadrao({
             <p className="text-lg font-medium text-gray-700 mb-2">
               {file ? file.name : 'Clique para selecionar ou arraste o arquivo Excel'}
             </p>
-            <p className="text-sm text-gray-500">Apenas arquivos Excel: .xlsx ou .xls</p>
+            <p className="text-sm text-gray-500">Apenas arquivos Excel: .xlsx</p>
           </label>
         </div>
 
@@ -317,7 +331,7 @@ export default function ImportacaoPadrao({
                 <tbody className="bg-white divide-y divide-gray-200">
                   {preview.map((row, idx) => (
                     <tr key={idx}>
-                      {Object.values(row).map((value: any, i) => (
+                      {Object.values(row).map((value, i) => (
                         <td key={i} className="px-4 py-2 whitespace-nowrap text-gray-700">
                           {String(value)}
                         </td>
@@ -422,14 +436,16 @@ export default function ImportacaoPadrao({
                     {item.arquivo_nome || item.nome || 'Importação'}
                   </p>
                   <p className="text-sm text-gray-600">
-                    {new Date(item.created_at || item.data).toLocaleString('pt-BR')}
+                    {new Date(item.created_at || item.data || 0).toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">
                     {item.total_registros || item.total || item.importados || 0} registros
                   </p>
-                  {item.erros > 0 && <p className="text-sm text-orange-600">{item.erros} erros</p>}
+                  {(item.erros ?? 0) > 0 && (
+                    <p className="text-sm text-orange-600">{item.erros} erros</p>
+                  )}
                 </div>
               </div>
             ))}
