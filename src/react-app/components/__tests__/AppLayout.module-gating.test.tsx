@@ -81,7 +81,7 @@ describe('AppLayout module gating', () => {
 
     expect(screen.queryByRole('link', { name: 'LMS' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'SGSO' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'layout.nav.dashboard' })).toBeNull();
+    expect(screen.getAllByRole('link', { name: 'layout.nav.dashboard' }).length).toBeGreaterThan(0);
   });
 
   it('exibe LMS e SGSO quando os modulos beta estao ativos', () => {
@@ -115,7 +115,13 @@ describe('AppLayout module gating', () => {
         role: 'ADMINISTRADOR',
       },
       logout: vi.fn(),
-      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'mro', 'controle_voos'] }],
+      empresas: [
+        {
+          id: 1,
+          nome: 'AirTrust',
+          modulos_ativos: ['dashboard', 'mro', 'controle_voos'],
+        },
+      ],
       empresaAtualId: 1,
       selectEmpresa: vi.fn(async () => undefined),
     });
@@ -135,7 +141,7 @@ describe('AppLayout module gating', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByRole('link', { name: 'layout.nav.dashboard' })).toBeNull();
+    expect(screen.getAllByRole('link', { name: 'layout.nav.dashboard' }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('link', { name: /Manutenção/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /Controle de Voos/i })).toBeNull();
   });
@@ -148,7 +154,13 @@ describe('AppLayout module gating', () => {
         role: 'ADMINISTRADOR',
       },
       logout: vi.fn(),
-      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'mro', 'controle_voos'] }],
+      empresas: [
+        {
+          id: 1,
+          nome: 'AirTrust',
+          modulos_ativos: ['dashboard', 'mro', 'controle_voos'],
+        },
+      ],
       empresaAtualId: 1,
       selectEmpresa: vi.fn(async () => undefined),
     });

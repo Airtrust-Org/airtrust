@@ -4,24 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DashboardPrincipal from '../DashboardPrincipal';
 
-const {
-  useAuthMock,
-  usePermissionsMock,
-  useMetricsQueryMock,
-  useAlertasQueryMock,
-  useFrmsAlertasQueryMock,
-  useEscalasQueryMock,
-  useSessoesSimuladorQueryMock,
-  useSimuladoresAlertasQueryMock,
-} = vi.hoisted(() => ({
+const { useAuthMock, usePermissionsMock, useOperationalSummaryMock } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   usePermissionsMock: vi.fn(),
-  useMetricsQueryMock: vi.fn(),
-  useAlertasQueryMock: vi.fn(),
-  useFrmsAlertasQueryMock: vi.fn(),
-  useEscalasQueryMock: vi.fn(),
-  useSessoesSimuladorQueryMock: vi.fn(),
-  useSimuladoresAlertasQueryMock: vi.fn(),
+  useOperationalSummaryMock: vi.fn(),
 }));
 
 vi.mock('../../components/AppLayout', () => ({
@@ -36,51 +22,17 @@ vi.mock('../../hooks/usePermissions', () => ({
   usePermissions: () => usePermissionsMock(),
 }));
 
-vi.mock('../dashboard/queries', () => ({
-  useMetricsQuery: (...args: unknown[]) => useMetricsQueryMock(...args),
-  useAlertasQuery: (...args: unknown[]) => useAlertasQueryMock(...args),
-  useFrmsAlertasQuery: (...args: unknown[]) => useFrmsAlertasQueryMock(...args),
-  useEscalasQuery: (...args: unknown[]) => useEscalasQueryMock(...args),
-  useSessoesSimuladorQuery: (...args: unknown[]) => useSessoesSimuladorQueryMock(...args),
-  useSimuladoresAlertasQuery: (...args: unknown[]) => useSimuladoresAlertasQueryMock(...args),
+vi.mock('../dashboard/useOperationalSummary', () => ({
+  useOperationalSummary: (...args: unknown[]) => useOperationalSummaryMock(...args),
 }));
 
-function buildQueryState<T>(data: T, overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    data,
-    isLoading: false,
-    isError: false,
-    isFetching: false,
-    error: undefined,
-    dataUpdatedAt: Date.now(),
-    refetch: vi.fn(async () => undefined),
-    ...overrides,
-  };
-}
-
-function buildMetricsData(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    tripulantesAtivos: 12,
-    tripulantesComQualificacoesVencendo: 1,
-    tripulantesComQualificacoesVencidas: 1,
-    qualificacoesAVencer: 1,
-    qualificacoesVencidas: 1,
-    qualificacoesValidas: 10,
-    totalQualificacoes: 12,
-    demandaFutura30Dias: 0,
-    demandaFutura60Dias: 0,
-    demandaFutura90Dias: 0,
-    ...overrides,
-  };
-}
-
-function buildAuthContext(overrides: Partial<Record<string, unknown>> = {}) {
+function buildAuthContext(role = 'ADMINISTRADOR') {
   return {
     user: {
       id: 1,
-      nome: 'Admin Principal',
-      email: 'filipe.daumas@icloud.com',
-      role: 'ADMINISTRADOR',
+      nome: role === 'GESTOR' ? 'Gestor Setorial' : 'Admin Principal',
+      email: role === 'ADMINISTRADOR' ? 'filipe.daumas@icloud.com' : 'gestor@empresa.com',
+      role,
       permissions: [],
       funcionario_id: null,
     },
@@ -89,13 +41,84 @@ function buildAuthContext(overrides: Partial<Record<string, unknown>> = {}) {
         id: 1,
         nome: 'AirTrust',
         codigo: 'AIR',
-        role: 'ADMINISTRADOR',
+        role,
         is_primary: 1,
         is_current: 1,
         modulos_ativos: ['funcionarios', 'qualificacoes', 'simuladores', 'escalas', 'frms', 'sgso'],
       },
     ],
     empresaAtualId: 1,
+  };
+}
+
+function buildSummary(selectable = true) {
+  return {
+    generatedAt: '2026-08-02T23:30:00-03:00',
+    scope: {
+      mode: selectable ? 'all' : 'restricted',
+      selectable,
+      sectorOptions: [
+        { id: 1, codigo: 'OPS', nome: 'Operações' },
+        { id: 2, codigo: 'TRN', nome: 'Treinamento' },
+      ],
+      selectedSetorIds: selectable ? [1, 2] : [1],
+      ignoredRequestedSetorIds: 0,
+    },
+    metrics: {
+      tripulantesAtivos: 12,
+      tripulantesComQualificacoesVencendo: 1,
+      tripulantesComQualificacoesVencidas: 1,
+      qualificacoesAVencer: 1,
+      qualificacoesVencidas: 1,
+      qualificacoesValidas: 10,
+      totalQualificacoes: 12,
+      demandaFutura30Dias: 3,
+      demandaFutura60Dias: 0,
+      demandaFutura90Dias: 0,
+      lms: {
+        totalCursos: 2,
+        totalMatriculas: 6,
+        concluidos: 4,
+        emAndamento: 2,
+        taxaConclusaoPct: 66.7,
+      },
+    },
+    alertas: [
+      {
+        id: 'qual-1',
+        tipo: 'qualificacao_vencendo',
+        criticidade: 'CRITICA',
+        mensagem: 'CRM vencido',
+        tripulanteNome: 'Tripulante Teste',
+        qualificacaoNome: 'CRM',
+        diasRestantes: -2,
+        urlAcao: '/qualificacoes/alertas',
+      },
+    ],
+    frmsAlertas: [],
+    escalas: [],
+    sessoes: [],
+    simuladoresAlertas: {
+      fichas_pendentes_avaliacao: 0,
+      fichas_aguardando_assinatura_aluno: 0,
+      fichas_aguardando_assinatura_instrutor: 0,
+      fichas_aguardando_assinatura: 0,
+      sessoes_proximas_sem_ficha_completa: 0,
+      edicoes_pendentes: 0,
+      janela_sessoes_proximas_horas: 24,
+    },
+    unavailableSources: [],
+  };
+}
+
+function buildQuery(data: ReturnType<typeof buildSummary> | undefined, overrides = {}) {
+  return {
+    data,
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    error: undefined,
+    refetch: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -106,225 +129,53 @@ function renderDashboard() {
       <Routes>
         <Route path="/dashboard" element={<DashboardPrincipal />} />
         <Route path="/funcionarios" element={<div>funcionarios-page</div>} />
+        <Route path="*" element={<div>destination-page</div>} />
       </Routes>
     </MemoryRouter>,
   );
 }
 
-describe('DashboardPrincipal', () => {
+describe('DashboardPrincipal setorial', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.sessionStorage.clear();
-
+    window.localStorage.clear();
     useAuthMock.mockReturnValue(buildAuthContext());
     usePermissionsMock.mockReturnValue({
-      can: (permission: string) =>
-        [
-          'funcionarios.view',
-          'qualificacoes.view',
-          'simuladores.view',
-          'escalas.view',
-          'frms.view',
-          'sgso.view',
-        ].includes(permission),
+      can: () => true,
       isAdmin: true,
       isGestor: false,
       isInstrutor: false,
       isAluno: false,
     });
-    useMetricsQueryMock.mockReturnValue(buildQueryState(buildMetricsData()));
-    useAlertasQueryMock.mockReturnValue(buildQueryState([]));
-    useFrmsAlertasQueryMock.mockReturnValue(buildQueryState([]));
-    useEscalasQueryMock.mockReturnValue(buildQueryState([]));
-    useSessoesSimuladorQueryMock.mockReturnValue(buildQueryState([]));
-    useSimuladoresAlertasQueryMock.mockReturnValue(
-      buildQueryState({
-        fichas_pendentes_avaliacao: 0,
-        fichas_aguardando_assinatura_aluno: 0,
-        fichas_aguardando_assinatura_instrutor: 0,
-        fichas_aguardando_assinatura: 0,
-        sessoes_proximas_sem_ficha_completa: 0,
-        edicoes_pendentes: 0,
-        janela_sessoes_proximas_horas: 24,
-      }),
-    );
+    useOperationalSummaryMock.mockReturnValue(buildQuery(buildSummary()));
   });
 
-  it('mantem o mesmo conjunto de alertas dispensado oculto e reexibe quando muda materialmente', () => {
-    const view = renderDashboard();
-
-    expect(screen.getByText(/1 qualificações vencidas/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /dispensar alertas/i }));
-    expect(screen.queryByText(/1 qualificações vencidas/i)).toBeNull();
-
-    view.rerender(
-      <MemoryRouter>
-        <DashboardPrincipal />
-      </MemoryRouter>,
-    );
-    expect(screen.queryByText(/1 qualificações vencidas/i)).toBeNull();
-
-    useMetricsQueryMock.mockReturnValue(
-      buildQueryState(
-        buildMetricsData({
-          tripulantesComQualificacoesVencidas: 2,
-          qualificacoesVencidas: 2,
-        }),
-      ),
-    );
-
-    view.rerender(
-      <MemoryRouter>
-        <DashboardPrincipal />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText(/2 qualificações vencidas/i)).toBeInTheDocument();
-  });
-
-  it('reavalia o banner quando a empresa atual muda', () => {
-    const view = renderDashboard();
-
-    fireEvent.click(screen.getByRole('button', { name: /dispensar alertas/i }));
-    expect(screen.queryByText(/1 qualificações vencidas/i)).toBeNull();
-
-    useAuthMock.mockReturnValue(
-      buildAuthContext({
-        empresaAtualId: 2,
-        empresas: [
-          {
-            id: 2,
-            nome: 'AirTrust 2',
-            codigo: 'AIR2',
-            role: 'GESTOR',
-            is_primary: 0,
-            is_current: 1,
-            modulos_ativos: ['funcionarios', 'qualificacoes', 'simuladores', 'escalas'],
-          },
-        ],
-      }),
-    );
-
-    view.rerender(
-      <MemoryRouter>
-        <DashboardPrincipal />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText(/1 qualificações vencidas/i)).toBeInTheDocument();
-  });
-
-  it('exibe pendencias de simuladores separadas de proximas sessoes', () => {
-    useSimuladoresAlertasQueryMock.mockReturnValue(
-      buildQueryState({
-        fichas_pendentes_avaliacao: 2,
-        fichas_aguardando_assinatura_aluno: 1,
-        fichas_aguardando_assinatura_instrutor: 2,
-        fichas_aguardando_assinatura: 3,
-        sessoes_proximas_sem_ficha_completa: 4,
-        edicoes_pendentes: 1,
-        janela_sessoes_proximas_horas: 24,
-      }),
-    );
-    useSessoesSimuladorQueryMock.mockReturnValue(
-      buildQueryState([
-        {
-          id: 'sessao-1',
-          data: '2026-06-21',
-          hora_inicio: '09:00',
-          tipo_sessao: 'REC',
-          tema_sessao: 'Sessão LOFT',
-          simulador_nome: 'AW139',
-        },
-      ]),
-    );
-
+  it('prioriza decisões e identifica o escopo no lugar de repetir o menu de módulos', () => {
     renderDashboard();
 
-    expect(screen.getByText('Pendências que exigem ação')).toBeInTheDocument();
-    expect(screen.getByText('Avaliações pendentes')).toBeInTheDocument();
-    expect(screen.getByText('Assinaturas pendentes')).toBeInTheDocument();
-    expect(screen.getByText('Edições pendentes')).toBeInTheDocument();
-    expect(screen.getByText('Sessões sem ficha completa')).toBeInTheDocument();
-    expect(screen.getByText('Próximas sessões')).toBeInTheDocument();
-    expect(screen.getByText('Sessão LOFT')).toBeInTheDocument();
+    expect(screen.getByText('Ações que exigem decisão')).toBeInTheDocument();
+    expect(screen.getByText('CRM vencida')).toBeInTheDocument();
+    expect(screen.getByText(/Tripulante Teste/)).toBeInTheDocument();
+    expect(screen.getByText('Indicadores do escopo selecionado')).toBeInTheDocument();
+    expect(screen.queryByText('Módulos do sistema')).toBeNull();
   });
 
-  it('mostra estado vazio claro quando nao ha pendencias nem sessoes de simuladores', () => {
+  it('só aplica a seleção do administrador quando ele confirma o filtro', () => {
     renderDashboard();
 
-    expect(
-      screen.getByText('Nenhuma pendência operacional de simuladores.'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Nenhuma sessão futura relevante.')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByText('Todos os setores')[0]);
+    fireEvent.click(screen.getByRole('checkbox', { name: /Treinamento/ }));
+
+    expect(useOperationalSummaryMock).not.toHaveBeenCalledWith([2], true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtro' }));
+
+    expect(useOperationalSummaryMock).toHaveBeenLastCalledWith([2], true);
+    expect(window.localStorage.getItem('airtrust.dashboard.sectors.v2:1:1')).toBe('[2]');
   });
 
-  it('nao deixa modulos ocultos pelo menu clicaveis na home', () => {
-    useAuthMock.mockReturnValue(
-      buildAuthContext({
-        user: {
-          id: 1,
-          nome: 'Admin Comum',
-          email: 'admin@empresa.com',
-          role: 'ADMINISTRADOR',
-          permissions: [],
-          funcionario_id: null,
-        },
-        empresas: [
-          {
-            id: 1,
-            nome: 'AirTrust',
-            codigo: 'AIR',
-            role: 'ADMINISTRADOR',
-            is_primary: 1,
-            is_current: 1,
-            modulos_ativos: ['funcionarios', 'qualificacoes', 'simuladores', 'frms', 'sgso', 'mro', 'controle_voos'],
-          },
-        ],
-      }),
-    );
-    usePermissionsMock.mockReturnValue({
-      can: (permission: string) =>
-        ['funcionarios.view', 'qualificacoes.view', 'simuladores.view'].includes(permission),
-      isAdmin: true,
-      isGestor: false,
-      isInstrutor: false,
-      isAluno: false,
-    });
-
-    renderDashboard();
-
-    expect(screen.queryByText('FRMS')).toBeNull();
-    expect(screen.queryByText('SGSO')).toBeNull();
-    expect(screen.queryByText('Manutenção')).toBeNull();
-    expect(screen.queryByText('Controle de Voos')).toBeNull();
-  });
-
-  it('redireciona gestor para /funcionarios sem renderizar o painel principal', () => {
-    useAuthMock.mockReturnValue(
-      buildAuthContext({
-        user: {
-          id: 1,
-          nome: 'Gestor Teste',
-          email: 'gestor@empresa.com',
-          role: 'GESTOR',
-          permissions: [],
-          funcionario_id: null,
-        },
-        empresas: [
-          {
-            id: 1,
-            nome: 'AirTrust',
-            codigo: 'AIR',
-            role: 'GESTOR',
-            is_primary: 1,
-            is_current: 1,
-            modulos_ativos: ['funcionarios', 'qualificacoes', 'simuladores', 'escalas', 'frms', 'sgso'],
-          },
-        ],
-      }),
-    );
+  it('mostra ao gestor um escopo fixo e mantém acesso à Home', () => {
+    useAuthMock.mockReturnValue(buildAuthContext('GESTOR'));
     usePermissionsMock.mockReturnValue({
       can: () => true,
       isAdmin: false,
@@ -332,26 +183,52 @@ describe('DashboardPrincipal', () => {
       isInstrutor: false,
       isAluno: false,
     });
+    useOperationalSummaryMock.mockReturnValue(buildQuery(buildSummary(false)));
+
+    renderDashboard();
+
+    expect(screen.getAllByText('Operações').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Aplicar filtro' })).toBeNull();
+    expect(screen.queryByText('funcionarios-page')).toBeNull();
+    expect(useOperationalSummaryMock).toHaveBeenCalledWith([], true);
+  });
+
+  it('informa falha parcial sem tratar a fonte ausente como normal', () => {
+    const summary = buildSummary();
+    summary.unavailableSources = ['frms'];
+    useOperationalSummaryMock.mockReturnValue(buildQuery(summary));
+
+    renderDashboard();
+
+    expect(screen.getByText('Painel carregado com dados parciais')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nenhuma fonte indisponível foi interpretada como situação normal/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Situação Normal')).toBeNull();
+  });
+
+  it('redireciona perfis sem acesso administrativo ou gerencial', () => {
+    useAuthMock.mockReturnValue(buildAuthContext('INSTRUTOR'));
+    usePermissionsMock.mockReturnValue({
+      can: () => true,
+      isAdmin: false,
+      isGestor: false,
+      isInstrutor: true,
+      isAluno: false,
+    });
 
     renderDashboard();
 
     expect(screen.getByText('funcionarios-page')).toBeInTheDocument();
-    expect(useMetricsQueryMock).not.toHaveBeenCalled();
+    expect(useOperationalSummaryMock).toHaveBeenCalledWith([], false);
   });
 
-  it('nao quebra ao sair de loading para carregado', () => {
-    useMetricsQueryMock
-      .mockReturnValueOnce(
-        buildQueryState(undefined, {
-          isLoading: true,
-          dataUpdatedAt: 0,
-        }),
-      )
-      .mockReturnValue(buildQueryState(buildMetricsData()));
+  it('mantém a ordem dos hooks estável ao sair de loading para carregado', () => {
+    useOperationalSummaryMock
+      .mockReturnValueOnce(buildQuery(undefined, { isLoading: true }))
+      .mockReturnValue(buildQuery(buildSummary()));
 
     const view = renderDashboard();
-
-    expect(view.container.textContent).toBe('');
 
     view.rerender(
       <MemoryRouter initialEntries={['/dashboard']}>
@@ -362,6 +239,6 @@ describe('DashboardPrincipal', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/Painel executivo/i)).toBeInTheDocument();
+    expect(screen.getByText('Decisões do escopo selecionado')).toBeInTheDocument();
   });
 });

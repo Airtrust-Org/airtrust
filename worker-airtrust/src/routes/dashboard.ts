@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
 import {
@@ -49,8 +50,10 @@ function buildDashboardRenewalSqlPredicates() {
 
 async function hasDashboardRenovacaoDeColumn(db: D1Database): Promise<boolean> {
   try {
-    const { results } = await db.prepare('PRAGMA table_info(qualificacoes_historico)').all();
-    return (results || []).some((column: any) => column?.name === 'renovacao_de');
+    const { results } = await db
+      .prepare('PRAGMA table_info(qualificacoes_historico)')
+      .all<{ name?: string }>();
+    return (results || []).some((column) => column?.name === 'renovacao_de');
   } catch {
     return false;
   }
@@ -70,10 +73,7 @@ app.get('/qualificacoes', async (c) => {
     const hojeSp = getTodayIsoSaoPaulo();
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
     const hasRenovacaoDe = await hasDashboardRenovacaoDeColumn(db);
-    const {
-      renewedQualificationPredicate,
-      activeRenewedQualificationPredicate,
-    } = buildDashboardRenewalSqlPredicates();
+    const { renewedQualificationPredicate } = buildDashboardRenewalSqlPredicates();
 
     // If renovacao_de column exists, use the canonical rule for a renewed record
     // (the older one), which is that there exists a newer valid record pointing to it.
@@ -86,7 +86,7 @@ app.get('/qualificacoes', async (c) => {
             AND qh_renovadora.renovacao_de = qh.id
         ))`
       : renewedQualificationPredicate;
-      
+
     const effectiveActiveRenewedPredicate = `(qh.deleted_at IS NULL AND NOT (${sqlStatusEqualsAny(QUALIFICATION_STATUS_EXPR, CANCELLED_STATUS_VALUES)}) AND ${effectiveRenewedPredicate})`;
 
     const effectiveActivePlannedPredicate = `(qh.deleted_at IS NULL AND NOT (${effectiveRenewedPredicate}) AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny(QUALIFICATION_STATUS_EXPR, PLANNED_QUALIFICATION_STATUS_VALUES)}))`;
@@ -513,7 +513,10 @@ app.get('/frms-alertas', async (c) => {
     const alertas = await getDashboardFrmsAlerts(c.env.DB, empresaId, access, dataInicio, limit);
     return c.json({ success: true, data: alertas, total: alertas.length });
   } catch (error) {
-    createLogger(c as Context, 'Dashboard').error('Erro ao buscar alertas FRMS do dashboard', toError(error));
+    createLogger(c as Context, 'Dashboard').error(
+      'Erro ao buscar alertas FRMS do dashboard',
+      toError(error),
+    );
     return c.json({ success: false, error: 'Erro ao buscar alertas FRMS do dashboard' }, 500);
   }
 });
@@ -524,10 +527,19 @@ app.get('/proximas-sessoes', async (c) => {
     const access = await getEmployeeSectorAccess(c, empresaId);
     const dataInicio = c.req.query('data_inicio') || getTodayIsoSaoPaulo();
     const limit = Number(c.req.query('limit') || '24');
-    const sessoes = await getDashboardUpcomingSessions(c.env.DB, empresaId, access, dataInicio, limit);
+    const sessoes = await getDashboardUpcomingSessions(
+      c.env.DB,
+      empresaId,
+      access,
+      dataInicio,
+      limit,
+    );
     return c.json({ success: true, data: sessoes });
   } catch (error) {
-    createLogger(c as Context, 'Dashboard').error('Erro ao buscar próximas sessões do dashboard', toError(error));
+    createLogger(c as Context, 'Dashboard').error(
+      'Erro ao buscar próximas sessões do dashboard',
+      toError(error),
+    );
     return c.json({ success: false, error: 'Erro ao buscar próximas sessões do dashboard' }, 500);
   }
 });
@@ -543,7 +555,10 @@ app.get('/escalas-resumo', async (c) => {
     const escalas = await getDashboardEscalasResumo(c.env.DB, empresaId, access, mes, ano, limit);
     return c.json({ success: true, data: escalas });
   } catch (error) {
-    createLogger(c as Context, 'Dashboard').error('Erro ao buscar resumo de escalas do dashboard', toError(error));
+    createLogger(c as Context, 'Dashboard').error(
+      'Erro ao buscar resumo de escalas do dashboard',
+      toError(error),
+    );
     return c.json({ success: false, error: 'Erro ao buscar resumo de escalas do dashboard' }, 500);
   }
 });
@@ -563,6 +578,138 @@ app.get('/simuladores-alertas', async (c) => {
       { success: false, error: 'Erro ao buscar resumo de alertas de simuladores' },
       500,
     );
+  }
+});
+
+/**
+ * GET /api/dashboard/operational-summary
+ * Consolida a Home em uma única chamada e aplica o escopo setorial no backend.
+ * Administradores podem solicitar subconjuntos de setores; gestores continuam
+ * limitados à interseção entre os setores solicitados e os setores autorizados.
+ */
+app.get('/operational-summary', requireRole('admin', 'manager'), async (c) => {
+  try {
+    const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
+    const baseAccess = await getEmployeeSectorAccess(c, empresaId);
+    const requestedSetorIds = [
+      ...new Set(
+        String(c.req.query('setor_ids') || '')
+          .split(',')
+          .map((value) => Number(value.trim()))
+          .filter((value) => Number.isInteger(value) && value > 0),
+      ),
+    ];
+
+    let setoresSql = `
+      SELECT id, codigo, nome
+      FROM setores
+      WHERE empresa_id = ?
+        AND deleted_at IS NULL
+        AND ativo = 1
+    `;
+    const setoresBindings: unknown[] = [empresaId];
+
+    if (baseAccess.mode !== 'all') {
+      if (baseAccess.setorIds.length === 0) {
+        setoresSql += ' AND 1 = 0';
+      } else {
+        setoresSql += ` AND id IN (${baseAccess.setorIds.map(() => '?').join(', ')})`;
+        setoresBindings.push(...baseAccess.setorIds);
+      }
+    }
+
+    setoresSql += ' ORDER BY nome ASC';
+    const setoresResult = await db
+      .prepare(setoresSql)
+      .bind(...setoresBindings)
+      .all<{ id: number; codigo: string | null; nome: string }>();
+    const sectorOptions = (setoresResult.results || []).map((setor) => ({
+      id: Number(setor.id),
+      codigo: setor.codigo ? String(setor.codigo) : null,
+      nome: String(setor.nome),
+    }));
+    const allowedSectorIds = new Set(sectorOptions.map((setor) => setor.id));
+    const appliedRequestedSetorIds = requestedSetorIds.filter((id) => allowedSectorIds.has(id));
+    const ignoredRequestedSetorIds = requestedSetorIds.length - appliedRequestedSetorIds.length;
+
+    const effectiveAccess =
+      requestedSetorIds.length === 0 || baseAccess.mode === 'self'
+        ? baseAccess
+        : {
+            mode: 'restricted' as const,
+            setorIds: appliedRequestedSetorIds,
+            funcionarioId: null,
+          };
+
+    const hoje = getTodayIsoSaoPaulo();
+    const dataInicioMes = `${hoje.slice(0, 7)}-01`;
+    const mes = Number(hoje.slice(5, 7));
+    const ano = Number(hoje.slice(0, 4));
+
+    const [
+      metricsResult,
+      alertasResult,
+      frmsResult,
+      escalasResult,
+      sessoesResult,
+      simuladoresResult,
+    ] = await Promise.allSettled([
+      getDashboardMetrics(db, empresaId, effectiveAccess),
+      getDashboardAlerts(db, empresaId, effectiveAccess),
+      getDashboardFrmsAlerts(db, empresaId, effectiveAccess, dataInicioMes, 200),
+      getDashboardEscalasResumo(db, empresaId, effectiveAccess, mes, ano, 6),
+      getDashboardUpcomingSessions(db, empresaId, effectiveAccess, hoje, 24),
+      getDashboardSimuladoresAlertas(db, empresaId, effectiveAccess),
+    ]);
+
+    const unavailableSources: string[] = [];
+    const readSource = <T>(result: PromiseSettledResult<T>, source: string): T | null => {
+      if (result.status === 'fulfilled') return result.value;
+      unavailableSources.push(source);
+      createLogger(c as Context, 'Dashboard').error(
+        `Falha parcial no resumo operacional: ${source}`,
+        toError(result.reason),
+      );
+      return null;
+    };
+
+    const selectedSetorIds =
+      effectiveAccess.mode === 'all'
+        ? sectorOptions.map((setor) => setor.id)
+        : effectiveAccess.setorIds;
+
+    c.header('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+    c.header('Pragma', 'no-cache');
+    c.header('Expires', '0');
+    c.header('Vary', 'Authorization');
+
+    return c.json({
+      success: true,
+      data: {
+        generatedAt: new Date().toISOString(),
+        scope: {
+          mode: baseAccess.mode,
+          selectable: baseAccess.mode === 'all',
+          sectorOptions,
+          selectedSetorIds,
+          ignoredRequestedSetorIds,
+        },
+        metrics: readSource(metricsResult, 'metrics'),
+        alertas: readSource(alertasResult, 'alertas'),
+        frmsAlertas: readSource(frmsResult, 'frms'),
+        escalas: readSource(escalasResult, 'escalas'),
+        sessoes: readSource(sessoesResult, 'simuladores_sessoes'),
+        simuladoresAlertas: readSource(simuladoresResult, 'simuladores_pendencias'),
+        unavailableSources,
+      },
+    });
+  } catch (error) {
+    createLogger(c as Context, 'Dashboard').error(
+      'Erro ao gerar resumo operacional do dashboard',
+      toError(error),
+    );
+    return c.json({ success: false, error: 'Erro ao gerar resumo operacional' }, 500);
   }
 });
 

@@ -1,6 +1,6 @@
 import { PRODUCT_MODULE_BY_KEY } from './modules';
 import {
-  canSeeAdministrativeDashboard,
+  canSeeOperationalDashboard,
   shouldShowRestrictedDevelopmentNavItems,
 } from './development-module-nav';
 
@@ -221,9 +221,7 @@ export function getModuleKeyForPath(pathname: string): string | null {
 export function getVisibleNavigationItems<
   T extends { id: string; children?: Array<{ id: string }> },
 >(items: T[], modulosAtivos: EmpresaModuleState, options: VisibleNavigationOptions = {}): T[] {
-  const canSeeRestrictedDevelopmentNavItems = shouldShowRestrictedDevelopmentNavItems(
-    options.user,
-  );
+  const canSeeRestrictedDevelopmentNavItems = shouldShowRestrictedDevelopmentNavItems(options.user);
 
   const shouldKeepNavigationItem = (itemId: string): boolean => {
     if (!canAccessModule(itemId, modulosAtivos)) {
@@ -234,7 +232,7 @@ export function getVisibleNavigationItems<
     if (
       RESTRICTED_ADMIN_DASHBOARD_NAV_MODULES.has(resolvedModuleKey) &&
       options.user &&
-      !canSeeAdministrativeDashboard(options.user)
+      !canSeeOperationalDashboard(options.user)
     ) {
       return false;
     }

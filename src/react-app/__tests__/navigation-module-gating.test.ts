@@ -17,10 +17,9 @@ describe('navigation module gating', () => {
     ]);
 
     expect(visible.map((item) => item.id)).toContain('dashboard');
-    expect(visible.find((item) => item.id === 'pessoas')?.children?.map((item) => item.id)).toEqual([
-      'funcionarios',
-      'pasta-virtual',
-    ]);
+    expect(visible.find((item) => item.id === 'pessoas')?.children?.map((item) => item.id)).toEqual(
+      ['funcionarios', 'pasta-virtual'],
+    );
   });
 
   it('oculta modulo beta quando inativo', () => {
@@ -80,7 +79,7 @@ describe('navigation module gating', () => {
     expect(visible.map((item) => item.id)).not.toContain('controle_voos');
   });
 
-  it('oculta dashboard administrativo para gestor comum', () => {
+  it('exibe dashboard operacional para gestor setorial', () => {
     const visible = getVisibleNavigationItems(NAVIGATION_CONFIG.main_menu, ['dashboard'], {
       user: {
         email: 'gestor@empresa.com',
@@ -88,7 +87,7 @@ describe('navigation module gating', () => {
       },
     });
 
-    expect(visible.map((item) => item.id)).not.toContain('dashboard');
+    expect(visible.map((item) => item.id)).toContain('dashboard');
   });
 
   it('exibe modulos de desenvolvimento para admin principal allowlisted', () => {
