@@ -67,14 +67,19 @@ function summarizeConsumerStates(states: DomainEventConsumerState[]): string {
   if (states.some((state) => state.status === 'dead_letter')) return 'dead_letter';
   if (states.some((state) => state.status === 'processing')) return 'processing';
   if (states.some((state) => state.status === 'retry')) return 'retry';
-  if (states.length > 0 && states.every((state) => state.status === 'processed')) return 'processed';
+  if (states.length > 0 && states.every((state) => state.status === 'processed')) {
+    return 'processed';
+  }
   return 'pending';
 }
 
-function enrichDomainEvent<T extends { consumidores: string | null; processado_por: string | null }>(
-  row: T,
-) {
-  const consumidorStatus = getDomainEventConsumerStates(row.consumidores, row.processado_por);
+function enrichDomainEvent<
+  T extends { consumidores: string | null; processado_por: string | null },
+>(row: T) {
+  const consumidorStatus = getDomainEventConsumerStates(
+    row.consumidores,
+    row.processado_por,
+  );
   return {
     ...row,
     estado_processamento: summarizeConsumerStates(consumidorStatus),
@@ -85,7 +90,10 @@ function enrichDomainEvent<T extends { consumidores: string | null; processado_p
 app.get('/domain-events', requireRole('admin'), async (c) => {
   const empresaId = getEmpresaId(c);
   const tipo = c.req.query('tipo');
-  const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 200);
+  const limit = Math.min(
+    Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1),
+    200,
+  );
 
   let sql = `
     SELECT id, empresa_id, modulo, tipo, payload, consumidores, processado_por,
