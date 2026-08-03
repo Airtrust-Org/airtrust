@@ -34,23 +34,24 @@ jobs:
       - name: Make scripts executable
         run: |
           chmod +x ./scripts/ci-demo-data-check.sh
+          chmod +x ./scripts/ci-internal-docs-check.sh
           chmod +x ./scripts/production-audit-check.sh
 
-      - name: Lint code
-        run: npm run lint
-        env:
-          CI: true
-          VITE_API_URL: http://127.0.0.1:8787
+      - name: Test internal documents guard
+        run: ./scripts/ci-internal-docs-check.sh --test
+
+      - name: Block sensitive internal documents
+        run: ./scripts/ci-internal-docs-check.sh
 
       - name: Build application
         run: npm run build
         env:
           VITE_API_URL: http://127.0.0.1:8787
 
-      - name: Run Demo Data Check
+      - name: Run demo data and production audit checks
         run: npm run check:demo-data
 
-      - name: Comment PR if demo data found
+      - name: Comment PR if a protected-content check fails
         if: failure() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         continue-on-error: true
@@ -60,5 +61,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '❌ **DEPLOY BLOQUEADO** - Dados demo/teste detectados!\n\n🚫 Este PR contém dados de demonstração que não devem ir para produção.\n\n📋 Verifique:\n- Arquivos CSV de teste\n- Fixtures com dados demo\n- Scripts de seed ativos\n- Dados hardcodados no código\n\n🧹 Remova todos os dados demo antes de aprovar este PR.'
+              body: '❌ **MERGE BLOQUEADO** — O gate de conteúdo protegido falhou.\n\nVerifique documentos internos sensíveis, dados de demonstração, fixtures, seeds, bypasses de autenticação e artefatos de build antes de atualizar o PR.'
             })

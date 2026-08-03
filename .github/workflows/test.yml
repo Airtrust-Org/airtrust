@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version-file: '.node-version'
           cache: 'npm'
 
       - name: Install dependencies
@@ -33,6 +33,24 @@ jobs:
       - name: Generate coverage with threshold (30%+)
         run: npm run test:coverage
         continue-on-error: false
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run credential-free public E2E smoke
+        run: npx playwright test --config=playwright.ci.config.ts
+        env:
+          CI: true
+          VITE_API_URL: http://127.0.0.1:8787
+
+      - name: Upload E2E diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-e2e-smoke-diagnostics
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Detect coverage artifact
         id: coverage_artifact
@@ -64,6 +82,6 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '✅ Tests passed with 30%+ coverage threshold enforced!'
+              body: '✅ Unit tests, coverage threshold and credential-free Playwright smoke passed.'
             })
         continue-on-error: true

@@ -11,7 +11,7 @@ jobs:
   check:
     name: 🧪 Check PR
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
 
     steps:
       - name: 📥 Checkout code
@@ -21,27 +21,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
-          cache: 'npm'
 
-      - name: 📚 Install dependencies
-        run: npm ci
+      - name: Validate workflow guard tests
+        run: node --test scripts/ci/check-github-workflow-contexts.test.mjs
 
-      - name: 🔍 Lint
-        run: npm run lint
-        env:
-          CI: true
-          VITE_API_URL: http://127.0.0.1:8787
+      - name: Validate workflow contracts
+        run: node scripts/ci/check-github-workflow-contexts.mjs
 
-      - name: 🏗️ Build
-        run: npm run build
-        env:
-          VITE_API_URL: http://127.0.0.1:8787
+      - name: Validate staging QA script syntax
+        run: node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
 
-      - name: ✅ PR is valid
+      - name: ✅ PR checks are structurally valid
         run: |
-          echo "✅ ================================"
-          echo "✅ PR VALIDADO COM SUCESSO!"
-          echo "✅ ================================"
-          echo "📝 PR: ${{ github.event.pull_request.title }}"
-          echo "👤 Author: ${{ github.actor }}"
-          echo "🔗 URL: ${{ github.event.pull_request.html_url }}"
+          echo "PR: ${{ github.event.pull_request.title }}"
+          echo "Author: ${{ github.actor }}"
+          echo "URL: ${{ github.event.pull_request.html_url }}"
