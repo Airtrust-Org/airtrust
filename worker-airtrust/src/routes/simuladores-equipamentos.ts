@@ -8,8 +8,13 @@
  * simuladores-core.ts) take precedence.
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from '../types';
+
+type DbRow = Record<string, unknown>;
+type DbValue = string | number | null;
+type SimuladoresContext = Context<{ Bindings: Env }>;
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { requireAdminForDelete, audit } from './simuladores-shared';
@@ -18,11 +23,11 @@ import { createLogger, toError } from '../utils/logger';
 const app = new Hono<{ Bindings: Env }>();
 
 function simuladoresErrorResponse(
-  c: Record<string, any>,
+  c: SimuladoresContext,
   error: unknown,
   message: string,
   code: string,
-  status: number = 500,
+  status: ContentfulStatusCode = 500,
 ) {
   const logger = createLogger(c, 'SimuladoresEquipamentosRoutes');
   logger.error(message, toError(error), { route: c.req.path, status });
@@ -205,7 +210,7 @@ app.get('/tipos-check', async (c) => {
       .bind(empresaId)
       .all();
 
-    let data: any[] = tipos.results || [];
+    let data: DbRow[] = (tipos.results || []) as DbRow[];
 
     // Filtrar por modelo de aeronave: exibir apenas checks do modelo solicitado
     // + checks genéricos (sem sufixo -76 nem -139, ex: FAP14).
@@ -213,7 +218,7 @@ app.get('/tipos-check', async (c) => {
     if (modelo) {
       const is139 = modelo.includes('139');
       const is76 = modelo.includes('76');
-      data = data.filter((t: any) => {
+      data = data.filter((t: DbRow) => {
         const codigo = String(t.codigo || '').toUpperCase();
         const has139Suffix = codigo.endsWith('-139');
         const has76Suffix = codigo.endsWith('-76');
@@ -244,7 +249,7 @@ app.get('/', async (c) => {
     // Check if empresa_id column exists (may not be present in older DB schemas)
     const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
     const hasEmpresaId = (tableInfo.results || []).some(
-      (row: any) => String(row.name || '') === 'empresa_id',
+      (row: DbRow) => String(row.name || '') === 'empresa_id',
     );
     const page = Math.max(parseInt(c.req.query('page') || '1', 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '100', 10) || 100, 1), 500);
@@ -287,9 +292,9 @@ app.get('/', async (c) => {
     WHERE s.deleted_at IS NULL${empresaClause}`;
     let countQuery = `SELECT COUNT(*) as total FROM simuladores s WHERE s.deleted_at IS NULL${empresaClause}`;
     // JOIN params: empresaId for modelos_aeronave, empresaId for aeronaves, then optional WHERE empresa_id
-    const ps: any[] = [empresaId, empresaId];
+    const ps: DbValue[] = [empresaId, empresaId];
     if (hasEmpresaId) ps.push(empresaId);
-    const countParams: any[] = hasEmpresaId ? [empresaId] : [];
+    const countParams: DbValue[] = hasEmpresaId ? [empresaId] : [];
     if (search) {
       q +=
         ' AND (s.nome LIKE ? OR s.modelo LIKE ? OR s.tipo LIKE ? OR s.fabricante LIKE ? OR s.localizacao LIKE ?)';
@@ -355,8 +360,8 @@ app.post('/', async (c) => {
       );
     }
     const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
-    const hasEmpresaId = (tableInfo.results || []).some((row: Record<string, unknown>) =>
-      String(row.name || '') === 'empresa_id',
+    const hasEmpresaId = (tableInfo.results || []).some(
+      (row: Record<string, unknown>) => String(row.name || '') === 'empresa_id',
     );
     const insertSql = hasEmpresaId
       ? 'INSERT INTO simuladores(nome,modelo,tipo,fabricante,localizacao,status,observacoes,empresa_id)VALUES(?,?,?,?,?,?,?,?)'
@@ -385,10 +390,12 @@ app.post('/', async (c) => {
       .bind(...insertParams)
       .run();
     const id = r.meta.last_row_id;
-    const cr = await c.env.DB.prepare(
-      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
-    )
-      .bind(id, empresaId)
+    const createdSelectSql = hasEmpresaId
+      ? 'SELECT id,nome,modelo,tipo,fabricante,localizacao,status,observacoes,deleted_at,empresa_id FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?'
+      : 'SELECT id,nome,modelo,tipo,fabricante,localizacao,status,observacoes,deleted_at FROM simuladores WHERE id=? AND deleted_at IS NULL';
+    const createdSelectParams = hasEmpresaId ? [id, empresaId] : [id];
+    const cr = await c.env.DB.prepare(createdSelectSql)
+      .bind(...createdSelectParams)
       .first();
     await audit(c.env.DB, {
       tabela: 'simuladores',
@@ -412,7 +419,7 @@ app.get('/:id', async (c) => {
     const id = c.req.param('id');
     const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
     const hasEmpresaId = (tableInfo.results || []).some(
-      (row: any) => String(row.name || '') === 'empresa_id',
+      (row: DbRow) => String(row.name || '') === 'empresa_id',
     );
     const s = await c.env.DB.prepare(
       hasEmpresaId
@@ -525,7 +532,7 @@ app.delete('/:id', async (c) => {
     const id = c.req.param('id');
     const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
     const hasEmpresaId = (tableInfo.results || []).some(
-      (row: any) => String(row.name || '') === 'empresa_id',
+      (row: DbRow) => String(row.name || '') === 'empresa_id',
     );
     const a = await c.env.DB.prepare(
       hasEmpresaId
