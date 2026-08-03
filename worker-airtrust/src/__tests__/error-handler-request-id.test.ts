@@ -9,6 +9,8 @@ type TestEnv = {
   };
   Variables: {
     requestId?: string;
+    empresaId?: string | number;
+    userId?: string | number;
   };
 };
 
@@ -16,6 +18,11 @@ function buildApp() {
   const app = new Hono<TestEnv>();
 
   app.use('*', requestIdMiddleware());
+  app.use('*', async (c, next) => {
+    c.set('empresaId', 'empresa-6');
+    c.set('userId', 42);
+    await next();
+  });
   app.onError(errorHandler);
 
   app.get('/boom', () => {
@@ -65,8 +72,16 @@ describe('error handler request id consistency', () => {
     expect(payload.stack).toBeUndefined();
 
     expect(errorSpy).toHaveBeenCalled();
-    const errorLog = errorSpy.mock.calls[0]?.[1] as { requestId?: string };
+    const errorLog = errorSpy.mock.calls[0]?.[1] as {
+      requestId?: string;
+      empresaId?: string | number;
+      userId?: string | number;
+      environment?: string;
+    };
     expect(errorLog.requestId).toBe('req-incoming-123');
+    expect(errorLog.empresaId).toBe('empresa-6');
+    expect(errorLog.userId).toBe(42);
+    expect(errorLog.environment).toBe('test');
   });
 
   it('uses middleware-generated request id when header is absent', async () => {

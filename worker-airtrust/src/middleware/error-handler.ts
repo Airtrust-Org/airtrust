@@ -7,10 +7,17 @@
 
 import type { ErrorHandler } from 'hono';
 
-function resolveRequestId(c: {
+type SupportedErrorStatus = 400 | 401 | 403 | 404 | 500 | 503;
+
+type ErrorContextReader = {
   get: (key: string) => unknown;
-  req: { header: (name: string) => string | undefined };
-}): string {
+};
+
+function resolveRequestId(
+  c: ErrorContextReader & {
+    req: { header: (name: string) => string | undefined };
+  },
+): string {
   const contextRequestId = c.get('requestId');
   if (typeof contextRequestId === 'string' && contextRequestId.trim().length > 0) {
     return contextRequestId;
@@ -22,6 +29,23 @@ function resolveRequestId(c: {
   }
 
   return crypto.randomUUID();
+}
+
+function resolveContextId(
+  c: ErrorContextReader,
+  key: 'empresaId' | 'userId',
+): string | number | undefined {
+  const value = c.get(key);
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value;
+  }
+
+  return undefined;
 }
 
 /**
@@ -43,13 +67,18 @@ export class ApiError extends Error {
  * Error handler global para o Worker
  * Captura todos os erros não tratados e retorna JSON
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const errorHandler: ErrorHandler<any> = (err, c) => {
+export const errorHandler: ErrorHandler = (err, c) => {
   const requestId = resolveRequestId(c);
+  const empresaId = resolveContextId(c, 'empresaId');
+  const userId = resolveContextId(c, 'userId');
+  const environment = c.env?.ENVIRONMENT || 'unknown';
   c.header('X-Request-ID', requestId);
 
   console.error('[ERROR]', {
     requestId,
+    empresaId,
+    userId,
+    environment,
     error: err.message,
     stack: err.stack,
     path: c.req.path,
@@ -65,27 +94,27 @@ export const errorHandler: ErrorHandler<any> = (err, c) => {
         code: err.code,
         requestId,
       },
-      err.statusCode as 400 | 401 | 403 | 404 | 500 | 503,
+      err.statusCode as SupportedErrorStatus,
     );
   }
 
   // Se for AppError (de utils/errors), usar status definido
   // Verificar por propriedades (o nome pode variar após transpile/minify)
-  if ('status' in err && typeof (err as any).status === 'number') {
-    const appErr = err as { message: string; status: number; code?: string };
+  const appErrorCandidate = err as Error & { status?: unknown; code?: string };
+  if (typeof appErrorCandidate.status === 'number') {
     return c.json(
       {
         success: false,
-        error: appErr.message,
-        code: appErr.code,
+        error: appErrorCandidate.message,
+        code: appErrorCandidate.code,
         requestId,
       },
-      appErr.status as 400 | 401 | 403 | 404 | 500 | 503,
+      appErrorCandidate.status as SupportedErrorStatus,
     );
   }
 
   // Detectar ambiente via binding (NUNCA via header — isso exporia stack traces a qualquer request)
-  const isDevelopment = c.env?.ENVIRONMENT === 'development' || c.env?.ENVIRONMENT === 'staging';
+  const isDevelopment = environment === 'development' || environment === 'staging';
 
   // Em produção: nunca expor stack traces
   if (isDevelopment) {

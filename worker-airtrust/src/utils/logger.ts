@@ -12,7 +12,6 @@ export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
 export interface LogContext {
   requestId: string;
   userId?: number;
-  userEmail?: string;
   environment: string;
   timestamp: string;
   module: string;
@@ -31,20 +30,21 @@ export interface LogEntry {
   duration?: number;
 }
 
+type LoggerContextSource = {
+  get?: (key: string) => unknown;
+  env?: {
+    ENVIRONMENT?: unknown;
+  };
+};
+
 export class Logger {
   private context: LogContext;
   private startTime: number;
 
-  constructor(
-    requestId: string,
-    module: string,
-    environment: string,
-    user?: { id: number; email: string },
-  ) {
+  constructor(requestId: string, module: string, environment: string, user?: { id: number }) {
     this.context = {
       requestId,
       userId: user?.id,
-      userEmail: user?.email,
       environment,
       timestamp: new Date().toISOString(),
       module,
@@ -111,7 +111,7 @@ export class Logger {
     console.log(`🆔 Request ID: ${entry.context.requestId}`);
 
     if (entry.context.userId) {
-      console.log(`👤 Usuário: ${entry.context.userEmail} (ID: ${entry.context.userId})`);
+      console.log(`👤 Usuário ID: ${entry.context.userId}`);
     }
 
     if (entry.data && Object.keys(entry.data).length > 0) {
@@ -221,10 +221,36 @@ export function createStructuredConsole(
 }
 
 // Factory para criar logger a partir do contexto Hono
-export function createLogger(c: Record<string, any>, module: string): Logger {
-  const requestId = c.get('requestId') || crypto.randomUUID();
-  const user = c.get('user');
-  const environment = c.env.ENVIRONMENT || 'development';
+export function createLogger(context: unknown, module: string): Logger {
+  const source = context as LoggerContextSource;
+  const getValue = typeof source.get === 'function' ? source.get.bind(source) : () => undefined;
 
-  return new Logger(requestId, module, environment, user);
+  const rawRequestId = getValue('requestId');
+  const requestId =
+    typeof rawRequestId === 'string' && rawRequestId.trim().length > 0
+      ? rawRequestId
+      : crypto.randomUUID();
+
+  const rawUser = getValue('user');
+  const userId =
+    rawUser &&
+    typeof rawUser === 'object' &&
+    'id' in rawUser &&
+    typeof rawUser.id === 'number' &&
+    Number.isFinite(rawUser.id)
+      ? rawUser.id
+      : undefined;
+
+  const rawEnvironment = source.env?.ENVIRONMENT;
+  const environment =
+    typeof rawEnvironment === 'string' && rawEnvironment.trim().length > 0
+      ? rawEnvironment
+      : 'development';
+
+  return new Logger(
+    requestId,
+    module,
+    environment,
+    userId === undefined ? undefined : { id: userId },
+  );
 }
