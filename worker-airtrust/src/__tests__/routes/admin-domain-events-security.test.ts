@@ -18,7 +18,7 @@ type DbCall = {
   bindings: unknown[];
 };
 
-function createMockEnv() {
+function createMockEnv(resultsByCall: Array<Array<Record<string, unknown>>> = []) {
   const calls: DbCall[] = [];
   const db = {
     prepare: vi.fn((sql: string) => {
@@ -29,8 +29,9 @@ function createMockEnv() {
           return statement;
         },
         all: async () => {
+          const callIndex = calls.length;
           calls.push({ sql: sql.replace(/\s+/g, ' ').trim(), bindings });
-          return { results: [] };
+          return { results: resultsByCall[callIndex] ?? [] };
         },
       };
       return statement;
@@ -106,6 +107,57 @@ describe('admin domain events security', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.sql).toContain('WHERE empresa_id = ? AND deleted_at IS NULL');
     expect(calls[0]?.bindings).toEqual([7, 'TESTE', 25]);
+  });
+
+  it('exposes retry and dead-letter states in the tenant-scoped admin response', async () => {
+    const retryAt = Date.UTC(2026, 7, 3, 5, 0, 0);
+    const { env, calls } = createMockEnv([
+      [
+        {
+          id: 'event-1',
+          empresa_id: 7,
+          modulo: 'funcionarios',
+          tipo: 'FUNCIONARIO_ATUALIZADO',
+          payload: '{}',
+          consumidores: JSON.stringify(['compliance', 'hospedagem']),
+          processado_por: JSON.stringify([
+            `__domain_event__|retry|compliance|2|${retryAt}`,
+            '__domain_event__|dead|hospedagem|5',
+          ]),
+          processado: 0,
+          ultimo_erro: 'falha persistente',
+          created_at: '2026-08-03T04:00:00.000Z',
+          processed_at: null,
+        },
+      ],
+    ]);
+
+    const response = await createApp('admin', 7).request('/api/admin/domain-events', {}, env);
+    const body = (await response.json()) as {
+      data: Array<{
+        estado_processamento: string;
+        consumidor_status: Array<Record<string, unknown>>;
+      }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(calls[0]?.bindings).toEqual([7, 50]);
+    expect(body.data[0]).toMatchObject({
+      estado_processamento: 'dead_letter',
+      consumidor_status: [
+        {
+          consumidor: 'compliance',
+          status: 'retry',
+          tentativas: 2,
+          next_attempt_at: new Date(retryAt).toISOString(),
+        },
+        {
+          consumidor: 'hospedagem',
+          status: 'dead_letter',
+          tentativas: 5,
+        },
+      ],
+    });
   });
 
   it('scopes every integration health aggregate to the authenticated tenant', async () => {

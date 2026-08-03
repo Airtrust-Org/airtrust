@@ -4,6 +4,10 @@ import { getEmpresaId } from '../middleware/tenant';
 import { requireRole } from '../middleware/rbac';
 import { getReleaseMetadata } from '../services/release-metadata';
 import type { DomainEventTipo } from '../shared/domainEvents';
+import {
+  getDomainEventConsumerStates,
+  type DomainEventConsumerState,
+} from '../shared/eventProcessor';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -45,13 +49,49 @@ function isDomainEventTipo(value: string): value is DomainEventTipo {
   return DOMAIN_EVENT_TYPES.some((candidate) => candidate === value);
 }
 
+type DomainEventAdminRow = {
+  id: string;
+  empresa_id: number;
+  modulo: string;
+  tipo: string;
+  payload: string;
+  consumidores: string | null;
+  processado_por: string | null;
+  processado: number;
+  ultimo_erro: string | null;
+  created_at: string;
+  processed_at: string | null;
+};
+
+function summarizeConsumerStates(states: DomainEventConsumerState[]): string {
+  if (states.some((state) => state.status === 'dead_letter')) return 'dead_letter';
+  if (states.some((state) => state.status === 'processing')) return 'processing';
+  if (states.some((state) => state.status === 'retry')) return 'retry';
+  if (states.length > 0 && states.every((state) => state.status === 'processed')) {
+    return 'processed';
+  }
+  return 'pending';
+}
+
+function enrichDomainEvent<
+  T extends { consumidores: string | null; processado_por: string | null },
+>(row: T) {
+  const consumidorStatus = getDomainEventConsumerStates(row.consumidores, row.processado_por);
+  return {
+    ...row,
+    estado_processamento: summarizeConsumerStates(consumidorStatus),
+    consumidor_status: consumidorStatus,
+  };
+}
+
 app.get('/domain-events', requireRole('admin'), async (c) => {
   const empresaId = getEmpresaId(c);
   const tipo = c.req.query('tipo');
   const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 200);
 
   let sql = `
-    SELECT id, empresa_id, modulo, tipo, payload, processado, created_at, processed_at
+    SELECT id, empresa_id, modulo, tipo, payload, consumidores, processado_por,
+           processado, ultimo_erro, created_at, processed_at
     FROM domain_events
     WHERE empresa_id = ? AND deleted_at IS NULL
   `;
@@ -67,12 +107,13 @@ app.get('/domain-events', requireRole('admin'), async (c) => {
 
   const result = await c.env.DB.prepare(sql)
     .bind(...bindings)
-    .all();
+    .all<DomainEventAdminRow>();
+  const events = (result.results || []).map(enrichDomainEvent);
 
   return c.json({
     success: true,
-    data: result.results || [],
-    total: (result.results || []).length,
+    data: events,
+    total: events.length,
   });
 });
 
@@ -80,7 +121,7 @@ app.get('/integracoes/health', requireRole('admin'), async (c) => {
   const empresaId = getEmpresaId(c);
 
   const eventos = await c.env.DB.prepare(
-    `SELECT tipo, consumidores, processado_por, ultimo_erro, created_at
+    `SELECT id, tipo, consumidores, processado_por, processado, ultimo_erro, created_at, processed_at
      FROM domain_events
      WHERE empresa_id = ? AND deleted_at IS NULL
      ORDER BY created_at DESC
@@ -88,12 +129,21 @@ app.get('/integracoes/health', requireRole('admin'), async (c) => {
   )
     .bind(empresaId)
     .all<{
+      id: string;
       tipo: string;
       consumidores: string | null;
       processado_por: string | null;
+      processado: number;
       ultimo_erro: string | null;
       created_at: string;
+      processed_at: string | null;
     }>();
+
+  const eventosRecentes = (eventos.results || []).map(enrichDomainEvent);
+  const resumoEventos = eventosRecentes.reduce<Record<string, number>>((acc, evento) => {
+    acc[evento.estado_processamento] = (acc[evento.estado_processamento] || 0) + 1;
+    return acc;
+  }, {});
 
   const jobs = await c.env.DB.prepare(
     `SELECT status_geracao, COUNT(*) as total
@@ -119,7 +169,8 @@ app.get('/integracoes/health', requireRole('admin'), async (c) => {
     success: true,
     data: {
       empresa_id: empresaId,
-      eventos_recentes: eventos.results || [],
+      eventos_recentes: eventosRecentes,
+      eventos_resumo: resumoEventos,
       pasta_virtual_jobs: jobs.results || [],
       qualificacoes_pendencias: pendencias.results || [],
       version: getReleaseMetadata(c.env).version,

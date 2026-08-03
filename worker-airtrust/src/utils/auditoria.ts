@@ -3,6 +3,8 @@
  * Funções para registrar operações críticas no sistema
  */
 
+import { publishDomainEvent, type DomainEventTipo } from '../shared/domainEvents';
+
 interface AuditoriaParams {
   db: D1Database;
   tabela: string;
@@ -16,8 +18,71 @@ interface AuditoriaParams {
   user_agent?: string;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function isAtivo(record: Record<string, unknown> | null): boolean {
+  if (!record) return false;
+  const ativo = record.ativo;
+  if (ativo === true || ativo === 1 || ativo === '1') return true;
+  return (
+    String(record.status || '')
+      .trim()
+      .toUpperCase() === 'ATIVO'
+  );
+}
+
+function resolveFuncionarioEvent(
+  tabela: string,
+  acao: AuditoriaParams['acao'],
+  dadosAnteriores: unknown,
+  dadosNovos: unknown,
+): { tipo: DomainEventTipo; empresaId: string | number } | null {
+  if (tabela !== 'funcionarios' || !['INSERT', 'UPDATE'].includes(acao)) return null;
+
+  const anterior = asRecord(dadosAnteriores);
+  const novo = asRecord(dadosNovos);
+  const empresaId = novo?.empresa_id ?? anterior?.empresa_id;
+  if (empresaId === undefined || empresaId === null || empresaId === '') return null;
+
+  if (acao === 'INSERT') {
+    return { tipo: 'FUNCIONARIO_CRIADO', empresaId: empresaId as string | number };
+  }
+
+  const reativado = !isAtivo(anterior) && isAtivo(novo);
+  return {
+    tipo: reativado ? 'FUNCIONARIO_REATIVADO' : 'FUNCIONARIO_ATUALIZADO',
+    empresaId: empresaId as string | number,
+  };
+}
+
+async function emitirEventoFuncionario(params: AuditoriaParams): Promise<void> {
+  const evento = resolveFuncionarioEvent(
+    params.tabela,
+    params.acao,
+    params.dados_anteriores,
+    params.dados_novos,
+  );
+  if (!evento) return;
+
+  try {
+    await publishDomainEvent(params.db, 'funcionarios', evento.tipo, {
+      empresa_id: evento.empresaId,
+      origem_modulo: 'funcionarios',
+      origem_usuario_id: params.usuario_id,
+      funcionario_id: String(params.registro_id),
+    });
+  } catch (error) {
+    console.error('[Auditoria] Erro ao publicar evento de funcionário:', error);
+  }
+}
+
 /**
- * Registra uma operação de auditoria no banco
+ * Registra uma operação no log legado e na trilha central. Falhas de
+ * observabilidade nunca revertem a mutação principal.
  */
 export async function registrarAuditoria(params: AuditoriaParams): Promise<void> {
   const {
@@ -33,8 +98,8 @@ export async function registrarAuditoria(params: AuditoriaParams): Promise<void>
     user_agent = null,
   } = params;
 
-  try {
-    await db
+  const writeLegacy = async () =>
+    db
       .prepare(
         `INSERT INTO auditoria (
           usuario_id, usuario_nome, acao, tabela_afetada, registro_id,
@@ -53,10 +118,35 @@ export async function registrarAuditoria(params: AuditoriaParams): Promise<void>
         user_agent,
       )
       .run();
-  } catch (error) {
-    // Log do erro mas não falhar a operação principal
-    console.error('[Auditoria] Erro ao registrar:', error);
+
+  const writeCentral = async () =>
+    db
+      .prepare(
+        `INSERT INTO auditoria_avancada_v2 (
+          tabela, acao, registro_id, dados_anteriores, dados_novos,
+          usuario_id, ip_address, user_agent, origem, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'api', datetime('now'))`,
+      )
+      .bind(
+        tabela,
+        acao,
+        String(registro_id),
+        dados_anteriores ? JSON.stringify(dados_anteriores) : null,
+        dados_novos ? JSON.stringify(dados_novos) : null,
+        usuario_id,
+        ip_address,
+        user_agent,
+      )
+      .run();
+
+  const writes = await Promise.allSettled([writeLegacy(), writeCentral()]);
+  for (const result of writes) {
+    if (result.status === 'rejected') {
+      console.error('[Auditoria] Erro ao registrar:', result.reason);
+    }
   }
+
+  await emitirEventoFuncionario(params);
 }
 
 /**
