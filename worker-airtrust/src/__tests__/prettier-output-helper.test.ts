@@ -3,13 +3,13 @@ import { describe, it } from 'vitest';
 
 const files = [
   'src/middleware/domainEventProcessor.ts',
-  'src/routes/admin-domain-events.ts',
+  'src/routes/funcionarios-mutations.ts',
+  'src/routes/hospedagemHandlers.ts',
   'src/shared/eventProcessor.ts',
-  'src/utils/auditoria.ts',
 ];
 
 describe('canonical prettier output helper', () => {
-  it('prints exact formatter output for the changed runtime files', () => {
+  it('prints exact formatter output for the current lint failures', () => {
     for (const file of files) {
       const formatted = execFileSync('npx', ['--yes', 'prettier@3.9.6', file], {
         cwd: process.cwd(),
