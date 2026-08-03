@@ -2,10 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { describe, it } from 'vitest';
 
 const files = [
-  'worker-airtrust/src/middleware/domainEventProcessor.ts',
-  'worker-airtrust/src/routes/admin-domain-events.ts',
-  'worker-airtrust/src/shared/eventProcessor.ts',
-  'worker-airtrust/src/utils/auditoria.ts',
+  'src/middleware/domainEventProcessor.ts',
+  'src/routes/admin-domain-events.ts',
+  'src/shared/eventProcessor.ts',
+  'src/utils/auditoria.ts',
 ];
 
 describe('canonical prettier output helper', () => {
