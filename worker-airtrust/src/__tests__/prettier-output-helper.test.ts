@@ -5,7 +5,7 @@ const files = [
   'src/middleware/domainEventProcessor.ts',
   'src/routes/admin-domain-events.ts',
   'src/shared/eventProcessor.ts',
-  'src/routes/auditoria.ts',
+  'src/utils/auditoria.ts',
 ];
 
 describe('canonical prettier output helper', () => {
