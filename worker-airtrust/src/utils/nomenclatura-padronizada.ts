@@ -108,7 +108,7 @@ export function gerarChaveR2(funcionarioId: number, nomeArquivo: string): string
 }
 
 /**
- * Valida se arquivo é PDF
+ * Valida metadados básicos declarados para um upload de PDF.
  */
 export function validarPDF(file: File): { valido: boolean; erro?: string } {
   // Validar extensão
@@ -134,6 +134,40 @@ export function validarPDF(file: File): { valido: boolean; erro?: string } {
   }
 
   return { valido: true };
+}
+
+const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d] as const; // %PDF-
+const PDF_HEADER_SCAN_LIMIT = 1024;
+
+/**
+ * Confirma a assinatura binária `%PDF-` no início lógico do arquivo. A busca
+ * limitada aos primeiros 1.024 bytes tolera o pequeno prefixo aceito por
+ * leitores legados sem confiar na extensão ou no MIME enviados pelo cliente.
+ */
+export function validarAssinaturaPDF(conteudo: ArrayBuffer | Uint8Array): {
+  valido: boolean;
+  erro?: string;
+} {
+  const bytes = conteudo instanceof Uint8Array ? conteudo : new Uint8Array(conteudo);
+  const scanLength = Math.min(bytes.byteLength, PDF_HEADER_SCAN_LIMIT);
+
+  for (let offset = 0; offset <= scanLength - PDF_SIGNATURE.length; offset += 1) {
+    let assinaturaEncontrada = true;
+
+    for (let index = 0; index < PDF_SIGNATURE.length; index += 1) {
+      if (bytes[offset + index] !== PDF_SIGNATURE[index]) {
+        assinaturaEncontrada = false;
+        break;
+      }
+    }
+
+    if (assinaturaEncontrada) return { valido: true };
+  }
+
+  return {
+    valido: false,
+    erro: 'Conteúdo inválido. O arquivo enviado não possui assinatura de PDF.',
+  };
 }
 
 /**

@@ -9,9 +9,7 @@
  */
 
 import { Hono } from 'hono';
-import { jsonOk, jsonError } from '../middleware/response';
-import { AppError } from '../utils/errors';
-import type { Env, ApiResponse, PaginatedResponse } from '../types';
+import type { AppEnv, Env, ApiResponse, PaginatedResponse } from '../types';
 import { calculatePagination } from '../utils/db';
 import { notFound, badRequest } from '../middleware/error-handler';
 import { auth } from '../middleware/auth';
@@ -23,7 +21,7 @@ import { publishDomainEvent } from '../shared/domainEvents';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import pastaVirtualExtraRoutes from './pasta-virtual-extra';
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AppEnv>();
 
 interface Documento {
   id: number;
@@ -37,6 +35,29 @@ interface Documento {
   updated_at: string;
   deleted_at: string | null;
   funcionario_nome?: string;
+}
+
+interface CategorizedDocument {
+  id: number;
+  uuid: string;
+  nome: string;
+  tipo: string;
+  tamanho: number;
+  url: string;
+  dataUpload: string;
+  status: string;
+}
+
+interface DocumentoListaRow {
+  id: number;
+  uuid: string;
+  nome: string;
+  tipo: string;
+  tamanho: number;
+  r2_key: string;
+  dataUpload: string;
+  data_vencimento: string | null;
+  status: string;
 }
 
 async function tableHasColumn(
@@ -152,16 +173,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
 
     // Agrupar por categoria baseado no nome do arquivo
     interface CategorizedDocs {
-      [category: string]: Array<{
-        id: number;
-        uuid: string;
-        nome: string;
-        tipo: string;
-        tamanho: number;
-        url: string;
-        dataUpload: string;
-        status: string;
-      }>;
+      [category: string]: CategorizedDocument[];
     }
 
     const categorized: CategorizedDocs = {
@@ -176,7 +188,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
     };
 
     // Usar Map para deduplica por nome_arquivo (prioriza documentos)
-    const filesMap = new Map<string, { doc: any; categoria: string }>();
+    const filesMap = new Map<string, { doc: CategorizedDocument; categoria: string }>();
 
     // Processar documentos da tabela documentos primeiro
     (docsResult.results || []).forEach((doc) => {
@@ -298,10 +310,13 @@ app.get('/:id', auth(), async (c) => {
       ORDER BY d.created_at DESC
     `;
 
-    const { results } = await db.prepare(query).bind(funcionarioId, empresaId).all();
+    const { results } = await db
+      .prepare(query)
+      .bind(funcionarioId, empresaId)
+      .all<DocumentoListaRow>();
 
     // Adicionar URL de streaming para cada documento
-    const arquivosComUrl = (results || []).map((doc: any) => ({
+    const arquivosComUrl = (results || []).map((doc) => ({
       ...doc,
       url: `/api/pasta-virtual/stream/${doc.id}`,
       arquivo_url: `/api/pasta-virtual/stream/${doc.id}`,
@@ -486,7 +501,7 @@ app.delete('/delete/:id', auth(), async (c) => {
     console.log(`✅ [PASTA-VIRTUAL DELETE] Documento ID=${id} removido com cascata completa`);
 
     try {
-      const userId = String((c.get as any)('userId') || '0');
+      const userId = String(c.get('userId') || '0');
       await registrarAuditoria({
         db,
         tabela,
@@ -501,7 +516,7 @@ app.delete('/delete/:id', auth(), async (c) => {
     }
 
     try {
-      const userId = String((c.get as any)('userId') || '0');
+      const userId = String(c.get('userId') || '0');
       await publishDomainEvent(db, 'pasta_virtual', 'DOCUMENTO_EXCLUIDO', {
         empresa_id: String(empresaId),
         origem_modulo: 'pasta_virtual',
@@ -649,7 +664,7 @@ app.post('/upload', auth(), async (c) => {
     }
 
     // Validar PDF
-    const { validarPDF } = await import('../utils/nomenclatura-padronizada');
+    const { validarPDF, validarAssinaturaPDF } = await import('../utils/nomenclatura-padronizada');
     const validacao = validarPDF(file);
     if (!validacao.valido) {
       return c.json({ success: false, error: validacao.erro }, 400);
@@ -658,7 +673,9 @@ app.post('/upload', auth(), async (c) => {
     // Buscar funcionário dentro do tenant antes de qualquer operação R2.
     const empresaId = getEmpresaId(c);
     const funcionario = await db
-      .prepare('SELECT cpf, nome FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .prepare(
+        'SELECT cpf, nome FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
       .bind(funcionarioId, empresaId)
       .first<{ cpf: string; nome: string }>();
 
@@ -706,6 +723,11 @@ app.post('/upload', auth(), async (c) => {
     // Converter File para Uint8Array (mantém PDF original em binário puro)
     const fileBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(fileBuffer);
+    const validacaoConteudo = validarAssinaturaPDF(uint8Array);
+    if (!validacaoConteudo.valido) {
+      return c.json({ success: false, error: validacaoConteudo.erro }, 400);
+    }
+
     const fileType = 'application/pdf';
     const fileSize = uint8Array.byteLength;
 
@@ -818,7 +840,7 @@ app.post('/upload', auth(), async (c) => {
     };
 
     try {
-      const userId = String((c.get as any)('userId') || '0');
+      const userId = String(c.get('userId') || '0');
       await registrarAuditoria({
         db,
         tabela: 'documentos',
@@ -834,7 +856,7 @@ app.post('/upload', auth(), async (c) => {
     }
 
     try {
-      const userId = String((c.get as any)('userId') || '0');
+      const userId = String(c.get('userId') || '0');
       await publishDomainEvent(db, 'pasta_virtual', 'DOCUMENTO_ENVIADO', {
         empresa_id: String(empresaId),
         origem_modulo: 'pasta_virtual',
@@ -1086,7 +1108,7 @@ app.delete('/:id', auth(), requireRole('admin'), async (c) => {
     await bucket.delete(documento.r2_key);
 
     try {
-      const userId = String((c.get as any)('userId') || '0');
+      const userId = String(c.get('userId') || '0');
       await registrarAuditoria({
         db,
         tabela: 'documentos',

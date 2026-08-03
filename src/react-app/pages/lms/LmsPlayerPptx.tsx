@@ -20,6 +20,7 @@ import {
 } from '@/react-app/hooks/useLms';
 import { pptxToHtml } from '@jvmr/pptx-to-html';
 import { fetchPptxViewerSession, type PptxViewerSession } from './pptxViewer';
+import { sanitizePptxSlideHtml } from './pptxSanitization';
 
 export default function LmsPlayerPptx() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
@@ -73,10 +74,11 @@ export default function LmsPlayerPptx() {
   );
 
   useEffect(() => {
-    if (!matricula?.curso_id) return;
+    const cursoId = matricula?.curso_id;
+    if (typeof cursoId !== 'number') return;
     let cancelled = false;
 
-    async function loadPptx() {
+    async function loadPptx(activeCursoId: number) {
       try {
         setLoadingPptx(true);
         setLoadError(null);
@@ -85,7 +87,7 @@ export default function LmsPlayerPptx() {
         positionRestored.current = false;
 
         // Try to fetch an Office viewer session in the background for the "preview" link
-        fetchPptxViewerSession(matricula!.curso_id)
+        fetchPptxViewerSession(activeCursoId)
           .then((session) => {
             if (!cancelled) setViewerSession(session);
           })
@@ -93,9 +95,9 @@ export default function LmsPlayerPptx() {
             // Office viewer unavailable — that's fine, preview link won't show
           });
 
-        const parsed = await loadRenderedSlides(matricula!.curso_id);
+        const parsed = await loadRenderedSlides(activeCursoId);
         if (!cancelled) {
-          setSlides(parsed);
+          setSlides(parsed.map(sanitizePptxSlideHtml));
         }
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Falha ao carregar PPTX');
@@ -104,7 +106,7 @@ export default function LmsPlayerPptx() {
       }
     }
 
-    void loadPptx();
+    void loadPptx(cursoId);
     return () => {
       cancelled = true;
     };
@@ -421,7 +423,7 @@ export default function LmsPlayerPptx() {
           </div>
         )}
 
-        {!loadingPptx && !loadError && slideHtml && (
+        {!loadingPptx && !loadError && slides && slideHtml && (
           <div className="mx-auto w-full max-w-4xl">
             {/* Slide card */}
             <div className="overflow-hidden rounded-xl bg-white text-slate-900 shadow-2xl sm:rounded-2xl">
@@ -450,7 +452,7 @@ export default function LmsPlayerPptx() {
               {/* Slide footer */}
               <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 sm:px-8">
                 <span className="text-xs text-slate-400">
-                  Slide {currentSlide + 1} de {slides!.length}
+                  Slide {currentSlide + 1} de {slides.length}
                 </span>
                 {done && (
                   <span className="flex items-center gap-1 text-xs text-emerald-600">
@@ -474,7 +476,7 @@ export default function LmsPlayerPptx() {
 
               {/* Slide dots */}
               <div className="flex max-w-full items-center gap-1 overflow-x-auto px-1">
-                {slides!.map((_, idx) => (
+                {slides.map((_, idx) => (
                   <button
                     key={idx}
                     onClick={() => goToSlide(idx)}
@@ -491,7 +493,7 @@ export default function LmsPlayerPptx() {
               </div>
 
               <button
-                disabled={currentSlide >= slides!.length - 1}
+                disabled={currentSlide >= slides.length - 1}
                 onClick={() => goToSlide(currentSlide + 1)}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30 sm:w-auto"
               >
