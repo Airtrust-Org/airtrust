@@ -3,9 +3,9 @@ import { describe, it } from 'vitest';
 
 const files = [
   'src/middleware/domainEventProcessor.ts',
-  'src/routes/funcionarios-mutations.ts',
-  'src/routes/hospedagemHandlers.ts',
+  'src/routes/admin-domain-events.ts',
   'src/shared/eventProcessor.ts',
+  'src/routes/auditoria.ts',
 ];
 
 describe('canonical prettier output helper', () => {
