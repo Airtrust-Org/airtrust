@@ -1,6 +1,10 @@
+import type { DomainEventPayloadBase } from '../domainEvents';
 import { registerHandler } from '../eventProcessor';
 
-registerHandler('hospedagem', 'TRIPULANTE_ALOCADO', async (db, _tipo, payload) => {
+export async function handleTripulanteAlocadoHospedagem(
+  db: D1Database,
+  payload: DomainEventPayloadBase,
+): Promise<void> {
   if (!payload.base_destino || !payload.funcionario_id) return;
 
   const empresaId = Number(payload.empresa_id);
@@ -23,7 +27,13 @@ registerHandler('hospedagem', 'TRIPULANTE_ALOCADO', async (db, _tipo, payload) =
     baseOrigem = String(funcionario?.base || '').trim();
   }
 
-  if (!baseDestino || !baseOrigem || baseDestino === baseOrigem) return;
+  if (
+    !baseDestino ||
+    !baseOrigem ||
+    baseDestino.localeCompare(baseOrigem, undefined, { sensitivity: 'accent' }) === 0
+  ) {
+    return;
+  }
 
   const escalaId = payload.escala_id ? String(payload.escala_id) : null;
   const dataInicio = payload.data_inicio ? String(payload.data_inicio) : null;
@@ -40,7 +50,7 @@ registerHandler('hospedagem', 'TRIPULANTE_ALOCADO', async (db, _tipo, payload) =
          WHERE empresa_id = ?
            AND funcionario_id = ?
            AND COALESCE(escala_id, '') = COALESCE(?, '')
-           AND base = ?
+           AND UPPER(TRIM(base)) = UPPER(TRIM(?))
            AND COALESCE(data_inicio, '') = COALESCE(?, '')
            AND COALESCE(data_fim, '') = COALESCE(?, '')
            AND status <> 'cancelado'
@@ -63,6 +73,10 @@ registerHandler('hospedagem', 'TRIPULANTE_ALOCADO', async (db, _tipo, payload) =
       dataFim,
     )
     .run();
+}
+
+registerHandler('hospedagem', 'TRIPULANTE_ALOCADO', async (db, _tipo, payload) => {
+  await handleTripulanteAlocadoHospedagem(db, payload);
 });
 
 registerHandler('hospedagem', 'FUNCIONARIO_INATIVADO', async (db, _tipo, payload) => {
