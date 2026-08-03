@@ -174,6 +174,7 @@ app.post(
         cpfInstrutor: String(body?.cpf_instrutor || '').trim(),
         matriculaInstrutor: String(body?.matricula_instrutor || '').trim(),
         actorUserId: ua.usuario_id ? Number(ua.usuario_id) : undefined,
+        expectedCertificadoArquivoId: existingDocId,
       });
 
       // 4. Soft-delete do documento anterior após geração bem-sucedida
@@ -206,11 +207,15 @@ app.post(
             usuario_id: ua.usuario_id ?? undefined,
           });
         } catch (cleanupErr) {
-          console.error('[gerar] Aviso: falha ao marcar doc anterior como substituído:', cleanupErr);
+          console.error(
+            '[gerar] Aviso: falha ao marcar doc anterior como substituído:',
+            cleanupErr,
+          );
         }
       }
 
-      const estado = forceRegenerate && existingDocId ? ('REGENERATED' as const) : ('CREATED' as const);
+      const estado =
+        forceRegenerate && existingDocId ? ('REGENERATED' as const) : ('CREATED' as const);
       const response: ApiResponse<{ id: number; uuid: string; r2_key: string; tamanho: number }> & {
         estado: typeof estado;
       } = {
@@ -234,13 +239,18 @@ app.post(
         ((c.get as (key: string) => unknown)('requestId') as string | undefined) || undefined;
 
       if (error instanceof CertificateGenerationError) {
-        console.error('❌ [GERAR PDF] Erro:', { requestId, code: error.code, message: error.message });
-        const statusByCode: Record<string, 404 | 422 | 503 | 502 | 500> = {
+        console.error('❌ [GERAR PDF] Erro:', {
+          requestId,
+          code: error.code,
+          message: error.message,
+        });
+        const statusByCode: Record<string, 404 | 409 | 422 | 503 | 502 | 500> = {
           CERTIFICATE_HISTORY_NOT_FOUND: 404,
           CERTIFICATE_TEMPLATE_NOT_CONFIGURED: 422,
           CERTIFICATE_BROWSER_RENDERING_NOT_CONFIGURED: 503,
           CERTIFICATE_BROWSER_RENDERING_FAILED: 502,
           CERTIFICATE_STORAGE_FAILED: 502,
+          CERTIFICATE_CONCURRENT_GENERATION: 409,
           CERTIFICATE_PERSISTENCE_FAILED: 500,
         };
         return c.json(
@@ -255,7 +265,11 @@ app.post(
       }
 
       if (error instanceof ApiError) {
-        console.error('❌ [GERAR PDF] Erro:', { requestId, code: error.code, message: error.message });
+        console.error('❌ [GERAR PDF] Erro:', {
+          requestId,
+          code: error.code,
+          message: error.message,
+        });
         return c.json(
           {
             success: false,
@@ -304,9 +318,7 @@ app.post(
     let uploadedR2Key: string | null = null;
     let documentoId: number | null = null;
     let funcionarioId: number | null = null;
-    let storageColumns:
-      | Awaited<ReturnType<typeof getCertificadosStorageColumns>>
-      | null = null;
+    let storageColumns: Awaited<ReturnType<typeof getCertificadosStorageColumns>> | null = null;
 
     try {
       const access = await getEmployeeSectorAccess(c, empresaId);
@@ -583,9 +595,7 @@ app.post(
                      AND deleted_at IS NULL`,
             )
             .bind(
-              ...(storageColumns.documentosHasEmpresaId
-                ? [documentoId, empresaId]
-                : [documentoId]),
+              ...(storageColumns.documentosHasEmpresaId ? [documentoId, empresaId] : [documentoId]),
             )
             .run();
         } catch (cleanupError) {
@@ -594,11 +604,7 @@ app.post(
 
         try {
           if (funcionarioId && uploadedR2Key) {
-            const filters = [
-              'funcionario_id = ?',
-              'caminho_arquivo = ?',
-              'deleted_at IS NULL',
-            ];
+            const filters = ['funcionario_id = ?', 'caminho_arquivo = ?', 'deleted_at IS NULL'];
             const bindings: Array<number | string> = [funcionarioId, uploadedR2Key];
 
             if (storageColumns.pastaVirtualHasCertificacaoId) {
@@ -641,8 +647,7 @@ app.post(
           : typeof (error as { statusCode?: unknown }).statusCode === 'number'
             ? Number((error as { statusCode: number }).statusCode)
             : null;
-      const handledStatus =
-        rawStatus && rawStatus >= 400 && rawStatus < 500 ? rawStatus : null;
+      const handledStatus = rawStatus && rawStatus >= 400 && rawStatus < 500 ? rawStatus : null;
       const handledCode =
         typeof (error as { code?: unknown }).code === 'string'
           ? String((error as { code: string }).code)

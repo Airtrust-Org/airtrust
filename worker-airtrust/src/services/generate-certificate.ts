@@ -44,6 +44,7 @@ export const CERTIFICATE_ERROR_CODES = [
   'CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED',
   'CERTIFICATE_ACCESS_DENIED',
   'CERTIFICATE_STORAGE_FAILED',
+  'CERTIFICATE_CONCURRENT_GENERATION',
   'CERTIFICATE_PERSISTENCE_FAILED',
 ] as const;
 
@@ -141,7 +142,10 @@ function ensureInstrutorSectionInTemplate(templateHtml: string): string {
   if (hasPlaceholder) return result;
 
   if (result.includes('</div>\n\n  <!-- QUALIFICAÇÃO -->')) {
-    return result.replace('</div>\n\n  <!-- QUALIFICAÇÃO -->', '</div>\n\n  {{instrutor_section}}\n\n  <!-- QUALIFICAÇÃO -->');
+    return result.replace(
+      '</div>\n\n  <!-- QUALIFICAÇÃO -->',
+      '</div>\n\n  {{instrutor_section}}\n\n  <!-- QUALIFICAÇÃO -->',
+    );
   }
 
   if (/<div[^>]+class=["'][^"']*training-box[^"']*["']/i.test(result)) {
@@ -177,6 +181,8 @@ export interface GenerateCertificateOptions {
   cpfInstrutor?: string;
   matriculaInstrutor?: string;
   actorUserId?: number;
+  /** Valor observado antes da geração; usado como compare-and-set no vínculo final. */
+  expectedCertificadoArquivoId?: number | null;
   actorRole?: string;
   ipAddress?: string;
 }
@@ -206,6 +212,7 @@ export async function generateCertificateForHistorico(
     cpfInstrutor: cpfInstrutorInformado = '',
     matriculaInstrutor: matriculaInstrutorInformada = '',
     actorUserId,
+    expectedCertificadoArquivoId: expectedCertificadoArquivoIdOption,
   } = options;
 
   const historicoHasTipoTreinamento = await tableHasColumn(
@@ -224,7 +231,6 @@ export async function generateCertificateForHistorico(
     'carga_horaria_recorrente',
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const qualificacao = (await db
     .prepare(
       `SELECT
@@ -263,6 +269,11 @@ export async function generateCertificateForHistorico(
     );
   }
 
+  const expectedCertificadoArquivoId =
+    expectedCertificadoArquivoIdOption === undefined
+      ? (qualificacao.certificado_arquivo_id ?? null)
+      : expectedCertificadoArquivoIdOption;
+
   const participanteCertificado = paraInstrutor
     ? await resolveInstrutorCertificadoData(db, {
         empresaId,
@@ -286,8 +297,7 @@ export async function generateCertificateForHistorico(
 
   const nomeArquivo = gerarNomeArquivoPadronizado({
     tipo: 'CERTIFICADO_QUALIFICACAO',
-    nomeFuncionario:
-      participanteCertificado?.nome || qualificacao.funcionario_nome || 'SEM_NOME',
+    nomeFuncionario: participanteCertificado?.nome || qualificacao.funcionario_nome || 'SEM_NOME',
     cpf:
       (
         participanteCertificado?.cpf ||
@@ -310,7 +320,9 @@ export async function generateCertificateForHistorico(
     normalizeTipoTreinamento(qualificacao.tipo_treinamento) ||
     (validadeMeses === 6 ? 'SEMESTRAL' : 'RECORRENTE');
   const vencimentoFimMes = Number(qualificacao.vencimento_fim_mes || 0) === 1 ? 1 : 0;
-  const dataVencimentoPersistido = String(qualificacao.data_vencimento || '').trim().split('T')[0];
+  const dataVencimentoPersistido = String(qualificacao.data_vencimento || '')
+    .trim()
+    .split('T')[0];
   const dataVencimentoCertificado =
     dataVencimentoPersistido ||
     (dataConclusaoCertificado && validadeMeses > 0
@@ -362,15 +374,12 @@ export async function generateCertificateForHistorico(
     data_vencimento: dataVencimentoCertificado,
     numero_certificado: nomeArquivo.replace('.pdf', ''),
     carga_horaria: cargaHorariaCertificado,
-    instrutor:
-      (participanteCertificado?.nome || qualificacao.instrutor || undefined) ?? undefined,
+    instrutor: (participanteCertificado?.nome || qualificacao.instrutor || undefined) ?? undefined,
     local: qualificacao.local || undefined,
     nota: qualificacao.nota || undefined,
     funcao: participanteCertificado?.funcao || qualificacao.funcionario_funcao || undefined,
     conteudo: buildConteudoProgramaticoCertificadoHtml(conteudoProgramaticoCertificado),
   };
-
-  const cpfLimpo = (certificadoData.funcionario_cpf || '').replace(/\D/g, '');
 
   // ── Buscar logo + template ──────────────────────────────────────────────────
   let nomeEmpresa: string | null = null;
@@ -400,7 +409,9 @@ export async function generateCertificateForHistorico(
   // Template: empresas_config first, then certificados_templates
   const rawTemplate = dadosEmpresa?.certificado_template_html || null;
   if (rawTemplate) {
-    templateHtml = isTemplateJson(rawTemplate) ? convertTemplateJsonToHtml(rawTemplate) : rawTemplate;
+    templateHtml = isTemplateJson(rawTemplate)
+      ? convertTemplateJsonToHtml(rawTemplate)
+      : rawTemplate;
   } else {
     const fallbackRow = await db
       .prepare(
@@ -514,10 +525,7 @@ export async function generateCertificateForHistorico(
       const instrutorFuncionario = await resolveFuncionarioInstrutorNaEmpresa(db, {
         empresaId: qualificacaoEmpresaId,
         nomeInstrutor:
-          participanteCertificado?.nome ||
-          nomeInstrutorInformado ||
-          qualificacao.instrutor ||
-          '',
+          participanteCertificado?.nome || nomeInstrutorInformado || qualificacao.instrutor || '',
         cpfInstrutor: participanteCertificado?.cpf || cpfInstrutorInformado,
         matriculaInstrutor: participanteCertificado?.matricula || matriculaInstrutorInformada,
       });
@@ -535,7 +543,12 @@ export async function generateCertificateForHistorico(
   // falhar após o R2 já ter sido escrito, o objeto recém-criado é removido do
   // R2 antes de propagar o erro — nunca deixamos um PDF orfão em storage sem
   // registro correspondente em documentos/qualificacoes_historico.
-  const r2Key = buildCertificadoR2Key(qualificacaoEmpresaId, targetFuncionarioId, historicoId, uuid);
+  const r2Key = buildCertificadoR2Key(
+    qualificacaoEmpresaId,
+    targetFuncionarioId,
+    historicoId,
+    uuid,
+  );
 
   try {
     await bucket.put(r2Key, pdfBytes, {
@@ -665,19 +678,41 @@ export async function generateCertificateForHistorico(
               numero_certificado = ?,
               updated_at = datetime('now')
         WHERE id = ?
-          AND empresa_id = ?`,
+          AND empresa_id = ?
+          AND (
+            (? IS NULL AND certificado_arquivo_id IS NULL)
+            OR certificado_arquivo_id = ?
+          )`,
     )
-    .bind(r2Key, r2Key, numeroCertificado, historicoId, qualificacaoEmpresaId);
+    .bind(
+      r2Key,
+      r2Key,
+      numeroCertificado,
+      historicoId,
+      qualificacaoEmpresaId,
+      expectedCertificadoArquivoId,
+      expectedCertificadoArquivoId,
+    );
 
   let batchResults: Awaited<ReturnType<typeof db.batch>>;
   try {
-    batchResults = await db.batch([insertDocumentoStmt, insertPastaVirtualStmt, updateHistoricoStmt]);
+    batchResults = await db.batch([
+      insertDocumentoStmt,
+      insertPastaVirtualStmt,
+      updateHistoricoStmt,
+    ]);
   } catch (e) {
-    console.error('[generate-certificate] Falha no batch D1 (documento+pasta_virtual+historico), revertendo R2:', e);
+    console.error(
+      '[generate-certificate] Falha no batch D1 (documento+pasta_virtual+historico), revertendo R2:',
+      e,
+    );
     try {
       await bucket.delete(r2Key);
     } catch (cleanupErr) {
-      console.error('[generate-certificate] Falha ao remover objeto R2 após erro de persistência:', cleanupErr);
+      console.error(
+        '[generate-certificate] Falha ao remover objeto R2 após erro de persistência:',
+        cleanupErr,
+      );
     }
     throw new CertificateGenerationError(
       'CERTIFICATE_PERSISTENCE_FAILED',
@@ -694,17 +729,22 @@ export async function generateCertificateForHistorico(
   // just the same, and explicitly remove everything we just wrote (D1 rows
   // keyed by the unique r2Key, plus the R2 object) so no residue survives
   // pointing at a certificate that was never fully linked.
-  const persistedSuccessfully =
-    documentoId > 0 &&
-    Number(pastaVirtualResult.meta.changes || 0) === 1 &&
-    Number(historicoUpdateResult.meta.changes || 0) === 1;
+  const documentoPersistido = documentoId > 0;
+  const pastaVirtualPersistida = Number(pastaVirtualResult.meta.changes || 0) === 1;
+  const historicoVinculado = Number(historicoUpdateResult.meta.changes || 0) === 1;
+  const persistedSuccessfully = documentoPersistido && pastaVirtualPersistida && historicoVinculado;
+  const lostConcurrentGenerationRace =
+    documentoPersistido && pastaVirtualPersistida && !historicoVinculado;
 
   if (!persistedSuccessfully) {
-    console.error('[generate-certificate] Persistência incompleta após batch — revertendo resíduo D1 + R2:', {
-      documentoId,
-      pastaVirtualChanges: pastaVirtualResult.meta.changes,
-      historicoChanges: historicoUpdateResult.meta.changes,
-    });
+    console.error(
+      '[generate-certificate] Persistência incompleta após batch — revertendo resíduo D1 + R2:',
+      {
+        documentoId,
+        pastaVirtualChanges: pastaVirtualResult.meta.changes,
+        historicoChanges: historicoUpdateResult.meta.changes,
+      },
+    );
     try {
       await db.batch([
         db.prepare('DELETE FROM pasta_virtual WHERE caminho_arquivo = ?').bind(r2Key),
@@ -716,11 +756,18 @@ export async function generateCertificateForHistorico(
     try {
       await bucket.delete(r2Key);
     } catch (cleanupErr) {
-      console.error('[generate-certificate] Falha ao remover objeto R2 após erro de persistência:', cleanupErr);
+      console.error(
+        '[generate-certificate] Falha ao remover objeto R2 após erro de persistência:',
+        cleanupErr,
+      );
     }
     throw new CertificateGenerationError(
-      'CERTIFICATE_PERSISTENCE_FAILED',
-      'Falha ao registrar o certificado gerado.',
+      lostConcurrentGenerationRace
+        ? 'CERTIFICATE_CONCURRENT_GENERATION'
+        : 'CERTIFICATE_PERSISTENCE_FAILED',
+      lostConcurrentGenerationRace
+        ? 'Outro processo concluiu a geração deste certificado antes desta solicitação.'
+        : 'Falha ao registrar o certificado gerado.',
     );
   }
 
@@ -730,14 +777,21 @@ export async function generateCertificateForHistorico(
       tabela: 'documentos',
       acao: 'INSERT',
       registro_id: documentoId,
-      dados_novos: { historico_id: historicoId, r2_key: r2Key, nome_arquivo: nomeArquivo, empresa_id: qualificacaoEmpresaId },
+      dados_novos: {
+        historico_id: historicoId,
+        r2_key: r2Key,
+        nome_arquivo: nomeArquivo,
+        empresa_id: qualificacaoEmpresaId,
+      },
       usuario_id: actorUserId?.toString(),
     });
   } catch (auditErr) {
     console.error('[generate-certificate] Falha ao registrar auditoria:', auditErr);
   }
 
-  console.log(`✅ [generate-certificate] Certificado gerado: historicoId=${historicoId} documentoId=${documentoId}`);
+  console.log(
+    `✅ [generate-certificate] Certificado gerado: historicoId=${historicoId} documentoId=${documentoId}`,
+  );
 
   return { documentoId, uuid, r2Key, tamanho: pdfBytes.length, numeroCertificado };
 }

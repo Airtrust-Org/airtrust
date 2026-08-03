@@ -11,7 +11,10 @@
  *   ERROR   — falha inesperada na geração (não derruba o fluxo principal)
  */
 import type { Env } from '../types';
-import { generateCertificateForHistorico } from './generate-certificate';
+import {
+  CertificateGenerationError,
+  generateCertificateForHistorico,
+} from './generate-certificate';
 
 // ── Tipos públicos ─────────────────────────────────────────────────────────────
 
@@ -47,7 +50,8 @@ export async function ensureCertificateForQualification(
     if (!env.CF_ACCOUNT_ID || !env.CF_BROWSER_API_TOKEN) {
       return {
         state: 'SKIPPED',
-        reason: 'CF Browser Rendering não configurado (CF_ACCOUNT_ID / CF_BROWSER_API_TOKEN ausentes)',
+        reason:
+          'CF Browser Rendering não configurado (CF_ACCOUNT_ID / CF_BROWSER_API_TOKEN ausentes)',
       };
     }
 
@@ -84,9 +88,7 @@ export async function ensureCertificateForQualification(
     if (historico.certificado_arquivo_id && !forceRegenerate) {
       // Verificar se o documento ainda existe (não foi soft-deleted)
       const docExiste = await db
-        .prepare(
-          `SELECT id FROM documentos WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
-        )
+        .prepare(`SELECT id FROM documentos WHERE id = ? AND deleted_at IS NULL LIMIT 1`)
         .bind(historico.certificado_arquivo_id)
         .first<{ id: number }>();
 
@@ -143,6 +145,7 @@ export async function ensureCertificateForQualification(
     // 6. Gerar certificado
     const generated = await generateCertificateForHistorico(env, historicoId, empresaId, {
       actorUserId,
+      expectedCertificadoArquivoId: historico.certificado_arquivo_id ?? null,
     });
 
     console.log(
@@ -154,6 +157,33 @@ export async function ensureCertificateForQualification(
       documentoId: generated.documentoId,
     };
   } catch (err) {
+    if (
+      err instanceof CertificateGenerationError &&
+      err.code === 'CERTIFICATE_CONCURRENT_GENERATION'
+    ) {
+      const winner = await db
+        .prepare(
+          `SELECT d.id
+             FROM qualificacoes_historico qh
+             INNER JOIN funcionarios f
+               ON f.id = qh.funcionario_id
+              AND f.empresa_id = ?
+              AND f.deleted_at IS NULL
+             INNER JOIN documentos d
+               ON d.id = qh.certificado_arquivo_id
+              AND d.deleted_at IS NULL
+            WHERE qh.id = ?
+              AND qh.deleted_at IS NULL
+            LIMIT 1`,
+        )
+        .bind(empresaId, historicoId)
+        .first<{ id: number }>();
+
+      if (winner) {
+        return { state: 'EXISTS', documentoId: winner.id };
+      }
+    }
+
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(
       `[ensure-certificate] ERROR historicoId=${historicoId} empresaId=${empresaId}:`,

@@ -13,8 +13,8 @@
  * - R2 write failure -> CERTIFICATE_STORAGE_FAILED, no D1 writes at all.
  * - D1 batch failure (documentos+pasta_virtual+historico) -> CERTIFICATE_PERSISTENCE_FAILED,
  *   zero residual rows in documentos/pasta_virtual, historico unchanged, R2 object removed.
- * - D1 batch "succeeds" but the historico UPDATE matches zero rows -> explicit
- *   compensation removes the documentos/pasta_virtual rows just written, R2 removed.
+ * - A concorrência no vínculo final é detectada por compare-and-set; o perdedor
+ *   remove os registros e o objeto R2 que acabou de criar.
  * - Historico not found -> CERTIFICATE_HISTORY_NOT_FOUND.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,10 +45,7 @@ vi.mock('../../routes/qualificacoes-certificados-helpers', async (importOriginal
   };
 });
 
-import {
-  generateCertificateForHistorico,
-  CertificateGenerationError,
-} from '../../services/generate-certificate';
+import { generateCertificateForHistorico } from '../../services/generate-certificate';
 
 // Fictitious identifiers only — do not use real production ids/names here.
 const HISTORICO_ID = 42001;
@@ -139,14 +136,16 @@ function makeFakeD1(options: {
   failDocumentoInsert?: boolean;
   historicoUpdateMatches?: boolean; // false simulates a WHERE that matches 0 rows
 }) {
-  const { qualificacao, templateHtml = '<html><body>{{qualificacao_nome}}</body></html>' } = options;
+  const { qualificacao, templateHtml = '<html><body>{{qualificacao_nome}}</body></html>' } =
+    options;
   const failDocumentoInsert = options.failDocumentoInsert ?? false;
   const historicoUpdateMatches = options.historicoUpdateMatches ?? true;
 
   const documentos: DocumentoRow[] = [];
   const pastaVirtual: PastaVirtualRow[] = [];
   const historico: HistoricoLinkState = {
-    certificado_arquivo_id: null,
+    certificado_arquivo_id:
+      (qualificacao?.certificado_arquivo_id as number | null | undefined) ?? null,
     arquivo_url: null,
     numero_certificado: null,
   };
@@ -154,23 +153,18 @@ function makeFakeD1(options: {
   let nextPastaVirtualId = 9500;
   const calls: string[] = [];
 
-  function execOne(sql: string, args: unknown[]): { meta: { changes: number; last_row_id: number } } {
+  function execOne(
+    sql: string,
+    args: unknown[],
+  ): { meta: { changes: number; last_row_id: number } } {
     calls.push(sql);
 
     if (sql.startsWith('INSERT INTO documentos')) {
       if (failDocumentoInsert) {
         throw new Error('simulated D1 insert failure');
       }
-      const [uuid, funcionarioId, nomeArquivo, tipo, tamanho, r2Key, descricao, empresaId] = args as [
-        string,
-        number,
-        string,
-        string,
-        number,
-        string,
-        string,
-        number,
-      ];
+      const [uuid, funcionarioId, nomeArquivo, tipo, tamanho, r2Key, descricao, empresaId] =
+        args as [string, number, string, string, number, string, string, number];
       const row: DocumentoRow = {
         id: ++nextDocumentoId,
         uuid,
@@ -189,8 +183,16 @@ function makeFakeD1(options: {
     if (sql.startsWith('INSERT INTO pasta_virtual')) {
       // bindings (all storage-columns flags true): [funcionarioId, r2Key(subquery),
       // historicoId, empresaId, 'CERTIFICADO', categoria, r2Key(caminho), nomeArquivo, descricao]
-      const [funcionarioId, r2KeyForDocLookup, historicoId, empresaId, , , caminhoArquivo, nomeArquivo] =
-        args as [number, string, number, number, string, string, string, string, string];
+      const [
+        funcionarioId,
+        r2KeyForDocLookup,
+        historicoId,
+        empresaId,
+        ,
+        ,
+        caminhoArquivo,
+        nomeArquivo,
+      ] = args as [number, string, number, number, string, string, string, string, string];
       const documento = documentos.find((d) => d.r2_key === r2KeyForDocLookup);
       const row: PastaVirtualRow = {
         id: ++nextPastaVirtualId,
@@ -205,11 +207,29 @@ function makeFakeD1(options: {
       return { meta: { changes: 1, last_row_id: row.id } };
     }
 
-    if (sql.includes('UPDATE qualificacoes_historico') && sql.includes('certificado_arquivo_id = (SELECT')) {
+    if (
+      sql.includes('UPDATE qualificacoes_historico') &&
+      sql.includes('certificado_arquivo_id = (SELECT')
+    ) {
       if (!historicoUpdateMatches) {
         return { meta: { changes: 0, last_row_id: 0 } };
       }
-      const [r2KeyForDocLookup, , numeroCertificado] = args as [string, string, string, number, number];
+      const [r2KeyForDocLookup, , numeroCertificado, , , expectedCurrentId] = args as [
+        string,
+        string,
+        string,
+        number,
+        number,
+        number | null,
+        number | null,
+      ];
+      const matchesExpectedCurrentId =
+        expectedCurrentId == null
+          ? historico.certificado_arquivo_id == null
+          : historico.certificado_arquivo_id === expectedCurrentId;
+      if (!matchesExpectedCurrentId) {
+        return { meta: { changes: 0, last_row_id: 0 } };
+      }
       const documento = documentos.find((d) => d.r2_key === r2KeyForDocLookup);
       historico.certificado_arquivo_id = documento?.id ?? null;
       historico.arquivo_url = documento ? `/api/pasta-virtual/stream/${documento.id}` : null;
@@ -245,7 +265,10 @@ function makeFakeD1(options: {
       bind: (...newArgs: unknown[]) => makeBoundStatement(sql, newArgs),
       all: vi.fn(async () => ({ results: [] })), // PRAGMA table_info(...) — no extra columns
       first: vi.fn(async () => {
-        if (sql.includes('FROM qualificacoes_historico qh') && sql.includes('LEFT JOIN funcionarios')) {
+        if (
+          sql.includes('FROM qualificacoes_historico qh') &&
+          sql.includes('LEFT JOIN funcionarios')
+        ) {
           return qualificacao;
         }
         if (sql.includes('FROM empresas e') && sql.includes('LEFT JOIN empresas_config')) {
@@ -297,7 +320,11 @@ function makeBucket() {
   };
 }
 
-function makeEnv(db: D1Database, bucket: ReturnType<typeof makeBucket>, hasBrowserRendering = true): Env {
+function makeEnv(
+  db: D1Database,
+  bucket: ReturnType<typeof makeBucket>,
+  hasBrowserRendering = true,
+): Env {
   return {
     DB: db,
     BUCKET: bucket,
@@ -358,7 +385,9 @@ describe('generateCertificateForHistorico', () => {
     const bucket = makeBucket();
     const env = makeEnv(db, bucket);
 
-    await expect(generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {})).rejects.toMatchObject({
+    await expect(
+      generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {}),
+    ).rejects.toMatchObject({
       code: 'CERTIFICATE_HISTORY_NOT_FOUND',
     });
     expect(bucket.put).not.toHaveBeenCalled();
@@ -369,7 +398,9 @@ describe('generateCertificateForHistorico', () => {
     const bucket = makeBucket();
     const env = makeEnv(db, bucket);
 
-    await expect(generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {})).rejects.toMatchObject({
+    await expect(
+      generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {}),
+    ).rejects.toMatchObject({
       code: 'CERTIFICATE_TEMPLATE_NOT_CONFIGURED',
     });
     expect(bucket.put).not.toHaveBeenCalled();
@@ -381,7 +412,9 @@ describe('generateCertificateForHistorico', () => {
     const bucket = makeBucket();
     const env = makeEnv(db, bucket, false);
 
-    await expect(generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {})).rejects.toMatchObject({
+    await expect(
+      generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {}),
+    ).rejects.toMatchObject({
       code: 'CERTIFICATE_BROWSER_RENDERING_NOT_CONFIGURED',
     });
     expect(bucket.put).not.toHaveBeenCalled();
@@ -394,7 +427,9 @@ describe('generateCertificateForHistorico', () => {
     const bucket = makeBucket();
     const env = makeEnv(db, bucket);
 
-    await expect(generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {})).rejects.toMatchObject({
+    await expect(
+      generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {}),
+    ).rejects.toMatchObject({
       code: 'CERTIFICATE_BROWSER_RENDERING_FAILED',
     });
     expect(bucket.put).not.toHaveBeenCalled();
@@ -408,7 +443,9 @@ describe('generateCertificateForHistorico', () => {
     const bucket = makeBucket();
     const env = makeEnv(db, bucket);
 
-    await expect(generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {})).rejects.toMatchObject({
+    await expect(
+      generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {}),
+    ).rejects.toMatchObject({
       code: 'CERTIFICATE_BROWSER_RENDERING_FAILED',
     });
     expect(bucket.put).not.toHaveBeenCalled();
@@ -420,7 +457,9 @@ describe('generateCertificateForHistorico', () => {
     bucket.put.mockRejectedValue(new Error('R2 unavailable'));
     const env = makeEnv(db, bucket);
 
-    await expect(generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {})).rejects.toMatchObject({
+    await expect(
+      generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {}),
+    ).rejects.toMatchObject({
       code: 'CERTIFICATE_STORAGE_FAILED',
     });
     expect(documentos).toHaveLength(0);
@@ -436,7 +475,9 @@ describe('generateCertificateForHistorico', () => {
     const bucket = makeBucket();
     const env = makeEnv(db, bucket);
 
-    await expect(generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {})).rejects.toMatchObject({
+    await expect(
+      generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {}),
+    ).rejects.toMatchObject({
       code: 'CERTIFICATE_PERSISTENCE_FAILED',
     });
 
@@ -452,27 +493,42 @@ describe('generateCertificateForHistorico', () => {
     expect((bucket.delete as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(r2KeyWritten);
   });
 
-  it('UPDATE do histórico casa 0 linhas (batch "sucede" mas não vincula) -> compensação remove documentos/pasta_virtual recém-criados e o objeto R2', async () => {
+  it('compare-and-set perde a corrida -> CERTIFICATE_CONCURRENT_GENERATION e remove todo o resíduo criado pelo perdedor', async () => {
+    const existingDocumentoId = 321;
     const { db, documentos, pastaVirtual, historico } = makeFakeD1({
-      qualificacao: makeQualificacaoRow(),
-      historicoUpdateMatches: false,
+      qualificacao: makeQualificacaoRow({ certificado_arquivo_id: existingDocumentoId }),
     });
     const bucket = makeBucket();
     const env = makeEnv(db, bucket);
 
-    await expect(generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {})).rejects.toMatchObject({
-      code: 'CERTIFICATE_PERSISTENCE_FAILED',
+    await expect(
+      generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {
+        expectedCertificadoArquivoId: null,
+      }),
+    ).rejects.toMatchObject({
+      code: 'CERTIFICATE_CONCURRENT_GENERATION',
     });
 
-    // O batch "sucedeu" (nenhuma exceção), mas o changes=0 do UPDATE deve
-    // disparar a compensação explícita — sem ela, o documento e o vínculo em
-    // pasta_virtual ficariam órfãos apontando para um certificado nunca
-    // vinculado ao histórico.
     expect(documentos).toHaveLength(0);
     expect(pastaVirtual).toHaveLength(0);
-    expect(historico.certificado_arquivo_id).toBeNull();
-
+    expect(historico.certificado_arquivo_id).toBe(existingDocumentoId);
     expect(bucket.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('compare-and-set permite regeneração quando o vínculo observado ainda é o atual', async () => {
+    const existingDocumentoId = 321;
+    const { db, historico } = makeFakeD1({
+      qualificacao: makeQualificacaoRow({ certificado_arquivo_id: existingDocumentoId }),
+    });
+    const bucket = makeBucket();
+    const env = makeEnv(db, bucket);
+
+    const result = await generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {
+      expectedCertificadoArquivoId: existingDocumentoId,
+    });
+
+    expect(historico.certificado_arquivo_id).toBe(result.documentoId);
+    expect(historico.certificado_arquivo_id).not.toBe(existingDocumentoId);
   });
 
   it('r2Key gerado é tenant-scoped (empresa/funcionario/historico) e não contém PII', async () => {
