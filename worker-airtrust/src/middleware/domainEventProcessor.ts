@@ -99,6 +99,31 @@ export function domainEventProcessorMiddleware() {
 
     const logger = createLogger(c, 'DomainEventProcessor');
     const empresaId = getEmpresaIdSafe(c);
+
+    let executionCtx: ExecutionContext;
+    try {
+      executionCtx = c.executionCtx;
+    } catch (error) {
+      logger.warn('Contexto de execução indisponível para tarefas pós-mutação', {
+        empresaId,
+        modulo,
+        path,
+        method,
+        error: toError(error).message,
+      });
+      return;
+    }
+
+    if (!executionCtx) {
+      logger.warn('Contexto de execução indisponível para tarefas pós-mutação', {
+        empresaId,
+        modulo,
+        path,
+        method,
+      });
+      return;
+    }
+
     const backgroundTasks: Promise<unknown>[] = [];
 
     if (shouldAudit) {
@@ -143,17 +168,6 @@ export function domainEventProcessorMiddleware() {
     if (backgroundTasks.length === 0) return;
 
     try {
-      const executionCtx = c.executionCtx;
-      if (!executionCtx) {
-        logger.warn('Contexto de execução indisponível para tarefas pós-mutação', {
-          empresaId,
-          modulo,
-          path,
-          method,
-        });
-        return;
-      }
-
       executionCtx.waitUntil(Promise.allSettled(backgroundTasks).then(() => undefined));
     } catch (error) {
       logger.error('Falha ao agendar tarefas pós-mutação', toError(error), {
