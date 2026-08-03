@@ -94,7 +94,8 @@ function getInternalTokenForConsumer(
   const tokens = processadoPor
     .map(parseInternalToken)
     .filter(
-      (token): token is InternalConsumerToken => token !== null && token.consumidor === consumidor,
+      (token): token is InternalConsumerToken =>
+        token !== null && token.consumidor === consumidor,
     );
 
   return tokens.at(-1) ?? null;
@@ -181,10 +182,7 @@ async function claimEvent(
 
   const tentativas = currentState.tentativas + 1;
   const claimToken = makeInternalToken('claim', consumidor, tentativas, nowMs);
-  const claimedValues = [
-    ...removeInternalTokensForConsumer(currentValues, consumidor),
-    claimToken,
-  ];
+  const claimedValues = [...removeInternalTokensForConsumer(currentValues, consumidor), claimToken];
 
   const claimed = await db
     .prepare(
@@ -344,9 +342,7 @@ export async function processarEventosParaModulo(
           );
 
       await finalizeClaim(db, evento.id, claim.claimToken, replacement, message);
-      acoes.push(
-        `${deadLetter ? 'DEAD' : 'ERR'}:${consumidor}←${evento.tipo}:${message}`,
-      );
+      acoes.push(`${deadLetter ? 'DEAD' : 'ERR'}:${consumidor}←${evento.tipo}:${message}`);
       erros++;
     }
   }
