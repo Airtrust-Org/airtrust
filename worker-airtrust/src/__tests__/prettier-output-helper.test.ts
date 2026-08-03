@@ -19,5 +19,7 @@ describe('canonical prettier output helper', () => {
       console.log(Buffer.from(formatted, 'utf8').toString('base64'));
       console.log(`PRETTIER_OUTPUT_END:${file}`);
     }
+
+    throw new Error('PRETTIER_OUTPUT_CAPTURE_COMPLETE');
   }, 120_000);
 });
