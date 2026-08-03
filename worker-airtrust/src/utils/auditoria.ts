@@ -28,9 +28,7 @@ function isAtivo(record: Record<string, unknown> | null): boolean {
   if (!record) return false;
   const ativo = record.ativo;
   if (ativo === true || ativo === 1 || ativo === '1') return true;
-  return String(record.status || '')
-    .trim()
-    .toUpperCase() === 'ATIVO';
+  return String(record.status || '').trim().toUpperCase() === 'ATIVO';
 }
 
 function resolveFuncionarioEvent(
@@ -96,7 +94,7 @@ export async function registrarAuditoria(params: AuditoriaParams): Promise<void>
     user_agent = null,
   } = params;
 
-  const writes = await Promise.allSettled([
+  const writeLegacy = async () =>
     db
       .prepare(
         `INSERT INTO auditoria (
@@ -115,7 +113,9 @@ export async function registrarAuditoria(params: AuditoriaParams): Promise<void>
         ip_address,
         user_agent,
       )
-      .run(),
+      .run();
+
+  const writeCentral = async () =>
     db
       .prepare(
         `INSERT INTO auditoria_avancada_v2 (
@@ -133,9 +133,9 @@ export async function registrarAuditoria(params: AuditoriaParams): Promise<void>
         ip_address,
         user_agent,
       )
-      .run(),
-  ]);
+      .run();
 
+  const writes = await Promise.allSettled([writeLegacy(), writeCentral()]);
   for (const result of writes) {
     if (result.status === 'rejected') {
       console.error('[Auditoria] Erro ao registrar:', result.reason);
