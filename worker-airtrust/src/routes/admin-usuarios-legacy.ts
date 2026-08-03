@@ -487,13 +487,24 @@ adminUsuariosRoutes.post('/', async (c) => {
   // Criar usuário (sem senha — será definida via convite)
   const placeholderHash = `INVITE_PENDING_${Date.now()}`;
 
-  const insertResult = await db
-    .prepare(
-      `INSERT INTO usuarios (email, password_hash, nome, perfil, funcionario_id, active)
-       VALUES (?, ?, ?, ?, ?, 0)`,
-    )
-    .bind(email, placeholderHash, nome, perfil, funcionarioId)
-    .run();
+  let insertResult;
+  try {
+    insertResult = await db
+      .prepare(
+        `INSERT INTO usuarios (email, password_hash, nome, perfil, funcionario_id, active)
+         VALUES (?, ?, ?, ?, ?, 0)`,
+      )
+      .bind(email, placeholderHash, nome, perfil, funcionarioId)
+      .run();
+  } catch (insertError) {
+    if (
+      insertError instanceof Error &&
+      /UNIQUE constraint failed: usuarios\.email/i.test(insertError.message)
+    ) {
+      throw badRequest('E-mail já cadastrado no sistema', 'EMAIL_ALREADY_EXISTS');
+    }
+    throw insertError;
+  }
 
   const novoUsuarioId = insertResult.meta?.last_row_id as number;
 

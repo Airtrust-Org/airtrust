@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
+  AUTH_TOKEN_CHANGED_EVENT,
   AuthRefreshError,
   setTokens,
   clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  refreshAccessToken,
   getPersistLogin,
   ensureValidAccessToken,
   getTokenExpiryTimeMs,
@@ -68,7 +72,14 @@ function normalizeRole(role?: string | null): string {
   }
 }
 
-function mergeUserFromMe(storedUser: User | null, meData: any): User {
+interface MeUserData {
+  id?: number | string | null;
+  email?: string | null;
+  nome?: string | null;
+  role?: string | null;
+}
+
+function mergeUserFromMe(storedUser: User | null, meData: MeUserData): User {
   const meId = Number(meData?.id || 0);
   const sameUser = Boolean(storedUser && meId > 0 && Number(storedUser.id) === meId);
 
@@ -225,45 +236,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadEmpresas]);
 
   const renewSession = useCallback(
-    async (storedRefreshToken: string, nextUser?: User | null) => {
-      const response = await authFetch('/refresh', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken: storedRefreshToken }),
-      });
+    async (_storedRefreshToken: string, nextUser?: User | null) => {
+      await refreshAccessToken();
+      const accessToken = getAccessToken();
+      const rotatedRefreshToken = getRefreshToken();
+      if (!accessToken) throw new AuthRefreshError('Resposta inválida do servidor');
 
-      if (!response.ok) {
-        const errorData = (await response.json().catch(() => ({}))) as {
-          error?: string;
-          code?: string;
-        };
-        const terminal =
-          response.status === 400 ||
-          response.status === 401 ||
-          response.status === 403 ||
-          errorData.code === 'INVALID_REFRESH_TOKEN' ||
-          errorData.code === 'REFRESH_TOKEN_REVOKED' ||
-          errorData.code === 'REFRESH_TOKEN_EXPIRED' ||
-          errorData.code === 'USER_INACTIVE';
-
-        throw new AuthRefreshError(errorData.error || 'Falha ao renovar token', {
-          terminal,
-          status: response.status,
-          code: errorData.code,
-        });
-      }
-
-      const data = await response.json();
-
-      if (!data.success || !data.data?.accessToken) {
-        throw new AuthRefreshError('Resposta inválida do servidor');
-      }
-
-      const accessToken = String(data.data.accessToken);
-      const newRefreshToken =
-        typeof data.data.refreshToken === 'string' ? data.data.refreshToken : storedRefreshToken;
       const isPersistent =
         localStorage.getItem(TOKEN_KEY) !== null ||
         localStorage.getItem(REFRESH_TOKEN_KEY) !== null ||
@@ -274,10 +252,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(nextUser);
         writeAuthStorage(USER_KEY, JSON.stringify(nextUser), isPersistent);
       }
-
-      setTokens(accessToken, newRefreshToken);
       writeAuthStorage(TOKEN_KEY, accessToken, isPersistent);
-      writeAuthStorage(REFRESH_TOKEN_KEY, newRefreshToken, isPersistent);
+      if (rotatedRefreshToken) {
+        writeAuthStorage(REFRESH_TOKEN_KEY, rotatedRefreshToken, isPersistent);
+      }
       await loadEmpresas(accessToken);
     },
     [loadEmpresas],
@@ -342,6 +320,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     [clearRefreshSchedule, refreshToken, token],
   );
+
+  useEffect(() => {
+    const applyTokenState = (nextToken: string | null) => {
+      if (nextToken) {
+        setToken(nextToken);
+        return;
+      }
+
+      queryClient.clear();
+      clearAllScopedAuthStorage();
+      clearLegacyPerfisCache();
+      clearRefreshSchedule();
+      removeAuthStorage(USER_KEY);
+      setToken(null);
+      setUser(null);
+      setEmpresas([]);
+      setEmpresaAtualId(null);
+    };
+
+    const onTokenChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ token?: string | null }>).detail;
+      applyTokenState(detail?.token ?? null);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === TOKEN_KEY) applyTokenState(event.newValue);
+    };
+
+    window.addEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [clearRefreshSchedule]);
 
   // Carregar dados persistidos ao montar
   useEffect(() => {

@@ -331,14 +331,27 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
       ? `INSERT INTO usuarios (email, nome, password_hash, perfil, ${activeColumn}, created_at) VALUES (?, ?, ?, ?, 1, datetime('now'))`
       : "INSERT INTO usuarios (email, nome, password_hash, perfil, created_at) VALUES (?, ?, ?, ?, datetime('now'))";
 
-    const result = await db
-      .prepare(insertSql)
-      .bind(normalizedEmail, nome || normalizedEmail.split('@')[0], hash, perfil)
-      .run();
+    try {
+      const result = await db
+        .prepare(insertSql)
+        .bind(normalizedEmail, nome || normalizedEmail.split('@')[0], hash, perfil)
+        .run();
 
-    user = { id: result.meta.last_row_id };
-    isNewUser = true;
-    console.log(`[INVITE] Novo usuário criado: ${normalizedEmail} (ID: ${user.id}).`);
+      user = { id: result.meta.last_row_id };
+      isNewUser = true;
+      console.log(`[INVITE] Novo usuário criado: ${normalizedEmail} (ID: ${user.id}).`);
+    } catch (insertError) {
+      const uniqueEmailRace =
+        insertError instanceof Error &&
+        /UNIQUE constraint failed: usuarios\.email/i.test(insertError.message);
+      if (!uniqueEmailRace) throw insertError;
+
+      user = await db
+        .prepare('SELECT id FROM usuarios WHERE email = ? AND deleted_at IS NULL')
+        .bind(normalizedEmail)
+        .first<{ id: number }>();
+      if (!user) throw insertError;
+    }
   }
 
   const { hasModulosAtivos } = await getUsuariosEmpresasFeatures(db);

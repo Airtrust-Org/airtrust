@@ -9,7 +9,7 @@
 
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { AppError } from '../utils/errors';
 import {
@@ -18,13 +18,12 @@ import {
   requireTenantRole,
   tenantMiddleware,
 } from '../middleware/tenant';
-import { generateRefreshToken } from '../utils/security';
 import { registrarAuditoria } from '../utils/auditoria';
 import { createLogger, toError } from '../utils/logger';
 import { buildLegacyAuditoriaActor, buildLegacyAuditPayload } from '../lib/audit/context';
 import empresasUsuariosRoutes from './empresas-usuarios';
 
-const empresasRoutes = new Hono<{ Bindings: Env }>();
+const empresasRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Aplicar auth + tenantMiddleware em TODAS as rotas deste router
 empresasRoutes.use('*', auth());
@@ -48,35 +47,58 @@ const CreateEmpresaSchema = z.object({
   max_storage_mb: z.number().int().positive().default(1000),
 });
 
-const UpdateEmpresaSchema = CreateEmpresaSchema.partial().omit({ codigo: true });
+type EmpresaRecord = Record<string, unknown> & {
+  cores_tema?: unknown;
+  modulos_ativos?: unknown;
+  certificado_template_html?: string | null;
+};
 
 const EmpresaConfigSchema = z.object({
-  // Certificados
   certificado_template_html: z.string().optional().nullable(),
-  certificado_logo_url: z.string().url().optional().nullable(),
+  certificado_logo_url: z
+    .union([z.string().url(), z.literal('')])
+    .optional()
+    .nullable(),
   certificado_assinatura_digital: z.string().optional().nullable(),
-  // Config geral
-  timezone: z.string().optional(),
-  idioma: z.string().optional(),
-  // EdApp (não editável pelo form, mas aceito)
+  timezone: z.string().min(1).max(64).optional(),
+  idioma: z.string().min(2).max(16).optional(),
   edapp_api_token: z.string().optional().nullable(),
   edapp_webhook_secret: z.string().optional().nullable(),
   edapp_webhook_id: z.string().optional().nullable(),
-  edapp_ativo: z.number().optional(),
-  // SMTP
+  edapp_ativo: z.coerce.number().int().min(0).max(1).optional(),
   smtp_host: z.string().optional().nullable(),
-  smtp_port: z.number().optional().nullable(),
+  smtp_port: z.coerce.number().int().min(1).max(65535).optional().nullable(),
   smtp_user: z.string().optional().nullable(),
   smtp_password: z.string().optional().nullable(),
   smtp_from: z.string().optional().nullable(),
-  // Legacy fields (ignored but accepted for backwards compat)
-  dias_alerta_vencimento: z.any().optional(),
-  email_notificacoes: z.any().optional(),
-  webhook_url: z.any().optional(),
-  logo_relatorio: z.any().optional(),
-  cores_tema: z.any().optional(),
-  modulos_ativos: z.any().optional(),
+  dias_alerta_vencimento: z.coerce.number().int().min(1).max(365).optional().nullable(),
+  email_notificacoes: z
+    .union([z.string().email(), z.literal('')])
+    .optional()
+    .nullable(),
+  webhook_url: z
+    .union([z.string().url(), z.literal('')])
+    .optional()
+    .nullable(),
+  logo_relatorio: z.string().optional().nullable(),
+  cores_tema: z
+    .union([z.record(z.unknown()), z.string()])
+    .optional()
+    .nullable(),
+  modulos_ativos: z
+    .union([z.array(z.string().min(1)), z.string()])
+    .optional()
+    .nullable(),
 });
+
+function serializeEmpresaConfigJson(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return value as null | undefined;
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function normalizeEmptyEmpresaConfigValue(value: unknown): unknown {
+  return typeof value === 'string' && value.trim() === '' ? null : value;
+}
 
 const SistemaConfigSchema = z.object({
   appName: z.string().min(1).max(60).optional(),
@@ -161,75 +183,11 @@ async function saveEmpresaSystemSettings(
     .run();
 }
 
-function isPlatformSuperAdmin(c: any): boolean {
+function isPlatformSuperAdmin(c: Parameters<typeof isPlatformAdminContext>[0]): boolean {
   return isPlatformAdminContext(c);
 }
 
 // Tabela convites_usuarios criada via migration 0290 — não mais DDL em runtime.
-
-async function enviarEmailConvite(
-  env: Env,
-  destinatario: string,
-  nome: string,
-  empresaNome: string,
-  conviteUrl: string,
-): Promise<boolean> {
-  if (!env.BREVO_API_KEY) {
-    console.warn('[INVITE] BREVO_API_KEY ausente. Email não enviado.');
-    return false;
-  }
-
-  const fromEmail = env.BREVO_FROM_EMAIL || 'treinamento@airtrust.online';
-  const fromName = env.BREVO_FROM_NAME || 'Treinamento';
-  const assunto = `Convite para acessar ${empresaNome} no AirTrust`;
-  const corpo = `
-    Olá ${nome || 'usuário'},
-
-    Você foi convidado(a) para acessar a empresa ${empresaNome} no AirTrust.
-
-    Para criar sua senha e concluir o acesso, clique no link abaixo:
-    ${conviteUrl}
-
-    Este link expira em 72 horas.
-
-    Se você não esperava este convite, ignore este e-mail.
-  `;
-
-  if (env.BREVO_API_KEY) {
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'api-key': env.BREVO_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        sender: { email: fromEmail, name: fromName },
-        to: [{ email: destinatario }],
-        subject: assunto,
-        textContent: corpo,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[INVITE] Erro Brevo:', errorText);
-      throw new AppError('Falha ao enviar email de convite', 500);
-    }
-
-    return true;
-  }
-
-  throw new AppError('Falha ao enviar email de convite: BREVO_API_KEY não configurado', 500);
-}
-
-async function getUsuariosEmpresasFeatures(db: Env['DB']): Promise<{ hasModulosAtivos: boolean }> {
-  const cols =
-    (await db.prepare("PRAGMA table_info('usuarios_empresas')").all<{ name: string }>()).results ||
-    [];
-  return {
-    hasModulosAtivos: cols.some((c) => c.name === 'modulos_ativos'),
-  };
-}
 
 // ============================================
 // GET /api/empresas/minha - Dados da minha empresa
@@ -322,12 +280,16 @@ empresasRoutes.get('/minha', async (c) => {
           if (novaEmpresa.modulos_ativos && typeof novaEmpresa.modulos_ativos === 'string') {
             try {
               novaEmpresa.modulos_ativos = JSON.parse(novaEmpresa.modulos_ativos);
-            } catch (_) {}
+            } catch {
+              // Preserve the original serialized value.
+            }
           }
           if (novaEmpresa.cores_tema && typeof novaEmpresa.cores_tema === 'string') {
             try {
               novaEmpresa.cores_tema = JSON.parse(novaEmpresa.cores_tema);
-            } catch (_) {}
+            } catch {
+              // Preserve the original serialized value.
+            }
           }
           return c.json({ success: true, data: novaEmpresa });
         }
@@ -344,15 +306,15 @@ empresasRoutes.get('/minha', async (c) => {
   if (empresa.cores_tema && typeof empresa.cores_tema === 'string') {
     try {
       empresa.cores_tema = JSON.parse(empresa.cores_tema);
-    } catch (e) {
-      // ignore
+    } catch {
+      // Preserve the original serialized value.
     }
   }
 
   if (empresa.modulos_ativos && typeof empresa.modulos_ativos === 'string') {
     try {
       empresa.modulos_ativos = JSON.parse(empresa.modulos_ativos);
-    } catch (e) {
+    } catch {
       // fallback
       empresa.modulos_ativos = ['treinamento', 'compliance'];
     }
@@ -385,7 +347,13 @@ empresasRoutes.get('/minha/sistema', async (c) => {
     `,
     )
     .bind(tenantCtx.empresaId)
-    .first<{ id: number; nome: string; logo_url: string | null; cores_tema: string | null; timezone: string | null }>();
+    .first<{
+      id: number;
+      nome: string;
+      logo_url: string | null;
+      cores_tema: string | null;
+      timezone: string | null;
+    }>();
 
   if (!empresa) {
     throw new AppError('Empresa não encontrada', 404);
@@ -450,7 +418,8 @@ empresasRoutes.put('/minha/sistema', requireTenantRole('admin'), async (c) => {
 
   // Salvar timezone na coluna dedicada de empresas_config
   if (payload.timezone !== undefined) {
-    const tz = payload.timezone && payload.timezone.trim().length > 0 ? payload.timezone.trim() : 'UTC';
+    const tz =
+      payload.timezone && payload.timezone.trim().length > 0 ? payload.timezone.trim() : 'UTC';
     await db
       .prepare(
         `INSERT INTO empresas_config (empresa_id, timezone, updated_at)
@@ -552,7 +521,7 @@ empresasRoutes.get('/:id', requireTenantRole('admin'), async (c) => {
     `,
       )
       .bind(id)
-      .first<any>();
+      .first<EmpresaRecord>();
 
     if (!empresa) {
       throw new AppError('Empresa não encontrada', 404);
@@ -577,15 +546,15 @@ empresasRoutes.get('/:id', requireTenantRole('admin'), async (c) => {
     if (empresa.cores_tema && typeof empresa.cores_tema === 'string') {
       try {
         empresa.cores_tema = JSON.parse(empresa.cores_tema);
-      } catch (_) {
-        // ignore
+      } catch {
+        // Preserve the original serialized value.
       }
     }
 
     if (empresa.modulos_ativos && typeof empresa.modulos_ativos === 'string') {
       try {
         empresa.modulos_ativos = JSON.parse(empresa.modulos_ativos);
-      } catch (_) {
+      } catch {
         // fallback
         empresa.modulos_ativos = ['treinamento', 'compliance'];
       }
@@ -601,11 +570,13 @@ empresasRoutes.get('/:id', requireTenantRole('admin'), async (c) => {
         },
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     createLogger(c, 'Empresas').error('GET /:id erro', toError(error));
     // Se for AppError, relançar
     if (error instanceof AppError) throw error; // Fix instanceof check just in case, or keep property check
-    if (error.status) throw error;
+    if (typeof error === 'object' && error !== null && 'status' in error) {
+      throw error;
+    }
 
     return c.json(
       {
@@ -744,7 +715,7 @@ empresasRoutes.post('/', requireTenantRole('admin'), async (c) => {
       },
       201,
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     createLogger(c, 'Empresas').error('POST / erro ao criar empresa', toError(error));
     throw error;
   }
@@ -1135,7 +1106,7 @@ empresasRoutes.get('/:id/config', requireTenantRole('admin'), async (c) => {
   `,
     )
     .bind(id)
-    .first();
+    .first<EmpresaRecord>();
 
   const templateAtivo = await db
     .prepare(
@@ -1153,7 +1124,7 @@ empresasRoutes.get('/:id/config', requireTenantRole('admin'), async (c) => {
     data: {
       ...(config || {}),
       certificado_template_html:
-        templateAtivo?.template_json || (config as any)?.certificado_template_html || null,
+        templateAtivo?.template_json || config?.certificado_template_html || null,
     },
   });
 });
@@ -1174,33 +1145,70 @@ empresasRoutes.put('/:id/config', requireTenantRole('admin'), async (c) => {
     const body = await c.req.json();
     const data = EmpresaConfigSchema.parse(body);
 
-    // Upsert config - only use columns that exist in empresas_config table
-    await db
-      .prepare(
-        `
-      INSERT INTO empresas_config (
-        empresa_id, certificado_template_html, certificado_logo_url, 
-        certificado_assinatura_digital, timezone, idioma
-      )
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(empresa_id) DO UPDATE SET
-        certificado_template_html = excluded.certificado_template_html,
-        certificado_logo_url = excluded.certificado_logo_url,
-        certificado_assinatura_digital = excluded.certificado_assinatura_digital,
-        timezone = excluded.timezone,
-        idioma = excluded.idioma,
-        updated_at = datetime('now')
-    `,
-      )
-      .bind(
-        id,
-        data.certificado_template_html || null,
-        data.certificado_logo_url || null,
-        data.certificado_assinatura_digital || null,
-        data.timezone ?? 'America/Sao_Paulo',
-        data.idioma ?? 'pt-BR',
-      )
-      .run();
+    // O histórico de migrations produziu duas variantes legítimas de empresas_config.
+    // Persistir somente colunas conhecidas que existam no schema do ambiente, sem descartar
+    // silenciosamente campos aceitos pelo contrato HTTP.
+    const tableInfo = await db
+      .prepare('PRAGMA table_info(empresas_config)')
+      .all<{ name: string }>();
+    const existingColumns = new Set((tableInfo.results || []).map((column) => column.name));
+    const candidateValues: Record<string, unknown> = {
+      certificado_template_html: data.certificado_template_html,
+      certificado_logo_url: normalizeEmptyEmpresaConfigValue(data.certificado_logo_url),
+      certificado_assinatura_digital: data.certificado_assinatura_digital,
+      timezone: data.timezone,
+      idioma: data.idioma,
+      edapp_api_token: data.edapp_api_token,
+      edapp_webhook_secret: data.edapp_webhook_secret,
+      edapp_webhook_id: data.edapp_webhook_id,
+      edapp_ativo: data.edapp_ativo,
+      smtp_host: normalizeEmptyEmpresaConfigValue(data.smtp_host),
+      smtp_port: data.smtp_port,
+      smtp_user: normalizeEmptyEmpresaConfigValue(data.smtp_user),
+      smtp_password: normalizeEmptyEmpresaConfigValue(data.smtp_password),
+      smtp_from: normalizeEmptyEmpresaConfigValue(data.smtp_from),
+      dias_alerta_vencimento: data.dias_alerta_vencimento,
+      email_notificacoes: normalizeEmptyEmpresaConfigValue(data.email_notificacoes),
+      webhook_url: normalizeEmptyEmpresaConfigValue(data.webhook_url),
+      logo_relatorio: normalizeEmptyEmpresaConfigValue(data.logo_relatorio),
+      cores_tema: serializeEmpresaConfigJson(data.cores_tema),
+      modulos_ativos: serializeEmpresaConfigJson(data.modulos_ativos),
+    };
+    const suppliedColumns = Object.entries(candidateValues).filter(
+      ([, value]) => value !== undefined,
+    );
+    const unsupportedColumns = suppliedColumns
+      .map(([column]) => column)
+      .filter((column) => !existingColumns.has(column));
+    if (unsupportedColumns.length > 0) {
+      return c.json(
+        {
+          success: false,
+          error: 'Schema de configurações da empresa está desatualizado',
+          code: 'EMPRESA_CONFIG_SCHEMA_OUTDATED',
+          unsupported_fields: unsupportedColumns,
+        },
+        409,
+      );
+    }
+
+    const entries = suppliedColumns;
+    if (entries.length > 0) {
+      const columns = entries.map(([column]) => column);
+      const values = entries.map(([, value]) => value);
+      const placeholders = columns.map(() => '?').join(', ');
+      const updates = columns.map((column) => `${column} = excluded.${column}`).join(', ');
+      await db
+        .prepare(
+          `INSERT INTO empresas_config (empresa_id, ${columns.join(', ')}, updated_at)
+           VALUES (?, ${placeholders}, datetime('now'))
+           ON CONFLICT(empresa_id) DO UPDATE SET
+             ${updates},
+             updated_at = datetime('now')`,
+        )
+        .bind(id, ...values)
+        .run();
+    }
 
     if (data.certificado_template_html && data.certificado_template_html.trim()) {
       await db

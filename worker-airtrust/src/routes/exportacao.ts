@@ -12,7 +12,7 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { getEmpresaId } from '../middleware/tenant';
-import { createLogger } from '../utils/logger';
+import { createLogger, toError } from '../utils/logger';
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
@@ -28,6 +28,53 @@ import {
 } from './qualificacoes/historico';
 
 const app = new Hono<{ Bindings: Env }>();
+const MAX_EXPORT_ROWS = 10_000;
+
+type ExportScalar = string | number | boolean | null | undefined;
+type ExportRow = Record<string, ExportScalar>;
+
+interface QualificacaoExportRow {
+  id: string | number;
+  funcionario_nome: string | null;
+  funcionario_matricula: string | null;
+  funcionario_codigo_anac: string | null;
+  funcionario_cpf: string | null;
+  funcionario_funcao: string | null;
+  funcionario_nascimento: string | null;
+  modelo_aeronave: string | null;
+  tipo_id: string | number | null;
+  tipo_nome: string | null;
+  qualificacao_nome: string | null;
+  qualificacao_codigo: string | null;
+  categoria: string | null;
+  validade_meses: string | number | null;
+  vencimento_fim_mes: string | number | null;
+  data_realizacao: string | null;
+  data_vencimento_raw: string | null;
+  renovada: string | number | null;
+  qualificacao_status: string | null;
+  tem_renovacao_posterior: string | number | null;
+  numero_certificado: string | null;
+  instrutor: string | null;
+  carga_horaria: string | number | null;
+  nota: string | number | null;
+  observacoes: string | null;
+  created_at: string | null;
+}
+
+function getFillArgb(fill: unknown): string | undefined {
+  if (typeof fill !== 'object' || fill === null || !('fgColor' in fill)) return undefined;
+  const fgColor = fill.fgColor;
+  if (typeof fgColor !== 'object' || fgColor === null || !('argb' in fgColor)) return undefined;
+  return typeof fgColor.argb === 'string' ? fgColor.argb : undefined;
+}
+
+app.use('*', async (c, next) => {
+  await next();
+  c.header('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
+});
 
 async function loadExcelJS(): Promise<typeof import('exceljs')> {
   return (await import('exceljs/dist/es5/exceljs.browser.js')) as unknown as typeof import('exceljs');
@@ -70,7 +117,8 @@ app.get('/funcionarios', auth(), async (c) => {
         FROM funcionarios f
         LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
         WHERE ${conditions.join('\n          AND ')}
-        ORDER BY f.nome`,
+        ORDER BY f.nome
+        LIMIT ${MAX_EXPORT_ROWS + 1}`,
       )
       .bind(...bindings)
       .all();
@@ -82,6 +130,15 @@ app.get('/funcionarios', auth(), async (c) => {
     const rows = funcionarios.results || [];
     if (rows.length === 0) {
       return c.json({ success: false, error: 'Nenhum funcionário encontrado' }, 404);
+    }
+    if (rows.length > MAX_EXPORT_ROWS) {
+      return c.json(
+        {
+          success: false,
+          error: `Exportação excede ${MAX_EXPORT_ROWS} linhas; aplique filtros antes de gerar o arquivo`,
+        },
+        422,
+      );
     }
 
     // Criar workbook Excel
@@ -120,7 +177,7 @@ app.get('/funcionarios', auth(), async (c) => {
     };
 
     // Adicionar dados
-    for (const row of rows as any[]) {
+    for (const row of rows as ExportRow[]) {
       worksheet.addRow({
         id: row.id || '',
         nome: row.nome || '',
@@ -154,8 +211,8 @@ app.get('/funcionarios', auth(), async (c) => {
         'Access-Control-Allow-Origin': '*',
       },
     });
-  } catch (error: any) {
-    createLogger(c, 'ExportacaoRoutes').error('Erro ao exportar funcionarios', error);
+  } catch (error: unknown) {
+    createLogger(c, 'ExportacaoRoutes').error('Erro ao exportar funcionarios', toError(error));
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -252,13 +309,23 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
       LEFT JOIN modelos_aeronave ma    ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
       WHERE ${conditions.join('\n        AND ')}
       ORDER BY qh.data_conclusao DESC, f.nome ASC
+      LIMIT ${MAX_EXPORT_ROWS + 1}
     `,
       )
       .bind(...params)
-      .all();
+      .all<QualificacaoExportRow>();
 
     if (!results || results.length === 0) {
       return c.json({ success: false, error: 'Nenhum registro encontrado' }, 404);
+    }
+    if (results.length > MAX_EXPORT_ROWS) {
+      return c.json(
+        {
+          success: false,
+          error: `Exportação excede ${MAX_EXPORT_ROWS} linhas; aplique filtros antes de gerar o arquivo`,
+        },
+        422,
+      );
     }
 
     // ─── Enriquecimento igual ao historico.ts ───────────────────────────────
@@ -268,7 +335,7 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
     dThreshold.setDate(dThreshold.getDate() + thresholdDias);
     const todayThreshold = dThreshold.toISOString().split('T')[0];
 
-    const enriched = (results as any[]).map((r) => {
+    const enriched = results.map((r) => {
       let validadeMesesEfetiva = Number(r.validade_meses || 12);
 
       // Ajuste especial para CMA acima de 60 anos
@@ -438,10 +505,8 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
       if (dataRow.number % 2 === 0) {
         dataRow.eachCell({ includeEmpty: true }, (cell, colNum) => {
           if (colNum === 1) return;
-          if (
-            !(cell.fill as any)?.fgColor?.argb ||
-            (cell.fill as any).fgColor.argb === 'FFFFFFFF'
-          ) {
+          const fillArgb = getFillArgb(cell.fill);
+          if (!fillArgb || fillArgb === 'FFFFFFFF') {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
           }
         });
@@ -461,8 +526,8 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
         'Access-Control-Allow-Origin': '*',
       },
     });
-  } catch (error: any) {
-    createLogger(c, 'ExportacaoRoutes').error('Erro ao exportar qualificacoes', error);
+  } catch (error: unknown) {
+    createLogger(c, 'ExportacaoRoutes').error('Erro ao exportar qualificacoes', toError(error));
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -494,7 +559,8 @@ app.get('/qualificacoes-tipos', auth(), async (c) => {
         FROM qualificacoes_tipos
         WHERE deleted_at IS NULL
           AND empresa_id = ?
-        ORDER BY codigo`,
+        ORDER BY codigo
+        LIMIT ${MAX_EXPORT_ROWS + 1}`,
       )
       .bind(empresaId)
       .all();
@@ -506,6 +572,15 @@ app.get('/qualificacoes-tipos', auth(), async (c) => {
     const rows = tipos.results || [];
     if (rows.length === 0) {
       return c.json({ success: false, error: 'Nenhum tipo encontrado' }, 404);
+    }
+    if (rows.length > MAX_EXPORT_ROWS) {
+      return c.json(
+        {
+          success: false,
+          error: `Exportação excede ${MAX_EXPORT_ROWS} linhas; aplique filtros antes de gerar o arquivo`,
+        },
+        422,
+      );
     }
 
     // Criar workbook Excel
@@ -538,7 +613,7 @@ app.get('/qualificacoes-tipos', auth(), async (c) => {
     };
 
     // Adicionar dados
-    for (const row of rows as any[]) {
+    for (const row of rows as ExportRow[]) {
       worksheet.addRow({
         id: row.id || '',
         tipo: row.tipo || '',
@@ -566,8 +641,11 @@ app.get('/qualificacoes-tipos', auth(), async (c) => {
         'Access-Control-Allow-Origin': '*',
       },
     });
-  } catch (error: any) {
-    createLogger(c, 'ExportacaoRoutes').error('Erro ao exportar tipos de qualificacao', error);
+  } catch (error: unknown) {
+    createLogger(c, 'ExportacaoRoutes').error(
+      'Erro ao exportar tipos de qualificacao',
+      toError(error),
+    );
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });

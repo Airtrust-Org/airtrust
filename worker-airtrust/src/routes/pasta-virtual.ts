@@ -783,30 +783,31 @@ app.post('/upload', auth(), async (c) => {
 
     let result;
     try {
-      result = await db
-        .prepare(query)
-        .bind(
-          uuid,
-          funcionarioId,
-          nomeArquivoPadronizado,
-          fileType,
-          fileSize,
-          r2Key,
-          descricao,
-          hashHex,
-          empresaId,
-        )
-        .run();
-    } catch (insertError) {
-      const errorMsg = String(insertError);
-      // Se coluna sha256_hash não existir, tentar sem ela
-      if (errorMsg.includes('no column named sha256_hash')) {
+      try {
+        result = await db
+          .prepare(query)
+          .bind(
+            uuid,
+            funcionarioId,
+            nomeArquivoPadronizado,
+            fileType,
+            fileSize,
+            r2Key,
+            descricao,
+            hashHex,
+            empresaId,
+          )
+          .run();
+      } catch (insertError) {
+        const errorMsg = String(insertError);
+        if (!errorMsg.includes('no column named sha256_hash')) throw insertError;
+
         console.warn(
           '[pasta-virtual/upload] Coluna sha256_hash não existe ainda, inserindo sem hash',
         );
         const queryNoHash = `
           INSERT INTO documentos (
-            uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, 
+            uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key,
             descricao, empresa_id, created_at, updated_at
           )
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -824,9 +825,14 @@ app.post('/upload', auth(), async (c) => {
             empresaId,
           )
           .run();
-      } else {
-        throw insertError;
       }
+    } catch (insertError) {
+      try {
+        await bucket.delete(r2Key);
+      } catch (rollbackError) {
+        console.error('[pasta-virtual/upload] Falha ao reverter objeto R2:', rollbackError);
+      }
+      throw insertError;
     }
 
     const response: ApiResponse<{ id: number; uuid: string; r2_key: string }> = {

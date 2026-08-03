@@ -11,7 +11,6 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import DOMPurify from 'dompurify';
 import { API_BASE_URL, ensureValidAccessToken } from '../../config/api';
 
 // Helper para resolver URL do logo (suporta data URLs e paths relativos /api/assets/...)
@@ -51,7 +50,7 @@ interface EmpresaData {
   // Configs extendidas
   certificado_logo_url?: string | null;
   certificado_template_html?: string | null;
-  cores_tema?: any;
+  cores_tema?: Record<string, unknown> | null;
   // Adicionando campos faltantes para evitar uso de 'any' e data loss
   dias_alerta_vencimento?: number;
   email_notificacoes?: string;
@@ -426,7 +425,7 @@ export function EmpresaForm({
          Se for admin, pode editar tudo.
       */
 
-      const empresaPayload: any = {
+      const empresaPayload: Record<string, string | number | null | undefined> = {
         nome: data.nome,
         cnpj: data.cnpj,
         dominio: data.dominio,
@@ -491,8 +490,10 @@ export function EmpresaForm({
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(configPayload),
         });
-        const jsonConfig = await resConfig.json();
-        if (!jsonConfig.success) console.warn('Erro ao salvar configs extras', jsonConfig.error);
+        const jsonConfig = await resConfig.json().catch(() => ({}));
+        if (!resConfig.ok || !jsonConfig.success) {
+          throw new Error(jsonConfig.error || 'Erro ao salvar configurações da empresa');
+        }
       }
 
       // Update state with saved ID to allow uploads immediately
@@ -502,9 +503,9 @@ export function EmpresaForm({
 
       toast.success(isSelfEdit ? 'Dados atualizados!' : 'Empresa salva com sucesso!');
       if (onSuccess) onSuccess();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(err.message || 'Erro ao salvar');
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar');
     } finally {
       setSaving(false);
     }
@@ -776,7 +777,9 @@ export function EmpresaForm({
                 </label>
                 <select
                   value={data.plano}
-                  onChange={(e) => setData({ ...data, plano: e.target.value as any })}
+                  onChange={(e) =>
+                    setData({ ...data, plano: e.target.value as EmpresaData['plano'] })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 bg-white"
                 >
                   <option value="basic">Basic</option>

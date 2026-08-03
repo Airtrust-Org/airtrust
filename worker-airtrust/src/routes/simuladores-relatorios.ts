@@ -4,14 +4,21 @@
  * (mounted under /relatorios prefix in simuladores-core.ts)
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
 
 const app = new Hono<{ Bindings: Env }>();
-function reportsErrorResponse(c: any, error: string, code: string) {
+
+app.use('*', async (c, next) => {
+  await next();
+  c.header('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
+});
+function reportsErrorResponse(c: Context<{ Bindings: Env }>, error: string, code: string) {
   return c.json({ success: false, error, code }, 500);
 }
 
@@ -26,14 +33,16 @@ app.get('/uso', async (c) => {
     const diSql = di || '2000-01-01';
     const dfSql = df || '2099-12-31';
 
-    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
+    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all<{
+      name: string;
+    }>();
     const hasEmpresaId = (tableInfo.results || []).some(
-      (row: any) => String(row.name || '') === 'empresa_id',
+      (row) => String(row.name || '') === 'empresa_id',
     );
     const sEmpresaClause = hasEmpresaId ? ' AND s.empresa_id = ?' : '';
 
     // 1. Uso por simulador
-    const params: any[] = [empresaId, diSql, dfSql];
+    const params: Array<string | number> = [empresaId, diSql, dfSql];
     if (hasEmpresaId) params.push(empresaId);
 
     const porSimulador = await c.env.DB.prepare(

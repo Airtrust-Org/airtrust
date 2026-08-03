@@ -289,10 +289,14 @@ export async function getExpiracaoRows(
       FROM lms_matriculas m
       JOIN funcionarios f
         ON f.id = m.funcionario_id
+       AND f.empresa_id = m.empresa_id
        AND f.deleted_at IS NULL
        AND COALESCE(f.ativo, 1) = 1
        AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-      JOIN lms_cursos c ON c.id = m.curso_id
+      JOIN lms_cursos c
+        ON c.id = m.curso_id
+       AND c.empresa_id = m.empresa_id
+       AND c.deleted_at IS NULL
       WHERE m.empresa_id = ?
         AND m.deleted_at IS NULL
         AND m.data_expiracao IS NOT NULL

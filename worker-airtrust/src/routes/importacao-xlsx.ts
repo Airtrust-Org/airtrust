@@ -7,8 +7,8 @@
  * - POST /api/importacao-xlsx/tipos
  *
  * Modos:
- * - "completar": Adiciona novos registros, atualiza existentes
- * - "substituir": Remove todos e insere os novos (com confirmação)
+ * - "completar": adiciona novos registros e atualiza existentes
+ * - "substituir": valida tudo e aplica delete + reimport em uma única transação D1
  */
 
 import { Hono } from 'hono';
@@ -19,12 +19,19 @@ import { getTenantContext } from '../middleware/tenant';
 import { createLogger } from '../utils/logger';
 
 const app = new Hono<{ Bindings: Env }>();
+const MAX_IMPORT_ROWS = 500;
+const LOOKUP_BIND_CHUNK = 80;
+const WRITE_BATCH_SIZE = 100;
 
 async function loadExcelJS(): Promise<typeof import('exceljs')> {
   return (await import('exceljs/dist/es5/exceljs.browser.js')) as unknown as typeof import('exceljs');
 }
 
-// ===== TIPOS =====
+interface ImportError {
+  linha: number;
+  erro: string;
+  dados?: Record<string, unknown>;
+}
 
 interface ImportResult {
   success: boolean;
@@ -33,157 +40,259 @@ interface ImportResult {
   inserted: number;
   updated: number;
   deleted?: number;
-  errors: Array<{
-    linha: number;
-    erro: string;
-    dados?: Record<string, any>;
-  }>;
+  errors: ImportError[];
 }
 
-// ===== HELPER: Parse XLSX =====
+type ImportAction = 'inserted' | 'updated';
 
-async function parseXLSXFile(fileBuffer: ArrayBuffer): Promise<any[]> {
+interface StatementEntry {
+  statement: D1PreparedStatement;
+  linha: number;
+  action: ImportAction;
+}
+
+interface ExecutionResult {
+  inserted: number;
+  updated: number;
+  deleted: number;
+  blocked: boolean;
+  transactionFailed: boolean;
+}
+
+interface UploadedFile {
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+function isUploadedFile(value: unknown): value is UploadedFile {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'arrayBuffer' in value &&
+    typeof value.arrayBuffer === 'function'
+  );
+}
+
+async function parseXLSXFile(fileBuffer: ArrayBuffer): Promise<Record<string, unknown>[]> {
   const ExcelJS = await loadExcelJS();
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(fileBuffer);
 
   const worksheet = workbook.worksheets[0];
-  if (!worksheet) {
-    throw new Error('Planilha vazia ou inválida');
-  }
+  if (!worksheet) throw new Error('Planilha vazia ou inválida');
 
-  const rows: any[] = [];
+  const rows: Record<string, unknown>[] = [];
   const headers: string[] = [];
 
   worksheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) {
-      // Headers
-      row.eachCell((cell) => {
-        headers.push(String(cell.value || '').trim());
-      });
-    } else {
-      // Data rows
-      const rowData: Record<string, any> = {};
-      row.eachCell((cell, colNumber) => {
-        const header = headers[colNumber - 1];
-        if (header) {
-          let value = cell.value;
+      row.eachCell((cell) => headers.push(String(cell.value || '').trim()));
+      return;
+    }
 
-          // Handle Excel dates
-          if (value instanceof Date) {
-            value = value.toISOString().split('T')[0];
-          } else if (typeof value === 'object' && value !== null && 'result' in value) {
-            value = value.result;
-          }
+    const rowData: Record<string, unknown> = {};
+    row.eachCell((cell, colNumber) => {
+      const header = headers[colNumber - 1];
+      if (!header) return;
 
-          rowData[header] = value;
-        }
-      });
-
-      // Só adiciona se tiver pelo menos um campo preenchido
-      if (Object.values(rowData).some((v) => v !== null && v !== undefined && v !== '')) {
-        rows.push(rowData);
+      let value = cell.value;
+      if (value instanceof Date) value = value.toISOString().split('T')[0];
+      else if (typeof value === 'object' && value !== null && 'result' in value) {
+        value = value.result;
       }
+      rowData[header] = value;
+    });
+
+    if (
+      Object.values(rowData).some((value) => value !== null && value !== undefined && value !== '')
+    ) {
+      rows.push(rowData);
     }
   });
 
   return rows;
 }
 
-// ===== FUNCIONÁRIOS =====
+function validateRequest(mode: string, rows: Record<string, unknown>[]): string | null {
+  if (mode !== 'completar' && mode !== 'substituir') return 'Modo de importação inválido';
+  if (rows.length === 0) return 'Planilha vazia';
+  if (rows.length > MAX_IMPORT_ROWS) {
+    return `Planilha excede o limite de ${MAX_IMPORT_ROWS} linhas por importação`;
+  }
+  return null;
+}
 
-/**
- * POST /api/importacao-xlsx/funcionarios
- * Body: FormData com arquivo "file" e campo "mode" (completar|substituir)
- *
- * Optimized: pre-fetches all aeronaves and existing CPFs in 2 queries,
- * then batches all UPDATEs and INSERTs via db.batch().
- * Before: ~3 queries per row. After: 2 queries + 1 batch call.
- */
+function normalizeCpf(value: unknown): string {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function isValidCpf(value: string): boolean {
+  if (!/^\d{11}$/.test(value) || /^(\d)\1{10}$/.test(value)) return false;
+  const calculateDigit = (base: string, factor: number) => {
+    let total = 0;
+    for (const digit of base) total += Number(digit) * factor--;
+    const remainder = (total * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+  return (
+    calculateDigit(value.slice(0, 9), 10) === Number(value[9]) &&
+    calculateDigit(value.slice(0, 10), 11) === Number(value[10])
+  );
+}
+
+function countActions(entries: StatementEntry[]): Pick<ExecutionResult, 'inserted' | 'updated'> {
+  return entries.reduce(
+    (totals, entry) => {
+      totals[entry.action] += 1;
+      return totals;
+    },
+    { inserted: 0, updated: 0 },
+  );
+}
+
+async function executeStatements(params: {
+  db: D1Database;
+  mode: string;
+  deleteStatement: D1PreparedStatement | null;
+  entries: StatementEntry[];
+  errors: ImportError[];
+}): Promise<ExecutionResult> {
+  const { db, mode, deleteStatement, entries, errors } = params;
+
+  if (mode === 'substituir') {
+    if (errors.length > 0) {
+      return { inserted: 0, updated: 0, deleted: 0, blocked: true, transactionFailed: false };
+    }
+
+    try {
+      const results = await db.batch([
+        deleteStatement as D1PreparedStatement,
+        ...entries.map((entry) => entry.statement),
+      ]);
+      const totals = countActions(entries);
+      return {
+        ...totals,
+        deleted: Number(results[0]?.meta?.changes || 0),
+        blocked: false,
+        transactionFailed: false,
+      };
+    } catch (error) {
+      errors.push({
+        linha: 0,
+        erro: `Importação não aplicada; toda a substituição foi revertida: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+      return { inserted: 0, updated: 0, deleted: 0, blocked: false, transactionFailed: true };
+    }
+  }
+
+  let inserted = 0;
+  let updated = 0;
+  for (let offset = 0; offset < entries.length; offset += WRITE_BATCH_SIZE) {
+    const chunk = entries.slice(offset, offset + WRITE_BATCH_SIZE);
+    try {
+      await db.batch(chunk.map((entry) => entry.statement));
+      const totals = countActions(chunk);
+      inserted += totals.inserted;
+      updated += totals.updated;
+    } catch {
+      // D1 reverte o batch que falhou. Reexecutar individualmente identifica a linha real.
+      for (const entry of chunk) {
+        try {
+          await entry.statement.run();
+          if (entry.action === 'inserted') inserted += 1;
+          else updated += 1;
+        } catch (error) {
+          errors.push({
+            linha: entry.linha,
+            erro: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+  }
+
+  return { inserted, updated, deleted: 0, blocked: false, transactionFailed: false };
+}
+
+function responseStatus(execution: ExecutionResult): 200 | 422 | 500 {
+  if (execution.blocked) return 422;
+  if (execution.transactionFailed) return 500;
+  return 200;
+}
+
 app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
     const formData = await c.req.formData();
-    const file = formData.get('file') as unknown as File;
-    const mode = (formData.get('mode') as string) || 'completar';
-
-    if (!file) {
+    const fileEntry: unknown = formData.get('file');
+    const mode = String(formData.get('mode') || 'completar');
+    if (!isUploadedFile(fileEntry)) {
       return c.json({ success: false, error: 'Arquivo não enviado' }, 400);
     }
 
-    const buffer = await file.arrayBuffer();
-    const rows = await parseXLSXFile(buffer);
-
-    if (rows.length === 0) {
-      return c.json({ success: false, error: 'Planilha vazia' }, 400);
-    }
+    const rows = await parseXLSXFile(await fileEntry.arrayBuffer());
+    const requestError = validateRequest(mode, rows);
+    if (requestError) return c.json({ success: false, error: requestError }, 400);
 
     const db = c.env.DB;
-    const tenantCtx = getTenantContext(c);
-    const errors: any[] = [];
-    let inserted = 0;
-    let updated = 0;
-    let deleted = 0;
+    const empresaId = getTenantContext(c).empresaId;
+    const errors: ImportError[] = [];
 
-    // Modo SUBSTITUIR: deletar tudo primeiro
-    if (mode === 'substituir') {
-      const deleteResult = await db
-        .prepare(
-          `UPDATE funcionarios
-              SET deleted_at = datetime('now')
-            WHERE deleted_at IS NULL
-              AND empresa_id = ?`,
-        )
-        .bind(tenantCtx.empresaId)
-        .run();
-      deleted = deleteResult.meta.changes || 0;
-    }
-
-    // ─── PRE-FETCH: modelos_aeronave e CPFs existentes (2 queries para toda a planilha) ───
-    const modelosAeronave = await db
+    const modelos = await db
       .prepare(
-        `SELECT id, modelo, codigo, nome
-           FROM modelos_aeronave
-          WHERE deleted_at IS NULL
-            AND empresa_id = ?`,
+        `SELECT id, modelo, codigo, nome FROM modelos_aeronave
+         WHERE deleted_at IS NULL AND empresa_id = ?`,
       )
-      .bind(tenantCtx.empresaId)
+      .bind(empresaId)
       .all<{ id: number; modelo: string | null; codigo: string | null; nome: string | null }>();
     const modeloMap = new Map<string, number>();
-    for (const m of modelosAeronave.results ?? []) {
-      if (m.modelo) modeloMap.set(m.modelo.toLowerCase(), m.id);
-      if (m.codigo) modeloMap.set(m.codigo.toLowerCase(), m.id);
-      if (m.nome) modeloMap.set(m.nome.toLowerCase(), m.id);
+    for (const modelo of modelos.results || []) {
+      if (modelo.modelo) modeloMap.set(modelo.modelo.toLowerCase(), modelo.id);
+      if (modelo.codigo) modeloMap.set(modelo.codigo.toLowerCase(), modelo.id);
+      if (modelo.nome) modeloMap.set(modelo.nome.toLowerCase(), modelo.id);
     }
 
-    const cpfsNaPlanilha = rows.map((r: any) => String(r.CPF || '')).filter(Boolean);
-    let existentesByCpf = new Map<string, string>(); // cpf → id
-    if (cpfsNaPlanilha.length > 0) {
-      // D1 não suporta IN com array nativo — usar múltiplas queries em batch OU WHERE cpf IN literal
-      // Para planilhas até 500 linhas é seguro serializar o IN
-      const placeholders = cpfsNaPlanilha.map(() => '?').join(',');
+    const cpfs = rows.map((row) => normalizeCpf(row.CPF)).filter(Boolean);
+    const duplicateCpfs = new Set<string>();
+    const seenCpfs = new Set<string>();
+    for (const cpf of cpfs) {
+      if (seenCpfs.has(cpf)) duplicateCpfs.add(cpf);
+      seenCpfs.add(cpf);
+    }
+
+    const existentesByCpf = new Map<string, string>();
+    const uniqueCpfs = [...new Set(cpfs)];
+    for (let offset = 0; offset < uniqueCpfs.length; offset += LOOKUP_BIND_CHUNK) {
+      const chunk = uniqueCpfs.slice(offset, offset + LOOKUP_BIND_CHUNK);
+      const placeholders = chunk.map(() => '?').join(',');
       const existentes = await db
         .prepare(
-          `SELECT id, cpf
-             FROM funcionarios
-            WHERE cpf IN (${placeholders})
-              AND empresa_id = ?
-              AND deleted_at IS NULL`,
+          `SELECT id, cpf FROM funcionarios
+           WHERE REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') IN (${placeholders})
+             AND empresa_id = ?`,
         )
-        .bind(...cpfsNaPlanilha, tenantCtx.empresaId)
+        .bind(...chunk, empresaId)
         .all<{ id: string; cpf: string }>();
-      for (const f of existentes.results ?? []) {
-        existentesByCpf.set(f.cpf, f.id);
-      }
+      for (const row of existentes.results || [])
+        existentesByCpf.set(normalizeCpf(row.cpf), row.id);
     }
 
-    // ─── GERAR STATEMENTS ───
-    const stmts: any[] = [];
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const linha = i + 2;
-
-      if (!row.Nome || !row.CPF) {
+    const entries: StatementEntry[] = [];
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const linha = index + 2;
+      const nome = String(row.Nome || '').trim();
+      const cpf = normalizeCpf(row.CPF);
+      if (!nome || !cpf) {
         errors.push({ linha, erro: 'Nome e CPF são obrigatórios', dados: row });
+        continue;
+      }
+      if (!isValidCpf(cpf)) {
+        errors.push({ linha, erro: `CPF inválido: ${String(row.CPF || '')}`, dados: row });
+        continue;
+      }
+      if (duplicateCpfs.has(cpf)) {
+        errors.push({ linha, erro: `CPF duplicado na planilha: ${cpf}`, dados: row });
         continue;
       }
 
@@ -191,20 +300,23 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
         .trim()
         .toLowerCase();
       const modeloAeronaveId = aeronaveKey ? (modeloMap.get(aeronaveKey) ?? null) : null;
-      const existenteId = existentesByCpf.get(String(row.CPF));
-
+      const existenteId = existentesByCpf.get(cpf);
       if (existenteId) {
-        stmts.push(
-          db
+        entries.push({
+          linha,
+          action: 'updated',
+          statement: db
             .prepare(
               `UPDATE funcionarios SET
-                nome = ?, matricula = ?, email = ?, telefone = ?, nascimento = ?, admissao = ?,
-                cargo = ?, funcao = ?, modelo_aeronave_id = ?, codigo_anac = ?, licenca = ?,
-                is_instrutor = ?, is_examinador = ?, ativo = ?, updated_at = datetime('now')
-              WHERE id = ? AND empresa_id = ?`,
+                 nome = ?, cpf = ?, matricula = ?, email = ?, telefone = ?, nascimento = ?, admissao = ?,
+                 cargo = ?, funcao = ?, modelo_aeronave_id = ?, codigo_anac = ?, licenca = ?,
+                 is_instrutor = ?, is_examinador = ?, ativo = ?, deleted_at = NULL,
+                 updated_at = datetime('now')
+               WHERE id = ? AND empresa_id = ?`,
             )
             .bind(
-              row.Nome,
+              nome,
+              cpf,
               row['Matrícula'] || null,
               row.Email || null,
               row.Telefone || null,
@@ -219,23 +331,24 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
               row.Examinador === 'Sim' ? 1 : 0,
               row.Ativo === 'Sim' ? 1 : 0,
               existenteId,
-              tenantCtx.empresaId,
+              empresaId,
             ),
-        );
-        updated++;
+        });
       } else {
-        stmts.push(
-          db
+        entries.push({
+          linha,
+          action: 'inserted',
+          statement: db
             .prepare(
               `INSERT INTO funcionarios (
-                nome, cpf, matricula, email, telefone, nascimento, admissao,
-                cargo, funcao, modelo_aeronave_id, codigo_anac, licenca,
-                is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+                 nome, cpf, matricula, email, telefone, nascimento, admissao,
+                 cargo, funcao, modelo_aeronave_id, codigo_anac, licenca,
+                 is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
             )
             .bind(
-              row.Nome,
-              row.CPF,
+              nome,
+              cpf,
               row['Matrícula'] || null,
               row.Email || null,
               row.Telefone || null,
@@ -249,281 +362,245 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
               row.Instrutor === 'Sim' ? 1 : 0,
               row.Examinador === 'Sim' ? 1 : 0,
               row.Ativo === 'Sim' ? 1 : 0,
-              tenantCtx.empresaId,
+              empresaId,
             ),
-        );
-        inserted++;
+        });
       }
     }
 
-    // ─── EXECUTAR BATCH ───
-    for (let i = 0; i < stmts.length; i += 100) {
-      try {
-        await db.batch(stmts.slice(i, i + 100));
-      } catch (err: any) {
-        errors.push({ linha: i + 2, erro: err.message || String(err) });
-      }
-    }
-
-    return c.json({
+    const execution = await executeStatements({
+      db,
+      mode,
+      deleteStatement:
+        mode === 'substituir'
+          ? db
+              .prepare(
+                `UPDATE funcionarios SET deleted_at = datetime('now')
+                 WHERE deleted_at IS NULL AND empresa_id = ?`,
+              )
+              .bind(empresaId)
+          : null,
+      entries,
+      errors,
+    });
+    const result: ImportResult = {
       success: errors.length === 0,
       mode,
       totalRows: rows.length,
-      inserted,
-      updated,
-      deleted: mode === 'substituir' ? deleted : undefined,
+      inserted: execution.inserted,
+      updated: execution.updated,
+      deleted: mode === 'substituir' ? execution.deleted : undefined,
       errors,
-    } as ImportResult);
-  } catch (error: any) {
-    createLogger(c, 'ImportacaoXlsxRoutes').error('Erro na importacao XLSX de funcionarios', error);
+    };
+    return c.json(result, responseStatus(execution));
+  } catch (error) {
+    createLogger(c, 'ImportacaoXlsxRoutes').error(
+      'Erro na importacao XLSX de funcionarios',
+      error instanceof Error ? error : new Error(String(error)),
+    );
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
-// ===== HISTÓRICO =====
-
-/**
- * POST /api/importacao-xlsx/historico
- */
 app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
     const formData = await c.req.formData();
-    const file = formData.get('file') as unknown as File;
-    const mode = (formData.get('mode') as string) || 'completar';
-
-    if (!file) {
+    const fileEntry: unknown = formData.get('file');
+    const mode = String(formData.get('mode') || 'completar');
+    if (!isUploadedFile(fileEntry)) {
       return c.json({ success: false, error: 'Arquivo não enviado' }, 400);
     }
 
-    const buffer = await file.arrayBuffer();
-    const rows = await parseXLSXFile(buffer);
-
-    if (rows.length === 0) {
-      return c.json({ success: false, error: 'Planilha vazia' }, 400);
-    }
+    const rows = await parseXLSXFile(await fileEntry.arrayBuffer());
+    const requestError = validateRequest(mode, rows);
+    if (requestError) return c.json({ success: false, error: requestError }, 400);
 
     const db = c.env.DB;
-    const tenantCtx = getTenantContext(c);
-    const errors: any[] = [];
-    let inserted = 0;
-    let updated = 0;
-    let deleted = 0;
+    const empresaId = getTenantContext(c).empresaId;
+    const errors: ImportError[] = [];
 
-    // Modo SUBSTITUIR
-    if (mode === 'substituir') {
-      const deleteResult = await db
-        .prepare(
-          `UPDATE qualificacoes_historico
-              SET deleted_at = datetime('now')
-            WHERE deleted_at IS NULL
-              AND empresa_id = ?`,
-        )
-        .bind(tenantCtx.empresaId)
-        .run();
-      deleted = deleteResult.meta.changes || 0;
-    }
-
-    // ─── PRE-FETCH: funcionarios e tipos_qualificacoes (2 queries para toda a planilha) ───
-    const todosFuncionarios = await db
+    const funcionarios = await db
       .prepare(
-        `SELECT id, nome
-           FROM funcionarios
-          WHERE deleted_at IS NULL
-            AND empresa_id = ?`,
+        `SELECT id, nome FROM funcionarios
+         WHERE deleted_at IS NULL AND empresa_id = ?`,
       )
-      .bind(tenantCtx.empresaId)
+      .bind(empresaId)
       .all<{ id: string; nome: string }>();
-    const funcionarioByNome = new Map<string, string>();
-    for (const f of todosFuncionarios.results ?? []) {
-      funcionarioByNome.set(f.nome.trim().toLowerCase(), f.id);
-    }
+    const funcionarioByNome = new Map(
+      (funcionarios.results || []).map((row) => [row.nome.trim().toLowerCase(), row.id]),
+    );
 
-    const todosTipos = await db
+    const tipos = await db
       .prepare(
-        `SELECT id, nome
-           FROM qualificacoes_tipos
-          WHERE deleted_at IS NULL
-            AND empresa_id = ?`,
+        `SELECT id, nome FROM qualificacoes_tipos
+         WHERE deleted_at IS NULL AND empresa_id = ?`,
       )
-      .bind(tenantCtx.empresaId)
+      .bind(empresaId)
       .all<{ id: string; nome: string }>();
-    const tipoByNome = new Map<string, string>();
-    for (const t of todosTipos.results ?? []) {
-      tipoByNome.set(t.nome.trim().toLowerCase(), t.id);
-    }
+    const tipoByNome = new Map(
+      (tipos.results || []).map((row) => [row.nome.trim().toLowerCase(), row.id]),
+    );
 
-    // ─── GERAR STATEMENTS (sem queries por linha — tudo resolvido pelos Maps) ───
-    const stmts: any[] = [];
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const linha = i + 2;
-
-      if (!row['Funcionário'] || !row['Qualificação']) {
+    const entries: StatementEntry[] = [];
+    const seenKeys = new Set<string>();
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const linha = index + 2;
+      const funcionarioNome = String(row['Funcionário'] || '').trim();
+      const qualificacaoNome = String(row['Qualificação'] || '').trim();
+      if (!funcionarioNome || !qualificacaoNome) {
         errors.push({ linha, erro: 'Funcionário e Qualificação são obrigatórios', dados: row });
         continue;
       }
 
-      const funcionarioId = funcionarioByNome.get(String(row['Funcionário']).trim().toLowerCase());
+      const funcionarioId = funcionarioByNome.get(funcionarioNome.toLowerCase());
       if (!funcionarioId) {
-        errors.push({
-          linha,
-          erro: `Funcionário não encontrado: ${row['Funcionário']}`,
-          dados: row,
-        });
+        errors.push({ linha, erro: `Funcionário não encontrado: ${funcionarioNome}`, dados: row });
         continue;
       }
-
-      const tipoId = tipoByNome.get(String(row['Qualificação']).trim().toLowerCase());
+      const tipoId = tipoByNome.get(qualificacaoNome.toLowerCase());
       if (!tipoId) {
         errors.push({
           linha,
-          erro: `Tipo de qualificação não encontrado: ${row['Qualificação']}`,
+          erro: `Tipo de qualificação não encontrado: ${qualificacaoNome}`,
           dados: row,
         });
         continue;
       }
 
-      // Use INSERT OR REPLACE (upsert) on the unique key (funcionario_id, qualificacao_id, data_conclusao)
-      // to avoid needing a per-row SELECT to check existence
-      stmts.push(
-        db
+      const dataConclusao = String(row['Data Conclusão'] || '').trim();
+      const uniqueKey = `${funcionarioId}:${tipoId}:${dataConclusao}`;
+      if (seenKeys.has(uniqueKey)) {
+        errors.push({ linha, erro: 'Registro duplicado na planilha', dados: row });
+        continue;
+      }
+      seenKeys.add(uniqueKey);
+
+      entries.push({
+        linha,
+        action: 'inserted',
+        statement: db
           .prepare(
             `INSERT INTO qualificacoes_historico (
-              funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
-              data_conclusao, data_vencimento, instrutor, observacoes,
-              empresa_id, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-            ON CONFLICT(funcionario_id, qualificacao_id, data_conclusao) DO UPDATE SET
-              qualificacao_codigo = excluded.qualificacao_codigo,
-              categoria = excluded.categoria,
-              data_vencimento = excluded.data_vencimento,
-              instrutor = excluded.instrutor,
-              observacoes = excluded.observacoes,
-              empresa_id = excluded.empresa_id,
-              updated_at = datetime('now')`,
+               funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
+               data_conclusao, data_vencimento, instrutor, observacoes,
+               empresa_id, created_at, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+             ON CONFLICT(funcionario_id, qualificacao_id, data_conclusao) DO UPDATE SET
+               qualificacao_codigo = excluded.qualificacao_codigo,
+               categoria = excluded.categoria,
+               data_vencimento = excluded.data_vencimento,
+               instrutor = excluded.instrutor,
+               observacoes = excluded.observacoes,
+               empresa_id = excluded.empresa_id,
+               deleted_at = NULL,
+               updated_at = datetime('now')`,
           )
           .bind(
             funcionarioId,
             tipoId,
             row['Código'] || null,
             row.Categoria || null,
-            row['Data Conclusão'] || null,
+            dataConclusao || null,
             row['Data Vencimento'] || null,
             row.Instrutor || null,
             row['Observações'] || null,
-            tenantCtx.empresaId,
+            empresaId,
           ),
-      );
-      inserted++; // counting as inserted (upsert may update existing rows)
+      });
     }
 
-    // ─── EXECUTAR BATCH ───
-    for (let i = 0; i < stmts.length; i += 100) {
-      try {
-        await db.batch(stmts.slice(i, i + 100));
-      } catch (err: any) {
-        errors.push({ linha: i + 2, erro: err.message || String(err) });
-      }
-    }
-
-    return c.json({
+    const execution = await executeStatements({
+      db,
+      mode,
+      deleteStatement:
+        mode === 'substituir'
+          ? db
+              .prepare(
+                `UPDATE qualificacoes_historico SET deleted_at = datetime('now')
+                 WHERE deleted_at IS NULL AND empresa_id = ?`,
+              )
+              .bind(empresaId)
+          : null,
+      entries,
+      errors,
+    });
+    const result: ImportResult = {
       success: errors.length === 0,
       mode,
       totalRows: rows.length,
-      inserted,
-      updated,
-      deleted: mode === 'substituir' ? deleted : undefined,
+      inserted: execution.inserted,
+      updated: execution.updated,
+      deleted: mode === 'substituir' ? execution.deleted : undefined,
       errors,
-    } as ImportResult);
-  } catch (error: any) {
-    createLogger(c, 'ImportacaoXlsxRoutes').error('Erro na importacao XLSX de historico', error);
+    };
+    return c.json(result, responseStatus(execution));
+  } catch (error) {
+    createLogger(c, 'ImportacaoXlsxRoutes').error(
+      'Erro na importacao XLSX de historico',
+      error instanceof Error ? error : new Error(String(error)),
+    );
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
-// ===== TIPOS =====
-
-/**
- * POST /api/importacao-xlsx/tipos
- */
 app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
     const formData = await c.req.formData();
-    const file = formData.get('file') as unknown as File;
-    const mode = (formData.get('mode') as string) || 'completar';
-
-    if (!file) {
+    const fileEntry: unknown = formData.get('file');
+    const mode = String(formData.get('mode') || 'completar');
+    if (!isUploadedFile(fileEntry)) {
       return c.json({ success: false, error: 'Arquivo não enviado' }, 400);
     }
 
-    const buffer = await file.arrayBuffer();
-    const rows = await parseXLSXFile(buffer);
-
-    if (rows.length === 0) {
-      return c.json({ success: false, error: 'Planilha vazia' }, 400);
-    }
+    const rows = await parseXLSXFile(await fileEntry.arrayBuffer());
+    const requestError = validateRequest(mode, rows);
+    if (requestError) return c.json({ success: false, error: requestError }, 400);
 
     const db = c.env.DB;
-    const tenantCtx = getTenantContext(c);
-    const errors: any[] = [];
-    let inserted = 0;
-    let updated = 0;
-    let deleted = 0;
-
-    // Modo SUBSTITUIR
-    if (mode === 'substituir') {
-      const deleteResult = await db
-        .prepare(
-          `UPDATE qualificacoes_tipos
-              SET deleted_at = datetime('now')
-            WHERE deleted_at IS NULL
-              AND empresa_id = ?`,
-        )
-        .bind(tenantCtx.empresaId)
-        .run();
-      deleted = deleteResult.meta.changes || 0;
-    }
-
-    // ─── PRE-FETCH: tipos existentes por código (1 query) ───
-    const todosExistentes = await db
-      .prepare(
-        `SELECT id, codigo
-           FROM qualificacoes_tipos
-          WHERE deleted_at IS NULL
-            AND empresa_id = ?`,
-      )
-      .bind(tenantCtx.empresaId)
+    const empresaId = getTenantContext(c).empresaId;
+    const errors: ImportError[] = [];
+    const existentes = await db
+      .prepare(`SELECT id, codigo FROM qualificacoes_tipos WHERE empresa_id = ?`)
+      .bind(empresaId)
       .all<{ id: string; codigo: string }>();
-    const existentesByCodigo = new Map<string, string>();
-    for (const t of todosExistentes.results ?? []) {
-      existentesByCodigo.set(t.codigo, t.id);
-    }
+    const existentesByCodigo = new Map(
+      (existentes.results || []).map((row) => [String(row.codigo), row.id]),
+    );
 
-    // ─── GERAR STATEMENTS ───
-    const stmts: any[] = [];
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const linha = i + 2;
-
-      if (!row.Nome || !row['Código']) {
+    const entries: StatementEntry[] = [];
+    const seenCodes = new Set<string>();
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const linha = index + 2;
+      const nome = String(row.Nome || '').trim();
+      const codigo = String(row['Código'] || '').trim();
+      if (!nome || !codigo) {
         errors.push({ linha, erro: 'Nome e Código são obrigatórios', dados: row });
         continue;
       }
+      if (seenCodes.has(codigo)) {
+        errors.push({ linha, erro: `Código duplicado na planilha: ${codigo}`, dados: row });
+        continue;
+      }
+      seenCodes.add(codigo);
 
-      const existenteId = existentesByCodigo.get(String(row['Código']));
+      const existenteId = existentesByCodigo.get(codigo);
       if (existenteId) {
-        stmts.push(
-          db
+        entries.push({
+          linha,
+          action: 'updated',
+          statement: db
             .prepare(
               `UPDATE qualificacoes_tipos SET
-                tipo = ?, nome = ?, descricao = ?, categoria = ?,
-                carga_horaria = ?, validade = ?, observacoes = ?,
-                ativo = ?, updated_at = datetime('now')
-              WHERE id = ? AND empresa_id = ?`,
+                 tipo = ?, nome = ?, descricao = ?, categoria = ?, carga_horaria = ?,
+                 validade = ?, observacoes = ?, ativo = ?, deleted_at = NULL,
+                 updated_at = datetime('now')
+               WHERE id = ? AND empresa_id = ?`,
             )
             .bind(
               row.Tipo || null,
-              row.Nome,
+              nome,
               row['Descrição'] || null,
               row.Categoria || null,
               row['Carga Horária'] || null,
@@ -531,58 +608,66 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
               row['Observações'] || null,
               row.Ativo === 'Sim' ? 1 : 0,
               existenteId,
-              tenantCtx.empresaId,
+              empresaId,
             ),
-        );
-        updated++;
+        });
       } else {
-        stmts.push(
-          db
+        entries.push({
+          linha,
+          action: 'inserted',
+          statement: db
             .prepare(
               `INSERT INTO qualificacoes_tipos (
-                tipo, codigo, nome, descricao, categoria, carga_horaria,
-                validade, observacoes, ativo, empresa_id, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+                 tipo, codigo, nome, descricao, categoria, carga_horaria,
+                 validade, observacoes, ativo, empresa_id, created_at, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
             )
             .bind(
               row.Tipo || null,
-              row['Código'],
-              row.Nome,
+              codigo,
+              nome,
               row['Descrição'] || null,
               row.Categoria || null,
               row['Carga Horária'] || null,
               row['Validade (meses)'] || null,
               row['Observações'] || null,
               row.Ativo === 'Sim' ? 1 : 0,
-              tenantCtx.empresaId,
+              empresaId,
             ),
-        );
-        inserted++;
+        });
       }
     }
 
-    // ─── EXECUTAR BATCH ───
-    for (let i = 0; i < stmts.length; i += 100) {
-      try {
-        await db.batch(stmts.slice(i, i + 100));
-      } catch (err: any) {
-        errors.push({ linha: i + 2, erro: err.message || String(err) });
-      }
-    }
-
+    const execution = await executeStatements({
+      db,
+      mode,
+      deleteStatement:
+        mode === 'substituir'
+          ? db
+              .prepare(
+                `UPDATE qualificacoes_tipos SET deleted_at = datetime('now')
+                 WHERE deleted_at IS NULL AND empresa_id = ?`,
+              )
+              .bind(empresaId)
+          : null,
+      entries,
+      errors,
+    });
     const result: ImportResult = {
       success: errors.length === 0,
       mode,
       totalRows: rows.length,
-      inserted,
-      updated,
-      deleted: mode === 'substituir' ? deleted : undefined,
+      inserted: execution.inserted,
+      updated: execution.updated,
+      deleted: mode === 'substituir' ? execution.deleted : undefined,
       errors,
     };
-
-    return c.json(result);
-  } catch (error: any) {
-    createLogger(c, 'ImportacaoXlsxRoutes').error('Erro na importacao XLSX de tipos', error);
+    return c.json(result, responseStatus(execution));
+  } catch (error) {
+    createLogger(c, 'ImportacaoXlsxRoutes').error(
+      'Erro na importacao XLSX de tipos',
+      error instanceof Error ? error : new Error(String(error)),
+    );
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });

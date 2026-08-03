@@ -18,6 +18,13 @@ import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+app.use('*', async (c, next) => {
+  await next();
+  c.header('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
+});
+
 // ── GET /relatorios/conformidade ─────────────────────────────────────────────
 // Retorna % de conformidade por função (cargo), para todos os cursos vinculados a qualificação.
 function resolveRelatorioSetorIds(

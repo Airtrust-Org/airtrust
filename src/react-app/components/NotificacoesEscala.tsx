@@ -32,7 +32,7 @@ export function NotificacoesEscala() {
       const res = await fetchWithAuth(`${apiBase}/api/escalas/notificacoes?limit=1`);
       if (!res.ok) return;
       const json = await res.json();
-      setUnread(json.data?.nao_lidas ?? 0);
+      setUnread(json.nao_lidas ?? json.data?.nao_lidas ?? 0);
     } catch {
       // silencioso
     }
@@ -44,8 +44,9 @@ export function NotificacoesEscala() {
       const res = await fetchWithAuth(`${apiBase}/api/escalas/notificacoes?limit=20`);
       if (!res.ok) return;
       const json = await res.json();
-      setNotifs(json.data?.notificacoes ?? []);
-      setUnread(json.data?.nao_lidas ?? 0);
+      const notificacoes = Array.isArray(json.data) ? json.data : (json.data?.notificacoes ?? []);
+      setNotifs(notificacoes);
+      setUnread(json.nao_lidas ?? json.data?.nao_lidas ?? 0);
     } catch {
       // silencioso
     } finally {
@@ -55,9 +56,12 @@ export function NotificacoesEscala() {
 
   async function marcarLida(id: string) {
     try {
-      await fetchWithAuth(`${apiBase}/api/escalas/notificacoes/${id}/lida`, {
+      const response = await fetchWithAuth(`${apiBase}/api/escalas/notificacoes/${id}/lida`, {
         method: 'PATCH',
       });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) return;
+
       setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, lida: true } : n)));
       setUnread((c) => Math.max(0, c - 1));
     } catch {
@@ -67,9 +71,13 @@ export function NotificacoesEscala() {
 
   async function marcarTodas() {
     try {
-      await fetchWithAuth(`${apiBase}/api/escalas/notificacoes/marcar-todas-lidas`, {
-        method: 'PATCH',
-      });
+      const response = await fetchWithAuth(
+        `${apiBase}/api/escalas/notificacoes/marcar-todas-lidas`,
+        { method: 'PATCH' },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) return;
+
       setNotifs((prev) => prev.map((n) => ({ ...n, lida: true })));
       setUnread(0);
     } catch {
@@ -80,9 +88,12 @@ export function NotificacoesEscala() {
   // Polling a cada 30 minutos (era 5min); pausa quando aba está oculta
   useEffect(() => {
     fetchCount();
-    const t = setInterval(() => {
-      if (!document.hidden) fetchCount();
-    }, 30 * 60 * 1000);
+    const t = setInterval(
+      () => {
+        if (!document.hidden) fetchCount();
+      },
+      30 * 60 * 1000,
+    );
     return () => clearInterval(t);
   }, [fetchCount]);
 

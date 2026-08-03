@@ -11,6 +11,7 @@ import { AppError } from '../utils/errors';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
+import { validarAssinaturaPDF } from '../utils/nomenclatura-padronizada';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -151,9 +152,9 @@ app.get('/download-certificados/:funcionario_id', auth(), async (c) => {
 app.get('/:id/documentos', auth(), async (c) => {
   try {
     const db = c.env.DB;
-    const id = parseInt(c.req.param('id'));
+    const funcionarioId = parseInt(c.req.param('id'));
     const empresaId = getEmpresaId(c);
-    if (isNaN(id)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
+    if (isNaN(funcionarioId)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
     const { results } = await db
       .prepare(
         `SELECT d.id, d.uuid, d.funcionario_id, d.nome_arquivo as nome, d.tipo, d.tamanho,
@@ -163,7 +164,7 @@ app.get('/:id/documentos', auth(), async (c) => {
          WHERE d.funcionario_id = ? AND f.empresa_id = ? AND d.deleted_at IS NULL
          ORDER BY d.created_at DESC LIMIT 100`,
       )
-      .bind(id, empresaId) // aqui usamos id como funcionario_id por compatibilidade
+      .bind(funcionarioId, empresaId)
       .all();
     return jsonOk(c, results || []);
   } catch (e) {
@@ -180,9 +181,7 @@ app.post('/:id/upload', auth(), async (c) => {
     const empresaId = getEmpresaId(c);
     if (isNaN(funcionarioId)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
     const funcionario = await db
-      .prepare(
-        'SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-      )
+      .prepare('SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
       .bind(funcionarioId, empresaId)
       .first<{ id: number }>();
     if (!funcionario) {
@@ -209,6 +208,10 @@ app.post('/:id/upload', auth(), async (c) => {
     const r2Key = `funcionarios/${funcionarioId}/${uuid}.pdf`;
     const buf = await file.arrayBuffer();
     const uint8 = new Uint8Array(buf);
+    const assinatura = validarAssinaturaPDF(uint8);
+    if (!assinatura.valido) {
+      return jsonError(c, assinatura.erro || 'Conteúdo PDF inválido', 422, 'ARQUIVO_INVALIDO');
+    }
 
     // Calcular hash SHA-256
     const hashBuffer = await crypto.subtle.digest('SHA-256', uint8);
@@ -219,17 +222,27 @@ app.post('/:id/upload', auth(), async (c) => {
 
     let insertResult;
     try {
-      insertResult = await db
-        .prepare(
-          `INSERT INTO documentos (uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, sha256_hash, empresa_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-        )
-        .bind(uuid, funcionarioId, file.name, 'application/pdf', file.size, r2Key, hashHex, empresaId)
-        .run();
-    } catch (insertError) {
-      const errorMsg = String(insertError);
-      // Se coluna sha256_hash não existir, tentar sem ela
-      if (errorMsg.includes('no column named sha256_hash')) {
+      try {
+        insertResult = await db
+          .prepare(
+            `INSERT INTO documentos (uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, sha256_hash, empresa_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+          )
+          .bind(
+            uuid,
+            funcionarioId,
+            file.name,
+            'application/pdf',
+            file.size,
+            r2Key,
+            hashHex,
+            empresaId,
+          )
+          .run();
+      } catch (insertError) {
+        const errorMsg = String(insertError);
+        if (!errorMsg.includes('no column named sha256_hash')) throw insertError;
+
         console.warn(
           '[pasta-virtual/:id/upload] Coluna sha256_hash não existe, inserindo sem hash',
         );
@@ -240,9 +253,14 @@ app.post('/:id/upload', auth(), async (c) => {
           )
           .bind(uuid, funcionarioId, file.name, 'application/pdf', file.size, r2Key, empresaId)
           .run();
-      } else {
-        throw insertError;
       }
+    } catch (insertError) {
+      try {
+        await bucket.delete(r2Key);
+      } catch (rollbackError) {
+        console.error('[pasta-virtual/:id/upload] Falha ao reverter objeto R2:', rollbackError);
+      }
+      throw insertError;
     }
 
     return jsonOk(

@@ -62,6 +62,12 @@ router.get(
       FROM qualificacoes_historico qh
       JOIN funcionarios f ON f.id = qh.funcionario_id
       WHERE qh.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM qualificacoes_historico qh_next
+          WHERE qh_next.renovacao_de = qh.id
+            AND qh_next.deleted_at IS NULL
+        )
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND f.empresa_id = ?
@@ -111,6 +117,12 @@ router.get(
       JOIN funcionarios f ON f.id = qh.funcionario_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
       WHERE qh.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM qualificacoes_historico qh_next
+          WHERE qh_next.renovacao_de = qh.id
+            AND qh_next.deleted_at IS NULL
+        )
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND f.empresa_id = ?
@@ -151,6 +163,12 @@ router.get(
       FROM qualificacoes_historico qh
       JOIN funcionarios f ON f.id = qh.funcionario_id
       WHERE qh.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM qualificacoes_historico qh_next
+          WHERE qh_next.renovacao_de = qh.id
+            AND qh_next.deleted_at IS NULL
+        )
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND f.empresa_id = ?
@@ -196,6 +214,12 @@ router.get(
       JOIN funcionarios f ON f.id = qh.funcionario_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
       WHERE qh.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM qualificacoes_historico qh_next
+          WHERE qh_next.renovacao_de = qh.id
+            AND qh_next.deleted_at IS NULL
+        )
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND f.empresa_id = ?
@@ -242,6 +266,12 @@ router.get(
       JOIN funcionarios f ON f.id = qh.funcionario_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
       WHERE qh.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM qualificacoes_historico qh_next
+          WHERE qh_next.renovacao_de = qh.id
+            AND qh_next.deleted_at IS NULL
+        )
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND f.empresa_id = ?

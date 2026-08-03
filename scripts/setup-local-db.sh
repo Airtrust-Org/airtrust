@@ -205,6 +205,10 @@ for column_name in empresa_id usuario_id acao tabela registro_id created_at; do
 done
 require_sqlite_column "lms_cursos" "conteudo_arquivo_nome"
 require_sqlite_column "manobras" "referencias_json"
+require_sqlite_table "frms_jornada"
+for column_name in empresa_id hora_dormiu hora_acordou sono_efetivo_min fonte_sono; do
+  require_sqlite_column "frms_jornada" "$column_name"
+done
 
 info "Aplicando seed sintético de desenvolvimento..."
 if sqlite3 "$SQLITE_FILE" < "$SEED_FILE" 2>/dev/null; then

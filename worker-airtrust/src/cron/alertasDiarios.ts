@@ -15,8 +15,38 @@ export async function alertasDiariosHandler(_event: ScheduledEvent, env: Env): P
   ).all<{ id: string | number }>();
 
   for (const empresa of empresas.results || []) {
-    await processarAlertasDiariosEmpresa(env.DB, String(empresa.id));
+    try {
+      await processarAlertasDiariosEmpresa(env.DB, String(empresa.id));
+    } catch (error) {
+      console.error(`[ALERTAS_DIARIOS] empresa=${empresa.id} falhou`, error);
+    }
   }
+}
+
+async function publishDomainEventOnce(
+  db: D1Database,
+  tipo: Parameters<typeof publishDomainEvent>[1],
+  payload: Record<string, unknown> & { empresa_id: string | number; origem_modulo: string },
+  dedupeFields: Record<string, string | number>,
+): Promise<void> {
+  const fields = Object.entries(dedupeFields);
+  const predicates = fields.map(
+    ([field]) => `CAST(json_extract(payload, '$.${field}') AS TEXT) = ?`,
+  );
+  const existing = await db
+    .prepare(
+      `SELECT id
+       FROM domain_events
+       WHERE empresa_id = ?
+         AND tipo = ?
+         AND deleted_at IS NULL
+         AND ${predicates.join(' AND ')}
+       LIMIT 1`,
+    )
+    .bind(Number(payload.empresa_id), tipo, ...fields.map(([, value]) => String(value)))
+    .first();
+
+  if (!existing) await publishDomainEvent(db, tipo, payload);
 }
 
 async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string): Promise<void> {
@@ -45,18 +75,26 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
     .all<{ funcionario_id: string; validade_fim: string; dias: number }>();
 
   for (const row of cmaVencendo.results || []) {
-    await publishDomainEvent(db, row.dias <= 7 ? 'CMA_VENCENDO_7D' : 'CMA_VENCENDO_30D', {
-      funcionario_id: row.funcionario_id,
-      empresa_id: empresaId,
-      origem_modulo: 'cron',
-      validade_fim: row.validade_fim,
-      dias_restantes: row.dias,
-    });
+    const tipo = row.dias <= 7 ? 'CMA_VENCENDO_7D' : 'CMA_VENCENDO_30D';
+    await publishDomainEventOnce(
+      db,
+      tipo,
+      {
+        funcionario_id: row.funcionario_id,
+        empresa_id: empresaId,
+        origem_modulo: 'cron',
+        validade_fim: row.validade_fim,
+        dias_restantes: row.dias,
+      },
+      { funcionario_id: row.funcionario_id, validade_fim: row.validade_fim },
+    );
   }
 
   const cmaVencido = await db
     .prepare(
-      `SELECT DISTINCT CAST(f.id AS TEXT) AS funcionario_id
+      `SELECT DISTINCT
+          CAST(f.id AS TEXT) AS funcionario_id,
+          ${getQualificacoesVencimentoExpr()} AS validade_fim
        FROM qualificacoes_historico qh
        JOIN funcionarios f ON f.id = qh.funcionario_id
        LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
@@ -69,20 +107,27 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
          AND date(${getQualificacoesVencimentoExpr()}) = date('now', '-1 day')`,
     )
     .bind(Number(empresaId))
-    .all<{ funcionario_id: string }>();
+    .all<{ funcionario_id: string; validade_fim: string }>();
 
   for (const row of cmaVencido.results || []) {
-    await publishDomainEvent(db, 'CMA_VENCIDO', {
-      funcionario_id: row.funcionario_id,
-      empresa_id: empresaId,
-      origem_modulo: 'cron',
-    });
+    await publishDomainEventOnce(
+      db,
+      'CMA_VENCIDO',
+      {
+        funcionario_id: row.funcionario_id,
+        empresa_id: empresaId,
+        origem_modulo: 'cron',
+        validade_fim: row.validade_fim,
+      },
+      { funcionario_id: row.funcionario_id, validade_fim: row.validade_fim },
+    );
   }
 
   const simuladoresVencendo = await db
     .prepare(
       `SELECT
           CAST(sp.funcionario_id AS TEXT) AS funcionario_id,
+          MIN(sa.data) AS data_sessao,
           CAST(JULIANDAY(MIN(sa.data)) - JULIANDAY('now') AS INTEGER) AS dias
        FROM sessoes_participantes sp
        JOIN simulador_agendamentos sa ON sa.id = sp.sessao_id
@@ -100,14 +145,20 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
        GROUP BY sp.funcionario_id`,
     )
     .bind(Number(empresaId))
-    .all<{ funcionario_id: string; dias: number }>();
+    .all<{ funcionario_id: string; data_sessao: string; dias: number }>();
 
   for (const row of simuladoresVencendo.results || []) {
-    await publishDomainEvent(db, 'SIMULADOR_PENDENTE_VENCENDO', {
-      funcionario_id: row.funcionario_id,
-      empresa_id: empresaId,
-      origem_modulo: 'cron',
-      dias_restantes: row.dias,
-    });
+    await publishDomainEventOnce(
+      db,
+      'SIMULADOR_PENDENTE_VENCENDO',
+      {
+        funcionario_id: row.funcionario_id,
+        empresa_id: empresaId,
+        origem_modulo: 'cron',
+        data_sessao: row.data_sessao,
+        dias_restantes: row.dias,
+      },
+      { funcionario_id: row.funcionario_id, data_sessao: row.data_sessao },
+    );
   }
 }

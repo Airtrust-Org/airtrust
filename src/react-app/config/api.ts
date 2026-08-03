@@ -62,6 +62,7 @@ const DEFAULT_PERSIST_LOGIN = true;
 // ===== TOKEN STORAGE (Memory-based for security) =====
 let cachedToken: string | null = null;
 let cachedRefreshToken: string | null = null;
+let refreshPromise: Promise<void> | null = null;
 
 function safeLocalStorageGet(key: string): string | null {
   try {
@@ -351,9 +352,9 @@ export async function fetchWithAuth(
       try {
         await refreshAccessToken();
         return fetchWithAuth(url, options, true); // Retry with new token
-      } catch {
-        clearTokens();
-        throw new Error('Token refresh failed');
+      } catch (error) {
+        if (isTerminalAuthRefreshError(error)) clearTokens();
+        throw error;
       }
     }
 
@@ -380,9 +381,9 @@ export async function fetchWithAuth(
       try {
         await refreshAccessToken();
         return fetchWithAuth(url, options, true); // Retry with new token
-      } catch {
-        clearTokens();
-        throw new Error('Session expired. Please login again.');
+      } catch (error) {
+        if (isTerminalAuthRefreshError(error)) clearTokens();
+        throw error;
       }
     } else {
       clearTokens();
@@ -396,7 +397,7 @@ export async function fetchWithAuth(
 /**
  * Refresh access token using refresh token
  */
-export async function refreshAccessToken(): Promise<void> {
+async function performRefreshAccessToken(): Promise<void> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) {
     clearTokens();
@@ -406,9 +407,7 @@ export async function refreshAccessToken(): Promise<void> {
   try {
     const response = await apiFetch(API_ENDPOINTS.REFRESH_TOKEN, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
 
@@ -427,10 +426,15 @@ export async function refreshAccessToken(): Promise<void> {
         code === 'REFRESH_TOKEN_EXPIRED' ||
         code === 'USER_INACTIVE';
 
-      if (terminal) {
-        clearTokens();
+      // Outra aba pode ter rotacionado o token enquanto esta requisição estava em voo.
+      const currentRefreshToken = readAuthStorageValue('airtrust_refresh_token');
+      if (currentRefreshToken && currentRefreshToken !== refreshToken) {
+        cachedRefreshToken = currentRefreshToken;
+        cachedToken = readAuthStorageValue('airtrust_token');
+        return;
       }
 
+      if (terminal) clearTokens();
       throw new AuthRefreshError(responseJson.error || 'Refresh token failed', {
         terminal,
         status: response.status,
@@ -452,23 +456,43 @@ export async function refreshAccessToken(): Promise<void> {
       refresh_token?: string;
     };
 
-    const payload = responseJson.data ?? responseJson;
+    type RefreshTokenPayload = {
+      accessToken?: string;
+      refreshToken?: string;
+      access_token?: string;
+      refresh_token?: string;
+    };
+    const payload = (responseJson.data ?? responseJson) as RefreshTokenPayload;
     const newAccessToken = payload.accessToken ?? payload.access_token;
     const newRefreshToken = payload.refreshToken ?? payload.refresh_token;
+    if (!newAccessToken) throw new AuthRefreshError('No token in refresh response');
 
-    if (newAccessToken) {
-      setTokens(newAccessToken, newRefreshToken);
-    } else {
-      throw new AuthRefreshError('No token in refresh response');
+    // Não sobrescrever um par mais novo que tenha sido gravado por outra aba.
+    const currentRefreshToken = readAuthStorageValue('airtrust_refresh_token');
+    if (currentRefreshToken && currentRefreshToken !== refreshToken) {
+      cachedRefreshToken = currentRefreshToken;
+      cachedToken = readAuthStorageValue('airtrust_token');
+      return;
     }
+
+    setTokens(newAccessToken, newRefreshToken);
   } catch (error) {
-    if (error instanceof AuthRefreshError) {
-      throw error;
-    }
+    if (error instanceof AuthRefreshError) throw error;
     throw new AuthRefreshError(error instanceof Error ? error.message : 'Refresh token failed', {
       terminal: false,
     });
   }
+}
+
+export function refreshAccessToken(): Promise<void> {
+  if (refreshPromise) return refreshPromise;
+
+  const operation = performRefreshAccessToken();
+  const tracked = operation.finally(() => {
+    if (refreshPromise === tracked) refreshPromise = null;
+  });
+  refreshPromise = tracked;
+  return tracked;
 }
 
 /**

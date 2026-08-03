@@ -3,26 +3,31 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
 
-vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: any, next: () => Promise<void>) => {
-      if (!c.req.header('Authorization')) {
-        return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
-      }
+type MockContext = {
+  req: { header(name: string): string | undefined };
+  json(body: unknown, status?: number): unknown;
+  set(key: string, value: unknown): void;
+  get(key: string): string | number | undefined;
+};
 
-      c.set('userId', 10);
-      c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
-      c.set('userRole', c.req.header('x-test-role') || 'admin');
-      await next();
-    },
+vi.mock('../../middleware/auth', () => ({
+  auth: () => async (c: MockContext, next: () => Promise<void>) => {
+    if (!c.req.header('Authorization')) {
+      return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
+    }
+
+    c.set('userId', 10);
+    c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
+    c.set('userRole', c.req.header('x-test-role') || 'admin');
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return {
     ...actual,
-    getTenantContext: (c: any) => ({
+    getTenantContext: (c: MockContext) => ({
       empresaId: Number(c.get('empresaId') || 0),
       empresaCodigo: `empresa-${Number(c.get('empresaId') || 0)}`,
       empresaNome: 'Empresa Teste',
@@ -30,22 +35,17 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
       plano: 'pro',
       permissions: ['read', 'write'],
     }),
-    getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
+    getEmpresaId: (c: MockContext) => Number(c.get('empresaId') || 0),
   };
 });
 
 vi.mock('../../middleware/rbac', () => ({
-  requireRole:
-    (requiredRole: string) =>
-    async (c: any, next: () => Promise<void>) => {
-      if ((c.get('userRole') || '').toLowerCase() !== String(requiredRole).toLowerCase()) {
-        return c.json(
-          { success: false, error: 'Permissão negada. Acesso restrito a: admin' },
-          403,
-        );
-      }
-      await next();
-    },
+  requireRole: (requiredRole: string) => async (c: MockContext, next: () => Promise<void>) => {
+    if (String(c.get('userRole') || '').toLowerCase() !== String(requiredRole).toLowerCase()) {
+      return c.json({ success: false, error: 'Permissão negada. Acesso restrito a: admin' }, 403);
+    }
+    await next();
+  },
 }));
 
 vi.mock('../../utils/auditoria', () => ({
@@ -209,7 +209,8 @@ function createMockEnv() {
 
   const findScopedDocumentsByFuncionario = (funcionarioId: number, empresaId: number) =>
     docs.filter(
-      (doc) => doc.funcionario_id === funcionarioId && doc.empresa_id === empresaId && !doc.deleted_at,
+      (doc) =>
+        doc.funcionario_id === funcionarioId && doc.empresa_id === empresaId && !doc.deleted_at,
     );
 
   const db = {
@@ -263,9 +264,7 @@ function createMockEnv() {
           const certId = Number(args[1]);
           const empresaId = Number(args[2]);
           const doc = findScopedDocument(certId, empresaId);
-          const historico = historicos.find(
-            (row) => row.id === historicoId && !row.deleted_at,
-          );
+          const historico = historicos.find((row) => row.id === historicoId && !row.deleted_at);
 
           if (!doc) return null;
           if (historico && historico.funcionario_id !== doc.funcionario_id) return null;
@@ -287,7 +286,9 @@ function createMockEnv() {
           const doc = docs.find(
             (row) => row.funcionario_id === funcionarioId && row.empresa_id === empresaId,
           );
-          return doc ? { id: funcionarioId, nome: 'Tripulante', matricula: 'M1', cpf: '123' } : null;
+          return doc
+            ? { id: funcionarioId, nome: 'Tripulante', matricula: 'M1', cpf: '123' }
+            : null;
         }
 
         return null;
@@ -300,7 +301,10 @@ function createMockEnv() {
           return { results: [] };
         }
 
-        if (query.includes('FROM documentos d') && query.includes('qh_link.certificado_arquivo_id')) {
+        if (
+          query.includes('FROM documentos d') &&
+          query.includes('qh_link.certificado_arquivo_id')
+        ) {
           const empresaId = Number(args[0]);
           return {
             results: docs
@@ -323,21 +327,28 @@ function createMockEnv() {
           };
         }
 
-        if (query.includes('FROM qualificacoes_historico qh') && query.includes('qh.codigo = ?')) {
+        if (
+          query.includes('FROM qualificacoes_historico qh') &&
+          query.includes('qh.qualificacao_codigo = ?') &&
+          query.includes('julianday(qh.data_conclusao)')
+        ) {
           const funcionarioId = Number(args[0]);
           const codigo = String(args[1]);
-          const empresaId = Number(args[2]);
+          const codigoLegado = String(args[2]);
+          const empresaId = Number(args[3]);
+          const dataReferencia = String(args[4]);
+          expect(args[5]).toBe(dataReferencia);
           return {
             results: historicos
               .filter(
                 (historico) =>
                   historico.funcionario_id === funcionarioId &&
-                  historico.codigo === codigo &&
+                  (historico.codigo === codigo || historico.codigo === codigoLegado) &&
                   historico.empresa_id === empresaId &&
                   historico.certificado_arquivo_id === null &&
                   !historico.deleted_at,
               )
-              .map((historico) => ({ id: historico.id, data_conclusao: '2026-01-01' })),
+              .map((historico) => ({ id: historico.id, data_conclusao: dataReferencia })),
           };
         }
 

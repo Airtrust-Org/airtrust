@@ -4,6 +4,32 @@ import type { Env } from '../../types';
 import { calcularDataVencimento } from '../../utils/qualificacoes-expiration';
 
 const validacao = new Hono<{ Bindings: Env }>();
+const CERTIFICATE_SCAN_BATCH_SIZE = 250;
+
+interface CertificateValidationRow {
+  id: number | string;
+  r2_key: string | null;
+  numero_certificado: string;
+  created_at: string;
+  data_conclusao: string | null;
+  data_vencimento: string | null;
+  validade_meses: number | string | null;
+  carga_horaria: number | string | null;
+  instrutor: string | null;
+  tipo_treinamento: string | null;
+  funcionario_nome: string;
+  funcionario_cpf: string;
+  codigo_anac: string | null;
+  qualificacao_nome: string | null;
+  qualificacao_codigo: string;
+  qualificacao_categoria: string | null;
+  qualificacao_carga_padrao: number | string | null;
+  qualificacao_carga_inicial: number | string | null;
+  qualificacao_carga_recorrente: number | string | null;
+  qualificacao_validade: number | string | null;
+  vencimento_fim_mes: number | string | null;
+  empresa_nome: string;
+}
 
 type TipoTreinamento = 'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO';
 
@@ -66,7 +92,6 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
   const db = c.env.DB;
 
   try {
-    // Validar formato do hash (16 caracteres hexadecimais)
     if (!/^[A-F0-9]{16}$/i.test(hash)) {
       return c.json(
         {
@@ -78,70 +103,86 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
       );
     }
 
-    console.log(`[VALIDAÇÃO] Verificando certificado com hash: ${hash}`);
+    const expectedHash = hash.toUpperCase();
+    let cursorCreatedAt: string | null = null;
+    let cursorId: number | null = null;
+    let scanned = 0;
 
-    // Buscar certificados ativos de qualificacoes_historico que têm documento gerado
-    // Usa a tabela documentos que é onde os certificados PDF são armazenados
-    const { results } = await db
-      .prepare(
-        `
-      SELECT 
-        d.id,
-        qh.numero_certificado,
-        d.created_at,
-        qh.data_conclusao,
-        qh.data_vencimento,
-        qh.validade_meses,
-        qh.carga_horaria,
-        qh.instrutor,
-        qh.tipo_treinamento,
-        f.nome as funcionario_nome,
-        f.cpf as funcionario_cpf,
-        f.codigo_anac,
-        qt.nome as qualificacao_nome,
-        qh.qualificacao_codigo as qualificacao_codigo,
-        qt.categoria as qualificacao_categoria,
-        qt.carga_horaria as qualificacao_carga_padrao,
-        qt.carga_horaria_inicial as qualificacao_carga_inicial,
-        qt.carga_horaria_recorrente as qualificacao_carga_recorrente,
-        qt.validade as qualificacao_validade,
-        COALESCE(qt.vencimento_fim_mes, 0) as vencimento_fim_mes,
-        e.nome as empresa_nome
-      FROM qualificacoes_historico qh
-      INNER JOIN documentos d ON d.id = qh.certificado_arquivo_id
-      INNER JOIN funcionarios f ON qh.funcionario_id = f.id
-      INNER JOIN qualificacoes_tipos qt ON qh.qualificacao_id = qt.id
-      INNER JOIN empresas e ON qh.empresa_id = e.id
-      WHERE qh.deleted_at IS NULL
-        AND d.deleted_at IS NULL
-        AND f.deleted_at IS NULL
-        AND qh.certificado_arquivo_id IS NOT NULL
-        AND qh.numero_certificado IS NOT NULL
-      ORDER BY d.created_at DESC
-      LIMIT 1000
-    `,
-      )
-      .all();
+    // O endpoint é público e não conhece o tenant. A paginação por chave garante que
+    // certificados antigos permaneçam verificáveis sem carregar toda a plataforma.
+    while (true) {
+      const cursorPredicate = cursorCreatedAt
+        ? 'AND (d.created_at < ? OR (d.created_at = ? AND d.id < ?))'
+        : '';
+      const statement = db.prepare(
+        `SELECT
+           d.id,
+           d.r2_key,
+           d.created_at,
+           qh.numero_certificado,
+           qh.data_conclusao,
+           qh.data_vencimento,
+           qh.validade_meses,
+           qh.carga_horaria,
+           qh.instrutor,
+           qh.tipo_treinamento,
+           f.nome AS funcionario_nome,
+           f.cpf AS funcionario_cpf,
+           f.codigo_anac,
+           qt.nome AS qualificacao_nome,
+           qh.qualificacao_codigo,
+           qt.categoria AS qualificacao_categoria,
+           qt.carga_horaria AS qualificacao_carga_padrao,
+           qt.carga_horaria_inicial AS qualificacao_carga_inicial,
+           qt.carga_horaria_recorrente AS qualificacao_carga_recorrente,
+           qt.validade AS qualificacao_validade,
+           COALESCE(qt.vencimento_fim_mes, 0) AS vencimento_fim_mes,
+           e.nome AS empresa_nome
+         FROM qualificacoes_historico qh
+         INNER JOIN documentos d ON d.id = qh.certificado_arquivo_id
+         INNER JOIN funcionarios f ON f.id = qh.funcionario_id
+         LEFT JOIN qualificacoes_tipos qt
+           ON qt.id = qh.qualificacao_id
+          AND qt.deleted_at IS NULL
+         INNER JOIN empresas e ON e.id = qh.empresa_id
+         WHERE qh.deleted_at IS NULL
+           AND d.deleted_at IS NULL
+           AND f.deleted_at IS NULL
+           AND qh.certificado_arquivo_id IS NOT NULL
+           AND qh.numero_certificado IS NOT NULL
+           ${cursorPredicate}
+         ORDER BY d.created_at DESC, d.id DESC
+         LIMIT ?`,
+      );
+      const page: D1Result<CertificateValidationRow> = cursorCreatedAt
+        ? await statement
+            .bind(cursorCreatedAt, cursorCreatedAt, cursorId, CERTIFICATE_SCAN_BATCH_SIZE)
+            .all<CertificateValidationRow>()
+        : await statement.bind(CERTIFICATE_SCAN_BATCH_SIZE).all<CertificateValidationRow>();
+      const results: CertificateValidationRow[] = page.results || [];
+      scanned += results.length;
 
-    console.log(`[VALIDAÇÃO] Encontrados ${results.length} certificados para verificar`);
-
-    // Verificar hash para cada certificado
-    for (const cert of results) {
-      const certHash = await gerarHashCertificado({
-        funcionario_cpf: cert.funcionario_cpf as string,
-        qualificacao_codigo: cert.qualificacao_codigo as string,
-        data_conclusao: cert.data_conclusao as string,
-        numero_certificado: cert.numero_certificado as string,
-      });
-
-      if (certHash === hash.toUpperCase()) {
-        console.log(`[VALIDAÇÃO] ✅ Certificado encontrado! ID: ${cert.id}`);
-
+      for (const cert of results) {
+        const funcionarioCpf = String(cert.funcionario_cpf || '');
+        const qualificacaoCodigo = String(cert.qualificacao_codigo || '');
         const dataConclusao = String(cert.data_conclusao || '').trim();
+        const numeroCertificado = String(cert.numero_certificado || '');
+        if (!funcionarioCpf || !qualificacaoCodigo || !dataConclusao || !numeroCertificado) {
+          continue;
+        }
+
+        const certHash = await gerarHashCertificado({
+          funcionario_cpf: funcionarioCpf,
+          qualificacao_codigo: qualificacaoCodigo,
+          data_conclusao: dataConclusao,
+          numero_certificado: numeroCertificado,
+        });
+        if (certHash !== expectedHash) continue;
+
         const validadeMesesNumero = Number(cert.validade_meses || cert.qualificacao_validade || 0);
         const vencimentoFimMes = Number(cert.vencimento_fim_mes || 0) === 1 ? 1 : 0;
         const cargaHorariaAtual = resolveCargaHorariaCertificado({
-          tipoTreinamento: cert.tipo_treinamento as string | null,
+          tipoTreinamento: cert.tipo_treinamento,
           cargaHistorico: cert.carga_horaria,
           cargaInicial: cert.qualificacao_carga_inicial,
           cargaRecorrente: cert.qualificacao_carga_recorrente,
@@ -152,47 +193,59 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
           .split('T')[0];
         const dataVencimentoAtual =
           dataVencimentoPersistido ||
-          (dataConclusao && validadeMesesNumero > 0
+          (validadeMesesNumero > 0
             ? calcularDataVencimento(dataConclusao, validadeMesesNumero, vencimentoFimMes)
             : null);
 
-        // Calcular validade em meses
         let validadeMeses = 'Indeterminada';
-        if (dataConclusao && dataVencimentoAtual) {
+        if (dataVencimentoAtual) {
           const conclusao = new Date(`${dataConclusao}T00:00:00Z`);
           const vencimento = new Date(`${dataVencimentoAtual}T00:00:00Z`);
           let meses = (vencimento.getFullYear() - conclusao.getFullYear()) * 12;
           meses += vencimento.getMonth() - conclusao.getMonth();
+          if (meses === 1) validadeMeses = '1 mês';
+          else if (meses > 1) validadeMeses = `${meses} meses`;
+        }
 
-          if (meses <= 0) {
-            validadeMeses = 'Indeterminada';
-          } else if (meses === 1) {
-            validadeMeses = '1 mês';
-          } else {
-            validadeMeses = `${meses} meses`;
+        let arquivoDisponivel = false;
+        const r2Key = String(cert.r2_key || '').trim();
+        if (r2Key) {
+          try {
+            arquivoDisponivel = Boolean(await c.env.BUCKET.head(r2Key));
+          } catch (storageError) {
+            console.error('[VALIDAÇÃO] Falha ao verificar artefato R2:', storageError);
           }
         }
 
+        const qualificacaoNome =
+          String(cert.qualificacao_nome || qualificacaoCodigo).trim() || 'Qualificação';
+        const qualificacaoCategoria = String(cert.qualificacao_categoria || '').trim() || 'N/A';
+
+        console.log(`[VALIDAÇÃO] Certificado encontrado após ${scanned} registros. ID: ${cert.id}`);
         return c.json({
           success: true,
           valido: true,
+          arquivo_disponivel: arquivoDisponivel,
+          alerta: arquivoDisponivel
+            ? undefined
+            : 'Certificado registrado, mas o arquivo digital está indisponível. Contate a empresa emissora.',
           certificado: {
-            numero: cert.numero_certificado,
+            numero: numeroCertificado,
             funcionario_nome: cert.funcionario_nome,
-            funcionario_cpf: mascarCPF(cert.funcionario_cpf as string),
+            funcionario_cpf: mascarCPF(funcionarioCpf),
             codigo_anac: cert.codigo_anac || 'N/A',
             instrutor_nome: cert.instrutor || 'N/A',
             instrutor_codigo_anac: 'N/A',
-            qualificacao_tipo: cert.qualificacao_categoria || 'N/A',
-            qualificacao_nome: cert.qualificacao_nome,
-            qualificacao_codigo: cert.qualificacao_codigo,
-            categoria: cert.qualificacao_categoria || 'N/A',
+            qualificacao_tipo: qualificacaoCategoria,
+            qualificacao_nome: qualificacaoNome,
+            qualificacao_codigo: qualificacaoCodigo,
+            categoria: qualificacaoCategoria,
             carga_horaria: cargaHorariaAtual ? `${cargaHorariaAtual} horas` : 'N/A',
             data_emissao: dataConclusao || cert.created_at,
-            data_conclusao: dataConclusao || null,
+            data_conclusao: dataConclusao,
             data_validade: dataVencimentoAtual,
             data_vencimento: dataVencimentoAtual
-              ? formatarData(dataVencimentoAtual as string)
+              ? formatarData(dataVencimentoAtual)
               : 'Indeterminada',
             validade: validadeMeses,
             empresa_nome: cert.empresa_nome,
@@ -201,10 +254,15 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
           },
         });
       }
+
+      if (results.length < CERTIFICATE_SCAN_BATCH_SIZE) break;
+      const last: CertificateValidationRow = results[results.length - 1];
+      cursorCreatedAt = String(last.created_at || '');
+      cursorId = Number(last.id);
+      if (!cursorCreatedAt || !Number.isFinite(cursorId)) break;
     }
 
-    // Hash não encontrado
-    console.log(`[VALIDAÇÃO] ❌ Hash não encontrado: ${hash}`);
+    console.log(`[VALIDAÇÃO] Hash não encontrado após ${scanned} registros: ${hash}`);
     return c.json(
       {
         success: false,

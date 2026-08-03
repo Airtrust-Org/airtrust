@@ -111,4 +111,40 @@ describe('auth session storage', () => {
     expect(module.readAuthStorageValue('airtrust_token')).toBe(accessToken);
     expect(module.readAuthStorageValue('airtrust_refresh_token')).toBe('refresh-transiente');
   });
+  it('coalesces concurrent refreshes into a single request', async () => {
+    const module = await import('../api');
+    module.setPersistLogin(true);
+    module.setTokens(makeJwt(1), 'refresh-race');
+
+    let resolveResponse!: (response: Response) => void;
+    apiFetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve;
+        }),
+    );
+
+    const first = module.refreshAccessToken();
+    const second = module.refreshAccessToken();
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(1);
+
+    resolveResponse(
+      new Response(
+        JSON.stringify({
+          data: {
+            accessToken: makeJwt(3600),
+            refreshToken: 'refresh-rotated',
+          },
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+
+    await Promise.all([first, second]);
+    expect(module.getRefreshToken()).toBe('refresh-rotated');
+  });
 });

@@ -1,3 +1,8 @@
+-- source_reference: local SQLite development schema aligned with versioned AirTrust D1 migrations; never an operational production apply source.
+-- operational_decision: maintain local FRMS schema parity so tests fail closed instead of masking production-column drift.
+-- dry_run_required: local setup only; no remote D1 target, deploy, or production mutation is permitted from this file.
+-- rollback_plan_required: recreate the disposable local database from versioned migrations/schema; no production rollback applies.
+
 PRAGMA defer_foreign_keys=TRUE;
 CREATE TABLE d1_migrations(
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1750,7 +1755,7 @@ CREATE TABLE IF NOT EXISTS "frms_jornada" (
   observacao                  TEXT,
   registrado_por              TEXT NOT NULL,
   origem                      TEXT DEFAULT 'MANUAL' CHECK(origem IN (
-                                'MANUAL','APUS','SIMULADOR','FIRA'
+                                'MANUAL','APUS','SIMULADOR','FIRA','SIGVOOS'
                               )),
   created_at                  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at                  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1759,7 +1764,20 @@ CREATE TABLE IF NOT EXISTS "frms_jornada" (
   tripulacao_aumentada        INTEGER DEFAULT 0,
   classe_cabine               TEXT DEFAULT NULL CHECK(classe_cabine IN ('ECONOMY','BUSINESS',NULL)),
   aclimatado                  INTEGER DEFAULT 1,
-  local_base                  TEXT DEFAULT NULL
+  local_base                  TEXT DEFAULT NULL,
+  hora_dormiu                 TEXT,
+  hora_acordou                TEXT,
+  sono_efetivo_min            INTEGER,
+  fonte_sono                  TEXT DEFAULT 'PADRAO',
+  acordou_na_wocl             INTEGER DEFAULT 0,
+  repouso_regulatorio_min     INTEGER,
+  empresa_id                  INTEGER,
+  fator_basica_pct            REAL DEFAULT 0,
+  fator_apresentacao_pct      REAL DEFAULT 0,
+  fator_repouso_pct           REAL DEFAULT 0,
+  horas_voo_noturno_min       INTEGER DEFAULT 0,
+  horas_voo_ifr_min           INTEGER DEFAULT 0,
+  fonte_resolucao             TEXT
 );
 CREATE TABLE IF NOT EXISTS "frms_notificacao_destinatario" (
   id TEXT PRIMARY KEY,
@@ -3680,6 +3698,14 @@ CREATE INDEX idx_frms_jornada_deleted
   ON frms_jornada(deleted_at);
 CREATE INDEX idx_frms_jornada_status
   ON frms_jornada(status);
+CREATE INDEX idx_frms_jornada_empresa_deleted
+  ON frms_jornada(empresa_id, deleted_at);
+CREATE INDEX idx_frms_jornada_empresa_data
+  ON frms_jornada(empresa_id, data);
+CREATE INDEX idx_frms_jornada_fonte_sono
+  ON frms_jornada(fonte_sono) WHERE deleted_at IS NULL;
+CREATE INDEX idx_frms_jornada_acordou_wocl
+  ON frms_jornada(acordou_na_wocl) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX idx_frms_jornada_trip_data_uq
   ON frms_jornada(tripulante_id, data) WHERE deleted_at IS NULL;
 CREATE INDEX idx_frms_notif_dest_funcionario

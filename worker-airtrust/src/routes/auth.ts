@@ -268,7 +268,9 @@ async function syncDevBypassUser(
     .run();
 
   const primeiraEmpresa = await db
-    .prepare(`SELECT id FROM empresas WHERE deleted_at IS NULL AND ativo = 1 ORDER BY id ASC LIMIT 1`)
+    .prepare(
+      `SELECT id FROM empresas WHERE deleted_at IS NULL AND ativo = 1 ORDER BY id ASC LIMIT 1`,
+    )
     .first<{ id: number }>();
 
   if (!primeiraEmpresa?.id) {
@@ -295,7 +297,9 @@ async function syncDevBypassUser(
 
 function normalizeModulosAtivos(value: unknown): string[] | null {
   if (Array.isArray(value)) {
-    const normalized = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    const normalized = value.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
     return normalized.length > 0 ? normalized : [];
   }
 
@@ -308,7 +312,9 @@ function normalizeModulosAtivos(value: unknown): string[] | null {
     if (!Array.isArray(parsed)) {
       return null;
     }
-    return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    return parsed.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
   } catch {
     return null;
   }
@@ -839,20 +845,39 @@ authRoutes.post(
 
     const passwordHash = await hashPassword(senha);
 
-    await db
-      .prepare(`UPDATE usuarios SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`)
-      .bind(passwordHash, user.id)
-      .run();
-
-    await db
-      .prepare(
-        `UPDATE password_reset_tokens
-         SET consumed_at = datetime('now'),
-             updated_at = datetime('now')
-         WHERE id = ?`,
-      )
-      .bind(tokenRow.id)
-      .run();
+    // Troca de senha e consumo do token pertencem à mesma transação D1. A condição
+    // EXISTS impede que uma segunda requisição reutilize o token já consumido.
+    const [passwordResult, consumeResult] = await db.batch([
+      db
+        .prepare(
+          `UPDATE usuarios
+           SET password_hash = ?, updated_at = datetime('now')
+           WHERE id = ?
+             AND EXISTS (
+               SELECT 1
+               FROM password_reset_tokens
+               WHERE id = ?
+                 AND consumed_at IS NULL
+                 AND expires_at > datetime('now')
+                 AND deleted_at IS NULL
+             )`,
+        )
+        .bind(passwordHash, user.id, tokenRow.id),
+      db
+        .prepare(
+          `UPDATE password_reset_tokens
+           SET consumed_at = datetime('now'),
+               updated_at = datetime('now')
+           WHERE id = ?
+             AND consumed_at IS NULL
+             AND expires_at > datetime('now')
+             AND deleted_at IS NULL`,
+        )
+        .bind(tokenRow.id),
+    ]);
+    if ((passwordResult.meta.changes || 0) !== 1 || (consumeResult.meta.changes || 0) !== 1) {
+      throw unauthorized('Token inválido ou expirado', 'INVALID_RESET_TOKEN');
+    }
 
     // Revoga refresh tokens para forçar novo login em todos os dispositivos.
     await db
@@ -906,7 +931,11 @@ authRoutes.post(
     c.header('X-Request-ID', requestId);
     const logger = createLogger(c, 'AuthRoutes.login');
     const logStep = (step: string, extra?: Record<string, unknown>) => {
-      try { logger.info(`[LOGIN:${step}]`, { requestId, ...extra }); } catch { /* never let logging break the response */ }
+      try {
+        logger.info(`[LOGIN:${step}]`, { requestId, ...extra });
+      } catch {
+        /* never let logging break the response */
+      }
     };
     try {
       const body = await c.req.json();
@@ -960,7 +989,9 @@ authRoutes.post(
 
       if (!user && devBypassEnabled && devIdentity?.isPreset) {
         const legacyUser = await db
-          .prepare(`SELECT id, email, nome, perfil, password_hash FROM usuarios WHERE email = ? LIMIT 1`)
+          .prepare(
+            `SELECT id, email, nome, perfil, password_hash FROM usuarios WHERE email = ? LIMIT 1`,
+          )
           .bind(email.toLowerCase())
           .first<DbUser>();
 
@@ -1018,7 +1049,10 @@ authRoutes.post(
       // Verificar senha — em dev com bypass, aceitar qualquer senha para utilizadores auto-provisionados
       let isValidPassword = false;
       try {
-        if (devBypassEnabled && (user as NonNullable<DbUser>).password_hash === 'dev-local-bypass') {
+        if (
+          devBypassEnabled &&
+          (user as NonNullable<DbUser>).password_hash === 'dev-local-bypass'
+        ) {
           isValidPassword = true;
         } else {
           isValidPassword = await verifyPassword(
@@ -1132,19 +1166,34 @@ authRoutes.post(
         requestId,
       });
     } catch (error) {
-      // Preserve ApiError to allow specific codes/messages from helpers
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const errorName = (error as any)?.name;
+      // Preserve ApiError to allow specific codes/messages from helpers.
+      const errorName =
+        typeof error === 'object' && error !== null && 'name' in error
+          ? String(error.name)
+          : undefined;
       if (errorName === 'ApiError') {
-        // Inject requestId into ApiError responses so client can correlate
-        if ((error as any)?.code) {
-          try { c.header('X-Request-ID', requestId); } catch { /* best effort */ }
+        const hasErrorCode =
+          typeof error === 'object' && error !== null && 'code' in error && Boolean(error.code);
+        if (hasErrorCode) {
+          try {
+            c.header('X-Request-ID', requestId);
+          } catch {
+            /* best effort */
+          }
         }
-        throw error as never;
+        throw error;
       }
       // Log safely — logger may fail if env is misconfigured
-      try { logStep('login_error', { errorName, errorMessage: toError(error).message }); } catch { /* silent */ }
-      try { logger.error('[AUTH] Login error', toError(error)); } catch { /* silent */ }
+      try {
+        logStep('login_error', { errorName, errorMessage: toError(error).message });
+      } catch {
+        /* silent */
+      }
+      try {
+        logger.error('[AUTH] Login error', toError(error));
+      } catch {
+        /* silent */
+      }
       // Always return JSON with requestId, never let an unexpected error crash the response
       return c.json(
         {
@@ -1267,12 +1316,7 @@ authRoutes.post(
         db,
         (tokenRecord as NonNullable<TokenRecord>).user_id,
       );
-      const resolvedRole = await resolveAuthRoleForUser(
-        db,
-        userId,
-        empresaId,
-        tokenRecord.perfil,
-      );
+      const resolvedRole = await resolveAuthRoleForUser(db, userId, empresaId, tokenRecord.perfil);
 
       // Recarregar permissões individuais (overrides GRANT/DENY)
       const permissoesRefresh = await db
@@ -1351,7 +1395,9 @@ authRoutes.post(
 authRoutes.post('/logout', async (c) => {
   const logger = createLogger(c, 'AuthRoutes.logout');
   try {
-    const body = await c.req.json<{ refreshToken?: string }>().catch(() => ({ refreshToken: undefined }));
+    const body = await c.req
+      .json<{ refreshToken?: string }>()
+      .catch(() => ({ refreshToken: undefined }));
     const refreshToken = typeof body.refreshToken === 'string' ? body.refreshToken : null;
 
     const db = c.env.DB;
@@ -1392,7 +1438,9 @@ authRoutes.post('/logout', async (c) => {
           await blocklistAccessTokenJti(db, tokenRow.access_token_jti);
         }
       } catch (e) {
-        logger.warn('[AUTH] Blocklist secundária (via refresh token) indisponível', { error: toError(e).message });
+        logger.warn('[AUTH] Blocklist secundária (via refresh token) indisponível', {
+          error: toError(e).message,
+        });
       }
     } else {
       // Revogação crítica: falha aqui impede o logout de retornar sucesso.
@@ -1839,10 +1887,7 @@ authRoutes.post('/impersonate', auth(), async (c) => {
       }
     } else if (targetEmpresaId !== callerEmpresaIdNum) {
       if (!(await isCallerPlatformAdmin)) {
-        throw forbidden(
-          'Usuário alvo não pertence à sua empresa',
-          'WRONG_TENANT',
-        );
+        throw forbidden('Usuário alvo não pertence à sua empresa', 'WRONG_TENANT');
       }
     }
 

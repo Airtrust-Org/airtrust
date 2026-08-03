@@ -28,6 +28,7 @@ jobs:
       - name: GitHub Actions context guard
         run: |
           node --test scripts/ci/check-github-workflow-contexts.test.mjs
+          node --test scripts/ci/check-audit-round2-regressions.test.mjs
           node scripts/ci/check-github-workflow-contexts.mjs
           node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
 

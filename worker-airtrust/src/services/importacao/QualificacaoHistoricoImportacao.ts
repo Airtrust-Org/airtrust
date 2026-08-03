@@ -62,9 +62,13 @@ export class QualificacaoHistoricoImportacaoService {
 
   /**
    * Valida batch completo sem inserir (COM FK CHECKS OTIMIZADOS!)
-   * NOTA: Não valida existência de CPF/Código pois serão criados automaticamente se necessário
+   * Funcionários precisam existir no tenant. Tipos ausentes continuam elegíveis ao fluxo
+   * legado de criação automática, mas CPFs desconhecidos são rejeitados com erro de linha.
    */
-  async validate(rows: Record<string, unknown>[], empresaIdOverride?: number): Promise<ValidationError[]> {
+  async validate(
+    rows: Record<string, unknown>[],
+    empresaIdOverride?: number,
+  ): Promise<ValidationError[]> {
     const empresaId = this.resolveEmpresaId(empresaIdOverride);
     const errors: ValidationError[] = [];
 
@@ -126,16 +130,20 @@ export class QualificacaoHistoricoImportacaoService {
       }
     }
 
-    // Agora valida cada linha usando os Sets (O(1) lookup)
-    // PASSANDO skip_fk_check=true para NÃO validar existência (serão criados)
+    // Tipos ausentes podem ser criados pelo fluxo legado; funcionários nunca são criados
+    // implicitamente, pois um CPF digitado errado não pode virar uma pessoa fantasma.
+    const codigosAceitos = new Set([
+      ...validCodigos,
+      ...allCodigos.map((codigo) => codigo.toUpperCase()),
+    ]);
     for (let i = 0; i < rows.length; i++) {
       const rowErrors = await validateQualificacaoHistoricoRow(
         rows[i],
         i + 2,
         this.db,
         validCPFs,
-        validCodigos,
-        true, // skip_fk_check = true (não validar FKs, serão criados)
+        codigosAceitos,
+        false,
       );
       errors.push(...rowErrors);
     }
@@ -146,7 +154,7 @@ export class QualificacaoHistoricoImportacaoService {
   /**
    * Importa histórico com validação COMPLETA de FKs e cálculo automático
    * Calcula data_vencimento automaticamente com base no tipo de qualificação
-   * CRIA AUTOMATICAMENTE funcionários e tipos que não existem (BATCH OTIMIZADO!)
+   * Rejeita funcionários inexistentes e cria tipos ausentes conforme compatibilidade legada.
    */
   async import(
     rows: Record<string, unknown>[],
@@ -170,7 +178,7 @@ export class QualificacaoHistoricoImportacaoService {
       return result;
     }
 
-    // ===== OTIMIZAÇÃO: BATCH CREATION DE FUNCIONÁRIOS E TIPOS =====
+    // ===== OTIMIZAÇÃO: LOOKUPS E CRIAÇÃO LEGADA DE TIPOS =====
 
     // Extrair todos CPFs e códigos únicos
     const allCPFs = Array.from(
@@ -187,33 +195,6 @@ export class QualificacaoHistoricoImportacaoService {
           .filter((cod): cod is string => Boolean(cod)),
       ),
     );
-
-    // Buscar funcionários existentes em BATCHES para não exceder 999 variáveis
-    const existingCPFs = new Set<string>();
-    if (allCPFs.length > 0) {
-      const CPF_BATCH = 100; // 100 CPFs = 100 variáveis (seguro)
-      for (let i = 0; i < allCPFs.length; i += CPF_BATCH) {
-        const batch = allCPFs.slice(i, i + CPF_BATCH);
-        const placeholders = batch.map(() => '?').join(',');
-
-        const existing = await this.db
-          .prepare(
-            `SELECT cpf FROM funcionarios WHERE cpf IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
-          )
-          .bind(...batch, empresaId) // batch já está normalizado (só dígitos)
-          .all<{ cpf: string }>();
-
-        (existing.results || []).forEach((f) => {
-          const normalized = normalizeCPF(f.cpf);
-          if (normalized) {
-            existingCPFs.add(normalized);
-          }
-        });
-      }
-      console.log(
-        `[AUTO-CREATE] Funcionários existentes: ${existingCPFs.size} de ${allCPFs.length}`,
-      );
-    }
 
     // Buscar tipos existentes em BATCHES para não exceder 999 variáveis
     const existingCodigos = new Set<string>();
@@ -236,41 +217,6 @@ export class QualificacaoHistoricoImportacaoService {
       console.log(
         `[AUTO-CREATE] Tipos existentes: ${existingCodigos.size} de ${allCodigos.length}`,
       );
-    }
-
-    // Criar funcionários que não existem (BATCH INSERT)
-    const cpfsToCreate = allCPFs.filter((cpf) => !existingCPFs.has(cpf));
-    if (cpfsToCreate.length > 0) {
-      console.log(`[AUTO-CREATE] Criando ${cpfsToCreate.length} funcionários em batch...`);
-      const FUNC_BATCH = 50; // Lotes de 50 para não estourar limites
-      for (let i = 0; i < cpfsToCreate.length; i += FUNC_BATCH) {
-        const batch = cpfsToCreate.slice(i, i + FUNC_BATCH);
-        const placeholders = batch
-          .map(() => '(?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)')
-          .join(',');
-        const values: unknown[] = [];
-        batch.forEach((cpf) => {
-          const matriculaAuto = `AUTO-${cpf.substring(0, 6)}`;
-          values.push(matriculaAuto, `Funcionário ${cpf}`, cpf, `auto.${cpf}@temp.com`, 'ATIVO', empresaId);
-        });
-
-        try {
-          await this.db
-            .prepare(
-              `INSERT INTO funcionarios (matricula, nome, cpf, email, status, empresa_id, created_at, updated_at)
-               VALUES ${placeholders}`,
-            )
-            .bind(...values)
-            .run();
-          console.log(
-            `[AUTO-CREATE] Lote ${Math.floor(i / FUNC_BATCH) + 1}: ${
-              batch.length
-            } funcionários criados`,
-          );
-        } catch (error) {
-          console.warn(`[AUTO-CREATE] Erro ao criar lote de funcionários:`, error);
-        }
-      }
     }
 
     // Criar tipos que não existem (BATCH INSERT)
@@ -305,7 +251,7 @@ export class QualificacaoHistoricoImportacaoService {
       }
     }
 
-    // ===== FIM DA BATCH CREATION =====
+    // ===== FIM DA CRIAÇÃO LEGADA DE TIPOS =====
 
     // Revalidar CPFs existentes no tenant após auto-create para evitar inserção cross-tenant
     const tenantCPFs = new Set<string>();
@@ -328,7 +274,10 @@ export class QualificacaoHistoricoImportacaoService {
     }
 
     // Buscar TODOS os tipos de qualificação em BATCHES para não exceder 999 variáveis
-    const tiposMap = new Map<string, { id: number; validade: number | null; vencimento_fim_mes: number }>();
+    const tiposMap = new Map<
+      string,
+      { id: number; validade: number | null; vencimento_fim_mes: number }
+    >();
     if (allCodigos.length > 0) {
       const TIPOS_BATCH = 100; // 100 códigos = 100 variáveis (seguro)
       for (let i = 0; i < allCodigos.length; i += TIPOS_BATCH) {
@@ -510,7 +459,14 @@ export class QualificacaoHistoricoImportacaoService {
       const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
       const values: unknown[] = [];
       batch.forEach((r) => {
-        values.push(r.cpf, r.codigo, r.qualificacaoId, r.data_conclusao, r.data_vencimento, empresaId);
+        values.push(
+          r.cpf,
+          r.codigo,
+          r.qualificacaoId,
+          r.data_conclusao,
+          r.data_vencimento,
+          empresaId,
+        );
       });
 
       console.log(
@@ -599,12 +555,15 @@ export class QualificacaoHistoricoImportacaoService {
    * Query de listagem COM JOIN - Integração ATIVA
    * Dados de funcionários e tipos sempre atualizados automaticamente
    */
-  async list(filters?: {
-    funcionario_cpf?: string;
-    qualificacao_codigo?: string;
-    limit?: number;
-    offset?: number;
-  }, empresaIdOverride?: number): Promise<Array<Record<string, unknown>>> {
+  async list(
+    filters?: {
+      funcionario_cpf?: string;
+      qualificacao_codigo?: string;
+      limit?: number;
+      offset?: number;
+    },
+    empresaIdOverride?: number,
+  ): Promise<Array<Record<string, unknown>>> {
     const empresaId = this.resolveEmpresaId(empresaIdOverride);
     let sql = `
       SELECT 

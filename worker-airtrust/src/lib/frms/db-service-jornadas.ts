@@ -2,7 +2,7 @@
  * FRMS — CRUD de jornadas, pipeline de cálculo e reprocessamento (D1)
  */
 
-import type { FrmsJornada, LimitesMap, FrmsFatorizacao, FrmsAcumuloRolling } from './types';
+import type { FrmsJornada, LimitesMap, FrmsFatorizacao } from './types';
 import {
   calcFatorizacao,
   calcEffectiveness,
@@ -16,19 +16,10 @@ import type { AcumuloRollingResult } from './calculos';
 import { processarAlertas, deveBloquearLancamento } from './alertas';
 import type { AlertaGerado } from './alertas';
 import { calcularLinhaFadigaAcumulada } from './fadiga-acumulada-legal';
-import {
-  generateId,
-  now,
-  dateOffset,
-  logAuditoria,
-  buscarHistoricoJornadas,
-} from './db-service-shared';
+import { generateId, now, logAuditoria, buscarHistoricoJornadas } from './db-service-shared';
 import { despacharNotificacoes } from './db-service-notificacoes';
 import { carregarLimites } from './db-service-config';
-import {
-  resolveFrmsSourceStatus,
-  shouldUseForOperationalFrms,
-} from './frms-source-policy';
+import { resolveFrmsSourceStatus, shouldUseForOperationalFrms } from './frms-source-policy';
 import { resolveFuncionarioActiveFortnightForDate } from '../escalas/active-fortnight';
 
 // ────────────────────────────────────────────────────────
@@ -627,12 +618,16 @@ export async function persistirAlerta(db: D1Database, alerta: AlertaGerado): Pro
 
   // Despachar notificações por cargo — resolve empresa do tripulante
   const alertaEmpresa = await db
-    .prepare(
-      `SELECT empresa_id FROM funcionarios WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
-    )
+    .prepare(`SELECT empresa_id FROM funcionarios WHERE id = ? AND deleted_at IS NULL LIMIT 1`)
     .bind(alerta.tripulante_id)
     .first<{ empresa_id: number | null }>();
-  await despacharNotificacoes(db, id, alerta.nivel, alerta.tripulante_id, alertaEmpresa?.empresa_id ?? null);
+  await despacharNotificacoes(
+    db,
+    id,
+    alerta.nivel,
+    alerta.tripulante_id,
+    alertaEmpresa?.empresa_id ?? null,
+  );
 
   return id;
 }
@@ -814,6 +809,7 @@ export async function atualizarJornada(
   await db
     .prepare(
       `UPDATE frms_jornada SET
+        data = ?, tripulante_id = ?,
         status = ?, hora_apresentacao = ?, hora_termino = ?,
         duracao_jornada_minutos = ?, horas_voo_minutos = ?,
         hora_primeiro_acionamento = ?, hora_primeira_decolagem = ?,
@@ -828,6 +824,8 @@ export async function atualizarJornada(
          AND deleted_at IS NULL`,
     )
     .bind(
+      merged.data,
+      merged.tripulante_id,
       merged.status,
       merged.hora_apresentacao ?? null,
       merged.hora_termino ?? null,
@@ -858,7 +856,12 @@ export async function atualizarJornada(
   const jornada = merged as FrmsJornada;
   const result = await recalcularPipeline(db, jornada, limites);
 
-  // Recalcular jornadas futuras para manter acumulados rolling consistentes
+  // Se data ou tripulante mudaram, a série anterior também precisa ser recomposta.
+  if (existing.tripulante_id !== jornada.tripulante_id || existing.data !== jornada.data) {
+    await recalcularPipelineCascataDesdeData(db, existing.tripulante_id, existing.data, limites);
+  }
+
+  // Recalcular jornadas futuras para manter acumulados rolling consistentes.
   await recalcularPipelineCascataDesdeData(db, jornada.tripulante_id, jornada.data, limites);
 
   await logAuditoria(db, 'frms_jornada', id, 'UPDATE', existing, jornada);
