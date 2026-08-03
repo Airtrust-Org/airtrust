@@ -38,8 +38,29 @@ function buildApp() {
   });
   app.use('*', domainEventProcessorMiddleware());
   app.post('/api/frms/checkin', (c) => c.json({ success: true }));
+  app.delete('/api/admin-usuarios/:id', (c) => c.body(null, 204));
 
   return app;
+}
+
+function createAuditDb() {
+  const calls: Array<{ sql: string; bindings: unknown[] }> = [];
+  const db = {
+    prepare(sql: string) {
+      return {
+        bind(...bindings: unknown[]) {
+          calls.push({ sql, bindings });
+          return {
+            async run() {
+              return { meta: { changes: 1 } };
+            },
+          };
+        },
+      };
+    },
+  } as unknown as D1Database;
+
+  return { db, calls };
 }
 
 beforeEach(() => {
@@ -114,11 +135,43 @@ describe('domain event processor observability', () => {
     expect(response.status).toBe(200);
     const serializedLogs = logSpy.mock.calls.map(([entry]) => String(entry));
     const schedulingLog = serializedLogs.find((entry) =>
-      entry.includes('Falha ao agendar processamento de eventos de domínio'),
+      entry.includes('Falha ao agendar tarefas pós-mutação'),
     );
 
     expect(schedulingLog).toBeDefined();
     expect(schedulingLog).toContain('req-domain-events');
     expect(schedulingLog).toContain('waitUntil unavailable');
+  });
+
+  it('records a central receipt for every successful DELETE without blocking the response', async () => {
+    const app = buildApp();
+    const pending: Promise<unknown>[] = [];
+    const { db, calls } = createAuditDb();
+    const executionContext = {
+      waitUntil(promise: Promise<unknown>) {
+        pending.push(promise);
+      },
+      passThroughOnException() {},
+      props: {},
+    } as ExecutionContext;
+
+    const response = await app.request(
+      '/api/admin-usuarios/77',
+      { method: 'DELETE' },
+      { DB: db, ENVIRONMENT: 'test' },
+      executionContext,
+    );
+
+    expect(response.status).toBe(204);
+    expect(pending).toHaveLength(1);
+    await Promise.all(pending);
+
+    expect(processarEventosParaModuloMock).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].sql).toContain('auditoria_avancada_v2');
+    expect(calls[0].bindings[0]).toBe('HTTP_DELETE');
+    expect(calls[0].bindings[1]).toBe('77');
+    expect(String(calls[0].bindings[2])).toContain('"empresa_id":"6"');
+    expect(calls[0].bindings[3]).toBe('42');
   });
 });
