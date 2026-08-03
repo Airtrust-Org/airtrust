@@ -28,7 +28,11 @@ function isAtivo(record: Record<string, unknown> | null): boolean {
   if (!record) return false;
   const ativo = record.ativo;
   if (ativo === true || ativo === 1 || ativo === '1') return true;
-  return String(record.status || '').trim().toUpperCase() === 'ATIVO';
+  return (
+    String(record.status || '')
+      .trim()
+      .toUpperCase() === 'ATIVO'
+  );
 }
 
 function resolveFuncionarioEvent(

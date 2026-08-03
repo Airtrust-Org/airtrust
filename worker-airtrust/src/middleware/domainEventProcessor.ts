@@ -155,12 +155,16 @@ export function domainEventProcessorMiddleware() {
             }
           })
           .catch((error) => {
-            logger.error('Falha no processamento assíncrono de eventos de domínio', toError(error), {
-              empresaId,
-              modulo,
-              path,
-              method,
-            });
+            logger.error(
+              'Falha no processamento assíncrono de eventos de domínio',
+              toError(error),
+              {
+                empresaId,
+                modulo,
+                path,
+                method,
+              },
+            );
           }),
       );
     }

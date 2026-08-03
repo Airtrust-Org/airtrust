@@ -19,11 +19,7 @@ type EventHandler = (
 ) => Promise<void>;
 
 export type DomainEventConsumerStatus =
-  | 'pending'
-  | 'processing'
-  | 'retry'
-  | 'processed'
-  | 'dead_letter';
+  'pending' | 'processing' | 'retry' | 'processed' | 'dead_letter';
 
 export interface DomainEventConsumerState {
   consumidor: string;
@@ -94,17 +90,13 @@ function getInternalTokenForConsumer(
   const tokens = processadoPor
     .map(parseInternalToken)
     .filter(
-      (token): token is InternalConsumerToken =>
-        token !== null && token.consumidor === consumidor,
+      (token): token is InternalConsumerToken => token !== null && token.consumidor === consumidor,
     );
 
   return tokens.at(-1) ?? null;
 }
 
-function getConsumerState(
-  processadoPor: string[],
-  consumidor: string,
-): DomainEventConsumerState {
+function getConsumerState(processadoPor: string[], consumidor: string): DomainEventConsumerState {
   if (processadoPor.includes(consumidor)) {
     return { consumidor, status: 'processed', tentativas: 0 };
   }

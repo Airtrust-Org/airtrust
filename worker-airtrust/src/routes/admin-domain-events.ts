@@ -76,10 +76,7 @@ function summarizeConsumerStates(states: DomainEventConsumerState[]): string {
 function enrichDomainEvent<
   T extends { consumidores: string | null; processado_por: string | null },
 >(row: T) {
-  const consumidorStatus = getDomainEventConsumerStates(
-    row.consumidores,
-    row.processado_por,
-  );
+  const consumidorStatus = getDomainEventConsumerStates(row.consumidores, row.processado_por);
   return {
     ...row,
     estado_processamento: summarizeConsumerStates(consumidorStatus),
@@ -90,10 +87,7 @@ function enrichDomainEvent<
 app.get('/domain-events', requireRole('admin'), async (c) => {
   const empresaId = getEmpresaId(c);
   const tipo = c.req.query('tipo');
-  const limit = Math.min(
-    Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1),
-    200,
-  );
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 200);
 
   let sql = `
     SELECT id, empresa_id, modulo, tipo, payload, consumidores, processado_por,
