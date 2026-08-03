@@ -1,4 +1,12 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  type ReactNode,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -83,14 +91,36 @@ interface TipoQualificacaoOption {
 
 // Palavras-chave que indicam público de Tripulação (voo)
 const PALAVRAS_TRIPULACAO = [
-  'tripulação', 'tripulacao', 'piloto', 'copiloto', 'comandante', 'pio', 'sic', 'pic',
-  'voo', 'aeronauta', 'cabin', 'comissário', 'comissario', 'purser',
+  'tripulação',
+  'tripulacao',
+  'piloto',
+  'copiloto',
+  'comandante',
+  'pio',
+  'sic',
+  'pic',
+  'voo',
+  'aeronauta',
+  'cabin',
+  'comissário',
+  'comissario',
+  'purser',
 ];
 
 // Palavras-chave que indicam público de Manutenção
 const PALAVRAS_MANUTENCAO = [
-  'manutenção', 'manutencao', 'mecânico', 'mecanico', 'técnico', 'tecnico', 'mec',
-  'maintenance', 'avionico', 'avionics', 'linha', 'hangar',
+  'manutenção',
+  'manutencao',
+  'mecânico',
+  'mecanico',
+  'técnico',
+  'tecnico',
+  'mec',
+  'maintenance',
+  'avionico',
+  'avionics',
+  'linha',
+  'hangar',
 ];
 
 /**
@@ -122,14 +152,30 @@ function determinarPublicoQualificacao(
 
 // Palavras-chave de funções/setores para Tripulação
 const FUNCAO_TRIPULACAO = [
-  'piloto', 'comandante', 'copiloto', 'purser', 'comissário', 'comissario',
-  'aeronauta', 'cabin crew', 'pic', 'sic',
+  'piloto',
+  'comandante',
+  'copiloto',
+  'purser',
+  'comissário',
+  'comissario',
+  'aeronauta',
+  'cabin crew',
+  'pic',
+  'sic',
 ];
 
 // Palavras-chave de funções/setores para Manutenção
 const FUNCAO_MANUTENCAO = [
-  'manutenção', 'manutencao', 'mecânico', 'mecanico', 'técnico', 'tecnico',
-  'mec ', 'linha ', 'hangar', 'avionico',
+  'manutenção',
+  'manutencao',
+  'mecânico',
+  'mecanico',
+  'técnico',
+  'tecnico',
+  'mec ',
+  'linha ',
+  'hangar',
+  'avionico',
 ];
 
 /**
@@ -381,7 +427,7 @@ function buildConclusaoDraft(
     data_conclusao_efetiva:
       participante.resultado === 'APROVADO'
         ? participante.data_conclusao_efetiva || defaultDate
-        : participante.data_conclusao_efetiva ?? null,
+        : (participante.data_conclusao_efetiva ?? null),
   };
 }
 
@@ -467,7 +513,9 @@ function getSimulatorSessionId(item: TreinamentoPlanejado): number | null {
   if (item.source !== 'SIMULADOR') return null;
   const rootId = Number(item.sessao_id || 0);
   if (Number.isInteger(rootId) && rootId > 0) return rootId;
-  const dayId = Number((item.dias || []).find((dia) => Number(dia.sessao_id || 0) > 0)?.sessao_id || 0);
+  const dayId = Number(
+    (item.dias || []).find((dia) => Number(dia.sessao_id || 0) > 0)?.sessao_id || 0,
+  );
   if (Number.isInteger(dayId) && dayId > 0) return dayId;
   const sourceId = Number(item.source_id || 0);
   return Number.isInteger(sourceId) && sourceId > 0 ? sourceId : null;
@@ -492,7 +540,8 @@ function mapTreinamentoToSessaoSimulador(
     horario_inicio: item.hora_inicio || firstActiveDay?.hora_inicio || '',
     horario_fim: item.hora_fim || firstActiveDay?.hora_fim || '',
     instrutor_id: Number(item.instrutor_id || firstActiveDay?.instrutor_id || 0),
-    instrutor_nome: item.instrutor_nome || item.instrutor_guerra || firstActiveDay?.instrutor_nome || undefined,
+    instrutor_nome:
+      item.instrutor_nome || item.instrutor_guerra || firstActiveDay?.instrutor_nome || undefined,
     tipo_sessao: item.titulo || item.qualificacao_nome || 'Sessão de treinamento',
     tipo_dispositivo: item.modalidade === 'AERONAVE' ? 'AERONAVE' : 'SIMULADOR',
     aeronave_id: firstActiveDay?.aeronave_id ?? null,
@@ -735,8 +784,6 @@ export default function TreinamentosPlanejadosPage({
   const canWriteTraining = !isAluno && (isAdmin || isGestor || can('qualificacoes.edit'));
   const canConcluirTurma = canWriteTraining;
 
-  const planejadosActionButtonClass =
-    'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors';
   const today = useMemo(() => getTodayYmd(), []);
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>(forcedTab || 'calendario');
   const [mesReferencia, setMesReferencia] = useState(today.slice(0, 7));
@@ -747,7 +794,9 @@ export default function TreinamentosPlanejadosPage({
   const [instrutorFiltro, setInstrutorFiltro] = useState('');
   const [busca, setBusca] = useState('');
   const [buscaConvocados, setBuscaConvocados] = useState('');
-  const [setorFilter, setSetorFilter] = useState<string[]>(() => initialSetorIds?.map(String) ?? []);
+  const [setorFilter, setSetorFilter] = useState<string[]>(
+    () => initialSetorIds?.map(String) ?? [],
+  );
   const [modalFormularioAberto, setModalFormularioAberto] = useState(false);
   const [modalDetalheAberto, setModalDetalheAberto] = useState(false);
   const [modalSessaoSimuladorAberto, setModalSessaoSimuladorAberto] = useState(false);
@@ -755,6 +804,7 @@ export default function TreinamentosPlanejadosPage({
   const [modalConfirmacaoConclusaoAberto, setModalConfirmacaoConclusaoAberto] = useState(false);
   const [modalResultadoConvocacaoAberto, setModalResultadoConvocacaoAberto] = useState(false);
   const [trilhaRecenteAberta, setTrilhaRecenteAberta] = useState(false);
+  const [gerandoListaPresencaTurma, setGerandoListaPresencaTurma] = useState(false);
   const [treinamentoEditando, setTreinamentoEditando] = useState<TreinamentoPlanejado | null>(null);
   const [treinamentoSelecionadoId, setTreinamentoSelecionadoId] = useState<number | null>(null);
   const [sessaoSimuladorEditando, setSessaoSimuladorEditando] =
@@ -818,7 +868,15 @@ export default function TreinamentosPlanejadosPage({
       source: sourceFilter,
       setor_ids: setorFilter.length > 0 ? setorFilter.map(Number) : undefined,
     }),
-    [buscaAdiada, instrutorFiltro, monthRange.fim, monthRange.inicio, setorFilter, sourceFilter, statusFiltro],
+    [
+      buscaAdiada,
+      instrutorFiltro,
+      monthRange.fim,
+      monthRange.inicio,
+      setorFilter,
+      sourceFilter,
+      statusFiltro,
+    ],
   );
 
   const treinamentosQuery = useTreinamentosPlanejados(filtrosComuns);
@@ -888,7 +946,9 @@ export default function TreinamentosPlanejadosPage({
       ausentes: count('AUSENTE'),
       parciais: count('PARCIAL'),
       dispensados: count('DISPENSADO'),
-      pendentes: Math.max(0, (detalheTreinamento?.participantes.length || 0) - presencas.length) + count('PENDENTE'),
+      pendentes:
+        Math.max(0, (detalheTreinamento?.participantes.length || 0) - presencas.length) +
+        count('PENDENTE'),
     };
   }, [detalheTreinamento?.participantes.length, diaPresencaSelecionado?.presencas]);
 
@@ -947,7 +1007,10 @@ export default function TreinamentosPlanejadosPage({
       setDiaPresencaSelecionadoId(null);
       return;
     }
-    if (!diaPresencaSelecionadoId || !diasPresenca.some((dia) => dia.id === diaPresencaSelecionadoId)) {
+    if (
+      !diaPresencaSelecionadoId ||
+      !diasPresenca.some((dia) => dia.id === diaPresencaSelecionadoId)
+    ) {
       setDiaPresencaSelecionadoId(diasPresenca[0].id);
     }
   }, [diaPresencaSelecionadoId, diasPresenca, modalDetalheAberto]);
@@ -1024,22 +1087,6 @@ export default function TreinamentosPlanejadosPage({
       },
     );
   }, [listaTreinamentos]);
-
-  const proximoTreinamento = useMemo(() => {
-    return [...listaTreinamentos]
-      .filter((item) => item.data_prevista >= today && item.status !== 'CANCELADO')
-      .sort((left, right) => {
-        const leftKey = `${left.data_prevista} ${left.hora_inicio || '99:99'}`;
-        const rightKey = `${right.data_prevista} ${right.hora_inicio || '99:99'}`;
-        return leftKey.localeCompare(rightKey);
-      })[0];
-  }, [listaTreinamentos, today]);
-
-  const ultimoEventoAuditado = useMemo(() => {
-    return auditoriaTreinamentos
-      .flatMap((item) => item.auditoria || [])
-      .sort((left, right) => right.created_at.localeCompare(left.created_at))[0];
-  }, [auditoriaTreinamentos]);
 
   const eventosPorDia = useMemo(() => {
     const map = new Map<string, TreinamentoPlanejado[]>();
@@ -1375,7 +1422,8 @@ export default function TreinamentosPlanejadosPage({
     if (!treinamento) return;
     setGerandoListaPresencaTurma(true);
     try {
-      const { gerarPDFListaPresencaTurma } = await import('@/react-app/services/pdf-lista-presenca');
+      const { gerarPDFListaPresencaTurma } =
+        await import('@/react-app/services/pdf-lista-presenca');
       const blob = await gerarPDFListaPresencaTurma({
         titulo: treinamento.titulo || treinamento.qualificacao_nome || 'Treinamento',
         codigoQualificacao: treinamento.qualificacao_codigo || '',
@@ -1440,7 +1488,8 @@ export default function TreinamentosPlanejadosPage({
         ? minutosPrevistos
         : status === 'AUSENTE' || status === 'PENDENTE' || status === 'DISPENSADO'
           ? 0
-          : getPresencaDia(diaPresencaSelecionado, participante.funcionario_id)?.minutos_presentes ?? null;
+          : (getPresencaDia(diaPresencaSelecionado, participante.funcionario_id)
+              ?.minutos_presentes ?? null);
 
     try {
       await atualizarPresencaDia.mutateAsync({
@@ -1461,7 +1510,11 @@ export default function TreinamentosPlanejadosPage({
   }
 
   async function atualizarPresencaDiaEmLote(status: TreinamentoPlanejadoPresencaDiaStatus) {
-    if (!treinamentoSelecionadoId || !diaPresencaSelecionado || !detalheTreinamento?.participantes.length) {
+    if (
+      !treinamentoSelecionadoId ||
+      !diaPresencaSelecionado ||
+      !detalheTreinamento?.participantes.length
+    ) {
       return;
     }
     const minutosPrevistos = calcularMinutosPrevistos(
@@ -1578,7 +1631,9 @@ export default function TreinamentosPlanejadosPage({
         presente: draft.presente,
         resultado: draft.resultado,
         data_conclusao_efetiva:
-          draft.resultado === 'APROVADO' ? draft.data_conclusao_efetiva || defaultConclusaoDate : null,
+          draft.resultado === 'APROVADO'
+            ? draft.data_conclusao_efetiva || defaultConclusaoDate
+            : null,
         nota: draft.nota,
         conceito: draft.conceito,
         observacoes: draft.observacoes,
@@ -1697,6 +1752,15 @@ export default function TreinamentosPlanejadosPage({
     }
   }
 
+  // H7: When parent header "Nova turma" button is clicked, auto-open the creation modal
+  useEffect(() => {
+    if (autoOpenForm && tiposQualificacao.length > 0 && funcionarios.length > 0) {
+      abrirNovoTreinamento();
+      onAutoOpenFormHandled?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenForm, tiposQualificacao.length, funcionarios.length]);
+
   if (!canManage) {
     return (
       <div className="p-6">
@@ -1718,23 +1782,26 @@ export default function TreinamentosPlanejadosPage({
     (detalheQuery.error as Error | null)?.message ||
     null;
 
+  const diagnosticsFalhos = Object.entries({
+    ...(treinamentosQuery.data?.diagnostics || {}),
+    ...(calendarioQuery.data?.diagnostics || {}),
+  })
+    .filter(([, status]) => status === 'error')
+    .map(([source]) =>
+      source === 'turma'
+        ? 'turmas'
+        : source === 'qualificacao_planejada'
+          ? 'qualificações planejadas'
+          : 'sessões de simulador',
+    );
+
   const salvandoFormulario = criarTreinamento.isPending || atualizarTreinamento.isPending;
   const excluindo = excluirTreinamento.isPending;
   const enviandoConvocacao = previewConvocacao.isPending || enviarConvocacao.isPending;
-  const [gerandoListaPresencaTurma, setGerandoListaPresencaTurma] = useState(false);
 
   const convocacaoDisabledReason = getConvocacaoDisabledReason(detalheTreinamento);
   const isTurmasView = sourceFilter === 'TURMA' || sourceFilter === 'TREINAMENTOS';
   const primaryActionLabel = isTurmasView ? 'Nova turma' : 'Novo treinamento';
-
-  // H7: When parent header "Nova turma" button is clicked, auto-open the creation modal
-  useEffect(() => {
-    if (autoOpenForm && tiposQualificacao.length > 0 && funcionarios.length > 0) {
-      abrirNovoTreinamento();
-      onAutoOpenFormHandled?.();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpenForm, tiposQualificacao.length, funcionarios.length]);
 
   const actionButtons = (
     <div className="flex flex-wrap items-center gap-2">
@@ -1769,40 +1836,58 @@ export default function TreinamentosPlanejadosPage({
           </div>
         )}
 
+        {diagnosticsFalhos.length > 0 && (
+          <div
+            className="flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            role="alert"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
+            <span>
+              A lista está incompleta: não foi possível carregar {diagnosticsFalhos.join(', ')}.
+              Atualize a página ou contate o administrador antes de tomar decisões operacionais.
+            </span>
+          </div>
+        )}
+
         {/* Summary tags + action buttons in same row */}
         <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-        <section className="flex flex-wrap items-center gap-1.5" aria-label="Resumo dos treinamentos">
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-slate-100 text-slate-700 text-xs">
-            <CalendarDays className="h-3 w-3" aria-hidden="true" />
-            <span>Total</span>
-            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.total}</strong>
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-purple-50 text-purple-700 text-xs">
-            <ClipboardList className="h-3 w-3" aria-hidden="true" />
-            <span>Planejados</span>
-            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.planejados}</strong>
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs">
-            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-            <span>Confirmados</span>
-            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.confirmadosEventos}</strong>
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-amber-50 text-amber-700 text-xs">
-            <Clock className="h-3 w-3" aria-hidden="true" />
-            <span>Em andamento</span>
-            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.emAndamento}</strong>
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-blue-50 text-blue-700 text-xs">
-            <Flag className="h-3 w-3" aria-hidden="true" />
-            <span>Concluídos</span>
-            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.concluidos}</strong>
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-rose-50 text-rose-700 text-xs">
-            <Ban className="h-3 w-3" aria-hidden="true" />
-            <span>Cancelados</span>
-            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.cancelados}</strong>
-          </span>
-        </section>
+          <section
+            className="flex flex-wrap items-center gap-1.5"
+            aria-label="Resumo dos treinamentos"
+          >
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-slate-100 text-slate-700 text-xs">
+              <CalendarDays className="h-3 w-3" aria-hidden="true" />
+              <span>Total</span>
+              <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.total}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-purple-50 text-purple-700 text-xs">
+              <ClipboardList className="h-3 w-3" aria-hidden="true" />
+              <span>Planejados</span>
+              <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.planejados}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs">
+              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+              <span>Confirmados</span>
+              <strong>
+                {treinamentosQuery.isLoading ? '...' : resumoLista.confirmadosEventos}
+              </strong>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-amber-50 text-amber-700 text-xs">
+              <Clock className="h-3 w-3" aria-hidden="true" />
+              <span>Em andamento</span>
+              <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.emAndamento}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-blue-50 text-blue-700 text-xs">
+              <Flag className="h-3 w-3" aria-hidden="true" />
+              <span>Concluídos</span>
+              <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.concluidos}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-rose-50 text-rose-700 text-xs">
+              <Ban className="h-3 w-3" aria-hidden="true" />
+              <span>Cancelados</span>
+              <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.cancelados}</strong>
+            </span>
+          </section>
           {asTab && !hideActions && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
@@ -1859,7 +1944,9 @@ export default function TreinamentosPlanejadosPage({
             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
           >
             {STATUS_OPTIONS.map((option) => (
-              <option key={option.value || 'all'} value={option.value}>{option.label}</option>
+              <option key={option.value || 'all'} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </select>
           {!statusFiltro && (
@@ -1934,7 +2021,9 @@ export default function TreinamentosPlanejadosPage({
                     onClick={() => {
                       const [year, month] = mesReferencia.split('-').map(Number);
                       const prev = new Date(year, month - 2, 1);
-                      setMesReferencia(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
+                      setMesReferencia(
+                        `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`,
+                      );
                     }}
                     aria-label="Mês anterior"
                     className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer motion-safe:transition-colors"
@@ -1956,7 +2045,9 @@ export default function TreinamentosPlanejadosPage({
                     onClick={() => {
                       const [year, month] = mesReferencia.split('-').map(Number);
                       const next = new Date(year, month, 1);
-                      setMesReferencia(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                      setMesReferencia(
+                        `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`,
+                      );
                     }}
                     aria-label="Próximo mês"
                     className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer motion-safe:transition-colors"
@@ -1972,79 +2063,79 @@ export default function TreinamentosPlanejadosPage({
               </div>
 
               <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
-              <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 min-w-[640px] sm:min-w-0">
-                {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'].map((label) => (
-                  <div key={label} className="rounded-xl bg-slate-100 px-2 py-2">
-                    {label}
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-7 gap-2 min-w-[640px] sm:min-w-0">
-                {calendarCells.map((cell) => {
-                  const eventos = eventosPorDia.get(cell.date) || [];
-                  const isToday = cell.date === today;
-                  return (
-                    <div
-                      key={cell.date}
-                      className={`min-h-[150px] rounded-2xl border p-2.5 transition ${
-                        cell.outside
-                          ? 'border-slate-100 bg-slate-50/70'
-                          : 'border-slate-200 bg-white'
-                      } ${isToday ? 'ring-2 ring-primary-200' : ''}`}
-                    >
-                      <div className="mb-2 flex items-center justify-between">
-                        <span
-                          className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-sm font-semibold ${
-                            isToday ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
-                          {cell.date.slice(-2)}
-                        </span>
-                        {eventos.length > 0 && (
-                          <span className="text-[11px] font-medium text-slate-500">
-                            {eventos.length} evento(s)
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        {eventos.slice(0, 2).map((evento) => (
-                          <button
-                            key={evento.id}
-                            type="button"
-                            onClick={() => abrirDetalhes(evento)}
-                            aria-label={`${getEventoTitulo(evento)}, ${formatHourRange(evento.hora_inicio, evento.hora_fim)}`}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left transition hover:border-primary-200 hover:bg-primary-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer motion-safe:transition-colors"
-                          >
-                            <div className="flex items-center justify-between gap-1.5">
-                              <p className="truncate text-xs font-semibold text-slate-900 leading-tight">
-                                {getEventoTitulo(evento)}
-                              </p>
-                              <StatusBadge status={evento.status} />
-                            </div>
-                            <p className="mt-0.5 text-[11px] text-slate-500">
-                              {formatHourRange(evento.hora_inicio, evento.hora_fim)}
-                            </p>
-                          </button>
-                        ))}
-
-                        {eventos.length > 2 && (
-                          <p className="px-1 text-[11px] font-medium text-slate-500">
-                            +{eventos.length - 2} evento(s) neste dia
-                          </p>
-                        )}
-
-                        {eventos.length === 0 && !cell.outside && (
-                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-400 text-center">
-                            Sem treinamentos planejados
-                          </div>
-                        )}
-                      </div>
+                <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 min-w-[640px] sm:min-w-0">
+                  {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'].map((label) => (
+                    <div key={label} className="rounded-xl bg-slate-100 px-2 py-2">
+                      {label}
                     </div>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-2 min-w-[640px] sm:min-w-0">
+                  {calendarCells.map((cell) => {
+                    const eventos = eventosPorDia.get(cell.date) || [];
+                    const isToday = cell.date === today;
+                    return (
+                      <div
+                        key={cell.date}
+                        className={`min-h-[150px] rounded-2xl border p-2.5 transition ${
+                          cell.outside
+                            ? 'border-slate-100 bg-slate-50/70'
+                            : 'border-slate-200 bg-white'
+                        } ${isToday ? 'ring-2 ring-primary-200' : ''}`}
+                      >
+                        <div className="mb-2 flex items-center justify-between">
+                          <span
+                            className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-sm font-semibold ${
+                              isToday ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {cell.date.slice(-2)}
+                          </span>
+                          {eventos.length > 0 && (
+                            <span className="text-[11px] font-medium text-slate-500">
+                              {eventos.length} evento(s)
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {eventos.slice(0, 2).map((evento) => (
+                            <button
+                              key={evento.id}
+                              type="button"
+                              onClick={() => abrirDetalhes(evento)}
+                              aria-label={`${getEventoTitulo(evento)}, ${formatHourRange(evento.hora_inicio, evento.hora_fim)}`}
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left transition hover:border-primary-200 hover:bg-primary-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer motion-safe:transition-colors"
+                            >
+                              <div className="flex items-center justify-between gap-1.5">
+                                <p className="truncate text-xs font-semibold text-slate-900 leading-tight">
+                                  {getEventoTitulo(evento)}
+                                </p>
+                                <StatusBadge status={evento.status} />
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-slate-500">
+                                {formatHourRange(evento.hora_inicio, evento.hora_fim)}
+                              </p>
+                            </button>
+                          ))}
+
+                          {eventos.length > 2 && (
+                            <p className="px-1 text-[11px] font-medium text-slate-500">
+                              +{eventos.length - 2} evento(s) neste dia
+                            </p>
+                          )}
+
+                          {eventos.length === 0 && !cell.outside && (
+                            <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-400 text-center">
+                              Sem treinamentos planejados
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -2057,7 +2148,9 @@ export default function TreinamentosPlanejadosPage({
                 </div>
               ) : treinamentosQuery.isError && listaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-700">
-                  <p className="font-medium">Erro ao carregar {isTurmasView ? 'turmas' : 'treinamentos'}.</p>
+                  <p className="font-medium">
+                    Erro ao carregar {isTurmasView ? 'turmas' : 'treinamentos'}.
+                  </p>
                   <button
                     type="button"
                     onClick={() => treinamentosQuery.refetch()}
@@ -2068,7 +2161,10 @@ export default function TreinamentosPlanejadosPage({
                 </div>
               ) : listaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  <ClipboardList className="mx-auto mb-3 h-10 w-10 text-slate-300" aria-hidden="true" />
+                  <ClipboardList
+                    className="mx-auto mb-3 h-10 w-10 text-slate-300"
+                    aria-hidden="true"
+                  />
                   <p className="font-medium text-slate-700">
                     {isTurmasView
                       ? 'Nenhuma turma planejada no período'
@@ -2103,7 +2199,8 @@ export default function TreinamentosPlanejadosPage({
                       {listaTreinamentos.map((item) => {
                         const simulatorSessionId = getSimulatorSessionId(item);
                         const participantSummary =
-                          getEventoParticipantSummary(item) || `${item.convocados_total} convocados`;
+                          getEventoParticipantSummary(item) ||
+                          `${item.convocados_total} convocados`;
                         return (
                           <tr
                             key={item.id}
@@ -2165,7 +2262,9 @@ export default function TreinamentosPlanejadosPage({
                               </span>
                             </td>
                             <td className="max-w-[280px] px-4 py-3">
-                              <p className="font-semibold text-slate-900">{getEventoTitulo(item)}</p>
+                              <p className="font-semibold text-slate-900">
+                                {getEventoTitulo(item)}
+                              </p>
                               {getEventoLinkedSessionLabel(item) ? (
                                 <p className="mt-1 text-xs text-slate-500">
                                   {getEventoLinkedSessionLabel(item)}
@@ -2183,7 +2282,9 @@ export default function TreinamentosPlanejadosPage({
                             <td className="px-4 py-3 text-slate-600">
                               <FuncionarioLink
                                 funcionarioId={item.instrutor_id ?? undefined}
-                                nome={item.instrutor_nome || item.instrutor_guerra || 'Não definido'}
+                                nome={
+                                  item.instrutor_nome || item.instrutor_guerra || 'Não definido'
+                                }
                                 className="font-medium text-slate-700"
                               />
                             </td>
@@ -2245,7 +2346,9 @@ export default function TreinamentosPlanejadosPage({
               ) : auditoriaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
                   <FileClock className="mx-auto mb-3 h-10 w-10 text-slate-300" aria-hidden="true" />
-                  <p className="font-medium text-slate-700">Nenhum treinamento com trilha de auditoria</p>
+                  <p className="font-medium text-slate-700">
+                    Nenhum treinamento com trilha de auditoria
+                  </p>
                   <p className="mt-1">Nenhum evento encontrado neste período.</p>
                 </div>
               ) : (
@@ -2280,7 +2383,10 @@ export default function TreinamentosPlanejadosPage({
                       <div className="mt-4 space-y-3">
                         {(item.auditoria || []).length === 0 ? (
                           <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500 text-center">
-                            <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-slate-300" aria-hidden="true" />
+                            <AlertTriangle
+                              className="mx-auto mb-1 h-5 w-5 text-slate-300"
+                              aria-hidden="true"
+                            />
                             Sem eventos auditados ainda.
                           </div>
                         ) : (
@@ -2340,11 +2446,7 @@ export default function TreinamentosPlanejadosPage({
               <Button variant="secondary" onClick={() => setModalFormularioAberto(false)}>
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                form="treinamento-planejado-form"
-                disabled={salvandoFormulario}
-              >
+              <Button type="submit" form="treinamento-planejado-form" disabled={salvandoFormulario}>
                 {salvandoFormulario ? 'Salvando...' : 'Salvar turma'}
               </Button>
             </>
@@ -2371,7 +2473,9 @@ export default function TreinamentosPlanejadosPage({
                         qualificacao_tipo_id: selectedId,
                         titulo: current.titulo || tipo?.nome || '',
                         carga_horaria_prevista:
-                          cargaHoraria != null ? String(cargaHoraria) : current.carga_horaria_prevista,
+                          cargaHoraria != null
+                            ? String(cargaHoraria)
+                            : current.carga_horaria_prevista,
                       };
                     });
                   }}
@@ -2435,7 +2539,9 @@ export default function TreinamentosPlanejadosPage({
                           ...current,
                           tipo_treinamento: 'INICIAL',
                           carga_horaria_prevista:
-                            cargaHoraria != null ? String(cargaHoraria) : current.carga_horaria_prevista,
+                            cargaHoraria != null
+                              ? String(cargaHoraria)
+                              : current.carga_horaria_prevista,
                         };
                       });
                     }}
@@ -2469,7 +2575,9 @@ export default function TreinamentosPlanejadosPage({
                           ...current,
                           tipo_treinamento: 'RECORRENTE',
                           carga_horaria_prevista:
-                            cargaHoraria != null ? String(cargaHoraria) : current.carga_horaria_prevista,
+                            cargaHoraria != null
+                              ? String(cargaHoraria)
+                              : current.carga_horaria_prevista,
                         };
                       });
                     }}
@@ -2576,8 +2684,7 @@ export default function TreinamentosPlanejadosPage({
                   min={treinamentoEditando ? undefined : today}
                   onChange={(event) => {
                     const nextStart = event.target.value;
-                    const nextEnd =
-                      formState.data_fim < nextStart ? nextStart : formState.data_fim;
+                    const nextEnd = formState.data_fim < nextStart ? nextStart : formState.data_fim;
                     atualizarIntervalo(nextStart, nextEnd);
                   }}
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
@@ -2795,19 +2902,22 @@ export default function TreinamentosPlanejadosPage({
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Convocados</h3>
                   <p className="text-sm text-slate-500">
-                    {formState.participante_ids.length} selecionado(s) de {convocadosElegiveis.length} elegível(is).
+                    {formState.participante_ids.length} selecionado(s) de{' '}
+                    {convocadosElegiveis.length} elegível(is).
                   </p>
                   {publicoQualificacaoSelecionada ? (
                     <p className="mt-0.5 text-xs font-medium text-indigo-600">
-                      Filtro de público: {publicoQualificacaoSelecionada === 'TRIPULACAO' ? 'Tripulação' : 'Manutenção'}
+                      Filtro de público:{' '}
+                      {publicoQualificacaoSelecionada === 'TRIPULACAO'
+                        ? 'Tripulação'
+                        : 'Manutenção'}
                     </p>
-                  ) : (
-                    convocadosElegiveis.length === (funcionarios as FuncionarioOption[]).length && formState.qualificacao_tipo_id ? (
-                      <p className="mt-0.5 text-xs text-amber-600">
-                        Tipo de público não identificado — revise a qualificação. Mostrando todos.
-                      </p>
-                    ) : null
-                  )}
+                  ) : convocadosElegiveis.length === (funcionarios as FuncionarioOption[]).length &&
+                    formState.qualificacao_tipo_id ? (
+                    <p className="mt-0.5 text-xs text-amber-600">
+                      Tipo de público não identificado — revise a qualificação. Mostrando todos.
+                    </p>
+                  ) : null}
                 </div>
                 <input
                   type="search"
@@ -2876,99 +2986,87 @@ export default function TreinamentosPlanejadosPage({
             detalheTreinamento ? getEventoTitulo(detalheTreinamento) : 'Detalhes do treinamento'
           }
           size="5xl"
-          footer={
-              (() => {
-                const isEncerrada =
-                  detalheTreinamento && STATUS_ENCERRADOS.has(detalheTreinamento.status);
-                const isPlanejadoOuConfirmado =
-                  detalheTreinamento &&
-                  (detalheTreinamento.status === 'PLANEJADO' ||
-                    detalheTreinamento.status === 'CONFIRMADO');
-                const isEmAndamento =
-                  detalheTreinamento && detalheTreinamento.status === 'EM_ANDAMENTO';
-                const convocacaoDisabled = Boolean(
-                  convocacaoDisabledReason || enviandoConvocacao,
-                );
+          footer={(() => {
+            const isEncerrada =
+              detalheTreinamento && STATUS_ENCERRADOS.has(detalheTreinamento.status);
+            const isPlanejadoOuConfirmado =
+              detalheTreinamento &&
+              (detalheTreinamento.status === 'PLANEJADO' ||
+                detalheTreinamento.status === 'CONFIRMADO');
+            const isEmAndamento =
+              detalheTreinamento && detalheTreinamento.status === 'EM_ANDAMENTO';
+            const convocacaoDisabled = Boolean(convocacaoDisabledReason || enviandoConvocacao);
 
-                // ── Ação primária contextual ──────────────────────────────
-                let primaryAction: ReactNode = null;
-                if (canWriteTraining && isPlanejadoOuConfirmado && !convocacaoDisabled) {
-                  primaryAction = (
-                    <Button onClick={abrirConvocacaoTurma} disabled={enviandoConvocacao}>
-                      <Mail className="h-4 w-4" />
-                      {enviandoConvocacao ? 'Preparando...' : 'Convocar Turma'}
-                    </Button>
-                  );
-                } else if (canWriteTraining && isEmAndamento) {
-                  primaryAction = (
-                    <Button
-                      onClick={abrirConfirmacaoConclusao}
-                      disabled={concluirTurma.isPending}
-                    >
-                      {concluirTurma.isPending ? 'Salvando...' : 'Concluir Turma'}
-                    </Button>
-                  );
-                }
-
-                // ── Ações secundárias (dropdown) ──────────────────────────
-                const dropdownItems: DropdownMenuItem[] = [];
-                if (canWriteTraining) {
-                  dropdownItems.push({
-                    key: 'editar',
-                    label: 'Editar',
-                    icon: <Edit2 className="h-4 w-4" />,
-                    onClick: () =>
-                      abrirEditor(detalheQuery.data || treinamentoEditando),
-                    disabled: !detalheTreinamento,
-                  });
-                }
-                // Convocar vai para o dropdown quando não é ação primária
-                if (
-                  canWriteTraining &&
-                  !isPlanejadoOuConfirmado &&
-                  !convocacaoDisabled
-                ) {
-                  dropdownItems.push({
-                    key: 'convocar',
-                    label: 'Convocar Turma',
-                    icon: <Mail className="h-4 w-4" />,
-                    onClick: abrirConvocacaoTurma,
-                  });
-                }
-                if (canWriteTraining && !isEncerrada) {
-                  dropdownItems.push({
-                    key: 'excluir',
-                    label: 'Excluir',
-                    icon: <Trash2 className="h-4 w-4" />,
-                    onClick: excluirTreinamentoSelecionado,
-                    danger: true,
-                    disabled: excluindo || !detalheTreinamento,
-                  });
-                }
-
-                return (
-                  <div className="flex w-full items-center gap-2">
-                    <Button variant="secondary" onClick={fecharModalDetalhes}>
-                      Fechar
-                    </Button>
-                    <div className="flex-1" />
-                    <Button
-                      variant="ghost"
-                      onClick={gerarListaPresencaTurmaAtual}
-                      disabled={gerandoListaPresencaTurma || !detalheTreinamento}
-                      title="Gerar lista de presença da turma em PDF"
-                    >
-                      <ClipboardList className="h-4 w-4" />
-                      Lista de Presença
-                    </Button>
-                    {dropdownItems.length > 0 && (
-                      <DropdownMenu items={dropdownItems} ariaLabel="Mais ações" />
-                    )}
-                    {primaryAction}
-                  </div>
-                );
-              })()
+            // ── Ação primária contextual ──────────────────────────────
+            let primaryAction: ReactNode = null;
+            if (canWriteTraining && isPlanejadoOuConfirmado && !convocacaoDisabled) {
+              primaryAction = (
+                <Button onClick={abrirConvocacaoTurma} disabled={enviandoConvocacao}>
+                  <Mail className="h-4 w-4" />
+                  {enviandoConvocacao ? 'Preparando...' : 'Convocar Turma'}
+                </Button>
+              );
+            } else if (canWriteTraining && isEmAndamento) {
+              primaryAction = (
+                <Button onClick={abrirConfirmacaoConclusao} disabled={concluirTurma.isPending}>
+                  {concluirTurma.isPending ? 'Salvando...' : 'Concluir Turma'}
+                </Button>
+              );
             }
+
+            // ── Ações secundárias (dropdown) ──────────────────────────
+            const dropdownItems: DropdownMenuItem[] = [];
+            if (canWriteTraining) {
+              dropdownItems.push({
+                key: 'editar',
+                label: 'Editar',
+                icon: <Edit2 className="h-4 w-4" />,
+                onClick: () => abrirEditor(detalheQuery.data || treinamentoEditando),
+                disabled: !detalheTreinamento,
+              });
+            }
+            // Convocar vai para o dropdown quando não é ação primária
+            if (canWriteTraining && !isPlanejadoOuConfirmado && !convocacaoDisabled) {
+              dropdownItems.push({
+                key: 'convocar',
+                label: 'Convocar Turma',
+                icon: <Mail className="h-4 w-4" />,
+                onClick: abrirConvocacaoTurma,
+              });
+            }
+            if (canWriteTraining && !isEncerrada) {
+              dropdownItems.push({
+                key: 'excluir',
+                label: 'Excluir',
+                icon: <Trash2 className="h-4 w-4" />,
+                onClick: excluirTreinamentoSelecionado,
+                danger: true,
+                disabled: excluindo || !detalheTreinamento,
+              });
+            }
+
+            return (
+              <div className="flex w-full items-center gap-2">
+                <Button variant="secondary" onClick={fecharModalDetalhes}>
+                  Fechar
+                </Button>
+                <div className="flex-1" />
+                <Button
+                  variant="ghost"
+                  onClick={gerarListaPresencaTurmaAtual}
+                  disabled={gerandoListaPresencaTurma || !detalheTreinamento}
+                  title="Gerar lista de presença da turma em PDF"
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  Lista de Presença
+                </Button>
+                {dropdownItems.length > 0 && (
+                  <DropdownMenu items={dropdownItems} ariaLabel="Mais ações" />
+                )}
+                {primaryAction}
+              </div>
+            );
+          })()}
         >
           {!detalheTreinamento || detalheQuery.isLoading ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
@@ -2995,7 +3093,9 @@ export default function TreinamentosPlanejadosPage({
                         Agenda
                       </p>
                       <p className="mt-2 text-sm font-semibold text-slate-900">
-                        {formatDateLabel(detalheTreinamento.data_inicio || detalheTreinamento.data_prevista)}
+                        {formatDateLabel(
+                          detalheTreinamento.data_inicio || detalheTreinamento.data_prevista,
+                        )}
                         {(detalheTreinamento.data_fim || detalheTreinamento.data_prevista) !==
                           (detalheTreinamento.data_inicio || detalheTreinamento.data_prevista) &&
                           ` até ${formatDateLabel(
@@ -3047,9 +3147,11 @@ export default function TreinamentosPlanejadosPage({
                             <span className="text-slate-500">
                               {formatHourRange(dia.hora_inicio, dia.hora_fim)}
                               {(dia.presencas || []).length > 0 &&
-                                ` · ${(dia.presencas || []).filter(
-                                  (presenca) => presenca.status === 'PRESENTE',
-                                ).length} presente(s)`}
+                                ` · ${
+                                  (dia.presencas || []).filter(
+                                    (presenca) => presenca.status === 'PRESENTE',
+                                  ).length
+                                } presente(s)`}
                             </span>
                           </div>
                         ))}
@@ -3102,7 +3204,8 @@ export default function TreinamentosPlanejadosPage({
                   <div>
                     <h3 className="text-base font-semibold text-slate-900">Presenca diaria</h3>
                     <p className="text-sm text-slate-500">
-                      Registro por dia da turma; aprovacao e emissao continuam no bloco de conclusao.
+                      Registro por dia da turma; aprovacao e emissao continuam no bloco de
+                      conclusao.
                     </p>
                   </div>
                   {diaPresencaSelecionado ? (
@@ -3111,28 +3214,37 @@ export default function TreinamentosPlanejadosPage({
                         variant="secondary"
                         disabled={indiceDiaPresenca <= 0}
                         onClick={() =>
-                          setDiaPresencaSelecionadoId(diasPresenca[indiceDiaPresenca - 1]?.id || null)
+                          setDiaPresencaSelecionadoId(
+                            diasPresenca[indiceDiaPresenca - 1]?.id || null,
+                          )
                         }
                       >
                         Anterior
                       </Button>
                       <select
                         value={diaPresencaSelecionado.id}
-                        onChange={(event) => setDiaPresencaSelecionadoId(Number(event.target.value))}
+                        onChange={(event) =>
+                          setDiaPresencaSelecionadoId(Number(event.target.value))
+                        }
                         className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
                         aria-label="Selecionar dia de presenca"
                       >
                         {diasPresenca.map((dia) => (
                           <option key={dia.id} value={dia.id}>
-                            {formatDateLabel(dia.data)} · {formatHourRange(dia.hora_inicio, dia.hora_fim)}
+                            {formatDateLabel(dia.data)} ·{' '}
+                            {formatHourRange(dia.hora_inicio, dia.hora_fim)}
                           </option>
                         ))}
                       </select>
                       <Button
                         variant="secondary"
-                        disabled={indiceDiaPresenca < 0 || indiceDiaPresenca >= diasPresenca.length - 1}
+                        disabled={
+                          indiceDiaPresenca < 0 || indiceDiaPresenca >= diasPresenca.length - 1
+                        }
                         onClick={() =>
-                          setDiaPresencaSelecionadoId(diasPresenca[indiceDiaPresenca + 1]?.id || null)
+                          setDiaPresencaSelecionadoId(
+                            diasPresenca[indiceDiaPresenca + 1]?.id || null,
+                          )
                         }
                       >
                         Proximo
@@ -3155,7 +3267,10 @@ export default function TreinamentosPlanejadosPage({
                         ['Dispensados', resumoPresencaDia.dispensados],
                         ['Pendentes', resumoPresencaDia.pendentes],
                       ].map(([label, value]) => (
-                        <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div
+                          key={String(label)}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                        >
                           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                             {label}
                           </p>
@@ -3209,7 +3324,10 @@ export default function TreinamentosPlanejadosPage({
                             const status = presenca?.status || 'PENDENTE';
                             const meta = getPresencaDiaMeta(status);
                             return (
-                              <tr key={`${diaPresencaSelecionado.id}-${participante.id}`} className="align-top">
+                              <tr
+                                key={`${diaPresencaSelecionado.id}-${participante.id}`}
+                                className="align-top"
+                              >
                                 <td className="px-3 py-4">
                                   <p className="font-semibold text-slate-900">
                                     {participante.funcionario_guerra ||
@@ -3217,7 +3335,10 @@ export default function TreinamentosPlanejadosPage({
                                       'Sem nome'}
                                   </p>
                                   <p className="text-slate-500">
-                                    {[participante.funcionario_nome, participante.funcionario_matricula]
+                                    {[
+                                      participante.funcionario_nome,
+                                      participante.funcionario_matricula,
+                                    ]
                                       .filter(Boolean)
                                       .join(' · ')}
                                   </p>
@@ -3228,8 +3349,15 @@ export default function TreinamentosPlanejadosPage({
                                       <button
                                         key={option.value}
                                         type="button"
-                                        disabled={!canWriteTraining || atualizarPresencaDia.isPending}
-                                        onClick={() => atualizarPresencaDiaParticipante(participante, option.value)}
+                                        disabled={
+                                          !canWriteTraining || atualizarPresencaDia.isPending
+                                        }
+                                        onClick={() =>
+                                          atualizarPresencaDiaParticipante(
+                                            participante,
+                                            option.value,
+                                          )
+                                        }
                                         className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                                           status === option.value
                                             ? option.className
@@ -3245,10 +3373,12 @@ export default function TreinamentosPlanejadosPage({
                                   {presenca?.minutos_presentes != null
                                     ? `${presenca.minutos_presentes} min`
                                     : status === 'PRESENTE'
-                                      ? `${calcularMinutosPrevistos(
-                                          diaPresencaSelecionado.hora_inicio,
-                                          diaPresencaSelecionado.hora_fim,
-                                        ) || 0} min`
+                                      ? `${
+                                          calcularMinutosPrevistos(
+                                            diaPresencaSelecionado.hora_inicio,
+                                            diaPresencaSelecionado.hora_fim,
+                                          ) || 0
+                                        } min`
                                       : '-'}
                                 </td>
                                 <td className="px-3 py-4">
@@ -3276,12 +3406,10 @@ export default function TreinamentosPlanejadosPage({
               <section className="rounded-3xl border border-slate-200 bg-white p-5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-900">
-                      Conclusão da turma
-                    </h3>
+                    <h3 className="text-base font-semibold text-slate-900">Conclusão da turma</h3>
                     <p className="text-sm text-slate-500">
-                      O status da turma é recalculado pelo backend. Ela só fecha como concluída quando
-                      todos os participantes tiverem resultado final.
+                      O status da turma é recalculado pelo backend. Ela só fecha como concluída
+                      quando todos os participantes tiverem resultado final.
                     </p>
                   </div>
                   {concluirTurma.isPending && (
@@ -3307,7 +3435,10 @@ export default function TreinamentosPlanejadosPage({
                         ['Já concluídos', resumoConclusao.jaConcluidos],
                         ['Históricos gerados', resumoConclusao.historicosGerados],
                       ].map(([label, value]) => (
-                        <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div
+                          key={String(label)}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                        >
                           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                             {label}
                           </p>
@@ -3367,7 +3498,10 @@ export default function TreinamentosPlanejadosPage({
                         <tbody className="divide-y divide-slate-100">
                           {detalheTreinamento.participantes.length === 0 ? (
                             <tr>
-                              <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500">
+                              <td
+                                colSpan={5}
+                                className="px-3 py-8 text-center text-sm text-slate-500"
+                              >
                                 Nenhum convocado vinculado a este treinamento.
                               </td>
                             </tr>
@@ -3385,19 +3519,27 @@ export default function TreinamentosPlanejadosPage({
                                         'Sem nome'}
                                     </p>
                                     <p className="text-slate-500">
-                                      {[participante.funcionario_nome, participante.funcionario_matricula]
+                                      {[
+                                        participante.funcionario_nome,
+                                        participante.funcionario_matricula,
+                                      ]
                                         .filter(Boolean)
                                         .join(' · ')}
                                     </p>
                                   </td>
                                   <td className="px-3 py-4 text-slate-600">
                                     <p>
-                                      {[participante.funcionario_setor, participante.funcionario_funcao]
+                                      {[
+                                        participante.funcionario_setor,
+                                        participante.funcionario_funcao,
+                                      ]
                                         .filter(Boolean)
                                         .join(' · ') || 'Nao informado'}
                                     </p>
                                     <p className="mt-2 text-xs text-slate-500">
-                                      {participante.confirmado ? 'Confirmado' : 'Ainda não confirmado'}
+                                      {participante.confirmado
+                                        ? 'Confirmado'
+                                        : 'Ainda não confirmado'}
                                       {participante.resultado
                                         ? ` · Resultado atual: ${participante.resultado}`
                                         : ' · Sem conclusão final'}
@@ -3409,108 +3551,113 @@ export default function TreinamentosPlanejadosPage({
                                         type="checkbox"
                                         checked={draft.presente === true}
                                         disabled={!canConcluirTurma || concluirTurma.isPending}
-                                    onChange={(event) =>
-                                      atualizarConclusaoParticipante(participante, {
-                                        presente: event.target.checked ? true : null,
-                                      })
-                                    }
-                                  />
-                                  Presente
-                                </label>
-                              </td>
-                              <td className="px-3 py-4">
-                                <div className="flex flex-wrap gap-2">
-                                  {[
-                                    ['APROVADO', 'Aprovado'],
-                                    ['REPROVADO', 'Reprovado'],
-                                    ['INCOMPLETO', 'Incompleto'],
-                                  ].map(([value, label]) => (
-                                    <button
-                                      key={value}
-                                      type="button"
-                                      disabled={!canConcluirTurma || concluirTurma.isPending}
-                                      onClick={() =>
-                                        atualizarConclusaoParticipante(participante, {
-                                          resultado: value as ConclusaoParticipanteDraft['resultado'],
-                                          presente:
-                                            value === 'APROVADO' && draft.presente == null
-                                              ? true
-                                              : draft.presente,
-                                          data_conclusao_efetiva:
-                                            value === 'APROVADO'
-                                              ? draft.data_conclusao_efetiva || defaultConclusaoDate
-                                              : null,
-                                        })
-                                      }
-                                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                        draft.resultado === value
-                                          ? value === 'APROVADO'
-                                            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                            : value === 'REPROVADO'
-                                              ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
-                                              : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
-                                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                  <button
-                                    type="button"
-                                    disabled={!canConcluirTurma || concluirTurma.isPending}
-                                    onClick={() =>
-                                      atualizarConclusaoParticipante(participante, {
-                                        resultado: null,
-                                        data_conclusao_efetiva: null,
-                                      })
-                                    }
-                                    className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
-                                  >
-                                    Limpar
-                                  </button>
-                                </div>
-                                {draft.resultado === 'APROVADO' ? (
-                                  <div className="mt-3 max-w-[180px]">
-                                    <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                                      Data de conclusão
+                                        onChange={(event) =>
+                                          atualizarConclusaoParticipante(participante, {
+                                            presente: event.target.checked ? true : null,
+                                          })
+                                        }
+                                      />
+                                      Presente
                                     </label>
-                                    <input
-                                      type="date"
-                                      value={draft.data_conclusao_efetiva || ''}
-                                      max={today}
-                                      disabled={!canConcluirTurma || concluirTurma.isPending}
-                                      onChange={(event) =>
-                                        atualizarConclusaoParticipante(participante, {
-                                          data_conclusao_efetiva: event.target.value || null,
-                                        })
-                                      }
-                                      className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                                    />
-                                  </div>
-                                ) : null}
-                              </td>
-                              <td className="px-3 py-4 text-slate-600">
-                                <p className="font-medium text-slate-900">
-                                  {participante.qualificacao_historico_id
-                                    ? `Histórico #${participante.qualificacao_historico_id}`
-                                    : 'Sem histórico gerado'}
-                                </p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  {participante.qualificacao_historico_status || 'Sem status histórico'}
-                                </p>
-                                {participante.resultado === 'APROVADO' && participante.data_conclusao_efetiva ? (
-                                  <p className="mt-2 text-xs text-slate-500">
-                                    Última conclusão: {formatDateLabel(participante.data_conclusao_efetiva)}
-                                  </p>
-                                ) : null}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                                  </td>
+                                  <td className="px-3 py-4">
+                                    <div className="flex flex-wrap gap-2">
+                                      {[
+                                        ['APROVADO', 'Aprovado'],
+                                        ['REPROVADO', 'Reprovado'],
+                                        ['INCOMPLETO', 'Incompleto'],
+                                      ].map(([value, label]) => (
+                                        <button
+                                          key={value}
+                                          type="button"
+                                          disabled={!canConcluirTurma || concluirTurma.isPending}
+                                          onClick={() =>
+                                            atualizarConclusaoParticipante(participante, {
+                                              resultado:
+                                                value as ConclusaoParticipanteDraft['resultado'],
+                                              presente:
+                                                value === 'APROVADO' && draft.presente == null
+                                                  ? true
+                                                  : draft.presente,
+                                              data_conclusao_efetiva:
+                                                value === 'APROVADO'
+                                                  ? draft.data_conclusao_efetiva ||
+                                                    defaultConclusaoDate
+                                                  : null,
+                                            })
+                                          }
+                                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                            draft.resultado === value
+                                              ? value === 'APROVADO'
+                                                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                                : value === 'REPROVADO'
+                                                  ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                                                  : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                          }`}
+                                        >
+                                          {label}
+                                        </button>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        disabled={!canConcluirTurma || concluirTurma.isPending}
+                                        onClick={() =>
+                                          atualizarConclusaoParticipante(participante, {
+                                            resultado: null,
+                                            data_conclusao_efetiva: null,
+                                          })
+                                        }
+                                        className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
+                                      >
+                                        Limpar
+                                      </button>
+                                    </div>
+                                    {draft.resultado === 'APROVADO' ? (
+                                      <div className="mt-3 max-w-[180px]">
+                                        <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                          Data de conclusão
+                                        </label>
+                                        <input
+                                          type="date"
+                                          value={draft.data_conclusao_efetiva || ''}
+                                          max={today}
+                                          disabled={!canConcluirTurma || concluirTurma.isPending}
+                                          onChange={(event) =>
+                                            atualizarConclusaoParticipante(participante, {
+                                              data_conclusao_efetiva: event.target.value || null,
+                                            })
+                                          }
+                                          className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                                        />
+                                      </div>
+                                    ) : null}
+                                  </td>
+                                  <td className="px-3 py-4 text-slate-600">
+                                    <p className="font-medium text-slate-900">
+                                      {participante.qualificacao_historico_id
+                                        ? `Histórico #${participante.qualificacao_historico_id}`
+                                        : 'Sem histórico gerado'}
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      {participante.qualificacao_historico_status ||
+                                        'Sem status histórico'}
+                                    </p>
+                                    {participante.resultado === 'APROVADO' &&
+                                    participante.data_conclusao_efetiva ? (
+                                      <p className="mt-2 text-xs text-slate-500">
+                                        Última conclusão:{' '}
+                                        {formatDateLabel(participante.data_conclusao_efetiva)}
+                                      </p>
+                                    ) : null}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </>
                 )}
               </section>
@@ -3581,9 +3728,7 @@ export default function TreinamentosPlanejadosPage({
                   className="flex w-full items-center justify-between text-left"
                 >
                   <div>
-                    <h3 className="text-base font-semibold text-slate-900">
-                      Trilha recente
-                    </h3>
+                    <h3 className="text-base font-semibold text-slate-900">Trilha recente</h3>
                     <p className="text-sm text-slate-500">
                       Registro auditado das alteracoes nesta turma.
                     </p>
@@ -3607,9 +3752,7 @@ export default function TreinamentosPlanejadosPage({
                           className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
                         >
                           <div className="flex flex-col gap-1">
-                            <p className="text-sm font-semibold text-slate-900">
-                              {registro.acao}
-                            </p>
+                            <p className="text-sm font-semibold text-slate-900">{registro.acao}</p>
                             <p className="text-xs text-slate-500">
                               {formatDateTimeLabel(registro.created_at)}
                             </p>
@@ -3634,16 +3777,10 @@ export default function TreinamentosPlanejadosPage({
           size="xl"
           footer={
             <>
-              <Button
-                variant="secondary"
-                onClick={() => setModalConfirmacaoConclusaoAberto(false)}
-              >
+              <Button variant="secondary" onClick={() => setModalConfirmacaoConclusaoAberto(false)}>
                 Revisar
               </Button>
-              <Button
-                onClick={confirmarConclusaoTurmaSalvar}
-                disabled={concluirTurma.isPending}
-              >
+              <Button onClick={confirmarConclusaoTurmaSalvar} disabled={concluirTurma.isPending}>
                 {concluirTurma.isPending ? 'Salvando...' : 'Confirmar conclusão'}
               </Button>
             </>
@@ -3660,10 +3797,16 @@ export default function TreinamentosPlanejadosPage({
               {[
                 ['Presentes', resumoConclusao.presentes],
                 ['Aprovados', resumoConclusao.aprovados],
-                ['Reprovados/Incompletos', resumoConclusao.reprovados + resumoConclusao.incompletos],
+                [
+                  'Reprovados/Incompletos',
+                  resumoConclusao.reprovados + resumoConclusao.incompletos,
+                ],
                 ['Pendentes sem conclusão', resumoConclusao.pendentes],
               ].map(([label, value]) => (
-                <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div
+                  key={String(label)}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                >
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     {label}
                   </p>
@@ -3675,8 +3818,9 @@ export default function TreinamentosPlanejadosPage({
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
               <p className="font-semibold text-slate-900">Regra operacional</p>
               <p className="mt-2">
-                A tabela principal só exibirá <strong>Concluído</strong> quando todos os participantes
-                tiverem resultado final. Participantes pendentes mantêm a turma em andamento.
+                A tabela principal só exibirá <strong>Concluído</strong> quando todos os
+                participantes tiverem resultado final. Participantes pendentes mantêm a turma em
+                andamento.
               </p>
             </div>
           </div>

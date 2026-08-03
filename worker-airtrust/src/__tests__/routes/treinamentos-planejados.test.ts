@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
+type MockMiddlewareContext = {
+  json: (body: unknown, status?: number) => Response;
+  set: (key: string, value: unknown) => void;
+};
+
 const {
   registrarAuditoriaMock,
   syncTreinamentoPlanejadoIntegrationMock,
@@ -17,19 +22,19 @@ const {
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
+  auth: () => async (c: MockMiddlewareContext, next: () => Promise<void>) => {
     if (authMode.current === 'missing') {
       return c.json({ success: false, error: 'Não autenticado' }, 401);
     }
-    c.set?.('userId', 99);
-    c.set?.('userRole', 'admin');
-    c.set?.('empresaId', tenantEmpresaId.current);
+    c.set('userId', 99);
+    c.set('userRole', 'admin');
+    c.set('empresaId', tenantEmpresaId.current);
     await next();
   },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
-  requireRole: () => async (c: any, next: () => Promise<void>) => {
+  requireRole: () => async (c: MockMiddlewareContext, next: () => Promise<void>) => {
     if (requireRoleMode.current === 'forbidden') {
       return c.json({ success: false, error: 'Acesso não autorizado' }, 403);
     }
@@ -110,6 +115,9 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
         }),
       };
     }),
+    batch: vi.fn(async (statements: D1PreparedStatement[]) =>
+      Promise.all(statements.map((statement) => statement.run())),
+    ),
   } as unknown as D1Database;
 
   return { db, calls };
@@ -141,7 +149,7 @@ describe('treinamentos planejados router', () => {
       ],
       [
         // M12: janela de deduplicação de duplo-submit — sem turma recente idêntica.
-        "-20 seconds",
+        '-20 seconds',
         {
           first: () => null,
         },
@@ -578,6 +586,50 @@ describe('treinamentos planejados router', () => {
     );
   });
 
+  it('atualiza turma em um unico batch atomico', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'SELECT id, qualificacao_tipo_id FROM treinamentos_planejados WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        {
+          first: () => ({ id: 31, qualificacao_tipo_id: 9 }),
+        },
+      ],
+      [
+        'UPDATE treinamentos_planejados',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 0 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/treinamentos/planejados/31', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ titulo: 'Turma revisada' }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { id: 31 },
+    });
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    const updateCall = calls.find(
+      (call) => call.method === 'run' && call.query.includes('UPDATE treinamentos_planejados'),
+    );
+    expect(updateCall?.args).toEqual(['Turma revisada', 31, 1]);
+    expect(syncTreinamentoPlanejadoIntegrationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ empresaId: 1, treinamentoId: 31 }),
+    );
+  });
+
   it('bloqueia concluir turma sem participantes pelo endpoint de edicao', async () => {
     const trainingRow = {
       id: 31,
@@ -723,8 +775,50 @@ describe('treinamentos planejados router', () => {
         {
           all: () => ({
             results: [
-              { treinamento_id: 31, funcionario_id: 1, funcionario_nome: 'Foo', funcionario_guerra: 'Foo', funcionario_matricula: '001', funcionario_email: null, funcionario_setor: null, funcionario_funcao: null, confirmado: 1, presente: 0, aprovado: null, nota: null, observacoes: null, qualificacao_historico_id: null, qualificacao_historico_status: null, status_participacao: null, resultado: null, conceito: null, data_conclusao_efetiva: null, concluido_em: null },
-              { treinamento_id: 31, funcionario_id: 2, funcionario_nome: 'Bar', funcionario_guerra: 'Bar', funcionario_matricula: '002', funcionario_email: null, funcionario_setor: null, funcionario_funcao: null, confirmado: 0, presente: 0, aprovado: null, nota: null, observacoes: null, qualificacao_historico_id: null, qualificacao_historico_status: null, status_participacao: null, resultado: null, conceito: null, data_conclusao_efetiva: null, concluido_em: null },
+              {
+                treinamento_id: 31,
+                funcionario_id: 1,
+                funcionario_nome: 'Foo',
+                funcionario_guerra: 'Foo',
+                funcionario_matricula: '001',
+                funcionario_email: null,
+                funcionario_setor: null,
+                funcionario_funcao: null,
+                confirmado: 1,
+                presente: 0,
+                aprovado: null,
+                nota: null,
+                observacoes: null,
+                qualificacao_historico_id: null,
+                qualificacao_historico_status: null,
+                status_participacao: null,
+                resultado: null,
+                conceito: null,
+                data_conclusao_efetiva: null,
+                concluido_em: null,
+              },
+              {
+                treinamento_id: 31,
+                funcionario_id: 2,
+                funcionario_nome: 'Bar',
+                funcionario_guerra: 'Bar',
+                funcionario_matricula: '002',
+                funcionario_email: null,
+                funcionario_setor: null,
+                funcionario_funcao: null,
+                confirmado: 0,
+                presente: 0,
+                aprovado: null,
+                nota: null,
+                observacoes: null,
+                qualificacao_historico_id: null,
+                qualificacao_historico_status: null,
+                status_participacao: null,
+                resultado: null,
+                conceito: null,
+                data_conclusao_efetiva: null,
+                concluido_em: null,
+              },
             ],
           }),
         },
@@ -808,9 +902,7 @@ describe('treinamentos planejados router', () => {
     app.route('/treinamentos', treinamentosPlanejadosRoutes);
 
     const response = await app.fetch(
-      new Request(
-        'http://localhost/treinamentos/planejados?inicio=2026-06-01&fim=2026-06-30',
-      ),
+      new Request('http://localhost/treinamentos/planejados?inicio=2026-06-01&fim=2026-06-30'),
       { DB: db } as Env,
       {} as ExecutionContext,
     );
@@ -1366,9 +1458,10 @@ describe('treinamentos planejados router', () => {
         {} as ExecutionContext,
       );
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(500);
       await expect(response.json()).resolves.toMatchObject({
-        success: true,
+        success: false,
+        code: 'BACKFILL_PARTIAL_FAILURE',
         data: {
           total: 3,
           processadas: 2,

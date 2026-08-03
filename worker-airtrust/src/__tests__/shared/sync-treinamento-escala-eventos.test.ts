@@ -210,7 +210,7 @@ describe('syncTreinamentoToEscalaEventos', () => {
   // ─── R3: Batch inserts ─────────────────────────────────────────────────────
 
   it('uses db.batch() for all inserts (Fix R3)', async () => {
-    let batchCalls = 0;
+    let insertBatchCalls = 0;
     const base = createMockDb({
       escalaId: 'escala-id',
       insertSpy: (q, args) => inserts.push({ q, args }),
@@ -220,8 +220,16 @@ describe('syncTreinamentoToEscalaEventos', () => {
     const db = {
       ...base,
       batch: async (stmts: unknown[]) => {
-        batchCalls++;
-        return (base as any).batch(stmts);
+        if (
+          stmts.some((stmt) =>
+            String((stmt as { _query?: string })._query || '').includes(
+              'INSERT INTO escala_eventos',
+            ),
+          )
+        ) {
+          insertBatchCalls++;
+        }
+        return base.batch(stmts as Parameters<D1Database['batch']>[0]);
       },
     } as unknown as D1Database;
 
@@ -238,7 +246,7 @@ describe('syncTreinamentoToEscalaEventos', () => {
       createdBy: 'system',
     });
 
-    expect(batchCalls).toBe(1);
+    expect(insertBatchCalls).toBe(1);
     expect(inserts).toHaveLength(3);
   });
 

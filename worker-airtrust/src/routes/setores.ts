@@ -36,7 +36,10 @@ setores.get('/', auth(), async (c) => {
 
     sql += ' ORDER BY nome ASC';
 
-    const { results } = await db.prepare(sql).bind(...bindings).all();
+    const { results } = await db
+      .prepare(sql)
+      .bind(...bindings)
+      .all();
 
     return c.json({
       success: true,
@@ -71,7 +74,10 @@ setores.get('/:id', auth(), async (c) => {
       bindings.push(...access.setorIds);
     }
 
-    const { results } = await db.prepare(sql).bind(...bindings).all();
+    const { results } = await db
+      .prepare(sql)
+      .bind(...bindings)
+      .all();
 
     if (!results || results.length === 0) {
       throw new ApiError('Setor não encontrado', 404);
@@ -178,7 +184,9 @@ setores.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
     // Verifica se existe
     const { results: existing } = await db
-      .prepare('SELECT id FROM setores WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?')
+      .prepare(
+        'SELECT id, codigo, nome FROM setores WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
+      )
       .bind(id, getEmpresaId(c))
       .all();
 
@@ -252,7 +260,9 @@ setores.delete('/:id', auth(), requireRole('admin'), async (c) => {
 
   try {
     const { results: existing } = await db
-      .prepare('SELECT id FROM setores WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?')
+      .prepare(
+        'SELECT id, codigo, nome FROM setores WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
+      )
       .bind(id, getEmpresaId(c))
       .all();
 
@@ -260,9 +270,31 @@ setores.delete('/:id', auth(), requireRole('admin'), async (c) => {
       throw new ApiError('Setor não encontrado', 404);
     }
 
+    const setor = existing[0] as { codigo?: string | null; nome?: string | null };
+    const emUso = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM funcionarios
+          WHERE empresa_id = ? AND deleted_at IS NULL
+            AND UPPER(COALESCE(status, 'ATIVO')) = 'ATIVO'
+            AND (
+              setor_id = ?
+              OR (
+                NULLIF(TRIM(COALESCE(setor, '')), '') IS NOT NULL
+                AND UPPER(TRIM(setor)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))
+              )
+            )`,
+      )
+      .bind(getEmpresaId(c), id, setor.nome || '', setor.codigo || '')
+      .first<{ total: number }>();
+    if (Number(emUso?.total || 0) > 0) {
+      throw new ApiError('Setor em uso por funcionários ativos não pode ser excluído', 409);
+    }
+
     // Soft delete
     await db
-      .prepare('UPDATE setores SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .prepare(
+        'UPDATE setores SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
       .bind(id, getEmpresaId(c))
       .run();
 

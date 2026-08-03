@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
@@ -21,7 +22,7 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return {
     ...actual,
-  getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
+    getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
   };
 });
 
@@ -51,11 +52,6 @@ vi.mock('../../routes/simuladores-fichas-helpers', () => ({
 import simuladoresFichasRoutes from '../../routes/simuladores-fichas';
 import { errorHandler } from '../../middleware/error-handler';
 
-// Bloqueador 5 closure: requireRole now legitimately throws ApiError for
-// unauthorized roles on these routes. Registering the real error handler
-// on this bare router (tested via .fetch() directly, bypassing the
-// parent app's global app.onError) turns that into the proper JSON
-// status code instead of Hono's generic 500.
 simuladoresFichasRoutes.onError(errorHandler);
 
 type FichaRow = {
@@ -107,29 +103,26 @@ function createFichasDb(options?: { instructorMetaTableMissing?: boolean }) {
     },
   ];
 
-  /** Fichas com data no futuro (para testar availability gate) */
   const futureFichas = new Set([903]);
 
   const db = {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
-          // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
           if (query.includes('FROM empresas WHERE id')) {
             return { operational_domain_rbac_enabled: 0 };
           }
           if (query.includes('FROM fichas_sessao_instrutor_meta')) {
-            // Regression: some environments (e.g. staging before migration
-            // 0429_instructor_event_models is applied) don't have this table
-            // yet. The PDF route must degrade gracefully instead of a 500.
             if (options?.instructorMetaTableMissing) {
               throw new Error('no such table: fichas_sessao_instrutor_meta: SQLITE_ERROR');
             }
             return null;
           }
 
-          if (query.includes('COALESCE(sa.data, fs.data_sessao)') && query.includes('WHERE fs.id = ?')) {
-            // Availability query: return data_sessao based on ficha id
+          if (
+            query.includes('COALESCE(sa.data, fs.data_sessao)') &&
+            query.includes('WHERE fs.id = ?')
+          ) {
             const fichaId = Number(args[0]);
             if (futureFichas.has(fichaId)) {
               return { data_sessao: '2099-12-31', hora_inicio: '08:00' };
@@ -137,11 +130,17 @@ function createFichasDb(options?: { instructorMetaTableMissing?: boolean }) {
             return { data_sessao: '2026-06-21', hora_inicio: '08:00' };
           }
 
-          if (query.includes('SELECT f.id FROM usuarios u') && query.includes('JOIN funcionarios f')) {
+          if (
+            query.includes('SELECT f.id FROM usuarios u') &&
+            query.includes('JOIN funcionarios f')
+          ) {
             return { id: Number(args[0]) + 100 };
           }
 
-          if (query.includes('SELECT COUNT(DISTINCT id) AS total') && query.includes('FROM funcionarios')) {
+          if (
+            query.includes('SELECT COUNT(DISTINCT id) AS total') &&
+            query.includes('FROM funcionarios')
+          ) {
             const ids = args.slice(0, -1).map((value) => Number(value));
             return { total: ids.length };
           }
@@ -153,19 +152,29 @@ function createFichasDb(options?: { instructorMetaTableMissing?: boolean }) {
             return null;
           }
 
-          // Handle queries without alias (used by popular-manobras, gerar-qualificacao, PUT)
           if (query.includes('FROM fichas_sessao WHERE id') && query.includes('empresa_id = ?')) {
             const fichaId = Number(args[0]);
             const empresaId = Number(args[1]);
-            const ficha = fichas.find((item) => item.id === fichaId && item.empresa_id === empresaId);
+            const ficha = fichas.find(
+              (item) => item.id === fichaId && item.empresa_id === empresaId,
+            );
             if (!ficha) return null;
-            return { id: ficha.id, colaborador_id_aluno: ficha.colaborador_id_aluno, instrutor_id: ficha.instrutor_id, status: ficha.status, tipo_sessao: ficha.tipo_sessao, tipo_aeronave: null };
+            return {
+              id: ficha.id,
+              colaborador_id_aluno: ficha.colaborador_id_aluno,
+              instrutor_id: ficha.instrutor_id,
+              status: ficha.status,
+              tipo_sessao: ficha.tipo_sessao,
+              tipo_aeronave: null,
+            };
           }
 
           if (query.includes('FROM fichas_sessao fs') && query.includes('WHERE fs.id = ?')) {
             const fichaId = Number(args[0]);
             const empresaId = Number(args[1]);
-            const ficha = fichas.find((item) => item.id === fichaId && item.empresa_id === empresaId);
+            const ficha = fichas.find(
+              (item) => item.id === fichaId && item.empresa_id === empresaId,
+            );
             if (!ficha) return null;
             return {
               id: ficha.id,
@@ -230,7 +239,10 @@ function createFichasDb(options?: { instructorMetaTableMissing?: boolean }) {
             };
           }
 
-          if (query.includes('FROM fichas_sessao f') && query.includes('ORDER BY f.created_at DESC')) {
+          if (
+            query.includes('FROM fichas_sessao f') &&
+            query.includes('ORDER BY f.created_at DESC')
+          ) {
             return {
               results: fichas.map((ficha) => ({
                 ...ficha,
@@ -240,7 +252,7 @@ function createFichasDb(options?: { instructorMetaTableMissing?: boolean }) {
             };
           }
 
-          if (query.includes('FROM fichas_sessao_manobras fsm')) {
+          if (query.includes('FROM fichas_sessao_manobras')) {
             return {
               results: [
                 {
@@ -462,16 +474,13 @@ describe('simuladores fichas scope guards', () => {
     });
 
     const { db } = createFichasDb();
-    // Ficha 901: colaborador 201 (setor 10) — dentro do escopo
     const okResp = await simuladoresFichasRoutes.fetch(
       new Request('http://localhost/fichas/901/pdf', { method: 'POST' }),
       { DB: db, __mockEmpresaId: 6, __mockRole: 'manager' } as unknown as Env,
       {} as ExecutionContext,
     );
-    // 404? 403? 500? The mock doesn't return all PDF columns, but the gate
-    // must be reached BEFORE the DB fetch for manobras. Non-200 means gate agiu.
     expect(okResp.status).not.toBe(404);
-    // Ficha 902: colaborador 202 (setor 20) — fora do escopo
+
     const blockedResp = await simuladoresFichasRoutes.fetch(
       new Request('http://localhost/fichas/902/pdf', { method: 'POST' }),
       { DB: db, __mockEmpresaId: 6, __mockRole: 'manager' } as unknown as Env,
@@ -492,8 +501,6 @@ describe('simuladores fichas scope guards', () => {
     });
 
     const { db } = createFichasDb();
-    // Ficha 901: colaborador 201, mas usuário logado é 101 (funcionario 201)
-    // Usando role='usuario' (ALUNO_PENDING_SIGNATURE scope) com userId=888 (outro aluno)
     const resp = await simuladoresFichasRoutes.fetch(
       new Request('http://localhost/fichas/901/pdf', { method: 'POST' }),
       {
@@ -519,7 +526,6 @@ describe('simuladores fichas scope guards', () => {
     });
 
     const { db } = createFichasDb();
-    // Usuário 201 → funcionario 301 (instrutor da ficha 901)
     const resp = await simuladoresFichasRoutes.fetch(
       new Request('http://localhost/fichas/901/pdf', { method: 'POST' }),
       {
@@ -530,8 +536,6 @@ describe('simuladores fichas scope guards', () => {
       } as unknown as Env,
       {} as ExecutionContext,
     );
-    // Instrutor da ficha 901 → autorizado (gate passa)
-    // Pode retornar 500 por falta de mock interno, mas NÃO 403
     expect(resp.status).not.toBe(403);
   });
 
@@ -543,7 +547,6 @@ describe('simuladores fichas scope guards', () => {
     });
 
     const { db } = createFichasDb();
-    // Ficha 903: data futura (2099-12-31)
     const resp = await simuladoresFichasRoutes.fetch(
       new Request('http://localhost/fichas/903'),
       {
@@ -555,7 +558,7 @@ describe('simuladores fichas scope guards', () => {
     );
 
     expect(resp.status).toBe(409);
-    const body = await resp.json() as Record<string, unknown>;
+    const body = (await resp.json()) as Record<string, unknown>;
     expect(body.code).toBe('FICHA_NOT_AVAILABLE_YET');
   });
 
@@ -578,7 +581,7 @@ describe('simuladores fichas scope guards', () => {
     );
 
     expect(resp.status).toBe(409);
-    const body = await resp.json() as Record<string, unknown>;
+    const body = (await resp.json()) as Record<string, unknown>;
     expect(body.code).toBe('FICHA_NOT_AVAILABLE_YET');
   });
 
@@ -590,7 +593,6 @@ describe('simuladores fichas scope guards', () => {
     });
 
     const { db } = createFichasDb();
-    // Ficha 901: data passada (2026-06-21)
     const resp = await simuladoresFichasRoutes.fetch(
       new Request('http://localhost/fichas/901'),
       {
@@ -601,7 +603,6 @@ describe('simuladores fichas scope guards', () => {
       {} as ExecutionContext,
     );
 
-    // 409 seria blocked, qualquer outro (incluindo 500 por falta de mock) = passou pelo gate
     expect(resp.status).not.toBe(409);
   });
 
@@ -704,7 +705,6 @@ describe('simuladores fichas scope guards', () => {
     });
 
     const { db } = createFichasDb();
-    // role='usuario' (ALUNO_PENDING_SIGNATURE) com userId=888 (outro aluno)
     const resp = await simuladoresFichasRoutes.fetch(
       new Request('http://localhost/fichas/901', {
         method: 'PUT',
@@ -735,7 +735,6 @@ describe('simuladores fichas scope guards', () => {
     });
 
     const { db } = createFichasDb();
-    // instrutor 201 → funcionario 301 (instrutor da ficha 901)
     const resp = await simuladoresFichasRoutes.fetch(
       new Request('http://localhost/fichas/901', {
         method: 'PUT',
@@ -751,7 +750,6 @@ describe('simuladores fichas scope guards', () => {
       {} as ExecutionContext,
     );
 
-    // Não é 403 — gate passou (availability pode bloquear depois, mas role passou)
     expect(resp.status).not.toBe(403);
   });
 
@@ -763,7 +761,6 @@ describe('simuladores fichas scope guards', () => {
     });
 
     const { db } = createFichasDb();
-    // Ficha 901, empresa 6 — mas usamos empresa 999 no mock
     const resp = await simuladoresFichasRoutes.fetch(
       new Request('http://localhost/fichas-simulador/901/popular-manobras', {
         method: 'POST',
@@ -776,7 +773,6 @@ describe('simuladores fichas scope guards', () => {
       {} as ExecutionContext,
     );
 
-    // Ficha 901 é empresa 6, mas usuário é empresa 999 → bloqueado (404 ou outro erro)
     expect(resp.status).toBeGreaterThanOrEqual(400);
   });
 
@@ -800,10 +796,8 @@ describe('simuladores fichas scope guards', () => {
       {} as ExecutionContext,
     );
 
-    // Bloqueado: 403 (role) ou 404 (tenant check — a query mock não cobre essa query)
-    // Ambos significam que o gate impede a geração de qualificação
     expect(resp.status).toBeGreaterThanOrEqual(400);
-    const body = await resp.json() as Record<string, unknown>;
+    const body = (await resp.json()) as Record<string, unknown>;
     expect(body.success).toBe(false);
   });
 });

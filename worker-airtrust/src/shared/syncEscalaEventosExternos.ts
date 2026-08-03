@@ -146,7 +146,7 @@ export async function removeManagedEscalaEvents(
   params: RemoveManagedEscalaEventsParams,
 ): Promise<number> {
   const now = new Date().toISOString();
-  const result = await params.db
+  const statement = params.db
     .prepare(
       `UPDATE escala_eventos
           SET deleted_at = ?, updated_at = ?
@@ -155,10 +155,10 @@ export async function removeManagedEscalaEvents(
           AND tripulacao_id = ?
           AND deleted_at IS NULL`,
     )
-    .bind(now, now, String(params.funcionarioId), params.origem, params.linkId)
-    .run();
+    .bind(now, now, String(params.funcionarioId), params.origem, params.linkId);
+  const [result] = await params.db.batch([statement] as Parameters<typeof params.db.batch>[0]);
 
-  return result.meta?.changes ?? 0;
+  return result?.meta?.changes ?? 0;
 }
 
 export async function replaceManagedEscalaEvents(
@@ -398,9 +398,7 @@ export async function syncTreinamentoToEscalaEventos(params: {
 
   // --- Step 3: Pre-cache escala IDs (Fix R3 — one DB round-trip per month, not N×M) ---
   const effectiveDates: string[] =
-    diasEfetivos && diasEfetivos.length > 0
-      ? diasEfetivos
-      : buildRangeDates(dataInicio, dataFim);
+    diasEfetivos && diasEfetivos.length > 0 ? diasEfetivos : buildRangeDates(dataInicio, dataFim);
 
   if (effectiveDates.length === 0) return;
 
@@ -421,25 +419,27 @@ export async function syncTreinamentoToEscalaEventos(params: {
 
       for (const funcionarioId of allCurrentIds) {
         insertStmts.push(
-          db.prepare(INSERT_ESCALA_EVENTO_SQL).bind(
-            crypto.randomUUID(),
-            escalaId,
-            linkId,
-            String(funcionarioId),
-            'treinamento_solo',
-            data,
-            data, // data_inicio === data_fim for a single-day slot
-            null, // local
-            null, // aeronave
-            null, // simulador_id
-            motivoAutomatico,
-            statusEvento,
-            'treinamento',
-            observacoes,
-            createdBy,
-            now,
-            now,
-          ),
+          db
+            .prepare(INSERT_ESCALA_EVENTO_SQL)
+            .bind(
+              crypto.randomUUID(),
+              escalaId,
+              linkId,
+              String(funcionarioId),
+              'treinamento_solo',
+              data,
+              data,
+              null,
+              null,
+              null,
+              motivoAutomatico,
+              statusEvento,
+              'treinamento',
+              observacoes,
+              createdBy,
+              now,
+              now,
+            ),
         );
       }
     }
@@ -455,25 +455,27 @@ export async function syncTreinamentoToEscalaEventos(params: {
 
       for (const funcionarioId of allCurrentIds) {
         insertStmts.push(
-          db.prepare(INSERT_ESCALA_EVENTO_SQL).bind(
-            crypto.randomUUID(),
-            escalaId,
-            linkId,
-            String(funcionarioId),
-            'treinamento_solo',
-            segment.dataInicio,
-            segment.dataFim,
-            null,
-            null,
-            null,
-            motivoAutomatico,
-            statusEvento,
-            'treinamento',
-            observacoes,
-            createdBy,
-            now,
-            now,
-          ),
+          db
+            .prepare(INSERT_ESCALA_EVENTO_SQL)
+            .bind(
+              crypto.randomUUID(),
+              escalaId,
+              linkId,
+              String(funcionarioId),
+              'treinamento_solo',
+              segment.dataInicio,
+              segment.dataFim,
+              null,
+              null,
+              null,
+              motivoAutomatico,
+              statusEvento,
+              'treinamento',
+              observacoes,
+              createdBy,
+              now,
+              now,
+            ),
         );
       }
     }
@@ -481,7 +483,6 @@ export async function syncTreinamentoToEscalaEventos(params: {
 
   // --- Step 5: Batch-execute all INSERTs (Fix R3 — single round-trip) ---
   if (insertStmts.length > 0) {
-    // D1 batch limit is 100 statements; chunk if needed.
     const BATCH_SIZE = 100;
     for (let i = 0; i < insertStmts.length; i += BATCH_SIZE) {
       await db.batch(insertStmts.slice(i, i + BATCH_SIZE) as Parameters<typeof db.batch>[0]);

@@ -16,7 +16,7 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria } from '../utils/auditoria';
-import type { TipoDocumento } from '../utils/nomenclatura-padronizada';
+import { normalizarTipoDocumento } from '../utils/nomenclatura-padronizada';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import pastaVirtualExtraRoutes from './pasta-virtual-extra';
@@ -46,6 +46,27 @@ interface CategorizedDocument {
   url: string;
   dataUpload: string;
   status: string;
+  versaoAtual?: boolean;
+  substituidoPorId?: number | null;
+}
+
+function documentVersionKey(document: CategorizedDocument): string {
+  const cleanName = String(document.nome || '')
+    .replace(/\.pdf$/i, '')
+    .toUpperCase();
+  const parts = cleanName.split('-').filter(Boolean);
+  const prefix = parts[0] || String(document.tipo || 'OUTROS').toUpperCase();
+
+  if (prefix === 'CERT') return `CERT:${parts[2] || 'SEM_CODIGO'}`;
+  if (['EXAME', 'DOC', 'LIC', 'TREIN'].includes(prefix)) {
+    const subtype = parts[1] || String(document.tipo || 'OUTROS').toUpperCase();
+    // Generic/uncategorized documents are independent records, not renewals of
+    // one another merely because they share the fallback OUTROS label.
+    if (subtype === 'OUTROS' || subtype === 'OUTRO') return `UNVERSIONED:${document.id}`;
+    return `${prefix}:${subtype}`;
+  }
+  if (prefix === 'SIM') return cleanName.replace(/-\d{8}(?:-[A-Z0-9]{1,12})?$/, '');
+  return `${String(document.tipo || prefix).toUpperCase()}:${prefix}`;
 }
 
 interface DocumentoListaRow {
@@ -102,6 +123,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         : "datetime('now')";
     const pvDescricaoExpr = pvColumns.has('descricao') ? 'pv.descricao' : 'NULL';
     const pvCategoriaExpr = pvColumns.has('categoria') ? 'pv.categoria' : 'NULL';
+    const pvDocumentoIdExpr = pvColumns.has('documento_id') ? 'pv.documento_id' : 'NULL';
     const pvR2KeyExpr = pvColumns.has('caminho_arquivo')
       ? 'pv.caminho_arquivo'
       : pvColumns.has('r2_key')
@@ -138,6 +160,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         ${pvDataUploadExpr} as dataUpload,
         ${pvDescricaoExpr} as descricao,
         ${pvCategoriaExpr} as categoria,
+        ${pvDocumentoIdExpr} as documento_id,
         'pasta_virtual' as origem
       FROM pasta_virtual pv
       INNER JOIN funcionarios f ON pv.funcionario_id = f.id AND f.deleted_at IS NULL
@@ -167,6 +190,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         dataUpload: string;
         descricao?: string;
         categoria?: string;
+        documento_id?: number | null;
         origem: string;
       }>(),
     ]);
@@ -187,8 +211,10 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
       Outros: [],
     };
 
-    // Usar Map para deduplica por nome_arquivo (prioriza documentos)
+    // Deduplicate only by canonical linkage/record identity. Generic filenames such as
+    // certificado.pdf must not hide unrelated legacy documents.
     const filesMap = new Map<string, { doc: CategorizedDocument; categoria: string }>();
+    const canonicalDocumentoIds = new Set((docsResult.results || []).map((doc) => Number(doc.id)));
 
     // Processar documentos da tabela documentos primeiro
     (docsResult.results || []).forEach((doc) => {
@@ -211,7 +237,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         categoria = 'Documentos Pessoais';
       }
 
-      filesMap.set(doc.nome_arquivo, {
+      filesMap.set(`documentos:${doc.id}`, {
         doc: {
           id: doc.id,
           uuid: doc.uuid,
@@ -228,10 +254,8 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
 
     // Processar documentos da tabela pasta_virtual (apenas se não existirem em documentos)
     (pvResult.results || []).forEach((doc) => {
-      // Pular se já existe em documentos
-      if (filesMap.has(doc.nome_arquivo)) {
-        return;
-      }
+      // Skip only an explicit compatibility mirror of the canonical documentos row.
+      if (doc.documento_id && canonicalDocumentoIds.has(Number(doc.documento_id))) return;
 
       // Usar categoria do registro ou inferir do nome
       let categoria = doc.categoria || 'Outros';
@@ -245,7 +269,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         }
       }
 
-      filesMap.set(doc.nome_arquivo, {
+      filesMap.set(`pasta_virtual:${doc.id}`, {
         doc: {
           id: doc.id,
           uuid: doc.uuid || `pv-${doc.id}`,
@@ -260,12 +284,29 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
       });
     });
 
-    // Agrupar documentos por categoria
+    // Agrupar documentos por categoria. Dentro de cada categoria/tipo, o upload
+    // mais recente é a versão atual; versões anteriores continuam visíveis.
     filesMap.forEach(({ doc, categoria }) => {
-      if (!categorized[categoria]) {
-        categorized[categoria] = [];
-      }
+      if (!categorized[categoria]) categorized[categoria] = [];
       categorized[categoria].push(doc);
+    });
+
+    Object.values(categorized).forEach((documents) => {
+      documents.sort((a, b) => String(b.dataUpload).localeCompare(String(a.dataUpload)));
+      const latestByType = new Map<string, CategorizedDocument>();
+      documents.forEach((document) => {
+        const versionKey = documentVersionKey(document);
+        const latest = latestByType.get(versionKey);
+        if (!latest) {
+          document.versaoAtual = true;
+          document.substituidoPorId = null;
+          latestByType.set(versionKey, document);
+        } else {
+          document.versaoAtual = false;
+          document.status = 'Substituído';
+          document.substituidoPorId = latest.id;
+        }
+      });
     });
 
     return c.json({
@@ -342,7 +383,7 @@ app.get('/:id', auth(), async (c) => {
  * Tenta deletar de ambas as tabelas: documentos e pasta_virtual
  * EXCLUSÃO EM CASCATA: Remove também de qualificacoes_historico
  */
-app.delete('/delete/:id', auth(), async (c) => {
+app.delete('/delete/:id', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
   const id = parseInt(c.req.param('id'));
@@ -708,7 +749,7 @@ app.post('/upload', auth(), async (c) => {
 
     const uuid = crypto.randomUUID();
     const nomeArquivoPadronizado = gerarNomeArquivoPadronizado({
-      tipo: tipoDocumento as TipoDocumento,
+      tipo: normalizarTipoDocumento(tipoDocumento),
       nomeFuncionario: nomeFuncionario, // Novo padrão
       cpf: cpfLimpo, // Mantido para compatibilidade
       data: dataRealizacao, // Usa data de realização da qualificação
@@ -1016,33 +1057,8 @@ app.get('/stream/:id', auth(), async (c) => {
       notFound('Arquivo não encontrado no R2');
     }
 
-    // Ler o conteúdo do arquivo
-    let fileBuffer: Uint8Array;
-
-    if (object.body instanceof ReadableStream) {
-      // Se for stream, ler como Uint8Array
-      const reader = object.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let result = await reader.read();
-
-      while (!result.done) {
-        chunks.push(result.value);
-        result = await reader.read();
-      }
-
-      // Combinar chunks em um único Uint8Array
-      const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-      const combined = new Uint8Array(totalLength);
-      let offset = 0;
-      for (const chunk of chunks) {
-        combined.set(chunk, offset);
-        offset += chunk.length;
-      }
-      fileBuffer = combined;
-    } else {
-      // Se for Blob ou ArrayBuffer direto, converter para Uint8Array
-      fileBuffer = new Uint8Array(await object.arrayBuffer());
-    }
+    // Preserve the R2 body as a stream instead of buffering the whole object.
+    const responseBody = object.body || new Uint8Array(await object.arrayBuffer());
 
     // Retornar stream direto do R2 (o conteúdo já é binário puro)
     // NOTA: Removida lógica de decode base64 que causava corrupção de PDFs
@@ -1054,11 +1070,11 @@ app.get('/stream/:id', auth(), async (c) => {
     const origin = c.req.header('Origin');
     const resolvedOrigin = resolveAllowedOrigin(origin, c.env.CORS_ORIGINS);
 
-    return new Response(fileBuffer, {
+    return new Response(responseBody, {
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `${!forceDownload && isPdf ? 'inline' : 'attachment'}; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`,
-        'Content-Length': fileBuffer.byteLength.toString(),
+        'Content-Length': String(documento.tamanho || object.size),
         'Cache-Control': 'private, max-age=3600',
         'Access-Control-Allow-Origin': resolvedOrigin,
         'Access-Control-Allow-Credentials': 'true',
@@ -1110,8 +1126,17 @@ app.delete('/:id', auth(), requireRole('admin'), async (c) => {
       .bind(id, empresaId)
       .run();
 
-    // Delete físico no R2
-    await bucket.delete(documento.r2_key);
+    // D1 is the source of visibility. A transient R2 cleanup failure must not
+    // turn a successful soft-delete into a false failure response.
+    try {
+      await bucket.delete(documento.r2_key);
+    } catch (r2Error) {
+      console.error('pasta_virtual_r2_delete_failed', {
+        documentoId: id,
+        r2Key: documento.r2_key,
+        error: r2Error instanceof Error ? r2Error.message : String(r2Error),
+      });
+    }
 
     try {
       const userId = String(c.get('userId') || '0');

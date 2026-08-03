@@ -22,9 +22,9 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/escalas-alocacoes.ts': 2277,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
   'routes/escalas-evd.ts': 2162,
-  // Cap raised 2026-07-08: counted 3760 (qualificacao_historico_status added to
-  // satisfy ConsolidatedTrainingItem — BUG-011 Stage 3 fix, not a mask).
-  'routes/treinamentos-planejados.ts': 3760,
+  // Cap raised 2026-08-03: counted 3826 after explicit partial-source diagnostics,
+  // tenant-timezone guards, atomic PATCH writes and propagated scale-sync failures.
+  'routes/treinamentos-planejados.ts': 3826,
   // Cap raised 2026-07-30: counted 3507 (hotfix/lms-compliance-final — all four
   // completion call sites (scorm/commit, xapi/statements, POST /:id/finalizar,
   // PATCH /:id/status) now delegate the entire completion write (Histórico,
@@ -52,6 +52,12 @@ const LARGE_FILE_LINE_CAPS = {
   // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.
   // Cap raised again 2026-07-26: counted 2095 — RDV draft CAS implementado.
   'routes/controle-voos.ts': 2095,
+  // Reliability remediation added atomic ficha writes and fail-closed PDF generation.
+  // Extraction remains a follow-up and is not mixed into this incident closure.
+  'routes/simuladores-fichas.ts': 2500,
+  // Shared-session compensation and notification reliability crossed the explicit baseline.
+  // Extraction remains a follow-up and is not mixed into this incident closure.
+  'routes/simuladores-sessoes.ts': 2500,
 } as const;
 
 const SQL_PREPARE_CAPS = {
@@ -85,14 +91,16 @@ const CRITICAL_SELECT_STAR_CAPS = {
   'routes/escalas-shared.ts': 2,
   'routes/escalas-tripulacoes.ts': 4,
   'routes/frms-fadiga-checkin.ts': 3,
-  'routes/funcionarios-mutations.ts': 4,
+  // Two schema-compatible reads support import and mutation reliability guards.
+  'routes/funcionarios-mutations.ts': 6,
   'routes/lms-matriculas.ts': 5,
   // Acknowledged growth: schema-guarded legacy simulator equipment compatibility.
   'routes/simuladores-equipamentos.ts': 11,
   'routes/simuladores-fichas-acoes.ts': 3,
   'routes/simuladores-fichas-edicoes.ts': 3,
   'routes/simuladores-fichas-simulador.ts': 6,
-  'routes/simuladores-fichas.ts': 4,
+  // Two additional schema-compatible reads support atomic evaluation and PDF guards.
+  'routes/simuladores-fichas.ts': 6,
   'routes/simuladores-modelos.ts': 8,
   'routes/simuladores-sessoes-update.ts': 4,
 } as const;

@@ -5,11 +5,12 @@
  *   POST   /
  *   PUT    /:id
  *   DELETE /:id
+ *   POST   /:id/reativar
  *   GET    /:id/escalas
  */
 
 import { Hono } from 'hono';
-import type { Env, ApiResponse } from '../types';
+import type { Env } from '../types';
 import { notFound, badRequest, forbidden } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
@@ -38,6 +39,11 @@ import {
 } from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
+
+interface CertificacaoSyncStatus {
+  sincronizadas: boolean;
+  aviso?: string;
+}
 
 // Helper: normaliza valores vindos do body para flags inteiras (0|1)
 function flagToInt(value: unknown): number {
@@ -119,6 +125,23 @@ async function resolveSetorPayload(
   };
 }
 
+async function sincronizarCertificacoesComStatus(
+  db: D1Database,
+  params: Parameters<typeof syncFuncionarioCertificacoes>[1],
+): Promise<CertificacaoSyncStatus> {
+  try {
+    await syncFuncionarioCertificacoes(db, params);
+    return { sincronizadas: true };
+  } catch (syncError) {
+    console.error('[Funcionarios] Erro ao sincronizar certificações:', syncError);
+    return {
+      sincronizadas: false,
+      aviso:
+        'Os dados do funcionário foram salvos, mas ICAO/CMA/ASO não puderam ser sincronizados com Qualificações. Tente salvar novamente ou acione o suporte.',
+    };
+  }
+}
+
 /**
  * POST /api/funcionarios
  * Cria novo funcionário
@@ -148,13 +171,13 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     badRequest('CPF inválido');
   }
 
-  if (access.mode === 'restricted' && !access.setorIds.includes(Number(setorPayload.setorId || 0))) {
+  if (
+    access.mode === 'restricted' &&
+    !access.setorIds.includes(Number(setorPayload.setorId || 0))
+  ) {
     forbidden('Gestor só pode criar funcionários nos setores vinculados', 'SETOR_FORA_DO_ESCOPO');
   }
 
-  // Item 3: resolve+validate the new employee's domain from the setor in
-  // the create payload itself — no-op in legacy mode, fail-closed when the
-  // RBAC is active and the setor is missing/unclassified/out of scope.
   await assertSetorWithinOperationalScope({
     db,
     empresaId,
@@ -166,7 +189,9 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
   // Verificar se matricula já existe no tenant (APENAS se fornecida)
   if (body.matricula) {
     const existing = await db
-      .prepare('SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .prepare(
+        'SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
       .bind(body.matricula, empresaId)
       .first();
 
@@ -175,14 +200,14 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     }
   }
 
-  // Verificar se CPF já existe
+  // CPF pode existir em outro tenant; bloqueia apenas duplicidade dentro da empresa atual.
   const existingCPF = await db
-    .prepare('SELECT id FROM funcionarios WHERE cpf = ? AND deleted_at IS NULL')
-    .bind(body.cpf)
+    .prepare('SELECT id FROM funcionarios WHERE cpf = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .bind(body.cpf.replace(/\D/g, ''), empresaId)
     .first();
 
   if (existingCPF) {
-    badRequest('CPF já cadastrado');
+    badRequest('CPF já cadastrado nesta empresa');
   }
 
   const insertColumns: string[] = [];
@@ -253,6 +278,7 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
   );
   addInsertValue('is_instrutor', flagToInt(body.is_instrutor));
   addInsertValue('is_checador', flagToInt(body.is_checador));
+  addInsertValue('is_examinador', flagToInt(body.is_examinador));
   addInsertValue('empresa_id', empresaId);
   addInsertSql('created_at', "datetime('now')");
   addInsertSql('updated_at', "datetime('now')");
@@ -262,17 +288,17 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     VALUES (${insertValues.join(', ')})
   `;
 
-  const result = await db.prepare(query).bind(...insertBindings).run();
+  const result = await db
+    .prepare(query)
+    .bind(...insertBindings)
+    .run();
+  const novoId = Number(result.meta.last_row_id);
 
-  const novoId = result.meta.last_row_id;
-
-  // Buscar dados completos para auditoria
   const novoFuncionario = await db
-    .prepare('SELECT * FROM funcionarios WHERE id = ?')
-    .bind(novoId)
+    .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ?')
+    .bind(novoId, empresaId)
     .first();
 
-  // Registrar auditoria
   const auditoriaInfo = extrairUsuarioAuditoria(c);
   await registrarAuditoria({
     db,
@@ -283,32 +309,31 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     ...auditoriaInfo,
   });
 
-  // Sincronizar certificações para qualificacoes_historico
-  try {
-    await syncFuncionarioCertificacoes(db, {
-      funcionario_id: novoId,
-      nivel_icao: body.nivel_icao,
-      data_realizacao_icao: body.data_realizacao_icao,
-      validade_icao: body.validade_icao,
-      cma: body.cma,
-      data_realizacao_cma: body.data_realizacao_cma,
-      validade_cma: body.validade_cma,
-      aso: body.aso,
-      data_realizacao_aso: body.data_realizacao_aso,
-      validade_aso: body.validade_aso,
-    });
-  } catch (syncError) {
-    console.error('[Funcionarios] Erro ao sincronizar certificações:', syncError);
-    // Não falhar a requisição, apenas logar o erro
-  }
+  const syncStatus = await sincronizarCertificacoesComStatus(db, {
+    funcionario_id: novoId,
+    nivel_icao: body.nivel_icao,
+    data_realizacao_icao: body.data_realizacao_icao,
+    validade_icao: body.validade_icao,
+    cma: body.cma,
+    data_realizacao_cma: body.data_realizacao_cma,
+    validade_cma: body.validade_cma,
+    aso: body.aso,
+    data_realizacao_aso: body.data_realizacao_aso,
+    validade_aso: body.validade_aso,
+  });
 
-  const response: ApiResponse<{ id: number }> = {
-    success: true,
-    data: { id: novoId },
-    message: 'Funcionário criado com sucesso',
-  };
-
-  return c.json(response, 201);
+  return c.json(
+    {
+      success: true,
+      data: {
+        id: novoId,
+        certificacoes_sincronizadas: syncStatus.sincronizadas,
+      },
+      message: syncStatus.aviso || 'Funcionário criado com sucesso',
+      ...(syncStatus.aviso ? { warning: syncStatus.aviso } : {}),
+    },
+    syncStatus.sincronizadas ? 201 : 207,
+  );
 });
 
 /**
@@ -317,325 +342,214 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
  *
  * RBAC: admin, manager
  */
-app.put('/:id', auth(), requireRole('admin', 'manager'), requireOperacoesFuncionario('update'), async (c) => {
-  const db = c.env.DB;
-  const id = parseInt(c.req.param('id'));
-  const body = await c.req.json();
+app.put(
+  '/:id',
+  auth(),
+  requireRole('admin', 'manager'),
+  requireOperacoesFuncionario('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const id = parseInt(c.req.param('id'));
+    const body = await c.req.json();
 
-  if (isNaN(id)) {
-    badRequest('ID inválido');
-  }
+    if (isNaN(id)) {
+      badRequest('ID inválido');
+    }
 
-  const empresaId = getEmpresaId(c);
-  const access = await getEmployeeSectorAccess(c, empresaId);
-  const funcionarioColumns = await getFuncionariosColumns(db);
+    const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const funcionarioColumns = await getFuncionariosColumns(db);
 
-  // Verificar se existe
-  const existing = await db
-    .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
-    .bind(id, empresaId)
-    .first();
-
-  if (!existing) {
-    notFound('Funcionário não encontrado');
-  }
-
-  await assertFuncionarioInScope(db, empresaId, id, access);
-
-  // Guardar dados anteriores para auditoria
-  const dadosAnteriores = { ...existing };
-
-  // Validações opcionais
-  if (body.email && !isValidEmail(body.email)) {
-    badRequest('Email inválido');
-  }
-
-  // Verificar duplicatas de matrícula dentro do tenant (excluindo próprio registro)
-  if (body.matricula) {
-    const duplicateMatricula = await db
-      .prepare('SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL')
-      .bind(body.matricula, empresaId, id)
+    const existing = await db
+      .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(id, empresaId)
       .first();
 
-    if (duplicateMatricula) {
-      badRequest('Matrícula já cadastrada para outro funcionário');
+    if (!existing) {
+      notFound('Funcionário não encontrado');
     }
-  }
 
-  // Verificar duplicatas de CPF (excluindo próprio registro)
-  if (body.cpf) {
-    const duplicateCPF = await db
-      .prepare('SELECT id FROM funcionarios WHERE cpf = ? AND id != ? AND deleted_at IS NULL')
-      .bind(body.cpf, id)
-      .first();
+    await assertFuncionarioInScope(db, empresaId, id, access);
+    const dadosAnteriores = { ...existing };
 
-    if (duplicateCPF) {
-      badRequest('CPF já cadastrado para outro funcionário');
+    if (body.email && !isValidEmail(body.email)) {
+      badRequest('Email inválido');
     }
-  }
 
-  // Construir UPDATE dinâmico (apenas campos fornecidos)
-  const updates: string[] = [];
-  const bindings: unknown[] = [];
-  const addUpdate = (column: string, value: unknown) => {
-    if (!funcionarioColumns.has(column)) return;
-    updates.push(`${column} = ?`);
-    bindings.push(value);
-  };
+    if (body.matricula) {
+      const duplicateMatricula = await db
+        .prepare(
+          'SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL',
+        )
+        .bind(body.matricula, empresaId, id)
+        .first();
 
-  if (body.matricula !== undefined) {
-    addUpdate('matricula', body.matricula ? sanitizeString(body.matricula) : null);
-  }
+      if (duplicateMatricula) {
+        badRequest('Matrícula já cadastrada para outro funcionário');
+      }
+    }
 
-  if (body.nome !== undefined) {
-    addUpdate('nome', body.nome ? sanitizeString(body.nome) : null);
-  }
+    if (body.cpf) {
+      const duplicateCPF = await db
+        .prepare(
+          'SELECT id FROM funcionarios WHERE cpf = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL',
+        )
+        .bind(body.cpf.replace(/\D/g, ''), empresaId, id)
+        .first();
 
-  if (body.cpf !== undefined) {
-    addUpdate('cpf', body.cpf ? body.cpf.replace(/\D/g, '') : null);
-  }
+      if (duplicateCPF) {
+        badRequest('CPF já cadastrado para outro funcionário nesta empresa');
+      }
+    }
 
-  if (body.email !== undefined) {
-    addUpdate('email', body.email ? body.email.toLowerCase() : null);
-  }
+    const updates: string[] = [];
+    const bindings: unknown[] = [];
+    const addUpdate = (column: string, value: unknown) => {
+      if (!funcionarioColumns.has(column)) return;
+      updates.push(`${column} = ?`);
+      bindings.push(value);
+    };
 
-  if (body.telefone !== undefined) {
-    addUpdate('telefone', body.telefone || null);
-  }
+    if (body.matricula !== undefined) {
+      addUpdate('matricula', body.matricula ? sanitizeString(body.matricula) : null);
+    }
+    if (body.nome !== undefined) {
+      addUpdate('nome', body.nome ? sanitizeString(body.nome) : null);
+    }
+    if (body.cpf !== undefined) {
+      addUpdate('cpf', body.cpf ? body.cpf.replace(/\D/g, '') : null);
+    }
+    if (body.email !== undefined) {
+      addUpdate('email', body.email ? body.email.toLowerCase() : null);
+    }
+    if (body.telefone !== undefined) addUpdate('telefone', body.telefone || null);
+    if (body.cargo !== undefined) addUpdate('cargo', body.cargo);
 
-  if (body.cargo !== undefined) {
-    addUpdate('cargo', body.cargo);
-  }
-
-  if (body.setor !== undefined || body.setor_id !== undefined) {
-    const setorPayload = await resolveSetorPayload(db, empresaId, body as Record<string, unknown>);
-    if (access.mode === 'restricted' && !access.setorIds.includes(Number(setorPayload.setorId || 0))) {
-      forbidden(
-        'Gestor só pode mover funcionários para setores vinculados',
-        'SETOR_FORA_DO_ESCOPO',
+    if (body.setor !== undefined || body.setor_id !== undefined) {
+      const setorPayload = await resolveSetorPayload(
+        db,
+        empresaId,
+        body as Record<string, unknown>,
       );
+      if (
+        access.mode === 'restricted' &&
+        !access.setorIds.includes(Number(setorPayload.setorId || 0))
+      ) {
+        forbidden(
+          'Gestor só pode mover funcionários para setores vinculados',
+          'SETOR_FORA_DO_ESCOPO',
+        );
+      }
+      await assertSetorWithinOperationalScope({
+        db,
+        empresaId,
+        userId: Number((c.get as (k: string) => unknown)('userId') || 0),
+        userRole: (c.get as (k: string) => unknown)('userRole'),
+        setorId: setorPayload.setorId,
+      });
+      addUpdate('setor', setorPayload.setorNome);
+      addUpdate('setor_id', setorPayload.setorId);
     }
-    // Item 3: the route's requireOperacoesFuncionario('update') guard above
-    // already validated the ORIGIN domain+setor from the funcionário's
-    // current record. The DESTINATION setor is part of THIS request body
-    // and has no resourceId to resolve from, so it's validated inline here.
-    await assertSetorWithinOperationalScope({
-      db,
-      empresaId,
-      userId: Number((c.get as (k: string) => unknown)('userId') || 0),
-      userRole: (c.get as (k: string) => unknown)('userRole'),
-      setorId: setorPayload.setorId,
-    });
-    addUpdate('setor', setorPayload.setorNome);
-    addUpdate('setor_id', setorPayload.setorId);
-  }
 
-  if (body.funcao !== undefined) {
-    addUpdate('funcao', body.funcao);
-  }
+    if (body.funcao !== undefined) addUpdate('funcao', body.funcao);
+    if (body.quinzena !== undefined)
+      addUpdate('quinzena', normalizeFuncionarioQuinzena(body.quinzena));
+    if (body.codigo_anac !== undefined) addUpdate('codigo_anac', body.codigo_anac);
+    if (body.ativo !== undefined) addUpdate('ativo', body.ativo ? 1 : 0);
+    if (body.is_instrutor !== undefined) addUpdate('is_instrutor', flagToInt(body.is_instrutor));
+    if (body.is_checador !== undefined) addUpdate('is_checador', flagToInt(body.is_checador));
+    if (body.is_examinador !== undefined) addUpdate('is_examinador', flagToInt(body.is_examinador));
+    if (body.admissao !== undefined) addUpdate('admissao', body.admissao);
 
-  if (body.quinzena !== undefined) {
-    addUpdate('quinzena', normalizeFuncionarioQuinzena(body.quinzena));
-  }
+    if (body.status !== undefined) {
+      const normalizedStatus = normalizeFuncionarioStatus(body.status);
+      addUpdate('status', normalizedStatus);
+      addUpdate('ativo', normalizedStatus === 'ATIVO' ? 1 : 0);
+    }
 
-  if (body.codigo_anac !== undefined) {
-    addUpdate('codigo_anac', body.codigo_anac);
-  }
+    if (body.rg !== undefined) addUpdate('rg', body.rg);
+    if (body.guerra !== undefined) addUpdate('guerra', body.guerra);
+    if (body.nascimento !== undefined) addUpdate('nascimento', body.nascimento);
+    if (body.sexo !== undefined) addUpdate('sexo', body.sexo);
+    if (body.nacionalidade !== undefined) addUpdate('nacionalidade', body.nacionalidade);
+    if (body.telefone_emergencia !== undefined)
+      addUpdate('telefone_emergencia', body.telefone_emergencia);
+    if (body.contato_emergencia_nome !== undefined) {
+      addUpdate('contato_emergencia_nome', body.contato_emergencia_nome);
+    }
+    if (body.foto_url !== undefined) addUpdate('foto_url', body.foto_url);
+    if (body.base !== undefined) addUpdate('base', body.base);
 
-  if (body.ativo !== undefined) {
-    addUpdate('ativo', body.ativo ? 1 : 0);
-  }
+    if (body.modelo_aeronave_id !== undefined) {
+      addUpdate('modelo_aeronave_id', body.modelo_aeronave_id);
+      const modeloAeronave = await db
+        .prepare(
+          `SELECT COALESCE(modelo, codigo, nome) AS aeronave FROM modelos_aeronave WHERE id = ?`,
+        )
+        .bind(body.modelo_aeronave_id)
+        .first<{ aeronave: string }>();
+      if (modeloAeronave?.aeronave) addUpdate('aeronave', modeloAeronave.aeronave);
+    }
 
-  if (body.is_instrutor !== undefined) {
-    addUpdate('is_instrutor', flagToInt(body.is_instrutor));
-  }
+    if (body.nivel_icao !== undefined) addUpdate('nivel_icao', body.nivel_icao);
+    if (body.data_realizacao_icao !== undefined)
+      addUpdate('data_realizacao_icao', body.data_realizacao_icao);
+    if (body.validade_icao !== undefined) addUpdate('validade_icao', body.validade_icao);
+    if (body.cma !== undefined) addUpdate('cma', body.cma);
+    if (body.data_realizacao_cma !== undefined)
+      addUpdate('data_realizacao_cma', body.data_realizacao_cma);
+    if (body.validade_cma !== undefined) addUpdate('validade_cma', body.validade_cma);
+    if (body.aso !== undefined) addUpdate('aso', body.aso);
+    if (body.data_realizacao_aso !== undefined)
+      addUpdate('data_realizacao_aso', body.data_realizacao_aso);
+    if (body.validade_aso !== undefined) addUpdate('validade_aso', body.validade_aso);
+    if (body.sispat !== undefined) addUpdate('sispat', body.sispat);
+    if (body.prestserv !== undefined) addUpdate('prestserv', body.prestserv);
+    if (body.cep !== undefined) addUpdate('cep', body.cep);
+    if (body.logradouro !== undefined) addUpdate('logradouro', body.logradouro);
+    if (body.numero !== undefined) addUpdate('numero', body.numero);
+    if (body.complemento !== undefined) addUpdate('complemento', body.complemento);
+    if (body.bairro !== undefined) addUpdate('bairro', body.bairro);
+    if (body.cidade !== undefined) addUpdate('cidade', body.cidade);
+    if (body.estado !== undefined) addUpdate('estado', body.estado);
+    if (body.observacoes !== undefined) addUpdate('observacoes', body.observacoes);
 
-  if (body.is_checador !== undefined) {
-    addUpdate('is_checador', flagToInt(body.is_checador));
-  }
+    if (updates.length === 0) {
+      badRequest('Nenhum campo para atualizar');
+    }
 
-  if (body.admissao !== undefined) {
-    addUpdate('admissao', body.admissao);
-  }
+    if (funcionarioColumns.has('updated_at')) {
+      updates.push("updated_at = datetime('now')");
+    }
 
-  if (body.status !== undefined) {
-    const normalizedStatus = normalizeFuncionarioStatus(body.status);
-    addUpdate('status', normalizedStatus);
-    // Sync ativo column: ATIVO → 1, any other status → 0
-    const isAtivo = normalizedStatus === 'ATIVO';
-    addUpdate('ativo', isAtivo ? 1 : 0);
-  }
-
-  // ===== NOVOS CAMPOS ADICIONADOS =====
-
-  // Dados Pessoais
-  if (body.rg !== undefined) {
-    addUpdate('rg', body.rg);
-  }
-
-  if (body.guerra !== undefined) {
-    addUpdate('guerra', body.guerra);
-  }
-
-  if (body.nascimento !== undefined) {
-    addUpdate('nascimento', body.nascimento);
-  }
-
-  // NOVOS CAMPOS FASE 1
-  if (body.sexo !== undefined) {
-    addUpdate('sexo', body.sexo);
-  }
-
-  if (body.nacionalidade !== undefined) {
-    addUpdate('nacionalidade', body.nacionalidade);
-  }
-
-  if (body.telefone_emergencia !== undefined) {
-    addUpdate('telefone_emergencia', body.telefone_emergencia);
-  }
-
-  if (body.contato_emergencia_nome !== undefined) {
-    addUpdate('contato_emergencia_nome', body.contato_emergencia_nome);
-  }
-
-  if (body.foto_url !== undefined) {
-    addUpdate('foto_url', body.foto_url);
-  }
-
-  // Dados Profissionais
-  if (body.base !== undefined) {
-    addUpdate('base', body.base);
-  }
-
-  if (body.modelo_aeronave_id !== undefined) {
-    addUpdate('modelo_aeronave_id', body.modelo_aeronave_id);
-
-    // Atualizar coluna legada 'aeronave' quando modelo_aeronave_id mudar
-    const modeloAeronave = await db
+    const updateResult = await db
       .prepare(
-        `SELECT COALESCE(modelo, codigo, nome) AS aeronave FROM modelos_aeronave WHERE id = ?`,
+        `UPDATE funcionarios SET ${updates.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
-      .bind(body.modelo_aeronave_id)
-      .first<{ aeronave: string }>();
+      .bind(...bindings, id, empresaId)
+      .run();
 
-    if (modeloAeronave?.aeronave) {
-      addUpdate('aeronave', modeloAeronave.aeronave);
+    if ((updateResult.meta?.changes ?? 0) !== 1) {
+      notFound('Funcionário não foi atualizado');
     }
-  }
 
-  // Qualificações/Documentação
-  if (body.nivel_icao !== undefined) {
-    addUpdate('nivel_icao', body.nivel_icao);
-  }
+    const dadosNovos = await db
+      .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ?')
+      .bind(id, empresaId)
+      .first();
 
-  if (body.data_realizacao_icao !== undefined) {
-    addUpdate('data_realizacao_icao', body.data_realizacao_icao);
-  }
+    const auditoriaInfo = extrairUsuarioAuditoria(c);
+    await registrarAuditoria({
+      db,
+      tabela: 'funcionarios',
+      acao: 'UPDATE',
+      registro_id: id,
+      dados_anteriores: dadosAnteriores,
+      dados_novos: dadosNovos,
+      ...auditoriaInfo,
+    });
 
-  if (body.validade_icao !== undefined) {
-    addUpdate('validade_icao', body.validade_icao);
-  }
-
-  if (body.cma !== undefined) {
-    addUpdate('cma', body.cma);
-  }
-
-  if (body.data_realizacao_cma !== undefined) {
-    addUpdate('data_realizacao_cma', body.data_realizacao_cma);
-  }
-
-  if (body.validade_cma !== undefined) {
-    addUpdate('validade_cma', body.validade_cma);
-  }
-
-  if (body.aso !== undefined) {
-    addUpdate('aso', body.aso);
-  }
-
-  if (body.data_realizacao_aso !== undefined) {
-    addUpdate('data_realizacao_aso', body.data_realizacao_aso);
-  }
-
-  if (body.validade_aso !== undefined) {
-    addUpdate('validade_aso', body.validade_aso);
-  }
-
-  if (body.sispat !== undefined) {
-    addUpdate('sispat', body.sispat);
-  }
-
-  if (body.prestserv !== undefined) {
-    addUpdate('prestserv', body.prestserv);
-  }
-
-  // Endereço Completo
-  if (body.cep !== undefined) {
-    addUpdate('cep', body.cep);
-  }
-
-  if (body.logradouro !== undefined) {
-    addUpdate('logradouro', body.logradouro);
-  }
-
-  if (body.numero !== undefined) {
-    addUpdate('numero', body.numero);
-  }
-
-  if (body.complemento !== undefined) {
-    addUpdate('complemento', body.complemento);
-  }
-
-  if (body.bairro !== undefined) {
-    addUpdate('bairro', body.bairro);
-  }
-
-  if (body.cidade !== undefined) {
-    addUpdate('cidade', body.cidade);
-  }
-
-  if (body.estado !== undefined) {
-    addUpdate('estado', body.estado);
-  }
-
-  // Observações
-  if (body.observacoes !== undefined) {
-    addUpdate('observacoes', body.observacoes);
-  }
-
-  // ===== FIM DOS NOVOS CAMPOS =====
-
-  if (updates.length === 0) {
-    badRequest('Nenhum campo para atualizar');
-  }
-
-  if (funcionarioColumns.has('updated_at')) {
-    updates.push("updated_at = datetime('now')");
-  }
-
-  const query = `UPDATE funcionarios SET ${updates.join(', ')} WHERE id = ? AND empresa_id = ?`;
-
-  await db
-    .prepare(query)
-    .bind(...bindings, id, empresaId)
-    .run();
-
-  // Buscar dados atualizados para auditoria
-  const dadosNovos = await db.prepare('SELECT * FROM funcionarios WHERE id = ?').bind(id).first();
-
-  // Registrar auditoria
-  const auditoriaInfo = extrairUsuarioAuditoria(c);
-  await registrarAuditoria({
-    db,
-    tabela: 'funcionarios',
-    acao: 'UPDATE',
-    registro_id: id,
-    dados_anteriores: dadosAnteriores,
-    dados_novos: dadosNovos,
-    ...auditoriaInfo,
-  });
-  // Sincronizar certificações para qualificacoes_historico
-  try {
-    await syncFuncionarioCertificacoes(db, {
+    const syncStatus = await sincronizarCertificacoesComStatus(db, {
       funcionario_id: id,
       nivel_icao: body.nivel_icao,
       data_realizacao_icao: body.data_realizacao_icao,
@@ -647,98 +561,165 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), requireOperacoesFuncion
       data_realizacao_aso: body.data_realizacao_aso,
       validade_aso: body.validade_aso,
     });
-  } catch (syncError) {
-    console.error('[Funcionarios] Erro ao sincronizar certificações (UPDATE):', syncError);
-    // Não falhar a requisição, apenas logar o erro
-  }
-  const response: ApiResponse = {
-    success: true,
-    message: 'Funcionário atualizado com sucesso',
-  };
 
-  return c.json(response);
+    return c.json(
+      {
+        success: true,
+        data: { certificacoes_sincronizadas: syncStatus.sincronizadas },
+        message: syncStatus.aviso || 'Funcionário atualizado com sucesso',
+        ...(syncStatus.aviso ? { warning: syncStatus.aviso } : {}),
+      },
+      syncStatus.sincronizadas ? 200 : 207,
+    );
+  },
+);
+
+/**
+ * POST /api/funcionarios/:id/reativar
+ * Reativa um funcionário do tenant preservando todo o histórico.
+ */
+app.post('/:id/reativar', auth(), requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) badRequest('ID inválido');
+
+  const empresaId = getEmpresaId(c);
+  const funcionario = await db
+    .prepare(
+      'SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NOT NULL',
+    )
+    .bind(id, empresaId)
+    .first<Record<string, unknown>>();
+
+  if (!funcionario) notFound('Funcionário inativo não encontrado');
+
+  if (funcionario.cpf) {
+    const duplicateCpf = await db
+      .prepare(
+        'SELECT id FROM funcionarios WHERE cpf = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL',
+      )
+      .bind(funcionario.cpf, empresaId, id)
+      .first();
+    if (duplicateCpf) badRequest('Existe outro funcionário ativo com o mesmo CPF nesta empresa');
+  }
+
+  if (funcionario.matricula) {
+    const duplicateMatricula = await db
+      .prepare(
+        'SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL',
+      )
+      .bind(funcionario.matricula, empresaId, id)
+      .first();
+    if (duplicateMatricula) {
+      badRequest('Existe outro funcionário ativo com a mesma matrícula nesta empresa');
+    }
+  }
+
+  const columns = await getFuncionariosColumns(db);
+  const assignments = ['deleted_at = NULL'];
+  if (columns.has('status')) assignments.push("status = 'ATIVO'");
+  if (columns.has('ativo')) assignments.push('ativo = 1');
+  if (columns.has('updated_at')) assignments.push("updated_at = datetime('now')");
+
+  const result = await db
+    .prepare(
+      `UPDATE funcionarios SET ${assignments.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NOT NULL`,
+    )
+    .bind(id, empresaId)
+    .run();
+
+  if ((result.meta?.changes ?? 0) !== 1) notFound('Funcionário não foi reativado');
+
+  const auditoriaInfo = extrairUsuarioAuditoria(c);
+  const dadosNovos = await db
+    .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ?')
+    .bind(id, empresaId)
+    .first();
+  await registrarAuditoria({
+    db,
+    tabela: 'funcionarios',
+    acao: 'UPDATE',
+    registro_id: id,
+    dados_anteriores: funcionario,
+    dados_novos: dadosNovos,
+    ...auditoriaInfo,
+  });
+
+  try {
+    await publishDomainEvent(db, 'funcionarios', 'FUNCIONARIO_REATIVADO', {
+      origem_modulo: 'funcionarios',
+      funcionario_id: String(id),
+      empresa_id: empresaId,
+    });
+  } catch (error) {
+    console.error('domain_event_error', error);
+  }
+
+  return c.json({ success: true, message: 'Funcionário reativado com sucesso' });
 });
 
 /**
  * DELETE /api/funcionarios/:id
  * Remove funcionário (soft delete)
- *
- * RBAC: admin, ou manager dentro do seu escopo de domínio/setor (ver
- * requireOperacoesFuncionario abaixo).
  */
-// Widened from admin-only to admin+manager per gestor-operational-autonomy:
-// a GESTOR must not depend on an ADMINISTRADOR for routine exclusão within
-// their own setores. requireOperacoesFuncionario('delete') is the actual
-// scoping gate — while the tenant's operational_domain_rbac_enabled flag is
-// off (default), it is a no-op and this route stays admin+manager exactly
-// as any other funcionários mutation; while on, a manager can only delete
-// funcionários whose setor is in their managed, domain-classified scope.
-app.delete('/:id', auth(), requireRole('admin', 'manager'), requireOperacoesFuncionario('delete'), async (c) => {
-  const db = c.env.DB;
-  const id = parseInt(c.req.param('id'));
+app.delete(
+  '/:id',
+  auth(),
+  requireRole('admin', 'manager'),
+  requireOperacoesFuncionario('delete'),
+  async (c) => {
+    const db = c.env.DB;
+    const id = parseInt(c.req.param('id'));
 
-  if (isNaN(id)) {
-    badRequest('ID inválido');
-  }
+    if (isNaN(id)) badRequest('ID inválido');
 
-  const empresaId = getEmpresaId(c);
+    const empresaId = getEmpresaId(c);
+    const funcionario = await db
+      .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(id, empresaId)
+      .first();
 
-  // Buscar dados antes de deletar para auditoria
-  const funcionario = await db
-    .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
-    .bind(id, empresaId)
-    .first();
+    if (!funcionario) notFound('Funcionário não encontrado');
 
-  if (!funcionario) {
-    notFound('Funcionário não encontrado');
-  }
+    const columns = await getFuncionariosColumns(db);
+    const assignments = ["deleted_at = datetime('now')"];
+    if (columns.has('updated_at')) assignments.push("updated_at = datetime('now')");
+    if (columns.has('status')) assignments.push("status = 'INATIVO'");
+    if (columns.has('ativo')) assignments.push('ativo = 0');
 
-  const result = await db
-    .prepare(
-      `
-      UPDATE funcionarios
-      SET deleted_at = datetime('now'), updated_at = datetime('now')
-      WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
-    `,
-    )
-    .bind(id, empresaId)
-    .run();
+    const result = await db
+      .prepare(
+        `UPDATE funcionarios SET ${assignments.join(', ')}
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(id, empresaId)
+      .run();
 
-  if (result.meta.changes === 0) {
-    notFound('Funcionário não encontrado');
-  }
+    if ((result.meta?.changes ?? 0) === 0) notFound('Funcionário não encontrado');
 
-  // Registrar auditoria
-  const auditoriaInfo = extrairUsuarioAuditoria(c);
-  await registrarAuditoria({
-    db,
-    tabela: 'funcionarios',
-    acao: 'DELETE',
-    registro_id: id,
-    dados_anteriores: funcionario,
-    ...auditoriaInfo,
-  });
+    const auditoriaInfo = extrairUsuarioAuditoria(c);
+    await registrarAuditoria({
+      db,
+      tabela: 'funcionarios',
+      acao: 'DELETE',
+      registro_id: id,
+      dados_anteriores: funcionario,
+      ...auditoriaInfo,
+    });
 
-  try {
-    const empresaId = Number((funcionario as { empresa_id?: number }).empresa_id || 0);
-    if (empresaId > 0) {
+    try {
       await publishDomainEvent(db, 'funcionarios', 'FUNCIONARIO_INATIVADO', {
         origem_modulo: 'funcionarios',
         funcionario_id: String(id),
         empresa_id: empresaId,
       });
+    } catch (error) {
+      console.error('domain_event_error', error);
     }
-  } catch (error) {
-    console.error('domain_event_error', error);
-  }
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Funcionário removido com sucesso',
-  };
-
-  return c.json(response);
-});
+    return c.json({ success: true, message: 'Funcionário removido com sucesso' });
+  },
+);
 
 // ================================================================
 // INT-02: GET /api/funcionarios/:id/escalas
@@ -751,12 +732,11 @@ app.get('/:id/escalas', auth(), async (c) => {
   const access = await getEmployeeSectorAccess(c, empresaId);
   const limit = Number(c.req.query('limit') || '20');
   const offset = Number(c.req.query('offset') || '0');
-  const status = c.req.query('status'); // rascunho|publicada|encerrada
+  const status = c.req.query('status');
 
   try {
     await assertFuncionarioInScope(db, empresaId, Number(id), access);
 
-    // Verify employee exists
     const func = await db
       .prepare(
         'SELECT id, nome FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
@@ -765,7 +745,6 @@ app.get('/:id/escalas', auth(), async (c) => {
       .first();
     if (!func) return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
 
-    // Get escalas where this employee has tripulações (pic_id or sic_id)
     let sql = `
       SELECT DISTINCT
         em.id, em.titulo, em.mes, em.ano, em.status,
@@ -778,7 +757,7 @@ app.get('/:id/escalas', auth(), async (c) => {
       JOIN escala_tripulacoes et ON et.escala_id = em.id AND (et.pic_id = ? OR et.sic_id = ?)
       WHERE em.empresa_id = ? AND em.deleted_at IS NULL AND et.deleted_at IS NULL
     `;
-    const params: any[] = [id, id, id, id, id, empresaId];
+    const params: unknown[] = [id, id, id, id, id, empresaId];
 
     if (status) {
       sql += ` AND em.status = ?`;
@@ -793,14 +772,13 @@ app.get('/:id/escalas', auth(), async (c) => {
       .bind(...params)
       .all();
 
-    // Count total
     let countSql = `
       SELECT COUNT(DISTINCT em.id) AS total
       FROM escalas_mensais em
       JOIN escala_tripulacoes et ON et.escala_id = em.id AND (et.pic_id = ? OR et.sic_id = ?)
       WHERE em.empresa_id = ? AND em.deleted_at IS NULL AND et.deleted_at IS NULL
     `;
-    const countParams: any[] = [id, id, empresaId];
+    const countParams: unknown[] = [id, id, empresaId];
     if (status) {
       countSql += ` AND em.status = ?`;
       countParams.push(status);
@@ -813,13 +791,9 @@ app.get('/:id/escalas', auth(), async (c) => {
     return c.json({
       success: true,
       data: rows.results || [],
-      pagination: {
-        total: countRow?.total ?? 0,
-        limit,
-        offset,
-      },
+      pagination: { total: countRow?.total ?? 0, limit, offset },
     });
-  } catch (e) {
+  } catch {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });

@@ -1,41 +1,58 @@
-import { isProtectedFichaStatus, runStatement } from './simuladores-shared-session-helpers';
+import { isProtectedFichaStatus } from './simuladores-shared-session-helpers';
 
 export async function cleanupFailedSharedCreate(db: D1Database, sessaoId: number) {
-  await runStatement(
-    db,
-    'DELETE FROM simulador_segmento_atribuicoes WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ?)',
-    sessaoId,
-  );
-  await runStatement(
-    db,
-    'DELETE FROM simulador_segmento_participantes WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ?)',
-    sessaoId,
-  );
-  await runStatement(db, 'DELETE FROM simulador_agendamento_segmentos WHERE agendamento_id = ?', sessaoId);
-  await runStatement(
-    db,
-    'DELETE FROM fichas_sessao_manobras WHERE ficha_id IN (SELECT id FROM fichas_sessao WHERE agendamento_slot_id = ?)',
-    sessaoId,
-  );
-  await runStatement(db, 'DELETE FROM fichas_sessao WHERE agendamento_slot_id = ?', sessaoId);
-  await runStatement(
-    db,
-    'DELETE FROM simulador_atribuicoes_curriculares WHERE agendamento_id = ?',
-    sessaoId,
-  );
-  await runStatement(db, 'DELETE FROM sessoes_participantes WHERE sessao_id = ?', sessaoId);
-  await runStatement(
-    db,
-    'DELETE FROM qualificacoes_historico WHERE sessao_id = ? AND deleted_at IS NULL',
-    sessaoId,
-  );
-  await runStatement(db, 'DELETE FROM simulador_agendamentos WHERE id = ?', sessaoId);
+  const linkId = String(sessaoId);
+  await db.batch([
+    db
+      .prepare(
+        'DELETE FROM simulador_segmento_atribuicoes WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ?)',
+      )
+      .bind(sessaoId),
+    db
+      .prepare(
+        'DELETE FROM simulador_segmento_participantes WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ?)',
+      )
+      .bind(sessaoId),
+    db
+      .prepare('DELETE FROM simulador_agendamento_segmentos WHERE agendamento_id = ?')
+      .bind(sessaoId),
+    db
+      .prepare(
+        'DELETE FROM fichas_sessao_manobras WHERE ficha_id IN (SELECT id FROM fichas_sessao WHERE agendamento_slot_id = ?)',
+      )
+      .bind(sessaoId),
+    db.prepare('DELETE FROM fichas_sessao WHERE agendamento_slot_id = ?').bind(sessaoId),
+    db
+      .prepare('DELETE FROM simulador_atribuicoes_curriculares WHERE agendamento_id = ?')
+      .bind(sessaoId),
+    db.prepare('DELETE FROM sessoes_checks WHERE sessao_id = ?').bind(sessaoId),
+    db.prepare('DELETE FROM sessoes_participantes WHERE sessao_id = ?').bind(sessaoId),
+    db
+      .prepare('DELETE FROM qualificacoes_historico WHERE sessao_id = ? AND deleted_at IS NULL')
+      .bind(sessaoId),
+    db
+      .prepare(
+        `UPDATE escala_eventos
+            SET deleted_at = datetime('now'), updated_at = datetime('now')
+          WHERE origem = 'simuladores'
+            AND tripulacao_id = ?
+            AND deleted_at IS NULL`,
+      )
+      .bind(linkId),
+    db.prepare('DELETE FROM simulador_agendamentos WHERE id = ?').bind(sessaoId),
+  ]);
 }
 
+type SharedAssignmentRow = {
+  funcionario_id: string | number;
+};
+
+type SharedFichaRow = {
+  status: string | null;
+};
+
 export type CancelSharedAssignmentResult =
-  | { outcome: 'not_found' }
-  | { outcome: 'protected' }
-  | { outcome: 'cancelled' };
+  { outcome: 'not_found' } | { outcome: 'protected' } | { outcome: 'cancelled' };
 
 export async function cancelSharedAssignment(
   db: D1Database,
@@ -56,7 +73,7 @@ export async function cancelSharedAssignment(
          AND sac.deleted_at IS NULL`,
     )
     .bind(atribuicaoId, sessaoId, empresaId)
-    .first<any>();
+    .first<SharedAssignmentRow>();
 
   if (!atribuicao) {
     return { outcome: 'not_found' };
@@ -72,7 +89,7 @@ export async function cancelSharedAssignment(
        LIMIT 1`,
     )
     .bind(atribuicaoId, empresaId)
-    .first<any>();
+    .first<SharedFichaRow>();
 
   if (ficha && isProtectedFichaStatus(ficha.status)) {
     return { outcome: 'protected' };

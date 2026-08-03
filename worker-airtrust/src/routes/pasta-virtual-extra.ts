@@ -11,7 +11,12 @@ import { AppError } from '../utils/errors';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
-import { validarAssinaturaPDF } from '../utils/nomenclatura-padronizada';
+import {
+  gerarChaveR2,
+  gerarNomeArquivoPadronizado,
+  normalizarTipoDocumento,
+  validarAssinaturaPDF,
+} from '../utils/nomenclatura-padronizada';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -181,9 +186,11 @@ app.post('/:id/upload', auth(), async (c) => {
     const empresaId = getEmpresaId(c);
     if (isNaN(funcionarioId)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
     const funcionario = await db
-      .prepare('SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .prepare(
+        'SELECT id, nome, cpf FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
       .bind(funcionarioId, empresaId)
-      .first<{ id: number }>();
+      .first<{ id: number; nome: string; cpf: string | null }>();
     if (!funcionario) {
       return jsonError(c, 'Funcionário não encontrado', 404, 'FUNCIONARIO_NOT_FOUND');
     }
@@ -204,8 +211,27 @@ app.post('/:id/upload', auth(), async (c) => {
       return jsonError(c, 'Arquivo excede limite de 10MB', 422, 'ARQUIVO_GRANDE');
     if (!file.name.toLowerCase().endsWith('.pdf'))
       return jsonError(c, 'Somente PDF é permitido', 422, 'ARQUIVO_INVALIDO');
+    const tipoDocumento = String(formData.get('tipo_documento') || 'OUTRO')
+      .trim()
+      .toUpperCase();
+    const subTipo = String(formData.get('sub_tipo') || '').trim() || undefined;
+    const dataRealizacaoRaw = String(formData.get('data_realizacao') || '').trim();
+    const dataRealizacao = dataRealizacaoRaw ? new Date(dataRealizacaoRaw) : new Date();
+    if (Number.isNaN(dataRealizacao.getTime())) {
+      return jsonError(c, 'data_realizacao inválida', 400, 'DATA_INVALIDA');
+    }
+
     const uuid = crypto.randomUUID();
-    const r2Key = `funcionarios/${funcionarioId}/${uuid}.pdf`;
+    const nomePadronizado = gerarNomeArquivoPadronizado({
+      tipo: normalizarTipoDocumento(tipoDocumento),
+      nomeFuncionario: funcionario.nome || 'SEM_NOME',
+      cpf: String(funcionario.cpf || '').replace(/\D/g, ''),
+      data: dataRealizacao,
+      codigo: subTipo,
+      subTipo,
+      uuid,
+    });
+    const r2Key = gerarChaveR2(funcionarioId, nomePadronizado);
     const buf = await file.arrayBuffer();
     const uint8 = new Uint8Array(buf);
     const assinatura = validarAssinaturaPDF(uint8);
@@ -231,7 +257,7 @@ app.post('/:id/upload', auth(), async (c) => {
           .bind(
             uuid,
             funcionarioId,
-            file.name,
+            nomePadronizado,
             'application/pdf',
             file.size,
             r2Key,
@@ -251,7 +277,15 @@ app.post('/:id/upload', auth(), async (c) => {
             `INSERT INTO documentos (uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, empresa_id, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
           )
-          .bind(uuid, funcionarioId, file.name, 'application/pdf', file.size, r2Key, empresaId)
+          .bind(
+            uuid,
+            funcionarioId,
+            nomePadronizado,
+            'application/pdf',
+            file.size,
+            r2Key,
+            empresaId,
+          )
           .run();
       }
     } catch (insertError) {

@@ -11,7 +11,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { z } from 'zod';
 import { parseFlexibleDate } from '../../utils/dates';
 import { normalizeCPF } from '../../utils/cpf';
-import { FUNCIONARIOS_COLUMNS, FUNCIONARIOS_REQUIRED, isValidEmail } from './columnMappings';
+import { FUNCIONARIOS_COLUMNS } from './columnMappings';
 import { validateFuncionarioRow, type ValidationError } from './validators';
 
 // ===== SCHEMA NORMALIZADO (14 campos da planilha) =====
@@ -72,10 +72,10 @@ export class FuncionarioImportacao {
    * Importa funcionários com validação completa
    *
    * MODOS:
-   * - INSERT: Insere apenas se não existe
-   * - UPDATE: Atualiza campos fornecidos (inteligente, não sobrescreve com vazio)
-   * - UPSERT: INSERT se não existe, UPDATE se existe (padrão)
-   * - REPLACE_ALL: Delete todos (soft) e reinsert (cuidado!)
+   * - INSERT: Insere apenas se não existe no tenant
+   * - UPDATE: Atualiza campos fornecidos do tenant (não sobrescreve com vazio)
+   * - UPSERT: INSERT se não existe, UPDATE se existe no tenant (padrão)
+   * - REPLACE_ALL: Soft-delete apenas os funcionários do tenant e reinsere
    */
   async import(
     rows: Record<string, unknown>[],
@@ -92,25 +92,28 @@ export class FuncionarioImportacao {
       errors: [],
     };
 
-    // 1. Se modo REPLACE_ALL, deletar todos (soft delete) primeiro
+    // 1. Se modo REPLACE_ALL, deletar apenas os registros do tenant atual
     if (mode === 'REPLACE_ALL') {
-      console.log('[DEBUG] Modo REPLACE_ALL: deletando todos funcionários (soft delete)...');
+      console.log('[DEBUG] Modo REPLACE_ALL: desativando funcionários do tenant...');
       try {
         await this.db
-          .prepare("UPDATE funcionarios SET deleted_at = datetime('now') WHERE deleted_at IS NULL")
+          .prepare(
+            "UPDATE funcionarios SET deleted_at = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE empresa_id = ? AND deleted_at IS NULL",
+          )
+          .bind(this.empresaId)
           .run();
-        console.log('[DEBUG] Soft delete concluído');
+        console.log('[DEBUG] Soft delete do tenant concluído');
       } catch (e) {
-        console.error('[DEBUG] Erro ao deletar funcionários:', e);
+        console.error('[DEBUG] Erro ao desativar funcionários do tenant:', e);
         result.errors.push({
           line: 0,
           field: 'global',
-          message: 'Erro ao deletar funcionários existentes',
+          message: 'Erro ao desativar funcionários existentes',
         });
         return result;
       }
-      // Mudar modo para INSERT para as linhas novas
-      mode = 'INSERT';
+      // Mudar modo para UPSERT: registros do próprio tenant podem ser reativados com segurança.
+      mode = 'UPSERT';
     }
 
     // 2. Validar todos antes de inserir
@@ -124,7 +127,7 @@ export class FuncionarioImportacao {
       return result;
     }
 
-    // 2. Processar cada linha
+    // 3. Processar cada linha
     console.log(`[DEBUG] Iniciando processamento de ${rows.length} linhas`);
     for (let i = 0; i < rows.length; i++) {
       try {
@@ -145,19 +148,21 @@ export class FuncionarioImportacao {
           });
         }
 
-        // Verificar se já existe (incluindo soft deleted)
+        // Verificar se já existe exclusivamente no tenant atual, incluindo soft deleted.
         const existing = await this.db
-          .prepare('SELECT id, deleted_at FROM funcionarios WHERE cpf = ?')
-          .bind(cpf)
+          .prepare(
+            'SELECT id, deleted_at FROM funcionarios WHERE cpf = ? AND empresa_id = ? LIMIT 1',
+          )
+          .bind(cpf, this.empresaId)
           .first<{ id: number; deleted_at: string | null }>();
 
-        if (existing && mode === 'INSERT' && !existing.deleted_at) {
+        if (existing && mode === 'INSERT') {
           result.skipped++;
           continue;
         }
 
         if (existing && (mode === 'UPDATE' || mode === 'UPSERT')) {
-          // UPDATE (inteligente - só atualiza campos preenchidos)
+          // UPDATE tenant-scoped (inteligente - só atualiza campos preenchidos)
           const updateFields: string[] = ['deleted_at = NULL', 'updated_at = CURRENT_TIMESTAMP'];
           const updateValues: unknown[] = [];
 
@@ -235,16 +240,23 @@ export class FuncionarioImportacao {
             updateValues.push(row.Matricula);
           }
 
-          // Adicionar CPF ao final para WHERE
-          updateValues.push(cpf);
+          // Escopo imutável: a importação só pode atualizar o registro previamente localizado no tenant.
+          updateValues.push(existing.id, this.empresaId);
 
-          const updateSQL = `UPDATE funcionarios SET ${updateFields.join(', ')} WHERE cpf = ?`;
-          await this.db
+          const updateSQL = `UPDATE funcionarios SET ${updateFields.join(', ')} WHERE id = ? AND empresa_id = ?`;
+          const updateResult = await this.db
             .prepare(updateSQL)
             .bind(...updateValues)
             .run();
 
+          if ((updateResult.meta?.changes ?? 0) !== 1) {
+            throw new Error('Funcionário não foi atualizado no tenant atual');
+          }
+
           result.updated++;
+        } else if (mode === 'UPDATE') {
+          // UPDATE não cria registros ausentes.
+          result.skipped++;
         } else {
           // INSERT
           await this.db

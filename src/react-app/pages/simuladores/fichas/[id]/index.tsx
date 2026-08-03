@@ -108,6 +108,7 @@ interface FichaDetalhada {
   tripulante_codigo_anac?: string;
   instrutor_codigo_anac?: string;
   created_at?: string | null;
+  updated_at?: string | null;
   nota_geral?: number;
   aprovado?: boolean | number | null;
   status: string;
@@ -177,13 +178,14 @@ function formatarDataLocalSemUTC(valor?: string): string {
 const STATUS_FICHA_FINALIZADA = new Set(['APROVADO', 'NAO_APROVADO', 'CONCLUIDA']);
 
 function normalizarPerfil(perfil?: string | null): string {
-  return String(perfil || '').trim().toUpperCase();
+  return String(perfil || '')
+    .trim()
+    .toUpperCase();
 }
 
 function isPerfilGestor(perfil?: string | null): boolean {
   return ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER'].includes(normalizarPerfil(perfil));
 }
-
 
 export default function FichaDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -379,9 +381,13 @@ export default function FichaDetalhe() {
             simulador_nome: apiData.simulador_nome || '',
             simulador_modelo: apiData.simulador_modelo || '',
             simulador_codigo: apiData.simulador_nome || apiData.simulador || '',
-            equipamento_utilizado: apiData.equipamento_utilizado || apiData.simulador_modelo || null,
+            equipamento_utilizado:
+              apiData.equipamento_utilizado || apiData.simulador_modelo || null,
             dispositivo_identificacao:
-              apiData.dispositivo_identificacao || apiData.simulador_nome || apiData.simulador || null,
+              apiData.dispositivo_identificacao ||
+              apiData.simulador_nome ||
+              apiData.simulador ||
+              null,
             assento_instrucao_utilizado: apiData.assento_instrucao_utilizado || null,
             data_hora: dataHora,
             nota_geral: apiData.nota_final,
@@ -539,6 +545,7 @@ export default function FichaDetalhe() {
         },
         body: JSON.stringify({
           status: ficha.status,
+          expected_updated_at: ficha.updated_at || undefined,
           recalculate_status: true,
           observacoes: ficha.observacoes_gerais,
           equipamento_utilizado: ficha.equipamento_utilizado,
@@ -638,14 +645,17 @@ export default function FichaDetalhe() {
   const decidirEdicao = async (edicaoId: number, acao: 'aprovar' | 'rejeitar') => {
     try {
       setDecidindoEdicaoId(edicaoId);
-      const response = await fetch(`${API_BASE_URL}/simuladores/fichas-edicoes/${edicaoId}/${acao}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${getAccessToken()}`,
+      const response = await fetch(
+        `${API_BASE_URL}/simuladores/fichas-edicoes/${edicaoId}/${acao}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getAccessToken()}`,
+          },
+          body: JSON.stringify({ observacoes: decisaoEdicao[edicaoId] || '' }),
         },
-        body: JSON.stringify({ observacoes: decisaoEdicao[edicaoId] || '' }),
-      });
+      );
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -1089,7 +1099,8 @@ export default function FichaDetalhe() {
                         <>
                           Examinador ANAC: <strong>{ficha.examinador_nome}</strong>
                           <span className="block mt-0.5 text-amber-600">
-                            Documentação ANAC separada — a assinatura desta ficha pedagógica é do instrutor
+                            Documentação ANAC separada — a assinatura desta ficha pedagógica é do
+                            instrutor
                           </span>
                         </>
                       ) : (
@@ -1133,7 +1144,9 @@ export default function FichaDetalhe() {
                     />
                   ) : (
                     <p className="text-sm font-semibold text-slate-900">
-                      {ficha.equipamento_utilizado || ficha.simulador_modelo || ficha.simulador_codigo}
+                      {ficha.equipamento_utilizado ||
+                        ficha.simulador_modelo ||
+                        ficha.simulador_codigo}
                     </p>
                   )}
                 </div>
@@ -1328,143 +1341,143 @@ export default function FichaDetalhe() {
                   ))}
                 </div>
               ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Coluna Esquerda (1-11) */}
-                <div className="space-y-3">
-                  {manobrasEsquerda.map((manobra) => (
-                    <div
-                      key={manobra.id}
-                      className={`flex items-center gap-3 rounded-md border p-3 ${
-                        manobra.tripulante === 'A'
-                          ? 'border-blue-200 bg-blue-50'
-                          : manobra.tripulante === 'B'
-                            ? 'border-orange-200 bg-orange-50'
-                            : 'border-slate-200'
-                      }`}
-                    >
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm">
-                        {manobra.ordem}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">
-                          {manobra.nome || manobra.descricao}
-                        </p>
-                        <p className="text-xs text-slate-500">{manobra.codigo}</p>
-                        {!isEditMode && manobra.observacoes?.trim() ? (
-                          <p className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-600">
-                            {manobra.observacoes}
-                          </p>
-                        ) : null}
-                      </div>
-                      <span
-                        className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Coluna Esquerda (1-11) */}
+                  <div className="space-y-3">
+                    {manobrasEsquerda.map((manobra) => (
+                      <div
+                        key={manobra.id}
+                        className={`flex items-center gap-3 rounded-md border p-3 ${
                           manobra.tripulante === 'A'
-                            ? 'bg-blue-100 text-blue-700 border-blue-300'
+                            ? 'border-blue-200 bg-blue-50'
                             : manobra.tripulante === 'B'
-                              ? 'bg-orange-100 text-orange-700 border-orange-300'
-                              : 'bg-purple-100 text-purple-700 border-purple-300'
+                              ? 'border-orange-200 bg-orange-50'
+                              : 'border-slate-200'
                         }`}
                       >
-                        {manobra.tripulante || 'AB'}
-                      </span>
-                      {isEditMode ? (
-                        <select
-                          value={getNotaSelectValue(manobra.nota)}
-                          onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
-                          className={`w-24 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
-                            manobra.nota === null
-                              ? 'border-red-300 bg-red-50 text-red-700'
-                              : 'border-slate-300'
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm">
+                          {manobra.ordem}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">
+                            {manobra.nome || manobra.descricao}
+                          </p>
+                          <p className="text-xs text-slate-500">{manobra.codigo}</p>
+                          {!isEditMode && manobra.observacoes?.trim() ? (
+                            <p className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-600">
+                              {manobra.observacoes}
+                            </p>
+                          ) : null}
+                        </div>
+                        <span
+                          className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                            manobra.tripulante === 'A'
+                              ? 'bg-blue-100 text-blue-700 border-blue-300'
+                              : manobra.tripulante === 'B'
+                                ? 'bg-orange-100 text-orange-700 border-orange-300'
+                                : 'bg-purple-100 text-purple-700 border-purple-300'
                           }`}
                         >
-                          <option value="">Selecione</option>
-                          {opcoesNota.map((opcao) => (
-                            <option key={opcao} value={opcao}>
-                              {opcao}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span
-                          className={`px-3 py-1 rounded-full text-sm font-bold ${getNotaBadgeClass(
-                            manobra.nota,
-                          )}`}
-                        >
-                          {getNotaLabel(manobra.nota)}
+                          {manobra.tripulante || 'AB'}
                         </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                        {isEditMode ? (
+                          <select
+                            value={getNotaSelectValue(manobra.nota)}
+                            onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
+                            className={`w-24 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
+                              manobra.nota === null
+                                ? 'border-red-300 bg-red-50 text-red-700'
+                                : 'border-slate-300'
+                            }`}
+                          >
+                            <option value="">Selecione</option>
+                            {opcoesNota.map((opcao) => (
+                              <option key={opcao} value={opcao}>
+                                {opcao}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            className={`px-3 py-1 rounded-full text-sm font-bold ${getNotaBadgeClass(
+                              manobra.nota,
+                            )}`}
+                          >
+                            {getNotaLabel(manobra.nota)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
 
-                {/* Coluna Direita (12-22) */}
-                <div className="space-y-3">
-                  {manobrasDireita.map((manobra) => (
-                    <div
-                      key={manobra.id}
-                      className={`flex items-center gap-3 rounded-md border p-3 ${
-                        manobra.tripulante === 'A'
-                          ? 'border-blue-200 bg-blue-50'
-                          : manobra.tripulante === 'B'
-                            ? 'border-orange-200 bg-orange-50'
-                            : 'border-slate-200'
-                      }`}
-                    >
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm">
-                        {manobra.ordem}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">
-                          {manobra.nome || manobra.descricao}
-                        </p>
-                        <p className="text-xs text-slate-500">{manobra.codigo}</p>
-                        {!isEditMode && manobra.observacoes?.trim() ? (
-                          <p className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-600">
-                            {manobra.observacoes}
-                          </p>
-                        ) : null}
-                      </div>
-                      <span
-                        className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                  {/* Coluna Direita (12-22) */}
+                  <div className="space-y-3">
+                    {manobrasDireita.map((manobra) => (
+                      <div
+                        key={manobra.id}
+                        className={`flex items-center gap-3 rounded-md border p-3 ${
                           manobra.tripulante === 'A'
-                            ? 'bg-blue-100 text-blue-700 border-blue-300'
+                            ? 'border-blue-200 bg-blue-50'
                             : manobra.tripulante === 'B'
-                              ? 'bg-orange-100 text-orange-700 border-orange-300'
-                              : 'bg-purple-100 text-purple-700 border-purple-300'
+                              ? 'border-orange-200 bg-orange-50'
+                              : 'border-slate-200'
                         }`}
                       >
-                        {manobra.tripulante || 'AB'}
-                      </span>
-                      {isEditMode ? (
-                        <select
-                          value={getNotaSelectValue(manobra.nota)}
-                          onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
-                          className={`w-24 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
-                            manobra.nota === null
-                              ? 'border-red-300 bg-red-50 text-red-700'
-                              : 'border-slate-300'
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm">
+                          {manobra.ordem}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">
+                            {manobra.nome || manobra.descricao}
+                          </p>
+                          <p className="text-xs text-slate-500">{manobra.codigo}</p>
+                          {!isEditMode && manobra.observacoes?.trim() ? (
+                            <p className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-600">
+                              {manobra.observacoes}
+                            </p>
+                          ) : null}
+                        </div>
+                        <span
+                          className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                            manobra.tripulante === 'A'
+                              ? 'bg-blue-100 text-blue-700 border-blue-300'
+                              : manobra.tripulante === 'B'
+                                ? 'bg-orange-100 text-orange-700 border-orange-300'
+                                : 'bg-purple-100 text-purple-700 border-purple-300'
                           }`}
                         >
-                          <option value="">Selecione</option>
-                          {opcoesNota.map((opcao) => (
-                            <option key={opcao} value={opcao}>
-                              {opcao}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span
-                          className={`px-3 py-1 rounded-full text-sm font-bold ${getNotaBadgeClass(
-                            manobra.nota,
-                          )}`}
-                        >
-                          {getNotaLabel(manobra.nota)}
+                          {manobra.tripulante || 'AB'}
                         </span>
-                      )}
-                    </div>
-                  ))}
+                        {isEditMode ? (
+                          <select
+                            value={getNotaSelectValue(manobra.nota)}
+                            onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
+                            className={`w-24 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
+                              manobra.nota === null
+                                ? 'border-red-300 bg-red-50 text-red-700'
+                                : 'border-slate-300'
+                            }`}
+                          >
+                            <option value="">Selecione</option>
+                            {opcoesNota.map((opcao) => (
+                              <option key={opcao} value={opcao}>
+                                {opcao}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            className={`px-3 py-1 rounded-full text-sm font-bold ${getNotaBadgeClass(
+                              manobra.nota,
+                            )}`}
+                          >
+                            {getNotaLabel(manobra.nota)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
               )}
             </div>
             {manobrasNotechs.length > 0 && (
@@ -1474,9 +1487,7 @@ export default function FichaDetalhe() {
                     <span className="rounded-full bg-slate-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
                       NOTECHS
                     </span>
-                    <h3 className="text-lg font-bold text-slate-900">
-                      Habilidades Não Técnicas
-                    </h3>
+                    <h3 className="text-lg font-bold text-slate-900">Habilidades Não Técnicas</h3>
                   </div>
                   <button
                     type="button"
@@ -1553,191 +1564,192 @@ export default function FichaDetalhe() {
                 </p>
               )}
             </div>
-            {fichaFinalizada && (edicoes.length > 0 || usuarioGestor || usuarioEhInstrutorDaFicha) && (
-              <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
-                <div className="mb-4 flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
-                      <History className="h-5 w-5 text-slate-500" />
-                      Edições pós-finalização
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Somente observações podem ser alteradas, sempre com solicitação do instrutor
-                      e aprovação do gestor.
-                    </p>
+            {fichaFinalizada &&
+              (edicoes.length > 0 || usuarioGestor || usuarioEhInstrutorDaFicha) && (
+                <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+                        <History className="h-5 w-5 text-slate-500" />
+                        Edições pós-finalização
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Somente observações podem ser alteradas, sempre com solicitação do instrutor
+                        e aprovação do gestor.
+                      </p>
+                    </div>
+                    {podeSolicitarEdicaoFinalizada && (
+                      <button
+                        onClick={abrirSolicitacaoEdicao}
+                        className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                      >
+                        <Send className="h-4 w-4" />
+                        Solicitar edição
+                      </button>
+                    )}
                   </div>
-                  {podeSolicitarEdicaoFinalizada && (
-                    <button
-                      onClick={abrirSolicitacaoEdicao}
-                      className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
-                    >
-                      <Send className="h-4 w-4" />
-                      Solicitar edição
-                    </button>
+
+                  {edicoes.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                      Nenhuma solicitação de edição registrada para esta ficha.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {edicoes.map((edicao) => {
+                        const pendente = edicao.status === 'PENDENTE';
+                        const aprovada = edicao.status === 'APROVADA';
+                        const manobrasAlteradas = edicao.alteracoes?.manobras || [];
+
+                        return (
+                          <div
+                            key={edicao.id}
+                            className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                          >
+                            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                      pendente
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : aprovada
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : 'bg-rose-100 text-rose-800'
+                                    }`}
+                                  >
+                                    {pendente ? (
+                                      <Clock className="h-3.5 w-3.5" />
+                                    ) : aprovada ? (
+                                      <ShieldCheck className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <XCircle className="h-3.5 w-3.5" />
+                                    )}
+                                    {edicao.status}
+                                  </span>
+                                  <span className="text-xs text-slate-500">
+                                    #{edicao.id} ·{' '}
+                                    {new Date(edicao.created_at).toLocaleString('pt-BR')}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-sm text-slate-700">
+                                  <strong>Solicitante:</strong>{' '}
+                                  {edicao.solicitante_nome || 'Instrutor'}
+                                </p>
+                                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
+                                  <strong>Motivo:</strong> {edicao.motivo}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3 rounded-lg bg-white p-3">
+                              {edicao.alteracoes?.observacoes_gerais && (
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    Observações gerais
+                                  </p>
+                                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                                    <div className="rounded border border-rose-100 bg-rose-50 p-2">
+                                      <p className="mb-1 text-[11px] font-semibold text-rose-700">
+                                        Antes
+                                      </p>
+                                      <p className="whitespace-pre-wrap text-xs text-slate-700">
+                                        {edicao.alteracoes.observacoes_gerais.antes || '—'}
+                                      </p>
+                                    </div>
+                                    <div className="rounded border border-emerald-100 bg-emerald-50 p-2">
+                                      <p className="mb-1 text-[11px] font-semibold text-emerald-700">
+                                        Depois
+                                      </p>
+                                      <p className="whitespace-pre-wrap text-xs text-slate-700">
+                                        {edicao.alteracoes.observacoes_gerais.depois || '—'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {manobrasAlteradas.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    Manobras alteradas ({manobrasAlteradas.length})
+                                  </p>
+                                  <div className="mt-2 space-y-2">
+                                    {manobrasAlteradas.map((manobra) => (
+                                      <div
+                                        key={manobra.manobra_id}
+                                        className="rounded border border-slate-200 p-2"
+                                      >
+                                        <p className="text-xs font-semibold text-slate-800">
+                                          {manobra.ordem}. {manobra.nome || manobra.codigo}
+                                        </p>
+                                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                                          <p className="whitespace-pre-wrap rounded bg-rose-50 p-2 text-xs text-slate-700">
+                                            <span className="font-semibold text-rose-700">
+                                              Antes:
+                                            </span>{' '}
+                                            {manobra.observacoes_antes || '—'}
+                                          </p>
+                                          <p className="whitespace-pre-wrap rounded bg-emerald-50 p-2 text-xs text-slate-700">
+                                            <span className="font-semibold text-emerald-700">
+                                              Depois:
+                                            </span>{' '}
+                                            {manobra.observacoes_depois || '—'}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {edicao.decisao_observacoes && (
+                              <p className="mt-3 whitespace-pre-wrap rounded bg-white px-3 py-2 text-xs text-slate-600">
+                                <strong>Decisão:</strong> {edicao.decisao_observacoes}
+                              </p>
+                            )}
+
+                            {usuarioGestor && pendente && (
+                              <div className="mt-4 border-t border-slate-200 pt-4">
+                                <textarea
+                                  value={decisaoEdicao[edicao.id] || ''}
+                                  onChange={(event) =>
+                                    setDecisaoEdicao((prev) => ({
+                                      ...prev,
+                                      [edicao.id]: event.target.value,
+                                    }))
+                                  }
+                                  rows={2}
+                                  placeholder="Observações da decisão (opcional)"
+                                  className="mb-3 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    onClick={() => decidirEdicao(edicao.id, 'aprovar')}
+                                    disabled={decidindoEdicaoId === edicao.id}
+                                    className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                  >
+                                    <ShieldCheck className="h-4 w-4" />
+                                    Aprovar e aplicar
+                                  </button>
+                                  <button
+                                    onClick={() => decidirEdicao(edicao.id, 'rejeitar')}
+                                    disabled={decidindoEdicaoId === edicao.id}
+                                    className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                    Rejeitar
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
-
-                {edicoes.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                    Nenhuma solicitação de edição registrada para esta ficha.
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {edicoes.map((edicao) => {
-                      const pendente = edicao.status === 'PENDENTE';
-                      const aprovada = edicao.status === 'APROVADA';
-                      const manobrasAlteradas = edicao.alteracoes?.manobras || [];
-
-                      return (
-                        <div
-                          key={edicao.id}
-                          className="rounded-lg border border-slate-200 bg-slate-50 p-4"
-                        >
-                          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span
-                                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                    pendente
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : aprovada
-                                        ? 'bg-emerald-100 text-emerald-800'
-                                        : 'bg-rose-100 text-rose-800'
-                                  }`}
-                                >
-                                  {pendente ? (
-                                    <Clock className="h-3.5 w-3.5" />
-                                  ) : aprovada ? (
-                                    <ShieldCheck className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <XCircle className="h-3.5 w-3.5" />
-                                  )}
-                                  {edicao.status}
-                                </span>
-                                <span className="text-xs text-slate-500">
-                                  #{edicao.id} ·{' '}
-                                  {new Date(edicao.created_at).toLocaleString('pt-BR')}
-                                </span>
-                              </div>
-                              <p className="mt-2 text-sm text-slate-700">
-                                <strong>Solicitante:</strong>{' '}
-                                {edicao.solicitante_nome || 'Instrutor'}
-                              </p>
-                              <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
-                                <strong>Motivo:</strong> {edicao.motivo}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="space-y-3 rounded-lg bg-white p-3">
-                            {edicao.alteracoes?.observacoes_gerais && (
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                  Observações gerais
-                                </p>
-                                <div className="mt-2 grid gap-2 md:grid-cols-2">
-                                  <div className="rounded border border-rose-100 bg-rose-50 p-2">
-                                    <p className="mb-1 text-[11px] font-semibold text-rose-700">
-                                      Antes
-                                    </p>
-                                    <p className="whitespace-pre-wrap text-xs text-slate-700">
-                                      {edicao.alteracoes.observacoes_gerais.antes || '—'}
-                                    </p>
-                                  </div>
-                                  <div className="rounded border border-emerald-100 bg-emerald-50 p-2">
-                                    <p className="mb-1 text-[11px] font-semibold text-emerald-700">
-                                      Depois
-                                    </p>
-                                    <p className="whitespace-pre-wrap text-xs text-slate-700">
-                                      {edicao.alteracoes.observacoes_gerais.depois || '—'}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {manobrasAlteradas.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                  Manobras alteradas ({manobrasAlteradas.length})
-                                </p>
-                                <div className="mt-2 space-y-2">
-                                  {manobrasAlteradas.map((manobra) => (
-                                    <div
-                                      key={manobra.manobra_id}
-                                      className="rounded border border-slate-200 p-2"
-                                    >
-                                      <p className="text-xs font-semibold text-slate-800">
-                                        {manobra.ordem}. {manobra.nome || manobra.codigo}
-                                      </p>
-                                      <div className="mt-2 grid gap-2 md:grid-cols-2">
-                                        <p className="whitespace-pre-wrap rounded bg-rose-50 p-2 text-xs text-slate-700">
-                                          <span className="font-semibold text-rose-700">
-                                            Antes:
-                                          </span>{' '}
-                                          {manobra.observacoes_antes || '—'}
-                                        </p>
-                                        <p className="whitespace-pre-wrap rounded bg-emerald-50 p-2 text-xs text-slate-700">
-                                          <span className="font-semibold text-emerald-700">
-                                            Depois:
-                                          </span>{' '}
-                                          {manobra.observacoes_depois || '—'}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {edicao.decisao_observacoes && (
-                            <p className="mt-3 whitespace-pre-wrap rounded bg-white px-3 py-2 text-xs text-slate-600">
-                              <strong>Decisão:</strong> {edicao.decisao_observacoes}
-                            </p>
-                          )}
-
-                          {usuarioGestor && pendente && (
-                            <div className="mt-4 border-t border-slate-200 pt-4">
-                              <textarea
-                                value={decisaoEdicao[edicao.id] || ''}
-                                onChange={(event) =>
-                                  setDecisaoEdicao((prev) => ({
-                                    ...prev,
-                                    [edicao.id]: event.target.value,
-                                  }))
-                                }
-                                rows={2}
-                                placeholder="Observações da decisão (opcional)"
-                                className="mb-3 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                              />
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  onClick={() => decidirEdicao(edicao.id, 'aprovar')}
-                                  disabled={decidindoEdicaoId === edicao.id}
-                                  className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                >
-                                  <ShieldCheck className="h-4 w-4" />
-                                  Aprovar e aplicar
-                                </button>
-                                <button
-                                  onClick={() => decidirEdicao(edicao.id, 'rejeitar')}
-                                  disabled={decidindoEdicaoId === edicao.id}
-                                  className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
-                                >
-                                  <XCircle className="h-4 w-4" />
-                                  Rejeitar
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
             {/* Assinaturas - só mostra em modo view, pois o modo sign já tem formulário inline */}
             {!isSignMode && (
               <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">

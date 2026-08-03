@@ -8,6 +8,14 @@ import { getEmpresaId } from '../middleware/tenant';
 
 const funcoes = new Hono<{ Bindings: Env }>();
 
+type FuncaoPayload = {
+  codigo?: unknown;
+  nome?: unknown;
+  descricao?: unknown;
+  categoria?: unknown;
+  ativo?: unknown;
+};
+
 // ===== GET /api/funcoes =====
 funcoes.get('/', auth(), async (c) => {
   const db = c.env.DB;
@@ -73,7 +81,7 @@ funcoes.get('/:id', auth(), async (c) => {
 // ===== POST /api/funcoes =====
 funcoes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
-  const body = (await c.req.json()) as any;
+  const body = (await c.req.json()) as FuncaoPayload;
   const { codigo, nome, descricao, categoria } = body;
 
   if (!codigo || String(codigo).trim().length === 0) {
@@ -138,7 +146,7 @@ funcoes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 funcoes.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
-  const body = (await c.req.json()) as any;
+  const body = (await c.req.json()) as FuncaoPayload;
   const empresaId = getEmpresaId(c);
 
   if (Object.keys(body).length === 0) {
@@ -147,7 +155,9 @@ funcoes.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 
   try {
     const { results: existing } = await db
-      .prepare('SELECT id FROM funcoes WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?')
+      .prepare(
+        'SELECT id, codigo, nome FROM funcoes WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
+      )
       .bind(id, empresaId)
       .all();
 
@@ -184,10 +194,30 @@ funcoes.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 
     values.push(empresaId);
 
-    await db
-      .prepare(`UPDATE funcoes SET ${fields.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`)
-      .bind(...values)
-      .run();
+    const statements = [
+      db
+        .prepare(
+          `UPDATE funcoes SET ${fields.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(...values),
+    ];
+    if (body.nome !== undefined || body.codigo !== undefined) {
+      const anterior = existing[0] as { nome?: string | null; codigo?: string | null };
+      const novoRotulo = String(
+        body.nome ?? anterior.nome ?? body.codigo ?? anterior.codigo ?? '',
+      ).trim();
+      statements.push(
+        db
+          .prepare(
+            `UPDATE funcionarios SET funcao = ?, updated_at = datetime('now')
+              WHERE empresa_id = ? AND deleted_at IS NULL
+                AND NULLIF(TRIM(COALESCE(funcao, '')), '') IS NOT NULL
+                AND UPPER(TRIM(funcao)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))`,
+          )
+          .bind(novoRotulo, empresaId, anterior.nome || '', anterior.codigo || ''),
+      );
+    }
+    await db.batch(statements);
 
     const ua2 = extrairUsuarioAuditoria(c);
     await registrarAuditoria({
@@ -222,7 +252,9 @@ funcoes.delete('/:id', auth(), requireRole('admin'), async (c) => {
 
   try {
     const { results: existing } = await db
-      .prepare('SELECT id FROM funcoes WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?')
+      .prepare(
+        'SELECT id, codigo, nome FROM funcoes WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
+      )
       .bind(id, empresaId)
       .all();
 
@@ -230,8 +262,25 @@ funcoes.delete('/:id', auth(), requireRole('admin'), async (c) => {
       throw new ApiError('Função não encontrada', 404);
     }
 
+    const funcao = existing[0] as { codigo?: string | null; nome?: string | null };
+    const emUso = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM funcionarios
+          WHERE empresa_id = ? AND deleted_at IS NULL
+            AND UPPER(COALESCE(status, 'ATIVO')) = 'ATIVO'
+            AND NULLIF(TRIM(COALESCE(funcao, '')), '') IS NOT NULL
+            AND UPPER(TRIM(funcao)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))`,
+      )
+      .bind(empresaId, funcao.nome || '', funcao.codigo || '')
+      .first<{ total: number }>();
+    if (Number(emUso?.total || 0) > 0) {
+      throw new ApiError('Função em uso por funcionários ativos não pode ser excluída', 409);
+    }
+
     await db
-      .prepare('UPDATE funcoes SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .prepare(
+        'UPDATE funcoes SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
       .bind(id, empresaId)
       .run();
 

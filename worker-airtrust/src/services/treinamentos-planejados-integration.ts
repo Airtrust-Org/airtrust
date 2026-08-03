@@ -141,9 +141,7 @@ function resolveTipoTreinamento(
   return normalized || 'RECORRENTE';
 }
 
-function shouldCompleteParticipante(
-  participante: ParticipanteContextRow,
-) {
+function shouldCompleteParticipante(participante: ParticipanteContextRow) {
   return (
     Number(participante.aprovado || 0) === 1 &&
     String(participante.resultado || '').toUpperCase() === 'APROVADO' &&
@@ -269,13 +267,7 @@ async function loadGeneratedQualificationLink(
             AND data_conclusao_efetiva = ?
           LIMIT 1`,
       )
-      .bind(
-        empresaId,
-        treinamentoId,
-        participanteId,
-        qualificacaoTipoId,
-        dataConclusaoEfetiva,
-      )
+      .bind(empresaId, treinamentoId, participanteId, qualificacaoTipoId, dataConclusaoEfetiva)
       .first<GeneratedQualificationLinkRow>()) || null
   );
 }
@@ -376,7 +368,8 @@ async function ensureGeneratedQualificationLink(
         participante.id,
         evento.qualificacao_tipo_id,
         dataConclusaoEfetiva,
-      )) || (await loadGeneratedQualificationLinkByHistorico(db, empresaId, qualificacaoHistoricoId));
+      )) ||
+      (await loadGeneratedQualificationLinkByHistorico(db, empresaId, qualificacaoHistoricoId));
     if (afterConflict) return afterConflict;
     throw error;
   }
@@ -1016,7 +1009,11 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
   let finalStatus = evento.status;
   if (evento.status !== 'CANCELADO' && currentParticipants.length > 0) {
     const isFinalResult = (resultado: string | null) =>
-      ['APROVADO', 'REPROVADO', 'CANCELADO'].includes(String(resultado || '').trim().toUpperCase());
+      ['APROVADO', 'REPROVADO', 'CANCELADO'].includes(
+        String(resultado || '')
+          .trim()
+          .toUpperCase(),
+      );
     const finalizedCount = currentParticipants.filter((p) => isFinalResult(p.resultado)).length;
     const desiredStatus =
       finalizedCount === currentParticipants.length
@@ -1091,9 +1088,6 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
     instrutorIds,
     removedParticipantIds: removedParticipants.map((p) => p.funcionario_id),
     createdBy,
-  }).catch((err) => {
-    // Escala sync is non-critical — a failure here should not block training operations.
-    console.error('treinamento_escala_sync_failed', { treinamentoId, error: (err as Error)?.message });
   });
 }
 

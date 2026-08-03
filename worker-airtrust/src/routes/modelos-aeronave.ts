@@ -8,6 +8,21 @@ import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria'
 
 const modelosAeronave = new Hono<{ Bindings: Env }>();
 
+type ModeloAeronavePayload = Record<string, unknown> & {
+  codigo?: unknown;
+  nome?: unknown;
+  modelo?: unknown;
+  fabricante?: unknown;
+  tipo?: unknown;
+  categoria?: unknown;
+  descricao?: unknown;
+  ativo?: unknown;
+};
+
+type ModeloAeronaveRow = ModeloAeronavePayload & {
+  id?: string | number;
+};
+
 function normalizeModeloAeronaveValue(value: unknown): unknown {
   if (typeof value !== 'string') return value;
   const trimmed = value.trim();
@@ -96,15 +111,18 @@ modelosAeronave.get('/:id', auth(), async (c) => {
 modelosAeronave.post('/', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  const body = normalizeModeloAeronavePayload((await c.req.json()) as Record<string, unknown>) as any;
+  const body = normalizeModeloAeronavePayload((await c.req.json()) as ModeloAeronavePayload);
 
-  const { modelo, fabricante, tipo, categoria, descricao } = body;
+  const { fabricante, tipo, categoria, descricao } = body;
+  const modeloInput = body.modelo ?? body.codigo ?? body.nome;
 
-  if (!modelo) {
+  if (!modeloInput || !String(modeloInput).trim()) {
     throw new ApiError('Modelo é obrigatório', 400);
   }
 
-  const modeloNormalizado = String(modelo).trim();
+  const modeloNormalizado = String(modeloInput).trim();
+  const codigoNormalizado = String(body.codigo ?? modeloNormalizado).trim();
+  const nomeNormalizado = String(body.nome ?? modeloNormalizado).trim();
 
   // Verifica se o modelo já existe
   const existe = await db
@@ -131,8 +149,8 @@ modelosAeronave.post('/', auth(), requireRole('admin'), async (c) => {
     )
     .bind(
       empresaId,
-      modeloNormalizado,
-      modeloNormalizado,
+      codigoNormalizado,
+      nomeNormalizado,
       modeloNormalizado,
       fabricante ?? null,
       tipo ?? null,
@@ -160,20 +178,24 @@ modelosAeronave.put('/:id', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
-  const body = normalizeModeloAeronavePayload((await c.req.json()) as Record<string, unknown>) as any;
+  const body = normalizeModeloAeronavePayload((await c.req.json()) as ModeloAeronavePayload);
 
   // Verifica se existe
   const existe = await db
-    .prepare(`SELECT * FROM modelos_aeronave WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+    .prepare(
+      `SELECT * FROM modelos_aeronave WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
     .bind(id, empresaId)
-    .first<any>();
+    .first<ModeloAeronaveRow>();
 
   if (!existe) {
     throw new ApiError('Modelo de aeronave não encontrado', 404);
   }
 
-  if (body.modelo !== undefined) {
-    const modeloNormalizado = String(body.modelo).trim();
+  const canonicalInput = body.modelo ?? body.codigo ?? body.nome;
+  if (canonicalInput !== undefined) {
+    const modeloNormalizado = String(canonicalInput).trim();
+    if (!modeloNormalizado) throw new ApiError('Modelo é obrigatório', 400);
     const duplicate = await db
       .prepare(
         `SELECT id
@@ -189,16 +211,27 @@ modelosAeronave.put('/:id', auth(), requireRole('admin'), async (c) => {
     if (duplicate) {
       throw new ApiError('Modelo já cadastrado', 409);
     }
-    body.codigo = modeloNormalizado;
-    body.nome = modeloNormalizado;
+    // `modelo` é a chave canônica histórica (backfill 0183 priorizou codigo),
+    // enquanto `nome` continua sendo o rótulo amigável informado pela UI.
     body.modelo = modeloNormalizado;
+    if (body.codigo !== undefined) body.codigo = String(body.codigo).trim();
+    if (body.nome !== undefined) body.nome = String(body.nome).trim();
   }
 
   // Monta a query dinamicamente com os campos fornecidos
   const campos: string[] = [];
-  const valores: any[] = [];
+  const valores: unknown[] = [];
 
-  const camposPermitidos = ['codigo', 'nome', 'modelo', 'fabricante', 'tipo', 'categoria', 'descricao', 'ativo'];
+  const camposPermitidos = [
+    'codigo',
+    'nome',
+    'modelo',
+    'fabricante',
+    'tipo',
+    'categoria',
+    'descricao',
+    'ativo',
+  ];
 
   camposPermitidos.forEach((campo) => {
     if (body[campo] !== undefined) {
@@ -240,7 +273,10 @@ modelosAeronave.delete('/:id', auth(), requireRole('admin'), async (c) => {
 
   // Verifica se existe
   const existe = await db
-    .prepare(`SELECT id FROM modelos_aeronave WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+    .prepare(
+      `SELECT id, codigo, nome, modelo FROM modelos_aeronave
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
     .bind(id, empresaId)
     .first();
 
@@ -248,8 +284,33 @@ modelosAeronave.delete('/:id', auth(), requireRole('admin'), async (c) => {
     throw new ApiError('Modelo de aeronave não encontrado', 404);
   }
 
+  const modelo = existe as { codigo?: string | null; nome?: string | null; modelo?: string | null };
+  const emUso = await db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM funcionarios
+           WHERE empresa_id = ? AND deleted_at IS NULL
+             AND UPPER(COALESCE(status, 'ATIVO')) = 'ATIVO'
+             AND CAST(modelo_aeronave_id AS TEXT) = CAST(? AS TEXT)) +
+         (SELECT COUNT(*) FROM modelos_sessao
+           WHERE empresa_id = ? AND deleted_at IS NULL AND ativo = 1
+             AND NULLIF(TRIM(COALESCE(modelo_aeronave, '')), '') IS NOT NULL
+             AND UPPER(TRIM(modelo_aeronave)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)), UPPER(TRIM(?))))
+         AS total`,
+    )
+    .bind(empresaId, id, empresaId, modelo.modelo || '', modelo.codigo || '', modelo.nome || '')
+    .first<{ total: number }>();
+  if (Number(emUso?.total || 0) > 0) {
+    throw new ApiError(
+      'Modelo em uso por funcionários ou sessões ativas não pode ser excluído',
+      409,
+    );
+  }
+
   await db
-    .prepare(`UPDATE modelos_aeronave SET deleted_at = datetime('now') WHERE id = ? AND empresa_id = ?`)
+    .prepare(
+      `UPDATE modelos_aeronave SET deleted_at = datetime('now') WHERE id = ? AND empresa_id = ?`,
+    )
     .bind(id, empresaId)
     .run();
 

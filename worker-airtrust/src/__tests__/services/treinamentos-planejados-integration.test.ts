@@ -123,6 +123,10 @@ function createMockDb(state: MockState): D1Database {
           return null;
         }
 
+        if (query.includes('FROM escalas_mensais')) {
+          return null;
+        }
+
         if (
           query.includes('FROM qualificacoes_historico') &&
           query.includes('WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
@@ -279,7 +283,10 @@ function createMockDb(state: MockState): D1Database {
         }
 
         // R1: instructor query — return empty list (no instructors in unit tests)
-        if (query.includes('FROM treinamentos_instrutores ti') || query.includes('t.instrutor_id AS funcionario_id')) {
+        if (
+          query.includes('FROM treinamentos_instrutores ti') ||
+          query.includes('t.instrutor_id AS funcionario_id')
+        ) {
           return { results: [] };
         }
 
@@ -371,10 +378,7 @@ function createMockDb(state: MockState): D1Database {
           return { meta: { changes: link ? 1 : 0, last_row_id: 0 } };
         }
 
-        if (
-          query.includes('UPDATE treinamentos_planejados') &&
-          query.includes('SET status = ?')
-        ) {
+        if (query.includes('UPDATE treinamentos_planejados') && query.includes('SET status = ?')) {
           // M3: transição de ciclo de vida da turma.
           const [status, treinamentoId, empresaId] = args as [string, number, number];
           if (state.event.id === treinamentoId && state.event.empresa_id === empresaId) {
@@ -386,7 +390,7 @@ function createMockDb(state: MockState): D1Database {
         if (
           query.includes('UPDATE qualificacoes_historico') &&
           query.includes('SET data_conclusao = ?, data_vencimento = ?') &&
-          !query.includes("status")
+          !query.includes('status')
         ) {
           // A4: recálculo de data/vencimento em qualificação já concluída.
           const [dataConclusao, dataVencimento, historicoId, empresaId] = args as [
@@ -629,7 +633,7 @@ function createMockDb(state: MockState): D1Database {
       };
     },
     // R1/R2/R3: sync to escala_eventos uses db.batch(); accept silently in unit tests.
-    batch: async (_stmts: unknown[]) => [],
+    batch: async () => [],
   } as unknown as D1Database;
 }
 

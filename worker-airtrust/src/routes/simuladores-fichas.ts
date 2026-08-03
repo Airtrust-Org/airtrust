@@ -24,7 +24,6 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
-import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { normalizeFichaRole, resolveFichaScope } from '../utils/ficha-role-scope';
 import { audit, requireAdminForDelete } from './simuladores-shared';
 import { syncHorasVooFromSimulador } from '../shared/handlers/horasVooFromSimulador.handler';
@@ -43,13 +42,6 @@ import {
   resolveOperationalHours,
 } from '../../../src/shared/simuladores/ficha-header';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
-import {
-  gerarQualificacaoDaFicha,
-  getQualificacaoGeracaoErrorStatus,
-  marcarNotificacoesFichaComoResolvidas,
-  listarManobrasPendentes,
-  type ResultadoGeracaoQualificacao,
-} from './simuladores-fichas-helpers';
 import fichasSimuladorRoutes from './simuladores-fichas-simulador';
 import fichasAcoesRoutes from './simuladores-fichas-acoes';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
@@ -66,6 +58,103 @@ const requireOperacoesFicha = (action: 'create' | 'update' | 'delete' | 'export'
   requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' });
 
 const app = new Hono<{ Bindings: Env }>();
+
+type FichaDbId = string | number | null;
+type FichaDbValue = FichaDbId;
+
+type FichaSessionRow = Record<string, unknown> & {
+  id: string | number;
+  uuid?: string | null;
+  empresa_id?: FichaDbId;
+  agendamento_slot_id?: FichaDbId;
+  colaborador_id_aluno?: FichaDbId;
+  instrutor_id?: FichaDbId;
+  tipo_sessao?: string | null;
+  tipo_aeronave?: string | null;
+  status?: string | null;
+  observacoes?: string | null;
+  resultado_final?: string | null;
+  atualizado_em?: string | null;
+  updated_at?: string | null;
+  assinatura_aluno_timestamp?: string | null;
+  assinatura_instrutor_timestamp?: string | null;
+  assinatura_aluno_ip?: string | null;
+  assinatura_instrutor_ip?: string | null;
+  assinatura_aluno_imagem?: string | null;
+  assinatura_instrutor_imagem?: string | null;
+  equipamento_utilizado?: string | null;
+  dispositivo_identificacao?: string | null;
+  assento_instrucao_utilizado?: string | null;
+  carga_horaria_pf?: string | number | null;
+  carga_horaria_pm?: string | number | null;
+  modelo_sessao_id?: FichaDbId;
+  atribuicao_curricular_id?: FichaDbId;
+  duracao_minutos?: number | null;
+  participantes_count?: number | null;
+  template_codigo?: string | null;
+  ficha_tipo_sessao?: string | null;
+  template_tema?: string | null;
+  ficha_modelo_nome?: string | null;
+  sessao_nome?: string | null;
+  sessao_nome_modelo?: string | null;
+  simulador_codigo?: string | null;
+  simulador_nome?: string | null;
+  simulador_modelo?: string | null;
+  simulador_tipo?: string | null;
+  tripulante_nome?: string | null;
+  tripulante_matricula?: string | null;
+  tripulante_codigo_anac?: string | null;
+  tripulante_funcao?: string | null;
+  instrutor_nome?: string | null;
+  instrutor_matricula?: string | null;
+  instrutor_codigo_anac?: string | null;
+  data?: string | null;
+  data_sessao?: string | null;
+  sessao_data?: string | null;
+  ficha_data_sessao?: string | null;
+  horario_inicio?: string | null;
+  horario_fim?: string | null;
+  aprovado?: string | number | null;
+  nota_final?: string | number | null;
+  is_check?: number | null;
+  examinador_id?: FichaDbId;
+  examinador_nome?: string | null;
+  modo_compartilhado?: number | null;
+  tripulacao_nomes?: string | null;
+  edicoes_pendentes_count?: number | null;
+  ficha_created_at?: string | null;
+};
+
+type FichaListRow = Record<string, unknown> & {
+  colaborador_id_aluno?: FichaDbId;
+};
+
+type FichaManobraRow = Record<string, unknown> & {
+  ordem?: FichaDbValue;
+  descricao?: FichaDbValue;
+  codigo?: FichaDbValue;
+  resultado?: unknown;
+  categoria?: FichaDbValue;
+  observacoes?: FichaDbValue;
+  tripulante?: FichaDbValue;
+};
+
+type FichaUpdateManobraPayload = {
+  ordem?: unknown;
+  resultado?: unknown;
+  observacoes?: unknown;
+};
+
+type FichaUpdatePayload = {
+  expected_updated_at?: unknown;
+  manobras?: unknown;
+  status?: unknown;
+  observacoes?: unknown;
+  recalculate_status?: unknown;
+  equipamento_utilizado?: unknown;
+  dispositivo_identificacao?: unknown;
+  assento_instrucao_utilizado?: unknown;
+};
 // Todos os endpoints de fichas requerem autenticação
 app.use('*', auth());
 
@@ -121,15 +210,13 @@ async function getFichaWithInstructorMeta(
       WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`,
     )
     .bind(String(fichaId), String(empresaId))
-    .first();
+    .first<FichaSessionRow>();
 }
 
 function uniquePositiveIds(values: unknown[]): number[] {
   return Array.from(
     new Set(
-      values
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0),
+      values.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0),
     ),
   );
 }
@@ -432,12 +519,7 @@ app.get('/fichas/minhas', async (c) => {
     const statusFilter = c.req.query('status') || '';
 
     let q = `${FICHAS_LIST_BASE_QUERY} AND f.colaborador_id_aluno = ?`;
-    const params: (string | number)[] = [
-      tenantEmpresaId,
-      tenantEmpresaId,
-      tenantEmpresaId,
-      funcId,
-    ];
+    const params: (string | number)[] = [tenantEmpresaId, tenantEmpresaId, tenantEmpresaId, funcId];
 
     if (statusFilter) {
       q += ' AND f.status=?';
@@ -482,9 +564,7 @@ async function hasSimuladoresEvaluateCapability(
   role: string,
 ): Promise<boolean> {
   const overrideRows = await db
-    .prepare(
-      `SELECT tipo FROM usuario_permissoes WHERE usuario_id = ? AND permissao = ?`,
-    )
+    .prepare(`SELECT tipo FROM usuario_permissoes WHERE usuario_id = ? AND permissao = ?`)
     .bind(userId, 'simuladores.evaluate')
     .all<{ tipo: string }>()
     .catch(() => ({ results: [] as Array<{ tipo: string }> }));
@@ -536,12 +616,7 @@ app.get('/fichas/para-avaliar', async (c) => {
     const statusFilter = c.req.query('status') || '';
 
     let q = `${FICHAS_LIST_BASE_QUERY} AND f.instrutor_id = ?`;
-    const params: (string | number)[] = [
-      tenantEmpresaId,
-      tenantEmpresaId,
-      tenantEmpresaId,
-      funcId,
-    ];
+    const params: (string | number)[] = [tenantEmpresaId, tenantEmpresaId, tenantEmpresaId, funcId];
 
     if (statusFilter) {
       q += ' AND f.status=?';
@@ -655,7 +730,7 @@ app.get('/fichas', async (c) => {
       .bind(...params)
       .all();
 
-    let data = r.results || [];
+    let data = (r.results || []) as FichaListRow[];
     if (access.mode === 'restricted') {
       // Item 1 (read-side filtering): once RBAC is active, a gestor's
       // legacy setor scope must be additionally narrowed to setores with a
@@ -675,10 +750,10 @@ app.get('/fichas', async (c) => {
       const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
         c.env.DB,
         tenantEmpresaId,
-        data.map((row: any) => row?.colaborador_id_aluno),
+        uniquePositiveIds(data.map((row) => row.colaborador_id_aluno)),
         effectiveSetorIds,
       );
-      data = data.filter((row: any) => allowedAlunoIds.has(Number(row?.colaborador_id_aluno || 0)));
+      data = data.filter((row) => allowedAlunoIds.has(Number(row.colaborador_id_aluno || 0)));
     }
 
     return c.json({ success: true, data });
@@ -709,7 +784,10 @@ app.post('/fichas', requireOperacoesFicha('create'), async (c) => {
     }
     if (instrutorId !== null && instrutorId === colaboradorId) {
       return c.json(
-        { success: false, error: 'O instrutor não pode ser o mesmo funcionário avaliado (autoavaliação bloqueada)' },
+        {
+          success: false,
+          error: 'O instrutor não pode ser o mesmo funcionário avaliado (autoavaliação bloqueada)',
+        },
         400,
       );
     }
@@ -790,7 +868,7 @@ app.post('/fichas', requireOperacoesFicha('create'), async (c) => {
       .bind(r.meta.last_row_id, empresaId)
       .first();
     return c.json({ success: true, data: f }, 201);
-  } catch (e: any) {
+  } catch {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -915,7 +993,7 @@ app.get('/fichas/:id', async (c) => {
       `,
     )
       .bind(id, tenantEmpresaId)
-      .first<any>();
+      .first<FichaSessionRow>();
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
 
@@ -975,7 +1053,7 @@ app.get('/fichas/:id', async (c) => {
 
     // Fetch manobras — JOIN com tabela manobras para obter nome curto correto
     // (fichas antigas gravaram COALESCE(nome, descricao) na coluna descricao, sem nome separado)
-    let m = await c.env.DB.prepare(
+    const m = await c.env.DB.prepare(
       `SELECT
         fsm.id,
         fsm.ordem,
@@ -1000,11 +1078,11 @@ app.get('/fichas/:id', async (c) => {
       .bind(tenantEmpresaId, id)
       .all();
 
-    let modeloSessaoResolvidoId =
+    const modeloSessaoResolvidoId =
       f.modelo_sessao_id && Number.isFinite(Number(f.modelo_sessao_id))
         ? Number(f.modelo_sessao_id)
         : null;
-    const fichaStatusFinalizado = isFichaStatusFinalizado((f as any).status);
+    const fichaStatusFinalizado = isFichaStatusFinalizado(f.status);
     const notechsMissingCount = getMissingNotechsItens(m.results || []).length;
     const notechsStatus = getNotechsStatus(m.results || []);
 
@@ -1080,8 +1158,8 @@ app.get('/fichas/:id', async (c) => {
       segmentTotalMinutes: segmentTotalMinutos,
       segmentPfMinutes: segmentPfMinutos,
       segmentPmMinutes: segmentPmMinutos,
-      canonicalPfHours: (f as any).carga_horaria_pf,
-      canonicalPmHours: (f as any).carga_horaria_pm,
+      canonicalPfHours: f.carga_horaria_pf,
+      canonicalPmHours: f.carga_horaria_pm,
       fallbackTotalMinutes: Number(f.duracao_minutos || 0),
       participantCount: Number(f.participantes_count || 0),
     });
@@ -1097,9 +1175,7 @@ app.get('/fichas/:id', async (c) => {
       simulatorName: f.simulador_nome,
       simulatorModel: f.simulador_modelo,
     });
-    const equipamentoUtilizado = String(
-      f.equipamento_utilizado || f.simulador_modelo || '',
-    ).trim();
+    const equipamentoUtilizado = String(f.equipamento_utilizado || f.simulador_modelo || '').trim();
     const dispositivoIdentificacao = String(
       f.dispositivo_identificacao || simuladorDisplay || '',
     ).trim();
@@ -1181,8 +1257,8 @@ app.get('/fichas/:id', async (c) => {
     };
 
     return c.json({ success: true, data: ficha });
-  } catch (e: any) {
-    console.error('Erro ao buscar ficha:', e);
+  } catch (error: unknown) {
+    console.error('Erro ao buscar ficha:', error);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -1244,7 +1320,7 @@ app.post('/fichas/:id/pdf', async (c) => {
       `,
     )
       .bind(fichaId, tenantEmpresaId)
-      .first<any>();
+      .first<FichaSessionRow>();
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
 
@@ -1411,6 +1487,18 @@ app.post('/fichas/:id/pdf', async (c) => {
       .bind(fichaId)
       .all();
 
+    if (!m.results || m.results.length === 0) {
+      return c.json(
+        {
+          success: false,
+          code: 'FICHA_SEM_MANOBRAS',
+          error:
+            'Ficha sem manobras. O PDF não pode ser gerado até que o modelo da sessão seja corrigido.',
+        },
+        409,
+      );
+    }
+
     const sessaoCodigo = String(f.tipo_sessao || '').toUpperCase();
     const specialDefinition = getSpecialEventSessionDefinition(sessaoCodigo);
     const simuladorDisplay = buildSimulatorDisplayName({
@@ -1430,8 +1518,7 @@ app.post('/fichas/:id/pdf', async (c) => {
     // Fichas anteriores preservam o template legado (com régua).
     const V6_CUTOFF = '2026-07-01';
     const fichaCreatedAt = f.ficha_created_at || '';
-    const templateVersion: 'legacy' | 'v6' =
-      fichaCreatedAt >= V6_CUTOFF ? 'v6' : 'legacy';
+    const templateVersion: 'legacy' | 'v6' = fichaCreatedAt >= V6_CUTOFF ? 'v6' : 'legacy';
 
     const dadosPDF = {
       fichaId: f.id.toString(),
@@ -1440,37 +1527,38 @@ app.post('/fichas/:id/pdf', async (c) => {
       sessao_nome: f.sessao_nome_modelo || undefined,
       sessao_titulo_linha1: specialDefinition?.headerTitle,
       sessao_titulo_linha2: specialDefinition?.headerSubtitle,
-      tripulante_nome: f.tripulante_nome,
+      tripulante_nome: String(f.tripulante_nome || ''),
       tripulante_codigo_anac: f.tripulante_codigo_anac || 'N/A',
       tripulante_funcao: f.tripulante_funcao || 'ALUNO',
-      instrutor_nome: f.instrutor_nome,
+      instrutor_nome: String(f.instrutor_nome || ''),
       instrutor_codigo_anac: f.instrutor_codigo_anac || 'N/A',
       data: dataSessaoPtBr,
       horario_inicio: f.horario_inicio || 'N/A',
       horario_fim: f.horario_fim || 'N/A',
       simulador: simuladorDisplay,
-      simulador_nome: f.simulador_nome,
-      simulador_modelo: f.simulador_modelo,
+      simulador_nome: f.simulador_nome || undefined,
+      simulador_modelo: f.simulador_modelo || undefined,
       equipamento_utilizado: f.equipamento_utilizado || f.simulador_modelo || undefined,
       dispositivo_identificacao: f.dispositivo_identificacao || simuladorDisplay,
-      assento_instrucao_utilizado: getInstructionSeatLabel(f.assento_instrucao_utilizado) || undefined,
+      assento_instrucao_utilizado:
+        getInstructionSeatLabel(f.assento_instrucao_utilizado) || undefined,
       carga_horaria_total,
       carga_horaria_pf: specialDefinition ? '' : undefined,
       carga_horaria_pm: specialDefinition ? '' : undefined,
-      status: f.status,
+      status: String(f.status || ''),
       observacoes_gerais: f.observacoes || '',
-      assinatura_aluno_timestamp: f.assinatura_aluno_timestamp,
-      assinatura_instrutor_timestamp: f.assinatura_instrutor_timestamp,
+      assinatura_aluno_timestamp: f.assinatura_aluno_timestamp ?? null,
+      assinatura_instrutor_timestamp: f.assinatura_instrutor_timestamp ?? null,
       logoBytes,
       templateVersion,
-      manobras: m.results.map((man: any) => ({
-        ordem: man.ordem,
-        descricao: man.descricao,
-        codigo: man.codigo,
-        resultado: man.resultado,
-        categoria: man.categoria || null,
-        observacoes: man.observacoes || null,
-        tripulante: man.tripulante || 'AB',
+      manobras: (m.results as FichaManobraRow[]).map((man) => ({
+        ordem: Number(man.ordem || 0),
+        descricao: String(man.descricao || ''),
+        codigo: String(man.codigo || ''),
+        resultado: Number.isFinite(Number(man.resultado)) ? Number(man.resultado) : null,
+        categoria: man.categoria == null ? null : String(man.categoria),
+        observacoes: man.observacoes == null ? null : String(man.observacoes),
+        tripulante: man.tripulante == null ? 'AB' : String(man.tripulante),
       })),
     };
 
@@ -1494,12 +1582,12 @@ app.post('/fichas/:id/pdf', async (c) => {
     const idPadded = String(fichaId).padStart(6, '0');
     const fileName = `SIM-${nomeSanitizado}-${sessaoSanitizada}-${dataSessaoFile}-${idPadded}.pdf`;
 
-    if ((c.env as any).R2_BUCKET) {
+    if (c.env.BUCKET) {
       try {
-        await (c.env as any).R2_BUCKET.put(`fichas-pdf/${fichaId}/${fileName}`, pdfBuffer, {
+        await c.env.BUCKET.put(`fichas-pdf/${fichaId}/${fileName}`, pdfBuffer, {
           customMetadata: {
             fichaId: fichaId.toString(),
-            tripulante: f.tripulante_nome,
+            tripulante: String(f.tripulante_nome || ''),
             data_geracao: new Date().toISOString(),
           },
         });
@@ -1524,8 +1612,8 @@ app.post('/fichas/:id/pdf', async (c) => {
         'Cache-Control': 'no-cache',
       },
     });
-  } catch (e: any) {
-    console.error('Erro ao gerar PDF:', e);
+  } catch (error: unknown) {
+    console.error('Erro ao gerar PDF:', error);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -1537,19 +1625,40 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     const role = getContextUserRole(c);
     const tenantEmpresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
-    const b = await c.req.json();
+    const b = await c.req.json<FichaUpdatePayload>();
     const a = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId);
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
+
+    const expectedUpdatedAt =
+      typeof b?.expected_updated_at === 'string' && b.expected_updated_at.trim()
+        ? b.expected_updated_at.trim()
+        : null;
+    const rawUpdatedAt = a['updated_at'];
+    const currentUpdatedAt = typeof rawUpdatedAt === 'string' ? rawUpdatedAt : '';
+    if (expectedUpdatedAt && currentUpdatedAt !== expectedUpdatedAt) {
+      return c.json(
+        {
+          success: false,
+          code: 'FICHA_CONCURRENT_UPDATE',
+          error: 'A ficha foi alterada em outra tela. Recarregue antes de salvar novamente.',
+          details: {
+            expected_updated_at: expectedUpdatedAt,
+            current_updated_at: currentUpdatedAt || null,
+          },
+        },
+        409,
+      );
+    }
 
     // ── Verificar acesso por setor ───────────────────────────────────────
     if (access.mode === 'restricted') {
       const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
         c.env.DB,
         tenantEmpresaId,
-        [Number((a as any).colaborador_id_aluno || 0)],
+        [Number(a.colaborador_id_aluno || 0)],
         access.setorIds,
       );
-      if (!allowedAlunoIds.has(Number((a as any).colaborador_id_aluno || 0))) {
+      if (!allowedAlunoIds.has(Number(a.colaborador_id_aluno || 0))) {
         return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
       }
     }
@@ -1560,10 +1669,10 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       const scope = resolveFichaScope(role);
       const authorized =
         scope === 'ALUNO_PENDING_SIGNATURE'
-          ? String((a as any).colaborador_id_aluno) === String(funcId)
+          ? String(a.colaborador_id_aluno) === String(funcId)
           : scope === 'INSTRUTOR_OR_ALUNO'
-            ? String((a as any).instrutor_id) === String(funcId) ||
-              String((a as any).colaborador_id_aluno) === String(funcId)
+            ? String(a.instrutor_id) === String(funcId) ||
+              String(a.colaborador_id_aluno) === String(funcId)
             : false;
       if (!authorized) return c.json({ success: false, error: 'Acesso negado' }, 403);
     }
@@ -1586,7 +1695,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       );
     }
 
-    if (['APROVADO', 'NAO_APROVADO', 'CONCLUIDA'].includes(String((a as any).status || '').toUpperCase())) {
+    if (['APROVADO', 'NAO_APROVADO', 'CONCLUIDA'].includes(String(a.status || '').toUpperCase())) {
       return c.json(
         {
           success: false,
@@ -1598,19 +1707,24 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       );
     }
 
-    // 1) Update manobras if present
+    // 1) Validate the complete maneuver payload before writing anything.
+    // D1 has no interactive transaction across individual .run() calls; all maneuver
+    // writes are therefore prepared first and committed later in one db.batch().
+    const manobraUpdates: Array<{ ordem: number; resultado: unknown; observacoes: string }> = [];
     if (Array.isArray(b.manobras) && b.manobras.length > 0) {
-      for (const m of b.manobras as any[]) {
+      const atuais = await c.env.DB.prepare(
+        'SELECT ordem, resultado FROM fichas_sessao_manobras WHERE ficha_id = ? AND deleted_at IS NULL ORDER BY ordem',
+      )
+        .bind(id)
+        .all<{ ordem: number; resultado: unknown }>();
+      const atuaisPorOrdem = new Map(
+        (atuais.results || []).map((row) => [Number(row.ordem), row.resultado]),
+      );
+
+      for (const m of b.manobras as FichaUpdateManobraPayload[]) {
         const ordem = Number(m?.ordem);
         if (!Number.isFinite(ordem) || ordem <= 0) continue;
-
-        const update = await c.env.DB.prepare(
-          'UPDATE fichas_sessao_manobras SET resultado=?, observacoes=?, updated_at=datetime("now") WHERE ficha_id=? AND ordem=? AND deleted_at IS NULL',
-        )
-          .bind(m?.resultado ?? null, m?.observacoes ?? '', id, ordem)
-          .run();
-
-        if (update.meta.changes === 0) {
+        if (!atuaisPorOrdem.has(ordem)) {
           return c.json(
             {
               success: false,
@@ -1622,9 +1736,20 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
             409,
           );
         }
+        const update = {
+          ordem,
+          resultado: m?.resultado ?? null,
+          observacoes: String(m?.observacoes ?? ''),
+        };
+        manobraUpdates.push(update);
+        atuaisPorOrdem.set(ordem, update.resultado);
       }
 
-      const manobrasPendentes = await listarManobrasPendentes(c.env.DB, id);
+      const manobrasPendentes = [...atuaisPorOrdem.entries()]
+        .filter(
+          ([, resultado]) => resultado === null || resultado === undefined || resultado === '',
+        )
+        .map(([ordem]) => ordem);
       if (manobrasPendentes.length > 0) {
         return c.json(
           {
@@ -1632,9 +1757,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
             code: 'MISSING_MANEUVER_RESULTS',
             error:
               'Preencha todas as manobras com uma nota ou marque NR antes de salvar a avaliação.',
-            details: {
-              missingManobras: manobrasPendentes,
-            },
+            details: { missingManobras: manobrasPendentes },
           },
           400,
         );
@@ -1646,15 +1769,17 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     const equipamentoUtilizado =
       b.equipamento_utilizado !== undefined
         ? String(b.equipamento_utilizado || '').trim() || null
-        : ((a as any).equipamento_utilizado ?? null);
+        : (a.equipamento_utilizado ?? null);
     const dispositivoIdentificacao =
       b.dispositivo_identificacao !== undefined
         ? String(b.dispositivo_identificacao || '').trim() || null
-        : ((a as any).dispositivo_identificacao ?? null);
+        : (a.dispositivo_identificacao ?? null);
     const assentoInstrucaoCanonico =
       b.assento_instrucao_utilizado !== undefined
-        ? normalizeInstructionSeatValue(b.assento_instrucao_utilizado)
-        : normalizeInstructionSeatValue((a as any).assento_instrucao_utilizado);
+        ? normalizeInstructionSeatValue(
+            b.assento_instrucao_utilizado == null ? null : String(b.assento_instrucao_utilizado),
+          )
+        : normalizeInstructionSeatValue(a.assento_instrucao_utilizado);
 
     // 3) Recalculate status if requested
     if (b.recalculate_status === true) {
@@ -1679,14 +1804,14 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
         );
       }
 
-      const alunoAssinou = Boolean((a as any)?.assinatura_aluno_timestamp);
-      const instrutorAssinou = Boolean((a as any)?.assinatura_instrutor_timestamp);
+      const alunoAssinou = Boolean(a.assinatura_aluno_timestamp);
+      const instrutorAssinou = Boolean(a.assinatura_instrutor_timestamp);
 
       if (instrutorAssinou) {
-        const rf = String((a as any)?.resultado_final || '');
+        const rf = String(a.resultado_final || '');
         if (rf === 'REPROVADO') newStatus = 'NAO_APROVADO';
         else if (rf === 'APROVADO') newStatus = 'APROVADO';
-        else newStatus = String((a as any)?.status || 'APROVADO');
+        else newStatus = String(a.status || 'APROVADO');
         console.log(`✅ [FICHA ${id}] Instrutor já assinou → ${newStatus}`);
       } else if (alunoAssinou) {
         newStatus = 'AGUARDANDO_ASSINATURA_INSTRUTOR';
@@ -1701,12 +1826,15 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     }
 
     if (
-      ['AGUARDANDO_ASSINATURA_ALUNO', 'AGUARDANDO_ASSINATURA_INSTRUTOR', 'APROVADO', 'NAO_APROVADO'].includes(
-        String(newStatus),
-      )
+      [
+        'AGUARDANDO_ASSINATURA_ALUNO',
+        'AGUARDANDO_ASSINATURA_INSTRUTOR',
+        'APROVADO',
+        'NAO_APROVADO',
+      ].includes(String(newStatus))
     ) {
       const missingFields = getInstructorFichaMissingFields({
-        tipo_sessao: (a as any).tipo_sessao,
+        tipo_sessao: a.tipo_sessao,
         equipamento_utilizado: equipamentoUtilizado,
         dispositivo_identificacao: dispositivoIdentificacao,
         assento_instrucao_utilizado: assentoInstrucaoCanonico,
@@ -1726,43 +1854,132 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       }
     }
 
-    // 4) Update header
-    await c.env.DB.prepare(
-      "UPDATE fichas_sessao SET status=?,observacoes=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?",
-    )
-      .bind(
-        newStatus,
-        b.observacoes !== undefined ? b.observacoes : a.observacoes,
-        id,
-        tenantEmpresaId,
-      )
-      .run();
+    // 4) Persist all dependent rows in one D1 batch. When the client sends an
+    // optimistic-lock timestamp, every child write is guarded by the same header
+    // version and the compare-and-set header update runs last in the transaction.
+    const writeTimestamp = new Date().toISOString();
+    const statements: D1PreparedStatement[] = [];
+    const versionGuard = expectedUpdatedAt
+      ? ' AND EXISTS (SELECT 1 FROM fichas_sessao fs WHERE fs.id = ? AND fs.empresa_id = ? AND fs.updated_at = ?)'
+      : '';
 
-    await c.env.DB.prepare(
-      `INSERT INTO fichas_sessao_instrutor_meta (
-         ficha_id,
-         empresa_id,
-         equipamento_utilizado,
-         dispositivo_identificacao,
-         assento_instrucao_utilizado,
-         created_at,
-         updated_at
-       ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-       ON CONFLICT(ficha_id) DO UPDATE SET
-         empresa_id = excluded.empresa_id,
-         equipamento_utilizado = excluded.equipamento_utilizado,
-         dispositivo_identificacao = excluded.dispositivo_identificacao,
-         assento_instrucao_utilizado = excluded.assento_instrucao_utilizado,
-         updated_at = datetime('now')`,
-    )
-      .bind(
-        id,
-        tenantEmpresaId,
-        equipamentoUtilizado,
-        dispositivoIdentificacao,
-        assentoInstrucaoCanonico,
-      )
-      .run();
+    for (const manobra of manobraUpdates) {
+      const statement = c.env.DB.prepare(
+        `UPDATE fichas_sessao_manobras
+            SET resultado = ?, observacoes = ?, updated_at = ?
+          WHERE ficha_id = ? AND ordem = ? AND deleted_at IS NULL${versionGuard}`,
+      );
+      statements.push(
+        expectedUpdatedAt
+          ? statement.bind(
+              manobra.resultado,
+              manobra.observacoes,
+              writeTimestamp,
+              id,
+              manobra.ordem,
+              id,
+              tenantEmpresaId,
+              expectedUpdatedAt,
+            )
+          : statement.bind(
+              manobra.resultado,
+              manobra.observacoes,
+              writeTimestamp,
+              id,
+              manobra.ordem,
+            ),
+      );
+    }
+
+    if (expectedUpdatedAt) {
+      statements.push(
+        c.env.DB.prepare(
+          `INSERT INTO fichas_sessao_instrutor_meta (
+             ficha_id, empresa_id, equipamento_utilizado, dispositivo_identificacao,
+             assento_instrucao_utilizado, created_at, updated_at
+           )
+           SELECT ?, ?, ?, ?, ?, datetime('now'), ?
+            WHERE EXISTS (
+              SELECT 1 FROM fichas_sessao
+               WHERE id = ? AND empresa_id = ? AND updated_at = ?
+            )
+           ON CONFLICT(ficha_id) DO UPDATE SET
+             empresa_id = excluded.empresa_id,
+             equipamento_utilizado = excluded.equipamento_utilizado,
+             dispositivo_identificacao = excluded.dispositivo_identificacao,
+             assento_instrucao_utilizado = excluded.assento_instrucao_utilizado,
+             updated_at = excluded.updated_at`,
+        ).bind(
+          id,
+          tenantEmpresaId,
+          equipamentoUtilizado,
+          dispositivoIdentificacao,
+          assentoInstrucaoCanonico,
+          writeTimestamp,
+          id,
+          tenantEmpresaId,
+          expectedUpdatedAt,
+        ),
+      );
+    } else {
+      statements.push(
+        c.env.DB.prepare(
+          `INSERT INTO fichas_sessao_instrutor_meta (
+             ficha_id, empresa_id, equipamento_utilizado, dispositivo_identificacao,
+             assento_instrucao_utilizado, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, datetime('now'), ?)
+           ON CONFLICT(ficha_id) DO UPDATE SET
+             empresa_id = excluded.empresa_id,
+             equipamento_utilizado = excluded.equipamento_utilizado,
+             dispositivo_identificacao = excluded.dispositivo_identificacao,
+             assento_instrucao_utilizado = excluded.assento_instrucao_utilizado,
+             updated_at = excluded.updated_at`,
+        ).bind(
+          id,
+          tenantEmpresaId,
+          equipamentoUtilizado,
+          dispositivoIdentificacao,
+          assentoInstrucaoCanonico,
+          writeTimestamp,
+        ),
+      );
+    }
+
+    const headerStatementIndex = statements.length;
+    statements.push(
+      expectedUpdatedAt
+        ? c.env.DB.prepare(
+            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND updated_at = ?',
+          ).bind(
+            newStatus,
+            b.observacoes !== undefined ? b.observacoes : a.observacoes,
+            writeTimestamp,
+            id,
+            tenantEmpresaId,
+            expectedUpdatedAt,
+          )
+        : c.env.DB.prepare(
+            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ?',
+          ).bind(
+            newStatus,
+            b.observacoes !== undefined ? b.observacoes : a.observacoes,
+            writeTimestamp,
+            id,
+            tenantEmpresaId,
+          ),
+    );
+
+    const batchResults = await c.env.DB.batch(statements);
+    if (expectedUpdatedAt && Number(batchResults[headerStatementIndex]?.meta?.changes || 0) === 0) {
+      return c.json(
+        {
+          success: false,
+          code: 'FICHA_CONCURRENT_UPDATE',
+          error: 'A ficha foi alterada em outra tela. Recarregue antes de salvar novamente.',
+        },
+        409,
+      );
+    }
 
     const u = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId);
     await audit(c.env.DB, {
@@ -1779,15 +1996,9 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
 
     // Notificar aluno quando avaliação for concluída e aguardar assinatura
     if (newStatus === 'AGUARDANDO_ASSINATURA_ALUNO') {
-      const alunoInfo = await getFuncionarioUserInfo(
-        c.env.DB,
-        String((a as any).colaborador_id_aluno),
-      );
+      const alunoInfo = await getFuncionarioUserInfo(c.env.DB, String(a.colaborador_id_aluno));
       if (alunoInfo?.userId) {
-        const instrutorInfo = await getFuncionarioUserInfo(
-          c.env.DB,
-          String((a as any).instrutor_id),
-        );
+        const instrutorInfo = await getFuncionarioUserInfo(c.env.DB, String(a.instrutor_id));
         const instrutorNome = instrutorInfo?.nome || 'O instrutor';
         await criarNotificacaoFicha(c.env.DB, {
           empresaId: tenantEmpresaId,
@@ -1807,7 +2018,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       }
 
       // Check previous status to avoid duplicate emails on re-saves
-      const statusAnterior = String((a as any).status || '');
+      const statusAnterior = String(a.status || '');
       const eraAguardandoAluno =
         statusAnterior === 'AGUARDANDO_ASSINATURA_ALUNO' ||
         statusAnterior === 'AGUARDANDO_ASSINATURAS' ||
@@ -1821,7 +2032,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     }
 
     return c.json({ success: true, data: u });
-  } catch (e: any) {
+  } catch {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -1839,7 +2050,9 @@ app.delete('/fichas/:id', requireOperacoesFicha('delete'), async (c) => {
       .bind(id, tenantEmpresaId)
       .first();
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
-    await c.env.DB.prepare("UPDATE fichas_sessao SET deleted_at=datetime('now') WHERE id=? AND empresa_id = ?")
+    await c.env.DB.prepare(
+      "UPDATE fichas_sessao SET deleted_at=datetime('now') WHERE id=? AND empresa_id = ?",
+    )
       .bind(id, tenantEmpresaId)
       .run();
     await audit(c.env.DB, {
@@ -1849,7 +2062,7 @@ app.delete('/fichas/:id', requireOperacoesFicha('delete'), async (c) => {
       dados_anteriores: a,
     });
     return c.json({ success: true, message: 'Excluída' });
-  } catch (e: any) {
+  } catch {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });

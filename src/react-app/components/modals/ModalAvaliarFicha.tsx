@@ -34,6 +34,7 @@ interface FichaContexto {
   participante_nome?: string;
   participante_funcao?: string;
   instrutor_nome?: string;
+  updated_at?: string | null;
 }
 
 interface ModalAvaliarFichaProps {
@@ -103,7 +104,7 @@ function formatarData(data?: string): string {
 function splitTitulo(titulo?: string): { principal: string; sub?: string } {
   if (!titulo) return { principal: 'Ficha de Avaliação' };
   // Tenta separar pelo último ":" ou " - " ou " / "
-  const sepMatch = titulo.match(/^(.+?)[\s–\-:\/]+(.+)$/);
+  const sepMatch = titulo.match(/^(.+?)[\s–:/-]+(.+)$/);
   if (sepMatch && sepMatch[1].length < 40) {
     return { principal: sepMatch[1].trim(), sub: sepMatch[2].trim() };
   }
@@ -153,14 +154,26 @@ export default function ModalAvaliarFicha({
 
           if (result.success && result.data) {
             const mapManobras = (raw: unknown[]): Manobra[] =>
-              raw.map((m: any) => ({
-                ...m,
-                nome: m.nome || m.descricao || m.codigo,
-                resultado: normalizeResultado(m.resultado),
-                tripulante: (['A', 'B', 'AB'].includes(String(m.tripulante || '').toUpperCase())
-                  ? String(m.tripulante).toUpperCase()
-                  : 'AB') as Tripulante,
-              }));
+              raw.map((item) => {
+                const manobra =
+                  item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+                const tripulanteRaw = String(manobra.tripulante || '').toUpperCase();
+                const tripulante: Tripulante = ['A', 'B', 'AB'].includes(tripulanteRaw)
+                  ? (tripulanteRaw as Tripulante)
+                  : 'AB';
+
+                return {
+                  id: Number(manobra.id || 0),
+                  ordem: Number(manobra.ordem || 0),
+                  codigo: String(manobra.codigo || ''),
+                  nome: String(manobra.nome || manobra.descricao || manobra.codigo || ''),
+                  descricao: String(manobra.descricao || ''),
+                  categoria: String(manobra.categoria || ''),
+                  resultado: normalizeResultado(manobra.resultado),
+                  observacoes: String(manobra.observacoes || ''),
+                  tripulante,
+                };
+              });
 
             const ctx: FichaContexto = {
               colaborador_id_aluno: result.data.colaborador_id_aluno,
@@ -172,6 +185,7 @@ export default function ModalAvaliarFicha({
               participante_nome: result.data.tripulante_nome || result.data.participante_nome,
               participante_funcao: result.data.tripulante_funcao || result.data.participante_funcao,
               instrutor_nome: result.data.instrutor_nome,
+              updated_at: result.data.updated_at || null,
             };
             setFichaContexto(ctx);
 
@@ -221,6 +235,7 @@ export default function ModalAvaliarFicha({
         Authorization: `Bearer ${getAccessToken()}`,
       },
       body: JSON.stringify({
+        expected_updated_at: fichaContexto.updated_at || undefined,
         recalculate_status: true,
         observacoes: observacoesGerais,
         manobras: manobras.map((m) => ({

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -56,7 +57,10 @@ function createMockDb(opts: MockOpts = {}) {
           };
         }
 
-        if (query.includes('FROM sgso_auditorias a') && query.includes('ORDER BY a.data_programada DESC')) {
+        if (
+          query.includes('FROM sgso_auditorias a') &&
+          query.includes('ORDER BY a.data_programada DESC')
+        ) {
           return {
             all: async () => ({
               results: [
@@ -72,7 +76,7 @@ function createMockDb(opts: MockOpts = {}) {
 
         if (query.includes('INSERT INTO sgso_auditorias')) {
           return {
-            run: async () => ({ meta: { last_row_id: 1 } }),
+            run: async () => ({ meta: { changes: 1, last_row_id: 1 } }),
           };
         }
 
@@ -85,17 +89,20 @@ function createMockDb(opts: MockOpts = {}) {
             };
           }
           return {
-            run: async () => ({ meta: { last_row_id: 42 } }),
+            run: async () => ({ meta: { changes: 1, last_row_id: 42 } }),
           };
         }
 
         return {
           first: async (): Promise<null> => null,
           all: async () => ({ results: [] }),
-          run: async () => ({ meta: { last_row_id: 0 } }),
+          run: async () => ({ meta: { changes: 1, last_row_id: 0 } }),
         };
       },
     })),
+    batch: vi.fn(async (statements: Array<{ run: () => Promise<unknown> }>) =>
+      Promise.all(statements.map((statement) => statement.run())),
+    ),
   } as unknown as D1Database;
 
   return { db, calls };
@@ -173,7 +180,6 @@ describe('sgso auditorias/nc guards', () => {
 
     const insertCall = calls.find((c) => c.query.includes('INSERT INTO sgso_auditorias'));
     expect(insertCall).toBeTruthy();
-    // bind(id, empresaId, ...)
     expect(insertCall?.args[1]).toBe(77);
   });
 
@@ -181,11 +187,11 @@ describe('sgso auditorias/nc guards', () => {
     const app = createSgsoApp();
     const { db, calls } = createMockDb();
 
-    const response = await app.request(
-      '/sgso/auditorias?page=1&limit=20',
-      { method: 'GET' },
-      { DB: db, __authMode: 'ok', __mockEmpresaId: 77 } as unknown as Env,
-    );
+    const response = await app.request('/sgso/auditorias?page=1&limit=20', { method: 'GET' }, {
+      DB: db,
+      __authMode: 'ok',
+      __mockEmpresaId: 77,
+    } as unknown as Env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -193,7 +199,9 @@ describe('sgso auditorias/nc guards', () => {
       pagination: { page: 1, limit: 20, total: 1 },
     });
 
-    const countCall = calls.find((c) => c.query.includes('SELECT COUNT(*) as n FROM sgso_auditorias'));
+    const countCall = calls.find((c) =>
+      c.query.includes('SELECT COUNT(*) as n FROM sgso_auditorias'),
+    );
     expect(countCall).toBeTruthy();
     expect(countCall?.args[0]).toBe(77);
   });

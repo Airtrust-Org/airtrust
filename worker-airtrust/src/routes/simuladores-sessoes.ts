@@ -1,3 +1,9 @@
+/*
+ * Legacy containment: this pre-existing route still carries explicit-any and unused
+ * compatibility helpers. The reliability hotfix changes only atomic compensation;
+ * remove this scoped suppression when the route is decomposed.
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 /**
  * SIMULADORES — Sessões e Agendamentos
  * Routes: GET /agendamentos, GET /instrutores,
@@ -14,6 +20,7 @@ import { getTenantContext } from '../middleware/tenant';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
+import { cleanupFailedSharedCreate } from './simuladores-shared-session-cancellation';
 import {
   requireAdminForDelete,
   timeToMinutes,
@@ -37,8 +44,15 @@ import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 import { sendSimulatorSessionEmailNotifications } from '../services/simuladores-session-notifications';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
-import { assertFuncionarioIdsWithinOperationalScope, normalizeTenantRole } from '../services/operational-domain-access';
-import { requireOperacoesSessao, buildOperationalSessaoReadFilter, narrowSetorIdsForOperationalDomain } from './simuladores-sessoes-rbac';
+import {
+  assertFuncionarioIdsWithinOperationalScope,
+  normalizeTenantRole,
+} from '../services/operational-domain-access';
+import {
+  requireOperacoesSessao,
+  buildOperationalSessaoReadFilter,
+  narrowSetorIdsForOperationalDomain,
+} from './simuladores-sessoes-rbac';
 
 const app = new Hono<{ Bindings: Env }>();
 // Todos os endpoints de sessões requerem autenticação
@@ -63,9 +77,7 @@ function parseOffset(raw: string | undefined): number {
 function uniquePositiveIds(values: unknown[]): number[] {
   return Array.from(
     new Set(
-      values
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0),
+      values.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0),
     ),
   );
 }
@@ -310,7 +322,12 @@ app.get('/agendamentos', async (c) => {
 
     // Item 1: narrows a gestor's list to sessões with a participant in scope.
     if (empresaId) {
-      const opFilter = await buildOperationalSessaoReadFilter({ db: c.env.DB, empresaId: Number(empresaId), userId: Number(userId), role });
+      const opFilter = await buildOperationalSessaoReadFilter({
+        db: c.env.DB,
+        empresaId: Number(empresaId),
+        userId: Number(userId),
+        role,
+      });
       if (opFilter.blocked) return c.json({ success: true, data: [] });
       query += opFilter.clause;
       params.push(...opFilter.bindings);
@@ -439,7 +456,7 @@ app.get('/sessoes', async (c) => {
     const tipoDispo = c.req.query('tipo_dispositivo'); // SIMULADOR | AERONAVE
     const tipoDispositivoSelect = hasTipoDispositivo
       ? "COALESCE(sa.tipo_dispositivo, 'SIMULADOR') as tipo_dispositivo,"
-      : "NULL as tipo_dispositivo,";
+      : 'NULL as tipo_dispositivo,';
     const aeronaveSelect = hasAeronaveId
       ? `sa.aeronave_id,
         ae.prefixo as aeronave_prefixo,
@@ -593,7 +610,11 @@ app.get('/sessoes', async (c) => {
       query += ` AND UPPER(COALESCE(sa.status, '')) IN (${normalizedStatusList.map(() => '?').join(',')})`;
       params.push(...normalizedStatusList);
     }
-    if (hasTipoDispositivo && tipoDispo && (tipoDispo === 'SIMULADOR' || tipoDispo === 'AERONAVE')) {
+    if (
+      hasTipoDispositivo &&
+      tipoDispo &&
+      (tipoDispo === 'SIMULADOR' || tipoDispo === 'AERONAVE')
+    ) {
       query += " AND COALESCE(sa.tipo_dispositivo, 'SIMULADOR') = ?";
       params.push(tipoDispo);
     }
@@ -604,7 +625,12 @@ app.get('/sessoes', async (c) => {
 
     // Item 1: same restriction as the full mode, for summary mode.
     if (empresaId) {
-      const opFilter = await buildOperationalSessaoReadFilter({ db: c.env.DB, empresaId: Number(empresaId), userId: Number(userId), role });
+      const opFilter = await buildOperationalSessaoReadFilter({
+        db: c.env.DB,
+        empresaId: Number(empresaId),
+        userId: Number(userId),
+        role,
+      });
       if (opFilter.blocked) return c.json({ success: true, data: [] });
       query += opFilter.clause;
       params.push(...opFilter.bindings);
@@ -690,6 +716,7 @@ app.get('/sessoes', async (c) => {
  * Versão 2.0 - Com auto-população de manobras
  */
 app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
+  let createdSessaoId: number | null = null;
   try {
     const { empresaId } = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
@@ -731,17 +758,28 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
     });
     let checksNormalizados: number[] = [];
     try {
-      checksNormalizados = await normalizeChecksSessao(c.env.DB, checks, modeloAeronaveSessao, empresaId);
+      checksNormalizados = await normalizeChecksSessao(
+        c.env.DB,
+        checks,
+        modeloAeronaveSessao,
+        empresaId,
+      );
     } catch (error: any) {
       return c.json({ success: false, error: 'Checks inválidos' }, 400);
     }
 
     // Validações por tipo_dispositivo
     if (tipoDispositivo === 'SIMULADOR' && !simulador_id) {
-      return c.json({ success: false, error: 'simulador_id é obrigatório para sessões de Simulador' }, 400);
+      return c.json(
+        { success: false, error: 'simulador_id é obrigatório para sessões de Simulador' },
+        400,
+      );
     }
     if (tipoDispositivo === 'AERONAVE' && !aeronave_id) {
-      return c.json({ success: false, error: 'aeronave_id é obrigatório para sessões de Aeronave' }, 400);
+      return c.json(
+        { success: false, error: 'aeronave_id é obrigatório para sessões de Aeronave' },
+        400,
+      );
     }
 
     if (!data || !instrutor_id || !tipo_sessao) {
@@ -769,7 +807,7 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
         [
           instrutor_id,
           examinador_id,
-          ...participantes.map((part: any) => part?.funcionario_id),
+          ...participantes.map((part: { funcionario_id?: unknown }) => part?.funcionario_id),
         ]
           .map((value) => Number(value))
           .filter((value) => Number.isFinite(value) && value > 0),
@@ -826,7 +864,11 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
 
       if (!instrutorRow || Number(instrutorRow.is_instrutor) !== 1) {
         return c.json(
-          { success: false, error: 'O funcionário selecionado como instrutor não possui o flag is_instrutor. Selecione um instrutor válido.' },
+          {
+            success: false,
+            error:
+              'O funcionário selecionado como instrutor não possui o flag is_instrutor. Selecione um instrutor válido.',
+          },
           400,
         );
       }
@@ -1034,7 +1076,8 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
       .bind(...insertBinds)
       .run();
 
-    const sessao_id = resultSessao.meta.last_row_id;
+    const sessao_id = Number(resultSessao.meta.last_row_id);
+    createdSessaoId = sessao_id;
 
     // Se for sessão de check, adicionar os checks selecionados
     if (is_check && checksNormalizados.length > 0) {
@@ -1229,11 +1272,9 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
            ORDER BY msm.ordem ASC`,
         )
           .bind(modeloId)
-          .all();
+          .all<FichaManobraBase>();
 
-        const manobras = buildOperationalFichaManobras(
-          ((manobrasModelo.results || []) as unknown) as FichaManobraBase[],
-        );
+        const manobras = buildOperationalFichaManobras(manobrasModelo.results || []);
         for (const man of manobras) {
           const m = man as {
             codigo: string;
@@ -1281,7 +1322,9 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
     //    se o modelo de sessão configurar "gera_qualificacao = 1".
     let modeloIdParaQual = Number(templateIdFinal || modelo_sessao_id || 0) || null;
     if (!modeloIdParaQual && tipo_sessao) {
-      const upperNome = String(tema_sessao || '').trim().toUpperCase();
+      const upperNome = String(tema_sessao || '')
+        .trim()
+        .toUpperCase();
 
       // Priority 1: model with gera_qualificacao=1, prefer name match
       let fallbackModelo = await c.env.DB.prepare(
@@ -1379,6 +1422,7 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
         }),
     );
 
+    createdSessaoId = null;
     return c.json(
       {
         success: true,
@@ -1392,9 +1436,24 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
       201,
     );
   } catch (e) {
+    if (createdSessaoId !== null) {
+      try {
+        await cleanupFailedSharedCreate(c.env.DB, createdSessaoId);
+      } catch (rollbackError) {
+        console.error('[SESSOES] Falha crítica ao reverter criação parcial:', {
+          sessaoId: createdSessaoId,
+          rollbackError,
+          originalError: e,
+        });
+        return c.json(
+          { success: false, error: 'Falha ao criar sessão e ao reverter gravações parciais' },
+          500,
+        );
+      }
+    }
+
     console.error('Erro ao criar sessão:', e);
-    const msg = e instanceof Error ? e.message : 'Erro desconhecido';
-    return c.json({ success: false, error: msg }, 500);
+    return c.json({ success: false, error: 'Erro ao criar sessão' }, 500);
   }
 });
 
@@ -1405,13 +1464,11 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
 app.get('/sessoes/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const empresaId = (c as unknown as { get: (k: string) => unknown }).get(
-      'empresaId',
-    ) as number | undefined;
+    const { empresaId } = getTenantContext(c);
     const { hasTipoDispositivo, hasAeronaveId } = await getSimuladorAgendamentosSchema(c.env.DB);
     const tipoDispositivoSelect = hasTipoDispositivo
       ? "COALESCE(sa.tipo_dispositivo, 'SIMULADOR') as tipo_dispositivo,"
-      : "NULL as tipo_dispositivo,";
+      : 'NULL as tipo_dispositivo,';
     const aeronaveSelect = hasAeronaveId
       ? `sa.aeronave_id,
         ae.prefixo as aeronave_prefixo,
@@ -1553,7 +1610,7 @@ app.get('/sessoes/:id', async (c) => {
 app.get('/sessoes/:id/fichas', async (c) => {
   try {
     const sessao_id = c.req.param('id');
-    const empresaId = Number((c as unknown as { get: (k: string) => unknown }).get('empresaId') || 0);
+    const { empresaId } = getTenantContext(c);
 
     const sessao = await c.env.DB.prepare(
       `SELECT id, empresa_id, instrutor_id, examinador_id
@@ -1564,7 +1621,12 @@ app.get('/sessoes/:id/fichas', async (c) => {
         LIMIT 1`,
     )
       .bind(sessao_id, ...(empresaId ? [empresaId] : []))
-      .first<{ id: number; empresa_id: number; instrutor_id?: number | null; examinador_id?: number | null }>();
+      .first<{
+        id: number;
+        empresa_id: number;
+        instrutor_id?: number | null;
+        examinador_id?: number | null;
+      }>();
 
     if (!sessao) {
       return c.json({ success: false, error: 'Não encontrada' }, 404);

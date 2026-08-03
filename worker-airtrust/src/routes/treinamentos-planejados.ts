@@ -787,15 +787,17 @@ async function replaceInstrutores(
 async function loadParticipanteLinks(
   db: D1Database,
   treinamentoId: number,
-): Promise<Array<{ funcionario_id: number; qualificacao_historico_id: number | null }>> {
+): Promise<
+  Array<{ id: number; funcionario_id: number; qualificacao_historico_id: number | null }>
+> {
   const rows = await db
     .prepare(
-      `SELECT funcionario_id, qualificacao_historico_id
+      `SELECT id, funcionario_id, qualificacao_historico_id
          FROM treinamentos_participantes
         WHERE treinamento_id = ?`,
     )
     .bind(treinamentoId)
-    .all<{ funcionario_id: number; qualificacao_historico_id: number | null }>();
+    .all<{ id: number; funcionario_id: number; qualificacao_historico_id: number | null }>();
 
   return rows.results || [];
 }
@@ -910,8 +912,36 @@ function isHistoricoGerado(status: string | null | undefined): boolean {
   return Boolean(normalized) && !['PLANEJADA', 'PLANEJADO'].includes(normalized);
 }
 
-function getTodayYmdUtc(): string {
-  return new Date().toISOString().slice(0, 10);
+function formatYmdInTimezone(timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+async function getTodayYmdForTenant(db: D1Database, empresaId: number): Promise<string> {
+  const fallbackTimezone = 'America/Sao_Paulo';
+  let timezone = fallbackTimezone;
+  try {
+    const config = await db
+      .prepare('SELECT timezone FROM empresas_config WHERE empresa_id = ?')
+      .bind(empresaId)
+      .first<{ timezone: string | null }>();
+    timezone = String(config?.timezone || fallbackTimezone).trim() || fallbackTimezone;
+  } catch (error) {
+    console.error('treinamentos_timezone_config_failed', { empresaId, error });
+  }
+
+  try {
+    return formatYmdInTimezone(timezone);
+  } catch (error) {
+    console.error('treinamentos_timezone_resolution_failed', { empresaId, timezone, error });
+    return formatYmdInTimezone(fallbackTimezone);
+  }
 }
 
 function normalizeSourceFilter(raw: string | null | undefined): ConsolidatedSource | null {
@@ -1801,6 +1831,7 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
     data: {
       items,
       total: items.length,
+      diagnostics: Object.values(diagnostics).some((v) => v === 'error') ? diagnostics : undefined,
     },
     diagnostics: Object.values(diagnostics).some((v) => v === 'error') ? diagnostics : undefined,
   });
@@ -1819,7 +1850,7 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
   const fim = c.req.query('fim') || monthRange?.fim || null;
   const capabilities = await detectTreinamentoSchemaCapabilities(db);
 
-  const { items } = await listEventos(
+  const { items, diagnostics } = await listEventos(
     db,
     empresaId,
     {
@@ -1834,6 +1865,9 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
     },
     capabilities,
   );
+  const partialDiagnostics = Object.values(diagnostics).some((value) => value === 'error')
+    ? diagnostics
+    : undefined;
 
   return c.json({
     success: true,
@@ -1843,7 +1877,9 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
         fim,
       },
       items,
+      diagnostics: partialDiagnostics,
     },
+    diagnostics: partialDiagnostics,
   });
 });
 
@@ -2527,7 +2563,7 @@ treinamentosPlanejadosRoutes.patch(
         input.data_inicio ||
         treinamentoAtual.data_fim ||
         treinamentoAtual.data_prevista;
-      if (dataFimEfetiva > getTodayYmdUtc()) {
+      if (dataFimEfetiva > (await getTodayYmdForTenant(db, empresaId))) {
         return c.json(
           { success: false, error: 'Turma concluída não pode ter período futuro.' },
           400,
@@ -2641,27 +2677,129 @@ treinamentosPlanejadosRoutes.patch(
       params.push(input.limite_participantes ?? null);
     }
 
+    const statements: D1PreparedStatement[] = [];
     if (updates.length > 0) {
       params.push(treinamentoId, empresaId);
-      await db
-        .prepare(
-          `UPDATE treinamentos_planejados
-            SET ${updates.join(', ')},
-                updated_at = datetime('now')
-          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-        )
-        .bind(...params)
-        .run();
+      statements.push(
+        db
+          .prepare(
+            `UPDATE treinamentos_planejados
+              SET ${updates.join(', ')},
+                  updated_at = datetime('now')
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+          )
+          .bind(...params),
+      );
     }
 
     if (input.participante_ids !== undefined) {
-      await replaceParticipantes(db, treinamentoId, input.participante_ids);
+      const participanteIds = normalizePositiveIds(input.participante_ids);
+      const participanteSet = new Set(participanteIds);
+      const participanteRowIdsToDelete = previousParticipants
+        .filter((participant) => !participanteSet.has(Number(participant.funcionario_id)))
+        .map((participant) => Number(participant.id))
+        .filter((participantId) => participantId > 0);
+
+      statements.push(
+        ...prepareByBindChunks(participanteRowIdsToDelete, 0, (chunk) => {
+          const placeholders = chunk.map(() => '?').join(', ');
+          return db
+            .prepare(
+              `DELETE FROM treinamentos_presencas WHERE participante_id IN (${placeholders})`,
+            )
+            .bind(...chunk);
+        }),
+        ...prepareByBindChunks(participanteRowIdsToDelete, 0, (chunk) => {
+          const placeholders = chunk.map(() => '?').join(', ');
+          return db
+            .prepare(`DELETE FROM treinamentos_participantes WHERE id IN (${placeholders})`)
+            .bind(...chunk);
+        }),
+      );
+
+      for (const funcionarioId of participanteIds) {
+        statements.push(
+          db
+            .prepare(
+              `INSERT OR IGNORE INTO treinamentos_participantes (
+                treinamento_id, funcionario_id, confirmado, presente, aprovado, nota,
+                observacoes, created_at, updated_at
+              ) VALUES (?, ?, 0, NULL, NULL, NULL, NULL, datetime('now'), datetime('now'))`,
+            )
+            .bind(treinamentoId, funcionarioId),
+        );
+      }
     }
+
     if (input.dias !== undefined) {
-      await replaceDias(db, empresaId, treinamentoId, input.dias);
+      const uniqueDias = [...new Map(input.dias.map((dia) => [dia.data, dia])).values()].sort(
+        (left, right) => left.data.localeCompare(right.data),
+      );
+      const datas = uniqueDias.map((dia) => dia.data);
+      if (datas.length > 0) {
+        const placeholders = datas.map(() => '?').join(', ');
+        statements.push(
+          db
+            .prepare(
+              `UPDATE treinamentos_dias
+                  SET deleted_at = datetime('now'), updated_at = datetime('now')
+                WHERE empresa_id = ? AND treinamento_id = ? AND deleted_at IS NULL
+                  AND data NOT IN (${placeholders})`,
+            )
+            .bind(empresaId, treinamentoId, ...datas),
+        );
+      } else {
+        statements.push(
+          db
+            .prepare(
+              `UPDATE treinamentos_dias
+                  SET deleted_at = datetime('now'), updated_at = datetime('now')
+                WHERE empresa_id = ? AND treinamento_id = ? AND deleted_at IS NULL`,
+            )
+            .bind(empresaId, treinamentoId),
+        );
+      }
+      for (const dia of uniqueDias) {
+        statements.push(
+          db
+            .prepare(
+              `INSERT INTO treinamentos_dias
+                (empresa_id, treinamento_id, data, hora_inicio, hora_fim, local, instrutor_id,
+                 simulador_id, aeronave_id, sessao_id, status, observacoes, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ATIVO', ?, datetime('now'), datetime('now'))
+               ON CONFLICT(treinamento_id, data) DO UPDATE SET
+                 empresa_id = excluded.empresa_id,
+                 hora_inicio = excluded.hora_inicio,
+                 hora_fim = excluded.hora_fim,
+                 local = excluded.local,
+                 instrutor_id = excluded.instrutor_id,
+                 simulador_id = excluded.simulador_id,
+                 aeronave_id = excluded.aeronave_id,
+                 sessao_id = excluded.sessao_id,
+                 status = 'ATIVO',
+                 observacoes = excluded.observacoes,
+                 deleted_at = NULL,
+                 updated_at = datetime('now')`,
+            )
+            .bind(
+              empresaId,
+              treinamentoId,
+              dia.data,
+              dia.hora_inicio,
+              dia.hora_fim,
+              toNullableText(dia.local),
+              dia.instrutor_id ?? null,
+              dia.simulador_id ?? null,
+              dia.aeronave_id ?? null,
+              dia.sessao_id ?? null,
+              toNullableText(dia.observacoes),
+            ),
+        );
+      }
     }
+
     if (input.instrutor_ids !== undefined || input.instrutor_id !== undefined) {
-      const instrutorIds =
+      const existingInstrutorIds =
         input.instrutor_ids !== undefined
           ? input.instrutor_ids
           : (
@@ -2672,16 +2810,37 @@ treinamentosPlanejadosRoutes.patch(
                 .bind(empresaId, treinamentoId)
                 .all<{ funcionario_id: number }>()
             ).results?.map((row) => Number(row.funcionario_id)) || [];
-      await replaceInstrutores(
-        db,
-        empresaId,
-        treinamentoId,
-        normalizePositiveIds([
-          ...instrutorIds,
-          ...(input.instrutor_id ? [input.instrutor_id] : []),
-        ]),
-        input.instrutor_id,
+      const instrutorIds = normalizePositiveIds([
+        ...existingInstrutorIds,
+        ...(input.instrutor_id ? [input.instrutor_id] : []),
+      ]);
+      statements.push(
+        db
+          .prepare(
+            'DELETE FROM treinamentos_instrutores WHERE empresa_id = ? AND treinamento_id = ?',
+          )
+          .bind(empresaId, treinamentoId),
       );
+      for (const funcionarioId of instrutorIds) {
+        statements.push(
+          db
+            .prepare(
+              `INSERT INTO treinamentos_instrutores
+                (empresa_id, treinamento_id, funcionario_id, papel, principal, created_at, updated_at)
+               VALUES (?, ?, ?, 'INSTRUTOR', ?, datetime('now'), datetime('now'))`,
+            )
+            .bind(
+              empresaId,
+              treinamentoId,
+              funcionarioId,
+              funcionarioId === input.instrutor_id ? 1 : 0,
+            ),
+        );
+      }
+    }
+
+    if (statements.length > 0) {
+      await db.batch(statements);
     }
 
     const incomingParticipantes =
@@ -2972,7 +3131,7 @@ treinamentosPlanejadosRoutes.patch(
     }
 
     const dataFimTurma = treinamento.data_fim || treinamento.data_prevista;
-    if (dataFimTurma > getTodayYmdUtc()) {
+    if (dataFimTurma > (await getTodayYmdForTenant(db, empresaId))) {
       return c.json({ success: false, error: 'Turma futura não pode ser concluída' }, 400);
     }
 
@@ -3637,12 +3796,28 @@ treinamentosPlanejadosRoutes.post('/planejados/backfill-sync', requireRole('admi
     }
   }
 
+  if (erros.length > 0) {
+    return c.json(
+      {
+        success: false,
+        error: 'Backfill concluído com falhas; consulte os itens retornados e tente novamente.',
+        code: 'BACKFILL_PARTIAL_FAILURE',
+        data: {
+          total: ids.length,
+          processadas,
+          erros,
+        },
+      },
+      500,
+    );
+  }
+
   return c.json({
     success: true,
     data: {
       total: ids.length,
       processadas,
-      erros,
+      erros: [],
     },
   });
 });

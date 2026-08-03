@@ -3,11 +3,7 @@ import { apiFetch } from '@/react-app/lib/apiFetch';
 import { getAccessToken } from '@/react-app/config/api';
 
 export type TreinamentoPlanejadoStatus =
-  | 'PLANEJADO'
-  | 'CONFIRMADO'
-  | 'EM_ANDAMENTO'
-  | 'CONCLUIDO'
-  | 'CANCELADO';
+  'PLANEJADO' | 'CONFIRMADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'CANCELADO';
 
 export interface TreinamentoPlanejadoParticipante {
   id: number;
@@ -209,9 +205,14 @@ export interface TreinamentoPlanejado {
   read_only?: boolean;
 }
 
+export type TreinamentosPlanejadosDiagnostics = Partial<
+  Record<'turma' | 'qualificacao_planejada' | 'simulador', 'ok' | 'skipped' | 'error'>
+>;
+
 export interface TreinamentosPlanejadosListResponse {
   items: TreinamentoPlanejado[];
   total: number;
+  diagnostics?: TreinamentosPlanejadosDiagnostics;
 }
 
 export interface TreinamentosPlanejadosCalendarioResponse {
@@ -220,6 +221,7 @@ export interface TreinamentosPlanejadosCalendarioResponse {
     fim?: string | null;
   };
   items: TreinamentoPlanejado[];
+  diagnostics?: TreinamentosPlanejadosDiagnostics;
 }
 
 export interface TreinamentosPlanejadosAuditoriaResponse {
@@ -302,11 +304,7 @@ export interface TreinamentoPlanejadoPresencaInput {
 }
 
 export type TreinamentoPlanejadoPresencaDiaStatus =
-  | 'PENDENTE'
-  | 'PRESENTE'
-  | 'AUSENTE'
-  | 'PARCIAL'
-  | 'DISPENSADO';
+  'PENDENTE' | 'PRESENTE' | 'AUSENTE' | 'PARCIAL' | 'DISPENSADO';
 
 export interface TreinamentoPlanejadoPresencaDiaInput {
   funcionario_id: number;

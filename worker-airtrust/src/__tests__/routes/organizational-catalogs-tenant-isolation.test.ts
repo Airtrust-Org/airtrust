@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../middleware/auth', () => ({
@@ -40,11 +41,11 @@ function createDbMock() {
         all: async () => {
           calls.push({ query, args, method: 'all' });
 
-          if (query.includes('SELECT id FROM funcoes WHERE id = ?')) {
-            return { results: args[1] === 6 ? [{ id: 1 }] : [] };
+          if (query.includes('SELECT id') && query.includes('FROM funcoes WHERE id = ?')) {
+            return { results: args[1] === 6 ? [{ id: 1, codigo: 'CMD', nome: 'Comandante' }] : [] };
           }
-          if (query.includes('SELECT id FROM setores WHERE id = ?')) {
-            return { results: args[1] === 6 ? [{ id: 1 }] : [] };
+          if (query.includes('SELECT id') && query.includes('FROM setores WHERE id = ?')) {
+            return { results: args[1] === 6 ? [{ id: 1, codigo: 'OPS', nome: 'Operações' }] : [] };
           }
           if (query.includes('SELECT id, codigo, nome')) {
             return { results: [] };
@@ -52,6 +53,7 @@ function createDbMock() {
 
           return { results: [] };
         },
+        first: async () => ({ total: 0 }),
         run: async () => {
           calls.push({ query, args, method: 'run' });
           return { meta: { changes: 1, last_row_id: 77 } };
@@ -63,6 +65,9 @@ function createDbMock() {
         all: () => bind().all(),
         run: () => bind().run(),
       };
+    },
+    async batch(statements: Array<{ run: () => Promise<unknown> }>) {
+      return Promise.all(statements.map((statement) => statement.run()));
     },
   } as unknown as D1Database;
 
@@ -143,9 +148,7 @@ describe('organizational catalog tenant isolation', () => {
         call.method === 'run' &&
         call.query.includes('UPDATE funcoes SET deleted_at = datetime("now")'),
     );
-    expect(softDelete?.query).toContain(
-      'WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    );
+    expect(softDelete?.query).toContain('WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL');
     expect(softDelete?.args).toEqual(['1', 6]);
   });
 
@@ -222,9 +225,7 @@ describe('organizational catalog tenant isolation', () => {
         call.method === 'run' &&
         call.query.includes('UPDATE setores SET deleted_at = datetime("now")'),
     );
-    expect(softDelete?.query).toContain(
-      'WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    );
+    expect(softDelete?.query).toContain('WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL');
     expect(softDelete?.args).toEqual(['1', 6]);
   });
 });

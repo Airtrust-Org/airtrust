@@ -24,6 +24,35 @@ export type TipoDocumento =
   | 'TREINAMENTO'
   | 'OUTRO';
 
+/**
+ * Normaliza categorias históricas/da UI para o contrato canônico usado na
+ * nomenclatura. Valores desconhecidos nunca viram nomes arbitrários.
+ */
+export function normalizarTipoDocumento(value: unknown): TipoDocumento {
+  const normalized = String(value || 'OUTRO')
+    .trim()
+    .toUpperCase();
+  switch (normalized) {
+    case 'CERTIFICADO_QUALIFICACAO':
+      return 'CERTIFICADO_QUALIFICACAO';
+    case 'EXAME_MEDICO':
+      return 'EXAME_MEDICO';
+    case 'DOCUMENTO_PESSOAL':
+      return 'DOCUMENTO_PESSOAL';
+    case 'LICENCA':
+    case 'CONTRATO':
+      return 'LICENCA';
+    case 'TREINAMENTO':
+    case 'SIMULADOR':
+    case 'CERTIFICADO_PROFISSIONAL':
+      return 'TREINAMENTO';
+    case 'OUTROS':
+    case 'OUTRO':
+    default:
+      return 'OUTRO';
+  }
+}
+
 export interface NomeArquivoParams {
   tipo: TipoDocumento;
   cpf?: string; // CPF sem formatação (legado, opcional)

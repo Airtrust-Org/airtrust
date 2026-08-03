@@ -34,7 +34,7 @@ aeronaves.get('/', auth(), async (c) => {
     const { results } = await db
       .prepare(
         `
-        SELECT id, modelo, prefixo, ano_fabricacao, status, observacoes, created_at, updated_at
+        SELECT id, codigo, modelo, prefixo, ano_fabricacao, status, observacoes, created_at, updated_at
         FROM aeronaves
         WHERE ${filters.join(' AND ')}
         ORDER BY modelo ASC
@@ -63,7 +63,7 @@ aeronaves.get('/:id', auth(), async (c) => {
     const { results } = await db
       .prepare(
         `
-        SELECT id, modelo, prefixo, ano_fabricacao, status, observacoes, created_at, updated_at
+        SELECT id, codigo, modelo, prefixo, ano_fabricacao, status, observacoes, created_at, updated_at
         FROM aeronaves
         WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
         `,
@@ -102,8 +102,20 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
   }
 
   const empresaId = getEmpresaIdSafe(c);
+  const prefixoNormalizado = body.prefixo?.trim().toUpperCase() || null;
+  const codigo = prefixoNormalizado || `${body.modelo.trim().toUpperCase()}_${Date.now()}`;
 
   try {
+    if (prefixoNormalizado) {
+      const duplicate = await db
+        .prepare(
+          'SELECT id FROM aeronaves WHERE empresa_id = ? AND codigo = ? COLLATE NOCASE AND deleted_at IS NULL LIMIT 1',
+        )
+        .bind(empresaId, codigo)
+        .first<{ id: number }>();
+      if (duplicate) throw new ApiError('Aeronave com esse prefixo já existe', 409);
+    }
+
     const result = await db
       .prepare(
         `
@@ -112,9 +124,9 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
         `,
       )
       .bind(
-        body.prefixo ? body.prefixo.trim().toUpperCase() : `${body.modelo.trim()}_${Date.now()}`,
+        codigo,
         body.modelo.trim(),
-        body.prefixo || null,
+        prefixoNormalizado,
         body.ano_fabricacao || null,
         body.status || 'ATIVO',
         body.observacoes || null,
@@ -138,8 +150,9 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
         success: true,
         data: {
           id: newId,
+          codigo,
           modelo: body.modelo.trim(),
-          prefixo: body.prefixo || null,
+          prefixo: prefixoNormalizado,
           ano_fabricacao: body.ano_fabricacao || null,
           status: body.status || 'ATIVO',
           observacoes: body.observacoes || null,
@@ -155,7 +168,8 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     if (errorMsg.includes('UNIQUE constraint failed')) {
       throw new ApiError('Aeronave com esse prefixo já existe', 409);
     }
-    throw new ApiError(`Erro ao criar aeronave: ${errorMsg}`, 500);
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Erro ao criar aeronave', 500);
   }
 });
 
@@ -180,10 +194,16 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     // Verifica se existe E pertence à empresa do usuário autenticado
     const { results: existing } = await db
       .prepare(
-        'SELECT id, status, prefixo, modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        'SELECT id, codigo, status, prefixo, modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
       .bind(id, empresaIdPut)
-      .all<{ id: number; status: string | null; prefixo: string | null; modelo: string | null }>();
+      .all<{
+        id: number;
+        codigo: string;
+        status: string | null;
+        prefixo: string | null;
+        modelo: string | null;
+      }>();
 
     if (!existing || existing.length === 0) {
       throw new ApiError('Aeronave não encontrada', 404);
@@ -194,6 +214,17 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
       String(aeronaveAtual.status || 'ATIVO')
         .trim()
         .toUpperCase() || 'ATIVO';
+    const prefixoNormalizado =
+      body.prefixo !== undefined ? body.prefixo.trim().toUpperCase() || null : undefined;
+    if (prefixoNormalizado) {
+      const duplicate = await db
+        .prepare(
+          'SELECT id FROM aeronaves WHERE empresa_id = ? AND id <> ? AND codigo = ? COLLATE NOCASE AND deleted_at IS NULL LIMIT 1',
+        )
+        .bind(empresaIdPut, id, prefixoNormalizado)
+        .first<{ id: number }>();
+      if (duplicate) throw new ApiError('Aeronave com esse prefixo já existe', 409);
+    }
 
     // Monta query dinâmica
     const fields = [];
@@ -204,8 +235,15 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
       values.push(body.modelo ? body.modelo.trim() : null);
     }
     if (body.prefixo !== undefined) {
+      const codigoAtualizado =
+        prefixoNormalizado ||
+        `${String(body.modelo ?? aeronaveAtual.modelo ?? 'AERONAVE')
+          .trim()
+          .toUpperCase()}_${Date.now()}`;
       fields.push('prefixo = ?');
-      values.push(body.prefixo || null);
+      values.push(prefixoNormalizado);
+      fields.push('codigo = ?');
+      values.push(codigoAtualizado);
     }
     if (body.ano_fabricacao !== undefined) {
       fields.push('ano_fabricacao = ?');
@@ -325,6 +363,32 @@ aeronaves.delete('/:id', auth(), requireRole('admin'), async (c) => {
 
     if (!existing || existing.length === 0) {
       throw new ApiError('Aeronave não encontrada', 404);
+    }
+
+    const inUse = await db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM treinamentos_dias td
+             WHERE td.empresa_id = ? AND td.aeronave_id = ? AND td.deleted_at IS NULL AND td.status = 'ATIVO') +
+           (SELECT COUNT(*) FROM funcionarios f
+             INNER JOIN aeronaves a ON a.id = ? AND a.empresa_id = f.empresa_id
+            WHERE f.empresa_id = ? AND f.deleted_at IS NULL
+              AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
+              AND NULLIF(TRIM(COALESCE(f.aeronave, '')), '') IS NOT NULL
+              AND (
+                (NULLIF(TRIM(COALESCE(a.prefixo, '')), '') IS NOT NULL
+                  AND UPPER(TRIM(f.aeronave)) = UPPER(TRIM(a.prefixo)))
+                OR UPPER(TRIM(f.aeronave)) = UPPER(TRIM(a.modelo))
+              ))
+           AS total`,
+      )
+      .bind(empresaIdDelete, id, id, empresaIdDelete)
+      .first<{ total: number }>();
+    if (Number(inUse?.total || 0) > 0) {
+      throw new ApiError(
+        'Aeronave em uso não pode ser excluída. Inative ou remova os vínculos primeiro.',
+        409,
+      );
     }
 
     // Soft delete

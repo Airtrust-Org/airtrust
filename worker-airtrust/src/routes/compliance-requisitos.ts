@@ -180,9 +180,9 @@ app.delete('/requisitos/:id', requireRole('admin', 'manager'), async (c) => {
 
   await db
     .prepare(
-      "UPDATE requisitos_compliance SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+      "UPDATE requisitos_compliance SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
     )
-    .bind(id)
+    .bind(id, empresaId)
     .run();
 
   return c.json({ success: true, data: { id, deleted: true } });
