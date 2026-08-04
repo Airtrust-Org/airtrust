@@ -29,17 +29,8 @@ assert_json() {
 
 fail=0
 assert_json "additive column exists with correct type" "PRAGMA table_info(qualificacoes_tipos)" 'const r=JSON.parse(process.env.RESULT); const c=r.find(x=>x.name==="dominio_codigo"); if(!c||c.type!=="TEXT"||c.notnull!==0)process.exit(1)' || fail=1
-assert_json "declared index exists" "SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_qualificacoes_tipos_dominio_codigo'" 'const r=JSON.parse(process.env.RESULT); const s=(r[0]?.sql||"").replace(/\s+/g," "); if(r.length!==1||!/CREATE INDEX idx_qualificacoes_tipos_dominio_codigo ON qualificacoes_tipos\(dominio_codigo\)/i.test(s))process.exit(1)' || fail=1
-# Safe-on-apply: this Schema V2 change performs no DML — every row must
-# still read dominio_codigo = NULL immediately after applying it. Any
-# specific tipo classification is a SEPARATE, explicitly authorized action
-# via POST /api/admin/operational-domain-rbac/classify
-# (resource_type='qualificacao_tipo'), never this change or this validator.
-assert_json "no tipo classified yet (additive-only, no DML in this change)" "SELECT COUNT(*) AS n FROM qualificacoes_tipos WHERE dominio_codigo IS NOT NULL" 'if(JSON.parse(process.env.RESULT)[0]?.n!==0)process.exit(1)' || fail=1
-# Only asserts objects confirmed present in production as of this change
-# (read-only query, 2026-07-31): dominios_operacionais (0452) exists;
-# ead_category_reconciliation_runs (0453) had NOT yet been applied to
-# production at that time — never assume a sibling change already landed.
+assert_json "declared index exists on qualificacoes_tipos" "SELECT name, tbl_name FROM sqlite_master WHERE type='index' AND name='idx_qualificacoes_tipos_dominio_codigo'" 'const r=JSON.parse(process.env.RESULT); if(r.length!==1||r[0]?.name!=="idx_qualificacoes_tipos_dominio_codigo"||r[0]?.tbl_name!=="qualificacoes_tipos")process.exit(1)' || fail=1
+assert_json "classified tipos reference active operational domains" "SELECT COUNT(*) AS n FROM qualificacoes_tipos qt LEFT JOIN dominios_operacionais d ON d.codigo = qt.dominio_codigo AND d.ativo = 1 WHERE qt.dominio_codigo IS NOT NULL AND d.codigo IS NULL" 'if(JSON.parse(process.env.RESULT)[0]?.n!==0)process.exit(1)' || fail=1
 assert_json "0452 catalog table remains present and untouched" "SELECT name FROM sqlite_master WHERE type='table' AND name='dominios_operacionais'" 'const r=JSON.parse(process.env.RESULT).map(x=>x.name); if(JSON.stringify(r)!==JSON.stringify(["dominios_operacionais"]))process.exit(1)' || fail=1
 [[ "$fail" -eq 0 ]] || { echo "POSTCONDITIONS_FAILED" >&2; exit 1; }
 echo "POSTCONDITIONS_OK"

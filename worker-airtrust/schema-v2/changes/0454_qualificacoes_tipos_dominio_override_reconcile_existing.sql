@@ -1,0 +1,34 @@
+-- Schema V2 reconciliation for change 0454 in production.
+--
+-- Incident evidence:
+-- - The reviewed Schema V2 apply reached the production D1 after the
+--   dedicated migration token was configured.
+-- - The original 0454 bundle failed with "duplicate column name:
+--   dominio_codigo".
+-- - The preflight had confirmed that the Schema V2 ledger did not yet
+--   contain change_id qualificacoes-tipos-dominio-override-0454.
+--
+-- This reconciliation does not recreate or modify the existing column and
+-- performs no qualification-type classification. Creating the index is a
+-- safe structural assertion: if dominio_codigo does not exist, SQLite
+-- rejects this statement and the appended ledger insert is not committed.
+-- The reviewed Schema V2 builder appends the exact ledger row and D1
+-- executes this file and that row atomically.
+--
+-- OPERATIONAL MARKERS (guard:operational-sql-sources):
+--   source_reference:
+--     Production Schema V2 run 30919588508, attempt 2: baseline active,
+--     change absent from ledger, recovery point captured, apply rejected
+--     because dominio_codigo already existed.
+--   operational_decision:
+--     Reconcile only the missing Schema V2 ledger state and ensure the
+--     declared index. Do not recreate the column or classify any tipo.
+--   dry_run_required:
+--     The official workflow verifies hashes, schema contract, active
+--     baseline and absent change before executing this reviewed bundle.
+--   rollback_plan_required:
+--     D1 executes the index assertion and appended ledger insert atomically;
+--     on failure the database returns to its original state.
+
+CREATE INDEX IF NOT EXISTS idx_qualificacoes_tipos_dominio_codigo
+  ON qualificacoes_tipos(dominio_codigo);

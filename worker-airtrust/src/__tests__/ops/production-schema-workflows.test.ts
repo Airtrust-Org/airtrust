@@ -166,11 +166,12 @@ describe('qualificacoes_tipos domain override Schema V2 change 0454', () => {
     expect(stagingSql).toContain('NOT\n-- scripts/apply-migration-production.sh');
   });
 
-  it('post-validates the column, index, zero-classification postcondition, and 0452 table read-only', () => {
+  it('post-validates the column, index, active domain references, and 0452 table read-only', () => {
     for (const token of [
       'PRAGMA table_info(qualificacoes_tipos)',
       'idx_qualificacoes_tipos_dominio_codigo',
-      'SELECT COUNT(*) AS n FROM qualificacoes_tipos WHERE dominio_codigo IS NOT NULL',
+      'LEFT JOIN dominios_operacionais d ON d.codigo = qt.dominio_codigo AND d.ativo = 1',
+      'WHERE qt.dominio_codigo IS NOT NULL AND d.codigo IS NULL',
       'dominios_operacionais',
     ]) {
       expect(validator).toContain(token);
