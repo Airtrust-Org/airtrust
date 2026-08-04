@@ -173,7 +173,7 @@ async function isTenantRbacEnabled(db: D1Database, empresaId: number): Promise<b
       .prepare('SELECT operational_domain_rbac_enabled FROM empresas WHERE id = ? LIMIT 1')
       .bind(empresaId)
       .first<{ operational_domain_rbac_enabled: unknown }>();
-  } catch (error) {
+  } catch {
     // A real query failure (D1 timeout, unreadable table, connection
     // error) must never be silently treated as "legacy tenant" — that
     // would let an infrastructure problem quietly disable the operational
@@ -331,9 +331,17 @@ export async function resolveResourceDomain(
 
   switch (resourceType) {
     case 'qualificacao_tipo': {
+      const tiposHasDominioOverride = await tableHasColumn(
+        db,
+        'qualificacoes_tipos',
+        'dominio_codigo',
+      );
+      const dominioSelect = tiposHasDominioOverride
+        ? 'COALESCE(qt.dominio_codigo, qc.dominio_codigo)'
+        : 'qc.dominio_codigo';
       const row = await db
         .prepare(
-          `SELECT qc.dominio_codigo AS dominio_codigo
+          `SELECT ${dominioSelect} AS dominio_codigo
              FROM qualificacoes_tipos qt
              LEFT JOIN qualificacoes_categorias qc ON qc.id = qt.categoria_id
             WHERE qt.id = ? AND qt.empresa_id = ? AND qt.deleted_at IS NULL
@@ -391,7 +399,11 @@ export async function resolveResourceDomain(
       // only) rather than throwing "no such column" and breaking every
       // certificate/historico authorization check for tenants that haven't
       // applied it yet.
-      const tiposHasDominioOverride = await tableHasColumn(db, 'qualificacoes_tipos', 'dominio_codigo');
+      const tiposHasDominioOverride = await tableHasColumn(
+        db,
+        'qualificacoes_tipos',
+        'dominio_codigo',
+      );
       const dominioSelect = tiposHasDominioOverride
         ? 'COALESCE(qc_hist.dominio_codigo, qt.dominio_codigo, qc_tipo.dominio_codigo)'
         : 'COALESCE(qc_hist.dominio_codigo, qc_tipo.dominio_codigo)';
@@ -532,10 +544,18 @@ export async function assertOperationalAccess(
   const { db, empresaId, userId, userRole, domain, action, resourceType, resourceId } = params;
 
   if (!(OPERATIONAL_ACTIONS as readonly string[]).includes(action)) {
-    throw new ApiError(`Ação operacional desconhecida: ${action}`, 422, 'UNKNOWN_OPERATIONAL_ACTION');
+    throw new ApiError(
+      `Ação operacional desconhecida: ${action}`,
+      422,
+      'UNKNOWN_OPERATIONAL_ACTION',
+    );
   }
   if (domain !== undefined && !(OPERATIONAL_DOMAINS as readonly string[]).includes(domain)) {
-    throw new ApiError(`Domínio operacional desconhecido: ${domain}`, 422, 'UNKNOWN_OPERATIONAL_DOMAIN');
+    throw new ApiError(
+      `Domínio operacional desconhecido: ${domain}`,
+      422,
+      'UNKNOWN_OPERATIONAL_DOMAIN',
+    );
   }
   const resourceTypeIsFixedDomain = !!resourceType && isFixedDomainResourceType(resourceType);
   if (domain === undefined && !(resourceType && (resourceId || resourceTypeIsFixedDomain))) {
@@ -600,7 +620,10 @@ export async function assertOperationalAccess(
       );
     }
     if (domain !== undefined && resource.domain !== effectiveDomain) {
-      forbidden('Recurso pertence a um domínio diferente do solicitado', 'RESOURCE_DOMAIN_MISMATCH');
+      forbidden(
+        'Recurso pertence a um domínio diferente do solicitado',
+        'RESOURCE_DOMAIN_MISMATCH',
+      );
     }
     if (resourceType && isSetorScopedResourceType(resourceType)) {
       // Item 5: some resources (whole simulador_sessao operations) carry a
@@ -665,24 +688,36 @@ export function requireOperationalAccess(
     // ── Pedagogical Bypass for Instructors / Students ──
     // Se o usuário for o instrutor/examinador ou aluno vinculado ao recurso (ação pedagógica legítima),
     // ele ignora a guarda gerencial e prossegue.
-    if (['simulador_sessao', 'simulador_ficha', 'simulador_sessao_participante'].includes(options.resourceType || '')) {
+    if (
+      ['simulador_sessao', 'simulador_ficha', 'simulador_sessao_participante'].includes(
+        options.resourceType || '',
+      )
+    ) {
       const funcRow = await c.env.DB.prepare(
         `SELECT f.id FROM usuarios u 
          JOIN funcionarios f ON f.id = u.funcionario_id 
-         WHERE u.id = ? AND f.empresa_id = ? AND (u.deleted_at IS NULL OR u.deleted_at = 0) AND f.deleted_at IS NULL LIMIT 1`
-      ).bind(userId, empresaId).first<{id: number}>();
-      
+         WHERE u.id = ? AND f.empresa_id = ? AND (u.deleted_at IS NULL OR u.deleted_at = 0) AND f.deleted_at IS NULL LIMIT 1`,
+      )
+        .bind(userId, empresaId)
+        .first<{ id: number }>();
+
       const funcId = funcRow ? Number(funcRow.id) : 0;
       if (funcId > 0) {
         let isPedagogical = false;
         if (options.resourceType === 'simulador_sessao') {
           if (options.action === 'create') {
-            const body = await c.req.raw.clone().json().catch(() => ({})) as Record<string, unknown>;
-            isPedagogical = Number(body.instrutor_id) === funcId || Number(body.examinador_id) === funcId;
+            const body = (await c.req.raw
+              .clone()
+              .json()
+              .catch(() => ({}))) as Record<string, unknown>;
+            isPedagogical =
+              Number(body.instrutor_id) === funcId || Number(body.examinador_id) === funcId;
           } else if (resourceId) {
             const row = await c.env.DB.prepare(
-              'SELECT instrutor_id, examinador_id FROM simulador_agendamentos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL'
-            ).bind(resourceId, empresaId).first<{ instrutor_id: number | null, examinador_id: number | null }>();
+              'SELECT instrutor_id, examinador_id FROM simulador_agendamentos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+            )
+              .bind(resourceId, empresaId)
+              .first<{ instrutor_id: number | null; examinador_id: number | null }>();
             if (row) isPedagogical = row.instrutor_id === funcId || row.examinador_id === funcId;
           }
         } else if (options.resourceType === 'simulador_ficha' && resourceId) {
@@ -690,22 +725,36 @@ export function requireOperationalAccess(
             `SELECT sa.instrutor_id, sa.examinador_id, fs.colaborador_id_aluno
              FROM fichas_sessao fs
              LEFT JOIN simulador_agendamentos sa ON sa.id = fs.sessao_id AND sa.empresa_id = fs.empresa_id
-             WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`
-          ).bind(resourceId, empresaId).first<{ instrutor_id: number | null, examinador_id: number | null, colaborador_id_aluno: number | null }>();
-          if (row) isPedagogical = row.instrutor_id === funcId || row.examinador_id === funcId || row.colaborador_id_aluno === funcId;
+             WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`,
+          )
+            .bind(resourceId, empresaId)
+            .first<{
+              instrutor_id: number | null;
+              examinador_id: number | null;
+              colaborador_id_aluno: number | null;
+            }>();
+          if (row)
+            isPedagogical =
+              row.instrutor_id === funcId ||
+              row.examinador_id === funcId ||
+              row.colaborador_id_aluno === funcId;
         } else if (options.resourceType === 'simulador_sessao_participante') {
           if (options.action === 'create') {
             const row = await c.env.DB.prepare(
-              'SELECT instrutor_id, examinador_id FROM simulador_agendamentos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL'
-            ).bind(Number(c.req.param('id') || 0), empresaId).first<{ instrutor_id: number | null, examinador_id: number | null }>();
+              'SELECT instrutor_id, examinador_id FROM simulador_agendamentos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+            )
+              .bind(Number(c.req.param('id') || 0), empresaId)
+              .first<{ instrutor_id: number | null; examinador_id: number | null }>();
             if (row) isPedagogical = row.instrutor_id === funcId || row.examinador_id === funcId;
           } else if (resourceId) {
             const row = await c.env.DB.prepare(
               `SELECT sa.instrutor_id, sa.examinador_id
                FROM sessoes_participantes sp
                INNER JOIN simulador_agendamentos sa ON sa.id = sp.sessao_id AND sa.empresa_id = ?
-               WHERE sp.id = ? AND sp.deleted_at IS NULL`
-            ).bind(empresaId, resourceId).first<{ instrutor_id: number | null, examinador_id: number | null }>();
+               WHERE sp.id = ? AND sp.deleted_at IS NULL`,
+            )
+              .bind(empresaId, resourceId)
+              .first<{ instrutor_id: number | null; examinador_id: number | null }>();
             if (row) isPedagogical = row.instrutor_id === funcId || row.examinador_id === funcId;
           }
         }
@@ -736,8 +785,6 @@ export function requireOperationalAccess(
 export function isValidOperationalDomain(value: unknown): value is OperationalDomain {
   return typeof value === 'string' && (OPERATIONAL_DOMAINS as readonly string[]).includes(value);
 }
-
-
 
 /**
  * Item 5 / create-time equivalent: validates that every funcionário in
@@ -828,7 +875,10 @@ export async function assertSetorWithinOperationalScope(params: {
     .first<{ dominio_codigo: string | null }>();
 
   if (!setor || !setor.dominio_codigo) {
-    forbidden('Setor sem domínio classificado — acesso negado (fail-closed)', 'RESOURCE_DOMAIN_UNCLASSIFIED');
+    forbidden(
+      'Setor sem domínio classificado — acesso negado (fail-closed)',
+      'RESOURCE_DOMAIN_UNCLASSIFIED',
+    );
   }
 
   if (!access.domains.includes(setor.dominio_codigo as OperationalDomain)) {
@@ -850,12 +900,14 @@ export interface OperationalReadScope {
   setorIds: number[];
 }
 
-const UNRESTRICTED_READ_SCOPE: OperationalReadScope = { restricted: false, domains: [], setorIds: [] };
+const UNRESTRICTED_READ_SCOPE: OperationalReadScope = {
+  restricted: false,
+  domains: [],
+  setorIds: [],
+};
 
 export type ManagedSectorDomainReason =
-  | 'MANAGED_SECTOR_DOMAIN'
-  | 'QUALIFICATION_SECTOR_LINK'
-  | 'AMBIGUOUS_UNCLASSIFIED';
+  'MANAGED_SECTOR_DOMAIN' | 'QUALIFICATION_SECTOR_LINK' | 'AMBIGUOUS_UNCLASSIFIED';
 
 export interface ManagedSectorDomainResolution {
   setorId: number;
@@ -899,7 +951,11 @@ export async function resolveManagedSectorDomainFallback(
     .first<{ dominio_codigo: string | null }>();
 
   if (setor?.dominio_codigo && activeCodes.has(setor.dominio_codigo as OperationalDomain)) {
-    return { setorId, domain: setor.dominio_codigo as OperationalDomain, reason: 'MANAGED_SECTOR_DOMAIN' };
+    return {
+      setorId,
+      domain: setor.dominio_codigo as OperationalDomain,
+      reason: 'MANAGED_SECTOR_DOMAIN',
+    };
   }
 
   const rows = await db
@@ -1074,8 +1130,18 @@ export async function assertQualificacaoAtribuicaoWithinOperationalScope(params:
   }
 
   const hasCategoriaId = await tableHasColumn(db, 'qualificacoes_tipos', 'categoria_id');
-  const hasCategoriaDominio = await tableHasColumn(db, 'qualificacoes_categorias', 'dominio_codigo');
-  const dominioSelect = hasCategoriaId && hasCategoriaDominio ? 'qc.dominio_codigo' : 'NULL';
+  const hasCategoriaDominio = await tableHasColumn(
+    db,
+    'qualificacoes_categorias',
+    'dominio_codigo',
+  );
+  const hasTipoDominioOverride = await tableHasColumn(db, 'qualificacoes_tipos', 'dominio_codigo');
+  const dominioSelect =
+    hasCategoriaId && hasCategoriaDominio
+      ? hasTipoDominioOverride
+        ? 'COALESCE(qt.dominio_codigo, qc.dominio_codigo)'
+        : 'qc.dominio_codigo'
+      : 'NULL';
   const dominioJoin =
     hasCategoriaId && hasCategoriaDominio
       ? 'LEFT JOIN qualificacoes_categorias qc ON qc.id = qt.categoria_id'
@@ -1093,7 +1159,10 @@ export async function assertQualificacaoAtribuicaoWithinOperationalScope(params:
     .first<{ dominio_codigo: string | null }>();
 
   if (!tipo || !tipo.dominio_codigo) {
-    forbidden('Qualificação sem domínio classificado — acesso negado (fail-closed)', 'RESOURCE_DOMAIN_UNCLASSIFIED');
+    forbidden(
+      'Qualificação sem domínio classificado — acesso negado (fail-closed)',
+      'RESOURCE_DOMAIN_UNCLASSIFIED',
+    );
   }
 
   if (!access.domains.includes(tipo.dominio_codigo as OperationalDomain)) {
@@ -1110,7 +1179,11 @@ export async function assertQualificacaoAtribuicaoWithinOperationalScope(params:
     .bind(funcionarioId, empresaId)
     .first<{ setor_id: number | null }>();
 
-  if (!funcionario || funcionario.setor_id == null || !access.setorIds.includes(funcionario.setor_id)) {
+  if (
+    !funcionario ||
+    funcionario.setor_id == null ||
+    !access.setorIds.includes(funcionario.setor_id)
+  ) {
     forbidden('Funcionário fora do seu escopo de setor', 'RESOURCE_SETOR_OUT_OF_SCOPE');
   }
 }

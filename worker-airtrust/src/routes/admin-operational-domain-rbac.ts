@@ -45,6 +45,17 @@ interface ReadinessReport {
   bloqueios: string[];
 }
 
+interface MixedCategoryTipoCandidate {
+  id: number;
+  nome: string | null;
+  codigo: string | null;
+  dominio_codigo: string | null;
+  categoria_nome: string | null;
+  categoria_dominio_codigo: string | null;
+  dominio_sugerido: string;
+  setores_json: string;
+}
+
 // Fix 2: a setor/categoria/curso's dominio_codigo can drift out of sync
 // with dominios_operacionais in two distinct ways — pointing at a code
 // that was never seeded (desconhecido) or at one that existed but was
@@ -149,13 +160,17 @@ async function computeReadiness(db: D1Database, empresaId: number): Promise<Read
     bloqueios.push(`${setoresSemDominioN} setor(es) ativo(s) sem domínio classificado`);
   }
   if (categoriasSemDominioN > 0) {
-    bloqueios.push(`${categoriasSemDominioN} categoria(s) de qualificação ativa(s) sem domínio classificado`);
+    bloqueios.push(
+      `${categoriasSemDominioN} categoria(s) de qualificação ativa(s) sem domínio classificado`,
+    );
   }
   if (cursosSemClassificacaoN > 0) {
     bloqueios.push(`${cursosSemClassificacaoN} curso(s) LMS sem domínio classificado`);
   }
   if (gestoresSemSetorN > 0) {
-    bloqueios.push(`${gestoresSemSetorN} usuário(s) com papel de gestor sem nenhum setor atribuído ativo`);
+    bloqueios.push(
+      `${gestoresSemSetorN} usuário(s) com papel de gestor sem nenhum setor atribuído ativo`,
+    );
   }
   if (dominiosDesconhecidosEmUsoN > 0) {
     bloqueios.push(
@@ -268,6 +283,61 @@ router.get('/unclassified', async (c) => {
   });
 });
 
+// ===== GET /api/admin/operational-domain-rbac/mixed-category-tipos =====
+// Lists only safe, reviewable candidates for a per-tipo override. A candidate
+// must have an explicit active setor link with exactly one active operational
+// domain, and that domain must disagree with (or be absent from) its category.
+// This is deliberately a *suggestion*, never an automatic classification.
+router.get('/mixed-category-tipos', async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const [tiposHaveOverride, linksExist] = await Promise.all([
+    tableHasColumn(db, 'qualificacoes_tipos', 'dominio_codigo'),
+    tableHasColumn(db, 'qualificacoes_tipos_setores', 'tipo_id'),
+  ]);
+
+  if (!tiposHaveOverride || !linksExist) {
+    return c.json({ success: true, data: { tipos: [] } });
+  }
+
+  const candidatos = await db
+    .prepare(
+      `SELECT qt.id, qt.nome, qt.codigo, qt.dominio_codigo,
+              qc.nome AS categoria_nome, qc.dominio_codigo AS categoria_dominio_codigo,
+              MIN(s.dominio_codigo) AS dominio_sugerido,
+              json_group_array(json_object('id', s.id, 'nome', s.nome, 'dominio_codigo', s.dominio_codigo)) AS setores_json
+         FROM qualificacoes_tipos qt
+         INNER JOIN qualificacoes_categorias qc
+           ON qc.id = qt.categoria_id
+          AND qc.empresa_id = qt.empresa_id
+          AND qc.deleted_at IS NULL
+         INNER JOIN qualificacoes_tipos_setores qts
+           ON qts.tipo_id = qt.id
+          AND qts.empresa_id = qt.empresa_id
+          AND qts.deleted_at IS NULL
+         INNER JOIN setores s
+           ON s.id = qts.setor_id
+          AND s.empresa_id = qts.empresa_id
+          AND s.ativo = 1
+          AND s.deleted_at IS NULL
+         INNER JOIN dominios_operacionais d
+           ON d.codigo = s.dominio_codigo
+          AND d.ativo = 1
+        WHERE qt.empresa_id = ?
+          AND qt.ativo = 1
+          AND qt.deleted_at IS NULL
+          AND qt.dominio_codigo IS NULL
+        GROUP BY qt.id, qt.nome, qt.codigo, qt.dominio_codigo, qc.nome, qc.dominio_codigo
+       HAVING COUNT(DISTINCT s.dominio_codigo) = 1
+          AND (qc.dominio_codigo IS NULL OR qc.dominio_codigo <> MIN(s.dominio_codigo))
+        ORDER BY qc.nome, qt.nome`,
+    )
+    .bind(empresaId)
+    .all<MixedCategoryTipoCandidate>();
+
+  return c.json({ success: true, data: { tipos: candidatos.results || [] } });
+});
+
 const classifySchema = z.discriminatedUnion('resource_type', [
   z.object({
     resource_type: z.enum(['setor', 'categoria', 'curso']),
@@ -341,8 +411,11 @@ router.post('/classify', async (c) => {
   if (!parsed.success) {
     badRequest(parsed.error.issues[0]?.message ?? 'Dados inválidos');
   }
-  const { resource_type: resourceType, resource_id: resourceId, dominio_codigo: dominioCodigo } =
-    parsed.data;
+  const {
+    resource_type: resourceType,
+    resource_id: resourceId,
+    dominio_codigo: dominioCodigo,
+  } = parsed.data;
 
   // Fix 1: validate against dominios_operacionais itself (existing AND
   // ativo=1), not just the static 5-code list — a domain that exists in

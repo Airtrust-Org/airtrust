@@ -51,6 +51,7 @@ export interface Fixtures {
     /** Explicit per-tipo domain override (migration 0454) — see resolveResourceDomain's precedence. */
     dominio_codigo?: string | null;
     nome?: string | null;
+    codigo?: string | null;
     ativo?: 0 | 1;
     deleted_at?: string | null;
   }>;
@@ -124,7 +125,9 @@ interface D1LikeStatement {
 
 export interface TestD1 {
   prepare: (sql: string) => D1LikeStatement;
-  batch: (statements: D1LikeStatement[]) => Promise<Array<{ meta: { changes: number; last_row_id: number } }>>;
+  batch: (
+    statements: D1LikeStatement[],
+  ) => Promise<Array<{ meta: { changes: number; last_row_id: number } }>>;
   fixtures: Fixtures;
 }
 
@@ -177,6 +180,9 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     if (sql.includes('PRAGMA table_info(qualificacoes_categorias)')) {
       return { all: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'dominio_codigo' }] };
     }
+    if (sql.includes('PRAGMA table_info(qualificacoes_tipos_setores)')) {
+      return { all: [{ name: 'tipo_id' }, { name: 'setor_id' }, { name: 'empresa_id' }] };
+    }
     if (sql.includes('PRAGMA table_info(lms_cursos)')) {
       return { all: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'dominio_codigo' }] };
     }
@@ -214,7 +220,11 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
         throw new Error('simulated D1 query failure');
       }
       const empresa = f.empresas.find((e) => e.id === empresaId);
-      return { first: empresa ? { operational_domain_rbac_enabled: empresa.operational_domain_rbac_enabled } : null };
+      return {
+        first: empresa
+          ? { operational_domain_rbac_enabled: empresa.operational_domain_rbac_enabled }
+          : null,
+      };
     }
 
     // operational-domain-access.ts: activeDomainCodes
@@ -239,7 +249,10 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     }
 
     // operational-domain-access.ts: resolveResourceDomain('qualificacao_tipo', ...)
-    if (sql.includes('FROM qualificacoes_tipos qt')) {
+    if (
+      sql.includes('FROM qualificacoes_tipos qt') &&
+      !sql.includes('INNER JOIN qualificacoes_tipos_setores qts')
+    ) {
       const [id, empresaId] = args as [number, number];
       const tipo = f.qualificacoesTipos!.find(
         (t) => t.id === id && t.empresa_id === empresaId && !t.deleted_at,
@@ -247,7 +260,11 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       const categoria = tipo?.categoria_id
         ? f.qualificacoesCategorias!.find((c) => c.id === tipo.categoria_id)
         : null;
-      return { first: tipo ? { dominio_codigo: categoria?.dominio_codigo ?? null } : null };
+      return {
+        first: tipo
+          ? { dominio_codigo: tipo.dominio_codigo ?? categoria?.dominio_codigo ?? null }
+          : null,
+      };
     }
 
     // operational-domain-access.ts: resolveResourceDomain('qualificacao_historico'|'qualificacao_certificado', ...)
@@ -276,7 +293,10 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
         first: hist
           ? {
               dominio_codigo:
-                categoriaHist?.dominio_codigo ?? tipo?.dominio_codigo ?? categoriaTipo?.dominio_codigo ?? null,
+                categoriaHist?.dominio_codigo ??
+                tipo?.dominio_codigo ??
+                categoriaTipo?.dominio_codigo ??
+                null,
               setor_id: funcionario?.setor_id ?? null,
             }
           : null,
@@ -299,9 +319,11 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     // — participantes list (plural, whole-session operations)
     if (sql.includes('FROM sessoes_participantes sp') && sql.includes('sp.sessao_id = ?')) {
       const [empresaId, sessaoId] = args as [number, number];
-      const rows = f.sessoesParticipantes!
-        .filter((sp) => sp.sessao_id === sessaoId && !sp.deleted_at)
-        .map((sp) => f.funcionarios!.find((fn) => fn.id === sp.funcionario_id && fn.empresa_id === empresaId))
+      const rows = f
+        .sessoesParticipantes!.filter((sp) => sp.sessao_id === sessaoId && !sp.deleted_at)
+        .map((sp) =>
+          f.funcionarios!.find((fn) => fn.id === sp.funcionario_id && fn.empresa_id === empresaId),
+        )
         .filter((fn): fn is NonNullable<typeof fn> => Boolean(fn))
         .map((fn) => ({ setor_id: fn.setor_id ?? null }));
       return { all: rows };
@@ -311,7 +333,9 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     // — single participante (per-participant operations)
     if (sql.includes('FROM sessoes_participantes sp') && sql.includes('sp.id = ?')) {
       const [empresaId, participanteId] = args as [number, number];
-      const sp = f.sessoesParticipantes!.find((row) => row.id === participanteId && !row.deleted_at);
+      const sp = f.sessoesParticipantes!.find(
+        (row) => row.id === participanteId && !row.deleted_at,
+      );
       const funcionario = sp
         ? f.funcionarios!.find((fn) => fn.id === sp.funcionario_id && fn.empresa_id === empresaId)
         : null;
@@ -321,7 +345,9 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     // operational-domain-access.ts: resolveResourceDomain('simulador_ficha', ...)
     if (sql.includes('FROM fichas_sessao fs')) {
       const [id, empresaId] = args as [number, number];
-      const ficha = f.fichasSessao!.find((x) => x.id === id && x.empresa_id === empresaId && !x.deleted_at);
+      const ficha = f.fichasSessao!.find(
+        (x) => x.id === id && x.empresa_id === empresaId && !x.deleted_at,
+      );
       const funcionario = ficha?.colaborador_id_aluno
         ? f.funcionarios!.find((fn) => fn.id === ficha.colaborador_id_aluno)
         : null;
@@ -334,21 +360,27 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     // with "FROM lms_cursos WHERE id" — this one additionally selects `id`.
     if (sql.includes('SELECT id, dominio_codigo FROM lms_cursos')) {
       const [id, empresaId] = args as [number, number];
-      const row = f.lmsCursos!.find((c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at);
+      const row = f.lmsCursos!.find(
+        (c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at,
+      );
       return { first: row ? { id: row.id, dominio_codigo: row.dominio_codigo ?? null } : null };
     }
 
     // operational-domain-access.ts: resolveResourceDomain('lms_curso', ...)
     if (sql.includes('FROM lms_cursos WHERE id')) {
       const [id, empresaId] = args as [number, number];
-      const curso = f.lmsCursos!.find((c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at);
+      const curso = f.lmsCursos!.find(
+        (c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at,
+      );
       return { first: curso ? { dominio_codigo: curso.dominio_codigo ?? null } : null };
     }
 
     // operational-domain-access.ts: resolveResourceDomain('funcionario', ...)
     if (sql.includes('FROM funcionarios f') && sql.includes('LEFT JOIN setores s')) {
       const [id, empresaId] = args as [number, number];
-      const func = f.funcionarios!.find((x) => x.id === id && x.empresa_id === empresaId && !x.deleted_at);
+      const func = f.funcionarios!.find(
+        (x) => x.id === id && x.empresa_id === empresaId && !x.deleted_at,
+      );
       if (!func) return { first: null };
       const setor = func.setor_id ? f.setores.find((s) => s.id === func.setor_id) : null;
       return {
@@ -387,7 +419,9 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
               (qt) => qt.id === link.tipo_id && qt.empresa_id === empresaId && !qt.deleted_at,
             );
             if (!tipo || tipo.categoria_id == null) return null;
-            const categoria = (f.qualificacoesCategorias || []).find((qc) => qc.id === tipo.categoria_id);
+            const categoria = (f.qualificacoesCategorias || []).find(
+              (qc) => qc.id === tipo.categoria_id,
+            );
             return categoria?.dominio_codigo ?? null;
           })
           .filter((d): d is string => Boolean(d)),
@@ -406,7 +440,9 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     // — single-funcionario setor lookup
     if (sql.includes('SELECT setor_id FROM funcionarios')) {
       const [id, empresaId] = args as [number, number];
-      const func = f.funcionarios!.find((x) => x.id === id && x.empresa_id === empresaId && !x.deleted_at);
+      const func = f.funcionarios!.find(
+        (x) => x.id === id && x.empresa_id === empresaId && !x.deleted_at,
+      );
       return { first: func ? { setor_id: func.setor_id ?? null } : null };
     }
 
@@ -427,24 +463,92 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     }
 
     // admin-operational-domain-rbac.ts: GET /unclassified listings
+    if (
+      sql.includes('FROM qualificacoes_tipos qt') &&
+      sql.includes('INNER JOIN qualificacoes_tipos_setores qts')
+    ) {
+      const [empresaId] = args as [number];
+      const rows = f
+        .qualificacoesTipos!.filter(
+          (t) =>
+            t.empresa_id === empresaId &&
+            (t.ativo ?? 1) === 1 &&
+            !t.deleted_at &&
+            !t.dominio_codigo,
+        )
+        .flatMap((t) => {
+          const categoria = f.qualificacoesCategorias!.find(
+            (c) => c.id === t.categoria_id && c.empresa_id === empresaId,
+          );
+          const setores = (f.qualificacoesTiposSetores || [])
+            .filter(
+              (link) => link.tipo_id === t.id && link.empresa_id === empresaId && !link.deleted_at,
+            )
+            .map((link) =>
+              f.setores.find(
+                (s) =>
+                  s.id === link.setor_id &&
+                  s.empresa_id === empresaId &&
+                  s.ativo === 1 &&
+                  !s.deleted_at,
+              ),
+            )
+            .filter((s): s is NonNullable<typeof s> =>
+              Boolean(
+                s &&
+                s.dominio_codigo &&
+                f.dominios.some((d) => d.codigo === s.dominio_codigo && d.ativo === 1),
+              ),
+            );
+          const domains = [...new Set(setores.map((s) => s.dominio_codigo).filter(Boolean))];
+          if (!categoria || domains.length !== 1 || categoria.dominio_codigo === domains[0])
+            return [];
+          return [
+            {
+              id: t.id,
+              nome: t.nome ?? null,
+              codigo: t.codigo ?? null,
+              dominio_codigo: t.dominio_codigo ?? null,
+              categoria_nome: categoria.nome ?? null,
+              categoria_dominio_codigo: categoria.dominio_codigo ?? null,
+              dominio_sugerido: domains[0],
+              setores_json: JSON.stringify(
+                setores.map((s) => ({
+                  id: s.id,
+                  nome: s.nome ?? null,
+                  dominio_codigo: s.dominio_codigo,
+                })),
+              ),
+            },
+          ];
+        });
+      return { all: rows };
+    }
     if (sql.includes('SELECT id, nome FROM setores') && sql.includes('ORDER BY nome')) {
       const [empresaId] = args as [number];
       const rows = f.setores
-        .filter((s) => s.empresa_id === empresaId && s.ativo === 1 && !s.deleted_at && !s.dominio_codigo)
+        .filter(
+          (s) => s.empresa_id === empresaId && s.ativo === 1 && !s.deleted_at && !s.dominio_codigo,
+        )
         .map((s) => ({ id: s.id, nome: s.nome ?? null }));
       return { all: rows };
     }
-    if (sql.includes('SELECT id, nome FROM qualificacoes_categorias') && sql.includes('ORDER BY nome')) {
+    if (
+      sql.includes('SELECT id, nome FROM qualificacoes_categorias') &&
+      sql.includes('ORDER BY nome')
+    ) {
       const [empresaId] = args as [number];
-      const rows = f.qualificacoesCategorias!
-        .filter((c) => c.empresa_id === empresaId && c.ativo === 1 && !c.deleted_at && !c.dominio_codigo)
+      const rows = f
+        .qualificacoesCategorias!.filter(
+          (c) => c.empresa_id === empresaId && c.ativo === 1 && !c.deleted_at && !c.dominio_codigo,
+        )
         .map((c) => ({ id: c.id, nome: c.nome ?? null }));
       return { all: rows };
     }
     if (sql.includes('SELECT id, titulo FROM lms_cursos') && sql.includes('ORDER BY titulo')) {
       const [empresaId] = args as [number];
-      const rows = f.lmsCursos!
-        .filter((c) => c.empresa_id === empresaId && !c.deleted_at && !c.dominio_codigo)
+      const rows = f
+        .lmsCursos!.filter((c) => c.empresa_id === empresaId && !c.deleted_at && !c.dominio_codigo)
         .map((c) => ({ id: c.id, titulo: c.titulo ?? null }));
       return { all: rows };
     }
@@ -452,9 +556,13 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     // blocked (no per-tipo override AND their own categoria unclassified).
     if (sql.includes('FROM qualificacoes_tipos tipo') && sql.includes('ORDER BY tipo.nome')) {
       const [empresaId] = args as [number];
-      const rows = f.qualificacoesTipos!
-        .filter(
-          (t) => t.empresa_id === empresaId && (t.ativo ?? 1) === 1 && !t.deleted_at && !t.dominio_codigo,
+      const rows = f
+        .qualificacoesTipos!.filter(
+          (t) =>
+            t.empresa_id === empresaId &&
+            (t.ativo ?? 1) === 1 &&
+            !t.deleted_at &&
+            !t.dominio_codigo,
         )
         .filter((t) => {
           if (!t.categoria_id) return true;
@@ -487,26 +595,78 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     }
     // admin-operational-domain-rbac.ts: POST /classify — the actual write
     if (sql.includes('UPDATE setores SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
-      const row = f.setores.find((s) => s.id === id && s.empresa_id === empresaId && !s.deleted_at && (oldDomain === undefined || s.dominio_codigo === oldDomain || (s.dominio_codigo == null && oldDomain == null)));
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [
+        string,
+        number,
+        number,
+        string | null,
+      ];
+      const row = f.setores.find(
+        (s) =>
+          s.id === id &&
+          s.empresa_id === empresaId &&
+          !s.deleted_at &&
+          (oldDomain === undefined ||
+            s.dominio_codigo === oldDomain ||
+            (s.dominio_codigo == null && oldDomain == null)),
+      );
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
     if (sql.includes('UPDATE qualificacoes_categorias SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
-      const row = f.qualificacoesCategorias!.find((c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at && (oldDomain === undefined || c.dominio_codigo === oldDomain || (c.dominio_codigo == null && oldDomain == null)));
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [
+        string,
+        number,
+        number,
+        string | null,
+      ];
+      const row = f.qualificacoesCategorias!.find(
+        (c) =>
+          c.id === id &&
+          c.empresa_id === empresaId &&
+          !c.deleted_at &&
+          (oldDomain === undefined ||
+            c.dominio_codigo === oldDomain ||
+            (c.dominio_codigo == null && oldDomain == null)),
+      );
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
     if (sql.includes('UPDATE lms_cursos SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
-      const row = f.lmsCursos!.find((c) => c.id === id && c.empresa_id === empresaId && !c.deleted_at && (oldDomain === undefined || c.dominio_codigo === oldDomain || (c.dominio_codigo == null && oldDomain == null)));
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [
+        string,
+        number,
+        number,
+        string | null,
+      ];
+      const row = f.lmsCursos!.find(
+        (c) =>
+          c.id === id &&
+          c.empresa_id === empresaId &&
+          !c.deleted_at &&
+          (oldDomain === undefined ||
+            c.dominio_codigo === oldDomain ||
+            (c.dominio_codigo == null && oldDomain == null)),
+      );
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
     if (sql.includes('UPDATE qualificacoes_tipos SET dominio_codigo')) {
-      const [dominioCodigo, id, empresaId, oldDomain] = args as [string, number, number, string | null];
-      const row = f.qualificacoesTipos!.find((t) => t.id === id && t.empresa_id === empresaId && !t.deleted_at && (oldDomain === undefined || t.dominio_codigo === oldDomain || (t.dominio_codigo == null && oldDomain == null)));
+      const [dominioCodigo, id, empresaId, oldDomain] = args as [
+        string,
+        number,
+        number,
+        string | null,
+      ];
+      const row = f.qualificacoesTipos!.find(
+        (t) =>
+          t.id === id &&
+          t.empresa_id === empresaId &&
+          !t.deleted_at &&
+          (oldDomain === undefined ||
+            t.dominio_codigo === oldDomain ||
+            (t.dominio_codigo == null && oldDomain == null)),
+      );
       if (row) row.dominio_codigo = dominioCodigo;
       return { run: { changes: row ? 1 : 0 } };
     }
@@ -522,7 +682,15 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       const [empresaId] = args as [number];
       const isDesconhecido = sql.includes('NOT EXISTS');
 
-      const rowsByTable: Record<string, Array<{ empresa_id: number; ativo?: 0 | 1; deleted_at?: string | null; dominio_codigo?: string | null }>> = {
+      const rowsByTable: Record<
+        string,
+        Array<{
+          empresa_id: number;
+          ativo?: 0 | 1;
+          deleted_at?: string | null;
+          dominio_codigo?: string | null;
+        }>
+      > = {
         setores: f.setores,
         qualificacoes_categorias: f.qualificacoesCategorias || [],
         lms_cursos: f.lmsCursos || [],
@@ -543,7 +711,11 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     }
 
     // admin-operational-domain-rbac.ts readiness: setores_sem_dominio
-    if (sql.includes('FROM setores') && sql.includes('dominio_codigo IS NULL') && sql.includes('AS n')) {
+    if (
+      sql.includes('FROM setores') &&
+      sql.includes('dominio_codigo IS NULL') &&
+      sql.includes('AS n')
+    ) {
       const [empresaId] = args as [number];
       const n = f.setores.filter(
         (s) => s.empresa_id === empresaId && s.ativo === 1 && !s.deleted_at && !s.dominio_codigo,
@@ -624,11 +796,11 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
   function makeStatement(sql: string, boundArgs: unknown[]): D1LikeStatement {
     return {
       bind: (...args: unknown[]) => makeStatement(sql, args),
-      first: async <T,>() => {
+      first: async <T>() => {
         const result = execute(sql, boundArgs) as { first?: T | null };
         return (result.first ?? null) as T | null;
       },
-      all: async <T,>() => {
+      all: async <T>() => {
         const result = execute(sql, boundArgs) as { all?: T[] };
         return { results: (result.all ?? []) as T[] };
       },

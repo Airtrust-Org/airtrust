@@ -30,7 +30,15 @@ interface UnclassifiedResponse {
   cursos: UnclassifiedItem[];
 }
 
-type ResourceType = 'setor' | 'categoria' | 'curso';
+interface MixedCategoryTipoCandidate extends UnclassifiedItem {
+  codigo: string | null;
+  dominio_codigo: string | null;
+  categoria_nome: string | null;
+  categoria_dominio_codigo: string | null;
+  dominio_sugerido: OperationalDomain;
+}
+
+type ResourceType = 'setor' | 'categoria' | 'curso' | 'qualificacao_tipo';
 
 function isReadinessReport(value: unknown): value is ReadinessReport {
   if (typeof value !== 'object' || value === null) return false;
@@ -62,15 +70,17 @@ function itemLabel(item: UnclassifiedItem): string {
 export default function OperationalDomainRbacPage() {
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
   const [unclassified, setUnclassified] = useState<UnclassifiedResponse | null>(null);
+  const [mixedCategoryTipos, setMixedCategoryTipos] = useState<MixedCategoryTipoCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      const [readinessRes, unclassifiedRes] = await Promise.all([
+      const [readinessRes, unclassifiedRes, mixedCategoryTiposRes] = await Promise.all([
         fetchWithAuth(`${BASE}/readiness`),
         fetchWithAuth(`${BASE}/unclassified`),
+        fetchWithAuth(`${BASE}/mixed-category-tipos`),
       ]);
 
       if (!readinessRes.ok) {
@@ -81,17 +91,33 @@ export default function OperationalDomainRbacPage() {
         const err = await parseErrorPayload(unclassifiedRes);
         throw new Error(err.error ?? `Erro ${unclassifiedRes.status}`);
       }
+      if (!mixedCategoryTiposRes.ok) {
+        const err = await parseErrorPayload(mixedCategoryTiposRes);
+        throw new Error(err.error ?? `Erro ${mixedCategoryTiposRes.status}`);
+      }
 
-      const readinessJson = await parseJsonResponse(readinessRes, (d): d is { success: boolean; data: ReadinessReport } =>
-        isEnvelope(d, isReadinessReport),
+      const readinessJson = await parseJsonResponse(
+        readinessRes,
+        (d): d is { success: boolean; data: ReadinessReport } => isEnvelope(d, isReadinessReport),
       );
       const unclassifiedJson = await parseJsonResponse(
         unclassifiedRes,
-        (d): d is { success: boolean; data: UnclassifiedResponse } => isEnvelope(d, isUnclassifiedResponse),
+        (d): d is { success: boolean; data: UnclassifiedResponse } =>
+          isEnvelope(d, isUnclassifiedResponse),
       );
 
       setReadiness(readinessJson.data);
       setUnclassified(unclassifiedJson.data);
+      const mixedCategoryTiposJson = await parseJsonResponse(
+        mixedCategoryTiposRes,
+        (d): d is { success: boolean; data: { tipos: MixedCategoryTipoCandidate[] } } =>
+          typeof d === 'object' &&
+          d !== null &&
+          typeof (d as Record<string, unknown>).success === 'boolean' &&
+          typeof (d as Record<string, unknown>).data === 'object' &&
+          Array.isArray(((d as Record<string, unknown>).data as Record<string, unknown>).tipos),
+      );
+      setMixedCategoryTipos(mixedCategoryTiposJson.data.tipos);
     } catch (err) {
       toast.error('Erro ao carregar RBAC operacional', {
         description: err instanceof Error ? err.message : String(err),
@@ -105,7 +131,11 @@ export default function OperationalDomainRbacPage() {
     carregar();
   }, [carregar]);
 
-  const classificar = async (resourceType: ResourceType, resourceId: number, dominioCodigo: string) => {
+  const classificar = async (
+    resourceType: ResourceType,
+    resourceId: number,
+    dominioCodigo: string,
+  ) => {
     const key = `${resourceType}:${resourceId}`;
     setBusyKey(key);
     try {
@@ -141,7 +171,9 @@ export default function OperationalDomainRbacPage() {
         throw new Error(err.error ?? `Erro ${res.status}`);
       }
       toast.success(
-        action === 'activate' ? 'RBAC operacional ativado para este tenant' : 'RBAC operacional desativado',
+        action === 'activate'
+          ? 'RBAC operacional ativado para este tenant'
+          : 'RBAC operacional desativado',
       );
       await carregar();
     } catch (err) {
@@ -231,6 +263,17 @@ export default function OperationalDomainRbacPage() {
               onClassify={classificar}
             />
             <ClassificationTable
+              title="Tipos de categoria mista com sugestão segura"
+              items={mixedCategoryTipos}
+              resourceType="qualificacao_tipo"
+              dominios={dominiosValidos}
+              busyKey={busyKey}
+              onClassify={classificar}
+              suggestedDomains={Object.fromEntries(
+                mixedCategoryTipos.map((item) => [item.id, item.dominio_sugerido]),
+              )}
+            />
+            <ClassificationTable
               title="Categorias de qualificação sem domínio"
               items={unclassified.categorias}
               resourceType="categoria"
@@ -260,8 +303,17 @@ function ClassificationTable(props: {
   dominios: readonly OperationalDomain[];
   busyKey: string | null;
   onClassify: (resourceType: ResourceType, resourceId: number, dominioCodigo: string) => void;
+  suggestedDomains?: Record<number, OperationalDomain>;
 }) {
-  const { title, items, resourceType, dominios, busyKey, onClassify } = props;
+  const {
+    title,
+    items,
+    resourceType,
+    dominios,
+    busyKey,
+    onClassify,
+    suggestedDomains = {},
+  } = props;
   const [selected, setSelected] = useState<Record<number, OperationalDomain>>({});
 
   if (items.length === 0) {
@@ -282,7 +334,7 @@ function ClassificationTable(props: {
         <tbody>
           {items.map((item) => {
             const key = `${resourceType}:${item.id}`;
-            const value = selected[item.id] ?? dominios[0];
+            const value = selected[item.id] ?? suggestedDomains[item.id] ?? dominios[0];
             return (
               <tr key={item.id} className="border-t">
                 <td className="py-2 pr-4">{itemLabel(item)}</td>
@@ -290,7 +342,10 @@ function ClassificationTable(props: {
                   <select
                     value={value}
                     onChange={(e) =>
-                      setSelected((prev) => ({ ...prev, [item.id]: e.target.value as OperationalDomain }))
+                      setSelected((prev) => ({
+                        ...prev,
+                        [item.id]: e.target.value as OperationalDomain,
+                      }))
                     }
                     className="border rounded px-2 py-1 text-sm"
                   >

@@ -9,7 +9,7 @@
  * - DELETE /tipos/:id - Deleta tipo (soft delete)
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env } from '../../types';
 import { auth } from '../../middleware/auth';
 import { requireRole } from '../../middleware/rbac';
@@ -146,8 +146,6 @@ type TipoQualificacaoRow = {
 
 const router = new Hono<{ Bindings: Env }>();
 
-let tiposHasIsCheckCache: boolean | null = null;
-
 type TiposColumnsSupport = {
   hasIsCheck: boolean;
   hasConteudoProgramatico: boolean;
@@ -157,6 +155,7 @@ type TiposColumnsSupport = {
   hasFormatoId: boolean;
   hasClasseRequisito: boolean;
   hasCategoriaId: boolean;
+  hasDominioOverride: boolean;
 };
 
 function deriveModeloTipo(validade: number | null | undefined, categoria?: string | null): string {
@@ -181,22 +180,7 @@ function isTipoCodigoUniqueConstraintError(error: unknown): boolean {
   return message.includes('UNIQUE constraint failed: qualificacoes_tipos.codigo');
 }
 
-async function qualificacoesTiposHasIsCheck(db: D1Database): Promise<boolean> {
-  if (tiposHasIsCheckCache !== null) return tiposHasIsCheckCache;
-  try {
-    const info = await db.prepare("PRAGMA table_info('qualificacoes_tipos')").all();
-    const cols = (info.results || []) as Array<{ name?: string }>;
-    tiposHasIsCheckCache = cols.some((c) => c.name === 'is_check');
-    return tiposHasIsCheckCache;
-  } catch {
-    tiposHasIsCheckCache = false;
-    return false;
-  }
-}
-
-async function loadQualificacoesTiposColumnsSupport(
-  db: D1Database,
-): Promise<TiposColumnsSupport> {
+async function loadQualificacoesTiposColumnsSupport(db: D1Database): Promise<TiposColumnsSupport> {
   const info = await db.prepare("PRAGMA table_info('qualificacoes_tipos')").all();
   const cols = (info.results || []) as Array<{ name?: string }>;
   const hasColumn = (columnName: string) => cols.some((c) => c.name === columnName);
@@ -208,6 +192,7 @@ async function loadQualificacoesTiposColumnsSupport(
   const hasFormatoId = hasColumn('formato_id');
   const hasClasseRequisito = hasColumn('classe_requisito');
   const hasCategoriaId = hasColumn('categoria_id');
+  const hasDominioOverride = hasColumn('dominio_codigo');
 
   return {
     hasIsCheck,
@@ -217,6 +202,7 @@ async function loadQualificacoesTiposColumnsSupport(
     hasCargaRecorrente,
     hasClasseRequisito,
     hasCategoriaId,
+    hasDominioOverride,
   };
 }
 
@@ -229,22 +215,27 @@ function buildFormatoJoin(hasFormatoId: boolean): string {
 }
 
 // ===== SCHEMAS VALIDAÇÃO =====
-const createTipoSchema = z.object({
-  nome: z.string().min(3, 'Nome obrigatório (mínimo 3 caracteres)'),
-  codigo: z.string().min(1, 'Código obrigatório'),
-  categoria: z.string().min(1, 'Categoria obrigatória').optional(),
-  categoria_id: z.number().int().positive('Categoria inválida').optional(),
-  descricao: z.string().optional(),
-  conteudo_programatico: z.string().nullable().optional(),
-  carga_horaria_inicial: z.number().nullable().optional(),
-  carga_horaria_recorrente: z.number().nullable().optional(),
-  validade: z.number().positive('Validade deve ser maior que zero').nullable().optional(),
-  vencimento_fim_mes: z.number().optional().default(1),
-  observacoes: z.string().nullable().optional(),
-  ativo: z.union([z.boolean(), z.number()]).optional().default(true),
-  is_check: z.union([z.boolean(), z.number()]).optional().default(false),
-  classe_requisito: z.enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA']).nullable().optional(),
-}).refine((value) => value.categoria_id || value.categoria, { message: 'Categoria obrigatória' });
+const createTipoSchema = z
+  .object({
+    nome: z.string().min(3, 'Nome obrigatório (mínimo 3 caracteres)'),
+    codigo: z.string().min(1, 'Código obrigatório'),
+    categoria: z.string().min(1, 'Categoria obrigatória').optional(),
+    categoria_id: z.number().int().positive('Categoria inválida').optional(),
+    descricao: z.string().optional(),
+    conteudo_programatico: z.string().nullable().optional(),
+    carga_horaria_inicial: z.number().nullable().optional(),
+    carga_horaria_recorrente: z.number().nullable().optional(),
+    validade: z.number().positive('Validade deve ser maior que zero').nullable().optional(),
+    vencimento_fim_mes: z.number().optional().default(1),
+    observacoes: z.string().nullable().optional(),
+    ativo: z.union([z.boolean(), z.number()]).optional().default(true),
+    is_check: z.union([z.boolean(), z.number()]).optional().default(false),
+    classe_requisito: z
+      .enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA'])
+      .nullable()
+      .optional(),
+  })
+  .refine((value) => value.categoria_id || value.categoria, { message: 'Categoria obrigatória' });
 
 const updateTipoSchema = z.object({
   nome: z.string().min(3).optional(),
@@ -260,7 +251,10 @@ const updateTipoSchema = z.object({
   observacoes: z.string().nullable().optional(),
   ativo: z.union([z.boolean(), z.number()]).optional(),
   is_check: z.union([z.boolean(), z.number()]).optional(),
-  classe_requisito: z.enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA']).nullable().optional(),
+  classe_requisito: z
+    .enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA'])
+    .nullable()
+    .optional(),
 });
 
 const updateTipoSetoresSchema = z.object({
@@ -268,8 +262,8 @@ const updateTipoSetoresSchema = z.object({
 });
 
 // ===== HELPERS =====
-function safe(fn: (c: any) => Promise<Response> | Response) {
-  return async (c: any) => {
+function safe(fn: (c: Context<{ Bindings: Env }>) => Promise<Response> | Response) {
+  return async (c: Context<{ Bindings: Env }>) => {
     try {
       return await fn(c);
     } catch (e) {
@@ -319,9 +313,7 @@ async function hasQualificacoesTiposSetoresTable(db: D1Database): Promise<boolea
 function normalizeSetorIds(values: Array<string | number>): number[] {
   return Array.from(
     new Set(
-      values
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0),
+      values.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0),
     ),
   );
 }
@@ -684,7 +676,10 @@ router.get(
       } else if (ativoRaw === '0' || ativoRaw === 'false') {
         conditions.push('qt.ativo = 0');
       } else {
-        return c.json({ success: false, error: 'Parâmetro ativo inválido. Use 1, 0, true ou false.' }, 400);
+        return c.json(
+          { success: false, error: 'Parâmetro ativo inválido. Use 1, 0, true ou false.' },
+          400,
+        );
       }
     }
 
@@ -699,7 +694,12 @@ router.get(
         userId: Number((c.get as (k: string) => unknown)('userId') || 0),
         userRole: (c.get as (k: string) => unknown)('userRole'),
       });
-      appendOperationalReadFilter(conditions, bindings, readScope, { domainColumn: 'qc.dominio_codigo' });
+      appendOperationalReadFilter(conditions, bindings, readScope, {
+        domainColumn:
+          columnsSupport.hasCategoriaId && columnsSupport.hasDominioOverride
+            ? 'COALESCE(qt.dominio_codigo, qc.dominio_codigo)'
+            : 'qc.dominio_codigo',
+      });
     }
 
     if (categoriaId > 0) {
@@ -766,7 +766,7 @@ router.get(
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
     const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const setorScope = buildTipoSetorVisibilityClause(access, hasQualificacoesTiposSetores, []);
 
     const tipo = await db
@@ -831,7 +831,7 @@ router.get(
     const { empresaId } = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
     const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const setorScope = buildTipoSetorVisibilityClause(access, hasQualificacoesTiposSetores, []);
 
     const tipo = await db
@@ -962,9 +962,19 @@ router.post(
 
     // Inserir — colunas opcionais adicionadas dinamicamente conforme migration aplicada
     const insertCols = [
-      'tipo', 'codigo', 'nome', 'descricao', 'categoria',
-      'carga_horaria', 'carga_horaria_inicial', 'carga_horaria_recorrente',
-      'conteudo_programatico', 'validade', 'vencimento_fim_mes', 'observacoes', 'ativo',
+      'tipo',
+      'codigo',
+      'nome',
+      'descricao',
+      'categoria',
+      'carga_horaria',
+      'carga_horaria_inicial',
+      'carga_horaria_recorrente',
+      'conteudo_programatico',
+      'validade',
+      'vencimento_fim_mes',
+      'observacoes',
+      'ativo',
     ];
     const insertBinds: unknown[] = [
       deriveModeloTipo(validade, categoria),
@@ -981,17 +991,26 @@ router.post(
       data.observacoes || null,
       ativo,
     ];
-    if (hasIsCheck) { insertCols.push('is_check'); insertBinds.push(isCheck); }
-    if (columnsSupport.hasCategoriaId) { insertCols.push('categoria_id'); insertBinds.push(categoriaCanonica.id); }
+    if (hasIsCheck) {
+      insertCols.push('is_check');
+      insertBinds.push(isCheck);
+    }
+    if (columnsSupport.hasCategoriaId) {
+      insertCols.push('categoria_id');
+      insertBinds.push(categoriaCanonica.id);
+    }
     // formato_id foi depreciado, não gravamos mais no banco.
-    if (columnsSupport.hasClasseRequisito) { insertCols.push('classe_requisito'); insertBinds.push(data.classe_requisito ?? null); }
+    if (columnsSupport.hasClasseRequisito) {
+      insertCols.push('classe_requisito');
+      insertBinds.push(data.classe_requisito ?? null);
+    }
     insertBinds.push(empresaId);
     const valuePlaceholders = insertCols.map(() => '?').join(', ');
     const insertSql = `INSERT INTO qualificacoes_tipos (${insertCols.join(', ')}, empresa_id, created_at, updated_at, deleted_at) VALUES (${valuePlaceholders}, ?, datetime('now'), datetime('now'), NULL)`;
 
     if (existing?.deleted_at) {
       const restoreSetParts = insertCols.map((col) => `${col} = ?`);
-      restoreSetParts.push("deleted_at = NULL", "updated_at = datetime('now')");
+      restoreSetParts.push('deleted_at = NULL', "updated_at = datetime('now')");
       const restoreSql = `UPDATE qualificacoes_tipos SET ${restoreSetParts.join(', ')} WHERE id = ? AND empresa_id = ?`;
       const restoreBinds = [...insertBinds.slice(0, -1), existing.id, empresaId];
 
@@ -1035,8 +1054,11 @@ router.post(
       await logAuditoria(db, 'qualificacoes_tipos', String(existing.id), 'RESTORE');
 
       const restoredCategoria = (restored as Record<string, unknown> | null)?.categoria;
-      if (typeof restoredCategoria === 'string' && isEadCategoria(restoredCategoria) &&
-        (restored as { empresa_id?: number | null })?.empresa_id) {
+      if (
+        typeof restoredCategoria === 'string' &&
+        isEadCategoria(restoredCategoria) &&
+        (restored as { empresa_id?: number | null })?.empresa_id
+      ) {
         await syncLmsCourseFromQualificacaoTipo(db, {
           empresaId: Number((restored as { empresa_id: number }).empresa_id),
           qualificacaoTipoId: existing.id,
@@ -1114,8 +1136,11 @@ router.post(
     await logAuditoria(db, 'qualificacoes_tipos', String(newId), 'CREATE');
 
     const createdCategoria = (created as Record<string, unknown> | null)?.categoria;
-    if (typeof createdCategoria === 'string' && isEadCategoria(createdCategoria) &&
-      (created as { empresa_id?: number | null })?.empresa_id) {
+    if (
+      typeof createdCategoria === 'string' &&
+      isEadCategoria(createdCategoria) &&
+      (created as { empresa_id?: number | null })?.empresa_id
+    ) {
       await syncLmsCourseFromQualificacaoTipo(db, {
         empresaId: Number((created as { empresa_id: number }).empresa_id),
         qualificacaoTipoId: Number(newId),
@@ -1144,7 +1169,7 @@ router.put(
     const { empresaId } = getTenantContext(c);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const body = await c.req.json();
 
     // Validar com Zod
@@ -1214,7 +1239,20 @@ router.put(
           LIMIT 1`,
       )
       .bind(id, empresaId)
-      .first()) as (TipoAnteriorRow & { categoria_id: number | null; descricao: string | null; observacoes: string | null; ativo: number | null; carga_horaria: number | null; carga_horaria_inicial: number | null; carga_horaria_recorrente: number | null; conteudo_programatico: string | null; is_check: number | null; classe_requisito: string | null }) | null;
+      .first()) as
+      | (TipoAnteriorRow & {
+          categoria_id: number | null;
+          descricao: string | null;
+          observacoes: string | null;
+          ativo: number | null;
+          carga_horaria: number | null;
+          carga_horaria_inicial: number | null;
+          carga_horaria_recorrente: number | null;
+          conteudo_programatico: string | null;
+          is_check: number | null;
+          classe_requisito: string | null;
+        })
+      | null;
 
     if (!rowAtual) {
       return c.json({ success: false, error: 'Tipo não encontrado' }, 404);
@@ -1223,11 +1261,20 @@ router.put(
     // Only treat category as "informed" if the values are meaningful.
     // categoria_id must be a positive integer, and/or categoria must be a non-empty string.
     // null, undefined, 0, or empty string are treated as "not informed".
-    const categoriaIdIsValid = typeof data.categoria_id === 'number' && Number.isFinite(data.categoria_id) && data.categoria_id > 0;
-    const categoriaTextIsValid = typeof data.categoria === 'string' && data.categoria.trim().length > 0;
+    const categoriaIdIsValid =
+      typeof data.categoria_id === 'number' &&
+      Number.isFinite(data.categoria_id) &&
+      data.categoria_id > 0;
+    const categoriaTextIsValid =
+      typeof data.categoria === 'string' && data.categoria.trim().length > 0;
     const categoriaFoiInformada = categoriaIdIsValid || categoriaTextIsValid;
     const categoriaCanonica = categoriaFoiInformada
-      ? await resolveCategoriaCanonica(db, empresaId, categoriaIdIsValid ? data.categoria_id! : undefined, categoriaTextIsValid ? data.categoria : undefined)
+      ? await resolveCategoriaCanonica(
+          db,
+          empresaId,
+          categoriaIdIsValid ? data.categoria_id! : undefined,
+          categoriaTextIsValid ? data.categoria : undefined,
+        )
       : null;
     if (categoriaFoiInformada && !categoriaCanonica) {
       return c.json({ success: false, error: 'Categoria canônica não encontrada ou inativa' }, 404);
@@ -1247,7 +1294,10 @@ router.put(
       if (operationalAccess.enabled) {
         const destinoDominio = categoriaCanonica.dominio_codigo;
         if (destinoDominio !== null && !isValidOperationalDomain(destinoDominio)) {
-          return c.json({ success: false, error: 'Domínio da categoria de destino é inválido' }, 422);
+          return c.json(
+            { success: false, error: 'Domínio da categoria de destino é inválido' },
+            422,
+          );
         }
         if (!destinoDominio || !operationalAccess.domains.includes(destinoDominio)) {
           forbidden(
@@ -1319,16 +1369,22 @@ router.put(
       }
     }
     if (data.carga_horaria_inicial !== undefined) {
-      const draftVal = data.carga_horaria_inicial == null ? null : Number(data.carga_horaria_inicial);
-      const atualVal = rowAtual.carga_horaria_inicial == null ? null : Number(rowAtual.carga_horaria_inicial);
+      const draftVal =
+        data.carga_horaria_inicial == null ? null : Number(data.carga_horaria_inicial);
+      const atualVal =
+        rowAtual.carga_horaria_inicial == null ? null : Number(rowAtual.carga_horaria_inicial);
       if (draftVal !== atualVal) {
         updateParts.push('carga_horaria_inicial = ?');
         binds.push(draftVal);
       }
     }
     if (data.carga_horaria_recorrente !== undefined) {
-      const draftVal = data.carga_horaria_recorrente == null ? null : Number(data.carga_horaria_recorrente);
-      const atualVal = rowAtual.carga_horaria_recorrente == null ? null : Number(rowAtual.carga_horaria_recorrente);
+      const draftVal =
+        data.carga_horaria_recorrente == null ? null : Number(data.carga_horaria_recorrente);
+      const atualVal =
+        rowAtual.carga_horaria_recorrente == null
+          ? null
+          : Number(rowAtual.carga_horaria_recorrente);
       if (draftVal !== atualVal) {
         updateParts.push('carga_horaria_recorrente = ?');
         binds.push(draftVal);
@@ -1395,7 +1451,10 @@ router.put(
     }
 
     if (updateParts.length === 0) {
-      return c.json({ success: true, data: { changed: false }, message: 'Nenhuma alteração detectada' }, 200);
+      return c.json(
+        { success: true, data: { changed: false }, message: 'Nenhuma alteração detectada' },
+        200,
+      );
     }
 
     updateParts.push("updated_at = datetime('now')");
@@ -1509,10 +1568,10 @@ router.put(
               : snapshot.qualificacaoCodigo;
           const historicoCodigoAtual = normalizeHistoricoCodigo(historico.qualificacao_codigo);
           const historicoCodigoFinal = normalizeHistoricoCodigo(qualificacaoCodigoFinal);
-          const shouldUpdateQualificacaoId =
-            String(historico.qualificacao_id ?? '') !== String(id);
+          const shouldUpdateQualificacaoId = String(historico.qualificacao_id ?? '') !== String(id);
           const shouldUpdateCodigo = historicoCodigoAtual !== historicoCodigoFinal;
-          const shouldUpdateTipo = String(historico.tipo_atual || '') !== String(snapshot.tipo || '');
+          const shouldUpdateTipo =
+            String(historico.tipo_atual || '') !== String(snapshot.tipo || '');
           const shouldUpdateCategoria =
             String(historico.categoria_atual || '') !== String(snapshot.categoria || '');
           const shouldUpdateValidade =
@@ -1600,7 +1659,7 @@ router.put(
             ? data.vencimento_fim_mes
               ? 1
               : 0
-            : rowAtual?.vencimento_fim_mes ?? null,
+            : (rowAtual?.vencimento_fim_mes ?? null),
         historicos_recalculados: historicosSincronizados,
         historicos_ignorados: historicosIgnorados,
       },
@@ -1660,7 +1719,7 @@ router.put(
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const body = await c.req.json();
 
     const parsed = updateTipoSetoresSchema.safeParse(body);
@@ -1715,7 +1774,7 @@ router.delete(
   safe(async (c) => {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
 
     if (!id || id.trim() === '') {
       return c.json({ success: false, error: 'ID inválido' }, 400);
