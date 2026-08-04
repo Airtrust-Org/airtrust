@@ -365,6 +365,7 @@ export async function fetchWithAuth(
 
   const config: RequestInit = {
     ...options,
+    credentials: options.credentials ?? fetchConfig.credentials,
     headers: {
       ...(isFormDataBody ? {} : fetchConfig.headers),
       Authorization: `Bearer ${token}`,
