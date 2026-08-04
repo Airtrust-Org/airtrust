@@ -13,9 +13,7 @@ import * as core from './operational-domain-access-core';
 
 export * from './operational-domain-access-core';
 
-type RequireOperationalAccessOptions = Parameters<
-  typeof core.requireOperationalAccess
->[0];
+type RequireOperationalAccessOptions = Parameters<typeof core.requireOperationalAccess>[0];
 
 function isTenantAdminQualificationCatalogRequest(
   options: RequireOperationalAccessOptions,
