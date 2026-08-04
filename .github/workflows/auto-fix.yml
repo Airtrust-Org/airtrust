@@ -51,8 +51,8 @@ jobs:
           path.write_text(source)
           PY
 
-      - name: Verify formatting
-        run: npx prettier --check worker-airtrust/src/routes/qualificacoes/historico-write.ts
+      - name: Format scoped file
+        run: npx prettier --write worker-airtrust/src/routes/qualificacoes/historico-write.ts
 
       - name: Commit and push cleanup
         run: |
