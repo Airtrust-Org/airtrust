@@ -29,6 +29,33 @@ export type ResultadoGeracaoQualificacao = {
   qualificacoes_geradas: QualificacaoGerada[];
 };
 
+type QualificationGenerationFichaRow = {
+  status: string | null;
+  aprovado: number | null;
+  modelo_qualificacao_tipo_id: number | null;
+  modelo_qualificacao_codigo: string | null;
+  tipo_sessao: string | null;
+  tipo_aeronave: string | null;
+  modelo_qualificacao_nome: string | null;
+  modelo_qualificacao_validade: number | string | null;
+  data_sessao: string | null;
+  aluno_empresa_id: number | null;
+  colaborador_id_aluno: number | null;
+  aluno_nome: string;
+  empresa_id: number;
+  agendamento_slot_id: number | null;
+  tipo_curricular_codigo: string | null;
+  tipo_curricular_nome: string | null;
+  modelo_id: number | null;
+};
+
+type QualificationCheckRow = {
+  qualificacao_tipo_id: number;
+  qt_codigo: string;
+  qt_nome: string;
+  qt_validade: number | string | null;
+};
+
 function normalizeTipoCurricular(value?: string | null): string {
   return String(value || '')
     .normalize('NFD')
@@ -114,7 +141,7 @@ export async function gerarQualificacaoDaFicha(
        WHERE f.id = ? AND f.empresa_id IS NOT NULL AND f.deleted_at IS NULL`,
     )
     .bind(fid)
-    .first<any>();
+    .first<QualificationGenerationFichaRow>();
 
   if (!f) throw new Error('Não encontrada');
   if (!['CONCLUIDA', 'APROVADO'].includes(String(f.status || ''))) {
@@ -234,9 +261,9 @@ export async function gerarQualificacaoDaFicha(
            )`,
       )
       .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, f.colaborador_id_aluno)
-      .all();
+      .all<QualificationCheckRow>();
 
-    for (const check of (checksMarcados.results || []) as any[]) {
+    for (const check of checksMarcados.results || []) {
       const validadeFAP = normalizeValidityMonths(check.qt_validade);
       if (validadeFAP === 6) fichaTemCheckSemestral = true;
       const dataVencimentoFap = calculateQualificationExpiry({
