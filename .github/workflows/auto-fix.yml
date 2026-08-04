@@ -54,23 +54,28 @@ jobs:
                   raise SystemExit('validateCommonInput marker not found')
               service = service.replace(marker, helper + marker, 1)
 
-          create_old = """  const results = await db.batch(statements);
-            const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;"""
-          create_new = """  const results = await db.batch(statements);
-            assertBatchSucceeded(results, 'A criação da qualificação');
+          batch_marker = """  const results = await db.batch(statements);
             const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;"""
           if "assertBatchSucceeded(results, 'A criação da qualificação')" not in service:
-              if create_old not in service:
+              if batch_marker not in service:
                   raise SystemExit('create batch marker not found')
-              service = service.replace(create_old, create_new, 1)
-
-          renew_new = """  const results = await db.batch(statements);
-            assertBatchSucceeded(results, 'A renovação da qualificação');
-            const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;"""
+              service = service.replace(
+                  batch_marker,
+                  """  const results = await db.batch(statements);
+            assertBatchSucceeded(results, 'A criação da qualificação');
+            const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;""",
+                  1,
+              )
           if "assertBatchSucceeded(results, 'A renovação da qualificação')" not in service:
-              if create_old not in service:
+              if batch_marker not in service:
                   raise SystemExit('renew batch marker not found')
-              service = service.replace(create_old, renew_new, 1)
+              service = service.replace(
+                  batch_marker,
+                  """  const results = await db.batch(statements);
+            assertBatchSucceeded(results, 'A renovação da qualificação');
+            const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;""",
+                  1,
+              )
           service_path.write_text(service)
 
           ficha_service_path = Path('worker-airtrust/src/services/qualificacoes-historico-ficha.ts')
@@ -99,19 +104,37 @@ jobs:
           helper_path.write_text(helper)
           PY
 
-      - name: Run ESLint fix
+      - name: Format scoped files
         run: |
-          npx eslint "./src/**/*.{js,jsx,ts,tsx}" --fix || true
+          npx prettier --write \
+            worker-airtrust/src/__tests__/helpers/qualification-history-sqlite-d1.ts \
+            worker-airtrust/src/__tests__/services/qualification-history-atomic.sqlite.test.ts \
+            worker-airtrust/src/routes/qualificacoes/historico-atomic-write.ts \
+            worker-airtrust/src/routes/simuladores-fichas-helpers.ts \
+            worker-airtrust/src/services/qualification-history-atomic.ts \
+            worker-airtrust/src/services/qualificacoes-historico-ficha.ts
 
-      - name: Run Prettier write
+      - name: Lint scoped files
         run: |
-          npx prettier --write "src/**/*.{js,jsx,ts,tsx,css,md,json}" "worker-airtrust/src/**/*.{js,ts,json}" || true
+          npx eslint \
+            worker-airtrust/src/__tests__/helpers/qualification-history-sqlite-d1.ts \
+            worker-airtrust/src/__tests__/services/qualification-history-atomic.sqlite.test.ts \
+            worker-airtrust/src/routes/qualificacoes/historico-atomic-write.ts \
+            worker-airtrust/src/routes/simuladores-fichas-helpers.ts \
+            worker-airtrust/src/services/qualification-history-atomic.ts \
+            worker-airtrust/src/services/qualificacoes-historico-ficha.ts
 
       - name: Commit and push fixes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- worker-airtrust/src
+          git add -- \
+            worker-airtrust/src/__tests__/helpers/qualification-history-sqlite-d1.ts \
+            worker-airtrust/src/__tests__/services/qualification-history-atomic.sqlite.test.ts \
+            worker-airtrust/src/routes/qualificacoes/historico-atomic-write.ts \
+            worker-airtrust/src/routes/simuladores-fichas-helpers.ts \
+            worker-airtrust/src/services/qualification-history-atomic.ts \
+            worker-airtrust/src/services/qualificacoes-historico-ficha.ts
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
