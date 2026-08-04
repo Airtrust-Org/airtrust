@@ -91,6 +91,8 @@ export function MultiSelect({
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
         className={cn(
           'flex items-center gap-2 rounded-md border px-3 py-2 pr-8 text-sm',
           'focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary',
@@ -113,6 +115,7 @@ export function MultiSelect({
             'absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-transform',
             open && 'rotate-180',
           )}
+          aria-hidden="true"
         />
       </button>
 
@@ -134,9 +137,11 @@ export function MultiSelect({
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded"
+                aria-label="Limpar busca"
+                title="Limpar busca"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             )}
           </div>
