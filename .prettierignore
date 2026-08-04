@@ -8,3 +8,5 @@ coverage
 package.json
 package-lock.json
 docs/regulatory/edb/ADR_EDB_REGULATED_SCHEMA_D1_R2_READINESS_20260802.md
+# Legacy route baseline; new TypeScript regressions remain guarded by delta checks.
+worker-airtrust/src/routes/qualificacoes/historico.ts

@@ -48,6 +48,7 @@ import {
   assertOperationalAccess,
   normalizeTenantRole,
 } from '../../services/operational-domain-access';
+import { buildQualificationHistoryDomainColumn } from './historico-domain';
 import writeRouter from './historico-write';
 
 const router = new Hono<{ Bindings: Env }>();
@@ -292,6 +293,14 @@ router.get(
     const employeeScope = await buildHistoricoEmployeeScopeCompat(db, access, 'f');
     const hasCategoriaEmpresaId = await hasTableColumn(db, 'qualificacoes_categorias', 'empresa_id');
     const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
+    const hasTipoDominioOverride = await hasTableColumn(
+      db,
+      'qualificacoes_tipos',
+      'dominio_codigo',
+    );
+    const qualificationDomainColumn = buildQualificationHistoryDomainColumn(
+      hasTipoDominioOverride,
+    );
     const categoriaJoinClause = buildCategoriaResolutionJoinClause(
       hasCategoriaIdColumn,
       hasCategoriaEmpresaId,
@@ -362,11 +371,11 @@ router.get(
     conditions.push(employeeScope.clause);
     params.push(...employeeScope.bindings);
 
-    // Item 1 (read-side filtering): histórico is individual data (tied to
-    // a funcionário's own setor via `f`, and to a categoria's domain via
-    // `qc`) — once RBAC is active, a gestor must be additionally narrowed
-    // to domain+setor, not just the legacy setor scope above. No-op in
-    // legacy mode / for admin/instrutor/aluno.
+    // Item 1 (read-side filtering): histórico is individual data tied to
+    // the funcionário's setor and to the canonical qualification domain.
+    // Mixed delivery categories such as EAD remain unclassified globally;
+    // resolution therefore follows history snapshot -> explicit tipo override
+    // -> tipo category fallback, matching the write/certificate guard.
     {
       const readScope = await resolveOperationalReadScope({
         db,
@@ -375,7 +384,7 @@ router.get(
         userRole: (c.get as (k: string) => unknown)('userRole'),
       });
       appendOperationalReadFilter(conditions, params, readScope, {
-        domainColumn: 'qc.dominio_codigo',
+        domainColumn: qualificationDomainColumn,
         setorColumn: employeeScope.hasSetorId ? 'f.setor_id' : undefined,
       });
     }
