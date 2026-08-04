@@ -1,0 +1,8 @@
+{
+  "changeId": "qualificacoes-tipos-dominio-override-0454",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0454_qualificacoes_tipos_dominio_override.sql",
+  "fileHash": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
+  "planPath": "worker-airtrust/schema-v2/plans/production-certificados-0454-schema-v2.md",
+  "planHash": "84428b26ae4628635d4a181dee179999440cc02b3fda30ff7e55354eaf1cfc28"
+}
