@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Users, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
 
 interface FuncionarioUnificado {
@@ -19,18 +20,32 @@ interface KPIProps {
 }
 
 export default function FuncionarioKPIs({ funcionariosUnificados }: KPIProps) {
-  const stats = {
-    totalAtivos: funcionariosUnificados.filter(f => f.status === 'ATIVO').length,
-    complianceOK: funcionariosUnificados.filter(f => f.compliance_status === 'CONFORME').length,
-    pendencias: funcionariosUnificados.filter(f => 
-      f.compliance_status === 'VENCIDO' || 
-      f.compliance_status === 'VENCENDO' || 
-      f.compliance_status === 'PENDENTE'
-    ).length,
-    mediaCompliance: Math.round(
-      (funcionariosUnificados.reduce((acc, f) => acc + (f.compliance_percentage || 0), 0) / (funcionariosUnificados.length || 1))
-    ) || 0
-  };
+  const stats = useMemo(() => {
+    const counts = funcionariosUnificados.reduce(
+      (acc, funcionario) => {
+        if (funcionario.status === 'ATIVO') acc.totalAtivos += 1;
+        if (funcionario.compliance_status === 'CONFORME') acc.complianceOK += 1;
+        if (
+          funcionario.compliance_status === 'VENCIDO' ||
+          funcionario.compliance_status === 'VENCENDO' ||
+          funcionario.compliance_status === 'PENDENTE'
+        ) {
+          acc.pendencias += 1;
+        }
+        acc.totalCompliance += funcionario.compliance_percentage || 0;
+        return acc;
+      },
+      { totalAtivos: 0, complianceOK: 0, pendencias: 0, totalCompliance: 0 },
+    );
+
+    return {
+      totalAtivos: counts.totalAtivos,
+      complianceOK: counts.complianceOK,
+      pendencias: counts.pendencias,
+      mediaCompliance:
+        Math.round(counts.totalCompliance / (funcionariosUnificados.length || 1)) || 0,
+    };
+  }, [funcionariosUnificados]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
@@ -46,7 +61,7 @@ export default function FuncionarioKPIs({ funcionariosUnificados }: KPIProps) {
           </div>
         </div>
       </div>
-      
+
       {/* Card 2: Compliance OK (Verde) */}
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex items-center">
@@ -59,7 +74,7 @@ export default function FuncionarioKPIs({ funcionariosUnificados }: KPIProps) {
           </div>
         </div>
       </div>
-      
+
       {/* Card 3: Pendências (Amarelo) */}
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex items-center">
@@ -72,7 +87,7 @@ export default function FuncionarioKPIs({ funcionariosUnificados }: KPIProps) {
           </div>
         </div>
       </div>
-      
+
       {/* Card 4: Média Compliance (Roxo) */}
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex items-center">
