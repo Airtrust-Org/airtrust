@@ -19,10 +19,7 @@ function isTenantAdminQualificationCatalogRequest(
   options: RequireOperationalAccessOptions,
   userRole: unknown,
 ): boolean {
-  return (
-    options.resourceType === 'qualificacao_tipo' &&
-    core.normalizeTenantRole(userRole) === 'admin'
-  );
+  return options.resourceType === 'qualificacao_tipo' && core.normalizeTenantRole(userRole) === 'admin';
 }
 
 export function requireOperationalAccess(
