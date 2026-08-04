@@ -112,10 +112,7 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0448_simuladores_matriz_aw139_sk76_gera_qualificacao.sql',
     '0448_simuladores_matriz_aw139_sk76_gera_qualificacao_rollback.sql',
   ],
-  '0452': [
-    '0452_operational_domain_rbac.sql',
-    '0452_operational_domain_rbac_rollback.sql',
-  ],
+  '0452': ['0452_operational_domain_rbac.sql', '0452_operational_domain_rbac_rollback.sql'],
   '0454': [
     '0454_qualificacoes_tipos_dominio_override.sql',
     '0454_qualificacoes_tipos_dominio_override_rollback.sql',
@@ -165,6 +162,7 @@ const EXPECTED_FOREIGN_KEYS_OFF_FILES = [
   '0402_harden_empresa_id_wave4.sql',
   '0437_setores_gestores_gestor_id_optional.sql',
   '0437_setores_gestores_gestor_id_optional_rollback.sql',
+  '0455_aeronaves_codigo_tenant_active_unique.sql',
 ] as const;
 
 function listCanonicalMigrationFiles(): string[] {
@@ -253,7 +251,8 @@ describe('migration governance', () => {
     // via the existing admin classification tool; see
     // docs/rbac/gestor-operational-autonomy.md and the certificate-
     // generation incident fix).
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(454);
+    // Ratchet raised 2026-08-03: 0455 scopes active aircraft codes per tenant.
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(455);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
