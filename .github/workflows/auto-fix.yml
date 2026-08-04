@@ -2,6 +2,9 @@ name: Auto-fix ESLint & Prettier on PR
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/qualificacoes-atomicidade-confiabilidade-20260804
 
 jobs:
   autofix:
@@ -13,32 +16,52 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 24
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run ESLint fix
+      - name: Remove legacy validity fallbacks
         run: |
-          npx eslint "./src/**/*.{js,jsx,ts,tsx}" --fix || true
+          python - <<'PY'
+          from pathlib import Path
 
-      - name: Run Prettier write
-        run: |
-          npx prettier --write "src/**/*.{js,jsx,ts,tsx,css,md,json}" "worker-airtrust/src/**/*.{js,ts,json}" || true
+          path = Path('worker-airtrust/src/routes/qualificacoes/historico-write.ts')
+          source = path.read_text()
+          source = source.replace(
+              '      let validadeMeses = original.hist_validade_meses || original.tipo_validade || null;',
+              """      let validadeMeses =
+                original.hist_validade_meses ?? original.tipo_validade ?? null;
+              if (validadeMeses === 0) validadeMeses = null;""",
+              1,
+          )
+          source = source.replace(
+              '    const validade_meses = tipo.validade || 12;',
+              '    const validade_meses = tipo.validade === 0 ? null : tipo.validade;',
+              1,
+          )
+          if 'tipo.validade || 12' in source:
+              raise SystemExit('legacy 12-month fallback remains')
+          path.write_text(source)
+          PY
 
-      - name: Commit and push fixes
+      - name: Verify formatting
+        run: npx prettier --check worker-airtrust/src/routes/qualificacoes/historico-write.ts
+
+      - name: Commit and push cleanup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- src worker-airtrust/src
+          git add -- worker-airtrust/src/routes/qualificacoes/historico-write.ts
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore: apply eslint --fix and prettier formatting [skip ci]" || true
-            git push origin HEAD:${{ github.head_ref }}
+            git commit -m "fix(qualificacoes): remove legacy validity fallbacks [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
           fi
