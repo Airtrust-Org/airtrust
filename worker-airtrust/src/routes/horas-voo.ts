@@ -868,7 +868,12 @@ app.post('/:funcionario_id/importar-xlsx', requireRole('admin', 'manager'), asyn
         .run();
       inseridos += 1;
     } catch (error) {
-      errors.push({ linha: i + 2, erro: error instanceof Error ? error.message : String(error) });
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[HORAS-VOO] Erro ao importar linha ${i + 2}:`, rawMessage);
+      const erro = rawMessage.includes('UNIQUE constraint failed')
+        ? 'Registro duplicado'
+        : 'Erro ao processar linha';
+      errors.push({ linha: i + 2, erro });
     }
   }
 

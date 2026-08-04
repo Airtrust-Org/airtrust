@@ -1,18 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
+type MockContext = {
+  env?: { __mockEmpresaId?: number };
+  get: (key: string) => unknown;
+  set: (key: string, value: unknown) => void;
+};
+
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
+  auth: () => async (c: MockContext, next: () => Promise<void>) => {
     const empresaId = Number(c.env?.__mockEmpresaId ?? 1);
     c.set('userId', 1);
     c.set('userRole', 'manager');
     c.set('empresaId', empresaId);
     await next();
   },
-  optionalAuth: () => async (_c: any, next: () => Promise<void>) => {
+  optionalAuth: () => async (_c: MockContext, next: () => Promise<void>) => {
     await next();
   },
-  requireRole: () => async (_c: any, next: () => Promise<void>) => {
+  requireRole: () => async (_c: MockContext, next: () => Promise<void>) => {
     await next();
   },
 }));
@@ -21,20 +27,18 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return {
     ...actual,
-    tenantMiddleware:
-      () =>
-      async (c: any, next: () => Promise<void>) => {
-        const empresaId = Number(c.env?.__mockEmpresaId ?? 1);
-        c.set('empresaId', empresaId);
-        c.set('tenant', { empresaId, userId: 1, role: 'ADMINISTRADOR' });
-        await next();
-      },
-    getTenantContext: (c: any) => ({
+    tenantMiddleware: () => async (c: MockContext, next: () => Promise<void>) => {
+      const empresaId = Number(c.env?.__mockEmpresaId ?? 1);
+      c.set('empresaId', empresaId);
+      c.set('tenant', { empresaId, userId: 1, role: 'ADMINISTRADOR' });
+      await next();
+    },
+    getTenantContext: (c: MockContext) => ({
       empresaId: Number(c.get('empresaId') ?? 0),
       userId: 1,
       role: 'ADMINISTRADOR',
     }),
-    getEmpresaId: (c: any) => Number(c.get('empresaId') ?? 0),
+    getEmpresaId: (c: MockContext) => Number(c.get('empresaId') ?? 0),
   };
 });
 
@@ -171,7 +175,7 @@ describe('GET /api/sessoes', () => {
     });
   });
 
-  it('retorna erro HTTP e success=false quando backend falha', async () => {
+  it('retorna erro HTTP sanitizado quando backend falha', async () => {
     const response = await app.fetch(
       new Request('http://localhost/api/sessoes?limit=5&offset=0', { method: 'GET' }),
       { DB: createMockDb('fail') } as Env,
@@ -188,8 +192,9 @@ describe('GET /api/sessoes', () => {
     };
     expect(payload).toMatchObject({
       success: false,
-      error: 'SESSOES_LIST_FAILED',
-      message: 'Erro interno ao listar sessões',
+      error: 'Erro interno do servidor',
+      code: 'INTERNAL_ERROR',
+      requestId: expect.any(String),
     });
     expect(payload.success).not.toBe(true);
     expect(payload.data).toBeUndefined();

@@ -1,18 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
+type MockContext = {
+  env?: { __mockEmpresaId?: number };
+  get: (key: string) => unknown;
+  set: (key: string, value: unknown) => void;
+};
+
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
+  auth: () => async (c: MockContext, next: () => Promise<void>) => {
     const empresaId = Number(c.env?.__mockEmpresaId ?? 1);
     c.set('userId', 1);
     c.set('userRole', 'manager');
     c.set('empresaId', empresaId);
     await next();
   },
-  optionalAuth: () => async (_c: any, next: () => Promise<void>) => {
+  optionalAuth: () => async (_c: MockContext, next: () => Promise<void>) => {
     await next();
   },
-  requireRole: () => async (_c: any, next: () => Promise<void>) => {
+  requireRole: () => async (_c: MockContext, next: () => Promise<void>) => {
     await next();
   },
 }));
@@ -21,23 +27,21 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return {
     ...actual,
-    tenantMiddleware:
-      () =>
-      async (c: any, next: () => Promise<void>) => {
-        const empresaId = Number(c.env?.__mockEmpresaId ?? 1);
-        c.set('empresaId', empresaId);
-        c.set('tenantContext', {
-          empresaId,
-          empresaCodigo: `emp-${empresaId}`,
-          empresaNome: `Empresa ${empresaId}`,
-          role: 'manager',
-          plano: 'PRO',
-          permissions: ['read', 'write'],
-        });
-        await next();
-      },
-    getTenantContext: (c: any) => c.get('tenantContext'),
-    getEmpresaId: (c: any) => Number(c.get('empresaId') ?? 0),
+    tenantMiddleware: () => async (c: MockContext, next: () => Promise<void>) => {
+      const empresaId = Number(c.env?.__mockEmpresaId ?? 1);
+      c.set('empresaId', empresaId);
+      c.set('tenantContext', {
+        empresaId,
+        empresaCodigo: `emp-${empresaId}`,
+        empresaNome: `Empresa ${empresaId}`,
+        role: 'manager',
+        plano: 'PRO',
+        permissions: ['read', 'write'],
+      });
+      await next();
+    },
+    getTenantContext: (c: MockContext) => c.get('tenantContext'),
+    getEmpresaId: (c: MockContext) => Number(c.get('empresaId') ?? 0),
   };
 });
 
@@ -56,7 +60,9 @@ function createMatrizDb(mode: 'ok' | 'fail'): D1Database {
         return { run: async () => ({ success: true }) };
       }
 
-      if (normalized.startsWith('CREATE INDEX IF NOT EXISTS idx_matriz_treinamento_empresa_funcao')) {
+      if (
+        normalized.startsWith('CREATE INDEX IF NOT EXISTS idx_matriz_treinamento_empresa_funcao')
+      ) {
         return { run: async () => ({ success: true }) };
       }
 
@@ -64,7 +70,11 @@ function createMatrizDb(mode: 'ok' | 'fail'): D1Database {
         return { run: async () => ({ success: true }) };
       }
 
-      if (normalized.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS idx_matriz_treinamento_unique_ativo')) {
+      if (
+        normalized.startsWith(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_matriz_treinamento_unique_ativo',
+        )
+      ) {
         return { run: async () => ({ success: true }) };
       }
 
@@ -74,7 +84,10 @@ function createMatrizDb(mode: 'ok' | 'fail'): D1Database {
         };
       }
 
-      if (normalized.includes('FROM funcionarios') && normalized.includes('WHERE id = ? AND empresa_id = ?')) {
+      if (
+        normalized.includes('FROM funcionarios') &&
+        normalized.includes('WHERE id = ? AND empresa_id = ?')
+      ) {
         return {
           bind: () => ({
             first: async () => ({
@@ -110,7 +123,7 @@ describe('fail-open hardening', () => {
     });
   });
 
-  it('retorna erro explícito quando requisitos da matriz falham internamente', async () => {
+  it('sanitiza falha interna ao carregar requisitos da matriz', async () => {
     const response = await app.fetch(
       new Request('http://localhost/api/matriz-treinamento/requisitos/10', { method: 'GET' }),
       { DB: createMatrizDb('fail') } as Env,
@@ -120,12 +133,13 @@ describe('fail-open hardening', () => {
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toMatchObject({
       success: false,
-      error: 'MATRIZ_TREINAMENTO_FAILED',
-      message: 'Erro interno ao carregar requisitos da matriz de treinamento',
+      error: 'Erro interno do servidor',
+      code: 'INTERNAL_ERROR',
+      requestId: expect.any(String),
     });
   });
 
-  it('retorna indisponibilidade explícita para endpoint legado /api/templates', async () => {
+  it('retorna indisponibilidade pública para endpoint legado /api/templates', async () => {
     const response = await app.fetch(
       new Request('http://localhost/api/templates', { method: 'GET' }),
       { DB: createMatrizDb('ok') } as Env,
@@ -141,7 +155,9 @@ describe('fail-open hardening', () => {
     };
     expect(payload).toMatchObject({
       success: false,
-      error: 'TEMPLATES_ENDPOINT_UNAVAILABLE',
+      error: 'Serviço temporariamente indisponível',
+      code: 'SERVICE_UNAVAILABLE',
+      requestId: expect.any(String),
     });
     expect(payload.success).not.toBe(true);
     expect(payload.data).toBeUndefined();

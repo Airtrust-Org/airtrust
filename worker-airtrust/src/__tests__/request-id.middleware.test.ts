@@ -85,4 +85,99 @@ describe('requestIdMiddleware', () => {
     expect(errorLog.requestId).toBe(generatedId);
     expect(errorLog.requestId).not.toBe('malicious/request');
   });
+
+  it('sanitizes legacy JSON 5xx responses outside production', async () => {
+    const app = new Hono<{
+      Bindings: { ENVIRONMENT?: string };
+      Variables: { requestId: string };
+    }>();
+    app.use('*', requestIdMiddleware());
+    app.get('/legacy-500', (c) =>
+      c.json(
+        {
+          success: false,
+          error: 'D1_ERROR: no such table funcionarios',
+          code: 'LEGACY_FAILURE',
+          detalhes: ['secret-provider-message'],
+        },
+        500,
+      ),
+    );
+
+    const response = await app.request(
+      '/legacy-500',
+      { headers: { 'X-Request-ID': 'test-legacy-500' } },
+      { ENVIRONMENT: 'test' },
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      success: false,
+      error: 'Erro interno do servidor',
+      code: 'LEGACY_FAILURE',
+      requestId: 'test-legacy-500',
+    });
+  });
+
+  it('sanitizes provider failures in NO_CHANNEL_SENT while preserving safe hints', async () => {
+    const app = new Hono<{
+      Bindings: { ENVIRONMENT?: string };
+      Variables: { requestId: string };
+    }>();
+    app.use('*', requestIdMiddleware());
+    app.get('/notification-failure', (c) =>
+      c.json(
+        {
+          success: false,
+          error: 'Nenhum envio foi concluído.',
+          code: 'NO_CHANNEL_SENT',
+          detalhes: ['BREVO_ERROR: 401 - invalid api key'],
+          data: {
+            alertas: [
+              {
+                tipo: 'email',
+                funcionarioNome: 'Pessoa A',
+                status: 'erro',
+                erro: 'BREVO_ERROR: 401 - invalid api key',
+              },
+              {
+                tipo: 'whatsapp',
+                funcionarioNome: 'Pessoa B',
+                status: 'erro',
+                erro: 'TWILIO_ERROR: auth token rejected',
+              },
+              {
+                tipo: 'email',
+                funcionarioNome: 'Pessoa C',
+                status: 'erro',
+                erro: 'E-mail não cadastrado para o destinatário.',
+              },
+            ],
+          },
+        },
+        400,
+      ),
+    );
+
+    const response = await app.request(
+      '/notification-failure',
+      { headers: { 'X-Request-ID': 'notification-400' } },
+      { ENVIRONMENT: 'staging' },
+    );
+    const payload = (await response.json()) as {
+      requestId: string;
+      detalhes: string[];
+      data: { alertas: Array<{ erro: string }> };
+    };
+
+    expect(response.status).toBe(400);
+    expect(payload.requestId).toBe('notification-400');
+    expect(payload.data.alertas.map((alerta) => alerta.erro)).toEqual([
+      'Falha ao enviar e-mail',
+      'Falha ao enviar WhatsApp',
+      'E-mail não cadastrado para o destinatário.',
+    ]);
+    expect(JSON.stringify(payload)).not.toContain('invalid api key');
+    expect(JSON.stringify(payload)).not.toContain('auth token rejected');
+  });
 });

@@ -116,17 +116,22 @@ describe('production server error response sanitizer', () => {
     });
   });
 
-  it('does not rewrite validation errors or non-production diagnostics', async () => {
+  it('preserves validation errors and sanitizes non-production server diagnostics', async () => {
     const app = buildApp();
 
     const badRequest = await app.request('/bad-request', {}, { ENVIRONMENT: 'production' });
     expect(await badRequest.json()).toEqual({ success: false, error: 'Campo obrigatório' });
 
-    const developmentError = await app.request('/direct-500', {}, { ENVIRONMENT: 'development' });
+    const developmentError = await app.request(
+      '/direct-500',
+      { headers: { 'X-Request-ID': 'req-development-500' } },
+      { ENVIRONMENT: 'development' },
+    );
     expect(await developmentError.json()).toEqual({
       success: false,
-      error: 'D1_ERROR: UNIQUE constraint failed: usuarios.email',
-      details: 'stack and internal details',
+      error: 'Erro interno do servidor',
+      code: 'INTERNAL_ERROR',
+      requestId: 'req-development-500',
     });
   });
 });
