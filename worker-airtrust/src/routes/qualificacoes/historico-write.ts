@@ -54,7 +54,11 @@ const requireOperacoesHistorico = (
   action: 'create' | 'update' | 'delete' | 'reissue' | 'complete' | 'cancel',
 ) =>
   action === 'create'
-    ? requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'qualificacao_historico' })
+    ? requireOperationalAccess({
+        domain: 'OPERACOES',
+        action,
+        resourceType: 'qualificacao_historico',
+      })
     : requireOperationalAccess({ action, resourceType: 'qualificacao_historico' });
 
 const writeRouter = new Hono<{ Bindings: Env }>();
@@ -326,7 +330,8 @@ writeRouter.post(
       // 2. Calcular nova data de vencimento
       // Prioridade: hist_validade_meses > tipo_validade
       // NULL = sem vencimento (não fabricar 12 meses)
-      let validadeMeses = original.hist_validade_meses || original.tipo_validade || null;
+      let validadeMeses = original.hist_validade_meses ?? original.tipo_validade ?? null;
+      if (validadeMeses === 0) validadeMeses = null;
 
       // Regra CMA semestral: pilotos com mais de 60 anos têm validade de 6 meses
       const codigoCMACheck =
@@ -347,13 +352,14 @@ writeRouter.post(
         }
       }
 
-      const renovacaoResolvida = validadeMeses !== null
-        ? resolveParametrosRenovacaoQualificacao({
-            codigoQualificacao: codigoOriginal,
-            dataConclusao: novaDataRealizacao,
-            validadeMeses,
-          })
-        : null;
+      const renovacaoResolvida =
+        validadeMeses !== null
+          ? resolveParametrosRenovacaoQualificacao({
+              codigoQualificacao: codigoOriginal,
+              dataConclusao: novaDataRealizacao,
+              validadeMeses,
+            })
+          : null;
       const novaDataVencimento = renovacaoResolvida?.dataVencimento ?? null;
       const tipoTreinamento = renovacaoResolvida?.tipoTreinamento ?? 'RECORRENTE';
       if (renovacaoResolvida) {
@@ -620,7 +626,7 @@ writeRouter.post(
 
     const qualificacao_id = tipo.id;
     const categoria = tipo.categoria;
-    const validade_meses = tipo.validade || 12;
+    const validade_meses = tipo.validade === 0 ? null : tipo.validade;
     const tipoTreinamento =
       tipo.validade === 6 ? 'SEMESTRAL' : normalizeTipoTreinamento(tipo_treinamento) || 'INICIAL';
     const cargaHorariaEfetiva = resolveCargaHorariaByTipo({
@@ -876,7 +882,9 @@ Alternativamente, edite ou exclua o registro existente antes de criar um novo.`,
           createdHistoricoId,
           tenantCtx.empresaId,
         );
-        console.log(`[auto-cert/create] historicoId=${createdHistoricoId} state=${certResult.state}`);
+        console.log(
+          `[auto-cert/create] historicoId=${createdHistoricoId} state=${certResult.state}`,
+        );
       } catch (certErr) {
         console.error(`[auto-cert/create] ERROR historicoId=${createdHistoricoId}:`, certErr);
       }
