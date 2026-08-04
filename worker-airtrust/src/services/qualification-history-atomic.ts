@@ -9,11 +9,7 @@
  */
 
 export type QualificationTrainingType =
-  | 'INICIAL'
-  | 'RECORRENTE'
-  | 'SEMESTRAL'
-  | 'UPGRADE'
-  | 'ESPECIFICO';
+  'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO';
 
 export type QualificationMutationAction = 'created' | 'updated' | 'idempotent';
 
@@ -96,7 +92,9 @@ type HistoryRow = {
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function normalizeCode(value: unknown): string {
-  return String(value || '').trim().toUpperCase();
+  return String(value || '')
+    .trim()
+    .toUpperCase();
 }
 
 function parseIsoDate(value: string, fieldName: string): Date {
@@ -178,11 +176,7 @@ export function calculateQualificationExpiry(params: {
 
   if (params.endOfMonth) {
     return new Date(
-      Date.UTC(
-        completion.getUTCFullYear(),
-        completion.getUTCMonth() + validityMonths + 1,
-        0,
-      ),
+      Date.UTC(completion.getUTCFullYear(), completion.getUTCMonth() + validityMonths + 1, 0),
     )
       .toISOString()
       .slice(0, 10);
@@ -203,6 +197,16 @@ function assertPositiveInteger(value: number, fieldName: string): void {
   }
 }
 
+function assertBatchSucceeded(results: readonly { success?: boolean }[], operation: string): void {
+  if (results.some((result) => result.success !== true)) {
+    throw new QualificationAtomicError(
+      'QUALIFICATION_BATCH_FAILED',
+      500,
+      `${operation} não foi concluída atomicamente`,
+    );
+  }
+}
+
 function validateCommonInput(input: {
   empresaId: number;
   funcionarioId?: number;
@@ -213,7 +217,8 @@ function validateCommonInput(input: {
   validityMonths: number | null;
 }): void {
   assertPositiveInteger(input.empresaId, 'empresa_id');
-  if (input.funcionarioId !== undefined) assertPositiveInteger(input.funcionarioId, 'funcionario_id');
+  if (input.funcionarioId !== undefined)
+    assertPositiveInteger(input.funcionarioId, 'funcionario_id');
   if (input.qualificationId !== undefined && input.qualificationId !== null) {
     assertPositiveInteger(input.qualificationId, 'qualificacao_id');
   }
@@ -519,12 +524,7 @@ async function findExactHistory(
         ORDER BY id DESC
         LIMIT 1`,
     )
-    .bind(
-      params.empresaId,
-      params.funcionarioId,
-      params.qualificationCode,
-      params.completionDate,
-    )
+    .bind(params.empresaId, params.funcionarioId, params.qualificationCode, params.completionDate)
     .first<HistoryRow>();
 }
 
@@ -550,12 +550,7 @@ async function findMostRecentRenewedPredecessor(
         ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
         LIMIT 1`,
     )
-    .bind(
-      params.empresaId,
-      params.funcionarioId,
-      params.qualificationCode,
-      params.currentId,
-    )
+    .bind(params.empresaId, params.funcionarioId, params.qualificationCode, params.currentId)
     .first<{ id: number }>();
 
   return row?.id ?? null;
@@ -699,10 +694,10 @@ export async function createQualificationHistoryAtomic(
   }
 
   const results = await db.batch(statements);
+  assertBatchSucceeded(results, 'A criação da qualificação');
   const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;
   const updated =
-    plannedUpdateIndex !== null &&
-    Number(results[plannedUpdateIndex]?.meta?.changes || 0) > 0;
+    plannedUpdateIndex !== null && Number(results[plannedUpdateIndex]?.meta?.changes || 0) > 0;
 
   const row = await findExactHistory(db, {
     empresaId: input.empresaId,
@@ -858,12 +853,7 @@ export async function renewQualificationHistoryAtomic(
                  AND UPPER(COALESCE(successor.status, '')) NOT IN ('CANCELADA', 'CANCELADO')
             )`,
       )
-      .bind(
-        input.sourceHistoryId,
-        input.empresaId,
-        input.empresaId,
-        input.sourceHistoryId,
-      ),
+      .bind(input.sourceHistoryId, input.empresaId, input.empresaId, input.sourceHistoryId),
   );
 
   const source = await db
@@ -898,6 +888,7 @@ export async function renewQualificationHistoryAtomic(
   }
 
   const results = await db.batch(statements);
+  assertBatchSucceeded(results, 'A renovação da qualificação');
   const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;
 
   const successor = await db

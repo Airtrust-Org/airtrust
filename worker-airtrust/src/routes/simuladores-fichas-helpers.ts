@@ -68,10 +68,7 @@ function normalizeTipoCurricular(value?: string | null): string {
  * G1-SEM is a curricular completion, not a side effect of a six-month FAP.
  * Keep this intentionally strict: an unresolved curricular type must fail closed.
  */
-export function isTipoCurricularSemestral(
-  codigo?: string | null,
-  nome?: string | null,
-): boolean {
+export function isTipoCurricularSemestral(codigo?: string | null, nome?: string | null): boolean {
   const normalizedCodigo = normalizeTipoCurricular(codigo);
   const normalizedNome = normalizeTipoCurricular(nome);
   if (normalizedCodigo) {
@@ -178,9 +175,7 @@ export async function gerarQualificacaoDaFicha(
       qualificacaoId: tipoQualifId,
       qualificacaoCodigo: qualifCodigo,
       dataConclusao,
-      // Runtime D1 accepts NULL; the legacy helper type remains string until
-      // its broader non-manual flow is migrated to the atomic contract.
-      dataVencimento: dataVencimentoPrincipal as string,
+      dataVencimento: dataVencimentoPrincipal,
       observacoes: `Gerado da ficha #${fid}`,
       empresaId: alunoEmpresaId,
       status: qualificacaoStatus,
@@ -276,7 +271,7 @@ export async function gerarQualificacaoDaFicha(
         qualificacaoId: check.qualificacao_tipo_id,
         qualificacaoCodigo: check.qt_codigo,
         dataConclusao,
-        dataVencimento: dataVencimentoFap as string,
+        dataVencimento: dataVencimentoFap,
         observacoes: `FAP gerada da ficha #${fid} (check aprovado)`,
         empresaId: alunoEmpresaId,
         status: qualificacaoStatus,

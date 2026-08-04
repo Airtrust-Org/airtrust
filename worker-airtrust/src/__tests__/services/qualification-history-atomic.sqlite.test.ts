@@ -11,10 +11,7 @@ import {
   type RequiredQualificationRelation,
 } from '../../services/qualification-history-atomic';
 import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../services/operational-domain-access';
-import {
-  insertHistory,
-  SqliteD1Database,
-} from '../helpers/qualification-history-sqlite-d1';
+import { insertHistory, SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 
 function createInput(
   overrides: Partial<AtomicQualificationCreateInput> = {},
@@ -143,9 +140,7 @@ describe('qualification history atomic core with real SQLite', () => {
         }),
       );
       const row = fixture.database
-        .prepare(
-          'SELECT validade_meses, data_vencimento FROM qualificacoes_historico WHERE id = ?',
-        )
+        .prepare('SELECT validade_meses, data_vencimento FROM qualificacoes_historico WHERE id = ?')
         .get(result.id) as {
         validade_meses: number | null;
         data_vencimento: string | null;
@@ -249,9 +244,9 @@ describe('qualification history atomic core with real SQLite', () => {
       END;
     `);
 
-    await expect(
-      renewQualificationHistoryAtomic(db, renewInput(sourceId)),
-    ).rejects.toThrow('forced successor failure');
+    await expect(renewQualificationHistoryAtomic(db, renewInput(sourceId))).rejects.toThrow(
+      'forced successor failure',
+    );
 
     expect(
       fixture.database
@@ -260,9 +255,7 @@ describe('qualification history atomic core with real SQLite', () => {
     ).toEqual({ renovada: 0, status: 'CONCLUIDA' });
     expect(
       fixture.database
-        .prepare(
-          'SELECT COUNT(*) AS total FROM qualificacoes_historico WHERE renovacao_de = ?',
-        )
+        .prepare('SELECT COUNT(*) AS total FROM qualificacoes_historico WHERE renovacao_de = ?')
         .get(sourceId),
     ).toEqual({ total: 0 });
   });
@@ -299,9 +292,7 @@ describe('qualification history atomic core with real SQLite', () => {
     ).toEqual({ renovada: 0, status: 'CONCLUIDA' });
     expect(
       fixture.database
-        .prepare(
-          'SELECT COUNT(*) AS total FROM qualificacoes_historico WHERE renovacao_de = ?',
-        )
+        .prepare('SELECT COUNT(*) AS total FROM qualificacoes_historico WHERE renovacao_de = ?')
         .get(sourceId),
     ).toEqual({ total: 0 });
   });
@@ -323,9 +314,7 @@ describe('qualification history atomic core with real SQLite', () => {
     });
     expect(
       fixture.database
-        .prepare(
-          'SELECT COUNT(*) AS total FROM qualificacoes_historico WHERE renovacao_de = ?',
-        )
+        .prepare('SELECT COUNT(*) AS total FROM qualificacoes_historico WHERE renovacao_de = ?')
         .get(sourceId),
     ).toEqual({ total: 1 });
   });
@@ -392,9 +381,7 @@ describe('qualification history atomic core with real SQLite', () => {
     expect(core.action).toBe('created');
     expect(pending).toEqual(['certificate']);
     expect(
-      fixture.database
-        .prepare('SELECT id FROM qualificacoes_historico WHERE id = ?')
-        .get(core.id),
+      fixture.database.prepare('SELECT id FROM qualificacoes_historico WHERE id = ?').get(core.id),
     ).toBeTruthy();
   });
 });

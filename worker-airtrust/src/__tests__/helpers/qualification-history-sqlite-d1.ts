@@ -45,9 +45,8 @@ class SqliteD1PreparedStatement {
   }
 
   async first<T = Record<string, unknown>>(column?: string): Promise<T | null> {
-    const row = this.statement().get(
-      ...this.values.map(normalizeSqliteValue),
-    ) as Record<string, unknown> | undefined;
+    const row = this.statement().get(...this.values.map(normalizeSqliteValue)) as
+      Record<string, unknown> | undefined;
     if (!row) return null;
     if (column) return (row[column] as T) ?? null;
     return row as T;

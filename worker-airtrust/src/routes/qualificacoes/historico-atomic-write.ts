@@ -92,7 +92,9 @@ const renewSchema = z
   });
 
 function normalizeCode(value: unknown): string {
-  return String(value || '').trim().toUpperCase();
+  return String(value || '')
+    .trim()
+    .toUpperCase();
 }
 
 function normalizeWritableStatus(value: unknown): 'PLANEJADA' | 'CONCLUIDA' | null {
@@ -344,11 +346,7 @@ async function processCreateComplementaryEffects(params: {
 
   if (params.status === 'CONCLUIDA') {
     effects.certificate = () =>
-      ensureCertificateForQualification(
-        params.c.env,
-        params.historyId,
-        tenantCtx.empresaId,
-      );
+      ensureCertificateForQualification(params.c.env, params.historyId, tenantCtx.empresaId);
   }
 
   const pending = await settleQualificationComplementaryEffects(effects);
@@ -559,8 +557,7 @@ router.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     return c.json(
       {
         success: true,
-        operation_state:
-          pendingEffects.length > 0 ? 'core_completed_pending' : 'completed',
+        operation_state: pendingEffects.length > 0 ? 'core_completed_pending' : 'completed',
         message:
           core.action === 'idempotent'
             ? 'Qualificação já existia; estado confirmado'
@@ -657,11 +654,7 @@ router.post('/:id/renovar', auth(), requireRole('admin', 'manager'), async (c) =
       );
     }
 
-    const type = await loadQualificationTypeForRenewal(
-      c.env.DB,
-      tenantCtx.empresaId,
-      source,
-    );
+    const type = await loadQualificationTypeForRenewal(c.env.DB, tenantCtx.empresaId, source);
     if (!type) {
       return c.json(
         {
@@ -714,11 +707,7 @@ router.post('/:id/renovar', auth(), requireRole('admin', 'manager'), async (c) =
     });
     const requiredRelation =
       qualificationCode === 'G1'
-        ? await buildRequiredG1SemRelation(
-            c.env.DB,
-            tenantCtx.empresaId,
-            completionDate,
-          )
+        ? await buildRequiredG1SemRelation(c.env.DB, tenantCtx.empresaId, completionDate)
         : null;
 
     const core = await renewQualificationHistoryAtomic(c.env.DB, {
@@ -753,8 +742,7 @@ router.post('/:id/renovar', auth(), requireRole('admin', 'manager'), async (c) =
 
     return c.json({
       success: true,
-      operation_state:
-        pendingEffects.length > 0 ? 'core_completed_pending' : 'completed',
+      operation_state: pendingEffects.length > 0 ? 'core_completed_pending' : 'completed',
       message:
         core.action === 'idempotent'
           ? 'Qualificação já havia sido renovada; estado confirmado'
