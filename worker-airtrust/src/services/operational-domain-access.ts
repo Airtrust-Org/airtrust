@@ -13,13 +13,18 @@ import * as core from './operational-domain-access-core';
 
 export * from './operational-domain-access-core';
 
-type RequireOperationalAccessOptions = Parameters<typeof core.requireOperationalAccess>[0];
+type RequireOperationalAccessOptions = Parameters<
+  typeof core.requireOperationalAccess
+>[0];
 
 function isTenantAdminQualificationCatalogRequest(
   options: RequireOperationalAccessOptions,
   userRole: unknown,
 ): boolean {
-  return options.resourceType === 'qualificacao_tipo' && core.normalizeTenantRole(userRole) === 'admin';
+  return (
+    options.resourceType === 'qualificacao_tipo' &&
+    core.normalizeTenantRole(userRole) === 'admin'
+  );
 }
 
 export function requireOperationalAccess(
