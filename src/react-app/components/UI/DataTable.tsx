@@ -224,19 +224,21 @@ export function DataTable({
                       {onView && (
                         <button
                           onClick={() => onView(item[idKey])}
-                          className="text-primary hover:text-primary transition-colors"
+                          className="text-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded p-1"
                           title="Visualizar"
+                          aria-label="Visualizar"
                         >
-                          <Eye className={iconWrappers.sm} />
+                          <Eye className={iconWrappers.sm} aria-hidden="true" />
                         </button>
                       )}
                       {onEdit && (
                         <button
                           onClick={() => onEdit(item[idKey])}
-                          className="text-primary-600 hover:text-primary-800 transition-colors"
+                          className="text-primary-600 hover:text-primary-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded p-1"
                           title="Editar"
+                          aria-label="Editar"
                         >
-                          <Edit2 className={iconWrappers.sm} />
+                          <Edit2 className={iconWrappers.sm} aria-hidden="true" />
                         </button>
                       )}
                       {onDelete && (
@@ -246,10 +248,11 @@ export function DataTable({
                               onDelete(item[idKey]);
                             }
                           }}
-                          className="text-red-600 hover:text-red-800 transition-colors"
+                          className="text-red-600 hover:text-red-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 rounded p-1"
                           title="Deletar"
+                          aria-label="Deletar"
                         >
-                          <Trash2 className={iconWrappers.sm} />
+                          <Trash2 className={iconWrappers.sm} aria-hidden="true" />
                         </button>
                       )}
                     </div>

@@ -404,10 +404,11 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
           {enableExport && (
             <button
               onClick={() => onExport?.(paginatedData, 'csv')}
-              className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-neutral-100 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
               title="Exportar CSV"
+              aria-label="Exportar CSV"
             >
-              <Download className="w-5 h-5 text-neutral-600" />
+              <Download className="w-5 h-5 text-neutral-600" aria-hidden="true" />
             </button>
           )}
 
@@ -416,10 +417,11 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
             <div className="relative">
               <button
                 onClick={() => setShowColumnMenu(!showColumnMenu)}
-                className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                className="p-2 hover:bg-neutral-100 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                 title="Configurar colunas"
+                aria-label="Configurar colunas"
               >
-                <Settings className="w-5 h-5 text-neutral-600" />
+                <Settings className="w-5 h-5 text-neutral-600" aria-hidden="true" />
               </button>
 
               {showColumnMenu && (
@@ -554,7 +556,7 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
                       >
                         {col.render
                           ? col.render(item[col.key], item, index)
-                          : (item[col.key] as React.ReactNode) ?? '-'}
+                          : ((item[col.key] as React.ReactNode) ?? '-')}
                       </td>
                     ))}
                   </tr>
@@ -579,9 +581,11 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
                 onPageChange?.(Math.max(1, currentPage - 1));
               }}
               disabled={currentPage === 1}
-              className="p-2 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+              className="p-2 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+              title="Página anterior"
+              aria-label="Página anterior"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-5 h-5" aria-hidden="true" />
             </button>
 
             <button
@@ -590,9 +594,11 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
                 onPageChange?.(Math.min(totalPages, currentPage + 1));
               }}
               disabled={currentPage === totalPages}
-              className="p-2 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+              className="p-2 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+              title="Próxima página"
+              aria-label="Próxima página"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
         </div>
