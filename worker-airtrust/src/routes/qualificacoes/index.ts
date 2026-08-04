@@ -17,6 +17,7 @@ import type { Env } from '../../types';
 
 import tiposRouter from './tipos';
 import historicoRouter from './historico';
+import historicoAtomicWriteRouter from './historico-atomic-write';
 import estatisticasRouter from './estatisticas';
 import atribuicaoRouter from './atribuicao';
 import formatosRouter from './formatos';
@@ -25,6 +26,9 @@ const router = new Hono<{ Bindings: Env }>();
 
 // ===== MONTAR SUB-ROTAS =====
 router.route('/tipos', tiposRouter);
+// Matching POST handlers terminate here; reads/edits/deletes continue to
+// the established historico router mounted immediately afterwards.
+router.route('/historico', historicoAtomicWriteRouter);
 router.route('/historico', historicoRouter);
 router.route('/stats', estatisticasRouter);
 router.route('/atribuir', atribuicaoRouter);
