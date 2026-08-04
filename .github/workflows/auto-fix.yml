@@ -2,9 +2,6 @@ name: Auto-fix ESLint & Prettier on PR
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - fix/qualificacoes-atomicidade-confiabilidade-20260804
 
 jobs:
   autofix:
@@ -16,128 +13,32 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 18
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Apply final qualification atomicity delta
+      - name: Run ESLint fix
         run: |
-          python - <<'PY'
-          from pathlib import Path
+          npx eslint "./src/**/*.{js,jsx,ts,tsx}" --fix || true
 
-          service_path = Path('worker-airtrust/src/services/qualification-history-atomic.ts')
-          service = service_path.read_text()
-          if 'function assertBatchSucceeded(' not in service:
-              marker = 'function validateCommonInput(input: {'
-              helper = """function assertBatchSucceeded(
-            results: readonly { success?: boolean }[],
-            operation: string,
-          ): void {
-            if (results.some((result) => result.success !== true)) {
-              throw new QualificationAtomicError(
-                'QUALIFICATION_BATCH_FAILED',
-                500,
-                `${operation} não foi concluída atomicamente`,
-              );
-            }
-          }
-
-          """
-              if marker not in service:
-                  raise SystemExit('validateCommonInput marker not found')
-              service = service.replace(marker, helper + marker, 1)
-
-          batch_marker = """  const results = await db.batch(statements);
-            const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;"""
-          if "assertBatchSucceeded(results, 'A criação da qualificação')" not in service:
-              if batch_marker not in service:
-                  raise SystemExit('create batch marker not found')
-              service = service.replace(
-                  batch_marker,
-                  """  const results = await db.batch(statements);
-            assertBatchSucceeded(results, 'A criação da qualificação');
-            const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;""",
-                  1,
-              )
-          if "assertBatchSucceeded(results, 'A renovação da qualificação')" not in service:
-              if batch_marker not in service:
-                  raise SystemExit('renew batch marker not found')
-              service = service.replace(
-                  batch_marker,
-                  """  const results = await db.batch(statements);
-            assertBatchSucceeded(results, 'A renovação da qualificação');
-            const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;""",
-                  1,
-              )
-          service_path.write_text(service)
-
-          ficha_service_path = Path('worker-airtrust/src/services/qualificacoes-historico-ficha.ts')
-          ficha_service = ficha_service_path.read_text()
-          ficha_service = ficha_service.replace(
-              '  dataVencimento: string;\n',
-              '  dataVencimento: string | null;\n',
-              1,
-          )
-          ficha_service_path.write_text(ficha_service)
-
-          helper_path = Path('worker-airtrust/src/routes/simuladores-fichas-helpers.ts')
-          helper = helper_path.read_text()
-          helper = helper.replace(
-              """      // Runtime D1 accepts NULL; the legacy helper type remains string until
-                // its broader non-manual flow is migrated to the atomic contract.
-                dataVencimento: dataVencimentoPrincipal as string,""",
-              '      dataVencimento: dataVencimentoPrincipal,',
-              1,
-          )
-          helper = helper.replace(
-              '        dataVencimento: dataVencimentoFap as string,',
-              '        dataVencimento: dataVencimentoFap,',
-              1,
-          )
-          helper_path.write_text(helper)
-          PY
-
-      - name: Format scoped files
+      - name: Run Prettier write
         run: |
-          npx prettier --write \
-            worker-airtrust/src/__tests__/helpers/qualification-history-sqlite-d1.ts \
-            worker-airtrust/src/__tests__/services/qualification-history-atomic.sqlite.test.ts \
-            worker-airtrust/src/routes/qualificacoes/historico-atomic-write.ts \
-            worker-airtrust/src/routes/simuladores-fichas-helpers.ts \
-            worker-airtrust/src/services/qualification-history-atomic.ts \
-            worker-airtrust/src/services/qualificacoes-historico-ficha.ts
-
-      - name: Lint scoped files
-        run: |
-          npx eslint \
-            worker-airtrust/src/__tests__/helpers/qualification-history-sqlite-d1.ts \
-            worker-airtrust/src/__tests__/services/qualification-history-atomic.sqlite.test.ts \
-            worker-airtrust/src/routes/qualificacoes/historico-atomic-write.ts \
-            worker-airtrust/src/routes/simuladores-fichas-helpers.ts \
-            worker-airtrust/src/services/qualification-history-atomic.ts \
-            worker-airtrust/src/services/qualificacoes-historico-ficha.ts
+          npx prettier --write "src/**/*.{js,jsx,ts,tsx,css,md,json}" "worker-airtrust/src/**/*.{js,ts,json}" || true
 
       - name: Commit and push fixes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- \
-            worker-airtrust/src/__tests__/helpers/qualification-history-sqlite-d1.ts \
-            worker-airtrust/src/__tests__/services/qualification-history-atomic.sqlite.test.ts \
-            worker-airtrust/src/routes/qualificacoes/historico-atomic-write.ts \
-            worker-airtrust/src/routes/simuladores-fichas-helpers.ts \
-            worker-airtrust/src/services/qualification-history-atomic.ts \
-            worker-airtrust/src/services/qualificacoes-historico-ficha.ts
+          git add -- src worker-airtrust/src
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "fix(qualificacoes): validate batch results and nullable expiry [skip ci]"
-            git push origin HEAD:${{ github.head_ref || github.ref_name }}
+            git commit -m "chore: apply eslint --fix and prettier formatting [skip ci]" || true
+            git push origin HEAD:${{ github.head_ref }}
           fi
