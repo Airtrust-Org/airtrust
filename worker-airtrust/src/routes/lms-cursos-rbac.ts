@@ -27,6 +27,21 @@ function getContextValue(c: Context<{ Bindings: Env }>, key: string): unknown {
   return (c.get as (k: string) => unknown)(key);
 }
 
+async function hasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
+  try {
+    const info = await db.prepare(`PRAGMA table_info(${table})`).bind().all<{ name: string }>();
+    return (info.results || []).some((row) => row?.name === column);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Curso domain-agnostic mitigation: a row with dominio_codigo NULL is
+ * accessible without falling into the operational-domain guard. Feature-
+ * detects the column (migration 0452) so a missing column never causes a
+ * runtime 500 — cursos without the column are simply never domain-agnostic.
+ */
 async function isDomainAgnosticLmsCurso(params: {
   db: D1Database;
   empresaId: number;
@@ -36,6 +51,9 @@ async function isDomainAgnosticLmsCurso(params: {
   const userRole = getContextValue(params.c, 'userRole');
   const normalizedRole = normalizeTenantRole(userRole);
   if (normalizedRole !== 'admin' && normalizedRole !== 'manager') return false;
+
+  const hasDominioCodigo = await hasColumn(params.db, 'lms_cursos', 'dominio_codigo');
+  if (!hasDominioCodigo) return false;
 
   const curso = await params.db
     .prepare(

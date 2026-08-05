@@ -137,4 +137,39 @@ describe('LMS cursos domínio-agnósticos', () => {
       code: 'RESOURCE_DOMAIN_UNCLASSIFIED',
     });
   });
+
+  it('não quebra (500) quando a coluna dominio_codigo não existe em lms_cursos', async () => {
+    // Simula um DB onde a migration 0452 ainda não foi aplicada e a
+    // coluna dominio_codigo não aparece no PRAGMA table_info.
+    // isDomainAgnosticLmsCurso deve retornar false sem lançar erro SQL.
+    const dbWithoutColumn = {
+      prepare: () => ({
+        bind: () => ({
+          all: async () => ({
+            results: [{ name: 'id' }, { name: 'empresa_id' }],
+          }),
+          first: async () => null,
+        }),
+      }),
+    } as unknown as D1Database;
+
+    // Deve passar sem erro — o middleware redireciona para o guard normal
+    const app = new Hono<{ Bindings: Env }>();
+    app.onError(errorHandler);
+    app.use('*', async (ctx, next) => {
+      ctx.set('empresaId' as never, 2 as never);
+      ctx.set('userId' as never, 100 as never);
+      ctx.set('userRole' as never, 'gestor' as never);
+      await next();
+    });
+    // requireOperacoesCurso chama isDomainAgnosticLmsCurso internamente
+    app.put('/cursos/:id', requireOperacoesCurso('update'), () => Response.json({ ok: true }));
+
+    const response = await app.request('http://localhost/cursos/502', { method: 'PUT' }, {
+      DB: dbWithoutColumn,
+    } as unknown as Env);
+
+    // O guard operacional falha (não tem dados), mas não é 500 de SQL error
+    expect(response.status).not.toBe(500);
+  });
 });
