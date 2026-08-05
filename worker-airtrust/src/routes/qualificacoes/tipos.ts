@@ -476,7 +476,7 @@ async function resolveCategoriaCanonica(
       .prepare(
         `SELECT id, nome, dominio_codigo
            FROM qualificacoes_categorias
-          WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
           LIMIT 1`,
       )
       .bind(categoriaId, empresaId)
