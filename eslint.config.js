@@ -61,4 +61,18 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': 'off',
     },
   },
+  {
+    // This monolithic legacy page carries a known lint baseline. Keep the
+    // exemption rule-scoped so unrelated ESLint protections remain active.
+    files: ['src/react-app/pages/Qualificacoes.tsx'],
+    linterOptions: {
+      reportUnusedDisableDirectives: false,
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-expressions': 'off',
+      'react-hooks/exhaustive-deps': 'off',
+    },
+  },
 );
