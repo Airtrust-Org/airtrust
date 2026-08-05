@@ -2,9 +2,6 @@ name: Auto-fix ESLint & Prettier on PR
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - fix/qualificacoes-atomicidade-confiabilidade-20260804
 
 jobs:
   autofix:
@@ -16,57 +13,32 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 18
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate employee before qualification upsert
+      - name: Run ESLint fix
         run: |
-          python - <<'PY'
-          from pathlib import Path
+          npx eslint "./src/**/*.{js,jsx,ts,tsx}" --fix || true
 
-          path = Path('worker-airtrust/src/routes/simuladores-fichas-helpers.ts')
-          source = path.read_text()
-          marker = """  if (f.aprovado !== 1) throw new Error('Precisa estar aprovado');
+      - name: Run Prettier write
+        run: |
+          npx prettier --write "src/**/*.{js,jsx,ts,tsx,css,md,json}" "worker-airtrust/src/**/*.{js,ts,json}" || true
 
-          """
-          replacement = """  if (f.aprovado !== 1) throw new Error('Precisa estar aprovado');
-
-            const colaboradorId = f.colaborador_id_aluno;
-            if (!colaboradorId) {
-              throw new Error('Ficha sem colaborador válido para gerar qualificação');
-            }
-
-          """
-          if 'const colaboradorId = f.colaborador_id_aluno;' not in source:
-              if marker not in source:
-                  raise SystemExit('employee validation marker not found')
-              source = source.replace(marker, replacement, 1)
-          source = source.replace('funcionarioId: f.colaborador_id_aluno,', 'funcionarioId: colaboradorId,')
-          path.write_text(source)
-          PY
-
-      - name: Format scoped file
-        run: npx prettier --write worker-airtrust/src/routes/simuladores-fichas-helpers.ts
-
-      - name: Worker typecheck
-        run: cd worker-airtrust && npx tsc --noEmit
-
-      - name: Commit and push fix
+      - name: Commit and push fixes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- worker-airtrust/src/routes/simuladores-fichas-helpers.ts
+          git add -- src worker-airtrust/src
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "fix(qualificacoes): require ficha employee before history write [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
+            git commit -m "chore: apply eslint --fix and prettier formatting [skip ci]" || true
+            git push origin HEAD:${{ github.head_ref }}
           fi
