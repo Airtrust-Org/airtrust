@@ -7,9 +7,10 @@
  *
  * lms_cursos.dominio_codigo can be OPERACOES, MANUTENCAO, etc. per row — no
  * fixed domain. Actions on an EXISTING curso (:id present) resolve their
- * domain dynamically from that row.
+ * domain dynamically from that row. A row with dominio_codigo NULL is
+ * explicitly domain-agnostic, while tenant, role and setor guards remain.
  */
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import {
@@ -17,25 +18,69 @@ import {
   resolveOperationalAccess,
   isValidOperationalDomain,
   resolveOperationalReadScope,
-  appendOperationalReadFilter,
   assertOperationalAccess,
   normalizeTenantRole,
   type OperationalReadScope,
 } from '../services/operational-domain-access';
 
-export const requireOperacoesCurso = (
-  action: 'update' | 'delete' | 'create' | 'import' | 'publish' | 'unpublish',
-) => requireOperationalAccess({ action, resourceType: 'lms_curso' });
-
 function getContextValue(c: Context<{ Bindings: Env }>, key: string): unknown {
   return (c.get as (k: string) => unknown)(key);
 }
 
+async function isDomainAgnosticLmsCurso(params: {
+  db: D1Database;
+  empresaId: number;
+  c: Context<{ Bindings: Env }>;
+  cursoId: number;
+}): Promise<boolean> {
+  const userRole = getContextValue(params.c, 'userRole');
+  const normalizedRole = normalizeTenantRole(userRole);
+  if (normalizedRole !== 'admin' && normalizedRole !== 'manager') return false;
+
+  const curso = await params.db
+    .prepare(
+      'SELECT dominio_codigo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+    )
+    .bind(params.cursoId, params.empresaId)
+    .first<{ dominio_codigo: string | null }>();
+
+  if (!curso || curso.dominio_codigo !== null) return false;
+
+  // Preserve fail-closed handling of a missing/invalid tenant flag and the
+  // requirement for an active operational setor assignment. The exemption
+  // removes only the domain check; it does not create operational access.
+  const access = await resolveOperationalAccess({
+    db: params.db,
+    empresaId: params.empresaId,
+    userId: Number(getContextValue(params.c, 'userId') || 0),
+    userRole,
+  });
+  return !access.enabled || access.setorIds.length > 0;
+}
+
+export const requireOperacoesCurso = (
+  action: 'update' | 'delete' | 'create' | 'import' | 'publish' | 'unpublish',
+): MiddlewareHandler<{ Bindings: Env }> => {
+  const operationalGuard = requireOperationalAccess({ action, resourceType: 'lms_curso' });
+
+  return async (c, next) => {
+    const cursoId = Number(c.req.param('id')) || 0;
+    const empresaId = Number(getContextValue(c, 'empresaId') || 0);
+
+    if (cursoId > 0 && (await isDomainAgnosticLmsCurso({ db: c.env.DB, empresaId, c, cursoId }))) {
+      await next();
+      return;
+    }
+
+    await operationalGuard(c, next);
+  };
+};
+
 /**
- * Item 1 (read-side filtering): cursos são conteúdo compartilhado por
- * domínio — uma vez com RBAC ativo, um gestor só deve listar cursos
- * classificados em um dos seus domínios. No-op em modo legado / para
- * admin/instrutor/aluno.
+ * Item 1 (read-side filtering): cursos classificados são conteúdo
+ * compartilhado por domínio. Cursos com dominio_codigo NULL são
+ * domínio-agnósticos e permanecem visíveis; o filtro setorial aplicado pela
+ * rota continua restringindo quais cursos o gestor pode acessar.
  */
 export async function applyLmsCursosDomainReadFilter(params: {
   db: D1Database;
@@ -51,10 +96,18 @@ export async function applyLmsCursosDomainReadFilter(params: {
     userId: Number(getContextValue(params.c, 'userId') || 0),
     userRole: getContextValue(params.c, 'userRole'),
   });
-  const conditions: string[] = [];
-  const bindings: unknown[] = [];
-  appendOperationalReadFilter(conditions, bindings, readScope, { domainColumn: 'c.dominio_codigo' });
-  return conditions.length > 0 ? { clause: ` AND ${conditions.join(' AND ')}`, bindings } : { clause: '', bindings: [] };
+
+  if (!readScope.restricted) return { clause: '', bindings: [] };
+  if (readScope.domains.length === 0) {
+    return { clause: ' AND c.dominio_codigo IS NULL', bindings: [] };
+  }
+
+  return {
+    clause: ` AND (c.dominio_codigo IS NULL OR c.dominio_codigo IN (${readScope.domains
+      .map(() => '?')
+      .join(', ')}))`,
+    bindings: [...readScope.domains],
+  };
 }
 
 /**
@@ -70,6 +123,8 @@ export async function assertLmsCursoDetailDomainAccess(params: {
 }): Promise<void> {
   const userRole = getContextValue(params.c, 'userRole');
   if (normalizeTenantRole(userRole) !== 'manager') return;
+  if (await isDomainAgnosticLmsCurso(params)) return;
+
   await assertOperationalAccess({
     db: params.db,
     empresaId: params.empresaId,
@@ -84,10 +139,9 @@ export async function assertLmsCursoDetailDomainAccess(params: {
 /**
  * Bloqueador 4 / Item 3: resolve the domain explicitly (payload's own
  * dominio_codigo, falling back to the linked qualificação's categoria)
- * instead of leaving the create path unguarded — a gestor de Manutenção
- * creating a Manutenção-domain course must not be blocked, and a course
- * with no resolvable domain fails closed once the tenant's RBAC is active.
- * Throws ApiError (422/403) on invalid/out-of-scope domain.
+ * instead of leaving the create path unguarded. A curso with no resolvable
+ * domain is intentionally domain-agnostic; classified cursos still require
+ * a domain within the caller's operational scope.
  */
 export async function resolveAndValidateCursoDominioCodigo(params: {
   db: D1Database;
@@ -123,8 +177,8 @@ export async function resolveAndValidateCursoDominioCodigo(params: {
     if (cursoDominioCodigo !== null && !isValidOperationalDomain(cursoDominioCodigo)) {
       throw new ApiError('Domínio informado é inválido', 422);
     }
-    if (!cursoDominioCodigo || !operationalAccess.domains.includes(cursoDominioCodigo)) {
-      throw new ApiError('Curso sem domínio classificado ou fora do seu escopo — acesso negado', 403);
+    if (cursoDominioCodigo && !operationalAccess.domains.includes(cursoDominioCodigo)) {
+      throw new ApiError('Curso fora do seu escopo operacional — acesso negado', 403);
     }
   }
 
