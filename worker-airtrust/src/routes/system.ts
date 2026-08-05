@@ -25,6 +25,11 @@ function setNoCacheHeaders(c: { header: (name: string, value: string) => void })
   c.header('Cloudflare-CDN-Cache-Control', 'no-store');
 }
 
+function getFrontVersion(env: Env): string | null {
+  const value = Reflect.get(env, 'FRONT_VERSION');
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
 export function registerSystemRoutes(app: SystemApp) {
   app.get('/api/edb/capability', (c) => {
     const tenantId = getEmpresaId(c);
@@ -177,8 +182,7 @@ export function registerSystemRoutes(app: SystemApp) {
     return c.json({
       success: true,
       backend_version: metadata.version,
-      frontend_version:
-        (c.env as unknown as Record<string, string>).FRONT_VERSION || null,
+      frontend_version: getFrontVersion(c.env),
       environment: metadata.environment,
       timestamp: new Date().toISOString(),
     });
