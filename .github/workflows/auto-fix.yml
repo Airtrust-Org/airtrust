@@ -2,6 +2,9 @@ name: Auto-fix ESLint & Prettier on PR
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/qualificacoes-atomicidade-confiabilidade-20260804
 
 jobs:
   autofix:
@@ -13,32 +16,31 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 24
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run ESLint fix
+      - name: Format and validate focused test
         run: |
-          npx eslint "./src/**/*.{js,jsx,ts,tsx}" --fix || true
+          npx prettier --write worker-airtrust/src/__tests__/routes/simuladores-fichas-g1-sem-curricular.test.ts
+          npx prettier --check worker-airtrust/src/__tests__/routes/simuladores-fichas-g1-sem-curricular.test.ts
+          npx eslint --max-warnings=0 -- worker-airtrust/src/__tests__/routes/simuladores-fichas-g1-sem-curricular.test.ts
 
-      - name: Run Prettier write
-        run: |
-          npx prettier --write "src/**/*.{js,jsx,ts,tsx,css,md,json}" "worker-airtrust/src/**/*.{js,ts,json}" || true
-
-      - name: Commit and push fixes
+      - name: Commit and push formatting
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- src worker-airtrust/src
+          git add -- worker-airtrust/src/__tests__/routes/simuladores-fichas-g1-sem-curricular.test.ts
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore: apply eslint --fix and prettier formatting [skip ci]" || true
-            git push origin HEAD:${{ github.head_ref }}
+            git commit -m "test(simuladores): format focused qualification coverage [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
           fi
