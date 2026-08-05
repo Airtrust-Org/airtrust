@@ -411,7 +411,7 @@ writeRouter.post(
           novaDataRealizacao,
           novaDataVencimento,
           validadeMeses,
-          `Renovação de #${id}${observacao ? '. ' + observacao : ''}`,
+          novaObservacao,
           original.numero_certificado,
           original.instrutor,
           cargaHorariaEfetiva,
