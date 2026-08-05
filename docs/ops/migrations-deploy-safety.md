@@ -19,6 +19,7 @@
 10. `wrangler d1 migrations apply ... --remote` é proibido fora do caminho exato governado e isolado:
    `scripts/production/apply-simuladores-matriz-remote-migration.sh`.
 11. O executor legado `worker-airtrust/scripts/aplicar-migration-0091-seguro.sh` permanece apenas como tombstone fail-closed e nunca consulta ou altera D1.
+12. O guard de fontes operacionais reconhece somente renomes Git `R100` como movimentação byte a byte. Renomes modificados e cópias continuam em escopo e exigem marcadores.
 
 ## Guardas
 
@@ -38,6 +39,14 @@ node scripts/guard-no-generic-remote-migrations.mjs
 ```
 
 A allowlist é baseada em caminho exato. Cópias, renomes ou novos wrappers falham até revisão explícita. Caminhos legados não recebem exceção: são aposentados em modo fail-closed.
+
+### Fontes operacionais
+
+```bash
+node scripts/check-operational-sql-sources.mjs
+```
+
+Arquivos DML adicionados ou alterados exigem marcador de fonte/decisão. Um `R100` é excluído somente porque o Git comprova conteúdo idêntico; `R099` ou qualquer cópia continua bloqueada sem marcador.
 
 ### NO_GO
 

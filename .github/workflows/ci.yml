@@ -34,7 +34,7 @@ jobs:
 
       - name: guard:migrations-dir-purity
         run: |
-          node --test scripts/__tests__/migration-deploy-safety.test.mjs scripts/__tests__/migration-no-go-guard.test.mjs
+          node --test scripts/__tests__/migration-deploy-safety.test.mjs scripts/__tests__/migration-no-go-guard.test.mjs scripts/__tests__/operational-sql-renames.test.mjs
           node scripts/guard-migrations-dir-purity.mjs --dry-run
           node scripts/guard-no-generic-remote-migrations.mjs
           node scripts/check-no-go-migrations.mjs
