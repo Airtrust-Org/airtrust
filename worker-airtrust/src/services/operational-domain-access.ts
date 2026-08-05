@@ -16,7 +16,11 @@ export * from './operational-domain-access-core';
 type RequireOperationalAccessOptions = Parameters<typeof core.requireOperationalAccess>[0];
 
 function isTenantAdminRole(userRole: unknown): boolean {
-  return ['admin', 'administrador'].includes(String(userRole || '').trim().toLowerCase());
+  return ['admin', 'administrador'].includes(
+    String(userRole || '')
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 function isTenantAdminQualificationCatalogRequest(
