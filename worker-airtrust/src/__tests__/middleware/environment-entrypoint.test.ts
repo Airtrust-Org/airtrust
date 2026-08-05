@@ -91,8 +91,12 @@ describe('environment entrypoint origin isolation', () => {
       );
 
       expect(response.status).toBe(403);
-      expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
-      expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
+      expect(
+        response.headers.get('Access-Control-Allow-Origin'),
+      ).toBeNull();
+      expect(
+        response.headers.get('Access-Control-Allow-Credentials'),
+      ).toBeNull();
     }
 
     expect(fetchMock).not.toHaveBeenCalled();
@@ -140,8 +144,12 @@ describe('environment entrypoint origin isolation', () => {
     );
 
     expect(allowed.status).toBe(204);
-    expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe('https://airtrust.online');
-    expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe(
+      'https://airtrust.online',
+    );
+    expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe(
+      'true',
+    );
   });
 
   it('allows requests without Origin', async () => {
