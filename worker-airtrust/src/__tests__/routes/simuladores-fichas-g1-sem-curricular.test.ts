@@ -58,11 +58,7 @@ function createDb(
     modelo_qualificacao_validade: 12,
     tipo_curricular_codigo: tipoCurricularCodigo,
     tipo_curricular_nome:
-      tipoCurricularCodigo === 'SEM'
-        ? 'Semestral'
-        : tipoCurricularCodigo
-          ? 'Periódico'
-          : null,
+      tipoCurricularCodigo === 'SEM' ? 'Semestral' : tipoCurricularCodigo ? 'Periódico' : null,
     ...overrides,
   };
 
@@ -125,10 +121,7 @@ describe('G1-SEM curricular gate', () => {
     );
 
     expect(mocks.upsert).toHaveBeenCalledTimes(2);
-    expect(result.qualificacoes_geradas.map((item) => item.codigo)).toEqual([
-      'REC',
-      'FAP06',
-    ]);
+    expect(result.qualificacoes_geradas.map((item) => item.codigo)).toEqual(['REC', 'FAP06']);
     expect(mocks.g1Sem).not.toHaveBeenCalled();
   });
 
@@ -146,9 +139,7 @@ describe('G1-SEM curricular gate', () => {
     );
 
     expect(mocks.g1Sem).toHaveBeenCalledTimes(1);
-    expect(
-      result.qualificacoes_geradas.filter((item) => item.codigo === 'G1-SEM'),
-    ).toHaveLength(1);
+    expect(result.qualificacoes_geradas.filter((item) => item.codigo === 'G1-SEM')).toHaveLength(1);
   });
 
   it('does not generate FAP or G1-SEM when the check is rejected by the scoped query', async () => {
@@ -173,9 +164,7 @@ describe('G1-SEM curricular gate', () => {
     );
 
     expect(mocks.g1Sem).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith(
-      expect.not.stringMatching(/Aluno de teste|cpf|canac|token/i),
-    );
+    expect(warn).toHaveBeenCalledWith(expect.not.stringMatching(/Aluno de teste|cpf|canac|token/i));
     warn.mockRestore();
   });
 
@@ -198,10 +187,7 @@ describe('G1-SEM curricular gate', () => {
 
   it('rejects a ficha without an employee before any qualification write', async () => {
     await expect(
-      gerarQualificacaoDaFicha(
-        createDb('PER', [], { colaborador_id_aluno: null }),
-        506,
-      ),
+      gerarQualificacaoDaFicha(createDb('PER', [], { colaborador_id_aluno: null }), 506),
     ).rejects.toThrow('Ficha sem colaborador válido para gerar qualificação');
 
     expect(mocks.upsert).not.toHaveBeenCalled();
