@@ -1,4 +1,9 @@
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
+import type { DatabaseSync } from 'node:sqlite';
+
+const NodeDatabaseSync = createRequire(import.meta.url)('node:sqlite').DatabaseSync as {
+  new (location: string): DatabaseSync;
+};
 
 type SqliteValue = string | number | bigint | Uint8Array | null;
 
@@ -75,7 +80,7 @@ class SqliteD1PreparedStatement {
 }
 
 export class SqliteD1Database {
-  readonly database = new DatabaseSync(':memory:');
+  readonly database = new NodeDatabaseSync(':memory:');
 
   constructor() {
     createSchema(this.database);
