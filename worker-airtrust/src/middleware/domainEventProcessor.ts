@@ -5,6 +5,7 @@ import type { Env, Variables } from '../types';
 import { enforceLmsCompletionIntegrity } from './lms-completion-integrity';
 import { enforceLmsCompletionReversal } from './lms-completion-reversal';
 import { enforcePersistedLmsProgressEvidence } from './lms-completion-persisted-progress';
+import { enforceLmsEnrollmentIntegrity } from './lms-enrollment-integrity';
 
 type DomainEventContext = {
   Bindings: {
@@ -100,6 +101,10 @@ export function domainEventProcessorMiddleware() {
     // Reversal has a governed schema-aware entry point and must preempt legacy handlers.
     const reversalResponse = await enforceLmsCompletionReversal(typedContext);
     if (reversalResponse) return reversalResponse;
+
+    // Enrollment/rematriculation policy must preempt the broader legacy handlers.
+    const enrollmentResponse = await enforceLmsEnrollmentIntegrity(typedContext);
+    if (enrollmentResponse) return enrollmentResponse;
 
     // A terminal payload cannot prove its own progress. Require earlier evidence first.
     const persistedProgressResponse = await enforcePersistedLmsProgressEvidence(typedContext);

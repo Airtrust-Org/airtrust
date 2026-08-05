@@ -85,18 +85,24 @@ function isScormCompletion(body: JsonRecord): boolean {
   );
 }
 
+function getXapiVerbId(body: JsonRecord): string {
+  return body.verb && typeof body.verb === 'object'
+    ? normalizeStatus((body.verb as JsonRecord).id)
+    : '';
+}
+
+function getXapiResult(body: JsonRecord): JsonRecord {
+  return body.result && typeof body.result === 'object' ? (body.result as JsonRecord) : {};
+}
+
+function isCanonicalXapiTerminalVerb(verb: string): boolean {
+  return verb.endsWith('/passed') || verb.endsWith('/completed');
+}
+
 function isXapiCompletion(body: JsonRecord): boolean {
-  const verb =
-    body.verb && typeof body.verb === 'object'
-      ? normalizeStatus((body.verb as JsonRecord).id)
-      : '';
-  const result =
-    body.result && typeof body.result === 'object' ? (body.result as JsonRecord) : {};
-  return (
-    verb.endsWith('/passed') ||
-    verb.endsWith('/completed') ||
-    result.completion === true
-  );
+  const verb = getXapiVerbId(body);
+  const result = getXapiResult(body);
+  return isCanonicalXapiTerminalVerb(verb) || result.completion === true;
 }
 
 /**
@@ -115,6 +121,18 @@ export async function enforcePersistedLmsProgressEvidence(
   const body = await readJsonClone(c);
   const completionRequested = isScorm ? isScormCompletion(body) : isXapiCompletion(body);
   if (!completionRequested) return null;
+
+  if (isXapi) {
+    const verb = getXapiVerbId(body);
+    const result = getXapiResult(body);
+    if (result.completion === true && !isCanonicalXapiTerminalVerb(verb)) {
+      return jsonResponse(c, 409, {
+        success: false,
+        code: 'LMS_XAPI_TERMINAL_VERB_REQUIRED',
+        error: 'Conclusão xAPI exige verbo terminal completed ou passed.',
+      });
+    }
+  }
 
   const matriculaId = parsePositiveInt(body.matricula_id);
   const empresaId = parsePositiveInt(c.get('empresaId'));
