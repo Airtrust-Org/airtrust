@@ -10,6 +10,8 @@ import {
 } from '../guard-no-generic-remote-migrations.mjs';
 import { inspectMigrationsDirectory } from '../migration-directory-policy.mjs';
 
+const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+
 function withTempDir(callback) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'airtrust-migrations-safety-'));
   try {
@@ -23,6 +25,12 @@ function write(directory, name, content = 'SELECT 1;\n') {
   fs.writeFileSync(path.join(directory, name), content);
 }
 
+function inspect(directory) {
+  return inspectMigrationsDirectory(directory, {
+    historicalDuplicateAllowlist: {},
+  });
+}
+
 function violationTypes(result) {
   return new Set(result.violations.map((violation) => violation.type));
 }
@@ -31,7 +39,7 @@ test('accepts a directory containing only canonical forward migrations', () => {
   withTempDir((directory) => {
     write(directory, '0001_create_example.sql');
     write(directory, '0002_add_example_index.sql');
-    const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
+    const result = inspect(directory);
     assert.equal(result.ok, true);
     assert.deepEqual(result.candidateFiles, [
       '0001_create_example.sql',
@@ -56,7 +64,7 @@ for (const [name, expectedType] of rejectedNames) {
   test(`rejects ${name} as ${expectedType}`, () => {
     withTempDir((directory) => {
       write(directory, name);
-      const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
+      const result = inspect(directory);
       assert.equal(result.ok, false);
       assert.ok(violationTypes(result).has(expectedType));
       assert.deepEqual(result.candidateFiles, []);
@@ -67,7 +75,7 @@ for (const [name, expectedType] of rejectedNames) {
 test('rejects a migration carrying NO_GO_MIGRATION_PRODUCAO', () => {
   withTempDir((directory) => {
     write(directory, '0001_blocked.sql', '-- NO_GO_MIGRATION_PRODUCAO\nSELECT 1;\n');
-    const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
+    const result = inspect(directory);
     assert.ok(violationTypes(result).has('no_go_migration'));
     assert.deepEqual(result.candidateFiles, []);
   });
@@ -77,8 +85,7 @@ test('rejects incompatible duplicate prefixes', () => {
   withTempDir((directory) => {
     write(directory, '0001_first.sql');
     write(directory, '0001_second.sql');
-    const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
-    assert.ok(violationTypes(result).has('duplicate_prefix'));
+    assert.ok(violationTypes(inspect(directory)).has('duplicate_prefix'));
   });
 });
 
@@ -87,24 +94,25 @@ test('rejects non-SQL files, nested directories and symlinks', () => {
     write(directory, '0001_valid.sql');
     write(directory, 'README.md');
     fs.mkdirSync(path.join(directory, 'nested'));
+
+    const source = path.join(directory, '0001_valid.sql');
+    const link = path.join(directory, '0002_link.sql');
     try {
-      fs.symlinkSync(path.join(directory, '0001_valid.sql'), path.join(directory, '0002_link.sql'));
+      fs.symlinkSync(source, link);
     } catch {
       // Symlink creation is not available on every test platform.
     }
 
-    const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
-    const types = violationTypes(result);
+    const types = violationTypes(inspect(directory));
     assert.ok(types.has('non_sql_file'));
     assert.ok(types.has('unexpected_entry'));
-    if (fs.existsSync(path.join(directory, '0002_link.sql'))) assert.ok(types.has('symlink'));
+    if (fs.existsSync(link)) assert.ok(types.has('symlink'));
   });
 });
 
 test('dry-run CLI prints the exact candidate list', () => {
   withTempDir((directory) => {
     write(directory, '0001_valid.sql');
-    const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
     const output = execFileSync(
       process.execPath,
       ['scripts/guard-migrations-dir-purity.mjs', '--dry-run', '--dir', directory],
@@ -117,20 +125,20 @@ test('dry-run CLI prints the exact candidate list', () => {
 });
 
 test('remote apply is accepted only in the exact governed wrapper', () => {
-  withTempDir((root) => {
+  withTempDir((directory) => {
     const allowed = 'scripts/production/apply-simuladores-matriz-remote-migration.sh';
     const forbidden = 'scripts/deploy-worker-only.sh';
-    fs.mkdirSync(path.join(root, 'scripts', 'production'), { recursive: true });
+    fs.mkdirSync(path.join(directory, 'scripts', 'production'), { recursive: true });
     fs.writeFileSync(
-      path.join(root, allowed),
+      path.join(directory, allowed),
       'npx --no-install wrangler d1 migrations apply DB --remote --env production\n',
     );
     fs.writeFileSync(
-      path.join(root, forbidden),
+      path.join(directory, forbidden),
       'npx --no-install wrangler d1 migrations apply airtrust-db --env production --remote\n',
     );
     const violations = findGenericRemoteMigrationApplyViolations({
-      root,
+      root: directory,
       files: [allowed, forbidden],
     });
     assert.deepEqual(violations, [forbidden]);
@@ -138,14 +146,12 @@ test('remote apply is accepted only in the exact governed wrapper', () => {
 });
 
 test('deploy-worker-only contains no implicit migration application', () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
   const source = fs.readFileSync(path.join(root, 'scripts', 'deploy-worker-only.sh'), 'utf8');
   assert.doesNotMatch(source, /d1\s+migrations\s+apply/);
   assert.match(source, /never applies D1 migrations/i);
 });
 
 test('legacy 0091 remote executor is retired fail-closed', () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
   const script = path.join(
     root,
     'worker-airtrust',
@@ -158,7 +164,10 @@ test('legacy 0091 remote executor is retired fail-closed', () => {
   let stderr = '';
   assert.throws(() => {
     try {
-      execFileSync('bash', [script], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+      execFileSync('bash', [script], {
+        cwd: root,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
     } catch (error) {
       stderr = String(error.stderr ?? '');
       throw error;
@@ -169,8 +178,12 @@ test('legacy 0091 remote executor is retired fail-closed', () => {
 });
 
 test('the real canonical directory enumerates no destructive artifact', () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
-  const result = inspectMigrationsDirectory(path.join(root, 'worker-airtrust', 'migrations'));
+  const directory = path.join(root, 'worker-airtrust', 'migrations');
+  const result = inspectMigrationsDirectory(directory);
+  const hasDestructiveCandidate = result.candidateFiles.some((name) =>
+    /rollback|purge|preflight|manual/i.test(name),
+  );
+
   assert.equal(result.ok, true, JSON.stringify(result.violations, null, 2));
-  assert.equal(result.candidateFiles.some((name) => /rollback|purge|preflight|manual/i.test(name)), false);
+  assert.equal(hasDestructiveCandidate, false);
 });

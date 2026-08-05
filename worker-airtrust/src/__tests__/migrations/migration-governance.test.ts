@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const repoRoot = join(workerRoot, '..');
 const migrationsDir = join(workerRoot, 'migrations');
+const migrationsDirPattern = /^\s*migrations_dir\s*=\s*"([^"]+)"/gm;
 const experimentalMigrationPath = join(
   workerRoot,
   'migrations_experimental',
@@ -56,12 +57,21 @@ function listCanonicalMigrationFiles(): string[] {
     .sort();
 }
 
+function readMigration(file: string): string {
+  return readFileSync(join(migrationsDir, file), 'utf8');
+}
+
+function readConfiguredMigrationDirs(configPath: string): string[] {
+  const config = readFileSync(configPath, 'utf8');
+  return [...config.matchAll(migrationsDirPattern)].map(([, value]) => value);
+}
+
 function readPurityReport() {
-  const output = execFileSync(
-    process.execPath,
-    [join(repoRoot, 'scripts', 'guard-migrations-dir-purity.mjs'), '--dry-run'],
-    { cwd: repoRoot, encoding: 'utf8' },
-  );
+  const guard = join(repoRoot, 'scripts', 'guard-migrations-dir-purity.mjs');
+  const output = execFileSync(process.execPath, [guard, '--dry-run'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
   return JSON.parse(output) as {
     ok: boolean;
     candidateFiles: string[];
@@ -80,7 +90,8 @@ describe('migration governance', () => {
   });
 
   it('keeps only the immutable historical filename exceptions', () => {
-    const nonStandard = files.filter((file) => !/^[0-9]{4}_[a-z0-9_]+\.sql$/.test(file));
+    const canonicalName = /^[0-9]{4}_[a-z0-9_]+\.sql$/;
+    const nonStandard = files.filter((file) => !canonicalName.test(file));
     expect(nonStandard).toEqual([...historicalFilenameExceptions]);
   });
 
@@ -90,9 +101,11 @@ describe('migration governance', () => {
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
     const expectedLatest = files.includes('0456_lms_h5p_course_binding.sql') ? 456 : 455;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
-    expect(
-      files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file)),
-    ).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
+
+    const highSentinels = files.filter(
+      (file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file),
+    );
+    expect(highSentinels).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
   it('keeps experimental migrations outside the canonical chain', () => {
@@ -102,9 +115,7 @@ describe('migration governance', () => {
 
   it('keeps Wrangler configured to the canonical migrations folder', () => {
     for (const configPath of wranglerConfigPaths) {
-      const configured = [
-        ...readFileSync(configPath, 'utf8').matchAll(/^\s*migrations_dir\s*=\s*"([^"]+)"/gm),
-      ].map(([, value]) => value);
+      const configured = readConfiguredMigrationDirs(configPath);
       expect(configured.length).toBeGreaterThan(0);
       expect(configured.every((value) => value === './migrations')).toBe(true);
       expect(configured).not.toContain('./migrations_experimental');
@@ -112,28 +123,25 @@ describe('migration governance', () => {
   });
 
   it('keeps CREATE TEMP TABLE confined to its historical allowlist', () => {
-    const offenders = files.filter((file) =>
-      /\bCREATE\s+TEMP\s+TABLE\b/i.test(readFileSync(join(migrationsDir, file), 'utf8')),
-    );
+    const pattern = /\bCREATE\s+TEMP\s+TABLE\b/i;
+    const offenders = files.filter((file) => pattern.test(readMigration(file)));
     expect(offenders).toEqual([...expectedTempTableFiles]);
   });
 
   it('keeps PRAGMA foreign_keys = OFF confined to its historical allowlist', () => {
-    const offenders = files.filter((file) =>
-      /\bPRAGMA\s+foreign_keys\s*=\s*OFF\b/i.test(
-        readFileSync(join(migrationsDir, file), 'utf8'),
-      ),
-    );
+    const pattern = /\bPRAGMA\s+foreign_keys\s*=\s*OFF\b/i;
+    const offenders = files.filter((file) => pattern.test(readMigration(file)));
     expect(offenders).toEqual([...expectedForeignKeysOffFiles]);
   });
 
   it('keeps operational and destructive SQL outside canonical migrations', () => {
     const forbiddenName = /rollback|purge|preflight|manual|diagnostic|diagnostico/i;
     const noGoMarker = /^\s*--\s*NO_GO_MIGRATION_PRODUCAO\s*$/m;
-    expect(files.filter((file) => forbiddenName.test(file))).toEqual([]);
-    expect(
-      files.filter((file) => noGoMarker.test(readFileSync(join(migrationsDir, file), 'utf8'))),
-    ).toEqual([]);
+    const forbiddenNames = files.filter((file) => forbiddenName.test(file));
+    const noGoFiles = files.filter((file) => noGoMarker.test(readMigration(file)));
+
+    expect(forbiddenNames).toEqual([]);
+    expect(noGoFiles).toEqual([]);
     expect(existsSync(join(repoRoot, 'scripts', 'sql', 'manual', 'destructive'))).toBe(true);
     expect(existsSync(join(repoRoot, 'scripts', 'sql', 'manual', 'no-go'))).toBe(true);
     expect(existsSync(join(repoRoot, 'scripts', 'sql', 'manual', 'archive'))).toBe(true);

@@ -65,28 +65,46 @@ function readGitNameStatus(args, root) {
   }
 }
 
+function collectNameStatusReports(root, baseRef) {
+  const branchArgs = [
+    'diff',
+    '--name-status',
+    '-M',
+    '-C',
+    '--diff-filter=AMR',
+    '-z',
+    `${baseRef}...HEAD`,
+  ];
+  const worktreeArgs = ['diff', '--name-status', '-M', '-C', '--diff-filter=AMR', '-z'];
+  const stagedArgs = [
+    'diff',
+    '--cached',
+    '--name-status',
+    '-M',
+    '-C',
+    '--diff-filter=AMR',
+    '-z',
+  ];
+
+  return [
+    readGitNameStatus(branchArgs, root),
+    readGitNameStatus(worktreeArgs, root),
+    readGitNameStatus(stagedArgs, root),
+  ];
+}
+
 export function getChangedFiles({ root = process.cwd(), baseRef = 'origin/main' } = {}) {
   const candidates = new Set();
   const exactRenames = new Set();
-  const reports = [
-    readGitNameStatus(
-      ['diff', '--name-status', '-M', '-C', '--diff-filter=AMR', '-z', `${baseRef}...HEAD`],
-      root,
-    ),
-    readGitNameStatus(['diff', '--name-status', '-M', '-C', '--diff-filter=AMR', '-z'], root),
-    readGitNameStatus(
-      ['diff', '--cached', '--name-status', '-M', '-C', '--diff-filter=AMR', '-z'],
-      root,
-    ),
-  ];
 
-  for (const report of reports) {
+  for (const report of collectNameStatusReports(root, baseRef)) {
     const parsed = parseNameStatus(report);
     for (const file of parsed.candidates) candidates.add(file);
     for (const file of parsed.exactRenames) exactRenames.add(file);
   }
 
-  const untracked = readGitNameStatus(['ls-files', '--others', '--exclude-standard', '-z'], root);
+  const untrackedArgs = ['ls-files', '--others', '--exclude-standard', '-z'];
+  const untracked = readGitNameStatus(untrackedArgs, root);
   for (const file of untracked.split('\0').filter(Boolean)) candidates.add(file);
   for (const file of candidates) exactRenames.delete(file);
 

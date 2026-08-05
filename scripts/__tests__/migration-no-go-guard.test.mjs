@@ -11,6 +11,21 @@ import {
   listNoGoMigrations,
 } from '../migration-no-go-lib.mjs';
 
+const confirmationText = 'I understand this may modify production data';
+
+function captureFailure(callback) {
+  let stderr = '';
+  assert.throws(() => {
+    try {
+      callback();
+    } catch (error) {
+      stderr = String(error.stderr ?? '');
+      throw error;
+    }
+  });
+  return stderr;
+}
+
 test('detects the NO_GO marker in file content', () => {
   const content = [
     '-- Migration 9999: example',
@@ -22,12 +37,13 @@ test('detects the NO_GO marker in file content', () => {
 });
 
 test('does not flag ordinary migrations', () => {
-  const content = ['-- Migration 9999: example', '-- Data: 2026-07-15', 'SELECT 1;'].join('\n');
-  assert.equal(isNoGoMigrationContent(content), false);
+  const content = ['-- Migration 9999: example', '-- Data: 2026-07-15', 'SELECT 1;'];
+  assert.equal(isNoGoMigrationContent(content.join('\n')), false);
 });
 
 test('does not false-positive on a suffixed token', () => {
-  assert.equal(isNoGoMigrationContent('-- NO_GO_MIGRATION_PRODUCAO_OUTRA_COISA\n'), false);
+  const content = '-- NO_GO_MIGRATION_PRODUCAO_OUTRA_COISA\n';
+  assert.equal(isNoGoMigrationContent(content), false);
 });
 
 test('blocked SQL is quarantined outside canonical migrations', () => {
@@ -53,41 +69,34 @@ test('isNoGoMigrationFile reads real files from disk', () => {
 
 test('production wrapper refuses a NO_GO migration', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'no-go-wrapper-test-'));
-  const migrationRelPath = 'worker-airtrust/migrations/9999_test_blocked.sql';
+  const migration = 'worker-airtrust/migrations/9999_test_blocked.sql';
   fs.mkdirSync(path.join(tmpDir, 'worker-airtrust', 'migrations'), { recursive: true });
   fs.mkdirSync(path.join(tmpDir, 'scripts'), { recursive: true });
-  fs.writeFileSync(
-    path.join(tmpDir, migrationRelPath),
-    '-- NO_GO_MIGRATION_PRODUCAO\nSELECT 1;\n',
-  );
+  fs.writeFileSync(path.join(tmpDir, migration), '-- NO_GO_MIGRATION_PRODUCAO\nSELECT 1;\n');
 
-  const helperFiles = [
+  const helpers = [
     'apply-migration-production.sh',
     'check-single-migration-no-go.mjs',
     'migration-no-go-lib.mjs',
     'guard-migrations-dir-purity.mjs',
     'migration-directory-policy.mjs',
   ];
-  for (const name of helperFiles) {
-    fs.cpSync(path.join(process.cwd(), 'scripts', name), path.join(tmpDir, 'scripts', name));
+  for (const name of helpers) {
+    const source = path.join(process.cwd(), 'scripts', name);
+    const destination = path.join(tmpDir, 'scripts', name);
+    fs.cpSync(source, destination);
   }
 
-  let stderr = '';
-  assert.throws(() => {
-    try {
-      execFileSync('bash', ['scripts/apply-migration-production.sh', migrationRelPath], {
-        cwd: tmpDir,
-        env: {
-          ...process.env,
-          AIRTRUST_ALLOW_PROD_DB_WRITE: 'YES',
-          AIRTRUST_CONFIRM_PROD_DB_WRITE: 'I understand this may modify production data',
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    } catch (error) {
-      stderr = String(error.stderr ?? '');
-      throw error;
-    }
+  const stderr = captureFailure(() => {
+    execFileSync('bash', ['scripts/apply-migration-production.sh', migration], {
+      cwd: tmpDir,
+      env: {
+        ...process.env,
+        AIRTRUST_ALLOW_PROD_DB_WRITE: 'YES',
+        AIRTRUST_CONFIRM_PROD_DB_WRITE: confirmationText,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
   });
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -96,18 +105,15 @@ test('production wrapper refuses a NO_GO migration', () => {
 });
 
 test('production wrapper rejects paths outside canonical migrations', () => {
-  let stderr = '';
-  assert.throws(() => {
-    try {
-      execFileSync(
-        'bash',
-        ['scripts/apply-migration-production.sh', 'sql/maintenance/whatever.sql'],
-        { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'pipe'] },
-      );
-    } catch (error) {
-      stderr = String(error.stderr ?? '');
-      throw error;
-    }
+  const stderr = captureFailure(() => {
+    execFileSync(
+      'bash',
+      ['scripts/apply-migration-production.sh', 'sql/maintenance/whatever.sql'],
+      {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
   });
   assert.match(stderr, /must be under worker-airtrust\/migrations/);
 });
