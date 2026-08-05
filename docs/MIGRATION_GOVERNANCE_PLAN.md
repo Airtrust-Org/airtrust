@@ -30,9 +30,10 @@ Duplicidades históricas permanecem limitadas à allowlist exata versionada em `
 | Preflight/validação read-only | `scripts/validation/` |
 | SQL manual/destrutivo | `scripts/sql/manual/` |
 | SQL bloqueado por `NO_GO_MIGRATION_PRODUCAO` | `scripts/sql/manual/no-go/` |
+| Backup/artefato legado não enumerável | `scripts/sql/manual/archive/` |
 | Mudança governada Schema V2 | `worker-airtrust/schema-v2/changes/` |
 
-Arquivos de rollback, purge, preflight, diagnóstico, SQL manual, `NO_GO`, não SQL, symlink ou subdiretório são proibidos no diretório canônico.
+Arquivos de rollback, purge, preflight, diagnóstico, SQL manual, `NO_GO`, não SQL, backups, symlinks ou subdiretórios são proibidos no diretório canônico.
 
 ## 3. Deploy e schema são operações separadas
 
@@ -58,7 +59,7 @@ node scripts/check-no-go-migrations.mjs
 node scripts/check-duplicate-migrations.mjs
 ```
 
-O CI executa esses guards antes da instalação/build. O modo dry-run lista exatamente `candidateFiles`; nenhum arquivo destrutivo ou operacional pode aparecer.
+O CI executa esses guards antes da instalação/build. O modo dry-run lista exatamente `candidateFiles`; nenhum arquivo destrutivo, operacional ou auxiliar pode aparecer.
 
 ## 5. Inventário de quarentena de 2026-08-04
 
@@ -67,9 +68,10 @@ Foram preservados sem alteração de conteúdo:
 - 14 rollbacks movidos de `worker-airtrust/migrations/` para `scripts/rollback/`;
 - `0420_notificacoes_log_add_empresa_id_preflight_audit.sql` movido para `scripts/validation/`;
 - `purge-soft-deleted-qualificacoes.sql` movido para `scripts/sql/manual/destructive/`;
-- `0432_revisao_completa_codigos_manobras.sql`, `0433_fix_loft_references.sql` e `0435_fix_vencimento_fim_mes_lms.sql` movidos para `scripts/sql/manual/no-go/`.
+- `0432_revisao_completa_codigos_manobras.sql`, `0433_fix_loft_references.sql` e `0435_fix_vencimento_fim_mes_lms.sql` movidos para `scripts/sql/manual/no-go/`;
+- `0020_simuladores_final.sql.bkp` movido para `scripts/sql/manual/archive/` após o guard detectar o backup legado no diretório canônico.
 
-O purge permanece somente como artefato histórico/manual. Não deve ser executado sem um procedimento operacional novo e explicitamente autorizado.
+O purge e o backup permanecem somente como artefatos históricos/manuais. Não devem ser executados sem procedimento operacional novo e autorização explícita.
 
 ## 6. Restrições operacionais
 
@@ -77,6 +79,7 @@ O purge permanece somente como artefato histórico/manual. Não deve ser executa
 - nenhuma aplicação remota genérica do diretório;
 - nenhum bypass em runtime para `NO_GO_MIGRATION_PRODUCAO`;
 - nenhum `DROP`, purge ou rollback no fluxo forward;
+- nenhum backup ou arquivo auxiliar dentro de `migrations_dir`;
 - nenhuma edição retroativa de migration aplicada para fazê-la passar;
 - produção e ledger continuam sujeitos aos gates de branch, SHA, backup, confirmação e Schema V2 aplicáveis.
 

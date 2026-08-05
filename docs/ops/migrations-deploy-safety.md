@@ -12,10 +12,11 @@
    - `132_add_funcionario_ativo.sql`.
 4. Rollbacks ficam em `scripts/rollback/`.
 5. Preflights ficam em `scripts/validation/`.
-6. SQL manual, destrutivo ou bloqueado fica em `scripts/sql/manual/`.
-7. Um arquivo com `NO_GO_MIGRATION_PRODUCAO` nunca é candidato canônico nem pode ser executado pelo wrapper de produção.
-8. Deploy do Worker e alteração de schema são operações separadas. `scripts/deploy-worker-only.sh` nunca enumera nem aplica migrations.
-9. `wrangler d1 migrations apply ... --remote` é proibido fora do caminho exato governado e isolado:
+6. SQL manual, destrutivo, bloqueado ou arquivado fica em `scripts/sql/manual/`.
+7. Arquivos auxiliares e backups, inclusive `*.bkp`, nunca ficam no `migrations_dir`.
+8. Um arquivo com `NO_GO_MIGRATION_PRODUCAO` nunca é candidato canônico nem pode ser executado pelo wrapper de produção.
+9. Deploy do Worker e alteração de schema são operações separadas. `scripts/deploy-worker-only.sh` nunca enumera nem aplica migrations.
+10. `wrangler d1 migrations apply ... --remote` é proibido fora do caminho exato governado e isolado:
    `scripts/production/apply-simuladores-matriz-remote-migration.sh`.
 
 ## Guardas
@@ -27,7 +28,7 @@ node scripts/guard-migrations-dir-purity.mjs
 node scripts/guard-migrations-dir-purity.mjs --dry-run
 ```
 
-O modo dry-run mostra em `candidateFiles` exatamente o conjunto que poderia ser enumerado. O guard falha para rollback, purge, preflight, SQL manual/diagnóstico, nome inválido, `NO_GO`, prefixo duplicado incompatível, arquivo não SQL, symlink ou subdiretório.
+O modo dry-run mostra em `candidateFiles` exatamente o conjunto que poderia ser enumerado. O guard falha para rollback, purge, preflight, SQL manual/diagnóstico, nome inválido, `NO_GO`, prefixo duplicado incompatível, arquivo não SQL, backup, symlink ou subdiretório.
 
 ### Aplicação remota genérica
 
@@ -51,9 +52,10 @@ O wrapper `scripts/apply-migration-production.sh` aceita um único arquivo canô
 
 ## Inventário movido nesta correção
 
-- rollbacks do diretório canônico → `scripts/rollback/`;
+- 14 rollbacks do diretório canônico → `scripts/rollback/`;
 - `0420_notificacoes_log_add_empresa_id_preflight_audit.sql` → `scripts/validation/`;
 - `purge-soft-deleted-qualificacoes.sql` → `scripts/sql/manual/destructive/`;
-- `0432`, `0433` e `0435` marcados `NO_GO_MIGRATION_PRODUCAO` → `scripts/sql/manual/no-go/`.
+- `0432`, `0433` e `0435` marcados `NO_GO_MIGRATION_PRODUCAO` → `scripts/sql/manual/no-go/`;
+- `0020_simuladores_final.sql.bkp` → `scripts/sql/manual/archive/`.
 
-Nenhum conteúdo SQL foi alterado, nenhuma migration foi executada e nenhum dado foi removido.
+Os 20 artefatos foram preservados byte a byte. Nenhum conteúdo SQL foi alterado, nenhuma migration foi executada e nenhum dado foi removido.
