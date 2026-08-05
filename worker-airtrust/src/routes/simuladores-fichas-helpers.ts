@@ -146,6 +146,11 @@ export async function gerarQualificacaoDaFicha(
   }
   if (f.aprovado !== 1) throw new Error('Precisa estar aprovado');
 
+  const colaboradorId = f.colaborador_id_aluno;
+  if (!colaboradorId) {
+    throw new Error('Ficha sem colaborador válido para gerar qualificação');
+  }
+
   const tipoQualifId: number | null = f.modelo_qualificacao_tipo_id || null;
   const qualifCodigo: string = f.modelo_qualificacao_codigo
     ? f.modelo_qualificacao_codigo
@@ -171,7 +176,7 @@ export async function gerarQualificacaoDaFicha(
   if (tipoQualifId) {
     const principalResult = await upsertQualificacaoHistoricoDaFicha(db, {
       fichaId: fid,
-      funcionarioId: f.colaborador_id_aluno,
+      funcionarioId: colaboradorId,
       qualificacaoId: tipoQualifId,
       qualificacaoCodigo: qualifCodigo,
       dataConclusao,
@@ -255,7 +260,7 @@ export async function gerarQualificacaoDaFicha(
                )
            )`,
       )
-      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, f.colaborador_id_aluno)
+      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, colaboradorId)
       .all<QualificationCheckRow>();
 
     for (const check of checksMarcados.results || []) {
@@ -267,7 +272,7 @@ export async function gerarQualificacaoDaFicha(
       });
       const fapResult = await upsertQualificacaoHistoricoDaFicha(db, {
         fichaId: fid,
-        funcionarioId: f.colaborador_id_aluno,
+        funcionarioId: colaboradorId,
         qualificacaoId: check.qualificacao_tipo_id,
         qualificacaoCodigo: check.qt_codigo,
         dataConclusao,
@@ -284,7 +289,7 @@ export async function gerarQualificacaoDaFicha(
           registro_id: fapResult.id,
           dados_novos: fapResult.row || {
             qualificacao_codigo: check.qt_codigo,
-            funcionario_id: f.colaborador_id_aluno,
+            funcionario_id: colaboradorId,
           },
         });
       }
@@ -317,10 +322,10 @@ export async function gerarQualificacaoDaFicha(
     );
   }
 
-  if (fichaTemCheckSemestral && tipoCurricularResolvido && f.colaborador_id_aluno) {
+  if (fichaTemCheckSemestral && tipoCurricularResolvido) {
     try {
       const g1semResult = await realizarG1SemPendente(db, {
-        funcionarioId: Number(f.colaborador_id_aluno),
+        funcionarioId: colaboradorId,
         dataConclusao,
         tipoTreinamento: 'SEMESTRAL',
         observacoes: `Realizada via ficha semestral #${fid}`,
