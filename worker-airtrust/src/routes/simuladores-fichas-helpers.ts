@@ -7,11 +7,15 @@
 import { audit } from './simuladores-shared';
 import { upsertQualificacaoHistoricoDaFicha } from '../services/qualificacoes-historico-ficha';
 import { realizarG1SemPendente } from '../services/qualificacoes-g1-sem';
+import {
+  calculateQualificationExpiry,
+  normalizeValidityMonths,
+} from '../services/qualification-history-atomic';
 
 export type QualificacaoGerada = {
   codigo: string;
   nome: string;
-  valida_ate: string;
+  valida_ate: string | null;
   tipo: 'principal' | 'fap';
 };
 
@@ -20,9 +24,36 @@ export type ResultadoGeracaoQualificacao = {
   funcionario: string;
   tipo: string;
   nome: string;
-  valida_ate: string;
-  faps_geradas: Array<{ codigo: string; nome: string; valida_ate: string }>;
+  valida_ate: string | null;
+  faps_geradas: Array<{ codigo: string; nome: string; valida_ate: string | null }>;
   qualificacoes_geradas: QualificacaoGerada[];
+};
+
+type QualificationGenerationFichaRow = {
+  status: string | null;
+  aprovado: number | null;
+  modelo_qualificacao_tipo_id: number | null;
+  modelo_qualificacao_codigo: string | null;
+  tipo_sessao: string | null;
+  tipo_aeronave: string | null;
+  modelo_qualificacao_nome: string | null;
+  modelo_qualificacao_validade: number | string | null;
+  data_sessao: string | null;
+  aluno_empresa_id: number | null;
+  colaborador_id_aluno: number | null;
+  aluno_nome: string;
+  empresa_id: number;
+  agendamento_slot_id: number | null;
+  tipo_curricular_codigo: string | null;
+  tipo_curricular_nome: string | null;
+  modelo_id: number | null;
+};
+
+type QualificationCheckRow = {
+  qualificacao_tipo_id: number;
+  qt_codigo: string;
+  qt_nome: string;
+  qt_validade: number | string | null;
 };
 
 function normalizeTipoCurricular(value?: string | null): string {
@@ -37,19 +68,13 @@ function normalizeTipoCurricular(value?: string | null): string {
  * G1-SEM is a curricular completion, not a side effect of a six-month FAP.
  * Keep this intentionally strict: an unresolved curricular type must fail closed.
  */
-export function isTipoCurricularSemestral(
-  codigo?: string | null,
-  nome?: string | null,
-): boolean {
+export function isTipoCurricularSemestral(codigo?: string | null, nome?: string | null): boolean {
   const normalizedCodigo = normalizeTipoCurricular(codigo);
   const normalizedNome = normalizeTipoCurricular(nome);
   if (normalizedCodigo) {
     return normalizedCodigo === 'SEM' || normalizedCodigo === 'SEMESTRAL';
   }
-  return (
-    normalizedNome === 'SEM' ||
-    normalizedNome === 'SEMESTRAL'
-  );
+  return normalizedNome === 'SEM' || normalizedNome === 'SEMESTRAL';
 }
 
 export function getQualificacaoGeracaoErrorStatus(message: string): number | null {
@@ -61,7 +86,6 @@ export function getQualificacaoGeracaoErrorStatus(message: string): number | nul
   ) {
     return 400;
   }
-
   return null;
 }
 
@@ -114,16 +138,17 @@ export async function gerarQualificacaoDaFicha(
        WHERE f.id = ? AND f.empresa_id IS NOT NULL AND f.deleted_at IS NULL`,
     )
     .bind(fid)
-    .first<any>();
+    .first<QualificationGenerationFichaRow>();
 
-  if (!f) {
-    throw new Error('Não encontrada');
-  }
+  if (!f) throw new Error('Não encontrada');
   if (!['CONCLUIDA', 'APROVADO'].includes(String(f.status || ''))) {
     throw new Error('Status precisa ser APROVADO');
   }
-  if (f.aprovado !== 1) {
-    throw new Error('Precisa estar aprovado');
+  if (f.aprovado !== 1) throw new Error('Precisa estar aprovado');
+
+  const colaboradorId = f.colaborador_id_aluno;
+  if (!colaboradorId) {
+    throw new Error('Ficha sem colaborador válido para gerar qualificação');
   }
 
   const tipoQualifId: number | null = f.modelo_qualificacao_tipo_id || null;
@@ -131,34 +156,31 @@ export async function gerarQualificacaoDaFicha(
     ? f.modelo_qualificacao_codigo
     : `${f.tipo_sessao}_${f.tipo_aeronave || 'GERAL'}`;
   const qualifNome: string = f.modelo_qualificacao_nome || qualifCodigo;
+  const validadeMeses = normalizeValidityMonths(f.modelo_qualificacao_validade);
 
-  const validadeMeses: number = f.modelo_qualificacao_validade || 12;
   // Usa a data da sessão para evitar problemas de fuso horário (servidor UTC vs horário local)
-  const _dataSessaoStr = (f.data_sessao || '').toString().slice(0, 10);
-  const dt = _dataSessaoStr ? new Date(_dataSessaoStr + 'T12:00:00Z') : new Date();
-  const dv = new Date(dt);
-  dv.setMonth(dv.getMonth() + validadeMeses);
+  const dataSessaoStr = (f.data_sessao || '').toString().slice(0, 10);
+  const dt = dataSessaoStr ? new Date(dataSessaoStr + 'T12:00:00Z') : new Date();
+  const dataConclusao = dt.toISOString().split('T')[0];
+  const dataVencimentoPrincipal = calculateQualificationExpiry({
+    completionDate: dataConclusao,
+    validityMonths: validadeMeses,
+  });
 
   const qualificacoesGeradas: QualificacaoGerada[] = [];
   const alunoEmpresaId: number | null = f.aluno_empresa_id || null;
-  const dataConclusao = dt.toISOString().split('T')[0];
-
-  // Determinar o status correto baseado na data da sessão
-  // Se data_conclusao é no futuro, marcar como PLANEJADA; caso contrário, CONCLUIDA
   const hoje = new Date().toISOString().split('T')[0];
   const qualificacaoStatus = dataConclusao > hoje ? 'PLANEJADA' : 'CONCLUIDA';
 
-  // Só gera qualificação principal se o modelo tiver um qualificacao_tipo_id configurado.
-  // Se não tiver (ex: sessões CHECK puras), apenas as FAPs serão geradas.
   let qid: number | null = null;
   if (tipoQualifId) {
     const principalResult = await upsertQualificacaoHistoricoDaFicha(db, {
       fichaId: fid,
-      funcionarioId: f.colaborador_id_aluno,
+      funcionarioId: colaboradorId,
       qualificacaoId: tipoQualifId,
       qualificacaoCodigo: qualifCodigo,
       dataConclusao,
-      dataVencimento: dv.toISOString().split('T')[0],
+      dataVencimento: dataVencimentoPrincipal,
       observacoes: `Gerado da ficha #${fid}`,
       empresaId: alunoEmpresaId,
       status: qualificacaoStatus,
@@ -177,13 +199,18 @@ export async function gerarQualificacaoDaFicha(
     qualificacoesGeradas.push({
       codigo: qualifCodigo,
       nome: qualifNome,
-      valida_ate: dv.toISOString().split('T')[0],
+      valida_ate: dataVencimentoPrincipal,
       tipo: 'principal',
     });
   }
 
-  const fapsGeradas: Array<{ codigo: string; nome: string; valida_ate: string }> = [];
+  const fapsGeradas: Array<{
+    codigo: string;
+    nome: string;
+    valida_ate: string | null;
+  }> = [];
   let fichaTemCheckSemestral = false;
+
   if (f.agendamento_slot_id) {
     const checksMarcados = await db
       .prepare(
@@ -203,14 +230,12 @@ export async function gerarQualificacaoDaFicha(
           AND qt.deleted_at IS NULL
          WHERE sc.sessao_id = ? AND sc.deleted_at IS NULL
            AND sc.qualificacao_tipo_id IS NOT NULL
-           -- Exclui checks explicitamente reprovados
            AND NOT EXISTS (
              SELECT 1 FROM sessoes_checks_resultados scr2
              WHERE scr2.sessao_check_id = sc.id
                AND scr2.aprovado = 0
                AND scr2.deleted_at IS NULL
            )
-           -- Inclui checks aprovados OU sem resultado (ficha já está APROVADA)
            AND (
              EXISTS (
                SELECT 1 FROM sessoes_checks_resultados scr3
@@ -224,7 +249,6 @@ export async function gerarQualificacaoDaFicha(
                  AND scr4.deleted_at IS NULL
              )
            )
-           -- Exclui checks que possuem ficha separada para outro colaborador (ex: FAP13→CRED-EXA, FAP07→TRE-INST)
            AND NOT EXISTS (
              SELECT 1 FROM fichas_sessao f2
              WHERE f2.agendamento_slot_id = sc.sessao_id
@@ -236,22 +260,23 @@ export async function gerarQualificacaoDaFicha(
                )
            )`,
       )
-      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, f.colaborador_id_aluno)
-      .all();
+      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, colaboradorId)
+      .all<QualificationCheckRow>();
 
-    for (const check of (checksMarcados.results || []) as any[]) {
-      const validadeFAP = check.qt_validade || 12;
+    for (const check of checksMarcados.results || []) {
+      const validadeFAP = normalizeValidityMonths(check.qt_validade);
       if (validadeFAP === 6) fichaTemCheckSemestral = true;
-      // Reutiliza a data da sessão (dt) para consistência
-      const dvFAP = new Date(dt);
-      dvFAP.setMonth(dvFAP.getMonth() + validadeFAP);
+      const dataVencimentoFap = calculateQualificationExpiry({
+        completionDate: dataConclusao,
+        validityMonths: validadeFAP,
+      });
       const fapResult = await upsertQualificacaoHistoricoDaFicha(db, {
         fichaId: fid,
-        funcionarioId: f.colaborador_id_aluno,
+        funcionarioId: colaboradorId,
         qualificacaoId: check.qualificacao_tipo_id,
         qualificacaoCodigo: check.qt_codigo,
         dataConclusao,
-        dataVencimento: dvFAP.toISOString().split('T')[0],
+        dataVencimento: dataVencimentoFap,
         observacoes: `FAP gerada da ficha #${fid} (check aprovado)`,
         empresaId: alunoEmpresaId,
         status: qualificacaoStatus,
@@ -264,7 +289,7 @@ export async function gerarQualificacaoDaFicha(
           registro_id: fapResult.id,
           dados_novos: fapResult.row || {
             qualificacao_codigo: check.qt_codigo,
-            funcionario_id: f.colaborador_id_aluno,
+            funcionario_id: colaboradorId,
           },
         });
       }
@@ -272,12 +297,12 @@ export async function gerarQualificacaoDaFicha(
       fapsGeradas.push({
         codigo: check.qt_codigo,
         nome: check.qt_nome,
-        valida_ate: dvFAP.toISOString().split('T')[0],
+        valida_ate: dataVencimentoFap,
       });
       qualificacoesGeradas.push({
         codigo: check.qt_codigo,
         nome: check.qt_nome,
-        valida_ate: dvFAP.toISOString().split('T')[0],
+        valida_ate: dataVencimentoFap,
         tipo: 'fap',
       });
     }
@@ -287,7 +312,8 @@ export async function gerarQualificacaoDaFicha(
     f.tipo_curricular_codigo,
     f.tipo_curricular_nome,
   );
-  const tipoCurricularAusente = !normalizeTipoCurricular(f.tipo_curricular_codigo) &&
+  const tipoCurricularAusente =
+    !normalizeTipoCurricular(f.tipo_curricular_codigo) &&
     !normalizeTipoCurricular(f.tipo_curricular_nome);
 
   if (fichaTemCheckSemestral && tipoCurricularAusente) {
@@ -296,13 +322,10 @@ export async function gerarQualificacaoDaFicha(
     );
   }
 
-  // A conclusão de G1-SEM exige os dois fatos independentes: check semestral
-  // aprovado e tipo curricular canônico SEM/SEMESTRAL. Uma FAP de seis meses
-  // dentro de uma ficha PER nunca conclui o currículo semestral.
-  if (fichaTemCheckSemestral && tipoCurricularResolvido && f.colaborador_id_aluno) {
+  if (fichaTemCheckSemestral && tipoCurricularResolvido) {
     try {
       const g1semResult = await realizarG1SemPendente(db, {
-        funcionarioId: Number(f.colaborador_id_aluno),
+        funcionarioId: colaboradorId,
         dataConclusao,
         tipoTreinamento: 'SEMESTRAL',
         observacoes: `Realizada via ficha semestral #${fid}`,
@@ -347,7 +370,7 @@ export async function gerarQualificacaoDaFicha(
     funcionario: f.aluno_nome,
     tipo: qid ? qualifCodigo : (primeiraFap?.codigo ?? ''),
     nome: qid ? qualifNome : (primeiraFap?.nome ?? ''),
-    valida_ate: qid ? dv.toISOString().split('T')[0] : (primeiraFap?.valida_ate ?? ''),
+    valida_ate: qid ? dataVencimentoPrincipal : (primeiraFap?.valida_ate ?? null),
     faps_geradas: fapsGeradas,
     qualificacoes_geradas: qualificacoesGeradas,
   };
