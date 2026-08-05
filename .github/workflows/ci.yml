@@ -32,6 +32,13 @@ jobs:
           node scripts/ci/check-github-workflow-contexts.mjs
           node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
 
+      - name: guard:migrations-dir-purity
+        run: |
+          node --test scripts/__tests__/migration-deploy-safety.test.mjs scripts/__tests__/migration-no-go-guard.test.mjs
+          node scripts/guard-migrations-dir-purity.mjs --dry-run
+          node scripts/guard-no-generic-remote-migrations.mjs
+          node scripts/check-no-go-migrations.mjs
+
       - name: Install
         run: npm ci
 
@@ -94,9 +101,9 @@ jobs:
       - name: Write local dev vars
         run: |
           JWT_SECRET="$(openssl rand -hex 32)"
-          cat > worker-airtrust/.dev.vars <<EOF
+          cat > worker-airtrust/.dev.vars <<EOFVARS
           JWT_SECRET=$JWT_SECRET
-          EOF
+          EOFVARS
 
       - name: Setup local database
         run: npm run setup:lms:local:reset

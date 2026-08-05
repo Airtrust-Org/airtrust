@@ -12,12 +12,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { isNoGoMigrationContent, isNoGoMigrationFile, listNoGoMigrations } from '../migration-no-go-lib.mjs';
+import {
+  isNoGoMigrationContent,
+  isNoGoMigrationFile,
+  listNoGoMigrations,
+} from '../migration-no-go-lib.mjs';
 
 test('detects the NO_GO marker in file content', () => {
-  const content = ['-- Migration 9999: example', '-- NO_GO_MIGRATION_PRODUCAO', '-- Motivo: teste', 'SELECT 1;'].join(
-    '\n',
-  );
+  const content = [
+    '-- Migration 9999: example',
+    '-- NO_GO_MIGRATION_PRODUCAO',
+    '-- Motivo: teste',
+    'SELECT 1;',
+  ].join('\n');
   assert.equal(isNoGoMigrationContent(content), true);
 });
 
@@ -26,19 +33,21 @@ test('does not flag ordinary migrations', () => {
   assert.equal(isNoGoMigrationContent(content), false);
 });
 
-test('does not false-positive on the word NO_GO appearing mid-sentence', () => {
-  const content = ['-- Esta nao e uma migration NO_GO_MIGRATION_PRODUCAO_QUALQUER_OUTRA_COISA no meio do texto'].join(
-    '\n',
-  );
-  // The marker requires the exact token at line start; a suffixed variant must not match.
+test('does not false-positive on a suffixed token', () => {
+  const content = '-- NO_GO_MIGRATION_PRODUCAO_OUTRA_COISA\n';
   assert.equal(isNoGoMigrationContent(content), false);
 });
 
-test('0432 and 0435 are currently marked NO_GO in the real migrations directory', () => {
-  const migrationsDir = path.join(process.cwd(), 'worker-airtrust', 'migrations');
-  const blocked = listNoGoMigrations(migrationsDir);
-  assert.ok(blocked.includes('0432_revisao_completa_codigos_manobras.sql'));
-  assert.ok(blocked.includes('0435_fix_vencimento_fim_mes_lms.sql'));
+test('blocked historical SQL is quarantined outside the canonical migrations directory', () => {
+  const canonicalDir = path.join(process.cwd(), 'worker-airtrust', 'migrations');
+  const manualNoGoDir = path.join(process.cwd(), 'scripts', 'sql', 'manual', 'no-go');
+  assert.deepEqual(listNoGoMigrations(canonicalDir), []);
+  const blocked = listNoGoMigrations(manualNoGoDir);
+  assert.deepEqual(blocked, [
+    '0432_revisao_completa_codigos_manobras.sql',
+    '0433_fix_loft_references.sql',
+    '0435_fix_vencimento_fim_mes_lms.sql',
+  ]);
 });
 
 test('isNoGoMigrationFile reads real files from disk', () => {
@@ -57,22 +66,22 @@ test('apply-migration-production.sh refuses a migration marked NO_GO', () => {
   fs.mkdirSync(migrationsSubdir, { recursive: true });
   const migrationRelPath = 'worker-airtrust/migrations/9999_test_blocked.sql';
   fs.writeFileSync(path.join(tmpDir, migrationRelPath), '-- NO_GO_MIGRATION_PRODUCAO\nSELECT 1;\n');
-  fs.cpSync(path.join(process.cwd(), 'scripts', 'apply-migration-production.sh'), path.join(tmpDir, 'apply.sh'));
-  fs.cpSync(
-    path.join(process.cwd(), 'scripts', 'check-single-migration-no-go.mjs'),
-    path.join(tmpDir, 'check-single-migration-no-go.mjs'),
-  );
-  fs.cpSync(path.join(process.cwd(), 'scripts', 'migration-no-go-lib.mjs'), path.join(tmpDir, 'migration-no-go-lib.mjs'));
-  // The wrapper shells out to `node scripts/check-single-migration-no-go.mjs`
-  // relative to CWD, so lay the copies out at the same relative path.
+
   fs.mkdirSync(path.join(tmpDir, 'scripts'), { recursive: true });
-  fs.cpSync(path.join(tmpDir, 'check-single-migration-no-go.mjs'), path.join(tmpDir, 'scripts', 'check-single-migration-no-go.mjs'));
-  fs.cpSync(path.join(tmpDir, 'migration-no-go-lib.mjs'), path.join(tmpDir, 'scripts', 'migration-no-go-lib.mjs'));
+  for (const name of [
+    'apply-migration-production.sh',
+    'check-single-migration-no-go.mjs',
+    'migration-no-go-lib.mjs',
+    'guard-migrations-dir-purity.mjs',
+    'migration-directory-policy.mjs',
+  ]) {
+    fs.cpSync(path.join(process.cwd(), 'scripts', name), path.join(tmpDir, 'scripts', name));
+  }
 
   let threw = false;
   let stderr = '';
   try {
-    execFileSync('bash', ['apply.sh', migrationRelPath], {
+    execFileSync('bash', ['scripts/apply-migration-production.sh', migrationRelPath], {
       cwd: tmpDir,
       env: {
         ...process.env,

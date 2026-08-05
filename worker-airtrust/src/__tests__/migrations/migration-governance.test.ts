@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const migrationsDir = join(workerRoot, 'migrations');
+const repoRoot = join(workerRoot, '..');
 const experimentalMigrationPath = join(
   workerRoot,
   'migrations_experimental',
@@ -60,7 +61,6 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0159_add_gera_qualificacao_modelos_sessao.sql',
     '0159_remover_tipo_aeronave_modelos_sessao.sql',
   ],
-  '0172': ['0172_create_treinamentos_planejados.sql', '0172_rollback_treinamentos.sql'],
   '0200': ['0200_performance_composite_indexes.sql', '0200_remove_unused_columns_historico.sql'],
   '0215': ['0215_frms_notas_resolucao.sql', '0215_frms_visual_thresholds.sql'],
   '0246': [
@@ -78,59 +78,11 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0367_classificar_dificuldade_sk76_restantes.sql',
     '0367_sk76_reaquisicao_experiencia_recente.sql',
   ],
-  '0418': [
-    '0418_notechs_codigos_categorizados.sql',
-    '0418_notechs_codigos_categorizados_rollback.sql',
-  ],
-  '0419': [
-    '0419_normalizar_nomes_modelos_sessao_ptbr.sql',
-    '0419_normalizar_nomes_modelos_sessao_ptbr_rollback.sql',
-  ],
-  '0420': [
-    '0420_notificacoes_log_add_empresa_id.sql',
-    '0420_notificacoes_log_add_empresa_id_preflight_audit.sql',
-    '0420_notificacoes_log_add_empresa_id_rollback.sql',
-  ],
-  '0437': [
-    '0437_setores_gestores_gestor_id_optional.sql',
-    '0437_setores_gestores_gestor_id_optional_rollback.sql',
-  ],
-  '0444': ['0444_controle_voos_versao.sql', '0444_controle_voos_versao_rollback.sql'],
-  '0445': [
-    '0445_simuladores_matriz_aw139_reconciliacao.sql',
-    '0445_simuladores_matriz_aw139_reconciliacao_rollback.sql',
-  ],
-  '0446': [
-    '0446_simuladores_matriz_aw139_reconciliacao_followup.sql',
-    '0446_simuladores_matriz_aw139_reconciliacao_followup_rollback.sql',
-  ],
-  '0447': [
-    '0447_simuladores_matriz_aw139_sk76_tipo_modelo.sql',
-    '0447_simuladores_matriz_aw139_sk76_tipo_modelo_rollback.sql',
-  ],
-  '0448': [
-    '0448_simuladores_matriz_aw139_sk76_gera_qualificacao.sql',
-    '0448_simuladores_matriz_aw139_sk76_gera_qualificacao_rollback.sql',
-  ],
-  '0452': ['0452_operational_domain_rbac.sql', '0452_operational_domain_rbac_rollback.sql'],
-  '0454': [
-    '0454_qualificacoes_tipos_dominio_override.sql',
-    '0454_qualificacoes_tipos_dominio_override_rollback.sql',
-  ],
 } as const;
 
 const EXPECTED_NON_STANDARD_FILES = [
   '0098-indices-performance.sql',
   '132_add_funcionario_ativo.sql',
-  'purge-soft-deleted-qualificacoes.sql',
-  // 0438's rollback deliberately does NOT start with digits: it must never
-  // be a candidate for duplicate-prefix detection, and must never be picked
-  // up by any tool that walks migrations by numeric prefix order.
-  'rollback_0438_controle_voos_rdv_coordenacao_workflow.sql',
-  // Mesmo padrão para 0439 (guias do instrutor) — renomeado de
-  // '0439_guias_instrutor_simulador_rollback.sql' (sufixo, colidia com a
-  // detecção de prefixo duplicado) para 'rollback_0439_...' (prefixo).
-  'rollback_0439_guias_instrutor_simulador.sql',
 ] as const;
 
 const EXPECTED_CREATE_TEMP_TABLE_FILES = [
@@ -161,7 +113,6 @@ const EXPECTED_FOREIGN_KEYS_OFF_FILES = [
   '0399_harden_empresa_id_wave3.sql',
   '0402_harden_empresa_id_wave4.sql',
   '0437_setores_gestores_gestor_id_optional.sql',
-  '0437_setores_gestores_gestor_id_optional_rollback.sql',
   '0455_aeronaves_codigo_tenant_active_unique.sql',
 ] as const;
 
@@ -176,145 +127,73 @@ describe('migration governance', () => {
 
   it('pins the historical duplicate-prefix allowlist for canonical migrations', () => {
     const prefixMap = new Map<string, string[]>();
-
     for (const file of files) {
-      const match = /^([0-9]{4})_/.exec(file);
-      if (!match) continue;
-      const prefix = match[1];
+      const prefix = /^([0-9]{4})_/.exec(file)?.[1];
+      if (!prefix) continue;
       prefixMap.set(prefix, [...(prefixMap.get(prefix) || []), file]);
     }
-
     const duplicates = Object.fromEntries(
       [...prefixMap.entries()]
         .filter(([, migrationFiles]) => migrationFiles.length > 1)
         .sort(([a], [b]) => a.localeCompare(b)),
     );
-
     expect(duplicates).toEqual(EXPECTED_DUPLICATE_PREFIXES);
   });
 
-  it('pins the historical non-standard filename allowlist', () => {
+  it('keeps only the two immutable historical filename exceptions', () => {
     const nonStandard = files.filter((file) => !/^[0-9]{4}_[a-z0-9_]+\.sql$/.test(file));
     expect(nonStandard).toEqual([...EXPECTED_NON_STANDARD_FILES]);
   });
 
-  it('keeps 9999 as the only reserved high-prefix sentinel above the regular chain', () => {
-    const numericPrefixes = files
+  it('keeps the regular chain ratcheted and 9999 as the only high sentinel', () => {
+    const regularPrefixes = files
       .map((file) => /^([0-9]{4})_/.exec(file)?.[1] || null)
-      .filter((prefix): prefix is string => prefix !== null);
-
-    const regularPrefixes = numericPrefixes.filter((prefix) => prefix !== '9999');
-    const highPrefixes = files.filter(
-      (file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file),
-    );
-
-    // Ratchet raised 2026-07-20: 0438 controle-voos RDV coordenacao workflow.
-    // Ratchet raised 2026-07-21: 0439 guias_instrutor_simulador (renumerado de
-    // 0438 para nao colidir com a migration do RDV, ja mergeada em main).
-    // Ratchet raised 2026-07-21: 0440 simuladores_matriz_versionada_metadata.
-    // Ratchet raised 2026-07-22: 0441 simuladores_matriz_manobra_resolution.
-    // Ratchet raised 2026-07-22: 0442 simuladores_matriz_guia_relink (separate,
-    // small, atomic executor for the 51 guia-instrutor links only).
-    // Ratchet raised 2026-07-25: 0443 simuladores_matriz_remediation_compensation
-    // (append-only overlay + ledger for the 5 LEGACY_EQUIVALENT compensation).
-    // Ratchet raised 2026-07-25: 0444 controle_voos_versao (CAS otimista em
-    // cv_voos, append-only ADD COLUMN com DEFAULT constante).
-    // Ratchet raised 2026-07-27: 0445 simuladores_matriz_aw139_reconciliacao
-    // (rename 30 AW139 current models, retire 7 duplicate-current rows,
-    // carry FAP check-links forward — ID-scoped, guarded, additive).
-    // Ratchet raised 2026-07-27: 0446 simuladores_matriz_aw139_reconciliacao_followup
-    // (0445 was built against an archived snapshot that predated a same-day
-    // remediation batch; 9 of the 30 AW139 codes had already been given a
-    // newer current row by that batch, so 0445 fixed their now-retired
-    // predecessor instead. This corrects the actual current rows.)
-    // Ratchet raised 2026-07-27: 0447 simuladores_matriz_aw139_sk76_tipo_modelo
-    // (fills tipo_sessao_id/modelo_aeronave — both NULL since the versioned
-    // import — for the 51 AW139/S-76 canonical models, by canonical code
-    // prefix, matching the convention already used by 6 pre-existing
-    // non-canonical models of the same tenant).
-    // Ratchet raised 2026-07-27: 0448 simuladores_matriz_aw139_sk76_gera_qualificacao
-    // (restores gera_qualificacao=1 + qualificacao_tipo_id on the 7 current
-    // check-session models whose predecessor already had it, lost the same
-    // way as the FAP links fixed in 0446).
-    // Ratchet raised 2026-07-27: 0449 simuladores_check_faps_reconciliacao
-    // (classifies FAP6-139/IFR-SK76 as is_check=1 to match their sibling
-    // FAPs, and adds the FAP06+IFR check-links the canonical rule
-    // requires for AW139/S-76 inicial/periodico/semestral checks).
-    // Ratchet raised 2026-07-27: 0450 qualificacoes_category_only
-    // (migrates EAD-formato types to categoria-only, sets formato_id=NULL).
-    // Ratchet raised 2026-07-28: 0452 operational_domain_rbac (dominios
-    // catalog + additive domain-classification columns + per-tenant
-    // rollout flag, see docs/rbac/gestor-operational-autonomy.md).
-    // Ratchet raised 2026-07-31: 0454 qualificacoes_tipos_dominio_override
-    // (additive, nullable per-tipo domain override — disambiguates a
-    // mixed-domain/delivery-modality categoria like "EAD", populated only
-    // via the existing admin classification tool; see
-    // docs/rbac/gestor-operational-autonomy.md and the certificate-
-    // generation incident fix).
-    // Ratchet raised 2026-08-03: 0455 scopes active aircraft codes per tenant.
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(455);
-    expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
+      .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
+    const expectedLatest = files.includes('0456_lms_h5p_course_binding.sql') ? 456 : 455;
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
+    expect(
+      files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file)),
+    ).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
-  it('keeps experimental migrations outside the canonical production migration chain', () => {
-    const experimentalFilesInCanonicalChain = files.filter((file) => /experimental/i.test(file));
-
-    expect(experimentalFilesInCanonicalChain).toEqual([]);
+  it('keeps experimental migrations outside the canonical production chain', () => {
+    expect(files.filter((file) => /experimental/i.test(file))).toEqual([]);
     expect(existsSync(experimentalMigrationPath)).toBe(true);
   });
 
-  it('keeps Wrangler D1 migrations configured to the canonical migrations folder', () => {
+  it('keeps Wrangler configured to the canonical migrations folder', () => {
     for (const configPath of wranglerConfigPaths) {
-      const configuredMigrationDirs = [
+      const configured = [
         ...readFileSync(configPath, 'utf8').matchAll(/^\s*migrations_dir\s*=\s*"([^"]+)"/gm),
-      ].map(([, migrationsDir]) => migrationsDir);
-
-      expect(configuredMigrationDirs.length).toBeGreaterThan(0);
-      expect(
-        configuredMigrationDirs.every((migrationsDir) => migrationsDir === './migrations'),
-      ).toBe(true);
-      expect(configuredMigrationDirs).not.toContain('./migrations_experimental');
+      ].map(([, value]) => value);
+      expect(configured.length).toBeGreaterThan(0);
+      expect(configured.every((value) => value === './migrations')).toBe(true);
+      expect(configured).not.toContain('./migrations_experimental');
     }
   });
 
-  it('keeps CREATE TEMP TABLE confined to the documented historical allowlist', () => {
+  it('keeps CREATE TEMP TABLE confined to its historical allowlist', () => {
     const offenders = files.filter((file) =>
-      /\bCREATE\s+TEMP\s+TABLE\b/i.test(readFileSync(`${migrationsDir}/${file}`, 'utf8')),
+      /\bCREATE\s+TEMP\s+TABLE\b/i.test(readFileSync(join(migrationsDir, file), 'utf8')),
     );
-
     expect(offenders).toEqual([...EXPECTED_CREATE_TEMP_TABLE_FILES]);
   });
 
-  it('keeps PRAGMA foreign_keys = OFF confined to the documented historical allowlist', () => {
+  it('keeps PRAGMA foreign_keys = OFF confined to its historical allowlist', () => {
     const offenders = files.filter((file) =>
-      /\bPRAGMA\s+foreign_keys\s*=\s*OFF\b/i.test(readFileSync(`${migrationsDir}/${file}`, 'utf8')),
+      /\bPRAGMA\s+foreign_keys\s*=\s*OFF\b/i.test(readFileSync(join(migrationsDir, file), 'utf8')),
     );
-
     expect(offenders).toEqual([...EXPECTED_FOREIGN_KEYS_OFF_FILES]);
   });
 
-  // Achado do PR #419: 0438's preflight (consulta read-only para decisão
-  // manual do operador, sem ALTER/CREATE) vivia em worker-airtrust/migrations/
-  // e era registrada no ledger d1_migrations como se fosse uma migration de
-  // verdade. Movida para scripts/validation/controle-voos-rdv-0438-preflight.sql.
-  // Este teste garante que o padrão não volte a aparecer sem passar por uma
-  // decisão explícita (a única exceção histórica é 0420, anterior a este guard).
-  it('keeps preflight/audit/validation-only read-only files out of the canonical migrations dir', () => {
-    const NON_MIGRATION_FILENAME_SUFFIXES = [
-      '_preflight_audit.sql',
-      '_preflight.sql',
-      '_validation_only.sql',
-      '_readonly.sql',
-      '_read_only.sql',
-    ];
-    const HISTORICAL_ALLOWLIST = ['0420_notificacoes_log_add_empresa_id_preflight_audit.sql'];
-
-    const offenders = files.filter(
-      (file) =>
-        NON_MIGRATION_FILENAME_SUFFIXES.some((suffix) => file.toLowerCase().endsWith(suffix)) &&
-        !HISTORICAL_ALLOWLIST.includes(file),
-    );
-
-    expect(offenders).toEqual([]);
+  it('keeps rollback, purge, preflight, manual and NO_GO SQL outside canonical migrations', () => {
+    const forbiddenName = /rollback|purge|preflight|manual|diagnostic|diagnostico/i;
+    const noGoMarker = /^\s*--\s*NO_GO_MIGRATION_PRODUCAO\s*$/m;
+    expect(files.filter((file) => forbiddenName.test(file))).toEqual([]);
+    expect(
+      files.filter((file) => noGoMarker.test(readFileSync(join(migrationsDir, file), 'utf8'))),
+    ).toEqual([]);
+    expect(existsSync(join(repoRoot, 'scripts', 'sql', 'manual', 'destructive'))).toBe(true);
+    expect(existsSync(join(repoRoot, 'scripts', 'sql', 'manual', 'no-go'))).toBe(true);
   });
 });
