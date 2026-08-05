@@ -18,6 +18,7 @@
 9. Deploy do Worker e alteração de schema são operações separadas. `scripts/deploy-worker-only.sh` nunca enumera nem aplica migrations.
 10. `wrangler d1 migrations apply ... --remote` é proibido fora do caminho exato governado e isolado:
    `scripts/production/apply-simuladores-matriz-remote-migration.sh`.
+11. O executor legado `worker-airtrust/scripts/aplicar-migration-0091-seguro.sh` permanece apenas como tombstone fail-closed e nunca consulta ou altera D1.
 
 ## Guardas
 
@@ -36,7 +37,7 @@ O modo dry-run mostra em `candidateFiles` exatamente o conjunto que poderia ser 
 node scripts/guard-no-generic-remote-migrations.mjs
 ```
 
-A allowlist é baseada em caminho exato. Cópias, renomes ou novos wrappers falham até revisão explícita.
+A allowlist é baseada em caminho exato. Cópias, renomes ou novos wrappers falham até revisão explícita. Caminhos legados não recebem exceção: são aposentados em modo fail-closed.
 
 ### NO_GO
 

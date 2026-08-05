@@ -127,6 +127,24 @@ test('deploy-worker-only contains no implicit migration application', () => {
   assert.match(source, /never applies D1 migrations/i);
 });
 
+test('legacy 0091 remote executor is retired fail-closed', () => {
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+  const script = path.join(root, 'worker-airtrust', 'scripts', 'aplicar-migration-0091-seguro.sh');
+  const source = fs.readFileSync(script, 'utf8');
+  assert.doesNotMatch(source, /--remote|d1\s+migrations\s+apply/);
+  let stderr = '';
+  assert.throws(() => {
+    try {
+      execFileSync('bash', [script], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (error) {
+      stderr = String(error.stderr ?? '');
+      throw error;
+    }
+  });
+  assert.match(stderr, /retired/i);
+  assert.match(stderr, /No database query or migration was executed/i);
+});
+
 test('the real canonical directory passes purity and enumerates no destructive artifact', () => {
   const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
   const result = inspectMigrationsDirectory(path.join(root, 'worker-airtrust', 'migrations'));
