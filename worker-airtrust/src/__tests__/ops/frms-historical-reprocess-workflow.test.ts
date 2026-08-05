@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+// The issue-comment path resumes the same durable scope instead of creating a second execution.
 const root = join(process.cwd(), '..');
 const workflow = readFileSync(
   join(root, '.github', 'workflows', 'frms-historical-reprocess.yml'),
@@ -34,6 +35,20 @@ describe('FRMS historical reprocessing governance', () => {
     expect(executeIndex).toBeGreaterThan(timeTravelIndex);
     expect(workflow).toContain('CLOUDFLARE_D1_BACKUP_API_TOKEN');
     expect(workflow).toContain('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+  });
+
+  it('accepts only the exact owner authorization comment and preserves the reviewed scope', () => {
+    expect(workflow).toContain('issue_comment:');
+    expect(workflow).toContain('github.event.issue.number == 827');
+    expect(workflow).toContain('github.event.comment.user.login == github.repository_owner');
+    expect(workflow).toContain(
+      "github.event.comment.body == 'FRMS_REPROCESS_ALL_HISTORICAL 2578ee339be7788bf3cc5a1da8a23bd50b06b524'",
+    );
+    expect(workflow).toContain('APPROVED_FORMULA_SHA: 2578ee339be7788bf3cc5a1da8a23bd50b06b524');
+    expect(workflow).toContain('git merge-base --is-ancestor "$expected_sha" "$main_sha"');
+    expect(workflow).toContain('Reviewed FRMS formula or executor changed after approval.');
+    expect(workflow).toContain('Record authorized production start');
+    expect(workflow).toContain('Publish sanitized production result to authorization issue');
   });
 
   it('uses a disposable backup dry-run and uploads only sanitized JSON reports', () => {

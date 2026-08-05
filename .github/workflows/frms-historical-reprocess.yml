@@ -1,6 +1,9 @@
 name: FRMS Historical Reprocessing (Governed)
 
 on:
+  issue_comment:
+    types:
+      - created
   workflow_dispatch:
     inputs:
       operation:
@@ -34,6 +37,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: frms-historical-reprocess-production
@@ -44,10 +48,17 @@ env:
   PRODUCTION_CONFIRMATION: FRMS_REPROCESS_ALL_HISTORICAL
   PRODUCTION_DATABASE_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
   FORMULA_DEFAULT: frms-regulatory-integrity-20260804-v2
+  APPROVED_FORMULA_SHA: 2578ee339be7788bf3cc5a1da8a23bd50b06b524
+  AUTHORIZATION_ISSUE: '827'
 
 jobs:
   reprocess:
     name: Backup, dry-run, execute and validate FRMS history
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.number == 827 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.body == 'FRMS_REPROCESS_ALL_HISTORICAL 2578ee339be7788bf3cc5a1da8a23bd50b06b524')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 360
@@ -69,12 +80,38 @@ jobs:
           INPUT_FORMULA_VERSION: ${{ inputs.formula_version }}
           INPUT_ROLLBACK_SCOPE_KEY: ${{ inputs.rollback_scope_key }}
           INPUT_CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ACTOR: ${{ github.event.comment.user.login }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
           git fetch origin main
           main_sha="$(git rev-parse origin/main)"
 
-          if [[ "$EVENT_NAME" == 'push' ]]; then
+          if [[ "$EVENT_NAME" == 'issue_comment' ]]; then
+            [[ "$EVENT_REF" == 'refs/heads/main' ]] || {
+              echo 'Authorized issue comment must execute from main.' >&2
+              exit 1
+            }
+            [[ "$ISSUE_NUMBER" == "$AUTHORIZATION_ISSUE" ]] || {
+              echo 'Unexpected authorization issue.' >&2
+              exit 1
+            }
+            [[ "$COMMENT_ACTOR" == "$REPOSITORY_OWNER" ]] || {
+              echo 'Only the repository owner can authorize this operation.' >&2
+              exit 1
+            }
+            [[ "$COMMENT_BODY" == "$PRODUCTION_CONFIRMATION $APPROVED_FORMULA_SHA" ]] || {
+              echo 'Authorization comment does not match the exact approved command.' >&2
+              exit 1
+            }
+            operation='execute'
+            expected_sha="$APPROVED_FORMULA_SHA"
+            formula_version="$FORMULA_DEFAULT"
+            rollback_scope_key=''
+            confirmation="$PRODUCTION_CONFIRMATION"
+          elif [[ "$EVENT_NAME" == 'push' ]]; then
             [[ "$EVENT_REF" == 'refs/heads/ops/frms-historical-reprocess-approved-20260805' ]] || {
               echo 'Unexpected push ref.' >&2
               exit 1
@@ -104,14 +141,36 @@ jobs:
             echo 'expected_sha must be a lowercase 40-character SHA.' >&2
             exit 1
           }
-          [[ "$expected_sha" == "$EVENT_SHA" ]] || {
-            echo 'expected_sha does not match github.sha.' >&2
-            exit 1
-          }
-          [[ "$expected_sha" == "$main_sha" ]] || {
-            echo 'The approved SHA is no longer the current origin/main.' >&2
-            exit 1
-          }
+
+          if [[ "$EVENT_NAME" == 'issue_comment' ]]; then
+            [[ "$EVENT_SHA" == "$main_sha" ]] || {
+              echo 'Issue-comment workflow SHA is not the current origin/main.' >&2
+              exit 1
+            }
+            git merge-base --is-ancestor "$expected_sha" "$main_sha" || {
+              echo 'The approved formula SHA is not an ancestor of current main.' >&2
+              exit 1
+            }
+            git diff --quiet "$expected_sha" "$main_sha" -- \
+              worker-airtrust/src/lib/frms/calculos.ts \
+              worker-airtrust/src/lib/frms/db-service-jornadas.ts \
+              worker-airtrust/src/lib/frms/db-service-config.ts \
+              ops/production/frms-historical-reprocess.mjs \
+              scripts/production/frms-historical-reprocess.mjs || {
+                echo 'Reviewed FRMS formula or executor changed after approval.' >&2
+                exit 1
+              }
+          else
+            [[ "$expected_sha" == "$EVENT_SHA" ]] || {
+              echo 'expected_sha does not match github.sha.' >&2
+              exit 1
+            }
+            [[ "$expected_sha" == "$main_sha" ]] || {
+              echo 'The approved SHA is no longer the current origin/main.' >&2
+              exit 1
+            }
+          fi
+
           [[ "$operation" == 'execute' || "$operation" == 'rollback' ]] || {
             echo 'Unsupported operation.' >&2
             exit 1
@@ -125,8 +184,6 @@ jobs:
             [[ "$rollback_scope_key" =~ ^[a-zA-Z0-9:._-]{3,255}$ ]] || { echo 'Invalid rollback_scope_key.' >&2; exit 1; }
           fi
 
-          # The canonical backup helper refuses non-main worktrees. The event
-          # SHA has already been proven identical to origin/main above.
           git checkout -B main origin/main
           [[ "$(git status --porcelain)" == '' ]]
 
@@ -136,6 +193,27 @@ jobs:
             echo "formula_version=$formula_version"
             echo "rollback_scope_key=$rollback_scope_key"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Record authorized production start
+        if: ${{ github.event_name == 'issue_comment' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$(jq -rn \
+            --arg source_sha '${{ steps.auth.outputs.expected_sha }}' \
+            --arg workflow_sha '${{ github.sha }}' \
+            '"## Recálculo histórico FRMS autorizado\n\n- source SHA da fórmula/executor: `\($source_sha)`\n- workflow SHA: `\($workflow_sha)`\n- estado: `BACKUP_AND_DRY_RUN_STARTED`\n\nA escrita produtiva somente ocorrerá depois do backup integral, restauração validada e dry-run completo."')"
+          jq -cn --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/start-comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            --data-binary @"$RUNNER_TEMP/start-comment.json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${AUTHORIZATION_ISSUE}/comments" >/dev/null
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -313,6 +391,34 @@ jobs:
               | jq -r '.[0].results[0].total')"
             [[ "$duplicates" == '0' ]] || { echo "Active factorization duplicates: $duplicates" >&2; exit 1; }
           fi
+
+      - name: Publish sanitized production result to authorization issue
+        if: ${{ github.event_name == 'issue_comment' && env.PRODUCTION_REPORT != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$(jq -rn \
+            --arg outcome "$(jq -r '.outcome' "$PRODUCTION_REPORT")" \
+            --arg journeys "$(jq -r '.inventory.overview.jornadas' "$PRODUCTION_REPORT")" \
+            --arg processed "$(jq -r '.summary.processed' "$PRODUCTION_REPORT")" \
+            --arg skipped "$(jq -r '(.summary.skipped_completed + .summary.skipped_non_operational)' "$PRODUCTION_REPORT")" \
+            --arg failed "$(jq -r '.summary.failed' "$PRODUCTION_REPORT")" \
+            --arg pending "$(jq -r '.summary.pending' "$PRODUCTION_REPORT")" \
+            --arg review "$(jq -r '.summary.review_required // 0' "$PRODUCTION_REPORT")" \
+            --arg scope "$(jq -r '.scope_key' "$PRODUCTION_REPORT")" \
+            --arg recovery "${RECOVERY_TIMESTAMP_UTC:-not-captured}" \
+            '"## Resultado do recálculo histórico FRMS\n\n- outcome: `\($outcome)`\n- jornadas históricas no inventário: `\($journeys)`\n- recalculadas nesta execução: `\($processed)`\n- já concluídas ou não operacionais: `\($skipped)`\n- falhas: `\($failed)`\n- pendentes: `\($pending)`\n- casos para revisão humana: `\($review)`\n- ponto de recuperação UTC: `\($recovery)`\n- escopo: `\($scope)`\n\nO relatório contém somente contagens e metadados sanitizados."')"
+          jq -cn --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/result-comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            --data-binary @"$RUNNER_TEMP/result-comment.json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${AUTHORIZATION_ISSUE}/comments" >/dev/null
 
       - name: Publish sanitized operation report
         if: ${{ always() && env.PRODUCTION_REPORT != '' }}
