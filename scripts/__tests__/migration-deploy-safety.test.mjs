@@ -152,12 +152,7 @@ test('deploy-worker-only contains no implicit migration application', () => {
 });
 
 test('legacy 0091 remote executor is retired fail-closed', () => {
-  const script = path.join(
-    root,
-    'worker-airtrust',
-    'scripts',
-    'aplicar-migration-0091-seguro.sh',
-  );
+  const script = path.join(root, 'worker-airtrust', 'scripts', 'aplicar-migration-0091-seguro.sh');
   const source = fs.readFileSync(script, 'utf8');
   assert.doesNotMatch(source, /--remote|d1\s+migrations\s+apply/);
 
