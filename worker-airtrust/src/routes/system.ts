@@ -14,7 +14,10 @@ import { getReleaseMetadata } from '../services/release-metadata';
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
 function setNoCacheHeaders(c: { header: (name: string, value: string) => void }) {
-  c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0');
+  c.header(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0',
+  );
   c.header('Pragma', 'no-cache');
   c.header('Expires', '0');
   c.header('Surrogate-Control', 'no-store');
@@ -26,7 +29,8 @@ export function registerSystemRoutes(app: SystemApp) {
   app.get('/api/edb/capability', (c) => {
     const tenantId = getEmpresaId(c);
     const enabled =
-      checkPermission(c, 'manager') && isEdbShadowPilotEnabledForTenant(c.env, tenantId);
+      checkPermission(c, 'manager') &&
+      isEdbShadowPilotEnabledForTenant(c.env, tenantId);
 
     return c.json({
       success: true,
@@ -47,7 +51,11 @@ export function registerSystemRoutes(app: SystemApp) {
 
     const tenantId = getEmpresaId(c);
     if (!isEdbShadowPilotEnabledForTenant(c.env, tenantId)) {
-      throw new ApiError('Recurso indisponivel', 404, 'EDB_SHADOW_PILOT_NOT_ENABLED');
+      throw new ApiError(
+        'Recurso indisponivel',
+        404,
+        'EDB_SHADOW_PILOT_NOT_ENABLED',
+      );
     }
 
     await next();
@@ -59,12 +67,17 @@ export function registerSystemRoutes(app: SystemApp) {
     setNoCacheHeaders(c);
 
     const startTime = Date.now();
-    const checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }> = {};
+    const checks: Record<
+      string,
+      { status: 'ok' | 'error'; latency?: number; error?: string }
+    > = {};
     let overallHealthy = true;
 
     try {
       const dbStart = Date.now();
-      const dbTest = await c.env.DB.prepare('SELECT 1 as test').first<{ test: number }>();
+      const dbTest = await c.env.DB.prepare('SELECT 1 as test').first<{
+        test: number;
+      }>();
       checks.database = {
         status: dbTest?.test === 1 ? 'ok' : 'error',
         latency: Date.now() - dbStart,
@@ -164,7 +177,8 @@ export function registerSystemRoutes(app: SystemApp) {
     return c.json({
       success: true,
       backend_version: metadata.version,
-      frontend_version: (c.env as unknown as Record<string, string>).FRONT_VERSION || null,
+      frontend_version:
+        (c.env as unknown as Record<string, string>).FRONT_VERSION || null,
       environment: metadata.environment,
       timestamp: new Date().toISOString(),
     });
@@ -178,7 +192,10 @@ export function registerSystemRoutes(app: SystemApp) {
   app.get('/api/system/operations/cron', async (c) => {
     setNoCacheHeaders(c);
     const empresaId = getEmpresaId(c);
-    const platformState = await resolvePlatformAccessState(c.env.DB, c.get('userId'));
+    const platformState = await resolvePlatformAccessState(
+      c.env.DB,
+      c.get('userId'),
+    );
     const platformAdmin = isPlatformAdminAccess(platformState);
 
     if (!platformAdmin && !checkPermission(c, 'admin')) {

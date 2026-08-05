@@ -174,12 +174,18 @@ export async function getOperationalStatus(
   let rows: StatusRow[] = [];
 
   if (options.platformAdmin) {
-    const result = await db.prepare(buildGlobalOperationalStatusQuery()).bind(limit).all<StatusRow>();
+    const result = await db
+      .prepare(buildGlobalOperationalStatusQuery())
+      .bind(limit)
+      .all<StatusRow>();
     rows = result.results || [];
   } else {
     const scopeKey = `empresa:${options.empresaId}`;
     const [scoped, globalItems] = await Promise.all([
-      db.prepare(buildTenantOperationalStatusQuery()).bind(scopeKey, limit).all<StatusRow>(),
+      db
+        .prepare(buildTenantOperationalStatusQuery())
+        .bind(scopeKey, limit)
+        .all<StatusRow>(),
       db
         .prepare(buildTenantGlobalItemStatusQuery())
         .bind(options.empresaId, limit)

@@ -85,7 +85,8 @@ export interface CronJobRunSummary {
 }
 
 function normalizeErrorCode(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error ?? 'CRON_JOB_FAILED');
+  const raw =
+    error instanceof Error ? error.message : String(error ?? 'CRON_JOB_FAILED');
   const normalized = raw
     .toUpperCase()
     .replace(/[^A-Z0-9:_-]+/g, '_')
@@ -105,13 +106,20 @@ export function createCronOperationBudget(input?: {
   d1Reserve?: number;
   externalReserve?: number;
 }) {
-  const d1Limit = boundedCount(input?.d1Limit ?? CRON_D1_OPERATION_LIMIT, CRON_D1_OPERATION_LIMIT, 5000);
+  const d1Limit = boundedCount(
+    input?.d1Limit ?? CRON_D1_OPERATION_LIMIT,
+    CRON_D1_OPERATION_LIMIT,
+    5000,
+  );
   const externalLimit = boundedCount(
     input?.externalLimit ?? CRON_EXTERNAL_CALL_LIMIT,
     CRON_EXTERNAL_CALL_LIMIT,
     1000,
   );
-  const d1Reserve = Math.min(d1Limit - 1, Math.max(0, Math.trunc(input?.d1Reserve ?? CRON_D1_OPERATION_RESERVE)));
+  const d1Reserve = Math.min(
+    d1Limit - 1,
+    Math.max(0, Math.trunc(input?.d1Reserve ?? CRON_D1_OPERATION_RESERVE)),
+  );
   const externalReserve = Math.min(
     externalLimit - 1,
     Math.max(0, Math.trunc(input?.externalReserve ?? CRON_EXTERNAL_CALL_RESERVE)),
@@ -184,8 +192,14 @@ export async function runCronJobWithLease(input: {
   };
   metadata?: Record<string, unknown> | null;
 }): Promise<CronJobRunSummary> {
-  const ttlSeconds = Math.max(30, Math.min(3600, Math.trunc(input.ttlSeconds ?? 180)));
-  const budgetMs = Math.max(1000, Math.min(10 * 60_000, Math.trunc(input.budgetMs ?? 25_000)));
+  const ttlSeconds = Math.max(
+    30,
+    Math.min(3600, Math.trunc(input.ttlSeconds ?? 180)),
+  );
+  const budgetMs = Math.max(
+    1000,
+    Math.min(10 * 60_000, Math.trunc(input.budgetMs ?? 25_000)),
+  );
   const owner = createCronLeaseOwner(input.jobName);
   const startedAt = Date.now();
   const operationBudget = createCronOperationBudget(input.operationBudget);
@@ -242,7 +256,8 @@ export async function runCronJobWithLease(input: {
       state,
       deadlineMs: startedAt + budgetMs,
       hasBudget: (reserveMs = 750) =>
-        Date.now() + Math.max(0, reserveMs) < startedAt + budgetMs && operationBudget.has(),
+        Date.now() + Math.max(0, reserveMs) < startedAt + budgetMs &&
+        operationBudget.has(),
       hasOperationalBudget: operationBudget.has,
       consumeD1: operationBudget.consumeD1,
       consumeExternal: operationBudget.consumeExternal,
@@ -250,7 +265,9 @@ export async function runCronJobWithLease(input: {
       stopForBudget: operationBudget.stop,
       budgetSnapshot: operationBudget.snapshot,
       heartbeat: async () => {
-        if (!operationBudget.consumeD1()) throw new Error('CRON_D1_PREVENTIVE_LIMIT');
+        if (!operationBudget.consumeD1()) {
+          throw new Error('CRON_D1_PREVENTIVE_LIMIT');
+        }
         const renewed = await heartbeatCronJobLease(input.db, {
           jobName: input.jobName,
           scopeKey: input.scopeKey,
@@ -260,7 +277,9 @@ export async function runCronJobWithLease(input: {
         if (!renewed) throw new Error('CRON_LEASE_LOST');
       },
       checkpoint: async (checkpoint) => {
-        if (!operationBudget.consumeD1()) throw new Error('CRON_D1_PREVENTIVE_LIMIT');
+        if (!operationBudget.consumeD1()) {
+          throw new Error('CRON_D1_PREVENTIVE_LIMIT');
+        }
         const updated = await updateCronJobCheckpoint(input.db, {
           jobName: input.jobName,
           scopeKey: input.scopeKey,
@@ -275,7 +294,10 @@ export async function runCronJobWithLease(input: {
     const processedCount = Math.max(0, Math.trunc(result.processedCount ?? 0));
     const failedCount = Math.max(0, Math.trunc(result.failedCount ?? 0));
     const budgetSnapshot = operationBudget.snapshot();
-    const metadata = { ...(result.metadata || {}), operation_budget: budgetSnapshot };
+    const metadata = {
+      ...(result.metadata || {}),
+      operation_budget: budgetSnapshot,
+    };
 
     await context.checkpoint({
       cursorValue: result.cursorAfter ?? state?.cursor_value ?? null,
@@ -344,7 +366,10 @@ export async function runCronJobWithLease(input: {
         scopeKey: input.scopeKey,
         owner,
         errorCode,
-        metadata: { ...(input.metadata || {}), operation_budget: operationBudget.snapshot() },
+        metadata: {
+          ...(input.metadata || {}),
+          operation_budget: operationBudget.snapshot(),
+        },
       });
     } catch (stateError) {
       input.logger.warn('[CRON_JOB] Falha ao registrar estado de erro', {

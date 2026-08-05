@@ -1,4 +1,5 @@
-const FORBIDDEN_KEY = /(cpf|email|nome|token|authorization|cookie|senha|password|certificado|mensagem|payload|conteudo)/i;
+const FORBIDDEN_KEY =
+  /(cpf|email|nome|token|authorization|cookie|senha|password|certificado|mensagem|payload|conteudo)/i;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const CPF_PATTERN = /\b\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2}\b/;
 const TOKEN_PATTERN = /\b(?:eyJ[A-Za-z0-9_-]{20,}|Bearer\s+\S+|[A-Fa-f0-9]{64,})\b/;
@@ -26,7 +27,11 @@ export type OperationalMetric = {
 
 function sanitizeString(value: string): string | null {
   const compact = value.replace(/[\r\n\t]+/g, ' ').slice(0, 180);
-  if (EMAIL_PATTERN.test(compact) || CPF_PATTERN.test(compact) || TOKEN_PATTERN.test(compact)) {
+  if (
+    EMAIL_PATTERN.test(compact) ||
+    CPF_PATTERN.test(compact) ||
+    TOKEN_PATTERN.test(compact)
+  ) {
     return null;
   }
   return compact;
@@ -38,7 +43,11 @@ export function sanitizeOperationalMetric(
   const output: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
     if (FORBIDDEN_KEY.test(key)) continue;
-    if (value == null || typeof value === 'number' || typeof value === 'boolean') {
+    if (
+      value == null ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
       output[key] = value;
       continue;
     }
@@ -81,10 +90,15 @@ export function classifyOperationalFlow(pathname: string): string {
   if (path.includes('/auth/')) return 'auth';
   if (path.includes('upload') || path.includes('/assets')) return 'upload';
   if (path.includes('certificado')) return 'certificate';
-  if (path.includes('/lms/') && (path.includes('conclus') || path.includes('progresso'))) {
+  if (
+    path.includes('/lms/') &&
+    (path.includes('conclus') || path.includes('progresso'))
+  ) {
     return 'lms_completion';
   }
-  if (path.includes('qualific') && path.includes('renov')) return 'qualification_renewal';
+  if (path.includes('qualific') && path.includes('renov')) {
+    return 'qualification_renewal';
+  }
   if (path.includes('/system/operations')) return 'operational_status';
   return 'http_request';
 }
