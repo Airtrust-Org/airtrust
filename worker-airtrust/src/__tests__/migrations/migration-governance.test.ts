@@ -252,7 +252,8 @@ describe('migration governance', () => {
     // docs/rbac/gestor-operational-autonomy.md and the certificate-
     // generation incident fix).
     // Ratchet raised 2026-08-03: 0455 scopes active aircraft codes per tenant.
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(455);
+    // Ratchet raised 2026-08-04: 0456 binds LMS courses to H5P content by id.
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(456);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 

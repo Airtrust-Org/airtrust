@@ -23,9 +23,36 @@ export default tseslint.config(
     },
   },
   {
-    // This legacy route already carries a known lint baseline. New type-safety
+    // These validators intentionally reject C0/DEL characters in untrusted ZIP
+    // paths. The security check is the reason for the control-character regex.
+    files: [
+      'src/react-app/pages/lms/lmsPackageValidator.ts',
+      'worker-airtrust/src/lib/lms/lms-package-validator.ts',
+    ],
+    rules: {
+      'no-control-regex': 'off',
+    },
+  },
+  {
+    // Test doubles model Hono and D1/R2 interfaces without widening production
+    // types. The production delta type-safety guard does not exclude runtime code.
+    files: [
+      'worker-airtrust/src/__tests__/lib/lms/lms-content-upload-service.test.ts',
+      'worker-airtrust/src/__tests__/routes/lms-cursos-schema-compat.test.ts',
+      'worker-airtrust/src/__tests__/routes/lms-cursos-structured-upload-complete.test.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-this-alias': 'off',
+    },
+  },
+  {
+    // These copied legacy routes retain their known lint baseline. New type-safety
     // regressions remain blocked by guard:typescript-delta on every changed line.
-    files: ['worker-airtrust/src/routes/qualificacoes/historico.ts'],
+    files: [
+      'worker-airtrust/src/routes/lms-cursos-legacy.ts',
+      'worker-airtrust/src/routes/qualificacoes/historico.ts',
+    ],
     linterOptions: {
       reportUnusedDisableDirectives: false,
     },
