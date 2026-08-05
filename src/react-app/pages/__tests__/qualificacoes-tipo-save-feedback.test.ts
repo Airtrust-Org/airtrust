@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -6,13 +9,29 @@ import {
   getTipoRelatedCachePatterns,
 } from '../qualificacoes/tipoSaveFeedback';
 
+const qualificacoesSource = readFileSync(
+  resolve(process.cwd(), 'src/react-app/pages/Qualificacoes.tsx'),
+  'utf8',
+).replace(/\s+/g, ' ');
+
 describe('tipoSaveFeedback', () => {
+  it('propaga categoria_id canônico ao selecionar ou editar um modelo', () => {
+    expect(qualificacoesSource).toContain(
+      'const selectedCat = categorias.find((c) => c.nome === selectedNome);',
+    );
+    expect(qualificacoesSource).toContain('categoria_id: selectedCat?.id ?? undefined');
+    expect(qualificacoesSource).toContain(
+      'categoria_id: (row as { categoria_id?: number | null }).categoria_id ?? null',
+    );
+  });
+
   it('monta payload do modelo com conversoes numericas e campos opcionais', () => {
     expect(
       buildTipoPayload({
         nome: ' AS350 B2 ',
         codigo: ' as350-b2 ',
         categoria: 'MANUTENCAO',
+        categoria_id: 17,
         conteudo_programatico: ' Conteudo ',
         carga_horaria_inicial: '8',
         carga_horaria_recorrente: 4,
@@ -26,6 +45,7 @@ describe('tipoSaveFeedback', () => {
       nome: 'AS350 B2',
       codigo: 'as350-b2',
       categoria: 'MANUTENCAO',
+      categoria_id: 17,
       conteudo_programatico: 'Conteudo',
       carga_horaria_inicial: 8,
       carga_horaria_recorrente: 4,

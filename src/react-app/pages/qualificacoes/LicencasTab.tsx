@@ -5,6 +5,7 @@
  * com tabela avançada, filtros e status visual
  */
 
+import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Calendar, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -46,6 +47,7 @@ export function LicencasTab() {
   const [licencas, setLicencas] = useState<Licenca[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filtros, setFiltros] = useState({
     busca: '',
     tipo: '',
@@ -56,19 +58,17 @@ export function LicencasTab() {
 
   const carregarLicencas = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params = new URLSearchParams();
       if (filtros.tipo) params.append('tipo', filtros.tipo);
       if (filtros.status) params.append('status', filtros.status);
-
-      const response = await fetch(`${API_BASE_URL}/licencas?${params}`);
-      const json = await response.json();
-
-      if (json.success) {
-        setLicencas(json.data || []);
-      }
+      const data = await apiJson<Licenca[]>(`${API_BASE_URL}/licencas?${params}`);
+      setLicencas(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Erro ao carregar licenças:', error);
+      setLicencas([]);
+      setLoadError(frontendErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -76,14 +76,11 @@ export function LicencasTab() {
 
   const carregarDashboard = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/dashboard/licencas`);
-      const json = await response.json();
-
-      if (json.success) {
-        setStats(json.data);
-      }
+      setStats(await apiJson<DashboardStats>(`${API_BASE_URL}/dashboard/licencas`));
     } catch (error) {
       console.error('Erro ao carregar dashboard:', error);
+      setStats(null);
+      setLoadError((current) => current || frontendErrorMessage(error));
     }
   };
 
@@ -150,16 +147,12 @@ export function LicencasTab() {
     if (!(await confirmDialog('Deseja realmente excluir esta licença?'))) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/licencas/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        carregarLicencas();
-        carregarDashboard();
-      }
+      await apiJson<unknown>(`${API_BASE_URL}/licencas/${id}`, { method: 'DELETE' });
+      void carregarLicencas();
+      void carregarDashboard();
     } catch (error) {
       console.error('Erro ao excluir licença:', error);
+      setLoadError(frontendErrorMessage(error));
     }
   };
 
@@ -286,6 +279,13 @@ export function LicencasTab() {
           <div className="p-8 text-center">
             <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
             <p className="mt-4 text-text-light">Carregando licenças...</p>
+          </div>
+        ) : loadError ? (
+          <div className="p-8 text-center" role="alert">
+            <AlertCircle className="w-12 h-12 mx-auto text-red-500 mb-4" />
+            <h3 className="text-lg font-semibold text-red-700 mb-2">Falha ao carregar licenças</h3>
+            <p className="text-sm text-red-600 mb-4">{loadError}</p>
+            <UIButton onClick={() => void carregarLicencas()}>Tentar novamente</UIButton>
           </div>
         ) : licencasFiltradas.length === 0 ? (
           <div className="p-8 text-center">

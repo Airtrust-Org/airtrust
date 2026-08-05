@@ -39,13 +39,18 @@ describe('hardRefreshApp', () => {
 
   it('atualiza SW e limpa apenas caches do AirTrust', async () => {
     const updateMock = vi.fn(async () => undefined);
-    const { api, deleteMock } = createCachesApi(['airtrust-v8-assets', 'other-cache', 'AirTrust-runtime']);
+    const { api, deleteMock } = createCachesApi([
+      'airtrust-v8-assets',
+      'other-cache',
+      'AirTrust-runtime',
+    ]);
     const replaceMock = vi.fn();
 
     await hardRefreshAppWithDeps({
       replace: replaceMock,
       cachesApi: api,
-      getServiceWorkerRegistration: async () => ({ update: updateMock } as ServiceWorkerRegistrationLike),
+      getServiceWorkerRegistration: async () =>
+        ({ update: updateMock }) as ServiceWorkerRegistrationLike,
     });
 
     expect(updateMock).toHaveBeenCalledTimes(1);
@@ -85,7 +90,8 @@ describe('hardRefreshApp', () => {
   it('aplica cache-busting sem loop de parametros antigos', async () => {
     const { api } = createCachesApi([]);
     const replaceMock = vi.fn();
-    const href = 'https://airtrust.online/frms/fadiga-checkin?refresh=123&runtime_recover=1&reason=x';
+    const href =
+      'https://airtrust.online/frms/fadiga-checkin?refresh=123&runtime_recover=1&reason=x';
 
     await hardRefreshAppWithDeps({
       replace: replaceMock,

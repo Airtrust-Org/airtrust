@@ -1,5 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/react-app/services/apiClient';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiJson } from '@/react-app/lib/api-contract';
+import { useAuth } from '@/react-app/hooks/useAuth';
+import { tenantQueryKey } from '@/react-app/lib/query-client';
 
 export interface Funcionario {
   id?: number;
@@ -46,7 +48,15 @@ export interface Funcionario {
   registros_frms?: unknown[];
 }
 
-const API_BASE = '/funcionarios';
+const API_BASE = '/api/funcionarios';
+
+function mutationInit(method: string, data?: unknown): RequestInit {
+  return {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: data === undefined ? undefined : JSON.stringify(data),
+  };
+}
 
 export function useFuncionariosRQ(filtros?: {
   status?: string;
@@ -59,8 +69,10 @@ export function useFuncionariosRQ(filtros?: {
   page?: number;
   limit?: number;
 }) {
+  const { empresaAtualId } = useAuth();
   return useQuery({
-    queryKey: ['funcionarios', filtros],
+    queryKey: tenantQueryKey(empresaAtualId, 'funcionarios', 'list', filtros),
+    enabled: Boolean(empresaAtualId),
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filtros?.status) params.set('status', filtros.status);
@@ -72,106 +84,82 @@ export function useFuncionariosRQ(filtros?: {
       if (filtros?.is_instrutor) params.set('is_instrutor', 'true');
       if (filtros?.page) params.set('page', String(filtros.page));
       if (filtros?.limit) params.set('limit', String(filtros.limit));
-      const response = await apiClient.get<unknown>(`${API_BASE}?${params.toString()}`);
-      if (!response.success) {
-        throw new Error(response.error || 'Erro ao buscar funcionários');
-      }
-      return response.data || response;
+      return apiJson<unknown>(`${API_BASE}?${params.toString()}`);
     },
     staleTime: 60_000,
   });
 }
 
 export function useFuncionarioRQ(id: number, includeAll = false) {
+  const { empresaAtualId } = useAuth();
   return useQuery({
-    queryKey: ['funcionario', id, includeAll],
-    enabled: !!id,
-    queryFn: async () => {
-      const url = `${API_BASE}/${id}${includeAll ? '?include=all' : ''}`;
-      const response = await apiClient.get<unknown>(url);
-      if (!response.success) {
-        throw new Error(response.error || 'Erro ao buscar funcionário');
-      }
-      return response.data || response;
-    },
+    queryKey: tenantQueryKey(empresaAtualId, 'funcionarios', 'detail', id, includeAll),
+    enabled: Boolean(id && empresaAtualId),
+    queryFn: () => apiJson<Funcionario>(`${API_BASE}/${id}${includeAll ? '?include=all' : ''}`),
   });
 }
 
 export function useCriarFuncionario() {
   const qc = useQueryClient();
+  const { empresaAtualId } = useAuth();
   return useMutation({
-    mutationFn: async (data: Omit<Funcionario, 'id'>) => {
-      const response = await apiClient.post<unknown>(API_BASE, data);
-      if (!response.success) {
-        throw new Error(response.error || 'Erro ao criar funcionário');
-      }
-      return response.data || response;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['funcionarios'] }),
+    mutationFn: (data: Omit<Funcionario, 'id'>) =>
+      apiJson<Funcionario>(API_BASE, mutationInit('POST', data)),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'funcionarios') }),
   });
 }
 
 export function useAtualizarFuncionario() {
   const qc = useQueryClient();
+  const { empresaAtualId } = useAuth();
   return useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<Funcionario> }) => {
-      const response = await apiClient.put<unknown>(`${API_BASE}/${id}`, data);
-      if (!response.success) {
-        throw new Error(response.error || 'Erro ao atualizar funcionário');
-      }
-      return response.data || response;
-    },
+    mutationFn: ({ id, data }: { id: number; data: Partial<Funcionario> }) =>
+      apiJson<Funcionario>(`${API_BASE}/${id}`, mutationInit('PUT', data)),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['funcionario', vars.id] });
-      qc.invalidateQueries({ queryKey: ['funcionarios'] });
-      qc.invalidateQueries({ queryKey: ['qualificacoes-historico'] });
-      qc.invalidateQueries({ queryKey: ['sessoes_simulador'] });
-      qc.invalidateQueries({ queryKey: ['hospedagens'] });
-      qc.invalidateQueries({ queryKey: ['frms'] });
-      qc.invalidateQueries({ queryKey: ['auditoria'] });
+      qc.invalidateQueries({
+        queryKey: tenantQueryKey(empresaAtualId, 'funcionarios', 'detail', vars.id),
+      });
+      qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'funcionarios') });
+      qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'qualificacoes-historico') });
+      qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'sessoes_simulador') });
+      qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'hospedagens') });
+      qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'frms') });
+      qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'auditoria') });
     },
   });
 }
 
 export function useDeletarFuncionario() {
   const qc = useQueryClient();
+  const { empresaAtualId } = useAuth();
   return useMutation({
-    mutationFn: async (id: number) => {
-      const response = await apiClient.delete<unknown>(`${API_BASE}/${id}`);
-      if (!response.success) {
-        throw new Error(response.error || 'Erro ao deletar funcionário');
-      }
-      return response.data || response;
-    },
+    mutationFn: (id: number) => apiJson<unknown>(`${API_BASE}/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['funcionarios'] });
-      qc.invalidateQueries({ queryKey: ['qualificacoes-historico'] });
-      qc.invalidateQueries({ queryKey: ['sessoes_simulador'] });
-      qc.invalidateQueries({ queryKey: ['hospedagens'] });
-      qc.invalidateQueries({ queryKey: ['frms'] });
+      for (const key of [
+        'funcionarios',
+        'qualificacoes-historico',
+        'sessoes_simulador',
+        'hospedagens',
+        'frms',
+      ]) {
+        qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, key) });
+      }
     },
   });
 }
 
 export function useVerificarDependencias(id: number) {
+  const { empresaAtualId } = useAuth();
   return useQuery({
-    queryKey: ['funcionario-deps', id],
-    enabled: !!id,
-    queryFn: async () => {
-      const response = await apiClient.get<unknown>(`${API_BASE}/${id}/dependencias`);
-      if (!response.success) {
-        throw new Error(response.error || 'Erro ao verificar dependências');
-      }
-      return response.data || response;
-    },
+    queryKey: tenantQueryKey(empresaAtualId, 'funcionarios', 'dependencies', id),
+    enabled: Boolean(id && empresaAtualId),
+    queryFn: () => apiJson<unknown>(`${API_BASE}/${id}/dependencias`),
   });
 }
 
-/**
- * Hook composto que expõe a interface esperada pelo FuncionariosWrapper
- * Combina useFuncionariosRQ com mutations para CRUD operations
- */
 export function useFuncionarios() {
+  const { empresaAtualId } = useAuth();
   const { data, isLoading, error } = useFuncionariosRQ();
   const criarMutation = useCriarFuncionario();
   const atualizarMutation = useAtualizarFuncionario();
@@ -179,32 +167,18 @@ export function useFuncionarios() {
   const qc = useQueryClient();
 
   return {
-    // Query results
     funcionarios:
       data && typeof data === 'object' && 'data' in data
         ? ((data as { data?: unknown }).data ?? [])
         : (data ?? []),
     loading: isLoading,
     error: error?.message || null,
-
-    // Mutations
-    criarFuncionario: async (dadosFuncionario: Omit<Funcionario, 'id'>) => {
-      const result = await criarMutation.mutateAsync(dadosFuncionario);
-      return result;
-    },
-
-    atualizarFuncionario: async (id: number, dados: Partial<Funcionario>) => {
-      const result = await atualizarMutation.mutateAsync({ id, data: dados });
-      return result;
-    },
-
-    deletarFuncionario: async (id: number) => {
-      const result = await deletarMutation.mutateAsync(id);
-      return result;
-    },
-
-    carregarFuncionarios: async () => {
-      await qc.invalidateQueries({ queryKey: ['funcionarios'] });
-    },
+    criarFuncionario: (dadosFuncionario: Omit<Funcionario, 'id'>) =>
+      criarMutation.mutateAsync(dadosFuncionario),
+    atualizarFuncionario: (id: number, dados: Partial<Funcionario>) =>
+      atualizarMutation.mutateAsync({ id, data: dados }),
+    deletarFuncionario: (id: number) => deletarMutation.mutateAsync(id),
+    carregarFuncionarios: () =>
+      qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'funcionarios') }),
   };
 }

@@ -2,6 +2,7 @@ export type TipoSaveDraft = {
   nome?: string | null;
   codigo?: string | null;
   categoria?: string | null;
+  categoria_id?: number | string | null;
   conteudo_programatico?: string | null;
   carga_horaria_inicial?: number | string | null;
   carga_horaria_recorrente?: number | string | null;
@@ -32,11 +33,13 @@ export function buildTipoPayload(editingTipo: TipoSaveDraft): Record<string, unk
     nome: editingTipo.nome?.trim() || '',
     codigo: editingTipo.codigo?.trim() || '',
     categoria: editingTipo.categoria?.trim() || '',
+    categoria_id:
+      editingTipo.categoria_id != null && Number(editingTipo.categoria_id) > 0
+        ? Number(editingTipo.categoria_id)
+        : undefined,
     conteudo_programatico: editingTipo.conteudo_programatico?.trim() || null,
     carga_horaria_inicial:
-      editingTipo.carga_horaria_inicial != null
-        ? Number(editingTipo.carga_horaria_inicial)
-        : null,
+      editingTipo.carga_horaria_inicial != null ? Number(editingTipo.carga_horaria_inicial) : null,
     carga_horaria_recorrente:
       editingTipo.carga_horaria_recorrente != null
         ? Number(editingTipo.carga_horaria_recorrente)

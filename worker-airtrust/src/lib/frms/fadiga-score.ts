@@ -34,7 +34,6 @@ export interface FadigaScoreResult {
   };
 }
 
-// Compat API antiga usada por testes e possíveis consumidores legados.
 export interface LegacyFadigaInput {
   kssScore: number;
   horasSono: number | null;
@@ -71,8 +70,12 @@ function normalizeKss(kssScore: number): number {
   return 1;
 }
 
+/**
+ * Ausência de dado não equivale a sono adequado. O valor conservador de 0,6 é
+ * uma regra empresarial de triagem, não um requisito numérico do RBAC 117.
+ */
 function normalizeSonoDuracao(horasSono: number | null): number {
-  if (horasSono === null || Number.isNaN(horasSono)) return 0.2;
+  if (horasSono === null || Number.isNaN(horasSono)) return 0.6;
   if (horasSono >= 8) return 0;
   if (horasSono >= 7) return 0.15;
   if (horasSono >= 6) return 0.35;
@@ -81,8 +84,9 @@ function normalizeSonoDuracao(horasSono: number | null): number {
   return 1;
 }
 
+/** Dado de qualidade ausente também é tratado como desconhecido, não como ótimo. */
 function normalizeQualidadeSono(qualidadeSono: number | null): number {
-  if (qualidadeSono === null || Number.isNaN(qualidadeSono)) return 0;
+  if (qualidadeSono === null || Number.isNaN(qualidadeSono)) return 0.4;
   if (qualidadeSono >= 5) return 0;
   if (qualidadeSono === 4) return 0.2;
   if (qualidadeSono === 3) return 0.45;
@@ -114,31 +118,22 @@ export function calcularScoreFadiga(
       sintomasNorm * config.peso_sintomas) *
     100;
 
-  // Penalidades operacionais provisórias: não são valores cientificamente calibrados.
-  // Funcionam como proxy conservador de triagem e devem ser calibradas futuramente
-  // com dados reais e revisão científica.
+  // Penalidades empresariais provisórias de triagem, ainda não calibradas como
+  // modelo biomatemático ou fórmula regulatória.
   const bonusMeds = input.meds_ult_12h === true || input.meds_ult_12h === 1 ? 8 : 0;
   const bonusAlcool = input.alcool_ult_12h === true || input.alcool_ult_12h === 1 ? 15 : 0;
   let score = base + bonusMeds + bonusAlcool;
 
-  if (input.apto === 0) {
-    score = Math.max(score, config.threshold_vermelho);
-  }
+  if (input.apto === 0) score = Math.max(score, config.threshold_vermelho);
 
   const scoreFinal = Math.round(clamp(score, 0, 100));
-
   let nivel: FadigaScoreResult['nivel_fadiga'] = 'VERDE';
-  if (scoreFinal >= config.threshold_vermelho + 20) {
-    nivel = 'VERMELHO';
-  } else if (scoreFinal >= config.threshold_vermelho) {
-    nivel = 'LARANJA';
-  } else if (scoreFinal >= config.threshold_amarelo) {
-    nivel = 'AMARELO';
-  }
+  if (scoreFinal >= config.threshold_vermelho + 20) nivel = 'VERMELHO';
+  else if (scoreFinal >= config.threshold_vermelho) nivel = 'LARANJA';
+  else if (scoreFinal >= config.threshold_amarelo) nivel = 'AMARELO';
 
   const statusOperacional: FadigaScoreResult['status_operacional'] =
     nivel === 'VERDE' ? 'APTO' : nivel === 'AMARELO' ? 'APTO_COM_RESSALVA' : 'INAPTO';
-
   const fratSugestao: FadigaScoreResult['frat_sugerido_nivel'] =
     nivel === 'VERDE'
       ? 'BAIXO'
@@ -147,7 +142,6 @@ export function calcularScoreFadiga(
         : nivel === 'LARANJA'
           ? 'ALTO'
           : 'CRITICO';
-
   const recomendacao =
     nivel === 'VERDE'
       ? 'Apto para a jornada com monitoramento padrão.'
@@ -193,6 +187,7 @@ export interface InputSono {
   minutosAntesApresentacao: number;
   horasSonoPadrao: number;
   horaDormiu?: number | null;
+  horaAcordou?: number | null;
 }
 
 export interface OutputSono {
@@ -200,6 +195,7 @@ export interface OutputSono {
   tDormiuMin: number;
   sonoEfetivoMin: number;
   fonteSono: 'INFORMADO' | 'PADRAO';
+  despertarEstimado: boolean;
 }
 
 function normalizeMinuteOfDay(value: number): number {
@@ -211,48 +207,68 @@ export function isWithinWOCL(minutoDoDia: number): boolean {
   return m >= 120 && m < 360;
 }
 
+/**
+ * Penalidade empresarial contínua dentro da WOCL fisiológica de 02:00–06:00.
+ * A janela é apoiada pela IS 117-001C; a função numérica não é definida pela norma.
+ */
 export function calcularPenalidadeWOCL(tAcordouMin: number): number {
   const m = normalizeMinuteOfDay(tAcordouMin);
   if (m < 120 || m >= 360) return 0;
-  const progress = (m - 120) / 239;
-  return -(0.3 - progress * 0.25);
+  const distanciaCentro = Math.abs(m - 240) / 120;
+  return -(0.3 - Math.min(1, distanciaCentro) * 0.15);
 }
 
+/**
+ * Resolve sono usando o despertar real quando informado. A estimativa pela
+ * apresentação só é usada na ausência do dado real e permanece identificada.
+ *
+ * Duas proveniências distintas são reportadas separadamente e não devem ser
+ * confundidas (ver docs/frms/frms-scientific-audit.md, D-01):
+ *
+ * - `fonteSono` descreve a proveniência do **dado de sono** (duração). É
+ *   `INFORMADO` quando o tripulante forneceu `horaDormiu` e/ou `horaAcordou`.
+ *   Esta é a semântica gravada em `frms_jornada.fonte_sono` pela rota
+ *   `frms.ts` ao registrar `hora_dormiu`, e é a que `informedData` consome.
+ * - `despertarEstimado` descreve a proveniência do **horário de despertar**.
+ *   É `true` sempre que o despertar foi derivado da apresentação.
+ */
 export function calcularSono(input: InputSono): OutputSono {
-  const tAcordouMin = input.horaApresentacaoMin - input.minutosAntesApresentacao;
+  const despertarEstimado = input.horaAcordou == null;
+  const tAcordouMin =
+    input.horaAcordou == null
+      ? input.horaApresentacaoMin - input.minutosAntesApresentacao
+      : input.horaAcordou;
 
   let sonoEfetivoMin: number;
-  let fonteSono: 'INFORMADO' | 'PADRAO';
-
   if (input.horaDormiu != null) {
     const acordouDia = normalizeMinuteOfDay(tAcordouMin);
     const dormiuDia = normalizeMinuteOfDay(input.horaDormiu);
     const diff = acordouDia - dormiuDia;
     sonoEfetivoMin = diff >= 0 ? diff : diff + 1440;
-    fonteSono = 'INFORMADO';
   } else {
     sonoEfetivoMin = Math.round(input.horasSonoPadrao * 60);
-    fonteSono = 'PADRAO';
   }
 
-  sonoEfetivoMin = Math.min(sonoEfetivoMin, 960);
-
-  if (sonoEfetivoMin < 0 || !Number.isFinite(sonoEfetivoMin)) {
+  if (!Number.isFinite(sonoEfetivoMin) || sonoEfetivoMin <= 0) {
     sonoEfetivoMin = Math.round(input.horasSonoPadrao * 60);
-    fonteSono = 'PADRAO';
   }
+  sonoEfetivoMin = Math.min(sonoEfetivoMin, 960);
 
   return {
     tAcordouMin,
     tDormiuMin: tAcordouMin - sonoEfetivoMin,
     sonoEfetivoMin,
-    fonteSono,
+    fonteSono: input.horaDormiu != null || input.horaAcordou != null ? 'INFORMADO' : 'PADRAO',
+    despertarEstimado,
   };
 }
 
+/**
+ * Fator fracionário de risco por sono. Oito horas ou mais definem baseline 0;
+ * sono adicional não gera bônus positivo. Dado inválido/desconhecido falha fechado.
+ */
 export function calcularFatorRepouso(duracaoSonoMin: number): number {
-  if (!Number.isFinite(duracaoSonoMin) || duracaoSonoMin <= 0) return 0;
-  if (duracaoSonoMin >= 600) return 0.05;
+  if (!Number.isFinite(duracaoSonoMin) || duracaoSonoMin <= 0) return -0.5;
   if (duracaoSonoMin >= 480) return 0;
   return -((480 - duracaoSonoMin) / 480) * 0.5;
 }
@@ -279,12 +295,10 @@ export function calculateFadigaScore(
     peso_sono_qualidade: 0.2,
     peso_sintomas: 0.15,
   };
-
   const sintomasJson = input.sintomas.reduce<Record<string, number>>((acc, nome, idx) => {
     acc[`${nome}-${idx}`] = 1;
     return acc;
   }, {});
-
   const out = calcularScoreFadiga(
     {
       kss_score: input.kssScore,
@@ -297,7 +311,6 @@ export function calculateFadigaScore(
     },
     internalConfig,
   );
-
   const nivelFadiga: LegacyFadigaResult['nivelFadiga'] =
     out.nivel_fadiga === 'VERDE'
       ? 'BAIXO'
@@ -306,10 +319,8 @@ export function calculateFadigaScore(
         : out.nivel_fadiga === 'LARANJA'
           ? 'ALTO'
           : 'CRITICO';
-
   const statusOperacional: LegacyFadigaResult['statusOperacional'] =
     nivelFadiga === 'CRITICO' ? 'NAO_APTO' : nivelFadiga === 'BAIXO' ? 'APTO' : 'RESTRITO';
-
   return {
     scoreFadiga: out.score_fadiga,
     nivelFadiga,

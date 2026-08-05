@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
-import { apiFetch } from '@/react-app/lib/apiFetch';
+import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
 import { Trash2, AlertTriangle, Shield, X } from 'lucide-react';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
@@ -66,6 +66,7 @@ export default function LimparDados() {
   const { t, language } = useLanguage();
   const [contadores, setContadores] = useState<Contadores | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [moduloSelecionado, setModuloSelecionado] = useState<string | null>(null);
   const [confirmacao, setConfirmacao] = useState('');
   const [entendi, setEntendi] = useState(false);
@@ -76,14 +77,13 @@ export default function LimparDados() {
   }, []);
 
   const carregarContadores = async () => {
+    setLoadError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/limpar-dados/contadores`);
-      const data = await res.json();
-      if (data.success) {
-        setContadores(data.data);
-      }
+      setContadores(await apiJson<Contadores>(`${API_BASE_URL}/admin/limpar-dados/contadores`));
     } catch (error) {
       console.error('Erro ao carregar contadores:', error);
+      setContadores(null);
+      setLoadError(frontendErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -110,26 +110,16 @@ export default function LimparDados() {
     setProcessando(true);
 
     try {
-      const res = await apiFetch(`/api/admin/limpar-dados/${moduloSelecionado}`, {
+      await apiJson<unknown>(`/api/admin/limpar-dados/${moduloSelecionado}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          confirmacao: 'LIMPAR DADOS',
-          usuario_id: 1,
-        }),
+        body: JSON.stringify({ confirmacao: 'LIMPAR DADOS' }),
       });
-
-      const data = await res.json();
-
-      if (data.success) {
-        fecharModal();
-        carregarContadores();
-      } else {
-        toast.warning(`${t('settings.danger.clean.toast.errorPrefix')} ${data.error}`);
-      }
+      fecharModal();
+      void carregarContadores();
     } catch (error) {
       console.error('Erro ao limpar dados:', error);
-      toast.warning(t('settings.danger.clean.toast.errorClean'));
+      toast.warning(frontendErrorMessage(error));
     } finally {
       setProcessando(false);
     }
@@ -186,8 +176,8 @@ export default function LimparDados() {
     return cores[perigo as keyof typeof cores] || cores.BAIXO;
   };
 
-  const getContador = (moduloId: string) => {
-    if (!contadores) return 0;
+  const getContador = (moduloId: string): number | null => {
+    if (!contadores) return null;
     return contadores[moduloId as keyof Contadores] || 0;
   };
 
@@ -221,6 +211,15 @@ export default function LimparDados() {
         </div>
       </div>
 
+      {loadError && (
+        <div
+          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          role="alert"
+        >
+          {loadError}
+        </div>
+      )}
+
       {/* Grid de Módulos */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {MODULOS.map((modulo) => {
@@ -249,11 +248,15 @@ export default function LimparDados() {
 
               <div className="flex items-center justify-between">
                 <span className="text-2xl font-bold text-gray-900">
-                  {loading ? '...' : contador.toLocaleString()}
+                  {loading
+                    ? '...'
+                    : loadError || contador === null
+                      ? '—'
+                      : contador.toLocaleString()}
                 </span>
                 <button
                   onClick={() => abrirModal(modulo.id)}
-                  disabled={loading || contador === 0}
+                  disabled={loading || Boolean(loadError) || contador === null || contador === 0}
                   className={`rounded-xl px-4 py-2 font-medium transition ${
                     modulo.perigo === 'CRITICO'
                       ? 'bg-red-600 text-white hover:bg-red-700'
@@ -292,7 +295,7 @@ export default function LimparDados() {
                 {t('settings.danger.clean.modal.removing')}
               </p>
               <p className="text-red-700 text-xl font-bold">
-                {getContador(moduloAtual.id).toLocaleString(
+                {(getContador(moduloAtual.id) ?? 0).toLocaleString(
                   language === 'en-US' ? 'en-US' : 'pt-BR',
                 )}{' '}
                 {t('settings.danger.clean.modal.records')}

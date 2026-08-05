@@ -11,7 +11,6 @@ export interface SyncResult {
   delta_effectiveness?: number | null;
 }
 
-// Kept for backwards-compatibility with external consumers.
 export function calcularNivelEffectiveness(effectivenessPct: number): string {
   if (effectivenessPct >= 90) return 'VERDE';
   if (effectivenessPct >= 65) return 'AMARELO';
@@ -25,6 +24,7 @@ type JornadaRow = {
   hora_ultimo_pouso: string | null;
   hora_corte_motor: string | null;
   hora_termino: string | null;
+  hora_acordou: string | null;
 };
 
 type FatorizacaoRow = {
@@ -49,6 +49,40 @@ type FatorizacaoRow = {
   total_dias_periodo: number | null;
 };
 
+const EVENTOS_DIAGNOSTICOS_PERMITIDOS = new Set([
+  'CHECKIN_SEM_JORNADA',
+  'FRMS_SYNC_SEM_FATORIZACAO',
+  'FRMS_RECALCULO_NECESSARIO',
+]);
+
+async function registrarEventoUnico(
+  db: D1Database,
+  empresaId: number,
+  checkinId: string,
+  tipo: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  if (!EVENTOS_DIAGNOSTICOS_PERMITIDOS.has(tipo)) {
+    throw new Error('FRMS_EVENT_TYPE_NOT_ALLOWED');
+  }
+  const existente = await db
+    .prepare(
+      `SELECT id FROM frms_fadiga_evento
+       WHERE empresa_id = ? AND checkin_id = ? AND tipo = ?
+       LIMIT 1`,
+    )
+    .bind(empresaId, checkinId, tipo)
+    .first<{ id: string }>();
+  if (existente?.id) return;
+  await db
+    .prepare(
+      `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
+       VALUES (?, ?, ?, '${tipo}', ?, datetime('now'))`,
+    )
+    .bind(crypto.randomUUID(), empresaId, checkinId, JSON.stringify(payload))
+    .run();
+}
+
 export async function sincronizarCheckinComFrms(
   db: D1Database,
   checkinId: string,
@@ -62,7 +96,7 @@ export async function sincronizarCheckinComFrms(
     .prepare(
       `SELECT fj.id, fj.hora_apresentacao,
               fj.hora_primeira_decolagem, fj.hora_ultimo_pouso,
-              fj.hora_corte_motor, fj.hora_termino
+              fj.hora_corte_motor, fj.hora_termino, fj.hora_acordou
        FROM frms_jornada fj
        JOIN funcionarios f ON f.id = fj.tripulante_id AND f.deleted_at IS NULL
        WHERE fj.tripulante_id = ?
@@ -76,30 +110,10 @@ export async function sincronizarCheckinComFrms(
     .first<JornadaRow>();
 
   if (!jornada?.id) {
-    const existing = await db
-      .prepare(
-        `SELECT id FROM frms_fadiga_evento
-         WHERE empresa_id = ? AND checkin_id = ? AND tipo = 'CHECKIN_SEM_JORNADA'
-         LIMIT 1`,
-      )
-      .bind(empresaId, checkinId)
-      .first<{ id: string }>();
-
-    if (!existing?.id) {
-      await db
-        .prepare(
-          `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
-           VALUES (?, ?, ?, 'CHECKIN_SEM_JORNADA', ?, datetime('now'))`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          empresaId,
-          checkinId,
-          JSON.stringify({ funcionario_id: funcionarioId, data_checkin: dataCheckin }),
-        )
-        .run();
-    }
-
+    await registrarEventoUnico(db, empresaId, checkinId, 'CHECKIN_SEM_JORNADA', {
+      funcionario_id: funcionarioId,
+      data_checkin: dataCheckin,
+    });
     return { sincronizado: false };
   }
 
@@ -123,67 +137,29 @@ export async function sincronizarCheckinComFrms(
     .first<FatorizacaoRow>();
 
   if (!fatorizacao?.id) {
-    const existing = await db
-      .prepare(
-        `SELECT id FROM frms_fadiga_evento
-         WHERE empresa_id = ? AND checkin_id = ? AND tipo = 'FRMS_SYNC_SEM_FATORIZACAO'
-         LIMIT 1`,
-      )
-      .bind(empresaId, checkinId)
-      .first<{ id: string }>();
-
-    if (!existing?.id) {
-      await db
-        .prepare(
-          `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
-           VALUES (?, ?, ?, 'FRMS_SYNC_SEM_FATORIZACAO', ?, datetime('now'))`,
-        )
-        .bind(crypto.randomUUID(), empresaId, checkinId, JSON.stringify({ jornada_id: jornada.id }))
-        .run();
-    }
-
+    await registrarEventoUnico(db, empresaId, checkinId, 'FRMS_SYNC_SEM_FATORIZACAO', {
+      jornada_id: jornada.id,
+    });
     return { sincronizado: false, jornada_id: jornada.id };
   }
 
-  // Without hora_apresentacao the circadian model cannot anchor wake time — do not invent effectiveness.
-  if (!jornada.hora_apresentacao) {
-    const existing = await db
-      .prepare(
-        `SELECT id FROM frms_fadiga_evento
-         WHERE empresa_id = ? AND checkin_id = ? AND tipo = 'FRMS_RECALCULO_NECESSARIO'
-         LIMIT 1`,
-      )
-      .bind(empresaId, checkinId)
-      .first<{ id: string }>();
-
-    if (!existing?.id) {
-      await db
-        .prepare(
-          `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
-           VALUES (?, ?, ?, 'FRMS_RECALCULO_NECESSARIO', ?, datetime('now'))`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          empresaId,
-          checkinId,
-          JSON.stringify({ jornada_id: jornada.id, motivo: 'hora_apresentacao_ausente' }),
-        )
-        .run();
-    }
-
+  const despertarReal = wakeTimeReal ?? jornada.hora_acordou ?? null;
+  if (!jornada.hora_apresentacao && !despertarReal) {
+    await registrarEventoUnico(db, empresaId, checkinId, 'FRMS_RECALCULO_NECESSARIO', {
+      jornada_id: jornada.id,
+      motivo: 'hora_apresentacao_e_hora_acordou_ausentes',
+    });
     return { sincronizado: false, jornada_id: jornada.id };
   }
 
   const limites = await carregarLimites(db);
   const cfgSono = resolverFrmsConfig(limites);
-
   const duracaoSonoMin = horasSonoParaMinutos(horasSono);
-
-  // Anchor hora_dormiu to the model's standard wake time so that calcEffectiveness
-  // receives exactly the reported sleep duration as sonoEfetivoMin.
   const apresentacaoMin = hhmmToMinutes(jornada.hora_apresentacao);
-  const standardWakeMin = apresentacaoMin - cfgSono.minutosAntesApresentacao;
-  const hora_dormiu = minutesToHhmm(standardWakeMin - duracaoSonoMin);
+  const despertarAncoraMin = despertarReal
+    ? hhmmToMinutes(despertarReal)
+    : apresentacaoMin - cfgSono.minutosAntesApresentacao;
+  const horaDormiu = minutesToHhmm(despertarAncoraMin - duracaoSonoMin);
 
   const fatResult = {
     fator_basica_pct: fatorizacao.fator_basica_pct,
@@ -205,13 +181,14 @@ export async function sincronizarCheckinComFrms(
 
   const effectResult = calcEffectiveness(fatResult, limites, {
     hora_apresentacao: jornada.hora_apresentacao,
-    hora_primeira_decolagem: jornada.hora_primeira_decolagem ?? null,
-    hora_ultimo_pouso: jornada.hora_ultimo_pouso ?? null,
-    hora_corte_motor: jornada.hora_corte_motor ?? null,
-    hora_termino: jornada.hora_termino ?? null,
-    hora_dormiu,
-    dia_periodo_embarcado: fatorizacao.dia_periodo_embarcado ?? null,
-    total_dias_periodo: fatorizacao.total_dias_periodo ?? null,
+    hora_primeira_decolagem: jornada.hora_primeira_decolagem,
+    hora_ultimo_pouso: jornada.hora_ultimo_pouso,
+    hora_corte_motor: jornada.hora_corte_motor,
+    hora_termino: jornada.hora_termino,
+    hora_dormiu: horaDormiu,
+    hora_acordou: despertarReal,
+    dia_periodo_embarcado: fatorizacao.dia_periodo_embarcado,
+    total_dias_periodo: fatorizacao.total_dias_periodo,
   });
 
   await db
@@ -230,7 +207,7 @@ export async function sincronizarCheckinComFrms(
     )
     .bind(
       effectResult.duracao_sono_efetiva_min,
-      effectResult.hora_despertar,
+      despertarReal ? null : effectResult.hora_despertar,
       effectResult.hora_inicio_sono,
       effectResult.fator_repouso_calibrado_pct,
       effectResult.effectiveness_pct,
@@ -244,7 +221,7 @@ export async function sincronizarCheckinComFrms(
     await db
       .prepare(
         `UPDATE frms_jornada
-         SET hora_acordou    = ?,
+         SET hora_acordou     = ?,
              sono_efetivo_min = ?,
              fonte_sono       = ?,
              acordou_na_wocl  = ?,
@@ -252,8 +229,15 @@ export async function sincronizarCheckinComFrms(
          WHERE id = ? AND deleted_at IS NULL`,
       )
       .bind(
-        wakeTimeReal ?? effectResult.hora_despertar,
+        despertarReal,
         effectResult.duracao_sono_efetiva_min,
+        // D-01: `fonte_sono` é a proveniência do DADO DE SONO, não do horário de
+        // despertar. O check-in sempre traz `horasSono` reportado pelo
+        // tripulante, portanto o dado é INFORMADO mesmo quando o despertar foi
+        // estimado a partir da apresentação. Gravar PADRAO aqui sobrescrevia o
+        // INFORMADO gravado por `frms.ts` ao registrar `hora_dormiu` e fazia
+        // `informedData` (frms.ts) classificar dado real do tripulante como
+        // estimativa. A proveniência do despertar segue em `wake_time_source`.
         effectResult.fonte_sono,
         effectResult.acordou_na_wocl ? 1 : 0,
         jornada.id,
@@ -265,6 +249,7 @@ export async function sincronizarCheckinComFrms(
   }
 
   const syncPayload = {
+    formula_version: 'FRMS_EFFECTIVENESS_V2_20260804',
     jornada_id: jornada.id,
     effectiveness_anterior: fatorizacao.effectiveness_pct,
     effectiveness_nova: effectResult.effectiveness_pct,
@@ -273,12 +258,13 @@ export async function sincronizarCheckinComFrms(
         ? null
         : effectResult.effectiveness_pct - fatorizacao.effectiveness_pct,
     duracao_sono_min: duracaoSonoMin,
-    wake_time_source: wakeTimeReal ? 'CREW_REPORTED' : 'FALLBACK_APRESENTACAO_MINUS_CONFIG',
-    wake_time_fallback_minutos_antes_apresentacao: wakeTimeReal
+    wake_time_source: despertarReal ? 'CREW_REPORTED' : 'ESTIMATED_FROM_PRESENTATION',
+    wake_time_fallback_minutos_antes_apresentacao: despertarReal
       ? null
       : cfgSono.minutosAntesApresentacao,
-    hora_dormiu_calculado: hora_dormiu,
-    hora_despertar_modelo: effectResult.hora_despertar,
+    hora_dormiu_calculada: horaDormiu,
+    hora_despertar_real: despertarReal,
+    hora_despertar_estimada: despertarReal ? null : effectResult.hora_despertar,
     acordou_na_wocl: effectResult.acordou_na_wocl,
     nivel: effectResult.nivel,
     componentes: effectResult.componentes,
@@ -319,8 +305,6 @@ export async function sincronizarCheckinComFrms(
     effectiveness_anterior: effectivenessAnterior,
     effectiveness_nova: effectResult.effectiveness_pct,
     delta_effectiveness:
-      effectivenessAnterior == null
-        ? null
-        : effectResult.effectiveness_pct - effectivenessAnterior,
+      effectivenessAnterior == null ? null : effectResult.effectiveness_pct - effectivenessAnterior,
   };
 }

@@ -87,7 +87,11 @@ export async function parseJsonResponse<T>(
 export async function parseErrorPayload(response: Response): Promise<{ error?: string }> {
   try {
     const data: unknown = await response.json();
-    if (typeof data === 'object' && data !== null && typeof (data as { error?: unknown }).error === 'string') {
+    if (
+      typeof data === 'object' &&
+      data !== null &&
+      typeof (data as { error?: unknown }).error === 'string'
+    ) {
       return { error: (data as { error: string }).error };
     }
     return {};

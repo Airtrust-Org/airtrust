@@ -17,7 +17,7 @@ export type UpsertQualificacaoHistoricoDaFichaParams = {
   qualificacaoId: number | null;
   qualificacaoCodigo?: string | null;
   dataConclusao: string;
-  dataVencimento: string;
+  dataVencimento: string | null;
   observacoes: string;
   empresaId: number | null;
   status?: string; // Optional: defaults to 'CONCLUIDA' if not provided
@@ -104,7 +104,9 @@ async function getQualificacaoHistoricoById(
   empresaId: number | null,
 ): Promise<Record<string, unknown> | null> {
   return db
-    .prepare('SELECT * FROM qualificacoes_historico WHERE id=? AND deleted_at IS NULL AND empresa_id=?')
+    .prepare(
+      'SELECT * FROM qualificacoes_historico WHERE id=? AND deleted_at IS NULL AND empresa_id=?',
+    )
     .bind(id, empresaId)
     .first<Record<string, unknown>>();
 }
