@@ -1,4 +1,7 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'vitest';
 
 const FILES = [
@@ -11,16 +14,24 @@ const FILES = [
 
 describe('temporary prettier output diagnostic', () => {
   it(
-    'prints the exact formatter output for the five failing files',
+    'prints concise unified diffs for the five failing files',
     () => {
-      for (const file of FILES) {
+      const directory = mkdtempSync(join(tmpdir(), 'prettier-diagnostic-'));
+
+      for (const [index, file] of FILES.entries()) {
         const formatted = execFileSync(
           'npx',
           ['--yes', 'prettier@3.9.6', file],
           { encoding: 'utf8' },
         );
-        const encoded = Buffer.from(formatted, 'utf8').toString('base64');
-        console.log(`PRETTIER_DIAGNOSTIC::${file}::${encoded}`);
+        const outputPath = join(directory, `${index}.formatted`);
+        writeFileSync(outputPath, formatted, 'utf8');
+        const diff = spawnSync('diff', ['-u', file, outputPath], {
+          encoding: 'utf8',
+        });
+        console.log(`PRETTIER_DIFF_START::${file}`);
+        console.log(diff.stdout || 'NO_DIFF');
+        console.log(`PRETTIER_DIFF_END::${file}`);
       }
     },
     120_000,
