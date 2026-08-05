@@ -1,39 +1,66 @@
-const DEFAULT_ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:4173',
-  'http://127.0.0.1:4173',
-  'https://airtrust.online',
-  'https://www.airtrust.online',
-  'https://api.airtrust.online',
-  'https://airtrust.pages.dev',
-  'https://production.airtrust.pages.dev',
-] as const;
+export const DENIED_CORS_ORIGIN = 'https://cors-denied.invalid';
+export const DEFAULT_ALLOWED_ORIGIN = DENIED_CORS_ORIGIN;
 
-export const ALLOWED_ORIGINS = [...DEFAULT_ALLOWED_ORIGINS];
-export const DEFAULT_ALLOWED_ORIGIN = DEFAULT_ALLOWED_ORIGINS[0];
+function normalizeOrigin(value?: string | null): string | null {
+  const candidate = value?.trim();
+  if (!candidate || candidate === '*' || candidate === 'null') return null;
 
-function parseEnvAllowedOrigins(corsOrigins?: string | null): string[] {
-  if (!corsOrigins) return [];
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return null;
+  }
 
-  return corsOrigins
-    .split(',')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0 && item !== '*');
+  const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocalhost)) {
+    return null;
+  }
+
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== '/' ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    return null;
+  }
+
+  return parsed.origin;
 }
 
-export function resolveAllowedOrigin(origin?: string | null, corsOrigins?: string | null): string {
-  if (!origin) return DEFAULT_ALLOWED_ORIGIN;
+export function parseEnvAllowedOrigins(corsOrigins?: string | null): string[] {
+  if (!corsOrigins) return [];
 
-  const runtimeAllowedOrigins = parseEnvAllowedOrigins(corsOrigins);
+  return [
+    ...new Set(
+      corsOrigins
+        .split(',')
+        .map((item) => normalizeOrigin(item))
+        .filter((item): item is string => item !== null),
+    ),
+  ];
+}
 
-  if ((ALLOWED_ORIGINS as string[]).includes(origin)) return origin;
+export function isAllowedOrigin(
+  origin?: string | null,
+  corsOrigins?: string | null,
+): boolean {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return false;
 
-  if (runtimeAllowedOrigins.includes(origin)) return origin;
+  return parseEnvAllowedOrigins(corsOrigins).includes(normalizedOrigin);
+}
 
-  if (/^https:\/\/[a-z0-9-]+\.airtrust\.pages\.dev$/i.test(origin)) return origin;
+export function resolveAllowedOrigin(
+  origin?: string | null,
+  corsOrigins?: string | null,
+): string {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin || !isAllowedOrigin(normalizedOrigin, corsOrigins)) {
+    return DENIED_CORS_ORIGIN;
+  }
 
-  return DEFAULT_ALLOWED_ORIGIN;
+  return normalizedOrigin;
 }

@@ -8,11 +8,8 @@ const PRODUCTION_FRONTEND_HOSTS = new Set([
   'production.airtrust.pages.dev',
 ]);
 
-const STAGING_FRONTEND_HOSTS = new Set([
-  'staging.airtrust.pages.dev',
-  'main.airtrust.pages.dev',
-]);
-
+const STAGING_FRONTEND_HOSTS = new Set(['staging.airtrust.pages.dev']);
+const BLOCKED_FRONTEND_HOSTS = new Set(['main.airtrust.pages.dev']);
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
 
 export class ApiEnvironmentConfigurationError extends Error {
@@ -30,14 +27,24 @@ function normalizeApiUrl(value?: string): string | undefined {
   try {
     parsed = new URL(trimmed);
   } catch {
-    throw new ApiEnvironmentConfigurationError(`VITE_API_URL is not a valid absolute URL: ${trimmed}`);
+    throw new ApiEnvironmentConfigurationError(
+      `VITE_API_URL is not a valid absolute URL: ${trimmed}`,
+    );
   }
 
-  if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
-    throw new ApiEnvironmentConfigurationError('VITE_API_URL must use HTTPS outside local development.');
+  const isLocalApi = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  if (parsed.protocol !== 'https:' && !isLocalApi) {
+    throw new ApiEnvironmentConfigurationError(
+      'VITE_API_URL must use HTTPS outside local development.',
+    );
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new ApiEnvironmentConfigurationError(
+      'VITE_API_URL must not include credentials, query parameters, or fragments.',
+    );
   }
 
-  return trimmed.replace(/\/+$/, '');
+  return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
 }
 
 function normalizeHost(host: string): string {
@@ -90,6 +97,12 @@ export function resolveApiBase({
 
   if (STAGING_FRONTEND_HOSTS.has(normalizedHost)) {
     return requireCanonicalApi(configuredApi, STAGING_API_BASE_URL, 'staging');
+  }
+
+  if (BLOCKED_FRONTEND_HOSTS.has(normalizedHost)) {
+    throw new ApiEnvironmentConfigurationError(
+      `Frontend host ${normalizedHost} is ambiguous and is not an approved environment.`,
+    );
   }
 
   // Cloudflare Pages previews are never inferred as production. They must be
