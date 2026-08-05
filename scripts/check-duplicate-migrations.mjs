@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inspectMigrationsDirectory } from './migration-directory-policy.mjs';
@@ -7,9 +8,8 @@ export function checkDuplicateMigrations(
   directory = path.join(process.cwd(), 'worker-airtrust', 'migrations'),
 ) {
   const result = inspectMigrationsDirectory(directory);
-  const duplicates = result.violations.filter(
-    (violation) => violation.type === 'duplicate_prefix',
-  );
+  const duplicates = result.violations.filter((item) => item.type === 'duplicate_prefix');
+
   return {
     ok: duplicates.length === 0,
     directory: result.directory,

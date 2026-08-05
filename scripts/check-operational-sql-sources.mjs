@@ -5,8 +5,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DML_RE =
-  /\b(INSERT\s+INTO|UPDATE\s+[A-Za-z_][A-Za-z0-9_]*\s+SET|DELETE\s+FROM|REPLACE\s+INTO|MERGE\s+INTO)\b/i;
+const DML_PATTERNS = [
+  /\bINSERT\s+INTO\b/i,
+  /\bUPDATE\s+[A-Za-z_][A-Za-z0-9_]*\s+SET\b/i,
+  /\bDELETE\s+FROM\b/i,
+  /\bREPLACE\s+INTO\b/i,
+  /\bMERGE\s+INTO\b/i,
+];
 const REQUIRED_MARKERS = [
   'source_reference',
   'operational_decision',
@@ -33,15 +38,13 @@ export function parseNameStatus(raw) {
       if (renameOrCopy[1] === 'R' && renameOrCopy[2] === '100') {
         exactRenames.add(destination);
       } else {
-        // Modified renames and every copy remain operationally new content.
         candidates.add(destination);
       }
       continue;
     }
 
     const file = fields[index++] ?? '';
-    if (!file) continue;
-    if (/^[AMTU]/.test(status)) candidates.add(file);
+    if (file && /^[AMTU]/.test(status)) candidates.add(file);
   }
 
   return {
@@ -65,7 +68,6 @@ function readGitNameStatus(args, root) {
 export function getChangedFiles({ root = process.cwd(), baseRef = 'origin/main' } = {}) {
   const candidates = new Set();
   const exactRenames = new Set();
-
   const reports = [
     readGitNameStatus(
       ['diff', '--name-status', '-M', '-C', '--diff-filter=AMR', '-z', `${baseRef}...HEAD`],
@@ -84,20 +86,18 @@ export function getChangedFiles({ root = process.cwd(), baseRef = 'origin/main' 
     for (const file of parsed.exactRenames) exactRenames.add(file);
   }
 
-  const untracked = readGitNameStatus(
-    ['ls-files', '--others', '--exclude-standard', '-z'],
-    root,
-  );
+  const untracked = readGitNameStatus(['ls-files', '--others', '--exclude-standard', '-z'], root);
   for (const file of untracked.split('\0').filter(Boolean)) candidates.add(file);
-
-  // If another diff reports the destination as modified/added, it is no longer
-  // an exact move and must remain in scope.
   for (const file of candidates) exactRenames.delete(file);
 
   return [...candidates]
     .filter((file) => CANDIDATE_RE.test(file))
     .filter((file) => !exactRenames.has(file))
     .sort();
+}
+
+function containsDml(content) {
+  return DML_PATTERNS.some((pattern) => pattern.test(content));
 }
 
 export function findOperationalSqlViolations({ root = process.cwd(), files } = {}) {
@@ -107,17 +107,16 @@ export function findOperationalSqlViolations({ root = process.cwd(), files } = {
   for (const file of changedFiles) {
     const fullPath = path.join(root, file);
     if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) continue;
-    const content = fs.readFileSync(fullPath, 'utf8');
-    if (!DML_RE.test(content)) continue;
 
-    const hasMarker = REQUIRED_MARKERS.some((marker) => content.includes(marker));
-    if (!hasMarker) {
-      violations.push({
-        file,
-        reason: 'changed_file_with_dml_missing_source_marker',
-        requiredMarkers: REQUIRED_MARKERS,
-      });
-    }
+    const content = fs.readFileSync(fullPath, 'utf8');
+    if (!containsDml(content)) continue;
+    if (REQUIRED_MARKERS.some((marker) => content.includes(marker))) continue;
+
+    violations.push({
+      file,
+      reason: 'changed_file_with_dml_missing_source_marker',
+      requiredMarkers: REQUIRED_MARKERS,
+    });
   }
 
   return violations;
