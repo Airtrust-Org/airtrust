@@ -4,6 +4,7 @@ import { createLogger, toError } from '../utils/logger';
 import type { Env, Variables } from '../types';
 import { enforceLmsCompletionIntegrity } from './lms-completion-integrity';
 import { enforceLmsCompletionReversal } from './lms-completion-reversal';
+import { enforcePersistedLmsProgressEvidence } from './lms-completion-persisted-progress';
 
 type DomainEventContext = {
   Bindings: {
@@ -99,6 +100,10 @@ export function domainEventProcessorMiddleware() {
     // Reversal has a governed schema-aware entry point and must preempt legacy handlers.
     const reversalResponse = await enforceLmsCompletionReversal(typedContext);
     if (reversalResponse) return reversalResponse;
+
+    // A terminal payload cannot prove its own progress. Require earlier evidence first.
+    const persistedProgressResponse = await enforcePersistedLmsProgressEvidence(typedContext);
+    if (persistedProgressResponse) return persistedProgressResponse;
 
     // LMS completion/progress integrity must run before any legacy route handler.
     const integrityResponse = await enforceLmsCompletionIntegrity(typedContext);

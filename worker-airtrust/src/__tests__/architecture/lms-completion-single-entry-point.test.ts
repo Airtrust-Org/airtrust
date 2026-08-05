@@ -14,6 +14,10 @@ const integrityMiddleware = readFileSync(
   join(workerRoot, 'src/middleware/lms-completion-integrity.ts'),
   'utf8',
 );
+const persistedProgressMiddleware = readFileSync(
+  join(workerRoot, 'src/middleware/lms-completion-persisted-progress.ts'),
+  'utf8',
+);
 const reversalMiddleware = readFileSync(
   join(workerRoot, 'src/middleware/lms-completion-reversal.ts'),
   'utf8',
@@ -26,22 +30,27 @@ const validationRoute = readFileSync(
 );
 
 describe('guard:lms-completion-single-entry-point', () => {
-  it('runs the integrity gate after auth/tenant middleware and before route handlers', () => {
+  it('runs all completion gates after auth/tenant and before route handlers', () => {
     expect(domainMiddleware).toContain("import { enforceLmsCompletionIntegrity }");
-    const gate = domainMiddleware.indexOf('await enforceLmsCompletionIntegrity');
-    const next = domainMiddleware.indexOf('await next();');
-    expect(gate).toBeGreaterThan(0);
-    expect(next).toBeGreaterThan(gate);
-  });
-
-  it('runs the governed reversal before the generic integrity and legacy handlers', () => {
     expect(domainMiddleware).toContain("import { enforceLmsCompletionReversal }");
+    expect(domainMiddleware).toContain("import { enforcePersistedLmsProgressEvidence }");
     const reversal = domainMiddleware.indexOf('await enforceLmsCompletionReversal');
+    const persisted = domainMiddleware.indexOf('await enforcePersistedLmsProgressEvidence');
     const integrity = domainMiddleware.indexOf('await enforceLmsCompletionIntegrity');
     const next = domainMiddleware.indexOf('await next();');
     expect(reversal).toBeGreaterThan(0);
-    expect(integrity).toBeGreaterThan(reversal);
+    expect(persisted).toBeGreaterThan(reversal);
+    expect(integrity).toBeGreaterThan(persisted);
     expect(next).toBeGreaterThan(integrity);
+  });
+
+  it('requires progress persisted before the terminal SCORM/xAPI payload', () => {
+    expect(persistedProgressMiddleware).toContain('LMS_PERSISTED_PROGRESS_REQUIRED');
+    expect(persistedProgressMiddleware).toContain('m.progresso_pct AS matricula_progresso_pct');
+    expect(persistedProgressMiddleware).toContain('FROM lms_xapi_statements x');
+    expect(persistedProgressMiddleware).toContain('hasPersistedCompletionProgressEvidence(row)');
+    expect(persistedProgressMiddleware).not.toMatch(/score_raw|score_scaled/);
+    expect(persistedProgressMiddleware).not.toContain('body.cmi_json');
   });
 
   it('keeps completion persistence behind the canonical completion service', () => {
@@ -98,6 +107,7 @@ describe('guard:lms-completion-single-entry-point', () => {
     expect(integrityMiddleware).toContain('WHERE m.id = ?');
     expect(integrityMiddleware).toContain('AND m.empresa_id = ?');
     expect(integrityMiddleware).toContain('Number(payload.empresa_id ?? 0) === row.empresa_id');
+    expect(persistedProgressMiddleware).toContain('AND m.empresa_id = ?');
     expect(reversalMiddleware).toContain('WHERE m.id = ? AND m.empresa_id = ?');
   });
 
@@ -107,7 +117,13 @@ describe('guard:lms-completion-single-entry-point', () => {
       /generateCertificateForHistorico\s*\(/,
       /INSERT\s+INTO\s+documentos[\s\S]{0,200}certificado/i,
     ];
-    for (const source of [matriculasRoute, progressoRoute, integrityMiddleware, reversalMiddleware]) {
+    for (const source of [
+      matriculasRoute,
+      progressoRoute,
+      integrityMiddleware,
+      persistedProgressMiddleware,
+      reversalMiddleware,
+    ]) {
       for (const pattern of forbidden) expect(source).not.toMatch(pattern);
     }
   });
