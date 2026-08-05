@@ -12,8 +12,7 @@ function normalizeOrigin(value?: string | null): string | null {
     return null;
   }
 
-  const isLocalhost =
-    parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
   const isSecure = parsed.protocol === 'https:';
   const isLocalHttp = parsed.protocol === 'http:' && isLocalhost;
   if (!isSecure && !isLocalHttp) return null;
@@ -26,9 +25,7 @@ function normalizeOrigin(value?: string | null): string | null {
   return parsed.origin;
 }
 
-export function parseEnvAllowedOrigins(
-  corsOrigins?: string | null,
-): string[] {
+export function parseEnvAllowedOrigins(corsOrigins?: string | null): string[] {
   if (!corsOrigins) return [];
 
   const normalizedOrigins = corsOrigins
