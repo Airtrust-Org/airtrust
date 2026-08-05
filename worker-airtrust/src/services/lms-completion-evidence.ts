@@ -162,8 +162,13 @@ export function evaluateLmsCompletionEvidence(
     lessonStatus === 'incomplete' ||
     completionStatus === 'incomplete' ||
     completionStatus === 'not attempted';
+  const manualInformativeCompletion = input.source === 'manual' && input.informativeCourse;
   const failure = Boolean(input.explicitFailure) || failedStatus;
-  const completionRequested = Boolean(input.explicitCompletion) || passedStatus || completedStatus;
+  const completionRequested =
+    Boolean(input.explicitCompletion) ||
+    passedStatus ||
+    completedStatus ||
+    manualInformativeCompletion;
   const inconsistent =
     input.stateConsistent === false ||
     (failure && completionRequested) ||
@@ -185,10 +190,17 @@ export function evaluateLmsCompletionEvidence(
   if (!input.informativeCourse && !input.packageBound) {
     return reject('PACKAGE_BINDING_INVALID', scoreValue, masteryValue);
   }
-  if (input.source !== 'administrative' && !input.assetSessionValid) {
+
+  const playerSessionRequired = input.source === 'scorm' || input.source === 'xapi';
+  if (playerSessionRequired && !input.assetSessionValid) {
     return reject('ASSET_SESSION_INVALID', scoreValue, masteryValue);
   }
-  if (!input.progressRowPresent || progressPct === null || progressPct <= 0) {
+
+  const progressEvidenceRequired = !input.informativeCourse || input.generatesQualification;
+  if (
+    progressEvidenceRequired &&
+    (!input.progressRowPresent || progressPct === null || progressPct <= 0)
+  ) {
     return reject('PROGRESS_EVIDENCE_MISSING', scoreValue, masteryValue);
   }
   if (input.minimumTimeSatisfied === false) {
@@ -207,7 +219,8 @@ export function evaluateLmsCompletionEvidence(
     Boolean(input.explicitCompletion) ||
     completionStatus === 'completed' ||
     completionStatus === 'complete' ||
-    progressPct >= 100;
+    (progressPct !== null && progressPct >= 100) ||
+    manualInformativeCompletion;
   if (!independentCompletion) {
     return reject('COMPLETION_EVIDENCE_INSUFFICIENT', scoreValue, masteryValue);
   }

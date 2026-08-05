@@ -114,11 +114,16 @@ describe('LMS completion evidence decision table', () => {
     });
   });
 
-  it('12. accepts an informational course without inventing assessment requirements', () => {
+  it('12. accepts explicit finalization of a non-qualifying informational course', () => {
     const input = valid({
       source: 'manual',
-      lessonStatus: 'completed',
+      assetSessionValid: false,
+      progressRowPresent: false,
+      progressPct: 0,
+      lessonStatus: null,
+      completionStatus: null,
       successStatus: null,
+      explicitCompletion: false,
       scoreRaw: null,
       scoreMin: null,
       scoreMax: null,
@@ -127,7 +132,10 @@ describe('LMS completion evidence decision table', () => {
       generatesQualification: false,
       informativeCourse: true,
     });
-    expect(evaluateLmsCompletionEvidence(input).accepted).toBe(true);
+    expect(evaluateLmsCompletionEvidence(input)).toMatchObject({
+      accepted: true,
+      code: 'COMPLETION_ACCEPTED',
+    });
   });
 
   it('13. is deterministic and idempotent for repeated commits', () => {
