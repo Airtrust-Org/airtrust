@@ -72,7 +72,10 @@ function ensureBaseRefFetched(baseRef, cwd) {
 
   const branchName = baseRef.startsWith('origin/') ? baseRef.slice('origin/'.length) : baseRef;
   try {
-    git(['fetch', '--quiet', 'origin', `+refs/heads/${branchName}:refs/remotes/origin/${branchName}`], cwd);
+    git(
+      ['fetch', '--quiet', 'origin', `+refs/heads/${branchName}:refs/remotes/origin/${branchName}`],
+      cwd,
+    );
   } catch {
     // Best effort — if this also fails (e.g. no network, no such branch),
     // resolveMergeBase()/runGuard() below will surface a clear error instead
@@ -88,8 +91,12 @@ function resolveMergeBase(baseRef, cwd) {
 export function runGuard({ cwd = process.cwd(), baseRef } = {}) {
   const resolvedBaseRef = baseRef ?? resolveBaseRef();
   const mergeBase = resolveMergeBase(resolvedBaseRef, cwd);
+  const copyDetectionArgs = ['-M', '-C', '--find-copies-harder'];
 
-  const nameStatusRaw = git(['diff', '--name-status', '-M', `${mergeBase}...HEAD`], cwd);
+  const nameStatusRaw = git(
+    ['diff', '--name-status', ...copyDetectionArgs, `${mergeBase}...HEAD`],
+    cwd,
+  );
   const addedFiles = new Set();
   for (const line of nameStatusRaw.split('\n')) {
     if (!line.trim()) continue;
@@ -99,7 +106,10 @@ export function runGuard({ cwd = process.cwd(), baseRef } = {}) {
     }
   }
 
-  const diffText = git(['diff', '-U0', `${mergeBase}...HEAD`], cwd);
+  // Use the same rename/copy detection for the content diff. Otherwise a
+  // compatibility extraction is parsed as a brand-new file and pre-existing
+  // legacy lines are incorrectly treated as new type-safety violations.
+  const diffText = git(['diff', ...copyDetectionArgs, '-U0', `${mergeBase}...HEAD`], cwd);
   const addedByFile = parseUnifiedDiffAddedLines(diffText);
 
   const violations = [];
@@ -126,12 +136,16 @@ function main() {
   const { violations, bannedFiles, baseRef, mergeBase } = runGuard({ cwd });
 
   if (bannedFiles.length === 0 && violations.length === 0) {
-    console.log(`OK: guard:typescript-delta — no forbidden type-safety patterns added vs ${baseRef} (${mergeBase})`);
+    console.log(
+      `OK: guard:typescript-delta — no forbidden type-safety patterns added vs ${baseRef} (${mergeBase})`,
+    );
     console.log('RESULT: PASS');
     process.exit(0);
   }
 
-  console.error(`\nRESULT: FAIL — guard:typescript-delta rejected this diff vs ${baseRef} (${mergeBase})\n`);
+  console.error(
+    `\nRESULT: FAIL — guard:typescript-delta rejected this diff vs ${baseRef} (${mergeBase})\n`,
+  );
 
   if (bannedFiles.length > 0) {
     console.error('Forbidden new files (TS log/inventory artifacts must not be committed):');
@@ -152,7 +166,7 @@ function main() {
 
   console.error(
     'Fix: remove the pattern and address the underlying type error with narrowing, a runtime schema\n' +
-      "validator, or `unknown` + a type guard. If a pattern is truly unavoidable, add an exact\n" +
+      'validator, or `unknown` + a type guard. If a pattern is truly unavoidable, add an exact\n' +
       "'file:line' entry to ALLOWLIST in scripts/typescript-delta-lib.mjs with an inline justification\n" +
       '— never a wildcard, and never for AirTrust-controlled production logic.',
   );

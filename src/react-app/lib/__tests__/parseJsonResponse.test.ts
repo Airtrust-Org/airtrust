@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { HttpResponseError, InvalidJsonPayloadError, parseErrorPayload, parseJsonResponse } from '../parseJsonResponse';
+import {
+  HttpResponseError,
+  InvalidJsonPayloadError,
+  parseErrorPayload,
+  parseJsonResponse,
+} from '../parseJsonResponse';
 
 interface TenantPayload {
   success: true;
@@ -43,7 +48,10 @@ describe('parseJsonResponse', () => {
     const res = jsonResponse({ error: 'empresa não encontrada' }, 404);
     await expect(parseJsonResponse(res, isTenantPayload)).rejects.toThrow(HttpResponseError);
     try {
-      await parseJsonResponse(jsonResponse({ error: 'empresa não encontrada' }, 404), isTenantPayload);
+      await parseJsonResponse(
+        jsonResponse({ error: 'empresa não encontrada' }, 404),
+        isTenantPayload,
+      );
       throw new Error('deveria ter lançado');
     } catch (err) {
       expect(err).toBeInstanceOf(HttpResponseError);

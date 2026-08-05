@@ -1,87 +1,104 @@
-import { QueryClient } from '@tanstack/react-query'
+import { MutationCache, QueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { frontendErrorMessage } from '@/react-app/lib/api-contract';
+import {
+  getCurrentTenantId,
+  registerTenantCacheReset,
+  resetTenantDataLayer,
+} from '@/react-app/lib/tenant-data-layer';
+
+export interface AirTrustMutationMeta extends Record<string, unknown> {
+  suppressGlobalError?: boolean;
+}
+
+const mutationCache = new MutationCache({
+  onError: (error, _variables, _context, mutation) => {
+    const meta = mutation.options.meta as AirTrustMutationMeta | undefined;
+    if (meta?.suppressGlobalError) return;
+    toast.error(frontendErrorMessage(error));
+  },
+});
 
 /**
- * React Query Client Configuration
- * Optimized for AirTrust performance
- *
- * Cache Strategy:
- * - Static data (categorias): 1 hour
- * - Medium volatility (qualificacoes): 30 minutes
- * - Employee data (funcionarios): 5 minutes
- * - Training history: 3 minutes
- * - Dashboard: 30 seconds (real-time)
+ * React Query client. Tenant changes clear the complete client before any new
+ * tenant-scoped refetch can begin.
  */
-
 export const queryClient = new QueryClient({
+  mutationCache,
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // Default: 5 minutes
-      gcTime: 1000 * 60 * 10, // Former cacheTime: 10 minutes
-      retry: 2,
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      retry: (failureCount, error) => {
+        const status = (error as { status?: number } | undefined)?.status;
+        if (status === 401 || status === 403) return false;
+        return failureCount < 2;
+      },
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
       refetchOnWindowFocus: false,
       refetchOnReconnect: 'always',
     },
     mutations: {
-      retry: 1,
-      retryDelay: 1000,
+      retry: 0,
     },
   },
-})
+});
+
+const clearReactQueryOnly = queryClient.clear.bind(queryClient);
+registerTenantCacheReset('react-query', clearReactQueryOnly);
+
+// Existing logout paths already call queryClient.clear(). Make that call the
+// complete data-layer reset rather than clearing React Query alone.
+queryClient.clear = () => {
+  resetTenantDataLayer({ reason: 'logout', tenantId: null });
+};
 
 /**
- * Tenant-scoped query key helper.
- * Prefixes any query key with the current empresaId so that switching
- * tenants automatically creates a new cache namespace.
- *
- * Usage:
- *   tenantQueryKey(empresaId, 'funcionarios', 'list', filters)
- *   // => ['tenant', 8, 'funcionarios', 'list', filters]
+ * Tenant-scoped query key helper. Missing IDs are derived from the current JWT.
+ * The safe pending namespace replaces the historical `tenant, 0` collision.
  */
-export function tenantQueryKey(empresaId: number | null | undefined, ...parts: unknown[]): readonly unknown[] {
-  return ['tenant', empresaId ?? 0, ...parts] as const;
+export function tenantQueryKey(
+  empresaId: number | null | undefined,
+  ...parts: unknown[]
+): readonly unknown[] {
+  const resolvedTenantId = empresaId ?? getCurrentTenantId();
+  return ['tenant', resolvedTenantId ?? 'pending', ...parts] as const;
 }
 
-/**
- * Query Key Factory
- * Standardized query keys for type-safe cache management.
- * All tenant-scoped keys accept an optional empresaId as first parameter.
- */
 export const queryKeys = {
-  all: ['data'] as const,
+  all: (empresaId?: number | null) => tenantQueryKey(empresaId, 'data'),
 
-  // Categorias (1 hour cache - static)
   categorias: (empresaId?: number | null) => tenantQueryKey(empresaId, 'categorias'),
-  categoriasDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'categorias', id),
+  categoriasDetail: (id: string, empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'categorias', id),
 
-  // Qualificações (30 min cache - medium volatility)
   qualificacoes: (empresaId?: number | null) => tenantQueryKey(empresaId, 'qualificacoes'),
-  qualificacoesDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'qualificacoes', id),
+  qualificacoesDetail: (id: string, empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'qualificacoes', id),
 
-  // Funcionários (5 min cache - frequent changes)
   funcionarios: (empresaId?: number | null) => tenantQueryKey(empresaId, 'funcionarios'),
-  funcionariosDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'funcionarios', id),
+  funcionariosDetail: (id: string, empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'funcionarios', id),
 
-  // Histórico (3 min cache - audit data)
+  agendamentos: (empresaId?: number | null) => tenantQueryKey(empresaId, 'agendamentos'),
+  agendamentosDetail: (id: string, empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'agendamentos', id),
+
   historico: (empresaId?: number | null) => tenantQueryKey(empresaId, 'historico'),
-  historicoDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'historico', id),
+  historicoDetail: (id: string, empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'historico', id),
 
-  // Simuladores (30 sec - real-time)
   simuladores: (empresaId?: number | null) => tenantQueryKey(empresaId, 'simuladores'),
-  simuladoresDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'simuladores', id),
+  simuladoresDetail: (id: string, empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'simuladores', id),
 
-  // Dashboard (30 sec - real-time)
   dashboard: (empresaId?: number | null) => tenantQueryKey(empresaId, 'dashboard'),
-}
+};
 
-/**
- * Cache configuration by data type
- * Override default staleTime per query
- */
 export const cacheTimes = {
-  STATIC: 1000 * 60 * 60, // 1 hour - categorias, funcoes
-  MEDIUM: 1000 * 60 * 30, // 30 min - qualificacoes
-  LOW: 1000 * 60 * 5, // 5 min - funcionarios
-  FREQUENT: 1000 * 60 * 3, // 3 min - historico
-  REALTIME: 1000 * 30, // 30 sec - dashboard, simuladores
-}
+  STATIC: 1000 * 60 * 60,
+  MEDIUM: 1000 * 60 * 30,
+  LOW: 1000 * 60 * 5,
+  FREQUENT: 1000 * 60 * 3,
+  REALTIME: 1000 * 30,
+};

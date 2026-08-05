@@ -21,10 +21,7 @@ export interface ProductModule {
 function operationalModuleGovernance(
   officialDataSource: string,
   governanceDescription: string,
-): Omit<
-  ProductModule,
-  'key' | 'label' | 'status' | 'defaultForPilot' | 'description'
-> {
+): Omit<ProductModule, 'key' | 'label' | 'status' | 'defaultForPilot' | 'description'> {
   return {
     maturityLevel: 'N1',
     evidenceLevel: 'A1',
@@ -40,10 +37,7 @@ function operationalModuleGovernance(
 function prototypeModuleGovernance(
   officialDataSource: string,
   governanceDescription: string,
-): Omit<
-  ProductModule,
-  'key' | 'label' | 'status' | 'defaultForPilot' | 'description'
-> {
+): Omit<ProductModule, 'key' | 'label' | 'status' | 'defaultForPilot' | 'description'> {
   return {
     maturityLevel: 'N0',
     evidenceLevel: 'A0',
@@ -238,7 +232,8 @@ export const PRODUCT_MODULES: ProductModule[] = [
     label: 'Controle de Voos',
     status: 'beta',
     defaultForPilot: false,
-    description: 'Programação de voos, tripulação, RDV, jornada, indisponibilidade e relatórios operacionais.',
+    description:
+      'Programação de voos, tripulação, RDV, jornada, indisponibilidade e relatórios operacionais.',
     ...operationalModuleGovernance(
       'AirTrust (programacao, voos, dashboard OCC e RDV operacional internos).',
       'Uso operacional interno; nao regulado, nao fiscal e sem substituicao de registros oficiais da operacao.',

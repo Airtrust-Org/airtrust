@@ -18,6 +18,7 @@ import {
 } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { queryClient } from '@/react-app/lib/query-client';
+import { resetTenantDataLayer, tenantIdFromToken } from '@/react-app/lib/tenant-data-layer';
 import { clearAllScopedAuthStorage, clearLegacyPerfisCache } from '@/react-app/utils/auth-storage';
 import { AuthContext, type AuthContextType, type User, type UsuarioEmpresa } from './auth-context';
 import { getDevLoginCredentials } from '@/react-app/utils/devCredentials';
@@ -585,10 +586,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const novoToken = String(json.data.accessToken);
-      queryClient.clear();
-      setToken(novoToken);
+
+      // O novo token precisa ser a fonte canônica antes de qualquer limpeza ou
+      // refetch. Assim nenhuma requisição iniciada pela troca usa o tenant antigo.
       setTokens(novoToken, readAuthStorage(REFRESH_TOKEN_KEY) || undefined);
       writeAuthStorage(TOKEN_KEY, novoToken);
+      setToken(novoToken);
+      resetTenantDataLayer({
+        reason: 'tenant-switch',
+        tenantId: tenantIdFromToken(novoToken) ?? novaEmpresaId,
+      });
 
       await loadEmpresas(novoToken);
     },

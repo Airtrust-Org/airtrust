@@ -6,7 +6,10 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { apiClient as api } from '@/react-app/services/apiClient';
+import { apiJson } from '@/react-app/lib/api-contract';
+import { useAuth } from '@/react-app/hooks/useAuth';
+import { LruTtlCache } from '@/react-app/lib/lru-ttl-cache';
+import { getCurrentTenantId, registerTenantCacheReset } from '@/react-app/lib/tenant-data-layer';
 import { getCorByString } from '@/react-app/constants';
 
 // =====================
@@ -52,6 +55,7 @@ interface UseAeronavesConfigReturn {
 // =====================
 
 export function useAeronavesConfig(): UseAeronavesConfigReturn {
+  const { empresaAtualId } = useAuth();
   const [aeronaves, setAeronaves] = useState<AeronaveConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,11 +65,15 @@ export function useAeronavesConfig(): UseAeronavesConfigReturn {
       setLoading(true);
       setError(null);
 
-      const response = await api.get<Aeronave[] | { data?: Aeronave[] }>('/modelos-aeronave');
-      const aeronavesPayload = Array.isArray(response.data)
-        ? response.data
-        : Array.isArray(response.data?.data)
-          ? response.data.data
+      if (!empresaAtualId) {
+        setAeronaves([]);
+        return;
+      }
+      const response = await apiJson<Aeronave[] | { data?: Aeronave[] }>('/api/modelos-aeronave');
+      const aeronavesPayload = Array.isArray(response)
+        ? response
+        : Array.isArray(response.data)
+          ? response.data
           : [];
 
       const configuredAeronaves: AeronaveConfig[] = aeronavesPayload.map((aeronave: Aeronave) => ({
@@ -74,14 +82,14 @@ export function useAeronavesConfig(): UseAeronavesConfigReturn {
       }));
 
       setAeronaves(configuredAeronaves);
-      updateAeronavesCache(configuredAeronaves);
+      updateAeronavesCache(configuredAeronaves, empresaAtualId);
     } catch (err) {
       console.error('Erro ao carregar aeronaves:', err);
       setError(err instanceof Error ? err.message : 'Erro ao carregar aeronaves');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [empresaAtualId]);
 
   useEffect(() => {
     fetchAeronaves();
@@ -133,14 +141,18 @@ export function useAeronavesConfig(): UseAeronavesConfigReturn {
 // SINGLETON/CACHE (para usar fora de componentes)
 // =====================
 
-let cachedAeronaves: AeronaveConfig[] = [];
+const cachedAeronaves = new LruTtlCache<number, AeronaveConfig[]>(8, 10 * 60 * 1000);
+registerTenantCacheReset('aeronaves', () => cachedAeronaves.clear());
 
 /**
  * Função utilitária para obter cores sem precisar de hook
  * Usa cache interno se disponível, senão gera cor consistente
  */
 export function getAeronaveCores(codigo: string): AeronaveCores {
-  const cached = cachedAeronaves.find((a) => a.codigo === codigo || a.modelo === codigo);
+  const tenantId = getCurrentTenantId();
+  const cached = tenantId
+    ? cachedAeronaves.get(tenantId)?.find((a) => a.codigo === codigo || a.modelo === codigo)
+    : undefined;
   if (cached) return cached.cores;
 
   // Fallback: gera cor consistente baseada no código
@@ -150,6 +162,10 @@ export function getAeronaveCores(codigo: string): AeronaveCores {
 /**
  * Atualiza o cache de aeronaves (chamar quando carregar aeronaves)
  */
-export function updateAeronavesCache(aeronaves: AeronaveConfig[]) {
-  cachedAeronaves = aeronaves;
+export function updateAeronavesCache(
+  aeronaves: AeronaveConfig[],
+  tenantId: number | null = getCurrentTenantId(),
+): void {
+  if (!tenantId) return;
+  cachedAeronaves.set(tenantId, aeronaves);
 }

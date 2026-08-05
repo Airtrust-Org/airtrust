@@ -1,17 +1,57 @@
 import { API_BASE_URL } from '@/react-app/config/api';
 import { notifyDataChanged, type DataChangeScope } from '@/react-app/utils/data-sync';
+import { LruTtlCache } from '@/react-app/lib/lru-ttl-cache';
+import { getCurrentTenantId, registerTenantCacheReset } from '@/react-app/lib/tenant-data-layer';
 
 type ApiFetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+interface ResponseSnapshot {
+  body: ArrayBuffer;
+  status: number;
+  statusText: string;
+  headers: Array<[string, string]>;
+}
+
+interface EndpointBackoff {
+  snapshot: ResponseSnapshot;
+  until: number;
+}
 
 declare global {
   var __airtrust_api_fetch_installed__: boolean | undefined;
   var __airtrust_api_fetch__: ApiFetchFn | undefined;
   var __airtrust_inflightGetMap__: Map<string, Promise<Response>> | undefined;
-  var __airtrust_recentGetCache__:
-    | Map<string, { expiresAt: number; response: Response }>
-    | undefined;
-  var __airtrust_endpointBackoff__: Map<string, number> | undefined;
+  var __airtrust_recentGetCache__: LruTtlCache<string, ResponseSnapshot> | undefined;
+  var __airtrust_endpointBackoff__: LruTtlCache<string, EndpointBackoff> | undefined;
 }
+
+async function responseToSnapshot(response: Response): Promise<ResponseSnapshot> {
+  const clone = response.clone();
+  return {
+    body: await clone.arrayBuffer(),
+    status: clone.status,
+    statusText: clone.statusText,
+    headers: [...clone.headers.entries()],
+  };
+}
+
+function responseFromSnapshot(snapshot: ResponseSnapshot, localBackoff = false): Response {
+  const headers = new Headers(snapshot.headers);
+  if (localBackoff) headers.set('X-AirTrust-Local-Backoff', '1');
+  return new Response(snapshot.body.slice(0), {
+    status: snapshot.status,
+    statusText: snapshot.statusText,
+    headers,
+  });
+}
+
+export function clearApiFetchCaches(): void {
+  globalThis.__airtrust_inflightGetMap__?.clear();
+  globalThis.__airtrust_recentGetCache__?.clear();
+  globalThis.__airtrust_endpointBackoff__?.clear();
+}
+
+registerTenantCacheReset('apiFetch', clearApiFetchCaches);
 
 function safeSessionGet(key: string): string | null {
   if (typeof window === 'undefined') return null;
@@ -94,7 +134,8 @@ function isAuthenticatedRequest(
 ): boolean {
   if (headers.has('Authorization')) return true;
 
-  const credentials = init?.credentials || (input instanceof Request ? input.credentials : undefined);
+  const credentials =
+    init?.credentials || (input instanceof Request ? input.credentials : undefined);
   if (credentials === 'include') return true;
 
   try {
@@ -174,7 +215,11 @@ function dataChangeScopeForMutation(pathname: string): DataChangeScope | null {
   return null;
 }
 
-function notifyMutationDataChange(method: string, pathname: string | null, response: Response): void {
+function notifyMutationDataChange(
+  method: string,
+  pathname: string | null,
+  response: Response,
+): void {
   if (!response.ok || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return;
   if (!pathname) return;
   const scope = dataChangeScopeForMutation(pathname);
@@ -194,9 +239,9 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
   const inflightGetMap =
     globalThis.__airtrust_inflightGetMap__ || new Map<string, Promise<Response>>();
   const recentGetCache =
-    globalThis.__airtrust_recentGetCache__ ||
-    new Map<string, { expiresAt: number; response: Response }>();
-  const endpointBackoff = globalThis.__airtrust_endpointBackoff__ || new Map<string, number>();
+    globalThis.__airtrust_recentGetCache__ || new LruTtlCache<string, ResponseSnapshot>(64, 15_000);
+  const endpointBackoff =
+    globalThis.__airtrust_endpointBackoff__ || new LruTtlCache<string, EndpointBackoff>(64, 15_000);
   globalThis.__airtrust_inflightGetMap__ = inflightGetMap;
   globalThis.__airtrust_recentGetCache__ = recentGetCache;
   globalThis.__airtrust_endpointBackoff__ = endpointBackoff;
@@ -234,7 +279,10 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
       const tryOnce = async (originToUse: string): Promise<Response> => {
         try {
           const candidate = new URL(rawInput, window.location.origin);
-          if (candidate.origin === window.location.origin && candidate.pathname.startsWith('/api/')) {
+          if (
+            candidate.origin === window.location.origin &&
+            candidate.pathname.startsWith('/api/')
+          ) {
             return await originalFetch(originToUse + candidate.pathname + candidate.search, init);
           }
           if (isRelativeApiInput(rawInput)) {
@@ -272,36 +320,26 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
         resolved.origin === defaultOrigin ||
         (altOrigin ? resolved.origin === altOrigin : false));
 
-    if (
-      !resolved ||
-      !isApiRequest ||
-      method !== 'GET' ||
-      bypassGetCache ||
-      authenticated
-    ) {
+    if (!resolved || !isApiRequest || method !== 'GET' || bypassGetCache || authenticated) {
       const response = await performFetchWithFallback();
       notifyMutationDataChange(method, resolved?.pathname || null, response);
       return response;
     }
 
     const now = Date.now();
-    const endpointKey = `${resolved.origin}${resolved.pathname}`;
-    const blockedUntil = endpointBackoff.get(endpointKey) || 0;
-    if (blockedUntil > now) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: `Endpoint temporariamente em backoff (${Math.ceil((blockedUntil - now) / 1000)}s).`,
-          code: 'REQUEST_BACKOFF',
-        }),
-        { status: 429, headers: { 'Content-Type': 'application/json' } },
-      );
+    const tenantScope = getCurrentTenantId() ?? 'public';
+    const endpointKey = `${tenantScope}:${resolved.origin}${resolved.pathname}`;
+    const activeBackoff = endpointBackoff.get(endpointKey, now);
+    if (activeBackoff && activeBackoff.until > now) {
+      // Preserve the actual server status/body that initiated backoff. The local
+      // marker is explicit and never fabricates a 429 that the server did not send.
+      return responseFromSnapshot(activeBackoff.snapshot, true);
     }
 
-    const requestKey = `${method}:${normalizeUrlForKey(resolved.toString())}`;
-    const cached = recentGetCache.get(requestKey);
-    if (cached && cached.expiresAt > now) {
-      return cached.response.clone();
+    const requestKey = `${tenantScope}:${method}:${normalizeUrlForKey(resolved.toString())}`;
+    const cached = recentGetCache.get(requestKey, now);
+    if (cached) {
+      return responseFromSnapshot(cached);
     }
 
     const inflight = inflightGetMap.get(requestKey);
@@ -312,11 +350,9 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
 
     const requestPromise = (async () => {
       const response = await performFetchWithFallback();
+      const snapshot = await responseToSnapshot(response);
       if (response.ok) {
-        recentGetCache.set(requestKey, {
-          expiresAt: Date.now() + getGetCacheTtlMs(resolved.pathname),
-          response: response.clone(),
-        });
+        recentGetCache.set(requestKey, snapshot, getGetCacheTtlMs(resolved.pathname));
       }
 
       const isEscalasEndpoint = /\/api\/escalas(\/|$)/i.test(resolved.pathname);
@@ -329,13 +365,22 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
           : response.status === 429
             ? 15000
             : 5000;
-        endpointBackoff.set(endpointKey, Date.now() + retryAfterMs);
+        endpointBackoff.set(
+          endpointKey,
+          { snapshot, until: Date.now() + retryAfterMs },
+          retryAfterMs,
+        );
       } else {
         endpointBackoff.delete(endpointKey);
       }
 
       return response;
     })();
+
+    if (inflightGetMap.size >= 128) {
+      const response = await requestPromise;
+      return response.clone();
+    }
 
     inflightGetMap.set(requestKey, requestPromise);
     try {

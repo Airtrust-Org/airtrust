@@ -1,0 +1,458 @@
+name: FRMS Historical Reprocessing (Governed)
+
+on:
+  issue_comment:
+    types:
+      - created
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Execute the approved recalculation or roll back a completed scope
+        required: true
+        type: choice
+        options:
+          - execute
+          - rollback
+        default: execute
+      expected_sha:
+        description: Exact main SHA approved for this production operation
+        required: true
+        type: string
+      formula_version:
+        description: Reviewed FRMS formula version
+        required: true
+        type: string
+        default: frms-regulatory-integrity-20260804-v2
+      rollback_scope_key:
+        description: Required only for rollback; use the scope_key from the execution report
+        required: false
+        type: string
+      confirm_production:
+        description: Type FRMS_REPROCESS_ALL_HISTORICAL
+        required: true
+        type: string
+  push:
+    branches:
+      - ops/frms-historical-reprocess-approved-20260805
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: frms-historical-reprocess-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PRODUCTION_CONFIRMATION: FRMS_REPROCESS_ALL_HISTORICAL
+  PRODUCTION_DATABASE_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+  FORMULA_DEFAULT: frms-regulatory-integrity-20260804-v2
+  APPROVED_FORMULA_SHA: 2578ee339be7788bf3cc5a1da8a23bd50b06b524
+  AUTHORIZATION_ISSUE: '827'
+
+jobs:
+  reprocess:
+    name: Backup, dry-run, execute and validate FRMS history
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.number == 827 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.body == 'FRMS_REPROCESS_ALL_HISTORICAL 2578ee339be7788bf3cc5a1da8a23bd50b06b524')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 360
+    steps:
+      - name: Checkout approved revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve and validate authorization
+        id: auth
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          INPUT_OPERATION: ${{ inputs.operation }}
+          INPUT_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          INPUT_FORMULA_VERSION: ${{ inputs.formula_version }}
+          INPUT_ROLLBACK_SCOPE_KEY: ${{ inputs.rollback_scope_key }}
+          INPUT_CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ACTOR: ${{ github.event.comment.user.login }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          main_sha="$(git rev-parse origin/main)"
+
+          if [[ "$EVENT_NAME" == 'issue_comment' ]]; then
+            [[ "$EVENT_REF" == 'refs/heads/main' ]] || {
+              echo 'Authorized issue comment must execute from main.' >&2
+              exit 1
+            }
+            [[ "$ISSUE_NUMBER" == "$AUTHORIZATION_ISSUE" ]] || {
+              echo 'Unexpected authorization issue.' >&2
+              exit 1
+            }
+            [[ "$COMMENT_ACTOR" == "$REPOSITORY_OWNER" ]] || {
+              echo 'Only the repository owner can authorize this operation.' >&2
+              exit 1
+            }
+            [[ "$COMMENT_BODY" == "$PRODUCTION_CONFIRMATION $APPROVED_FORMULA_SHA" ]] || {
+              echo 'Authorization comment does not match the exact approved command.' >&2
+              exit 1
+            }
+            operation='execute'
+            expected_sha="$APPROVED_FORMULA_SHA"
+            formula_version="$FORMULA_DEFAULT"
+            rollback_scope_key=''
+            confirmation="$PRODUCTION_CONFIRMATION"
+          elif [[ "$EVENT_NAME" == 'push' ]]; then
+            [[ "$EVENT_REF" == 'refs/heads/ops/frms-historical-reprocess-approved-20260805' ]] || {
+              echo 'Unexpected push ref.' >&2
+              exit 1
+            }
+            operation='execute'
+            expected_sha="$EVENT_SHA"
+            formula_version="$FORMULA_DEFAULT"
+            rollback_scope_key=''
+            confirmation="$PRODUCTION_CONFIRMATION"
+          else
+            [[ "$EVENT_REF" == 'refs/heads/main' ]] || {
+              echo 'Manual execution is allowed only from main.' >&2
+              exit 1
+            }
+            operation="$INPUT_OPERATION"
+            expected_sha="$INPUT_EXPECTED_SHA"
+            formula_version="$INPUT_FORMULA_VERSION"
+            rollback_scope_key="$INPUT_ROLLBACK_SCOPE_KEY"
+            confirmation="$INPUT_CONFIRM_PRODUCTION"
+          fi
+
+          [[ "$confirmation" == "$PRODUCTION_CONFIRMATION" ]] || {
+            echo "confirm_production must be $PRODUCTION_CONFIRMATION." >&2
+            exit 1
+          }
+          [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo 'expected_sha must be a lowercase 40-character SHA.' >&2
+            exit 1
+          }
+
+          if [[ "$EVENT_NAME" == 'issue_comment' ]]; then
+            [[ "$EVENT_SHA" == "$main_sha" ]] || {
+              echo 'Issue-comment workflow SHA is not the current origin/main.' >&2
+              exit 1
+            }
+            git merge-base --is-ancestor "$expected_sha" "$main_sha" || {
+              echo 'The approved formula SHA is not an ancestor of current main.' >&2
+              exit 1
+            }
+            git diff --quiet "$expected_sha" "$main_sha" -- \
+              worker-airtrust/src/lib/frms/calculos.ts \
+              worker-airtrust/src/lib/frms/db-service-jornadas.ts \
+              worker-airtrust/src/lib/frms/db-service-config.ts \
+              ops/production/frms-historical-reprocess.mjs \
+              scripts/production/frms-historical-reprocess.mjs || {
+                echo 'Reviewed FRMS formula or executor changed after approval.' >&2
+                exit 1
+              }
+          else
+            [[ "$expected_sha" == "$EVENT_SHA" ]] || {
+              echo 'expected_sha does not match github.sha.' >&2
+              exit 1
+            }
+            [[ "$expected_sha" == "$main_sha" ]] || {
+              echo 'The approved SHA is no longer the current origin/main.' >&2
+              exit 1
+            }
+          fi
+
+          [[ "$operation" == 'execute' || "$operation" == 'rollback' ]] || {
+            echo 'Unsupported operation.' >&2
+            exit 1
+          }
+          [[ "$formula_version" =~ ^[a-z0-9][a-z0-9._-]{2,127}$ ]] || {
+            echo 'Invalid formula_version.' >&2
+            exit 1
+          }
+          if [[ "$operation" == 'rollback' ]]; then
+            [[ -n "$rollback_scope_key" ]] || { echo 'rollback_scope_key is required for rollback.' >&2; exit 1; }
+            [[ "$rollback_scope_key" =~ ^[a-zA-Z0-9:._-]{3,255}$ ]] || { echo 'Invalid rollback_scope_key.' >&2; exit 1; }
+          fi
+
+          git checkout -B main origin/main
+          [[ "$(git status --porcelain)" == '' ]]
+
+          {
+            echo "operation=$operation"
+            echo "expected_sha=$expected_sha"
+            echo "formula_version=$formula_version"
+            echo "rollback_scope_key=$rollback_scope_key"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Record authorized production start
+        if: ${{ github.event_name == 'issue_comment' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$(jq -rn \
+            --arg source_sha '${{ steps.auth.outputs.expected_sha }}' \
+            --arg workflow_sha '${{ github.sha }}' \
+            '"## Recálculo histórico FRMS autorizado\n\n- source SHA da fórmula/executor: `\($source_sha)`\n- workflow SHA: `\($workflow_sha)`\n- estado: `BACKUP_AND_DRY_RUN_STARTED`\n\nA escrita produtiva somente ocorrerá depois do backup integral, restauração validada e dry-run completo."')"
+          jq -cn --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/start-comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            --data-binary @"$RUNNER_TEMP/start-comment.json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${AUTHORIZATION_ISSUE}/comments" >/dev/null
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies and SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm --prefix worker-airtrust ci
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+
+      - name: Guard production D1 credentials
+        shell: bash
+        env:
+          CLOUDFLARE_D1_BACKUP_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_D1_MIGRATION_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_D1_BACKUP_API_TOKEN" ]] || { echo 'PRODUCTION_D1_BACKUP_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_D1_MIGRATION_API_TOKEN" ]] || { echo 'PRODUCTION_D1_WRITE_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Build reviewed FRMS executor
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/frms-historical-reprocess.mjs"
+          npx --no-install esbuild scripts/production/frms-historical-reprocess.mjs \
+            --bundle \
+            --platform=node \
+            --format=esm \
+            --target=node24 \
+            --outfile="$bundle"
+          node --check "$bundle"
+          echo "EXECUTOR_BUNDLE=$bundle" >> "$GITHUB_ENV"
+
+      - name: Export and verify production D1 backup
+        id: backup
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          backup_dir="$RUNNER_TEMP/frms-reprocess-backup"
+          backup_sql="$backup_dir/airtrust-db-production.sql"
+          backup_report="$RUNNER_TEMP/frms-backup-report.raw.json"
+          mkdir -p "$backup_dir"
+          node scripts/production/backup-production-d1-readonly.mjs \
+            --config worker-airtrust/wrangler.toml \
+            --env production \
+            --out-dir "$backup_dir" \
+            --out-file "$backup_sql" > "$backup_report"
+          jq -e '.ok == true and .restored_sqlite.integrity_check == "ok"' "$backup_report" >/dev/null
+          test -s "$backup_sql"
+          echo "BACKUP_SQL=$backup_sql" >> "$GITHUB_ENV"
+          echo "BACKUP_REPORT=$backup_report" >> "$GITHUB_ENV"
+
+      - name: Restore backup into disposable SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_db="$RUNNER_TEMP/frms-reprocess-dry-run.sqlite"
+          rm -f "$local_db"
+          sqlite3 "$local_db" < "$BACKUP_SQL"
+          [[ "$(sqlite3 "$local_db" 'PRAGMA integrity_check;')" == 'ok' ]]
+          echo "DRY_RUN_DB=$local_db" >> "$GITHUB_ENV"
+
+      - name: Run full historical dry-run against backup copy
+        id: dry_run
+        shell: bash
+        env:
+          OPERATION: ${{ steps.auth.outputs.operation }}
+          EXPECTED_SHA: ${{ steps.auth.outputs.expected_sha }}
+          FORMULA_VERSION: ${{ steps.auth.outputs.formula_version }}
+          ROLLBACK_SCOPE_KEY: ${{ steps.auth.outputs.rollback_scope_key }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/frms-historical-dry-run.json"
+          args=(
+            node "$EXECUTOR_BUNDLE"
+            --target sqlite
+            --operation "$OPERATION"
+            --sqlite-file "$DRY_RUN_DB"
+            --source-sha "$EXPECTED_SHA"
+            --formula-version "$FORMULA_VERSION"
+            --report "$report"
+          )
+          if [[ "$OPERATION" == 'rollback' ]]; then
+            args+=(--scope-key "$ROLLBACK_SCOPE_KEY")
+          fi
+          "${args[@]}"
+          jq -e '.ok == true and .outcome == "SUCCEEDED" and .summary.failed == 0 and .summary.pending == 0' "$report" >/dev/null
+          if [[ "$OPERATION" == 'execute' ]]; then
+            jq -e '(.summary.processed + .summary.skipped_completed + .summary.skipped_non_operational) == .inventory.overview.jornadas' "$report" >/dev/null
+          fi
+          echo "DRY_RUN_REPORT=$report" >> "$GITHUB_ENV"
+
+      - name: Capture D1 Time Travel recovery point
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          recovery_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          recovery_output="$RUNNER_TEMP/frms-d1-time-travel-info.txt"
+          npx wrangler d1 time-travel info airtrust-db --env production \
+            --timestamp="$recovery_timestamp" > "$recovery_output"
+          test -s "$recovery_output"
+          echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp" >> "$GITHUB_ENV"
+          echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$recovery_output"
+
+      - name: Execute governed production reprocessing
+        id: production
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OPERATION: ${{ steps.auth.outputs.operation }}
+          EXPECTED_SHA: ${{ steps.auth.outputs.expected_sha }}
+          FORMULA_VERSION: ${{ steps.auth.outputs.formula_version }}
+          ROLLBACK_SCOPE_KEY: ${{ steps.auth.outputs.rollback_scope_key }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/frms-historical-production-report.json"
+          args=(
+            node "$EXECUTOR_BUNDLE"
+            --target remote
+            --operation "$OPERATION"
+            --account-id "$CLOUDFLARE_ACCOUNT_ID"
+            --database-id "$PRODUCTION_DATABASE_ID"
+            --source-sha "$EXPECTED_SHA"
+            --formula-version "$FORMULA_VERSION"
+            --report "$report"
+          )
+          if [[ "$OPERATION" == 'execute' ]]; then
+            args+=(--approved-dry-run "$DRY_RUN_REPORT")
+          else
+            args+=(--scope-key "$ROLLBACK_SCOPE_KEY")
+          fi
+          "${args[@]}"
+          jq -e '.ok == true and .target == "remote" and .outcome == "SUCCEEDED" and .summary.failed == 0 and .summary.pending == 0' "$report" >/dev/null
+          if [[ "$OPERATION" == 'execute' ]]; then
+            jq -e '(.summary.processed + .summary.skipped_completed + .summary.skipped_non_operational) == .inventory.overview.jornadas' "$report" >/dev/null
+          fi
+          echo "PRODUCTION_REPORT=$report" >> "$GITHUB_ENV"
+          echo "scope_key=$(jq -r '.scope_key' "$report")" >> "$GITHUB_OUTPUT"
+
+      - name: Validate production postconditions independently
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OPERATION: ${{ steps.auth.outputs.operation }}
+          SCOPE_KEY: ${{ steps.production.outputs.scope_key }}
+        run: |
+          set -euo pipefail
+          rows="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command \
+            "SELECT status, COUNT(*) AS total FROM cron_job_items WHERE job_name='frms_historical_reprocess_v2' AND scope_key='${SCOPE_KEY}' GROUP BY status ORDER BY status;")"
+          failed="$(printf '%s' "$rows" | jq '[.[].results[] | select(.status == "FAILED" or .status == "PENDING" or .status == "PROCESSING") | .total] | add // 0')"
+          [[ "$failed" == '0' ]] || { echo "FRMS ledger has $failed unfinished items." >&2; exit 1; }
+          if [[ "$OPERATION" == 'execute' ]]; then
+            duplicates="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command \
+              "SELECT COUNT(*) AS total FROM (SELECT jornada_id FROM frms_fatorizacao_jornada WHERE deleted_at IS NULL GROUP BY jornada_id HAVING COUNT(*) > 1);" \
+              | jq -r '.[0].results[0].total')"
+            [[ "$duplicates" == '0' ]] || { echo "Active factorization duplicates: $duplicates" >&2; exit 1; }
+          fi
+
+      - name: Publish sanitized production result to authorization issue
+        if: ${{ github.event_name == 'issue_comment' && env.PRODUCTION_REPORT != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$(jq -rn \
+            --arg outcome "$(jq -r '.outcome' "$PRODUCTION_REPORT")" \
+            --arg journeys "$(jq -r '.inventory.overview.jornadas' "$PRODUCTION_REPORT")" \
+            --arg processed "$(jq -r '.summary.processed' "$PRODUCTION_REPORT")" \
+            --arg skipped "$(jq -r '(.summary.skipped_completed + .summary.skipped_non_operational)' "$PRODUCTION_REPORT")" \
+            --arg failed "$(jq -r '.summary.failed' "$PRODUCTION_REPORT")" \
+            --arg pending "$(jq -r '.summary.pending' "$PRODUCTION_REPORT")" \
+            --arg review "$(jq -r '.summary.review_required // 0' "$PRODUCTION_REPORT")" \
+            --arg scope "$(jq -r '.scope_key' "$PRODUCTION_REPORT")" \
+            --arg recovery "${RECOVERY_TIMESTAMP_UTC:-not-captured}" \
+            '"## Resultado do recálculo histórico FRMS\n\n- outcome: `\($outcome)`\n- jornadas históricas no inventário: `\($journeys)`\n- recalculadas nesta execução: `\($processed)`\n- já concluídas ou não operacionais: `\($skipped)`\n- falhas: `\($failed)`\n- pendentes: `\($pending)`\n- casos para revisão humana: `\($review)`\n- ponto de recuperação UTC: `\($recovery)`\n- escopo: `\($scope)`\n\nO relatório contém somente contagens e metadados sanitizados."')"
+          jq -cn --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/result-comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            --data-binary @"$RUNNER_TEMP/result-comment.json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${AUTHORIZATION_ISSUE}/comments" >/dev/null
+
+      - name: Publish sanitized operation report
+        if: ${{ always() && env.PRODUCTION_REPORT != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frms-historical-reprocess-${{ github.sha }}
+          path: |
+            ${{ env.DRY_RUN_REPORT }}
+            ${{ env.PRODUCTION_REPORT }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Write final operation summary
+        if: ${{ always() && env.PRODUCTION_REPORT != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## FRMS historical reprocessing'
+            echo "- operation: \`${{ steps.auth.outputs.operation }}\`"
+            echo "- source SHA: \`${{ steps.auth.outputs.expected_sha }}\`"
+            echo "- formula version: \`${{ steps.auth.outputs.formula_version }}\`"
+            echo "- scope key: \`$(jq -r '.scope_key' "$PRODUCTION_REPORT")\`"
+            echo "- outcome: \`$(jq -r '.outcome' "$PRODUCTION_REPORT")\`"
+            echo "- processed: \`$(jq -r '.summary.processed' "$PRODUCTION_REPORT")\`"
+            echo "- review required: \`$(jq -r '.summary.review_required // 0' "$PRODUCTION_REPORT")\`"
+            echo "- recovery point: \`${RECOVERY_TIMESTAMP_UTC:-not-captured}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove sensitive temporary database material
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/frms-reprocess-backup" \
+                 "$RUNNER_TEMP/frms-reprocess-dry-run.sqlite" \
+                 "$RUNNER_TEMP/frms-historical-reprocess.mjs" \
+                 "$RUNNER_TEMP/frms-backup-report.raw.json"
