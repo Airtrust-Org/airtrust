@@ -1,0 +1,167 @@
+name: FRMS Historical Reprocessing Verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ops/frms-historical-reprocess-verify-20260805
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: frms-historical-reprocess-production-verification
+  cancel-in-progress: false
+
+env:
+  PRODUCTION_DATABASE_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+  EXECUTION_SOURCE_SHA: 2578ee339be7788bf3cc5a1da8a23bd50b06b524
+  EXECUTION_SCOPE: formula:frms-regulatory-integrity-20260804-v2:sha:2578ee339be7788bf3cc5a1da8a23bd50b06b524
+  LEDGER_JOB: frms_historical_reprocess_v2
+  RECORD_ISSUE: '827'
+
+jobs:
+  d1-verification:
+    name: D1 production ledger verification
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 150
+    steps:
+      - name: Checkout verification revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate verification provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || {
+            echo 'Verification must run from the current main SHA.' >&2
+            exit 1
+          }
+
+      - name: Guard production D1 read credentials
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo 'PRODUCTION_D1_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Wait for terminal D1 ledger and publish sanitized record
+        id: verify
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          endpoint="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${PRODUCTION_DATABASE_ID}/query"
+          report="$RUNNER_TEMP/frms-production-verification.json"
+          body="$RUNNER_TEMP/frms-production-verification.md"
+          final='false'
+
+          query_d1() {
+            local sql="$1"
+            local payload response
+            payload="$(jq -cn --arg sql "$sql" '{sql:$sql}')"
+            response="$(curl --fail-with-body --silent --show-error \
+              --retry 4 --retry-all-errors --retry-delay 2 \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json' \
+              --data "$payload" "$endpoint")"
+            printf '%s' "$response" | jq -e '.success == true and .result[0].success == true' >/dev/null
+            printf '%s' "$response" | jq -c '.result[0].results[0] // {}'
+          }
+
+          sql="SELECT
+            (SELECT COUNT(*) FROM cron_job_state WHERE job_name='${LEDGER_JOB}' AND scope_key='${EXECUTION_SCOPE}') AS state_rows,
+            (SELECT outcome FROM cron_job_runs WHERE job_name='${LEDGER_JOB}' AND scope_key='${EXECUTION_SCOPE}' ORDER BY started_at DESC LIMIT 1) AS latest_outcome,
+            (SELECT COUNT(*) FROM cron_job_items WHERE job_name='${LEDGER_JOB}' AND scope_key='${EXECUTION_SCOPE}' AND status='SUCCEEDED') AS succeeded,
+            (SELECT COUNT(*) FROM cron_job_items WHERE job_name='${LEDGER_JOB}' AND scope_key='${EXECUTION_SCOPE}' AND status='FAILED') AS failed,
+            (SELECT COUNT(*) FROM cron_job_items WHERE job_name='${LEDGER_JOB}' AND scope_key='${EXECUTION_SCOPE}' AND status IN ('PENDING','PROCESSING')) AS unfinished,
+            (SELECT COUNT(*) FROM cron_job_items WHERE job_name='${LEDGER_JOB}' AND scope_key='${EXECUTION_SCOPE}' AND stage='COMPLETED_REVIEW_REQUIRED') AS review_required,
+            (SELECT COUNT(*) FROM frms_jornada j JOIN funcionarios f ON f.id=CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL WHERE j.deleted_at IS NULL) AS active_journeys,
+            (SELECT COUNT(*) FROM (SELECT jornada_id FROM frms_fatorizacao_jornada WHERE deleted_at IS NULL GROUP BY jornada_id HAVING COUNT(*) > 1)) AS active_factorization_duplicates,
+            (SELECT last_success_at FROM cron_job_state WHERE job_name='${LEDGER_JOB}' AND scope_key='${EXECUTION_SCOPE}' LIMIT 1) AS last_success_at;"
+
+          for attempt in $(seq 1 120); do
+            snapshot="$(query_d1 "$sql")"
+            latest_outcome="$(printf '%s' "$snapshot" | jq -r '.latest_outcome // "NOT_STARTED"')"
+            if [[ "$latest_outcome" == 'SUCCEEDED' || "$latest_outcome" == 'FAILED' || "$latest_outcome" == 'PARTIAL' ]]; then
+              final='true'
+              break
+            fi
+            sleep 60
+          done
+
+          [[ "$final" == 'true' ]] || snapshot="$(query_d1 "$sql")"
+          verified_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          jq -n \
+            --arg verified_at "$verified_at" \
+            --arg source_sha "$EXECUTION_SOURCE_SHA" \
+            --arg scope "$EXECUTION_SCOPE" \
+            --argjson snapshot "$snapshot" \
+            '{verified_at:$verified_at,source_sha:$source_sha,scope:$scope,snapshot:$snapshot}' > "$report"
+
+          state_rows="$(jq -r '.snapshot.state_rows // 0' "$report")"
+          latest_outcome="$(jq -r '.snapshot.latest_outcome // "NOT_STARTED"' "$report")"
+          succeeded="$(jq -r '.snapshot.succeeded // 0' "$report")"
+          failed="$(jq -r '.snapshot.failed // 0' "$report")"
+          unfinished="$(jq -r '.snapshot.unfinished // 0' "$report")"
+          review_required="$(jq -r '.snapshot.review_required // 0' "$report")"
+          active_journeys="$(jq -r '.snapshot.active_journeys // 0' "$report")"
+          duplicates="$(jq -r '.snapshot.active_factorization_duplicates // 0' "$report")"
+          last_success_at="$(jq -r '.snapshot.last_success_at // "null"' "$report")"
+
+          outcome='FAILED'
+          if [[ "$state_rows" == '1' && "$latest_outcome" == 'SUCCEEDED' && "$failed" == '0' && "$unfinished" == '0' && "$succeeded" == "$active_journeys" && "$duplicates" == '0' ]]; then
+            outcome='VERIFIED_SUCCESS'
+          fi
+
+          cat > "$body" <<EOF
+          ## Verificação produtiva FRMS — ${outcome}
+
+          - verificado em UTC: \`${verified_at}\`
+          - source SHA da execução: \`${EXECUTION_SOURCE_SHA}\`
+          - outcome do ledger: \`${latest_outcome}\`
+          - jornadas ativas: \`${active_journeys}\`
+          - itens concluídos: \`${succeeded}\`
+          - itens com falha: \`${failed}\`
+          - itens pendentes/processando: \`${unfinished}\`
+          - casos marcados para revisão humana: \`${review_required}\`
+          - fatorizações ativas duplicadas: \`${duplicates}\`
+          - último sucesso: \`${last_success_at}\`
+          - escopo: \`${EXECUTION_SCOPE}\`
+
+          O relatório contém somente contagens e metadados operacionais sanitizados.
+          EOF
+
+          jq -cn --rawfile body "$body" '{body:$body}' > "$RUNNER_TEMP/issue-comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            --data-binary @"$RUNNER_TEMP/issue-comment.json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${RECORD_ISSUE}/comments" >/dev/null
+
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+          [[ "$outcome" == 'VERIFIED_SUCCESS' ]]
+
+      - name: Upload sanitized D1 verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frms-production-verification-${{ github.sha }}
+          path: ${{ runner.temp }}/frms-production-verification.json
+          if-no-files-found: warn
+          retention-days: 90

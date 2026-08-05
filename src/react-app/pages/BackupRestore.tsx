@@ -1,3 +1,5 @@
+import { appFetch } from '@/react-app/lib/app-fetch';
+import { frontendErrorMessage } from '@/react-app/lib/api-contract';
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 
@@ -75,6 +77,7 @@ const BackupRestorePage = () => {
   const [conflitos, setConflitos] = useState<Conflito[]>([]);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [historico, setHistorico] = useState<HistoricoItem[]>([]);
+  const [backupError, setBackupError] = useState<string | null>(null);
 
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -87,9 +90,9 @@ const BackupRestorePage = () => {
     try {
       // ✅ CORRIGIDO: /funcionarios/listar não existe, usar /funcionarios com limit
       const [funcionariosResp, simuladoresResp, treinamentosResp] = await Promise.all([
-        fetch(`${API_BASE_URL}/funcionarios?limit=1000`),
-        fetch(`${API_BASE_URL}/simulador/slots`),
-        fetch(`${API_BASE_URL}/qualificacoes?page=1&limit=1`),
+        appFetch(`${API_BASE_URL}/funcionarios?limit=1000`),
+        appFetch(`${API_BASE_URL}/simulador/slots`),
+        appFetch(`${API_BASE_URL}/qualificacoes?page=1&limit=1`),
       ]);
 
       const funcionarios = await funcionariosResp.json();
@@ -119,6 +122,11 @@ const BackupRestorePage = () => {
       setEstimativaTempo(estimatedTime.toString());
     } catch (error) {
       console.error('Erro ao carregar estatísticas:', error);
+      setFuncionarioCount(0);
+      setSimuladorCount(0);
+      setFichaCount(0);
+      setTreinamentoCount(0);
+      setBackupError(frontendErrorMessage(error));
     }
   }, []);
 
@@ -129,40 +137,17 @@ const BackupRestorePage = () => {
 
   const carregarHistorico = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/backup/historico`);
-      const data = await response.json();
-
-      if (data.success) {
-        setHistorico(data.historico);
+      setBackupError(null);
+      const response = await appFetch(`${API_BASE_URL}/backup/historico`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || `Erro HTTP ${response.status}`);
       }
+      setHistorico(Array.isArray(data.historico) ? data.historico : []);
     } catch (error) {
       console.error('Erro ao carregar histórico:', error);
-      setHistorico([
-        {
-          id: 1,
-          data: '03/10/2025 18:30',
-          operacao: 'Backup Completo',
-          tamanho: '12.5 MB',
-          status: 'Sucesso',
-          usuario: 'Admin',
-        },
-        {
-          id: 2,
-          data: '02/10/2025 14:22',
-          operacao: 'Importação Funcionários',
-          tamanho: '2.1 MB',
-          status: 'Sucesso',
-          usuario: 'Gestor',
-        },
-        {
-          id: 3,
-          data: '01/10/2025 09:15',
-          operacao: 'Backup Incremental',
-          tamanho: '5.8 MB',
-          status: 'Sucesso',
-          usuario: 'Sistema',
-        },
-      ]);
+      setHistorico([]);
+      setBackupError(frontendErrorMessage(error));
     }
   };
 
@@ -185,7 +170,7 @@ const BackupRestorePage = () => {
       setProgressMessage('Exportando dados...');
       setProgress(25);
 
-      const response = await fetch(`${API_BASE_URL}/backup/export`, {
+      const response = await appFetch(`${API_BASE_URL}/backup/export`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ modulos: modulosSelecionados }),
@@ -253,7 +238,7 @@ const BackupRestorePage = () => {
         metadata: dados.metadata,
       });
 
-      const response = await fetch(`${API_BASE_URL}/backup/preview`, {
+      const response = await appFetch(`${API_BASE_URL}/backup/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dados),
@@ -297,7 +282,7 @@ const BackupRestorePage = () => {
       setProgress(25);
       setProgressMessage('Validando dados...');
 
-      const response = await fetch(`${API_BASE_URL}/backup/import`, {
+      const response = await appFetch(`${API_BASE_URL}/backup/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dados),
@@ -347,6 +332,14 @@ const BackupRestorePage = () => {
       title="Backup & Restore"
       description="Sistema completo para transferência de dados entre instâncias do AirTrust"
     >
+      {backupError && (
+        <div
+          className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          role="alert"
+        >
+          {backupError}
+        </div>
+      )}
       <PageGrid cols={2}>
         {/* PAINEL EXPORTAÇÃO */}
         <PageSection title="Exportar Dados" icon={<Download className="text-blue-700" />}>

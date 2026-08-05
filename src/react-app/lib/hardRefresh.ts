@@ -57,7 +57,8 @@ export async function hardRefreshApp(): Promise<void> {
 }
 
 export async function hardRefreshAppWithDeps(deps: HardRefreshDeps = {}): Promise<void> {
-  const cachesApi = deps.cachesApi ?? (typeof window !== 'undefined' && 'caches' in window ? caches : null);
+  const cachesApi =
+    deps.cachesApi ?? (typeof window !== 'undefined' && 'caches' in window ? caches : null);
   const getServiceWorkerRegistration =
     deps.getServiceWorkerRegistration ??
     (async () => {

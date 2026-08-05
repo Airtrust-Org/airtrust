@@ -24,12 +24,14 @@ export function formatarNomeSessaoVisivel(nomeSessao: string): string {
   return limpo || nomeSessao;
 }
 
-export function getNomeExibicaoGuia(guia: Pick<GuiaInstrutor, 'nome_sessao' | 'titulo' | 'codigo' | 'sessao_numero' | 'sessao_total'>): { visivel: string; tooltip: string } {
+export function getNomeExibicaoGuia(
+  guia: Pick<GuiaInstrutor, 'nome_sessao' | 'titulo' | 'codigo' | 'sessao_numero' | 'sessao_total'>,
+): { visivel: string; tooltip: string } {
   if (guia.nome_sessao) {
     const visivel = formatarNomeSessaoVisivel(guia.nome_sessao);
     return { visivel, tooltip: guia.nome_sessao };
   }
-  
+
   if (guia.titulo && guia.titulo !== guia.codigo) {
     return { visivel: guia.titulo, tooltip: guia.titulo };
   }

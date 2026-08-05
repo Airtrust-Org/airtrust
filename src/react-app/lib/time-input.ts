@@ -9,7 +9,9 @@ function parseAndNormalize(hourText: string, minuteText: string): string | null 
 }
 
 export function normalizeTimeInput(value: string): string | null {
-  const raw = String(value || '').trim().toLowerCase();
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase();
   if (!raw) return null;
 
   const compact = raw.replace(/\s+/g, '');

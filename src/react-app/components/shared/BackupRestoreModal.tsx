@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
+import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
 import { Download, Upload, AlertTriangle } from 'lucide-react';
 import Button from '../Button';
 import { BaseModal as Modal } from '../modals/BaseModal';
@@ -11,59 +12,69 @@ interface BackupRestoreModalProps {
   onClose: () => void;
 }
 
+interface BackupStats {
+  funcionarios_importados?: number;
+  treinamentos_importados?: number;
+  certificacoes_importadas?: number;
+  total_funcionarios?: number;
+  total_treinamentos?: number;
+  total_certificacoes?: number;
+  total_arquivos?: number;
+}
+
+interface BackupPayload extends Record<string, unknown> {
+  metadata?: BackupStats;
+}
+
+interface BackupOperationResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  stats?: BackupStats;
+}
+
 const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [result, setResult] = useState<{
-    success: boolean;
-    message?: string;
-    error?: string;
-    stats?: any;
-  } | null>(null);
+  const [result, setResult] = useState<BackupOperationResult | null>(null);
 
   const handleExport = async () => {
     setIsExporting(true);
     setResult(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/system/export-data`);
-      const data = await response.json();
+      const data = await apiJson<BackupPayload>(`${API_BASE_URL}/system/export-data`);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `airtrust-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
 
-      if (response.ok) {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `airtrust-backup-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        setResult({
-          success: true,
-          message: 'Backup criado e baixado com sucesso!',
-          stats: data.metadata,
-        });
-      } else {
-        throw new Error(data.error || 'Erro ao criar backup');
-      }
+      setResult({
+        success: true,
+        message: 'Backup criado e baixado com sucesso!',
+        stats: data.metadata,
+      });
     } catch (error) {
       setResult({
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: frontendErrorMessage(error),
       });
     } finally {
       setIsExporting(false);
     }
   };
 
-  const handleImportSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget as HTMLFormElement);
-    const file = formData.get('backup_file') as File;
+  const handleImportSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const file = formData.get('backup_file');
 
-    if (!file) {
+    if (!(file instanceof File)) {
       toast.warning('Selecione um arquivo de backup');
       return;
     }
@@ -73,20 +84,18 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose
 
     try {
       const fileContent = await file.text();
-      const backupData = JSON.parse(fileContent);
-
-      const response = await fetch(`${API_BASE_URL}/system/import-data`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(backupData),
-      });
-
-      const result = await response.json();
-      setResult(result);
+      const backupData: unknown = JSON.parse(fileContent);
+      setResult(
+        await apiJson<BackupOperationResult>(`${API_BASE_URL}/system/import-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(backupData),
+        }),
+      );
     } catch (error) {
       setResult({
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: frontendErrorMessage(error),
       });
     } finally {
       setIsImporting(false);
@@ -96,7 +105,6 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Backup e Restore do Sistema">
       <div className="p-6 space-y-6">
-        {/* Exportar Backup */}
         <div className="border-b pb-4">
           <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
             <Download className="w-5 h-5 mr-2 text-primary" />
@@ -117,7 +125,6 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose
           </Button>
         </div>
 
-        {/* Importar Backup */}
         <div className="border-b pb-4">
           <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
             <Upload className="w-5 h-5 mr-2 text-red-600" />
@@ -161,7 +168,6 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose
           </form>
         </div>
 
-        {/* Resultado */}
         {result && (
           <div
             className={`p-4 rounded-lg ${
@@ -185,29 +191,29 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose
             {result.stats && (
               <div className="text-sm mt-3 space-y-1">
                 <p className="font-medium text-green-800">Estatísticas:</p>
-                {result.stats.funcionarios_importados && (
+                {result.stats.funcionarios_importados !== undefined && (
                   <p className="text-green-700">
                     • Funcionários: {result.stats.funcionarios_importados}
                   </p>
                 )}
-                {result.stats.treinamentos_importados && (
+                {result.stats.treinamentos_importados !== undefined && (
                   <p className="text-green-700">
                     • Treinamentos: {result.stats.treinamentos_importados}
                   </p>
                 )}
-                {result.stats.certificacoes_importadas && (
+                {result.stats.certificacoes_importadas !== undefined && (
                   <p className="text-green-700">
                     • Certificações: {result.stats.certificacoes_importadas}
                   </p>
                 )}
-                {result.stats.total_funcionarios && (
+                {result.stats.total_funcionarios !== undefined && (
                   <div className="mt-2 pt-2 border-t border-green-200">
                     <p className="text-green-700">Total no backup:</p>
                     <p className="text-green-600 text-xs">
                       • {result.stats.total_funcionarios} funcionários •{' '}
-                      {result.stats.total_treinamentos} treinamentos •{' '}
-                      {result.stats.total_certificacoes} certificações •{' '}
-                      {result.stats.total_arquivos} arquivos
+                      {result.stats.total_treinamentos ?? 0} treinamentos •{' '}
+                      {result.stats.total_certificacoes ?? 0} certificações •{' '}
+                      {result.stats.total_arquivos ?? 0} arquivos
                     </p>
                   </div>
                 )}
@@ -216,7 +222,6 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose
           </div>
         )}
 
-        {/* Instruções */}
         <div className="bg-primary/10 border border-blue-200 rounded-lg p-4">
           <h4 className="font-medium text-blue-900 mb-2">💡 Dicas importantes:</h4>
           <ul className="text-sm text-primary space-y-1">

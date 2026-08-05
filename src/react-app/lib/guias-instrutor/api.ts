@@ -42,16 +42,20 @@ export interface ProximaSessaoGuia {
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetchWithAuth(`${API_BASE_URL}${path}`);
-  const json = (await res.json().catch(() => null)) as
-    | { success?: boolean; data?: T; error?: string }
-    | null;
+  const json = (await res.json().catch(() => null)) as {
+    success?: boolean;
+    data?: T;
+    error?: string;
+  } | null;
   if (!res.ok || !json?.success) {
     throw new Error(json?.error || 'Falha ao carregar guias do instrutor');
   }
   return json.data as T;
 }
 
-export function useGuiasInstrutor(filtros: { aeronave?: string; programa?: string; q?: string } = {}) {
+export function useGuiasInstrutor(
+  filtros: { aeronave?: string; programa?: string; q?: string } = {},
+) {
   const { empresaId, tenantKey } = useTenantQueryKey();
   const params = new URLSearchParams();
   if (filtros.aeronave) params.set('aeronave', filtros.aeronave);
@@ -91,7 +95,8 @@ export function useGuiaDaSessao(sessaoId: number | null) {
   const { empresaId, tenantKey } = useTenantQueryKey();
   return useQuery({
     queryKey: tenantKey('guias-instrutor', 'sessao', sessaoId),
-    queryFn: () => getJson<GuiaInstrutor | null>(`/simuladores/sessoes/${sessaoId}/guias-instrutor`),
+    queryFn: () =>
+      getJson<GuiaInstrutor | null>(`/simuladores/sessoes/${sessaoId}/guias-instrutor`),
     enabled: Boolean(empresaId) && Boolean(sessaoId),
     staleTime: 5 * 60 * 1000,
   });

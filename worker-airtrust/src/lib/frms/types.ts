@@ -403,7 +403,10 @@ export interface EffectivenessResult {
   duracao_sono_efetiva_min: number | null;
   hora_despertar: string | null;
   hora_inicio_sono: string | null;
+  /** Proveniência do dado de sono (duração). Ver D-01 em frms-scientific-audit.md. */
   fonte_sono: 'PADRAO' | 'INFORMADO';
+  /** Proveniência do horário de despertar; `true` quando derivado da apresentação. */
+  despertar_estimado: boolean;
   acordou_na_wocl: boolean;
   dia_periodo_embarcado: number | null;
   total_dias_periodo: number | null;

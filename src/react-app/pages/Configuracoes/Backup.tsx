@@ -10,17 +10,11 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { apiFetch } from '@/react-app/lib/apiFetch';
-import { getAccessToken } from '@/react-app/config/api';
+import { appFetch } from '@/react-app/lib/app-fetch';
 
-/** apiFetch com header de autenticação injetado automaticamente */
+/** Cliente canônico autenticado, com refresh e proteção de tenant. */
 function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const token = getAccessToken();
-  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
-  return apiFetch(input, {
-    ...init,
-    headers: { ...authHeaders, ...(init?.headers as Record<string, string> | undefined) },
-  });
+  return appFetch(input, init);
 }
 
 function authFetchNoStore(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -884,336 +878,334 @@ export default function BackupPage() {
 
   return (
     <div className="space-y-4">
-        <SettingsSectionIntro
-          badge="Backup e restauração"
-          title="Backup & Restore"
-          description="Gerenciamento de backups e recuperação de dados do sistema AirTrust."
-          icon={<Database className="h-5 w-5" />}
-          action={
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
-            >
-              <Database className="w-4 h-4" />
-              Criar Backup
-            </button>
-          }
-        />
+      <SettingsSectionIntro
+        badge="Backup e restauração"
+        title="Backup & Restore"
+        description="Gerenciamento de backups e recuperação de dados do sistema AirTrust."
+        icon={<Database className="h-5 w-5" />}
+        action={
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <Database className="w-4 h-4" />
+            Criar Backup
+          </button>
+        }
+      />
 
-        {/* ── Stats ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                <Package className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">
-                  Total
-                </p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                  {totalBackups}
-                </p>
-              </div>
+      {/* ── Stats ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+              <Package className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">
-                  Concluídos
-                </p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                  {backupsConcluidos}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-purple-50 dark:bg-purple-900/30 rounded-lg">
-                <HardDrive className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">
-                  Tamanho Total
-                </p>
-                <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                  {formatBytes(totalSize)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-orange-50 dark:bg-orange-900/30 rounded-lg">
-                <Calendar className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">
-                  Último Backup
-                </p>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {ultimoBackup ? formatDateShort(ultimoBackup.created_at) : '—'}
-                </p>
-              </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">
+                Total
+              </p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                {totalBackups}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* ── Table Card ── */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          {/* Filters */}
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <Activity className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por UUID, descrição ou origem..."
-                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-transparent"
-              />
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <option value="">Todos os status</option>
-              <option value="CONCLUIDO">Concluído</option>
-              <option value="EM_PROGRESSO">Em Progresso</option>
-              <option value="FALHOU">Falhou</option>
-            </select>
-            <select
-              value={filterTipo}
-              onChange={(e) => setFilterTipo(e.target.value)}
-              className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <option value="">Todos os tipos</option>
-              <option value="COMPLETO">Completo</option>
-              <option value="MODULAR">Modular</option>
-              <option value="INCREMENTAL">Incremental</option>
-            </select>
-            <button
-              onClick={carregarBackups}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors border border-slate-200 dark:border-slate-700"
-              title="Atualizar"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">
+                Concluídos
+              </p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                {backupsConcluidos}
+              </p>
+            </div>
           </div>
+        </div>
 
-          {/* Table */}
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-              <p className="mt-3 text-sm text-slate-500">Carregando backups...</p>
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-purple-50 dark:bg-purple-900/30 rounded-lg">
+              <HardDrive className="w-5 h-5 text-purple-600 dark:text-purple-400" />
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <Database className="w-14 h-14 text-slate-200 dark:text-slate-700 mb-4" />
-              <p className="text-slate-500 dark:text-slate-400 font-medium">
-                {searchQuery || filterStatus || filterTipo
-                  ? 'Nenhum backup encontrado para os filtros aplicados'
-                  : 'Nenhum backup encontrado'}
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">
+                Tamanho Total
               </p>
-              <p className="text-slate-400 text-sm mt-1">
-                {!searchQuery &&
-                  !filterStatus &&
-                  !filterTipo &&
-                  'Crie o primeiro backup usando o botão acima'}
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                {formatBytes(totalSize)}
               </p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      Tipo
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      UUID
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      Origem
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      Registros
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      Tamanho
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      Data
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      Retenção
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filtered.map((backup) => (
-                    <tr
-                      key={backup.uuid}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
-                    >
-                      <td className="px-4 py-3">
-                        <StatusBadge status={backup.status} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <TipoBadge tipo={backup.tipo} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                          {backup.uuid.slice(0, 8)}…
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-slate-700 dark:text-slate-300">
-                          {formatTriggeredBy(backup.triggered_by)}
-                        </span>
-                        {backup.descricao && (
-                          <p
-                            className="text-xs text-slate-400 truncate max-w-[150px]"
-                            title={backup.descricao}
-                          >
-                            {backup.descricao}
-                          </p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-orange-50 dark:bg-orange-900/30 rounded-lg">
+              <Calendar className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">
+                Último Backup
+              </p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {ultimoBackup ? formatDateShort(ultimoBackup.created_at) : '—'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Table Card ── */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        {/* Filters */}
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Activity className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por UUID, descrição ou origem..."
+              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-transparent"
+            />
+          </div>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">Todos os status</option>
+            <option value="CONCLUIDO">Concluído</option>
+            <option value="EM_PROGRESSO">Em Progresso</option>
+            <option value="FALHOU">Falhou</option>
+          </select>
+          <select
+            value={filterTipo}
+            onChange={(e) => setFilterTipo(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">Todos os tipos</option>
+            <option value="COMPLETO">Completo</option>
+            <option value="MODULAR">Modular</option>
+            <option value="INCREMENTAL">Incremental</option>
+          </select>
+          <button
+            onClick={carregarBackups}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors border border-slate-200 dark:border-slate-700"
+            title="Atualizar"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Table */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+            <p className="mt-3 text-sm text-slate-500">Carregando backups...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <Database className="w-14 h-14 text-slate-200 dark:text-slate-700 mb-4" />
+            <p className="text-slate-500 dark:text-slate-400 font-medium">
+              {searchQuery || filterStatus || filterTipo
+                ? 'Nenhum backup encontrado para os filtros aplicados'
+                : 'Nenhum backup encontrado'}
+            </p>
+            <p className="text-slate-400 text-sm mt-1">
+              {!searchQuery &&
+                !filterStatus &&
+                !filterTipo &&
+                'Crie o primeiro backup usando o botão acima'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Tipo
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    UUID
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Origem
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Registros
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Tamanho
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Data
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Retenção
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Ações
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filtered.map((backup) => (
+                  <tr
+                    key={backup.uuid}
+                    className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <StatusBadge status={backup.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <TipoBadge tipo={backup.tipo} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                        {backup.uuid.slice(0, 8)}…
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-slate-700 dark:text-slate-300">
+                        {formatTriggeredBy(backup.triggered_by)}
+                      </span>
+                      {backup.descricao && (
+                        <p
+                          className="text-xs text-slate-400 truncate max-w-[150px]"
+                          title={backup.descricao}
+                        >
+                          {backup.descricao}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {(backup.total_registros || 0).toLocaleString('pt-BR')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400">
+                      {formatBytes(backup.tamanho_bytes || 0)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                      {formatDate(backup.created_at)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {(backup.retention_policy || '').replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => setLogsBackup(backup)}
+                          title="Ver logs"
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {backup.status === 'CONCLUIDO' && (
+                          <>
+                            <button
+                              onClick={() => handleDownload(backup)}
+                              title="Baixar backup"
+                              className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setRestoreBackup(backup)}
+                              title="Restaurar backup"
+                              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          </>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="font-medium text-slate-700 dark:text-slate-300">
-                          {(backup.total_registros || 0).toLocaleString('pt-BR')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400">
-                        {formatBytes(backup.tamanho_bytes || 0)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                        {formatDate(backup.created_at)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                          {(backup.retention_policy || '').replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => setLogsBackup(backup)}
-                            title="Ver logs"
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          {backup.status === 'CONCLUIDO' && (
-                            <>
-                              <button
-                                onClick={() => handleDownload(backup)}
-                                title="Baixar backup"
-                                className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setRestoreBackup(backup)}
-                                title="Restaurar backup"
-                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
-                              >
-                                <RefreshCw className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => handleDelete(backup)}
-                            title="Remover backup"
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Footer row count */}
-          {!loading && filtered.length > 0 && (
-            <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400">
-              {filtered.length} de {backups.length} backup{backups.length !== 1 ? 's' : ''}
-            </div>
-          )}
-        </div>
-
-        {/* ── Automated Schedule Card ── */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Clock className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-            <h3 className="font-semibold text-slate-800 dark:text-slate-200">
-              Próximos Backups Automáticos
-            </h3>
-            <Shield className="w-4 h-4 text-blue-500 ml-1" title="Conformidade FAA" />
+                        <button
+                          onClick={() => handleDelete(backup)}
+                          title="Remover backup"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg mt-0.5">
-                <Activity className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="font-semibold text-blue-800 dark:text-blue-300 text-sm">Diário</p>
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
-                  Todos os dias às 03:00 UTC
-                </p>
-                <p className="text-xs text-blue-500 dark:text-blue-500 mt-1">Retenção: 30 dias</p>
-              </div>
+        )}
+
+        {/* Footer row count */}
+        {!loading && filtered.length > 0 && (
+          <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400">
+            {filtered.length} de {backups.length} backup{backups.length !== 1 ? 's' : ''}
+          </div>
+        )}
+      </div>
+
+      {/* ── Automated Schedule Card ── */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+          <h3 className="font-semibold text-slate-800 dark:text-slate-200">
+            Próximos Backups Automáticos
+          </h3>
+          <Shield className="w-4 h-4 text-blue-500 ml-1" title="Conformidade FAA" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg mt-0.5">
+              <Activity className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             </div>
-            <div className="flex items-start gap-3 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg mt-0.5">
-                <Calendar className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <p className="font-semibold text-purple-800 dark:text-purple-300 text-sm">
-                  Semanal
-                </p>
-                <p className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
-                  Domingos às 04:00 UTC
-                </p>
-                <p className="text-xs text-purple-500 dark:text-purple-500 mt-1">Retenção: 1 ano</p>
-              </div>
+            <div>
+              <p className="font-semibold text-blue-800 dark:text-blue-300 text-sm">Diário</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                Todos os dias às 03:00 UTC
+              </p>
+              <p className="text-xs text-blue-500 dark:text-blue-500 mt-1">Retenção: 30 dias</p>
             </div>
-            <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800">
-              <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-lg mt-0.5">
-                <Shield className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">Mensal</p>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                  Dia 1 de cada mês às 05:00 UTC
-                </p>
-                <p className="text-xs text-amber-500 dark:text-amber-500 mt-1">
-                  Retenção: 7 anos (FAA)
-                </p>
-              </div>
+          </div>
+          <div className="flex items-start gap-3 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800">
+            <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg mt-0.5">
+              <Calendar className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-purple-800 dark:text-purple-300 text-sm">Semanal</p>
+              <p className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
+                Domingos às 04:00 UTC
+              </p>
+              <p className="text-xs text-purple-500 dark:text-purple-500 mt-1">Retenção: 1 ano</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800">
+            <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-lg mt-0.5">
+              <Shield className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">Mensal</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                Dia 1 de cada mês às 05:00 UTC
+              </p>
+              <p className="text-xs text-amber-500 dark:text-amber-500 mt-1">
+                Retenção: 7 anos (FAA)
+              </p>
             </div>
           </div>
         </div>
+      </div>
 
       {/* ── Modals ── */}
       {showCreateModal && (

@@ -278,7 +278,10 @@ export async function recalcularPipeline(
           WHERE id = ? AND deleted_at IS NULL`,
       )
       .bind(
-        effectResult.hora_despertar,
+        // D-02: `hora_acordou` guarda apenas despertar real. A estimativa vive em
+        // `frms_fatorizacao_jornada.hora_despertar_estimada`, e é assim que
+        // `frms.ts` distingue `wakeTime` de `wakeTimeEstimated`.
+        effectResult.despertar_estimado ? null : effectResult.hora_despertar,
         effectResult.duracao_sono_efetiva_min,
         effectResult.fonte_sono,
         effectResult.acordou_na_wocl ? 1 : 0,

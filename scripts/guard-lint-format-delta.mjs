@@ -57,14 +57,48 @@ export function selectDeltaFiles(files, cwd = process.cwd()) {
   };
 }
 
+export function parseChangedFileStatus(raw) {
+  const fields = raw.split('\0').filter(Boolean);
+  const files = [];
+  const exactCopies = [];
+
+  for (let index = 0; index < fields.length;) {
+    const status = fields[index++] ?? '';
+    if (/^[RC]\d+$/.test(status)) {
+      const source = fields[index++] ?? '';
+      const destination = fields[index++] ?? '';
+      if (status === 'C100') {
+        exactCopies.push({ source, destination });
+      } else if (destination) {
+        files.push(destination);
+      }
+      continue;
+    }
+
+    const file = fields[index++] ?? '';
+    if (file) files.push(file);
+  }
+
+  return { files, exactCopies };
+}
+
 export function readChangedFiles({ cwd = process.cwd(), baseRef = resolveBaseRef() } = {}) {
   const mergeBase = git(['merge-base', baseRef, 'HEAD'], cwd).trim();
   const raw = execFileSync(
     'git',
-    ['diff', '--name-only', '--diff-filter=ACMR', '-z', `${mergeBase}...HEAD`],
+    [
+      'diff',
+      '--name-status',
+      '-M',
+      '-C',
+      '--find-copies-harder',
+      '--diff-filter=ACMR',
+      '-z',
+      `${mergeBase}...HEAD`,
+    ],
     { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   );
-  return { files: raw.split('\0').filter(Boolean), mergeBase, baseRef };
+  return { ...parseChangedFileStatus(raw), mergeBase, baseRef };
 }
 
 function run(command, args, cwd) {
@@ -90,7 +124,7 @@ function main() {
   const cwd = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const result = runGuard({ cwd });
   console.log(
-    `OK: delta lint/format gate checked ${result.eslintFiles.length} ESLint file(s) and ${result.prettierFiles.length} Prettier file(s) vs ${result.baseRef} (${result.mergeBase})`,
+    `OK: delta lint/format gate checked ${result.eslintFiles.length} ESLint file(s) and ${result.prettierFiles.length} Prettier file(s) vs ${result.baseRef} (${result.mergeBase}); ignored ${result.exactCopies.length} exact compatibility copy/copies`,
   );
 }
 

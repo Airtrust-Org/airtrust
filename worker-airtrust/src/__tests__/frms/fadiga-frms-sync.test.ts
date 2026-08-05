@@ -248,9 +248,14 @@ describe('sincronizarCheckinComFrms — C2 patch', () => {
     const [horaAcordou, sonoEfetivoMin, fonteSono, acordouNaWocl, jornadaId] =
       jornadaUpdateArgs[0] as [string, number, string, number, string];
 
-    expect(typeof horaAcordou).toBe('string');
+    // D-02: `hora_acordou` guarda apenas despertar REAL. Aqui não houve
+    // wakeTimeReal nem hora_acordou prévia, então permanece nulo; a estimativa
+    // vai para `frms_fatorizacao_jornada.hora_despertar_estimada`.
+    expect(horaAcordou).toBeNull();
     expect(sonoEfetivoMin).toBe(360); // 6h * 60
-    expect(fonteSono).toBe('INFORMADO'); // hora_dormiu sempre fornecida
+    // D-01: `fonte_sono` é a proveniência do DADO DE SONO. O tripulante
+    // reportou 6 h no check-in, logo INFORMADO — mesmo com despertar estimado.
+    expect(fonteSono).toBe('INFORMADO');
     expect(typeof acordouNaWocl).toBe('number'); // 0 or 1
     expect(jornadaId).toBe('jornada-1');
   });

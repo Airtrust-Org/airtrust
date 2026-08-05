@@ -4,7 +4,9 @@ import { describe, it, expect } from 'vitest';
 describe('guias-instrutor/helpers', () => {
   describe('formatarNomeSessaoVisivel', () => {
     it('remove o prefixo padrão', () => {
-      const result = formatarNomeSessaoVisivel('AW139 - INICIAL - 02/12 - EMERGÊNCIAS DE MOTOR, OEI E AUTORROTAÇÃO');
+      const result = formatarNomeSessaoVisivel(
+        'AW139 - INICIAL - 02/12 - EMERGÊNCIAS DE MOTOR, OEI E AUTORROTAÇÃO',
+      );
       expect(result).toBe('Emergências de motor, oei e autorrotação');
     });
 
@@ -12,7 +14,7 @@ describe('guias-instrutor/helpers', () => {
       const result = formatarNomeSessaoVisivel('S-76 - PERIÓDICO - 01/01 - PROCEDIMENTOS NORMAIS');
       expect(result).toBe('Procedimentos normais');
     });
-    
+
     it('remove o fallback sem numero/ciclo', () => {
       const result = formatarNomeSessaoVisivel('S-76 - CHECK - EMERGÊNCIAS');
       expect(result).toBe('Emergências');
