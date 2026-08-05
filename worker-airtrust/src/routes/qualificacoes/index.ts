@@ -24,10 +24,17 @@ import formatosRouter from './formatos';
 
 const router = new Hono<{ Bindings: Env }>();
 
+const retiredLegacyAtomicPostPaths = new Set(['/', '/:id/renovar']);
+const retainedHistoricoRoutes = historicoRouter.routes.filter(
+  (route) => !(route.method === 'POST' && retiredLegacyAtomicPostPaths.has(route.path)),
+);
+historicoRouter.routes.splice(0, historicoRouter.routes.length, ...retainedHistoricoRoutes);
+
 // ===== MONTAR SUB-ROTAS =====
 router.route('/tipos', tiposRouter);
-// Matching POST handlers terminate here; reads/edits/deletes continue to
-// the established historico router mounted immediately afterwards.
+// Creation and renewal are registered only by the atomic router. The legacy
+// router remains mounted for reads, edits, rescheduling, confirmation,
+// cancellation and deletion after its two non-atomic POST paths are removed.
 router.route('/historico', historicoAtomicWriteRouter);
 router.route('/historico', historicoRouter);
 router.route('/stats', estatisticasRouter);
