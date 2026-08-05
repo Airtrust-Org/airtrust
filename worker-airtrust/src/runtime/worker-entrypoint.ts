@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import type { Env } from '../types';
 import { runResilientScheduledJobs } from '../cron/resilient/scheduled-router';
+import { emitHttpMetric } from '../observability/operational-metrics';
 import { runCorrelatedJob, type JobExecutionContext } from './job-correlation';
 
 export interface WorkerEntrypointOptions {
@@ -31,12 +32,31 @@ export function createWorkerEntrypoint(
   return {
     async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
       assertSafeRuntimeConfig(env);
+      const startedAt = performance.now();
+      const pathname = new URL(request.url).pathname;
 
-      if (options.onApiRequestBootstrap && request.url.includes('/api/')) {
-        await options.onApiRequestBootstrap(env);
+      try {
+        if (options.onApiRequestBootstrap && request.url.includes('/api/')) {
+          await options.onApiRequestBootstrap(env);
+        }
+
+        const response = await app.fetch(request, env, ctx);
+        emitHttpMetric({
+          pathname,
+          method: request.method,
+          status: response.status,
+          latencyMs: performance.now() - startedAt,
+        });
+        return response;
+      } catch (error) {
+        emitHttpMetric({
+          pathname,
+          method: request.method,
+          status: 500,
+          latencyMs: performance.now() - startedAt,
+        });
+        throw error;
       }
-
-      return app.fetch(request, env, ctx);
     },
 
     async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
