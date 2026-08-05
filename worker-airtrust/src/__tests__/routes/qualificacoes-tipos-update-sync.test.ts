@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
-const { invalidateMaterializedStatsMock, registrarAuditoriaMock } = vi.hoisted(() => ({
+const {
+  invalidateMaterializedStatsMock,
+  registrarAuditoriaMock,
+} = vi.hoisted(() => ({
   invalidateMaterializedStatsMock: vi.fn(),
   registrarAuditoriaMock: vi.fn(),
 }));
@@ -20,14 +23,6 @@ vi.mock('../../middleware/rbac', () => ({
 }));
 
 vi.mock('../../middleware/tenant', () => ({
-  normalizeTenantRole: (role: unknown) =>
-    String(role || '')
-      .trim()
-      .toLowerCase() === 'gestor'
-      ? 'manager'
-      : String(role || '')
-          .trim()
-          .toLowerCase(),
   getTenantContext: () => ({ empresaId: 7 }),
 }));
 
@@ -47,12 +42,8 @@ vi.mock('../../utils/auditoria', () => ({
 
 vi.mock('../../services/lms-ead-ssot', () => ({
   isEadCategoria: (categoria: string | null | undefined) =>
-    String(categoria || '')
-      .trim()
-      .toUpperCase() === 'EAD' ||
-    String(categoria || '')
-      .trim()
-      .toUpperCase() === 'TREINAMENTO EAD',
+    String(categoria || '').trim().toUpperCase() === 'EAD' ||
+    String(categoria || '').trim().toUpperCase() === 'TREINAMENTO EAD',
   isEadFormato: ({
     formato_codigo,
     categoria,
@@ -62,12 +53,8 @@ vi.mock('../../services/lms-ead-ssot', () => ({
   }) =>
     formato_codigo != null
       ? String(formato_codigo).trim().toUpperCase() === 'EAD'
-      : String(categoria || '')
-          .trim()
-          .toUpperCase() === 'EAD' ||
-        String(categoria || '')
-          .trim()
-          .toUpperCase() === 'TREINAMENTO EAD',
+      : String(categoria || '').trim().toUpperCase() === 'EAD' ||
+        String(categoria || '').trim().toUpperCase() === 'TREINAMENTO EAD',
   reconcileImportedEdappHistory: vi.fn(),
   softDeleteLmsCourseForQualificacaoTipo: vi.fn(),
   syncLmsCourseFromQualificacaoTipo: vi.fn(),
@@ -98,11 +85,8 @@ const DEFAULT_HANDLERS: Array<[string, QueryHandler]> = [
 ];
 
 function createMockDb(handlers: Array<[string, QueryHandler]>) {
-  const calls: Array<{
-    query: string;
-    args: unknown[];
-    method: 'first' | 'run' | 'all' | 'batch';
-  }> = [];
+  const calls: Array<{ query: string; args: unknown[]; method: 'first' | 'run' | 'all' | 'batch' }> =
+    [];
   const normalizeSql = (value: string) => value.replace(/\s+/g, ' ').trim();
   const allHandlers = [...handlers, ...DEFAULT_HANDLERS];
 
@@ -114,9 +98,7 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
   const db = {
     prepare: vi.fn((query: string) => {
       const normalizedQuery = normalizeSql(query);
-      const entry = allHandlers.find(([matcher]) =>
-        normalizedQuery.includes(normalizeSql(matcher)),
-      );
+      const entry = allHandlers.find(([matcher]) => normalizedQuery.includes(normalizeSql(matcher)));
       if (!entry) {
         throw new Error(`Unhandled query: ${query}`);
       }
