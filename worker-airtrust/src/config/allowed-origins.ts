@@ -12,7 +12,8 @@ function normalizeOrigin(value?: string | null): string | null {
     return null;
   }
 
-  const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  const isLocalhost =
+    parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocalhost)) {
     return null;
   }

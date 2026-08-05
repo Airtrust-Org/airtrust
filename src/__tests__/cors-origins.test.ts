@@ -16,10 +16,7 @@ const PRODUCTION_ORIGINS = [
 
 const STAGING_ORIGINS = 'https://staging.airtrust.pages.dev';
 
-const LOCAL_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-].join(',');
+const LOCAL_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:5173'].join(',');
 
 describe('environment-scoped CORS origins', () => {
   it.each([
@@ -81,9 +78,14 @@ describe('environment-scoped CORS origins', () => {
   });
 
   it('ignores wildcard and malformed configured origins', () => {
-    const parsed = parseEnvAllowedOrigins(
-      '*,https://valid.example,https://valid.example/path,ftp://invalid.example,https://valid.example',
-    );
+    const configuredOrigins = [
+      '*',
+      'https://valid.example',
+      'https://valid.example/path',
+      'ftp://invalid.example',
+      'https://valid.example',
+    ].join(',');
+    const parsed = parseEnvAllowedOrigins(configuredOrigins);
 
     expect(parsed).toEqual(['https://valid.example']);
     expect(resolveAllowedOrigin('https://evil.example', '*')).toBe(DENIED_CORS_ORIGIN);

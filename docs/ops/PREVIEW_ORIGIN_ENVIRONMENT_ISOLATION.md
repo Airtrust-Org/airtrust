@@ -1,44 +1,83 @@
 # Isolamento de Origens e Ambientes
 
-**Frente:** 9 — Isolamento de Origens e Ambientes  
-**SHA-base:** `c3259a7967412c4a4219beba095f4b5515fb71b9`  
+**Frente:** 9 — Isolamento de Origens e Ambientes
+
+**SHA-base:** `c3259a7967412c4a4219beba095f4b5515fb71b9`
+
 **Branch:** `fix/preview-origin-environment-isolation-20260804`
 
 ## Objetivo
 
-Impedir que builds de preview ou desenvolvimento usem a API de produção com credenciais. A decisão é feita em duas barreiras:
+Impedir que builds de preview ou desenvolvimento usem a API de produção com credenciais.
+A decisão é aplicada em duas barreiras:
 
-1. o frontend resolve a API por host explícito e falha fechado para host desconhecido;
-2. o Worker rejeita qualquer request com `Origin` não listado no `CORS_ORIGINS` do ambiente antes do Hono e de qualquer rota com efeito colateral.
+1. O frontend resolve a API por host explícito e falha fechado para host desconhecido.
+2. O Worker rejeita qualquer request com `Origin` não listado no `CORS_ORIGINS` do
+   ambiente antes do Hono e de qualquer rota com efeito colateral.
 
 Nenhuma regra usa wildcard ou regex para aceitar todos os subdomínios Pages.
 
 ## Matriz de ambientes
 
-| Ambiente frontend | Hosts | API permitida | Comportamento sem configuração |
-|---|---|---|---|
-| Produção | `airtrust.online`, `www.airtrust.online`, `airtrust.pages.dev`, `production.airtrust.pages.dev` | `https://api.airtrust.online/api` | produção canônica |
-| Staging oficial | `staging.airtrust.pages.dev` | `https://airtrust-api-staging.airtrust.workers.dev/api` | staging canônico |
-| Host `main` | `main.airtrust.pages.dev` | nenhuma | bloqueado por ser ambíguo e não usado pelo workflow oficial |
-| Preview aprovado | origem Pages exata aprovada no `CORS_ORIGINS` de staging | staging somente | frontend exige `VITE_API_URL`; Worker rejeita se a origem não estiver listada |
-| Preview arbitrário | qualquer outro `*.pages.dev` | nenhuma por padrão | erro explícito no frontend e `403 CORS_ORIGIN_DENIED` no Worker |
-| Local | `localhost`, `127.0.0.1` nas portas declaradas | proxy same-origin `/api` | não usa API remota por fallback |
-| Host customizado | domínio não registrado | URL HTTPS explícita, nunca produção sem inclusão na allowlist oficial | erro explícito |
+### Produção
 
-O workflow oficial `.github/workflows/deploy-staging.yml` publica a branch Pages `staging`. A PR #804 confirmou a mesma URL canônica e classifica `main.airtrust.pages.dev` como alvo ambíguo/proibido.
+Hosts oficiais:
+
+- `airtrust.online`;
+- `www.airtrust.online`;
+- `airtrust.pages.dev`;
+- `production.airtrust.pages.dev`.
+
+API permitida: `https://api.airtrust.online/api`.
+
+### Staging oficial
+
+Host: `staging.airtrust.pages.dev`.
+
+API permitida: `https://airtrust-api-staging.airtrust.workers.dev/api`.
+
+### Host `main`
+
+`main.airtrust.pages.dev` é bloqueado por ser ambíguo e não ser usado pelo workflow
+oficial.
+
+### Preview aprovado
+
+Uma origem Pages adicional precisa ser incluída de forma exata no `CORS_ORIGINS` de
+staging. O frontend exige `VITE_API_URL` de staging, e o Worker rejeita a origem se ela
+não estiver listada.
+
+### Preview arbitrário
+
+Qualquer outro `*.pages.dev` falha fechado no frontend e recebe
+`403 CORS_ORIGIN_DENIED` no Worker.
+
+### Desenvolvimento local
+
+`localhost` e `127.0.0.1`, nas portas declaradas, usam o proxy same-origin `/api`.
+Não existe fallback para API remota.
+
+### Host customizado
+
+Um domínio não registrado exige uma URL HTTPS explícita. A API de produção permanece
+proibida até o domínio entrar na allowlist oficial.
+
+O workflow `.github/workflows/deploy-staging.yml` publica a branch Pages `staging`.
+A PR #804 confirmou a mesma URL canônica e classificou `main.airtrust.pages.dev` como
+alvo ambíguo ou proibido.
 
 ## CORS do Worker
 
 ### Produção
 
-Permitidas:
+Origens permitidas:
 
 - `https://airtrust.online`;
 - `https://www.airtrust.online`;
 - `https://airtrust.pages.dev`;
 - `https://production.airtrust.pages.dev`.
 
-Negadas:
+Origens negadas:
 
 - staging e `main.airtrust.pages.dev`;
 - qualquer preview de branch não listado;
@@ -48,22 +87,26 @@ Negadas:
 
 ### Staging
 
-Permitida por padrão:
+A origem permitida por padrão é `https://staging.airtrust.pages.dev`.
 
-- `https://staging.airtrust.pages.dev`.
-
-Um preview adicional só pode ser autorizado adicionando sua origem exata ao `CORS_ORIGINS` de staging em mudança revisada. Ele nunca é aceito por sufixo ou regex. `main.airtrust.pages.dev` continua negado até existir decisão oficial explícita que substitua a configuração atual.
+Um preview adicional só pode ser autorizado por origem exata no `CORS_ORIGINS` de
+staging. Ele nunca é aceito por sufixo ou regex. `main.airtrust.pages.dev` continua
+negado até existir uma decisão oficial explícita.
 
 ### Desenvolvimento local
 
-Somente as origens exatas `localhost` e `127.0.0.1` nas portas declaradas em `worker-airtrust/wrangler.dev.toml` e no ambiente `development` remoto.
+Somente as origens exatas de `localhost` e `127.0.0.1`, nas portas declaradas em
+`worker-airtrust/wrangler.dev.toml` e no ambiente remoto `development`, são permitidas.
 
 ## Preflight e credenciais
 
-- origem permitida: o Hono mantém `Access-Control-Allow-Origin` exato e `Access-Control-Allow-Credentials: true`;
-- origem negada: a barreira `environment-entrypoint.ts` responde `403` antes das rotas e sem headers de autorização CORS;
-- request sem `Origin`: permitido para same-origin e clientes server-to-server;
-- wildcard com credenciais permanece proibido.
+- Uma origem permitida recebe `Access-Control-Allow-Origin` exato e
+  `Access-Control-Allow-Credentials: true`.
+- Uma origem negada recebe `403` na barreira `environment-entrypoint.ts`, antes das
+  rotas e sem headers de autorização CORS.
+- Requests sem `Origin` continuam permitidos para same-origin e clientes
+  server-to-server.
+- Wildcard com credenciais permanece proibido.
 
 ## Cookies LMS
 
@@ -73,8 +116,8 @@ A mudança não altera o contrato de sessão de assets:
 - `HttpOnly`;
 - `Secure` e `SameSite=None` fora do ambiente local;
 - `Path=/api/lms/`;
-- chamadas autenticadas continuam com `credentials: include`;
-- SCORM, H5P e asset-session permanecem na mesma arquitetura.
+- chamadas autenticadas com `credentials: include`;
+- SCORM, H5P e asset-session na mesma arquitetura.
 
 ## Configuração do frontend
 
@@ -87,7 +130,9 @@ A mudança não altera o contrato de sessão de assets:
 - host desconhecido exige configuração explícita e não pode apontar para produção;
 - localhost continua no proxy local mesmo que uma URL remota seja fornecida.
 
-O workflow oficial de staging já injeta `VITE_API_URL=https://airtrust-api-staging.airtrust.workers.dev/api`; nenhum workflow temporário foi criado.
+O workflow oficial de staging já injeta
+`VITE_API_URL=https://airtrust-api-staging.airtrust.workers.dev/api`.
+Nenhum workflow temporário foi criado.
 
 ## Guard
 
@@ -102,18 +147,20 @@ O guard detecta:
 - `pages.dev` genérico roteado para produção;
 - regex ampla de `*.airtrust.pages.dev`;
 - wildcard com credentials;
-- URL de produção em workflow de staging/preview;
+- URL de produção em workflow de staging ou preview;
 - branch Pages de staging configurada como `production`;
 - origem de staging em CORS de produção e vice-versa;
 - preview Pages não aprovado em produção;
-- mistura de IDs D1, buckets ou APIs de staging/produção;
+- mistura de IDs D1, buckets ou APIs de staging e produção;
 - remoção da barreira `environment-entrypoint.ts` do `main` do Worker.
 
-A ativação no agregador obrigatório de CI pertence à Frente 6. Esta frente entrega o script e os testes, sem alterar `package.json` nem workflows oficiais para evitar sobreposição de ownership.
+A ativação no agregador obrigatório de CI pertence à Frente 6. Esta frente entrega o
+script e os testes sem alterar `package.json` ou workflows oficiais, evitando
+sobreposição de ownership.
 
 ## Testes
 
-Cobertura adicionada para:
+A cobertura adicionada inclui:
 
 - hosts oficiais de produção;
 - `production.airtrust.pages.dev`;
@@ -128,30 +175,37 @@ Cobertura adicionada para:
 - preflight `OPTIONS` permitido e negado;
 - `Origin: null`;
 - tentativa de preview acessar produção;
-- preservação do cookie SCORM/H5P/asset-session;
+- cookie SCORM, H5P e asset-session;
 - preservação do handler `scheduled` do Worker;
-- detecção de regressões pelo guard.
+- detectores do guard.
 
 ## Dependências e conflitos
 
-- **PR #807:** na revalidação imediatamente anterior ao commit, não alterava mais `src/react-app/config/api.ts` nem outro arquivo desta frente. Permanece dependência semântica: o cliente autenticado deve continuar consumindo o `API_BASE_URL` canônico e preservando `credentials: include`.
-- **PR #804:** sem sobreposição de arquivos. A URL oficial de staging e o bloqueio do host `main` foram alinhados semanticamente.
-- **PR #808:** sem sobreposição de arquivos; esta frente não toca migrations nem scripts de aplicação de schema.
-- **Frente 6:** proprietária da ativação do guard no lint/CI obrigatório.
-- **PR #801:** o contrato `credentials: include` e o cookie de assets foi preservado.
+- **PR #807:** na revalidação imediatamente anterior ao commit, não alterava
+  `src/react-app/config/api.ts` nem outro arquivo desta frente. Permanece a dependência
+  semântica de o cliente consumir o `API_BASE_URL` canônico e preservar
+  `credentials: include`.
+- **PR #804:** sem sobreposição de arquivos. A URL oficial de staging e o bloqueio do
+  host `main` foram alinhados semanticamente.
+- **PR #808:** sem sobreposição de arquivos. Esta frente não toca migrations nem
+  scripts de aplicação de schema.
+- **Frente 6:** proprietária da ativação do guard no lint e na CI obrigatória.
+- **PR #801:** o contrato `credentials: include` e o cookie de assets foram preservados.
 
 ## Migrations, deploy e secrets
 
-- nenhuma migration criada ou aplicada;
-- nenhum deploy executado;
-- nenhum DNS alterado;
-- nenhum secret alterado;
-- nenhum dado remoto acessado ou escrito;
-- nenhuma mudança de autenticação, token ou cache geral.
+- Nenhuma migration foi criada ou aplicada.
+- Nenhum deploy foi executado.
+- Nenhum DNS foi alterado.
+- Nenhum secret foi alterado.
+- Nenhum dado remoto foi acessado ou escrito.
+- Nenhuma arquitetura de autenticação, token ou cache geral foi alterada.
 
 ## Riscos residuais
 
-- previews adicionais exigem inclusão explícita na configuração de staging; sem isso falham por projeto;
-- a ativação obrigatória do guard depende da Frente 6;
-- a PR #807 pode exigir apenas validação semântica após integração, caso altere posteriormente o contrato de `API_BASE_URL`;
-- validação funcional real de SCORM/H5P cross-origin permanece gate de staging, não executado nesta frente.
+- Previews adicionais exigem inclusão explícita na configuração de staging.
+- A ativação obrigatória do guard depende da Frente 6.
+- A PR #807 pode exigir validação semântica após integração se alterar posteriormente o
+  contrato de `API_BASE_URL`.
+- A validação funcional real de SCORM e H5P cross-origin permanece um gate de staging
+  não executado nesta frente.

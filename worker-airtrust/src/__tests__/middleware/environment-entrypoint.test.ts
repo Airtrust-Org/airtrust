@@ -24,10 +24,16 @@ vi.mock('../../index', () => ({
 
 import environmentEntrypoint from '../../environment-entrypoint';
 
-const PROD_ORIGINS =
-  'https://airtrust.online,https://www.airtrust.online,https://airtrust.pages.dev,https://production.airtrust.pages.dev';
-const STAGING_ORIGINS =
-  'https://staging.airtrust.pages.dev,https://feature-123.airtrust.pages.dev';
+const PROD_ORIGINS = [
+  'https://airtrust.online',
+  'https://www.airtrust.online',
+  'https://airtrust.pages.dev',
+  'https://production.airtrust.pages.dev',
+].join(',');
+const STAGING_ORIGINS = [
+  'https://staging.airtrust.pages.dev',
+  'https://feature-123.airtrust.pages.dev',
+].join(',');
 
 function env(corsOrigins: string, environment: Env['ENVIRONMENT']): Env {
   return {
@@ -65,27 +71,30 @@ describe('environment entrypoint origin isolation', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it('rejects staging, main, arbitrary preview, lookalike and null origins in production', async () => {
-    for (const origin of [
-      'https://staging.airtrust.pages.dev',
-      'https://main.airtrust.pages.dev',
-      'https://feature-123.airtrust.pages.dev',
-      'https://airtrust.pages.dev.evil.example',
-      'null',
-    ]) {
-      const response = await environmentEntrypoint.fetch(
-        request(origin),
-        env(PROD_ORIGINS, 'production'),
-        {} as ExecutionContext,
-      );
+  it(
+    'rejects staging, main, arbitrary preview, lookalike and null origins in production',
+    async () => {
+      for (const origin of [
+        'https://staging.airtrust.pages.dev',
+        'https://main.airtrust.pages.dev',
+        'https://feature-123.airtrust.pages.dev',
+        'https://airtrust.pages.dev.evil.example',
+        'null',
+      ]) {
+        const response = await environmentEntrypoint.fetch(
+          request(origin),
+          env(PROD_ORIGINS, 'production'),
+          {} as ExecutionContext,
+        );
 
-      expect(response.status).toBe(403);
-      expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
-      expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
-    }
+        expect(response.status).toBe(403);
+        expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+        expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
+      }
 
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('allows a configured staging preview but rejects main and an arbitrary preview', async () => {
     const allowed = await environmentEntrypoint.fetch(
@@ -108,24 +117,29 @@ describe('environment entrypoint origin isolation', () => {
     }
   });
 
-  it('rejects a disallowed preflight before Hono and preserves allowed credentialed preflight', async () => {
-    const denied = await environmentEntrypoint.fetch(
-      request('https://unreviewed.airtrust.pages.dev', 'OPTIONS'),
-      env(PROD_ORIGINS, 'production'),
-      {} as ExecutionContext,
-    );
-    expect(denied.status).toBe(403);
-    expect(fetchMock).not.toHaveBeenCalled();
+  it(
+    'rejects a disallowed preflight before Hono and preserves allowed credentialed preflight',
+    async () => {
+      const denied = await environmentEntrypoint.fetch(
+        request('https://unreviewed.airtrust.pages.dev', 'OPTIONS'),
+        env(PROD_ORIGINS, 'production'),
+        {} as ExecutionContext,
+      );
+      expect(denied.status).toBe(403);
+      expect(fetchMock).not.toHaveBeenCalled();
 
-    const allowed = await environmentEntrypoint.fetch(
-      request('https://airtrust.online', 'OPTIONS'),
-      env(PROD_ORIGINS, 'production'),
-      {} as ExecutionContext,
-    );
-    expect(allowed.status).toBe(204);
-    expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe('https://airtrust.online');
-    expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe('true');
-  });
+      const allowed = await environmentEntrypoint.fetch(
+        request('https://airtrust.online', 'OPTIONS'),
+        env(PROD_ORIGINS, 'production'),
+        {} as ExecutionContext,
+      );
+      expect(allowed.status).toBe(204);
+      expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe(
+        'https://airtrust.online',
+      );
+      expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    },
+  );
 
   it('allows requests without Origin for same-origin and server-to-server clients', async () => {
     const response = await environmentEntrypoint.fetch(

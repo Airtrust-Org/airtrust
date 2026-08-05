@@ -16,7 +16,12 @@ function extractTomlBlock(source, startHeader, nextHeader) {
 
 function extractCorsOrigins(block) {
   const match = block.match(/^CORS_ORIGINS\s*=\s*"([^"]*)"$/m);
-  return match ? match[1].split(',').map((item) => item.trim()).filter(Boolean) : [];
+  return match
+    ? match[1]
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 }
 
 export function inspectFrontendSource(source) {
@@ -41,8 +46,12 @@ export function inspectAllowedOriginsSource(source) {
   if (/\[a-z0-9-\]\+\\\.airtrust\\\.pages\\\.dev/i.test(source)) {
     violations.push('worker: broad *.airtrust.pages.dev credentialed allowlist is forbidden');
   }
-  if (/origin\.(?:includes|endsWith)\(\s*['"](?:\.airtrust\.)?pages\.dev['"]/.test(source)) {
-    violations.push('worker: Pages origins must be exact configured values, not suffix heuristics');
+  if (
+    /origin\.(?:includes|endsWith)\(\s*['"](?:\.airtrust\.)?pages\.dev['"]/.test(source)
+  ) {
+    violations.push(
+      'worker: Pages origins must be exact configured values, not suffix heuristics',
+    );
   }
   if (!source.includes('parseEnvAllowedOrigins') || !source.includes("candidate === '*'")) {
     violations.push('worker: CORS parser must reject wildcard configuration');
@@ -106,14 +115,18 @@ export function inspectWranglerSource(source, label = 'worker-airtrust/wrangler.
       staging.includes(PRODUCTION_DB_ID) ||
       /bucket_name\s*=\s*"airtrust-storage"/.test(staging)
     ) {
-      violations.push(`${label}: staging block contains a production API, D1, or R2 target`);
+      violations.push(
+        `${label}: staging block contains a production API, D1, or R2 target`,
+      );
     }
     if (
       production.includes(STAGING_API) ||
       production.includes(STAGING_DB_ID) ||
       /bucket_name\s*=\s*"airtrust-storage-staging"/.test(production)
     ) {
-      violations.push(`${label}: production block contains a staging API, D1, or R2 target`);
+      violations.push(
+        `${label}: production block contains a staging API, D1, or R2 target`,
+      );
     }
   }
 
@@ -140,8 +153,11 @@ async function listFiles(directory) {
   const output = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) output.push(...(await listFiles(fullPath)));
-    else output.push(fullPath);
+    if (entry.isDirectory()) {
+      output.push(...(await listFiles(fullPath)));
+    } else {
+      output.push(fullPath);
+    }
   }
   return output;
 }
@@ -149,21 +165,31 @@ async function listFiles(directory) {
 export async function collectViolations(root = process.cwd()) {
   const violations = [];
   const frontend = await readText(root, 'src/react-app/config/api-environment.ts');
-  const allowedOrigins = await readText(root, 'worker-airtrust/src/config/allowed-origins.ts');
+  const allowedOrigins = await readText(
+    root,
+    'worker-airtrust/src/config/allowed-origins.ts',
+  );
   const wrangler = await readText(root, 'worker-airtrust/wrangler.toml');
   const wranglerDev = await readText(root, 'worker-airtrust/wrangler.dev.toml');
 
   violations.push(...inspectFrontendSource(frontend));
   violations.push(...inspectAllowedOriginsSource(allowedOrigins));
   violations.push(...inspectWranglerSource(wrangler));
-  violations.push(...inspectWranglerSource(wranglerDev, 'worker-airtrust/wrangler.dev.toml'));
+  violations.push(
+    ...inspectWranglerSource(wranglerDev, 'worker-airtrust/wrangler.dev.toml'),
+  );
 
   const workerSourceFiles = await listFiles(path.join(root, 'worker-airtrust/src'));
   for (const file of workerSourceFiles) {
-    if (!file.endsWith('.ts') || file.includes(`${path.sep}__tests__${path.sep}`)) continue;
+    if (!file.endsWith('.ts') || file.includes(`${path.sep}__tests__${path.sep}`)) {
+      continue;
+    }
     const source = await readFile(file, 'utf8');
     violations.push(
-      ...inspectCredentialedCorsSource(source, path.relative(root, file).replaceAll(path.sep, '/')),
+      ...inspectCredentialedCorsSource(
+        source,
+        path.relative(root, file).replaceAll(path.sep, '/'),
+      ),
     );
   }
 
