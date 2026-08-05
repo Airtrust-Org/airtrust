@@ -3,6 +3,7 @@ import { processarEventosParaModulo } from '../shared/handlers';
 import { createLogger, toError } from '../utils/logger';
 import type { Env, Variables } from '../types';
 import { enforceLmsCompletionIntegrity } from './lms-completion-integrity';
+import { enforceLmsCompletionReversal } from './lms-completion-reversal';
 
 type DomainEventContext = {
   Bindings: {
@@ -92,12 +93,15 @@ export function domainEventProcessorMiddleware() {
     const path = c.req.path;
     const method = c.req.method;
     const modulo = Object.entries(ROTA_MODULO).find(([rota]) => path.startsWith(rota))?.[1];
+    const typedContext = c as unknown as Context<{ Bindings: Env; Variables: Variables }>;
 
     // Auth and tenant were resolved by the global middleware before this point.
+    // Reversal has a governed schema-aware entry point and must preempt legacy handlers.
+    const reversalResponse = await enforceLmsCompletionReversal(typedContext);
+    if (reversalResponse) return reversalResponse;
+
     // LMS completion/progress integrity must run before any legacy route handler.
-    const integrityResponse = await enforceLmsCompletionIntegrity(
-      c as unknown as Context<{ Bindings: Env; Variables: Variables }>,
-    );
+    const integrityResponse = await enforceLmsCompletionIntegrity(typedContext);
     if (integrityResponse) return integrityResponse;
 
     await next();

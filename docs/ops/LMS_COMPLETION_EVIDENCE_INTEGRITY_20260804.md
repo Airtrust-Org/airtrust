@@ -18,6 +18,11 @@ gate é executado antes dos handlers legados. A emissão idempotente de certific
 permanece uma pós-condição do histórico criado pelo serviço canônico; não existe
 rota SCORM autorizada a criar qualificação ou PDF diretamente.
 
+A reversão usa um ponto de entrada governado separado,
+`enforceLmsCompletionReversal`, executado antes do gate genérico e dos handlers
+legados. Isso permite aplicar o contrato de revogação compatível com o schema sem
+criar rota paralela de conclusão.
+
 ## 2. Precedência canônica
 
 A ordem é fail-closed:
@@ -128,14 +133,15 @@ O batch governado:
 
 - reabre matrícula/ciclo como `EM_ANDAMENTO` e limita progresso a 99%;
 - limpa o vínculo operacional com a qualificação;
-- marca o histórico `INVALIDADA` e aplica soft delete auditável;
+- marca o histórico como `CANCELADA`, único estado de revogação compatível com o
+  CHECK atual, aplica soft delete auditável e registra o motivo de invalidação;
 - aplica soft delete ao documento do certificado;
 - neutraliza os status finais SCORM;
 - registra `LMS_COMPLETION_REVERSED` com estado anterior, ator, motivo e classe.
 
-O endpoint público de QR já exige `qh.deleted_at IS NULL` e
-documento `deleted_at IS NULL`; portanto o QR revogado deixa de validar. O objeto
-R2 não é apagado nesta frente.
+O endpoint público de QR já exige `qh.deleted_at IS NULL` e documento
+`d.deleted_at IS NULL`; portanto o QR revogado deixa de validar. O objeto R2 não é
+apagado nesta frente.
 
 ## 10. Diagnóstico histórico
 
@@ -154,5 +160,5 @@ remota.
   reinicia o runtime e preserva snapshot no audit log; uma evolução futura pode
   materializar progresso por ciclo.
 - O artefato R2 de certificado revogado permanece retido; acesso público/normal é
-  invalidado pelo registro e documento soft-deleted.
+  invalidado pelo histórico e documento soft-deleted.
 - Reparação de dados anteriores pertence à Frente 10 e não é executada aqui.

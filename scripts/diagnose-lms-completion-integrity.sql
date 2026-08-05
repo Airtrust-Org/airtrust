@@ -46,8 +46,10 @@ SELECT
   p.score_max,
   p.last_commit_at
 FROM lms_progresso_scorm p
-WHERE LOWER(COALESCE(p.lesson_status, '')) = 'failed'
-   OR LOWER(COALESCE(p.success_status, '')) = 'failed'
+WHERE (
+    LOWER(COALESCE(p.lesson_status, '')) = 'failed'
+    OR LOWER(COALESCE(p.success_status, '')) = 'failed'
+  )
   AND (
     LOWER(COALESCE(p.lesson_status, '')) IN ('passed', 'completed', 'complete')
     OR LOWER(COALESCE(p.completion_status, '')) IN ('completed', 'complete')

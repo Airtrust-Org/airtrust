@@ -14,6 +14,10 @@ const integrityMiddleware = readFileSync(
   join(workerRoot, 'src/middleware/lms-completion-integrity.ts'),
   'utf8',
 );
+const reversalMiddleware = readFileSync(
+  join(workerRoot, 'src/middleware/lms-completion-reversal.ts'),
+  'utf8',
+);
 const matriculasRoute = readFileSync(join(workerRoot, 'src/routes/lms-matriculas.ts'), 'utf8');
 const progressoRoute = readFileSync(join(workerRoot, 'src/routes/lms-progresso.ts'), 'utf8');
 const validationRoute = readFileSync(
@@ -28,6 +32,16 @@ describe('guard:lms-completion-single-entry-point', () => {
     const next = domainMiddleware.indexOf('await next();');
     expect(gate).toBeGreaterThan(0);
     expect(next).toBeGreaterThan(gate);
+  });
+
+  it('runs the governed reversal before the generic integrity and legacy handlers', () => {
+    expect(domainMiddleware).toContain("import { enforceLmsCompletionReversal }");
+    const reversal = domainMiddleware.indexOf('await enforceLmsCompletionReversal');
+    const integrity = domainMiddleware.indexOf('await enforceLmsCompletionIntegrity');
+    const next = domainMiddleware.indexOf('await next();');
+    expect(reversal).toBeGreaterThan(0);
+    expect(integrity).toBeGreaterThan(reversal);
+    expect(next).toBeGreaterThan(integrity);
   });
 
   it('keeps completion persistence behind the canonical completion service', () => {
@@ -65,15 +79,17 @@ describe('guard:lms-completion-single-entry-point', () => {
     expect(integrityMiddleware).toContain('LMS_REMATRICULATION_REQUIRED');
     expect(integrityMiddleware).toContain('/rematricular');
     expect(integrityMiddleware).toContain("status = 'NAO_INICIADO'");
-    expect(integrityMiddleware).toContain('INSERT INTO lms_matricula_ciclos');
+    expect(integrityMiddleware).toMatch(/INSERT\s+INTO\s+lms_matricula_ciclos/);
     expect(integrityMiddleware).toContain('actorFuncionarioId !== existing.funcionario_id');
   });
 
-  it('23-25. reverses completion without silent deletion and invalidates certificate QR', () => {
-    expect(integrityMiddleware).toContain('LMS_COMPLETION_REVERSED');
-    expect(integrityMiddleware).toContain("status = 'INVALIDADA'");
-    expect(integrityMiddleware).toContain('UPDATE documentos');
-    expect(integrityMiddleware).toContain('qr_valido: false');
+  it('23-25. reverses completion with a schema-valid revocation and invalidates QR', () => {
+    expect(reversalMiddleware).toContain('LMS_COMPLETION_REVERSED');
+    expect(reversalMiddleware).toContain("status = 'CANCELADA'");
+    expect(reversalMiddleware).not.toContain("status = 'INVALIDADA'");
+    expect(reversalMiddleware).toContain('UPDATE documentos');
+    expect(reversalMiddleware).toContain('deleted_at = COALESCE(deleted_at');
+    expect(reversalMiddleware).toContain('qr_valido: false');
     expect(validationRoute).toContain('WHERE qh.deleted_at IS NULL');
     expect(validationRoute).toContain('AND d.deleted_at IS NULL');
   });
@@ -82,6 +98,7 @@ describe('guard:lms-completion-single-entry-point', () => {
     expect(integrityMiddleware).toContain('WHERE m.id = ?');
     expect(integrityMiddleware).toContain('AND m.empresa_id = ?');
     expect(integrityMiddleware).toContain('Number(payload.empresa_id ?? 0) === row.empresa_id');
+    expect(reversalMiddleware).toContain('WHERE m.id = ? AND m.empresa_id = ?');
   });
 
   it('26. blocks new direct qualification or certificate generation in SCORM routes', () => {
@@ -90,7 +107,7 @@ describe('guard:lms-completion-single-entry-point', () => {
       /generateCertificateForHistorico\s*\(/,
       /INSERT\s+INTO\s+documentos[\s\S]{0,200}certificado/i,
     ];
-    for (const source of [matriculasRoute, progressoRoute, integrityMiddleware]) {
+    for (const source of [matriculasRoute, progressoRoute, integrityMiddleware, reversalMiddleware]) {
       for (const pattern of forbidden) expect(source).not.toMatch(pattern);
     }
   });
