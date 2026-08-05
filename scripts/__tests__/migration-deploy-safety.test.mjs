@@ -29,9 +29,14 @@ test('accepts a directory containing only canonical forward migrations', () =>
   withTempDir((directory) => {
     write(directory, '0001_create_example.sql');
     write(directory, '0002_add_example_index.sql');
-    const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
+    const result = inspectMigrationsDirectory(directory, {
+      historicalDuplicateAllowlist: {},
+    });
     assert.equal(result.ok, true);
-    assert.deepEqual(result.candidateFiles, ['0001_create_example.sql', '0002_add_example_index.sql']);
+    assert.deepEqual(result.candidateFiles, [
+      '0001_create_example.sql',
+      '0002_add_example_index.sql',
+    ]);
   }));
 
 for (const [name, expectedType] of [
@@ -48,7 +53,9 @@ for (const [name, expectedType] of [
   test(`rejects ${name} as ${expectedType}`, () =>
     withTempDir((directory) => {
       write(directory, name);
-      const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
+      const result = inspectMigrationsDirectory(directory, {
+        historicalDuplicateAllowlist: {},
+      });
       assert.equal(result.ok, false);
       assert.ok(violationTypes(result).has(expectedType));
       assert.deepEqual(result.candidateFiles, []);
@@ -58,7 +65,9 @@ for (const [name, expectedType] of [
 test('rejects a migration carrying NO_GO_MIGRATION_PRODUCAO', () =>
   withTempDir((directory) => {
     write(directory, '0001_blocked.sql', '-- NO_GO_MIGRATION_PRODUCAO\nSELECT 1;\n');
-    const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
+    const result = inspectMigrationsDirectory(directory, {
+      historicalDuplicateAllowlist: {},
+    });
     assert.ok(violationTypes(result).has('no_go_migration'));
     assert.deepEqual(result.candidateFiles, []);
   }));
@@ -67,7 +76,9 @@ test('rejects incompatible duplicate prefixes', () =>
   withTempDir((directory) => {
     write(directory, '0001_first.sql');
     write(directory, '0001_second.sql');
-    const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
+    const result = inspectMigrationsDirectory(directory, {
+      historicalDuplicateAllowlist: {},
+    });
     assert.ok(violationTypes(result).has('duplicate_prefix'));
   }));
 
@@ -81,7 +92,9 @@ test('rejects non-SQL files, nested directories and symlinks', () =>
     } catch {
       // Some platforms disallow symlink creation; the other two assertions remain portable.
     }
-    const result = inspectMigrationsDirectory(directory, { historicalDuplicateAllowlist: {} });
+    const result = inspectMigrationsDirectory(directory, {
+      historicalDuplicateAllowlist: {},
+    });
     const types = violationTypes(result);
     assert.ok(types.has('non_sql_file'));
     assert.ok(types.has('unexpected_entry'));
@@ -94,7 +107,10 @@ test('dry-run CLI prints the exact candidate list and never includes destructive
     const output = execFileSync(
       process.execPath,
       ['scripts/guard-migrations-dir-purity.mjs', '--dry-run', '--dir', directory],
-      { cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..'), encoding: 'utf8' },
+      {
+        cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..'),
+        encoding: 'utf8',
+      },
     );
     const parsed = JSON.parse(output);
     assert.equal(parsed.mode, 'dry-run');
@@ -129,13 +145,21 @@ test('deploy-worker-only contains no implicit migration application', () => {
 
 test('legacy 0091 remote executor is retired fail-closed', () => {
   const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
-  const script = path.join(root, 'worker-airtrust', 'scripts', 'aplicar-migration-0091-seguro.sh');
+  const script = path.join(
+    root,
+    'worker-airtrust',
+    'scripts',
+    'aplicar-migration-0091-seguro.sh',
+  );
   const source = fs.readFileSync(script, 'utf8');
   assert.doesNotMatch(source, /--remote|d1\s+migrations\s+apply/);
   let stderr = '';
   assert.throws(() => {
     try {
-      execFileSync('bash', [script], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+      execFileSync('bash', [script], {
+        cwd: root,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
     } catch (error) {
       stderr = String(error.stderr ?? '');
       throw error;

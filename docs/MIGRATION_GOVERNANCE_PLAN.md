@@ -23,15 +23,15 @@ Duplicidades históricas permanecem limitadas à allowlist exata versionada em `
 
 ## 2. Separação obrigatória de artefatos
 
-| Tipo | Local |
-|---|---|
-| Migration forward | `worker-airtrust/migrations/` |
-| Rollback | `scripts/rollback/` |
-| Preflight/validação read-only | `scripts/validation/` |
-| SQL manual/destrutivo | `scripts/sql/manual/` |
-| SQL bloqueado por `NO_GO_MIGRATION_PRODUCAO` | `scripts/sql/manual/no-go/` |
-| Backup/artefato legado não enumerável | `scripts/sql/manual/archive/` |
-| Mudança governada Schema V2 | `worker-airtrust/schema-v2/changes/` |
+| Tipo                                         | Local                                |
+| -------------------------------------------- | ------------------------------------ |
+| Migration forward                            | `worker-airtrust/migrations/`        |
+| Rollback                                     | `scripts/rollback/`                  |
+| Preflight/validação read-only                | `scripts/validation/`                |
+| SQL manual/destrutivo                        | `scripts/sql/manual/`                |
+| SQL bloqueado por `NO_GO_MIGRATION_PRODUCAO` | `scripts/sql/manual/no-go/`          |
+| Backup/artefato legado não enumerável        | `scripts/sql/manual/archive/`        |
+| Mudança governada Schema V2                  | `worker-airtrust/schema-v2/changes/` |
 
 Arquivos de rollback, purge, preflight, diagnóstico, SQL manual, `NO_GO`, não SQL, backups, symlinks ou subdiretórios são proibidos no diretório canônico.
 

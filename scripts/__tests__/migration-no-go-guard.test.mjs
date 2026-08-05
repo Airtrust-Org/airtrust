@@ -29,7 +29,11 @@ test('detects the NO_GO marker in file content', () => {
 });
 
 test('does not flag ordinary migrations', () => {
-  const content = ['-- Migration 9999: example', '-- Data: 2026-07-15', 'SELECT 1;'].join('\n');
+  const content = [
+    '-- Migration 9999: example',
+    '-- Data: 2026-07-15',
+    'SELECT 1;',
+  ].join('\n');
   assert.equal(isNoGoMigrationContent(content), false);
 });
 
@@ -65,7 +69,10 @@ test('apply-migration-production.sh refuses a migration marked NO_GO', () => {
   const migrationsSubdir = path.join(tmpDir, 'worker-airtrust', 'migrations');
   fs.mkdirSync(migrationsSubdir, { recursive: true });
   const migrationRelPath = 'worker-airtrust/migrations/9999_test_blocked.sql';
-  fs.writeFileSync(path.join(tmpDir, migrationRelPath), '-- NO_GO_MIGRATION_PRODUCAO\nSELECT 1;\n');
+  fs.writeFileSync(
+    path.join(tmpDir, migrationRelPath),
+    '-- NO_GO_MIGRATION_PRODUCAO\nSELECT 1;\n',
+  );
 
   fs.mkdirSync(path.join(tmpDir, 'scripts'), { recursive: true });
   for (const name of [
@@ -75,7 +82,10 @@ test('apply-migration-production.sh refuses a migration marked NO_GO', () => {
     'guard-migrations-dir-purity.mjs',
     'migration-directory-policy.mjs',
   ]) {
-    fs.cpSync(path.join(process.cwd(), 'scripts', name), path.join(tmpDir, 'scripts', name));
+    fs.cpSync(
+      path.join(process.cwd(), 'scripts', name),
+      path.join(tmpDir, 'scripts', name),
+    );
   }
 
   let threw = false;
@@ -106,10 +116,14 @@ test('apply-migration-production.sh rejects paths outside worker-airtrust/migrat
   let threw = false;
   let stderr = '';
   try {
-    execFileSync('bash', ['scripts/apply-migration-production.sh', 'sql/maintenance/whatever.sql'], {
-      cwd: process.cwd(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    execFileSync(
+      'bash',
+      ['scripts/apply-migration-production.sh', 'sql/maintenance/whatever.sql'],
+      {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
   } catch (error) {
     threw = true;
     stderr = String(error.stderr ?? '');

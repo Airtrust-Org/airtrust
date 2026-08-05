@@ -17,7 +17,7 @@
 8. Um arquivo com `NO_GO_MIGRATION_PRODUCAO` nunca é candidato canônico nem pode ser executado pelo wrapper de produção.
 9. Deploy do Worker e alteração de schema são operações separadas. `scripts/deploy-worker-only.sh` nunca enumera nem aplica migrations.
 10. `wrangler d1 migrations apply ... --remote` é proibido fora do caminho exato governado e isolado:
-   `scripts/production/apply-simuladores-matriz-remote-migration.sh`.
+    `scripts/production/apply-simuladores-matriz-remote-migration.sh`.
 11. O executor legado `worker-airtrust/scripts/aplicar-migration-0091-seguro.sh` permanece apenas como tombstone fail-closed e nunca consulta ou altera D1.
 12. O guard de fontes operacionais reconhece somente renomes Git `R100` como movimentação byte a byte. Renomes modificados e cópias continuam em escopo e exigem marcadores.
 

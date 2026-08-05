@@ -8,8 +8,18 @@ export const REMOTE_MIGRATIONS_APPLY_ALLOWLIST = new Set([
   'scripts/production/apply-simuladores-matriz-remote-migration.sh',
 ]);
 
-const SCANNED_EXTENSIONS = new Set(['.sh', '.mjs', '.cjs', '.js', '.ts', '.tsx', '.yml', '.yaml']);
-const GENERIC_REMOTE_APPLY = /\bwrangler\s+d1\s+migrations\s+apply\b[\s\S]{0,500}?\s--remote(?:\s|$)/m;
+const SCANNED_EXTENSIONS = new Set([
+  '.sh',
+  '.mjs',
+  '.cjs',
+  '.js',
+  '.ts',
+  '.tsx',
+  '.yml',
+  '.yaml',
+]);
+const GENERIC_REMOTE_APPLY =
+  /\bwrangler\s+d1\s+migrations\s+apply\b[\s\S]{0,500}?\s--remote(?:\s|$)/m;
 
 function stripComments(source, extension) {
   if (extension === '.sh' || extension === '.yml' || extension === '.yaml') {
@@ -31,7 +41,12 @@ export function findGenericRemoteMigrationApplyViolations({ root, files }) {
     const normalized = relativePath.split(path.sep).join('/');
     const extension = path.extname(normalized);
     if (!SCANNED_EXTENSIONS.has(extension)) continue;
-    if (normalized.includes('/__tests__/') || /\.(?:test|spec)\.[^.]+$/.test(normalized)) continue;
+    if (
+      normalized.includes('/__tests__/') ||
+      /\.(?:test|spec)\.[^.]+$/.test(normalized)
+    ) {
+      continue;
+    }
     const fullPath = path.join(root, relativePath);
     if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) continue;
     const source = stripComments(fs.readFileSync(fullPath, 'utf8'), extension);
@@ -48,7 +63,10 @@ export function runNoGenericRemoteMigrationsGuard({ root = process.cwd(), files 
     execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
       .split('\0')
       .filter(Boolean);
-  const violations = findGenericRemoteMigrationApplyViolations({ root, files: trackedFiles });
+  const violations = findGenericRemoteMigrationApplyViolations({
+    root,
+    files: trackedFiles,
+  });
   return {
     ok: violations.length === 0,
     allowlist: [...REMOTE_MIGRATIONS_APPLY_ALLOWLIST].sort(),

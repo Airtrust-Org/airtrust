@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DML_RE = /\b(INSERT\s+INTO|UPDATE\s+[A-Za-z_][A-Za-z0-9_]*\s+SET|DELETE\s+FROM|REPLACE\s+INTO|MERGE\s+INTO)\b/i;
+const DML_RE =
+  /\b(INSERT\s+INTO|UPDATE\s+[A-Za-z_][A-Za-z0-9_]*\s+SET|DELETE\s+FROM|REPLACE\s+INTO|MERGE\s+INTO)\b/i;
 const REQUIRED_MARKERS = [
   'source_reference',
   'operational_decision',
@@ -83,7 +84,10 @@ export function getChangedFiles({ root = process.cwd(), baseRef = 'origin/main' 
     for (const file of parsed.exactRenames) exactRenames.add(file);
   }
 
-  const untracked = readGitNameStatus(['ls-files', '--others', '--exclude-standard', '-z'], root);
+  const untracked = readGitNameStatus(
+    ['ls-files', '--others', '--exclude-standard', '-z'],
+    root,
+  );
   for (const file of untracked.split('\0').filter(Boolean)) candidates.add(file);
 
   // If another diff reports the destination as modified/added, it is no longer

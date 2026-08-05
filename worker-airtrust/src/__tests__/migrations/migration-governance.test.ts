@@ -26,8 +26,14 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0063_align_qualificacoes_tipos_schema.sql',
     '0063_normalize_qualificacoes_historico_schema.sql',
   ],
-  '0068': ['0068_enrich_and_fk.sql', '0068_reintroduce_fk_qualificacoes_historico.sql'],
-  '0069': ['0069_create_view_qualificacoes_historico_v.sql', '0069_repoint_view_qualificacoes.sql'],
+  '0068': [
+    '0068_enrich_and_fk.sql',
+    '0068_reintroduce_fk_qualificacoes_historico.sql',
+  ],
+  '0069': [
+    '0069_create_view_qualificacoes_historico_v.sql',
+    '0069_repoint_view_qualificacoes.sql',
+  ],
   '0092': [
     '0092_restore_data_chunk1.sql',
     '0092_restore_data_chunk2.sql',
@@ -50,7 +56,10 @@ const EXPECTED_DUPLICATE_PREFIXES = {
   '0137': ['0137_add_integrity_checks.sql', '0137_fix_certificados_completo.sql'],
   '0140': ['0140_add_simuladores_indexes.sql', '0140_fix_fk_modelos_sessao_manobras.sql'],
   '0144': ['0144_deprecate_sessoes_template.sql', '0144_integracao_edapp.sql'],
-  '0145': ['0145_cleanup_obsolete_simuladores_tables.sql', '0145_integracao_edapp_dados_teste.sql'],
+  '0145': [
+    '0145_cleanup_obsolete_simuladores_tables.sql',
+    '0145_integracao_edapp_dados_teste.sql',
+  ],
   '0150': [
     '0150_marcar_qualificacoes_renovadas.sql',
     '0150_multi_tenant_empresas.sql',
@@ -61,16 +70,28 @@ const EXPECTED_DUPLICATE_PREFIXES = {
     '0159_add_gera_qualificacao_modelos_sessao.sql',
     '0159_remover_tipo_aeronave_modelos_sessao.sql',
   ],
-  '0200': ['0200_performance_composite_indexes.sql', '0200_remove_unused_columns_historico.sql'],
+  '0200': [
+    '0200_performance_composite_indexes.sql',
+    '0200_remove_unused_columns_historico.sql',
+  ],
   '0215': ['0215_frms_notas_resolucao.sql', '0215_frms_visual_thresholds.sql'],
   '0246': [
     '0246_enforce_tripulacao_unique_aeronave.sql',
     '0246_fix_vw_tripulante_operacional_guerra.sql',
   ],
-  '0263': ['0263_backfill_manobras_descricao.sql', '0263_frms_effectiveness_thresholds.sql'],
+  '0263': [
+    '0263_backfill_manobras_descricao.sql',
+    '0263_frms_effectiveness_thresholds.sql',
+  ],
   '0284': ['0284_fix_sk76_loft_check_0303.sql', '0284_frat_multilevel_bowtie_risk.sql'],
-  '0320': ['0320_alertas_whatsapp_delivery_tracking.sql', '0320_treinamentos_convocacao_email.sql'],
-  '0332': ['0332_create_audit_logs_compatible.sql', '0332_normalize_edapp_historical_renewals.sql'],
+  '0320': [
+    '0320_alertas_whatsapp_delivery_tracking.sql',
+    '0320_treinamentos_convocacao_email.sql',
+  ],
+  '0332': [
+    '0332_create_audit_logs_compatible.sql',
+    '0332_normalize_edapp_historical_renewals.sql',
+  ],
   '0340': ['0340_lms_cursos_ead_metadata.sql', '0340_perfis_permissoes.sql'],
   '0347': ['0347_lms_cursos_content_filename.sql', '0347_lms_edapp_tenant_indexes.sql'],
   '0362': ['0362_fichas_edicao_pos_finalizacao.sql', '0362_frms_daily_fatigue_v01.sql'],
@@ -141,7 +162,9 @@ describe('migration governance', () => {
   });
 
   it('keeps only the two immutable historical filename exceptions', () => {
-    const nonStandard = files.filter((file) => !/^[0-9]{4}_[a-z0-9_]+\.sql$/.test(file));
+    const nonStandard = files.filter(
+      (file) => !/^[0-9]{4}_[a-z0-9_]+\.sql$/.test(file),
+    );
     expect(nonStandard).toEqual([...EXPECTED_NON_STANDARD_FILES]);
   });
 
@@ -164,7 +187,9 @@ describe('migration governance', () => {
   it('keeps Wrangler configured to the canonical migrations folder', () => {
     for (const configPath of wranglerConfigPaths) {
       const configured = [
-        ...readFileSync(configPath, 'utf8').matchAll(/^\s*migrations_dir\s*=\s*"([^"]+)"/gm),
+        ...readFileSync(configPath, 'utf8').matchAll(
+          /^\s*migrations_dir\s*=\s*"([^"]+)"/gm,
+        ),
       ].map(([, value]) => value);
       expect(configured.length).toBeGreaterThan(0);
       expect(configured.every((value) => value === './migrations')).toBe(true);
@@ -181,7 +206,9 @@ describe('migration governance', () => {
 
   it('keeps PRAGMA foreign_keys = OFF confined to its historical allowlist', () => {
     const offenders = files.filter((file) =>
-      /\bPRAGMA\s+foreign_keys\s*=\s*OFF\b/i.test(readFileSync(join(migrationsDir, file), 'utf8')),
+      /\bPRAGMA\s+foreign_keys\s*=\s*OFF\b/i.test(
+        readFileSync(join(migrationsDir, file), 'utf8'),
+      ),
     );
     expect(offenders).toEqual([...EXPECTED_FOREIGN_KEYS_OFF_FILES]);
   });
