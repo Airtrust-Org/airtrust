@@ -12,7 +12,10 @@ function expectResolution(input: ApiBaseInput, expected: string): void {
   expect(resolveApiBase(input)).toBe(expected);
 }
 
-function expectConfigurationError(input: ApiBaseInput, expected: RegExp): void {
+function expectConfigurationError(
+  input: ApiBaseInput,
+  expected: RegExp,
+): void {
   expect(() => resolveApiBase(input)).toThrow(expected);
 }
 
@@ -22,7 +25,10 @@ describe('resolveApiBase environment isolation', () => {
       ['airtrust.online', 'https://airtrust.online'],
       ['www.airtrust.online', 'https://www.airtrust.online'],
       ['airtrust.pages.dev', 'https://airtrust.pages.dev'],
-      ['production.airtrust.pages.dev', 'https://production.airtrust.pages.dev'],
+      [
+        'production.airtrust.pages.dev',
+        'https://production.airtrust.pages.dev',
+      ],
     ] as const;
 
     for (const [host, origin] of productionHosts) {
@@ -94,7 +100,10 @@ describe('resolveApiBase environment isolation', () => {
     ] as const;
 
     for (const [host, origin] of localHosts) {
-      expectResolution({ host, origin, envUrl: PRODUCTION_API_BASE_URL }, `${origin}/api`);
+      expectResolution(
+        { host, origin, envUrl: PRODUCTION_API_BASE_URL },
+        `${origin}/api`,
+      );
     }
   });
 
