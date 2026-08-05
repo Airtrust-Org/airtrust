@@ -1,146 +1,44 @@
-name: Retire legacy qualification create and renewal handlers
+name: Auto-fix ESLint & Prettier on PR
 
 on:
-  push:
-    branches:
-      - fix/qualificacoes-atomicidade-confiabilidade-20260804
+  workflow_dispatch:
 
 jobs:
-  finalize:
+  autofix:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout branch
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 18
           cache: 'npm'
 
       - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint fix
         run: |
-          npm ci
-          npm --prefix worker-airtrust ci
+          npx eslint "./src/**/*.{js,jsx,ts,tsx}" --fix || true
 
-      - name: Remove non-atomic legacy handlers and add registration guard
+      - name: Run Prettier write
         run: |
-          python - <<'PY'
-          from pathlib import Path
+          npx prettier --write "src/**/*.{js,jsx,ts,tsx,css,md,json}" "worker-airtrust/src/**/*.{js,ts,json}" || true
 
-          path = Path('worker-airtrust/src/routes/qualificacoes/historico-write.ts')
-          source = path.read_text()
-
-          source = source.replace(
-              ' * QUALIFICACOES HISTORICO — Write routes (POST, PUT, PATCH, DELETE)\n',
-              ' * QUALIFICACOES HISTORICO — Legacy update/confirm/cancel/delete routes\n',
-              1,
-          )
-          source = source.replace("import { z } from 'zod';\n", '', 1)
-          source = source.replace('  resolveParametrosRenovacaoQualificacao,\n', '', 1)
-          source = source.replace('  normalizeCompletedStatusForNewWrites,\n', '', 1)
-          source = source.replace('  normalizePlannedStatusForNewWrites,\n', '', 1)
-          source = source.replace('  PLANNED_QUALIFICATION_STATUS_VALUES,\n', '', 1)
-          source = source.replace('  sqlStatusNotEqualsAny,\n', '', 1)
-          source = source.replace(
-              "import {\n  garantirG1SemPlanejado,\n  isG1QualificacaoCode,\n  isG1SemQualificacaoCode,\n  realizarG1SemPendente,\n} from '../../services/qualificacoes-g1-sem';\n",
-              "import { isG1SemQualificacaoCode } from '../../services/qualificacoes-g1-sem';\n",
-              1,
-          )
-          source = source.replace(
-              "import { ensureCertificateForQualification } from '../../services/ensure-certificate';\n",
-              '',
-              1,
-          )
-
-          normalize_start = source.index('function normalizeWritableHistoricoStatus(')
-          normalize_end = source.index('async function resolveInstrutorNomePorPayload(')
-          source = source[:normalize_start] + source[normalize_end:]
-
-          access_start = source.index('// Qualificação histórico domain varies')
-          router_marker = 'const writeRouter = new Hono<{ Bindings: Env }>();'
-          access_end = source.index(router_marker)
-          replacement = """// Creation and renewal are intentionally absent from this legacy router.\n// POST /historico and POST /historico/:id/renovar are registered only by\n// historico-atomic-write.ts. Existing-record mutations keep dynamic domain access.\nconst requireHistoricoAccess = (\n  action: 'update' | 'delete' | 'complete' | 'cancel',\n) => requireOperationalAccess({ action, resourceType: 'qualificacao_historico' });\n\n"""
-          source = source[:access_start] + replacement + source[access_end:]
-          source = source.replace('requireOperacoesHistorico(', 'requireHistoricoAccess(')
-
-          handlers_start = source.index('// ===== SCHEMA PARA RENOVAÇÃO =====')
-          handlers_end = source.index('/**\n * PUT /historico/:id')
-          retirement_note = """// The former non-atomic POST / and POST /:id/renovar handlers were removed.\n// Their only registered implementations live in historico-atomic-write.ts.\n\n"""
-          source = source[:handlers_start] + retirement_note + source[handlers_end:]
-          path.write_text(source)
-
-          test_path = Path(
-              'worker-airtrust/src/__tests__/routes/qualificacoes-historico-route-registration.test.ts'
-          )
-          test_path.write_text("""import { describe, expect, it } from 'vitest';
-
-import qualificacoesRouter from '../../routes/qualificacoes';
-import legacyWriteRouter from '../../routes/qualificacoes/historico-write';
-
-type RegisteredRoute = { method: string; path: string };
-
-function normalizePath(path: string): string {
-  const normalized = path.replace(/\\/+$/, '');
-  return normalized || '/';
-}
-
-function matchingPostRoutes(
-  routes: readonly RegisteredRoute[],
-  expectedPath: string,
-): RegisteredRoute[] {
-  return routes.filter(
-    (route) => route.method === 'POST' && normalizePath(route.path) === expectedPath,
-  );
-}
-
-describe('qualification history route registration', () => {
-  it('registers creation and renewal exactly once through the atomic router', () => {
-    expect(matchingPostRoutes(qualificacoesRouter.routes, '/historico')).toHaveLength(1);
-    expect(
-      matchingPostRoutes(qualificacoesRouter.routes, '/historico/:id/renovar'),
-    ).toHaveLength(1);
-  });
-
-  it('does not expose legacy non-atomic creation or renewal handlers', () => {
-    expect(matchingPostRoutes(legacyWriteRouter.routes, '/')).toHaveLength(0);
-    expect(matchingPostRoutes(legacyWriteRouter.routes, '/:id/renovar')).toHaveLength(0);
-  });
-});
-""")
-          PY
-
-      - name: Restore canonical auto-fix workflow
-        run: |
-          git fetch origin main --quiet
-          git show origin/main:.github/workflows/auto-fix.yml > .github/workflows/auto-fix.yml
-          git diff --exit-code origin/main -- .github/workflows/auto-fix.yml
-
-      - name: Format and validate focused delta
-        run: |
-          npx prettier --write \
-            worker-airtrust/src/routes/qualificacoes/historico-write.ts \
-            worker-airtrust/src/__tests__/routes/qualificacoes-historico-route-registration.test.ts
-          npx eslint --max-warnings=0 -- \
-            worker-airtrust/src/routes/qualificacoes/historico-write.ts \
-            worker-airtrust/src/__tests__/routes/qualificacoes-historico-route-registration.test.ts
-          npx vitest run \
-            worker-airtrust/src/__tests__/routes/qualificacoes-historico-route-registration.test.ts \
-            worker-airtrust/src/__tests__/services/qualification-history-atomic.sqlite.test.ts \
-            worker-airtrust/src/__tests__/routes/simuladores-fichas-g1-sem-curricular.test.ts
-
-      - name: Commit and push final cleanup
+      - name: Commit and push fixes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- \
-            .github/workflows/auto-fix.yml \
-            worker-airtrust/src/routes/qualificacoes/historico-write.ts \
-            worker-airtrust/src/__tests__/routes/qualificacoes-historico-route-registration.test.ts
-          git commit -m "fix(qualificacoes): retire non-atomic legacy handlers"
-          git push origin HEAD:${{ github.ref_name }}
+          git add -- src worker-airtrust/src
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: apply eslint --fix and prettier formatting [skip ci]" || true
+            git push origin HEAD:${{ github.head_ref }}
+          fi
