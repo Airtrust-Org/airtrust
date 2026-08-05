@@ -7,6 +7,7 @@ import { requireOperationalAccess } from '../../services/operational-domain-acce
 function createDb(flag: unknown = 1): D1Database {
   return {
     prepare: (query: string) => ({
+      all: async () => ({ results: [] }),
       bind: () => ({
         first: async () =>
           query.includes('operational_domain_rbac_enabled')

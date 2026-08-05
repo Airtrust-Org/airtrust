@@ -20,8 +20,7 @@ function isTenantAdminQualificationCatalogRequest(
   userRole: unknown,
 ): boolean {
   return (
-    options.resourceType === 'qualificacao_tipo' &&
-    core.normalizeTenantRole(userRole) === 'admin'
+    options.resourceType === 'qualificacao_tipo' && core.normalizeTenantRole(userRole) === 'admin'
   );
 }
 
@@ -43,12 +42,10 @@ export function requireOperationalAccess(
 
     // Preserve the tenant rollout/state integrity checks. Query failures,
     // missing tenants and invalid feature flags still fail closed.
-    await core.resolveOperationalAccess({
-      db: c.env.DB,
-      empresaId: Number((c.get as (key: string) => unknown)('empresaId') || 0),
-      userId: Number((c.get as (key: string) => unknown)('userId') || 0),
-      userRole,
-    });
+    await core.isTenantRbacEnabled(
+      c.env.DB,
+      Number((c.get as (key: string) => unknown)('empresaId') || 0),
+    );
 
     // The qualification handlers themselves always resolve the resource
     // with empresa_id from the authenticated tenant. A cross-tenant id

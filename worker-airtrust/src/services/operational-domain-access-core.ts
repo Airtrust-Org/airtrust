@@ -166,7 +166,7 @@ interface AssertOperationalAccessParams extends ResolveOperationalAccessParams {
  * controlled error that the route's error handler turns into a 500/503,
  * blocking the request rather than authorizing it.
  */
-async function isTenantRbacEnabled(db: D1Database, empresaId: number): Promise<boolean> {
+export async function isTenantRbacEnabled(db: D1Database, empresaId: number): Promise<boolean> {
   let row: { operational_domain_rbac_enabled: unknown } | null;
   try {
     row = await db
@@ -694,8 +694,8 @@ export function requireOperationalAccess(
       )
     ) {
       const funcRow = await c.env.DB.prepare(
-        `SELECT f.id FROM usuarios u 
-         JOIN funcionarios f ON f.id = u.funcionario_id 
+        `SELECT f.id FROM usuarios u
+         JOIN funcionarios f ON f.id = u.funcionario_id
          WHERE u.id = ? AND f.empresa_id = ? AND (u.deleted_at IS NULL OR u.deleted_at = 0) AND f.deleted_at IS NULL LIMIT 1`,
       )
         .bind(userId, empresaId)

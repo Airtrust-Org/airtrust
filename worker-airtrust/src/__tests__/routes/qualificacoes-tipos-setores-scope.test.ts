@@ -4,20 +4,26 @@ import type { Env } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
 
 vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: any, next: () => Promise<void>) => {
-      if (!c.req.header('Authorization')) {
-        return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
-      }
-      c.set('userId', 10);
-      c.set('empresaId', 1);
-      c.set('userRole', c.req.header('x-test-role') || 'admin');
-      await next();
-    },
+  auth: () => async (c: any, next: () => Promise<void>) => {
+    if (!c.req.header('Authorization')) {
+      return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
+    }
+    c.set('userId', 10);
+    c.set('empresaId', 1);
+    c.set('userRole', c.req.header('x-test-role') || 'admin');
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', () => ({
+  normalizeTenantRole: (role: unknown) =>
+    String(role || '')
+      .trim()
+      .toLowerCase() === 'gestor'
+      ? 'manager'
+      : String(role || '')
+          .trim()
+          .toLowerCase(),
   getTenantContext: (c: any) => ({
     empresaId: Number(c.get('empresaId') || 0),
     empresaCodigo: 'empresa-teste',
@@ -35,7 +41,10 @@ vi.mock('../../middleware/rbac', () => ({
       const role = String(c.get('userRole') || '').toLowerCase();
       if (!requiredRoles.map((item) => item.toLowerCase()).includes(role)) {
         return c.json(
-          { success: false, error: `Permissão negada. Acesso restrito a: ${requiredRoles.join(', ')}` },
+          {
+            success: false,
+            error: `Permissão negada. Acesso restrito a: ${requiredRoles.join(', ')}`,
+          },
           403,
         );
       }
@@ -50,8 +59,10 @@ vi.mock('../../services/employee-sector-access', () => ({
     if (role === 'manager') return { mode: 'restricted', setorIds: [1], funcionarioId: null };
     return { mode: 'restricted', setorIds: [], funcionarioId: null };
   },
-  filterRequestedSetorIdsByAccess: (requested: number[], access: { mode: string; setorIds: number[] }) =>
-    access.mode === 'all' ? requested : requested.filter((id) => access.setorIds.includes(id)),
+  filterRequestedSetorIdsByAccess: (
+    requested: number[],
+    access: { mode: string; setorIds: number[] },
+  ) => (access.mode === 'all' ? requested : requested.filter((id) => access.setorIds.includes(id))),
 }));
 
 vi.mock('../../services/qualificacoes-tipos-sync', () => ({
@@ -102,8 +113,20 @@ type QualificacoesTipoSetoresPayload = {
 function createMockEnv() {
   const tipos: TipoRecord[] = [
     { id: 1, codigo: 'CONDUTA', nome: 'Código de Conduta', categoria: 'Treinamento', setores: [] },
-    { id: 2, codigo: 'MNT-01', nome: 'Treinamento de Manutenção', categoria: 'Treinamento', setores: [{ id: 1, nome: 'Manutenção' }] },
-    { id: 3, codigo: 'TRIP-01', nome: 'Treinamento de Tripulação', categoria: 'Operacional', setores: [{ id: 2, nome: 'Tripulação' }] },
+    {
+      id: 2,
+      codigo: 'MNT-01',
+      nome: 'Treinamento de Manutenção',
+      categoria: 'Treinamento',
+      setores: [{ id: 1, nome: 'Manutenção' }],
+    },
+    {
+      id: 3,
+      codigo: 'TRIP-01',
+      nome: 'Treinamento de Tripulação',
+      categoria: 'Operacional',
+      setores: [{ id: 2, nome: 'Tripulação' }],
+    },
   ];
   const availableSetores = new Map<number, string>([
     [1, 'Manutenção'],
@@ -123,7 +146,11 @@ function createMockEnv() {
             return { operational_domain_rbac_enabled: 0 };
           }
 
-          if (query.includes("sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'")) {
+          if (
+            query.includes(
+              "sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'",
+            )
+          ) {
             return { name: 'qualificacoes_tipos_setores' };
           }
 
@@ -177,7 +204,11 @@ function createMockEnv() {
           return null;
         },
         all: async () => {
-          if (query.includes("sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'")) {
+          if (
+            query.includes(
+              "sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'",
+            )
+          ) {
             return { results: [{ name: 'qualificacoes_tipos_setores' }] };
           }
 
@@ -220,11 +251,9 @@ function createMockEnv() {
             return { results: tipo?.setores || [] };
           }
 
-          if (
-            query.includes('FROM qualificacoes_tipos qt') &&
-            query.includes('LIMIT ?')
-          ) {
-            const result = currentRole === 'manager' ? tipos.filter((item) => item.id !== 3) : tipos;
+          if (query.includes('FROM qualificacoes_tipos qt') && query.includes('LIMIT ?')) {
+            const result =
+              currentRole === 'manager' ? tipos.filter((item) => item.id !== 3) : tipos;
             return {
               results: result.map((tipo) => ({
                 ...tipo,
@@ -255,13 +284,21 @@ function createMockEnv() {
         },
       }),
       first: async () => {
-        if (query.includes("sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'")) {
+        if (
+          query.includes(
+            "sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'",
+          )
+        ) {
           return { name: 'qualificacoes_tipos_setores' };
         }
         return null;
       },
       all: async () => {
-        if (query.includes("sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'")) {
+        if (
+          query.includes(
+            "sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'",
+          )
+        ) {
           return { results: [{ name: 'qualificacoes_tipos_setores' }] };
         }
         return { results: [] };
