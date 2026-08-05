@@ -11,8 +11,10 @@ const fetchMock = vi.fn(async (request: Request) => {
       },
     });
   }
+
   return new Response('ok', { status: 200 });
 });
+
 const scheduledMock = vi.fn(async () => undefined);
 
 vi.mock('../../index', () => ({
@@ -30,12 +32,16 @@ const PROD_ORIGINS = [
   'https://airtrust.pages.dev',
   'https://production.airtrust.pages.dev',
 ].join(',');
+
 const STAGING_ORIGINS = [
   'https://staging.airtrust.pages.dev',
   'https://feature-123.airtrust.pages.dev',
 ].join(',');
 
-function env(corsOrigins: string, environment: Env['ENVIRONMENT']): Env {
+function env(
+  corsOrigins: string,
+  environment: Env['ENVIRONMENT'],
+): Env {
   return {
     CORS_ORIGINS: corsOrigins,
     ENVIRONMENT: environment,
@@ -71,32 +77,31 @@ describe('environment entrypoint origin isolation', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it(
-    'rejects staging, main, arbitrary preview, lookalike and null origins in production',
-    async () => {
-      for (const origin of [
-        'https://staging.airtrust.pages.dev',
-        'https://main.airtrust.pages.dev',
-        'https://feature-123.airtrust.pages.dev',
-        'https://airtrust.pages.dev.evil.example',
-        'null',
-      ]) {
-        const response = await environmentEntrypoint.fetch(
-          request(origin),
-          env(PROD_ORIGINS, 'production'),
-          {} as ExecutionContext,
-        );
+  it('rejects disallowed production origins before Hono', async () => {
+    const deniedOrigins = [
+      'https://staging.airtrust.pages.dev',
+      'https://main.airtrust.pages.dev',
+      'https://feature-123.airtrust.pages.dev',
+      'https://airtrust.pages.dev.evil.example',
+      'null',
+    ];
 
-        expect(response.status).toBe(403);
-        expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
-        expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
-      }
+    for (const origin of deniedOrigins) {
+      const response = await environmentEntrypoint.fetch(
+        request(origin),
+        env(PROD_ORIGINS, 'production'),
+        {} as ExecutionContext,
+      );
 
-      expect(fetchMock).not.toHaveBeenCalled();
-    },
-  );
+      expect(response.status).toBe(403);
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+      expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
+    }
 
-  it('allows a configured staging preview but rejects main and an arbitrary preview', async () => {
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('allows a configured staging preview and rejects unknown previews', async () => {
     const allowed = await environmentEntrypoint.fetch(
       request('https://feature-123.airtrust.pages.dev'),
       env(STAGING_ORIGINS, 'staging'),
@@ -104,10 +109,12 @@ describe('environment entrypoint origin isolation', () => {
     );
     expect(allowed.status).toBe(200);
 
-    for (const origin of [
+    const deniedOrigins = [
       'https://main.airtrust.pages.dev',
       'https://other-preview.airtrust.pages.dev',
-    ]) {
+    ];
+
+    for (const origin of deniedOrigins) {
       const denied = await environmentEntrypoint.fetch(
         request(origin),
         env(STAGING_ORIGINS, 'staging'),
@@ -117,31 +124,34 @@ describe('environment entrypoint origin isolation', () => {
     }
   });
 
-  it(
-    'rejects a disallowed preflight before Hono and preserves allowed credentialed preflight',
-    async () => {
-      const denied = await environmentEntrypoint.fetch(
-        request('https://unreviewed.airtrust.pages.dev', 'OPTIONS'),
-        env(PROD_ORIGINS, 'production'),
-        {} as ExecutionContext,
-      );
-      expect(denied.status).toBe(403);
-      expect(fetchMock).not.toHaveBeenCalled();
+  it('rejects a disallowed preflight before Hono', async () => {
+    const denied = await environmentEntrypoint.fetch(
+      request('https://unreviewed.airtrust.pages.dev', 'OPTIONS'),
+      env(PROD_ORIGINS, 'production'),
+      {} as ExecutionContext,
+    );
 
-      const allowed = await environmentEntrypoint.fetch(
-        request('https://airtrust.online', 'OPTIONS'),
-        env(PROD_ORIGINS, 'production'),
-        {} as ExecutionContext,
-      );
-      expect(allowed.status).toBe(204);
-      expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe(
-        'https://airtrust.online',
-      );
-      expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe('true');
-    },
-  );
+    expect(denied.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
-  it('allows requests without Origin for same-origin and server-to-server clients', async () => {
+  it('preserves an allowed credentialed preflight', async () => {
+    const allowed = await environmentEntrypoint.fetch(
+      request('https://airtrust.online', 'OPTIONS'),
+      env(PROD_ORIGINS, 'production'),
+      {} as ExecutionContext,
+    );
+
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe(
+      'https://airtrust.online',
+    );
+    expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe(
+      'true',
+    );
+  });
+
+  it('allows requests without Origin', async () => {
     const response = await environmentEntrypoint.fetch(
       request(),
       env(PROD_ORIGINS, 'production'),
