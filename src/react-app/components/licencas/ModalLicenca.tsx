@@ -9,6 +9,7 @@
  * ============================================================
  */
 
+import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { API_BASE_URL } from '@/react-app/config/api';
@@ -81,7 +82,9 @@ export default function ModalLicenca({
     if (!aberto) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [aberto]);
 
   // Carregar funcionários
@@ -90,22 +93,23 @@ export default function ModalLicenca({
 
     (async () => {
       try {
-        const apiUrl = API_BASE_URL;
-        const res = await fetch(`${apiUrl}/funcionarios`);
-        const json = await res.json();
-        const data = json.data || json.results || json;
+        const data = await apiJson<
+          Array<{ id: number; nome_completo?: string; nome?: string; matricula: string }>
+        >(`${API_BASE_URL}/funcionarios`);
 
         setFuncionarios(
           data.map(
             (f: { id: number; nome_completo?: string; nome?: string; matricula: string }) => ({
               id: f.id,
-              nome_completo: f.nome_completo || f.nome,
+              nome_completo: f.nome_completo || f.nome || 'Funcionário sem nome',
               matricula: f.matricula,
             }),
           ),
         );
       } catch (err) {
         console.error('Erro ao carregar funcionários:', err);
+        setFuncionarios([]);
+        setError(frontendErrorMessage(err));
       }
     })();
   }, [aberto]);
@@ -116,10 +120,9 @@ export default function ModalLicenca({
 
     (async () => {
       try {
-        const apiUrl = API_BASE_URL;
-        const res = await fetch(`${apiUrl}/licencas/${licencaId}`);
-        const json = await res.json();
-        const data = json.data || json;
+        const data = await apiJson<FormData & { funcionario_id: number }>(
+          `${API_BASE_URL}/licencas/${licencaId}`,
+        );
 
         setFormData({
           funcionario_id: data.funcionario_id,
@@ -131,7 +134,7 @@ export default function ModalLicenca({
         });
       } catch (err) {
         console.error('Erro ao carregar licença:', err);
-        setError('Erro ao carregar dados da licença');
+        setError(frontendErrorMessage(err));
       }
     })();
   }, [aberto, mode, licencaId]);
@@ -164,23 +167,17 @@ export default function ModalLicenca({
         observacoes: formData.observacoes?.trim() || null,
       };
 
-      const res = await fetch(url, {
+      await apiJson<unknown>(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Erro ao salvar licença');
-      }
-
       onSalvar();
       handleFechar();
     } catch (err) {
       console.error('Erro ao salvar licença:', err);
-      setError((err as Error).message || 'Erro ao salvar licença');
+      setError(frontendErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -234,7 +231,9 @@ export default function ModalLicenca({
               <label className="mb-1 block text-sm font-medium text-gray-700">Funcionário *</label>
               <select
                 value={formData.funcionario_id}
-                onChange={(e) => setFormData((prev) => ({ ...prev, funcionario_id: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, funcionario_id: e.target.value }))
+                }
                 required
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
               >

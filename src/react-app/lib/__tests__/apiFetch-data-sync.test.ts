@@ -25,9 +25,9 @@ describe('apiFetch data-change notifications', () => {
   it('emits the scale scope after a successful mutation', async () => {
     const callback = vi.fn();
     const cleanup = onDataChanged(callback, ['escala']);
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: true }), { status: 200 }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     Object.defineProperty(window, 'fetch', {
       configurable: true,
@@ -46,9 +46,9 @@ describe('apiFetch data-change notifications', () => {
   it('does not emit for GET requests', async () => {
     const callback = vi.fn();
     const cleanup = onDataChanged(callback, ['escala']);
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: true }), { status: 200 }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     Object.defineProperty(window, 'fetch', {
       configurable: true,
@@ -65,9 +65,9 @@ describe('apiFetch data-change notifications', () => {
   });
 
   it('authenticated requests with Authorization header skip fallback retry and cache', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: true }), { status: 200 }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     Object.defineProperty(window, 'fetch', {
       configurable: true,
@@ -89,9 +89,9 @@ describe('apiFetch data-change notifications', () => {
   });
 
   it('authenticated mutation requests do not persist origin override on fallback', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: true }), { status: 200 }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     Object.defineProperty(window, 'fetch', {
       configurable: true,
@@ -120,7 +120,11 @@ describe('apiFetch data-change notifications', () => {
       .mockResolvedValueOnce(new Response('not found', { status: 404 }))
       .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
 
     const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
       await loadApiFetchWithRemoteOrigin();
@@ -136,10 +140,17 @@ describe('apiFetch data-change notifications', () => {
 
   it('removes a persisted alternate origin before an authenticated Request is sent', async () => {
     vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
-    window.sessionStorage.setItem('API_ORIGIN_OVERRIDE', 'https://airtrust-api-production.airtrust.workers.dev');
+    window.sessionStorage.setItem(
+      'API_ORIGIN_OVERRIDE',
+      'https://airtrust-api-production.airtrust.workers.dev',
+    );
     const fetchMock = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
 
     const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
       await loadApiFetchWithRemoteOrigin();
@@ -164,7 +175,11 @@ describe('apiFetch data-change notifications', () => {
       .mockResolvedValueOnce(new Response('not found', { status: 404 }))
       .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
 
     const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
       await loadApiFetchWithRemoteOrigin();
@@ -182,7 +197,11 @@ describe('apiFetch data-change notifications', () => {
       .mockResolvedValueOnce(new Response('not found', { status: 404 }))
       .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
 
     const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
       await loadApiFetchWithRemoteOrigin();
@@ -200,7 +219,11 @@ describe('apiFetch data-change notifications', () => {
       .mockResolvedValueOnce(new Response('not found', { status: 404 }))
       .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
 
     const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
       await loadApiFetchWithRemoteOrigin();
@@ -215,8 +238,18 @@ describe('apiFetch data-change notifications', () => {
   });
 
   it.each([
-    ['cookie', () => { document.cookie = 'auth_token=test; path=/'; }],
-    ['storage', () => { window.sessionStorage.setItem('airtrust_token', 'test'); }],
+    [
+      'cookie',
+      () => {
+        document.cookie = 'auth_token=test; path=/';
+      },
+    ],
+    [
+      'storage',
+      () => {
+        window.sessionStorage.setItem('airtrust_token', 'test');
+      },
+    ],
   ])('does not fall back when authentication is supplied by %s', async (_source, authenticate) => {
     vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
     authenticate();
@@ -225,7 +258,11 @@ describe('apiFetch data-change notifications', () => {
       .mockResolvedValueOnce(new Response('not found', { status: 404 }))
       .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
     const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
       await loadApiFetchWithRemoteOrigin();
     installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
@@ -238,7 +275,11 @@ describe('apiFetch data-change notifications', () => {
     vi.stubEnv('VITE_ALLOW_API_ORIGIN_FALLBACK', 'true');
     const fetchMock = vi.fn().mockResolvedValue(new Response('not found', { status: 404 }));
     vi.stubGlobal('fetch', fetchMock);
-    Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
     const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
       await loadApiFetchWithRemoteOrigin();
     installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
@@ -256,7 +297,11 @@ describe('apiFetch data-change notifications', () => {
         .mockResolvedValueOnce(new Response('not found', { status: 404 }))
         .mockResolvedValueOnce(new Response('alternate', { status: 200 }));
       vi.stubGlobal('fetch', fetchMock);
-      Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: fetchMock });
+      Object.defineProperty(window, 'fetch', {
+        configurable: true,
+        writable: true,
+        value: fetchMock,
+      });
       const { apiFetch: configuredApiFetch, installGlobalApiFetch: installConfiguredApiFetch } =
         await loadApiFetchWithRemoteOrigin();
       installConfiguredApiFetch('https://airtrust-api.airtrust.workers.dev/api');
