@@ -75,13 +75,19 @@ export function requireRole(...roles: UserRole[]): MiddlewareHandler<{ Bindings:
 }
 
 /**
- * Helper: verificar se usuário tem role específica
+ * Helper: verificar se usuário tem role específica.
+ *
+ * A assinatura é genérica para preservar as Variables tipadas de cada contexto
+ * Hono sem alterar a lógica RBAC ou permitir novos papéis.
  *
  * @param c Context do Hono
  * @param roles Roles permitidas
  * @returns true se usuário tem uma das roles
  */
-export function hasRole(c: Context<{ Bindings: Env }>, ...roles: UserRole[]): boolean {
+export function hasRole<E extends { Bindings: Env }>(
+  c: Context<E>,
+  ...roles: UserRole[]
+): boolean {
   const userRole = normalizeRole((c.get as (key: string) => string | undefined)('userRole'));
   return !!userRole && roles.includes(userRole);
 }

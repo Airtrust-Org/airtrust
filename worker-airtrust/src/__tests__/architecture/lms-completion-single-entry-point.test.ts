@@ -1,26 +1,23 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const root = process.cwd();
+const cwd = process.cwd();
+const workerRoot = existsSync(join(cwd, 'src', 'middleware', 'domainEventProcessor.ts'))
+  ? cwd
+  : join(cwd, 'worker-airtrust');
 const domainMiddleware = readFileSync(
-  join(root, 'worker-airtrust/src/middleware/domainEventProcessor.ts'),
+  join(workerRoot, 'src/middleware/domainEventProcessor.ts'),
   'utf8',
 );
 const integrityMiddleware = readFileSync(
-  join(root, 'worker-airtrust/src/middleware/lms-completion-integrity.ts'),
+  join(workerRoot, 'src/middleware/lms-completion-integrity.ts'),
   'utf8',
 );
-const matriculasRoute = readFileSync(
-  join(root, 'worker-airtrust/src/routes/lms-matriculas.ts'),
-  'utf8',
-);
-const progressoRoute = readFileSync(
-  join(root, 'worker-airtrust/src/routes/lms-progresso.ts'),
-  'utf8',
-);
+const matriculasRoute = readFileSync(join(workerRoot, 'src/routes/lms-matriculas.ts'), 'utf8');
+const progressoRoute = readFileSync(join(workerRoot, 'src/routes/lms-progresso.ts'), 'utf8');
 const validationRoute = readFileSync(
-  join(root, 'worker-airtrust/src/routes/certificados/validacao.ts'),
+  join(workerRoot, 'src/routes/certificados/validacao.ts'),
   'utf8',
 );
 
@@ -68,7 +65,7 @@ describe('guard:lms-completion-single-entry-point', () => {
     expect(integrityMiddleware).toContain('LMS_REMATRICULATION_REQUIRED');
     expect(integrityMiddleware).toContain('/rematricular');
     expect(integrityMiddleware).toContain("status = 'NAO_INICIADO'");
-    expect(integrityMiddleware).toContain("INSERT INTO lms_matricula_ciclos");
+    expect(integrityMiddleware).toContain('INSERT INTO lms_matricula_ciclos');
     expect(integrityMiddleware).toContain('actorFuncionarioId !== existing.funcionario_id');
   });
 
