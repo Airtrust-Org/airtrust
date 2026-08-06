@@ -172,4 +172,63 @@ describe('LMS cursos domínio-agnósticos', () => {
     // O guard operacional falha (não tem dados), mas não é 500 de SQL error
     expect(response.status).not.toBe(500);
   });
+
+  it('não propaga exceção inesperada como 500 — fail-safe retorna false', async () => {
+    // Simula um DB que responde ao PRAGMA e ao SELECT normalmente, mas
+    // cujo prepare() subsequente quebra — qualquer exceção dentro de
+    // isDomainAgnosticLmsCurso deve ser capturada e retornar false,
+    // nunca propagar um 500.
+    const dbThrowingOnOperationalAccess = {
+      prepare: (sql: string) => {
+        // PRAGMA table_info — responde com a coluna dominio_codigo presente
+        if (sql.includes('pragma_table_info')) {
+          return {
+            bind: () => ({
+              all: async () => ({
+                results: [{ name: 'dominio_codigo' }, { name: 'id' }, { name: 'empresa_id' }],
+              }),
+            }),
+          };
+        }
+        // SELECT dominio_codigo FROM lms_cursos — responde com NULL
+        if (sql.includes('dominio_codigo FROM lms_cursos')) {
+          return {
+            bind: () => ({ first: async () => ({ dominio_codigo: null }) }),
+          };
+        }
+        // Qualquer outra query (resolveOperationalAccess) lança erro
+        return {
+          bind: () => {
+            throw new Error('D1 simulated failure');
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    // A exceção em resolveOperationalAccess NÃO deve causar 500
+    const app = new Hono<{ Bindings: Env }>();
+    app.onError(errorHandler);
+    app.use('*', async (ctx, next) => {
+      ctx.set('empresaId' as never, 2 as never);
+      ctx.set('userId' as never, 100 as never);
+      ctx.set('userRole' as never, 'gestor' as never);
+      await next();
+    });
+    app.put(
+      '/cursos/:id',
+      requireOperacoesCurso('update'),
+      () =>
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    );
+
+    const response = await app.request('http://localhost/cursos/502', { method: 'PUT' }, {
+      DB: dbThrowingOnOperationalAccess,
+    } as unknown as Env);
+
+    // O status NÃO deve ser 500 — o try/catch capturou a exceção e
+    // redirecionou para o guard normal (que pode dar 403 com o DB real).
+    expect(response.status).not.toBe(500);
+  });
 });

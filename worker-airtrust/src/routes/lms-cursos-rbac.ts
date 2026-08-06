@@ -48,32 +48,39 @@ async function isDomainAgnosticLmsCurso(params: {
   c: Context<{ Bindings: Env }>;
   cursoId: number;
 }): Promise<boolean> {
-  const userRole = getContextValue(params.c, 'userRole');
-  const normalizedRole = normalizeTenantRole(userRole);
-  if (normalizedRole !== 'admin' && normalizedRole !== 'manager') return false;
+  try {
+    const userRole = getContextValue(params.c, 'userRole');
+    const normalizedRole = normalizeTenantRole(userRole);
+    if (normalizedRole !== 'admin' && normalizedRole !== 'manager') return false;
 
-  const hasDominioCodigo = await hasColumn(params.db, 'lms_cursos', 'dominio_codigo');
-  if (!hasDominioCodigo) return false;
+    const hasDominioCodigo = await hasColumn(params.db, 'lms_cursos', 'dominio_codigo');
+    if (!hasDominioCodigo) return false;
 
-  const curso = await params.db
-    .prepare(
-      'SELECT dominio_codigo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
-    )
-    .bind(params.cursoId, params.empresaId)
-    .first<{ dominio_codigo: string | null }>();
+    const curso = await params.db
+      .prepare(
+        'SELECT dominio_codigo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+      )
+      .bind(params.cursoId, params.empresaId)
+      .first<{ dominio_codigo: string | null }>();
 
-  if (!curso || curso.dominio_codigo !== null) return false;
+    if (!curso || curso.dominio_codigo !== null) return false;
 
-  // Preserve fail-closed handling of a missing/invalid tenant flag and the
-  // requirement for an active operational setor assignment. The exemption
-  // removes only the domain check; it does not create operational access.
-  const access = await resolveOperationalAccess({
-    db: params.db,
-    empresaId: params.empresaId,
-    userId: Number(getContextValue(params.c, 'userId') || 0),
-    userRole,
-  });
-  return !access.enabled || access.setorIds.length > 0;
+    // Preserve fail-closed handling of a missing/invalid tenant flag and the
+    // requirement for an active operational setor assignment. The exemption
+    // removes only the domain check; it does not create operational access.
+    const access = await resolveOperationalAccess({
+      db: params.db,
+      empresaId: params.empresaId,
+      userId: Number(getContextValue(params.c, 'userId') || 0),
+      userRole,
+    });
+    return !access.enabled || access.setorIds.length > 0;
+  } catch {
+    // Any unexpected error (D1, proxy, infra) must never escalate to 500.
+    // Fail-safe: return false so the request falls through to the normal
+    // operational guard, which has its own error handling.
+    return false;
+  }
 }
 
 export const requireOperacoesCurso = (
