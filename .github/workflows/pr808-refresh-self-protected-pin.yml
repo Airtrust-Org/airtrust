@@ -1,4 +1,4 @@
-name: PR 808 refresh reviewed self-protected pin
+name: PR 808 temporary workflow cleanup
 
 on:
   push:
@@ -9,31 +9,16 @@ permissions:
   contents: write
 
 jobs:
-  refresh-pin:
+  cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: fix/migrations-deploy-safety-20260804
-      - name: Replace exact reviewed fingerprint
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('scripts/audit-dangerous-ops.sh')
-          old = '45eec03f36070cdb1fafe8c6afad05cb25e86d171b93e449ce367966291ae995'
-          new = '6b73a2c46202b21d618c8ad4263acb5bb5dfbb73be87013ce33780ae520e22f6'
-          text = p.read_text()
-          if text.count(old) != 1:
-              raise SystemExit(f'expected exactly one old pin, found {text.count(old)}')
-          p.write_text(text.replace(old, new))
-          PY
-      - name: Verify self-protected guard
-        run: bash scripts/audit-dangerous-ops.sh
-      - name: Commit reviewed pin only
+      - name: Remove this temporary workflow
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add scripts/audit-dangerous-ops.sh
-          git diff --cached --exit-code && exit 0 || true
-          git commit -m 'chore(ops): refresh reviewed migration wrapper protection pin'
+          git rm .github/workflows/pr808-refresh-self-protected-pin.yml
+          git commit -m 'ci: remove temporary PR 808 pin workflow'
           git push origin HEAD:fix/migrations-deploy-safety-20260804
