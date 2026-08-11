@@ -12,8 +12,7 @@ function normalizeOrigin(value?: string | null): string | null {
     return null;
   }
 
-  const isLocalhost =
-    parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
   const isSecure = parsed.protocol === 'https:';
   const isLocalHttp = parsed.protocol === 'http:' && isLocalhost;
   if (!isSecure && !isLocalHttp) return null;
@@ -26,9 +25,7 @@ function normalizeOrigin(value?: string | null): string | null {
   return parsed.origin;
 }
 
-export function parseEnvAllowedOrigins(
-  corsOrigins?: string | null,
-): string[] {
+export function parseEnvAllowedOrigins(corsOrigins?: string | null): string[] {
   if (!corsOrigins) return [];
 
   const normalizedOrigins = corsOrigins
@@ -39,20 +36,14 @@ export function parseEnvAllowedOrigins(
   return [...new Set(normalizedOrigins)];
 }
 
-export function isAllowedOrigin(
-  origin?: string | null,
-  corsOrigins?: string | null,
-): boolean {
+export function isAllowedOrigin(origin?: string | null, corsOrigins?: string | null): boolean {
   const normalizedOrigin = normalizeOrigin(origin);
   if (!normalizedOrigin) return false;
 
   return parseEnvAllowedOrigins(corsOrigins).includes(normalizedOrigin);
 }
 
-export function resolveAllowedOrigin(
-  origin?: string | null,
-  corsOrigins?: string | null,
-): string {
+export function resolveAllowedOrigin(origin?: string | null, corsOrigins?: string | null): string {
   const normalizedOrigin = normalizeOrigin(origin);
   if (!normalizedOrigin) return DENIED_CORS_ORIGIN;
   if (!isAllowedOrigin(normalizedOrigin, corsOrigins)) {
