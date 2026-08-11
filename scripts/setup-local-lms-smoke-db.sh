@@ -173,6 +173,7 @@ ensure_sqlite_column "empresas" "operational_domain_rbac_enabled" "INTEGER NOT N
 ensure_sqlite_column "qualificacoes_categorias" "dominio_codigo" "TEXT"
 ensure_sqlite_column "qualificacoes_categorias" "empresa_id" "INTEGER REFERENCES empresas(id)"
 ensure_sqlite_column "qualificacoes_tipos" "categoria_id" "INTEGER REFERENCES qualificacoes_categorias(id)"
+ensure_sqlite_column "qualificacoes_tipos" "dominio_codigo" "TEXT"
 
 printf 'setup:lms:local: ensuring local qualificacoes formatos bootstrap\n'
 sqlite3 "$SQLITE_FILE" <<'SQL'
