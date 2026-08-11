@@ -346,7 +346,7 @@ describe('matriz local apply + compensatory rollback', () => {
       // manoeuvre is used within *this* session, not an inherent catalog
       // property of the manobra).
       const expectedPayload = plan.manobra_resolution.find(
-        (e: any) => e.codigo_canonico === MISSING_CODE,
+        (e) => e.codigo_canonico === MISSING_CODE,
       )!.create_payload!;
       const persistedManobra = queryJson<
         Array<{
@@ -539,10 +539,11 @@ describe('matriz local apply + compensatory rollback', () => {
       ).toBe(51);
 
       // Intermediate failure rolls back: wrong fingerprint
-      const { plan_sha256: _drop, ...payload } = {
+      const payload: Record<string, unknown> = {
         ...plan2,
         base_fingerprint: 'f'.repeat(64),
       };
+      delete payload.plan_sha256;
       const broken = { ...payload, plan_sha256: sha256(payload) };
       expect(() =>
         applyPlan({ dbPath: db, plan: broken, importUuid: 'import-uuid-3', dryRun: false }),
@@ -573,7 +574,8 @@ describe('matriz local apply + compensatory rollback', () => {
 });
 
 function reseal(plan: Record<string, unknown>): PlanoDeterministico {
-  const { plan_sha256: _drop, ...payload } = plan;
+  const payload = { ...plan };
+  delete payload.plan_sha256;
   return sealPlan(payload) as unknown as PlanoDeterministico;
 }
 function withMutatedResolution(
@@ -618,7 +620,7 @@ describe('manobra resolution integrity: fails closed on any divergence from the 
     try {
       const plan2 = buildPlan(db);
       const targetCode = plan2.manobra_resolution.find(
-        (e: any) => e.resolution_type === 'EXACT_UNIQUE',
+        (e) => e.resolution_type === 'EXACT_UNIQUE',
       )!.codigo_canonico;
       const missingCodeManobraId = queryJson<Array<{ manobra_id: number }>>(
         db,
@@ -640,7 +642,7 @@ describe('manobra resolution integrity: fails closed on any divergence from the 
     try {
       const plan2 = buildPlan(db);
       const targetCode = plan2.manobra_resolution.find(
-        (e: any) => e.resolution_type === 'EXACT_UNIQUE',
+        (e) => e.resolution_type === 'EXACT_UNIQUE',
       )!.codigo_canonico;
       const mutated = withMutatedResolution(plan2, targetCode, {
         resolution_type: 'LEGACY_EQUIVALENT',
@@ -658,7 +660,7 @@ describe('manobra resolution integrity: fails closed on any divergence from the 
     try {
       const plan2 = buildPlan(db);
       const targetCode = plan2.manobra_resolution.find(
-        (e: any) => e.resolution_type === 'EXACT_UNIQUE',
+        (e) => e.resolution_type === 'EXACT_UNIQUE',
       )!.codigo_canonico;
       const mutated = withMutatedResolution(plan2, targetCode, { source_hash: 'f'.repeat(64) });
       expect(() =>
@@ -675,7 +677,7 @@ describe('manobra resolution integrity: fails closed on any divergence from the 
       const plan2 = buildPlan(db);
       const mutated = withMutatedResolution(plan2, MISSING_CODE, {
         create_payload: {
-          ...plan2.manobra_resolution.find((e: any) => e.codigo_canonico === MISSING_CODE)!
+          ...plan2.manobra_resolution.find((e) => e.codigo_canonico === MISSING_CODE)!
             .create_payload,
           categoria: 'CATEGORIA-ADULTERADA',
         },
