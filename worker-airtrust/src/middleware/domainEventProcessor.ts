@@ -51,7 +51,7 @@ async function recordMutationReceipt(
     c.req.header('x-request-id') ??
     c.req.header('cf-ray') ??
     null;
-  const userId = c.get('userId');
+  const userId = c.get('userId') ?? c.get('user')?.id;
   const payload = {
     method,
     path,
