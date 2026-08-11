@@ -372,6 +372,7 @@ export default function Qualificacoes() {
     nome: string;
     codigo?: string | null;
     categoria?: string | null;
+    categoria_id?: number | null;
     validade?: number | null;
     observacoes?: string | null;
     ativo?: boolean | number;
@@ -2855,6 +2856,9 @@ export default function Qualificacoes() {
                                     codigo: row.codigo ?? null,
                                     tipo: (row as { tipo?: string | null }).tipo ?? null,
                                     categoria: row.categoria ?? null,
+                                    categoria_id:
+                                      (row as { categoria_id?: number | null }).categoria_id ??
+                                      null,
                                     validade: row.validade ?? null,
                                     observacoes: row.observacoes ?? null,
                                     ativo: row.ativo ?? 1,
@@ -3977,11 +3981,7 @@ export default function Qualificacoes() {
                 onChange={(e) =>
                   setTurmaPlanejadaTipoTreinamento(
                     e.target.value as
-                      | 'INICIAL'
-                      | 'RECORRENTE'
-                      | 'SEMESTRAL'
-                      | 'UPGRADE'
-                      | 'ESPECIFICO',
+                      'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO',
                   )
                 }
                 options={[
@@ -4709,7 +4709,9 @@ export default function Qualificacoes() {
           <FormField label="Categoria" required>
             <Select
               value={editingTipo?.categoria || ''}
-              onChange={(e) =>
+              onChange={(e) => {
+                const selectedNome = (e.target as HTMLSelectElement).value;
+                const selectedCat = categorias.find((c) => c.nome === selectedNome);
                 setEditingTipo((prev) => ({
                   ...(prev || {
                     id: '',
@@ -4725,9 +4727,10 @@ export default function Qualificacoes() {
                     carga_horaria_recorrente: null,
                     is_check: 0,
                   }),
-                  categoria: (e.target as HTMLSelectElement).value,
-                }))
-              }
+                  categoria: selectedNome,
+                  categoria_id: selectedCat?.id ?? undefined,
+                }));
+              }}
               options={[
                 { value: '', label: '-- Selecione uma categoria --' },
                 ...categorias.map((cat) => ({

@@ -22,7 +22,11 @@ import {
 import { processarAlertas, deveBloquearLancamento } from '../../lib/frms/alertas';
 import { LIMITES_DEFAULT } from '../../lib/frms/types';
 import type { FrmsJornada, LimitesMap } from '../../lib/frms/types';
-import type { AcumuloRollingResult, PeriodoProjetado } from '../../lib/frms/calculos';
+import type {
+  AcumuloRollingInput,
+  AcumuloRollingResult,
+  PeriodoProjetado,
+} from '../../lib/frms/calculos';
 
 const limites = LIMITES_DEFAULT;
 
@@ -105,9 +109,12 @@ describe('calcFatorizacao', () => {
       diasDoMes: 31,
     });
 
+    // As razões básicas são diagnósticas (utilização do limite) e positivas...
     expect(result.fator_basica_pct).toBeGreaterThan(0);
+    expect(result.fator_hv_basica_pct).toBeGreaterThan(0);
+    // ...mas não entram nos totais, que somam apenas penalidades (≤ 0).
     expect(result.total_fatorizado_jornada).toBeLessThan(0);
-    expect(result.total_fatorizado_hv).toBeGreaterThan(0);
+    expect(result.total_fatorizado_hv).toBeLessThanOrEqual(0);
   });
 
   it('folga (FR) retorna todos zeros', () => {
@@ -212,9 +219,13 @@ describe('calcEffectiveness wake fallback', () => {
       diaDoCiclo: 1,
     });
 
-    const result = calcEffectiveness(fatorizacao, { ...limites, MINUTOS_ANTES_APRESENTACAO: 75 }, {
-      hora_apresentacao: '07:00',
-    });
+    const result = calcEffectiveness(
+      fatorizacao,
+      { ...limites, MINUTOS_ANTES_APRESENTACAO: 75 },
+      {
+        hora_apresentacao: '07:00',
+      },
+    );
 
     expect(result.hora_despertar).toBe('05:45');
   });
@@ -817,7 +828,7 @@ describe('calcAcumuloRolling — virada de ano', () => {
         hora_termino: '17:00',
         duracao_jornada_minutos: 660,
       },
-    ] as any[];
+    ] satisfies AcumuloRollingInput['jornadasHistorico'];
 
     const result = calcAcumuloRolling({
       tripulanteId: 1,
@@ -863,7 +874,7 @@ describe('calcAcumuloRolling — virada de ano', () => {
         hora_termino: '17:00',
         duracao_jornada_minutos: 660,
       },
-    ] as any[];
+    ] satisfies AcumuloRollingInput['jornadasHistorico'];
 
     const result = calcAcumuloRolling({
       tripulanteId: 1,
@@ -887,8 +898,9 @@ describe('calcFatorCicloEmbarcado', () => {
     CICLO_EMBARCADO_ATIVO: 1,
     CICLO_EMBARCADO_DIA_INICIO: 1,
     CICLO_EMBARCADO_DIA_MAX: 14,
+    // Escala canônica: fração assinada (ver LIMITES_DEFAULT e D-03).
     CICLO_EMBARCADO_PCT_MIN: 0,
-    CICLO_EMBARCADO_PCT_MAX: 10,
+    CICLO_EMBARCADO_PCT_MAX: -0.1,
   };
 
   it('retorna 0 quando funcionalidade desativada', () => {
@@ -909,18 +921,19 @@ describe('calcFatorCicloEmbarcado', () => {
   });
 
   it('dia 14 (máximo) retorna PCT_MAX', () => {
-    expect(calcFatorCicloEmbarcado(14, customLimites)).toBeCloseTo(10, 2);
+    expect(calcFatorCicloEmbarcado(14, customLimites)).toBeCloseTo(-0.1, 4);
   });
 
   it('dia intermediário interpola linearmente', () => {
-    // dia 7 de 14: (7-1)/(14-1) * 10 = 6/13 * 10 ≈ 4.6154
+    // dia 7 de 14: (7-1)/(14-1) * (-0,10) = 6/13 * (-0,10) ≈ -0,046154
     const result = calcFatorCicloEmbarcado(7, customLimites);
-    expect(result).toBeGreaterThan(4);
-    expect(result).toBeLessThan(5);
+    expect(result).toBeCloseTo(-0.0462, 4);
+    expect(result).toBeGreaterThan(-0.1);
+    expect(result).toBeLessThan(0);
   });
 
   it('dia além do máximo é capped em PCT_MAX', () => {
-    expect(calcFatorCicloEmbarcado(20, customLimites)).toBeCloseTo(10, 2);
+    expect(calcFatorCicloEmbarcado(20, customLimites)).toBeCloseTo(-0.1, 4);
   });
 
   it('dia 0 ou negativo retorna 0', () => {
@@ -963,8 +976,8 @@ describe('calcFatorizacao com limites customizados', () => {
     local_base: null,
   };
 
-  it('hora noturna gera fator com NOTURNO_FATOR configurável', () => {
-    const custom = { ...limites, NOTURNO_FATOR: 20 };
+  it('hora noturna gera fator com NOTURNO_FATOR configurável (escala fração)', () => {
+    const custom = { ...limites, NOTURNO_FATOR: -0.2 };
     const jornadaNoturna: FrmsJornada = {
       ...testJornada,
       hora_apresentacao: '23:00',
@@ -980,7 +993,32 @@ describe('calcFatorizacao com limites customizados', () => {
       limites: custom,
       diasDoMes: 31,
     });
-    expect(result.fator_noturno_dep_pct).toBe(20);
+    expect(result.fator_noturno_dep_pct).toBe(-0.2);
+  });
+
+  it('NOTURNO_FATOR em escala percentual exige FATORES_ESCALA explícito', () => {
+    const jornadaNoturna: FrmsJornada = {
+      ...testJornada,
+      hora_apresentacao: '23:00',
+      hora_termino: '07:00',
+      hora_primeira_decolagem: '23:30',
+      hora_ultimo_pouso: '06:30',
+      duracao_jornada_minutos: 480,
+      horas_voo_minutos: 180,
+    };
+    const args = { jornada: jornadaNoturna, repousoAnteriorMin: 720, diasDoMes: 31 };
+
+    // Declarada percentual: 20 significa 20 pontos → −0,20.
+    const percentual = calcFatorizacao({
+      ...args,
+      limites: { ...limites, NOTURNO_FATOR: 20, FATORES_ESCALA: 'PERCENTUAL' } as LimitesMap,
+    });
+    expect(percentual.fator_noturno_dep_pct).toBe(-0.2);
+
+    // Sem declarar, 20 está fora do domínio fracionário e satura em −1
+    // (falha fechada), em vez de ser reinterpretado silenciosamente.
+    const semDeclarar = calcFatorizacao({ ...args, limites: { ...limites, NOTURNO_FATOR: 20 } });
+    expect(semDeclarar.fator_noturno_dep_pct).toBe(-1);
   });
 
   it('calcAcumuloRolling retorna pct_limite_mes_calendario', () => {
@@ -1114,9 +1152,16 @@ describe('calcDuracaoJornada', () => {
     expect(calcDuracaoJornada(makeJ('FE', '06:00', '17:00'))).toBe(0);
   });
 
-  it('jornada ES retorna duração correta (deduz 60 min almoço)', () => {
-    // 06:00–17:00 = 660 min bruto − 60 min almoço = 600
-    expect(calcDuracaoJornada(makeJ('ES', '06:00', '17:00'))).toBe(600);
+  // RBAC 117 A117.23(b) e 117.3(n): a jornada é apresentação → encerramento.
+  // Nenhuma norma autoriza deduzir almoço presumido; só pausa registrada reduz.
+  it('jornada ES é apresentação → término, sem dedução presumida', () => {
+    // 06:00–17:00 = 660 min; sem pausa registrada, nada é deduzido.
+    expect(calcDuracaoJornada(makeJ('ES', '06:00', '17:00'))).toBe(660);
+  });
+
+  it('pausa registrada é deduzida; ausência de pausa não deduz nada', () => {
+    const comPausa = { ...makeJ('ES', '06:00', '17:00'), intervalo_pausa_minutos: 45 };
+    expect(calcDuracaoJornada(comPausa as FrmsJornada)).toBe(615);
   });
 
   it('jornada sem horários retorna 0', () => {
@@ -1124,14 +1169,14 @@ describe('calcDuracaoJornada', () => {
   });
 
   it('jornada cruzando meia-noite calcula corretamente', () => {
-    // 22:00–06:00 = 480 min bruto − 60 min almoço = 420
-    expect(calcDuracaoJornada(makeJ('ES', '22:00', '06:00'))).toBe(420);
+    // 22:00–06:00 = 480 min
+    expect(calcDuracaoJornada(makeJ('ES', '22:00', '06:00'))).toBe(480);
   });
 
   it('TS e TV contam como jornada (FDP)', () => {
-    // 08:00–12:00 = 240 min bruto − 60 min almoço = 180
-    expect(calcDuracaoJornada(makeJ('TS', '08:00', '12:00'))).toBe(180);
-    expect(calcDuracaoJornada(makeJ('TV', '14:00', '18:00'))).toBe(180);
+    // 08:00–12:00 = 240 min
+    expect(calcDuracaoJornada(makeJ('TS', '08:00', '12:00'))).toBe(240);
+    expect(calcDuracaoJornada(makeJ('TV', '14:00', '18:00'))).toBe(240);
   });
 });
 
@@ -1375,8 +1420,8 @@ describe('calcFatorizacao — tipo_base AWAY e aclimatado', () => {
 
   const limitesComFatores: LimitesMap = {
     ...limites,
-    FATOR_BASE_AWAY_PCT: 0.1,
-    FATOR_ACLIMATADO_NAO_PCT: 0.08,
+    FATOR_BASE_AWAY_PCT: -0.1,
+    FATOR_ACLIMATADO_NAO_PCT: -0.08,
     FATOR_TRIPULACAO_AUM_HORAS: 2.0,
   };
 
@@ -1391,25 +1436,25 @@ describe('calcFatorizacao — tipo_base AWAY e aclimatado', () => {
     expect(r.fator_aclimatacao_pct).toBe(0);
   });
 
-  it('AWAY → fator_base_away_pct = FATOR_BASE_AWAY_PCT (0.10)', () => {
+  it('AWAY → fator_base_away_pct = FATOR_BASE_AWAY_PCT (−0,10)', () => {
     const r = calcFatorizacao({
       jornada: { ...baseJornada, tipo_base: 'AWAY' },
       repousoAnteriorMin: 720,
       limites: limitesComFatores,
       diasDoMes: 31,
     });
-    expect(r.fator_base_away_pct).toBe(0.1);
+    expect(r.fator_base_away_pct).toBe(-0.1);
     expect(r.fator_aclimatacao_pct).toBe(0);
   });
 
-  it('aclimatado=0 → fator_aclimatacao_pct = FATOR_ACLIMATADO_NAO_PCT (0.08)', () => {
+  it('aclimatado=0 → fator_aclimatacao_pct = FATOR_ACLIMATADO_NAO_PCT (−0,08)', () => {
     const r = calcFatorizacao({
       jornada: { ...baseJornada, aclimatado: 0 },
       repousoAnteriorMin: 720,
       limites: limitesComFatores,
       diasDoMes: 31,
     });
-    expect(r.fator_aclimatacao_pct).toBe(0.08);
+    expect(r.fator_aclimatacao_pct).toBe(-0.08);
     expect(r.fator_base_away_pct).toBe(0);
   });
 
@@ -1420,8 +1465,8 @@ describe('calcFatorizacao — tipo_base AWAY e aclimatado', () => {
       limites: limitesComFatores,
       diasDoMes: 31,
     });
-    expect(r.fator_base_away_pct).toBe(0.1);
-    expect(r.fator_aclimatacao_pct).toBe(0.08);
+    expect(r.fator_base_away_pct).toBe(-0.1);
+    expect(r.fator_aclimatacao_pct).toBe(-0.08);
     const semFatores = calcFatorizacao({
       jornada: baseJornada,
       repousoAnteriorMin: 720,
@@ -1429,7 +1474,7 @@ describe('calcFatorizacao — tipo_base AWAY e aclimatado', () => {
       diasDoMes: 31,
     });
     expect(r.total_fatorizado_jornada).toBeCloseTo(
-      semFatores.total_fatorizado_jornada + 0.1 + 0.08,
+      semFatores.total_fatorizado_jornada - 0.1 - 0.08,
       6,
     );
   });
@@ -1473,7 +1518,7 @@ describe('processarAlertas — tripulacao_aumentada e FDP estendido', () => {
 
   const limitesComTripAum: LimitesMap = {
     ...LIMITES_DEFAULT,
-    FATOR_BASE_AWAY_PCT: 0.1,
+    FATOR_BASE_AWAY_PCT: -0.1,
     FATOR_ACLIMATADO_NAO_PCT: 0.1,
     FATOR_TRIPULACAO_AUM_HORAS: 2.0,
   };
@@ -1641,8 +1686,8 @@ describe('calcFatorizacao — folga/férias retorna novos campos zerados', () =>
       repousoAnteriorMin: 720,
       limites: {
         ...LIMITES_DEFAULT,
-        FATOR_BASE_AWAY_PCT: 0.1,
-        FATOR_ACLIMATADO_NAO_PCT: 0.08,
+        FATOR_BASE_AWAY_PCT: -0.1,
+        FATOR_ACLIMATADO_NAO_PCT: -0.08,
         FATOR_TRIPULACAO_AUM_HORAS: 2.0,
       },
       diasDoMes: 31,
@@ -1658,8 +1703,8 @@ describe('calcFatorizacao — folga/férias retorna novos campos zerados', () =>
       repousoAnteriorMin: 720,
       limites: {
         ...LIMITES_DEFAULT,
-        FATOR_BASE_AWAY_PCT: 0.1,
-        FATOR_ACLIMATADO_NAO_PCT: 0.08,
+        FATOR_BASE_AWAY_PCT: -0.1,
+        FATOR_ACLIMATADO_NAO_PCT: -0.08,
         FATOR_TRIPULACAO_AUM_HORAS: 2.0,
       },
       diasDoMes: 31,
@@ -1683,13 +1728,13 @@ describe('calcFatorizacao — folga/férias retorna novos campos zerados', () =>
       repousoAnteriorMin: 720,
       limites: {
         ...LIMITES_DEFAULT,
-        FATOR_BASE_AWAY_PCT: 0.1,
-        FATOR_ACLIMATADO_NAO_PCT: 0.08,
+        FATOR_BASE_AWAY_PCT: -0.1,
+        FATOR_ACLIMATADO_NAO_PCT: -0.08,
         FATOR_TRIPULACAO_AUM_HORAS: 2.0,
       },
       diasDoMes: 31,
     });
     // TRAINING with AWAY: AWAY penalty applies
-    expect(r.fator_base_away_pct).toBe(0.1);
+    expect(r.fator_base_away_pct).toBe(-0.1);
   });
 });

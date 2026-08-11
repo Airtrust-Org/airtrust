@@ -1,14 +1,9 @@
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { Env } from '../../types';
 
-const authState = vi.hoisted(() => ({
-  role: 'admin',
-  userId: 42,
-  empresaId: 77,
-}));
-
+const authState = vi.hoisted(() => ({ role: 'admin', userId: 42, empresaId: 77 }));
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
     c.set('userId', authState.userId);
@@ -17,118 +12,153 @@ vi.mock('../../middleware/auth', () => ({
     await next();
   },
 }));
-
 vi.mock('../../middleware/rbac', () => ({
-  requireRole: () => async (_c: unknown, next: () => Promise<void>) => {
-    await next();
-  },
+  requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
-
-vi.mock('../../routes/escalas-shared', () => ({
-  getEmpresaIdSafe: () => authState.empresaId,
-}));
+vi.mock('../../routes/escalas-shared', () => ({ getEmpresaIdSafe: () => authState.empresaId }));
 
 import lmsCursosRoutes from '../../routes/lms-cursos';
 
-function createTestApp() {
-  const app = new Hono<{ Bindings: Env }>();
-  app.onError((error, c) => {
+function app() {
+  const testApp = new Hono<{ Bindings: Env }>();
+  testApp.onError((error, c) => {
     const status =
       typeof error === 'object' && error && 'statusCode' in error
         ? Number((error as { statusCode?: number }).statusCode) || 500
         : 500;
-    return c.json({ success: false, error: error instanceof Error ? error.message : 'Erro interno' }, status as 200 | 400 | 401 | 403 | 404 | 409 | 422 | 500);
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : 'Erro interno' },
+      status as 400 | 500,
+    );
   });
-  app.route('/cursos', lmsCursosRoutes);
-  return app;
+  testApp.route('/cursos', lmsCursosRoutes);
+  return testApp;
 }
 
-function createDb() {
+function db() {
   return {
     prepare: vi.fn((query: string) => {
-      if (query.includes('SELECT id, empresa_id, titulo FROM lms_cursos')) {
+      if (query.includes('FROM sqlite_master')) {
+        return { bind: () => ({ first: async () => ({ ok: 1 }) }) };
+      }
+      if (/PRAGMA\s+table_info\s*\(\s*lms_cursos\s*\)/i.test(query)) {
         return {
-          bind: (..._args: unknown[]) => ({
-            first: async () => ({ id: 12, empresa_id: authState.empresaId, titulo: 'Offshore' }),
+          all: async () => ({
+            results: [
+              { name: 'id' },
+              { name: 'h5p_conteudo_id' },
+              { name: 'formato_id' },
+              { name: 'dominio_codigo' },
+            ],
           }),
         };
       }
-
-      if (query.includes('UPDATE lms_cursos')) {
+      if (query.includes('FROM lms_cursos')) {
         return {
-          bind: (..._args: unknown[]) => ({
-            run: async () => ({ meta: { changes: 1, last_row_id: 0 } }),
+          bind: () => ({
+            first: async () => ({
+              id: 12,
+              empresa_id: 77,
+              titulo: 'Offshore',
+              version_tag: 'v1',
+              scorm_package_r2_prefix: 'lms/scorm/77/12/',
+              tipo_conteudo: 'scorm',
+              h5p_conteudo_id: null,
+            }),
           }),
         };
       }
-
-      // This suite doesn't exercise the operational-domain RBAC feature —
-      // legacy tenant, flag resolves to 0 (disabled).
       if (query.includes('operational_domain_rbac_enabled')) {
-        return {
-          bind: (..._args: unknown[]) => ({
-            first: async () => ({ operational_domain_rbac_enabled: 0 }),
-          }),
-        };
+        return { bind: () => ({ first: async () => ({ operational_domain_rbac_enabled: 0 }) }) };
       }
-
-      throw new Error(`Unhandled query in structured upload complete test: ${query}`);
+      if (query.includes('UPDATE lms_cursos')) {
+        return { bind: () => ({ run: async () => ({ meta: { changes: 1, last_row_id: 0 } }) }) };
+      }
+      throw new Error(`Unhandled query: ${query}`);
     }),
   } as unknown as D1Database;
 }
 
-function createBucketWithObjects(keys: string[]) {
-  return {
-    list: vi.fn(async ({ prefix }: { prefix?: string }) => ({
-      objects: keys.filter((key) => (prefix ? key.startsWith(prefix) : true)).map((key) => ({ key })),
+class Bucket {
+  objects = new Map<string, Uint8Array>([
+    ['lms/scorm/77/12/index.html', new TextEncoder().encode('legacy')],
+  ]);
+  async put(key: string, value: string | ArrayBufferView) {
+    const bytes =
+      typeof value === 'string'
+        ? new TextEncoder().encode(value)
+        : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    this.objects.set(key, new Uint8Array(bytes));
+    return {};
+  }
+  async get(key: string) {
+    const bytes = this.objects.get(key);
+    if (!bytes) return null;
+    return {
+      size: bytes.byteLength,
+      text: async () => new TextDecoder().decode(bytes),
+      arrayBuffer: async () =>
+        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    };
+  }
+  async list({ prefix = '' }: { prefix?: string }) {
+    return {
+      objects: [...this.objects.entries()]
+        .filter(([key]) => key.startsWith(prefix))
+        .map(([key, bytes]) => ({ key, size: bytes.byteLength })),
       truncated: false,
       cursor: undefined,
       delimitedPrefixes: [],
-    })),
-    delete: vi.fn(async () => undefined),
-    put: vi.fn(async () => undefined),
-    get: vi.fn(async () => null),
-    head: vi.fn(async () => null),
-  } as unknown as R2Bucket;
+    };
+  }
+  async delete(keys: string | string[]) {
+    for (const key of Array.isArray(keys) ? keys : [keys]) this.objects.delete(key);
+  }
 }
 
 describe('lms cursos structured upload complete', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    authState.role = 'admin';
-    authState.userId = 42;
-    authState.empresaId = 77;
-  });
+  it('não aceita arquivo legado fora da versão para mascarar launch ausente', async () => {
+    const bucket = new Bucket();
+    const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;
+    const init = await app().request(
+      '/cursos/12/content-upload/init',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo_conteudo: 'scorm' }),
+      },
+      env,
+    );
+    const initJson = (await init.json()) as { data: { upload_id: string } };
+    const uploadId = initJson.data.upload_id;
 
-  it('falha quando skip_purge deixa arquivo legado mascarar falta de arquivo novo', async () => {
-    const prefix = 'lms/scorm/77/12/';
-    const bucket = createBucketWithObjects([
-      `${prefix}imsmanifest.xml`,
-      `${prefix}legacy-video.mp4`,
-    ]);
+    await app().request(
+      `/cursos/12/content-upload/file?tipo_conteudo=scorm&upload_id=${uploadId}&path=imsmanifest.xml`,
+      {
+        method: 'POST',
+        body: '<manifest><resources><resource href="index.html" /></resources></manifest>',
+      },
+      env,
+    );
 
-    const app = createTestApp();
-    const response = await app.request(
+    const response = await app().request(
       '/cursos/12/content-upload/complete',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tipo_conteudo: 'scorm',
-          launch_file: 'index.html',
-          scorm_versao: '1.2',
-          arquivo_nome: 'Operacoes_Offshore_SCORM12_Rev01.zip',
-          files_uploaded: 2,
-          uploaded_paths: ['imsmanifest.xml', 'app.js'],
+          upload_id: uploadId,
+          arquivo_nome: 'novo.zip',
         }),
       },
-      { DB: createDb(), BUCKET: bucket } as Env,
+      env,
     );
-
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       success: false,
-      error: 'Upload incompleto: 1/2 arquivos confirmados no storage',
+      error: expect.stringMatching(/launch file .* não existe/i),
     });
+    expect(bucket.objects.has('lms/scorm/77/12/index.html')).toBe(true);
   });
 });

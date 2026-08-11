@@ -1,21 +1,17 @@
 /**
- * FRMS — Funções puras de cálculo e fatorização científica
+ * FRMS — cálculos puros, determinísticos e com unidades explícitas.
  *
- * Modelo baseado em:
- *   - Borbély Two-Process Model (Process S homeostático + Process C circadiano)
- *   - ICAO Doc 9966 (Flight Crew Fatigue Risk Management)
- *   - RBAC 117 / IS 117-001 (regulamentação brasileira)
- *
- * ZERO HARDCODE: todos os parâmetros vêm de LimitesMap (banco de dados).
- * Todas as funções são puras (sem side-effects, sem acesso DB).
+ * A legislação e o RBAC estabelecem limites e princípios de gerenciamento de
+ * fadiga. A fórmula interna de effectiveness deste arquivo é um modelo
+ * empresarial versionável e ainda depende de validação formal de especialista.
  */
 
 import type {
-  FrmsJornada,
-  LimitesMap,
-  FrmsFatorizacao,
-  FrmsStatus,
   EffectivenessResult,
+  FrmsFatorizacao,
+  FrmsJornada,
+  FrmsStatus,
+  LimitesMap,
 } from './types';
 import { FDP_STATUS, FOLGA_STATUS } from './types';
 import {
@@ -27,85 +23,101 @@ import {
 import { resolverFrmsConfig } from './frms-config';
 import { shouldUseForRolling } from './frms-source-policy';
 
-// ────────────────────────────────────────────────────────────────────
-// Helpers de tempo
-// ────────────────────────────────────────────────────────────────────
+export type MomentoCalculoHvDia = 'PROJECAO_ANTES_JORNADA' | 'REALIZADO_APOS_JORNADA';
+export type RepousoEstado = 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO' | 'NAO_APLICAVEL';
 
-/** Converte "HH:MM" em minutos desde meia-noite */
+const MINUTOS_DIA = 1440;
+const OPERATIONAL_TIMEZONE_DEFAULT = 'America/Sao_Paulo';
+
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
+
+/**
+ * Escala em que os fatores configuráveis (`*_FATOR`, `*_PCT`) são interpretados.
+ *
+ * `LIMITES_DEFAULT` já usa fração assinada (-0,1 = −10 pontos de effectiveness),
+ * portanto `FRACAO` é o padrão e preserva o comportamento de produção.
+ */
+export type EscalaFatores = 'FRACAO' | 'PERCENTUAL';
+
+export function resolverEscalaFatores(limites?: Partial<LimitesMap> | null): EscalaFatores {
+  const declarada = (limites as { FATORES_ESCALA?: unknown } | null | undefined)?.FATORES_ESCALA;
+  return declarada === 'PERCENTUAL' ? 'PERCENTUAL' : 'FRACAO';
+}
+
+/**
+ * Converte um fator **configurado** em penalidade fracionária no domínio [-1, 0].
+ *
+ * A escala é declarada uma única vez por configuração (`FATORES_ESCALA`) e nunca
+ * inferida por valor. A inferência anterior (`|v| > 1 ? v/100 : v`) era
+ * descontínua e **não monotônica** em torno de |v| = 1: 1,0 → −1,0 enquanto
+ * 1,0001 → −0,010001, ou seja, aumentar a severidade configurada *reduzia* a
+ * penalidade aplicada em ~99 pontos. Ver D-03 em frms-scientific-audit.md.
+ *
+ * Valores fora do domínio saturam em −1 (falha fechada, penalidade máxima) em vez
+ * de serem reinterpretados silenciosamente em outra unidade.
+ */
+function toPenalty(value: number | null | undefined, escala: EscalaFatores): number {
+  if (!Number.isFinite(value)) return 0;
+  const magnitude = Math.abs(Number(value)) / (escala === 'PERCENTUAL' ? 100 : 1);
+  return -Math.min(1, magnitude);
+}
+
+/**
+ * Satura um valor que **já está** em escala fracionária. Usado em
+ * `calcEffectiveness`, onde as entradas são fatores previamente normalizados —
+ * aplicar `toPenalty` ali causaria dupla conversão sob `FATORES_ESCALA=PERCENTUAL`.
+ */
+function clampPenalty(value: number | null | undefined): number {
+  if (!Number.isFinite(value)) return 0;
+  return -Math.min(1, Math.abs(Number(value)));
+}
+
+/** Converte HH:MM válido em minutos; retorna 0 por compatibilidade legada. */
 export function hhmmToMinutes(hhmm: string | null | undefined): number {
-  if (!hhmm) return 0;
-  const parts = hhmm.split(':');
-  if (parts.length < 2) return 0;
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  if (isNaN(h) || isNaN(m)) return 0;
+  return parseHhmm(hhmm) ?? 0;
+}
+
+function parseHhmm(hhmm: string | null | undefined): number | null {
+  if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return null;
+  const [h, m] = hhmm.split(':').map(Number);
+  if (!Number.isInteger(h) || !Number.isInteger(m) || h < 0 || h > 23 || m < 0 || m > 59)
+    return null;
   return h * 60 + m;
 }
 
-/** Converte minutos em "HH:MM" */
 export function minutesToHhmm(min: number): string {
-  const normalized = ((min % 1440) + 1440) % 1440;
+  const normalized = ((Math.round(min) % MINUTOS_DIA) + MINUTOS_DIA) % MINUTOS_DIA;
   const h = Math.floor(normalized / 60);
   const m = normalized % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function calcularFatorBasicaCircadiano(horaAcordouMin: number): number {
-  const wakeMinutes = ((horaAcordouMin % 1440) + 1440) % 1440;
-
-  if (wakeMinutes >= 120 && wakeMinutes <= 239) return 0.55;
-  if (wakeMinutes >= 240 && wakeMinutes <= 359) return 0.6;
-  if (wakeMinutes >= 360 && wakeMinutes <= 479) return 0.7;
-  if (wakeMinutes >= 480 && wakeMinutes <= 599) return 0.845;
-  if (wakeMinutes >= 600 && wakeMinutes <= 719) return 0.87;
-  if (wakeMinutes >= 720 && wakeMinutes <= 839) return 0.845;
-  if (wakeMinutes >= 840 && wakeMinutes <= 1079) return 0.79;
-  if (wakeMinutes >= 1080 && wakeMinutes <= 1319) return 0.7;
-  return 0.61;
-}
-
-/** Calcula duração em minutos entre dois HH:MM (suporta cruzar meia-noite) */
 export function calcDuracaoMinutos(inicio: string | null, fim: string | null): number {
-  if (!inicio || !fim) return 0;
-  const i = hhmmToMinutes(inicio);
-  const f = hhmmToMinutes(fim);
-  if (f >= i) return f - i;
-  // Cruza meia-noite
-  return 1440 - i + f;
+  const i = parseHhmm(inicio);
+  const f = parseHhmm(fim);
+  if (i == null || f == null) return 0;
+  return f >= i ? f - i : MINUTOS_DIA - i + f;
 }
 
-/** Número de dias no mês */
 export function diasNoMes(ano: number, mes: number): number {
-  return new Date(ano, mes, 0).getDate();
+  return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
 }
 
-/** Extrai hora de "HH:MM" */
 export function getHora(hhmm: string | null | undefined): number {
-  if (!hhmm) return -1;
-  const h = parseInt(hhmm.split(':')[0], 10);
-  return isNaN(h) ? -1 : h;
+  const min = parseHhmm(hhmm);
+  return min == null ? -1 : Math.floor(min / 60);
 }
 
-/**
- * Verifica se hora está na janela noturna operacional (decolagem/pouso).
- * Nao confundir com WOCL fisiologica de despertar (02:00-06:00), tratada em `isWithinWOCL`.
- */
 export function isNoturno(hhmm: string | null | undefined, limites?: LimitesMap): boolean {
   const h = getHora(hhmm);
   if (h < 0) return false;
   const inicio = limites?.NOTURNO_INICIO_HORA ?? 22;
   const fim = limites?.NOTURNO_FIM_HORA ?? 5;
-  // Faixa que cruza meia-noite (ex: 22–05)
-  if (inicio > fim) return h >= inicio || h <= fim;
-  // Faixa que não cruza meia-noite
-  return h >= inicio && h <= fim;
+  return inicio > fim ? h >= inicio || h <= fim : h >= inicio && h <= fim;
 }
 
-// ────────────────────────────────────────────────────────────────────
-// Validação de repouso em plataforma
-// ────────────────────────────────────────────────────────────────────
-
-/** Verifica se repouso em plataforma é válido (entre 3h e 6h) */
 export function validarRepousoPlataforma(
   inicio: string | null,
   fim: string | null,
@@ -113,40 +125,39 @@ export function validarRepousoPlataforma(
 ): boolean {
   if (!inicio || !fim) return false;
   const duracao = calcDuracaoMinutos(inicio, fim);
-  const minMin = limites.REPOUSO_PLATAFORMA_MINIMO_HORAS * 60;
-  const maxMin = limites.REPOUSO_PLATAFORMA_MAXIMO_HORAS * 60;
-  return duracao >= minMin && duracao <= maxMin;
+  return (
+    duracao >= limites.REPOUSO_PLATAFORMA_MINIMO_HORAS * 60 &&
+    duracao <= limites.REPOUSO_PLATAFORMA_MAXIMO_HORAS * 60
+  );
 }
 
-// ────────────────────────────────────────────────────────────────────
-// Cálculo de duração de jornada
-// ────────────────────────────────────────────────────────────────────
-
-/** Intervalo de almoço deduzido da jornada diária (minutos) */
-const INTERVALO_ALMOCO_MIN = 60;
-
-/** Calcula duração de jornada em minutos (apresentação → término), deduzindo 1h de almoço */
+/**
+ * Jornada é apresentação → encerramento. Pausa só é deduzida quando registrada
+ * explicitamente em `intervalo_pausa_minutos`/`pausa_minutos`; não existe mais
+ * dedução fixa de almoço.
+ */
 export function calcDuracaoJornada(jornada: FrmsJornada): number {
   if (FOLGA_STATUS.includes(jornada.status)) return 0;
   if (!jornada.hora_apresentacao || !jornada.hora_termino) return 0;
   const bruto = calcDuracaoMinutos(jornada.hora_apresentacao, jornada.hora_termino);
-  return Math.max(0, bruto - INTERVALO_ALMOCO_MIN);
+  const extensao = jornada as FrmsJornada & {
+    intervalo_pausa_minutos?: number | null;
+    pausa_minutos?: number | null;
+  };
+  const pausa = Math.max(0, extensao.intervalo_pausa_minutos ?? extensao.pausa_minutos ?? 0);
+  return Math.max(0, bruto - pausa);
 }
-
-// ────────────────────────────────────────────────────────────────────
-// FATORIZAÇÃO DA JORNADA
-// ────────────────────────────────────────────────────────────────────
 
 interface FatorizacaoInput {
   jornada: FrmsJornada;
-  repousoAnteriorMin: number | null; // minutos de repouso desde a jornada anterior
+  repousoAnteriorMin: number | null;
   limites: LimitesMap;
-  diasDoMes: number; // quantos dias tem o mês de referência
-  diaDoCiclo?: number | null; // dia embarcado dentro do ciclo (1..N) — null se não aplicável
+  diasDoMes: number;
+  diaDoCiclo?: number | null;
 }
 
-interface FatorizacaoResult {
-  // Fatores da jornada
+export interface FatorizacaoResult {
+  /** Campos `_pct` históricos; todos os fatores abaixo estão em escala fracionária 0–1. */
   fator_basica_pct: number;
   fator_apresentacao_pct: number;
   fator_duracao_pct: number;
@@ -157,7 +168,6 @@ interface FatorizacaoResult {
   fator_base_away_pct: number;
   fator_aclimatacao_pct: number;
   total_fatorizado_jornada: number;
-  // Fatores das horas de voo
   fator_hv_basica_pct: number;
   fator_hv_quantidade_pct: number;
   fator_hv_noturno_dep_pct: number;
@@ -165,69 +175,40 @@ interface FatorizacaoResult {
   total_fatorizado_hv: number;
 }
 
-/**
- * Calcula fatorização completa de uma jornada.
- * Função pura — todos os inputs fornecidos, nenhum acesso DB.
- *
- * Zero hardcode: todos os limiares e fatores vêm de `limites` (LimitesMap).
- */
 export function calcFatorizacao(input: FatorizacaoInput): FatorizacaoResult {
-  const { jornada, repousoAnteriorMin, limites, diasDoMes, diaDoCiclo } = input;
-
-  // Folga → zeros
-  if (FOLGA_STATUS.includes(jornada.status)) {
-    return zeroFatorizacao();
-  }
+  const { jornada, repousoAnteriorMin, limites, diaDoCiclo } = input;
+  if (FOLGA_STATUS.includes(jornada.status)) return zeroFatorizacao();
 
   const duracaoMin = jornada.duracao_jornada_minutos ?? calcDuracaoJornada(jornada);
-  const hvMin = jornada.horas_voo_minutos ?? 0;
-
-  // ES sem horário preenchido → padrão especial da planilha
-  const isFdpStatus = FDP_STATUS.includes(jornada.status);
+  const hvMin = Math.max(0, jornada.horas_voo_minutos ?? 0);
   const semHorario = !jornada.hora_apresentacao || !jornada.hora_termino;
-
-  if (isFdpStatus && semHorario && duracaoMin === 0) {
+  if (FDP_STATUS.includes(jornada.status) && semHorario && duracaoMin === 0) {
     return fatorizacaoDiaSemJornada(limites);
   }
 
-  // ── 1. BÁSICA (jornada) ──
-  // Proporção da duração desta jornada em relação ao FDP máximo diário (0–1 escala)
-  // ⚠️ NÃO multiplica por 100 aqui — mantém na mesma escala fracionária dos demais fatores
-  const jornadaMaxMesMin = limites.FDP_MAXIMO_HORAS * 60;
-  const fator_basica_pct = jornadaMaxMesMin > 0 ? round4(duracaoMin / jornadaMaxMesMin) : 0;
-
-  // ── 2. APRESENTAÇÃO (configurável por faixa horária) ──
+  const escala = resolverEscalaFatores(limites);
+  const fdpMaxMin = limites.FDP_MAXIMO_HORAS * 60;
+  const fator_basica_pct = fdpMaxMin > 0 ? round4(duracaoMin / fdpMaxMin) : 0;
   const fator_apresentacao_pct = calcFatorApresentacao(jornada.hora_apresentacao, limites);
-
-  // ── 3. DURAÇÃO (configurável) ──
   const fator_duracao_pct = calcFatorDuracao(duracaoMin, limites);
-
-  // ── 4. REPOUSO (configurável) ──
-  const fator_repouso_pct = calcFatorRepouso(repousoAnteriorMin, jornada.status, limites);
-
-  // ── 5. NOTURNO DECOLAGEM (janela noturna operacional — configurável) ──
+  const fator_repouso_pct = calcFatorRepousoConfigurado(
+    repousoAnteriorMin,
+    jornada.status,
+    limites,
+  );
   const fator_noturno_dep_pct = isNoturno(jornada.hora_primeira_decolagem, limites)
-    ? limites.NOTURNO_FATOR
+    ? toPenalty(limites.NOTURNO_FATOR, escala)
     : 0;
-
-  // ── 6. NOTURNO CHEGADA (janela noturna operacional — configurável) ──
   const fator_noturno_arr_pct = isNoturno(jornada.hora_ultimo_pouso, limites)
-    ? limites.NOTURNO_FATOR
+    ? toPenalty(limites.NOTURNO_FATOR, escala)
     : 0;
-
-  // ── 7. CICLO EMBARCADO (Process S acúmulo — Borbély) ──
   const fator_ciclo_embarcado_pct = calcFatorCicloEmbarcado(diaDoCiclo ?? null, limites);
+  const fator_base_away_pct =
+    jornada.tipo_base === 'AWAY' ? toPenalty(limites.FATOR_BASE_AWAY_PCT, escala) : 0;
+  const fator_aclimatacao_pct =
+    jornada.aclimatado === 0 ? toPenalty(limites.FATOR_ACLIMATADO_NAO_PCT, escala) : 0;
 
-  // ── 8. BASE AWAY (operação fora da base domícilio) ──
-  const fator_base_away_pct = jornada.tipo_base === 'AWAY' ? limites.FATOR_BASE_AWAY_PCT : 0;
-
-  // ── 9. NÃO-ACLIMATADO ──
-  const fator_aclimatacao_pct = jornada.aclimatado === 0 ? limites.FATOR_ACLIMATADO_NAO_PCT : 0;
-
-  // ⚠️ fator_basica_pct NÃO entra no total:
-  // — Representa proporção do FDP usado hoje (0–1, positivo), não uma penalidade de fadiga.
-  // — Incluí-lo tornaria o total sempre positivo, clampeando effectiveness em 100% (bug original).
-  // — Duração já é capturada como penalidade por fator_duracao_pct (LONGA/CURTA → -0.1).
+  // A básica é apenas razão diagnóstica de utilização do limite; não é somada como risco.
   const total_fatorizado_jornada = round4(
     fator_apresentacao_pct +
       fator_duracao_pct +
@@ -239,24 +220,14 @@ export function calcFatorizacao(input: FatorizacaoInput): FatorizacaoResult {
       fator_aclimatacao_pct,
   );
 
-  // ═══ FATORIZAÇÃO DAS HORAS DE VOO ═══
-
-  // ── 1. BÁSICA (HV) ──
-  const hvMaxMesMin = limites.HV_MES_HORAS * 60;
-  const fator_hv_basica_pct = hvMaxMesMin > 0 ? round4((hvMin / hvMaxMesMin) * 100) : 0;
-
-  // ── 2. QUANTIDADE DE HV (configurável) ──
+  const hvDiaLimiteMin = limites.HV_DIARIA_HORAS * 60;
+  const fator_hv_basica_pct = hvDiaLimiteMin > 0 ? round4(hvMin / hvDiaLimiteMin) : 0;
   const fator_hv_quantidade_pct = calcFatorHvQuantidade(hvMin, limites);
-
-  // ── 3–4. NOTURNO (mesmos valores) ──
   const fator_hv_noturno_dep_pct = fator_noturno_dep_pct;
   const fator_hv_noturno_arr_pct = fator_noturno_arr_pct;
-
+  // Também exclui a razão básica diagnóstica, evitando mistura 0–1 com 0–100.
   const total_fatorizado_hv = round4(
-    fator_hv_basica_pct +
-      fator_hv_quantidade_pct +
-      fator_hv_noturno_dep_pct +
-      fator_hv_noturno_arr_pct,
+    fator_hv_quantidade_pct + fator_hv_noturno_dep_pct + fator_hv_noturno_arr_pct,
   );
 
   return {
@@ -278,124 +249,90 @@ export function calcFatorizacao(input: FatorizacaoInput): FatorizacaoResult {
   };
 }
 
-// ────────────────────────────────────────────────────────────────────
-// Sub-funções de fatorização
-// ────────────────────────────────────────────────────────────────────
-
-/** Fator de apresentação por horário de início (configurável via limites) */
-function calcFatorApresentacao(horaApresentacao: string | null, limites: LimitesMap): number {
-  const h = getHora(horaApresentacao);
-  if (h < 0) return 0;
-
+function calcFatorApresentacao(hora: string | null, limites: LimitesMap): number {
+  const escala = resolverEscalaFatores(limites);
+  const h = getHora(hora);
+  if (h < 0) return toPenalty(limites.APRESENTACAO_NOITE_FATOR, escala);
   if (h >= limites.APRESENTACAO_AMANHECER_H_MIN && h <= limites.APRESENTACAO_AMANHECER_H_MAX)
-    return limites.APRESENTACAO_AMANHECER_FATOR;
+    return toPenalty(limites.APRESENTACAO_AMANHECER_FATOR, escala);
   if (h >= limites.APRESENTACAO_DIURNO_H_MIN && h <= limites.APRESENTACAO_DIURNO_H_MAX)
-    return limites.APRESENTACAO_DIURNO_FATOR;
+    return toPenalty(limites.APRESENTACAO_DIURNO_FATOR, escala);
   if (h >= limites.APRESENTACAO_TARDE_H_MIN && h <= limites.APRESENTACAO_TARDE_H_MAX)
-    return limites.APRESENTACAO_TARDE_FATOR;
+    return toPenalty(limites.APRESENTACAO_TARDE_FATOR, escala);
   if (h >= limites.APRESENTACAO_MADRUGADA_H_MIN && h <= limites.APRESENTACAO_MADRUGADA_H_MAX)
-    return limites.APRESENTACAO_MADRUGADA_FATOR;
-  // Noite (18h–23h59)
-  return limites.APRESENTACAO_NOITE_FATOR;
-}
-
-/** Fator de duração da jornada (configurável via limites) */
-function calcFatorDuracao(duracaoMin: number, limites: LimitesMap): number {
-  if (duracaoMin > limites.DURACAO_LONGA_MINUTOS) return limites.DURACAO_LONGA_FATOR;
-  if (duracaoMin < limites.DURACAO_CURTA_MINUTOS) return limites.DURACAO_CURTA_FATOR;
-  return limites.DURACAO_NORMAL_FATOR;
-}
-
-/** Fator de repouso — tempo desde última jornada (configurável) */
-function calcFatorRepouso(repousoMin: number | null, status: string, limites: LimitesMap): number {
-  if (FOLGA_STATUS.includes(status as never)) return 0;
-  if (repousoMin === null || repousoMin < 0) return 0; // primeiro dia do ciclo
-
-  if (repousoMin >= limites.REPOUSO_ADEQUADO_MINUTOS) return limites.REPOUSO_ADEQUADO_FATOR;
-  if (repousoMin >= limites.REPOUSO_RUIM_MINUTOS) return limites.REPOUSO_RUIM_FATOR;
-  return limites.REPOUSO_CRITICO_FATOR;
-}
-
-/** Fator de quantidade de HV no dia (configurável) */
-function calcFatorHvQuantidade(hvMin: number, limites: LimitesMap): number {
-  if (hvMin >= limites.HV_MUITAS_MINUTOS) return limites.HV_MUITAS_FATOR;
-  if (hvMin < limites.HV_POUCAS_MINUTOS) return limites.HV_POUCAS_FATOR;
-  return limites.HV_NORMAL_FATOR;
+    return toPenalty(limites.APRESENTACAO_MADRUGADA_FATOR, escala);
+  return toPenalty(limites.APRESENTACAO_NOITE_FATOR, escala);
 }
 
 /**
- * Fator Ciclo Embarcado — Process S (Borbély)
+ * Duração não recebe bônus; jornadas longas recebem a penalidade configurada.
  *
- * Modela acúmulo homeostático de fadiga durante ciclo offshore/embarcado.
- * Interpolação linear de PCT_MIN (dia 1) a PCT_MAX (dia N).
- * Após dia N, permanece em PCT_MAX.
- *
- * @param diaDoCiclo — dia corrente dentro do embarque (1-based). null = não embarcado.
- * @param limites — configuração carregada do banco
+ * `DURACAO_CURTA_MINUTOS`/`DURACAO_CURTA_FATOR` permanecem em `LimitesMap` por
+ * compatibilidade de schema mas **não são lidos** — jornada curta não atenua
+ * fadiga. Ver D-05 em frms-scientific-audit.md.
  */
+function calcFatorDuracao(duracaoMin: number, limites: LimitesMap): number {
+  const escala = resolverEscalaFatores(limites);
+  if (duracaoMin > limites.DURACAO_LONGA_MINUTOS)
+    return toPenalty(limites.DURACAO_LONGA_FATOR, escala);
+  return toPenalty(limites.DURACAO_NORMAL_FATOR, escala);
+}
+
+function calcFatorRepousoConfigurado(
+  repousoMin: number | null,
+  status: string,
+  limites: LimitesMap,
+): number {
+  const escala = resolverEscalaFatores(limites);
+  if (FOLGA_STATUS.includes(status as FrmsStatus)) return 0;
+  if (repousoMin == null || repousoMin < 0) return toPenalty(limites.REPOUSO_CRITICO_FATOR, escala);
+  if (repousoMin >= limites.REPOUSO_ADEQUADO_MINUTOS)
+    return toPenalty(limites.REPOUSO_ADEQUADO_FATOR, escala);
+  if (repousoMin >= limites.REPOUSO_RUIM_MINUTOS)
+    return toPenalty(limites.REPOUSO_RUIM_FATOR, escala);
+  return toPenalty(limites.REPOUSO_CRITICO_FATOR, escala);
+}
+
+function calcFatorHvQuantidade(hvMin: number, limites: LimitesMap): number {
+  const escala = resolverEscalaFatores(limites);
+  const fatoresOrdenados = [
+    toPenalty(limites.HV_POUCAS_FATOR, escala),
+    toPenalty(limites.HV_NORMAL_FATOR, escala),
+    toPenalty(limites.HV_MUITAS_FATOR, escala),
+  ].sort((a, b) => b - a);
+  if (hvMin >= limites.HV_MUITAS_MINUTOS) return fatoresOrdenados[2];
+  if (hvMin < limites.HV_POUCAS_MINUTOS) return fatoresOrdenados[0];
+  return fatoresOrdenados[1];
+}
+
 export function calcFatorCicloEmbarcado(
   diaDoCiclo: number | null | undefined,
   limites: LimitesMap,
 ): number {
   if (!limites.CICLO_EMBARCADO_ATIVO) return 0;
   if (diaDoCiclo == null || diaDoCiclo < limites.CICLO_EMBARCADO_DIA_INICIO) return 0;
-
-  const diaInicio = limites.CICLO_EMBARCADO_DIA_INICIO;
-  const diaMax = limites.CICLO_EMBARCADO_DIA_MAX;
-  const pctMin = limites.CICLO_EMBARCADO_PCT_MIN;
-  const pctMax = limites.CICLO_EMBARCADO_PCT_MAX;
-
-  if (diaDoCiclo >= diaMax) return pctMax;
-
-  // Interpolação linear
-  const range = diaMax - diaInicio;
-  if (range <= 0) return pctMax;
-  const progresso = (diaDoCiclo - diaInicio) / range;
-  return round4(pctMin + progresso * (pctMax - pctMin));
+  const escala = resolverEscalaFatores(limites);
+  const inicio = limites.CICLO_EMBARCADO_DIA_INICIO;
+  const max = limites.CICLO_EMBARCADO_DIA_MAX;
+  const fatorInicial = toPenalty(limites.CICLO_EMBARCADO_PCT_MIN, escala);
+  const fatorMaximo = toPenalty(limites.CICLO_EMBARCADO_PCT_MAX, escala);
+  if (diaDoCiclo >= max || max <= inicio) return fatorMaximo;
+  const progresso = (diaDoCiclo - inicio) / (max - inicio);
+  return round4(fatorInicial + progresso * (fatorMaximo - fatorInicial));
 }
 
-/**
- * Padrão para dia ES/TS/TV/EX/RE/SA sem horário de apresentação preenchido.
- *
- * Assume pior caso operacional:
- *   - Apresentação: faixa noturna (APRESENTACAO_NOITE_FATOR) — sem horário registrado
- *   - Duração: zero minutos → calcFatorDuracao(0) → faixa curta
- *   - Repouso: desconhecido → REPOUSO_RUIM_FATOR (pior caso seguro)
- *
- * Todos os valores vêm de `LimitesMap` — zero hardcode.
- */
 function fatorizacaoDiaSemJornada(limites: LimitesMap): FatorizacaoResult {
-  // Apresentação: assume faixa noturna (18h–23h) como pior caso sem horário
-  const fator_apresentacao_pct = limites.APRESENTACAO_NOITE_FATOR;
-  // Duração zero → faixa curta
-  const fator_duracao_pct = calcFatorDuracao(0, limites);
-  // Repouso desconhecido → categoria ruim (pior caso conservador)
-  const fator_repouso_pct = limites.REPOUSO_RUIM_FATOR;
-
-  const total_fatorizado_jornada = round4(
-    fator_apresentacao_pct + fator_duracao_pct + fator_repouso_pct,
-  );
-
+  const escala = resolverEscalaFatores(limites);
+  const fator_apresentacao_pct = toPenalty(limites.APRESENTACAO_NOITE_FATOR, escala);
+  const fator_repouso_pct = toPenalty(limites.REPOUSO_CRITICO_FATOR, escala);
   return {
-    fator_basica_pct: 0,
+    ...zeroFatorizacao(),
     fator_apresentacao_pct,
-    fator_duracao_pct,
     fator_repouso_pct,
-    fator_noturno_dep_pct: 0,
-    fator_noturno_arr_pct: 0,
-    fator_ciclo_embarcado_pct: 0,
-    fator_base_away_pct: 0,
-    fator_aclimatacao_pct: 0,
-    total_fatorizado_jornada,
-    fator_hv_basica_pct: 0,
-    fator_hv_quantidade_pct: 0,
-    fator_hv_noturno_dep_pct: 0,
-    fator_hv_noturno_arr_pct: 0,
-    total_fatorizado_hv: 0,
+    total_fatorizado_jornada: round4(fator_apresentacao_pct + fator_repouso_pct),
   };
 }
 
-/** Zeros para folga */
 function zeroFatorizacao(): FatorizacaoResult {
   return {
     fator_basica_pct: 0,
@@ -416,22 +353,6 @@ function zeroFatorizacao(): FatorizacaoResult {
   };
 }
 
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
-}
-
-// ────────────────────────────────────────────────────────────────────
-// EFFECTIVENESS (proxy local inspirado em modelos biomatemáticos + sono offshore)
-// ────────────────────────────────────────────────────────────────────
-
-/**
- * Converte a fatorização da jornada em um score de Effectiveness (0–100%).
- *
- * Modelo heurístico local para operação offshore:
- * - Referências conceituais: ICAO Doc 9966, FAA AC 120-103A e literatura biomatemática.
- * - Não é implementação validada de SAFTE-FAST proprietária.
- * - Pressupostos: despertar configurável antes da apresentação e sono padrão quando ausente.
- */
 export function calcEffectiveness(
   fatorizacao: FatorizacaoResult,
   limites: LimitesMap,
@@ -442,56 +363,51 @@ export function calcEffectiveness(
     hora_corte_motor?: string | null;
     hora_termino?: string | null;
     hora_dormiu?: string | null;
+    hora_acordou?: string | null;
     dia_periodo_embarcado?: number | null;
     total_dias_periodo?: number | null;
   },
 ): EffectivenessResult {
+  // Mantém o contrato histórico para consumidores que fornecem apenas a fatorização.
+  if (!jornada) return calcEffectivenessLegado(fatorizacao, limites);
+
   const cfgSono = resolverFrmsConfig(limites);
+  const apresentacaoMin = parseHhmm(jornada.hora_apresentacao);
+  const acordouMin = parseHhmm(jornada.hora_acordou);
+  const dormiuMin = parseHhmm(jornada.hora_dormiu);
 
-  let duracao_sono_efetiva_min: number | null = null;
-  let hora_despertar: string | null = null;
-  let hora_inicio_sono: string | null = null;
+  let duracaoSono: number | null = null;
+  let horaDespertar: string | null = null;
+  let horaInicioSono: string | null = null;
   let fonteSono: 'PADRAO' | 'INFORMADO' = 'PADRAO';
-  let acordouNaWOCL = false;
-  let fatorApresentacaoWocl = fatorizacao.fator_apresentacao_pct;
-  let fatorBasicaAjustada = fatorizacao.fator_basica_pct;
+  let despertarEstimado = true;
+  let acordouNaWocl = false;
+  let fatorCircadiano = fatorizacao.fator_apresentacao_pct;
 
-  const parseHoraDormiuMin = (value?: string | null): number | null => {
-    if (!value || !/^\d{2}:\d{2}$/.test(value)) return null;
-    const [h, m] = value.split(':').map(Number);
-    if (!Number.isInteger(h) || !Number.isInteger(m) || h < 0 || h > 23 || m < 0 || m > 59)
-      return null;
-    return h * 60 + m;
-  };
-
-  if (jornada?.hora_apresentacao) {
+  if (apresentacaoMin != null || acordouMin != null) {
     const sono = calcularSono({
-      horaApresentacaoMin: hhmmToMinutes(jornada.hora_apresentacao),
+      horaApresentacaoMin: apresentacaoMin ?? acordouMin ?? 0,
       minutosAntesApresentacao: cfgSono.minutosAntesApresentacao,
       horasSonoPadrao: cfgSono.horasSonoPadrao,
-      horaDormiu: parseHoraDormiuMin(jornada.hora_dormiu),
+      horaDormiu: dormiuMin,
+      horaAcordou: acordouMin,
     });
-
-    duracao_sono_efetiva_min = sono.sonoEfetivoMin;
-    hora_despertar = minutesToHhmm(sono.tAcordouMin);
-    hora_inicio_sono = minutesToHhmm(sono.tDormiuMin);
+    duracaoSono = sono.sonoEfetivoMin;
+    horaDespertar = minutesToHhmm(sono.tAcordouMin);
+    horaInicioSono = minutesToHhmm(sono.tDormiuMin);
     fonteSono = sono.fonteSono;
-
-    acordouNaWOCL = isWithinWOCL(sono.tAcordouMin);
-    fatorApresentacaoWocl = acordouNaWOCL ? calcularPenalidadeWOCL(sono.tAcordouMin) : 0;
-    fatorBasicaAjustada = calcularFatorBasicaCircadiano(sono.tAcordouMin);
+    despertarEstimado = sono.despertarEstimado;
+    acordouNaWocl = isWithinWOCL(sono.tAcordouMin);
+    fatorCircadiano = acordouNaWocl ? calcularPenalidadeWOCL(sono.tAcordouMin) : 0;
   }
 
-  // === PROCESSO S: débito de sono → impacto na efetividade ===
-  const fatorRepousoCalibrado =
-    duracao_sono_efetiva_min !== null
-      ? calcularFatorRepouso(duracao_sono_efetiva_min)
-      : fatorizacao.fator_repouso_pct;
+  const fatorRepouso =
+    duracaoSono == null
+      ? clampPenalty(fatorizacao.fator_repouso_pct)
+      : calcularFatorRepouso(duracaoSono);
 
-  // === FATOR PROGRESSIVO DE FADIGA POR DURAÇÃO DO PERÍODO EMBARCADO ===
-  const progMaxPct = (limites.FRMS_EMBARQUE_PROGRESSO_MAX ?? 8) / 100;
-  const diaPeriodo = jornada?.dia_periodo_embarcado ?? null;
-  const totalPeriodo = jornada?.total_dias_periodo ?? null;
+  const diaPeriodo = jornada.dia_periodo_embarcado ?? null;
+  const totalPeriodo = jornada.total_dias_periodo ?? null;
   let fatorProgressivo = 0;
   if (
     totalPeriodo != null &&
@@ -500,93 +416,132 @@ export function calcEffectiveness(
     diaPeriodo >= 1 &&
     diaPeriodo <= totalPeriodo
   ) {
-    const frac = (diaPeriodo - 1) / (totalPeriodo - 1);
-    fatorProgressivo = -progMaxPct * frac;
+    const max = -Math.abs(limites.FRMS_EMBARQUE_PROGRESSO_MAX ?? 8) / 100;
+    fatorProgressivo = max * ((diaPeriodo - 1) / (totalPeriodo - 1));
   }
 
-  // === EFFECTIVENESS FINAL ===
-  const totalCalibradoBase =
-    fatorizacao.total_fatorizado_jornada +
-    (duracao_sono_efetiva_min !== null
-      ? fatorRepousoCalibrado - fatorizacao.fator_repouso_pct
-      : 0) +
-    (fatorApresentacaoWocl - fatorizacao.fator_apresentacao_pct) +
-    (fatorBasicaAjustada - fatorizacao.fator_basica_pct);
-  const totalCalibrado = totalCalibradoBase + fatorProgressivo;
-
-  const effectiveness = Math.max(0, Math.min(100, 100 + totalCalibrado * 100));
-
-  // === CLASSIFICAÇÃO ===
-  const verde = limites.EFFECTIV_VERDE_MIN ?? 90;
-  const amarelo = limites.EFFECTIV_AMARELO_MAX ?? 77;
-  const vermelho = limites.EFFECTIV_VERMELHO_MAX ?? 65;
-
-  const nivel: EffectivenessResult['nivel'] =
-    effectiveness >= verde
-      ? 'verde'
-      : effectiveness <= vermelho
-        ? 'vermelho'
-        : effectiveness <= amarelo
-          ? 'amarelo'
-          : 'atencao';
-
-  // === TEMPO ABAIXO DO LIMIAR (estimativa para offshore) ===
-  const isApresentacaoNoturna = fatorizacao.fator_noturno_dep_pct !== 0;
-  const isChegadaNoturna = fatorizacao.fator_noturno_arr_pct !== 0;
-  const isRepousoCurto = fatorRepousoCalibrado < -0.05;
-
+  // Fórmula empresarial v2: soma somente grandezas adimensionais fracionárias
+  // com sinal de penalidade. Razões diagnósticas e percentuais 0–100 ficam fora.
+  const totalCalibrado = round4(
+    clampPenalty(fatorCircadiano) +
+      clampPenalty(fatorizacao.fator_duracao_pct) +
+      clampPenalty(fatorRepouso) +
+      clampPenalty(fatorizacao.fator_noturno_dep_pct) +
+      clampPenalty(fatorizacao.fator_noturno_arr_pct) +
+      clampPenalty(fatorizacao.fator_ciclo_embarcado_pct) +
+      clampPenalty(fatorizacao.fator_base_away_pct) +
+      clampPenalty(fatorizacao.fator_aclimatacao_pct) +
+      clampPenalty(fatorizacao.fator_hv_quantidade_pct) +
+      fatorProgressivo,
+  );
+  const rawEffectiveness = 100 + totalCalibrado * 100;
+  const effectiveness = Math.max(0, Math.min(100, rawEffectiveness));
+  const nivel = classificarEffectiveness(effectiveness, limites);
   const tempoAbaixoLimiarMin =
-    (isApresentacaoNoturna ? 45 : 0) + (isChegadaNoturna ? 30 : 0) + (isRepousoCurto ? 30 : 0);
+    (fatorizacao.fator_noturno_dep_pct < 0 ? 45 : 0) +
+    (fatorizacao.fator_noturno_arr_pct < 0 ? 30 : 0) +
+    (fatorRepouso < -0.05 ? 30 : 0);
 
   return {
     effectiveness_pct: Math.round(effectiveness * 10) / 10,
     nivel,
     tempo_abaixo_limiar_pct: tempoAbaixoLimiarMin,
     fatorizacao_delta: fatorizacao.total_fatorizado_jornada,
-    fator_basica_calibrado_pct: round4(fatorBasicaAjustada),
-    fator_apresentacao_calibrado_pct: round4(fatorApresentacaoWocl),
-    fator_repouso_calibrado_pct: round4(fatorRepousoCalibrado),
-    total_fatorizado_calibrado_jornada: round4(totalCalibradoBase),
-    duracao_sono_efetiva_min,
-    hora_despertar,
-    hora_inicio_sono,
+    fator_basica_calibrado_pct: 0,
+    fator_apresentacao_calibrado_pct: round4(fatorCircadiano),
+    fator_repouso_calibrado_pct: round4(fatorRepouso),
+    total_fatorizado_calibrado_jornada: totalCalibrado,
+    duracao_sono_efetiva_min: duracaoSono,
+    hora_despertar: horaDespertar,
+    hora_inicio_sono: horaInicioSono,
     fonte_sono: fonteSono,
-    acordou_na_wocl: acordouNaWOCL,
+    despertar_estimado: despertarEstimado,
+    acordou_na_wocl: acordouNaWocl,
     dia_periodo_embarcado: diaPeriodo,
     total_dias_periodo: totalPeriodo,
     componentes: {
-      processo_s: round4(fatorizacao.fator_ciclo_embarcado_pct),
+      processo_s: round4(fatorizacao.fator_ciclo_embarcado_pct + fatorProgressivo),
       processo_c: round4(
-        fatorApresentacaoWocl +
-          fatorizacao.fator_noturno_dep_pct +
-          fatorizacao.fator_noturno_arr_pct,
+        fatorCircadiano + fatorizacao.fator_noturno_dep_pct + fatorizacao.fator_noturno_arr_pct,
       ),
-      repouso: round4(fatorRepousoCalibrado),
+      repouso: round4(fatorRepouso),
       hv: round4(fatorizacao.fator_hv_quantidade_pct),
       duracao: round4(fatorizacao.fator_duracao_pct),
     },
   };
 }
 
-// ────────────────────────────────────────────────────────────────────
-// ACÚMULO ROLLING
-// ────────────────────────────────────────────────────────────────────
+function calcEffectivenessLegado(
+  fatorizacao: FatorizacaoResult,
+  limites: LimitesMap,
+): EffectivenessResult {
+  const effectiveness = Math.max(
+    0,
+    Math.min(100, 100 + fatorizacao.total_fatorizado_jornada * 100),
+  );
+  return {
+    effectiveness_pct: Math.round(effectiveness * 10) / 10,
+    nivel: classificarEffectiveness(effectiveness, limites),
+    tempo_abaixo_limiar_pct:
+      (fatorizacao.fator_noturno_dep_pct !== 0 ? 45 : 0) +
+      (fatorizacao.fator_noturno_arr_pct !== 0 ? 30 : 0) +
+      (fatorizacao.fator_repouso_pct < -0.05 ? 30 : 0),
+    fatorizacao_delta: fatorizacao.total_fatorizado_jornada,
+    fator_basica_calibrado_pct: fatorizacao.fator_basica_pct,
+    fator_apresentacao_calibrado_pct: fatorizacao.fator_apresentacao_pct,
+    fator_repouso_calibrado_pct: fatorizacao.fator_repouso_pct,
+    total_fatorizado_calibrado_jornada: fatorizacao.total_fatorizado_jornada,
+    duracao_sono_efetiva_min: null,
+    hora_despertar: null,
+    hora_inicio_sono: null,
+    fonte_sono: 'PADRAO',
+    despertar_estimado: true,
+    acordou_na_wocl: false,
+    dia_periodo_embarcado: null,
+    total_dias_periodo: null,
+    componentes: {
+      processo_s: fatorizacao.fator_ciclo_embarcado_pct,
+      processo_c:
+        fatorizacao.fator_apresentacao_pct +
+        fatorizacao.fator_noturno_dep_pct +
+        fatorizacao.fator_noturno_arr_pct,
+      repouso: fatorizacao.fator_repouso_pct,
+      hv: fatorizacao.fator_hv_quantidade_pct,
+      duracao: fatorizacao.fator_duracao_pct,
+    },
+  };
+}
+
+function classificarEffectiveness(
+  effectiveness: number,
+  limites: LimitesMap,
+): EffectivenessResult['nivel'] {
+  const verde = limites.EFFECTIV_VERDE_MIN ?? 90;
+  const amarelo = limites.EFFECTIV_AMARELO_MAX ?? 77;
+  const vermelho = limites.EFFECTIV_VERMELHO_MAX ?? 65;
+  if (effectiveness >= verde) return 'verde';
+  if (effectiveness <= vermelho) return 'vermelho';
+  if (effectiveness <= amarelo) return 'amarelo';
+  return 'atencao';
+}
+
+type JornadaRolling = Pick<
+  FrmsJornada,
+  | 'data'
+  | 'status'
+  | 'horas_voo_minutos'
+  | 'hora_termino'
+  | 'hora_apresentacao'
+  | 'duracao_jornada_minutos'
+> & { origem?: string | null };
 
 export interface AcumuloRollingInput {
   tripulanteId: number;
-  dataReferencia: string; // YYYY-MM-DD
-  jornadasHistorico: Array<
-    Pick<
-      FrmsJornada,
-      | 'data'
-      | 'status'
-      | 'horas_voo_minutos'
-      | 'hora_termino'
-      | 'hora_apresentacao'
-      | 'duracao_jornada_minutos'
-    > & { origem?: string | null }
-  >;
+  dataReferencia: string;
+  jornadasHistorico: JornadaRolling[];
   limites: LimitesMap;
+  momentoCalculoHvDia?: MomentoCalculoHvDia;
+  timeZone?: string;
 }
 
 export interface AcumuloRollingResult {
@@ -602,210 +557,248 @@ export interface AcumuloRollingResult {
   pct_limite_dia: number;
   repouso_anterior_min: number;
   repouso_suficiente: number;
+  repouso_estado?: RepousoEstado;
+  /** Mínimo exigido para esta jornada (RBAC 117 A117.23(b)), em minutos. */
+  repouso_minimo_requerido_min?: number;
+  /** Duração da jornada anterior usada para escolher o patamar de repouso. */
+  duracao_jornada_anterior_min?: number | null;
+  momento_calculo_hv_dia?: MomentoCalculoHvDia;
+  timezone_operacional?: string;
 }
 
-function parseDateTimeOrNull(value: string): Date | null {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
+function parseIsoDay(date: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const ms = Date.UTC(year, month - 1, day);
+  const check = new Date(ms);
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day
+  )
+    return null;
+  return Math.floor(ms / 86400000);
 }
 
-function estimateJornadaInterval(
-  jornada: Pick<
-    FrmsJornada,
-    'data' | 'hora_apresentacao' | 'hora_termino' | 'duracao_jornada_minutos' | 'status'
-  >,
-): { start: Date; end: Date } | null {
-  const startText = jornada.hora_apresentacao
-    ? `${jornada.data}T${jornada.hora_apresentacao}:00`
-    : `${jornada.data}T00:00:00`;
-  const start = parseDateTimeOrNull(startText);
-  if (!start) return null;
+function civilMinute(date: string, hhmm: string | null): number | null {
+  const day = parseIsoDay(date);
+  const minute = parseHhmm(hhmm);
+  return day == null || minute == null ? null : day * MINUTOS_DIA + minute;
+}
 
-  if (jornada.hora_termino) {
-    const sameDayEnd = parseDateTimeOrNull(`${jornada.data}T${jornada.hora_termino}:00`);
-    if (!sameDayEnd) return null;
-    const end = sameDayEnd > start ? sameDayEnd : new Date(sameDayEnd.getTime() + 86400000);
+function resolveJornadaInterval(jornada: JornadaRolling): { start: number; end: number } | null {
+  const start = civilMinute(jornada.data, jornada.hora_apresentacao);
+  if (start == null) return null;
+  const fimMin = parseHhmm(jornada.hora_termino);
+  if (fimMin != null) {
+    const dia = parseIsoDay(jornada.data);
+    if (dia == null) return null;
+    let end = dia * MINUTOS_DIA + fimMin;
+    if (end <= start) end += MINUTOS_DIA;
     return { start, end };
   }
+  const duracao = jornada.duracao_jornada_minutos ?? 0;
+  return duracao > 0 ? { start, end: start + duracao } : null;
+}
 
-  const fallbackMinutes = Math.max(0, jornada.duracao_jornada_minutos ?? 0);
-  if (fallbackMinutes <= 0) return null;
-  return { start, end: new Date(start.getTime() + fallbackMinutes * 60000) };
+function findReferenceJornada(data: string, jornadas: JornadaRolling[]): JornadaRolling | null {
+  return (
+    jornadas.find((j) => j.data === data && FDP_STATUS.includes(j.status as FrmsStatus)) ?? null
+  );
 }
 
 function calcHvRolling24h(
   dataReferencia: string,
-  jornadasHistorico: Pick<
-    FrmsJornada,
-    | 'data'
-    | 'status'
-    | 'horas_voo_minutos'
-    | 'hora_termino'
-    | 'hora_apresentacao'
-    | 'duracao_jornada_minutos'
-  >[],
+  jornadas: JornadaRolling[],
+  momento: MomentoCalculoHvDia,
 ): number {
-  const jornadaRef = jornadasHistorico.find(
-    (j) => j.data === dataReferencia && FDP_STATUS.includes(j.status as never),
-  );
+  const referencia = findReferenceJornada(dataReferencia, jornadas);
+  if (!referencia) return 0;
+  const intervaloRef = resolveJornadaInterval(referencia);
+  if (!intervaloRef) return 0;
+  const windowEnd = momento === 'PROJECAO_ANTES_JORNADA' ? intervaloRef.start : intervaloRef.end;
+  const windowStart = windowEnd - MINUTOS_DIA;
+  let hv = 0;
 
-  const refDateTime = parseDateTimeOrNull(
-    `${dataReferencia}T${jornadaRef?.hora_apresentacao || '23:59'}:00`,
-  );
-  if (!refDateTime) return 0;
-
-  const windowStartMs = refDateTime.getTime() - 24 * 60 * 60 * 1000;
-  const windowEndMs = refDateTime.getTime();
-
-  let hv24h = 0;
-
-  for (const j of jornadasHistorico) {
-    const hv = j.horas_voo_minutos ?? 0;
-    if (hv <= 0) continue;
-
-    const interval = estimateJornadaInterval(j);
-    if (!interval) {
-      if (j.data === dataReferencia) hv24h += hv;
-      continue;
-    }
-
-    const startMs = interval.start.getTime();
-    const endMs = interval.end.getTime();
-    if (endMs <= startMs) continue;
-
-    const overlapStart = Math.max(startMs, windowStartMs);
-    const overlapEnd = Math.min(endMs, windowEndMs);
-    if (overlapEnd <= overlapStart) continue;
-
-    const overlapRatio = (overlapEnd - overlapStart) / (endMs - startMs);
-    hv24h += hv * overlapRatio;
+  for (const jornada of jornadas) {
+    const minutosVoo = Math.max(0, jornada.horas_voo_minutos ?? 0);
+    if (minutosVoo === 0) continue;
+    const intervalo = resolveJornadaInterval(jornada);
+    if (!intervalo || intervalo.end <= intervalo.start) continue;
+    const inicioSobreposicao = Math.max(intervalo.start, windowStart);
+    const fimSobreposicao = Math.min(intervalo.end, windowEnd);
+    if (fimSobreposicao <= inicioSobreposicao) continue;
+    hv += minutosVoo * ((fimSobreposicao - inicioSobreposicao) / (intervalo.end - intervalo.start));
   }
-
-  return Math.round(hv24h);
+  return Math.round(hv);
 }
 
 /**
- * Calcula acúmulo rolling (janelas deslizantes) para um tripulante numa data.
- * Resolve o problema crítico da planilha que não cruzava meses.
+ * Repouso mínimo regulamentar exigido, em minutos.
+ *
+ * Fonte: RBAC nº 117 EMD 01, Apêndice A, seção **A117.23(b)** — "O tempo mínimo
+ * de repouso tem duração relacionada ao tempo da jornada anterior":
+ *
+ * | Jornada anterior      | Repouso mínimo |
+ * | --------------------- | -------------- |
+ * | até 12 h              | 12 h           |
+ * | > 12 h e até 15 h     | 16 h           |
+ * | > 15 h                | 24 h           |
+ *
+ * A117.23(c) permite limites diferentes aprovados pela ANAC e constantes do
+ * manual do operador; por isso os patamares são configuráveis. `Math.max` com
+ * `REPOUSO_MINIMO_HORAS` garante que a configuração do operador só possa ser
+ * **mais** restritiva que o piso declarado, nunca menos.
+ *
+ * Não modelado aqui: A117.23(d) (+2 h por fuso quando cruzados 3 ou mais) —
+ * o schema não registra fusos cruzados. Ver D-09 em frms-scientific-audit.md.
  */
-export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingResult {
-  const { dataReferencia, jornadasHistorico, limites } = input;
-  const operationalHistorico = jornadasHistorico.filter((j) => {
-    if (!('origem' in j)) return true;
-    return shouldUseForRolling(j as { origem?: string | null });
-  });
+export function repousoMinimoRequeridoMin(
+  duracaoJornadaAnteriorMin: number | null,
+  limites: LimitesMap,
+): number {
+  const base = Math.max(0, limites.REPOUSO_MINIMO_HORAS * 60);
+  if (duracaoJornadaAnteriorMin == null || !Number.isFinite(duracaoJornadaAnteriorMin)) {
+    return base;
+  }
+  const cfg = limites as LimitesMap & {
+    REPOUSO_MINIMO_APOS_JORNADA_12_15_HORAS?: number;
+    REPOUSO_MINIMO_APOS_JORNADA_MAIOR_15_HORAS?: number;
+  };
+  if (duracaoJornadaAnteriorMin > 15 * 60) {
+    return Math.max(base, (cfg.REPOUSO_MINIMO_APOS_JORNADA_MAIOR_15_HORAS ?? 24) * 60);
+  }
+  if (duracaoJornadaAnteriorMin > 12 * 60) {
+    return Math.max(base, (cfg.REPOUSO_MINIMO_APOS_JORNADA_12_15_HORAS ?? 16) * 60);
+  }
+  return base;
+}
 
-  const refDate = new Date(dataReferencia + 'T00:00:00');
-  const refYear = refDate.getFullYear();
-  const refMonth = refDate.getMonth() + 1;
+function calcRepousoAnterior(
+  dataReferencia: string,
+  jornadas: JornadaRolling[],
+): {
+  minutos: number;
+  duracaoAnteriorMin: number | null;
+  estadoBase: 'CALCULADO' | 'DESCONHECIDO' | 'NAO_APLICAVEL';
+} {
+  const atual = findReferenceJornada(dataReferencia, jornadas);
+  if (!atual) return { minutos: -1, duracaoAnteriorMin: null, estadoBase: 'NAO_APLICAVEL' };
+  const intervaloAtual = resolveJornadaInterval(atual);
+  if (!intervaloAtual) {
+    return { minutos: -1, duracaoAnteriorMin: null, estadoBase: 'DESCONHECIDO' };
+  }
 
-  // Filter por janelas
-  const d7 = dateOffset(dataReferencia, -6);
-  const d28 = dateOffset(dataReferencia, -27);
-  const d365 = dateOffset(dataReferencia, -364);
-
-  let hv7 = 0,
-    hv28 = 0,
-    hv365 = 0,
-    hvMes = 0,
-    hvDia = 0;
-
-  for (const j of operationalHistorico) {
-    const hv = j.horas_voo_minutos ?? 0;
-    if (hv <= 0) continue;
-
-    if (j.data >= d7 && j.data <= dataReferencia) hv7 += hv;
-    if (j.data >= d28 && j.data <= dataReferencia) hv28 += hv;
-    if (j.data >= d365 && j.data <= dataReferencia) hv365 += hv;
-
-    // Mês calendário
-    const jDate = new Date(j.data + 'T00:00:00');
-    if (jDate.getFullYear() === refYear && jDate.getMonth() + 1 === refMonth) {
-      hvMes += hv;
+  let ultimoFim: number | null = null;
+  let duracaoAnteriorMin: number | null = null;
+  let integridadeComprometida = false;
+  for (const jornada of jornadas) {
+    if (!FDP_STATUS.includes(jornada.status as FrmsStatus) || jornada === atual) continue;
+    const dia = parseIsoDay(jornada.data);
+    const diaAtual = parseIsoDay(dataReferencia);
+    if (dia == null || diaAtual == null || dia > diaAtual) continue;
+    const intervalo = resolveJornadaInterval(jornada);
+    if (!intervalo) {
+      // Jornada anterior sem horários utilizáveis: o repouso não é observável.
+      if (dia < diaAtual) integridadeComprometida = true;
+      continue;
+    }
+    // D-07: jornada anterior que invade a apresentação atual. Ignorá-la e usar
+    // uma jornada mais antiga produziria um repouso MAIOR que o real (falha
+    // aberta). Sobreposição é defeito de dado, não folga.
+    if (intervalo.end > intervaloAtual.start && intervalo.start < intervaloAtual.start) {
+      integridadeComprometida = true;
+      continue;
+    }
+    if (intervalo.end <= intervaloAtual.start && (ultimoFim == null || intervalo.end > ultimoFim)) {
+      ultimoFim = intervalo.end;
+      duracaoAnteriorMin = intervalo.end - intervalo.start;
     }
   }
 
-  hvDia = calcHvRolling24h(dataReferencia, operationalHistorico);
+  if (ultimoFim == null || integridadeComprometida) {
+    return { minutos: -1, duracaoAnteriorMin: null, estadoBase: 'DESCONHECIDO' };
+  }
+  return {
+    minutos: Math.max(0, intervaloAtual.start - ultimoFim),
+    duracaoAnteriorMin,
+    estadoBase: 'CALCULADO',
+  };
+}
 
-  const limite7min = limites.HV_7_DIAS_HORAS * 60;
-  const limite28min = limites.HV_28_DIAS_HORAS * 60;
-  const limiteMesMin = limites.HV_MES_HORAS * 60; // Lei 13.475/2017: 90h/mês calendário
-  const limite365min = limites.HV_365_DIAS_HORAS * 60;
-  const limiteDiaMin = limites.HV_DIARIA_HORAS * 60;
+export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingResult {
+  const {
+    dataReferencia,
+    limites,
+    momentoCalculoHvDia = 'PROJECAO_ANTES_JORNADA',
+    timeZone = OPERATIONAL_TIMEZONE_DEFAULT,
+  } = input;
+  const jornadas = input.jornadasHistorico.filter((j) =>
+    'origem' in j ? shouldUseForRolling(j) : true,
+  );
+  const d7 = dateOffset(dataReferencia, -6);
+  const d28 = dateOffset(dataReferencia, -27);
+  const d365 = dateOffset(dataReferencia, -364);
+  const mes = dataReferencia.slice(0, 7);
 
-  // Repouso: tempo desde o término da última jornada até apresentação de hoje
-  const repousoMin = calcRepousoAnterior(dataReferencia, operationalHistorico);
+  let hv7 = 0;
+  let hv28 = 0;
+  let hv365 = 0;
+  let hvMes = 0;
+  for (const jornada of jornadas) {
+    if (!FDP_STATUS.includes(jornada.status as FrmsStatus)) continue;
+    const hv = Math.max(0, jornada.horas_voo_minutos ?? 0);
+    if (jornada.data >= d7 && jornada.data <= dataReferencia) hv7 += hv;
+    if (jornada.data >= d28 && jornada.data <= dataReferencia) hv28 += hv;
+    if (jornada.data >= d365 && jornada.data <= dataReferencia) hv365 += hv;
+    if (jornada.data.startsWith(mes) && jornada.data <= dataReferencia) hvMes += hv;
+  }
 
+  const hvDia = calcHvRolling24h(dataReferencia, jornadas, momentoCalculoHvDia);
+  const repouso = calcRepousoAnterior(dataReferencia, jornadas);
+  // RBAC 117 A117.23(b): o mínimo depende da duração da jornada anterior.
+  const minimoRepouso = repousoMinimoRequeridoMin(repouso.duracaoAnteriorMin, limites);
+  const repousoEstado: RepousoEstado =
+    repouso.estadoBase === 'NAO_APLICAVEL'
+      ? 'NAO_APLICAVEL'
+      : repouso.estadoBase === 'DESCONHECIDO'
+        ? 'DESCONHECIDO'
+        : repouso.minutos >= minimoRepouso
+          ? 'SUFICIENTE'
+          : 'INSUFICIENTE';
+
+  const pct = (valor: number, limiteHoras: number) =>
+    limiteHoras > 0 ? round4((valor / (limiteHoras * 60)) * 100) : 0;
   return {
     hv_7_dias_min: hv7,
     hv_28_dias_min: hv28,
     hv_365_dias_min: hv365,
     hv_mes_calendario_min: hvMes,
     hv_dia_min: hvDia,
-    pct_limite_7d: limite7min > 0 ? round4((hv7 / limite7min) * 100) : 0,
-    pct_limite_28d: limite28min > 0 ? round4((hv28 / limite28min) * 100) : 0,
-    pct_limite_mes_calendario: limiteMesMin > 0 ? round4((hvMes / limiteMesMin) * 100) : 0,
-    pct_limite_365d: limite365min > 0 ? round4((hv365 / limite365min) * 100) : 0,
-    pct_limite_dia: limiteDiaMin > 0 ? round4((hvDia / limiteDiaMin) * 100) : 0,
-    repouso_anterior_min: repousoMin,
-    repouso_suficiente:
-      repousoMin < 0 ? 1 : repousoMin >= limites.REPOUSO_MINIMO_HORAS * 60 ? 1 : 0,
+    pct_limite_7d: pct(hv7, limites.HV_7_DIAS_HORAS),
+    pct_limite_28d: pct(hv28, limites.HV_28_DIAS_HORAS),
+    pct_limite_mes_calendario: pct(hvMes, limites.HV_MES_HORAS),
+    pct_limite_365d: pct(hv365, limites.HV_365_DIAS_HORAS),
+    pct_limite_dia: pct(hvDia, limites.HV_DIARIA_HORAS),
+    repouso_anterior_min: repouso.minutos,
+    // Compatibilidade com persistência 0/1: desconhecido falha fechado como 0.
+    repouso_suficiente: repousoEstado === 'SUFICIENTE' ? 1 : 0,
+    repouso_estado: repousoEstado,
+    repouso_minimo_requerido_min: minimoRepouso,
+    duracao_jornada_anterior_min: repouso.duracaoAnteriorMin,
+    momento_calculo_hv_dia: momentoCalculoHvDia,
+    timezone_operacional: timeZone,
   };
 }
 
-/** Calcula repouso desde a jornada anterior */
-function calcRepousoAnterior(
-  dataRef: string,
-  jornadas: Pick<FrmsJornada, 'data' | 'status' | 'hora_termino' | 'hora_apresentacao'>[],
-): number {
-  // Encontrar jornada do dia ref e jornada do dia anterior mais recente que tenha hora_termino
-  const jornadaHoje = jornadas.find(
-    (j) => j.data === dataRef && FDP_STATUS.includes(j.status as never),
-  );
-  if (!jornadaHoje?.hora_apresentacao) return -1; // sem apresentação hoje → sem repouso calculável
-
-  // Buscar última jornada anterior com hora_termino
-  const anteriores = jornadas
-    .filter((j) => j.data < dataRef && FDP_STATUS.includes(j.status as never) && j.hora_termino)
-    .sort((a, b) => b.data.localeCompare(a.data));
-
-  if (anteriores.length === 0) return -1; // primeiro dia do ciclo
-
-  const ultimaAnterior = anteriores[0];
-
-  // Calcular minutos de repouso entre hora_termino de ontem e hora_apresentacao de hoje
-  // Se são datas diferentes (pode haver dias de folga no meio), somar dias completos
-  const diaAnterior = new Date(ultimaAnterior.data + 'T00:00:00');
-  const diaHoje = new Date(dataRef + 'T00:00:00');
-  const diffDias = Math.floor((diaHoje.getTime() - diaAnterior.getTime()) / 86400000);
-
-  const terminoMin = hhmmToMinutes(ultimaAnterior.hora_termino);
-  const apresentacaoMin = hhmmToMinutes(jornadaHoje.hora_apresentacao);
-
-  // Repouso = (dias completos entre - 1) * 1440 + (1440 - termino) + apresentacao
-  if (diffDias === 0) {
-    // Mesmo dia (improvável mas defensivo)
-    return apresentacaoMin > terminoMin ? apresentacaoMin - terminoMin : 0;
-  }
-  if (diffDias === 1) {
-    // Dia consecutivo
-    return 1440 - terminoMin + apresentacaoMin;
-  }
-  // Dias intermediários (folgas etc.)
-  return (diffDias - 1) * 1440 + (1440 - terminoMin) + apresentacaoMin;
-}
-
-/** Retorna YYYY-MM-DD com offset de dias */
 function dateOffset(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  const day = parseIsoDay(dateStr);
+  if (day == null) return dateStr;
+  return new Date((day + days) * 86400000).toISOString().slice(0, 10);
 }
-
-// ────────────────────────────────────────────────────────────────────
-// ACÚMULO MENSAL
-// ────────────────────────────────────────────────────────────────────
 
 export interface AcumuloMensalInput {
   jornadas: Pick<FrmsJornada, 'status' | 'duracao_jornada_minutos' | 'horas_voo_minutos'>[];
@@ -822,57 +815,33 @@ export interface AcumuloMensalResult {
   dias_ferias: number;
 }
 
-/** Calcula acúmulo mensal consolidado */
 export function calcAcumuloMensal(input: AcumuloMensalInput): AcumuloMensalResult {
-  const { jornadas, fatorizacoes } = input;
-
   let jornadaMin = 0;
   let hvMin = 0;
   let diasEmbarcado = 0;
   let diasFolga = 0;
   let diasFerias = 0;
-
-  for (const j of jornadas) {
-    jornadaMin += j.duracao_jornada_minutos ?? 0;
-    hvMin += j.horas_voo_minutos ?? 0;
-
-    if (
-      j.status === 'ES' ||
-      j.status === 'TS' ||
-      j.status === 'TV' ||
-      j.status === 'EX' ||
-      j.status === 'RE' ||
-      j.status === 'SA'
-    ) {
-      diasEmbarcado++;
-    } else if (j.status === 'FR' || j.status === 'FS') {
-      diasFolga++;
-    } else if (j.status === 'FE') {
-      diasFerias++;
-    }
+  for (const jornada of input.jornadas) {
+    jornadaMin += jornada.duracao_jornada_minutos ?? 0;
+    hvMin += jornada.horas_voo_minutos ?? 0;
+    if (FDP_STATUS.includes(jornada.status)) diasEmbarcado++;
+    else if (jornada.status === 'FR' || jornada.status === 'FS') diasFolga++;
+    else if (jornada.status === 'FE') diasFerias++;
   }
-
-  let jornadaFatPct = 0;
-  let hvFatPct = 0;
-  for (const f of fatorizacoes) {
-    jornadaFatPct += f.total_fatorizado_jornada;
-    hvFatPct += f.total_fatorizado_hv;
-  }
-
   return {
     jornada_realizada_min: jornadaMin,
     hv_realizada_min: hvMin,
-    jornada_fatorizada_pct: round4(jornadaFatPct),
-    hv_fatorizada_pct: round4(hvFatPct),
+    jornada_fatorizada_pct: round4(
+      input.fatorizacoes.reduce((sum, f) => sum + f.total_fatorizado_jornada, 0),
+    ),
+    hv_fatorizada_pct: round4(
+      input.fatorizacoes.reduce((sum, f) => sum + f.total_fatorizado_hv, 0),
+    ),
     dias_embarcado: diasEmbarcado,
     dias_folga: diasFolga,
     dias_ferias: diasFerias,
   };
 }
-
-// ────────────────────────────────────────────────────────────────────
-// VALIDAÇÃO DE ESCALA FUTURA (projeção)
-// ────────────────────────────────────────────────────────────────────
 
 export interface PeriodoProjetado {
   data: string;
@@ -892,11 +861,7 @@ export interface ValidacaoEscalaResult {
     valor_limite: number;
     percentual: number;
   }[];
-  alertas: {
-    data: string;
-    nivel: string;
-    mensagem: string;
-  }[];
+  alertas: { data: string; nivel: string; mensagem: string }[];
 }
 
 type JornadaValidacaoEscala = Pick<
@@ -909,48 +874,30 @@ type JornadaValidacaoEscala = Pick<
   | 'duracao_jornada_minutos'
 >;
 
-function derivarHoraApresentacaoProjetada(
-  periodo: PeriodoProjetado,
-  fallbackHoraApresentacao: string,
-): string {
-  if (periodo.hora_apresentacao_estimada) return periodo.hora_apresentacao_estimada;
-  if (periodo.hora_termino_estimada) {
-    return minutesToHhmm(
-      hhmmToMinutes(periodo.hora_termino_estimada) - periodo.duracao_estimada_min,
-    );
-  }
-  return fallbackHoraApresentacao;
-}
-
-function derivarHoraTerminoProjetada(periodo: PeriodoProjetado, horaApresentacao: string): string {
-  if (periodo.hora_termino_estimada) return periodo.hora_termino_estimada;
-  return minutesToHhmm(hhmmToMinutes(horaApresentacao) + periodo.duracao_estimada_min);
-}
-
 function montarJornadasProjetadas(periodos: PeriodoProjetado[]): JornadaValidacaoEscala[] {
-  const periodosOrdenados = [...periodos].sort((a, b) => a.data.localeCompare(b.data));
-  let horaApresentacaoFallback = '06:00';
-
-  return periodosOrdenados.map((periodo) => {
-    const hora_apresentacao = derivarHoraApresentacaoProjetada(periodo, horaApresentacaoFallback);
-    const hora_termino = derivarHoraTerminoProjetada(periodo, hora_apresentacao);
-    horaApresentacaoFallback = hora_apresentacao;
-
-    return {
-      data: periodo.data,
-      status: periodo.status,
-      horas_voo_minutos: periodo.hv_estimada_min,
-      hora_apresentacao,
-      hora_termino,
-      duracao_jornada_minutos: periodo.duracao_estimada_min,
-    };
-  });
+  return [...periodos]
+    .sort((a, b) => a.data.localeCompare(b.data))
+    .map((periodo) => {
+      const apresentacao = periodo.hora_apresentacao_estimada ?? '06:00';
+      // D-06: HH:MM não representa duração >= 24 h. Sintetizar o término faria
+      // `minutesToHhmm` dar a volta no relógio e encurtar a jornada (ex.: 1500
+      // min viraria 60 min). Sem término, `resolveJornadaInterval` usa a duração.
+      const termino =
+        periodo.hora_termino_estimada ??
+        (periodo.duracao_estimada_min < MINUTOS_DIA
+          ? minutesToHhmm(hhmmToMinutes(apresentacao) + periodo.duracao_estimada_min)
+          : null);
+      return {
+        data: periodo.data,
+        status: periodo.status,
+        horas_voo_minutos: periodo.hv_estimada_min,
+        hora_apresentacao: apresentacao,
+        hora_termino: termino,
+        duracao_jornada_minutos: periodo.duracao_estimada_min,
+      };
+    });
 }
 
-/**
- * Simula inserção de jornadas futuras e verifica violações projetadas.
- * NÃO salva nada — apenas calcula.
- */
 export function validarEscalaFutura(
   periodos: PeriodoProjetado[],
   historicoExistente: JornadaValidacaoEscala[],
@@ -958,142 +905,88 @@ export function validarEscalaFutura(
 ): ValidacaoEscalaResult {
   const violacoes: ValidacaoEscalaResult['violacoes'] = [];
   const alertas: ValidacaoEscalaResult['alertas'] = [];
-  const jornadasProjetadas = montarJornadasProjetadas(periodos);
-
-  // Merge histórico + projetado
-  const jornadasCombinadas = [...historicoExistente, ...jornadasProjetadas].sort((a, b) =>
+  const projetadas = montarJornadasProjetadas(periodos);
+  const combinadas = [...historicoExistente, ...projetadas].sort((a, b) =>
     a.data.localeCompare(b.data),
   );
 
-  for (const periodo of jornadasProjetadas) {
+  for (const jornada of projetadas) {
     const acumulo = calcAcumuloRolling({
       tripulanteId: 0,
-      dataReferencia: periodo.data,
-      jornadasHistorico: jornadasCombinadas,
+      dataReferencia: jornada.data,
+      jornadasHistorico: combinadas,
       limites,
+      momentoCalculoHvDia: 'REALIZADO_APOS_JORNADA',
     });
-
-    // Verificar FDP
-    const fdpLimMin = limites.FDP_MAXIMO_HORAS * 60;
-    if ((periodo.duracao_jornada_minutos ?? 0) > fdpLimMin) {
-      const pct = round4(((periodo.duracao_jornada_minutos ?? 0) / fdpLimMin) * 100);
+    const fdpLimite = limites.FDP_MAXIMO_HORAS * 60;
+    if ((jornada.duracao_jornada_minutos ?? 0) > fdpLimite) {
       violacoes.push({
-        data: periodo.data,
+        data: jornada.data,
         tipo_limite: 'FDP_DIARIO',
-        valor_projetado: periodo.duracao_jornada_minutos ?? 0,
-        valor_limite: fdpLimMin,
-        percentual: pct,
+        valor_projetado: jornada.duracao_jornada_minutos ?? 0,
+        valor_limite: fdpLimite,
+        percentual:
+          fdpLimite > 0 ? round4(((jornada.duracao_jornada_minutos ?? 0) / fdpLimite) * 100) : 0,
       });
     }
-
-    const repousoMinimo = limites.REPOUSO_MINIMO_HORAS * 60;
-    if (acumulo.repouso_anterior_min >= 0 && acumulo.repouso_anterior_min < repousoMinimo) {
+    // Mínimo efetivamente exigido para esta jornada (A117.23(b)), não a constante.
+    const repousoLimite = acumulo.repouso_minimo_requerido_min ?? limites.REPOUSO_MINIMO_HORAS * 60;
+    if (acumulo.repouso_estado === 'DESCONHECIDO') {
       violacoes.push({
-        data: periodo.data,
+        data: jornada.data,
+        tipo_limite: 'REPOUSO_DESCONHECIDO',
+        valor_projetado: -1,
+        valor_limite: repousoLimite,
+        percentual: 0,
+      });
+    } else if (acumulo.repouso_estado === 'INSUFICIENTE') {
+      violacoes.push({
+        data: jornada.data,
         tipo_limite: 'REPOUSO',
         valor_projetado: acumulo.repouso_anterior_min,
-        valor_limite: repousoMinimo,
+        valor_limite: repousoLimite,
         percentual:
-          repousoMinimo > 0 ? round4((acumulo.repouso_anterior_min / repousoMinimo) * 100) : 0,
+          repousoLimite > 0 ? round4((acumulo.repouso_anterior_min / repousoLimite) * 100) : 0,
       });
     }
 
-    // HV diária
-    if (acumulo.pct_limite_dia >= limites.ALERTA_VIOLACAO_PCT) {
-      violacoes.push({
-        data: periodo.data,
-        tipo_limite: 'HV_DIARIA',
-        valor_projetado: acumulo.hv_dia_min,
-        valor_limite: limites.HV_DIARIA_HORAS * 60,
-        percentual: acumulo.pct_limite_dia,
-      });
-    } else if (acumulo.pct_limite_dia >= limites.ALERTA_AVISO_PCT) {
-      const nivel =
-        acumulo.pct_limite_dia >= limites.ALERTA_CRITICO_PCT
-          ? 'CRITICO'
-          : acumulo.pct_limite_dia >= limites.ALERTA_ATENCAO_PCT
-            ? 'ATENCAO'
-            : 'AVISO';
-      alertas.push({
-        data: periodo.data,
-        nivel,
-        mensagem: `HV diária projetada em ${acumulo.pct_limite_dia.toFixed(1)}%`,
-      });
-    }
-
-    // HV 7d
-    if (acumulo.pct_limite_7d >= limites.ALERTA_VIOLACAO_PCT) {
-      violacoes.push({
-        data: periodo.data,
-        tipo_limite: 'HV_7D',
-        valor_projetado: acumulo.hv_7_dias_min,
-        valor_limite: limites.HV_7_DIAS_HORAS * 60,
-        percentual: acumulo.pct_limite_7d,
-      });
-    } else if (acumulo.pct_limite_7d >= limites.ALERTA_AVISO_PCT) {
-      const nivel =
-        acumulo.pct_limite_7d >= limites.ALERTA_CRITICO_PCT
-          ? 'CRITICO'
-          : acumulo.pct_limite_7d >= limites.ALERTA_ATENCAO_PCT
-            ? 'ATENCAO'
-            : 'AVISO';
-      alertas.push({
-        data: periodo.data,
-        nivel,
-        mensagem: `HV 7 dias projetada em ${acumulo.pct_limite_7d.toFixed(1)}%`,
-      });
-    }
-
-    // HV mês (usa pct_limite_mes_calendario — nome corrigido)
-    if (acumulo.pct_limite_mes_calendario >= limites.ALERTA_VIOLACAO_PCT) {
-      violacoes.push({
-        data: periodo.data,
-        tipo_limite: 'HV_MES',
-        valor_projetado: acumulo.hv_mes_calendario_min,
-        valor_limite: limites.HV_MES_HORAS * 60,
-        percentual: acumulo.pct_limite_mes_calendario,
-      });
-    } else if (acumulo.pct_limite_mes_calendario >= limites.ALERTA_AVISO_PCT) {
-      const nivel =
-        acumulo.pct_limite_mes_calendario >= limites.ALERTA_CRITICO_PCT
-          ? 'CRITICO'
-          : acumulo.pct_limite_mes_calendario >= limites.ALERTA_ATENCAO_PCT
-            ? 'ATENCAO'
-            : 'AVISO';
-      alertas.push({
-        data: periodo.data,
-        nivel,
-        mensagem: `HV mês projetada em ${acumulo.pct_limite_mes_calendario.toFixed(1)}%`,
-      });
-    }
-
-    // HV 365d
-    if (acumulo.pct_limite_365d >= limites.ALERTA_VIOLACAO_PCT) {
-      violacoes.push({
-        data: periodo.data,
-        tipo_limite: 'HV_365D',
-        valor_projetado: acumulo.hv_365_dias_min,
-        valor_limite: limites.HV_365_DIAS_HORAS * 60,
-        percentual: acumulo.pct_limite_365d,
-      });
-    } else if (acumulo.pct_limite_365d >= limites.ALERTA_AVISO_PCT) {
-      const nivel =
-        acumulo.pct_limite_365d >= limites.ALERTA_CRITICO_PCT
-          ? 'CRITICO'
-          : acumulo.pct_limite_365d >= limites.ALERTA_ATENCAO_PCT
-            ? 'ATENCAO'
-            : 'AVISO';
-      alertas.push({
-        data: periodo.data,
-        nivel,
-        mensagem: `HV 365 dias projetada em ${acumulo.pct_limite_365d.toFixed(1)}%`,
-      });
-    }
+    const verificar = (tipo: string, valor: number, limiteHoras: number, percentual: number) => {
+      if (percentual >= limites.ALERTA_VIOLACAO_PCT) {
+        violacoes.push({
+          data: jornada.data,
+          tipo_limite: tipo,
+          valor_projetado: valor,
+          valor_limite: limiteHoras * 60,
+          percentual,
+        });
+      } else if (percentual >= limites.ALERTA_AVISO_PCT) {
+        const nivel =
+          percentual >= limites.ALERTA_CRITICO_PCT
+            ? 'CRITICO'
+            : percentual >= limites.ALERTA_ATENCAO_PCT
+              ? 'ATENCAO'
+              : 'AVISO';
+        alertas.push({
+          data: jornada.data,
+          nivel,
+          mensagem: `${tipo} projetada em ${percentual.toFixed(1)}%`,
+        });
+      }
+    };
+    verificar('HV_DIARIA', acumulo.hv_dia_min, limites.HV_DIARIA_HORAS, acumulo.pct_limite_dia);
+    verificar('HV_7D', acumulo.hv_7_dias_min, limites.HV_7_DIAS_HORAS, acumulo.pct_limite_7d);
+    verificar(
+      'HV_MES',
+      acumulo.hv_mes_calendario_min,
+      limites.HV_MES_HORAS,
+      acumulo.pct_limite_mes_calendario,
+    );
+    verificar(
+      'HV_365D',
+      acumulo.hv_365_dias_min,
+      limites.HV_365_DIAS_HORAS,
+      acumulo.pct_limite_365d,
+    );
   }
-
-  return {
-    valida: violacoes.length === 0,
-    violacoes,
-    alertas,
-  };
+  return { valida: violacoes.length === 0, violacoes, alertas };
 }
