@@ -25,7 +25,7 @@ export function parseNameStatus(raw) {
   const candidates = new Set();
   const exactRenames = new Set();
 
-  for (let index = 0; index < fields.length; ) {
+  for (let index = 0; index < fields.length;) {
     const status = fields[index++];
     if (!status) continue;
 
@@ -76,15 +76,7 @@ function collectNameStatusReports(root, baseRef) {
     `${baseRef}...HEAD`,
   ];
   const worktreeArgs = ['diff', '--name-status', '-M', '-C', '--diff-filter=AMR', '-z'];
-  const stagedArgs = [
-    'diff',
-    '--cached',
-    '--name-status',
-    '-M',
-    '-C',
-    '--diff-filter=AMR',
-    '-z',
-  ];
+  const stagedArgs = ['diff', '--cached', '--name-status', '-M', '-C', '--diff-filter=AMR', '-z'];
 
   return [
     readGitNameStatus(branchArgs, root),

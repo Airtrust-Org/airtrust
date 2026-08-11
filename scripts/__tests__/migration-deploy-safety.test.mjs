@@ -5,9 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import {
-  findGenericRemoteMigrationApplyViolations,
-} from '../guard-no-generic-remote-migrations.mjs';
+import { findGenericRemoteMigrationApplyViolations } from '../guard-no-generic-remote-migrations.mjs';
 import { inspectMigrationsDirectory } from '../migration-directory-policy.mjs';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
