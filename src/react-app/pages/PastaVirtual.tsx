@@ -299,21 +299,26 @@ export default function PastaVirtual() {
   }
 
   // Calcular estatísticas a partir dos dados reais
-  const totalArquivos = categoriasDocumentos.reduce((acc, cat) => acc + cat.documentos.length, 0);
-  const arquivosVencidos = categoriasDocumentos.reduce(
-    (acc, cat) => acc + cat.documentos.filter((doc) => doc.status === 'VENCIDO').length,
-    0,
-  );
-  const arquivosVencendo = categoriasDocumentos.reduce(
-    (acc, cat) => acc + cat.documentos.filter((doc) => doc.status === 'VENCENDO').length,
-    0,
-  );
-  const espacoTotal =
+  const { totalArquivos, arquivosVencidos, arquivosVencendo, espacoTotalBytes } =
     categoriasDocumentos.reduce(
-      (acc, cat) => acc + cat.documentos.reduce((sum, doc) => sum + (doc.tamanho || 0), 0),
-      0,
-    ) /
-    (1024 * 1024); // Converter bytes para MB
+      (acc, cat) => {
+        acc.totalArquivos += cat.documentos.length;
+        for (const doc of cat.documentos) {
+          if (doc.status === 'VENCIDO') acc.arquivosVencidos++;
+          if (doc.status === 'VENCENDO') acc.arquivosVencendo++;
+          acc.espacoTotalBytes += doc.tamanho || 0;
+        }
+        return acc;
+      },
+      {
+        totalArquivos: 0,
+        arquivosVencidos: 0,
+        arquivosVencendo: 0,
+        espacoTotalBytes: 0,
+      },
+    );
+
+  const espacoTotal = espacoTotalBytes / (1024 * 1024); // Converter bytes para MB
 
   const perfilOperacional = `${String(funcionario.cargo || '').toLowerCase()} ${String(
     funcionario.funcao || '',
