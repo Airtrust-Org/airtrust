@@ -143,7 +143,6 @@ describe('S-76 periódico — denominador canônico /03', () => {
           codigo_canonico: 'S76-P-02/03-C1',
           aeronave: 'SK76',
           programa: 'Periódico',
-          tipo_qualificacao_estruturado: 'PERIODICO',
           ciclo: null,
           html_relpath: 'SK76/html/Guia_Instrutor_Simulador_S76_S76-P-02-04-C1.html',
         },
@@ -155,6 +154,8 @@ describe('S-76 periódico — denominador canônico /03', () => {
           aeronave: 'SK76',
           programa: 'PERIODICO',
           ciclo: null,
+          sessao_numero: null,
+          sessao_total: null,
         },
       ],
     });
