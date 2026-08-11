@@ -41,9 +41,10 @@ function sessionCoreSignature(session) {
   return {
     aeronave: normalizeText(session.aeronave),
     programaCandidates: new Set(
-      [normalizeText(session.programa), normalizeText(session.tipo_qualificacao_estruturado)].filter(
-        Boolean,
-      ),
+      [
+        normalizeText(session.programa),
+        normalizeText(session.tipo_qualificacao_estruturado),
+      ].filter(Boolean),
     ),
     ciclo: deriveCiclo(session),
   };
@@ -153,7 +154,8 @@ export function resolveGuiaLinks({ sessions, guias }) {
   });
 
   for (const r of resolutions) {
-    if (usedGuiaIds.has(r.guia_id)) fail(`guia ${r.guia_id} vinculado a mais de um código canônico`);
+    if (usedGuiaIds.has(r.guia_id))
+      fail(`guia ${r.guia_id} vinculado a mais de um código canônico`);
     usedGuiaIds.add(r.guia_id);
   }
   if (resolutions.length !== sessions.length) fail('quantidade de resoluções diverge das sessões');
