@@ -1,5 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  applySk76PeriodicSessionContractCorrections,
+  assertSk76PeriodicCodesCorrected,
+} from './sk76-periodic-code-contract.mjs';
 
 export const CONTRACT_SCHEMA_VERSION = 1;
 export const EXPECTED_TOTALS = { modelos: 51, vinculos: 918, loft: 22 };
@@ -48,12 +52,12 @@ export const SK76_CODES = [
   'SK76-I-10/12',
   'SK76-I-11/12',
   'SK76-I-12/12',
-  'S76-P-01/04-C1',
-  'S76-P-01/04-C2',
-  'S76-P-01/04-C3',
-  'S76-P-02/04-C1',
-  'S76-P-02/04-C2',
-  'S76-P-02/04-C3',
+  'S76-P-01/03-C1',
+  'S76-P-01/03-C2',
+  'S76-P-01/03-C3',
+  'S76-P-02/03-C1',
+  'S76-P-02/03-C2',
+  'S76-P-02/03-C3',
   'SK76-P-CHECK',
   'SK76-S-01/02',
   'SK76-S-02/02',
@@ -86,7 +90,8 @@ function programaBucket(session) {
 }
 
 export function loadSessionContract(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  const source = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  return applySk76PeriodicSessionContractCorrections(source);
 }
 
 export function validateSessionContract(contract) {
@@ -105,6 +110,7 @@ export function validateSessionContract(contract) {
   if (new Set(codes).size !== 51) fail('códigos canônicos duplicados');
   for (const code of AW139_CODES) if (!codes.includes(code)) fail(`AW139 ausente: ${code}`);
   for (const code of SK76_CODES) if (!codes.includes(code)) fail(`S-76 ausente: ${code}`);
+  assertSk76PeriodicCodesCorrected(codes);
 
   const htmlPaths = new Set();
   const aw = [];
