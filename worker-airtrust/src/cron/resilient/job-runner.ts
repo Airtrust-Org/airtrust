@@ -85,8 +85,7 @@ export interface CronJobRunSummary {
 }
 
 function normalizeErrorCode(error: unknown): string {
-  const raw =
-    error instanceof Error ? error.message : String(error ?? 'CRON_JOB_FAILED');
+  const raw = error instanceof Error ? error.message : String(error ?? 'CRON_JOB_FAILED');
   const normalized = raw
     .toUpperCase()
     .replace(/[^A-Z0-9:_-]+/g, '_')
@@ -192,14 +191,8 @@ export async function runCronJobWithLease(input: {
   };
   metadata?: Record<string, unknown> | null;
 }): Promise<CronJobRunSummary> {
-  const ttlSeconds = Math.max(
-    30,
-    Math.min(3600, Math.trunc(input.ttlSeconds ?? 180)),
-  );
-  const budgetMs = Math.max(
-    1000,
-    Math.min(10 * 60_000, Math.trunc(input.budgetMs ?? 25_000)),
-  );
+  const ttlSeconds = Math.max(30, Math.min(3600, Math.trunc(input.ttlSeconds ?? 180)));
+  const budgetMs = Math.max(1000, Math.min(10 * 60_000, Math.trunc(input.budgetMs ?? 25_000)));
   const owner = createCronLeaseOwner(input.jobName);
   const startedAt = Date.now();
   const operationBudget = createCronOperationBudget(input.operationBudget);
@@ -256,8 +249,7 @@ export async function runCronJobWithLease(input: {
       state,
       deadlineMs: startedAt + budgetMs,
       hasBudget: (reserveMs = 750) =>
-        Date.now() + Math.max(0, reserveMs) < startedAt + budgetMs &&
-        operationBudget.has(),
+        Date.now() + Math.max(0, reserveMs) < startedAt + budgetMs && operationBudget.has(),
       hasOperationalBudget: operationBudget.has,
       consumeD1: operationBudget.consumeD1,
       consumeExternal: operationBudget.consumeExternal,
