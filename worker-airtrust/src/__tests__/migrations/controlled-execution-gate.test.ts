@@ -1,13 +1,16 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const genericGateScript = join(testDir, '../../../../scripts/controlled-execution-gate.sh');
-const migGateScript = join(testDir, '../../../../scripts/mig01-controlled-rebaseline-gate.sh');
+const migGateScript = join(
+  testDir,
+  '../../../../scripts/mig01-controlled-rebaseline-gate.sh',
+);
 
 const tempDirs: string[] = [];
 
@@ -102,7 +105,8 @@ describe('controlled execution gate', () => {
     const env = baseEnv({
       AIRTRUST_CONTROLLED_TARGET: 'production',
       AIRTRUST_CONTROLLED_TARGET_REF: 'cluster://production/db',
-      AIRTRUST_CONTROLLED_SAFE_COMMAND: 'bash scripts/run-dq01-backfill.sh --mode backfill --target production',
+      AIRTRUST_CONTROLLED_SAFE_COMMAND:
+        'bash scripts/run-dq01-backfill.sh --mode backfill --target production',
     });
     env.AIRTRUST_DB_PATH = '';
 
@@ -115,7 +119,8 @@ describe('controlled execution gate', () => {
   it('blocks commands that contain deploy', () => {
     const result = runGenericGate(
       baseEnv({
-        AIRTRUST_CONTROLLED_SAFE_COMMAND: 'wrangler deploy && bash scripts/run-dq01-backfill.sh --mode backfill',
+        AIRTRUST_CONTROLLED_SAFE_COMMAND:
+          'wrangler deploy && bash scripts/run-dq01-backfill.sh --mode backfill',
       }),
     );
 
