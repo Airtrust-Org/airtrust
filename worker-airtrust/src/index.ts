@@ -192,7 +192,7 @@ app.all('*', async (c, next) => {
     c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
     c.header(
       'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires, X-AirTrust-Bypass-Cache, X-EdApp-Secret',
+      'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires, X-AirTrust-Bypass-Cache, X-EdApp-Secret, Idempotency-Key, X-Dev-Auth-Bypass, X-Maintenance-Secret, X-AirTrust-Maintenance',
     );
     c.header('Access-Control-Allow-Credentials', 'true');
     c.header('Access-Control-Max-Age', '86400');
@@ -423,7 +423,10 @@ app.use(
   '/api/admin/simuladores-matriz-remediation/*',
   rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'simuladores-matriz-remediation' }),
 );
-app.route('/api/admin/simuladores-matriz-remediation', adminSimuladoresMatrizRemediationExecutorRoutes);
+app.route(
+  '/api/admin/simuladores-matriz-remediation',
+  adminSimuladoresMatrizRemediationExecutorRoutes,
+);
 app.use(
   '/api/admin/ead-category-reconciliation/*',
   rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'ead-category-reconciliation' }),
@@ -781,7 +784,8 @@ app.get('/api/templates', auth(), async (c) => {
     {
       success: false,
       error: 'TEMPLATES_ENDPOINT_UNAVAILABLE',
-      message: 'Endpoint legado indisponível; utilize endpoints específicos de templates por módulo',
+      message:
+        'Endpoint legado indisponível; utilize endpoints específicos de templates por módulo',
     },
     503,
   );
@@ -816,22 +820,22 @@ app.get('/api/sessoes', auth(), async (c) => {
     // Tentar query simples sem JOIN
     const result = await db
       .prepare(
-	        `SELECT id, funcionario_id, modelo_aeronave_id, data_sessao, tipo,
+        `SELECT id, funcionario_id, modelo_aeronave_id, data_sessao, tipo,
 	                status, observacoes, created_at, updated_at
 	         FROM sessoes
 	         WHERE deleted_at IS NULL
 	           AND empresa_id = ?
 	         ORDER BY data_sessao DESC, created_at DESC
 	         LIMIT ? OFFSET ?`,
-	      )
-	      .bind(empresaId, limit, offset)
-	      .all();
+      )
+      .bind(empresaId, limit, offset)
+      .all();
 
-	    // Contar total
-	    const countResult = await db
-	      .prepare('SELECT COUNT(*) as total FROM sessoes WHERE deleted_at IS NULL AND empresa_id = ?')
-	      .bind(empresaId)
-	      .first<{ total: number }>();
+    // Contar total
+    const countResult = await db
+      .prepare('SELECT COUNT(*) as total FROM sessoes WHERE deleted_at IS NULL AND empresa_id = ?')
+      .bind(empresaId)
+      .first<{ total: number }>();
 
     return c.json({
       success: true,
