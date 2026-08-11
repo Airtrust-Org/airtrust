@@ -4,20 +4,14 @@ import edbShadowPreviewRoutes from './edb-shadow-preview';
 import { checkPermission, getEmpresaId } from '../middleware/tenant';
 import { ApiError } from '../middleware/error-handler';
 import { isEdbShadowPilotEnabledForTenant } from '../lib/edb/edb-shadow-pilot-flag';
-import {
-  isPlatformAdminAccess,
-  resolvePlatformAccessState,
-} from '../lib/rbac/platform-access';
+import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { getOperationalStatus } from '../observability/operational-status';
 import { getReleaseMetadata } from '../services/release-metadata';
 
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
 function setNoCacheHeaders(c: { header: (name: string, value: string) => void }) {
-  c.header(
-    'Cache-Control',
-    'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0',
-  );
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0');
   c.header('Pragma', 'no-cache');
   c.header('Expires', '0');
   c.header('Surrogate-Control', 'no-store');
@@ -34,8 +28,7 @@ export function registerSystemRoutes(app: SystemApp) {
   app.get('/api/edb/capability', (c) => {
     const tenantId = getEmpresaId(c);
     const enabled =
-      checkPermission(c, 'manager') &&
-      isEdbShadowPilotEnabledForTenant(c.env, tenantId);
+      checkPermission(c, 'manager') && isEdbShadowPilotEnabledForTenant(c.env, tenantId);
 
     return c.json({
       success: true,
@@ -56,11 +49,7 @@ export function registerSystemRoutes(app: SystemApp) {
 
     const tenantId = getEmpresaId(c);
     if (!isEdbShadowPilotEnabledForTenant(c.env, tenantId)) {
-      throw new ApiError(
-        'Recurso indisponivel',
-        404,
-        'EDB_SHADOW_PILOT_NOT_ENABLED',
-      );
+      throw new ApiError('Recurso indisponivel', 404, 'EDB_SHADOW_PILOT_NOT_ENABLED');
     }
 
     await next();
@@ -72,10 +61,7 @@ export function registerSystemRoutes(app: SystemApp) {
     setNoCacheHeaders(c);
 
     const startTime = Date.now();
-    const checks: Record<
-      string,
-      { status: 'ok' | 'error'; latency?: number; error?: string }
-    > = {};
+    const checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }> = {};
     let overallHealthy = true;
 
     try {
@@ -196,10 +182,7 @@ export function registerSystemRoutes(app: SystemApp) {
   app.get('/api/system/operations/cron', async (c) => {
     setNoCacheHeaders(c);
     const empresaId = getEmpresaId(c);
-    const platformState = await resolvePlatformAccessState(
-      c.env.DB,
-      c.get('userId'),
-    );
+    const platformState = await resolvePlatformAccessState(c.env.DB, c.get('userId'));
     const platformAdmin = isPlatformAdminAccess(platformState);
 
     if (!platformAdmin && !checkPermission(c, 'admin')) {
