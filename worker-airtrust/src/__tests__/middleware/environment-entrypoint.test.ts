@@ -1,21 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
-const fetchMock = vi.fn(async (request: Request) => {
-  if (request.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': request.headers.get('Origin') ?? '',
-        'Access-Control-Allow-Credentials': 'true',
-      },
-    });
-  }
+const { fetchMock, scheduledMock } = vi.hoisted(() => ({
+  fetchMock: vi.fn(async (request: Request) => {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': request.headers.get('Origin') ?? '',
+          'Access-Control-Allow-Credentials': 'true',
+        },
+      });
+    }
 
-  return new Response('ok', { status: 200 });
-});
-
-const scheduledMock = vi.fn(async () => undefined);
+    return new Response('ok', { status: 200 });
+  }),
+  scheduledMock: vi.fn(async () => undefined),
+}));
 
 vi.mock('../../index', () => ({
   default: {
@@ -91,12 +92,8 @@ describe('environment entrypoint origin isolation', () => {
       );
 
       expect(response.status).toBe(403);
-      expect(
-        response.headers.get('Access-Control-Allow-Origin'),
-      ).toBeNull();
-      expect(
-        response.headers.get('Access-Control-Allow-Credentials'),
-      ).toBeNull();
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+      expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
     }
 
     expect(fetchMock).not.toHaveBeenCalled();
@@ -147,9 +144,7 @@ describe('environment entrypoint origin isolation', () => {
     expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe(
       'https://airtrust.online',
     );
-    expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe(
-      'true',
-    );
+    expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe('true');
   });
 
   it('allows requests without Origin', async () => {
