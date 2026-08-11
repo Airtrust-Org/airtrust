@@ -14,10 +14,7 @@ const PRODUCTION_ORIGINS = [
   'https://production.airtrust.pages.dev',
 ];
 
-const STAGING_ORIGINS = [
-  'https://staging.airtrust.pages.dev',
-  'https://main.airtrust.pages.dev',
-];
+const STAGING_ORIGINS = ['https://staging.airtrust.pages.dev', 'https://main.airtrust.pages.dev'];
 
 function extractTomlBlock(source, startHeader, nextHeader) {
   const start = source.indexOf(startHeader);
@@ -43,15 +40,11 @@ export function inspectFrontendSource(source) {
   const violations = [];
 
   if (/host\.includes\(\s*['"]pages\.dev['"]\s*\)/.test(source)) {
-    violations.push(
-      'frontend: generic pages.dev includes() routing is forbidden',
-    );
+    violations.push('frontend: generic pages.dev includes() routing is forbidden');
   }
 
   if (/host\.includes\(\s*['"]airtrust\.pages\.dev['"]\s*\)/.test(source)) {
-    violations.push(
-      'frontend: generic airtrust.pages.dev includes() routing is forbidden',
-    );
+    violations.push('frontend: generic airtrust.pages.dev includes() routing is forbidden');
   }
 
   if (!source.includes('PRODUCTION_FRONTEND_HOSTS')) {
@@ -61,9 +54,7 @@ export function inspectFrontendSource(source) {
   const previewFailsClosed = source.includes('Preview host');
   const previewUsesStaging = source.includes('may only use the staging API');
   if (!previewFailsClosed || !previewUsesStaging) {
-    violations.push(
-      'frontend: Pages previews must fail closed or use staging explicitly',
-    );
+    violations.push('frontend: Pages previews must fail closed or use staging explicitly');
   }
 
   return violations;
@@ -72,19 +63,14 @@ export function inspectFrontendSource(source) {
 export function inspectAllowedOriginsSource(source) {
   const violations = [];
   const broadPagesRegex = /\[a-z0-9-\]\+\\\.airtrust\\\.pages\\\.dev/i;
-  const suffixHeuristic =
-    /origin\.(?:includes|endsWith)\(\s*['"](?:\.airtrust\.)?pages\.dev['"]/;
+  const suffixHeuristic = /origin\.(?:includes|endsWith)\(\s*['"](?:\.airtrust\.)?pages\.dev['"]/;
 
   if (broadPagesRegex.test(source)) {
-    violations.push(
-      'worker: broad *.airtrust.pages.dev credentialed allowlist is forbidden',
-    );
+    violations.push('worker: broad *.airtrust.pages.dev credentialed allowlist is forbidden');
   }
 
   if (suffixHeuristic.test(source)) {
-    violations.push(
-      'worker: Pages origins must be exact configured values, not suffix heuristics',
-    );
+    violations.push('worker: Pages origins must be exact configured values, not suffix heuristics');
   }
 
   const hasParser = source.includes('parseEnvAllowedOrigins');
@@ -98,29 +84,21 @@ export function inspectAllowedOriginsSource(source) {
 
 export function inspectCredentialedCorsSource(source, label = 'source') {
   const violations = [];
-  const credentialsPattern =
-    /Access-Control-Allow-Credentials['"),:\s]+true/i;
+  const credentialsPattern = /Access-Control-Allow-Credentials['"),:\s]+true/i;
   const wildcardPattern = /Access-Control-Allow-Origin['"),:\s]+\*/i;
 
   if (!credentialsPattern.test(source) || !wildcardPattern.test(source)) {
     return [];
   }
 
-  return [
-    `${label}: wildcard Access-Control-Allow-Origin with credentials is forbidden`,
-  ];
+  return [`${label}: wildcard Access-Control-Allow-Origin with credentials is forbidden`];
 }
 
-export function inspectWranglerSource(
-  source,
-  label = 'worker-airtrust/wrangler.toml',
-) {
+export function inspectWranglerSource(source, label = 'worker-airtrust/wrangler.toml') {
   const violations = [];
 
   if (!/main\s*=\s*"src\/environment-entrypoint\.ts"/.test(source)) {
-    violations.push(
-      `${label}: Worker main must enforce the environment origin boundary`,
-    );
+    violations.push(`${label}: Worker main must enforce the environment origin boundary`);
   }
 
   if (/CORS_ORIGINS\s*=\s*"[^"]*\*[^"]*"/.test(source)) {
@@ -131,11 +109,7 @@ export function inspectWranglerSource(
   const hasProduction = source.includes('[env.production]');
   if (!hasStaging || !hasProduction) return violations;
 
-  const staging = extractTomlBlock(
-    source,
-    '[env.staging]',
-    '\n[env.production]',
-  );
+  const staging = extractTomlBlock(source, '[env.staging]', '\n[env.production]');
   const production = extractTomlBlock(source, '[env.production]');
   const stagingOrigins = extractCorsOrigins(staging);
   const productionOrigins = extractCorsOrigins(production);
@@ -156,9 +130,7 @@ export function inspectWranglerSource(
     const isPagesOrigin = origin.endsWith('.pages.dev');
     const isApprovedProductionPages = PRODUCTION_ORIGINS.includes(origin);
     if (isPagesOrigin && !isApprovedProductionPages) {
-      violations.push(
-        `${label}: unapproved Pages preview in production CORS: ${origin}`,
-      );
+      violations.push(`${label}: unapproved Pages preview in production CORS: ${origin}`);
     }
   }
 
@@ -167,9 +139,7 @@ export function inspectWranglerSource(
     staging.includes(PRODUCTION_DB_ID) ||
     /bucket_name\s*=\s*"airtrust-storage"/.test(staging);
   if (stagingHasProductionTarget) {
-    violations.push(
-      `${label}: staging block contains a production API, D1, or R2 target`,
-    );
+    violations.push(`${label}: staging block contains a production API, D1, or R2 target`);
   }
 
   const productionHasStagingTarget =
@@ -177,9 +147,7 @@ export function inspectWranglerSource(
     production.includes(STAGING_DB_ID) ||
     /bucket_name\s*=\s*"airtrust-storage-staging"/.test(production);
   if (productionHasStagingTarget) {
-    violations.push(
-      `${label}: production block contains a staging API, D1, or R2 target`,
-    );
+    violations.push(`${label}: production block contains a staging API, D1, or R2 target`);
   }
 
   return violations;
@@ -188,20 +156,14 @@ export function inspectWranglerSource(
 export function inspectWorkflowSource(source, label) {
   const violations = [];
   const isStagingOrPreview = /staging|PAGES_STAGING_BRANCH|preview/i.test(source);
-  const usesProductionApi = source.includes(
-    `VITE_API_URL: ${PRODUCTION_API}`,
-  );
+  const usesProductionApi = source.includes(`VITE_API_URL: ${PRODUCTION_API}`);
 
   if (isStagingOrPreview && usesProductionApi) {
-    violations.push(
-      `${label}: staging/preview workflow points VITE_API_URL to production`,
-    );
+    violations.push(`${label}: staging/preview workflow points VITE_API_URL to production`);
   }
 
   if (/PAGES_STAGING_BRANCH:\s*production/.test(source)) {
-    violations.push(
-      `${label}: staging workflow targets the production Pages branch`,
-    );
+    violations.push(`${label}: staging workflow targets the production Pages branch`);
   }
 
   return violations;
@@ -229,29 +191,15 @@ async function listFiles(directory) {
 
 export async function collectViolations(root = process.cwd()) {
   const violations = [];
-  const frontend = await readText(
-    root,
-    'src/react-app/config/api-environment.ts',
-  );
-  const allowedOrigins = await readText(
-    root,
-    'worker-airtrust/src/config/allowed-origins.ts',
-  );
+  const frontend = await readText(root, 'src/react-app/config/api-environment.ts');
+  const allowedOrigins = await readText(root, 'worker-airtrust/src/config/allowed-origins.ts');
   const wrangler = await readText(root, 'worker-airtrust/wrangler.toml');
-  const wranglerDev = await readText(
-    root,
-    'worker-airtrust/wrangler.dev.toml',
-  );
+  const wranglerDev = await readText(root, 'worker-airtrust/wrangler.dev.toml');
 
   violations.push(...inspectFrontendSource(frontend));
   violations.push(...inspectAllowedOriginsSource(allowedOrigins));
   violations.push(...inspectWranglerSource(wrangler));
-  violations.push(
-    ...inspectWranglerSource(
-      wranglerDev,
-      'worker-airtrust/wrangler.dev.toml',
-    ),
-  );
+  violations.push(...inspectWranglerSource(wranglerDev, 'worker-airtrust/wrangler.dev.toml'));
 
   const workerRoot = path.join(root, 'worker-airtrust/src');
   const workerSourceFiles = await listFiles(workerRoot);
@@ -262,9 +210,7 @@ export async function collectViolations(root = process.cwd()) {
 
     const source = await readFile(file, 'utf8');
     const relativePath = path.relative(root, file).replaceAll(path.sep, '/');
-    violations.push(
-      ...inspectCredentialedCorsSource(source, relativePath),
-    );
+    violations.push(...inspectCredentialedCorsSource(source, relativePath));
   }
 
   const workflowRoot = path.join(root, '.github/workflows');
@@ -291,7 +237,5 @@ if (invokedPath === currentPath) {
     process.exit(1);
   }
 
-  console.log(
-    '✅ Production/preview API, CORS, Pages, and binding isolation verified.',
-  );
+  console.log('✅ Production/preview API, CORS, Pages, and binding isolation verified.');
 }
