@@ -1,6 +1,10 @@
 import { physicalManoeuvreCode } from './matriz-manobra-resolution.mjs';
 
-export const REUSE_RESOLUTION_TYPES = new Set(['EXACT_UNIQUE', 'FORMAL_ALIAS', 'LEGACY_EQUIVALENT']);
+export const REUSE_RESOLUTION_TYPES = new Set([
+  'EXACT_UNIQUE',
+  'FORMAL_ALIAS',
+  'LEGACY_EQUIVALENT',
+]);
 
 function esc(value) {
   return String(value).replace(/'/g, "''");
@@ -14,12 +18,13 @@ export function physicalCode(canonical, versaoMatriz, versaoNumero) {
 }
 
 export function resolveStructuredTipo(model, fail) {
-  const candidates = [model.tipo_qualificacao_estruturado, model.tipo, model.programa].map((value) =>
-    String(value || '')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .trim()
-      .toUpperCase(),
+  const candidates = [model.tipo_qualificacao_estruturado, model.tipo, model.programa].map(
+    (value) =>
+      String(value || '')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .trim()
+        .toUpperCase(),
   );
   for (const raw of candidates) {
     if (!raw) continue;
@@ -71,9 +76,13 @@ export function buildResolutionStatements({
         }
       } else {
         const created = manobraById.get(Number(existing.manobra_id));
-        if (!created) fail(`${entry.codigo_canonico}: manobra da resolução já registrada não existe mais`);
+        if (!created) {
+          fail(`${entry.codigo_canonico}: manobra da resolução já registrada não existe mais`);
+        }
         if (Number(created.empresa_id) !== empresaId) {
-          fail(`${entry.codigo_canonico}: manobra da resolução já registrada pertence a outro tenant`);
+          fail(
+            `${entry.codigo_canonico}: manobra da resolução já registrada pertence a outro tenant`,
+          );
         }
         const expectedCodigoFisico =
           entry.resolution_type === 'COLLISION'
@@ -87,7 +96,9 @@ export function buildResolutionStatements({
           String(created.tipo_aeronave ?? '') !== String(payload.tipo_aeronave ?? '') ||
           String(created.descricao ?? '') !== String(payload.descricao ?? '')
         ) {
-          fail(`${entry.codigo_canonico}: manobra criada diverge do create_payload da resolução já registrada`);
+          fail(
+            `${entry.codigo_canonico}: manobra criada diverge do create_payload da resolução já registrada`,
+          );
         }
       }
       continue;
@@ -166,7 +177,16 @@ function chunk(array, size) {
   return chunks;
 }
 
-export function buildModelAndLinkStatements({ plan, empresaId, versaoMatriz, importUuid, fail, models, items, maxVersionByCode }) {
+export function buildModelAndLinkStatements({
+  plan,
+  empresaId,
+  versaoMatriz,
+  importUuid,
+  fail,
+  models,
+  items,
+  maxVersionByCode,
+}) {
   const statements = [];
   const versaoMatrizEscaped = esc(versaoMatriz);
   const importUuidEscaped = esc(importUuid);
@@ -186,12 +206,18 @@ export function buildModelAndLinkStatements({ plan, empresaId, versaoMatriz, imp
 
   statements.push(`INSERT INTO modelos_sessao(codigo,nome,empresa_id,tipo,created_at,updated_at) VALUES
     ${modelRows
-      .map((m) => `('${esc(m.codigoFisico)}',${sqlText(m.nome)},${empresaId},'${m.tipo}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`)
+      .map(
+        (m) =>
+          `('${esc(m.codigoFisico)}',${sqlText(m.nome)},${empresaId},'${m.tipo}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+      )
       .join(',\n    ')};`);
 
   const modelsCte = `_models(codigo_canonico,codigo_fisico,prev_id,versao_numero) AS (VALUES
     ${modelRows
-      .map((m) => `('${esc(m.codigoCanonico)}','${esc(m.codigoFisico)}',${m.prevId == null ? 'NULL' : m.prevId},${m.versaoNumero})`)
+      .map(
+        (m) =>
+          `('${esc(m.codigoCanonico)}','${esc(m.codigoFisico)}',${m.prevId == null ? 'NULL' : m.prevId},${m.versaoNumero})`,
+      )
       .join(',\n    ')}
   )`;
   const linksCteFor = (chunkItems) =>

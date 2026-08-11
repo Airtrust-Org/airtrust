@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { EXPECTED_TOTALS } from './matriz-session-contract.mjs';
 import { validateManoeuvreResolution } from './matriz-manobra-resolution.mjs';
+import { applySk76PeriodicMatrixCodeCorrections } from './sk76-periodic-code-contract.mjs';
 
 export const PLAN_SCHEMA_VERSION = 4;
 export const EXPECTED_SOURCE_HASH_COUNT = 61;
@@ -70,8 +71,9 @@ export function createDeterministicPlan({
   ],
 }) {
   if (!Number.isInteger(empresaId) || empresaId <= 0) throw new Error('empresa_id inválido');
+  const normalizedSk76 = applySk76PeriodicMatrixCodeCorrections(sk76);
   validateModelItems(aw139.models, aw139.items);
-  validateModelItems(sk76.models, sk76.items);
+  validateModelItems(normalizedSk76.models, normalizedSk76.items);
   const hashCount = Object.keys(sourceHashes || {}).length;
   if (hashCount !== EXPECTED_SOURCE_HASH_COUNT) {
     throw new Error(
@@ -79,8 +81,8 @@ export function createDeterministicPlan({
     );
   }
   const totals = {
-    modelos: aw139.models.length + sk76.models.length,
-    vinculos: aw139.items.length + sk76.items.length,
+    modelos: aw139.models.length + normalizedSk76.models.length,
+    vinculos: aw139.items.length + normalizedSk76.items.length,
     loft,
   };
   if (
@@ -91,7 +93,7 @@ export function createDeterministicPlan({
     throw new Error('plano fora do contrato 51/918/22');
   }
   const requestedCodes = [
-    ...new Set([...aw139.items, ...sk76.items].map((item) => String(item.codigo || ''))),
+    ...new Set([...aw139.items, ...normalizedSk76.items].map((item) => String(item.codigo || ''))),
   ];
   validateManoeuvreResolution(manobraResolution, { requestedCodes });
   const payload = {
@@ -101,7 +103,7 @@ export function createDeterministicPlan({
     contract_ref: contract
       ? { schema_version: contract.schema_version, totals: contract.totals }
       : null,
-    matrices: { AW139: aw139, SK76: sk76 },
+    matrices: { AW139: aw139, SK76: normalizedSk76 },
     totals,
     base_fingerprint: baseFingerprint,
     expected_current_versions: expectedCurrentVersions,
