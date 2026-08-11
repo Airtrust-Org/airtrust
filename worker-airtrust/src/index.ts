@@ -92,7 +92,6 @@ import importacaoXlsxRoutes from './routes/importacao-xlsx';
 // Backup & Restore
 import backupRoutes from './routes/backup';
 // Integrações EdApp
-import { edappRouter } from './routes/integracoes_edapp';
 import { sigvoosRouter } from './routes/integracoes_sigvoos';
 import controleVoosRoutes from './routes/controle-voos';
 import controleVoosRdvWorkflowRoutes from './routes/controle-voos-rdv-workflow';
