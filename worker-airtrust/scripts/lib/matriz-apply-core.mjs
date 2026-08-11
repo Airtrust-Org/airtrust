@@ -18,12 +18,13 @@ export function physicalCode(canonical, versaoMatriz, versaoNumero) {
 }
 
 export function resolveStructuredTipo(model, fail) {
-  const candidates = [model.tipo_qualificacao_estruturado, model.tipo, model.programa].map((value) =>
-    String(value || '')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .trim()
-      .toUpperCase(),
+  const candidates = [model.tipo_qualificacao_estruturado, model.tipo, model.programa].map(
+    (value) =>
+      String(value || '')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .trim()
+        .toUpperCase(),
   );
   for (const raw of candidates) {
     if (!raw) continue;
