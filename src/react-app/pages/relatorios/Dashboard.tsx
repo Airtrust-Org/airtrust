@@ -6,6 +6,32 @@ import AppLayout from '../../components/AppLayout';
 import { PageLayout } from '../../components/layout/PageLayout';
 import { Button } from '../../components/UI/Button';
 import { SkeletonCard } from '../../components/UI/Skeleton';
+import QualificationHistoryReportPanel from './QualificationHistoryReportPanel';
+
+interface CertificacaoMesMetric {
+  mes?: string;
+  total?: number;
+}
+
+interface ComplianceSetorMetric {
+  setor?: string;
+  taxa_compliance?: number;
+}
+
+interface SimuladorUsoMetric {
+  nome?: string;
+  total_sessoes?: number;
+}
+
+interface TreinamentoCategoriaMetric {
+  categoria?: string;
+  total?: number;
+}
+
+interface RelatorioMetricEnvelope<T> {
+  success?: boolean;
+  dados?: T[];
+}
 
 const DashboardCharts = lazyWithRetry(
   () => import('./DashboardCharts'),
@@ -26,14 +52,14 @@ function RelatoriosLoadingSkeleton() {
 }
 
 export default function RelatoriosDashboard() {
-  const [certMes, setCertMes] = useState<any[]>([]);
-  const [complianceSetor, setComplianceSetor] = useState<any[]>([]);
-  const [simUso, setSimUso] = useState<any[]>([]);
-  const [treinCat, setTreinCat] = useState<any[]>([]);
+  const [certMes, setCertMes] = useState<CertificacaoMesMetric[]>([]);
+  const [complianceSetor, setComplianceSetor] = useState<ComplianceSetorMetric[]>([]);
+  const [simUso, setSimUso] = useState<SimuladorUsoMetric[]>([]);
+  const [treinCat, setTreinCat] = useState<TreinamentoCategoriaMetric[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    carregarDados();
+    void carregarDados();
   }, []);
 
   const carregarDados = async () => {
@@ -45,12 +71,17 @@ export default function RelatoriosDashboard() {
         fetchWithAuth(`${API_BASE_URL}/relatorios/treinamentos-categoria`),
       ]);
 
-      const [certData, compData, simData, treinData] = await Promise.all([
+      const [certData, compData, simData, treinData] = (await Promise.all([
         certResp.json(),
         compResp.json(),
         simResp.json(),
         treinResp.json(),
-      ]);
+      ])) as [
+        RelatorioMetricEnvelope<CertificacaoMesMetric>,
+        RelatorioMetricEnvelope<ComplianceSetorMetric>,
+        RelatorioMetricEnvelope<SimuladorUsoMetric>,
+        RelatorioMetricEnvelope<TreinamentoCategoriaMetric>,
+      ];
 
       if (certData.success) setCertMes(certData.dados || []);
       if (compData.success) setComplianceSetor(compData.dados || []);
@@ -68,7 +99,10 @@ export default function RelatoriosDashboard() {
   };
 
   const semDados =
-    certMes.length === 0 && complianceSetor.length === 0 && simUso.length === 0 && treinCat.length === 0;
+    certMes.length === 0 &&
+    complianceSetor.length === 0 &&
+    simUso.length === 0 &&
+    treinCat.length === 0;
 
   const statsCards = [
     {
@@ -114,7 +148,7 @@ export default function RelatoriosDashboard() {
     <AppLayout>
       <PageLayout
         title="Relatórios e Análises"
-        subtitle="Dashboards executivos com métricas operacionais"
+        subtitle="Relatórios de qualificações e métricas operacionais"
         action={
           <Button
             variant="secondary"
@@ -126,55 +160,59 @@ export default function RelatoriosDashboard() {
           </Button>
         }
       >
-        {loading ? (
-          <RelatoriosLoadingSkeleton />
-        ) : (
-          <div className="space-y-4">
-            {/* Cards de resumo */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
-              {statsCards.map((card) => (
-                <div
-                  key={card.label}
-                  className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm"
-                >
+        <div className="space-y-6">
+          <QualificationHistoryReportPanel />
+
+          {loading ? (
+            <RelatoriosLoadingSkeleton />
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
+                {statsCards.map((card) => (
                   <div
-                    className={`w-11 h-11 ${card.iconBg} rounded-full flex items-center justify-center mx-auto mb-3`}
+                    key={card.label}
+                    className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm"
                   >
-                    {card.icon}
+                    <div
+                      className={`w-11 h-11 ${card.iconBg} rounded-full flex items-center justify-center mx-auto mb-3`}
+                    >
+                      {card.icon}
+                    </div>
+                    <p className="text-sm text-slate-500">{card.label}</p>
+                    <p className={`text-2xl font-bold mt-1 ${card.valueClass}`}>{card.value}</p>
                   </div>
-                  <p className="text-sm text-slate-500">{card.label}</p>
-                  <p className={`text-2xl font-bold mt-1 ${card.valueClass}`}>{card.value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Gráficos */}
-            <Suspense
-              fallback={
-                <div className="h-[640px] rounded-2xl border border-slate-200 bg-white animate-pulse" />
-              }
-            >
-              <DashboardCharts
-                certMes={certMes}
-                complianceSetor={complianceSetor}
-                simUso={simUso}
-                treinCat={treinCat}
-              />
-            </Suspense>
-
-            {/* Empty state */}
-            {semDados && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
-                <BarChart3 className="w-14 h-14 mx-auto text-slate-300 mb-4" />
-                <h3 className="text-lg font-semibold text-slate-800 mb-1">Sem dados disponíveis</h3>
-                <p className="text-sm text-slate-500 max-w-sm mx-auto">
-                  Não há dados suficientes para gerar os relatórios. Adicione certificações, sessões
-                  e treinamentos para visualizar as análises.
-                </p>
+                ))}
               </div>
-            )}
-          </div>
-        )}
+
+              <Suspense
+                fallback={
+                  <div className="h-[640px] rounded-2xl border border-slate-200 bg-white animate-pulse" />
+                }
+              >
+                <DashboardCharts
+                  certMes={certMes}
+                  complianceSetor={complianceSetor}
+                  simUso={simUso}
+                  treinCat={treinCat}
+                />
+              </Suspense>
+
+              {semDados && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
+                  <BarChart3 className="w-14 h-14 mx-auto text-slate-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-800 mb-1">
+                    Sem dados disponíveis
+                  </h3>
+                  <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                    Não há dados suficientes para gerar os painéis analíticos. O relatório de
+                    histórico acima continua disponível conforme os registros autorizados ao
+                    usuário.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </PageLayout>
     </AppLayout>
   );
