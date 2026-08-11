@@ -129,13 +129,7 @@ describe('matriz-guia-resolution', () => {
     // A stale/reused guia row could share a code string across aircraft
     // families; the exact code alone must never be trusted.
     const sessions = [
-      session(
-        'A139-I-01/12',
-        'AW139/html/G_Inicial_Sessao_1_de_12.html',
-        null,
-        'INICIAL',
-        'AW139',
-      ),
+      session('A139-I-01/12', 'AW139/html/G_Inicial_Sessao_1_de_12.html', null, 'INICIAL', 'AW139'),
     ];
     const guias = [guia(1, 'A139-I-01/12', 'INICIAL', null, 1, 12, 'SK76')];
     expect(() => resolveGuiaLinks({ sessions, guias })).toThrow(
