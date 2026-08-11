@@ -47,13 +47,22 @@ function hasH5pBindingColumn(c: Parameters<typeof getLmsSchemaSnapshot>[0]) {
   return getLmsSchemaSnapshot(c).lmsCursosColumns.h5p_conteudo_id === 'present';
 }
 
-function assertContentLengthWithinLimit(request: Request, maxBytes: number, label: string) {
+function contentLengthWithinLimit(
+  request: Request,
+  maxBytes: number,
+  label: string,
+): number | null {
   const raw = request.headers.get('content-length');
-  if (!raw) return;
+  if (!raw) return null;
   const length = Number(raw);
   if (Number.isFinite(length) && length > maxBytes) {
     throw new ApiError(`${label} excede o limite permitido`, 413);
   }
+  return Number.isFinite(length) && length >= 0 ? length : null;
+}
+
+function assertContentLengthWithinLimit(request: Request, maxBytes: number, label: string) {
+  contentLengthWithinLimit(request, maxBytes, label);
 }
 
 type UploadedFile = {
@@ -204,12 +213,17 @@ app.post(
     }
     const uploadId = c.req.query('upload_id')?.trim() ?? '';
     const path = c.req.query('path') ?? '';
-    assertContentLengthWithinLimit(
+    const contentLength = contentLengthWithinLimit(
       c.req.raw,
       LMS_PACKAGE_LIMITS.maxFileBytes,
       'Arquivo individual',
     );
-    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    // Browser uploads include Content-Length, so stream directly to R2 instead
+    // of charging Worker CPU to copy each SCORM media file into memory.
+    const bufferedBody =
+      contentLength === null || !c.req.raw.body ? new Uint8Array(await c.req.arrayBuffer()) : null;
+    const body = bufferedBody ?? c.req.raw.body!;
+    const byteLength = contentLength ?? bufferedBody!.byteLength;
 
     const data = await putLmsContentUploadFile({
       bucket: c.env.BUCKET,
@@ -218,7 +232,8 @@ app.post(
       tipoConteudo,
       operationId: uploadId,
       path,
-      bytes,
+      body,
+      byteLength,
     });
     return c.json({ success: true, data });
   },

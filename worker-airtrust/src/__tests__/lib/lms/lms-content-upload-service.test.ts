@@ -278,8 +278,22 @@ describe('LMS content upload consistency', () => {
     const first = await beginLmsContentUpload(common);
     const second = await beginLmsContentUpload(common);
     for (const marker of [first, second]) {
-      await putLmsContentUploadFile({ ...common, operationId: marker.operationId, path: 'imsmanifest.xml', bytes: strToU8('<manifest><resources><resource href="index.html" /></resources></manifest>') });
-      await putLmsContentUploadFile({ ...common, operationId: marker.operationId, path: 'index.html', bytes: strToU8('ok') });
+      const manifest = strToU8('<manifest><resources><resource href="index.html" /></resources></manifest>');
+      await putLmsContentUploadFile({
+        ...common,
+        operationId: marker.operationId,
+        path: 'imsmanifest.xml',
+        body: manifest,
+        byteLength: manifest.byteLength,
+      });
+      const index = strToU8('ok');
+      await putLmsContentUploadFile({
+        ...common,
+        operationId: marker.operationId,
+        path: 'index.html',
+        body: index,
+        byteLength: index.byteLength,
+      });
     }
 
     const winner = await completeStructuredLmsContentUpload({ ...common, operationId: first.operationId, arquivoNome: 'a.zip' });
