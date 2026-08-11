@@ -141,9 +141,7 @@ describe('environment entrypoint origin isolation', () => {
     );
 
     expect(allowed.status).toBe(204);
-    expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe(
-      'https://airtrust.online',
-    );
+    expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe('https://airtrust.online');
     expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe('true');
   });
 
