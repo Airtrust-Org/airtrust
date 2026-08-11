@@ -253,7 +253,8 @@ export async function putLmsContentUploadFile(params: {
   tipoConteudo: LmsStructuredContentType;
   operationId: string;
   path: string;
-  bytes: Uint8Array;
+  body: ReadableStream<Uint8Array> | Uint8Array;
+  byteLength: number;
 }) {
   const prefix = `${basePrefix(params.tipoConteudo, params.empresaId, params.cursoId)}_versions/${params.operationId}/`;
   const marker = await readMarker(params.bucket, prefix);
@@ -263,14 +264,14 @@ export async function putLmsContentUploadFile(params: {
 
   const path = normalizeLmsArchivePath(params.path);
   if (!path) throw new ApiError('Caminho de arquivo inválido', 400);
-  if (params.bytes.byteLength > LMS_PACKAGE_LIMITS.maxFileBytes) {
+  if (params.byteLength > LMS_PACKAGE_LIMITS.maxFileBytes) {
     throw new ApiError('Arquivo individual excede o limite de 64 MB', 413);
   }
 
-  await params.bucket.put(`${prefix}${path}`, params.bytes, {
+  await params.bucket.put(`${prefix}${path}`, params.body, {
     httpMetadata: { contentType: mimeType(path), cacheControl: 'public, max-age=86400' },
   });
-  return { path, bytes: params.bytes.byteLength };
+  return { path, bytes: params.byteLength };
 }
 
 async function listUploadedEntries(bucket: R2Bucket, marker: UploadOperationMarker) {
