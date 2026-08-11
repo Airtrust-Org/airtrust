@@ -52,6 +52,11 @@ binding = "AI"
 [env.staging]
 name = "airtrust-api-staging"
 
+[env.staging.limits]
+# Structured SCORM packages can contain large media assets. Keep the Worker
+# budget above the bundled-plan default so direct R2 streaming can finish.
+cpu_ms = 300000
+
 [env.staging.version_metadata]
 binding = "CF_VERSION_METADATA"
 
@@ -109,6 +114,11 @@ name = "airtrust-api-production"
 routes = [
   { pattern = "api.airtrust.online/*", zone_name = "airtrust.online" }
 ]
+
+[env.production.limits]
+# Matches staging; avoids platform 1102 responses without CORS headers during
+# authenticated per-file SCORM uploads.
+cpu_ms = 300000
 
 [env.production.version_metadata]
 binding = "CF_VERSION_METADATA"
