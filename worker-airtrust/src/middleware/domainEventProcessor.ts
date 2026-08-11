@@ -7,7 +7,15 @@ import { enforcePersistedLmsProgressEvidence } from './lms-completion-persisted-
 import { enforceLmsCompletionReversal } from './lms-completion-reversal';
 import { enforceLmsEnrollmentIntegrity } from './lms-enrollment-integrity';
 
-type DomainEventContext = AppEnv;
+type DomainEventContext = {
+  Bindings: AppEnv['Bindings'];
+  Variables: AppEnv['Variables'] & {
+    user?: {
+      id?: number;
+      empresa_id?: string | number;
+    };
+  };
+};
 
 const ROTA_MODULO: Record<string, string> = {
   '/api/escalas': 'escalas',
