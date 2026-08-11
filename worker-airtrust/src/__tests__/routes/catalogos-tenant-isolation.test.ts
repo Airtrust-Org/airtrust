@@ -3,26 +3,31 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
 
-vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: any, next: () => Promise<void>) => {
-      if (!c.req.header('Authorization')) {
-        return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
-      }
+type MockContext = {
+  req: { header: (name: string) => string | undefined };
+  set: (key: string, value: unknown) => void;
+  get: (key: string) => unknown;
+  json: (body: unknown, status?: number) => Response;
+};
 
-      c.set('userId', 10);
-      c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
-      c.set('userRole', c.req.header('x-test-role') || 'admin');
-      await next();
-    },
+vi.mock('../../middleware/auth', () => ({
+  auth: () => async (c: MockContext, next: () => Promise<void>) => {
+    if (!c.req.header('Authorization')) {
+      return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
+    }
+
+    c.set('userId', 10);
+    c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
+    c.set('userRole', c.req.header('x-test-role') || 'admin');
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return {
     ...actual,
-    getTenantContext: (c: any) => ({
+    getTenantContext: (c: MockContext) => ({
       empresaId: Number(c.get('empresaId') || 0),
       empresaCodigo: `empresa-${Number(c.get('empresaId') || 0)}`,
       empresaNome: 'Empresa Teste',
@@ -30,14 +35,14 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
       plano: 'pro',
       permissions: ['read', 'write'],
     }),
-    getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
+    getEmpresaId: (c: MockContext) => Number(c.get('empresaId') || 0),
   };
 });
 
 vi.mock('../../middleware/rbac', () => ({
   requireRole:
     (...requiredRoles: string[]) =>
-    async (c: any, next: () => Promise<void>) => {
+    async (c: MockContext, next: () => Promise<void>) => {
       const role = String(c.get('userRole') || '').toLowerCase();
       if (!requiredRoles.map((item) => item.toLowerCase()).includes(role)) {
         return c.json({ success: false, error: 'Permissão negada' }, 403);
@@ -336,15 +341,15 @@ function createMockEnv() {
             )
           ) {
             const empresaId = Number(args[0]);
-            const codigo = String(args[1] || '').trim().toUpperCase();
-            return (
-              state.manobras.find(
-                (item) =>
-                  item.empresa_id === empresaId &&
-                  item.deleted_at === null &&
-                  item.codigo.trim().toUpperCase() === codigo,
-              ) || null
-            ) as T | null;
+            const codigo = String(args[1] || '')
+              .trim()
+              .toUpperCase();
+            return (state.manobras.find(
+              (item) =>
+                item.empresa_id === empresaId &&
+                item.deleted_at === null &&
+                item.codigo.trim().toUpperCase() === codigo,
+            ) || null) as T | null;
           }
 
           if (
@@ -354,12 +359,9 @@ function createMockEnv() {
           ) {
             const id = Number(args[0]);
             const empresaId = Number(args[1]);
-            return (
-              state.manobras.find(
-                (item) =>
-                  item.id === id && item.empresa_id === empresaId && item.deleted_at === null,
-              ) || null
-            ) as T | null;
+            return (state.manobras.find(
+              (item) => item.id === id && item.empresa_id === empresaId && item.deleted_at === null,
+            ) || null) as T | null;
           }
 
           if (
@@ -368,15 +370,17 @@ function createMockEnv() {
             )
           ) {
             const empresaId = Number(args[0]);
-            const modelo = String(args[1] || '').trim().toUpperCase();
-            return (
-              state.modelosAeronave.find(
-                (item) =>
-                  item.empresa_id === empresaId &&
-                  item.deleted_at === null &&
-                  String(item.modelo || item.codigo || item.nome).trim().toUpperCase() === modelo,
-              ) || null
-            ) as T | null;
+            const modelo = String(args[1] || '')
+              .trim()
+              .toUpperCase();
+            return (state.modelosAeronave.find(
+              (item) =>
+                item.empresa_id === empresaId &&
+                item.deleted_at === null &&
+                String(item.modelo || item.codigo || item.nome)
+                  .trim()
+                  .toUpperCase() === modelo,
+            ) || null) as T | null;
           }
 
           if (
@@ -386,12 +390,9 @@ function createMockEnv() {
           ) {
             const id = Number(args[0]);
             const empresaId = Number(args[1]);
-            return (
-              state.modelosAeronave.find(
-                (item) =>
-                  item.id === id && item.empresa_id === empresaId && item.deleted_at === null,
-              ) || null
-            ) as T | null;
+            return (state.modelosAeronave.find(
+              (item) => item.id === id && item.empresa_id === empresaId && item.deleted_at === null,
+            ) || null) as T | null;
           }
 
           if (query.includes('SELECT COUNT(*) as total FROM habilitacoes WHERE')) {
@@ -408,7 +409,9 @@ function createMockEnv() {
           state.calls.push({ query, args, method: 'all' });
 
           if (
-            query.includes('FROM manobras WHERE empresa_id = ? AND deleted_at IS NULL ORDER BY ordem,codigo')
+            query.includes(
+              'FROM manobras WHERE empresa_id = ? AND deleted_at IS NULL ORDER BY ordem,codigo',
+            )
           ) {
             const empresaId = Number(args[0]);
             return {
@@ -432,9 +435,10 @@ function createMockEnv() {
           }
 
           if (
-            query.includes('FROM qualificacoes_categorias')
-            && query.includes('WHERE empresa_id = ? AND deleted_at IS NULL')
-            && query.includes('ORDER BY id ASC')
+            query.includes('FROM qualificacoes_categorias') &&
+            (query.includes('WHERE empresa_id = ? AND deleted_at IS NULL') ||
+              query.includes('WHERE qc.empresa_id = ? AND qc.deleted_at IS NULL')) &&
+            (query.includes('ORDER BY id ASC') || query.includes('ORDER BY qc.id ASC'))
           ) {
             const empresaId = Number(args[0]);
             return {
@@ -445,8 +449,8 @@ function createMockEnv() {
           }
 
           if (
-            query.includes('FROM habilitacoes WHERE deleted_at IS NULL AND empresa_id = ?')
-            && query.includes('ORDER BY nome ASC, created_at DESC')
+            query.includes('FROM habilitacoes WHERE deleted_at IS NULL AND empresa_id = ?') &&
+            query.includes('ORDER BY nome ASC, created_at DESC')
           ) {
             const empresaId = Number(args[0]);
             return {
@@ -457,8 +461,8 @@ function createMockEnv() {
           }
 
           if (
-            query.includes('FROM modelos_aeronave WHERE empresa_id = ? AND deleted_at IS NULL')
-            && query.includes('ORDER BY COALESCE(modelo, codigo, nome) ASC')
+            query.includes('FROM modelos_aeronave WHERE empresa_id = ? AND deleted_at IS NULL') &&
+            query.includes('ORDER BY COALESCE(modelo, codigo, nome) ASC')
           ) {
             const empresaId = Number(args[0]);
             return {
@@ -542,7 +546,7 @@ function createMockEnv() {
 
           if (
             query.includes(
-              'INSERT INTO modelos_aeronave (empresa_id, codigo, nome, modelo, fabricante, tipo, categoria, descricao, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, datetime(\'now\'), datetime(\'now\'))',
+              "INSERT INTO modelos_aeronave (empresa_id, codigo, nome, modelo, fabricante, tipo, categoria, descricao, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))",
             )
           ) {
             const row: ModeloAeronaveRow = {
@@ -573,7 +577,7 @@ function createMockEnv() {
   };
 
   return {
-    DB: db as any,
+    DB: db as unknown as D1Database,
     __state: state,
   };
 }
@@ -591,7 +595,7 @@ describe('catalogos tenant isolation', () => {
           'x-test-empresa-id': '1',
         },
       },
-      env as any,
+      env as unknown as Env,
     );
 
     expect(res.status).toBe(200);
@@ -616,7 +620,7 @@ describe('catalogos tenant isolation', () => {
         },
         body: JSON.stringify({ nome: 'Nao pode' }),
       },
-      env as any,
+      env as unknown as Env,
     );
 
     expect(updateRes.status).toBe(404);
@@ -630,7 +634,7 @@ describe('catalogos tenant isolation', () => {
           'x-test-empresa-id': '1',
         },
       },
-      env as any,
+      env as unknown as Env,
     );
 
     expect(deleteRes.status).toBe(404);
@@ -647,35 +651,49 @@ describe('catalogos tenant isolation', () => {
         {
           headers: { Authorization: 'Bearer test', 'x-test-empresa-id': '1' },
         },
-        env as any,
+        env as unknown as Env,
       ),
       app.request(
         '/api/categorias',
         {
           headers: { Authorization: 'Bearer test', 'x-test-empresa-id': '1' },
         },
-        env as any,
+        env as unknown as Env,
       ),
       app.request(
         '/api/habilitacoes',
         {
           headers: { Authorization: 'Bearer test', 'x-test-empresa-id': '1' },
         },
-        env as any,
+        env as unknown as Env,
       ),
       app.request(
         '/api/modelos-aeronave',
         {
           headers: { Authorization: 'Bearer test', 'x-test-empresa-id': '1' },
         },
-        env as any,
+        env as unknown as Env,
       ),
     ]);
 
-    expect(((await catManobraRes.json()) as { data: Array<{ empresa_id: number }> }).data.map((item) => item.empresa_id)).toEqual([1]);
-    expect(((await qualCatRes.json()) as { data: Array<{ id: number }> }).data.map((item) => item.id)).toEqual([1]);
-    expect(((await habilRes.json()) as { data: Array<{ empresa_id: number }> }).data.map((item) => item.empresa_id)).toEqual([1]);
-    expect(((await modelosRes.json()) as { data: Array<{ empresa_id: number }> }).data.map((item) => item.empresa_id)).toEqual([1]);
+    expect(
+      ((await catManobraRes.json()) as { data: Array<{ empresa_id: number }> }).data.map(
+        (item) => item.empresa_id,
+      ),
+    ).toEqual([1]);
+    expect(
+      ((await qualCatRes.json()) as { data: Array<{ id: number }> }).data.map((item) => item.id),
+    ).toEqual([1]);
+    expect(
+      ((await habilRes.json()) as { data: Array<{ empresa_id: number }> }).data.map(
+        (item) => item.empresa_id,
+      ),
+    ).toEqual([1]);
+    expect(
+      ((await modelosRes.json()) as { data: Array<{ empresa_id: number }> }).data.map(
+        (item) => item.empresa_id,
+      ),
+    ).toEqual([1]);
   });
 
   it('mesmo codigo pode existir em empresas diferentes, mas duplicidade na mesma empresa eh bloqueada', async () => {
@@ -700,7 +718,7 @@ describe('catalogos tenant isolation', () => {
           tipo_aeronave: 'SK76',
         }),
       },
-      env as any,
+      env as unknown as Env,
     );
 
     expect(crossTenantCreate.status).toBe(201);
@@ -723,7 +741,7 @@ describe('catalogos tenant isolation', () => {
           tipo_aeronave: 'AW139',
         }),
       },
-      env as any,
+      env as unknown as Env,
     );
 
     expect(sameTenantDuplicate.status).toBe(409);
@@ -750,7 +768,7 @@ describe('catalogos tenant isolation', () => {
           categoria: 'Executivo',
         }),
       },
-      env as any,
+      env as unknown as Env,
     );
 
     expect(res.status).toBe(201);

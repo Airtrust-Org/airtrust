@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 const testDir = dirname(fileURLToPath(import.meta.url));
 const workerRoot = join(testDir, '../../..');
 const migrationsDir = join(workerRoot, 'migrations');
+const noGoDir = join(workerRoot, '../scripts/sql/manual/no-go');
 const require = createRequire(import.meta.url);
 const { listNoGoMigrations } = require('../../../../scripts/migration-no-go-lib.mjs') as {
   listNoGoMigrations: (dir: string) => string[];
@@ -33,7 +34,9 @@ describe('applied migration artifacts integrity', () => {
       expect(migrationPath).toContain('/worker-airtrust/migrations/');
       expect(sha256Hex(sql)).toBe(migration.sha256);
       expect(sql).toContain('ALTER TABLE notificacoes_log ADD COLUMN updated_at TEXT;');
-      expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_notificacoes_log_empresa_notification_key');
+      expect(sql).toContain(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_notificacoes_log_empresa_notification_key',
+      );
       expect(sql).not.toMatch(/\bwrangler\s+d1\b/i);
       expect(sql).not.toMatch(/\b--remote\b/i);
     }
@@ -47,8 +50,8 @@ describe('applied migration artifacts integrity', () => {
     expect(sha256Hex(mutatedSql)).not.toBe(migration.sha256);
   });
 
-  it('keeps 0432, 0433 and 0435 blocked for production execution while leaving 0436 mutable only by hash guard', () => {
-    const blocked = listNoGoMigrations(migrationsDir);
+  it('keeps 0432, 0433 and 0435 blocked after quarantine while leaving 0436 governed only by hash guard', () => {
+    const blocked = listNoGoMigrations(noGoDir);
 
     expect(blocked).toContain('0432_revisao_completa_codigos_manobras.sql');
     expect(blocked).toContain('0433_fix_loft_references.sql');

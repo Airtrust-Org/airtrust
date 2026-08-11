@@ -36,6 +36,7 @@ CREATE TABLE qualificacoes_historico (
     codigo TEXT,
     categoria_id INTEGER,
     categoria TEXT,
+    categoria_codigo TEXT,
   data_conclusao TEXT,
   data_vencimento TEXT,
   validade_meses INTEGER,

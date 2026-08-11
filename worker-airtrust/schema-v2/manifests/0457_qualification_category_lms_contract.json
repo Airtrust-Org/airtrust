@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "change_id": "0457_qualification_category_lms_contract",
+  "migration_path": "worker-airtrust/migrations/0457_qualification_category_lms_contract.sql",
+  "schema_v2_change_path": "worker-airtrust/schema-v2/changes/0457_qualification_category_lms_contract.sql",
+  "plan_path": "worker-airtrust/schema-v2/plans/qualification-category-lms-contract-0457.md",
+  "rollback_path": "scripts/rollback/0457_qualification_category_lms_contract.sql",
+  "migration_sha256": "d2d55f1501df89201c11c88390b4aa17411760da22096a9279ff6bf2d95204f5",
+  "remote_application": "prohibited_by_pr",
+  "requires_backup": true,
+  "requires_dry_run": true,
+  "requires_postconditions": true,
+  "data_reconciliation_separate": true,
+  "database_guards": [
+    "tenant_scoped_category_fk",
+    "active_category_required",
+    "category_code_immutable",
+    "category_deactivation_blocked_when_referenced",
+    "history_snapshots_derived",
+    "lms_category_domain_derived",
+    "legacy_format_neutralized"
+  ]
+}

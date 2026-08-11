@@ -1,7 +1,7 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -102,7 +102,8 @@ describe('controlled execution gate', () => {
     const env = baseEnv({
       AIRTRUST_CONTROLLED_TARGET: 'production',
       AIRTRUST_CONTROLLED_TARGET_REF: 'cluster://production/db',
-      AIRTRUST_CONTROLLED_SAFE_COMMAND: 'bash scripts/run-dq01-backfill.sh --mode backfill --target production',
+      AIRTRUST_CONTROLLED_SAFE_COMMAND:
+        'bash scripts/run-dq01-backfill.sh --mode backfill --target production',
     });
     env.AIRTRUST_DB_PATH = '';
 
@@ -115,7 +116,8 @@ describe('controlled execution gate', () => {
   it('blocks commands that contain deploy', () => {
     const result = runGenericGate(
       baseEnv({
-        AIRTRUST_CONTROLLED_SAFE_COMMAND: 'wrangler deploy && bash scripts/run-dq01-backfill.sh --mode backfill',
+        AIRTRUST_CONTROLLED_SAFE_COMMAND:
+          'wrangler deploy && bash scripts/run-dq01-backfill.sh --mode backfill',
       }),
     );
 
@@ -146,13 +148,13 @@ describe('controlled execution gate', () => {
     expect(result.stdout).toContain('mode_command_mismatch');
   });
 
-  it('blocks when safe_command references a migration marked NO_GO_MIGRATION_PRODUCAO', () => {
+  it('blocks when safe_command references a quarantined migration marked NO_GO_MIGRATION_PRODUCAO', () => {
     const result = runGenericGate(
       baseEnv({
         AIRTRUST_CONTROLLED_MODE: 'audit-v2-schema',
         AIRTRUST_CONTROLLED_TARGET: 'local-copy',
         AIRTRUST_CONTROLLED_SAFE_COMMAND:
-          'audit-v2 schema check then apply worker-airtrust/migrations/0432_revisao_completa_codigos_manobras.sql',
+          'audit-v2 schema check then apply scripts/sql/manual/no-go/0432_revisao_completa_codigos_manobras.sql',
       }),
     );
 
@@ -162,13 +164,13 @@ describe('controlled execution gate', () => {
     expect(result.stdout).toContain('0432_revisao_completa_codigos_manobras.sql');
   });
 
-  it('blocks when safe_command references migration 0433 (missing marker would be a bypass)', () => {
+  it('blocks when safe_command references quarantined migration 0433', () => {
     const result = runGenericGate(
       baseEnv({
         AIRTRUST_CONTROLLED_MODE: 'audit-v2-schema',
         AIRTRUST_CONTROLLED_TARGET: 'local-copy',
         AIRTRUST_CONTROLLED_SAFE_COMMAND:
-          'audit-v2 schema check then apply worker-airtrust/migrations/0433_fix_loft_references.sql',
+          'audit-v2 schema check then apply scripts/sql/manual/no-go/0433_fix_loft_references.sql',
       }),
     );
 
@@ -202,7 +204,9 @@ describe('controlled execution gate', () => {
     );
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain('CONTROLLED_EXECUTION_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION');
+    expect(result.stdout).toContain(
+      'CONTROLLED_EXECUTION_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION',
+    );
   });
 
   it('allows a local-copy scenario with fake artifacts and reviewed command', () => {
@@ -215,7 +219,9 @@ describe('controlled execution gate', () => {
     );
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain('CONTROLLED_EXECUTION_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION');
+    expect(result.stdout).toContain(
+      'CONTROLLED_EXECUTION_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION',
+    );
     expect(result.stdout).toContain('TARGET=local-copy');
     expect(result.stdout).toContain('SNAPSHOT_EVIDENCE=YES');
     expect(result.stdout).toContain('ROLLBACK_EVIDENCE=YES');
