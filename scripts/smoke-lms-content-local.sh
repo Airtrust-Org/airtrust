@@ -95,6 +95,17 @@ if [[ "$HEADER_SLIDE_COUNT" != "$PPTX_SLIDE_COUNT" ]]; then
   exit 1
 fi
 
+echo "[smoke:lms] Persisting progress before end-user completion"
+curl -fsS -X PATCH "$API_BASE/lms/matriculas/$PDF_MATRICULA_ID/progresso" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"progresso_pct":100}' >/dev/null
+
+curl -fsS -X PATCH "$API_BASE/lms/matriculas/$PPTX_MATRICULA_ID/progresso" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"progresso_pct":100}' >/dev/null
+
 echo "[smoke:lms] Finalizing enrollments through end-user flow"
 curl -fsS -X POST "$API_BASE/lms/matriculas/$PDF_MATRICULA_ID/finalizar" \
   -H "Authorization: Bearer $TOKEN" \
