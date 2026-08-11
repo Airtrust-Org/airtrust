@@ -97,7 +97,7 @@ export function isEadFormato(tipo: {
 }
 
 async function resolveCanonicalEadCategoriaId(db: D1Database, empresaId: number) {
-  const result = await db
+  const active = await db
     .prepare(
       `SELECT id FROM qualificacoes_categorias
         WHERE empresa_id = ? AND deleted_at IS NULL AND ativo = 1
@@ -106,7 +106,28 @@ async function resolveCanonicalEadCategoriaId(db: D1Database, empresaId: number)
     )
     .bind(empresaId)
     .all<{ id: number }>();
-  const rows = result.results ?? [];
+  let rows = active.results ?? [];
+
+  // Incident 2026-08-10: production had exactly one 'EAD' categoria row for
+  // a tenant, deactivated (ativo=0) by unrelated catalog cleanup, while still
+  // being the row qualificacoes_tipos.categoria_id points at. This mirror
+  // sync only needs a stable, unambiguous id to classify by — it is not an
+  // authorization check — so an inactive-but-unique row still resolves
+  // instead of hard-failing every course save. Genuine ambiguity (zero or
+  // multiple candidates, active or not) still fails closed.
+  if (rows.length === 0) {
+    const all = await db
+      .prepare(
+        `SELECT id FROM qualificacoes_categorias
+          WHERE empresa_id = ? AND deleted_at IS NULL
+            AND UPPER(TRIM(nome)) = 'EAD'
+          ORDER BY id ASC LIMIT 2`,
+      )
+      .bind(empresaId)
+      .all<{ id: number }>();
+    rows = all.results ?? [];
+  }
+
   if (rows.length !== 1)
     throw new Error(`Categoria EAD canônica inválida para empresa_id=${empresaId}`);
   return Number(rows[0].id);
