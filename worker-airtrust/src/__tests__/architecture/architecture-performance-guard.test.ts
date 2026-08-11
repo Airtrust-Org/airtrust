@@ -43,7 +43,12 @@ const LARGE_FILE_LINE_CAPS = {
   // Cap raised 2026-07-31: counted 2548 after scoped short-lived asset sessions,
   // request-aware cookie policy and CSP hardening in PR #565. Extraction remains
   // a follow-up and is not mixed into this security hotfix.
-  'routes/lms-assets.ts': 2550,
+  // Cap raised 2026-08-11: counted 2554 after fixing GET course-assets/:cursoId/thumbnail
+  // — added the missing empresa_id tenant filter (cross-tenant thumbnail leak) and
+  // switched Access-Control-Allow-Origin from a hardcoded '*' to the shared
+  // buildAssetHeaders() resolver (credentials-incompatible wildcard blocked thumbnails
+  // in every tenant's browser). Same incident as the SCORM upload 500 hotfix.
+  'routes/lms-assets.ts': 2554,
   // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
   // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,
   // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.
