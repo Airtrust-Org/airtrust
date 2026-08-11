@@ -1,6 +1,11 @@
 import { physicalManoeuvreCode } from './matriz-manobra-resolution.mjs';
+import { legacySk76PeriodicCode } from './sk76-periodic-code-contract.mjs';
 
-export const REUSE_RESOLUTION_TYPES = new Set(['EXACT_UNIQUE', 'FORMAL_ALIAS', 'LEGACY_EQUIVALENT']);
+export const REUSE_RESOLUTION_TYPES = new Set([
+  'EXACT_UNIQUE',
+  'FORMAL_ALIAS',
+  'LEGACY_EQUIVALENT',
+]);
 
 function esc(value) {
   return String(value).replace(/'/g, "''");
@@ -71,9 +76,12 @@ export function buildResolutionStatements({
         }
       } else {
         const created = manobraById.get(Number(existing.manobra_id));
-        if (!created) fail(`${entry.codigo_canonico}: manobra da resolução já registrada não existe mais`);
+        if (!created)
+          fail(`${entry.codigo_canonico}: manobra da resolução já registrada não existe mais`);
         if (Number(created.empresa_id) !== empresaId) {
-          fail(`${entry.codigo_canonico}: manobra da resolução já registrada pertence a outro tenant`);
+          fail(
+            `${entry.codigo_canonico}: manobra da resolução já registrada pertence a outro tenant`,
+          );
         }
         const expectedCodigoFisico =
           entry.resolution_type === 'COLLISION'
@@ -87,7 +95,9 @@ export function buildResolutionStatements({
           String(created.tipo_aeronave ?? '') !== String(payload.tipo_aeronave ?? '') ||
           String(created.descricao ?? '') !== String(payload.descricao ?? '')
         ) {
-          fail(`${entry.codigo_canonico}: manobra criada diverge do create_payload da resolução já registrada`);
+          fail(
+            `${entry.codigo_canonico}: manobra criada diverge do create_payload da resolução já registrada`,
+          );
         }
       }
       continue;
@@ -142,9 +152,9 @@ export function buildResolutionStatements({
  * working data that used to live in a temp table is instead computed in JS
  * up front and inlined as a `WITH _models(...) AS (VALUES ...)` /
  * `_links(...)` row-constructor CTE, repeated verbatim in each statement that
- * needs it (a CTE only scopes to the one statement it's attached to; nothing
- * can be shared across statements in a batch except what's already committed
- * to a permanent table).
+ * needs it (a CTE only scopes to the one statement; nothing can be shared
+ * across statements in a batch except what's already committed to a permanent
+ * table).
  *
  * The `_links` CTE (one row per model/manoeuvre position — 918 for the real
  * matrix) is chunked across several statements rather than inlined once: a
@@ -166,13 +176,29 @@ function chunk(array, size) {
   return chunks;
 }
 
-export function buildModelAndLinkStatements({ plan, empresaId, versaoMatriz, importUuid, fail, models, items, maxVersionByCode }) {
+function previousVersion(maxVersionByCode, canonicalCode) {
+  const exact = maxVersionByCode.get(canonicalCode);
+  if (exact) return exact;
+  const legacyAlias = legacySk76PeriodicCode(canonicalCode);
+  return legacyAlias ? maxVersionByCode.get(legacyAlias) : undefined;
+}
+
+export function buildModelAndLinkStatements({
+  plan,
+  empresaId,
+  versaoMatriz,
+  importUuid,
+  fail,
+  models,
+  items,
+  maxVersionByCode,
+}) {
   const statements = [];
   const versaoMatrizEscaped = esc(versaoMatriz);
   const importUuidEscaped = esc(importUuid);
 
   const modelRows = models.map((model) => {
-    const prev = maxVersionByCode.get(String(model.codigo));
+    const prev = previousVersion(maxVersionByCode, String(model.codigo));
     const versaoNumero = prev ? Number(prev.versao_numero) + 1 : 1;
     return {
       codigoCanonico: String(model.codigo),
@@ -186,12 +212,18 @@ export function buildModelAndLinkStatements({ plan, empresaId, versaoMatriz, imp
 
   statements.push(`INSERT INTO modelos_sessao(codigo,nome,empresa_id,tipo,created_at,updated_at) VALUES
     ${modelRows
-      .map((m) => `('${esc(m.codigoFisico)}',${sqlText(m.nome)},${empresaId},'${m.tipo}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`)
+      .map(
+        (m) =>
+          `('${esc(m.codigoFisico)}',${sqlText(m.nome)},${empresaId},'${m.tipo}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+      )
       .join(',\n    ')};`);
 
   const modelsCte = `_models(codigo_canonico,codigo_fisico,prev_id,versao_numero) AS (VALUES
     ${modelRows
-      .map((m) => `('${esc(m.codigoCanonico)}','${esc(m.codigoFisico)}',${m.prevId == null ? 'NULL' : m.prevId},${m.versaoNumero})`)
+      .map(
+        (m) =>
+          `('${esc(m.codigoCanonico)}','${esc(m.codigoFisico)}',${m.prevId == null ? 'NULL' : m.prevId},${m.versaoNumero})`,
+      )
       .join(',\n    ')}
   )`;
   const linksCteFor = (chunkItems) =>
@@ -241,7 +273,6 @@ export function buildModelAndLinkStatements({ plan, empresaId, versaoMatriz, imp
     UPDATE modelos_sessao_versionamento
     SET is_current=0, efetivo_ate=CURRENT_TIMESTAMP
     WHERE empresa_id=${empresaId} AND is_current=1
-      AND codigo_canonico IN (SELECT codigo_canonico FROM _models)
       AND modelo_id IN (SELECT prev_id FROM _models WHERE prev_id IS NOT NULL);`);
 
   statements.push(`WITH ${modelsCte}
