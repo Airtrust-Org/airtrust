@@ -327,8 +327,6 @@ describe('matriz local apply + compensatory rollback', () => {
         ),
       ).toEqual([]);
 
-      // TRUE_MISSING manoeuvre code was created tenant-scoped, resolved
-      // exactly once, and all 918 links now exist.
       const createdManobra = queryJson<
         Array<{ id: number; empresa_id: number; deleted_at: string | null }>
       >(
@@ -339,12 +337,6 @@ describe('matriz local apply + compensatory rollback', () => {
       expect(createdManobra[0].empresa_id).toBe(7);
       expect(createdManobra[0].deleted_at).toBeNull();
 
-      // Every field the create_payload carries must be persisted — not
-      // silently dropped — either on manobras itself (nome/categoria/
-      // tipo_aeronave/descricao/referencia_tecnica) or, for fase_voo/
-      // tipo_conteudo, on the per-link context row (they describe how the
-      // manoeuvre is used within *this* session, not an inherent catalog
-      // property of the manobra).
       const expectedPayload = plan.manobra_resolution.find(
         (e) => e.codigo_canonico === MISSING_CODE,
       )!.create_payload!;
@@ -404,7 +396,6 @@ describe('matriz local apply + compensatory rollback', () => {
 
       const second = applyPlan({ dbPath: db, plan, importUuid, dryRun: false });
       expect(second.idempotent).toBe(true);
-      // Idempotent reapply must not duplicate the created manobra.
       expect(
         queryJson<Array<{ c: number }>>(
           db,
@@ -434,7 +425,6 @@ describe('matriz local apply + compensatory rollback', () => {
           "SELECT COUNT(*) AS c FROM modelos_sessao_versionamento WHERE empresa_id=7 AND is_current=1 AND versao_matriz LIKE 'COMPENSATE%'",
         )[0]?.c,
       ).toBe(51);
-      // V1 + V2 preserved historically
       expect(
         queryJson<Array<{ c: number }>>(
           db,
@@ -447,8 +437,6 @@ describe('matriz local apply + compensatory rollback', () => {
           "SELECT COUNT(*) AS c FROM modelos_sessao_versionamento WHERE empresa_id=7 AND versao_matriz='M2026.07'",
         )[0]?.c,
       ).toBe(51);
-      // Rollback is compensatory: the created manobra and its audited
-      // resolution are never deleted, even though the import is ROLLED_BACK.
       expect(
         queryJson<Array<{ c: number }>>(
           db,
@@ -480,7 +468,6 @@ describe('matriz local apply + compensatory rollback', () => {
         runCompensatoryRollback({ d1Local: db, importUuid, empresaId: 8 }),
       ).toThrow(/tenant|não encontrada/);
 
-      // Drift: invent a newer current non-compensate version
       const sample = queryJson<Array<{ codigo_canonico: string; modelo_id: number }>>(
         db,
         "SELECT codigo_canonico, modelo_id FROM modelos_sessao_versionamento WHERE empresa_id=7 AND is_current=1 LIMIT 1",
@@ -495,7 +482,6 @@ describe('matriz local apply + compensatory rollback', () => {
          SELECT id,7,'${sample.codigo_canonico.replace(/'/g, "''")}',99,'DRIFT',1,${sample.modelo_id},CURRENT_TIMESTAMP
          FROM modelos_sessao WHERE codigo='DRIFT-X';`,
       );
-      // Restore for reapply path: undo drift first
       run(
         db,
         `DELETE FROM modelos_sessao_versionamento WHERE versao_matriz='DRIFT';
@@ -511,8 +497,6 @@ describe('matriz local apply + compensatory rollback', () => {
         dryRun: false,
       });
       expect(reapply.status).toBe('APPLIED');
-      // Reapply under a new import-uuid (after the first import was rolled
-      // back) must reuse the previously created manobra, never duplicate it.
       expect(
         queryJson<Array<{ c: number }>>(
           db,
@@ -538,13 +522,10 @@ describe('matriz local apply + compensatory rollback', () => {
         )[0]?.c,
       ).toBe(51);
 
-      // Intermediate failure rolls back: wrong fingerprint
-      const payload: Record<string, unknown> = {
+      const broken = reseal({
         ...plan2,
         base_fingerprint: 'f'.repeat(64),
-      };
-      delete payload.plan_sha256;
-      const broken = { ...payload, plan_sha256: sha256(payload) };
+      });
       expect(() =>
         applyPlan({ dbPath: db, plan: broken, importUuid: 'import-uuid-3', dryRun: false }),
       ).toThrow(/fingerprint/);
@@ -578,6 +559,7 @@ function reseal(plan: Record<string, unknown>): PlanoDeterministico {
   delete payload.plan_sha256;
   return sealPlan(payload) as unknown as PlanoDeterministico;
 }
+
 function withMutatedResolution(
   plan: PlanoDeterministico,
   codigo: string,
@@ -693,16 +675,12 @@ describe('manobra resolution integrity: fails closed on any divergence from the 
   it('rejects apply when the already-stored resolution row was tampered with directly in the database', () => {
     const { dir, db } = setupAppliedDb();
     try {
-      // Bypass the immutability trigger the way a direct DB tamper would.
-      // The FK on manobra_id forbids pointing at a nonexistent manobra, so a
-      // tamper can only redirect the row to a *different real* one — which
-      // must still be caught (wrong physical code/payload for this code).
       run(
         db,
         `DROP TRIGGER trg_matriz_manobra_resolution_imutavel;
          UPDATE simuladores_matriz_manobra_resolution SET manobra_id = 1 WHERE empresa_id=7 AND codigo_canonico='${MISSING_CODE}';`,
       );
-      const plan2 = buildPlan(db); // reflects the tampered row's resolution_type via carry-forward, but not the redirected manobra_id
+      const plan2 = buildPlan(db);
       expect(() =>
         applyPlan({ dbPath: db, plan: plan2, importUuid: 'ru-2', dryRun: false }),
       ).toThrow(/diverge do create_payload/);
