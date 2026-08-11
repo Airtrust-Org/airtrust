@@ -62,7 +62,7 @@ export function parseChangedFileStatus(raw) {
   const files = [];
   const exactCopies = [];
 
-  for (let index = 0; index < fields.length;) {
+  for (let index = 0; index < fields.length; ) {
     const status = fields[index++] ?? '';
     if (/^[RC]\d+$/.test(status)) {
       const source = fields[index++] ?? '';
@@ -101,8 +101,25 @@ export function readChangedFiles({ cwd = process.cwd(), baseRef = resolveBaseRef
   return { ...parseChangedFileStatus(raw), mergeBase, baseRef };
 }
 
+function annotationEscape(value) {
+  return String(value).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+}
+
 function run(command, args, cwd) {
-  execFileSync(command, args, { cwd, stdio: 'inherit' });
+  try {
+    const output = execFileSync(command, args, {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (output) process.stdout.write(output);
+  } catch (error) {
+    const stdout = error && typeof error === 'object' && 'stdout' in error ? error.stdout : '';
+    const stderr = error && typeof error === 'object' && 'stderr' in error ? error.stderr : '';
+    const details = `${stdout || ''}${stderr || ''}`.trim() || String(error);
+    console.error(`::error title=lint delta diagnostics::${annotationEscape(details)}`);
+    throw error;
+  }
 }
 
 export function runGuard({ cwd = process.cwd(), baseRef = resolveBaseRef() } = {}) {
