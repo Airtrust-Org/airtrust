@@ -143,6 +143,8 @@ test('remote apply is accepted only in the exact governed wrapper', () => {
   });
 });
 
+// This assertion complements the self-protected fingerprint for the production wrapper:
+// Worker code deployment must stay structurally incapable of applying D1 migrations.
 test('deploy-worker-only contains no implicit migration application', () => {
   const source = fs.readFileSync(path.join(root, 'scripts', 'deploy-worker-only.sh'), 'utf8');
   assert.doesNotMatch(source, /d1\s+migrations\s+apply/);
