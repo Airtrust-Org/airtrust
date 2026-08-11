@@ -62,7 +62,7 @@ export function parseChangedFileStatus(raw) {
   const files = [];
   const exactCopies = [];
 
-  for (let index = 0; index < fields.length; ) {
+  for (let index = 0; index < fields.length;) {
     const status = fields[index++] ?? '';
     if (/^[RC]\d+$/.test(status)) {
       const source = fields[index++] ?? '';
@@ -101,44 +101,8 @@ export function readChangedFiles({ cwd = process.cwd(), baseRef = resolveBaseRef
   return { ...parseChangedFileStatus(raw), mergeBase, baseRef };
 }
 
-function annotationEscape(value) {
-  return String(value).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
-}
-
-function emitDiffChunks(file, diff) {
-  const chunkSize = 3000;
-  const chunks = [];
-  for (let index = 0; index < diff.length; index += chunkSize) {
-    chunks.push(diff.slice(index, index + chunkSize));
-  }
-  chunks.forEach((chunk, index) => {
-    console.error(
-      `::error title=prettier fix ${path.basename(file)} ${index + 1}/${chunks.length}::${annotationEscape(chunk)}`,
-    );
-  });
-}
-
 function run(command, args, cwd) {
-  try {
-    const output = execFileSync(command, args, {
-      cwd,
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    if (output) process.stdout.write(output);
-  } catch (error) {
-    if (command === 'npx' && args.includes('prettier@3.9.6') && args.includes('--check')) {
-      const writeArgs = args.map((arg) => (arg === '--check' ? '--write' : arg));
-      execFileSync(command, writeArgs, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-      const separator = args.indexOf('--');
-      const files = separator >= 0 ? args.slice(separator + 1) : [];
-      for (const file of files) {
-        const diff = git(['diff', '--', file], cwd).trim();
-        if (diff) emitDiffChunks(file, diff);
-      }
-    }
-    throw error;
-  }
+  execFileSync(command, args, { cwd, stdio: 'inherit' });
 }
 
 export function runGuard({ cwd = process.cwd(), baseRef = resolveBaseRef() } = {}) {
