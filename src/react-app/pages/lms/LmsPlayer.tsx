@@ -159,6 +159,8 @@ export default function LmsPlayer() {
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
+  const assetMatriculaId = matricula?.id ?? null;
+  const assetContentType = matricula?.tipo_conteudo ?? null;
   // ── Session identity ──────────────────────────────────────────────
   // Freeze the launch URL per logical session so the iframe is never
   // recreated during progress saves, refetches, or token rotations.
@@ -175,6 +177,7 @@ export default function LmsPlayer() {
   const sessionKey = `${id}:${reviewParam ? 'review' : 'normal'}:${user?.id ?? 'anon'}:${empresaAtualId ?? 'none'}`;
   const sessionKeyRef = useRef<string | null>(null);
   const stableLaunchUrlRef = useRef<string | null>(null);
+  const assetSessionKeyRef = useRef<string | null>(null);
 
   // Previous session key — used to detect REAL session transitions for
   // iframeLoaded reset (not initial mount).
@@ -183,7 +186,7 @@ export default function LmsPlayer() {
   const launchUrl = (() => {
     // The iframe URL never carries the access token. A short-lived,
     // HttpOnly cookie is established before the URL becomes available.
-    if (!assetSessionReady || !matricula) {
+    if (!assetSessionReady || assetSessionKeyRef.current !== sessionKey || !matricula) {
       return null;
     }
 
@@ -204,11 +207,6 @@ export default function LmsPlayer() {
     return stableLaunchUrlRef.current;
   })();
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
-
-  function invalidateLmsDashboardCaches() {
-    void qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
-    void qc.invalidateQueries({ queryKey: lmsKeys.minhasEAD() });
-  }
 
   function showCompletionToast(
     phase: 'saving' | 'pending' | 'error' | 'success',
@@ -240,6 +238,7 @@ export default function LmsPlayer() {
 
   useEffect(() => {
     let cancelled = false;
+    const completionToastId = completionToastIdRef.current;
 
     async function syncToken() {
       try {
@@ -271,8 +270,9 @@ export default function LmsPlayer() {
       cancelled = true;
       window.clearInterval(intervalId);
       window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged as EventListener);
-      toast.dismiss(completionToastIdRef.current);
-      invalidateLmsDashboardCaches();
+      toast.dismiss(completionToastId);
+      void qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
+      void qc.invalidateQueries({ queryKey: lmsKeys.minhasEAD() });
     };
   }, [qc, token]);
 
@@ -284,15 +284,23 @@ export default function LmsPlayer() {
     // Only reset when transitioning FROM one valid session TO another.
     // prev === null means first mount — the loading overlay already shows.
     if (prev !== null && prev !== sessionKey) {
+      assetSessionKeyRef.current = null;
+      sessionKeyRef.current = null;
+      stableLaunchUrlRef.current = null;
+      setAssetSessionReady(false);
       setIframeLoaded(false);
     }
     prevSessionKeyRef.current = sessionKey;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey]);
 
   useEffect(() => {
-    if (!matricula || matricula.tipo_conteudo === 'h5p') {
+    if (assetContentType === 'h5p') {
+      assetSessionKeyRef.current = null;
       setAssetSessionReady(false);
+      return;
+    }
+
+    if (!assetMatriculaId) {
       return;
     }
 
@@ -311,9 +319,23 @@ export default function LmsPlayer() {
           method: 'POST',
           body: JSON.stringify({ matricula_id: id }),
         });
-        if (!cancelled) setAssetSessionReady(response.ok);
+        if (cancelled) return;
+
+        if (response.ok) {
+          assetSessionKeyRef.current = sessionKey;
+          setAssetSessionReady(true);
+          return;
+        }
+
+        // A failed refresh cannot destroy an already running SCORM iframe.
+        // Only an initial failure keeps the player blocked from launching.
+        if (assetSessionKeyRef.current !== sessionKey) {
+          setAssetSessionReady(false);
+        }
       } catch {
-        if (!cancelled) setAssetSessionReady(false);
+        if (!cancelled && assetSessionKeyRef.current !== sessionKey) {
+          setAssetSessionReady(false);
+        }
       }
     }
 
@@ -324,7 +346,7 @@ export default function LmsPlayer() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [id, matricula?.id, matricula?.tipo_conteudo, playerToken, sessionKey]);
+  }, [assetContentType, assetMatriculaId, id, playerToken, sessionKey]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);
@@ -556,7 +578,7 @@ export default function LmsPlayer() {
       window.clearInterval(intervalId);
       window.removeEventListener('message', handleMessage);
     };
-  }, [id, iframeLoaded, launchOrigin, refetchMatricula]);
+  }, [effectiveReviewMode, id, iframeLoaded, launchOrigin, refetchMatricula]);
 
   async function handleFullscreen() {
     const el = iframeRef.current;
