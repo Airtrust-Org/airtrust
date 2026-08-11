@@ -101,8 +101,7 @@ function buildDatabase() {
         );
         ${Array.from(
           { length: 18 },
-          () =>
-            `INSERT INTO modelos_sessao_manobras(modelo_id,deleted_at) VALUES (${id},NULL);`,
+          () => `INSERT INTO modelos_sessao_manobras(modelo_id,deleted_at) VALUES (${id},NULL);`,
         ).join('\n')}
         INSERT INTO simuladores_guias_instrutor(
           id,empresa_id,codigo,programa,ciclo,sessao_numero,sessao_total,deleted_at
