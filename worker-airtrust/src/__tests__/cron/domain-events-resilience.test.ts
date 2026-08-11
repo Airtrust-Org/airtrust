@@ -26,9 +26,7 @@ describe('domain events tenant cursor', () => {
     let cursor = 0;
 
     while (visited.length < tenants.length) {
-      const page = tenants
-        .filter((id) => id > cursor)
-        .slice(0, DOMAIN_EVENT_TENANT_BATCH);
+      const page = tenants.filter((id) => id > cursor).slice(0, DOMAIN_EVENT_TENANT_BATCH);
       visited.push(...page);
       const next = nextTenantCursor(cursor, page, DOMAIN_EVENT_TENANT_BATCH);
       cursor = next.cursor;
@@ -45,7 +43,11 @@ describe('domain events tenant cursor', () => {
       cycleComplete: true,
     });
     expect(
-      nextTenantCursor(0, Array.from({ length: 25 }, (_, i) => i + 1), 25),
+      nextTenantCursor(
+        0,
+        Array.from({ length: 25 }, (_, i) => i + 1),
+        25,
+      ),
     ).toEqual({
       cursor: 25,
       cycleComplete: false,
