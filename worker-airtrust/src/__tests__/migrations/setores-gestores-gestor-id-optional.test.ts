@@ -37,7 +37,7 @@ function migrationSql(): string {
 
 function rollbackSql(): string {
   return readFileSync(
-    join(__dirname, '../../../migrations/0437_setores_gestores_gestor_id_optional_rollback.sql'),
+    join(__dirname, '../../../../scripts/rollback/0437_setores_gestores_gestor_id_optional_rollback.sql'),
     'utf8',
   );
 }
