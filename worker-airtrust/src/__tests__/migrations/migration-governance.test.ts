@@ -99,7 +99,7 @@ describe('migration governance', () => {
     const regularPrefixes = files
       .map((file) => /^([0-9]{4})_/.exec(file)?.[1] ?? null)
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
-    const expectedLatest = files.includes('0456_lms_h5p_course_binding.sql') ? 456 : 455;
+    const expectedLatest = 459;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
