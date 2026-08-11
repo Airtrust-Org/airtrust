@@ -66,7 +66,9 @@ describe('SCORM mobile stability — autosave e resume', () => {
   });
 
   it('cookie de asset do SCORM usa SameSite=None; Secure fora de localhost (frontend e worker são sites diferentes em staging)', () => {
-    expect(source).toContain("'SameSite=None; Secure' : 'SameSite=Lax'");
+    expect(source).toContain('const sameSiteDirective = shouldUseSecureAssetCookie(request)');
+    expect(source).toContain("? 'SameSite=None; Secure'");
+    expect(source).toContain(": 'SameSite=Lax';");
     expect(source).not.toContain('SameSite=Lax${secureDirective}');
   });
 });

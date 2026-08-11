@@ -83,11 +83,16 @@ class Bucket {
   objects = new Map<string, Uint8Array>([
     ['lms/scorm/77/12/index.html', new TextEncoder().encode('legacy')],
   ]);
-  async put(key: string, value: string | ArrayBufferView) {
+  putValues: unknown[] = [];
+  async put(key: string, value: string | ArrayBufferView | ReadableStream<Uint8Array>) {
+    this.putValues.push(value);
+    const isStream = typeof value === 'object' && value !== null && 'getReader' in value;
     const bytes =
       typeof value === 'string'
         ? new TextEncoder().encode(value)
-        : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+        : isStream
+          ? new Uint8Array(await new Response(value).arrayBuffer())
+          : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     this.objects.set(key, new Uint8Array(bytes));
     return {};
   }
@@ -117,6 +122,34 @@ class Bucket {
 }
 
 describe('lms cursos structured upload complete', () => {
+  it('encaminha arquivos com Content-Length diretamente ao R2 como stream', async () => {
+    const bucket = new Bucket();
+    const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;
+    const init = await app().request(
+      '/cursos/12/content-upload/init',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo_conteudo: 'scorm' }),
+      },
+      env,
+    );
+    const initJson = (await init.json()) as { data: { upload_id: string } };
+    const body = new TextEncoder().encode('<manifest />');
+    const response = await app().request(
+      `/cursos/12/content-upload/file?tipo_conteudo=scorm&upload_id=${initJson.data.upload_id}&path=imsmanifest.xml`,
+      {
+        method: 'POST',
+        headers: { 'Content-Length': String(body.byteLength) },
+        body,
+      },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(bucket.putValues.at(-1)).toBeInstanceOf(ReadableStream);
+  });
+
   it('não aceita arquivo legado fora da versão para mascarar launch ausente', async () => {
     const bucket = new Bucket();
     const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;

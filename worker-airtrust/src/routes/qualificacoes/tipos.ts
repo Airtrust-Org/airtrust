@@ -476,7 +476,7 @@ async function resolveCategoriaCanonica(
       .prepare(
         `SELECT id, nome, dominio_codigo
            FROM qualificacoes_categorias
-          WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
           LIMIT 1`,
       )
       .bind(categoriaId, empresaId)
@@ -924,10 +924,11 @@ router.post(
       if (categoriaDomain !== null && !isValidOperationalDomain(categoriaDomain)) {
         return c.json({ success: false, error: 'Domínio da categoria é inválido' }, 422);
       }
-      if (!categoriaDomain || !operationalAccess.domains.includes(categoriaDomain)) {
+      // Categoria sem domínio é domínio-agnóstico — permitir sem restrição
+      if (categoriaDomain && !operationalAccess.domains.includes(categoriaDomain)) {
         forbidden(
-          'Categoria sem domínio classificado ou fora do seu escopo — acesso negado (fail-closed)',
-          categoriaDomain ? 'OPERATIONAL_DOMAIN_ACCESS_DENIED' : 'RESOURCE_DOMAIN_UNCLASSIFIED',
+          'Categoria fora do seu escopo operacional — acesso negado (fail-closed)',
+          'OPERATIONAL_DOMAIN_ACCESS_DENIED',
         );
       }
     }
@@ -1299,10 +1300,11 @@ router.put(
             422,
           );
         }
-        if (!destinoDominio || !operationalAccess.domains.includes(destinoDominio)) {
+        // Categoria sem domínio é domínio-agnóstico — permitir sem restrição
+        if (destinoDominio && !operationalAccess.domains.includes(destinoDominio)) {
           forbidden(
-            'Categoria de destino sem domínio classificado ou fora do seu escopo — acesso negado (fail-closed)',
-            destinoDominio ? 'OPERATIONAL_DOMAIN_ACCESS_DENIED' : 'RESOURCE_DOMAIN_UNCLASSIFIED',
+            'Categoria de destino fora do seu escopo operacional — acesso negado (fail-closed)',
+            'OPERATIONAL_DOMAIN_ACCESS_DENIED',
           );
         }
       }

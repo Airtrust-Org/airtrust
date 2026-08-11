@@ -1,6 +1,7 @@
 export type TipoSaveDraft = {
   nome?: string | null;
   codigo?: string | null;
+  /** Display-only legacy field. Never sent as functional identity. */
   categoria?: string | null;
   categoria_id?: number | string | null;
   conteudo_programatico?: string | null;
@@ -25,18 +26,20 @@ export type TipoUpdateResponseData = {
 
 /**
  * Constrói o payload para criar/atualizar um tipo de qualificação.
- * `validade` é SEMPRE incluído no payload — null significa "remover vencimento".
- * Omitir a chave impede o hasOwnProperty check do backend de disparar o sync de historico.
+ * `categoria_id` é a única identidade funcional da categoria. O backend
+ * deriva os snapshots de nome/código da linha tenant-scoped.
+ * `validade` é SEMPRE incluído — null significa "remover vencimento".
  */
 export function buildTipoPayload(editingTipo: TipoSaveDraft): Record<string, unknown> {
+  const categoriaId = Number(editingTipo.categoria_id || 0);
+  if (!Number.isInteger(categoriaId) || categoriaId <= 0) {
+    throw new Error('Selecione uma categoria válida');
+  }
+
   const payload: Record<string, unknown> = {
     nome: editingTipo.nome?.trim() || '',
     codigo: editingTipo.codigo?.trim() || '',
-    categoria: editingTipo.categoria?.trim() || '',
-    categoria_id:
-      editingTipo.categoria_id != null && Number(editingTipo.categoria_id) > 0
-        ? Number(editingTipo.categoria_id)
-        : undefined,
+    categoria_id: categoriaId,
     conteudo_programatico: editingTipo.conteudo_programatico?.trim() || null,
     carga_horaria_inicial:
       editingTipo.carga_horaria_inicial != null ? Number(editingTipo.carga_horaria_inicial) : null,
@@ -47,7 +50,6 @@ export function buildTipoPayload(editingTipo: TipoSaveDraft): Record<string, unk
     ativo: editingTipo.ativo ?? 1,
     vencimento_fim_mes: editingTipo.vencimento_fim_mes ?? 0,
     is_check: editingTipo.is_check ? 1 : 0,
-    // validade SEMPRE presente — null = sem vencimento (0 é proibido pela constraint DB)
     validade:
       editingTipo.validade != null && Number(editingTipo.validade) > 0
         ? Number(editingTipo.validade)
