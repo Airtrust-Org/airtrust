@@ -67,7 +67,25 @@ jobs:
         run: cd worker-airtrust && npx tsc --noEmit
 
       - name: Worker unit tests
-        run: cd worker-airtrust && npx vitest run
+        shell: bash
+        run: |
+          set +e
+          cd worker-airtrust
+          npx vitest run > /tmp/worker-vitest.log 2>&1
+          status=$?
+          cat /tmp/worker-vitest.log
+          if [ "$status" -ne 0 ]; then
+            node - <<'NODE'
+          const fs = require('node:fs');
+          const text = fs.readFileSync('/tmp/worker-vitest.log', 'utf8').slice(-24000);
+          const chunks = text.match(/[\s\S]{1,3000}/g) || [];
+          const escape = (value) => value.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+          chunks.forEach((chunk, index) => {
+            console.error(`::error title=vitest diagnostics ${index + 1}/${chunks.length}::${escape(chunk)}`);
+          });
+          NODE
+          fi
+          exit "$status"
 
   lms-smoke:
     runs-on: ubuntu-latest
