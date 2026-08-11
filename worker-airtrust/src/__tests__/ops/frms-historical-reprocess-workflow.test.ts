@@ -33,8 +33,11 @@ describe('FRMS historical reprocessing governance', () => {
     expect(dryRunIndex).toBeGreaterThan(backupIndex);
     expect(timeTravelIndex).toBeGreaterThan(dryRunIndex);
     expect(executeIndex).toBeGreaterThan(timeTravelIndex);
-    expect(workflow).toContain('CLOUDFLARE_D1_BACKUP_API_TOKEN');
+    expect(workflow).not.toContain('CLOUDFLARE_D1_BACKUP_API_TOKEN');
     expect(workflow).toContain('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+    expect(workflow).toContain(
+      'CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}',
+    );
   });
 
   it('accepts only the exact owner authorization comment and preserves the reviewed scope', () => {

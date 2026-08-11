@@ -22,10 +22,7 @@ function scalar(dbPath: string, sql: string): string {
 }
 
 function rows(dbPath: string, sql: string): string[] {
-  return runSqlite(dbPath, `${sql}\n`)
-    .trim()
-    .split('\n')
-    .filter(Boolean);
+  return runSqlite(dbPath, `${sql}\n`).trim().split('\n').filter(Boolean);
 }
 
 function migrationSql(): string {
@@ -37,7 +34,10 @@ function migrationSql(): string {
 
 function rollbackSql(): string {
   return readFileSync(
-    join(__dirname, '../../../migrations/0437_setores_gestores_gestor_id_optional_rollback.sql'),
+    join(
+      __dirname,
+      '../../../../scripts/rollback/0437_setores_gestores_gestor_id_optional_rollback.sql',
+    ),
     'utf8',
   );
 }
@@ -423,6 +423,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
       dbPath,
       "SELECT sql FROM sqlite_master WHERE name='setores_gestores' AND type='table';",
     ).trim();
+    expect(preSchema).toContain('gestor_id INTEGER NOT NULL');
     const preData = rows(
       dbPath,
       'SELECT id, setor_id, gestor_id, empresa_id, role, ativo, COALESCE(deleted_at, "NULL"), COALESCE(usuario_id, "NULL") FROM setores_gestores ORDER BY id;',

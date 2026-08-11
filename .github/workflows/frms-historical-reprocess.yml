@@ -233,13 +233,11 @@ jobs:
       - name: Guard production D1 credentials
         shell: bash
         env:
-          CLOUDFLARE_D1_BACKUP_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
           CLOUDFLARE_D1_MIGRATION_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          [[ -n "$CLOUDFLARE_D1_BACKUP_API_TOKEN" ]] || { echo 'PRODUCTION_D1_BACKUP_TOKEN_MISSING' >&2; exit 1; }
-          [[ -n "$CLOUDFLARE_D1_MIGRATION_API_TOKEN" ]] || { echo 'PRODUCTION_D1_WRITE_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_D1_MIGRATION_API_TOKEN" ]] || { echo 'PRODUCTION_D1_MIGRATION_TOKEN_MISSING' >&2; exit 1; }
           [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
 
       - name: Build reviewed FRMS executor
@@ -260,7 +258,7 @@ jobs:
         id: backup
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { syncLmsCourseFromQualificacaoTipo } from '../../services/lms-ead-ssot';
+import {
+  syncLmsCourseFromQualificacaoTipo,
+  syncQualificacaoTipoFromCurso,
+} from '../../services/lms-ead-ssot';
 
 type QueryCall = { query: string; args: unknown[]; method: 'first' | 'all' | 'run' };
 
@@ -185,5 +188,90 @@ describe('lms-ead-ssot', () => {
       }),
     ).rejects.toThrow(/Ambiguidade ao resolver curso LMS canônico/);
     expect(insertCalled.value).toBe(false);
+  });
+});
+
+describe('syncQualificacaoTipoFromCurso', () => {
+  // Incident 2026-08-10: production had exactly one 'EAD' categoria row for
+  // the tenant, but with ativo=0 — resolveCanonicalEadCategoriaId's original
+  // ativo=1-only query found zero rows and threw a raw Error, escalating to
+  // an uncaught 500 on every metadata save of every EAD-linked course
+  // (PUT /api/lms/cursos/:id, before the SCORM upload even starts).
+  function makeCursoJoinRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 43,
+      empresa_id: 6,
+      qualificacao_tipo_id: 139,
+      titulo: 'MEL - Lista de Equipamentos Mínimos',
+      descricao: null,
+      categoria: null,
+      formato_id: null,
+      formato_codigo: null,
+      carga_horaria_minutos: 480,
+      conteudo_programatico: null,
+      observacoes: null,
+      carga_horaria_inicial_horas: null,
+      carga_horaria_recorrente_horas: null,
+      qualificacao_categoria: 'EAD',
+      qualificacao_formato_id: null,
+      qualificacao_formato_codigo: null,
+      ...overrides,
+    };
+  }
+
+  function makeMockDb(categoriaRows: Array<{ id: number }>) {
+    const updateCalls: unknown[][] = [];
+
+    const db = {
+      prepare: vi.fn((query: string) => ({
+        bind: (...args: unknown[]) => ({
+          first: async () => {
+            if (
+              query.includes('FROM lms_cursos c') &&
+              query.includes('JOIN qualificacoes_tipos qt')
+            ) {
+              return makeCursoJoinRow();
+            }
+            return null;
+          },
+          all: async () => {
+            if (query.includes('FROM qualificacoes_categorias')) {
+              if (query.includes('ativo = 1')) return { results: [] };
+              return { results: categoriaRows };
+            }
+            if (/PRAGMA\s+table_info\s*\(\s*qualificacoes_tipos\s*\)/i.test(query)) {
+              return { results: [{ name: 'categoria_id' }] };
+            }
+            return { results: [] };
+          },
+          run: async () => {
+            if (query.includes('UPDATE qualificacoes_tipos')) {
+              updateCalls.push(args);
+            }
+            return { meta: { changes: 1, last_row_id: 0 } };
+          },
+        }),
+      })),
+    } as unknown as D1Database;
+
+    return { db, updateCalls };
+  }
+
+  it('sincroniza usando a categoria EAD inativa quando é a única candidata', async () => {
+    const { db, updateCalls } = makeMockDb([{ id: 13 }]);
+
+    const result = await syncQualificacaoTipoFromCurso(db, { empresaId: 6, cursoId: 43 });
+
+    expect(result).toBe(139);
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0]).toContain(13);
+  });
+
+  it('continua fail-closed quando existem duas categorias EAD (mesmo com nenhuma ativa)', async () => {
+    const { db } = makeMockDb([{ id: 13 }, { id: 21 }]);
+
+    await expect(syncQualificacaoTipoFromCurso(db, { empresaId: 6, cursoId: 43 })).rejects.toThrow(
+      /Categoria EAD canônica inválida/,
+    );
   });
 });

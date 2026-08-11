@@ -12,9 +12,7 @@ import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from './escalas-shared';
 import type { Env, JwtPayload } from '../types';
-import {
-  buildLmsContentSecurityPolicy,
-} from '../lib/lms/security-headers';
+import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -368,7 +366,9 @@ function buildAbsoluteLmsAssetUrl(request: Request, path: string) {
 
 function appendAssetTokenCookie(headers: Headers, token: string, request: Request) {
   // None+Secure fora de local (Pages e Workers são sites diferentes em staging).
-  const sameSiteDirective = shouldUseSecureAssetCookie(request) ? 'SameSite=None; Secure' : 'SameSite=Lax';
+  const sameSiteDirective = shouldUseSecureAssetCookie(request)
+    ? 'SameSite=None; Secure'
+    : 'SameSite=Lax';
 
   headers.append(
     'Set-Cookie',
@@ -429,9 +429,8 @@ app.post('/assets/session', auth(), async (c) => {
   let scopedMatriculaId: number | undefined;
 
   if (matriculaId > 0) {
-    const matricula = await c.env.DB
-      .prepare(
-        `SELECT m.id, m.curso_id, m.funcionario_id, m.status, c.ativo, c.publicado
+    const matricula = await c.env.DB.prepare(
+      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, c.ativo, c.publicado
            FROM lms_matriculas m
            JOIN lms_cursos c
              ON c.id = m.curso_id
@@ -440,7 +439,7 @@ app.post('/assets/session', auth(), async (c) => {
           WHERE m.id = ?
             AND m.empresa_id = ?
             AND m.deleted_at IS NULL`,
-      )
+    )
       .bind(matriculaId, empresaId)
       .first<{
         id: number;
@@ -656,11 +655,7 @@ async function resolveCursoFromH5p(db: D1Database, h5pId: number) {
     }>();
 }
 
-async function ensureH5pAssetAccess(
-  db: D1Database,
-  payload: JwtPayload,
-  h5pId: number,
-) {
+async function ensureH5pAssetAccess(db: D1Database, payload: JwtPayload, h5pId: number) {
   const h5p = await resolveCursoFromH5p(db, h5pId);
   if (!h5p) {
     throw new ApiError('Conteúdo H5P não encontrado', 404);
@@ -813,7 +808,11 @@ app.get('/scorm/assets-by-curso/:cursoId/*', async (c) => {
 
   let object: R2ObjectBody | null = foundObject;
   let status = 200;
-  const headers = buildAssetHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'), guessMime(wildcard));
+  const headers = buildAssetHeaders(
+    c.env.CORS_ORIGINS,
+    c.req.header('Origin'),
+    guessMime(wildcard),
+  );
 
   if (rangeHeader && object) {
     const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
@@ -858,7 +857,11 @@ app.get('/h5p/assets/:h5pId/*', async (c) => {
   const object = await c.env.BUCKET.get(key);
   if (!object) return c.text('Not found', 404);
 
-  const headers = buildAssetHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'), guessMime(wildcard));
+  const headers = buildAssetHeaders(
+    c.env.CORS_ORIGINS,
+    c.req.header('Origin'),
+    guessMime(wildcard),
+  );
   headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
   if (object.httpEtag) headers.set('ETag', object.httpEtag);
 
@@ -868,15 +871,20 @@ app.get('/h5p/assets/:h5pId/*', async (c) => {
 app.get('/course-assets/:cursoId/thumbnail', async (c) => {
   const db = c.env.DB;
   const cursoId = Number(c.req.param('cursoId'));
+  const empresaId = getEmpresaIdOptional(c);
+  if (!empresaId) {
+    return c.text('Not found', 404);
+  }
 
   const curso = await db
     .prepare(
       `SELECT id, thumbnail_r2_key
          FROM lms_cursos
         WHERE id = ?
+          AND empresa_id = ?
           AND deleted_at IS NULL`,
     )
-    .bind(cursoId)
+    .bind(cursoId, empresaId)
     .first<{ id: number; thumbnail_r2_key: string | null }>();
 
   if (!curso?.thumbnail_r2_key) {
@@ -888,12 +896,13 @@ app.get('/course-assets/:cursoId/thumbnail', async (c) => {
     return c.text('Not found', 404);
   }
 
-  const headers = new Headers({
-    'Content-Type': guessMime(curso.thumbnail_r2_key),
-    'Cache-Control': 'public, max-age=86400',
-    'Access-Control-Allow-Origin': '*',
-    'Cross-Origin-Resource-Policy': 'cross-origin',
-  });
+  const headers = buildAssetHeaders(
+    c.env.CORS_ORIGINS,
+    c.req.header('Origin'),
+    guessMime(curso.thumbnail_r2_key),
+    'public, max-age=86400',
+  );
+  headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
 
   if (object.httpEtag) headers.set('ETag', object.httpEtag);
 
@@ -2499,7 +2508,12 @@ app.get('/pdf/asset/:cursoId', async (c) => {
   const object = await c.env.BUCKET.get(curso.pdf_r2_key);
   if (!object) return c.text('Not found', 404);
 
-  const headers = buildAssetHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'), 'application/pdf', 'no-store');
+  const headers = buildAssetHeaders(
+    c.env.CORS_ORIGINS,
+    c.req.header('Origin'),
+    'application/pdf',
+    'no-store',
+  );
   if (object.httpEtag) headers.set('ETag', object.httpEtag);
   headers.set('Content-Disposition', 'inline');
 

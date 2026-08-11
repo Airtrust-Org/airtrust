@@ -471,7 +471,7 @@ self_protected_pin() {
       echo "21c520eb487e6b9142b3c7508ab5aaaa529652ea01be62b10778bc73803e4b59"
       ;;
     "scripts/apply-migration-production.sh")
-      echo "45eec03f36070cdb1fafe8c6afad05cb25e86d171b93e449ce367966291ae995"
+      echo "6b73a2c46202b21d618c8ad4263acb5bb5dfbb73be87013ce33780ae520e22f6"
       ;;
     "scripts/production/apply-simuladores-matriz-remote-migration.sh")
       echo "ffa129b0e4530a548d70e493a658eea572ee35c1239e85bcbad34b04dd8c0e9d"
