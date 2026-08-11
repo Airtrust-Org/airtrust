@@ -1,0 +1,31 @@
+name: tmp-pr808-prettier-artifact
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    if: github.head_ref == 'fix/migrations-deploy-safety-20260804'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Format exact PR 808 files
+        run: |
+          npx --yes prettier@3.9.6 --write -- \
+            worker-airtrust/src/__tests__/migrations/controlled-execution-gate.test.ts \
+            worker-airtrust/src/__tests__/migrations/setores-gestores-gestor-id-optional.test.ts
+      - name: Upload formatted files
+        uses: actions/upload-artifact@v6
+        with:
+          name: pr808-prettier-3.9.6
+          path: |
+            worker-airtrust/src/__tests__/migrations/controlled-execution-gate.test.ts
+            worker-airtrust/src/__tests__/migrations/setores-gestores-gestor-id-optional.test.ts
+          if-no-files-found: error
