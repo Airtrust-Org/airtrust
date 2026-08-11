@@ -22,10 +22,7 @@ function scalar(dbPath: string, sql: string): string {
 }
 
 function rows(dbPath: string, sql: string): string[] {
-  return runSqlite(dbPath, `${sql}\n`)
-    .trim()
-    .split('\n')
-    .filter(Boolean);
+  return runSqlite(dbPath, `${sql}\n`).trim().split('\n').filter(Boolean);
 }
 
 function migrationSql(): string {
