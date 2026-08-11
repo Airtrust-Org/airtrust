@@ -34,7 +34,9 @@ describe('applied migration artifacts integrity', () => {
       expect(migrationPath).toContain('/worker-airtrust/migrations/');
       expect(sha256Hex(sql)).toBe(migration.sha256);
       expect(sql).toContain('ALTER TABLE notificacoes_log ADD COLUMN updated_at TEXT;');
-      expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_notificacoes_log_empresa_notification_key');
+      expect(sql).toContain(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_notificacoes_log_empresa_notification_key',
+      );
       expect(sql).not.toMatch(/\bwrangler\s+d1\b/i);
       expect(sql).not.toMatch(/\b--remote\b/i);
     }
