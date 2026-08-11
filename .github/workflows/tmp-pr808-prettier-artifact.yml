@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   format:
@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
@@ -21,11 +23,16 @@ jobs:
           npx --yes prettier@3.9.6 --write -- \
             worker-airtrust/src/__tests__/migrations/controlled-execution-gate.test.ts \
             worker-airtrust/src/__tests__/migrations/setores-gestores-gestor-id-optional.test.ts
-      - name: Upload formatted files
-        uses: actions/upload-artifact@v6
-        with:
-          name: pr808-prettier-3.9.6
-          path: |
-            worker-airtrust/src/__tests__/migrations/controlled-execution-gate.test.ts
+      - name: Commit exact formatter output
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            worker-airtrust/src/__tests__/migrations/controlled-execution-gate.test.ts \
             worker-airtrust/src/__tests__/migrations/setores-gestores-gestor-id-optional.test.ts
-          if-no-files-found: error
+          if git diff --cached --quiet; then
+            echo "No formatter changes required"
+            exit 0
+          fi
+          git commit -m "style: apply Prettier 3.9.6 to migration tests"
+          git push origin HEAD:${{ github.head_ref }}
