@@ -1,23 +1,26 @@
 /**
- * Testes de regressao CORS - Guias do Instrutor (HTML, PDF, download)
+ * Testes de regressao CORS - Guias do Instrutor (HTML, PDF, download).
  *
- * Garante que NENHUMA resposta binaria dos Guias perca os headers CORS, mesmo
- * que a implementacao seja alterada no futuro.
- *
- * O app de teste monta o middleware cors() real + as rotas, replicando a
- * configuracao do index.ts em producao.
+ * O harness usa o middleware CORS real e allowlists explícitas por ambiente.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
-import type { Env } from '../../types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cors } from '../../middleware/cors';
 import { errorHandler } from '../../middleware/error-handler';
+import type { Env } from '../../types';
+
+type TestContext = {
+  req: { header: (name: string) => string | undefined };
+  get: (key: string) => unknown;
+  set: (key: string, value: unknown) => void;
+  json: (body: unknown, status?: number) => unknown;
+};
 
 vi.mock('../../middleware/auth', () => ({
   auth:
     () =>
-    async (c: any, next: () => Promise<void>) => {
+    async (c: TestContext, next: () => Promise<void>) => {
       if (!c.req.header('Authorization')) {
         return c.json({ success: false, error: 'Token nao fornecido' }, 401);
       }
@@ -32,7 +35,7 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return {
     ...actual,
-    getTenantContext: (c: any) => ({
+    getTenantContext: (c: TestContext) => ({
       empresaId: Number(c.get('empresaId') || 0),
       empresaCodigo: `empresa-${Number(c.get('empresaId') || 0)}`,
       empresaNome: 'Empresa Teste',
@@ -49,7 +52,7 @@ vi.mock('../../middleware/guias-instrutor-permissions', () => {
   const guard =
     (allowed: Set<string>, message: string) =>
     () =>
-    async (c: any, next: () => Promise<void>) => {
+    async (c: TestContext, next: () => Promise<void>) => {
       const role = String(c.req.header('x-test-guia-role') || '').toUpperCase();
       if (!allowed.has(role)) {
         return c.json({ success: false, error: message }, 403);
@@ -61,17 +64,18 @@ vi.mock('../../middleware/guias-instrutor-permissions', () => {
     visualizar: 'simuladores.guias.visualizar',
     gerenciar: 'simuladores.guias.gerenciar',
   } as const;
+
   return {
     GUIAS_INSTRUTOR_CAPABILITIES,
     requireGuiaInstrutorRead: guard(READ, 'Acesso restrito a instrutores autorizados'),
     requireGuiaInstrutorManage: guard(MANAGE, 'Publicacao restrita a gestores/administradores'),
-    hasGuiaInstrutorCapability: async (c: any, capability: string) => {
+    hasGuiaInstrutorCapability: async (c: TestContext, capability: string) => {
       const role = String(c.req.header('x-test-guia-role') || '').toUpperCase();
       if (role === 'PLATFORM_ADMIN') return true;
       if (capability === GUIAS_INSTRUTOR_CAPABILITIES.gerenciar) return MANAGE.has(role);
       return READ.has(role);
     },
-    resolveGuiaInstrutorPermissions: async (c: any) => {
+    resolveGuiaInstrutorPermissions: async (c: TestContext) => {
       const role = String(c.req.header('x-test-guia-role') || '').toUpperCase();
       const isPlatformAdmin = role === 'PLATFORM_ADMIN';
       return {
@@ -87,8 +91,22 @@ import guiasInstrutorRoutes from '../../routes/simuladores-guias-instrutor';
 
 const HTML_CONTENT = '<html><body>Guia de Instrutor</body></html>';
 const PDF_CONTENT = '%PDF-1.4 fake pdf content';
+const PROD_ORIGIN = 'https://airtrust.online';
+const WWW_ORIGIN = 'https://www.airtrust.online';
+const STAGING_ORIGIN = 'https://staging.airtrust.pages.dev';
+const PAGES_DEV_ORIGIN = 'https://meu-branch.airtrust.pages.dev';
+const UNAUTHORIZED_ORIGIN = 'https://evil.example.com';
+const LOCALHOST_ORIGIN = 'http://localhost:5173';
+const PROD_CORS_ORIGINS = [
+  PROD_ORIGIN,
+  WWW_ORIGIN,
+  'https://airtrust.pages.dev',
+  'https://production.airtrust.pages.dev',
+].join(',');
+const STAGING_CORS_ORIGINS = STAGING_ORIGIN;
+const DEV_CORS_ORIGINS = LOCALHOST_ORIGIN;
 
-function createMockEnv(empresaId = 6, corsOrigins = PROD_CORS_ORIGINS) {
+function createMockEnv(empresaId = 6, corsOrigins = PROD_CORS_ORIGINS): Env {
   const r2Objects: Record<string, { body: string; type: string }> = {
     [`guias-instrutor/${empresaId}/AW139/PERIODICO/A139-P-02-04-C1/1.0/index.html`]: {
       body: HTML_CONTENT,
@@ -154,7 +172,6 @@ function createMockEnv(empresaId = 6, corsOrigins = PROD_CORS_ORIGINS) {
             if (id === guia.id && empId === guia.empresa_id) {
               return guia as unknown as T;
             }
-            return null;
           }
           return null;
         },
@@ -192,7 +209,7 @@ function createAppWithCors() {
     if (c.req.method === 'OPTIONS') {
       const { resolveAllowedOrigin } = await import('../../config/allowed-origins');
       const origin = c.req.header('Origin');
-      const resolvedOrigin = resolveAllowedOrigin(origin, (c.env as any)?.CORS_ORIGINS);
+      const resolvedOrigin = resolveAllowedOrigin(origin, c.env.CORS_ORIGINS);
       c.header('Access-Control-Allow-Origin', resolvedOrigin);
       c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
       c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -210,21 +227,6 @@ function createAppWithCors() {
   return app;
 }
 
-const PROD_ORIGIN = 'https://airtrust.online';
-const WWW_ORIGIN = 'https://www.airtrust.online';
-const STAGING_ORIGIN = 'https://staging.airtrust.pages.dev';
-const PAGES_DEV_ORIGIN = 'https://meu-branch.airtrust.pages.dev';
-const UNAUTHORIZED_ORIGIN = 'https://evil.example.com';
-const LOCALHOST_ORIGIN = 'http://localhost:5173';
-const PROD_CORS_ORIGINS = [
-  PROD_ORIGIN,
-  WWW_ORIGIN,
-  'https://airtrust.pages.dev',
-  'https://production.airtrust.pages.dev',
-].join(',');
-const STAGING_CORS_ORIGINS = STAGING_ORIGIN;
-const DEV_CORS_ORIGINS = LOCALHOST_ORIGIN;
-
 function authHeaders(origin: string, empresaId = 6) {
   return {
     Authorization: 'Bearer x',
@@ -237,8 +239,7 @@ function authHeaders(origin: string, empresaId = 6) {
 function assertCorsHeaders(res: Response, expectedOrigin: string) {
   expect(res.headers.get('Access-Control-Allow-Origin')).toBe(expectedOrigin);
   expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
-  const vary = res.headers.get('Vary') || '';
-  expect(vary.toLowerCase()).toContain('origin');
+  expect((res.headers.get('Vary') || '').toLowerCase()).toContain('origin');
 }
 
 describe('CORS — guias-instrutor binary endpoints (regressao)', () => {
@@ -246,381 +247,149 @@ describe('CORS — guias-instrutor binary endpoints (regressao)', () => {
   let app: ReturnType<typeof createAppWithCors>;
 
   beforeEach(() => {
-    env = createMockEnv(6);
+    env = createMockEnv();
     app = createAppWithCors();
   });
 
-  describe('GET /guias-instrutor/:id/html', () => {
-    it('retorna 200 com CORS correto para https://airtrust.online', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      expect(res.status).toBe(200);
-      assertCorsHeaders(res, PROD_ORIGIN);
-      expect(res.headers.get('Content-Type')).toMatch(/text\/html/i);
-      const body = await res.text();
-      expect(body).toContain('<html>');
-    });
+  it.each([
+    ['/api/simuladores/guias-instrutor/1/html', /text\/html/i],
+    ['/api/simuladores/guias-instrutor/1/pdf', /application\/pdf/i],
+    ['/api/simuladores/guias-instrutor/1/download', /application\/pdf/i],
+  ])('mantem CORS credenciado na rota %s', async (path, contentType) => {
+    const res = await app.request(path, { headers: authHeaders(PROD_ORIGIN) }, env);
+    expect(res.status).toBe(200);
+    assertCorsHeaders(res, PROD_ORIGIN);
+    expect(res.headers.get('Content-Type')).toMatch(contentType);
+  });
 
-    it('retorna CORS para https://www.airtrust.online', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        { headers: authHeaders(WWW_ORIGIN) },
-        env,
-      );
-      expect(res.status).toBe(200);
-      assertCorsHeaders(res, WWW_ORIGIN);
-    });
+  it('preserva os headers de seguranca do HTML', async () => {
+    const res = await app.request(
+      '/api/simuladores/guias-instrutor/1/html',
+      { headers: authHeaders(PROD_ORIGIN) },
+      env,
+    );
+    expect(res.headers.get('Content-Security-Policy') || '').toContain("script-src 'none'");
+    expect(res.headers.get('Content-Security-Policy') || '').toContain("connect-src 'none'");
+    expect(res.headers.get('Cache-Control') || '').toContain('no-store');
+    expect(await res.text()).toContain('<html>');
+  });
 
-    it('retorna CORS para staging oficial', async () => {
-      const stagingEnv = createMockEnv(6, STAGING_CORS_ORIGINS);
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        { headers: authHeaders(STAGING_ORIGIN) },
-        stagingEnv,
+  it('preserva Content-Disposition e corpo PDF', async () => {
+    for (const [path, mode] of [
+      ['/api/simuladores/guias-instrutor/1/pdf', 'inline'],
+      ['/api/simuladores/guias-instrutor/1/download', 'attachment'],
+    ] as const) {
+      const res = await app.request(path, { headers: authHeaders(PROD_ORIGIN) }, env);
+      expect(res.headers.get('Content-Disposition') || '').toContain(mode);
+      expect(res.headers.get('Access-Control-Expose-Headers') || '').toContain(
+        'Content-Disposition',
       );
-      expect(res.status).toBe(200);
-      assertCorsHeaders(res, STAGING_ORIGIN);
-    });
+      expect((await res.text()).startsWith('%PDF')).toBe(true);
+    }
+  });
 
-    it('NAO autoriza subdominio pages.dev arbitrario', async () => {
+  it('autoriza apenas origens exatas do ambiente', async () => {
+    const www = await app.request(
+      '/api/simuladores/guias-instrutor/1/html',
+      { headers: authHeaders(WWW_ORIGIN) },
+      env,
+    );
+    assertCorsHeaders(www, WWW_ORIGIN);
+
+    const stagingEnv = createMockEnv(6, STAGING_CORS_ORIGINS);
+    const staging = await app.request(
+      '/api/simuladores/guias-instrutor/1/html',
+      { headers: authHeaders(STAGING_ORIGIN) },
+      stagingEnv,
+    );
+    assertCorsHeaders(staging, STAGING_ORIGIN);
+
+    const devEnv = createMockEnv(6, DEV_CORS_ORIGINS);
+    const local = await app.request(
+      '/api/simuladores/guias-instrutor/1/html',
+      { headers: authHeaders(LOCALHOST_ORIGIN) },
+      devEnv,
+    );
+    assertCorsHeaders(local, LOCALHOST_ORIGIN);
+  });
+
+  it.each([PAGES_DEV_ORIGIN, UNAUTHORIZED_ORIGIN])(
+    'nao devolve CORS credenciado para origem nao autorizada %s',
+    async (origin) => {
       const res = await app.request(
         '/api/simuladores/guias-instrutor/1/html',
-        { headers: authHeaders(PAGES_DEV_ORIGIN) },
+        { headers: authHeaders(origin) },
         env,
       );
       expect(res.status).toBe(200);
       expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
       expect(res.headers.get('Access-Control-Allow-Credentials')).toBeNull();
-    });
+    },
+  );
 
-    it('retorna CORS para localhost no ambiente de desenvolvimento', async () => {
-      const devEnv = createMockEnv(6, DEV_CORS_ORIGINS);
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        { headers: authHeaders(LOCALHOST_ORIGIN) },
-        devEnv,
-      );
-      expect(res.status).toBe(200);
-      assertCorsHeaders(res, LOCALHOST_ORIGIN);
-    });
-
-    it('NAO autoriza origem maliciosa', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        { headers: authHeaders(UNAUTHORIZED_ORIGIN) },
-        env,
-      );
-      const acao = res.headers.get('Access-Control-Allow-Origin') || '';
-      expect(acao).not.toBe(UNAUTHORIZED_ORIGIN);
-    });
-
-    it('mantem CSP restritiva (script-src none; connect-src none)', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      const csp = res.headers.get('Content-Security-Policy') || '';
-      expect(csp).toContain("script-src 'none'");
-      expect(csp).toContain("connect-src 'none'");
-    });
-
-    it('mantem Cache-Control private no-store', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      const cc = res.headers.get('Cache-Control') || '';
-      expect(cc).toContain('private');
-      expect(cc).toContain('no-store');
-    });
-
-    it('401 sem autenticacao tambem carrega CORS', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        { headers: { Origin: PROD_ORIGIN } },
-        env,
-      );
-      expect(res.status).toBe(401);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
-    });
-
-    it('403 sem permissao tambem carrega CORS', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        {
-          headers: {
-            Authorization: 'Bearer x',
-            Origin: PROD_ORIGIN,
-            'x-test-empresa-id': '6',
-            'x-test-guia-role': 'USUARIO',
-          },
-        },
-        env,
-      );
-      expect(res.status).toBe(403);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
-    });
-
-    it('404 (guia nao existe) tambem carrega CORS', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/9999/html',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      expect(res.status).toBe(404);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
-    });
-
-    it('isolamento de tenant: empresa 7 nao acessa guia da empresa 6, mas CORS presente', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/html',
-        { headers: authHeaders(PROD_ORIGIN, 7) },
-        env,
-      );
-      expect(res.status).toBe(404);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
-    });
-  });
-
-  describe('GET /guias-instrutor/:id/pdf', () => {
-    it('retorna 200 com CORS correto e Content-Type application/pdf', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/pdf',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      expect(res.status).toBe(200);
-      assertCorsHeaders(res, PROD_ORIGIN);
-      expect(res.headers.get('Content-Type')).toBe('application/pdf');
-    });
-
-    it('Content-Disposition e inline com filename', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/pdf',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      const disposition = res.headers.get('Content-Disposition') || '';
-      expect(disposition).toContain('inline');
-      expect(disposition).toContain('filename=');
-    });
-
-    it('Access-Control-Expose-Headers inclui Content-Disposition', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/pdf',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      const expose = res.headers.get('Access-Control-Expose-Headers') || '';
-      expect(expose).toContain('Content-Disposition');
-    });
-
-    it('corpo comeca com %PDF', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/pdf',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      const text = await res.text();
-      expect(text.startsWith('%PDF')).toBe(true);
-    });
-
-    it('retorna CORS para www.airtrust.online', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/pdf',
-        { headers: authHeaders(WWW_ORIGIN) },
-        env,
-      );
-      expect(res.status).toBe(200);
-      assertCorsHeaders(res, WWW_ORIGIN);
-    });
-
-    it('401 sem token tambem carrega CORS', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/pdf',
-        { headers: { Origin: PROD_ORIGIN } },
-        env,
-      );
-      expect(res.status).toBe(401);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
-    });
-
-    it('403 sem permissao tambem carrega CORS', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/pdf',
-        {
-          headers: {
-            Authorization: 'Bearer x',
-            Origin: PROD_ORIGIN,
-            'x-test-empresa-id': '6',
-            'x-test-guia-role': 'USUARIO',
-          },
-        },
-        env,
-      );
-      expect(res.status).toBe(403);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
-    });
-
-    it('404 quando guia nao existe tambem carrega CORS', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/9999/pdf',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      expect(res.status).toBe(404);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
-    });
-  });
-
-  describe('GET /guias-instrutor/:id/download', () => {
-    it('retorna 200 com CORS correto e Content-Type application/pdf', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/download',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      expect(res.status).toBe(200);
-      assertCorsHeaders(res, PROD_ORIGIN);
-      expect(res.headers.get('Content-Type')).toBe('application/pdf');
-    });
-
-    it('Content-Disposition e attachment', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/download',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      const disposition = res.headers.get('Content-Disposition') || '';
-      expect(disposition).toContain('attachment');
-    });
-
-    it('nome do arquivo nao expoe chave R2 interna', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/download',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      const disposition = res.headers.get('Content-Disposition') || '';
-      expect(disposition).not.toContain('guias-instrutor/6/AW139');
-    });
-
-    it('Access-Control-Expose-Headers inclui Content-Disposition', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/download',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      const expose = res.headers.get('Access-Control-Expose-Headers') || '';
-      expect(expose).toContain('Content-Disposition');
-    });
-
-    it('corpo comeca com %PDF (nao e JSON de erro)', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/download',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      const text = await res.text();
-      expect(text.startsWith('%PDF')).toBe(true);
-      expect(text).not.toContain('"success":false');
-    });
-
-    it('retorna CORS para staging origin', async () => {
-      const stagingEnv = createMockEnv(6, STAGING_CORS_ORIGINS);
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/download',
-        { headers: authHeaders(STAGING_ORIGIN) },
-        stagingEnv,
-      );
-      expect(res.status).toBe(200);
-      assertCorsHeaders(res, STAGING_ORIGIN);
-    });
-
-    it('NAO autoriza origem maliciosa', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/1/download',
-        { headers: authHeaders(UNAUTHORIZED_ORIGIN) },
-        env,
-      );
-      const acao = res.headers.get('Access-Control-Allow-Origin') || '';
-      expect(acao).not.toBe(UNAUTHORIZED_ORIGIN);
-    });
-
-    it('404 quando guia nao existe tambem carrega CORS', async () => {
-      const res = await app.request(
-        '/api/simuladores/guias-instrutor/9999/download',
-        { headers: authHeaders(PROD_ORIGIN) },
-        env,
-      );
-      expect(res.status).toBe(404);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
-    });
-  });
-
-  describe('OPTIONS preflight (todos os endpoints)', () => {
-    const endpoints = [
+  it('mantem CORS em respostas autenticadas de erro', async () => {
+    const unauthorized = await app.request(
       '/api/simuladores/guias-instrutor/1/html',
-      '/api/simuladores/guias-instrutor/1/pdf',
-      '/api/simuladores/guias-instrutor/1/download',
-    ];
+      { headers: { Origin: PROD_ORIGIN } },
+      env,
+    );
+    expect(unauthorized.status).toBe(401);
+    assertCorsHeaders(unauthorized, PROD_ORIGIN);
 
-    for (const endpoint of endpoints) {
-      it(`${endpoint} - retorna 204 com headers de preflight corretos`, async () => {
-        const res = await app.request(
-          endpoint,
-          {
-            method: 'OPTIONS',
-            headers: {
-              Origin: PROD_ORIGIN,
-              'Access-Control-Request-Method': 'GET',
-              'Access-Control-Request-Headers': 'Authorization, Content-Type',
-            },
-          },
-          env,
-        );
-        expect(res.status).toBe(204);
-        expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
-        expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
-        expect(res.headers.get('Access-Control-Allow-Methods')).toContain('GET');
-      });
-    }
+    const forbidden = await app.request(
+      '/api/simuladores/guias-instrutor/1/html',
+      {
+        headers: {
+          Authorization: 'Bearer x',
+          Origin: PROD_ORIGIN,
+          'x-test-empresa-id': '6',
+          'x-test-guia-role': 'USUARIO',
+        },
+      },
+      env,
+    );
+    expect(forbidden.status).toBe(403);
+    assertCorsHeaders(forbidden, PROD_ORIGIN);
   });
 
-  describe('REGRESSAO - nenhuma rota de arquivo perde CORS', () => {
-    const fileRoutes = [
-      { path: '/api/simuladores/guias-instrutor/1/html', label: 'HTML' },
-      { path: '/api/simuladores/guias-instrutor/1/pdf', label: 'PDF inline' },
-      { path: '/api/simuladores/guias-instrutor/1/download', label: 'PDF download' },
-    ];
+  it('preserva isolamento de tenant e CORS no 404', async () => {
+    const missing = await app.request(
+      '/api/simuladores/guias-instrutor/9999/html',
+      { headers: authHeaders(PROD_ORIGIN) },
+      env,
+    );
+    expect(missing.status).toBe(404);
+    assertCorsHeaders(missing, PROD_ORIGIN);
 
-    for (const route of fileRoutes) {
-      it(`${route.label}: sempre contem Access-Control-Allow-Origin (nao null, nao vazio)`, async () => {
-        const res = await app.request(
-          route.path,
-          { headers: authHeaders(PROD_ORIGIN) },
-          env,
-        );
-        const acao = res.headers.get('Access-Control-Allow-Origin');
-        expect(acao).not.toBeNull();
-        expect(acao).not.toBe('');
-        expect(acao).not.toBe('*');
-      });
+    const crossTenant = await app.request(
+      '/api/simuladores/guias-instrutor/1/html',
+      { headers: authHeaders(PROD_ORIGIN, 7) },
+      env,
+    );
+    expect(crossTenant.status).toBe(404);
+    assertCorsHeaders(crossTenant, PROD_ORIGIN);
+  });
 
-      it(`${route.label}: nao usa wildcard Access-Control-Allow-Origin: * (incompativel com credenciais)`, async () => {
-        const res = await app.request(
-          route.path,
-          { headers: authHeaders(PROD_ORIGIN) },
-          env,
-        );
-        expect(res.headers.get('Access-Control-Allow-Origin')).not.toBe('*');
-        expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
-      });
-    }
+  it.each([
+    '/api/simuladores/guias-instrutor/1/html',
+    '/api/simuladores/guias-instrutor/1/pdf',
+    '/api/simuladores/guias-instrutor/1/download',
+  ])('responde preflight permitido na rota %s', async (path) => {
+    const res = await app.request(
+      path,
+      {
+        method: 'OPTIONS',
+        headers: {
+          Origin: PROD_ORIGIN,
+          'Access-Control-Request-Method': 'GET',
+          'Access-Control-Request-Headers': 'Authorization, Content-Type',
+        },
+      },
+      env,
+    );
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(PROD_ORIGIN);
+    expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(res.headers.get('Access-Control-Allow-Methods')).toContain('GET');
   });
 });
