@@ -105,6 +105,19 @@ function annotationEscape(value) {
   return String(value).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
 }
 
+function emitDiffChunks(file, diff) {
+  const chunkSize = 3000;
+  const chunks = [];
+  for (let index = 0; index < diff.length; index += chunkSize) {
+    chunks.push(diff.slice(index, index + chunkSize));
+  }
+  chunks.forEach((chunk, index) => {
+    console.error(
+      `::error title=prettier fix ${path.basename(file)} ${index + 1}/${chunks.length}::${annotationEscape(chunk)}`,
+    );
+  });
+}
+
 function run(command, args, cwd) {
   try {
     const output = execFileSync(command, args, {
@@ -121,11 +134,7 @@ function run(command, args, cwd) {
       const files = separator >= 0 ? args.slice(separator + 1) : [];
       for (const file of files) {
         const diff = git(['diff', '--', file], cwd).trim();
-        if (diff) {
-          console.error(
-            `::error title=prettier fix ${path.basename(file)}::${annotationEscape(diff)}`,
-          );
-        }
+        if (diff) emitDiffChunks(file, diff);
       }
     }
     throw error;
