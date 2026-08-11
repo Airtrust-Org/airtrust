@@ -27,27 +27,17 @@ export type OperationalMetric = {
 
 function sanitizeString(value: string): string | null {
   const compact = value.replace(/[\r\n\t]+/g, ' ').slice(0, 180);
-  if (
-    EMAIL_PATTERN.test(compact) ||
-    CPF_PATTERN.test(compact) ||
-    TOKEN_PATTERN.test(compact)
-  ) {
+  if (EMAIL_PATTERN.test(compact) || CPF_PATTERN.test(compact) || TOKEN_PATTERN.test(compact)) {
     return null;
   }
   return compact;
 }
 
-export function sanitizeOperationalMetric(
-  input: Record<string, unknown>,
-): Record<string, unknown> {
+export function sanitizeOperationalMetric(input: Record<string, unknown>): Record<string, unknown> {
   const output: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
     if (FORBIDDEN_KEY.test(key)) continue;
-    if (
-      value == null ||
-      typeof value === 'number' ||
-      typeof value === 'boolean'
-    ) {
+    if (value == null || typeof value === 'number' || typeof value === 'boolean') {
       output[key] = value;
       continue;
     }
@@ -90,10 +80,7 @@ export function classifyOperationalFlow(pathname: string): string {
   if (path.includes('/auth/')) return 'auth';
   if (path.includes('upload') || path.includes('/assets')) return 'upload';
   if (path.includes('certificado')) return 'certificate';
-  if (
-    path.includes('/lms/') &&
-    (path.includes('conclus') || path.includes('progresso'))
-  ) {
+  if (path.includes('/lms/') && (path.includes('conclus') || path.includes('progresso'))) {
     return 'lms_completion';
   }
   if (path.includes('qualific') && path.includes('renov')) {
