@@ -80,7 +80,9 @@ export function buildResolutionStatements({
           fail(`${entry.codigo_canonico}: manobra da resolução já registrada não existe mais`);
         }
         if (Number(created.empresa_id) !== empresaId) {
-          fail(`${entry.codigo_canonico}: manobra da resolução já registrada pertence a outro tenant`);
+          fail(
+            `${entry.codigo_canonico}: manobra da resolução já registrada pertence a outro tenant`,
+          );
         }
         const expectedCodigoFisico =
           entry.resolution_type === 'COLLISION'
