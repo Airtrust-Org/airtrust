@@ -1,0 +1,27 @@
+name: diag-808-find-change-risk
+
+on:
+  push:
+    branches:
+      - fix/migrations-deploy-safety-20260804
+    paths:
+      - .github/workflows/diag-808-find-change-risk.yml
+
+permissions:
+  contents: read
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate change-risk selector and migration risk mapping
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== candidate files ==='
+          find . -type f \( -name '*change-risk*' -o -name '*risk-test*' \) -not -path './node_modules/*' -not -path './worker-airtrust/node_modules/*' -print | sort
+          echo '=== migration-release-safety matches ==='
+          grep -R -n --exclude-dir=node_modules --exclude-dir=.git --include='*.js' --include='*.mjs' --include='*.cjs' --include='*.ts' --include='*.mts' --include='*.cts' 'migration-release-safety' . || true
+          echo '=== migration-governance.test matches ==='
+          grep -R -n --exclude-dir=node_modules --exclude-dir=.git --include='*.js' --include='*.mjs' --include='*.cjs' --include='*.ts' --include='*.mts' --include='*.cts' 'migration-governance\.test' . || true
