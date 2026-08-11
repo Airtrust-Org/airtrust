@@ -1,39 +1,54 @@
-const DEFAULT_ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:4173',
-  'http://127.0.0.1:4173',
-  'https://airtrust.online',
-  'https://www.airtrust.online',
-  'https://api.airtrust.online',
-  'https://airtrust.pages.dev',
-  'https://production.airtrust.pages.dev',
-] as const;
+export const DENIED_CORS_ORIGIN = 'https://cors-denied.invalid';
+export const DEFAULT_ALLOWED_ORIGIN = DENIED_CORS_ORIGIN;
 
-export const ALLOWED_ORIGINS = [...DEFAULT_ALLOWED_ORIGINS];
-export const DEFAULT_ALLOWED_ORIGIN = DEFAULT_ALLOWED_ORIGINS[0];
+function normalizeOrigin(value?: string | null): string | null {
+  const candidate = value?.trim();
+  if (!candidate || candidate === '*' || candidate === 'null') return null;
 
-function parseEnvAllowedOrigins(corsOrigins?: string | null): string[] {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return null;
+  }
+
+  const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  const isSecure = parsed.protocol === 'https:';
+  const isLocalHttp = parsed.protocol === 'http:' && isLocalhost;
+  if (!isSecure && !isLocalHttp) return null;
+
+  const hasPath = parsed.pathname !== '/';
+  const hasCredentials = Boolean(parsed.username || parsed.password);
+  const hasExtraParts = Boolean(parsed.search || parsed.hash);
+  if (hasPath || hasCredentials || hasExtraParts) return null;
+
+  return parsed.origin;
+}
+
+export function parseEnvAllowedOrigins(corsOrigins?: string | null): string[] {
   if (!corsOrigins) return [];
 
-  return corsOrigins
+  const normalizedOrigins = corsOrigins
     .split(',')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0 && item !== '*');
+    .map((item) => normalizeOrigin(item))
+    .filter((item): item is string => item !== null);
+
+  return [...new Set(normalizedOrigins)];
+}
+
+export function isAllowedOrigin(origin?: string | null, corsOrigins?: string | null): boolean {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return false;
+
+  return parseEnvAllowedOrigins(corsOrigins).includes(normalizedOrigin);
 }
 
 export function resolveAllowedOrigin(origin?: string | null, corsOrigins?: string | null): string {
-  if (!origin) return DEFAULT_ALLOWED_ORIGIN;
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return DENIED_CORS_ORIGIN;
+  if (!isAllowedOrigin(normalizedOrigin, corsOrigins)) {
+    return DENIED_CORS_ORIGIN;
+  }
 
-  const runtimeAllowedOrigins = parseEnvAllowedOrigins(corsOrigins);
-
-  if ((ALLOWED_ORIGINS as string[]).includes(origin)) return origin;
-
-  if (runtimeAllowedOrigins.includes(origin)) return origin;
-
-  if (/^https:\/\/[a-z0-9-]+\.airtrust\.pages\.dev$/i.test(origin)) return origin;
-
-  return DEFAULT_ALLOWED_ORIGIN;
+  return normalizedOrigin;
 }

@@ -1,5 +1,5 @@
 name = "airtrust-api"
-main = "src/index.ts"
+main = "src/environment-entrypoint.ts"
 compatibility_date = "2025-11-22"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
@@ -27,6 +27,7 @@ name = "airtrust-api-development"
 
 [env.development.vars]
 ENVIRONMENT = "development"
+CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173"
 # DEV auth bypass local deve ficar apenas em worker-airtrust/.dev.vars, nunca em arquivo rastreado.
 # Feature flag: shared simulator sessions (paridade com produção; sem esta
 # var o toggle "Sessão compartilhada" fica invisível na UI mesmo com o
@@ -57,6 +58,7 @@ binding = "CF_VERSION_METADATA"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
+CORS_ORIGINS = "https://staging.airtrust.pages.dev"
 # Placeholder tracked in git. Real APP_VERSION is injected by
 # scripts/deploy-staging-worker-safe.sh and .github/workflows/deploy-staging.yml.
 # Absent/unstamped remote staging must never publish as "dev-local".
@@ -115,6 +117,7 @@ binding = "CF_VERSION_METADATA"
 
 [env.production.vars]
 ENVIRONMENT = "production"
+CORS_ORIGINS = "https://airtrust.online,https://www.airtrust.online,https://airtrust.pages.dev,https://production.airtrust.pages.dev"
 # Placeholder tracked in git. The real APP_VERSION is injected by scripts/deploy-worker-only.sh
 APP_VERSION = "managed-by-script"
 # Placeholder tracked in git. The real APP_BUILD_TIME is injected by scripts/deploy-worker-only.sh
