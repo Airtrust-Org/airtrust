@@ -423,6 +423,7 @@ describe('0437 — setores_gestores gestor_id optional', () => {
       dbPath,
       "SELECT sql FROM sqlite_master WHERE name='setores_gestores' AND type='table';",
     ).trim();
+    expect(preSchema).toContain('gestor_id INTEGER NOT NULL');
     const preData = rows(
       dbPath,
       'SELECT id, setor_id, gestor_id, empresa_id, role, ativo, COALESCE(deleted_at, "NULL"), COALESCE(usuario_id, "NULL") FROM setores_gestores ORDER BY id;',
