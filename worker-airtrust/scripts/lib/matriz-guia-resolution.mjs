@@ -1,4 +1,7 @@
-import { legacySk76PeriodicCode } from './sk76-periodic-code-contract.mjs';
+import {
+  canonicalSk76PeriodicCode,
+  legacySk76PeriodicCode,
+} from './sk76-periodic-code-contract.mjs';
 
 function fail(message) {
   throw new Error(`Resolução de guias recusada: ${message}`);
@@ -10,6 +13,13 @@ function normalizeText(value) {
     .replace(/[̀-ͯ]/g, '')
     .toUpperCase()
     .trim();
+}
+
+function canonicalSession(session) {
+  const codigoCanonico = canonicalSk76PeriodicCode(session.codigo_canonico);
+  return codigoCanonico === session.codigo_canonico
+    ? session
+    : { ...session, codigo_canonico: codigoCanonico };
 }
 
 // Some contract sessions leave `ciclo` null/absent even though their own
@@ -27,12 +37,6 @@ function deriveCiclo(entity) {
   return declared ?? extractCicloFromCode(entity.codigo_canonico ?? entity.codigo);
 }
 
-// A guia's "programa" column is used inconsistently in real data: most guias
-// use the broad curricular program (e.g. "PERIODICO") even for a CHECK
-// session, but at least one real guia (SK76-P-CHECK) instead stores the
-// finer tipo_qualificacao_estruturado ("CHECK") as its programa. Both are
-// authoritative, non-fuzzy fields already on the session — a guia matches if
-// its single programa value equals *either* one.
 function sessionCoreSignature(session) {
   return {
     aeronave: normalizeText(session.aeronave),
@@ -59,10 +63,6 @@ function sameCoreSignature(sessionCore, guiaCore) {
   );
 }
 
-// Only derivable when html_relpath encodes "Sessao_N_de_M" — some guias (e.g.
-// legacy SK76 filenames) instead embed the canonical code directly and never
-// carry this pattern, so it is required only for the structured fallback,
-// never as a precondition for verifying an exact codigo_canonico match.
 function sessionCountSignature(session) {
   const match = String(session.html_relpath || '').match(/Sessao_(\d+)_de_(\d+)/);
   if (!match) return null;
@@ -79,10 +79,12 @@ function sameCountSignature(a, b) {
 }
 
 /**
- * Resolves each of the 51 canonical sessions to exactly one active guia.
- * The six S-76 periodic /04 guide codes are accepted only through the explicit
- * /04 -> /03 nomenclature map; this preserves the existing guide artifacts
- * while the model identity is corrected. No fuzzy text matching is used.
+ * Resolves each canonical session to exactly one active guia. Both callers
+ * that use loadSessionContract() and the production executor that imports the
+ * raw JSON directly converge here: S-76 periodic /04 source codes are first
+ * canonicalized to /03. Existing /04 guide rows remain accepted only via the
+ * explicit six-entry alias map, so pre- and post-migration states are both
+ * deterministic without fuzzy matching.
  */
 export function resolveGuiaLinks({ sessions, guias }) {
   if (!Array.isArray(sessions) || sessions.length === 0) fail('sessões ausentes');
@@ -95,7 +97,8 @@ export function resolveGuiaLinks({ sessions, guias }) {
   }
 
   const usedGuiaIds = new Set();
-  const resolutions = sessions.map((session) => {
+  const resolutions = sessions.map((rawSession) => {
+    const session = canonicalSession(rawSession);
     const core = sessionCoreSignature(session);
     const legacyAlias = legacySk76PeriodicCode(session.codigo_canonico);
     const exactCandidates = [
@@ -119,7 +122,11 @@ export function resolveGuiaLinks({ sessions, guias }) {
           `${session.codigo_canonico}: guia de código exato pertence a aeronave/programa/ciclo/sessão incompatível`,
         );
       }
-      return { codigo_canonico: session.codigo_canonico, guia_id: guia.id, match_type: matchType };
+      return {
+        codigo_canonico: session.codigo_canonico,
+        guia_id: guia.id,
+        match_type: matchType,
+      };
     }
 
     const count = sessionCountSignature(session);
