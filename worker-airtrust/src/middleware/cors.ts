@@ -12,7 +12,7 @@ import { isAllowedOrigin, resolveAllowedOrigin } from '../config/allowed-origins
 
 const ALLOWED_METHODS = 'GET, POST, PUT, DELETE, PATCH, OPTIONS';
 const ALLOWED_HEADERS =
-  'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires, X-Dev-Auth-Bypass, X-AirTrust-Bypass-Cache, X-Maintenance-Secret, X-AirTrust-Maintenance';
+  'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires, X-Dev-Auth-Bypass, X-AirTrust-Bypass-Cache, X-Maintenance-Secret, X-AirTrust-Maintenance, Idempotency-Key';
 
 export function cors(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {

@@ -435,6 +435,7 @@ export function AdvancedDataTable({
               placeholder={searchPlaceholder}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label="Pesquisar na tabela"
               className="w-full pl-10 pr-10 py-2 border border-neutral-200 rounded-lg focus-visible:outline-none focus:ring-2 focus:ring-primary-600"
             />
             {searchTerm && (
@@ -534,6 +535,7 @@ export function AdvancedDataTable({
                     type="checkbox"
                     checked={selectAll}
                     onChange={handleSelectAll}
+                    aria-label="Selecionar todas as linhas"
                     className="rounded border-neutral-300"
                   />
                 </th>
@@ -545,21 +547,37 @@ export function AdvancedDataTable({
                   <th
                     key={column.key}
                     style={{ width }}
+                    aria-sort={
+                      isActiveSortColumn
+                        ? sortDirection === 'asc'
+                          ? 'ascending'
+                          : 'descending'
+                        : column.sortable
+                          ? 'none'
+                          : undefined
+                    }
                     className={`px-6 py-3 text-left text-sm font-semibold relative group transition-colors ${
                       column.sortable
-                        ? `cursor-pointer ${
-                            isActiveSortColumn
-                              ? 'bg-primary-50 text-primary-900'
-                              : 'text-neutral-900 hover:bg-neutral-100'
-                          }`
+                        ? isActiveSortColumn
+                          ? 'bg-primary-50 text-primary-900'
+                          : 'text-neutral-900 hover:bg-neutral-100'
                         : 'text-neutral-900'
                     }`}
-                    onClick={() => column.sortable && handleSort(column.key)}
                   >
-                    <div className="flex items-center gap-1">
-                      <span>{column.label}</span>
-                      {column.sortable && renderSortIndicator(column.key)}
-                    </div>
+                    {column.sortable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSort(column.key)}
+                        className="flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded"
+                      >
+                        <span>{column.label}</span>
+                        {renderSortIndicator(column.key)}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span>{column.label}</span>
+                      </div>
+                    )}
 
                     {columnResizable && (
                       <div
@@ -596,6 +614,7 @@ export function AdvancedDataTable({
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleSelectRow(itemId)}
+                        aria-label="Selecionar linha"
                         className="rounded border-neutral-300"
                       />
                     </td>
@@ -694,6 +713,7 @@ export function AdvancedDataTable({
                 max={totalPages}
                 value={pageInput}
                 onChange={(e) => setPageInput(e.target.value)}
+                aria-label="Ir para página"
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {
                     const page = Math.min(Math.max(1, parseInt(pageInput) || 1), totalPages);
@@ -725,6 +745,7 @@ export function AdvancedDataTable({
               onChange={() => {
                 setCurrentPage(1);
               }}
+              aria-label="Itens por página"
               className="px-2 py-1 border border-neutral-200 rounded text-sm"
             >
               {[10, 25, 50, 100].map((size) => (
@@ -738,29 +759,6 @@ export function AdvancedDataTable({
       )}
     </div>
   );
-}
-
-// Helper: Convert to CSV
-function convertToCSV(data: any[], columns: DataTableColumn[]): string {
-  const headers = columns.map((c) => `"${c.label}"`).join(',');
-  const rows = data.map((item) =>
-    columns.map((col) => {
-      const value = item[col.key];
-      return `"${String(value).replace(/"/g, '""')}"`;
-    }),
-  );
-  return [headers, ...rows.map((r) => r.join(','))].join('\n');
-}
-
-// Helper: Download file
-function downloadFile(content: string, filename: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 export default AdvancedDataTable;

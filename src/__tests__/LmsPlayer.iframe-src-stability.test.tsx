@@ -6,8 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import LmsPlayer from '@/react-app/pages/lms/LmsPlayer';
 
-const { ensureValidAccessTokenMock, getAccessTokenMock } = vi.hoisted(() => ({
+const { ensureValidAccessTokenMock, fetchWithAuthMock, getAccessTokenMock } = vi.hoisted(() => ({
   ensureValidAccessTokenMock: vi.fn(async () => 'token-initial'),
+  fetchWithAuthMock: vi.fn(async () => ({ ok: true })),
   getAccessTokenMock: vi.fn(() => 'token-initial'),
 }));
 
@@ -48,7 +49,7 @@ vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost:8787/api',
   AUTH_TOKEN_CHANGED_EVENT: 'airtrust-auth-token-changed',
   ensureValidAccessToken: ensureValidAccessTokenMock,
-  fetchWithAuth: vi.fn(async () => ({ ok: true })),
+  fetchWithAuth: fetchWithAuthMock,
   getAccessToken: getAccessTokenMock,
 }));
 
@@ -72,6 +73,7 @@ function renderPlayer() {
 describe('LmsPlayer — estabilidade do src do iframe frente a rotação de token', () => {
   beforeEach(() => {
     ensureValidAccessTokenMock.mockReset().mockResolvedValue('token-initial');
+    fetchWithAuthMock.mockReset().mockResolvedValue({ ok: true });
     getAccessTokenMock.mockReset().mockReturnValue('token-initial');
   });
 
@@ -138,5 +140,37 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
       expect(iframeAfter).not.toBeNull();
       expect(iframeAfter!.getAttribute('src')).toBe(initialSrc);
     });
+  });
+
+  it('preserva o mesmo iframe quando a renovação da sessão de assets falha transitoriamente', async () => {
+    const { container } = renderPlayer();
+
+    let initialIframe: HTMLIFrameElement | null = null;
+    await waitFor(() => {
+      initialIframe = container.querySelector('iframe');
+      expect(initialIframe).not.toBeNull();
+      expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+    });
+
+    const initialSrc = initialIframe!.getAttribute('src');
+    fetchWithAuthMock.mockRejectedValueOnce(new Error('temporary asset-session failure'));
+    ensureValidAccessTokenMock.mockResolvedValue('token-rotated');
+    getAccessTokenMock.mockReturnValue('token-rotated');
+
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('airtrust-auth-token-changed', {
+          detail: { token: 'token-rotated' },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(fetchWithAuthMock).toHaveBeenCalledTimes(2);
+    });
+
+    const iframeAfter = container.querySelector('iframe');
+    expect(iframeAfter).toBe(initialIframe);
+    expect(iframeAfter!.getAttribute('src')).toBe(initialSrc);
   });
 });
