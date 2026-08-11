@@ -114,10 +114,20 @@ function run(command, args, cwd) {
     });
     if (output) process.stdout.write(output);
   } catch (error) {
-    const stdout = error && typeof error === 'object' && 'stdout' in error ? error.stdout : '';
-    const stderr = error && typeof error === 'object' && 'stderr' in error ? error.stderr : '';
-    const details = `${stdout || ''}${stderr || ''}`.trim() || String(error);
-    console.error(`::error title=lint delta diagnostics::${annotationEscape(details)}`);
+    if (command === 'npx' && args.includes('prettier@3.9.6') && args.includes('--check')) {
+      const writeArgs = args.map((arg) => (arg === '--check' ? '--write' : arg));
+      execFileSync(command, writeArgs, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      const separator = args.indexOf('--');
+      const files = separator >= 0 ? args.slice(separator + 1) : [];
+      for (const file of files) {
+        const diff = git(['diff', '--', file], cwd).trim();
+        if (diff) {
+          console.error(
+            `::error title=prettier fix ${path.basename(file)}::${annotationEscape(diff)}`,
+          );
+        }
+      }
+    }
     throw error;
   }
 }
