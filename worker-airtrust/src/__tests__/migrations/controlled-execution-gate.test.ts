@@ -146,13 +146,13 @@ describe('controlled execution gate', () => {
     expect(result.stdout).toContain('mode_command_mismatch');
   });
 
-  it('blocks when safe_command references a migration marked NO_GO_MIGRATION_PRODUCAO', () => {
+  it('blocks when safe_command references a quarantined migration marked NO_GO_MIGRATION_PRODUCAO', () => {
     const result = runGenericGate(
       baseEnv({
         AIRTRUST_CONTROLLED_MODE: 'audit-v2-schema',
         AIRTRUST_CONTROLLED_TARGET: 'local-copy',
         AIRTRUST_CONTROLLED_SAFE_COMMAND:
-          'audit-v2 schema check then apply worker-airtrust/migrations/0432_revisao_completa_codigos_manobras.sql',
+          'audit-v2 schema check then apply scripts/sql/manual/no-go/0432_revisao_completa_codigos_manobras.sql',
       }),
     );
 
@@ -162,13 +162,13 @@ describe('controlled execution gate', () => {
     expect(result.stdout).toContain('0432_revisao_completa_codigos_manobras.sql');
   });
 
-  it('blocks when safe_command references migration 0433 (missing marker would be a bypass)', () => {
+  it('blocks when safe_command references quarantined migration 0433', () => {
     const result = runGenericGate(
       baseEnv({
         AIRTRUST_CONTROLLED_MODE: 'audit-v2-schema',
         AIRTRUST_CONTROLLED_TARGET: 'local-copy',
         AIRTRUST_CONTROLLED_SAFE_COMMAND:
-          'audit-v2 schema check then apply worker-airtrust/migrations/0433_fix_loft_references.sql',
+          'audit-v2 schema check then apply scripts/sql/manual/no-go/0433_fix_loft_references.sql',
       }),
     );
 
