@@ -85,9 +85,7 @@ function matricesFromContract() {
   const aw139Sessions = CONTRACT.sessions.filter(
     (s: { aeronave: string }) => s.aeronave === 'AW139',
   );
-  const sk76Sessions = CONTRACT.sessions.filter(
-    (s: { aeronave: string }) => s.aeronave === 'SK76',
-  );
+  const sk76Sessions = CONTRACT.sessions.filter((s: { aeronave: string }) => s.aeronave === 'SK76');
   const toMatrix = (sessions: Array<Record<string, unknown>>) => {
     const models = sessions.map((s) => ({
       codigo: String(s.codigo_canonico),
@@ -329,10 +327,7 @@ describe('matriz local apply + compensatory rollback', () => {
 
       const createdManobra = queryJson<
         Array<{ id: number; empresa_id: number; deleted_at: string | null }>
-      >(
-        db,
-        `SELECT id, empresa_id, deleted_at FROM manobras WHERE codigo='${MISSING_CODE}'`,
-      );
+      >(db, `SELECT id, empresa_id, deleted_at FROM manobras WHERE codigo='${MISSING_CODE}'`);
       expect(createdManobra).toHaveLength(1);
       expect(createdManobra[0].empresa_id).toBe(7);
       expect(createdManobra[0].deleted_at).toBeNull();
@@ -464,13 +459,13 @@ describe('matriz local apply + compensatory rollback', () => {
         )[0]?.c,
       ).toBe(51);
 
-      expect(() =>
-        runCompensatoryRollback({ d1Local: db, importUuid, empresaId: 8 }),
-      ).toThrow(/tenant|não encontrada/);
+      expect(() => runCompensatoryRollback({ d1Local: db, importUuid, empresaId: 8 })).toThrow(
+        /tenant|não encontrada/,
+      );
 
       const sample = queryJson<Array<{ codigo_canonico: string; modelo_id: number }>>(
         db,
-        "SELECT codigo_canonico, modelo_id FROM modelos_sessao_versionamento WHERE empresa_id=7 AND is_current=1 LIMIT 1",
+        'SELECT codigo_canonico, modelo_id FROM modelos_sessao_versionamento WHERE empresa_id=7 AND is_current=1 LIMIT 1',
       )[0];
       run(
         db,
