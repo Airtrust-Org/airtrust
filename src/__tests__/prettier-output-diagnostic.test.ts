@@ -16,9 +16,11 @@ describe('temporary prettier output diagnostic', () => {
   for (const [index, file] of FILES.entries()) {
     it(`emits prettier diff for ${file}`, () => {
       const directory = mkdtempSync(join(tmpdir(), 'prettier-diagnostic-'));
-      const formatted = execFileSync('node_modules/.bin/prettier', [file], {
-        encoding: 'utf8',
-      });
+      const formatted = execFileSync(
+        'npx',
+        ['--yes', 'prettier@3.9.6', file],
+        { encoding: 'utf8' },
+      );
       const outputPath = join(directory, `${index}.formatted`);
       writeFileSync(outputPath, formatted, 'utf8');
       const diff = spawnSync('diff', ['-u', file, outputPath], {
