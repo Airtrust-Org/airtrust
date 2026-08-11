@@ -1,6 +1,13 @@
 -- Rollback 0459: restaurar /03 -> /04 SOMENTE se nenhuma nova versão /03
 -- tiver sido criada depois da correção. Não executar automaticamente.
 --
+-- source_reference: worker-airtrust/migrations/0459_sk76_periodic_code_denominator.sql
+-- operational_decision: rollback estritamente compensatório /03 -> /04 no tenant 6,
+--   preservando IDs, fichas, agendamentos, manobras e vínculos.
+-- dry_run_required: confirmar ledger 0459, seis códigos /03 correntes, zero /04,
+--   ausência de colisões e ausência de versões posteriores antes da execução.
+-- rollback_plan_required: este arquivo é o rollback explícito; exige autorização
+--   operacional separada e backup validado antes de qualquer execução remota.
 -- data_origin: migration 0459_sk76_periodic_code_denominator.sql
 -- evidence_source: d1_migrations + modelos_sessao_versionamento tenant 6
 -- safety_rationale: preserva IDs e recusa colisão/versão posterior antes de renomear
@@ -10,6 +17,11 @@ CREATE TABLE IF NOT EXISTS _rb0459_guard (id INTEGER PRIMARY KEY CHECK(id=1));
 CREATE TRIGGER IF NOT EXISTS _rb0459_preflight
 BEFORE INSERT ON _rb0459_guard
 BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM d1_migrations
+    WHERE name='0459_sk76_periodic_code_denominator.sql'
+  ) THEN RAISE(ABORT, 'rollback 0459: migration 0459 não registrada no ledger') END;
+
   SELECT CASE WHEN (
     SELECT COUNT(*) FROM modelos_sessao_versionamento
     WHERE empresa_id=6 AND is_current=1
@@ -36,11 +48,11 @@ BEGIN
         'S76-P-01/03-C1','S76-P-01/03-C2','S76-P-01/03-C3',
         'S76-P-02/03-C1','S76-P-02/03-C2','S76-P-02/03-C3'
       )
-      AND v.created_at > COALESCE((
+      AND v.created_at > (
         SELECT applied_at FROM d1_migrations
         WHERE name='0459_sk76_periodic_code_denominator.sql'
         ORDER BY id DESC LIMIT 1
-      ), '9999-12-31')
+      )
   ) THEN RAISE(ABORT, 'rollback 0459: nova versão /03 criada após a migration') END;
 
   SELECT CASE WHEN EXISTS (
