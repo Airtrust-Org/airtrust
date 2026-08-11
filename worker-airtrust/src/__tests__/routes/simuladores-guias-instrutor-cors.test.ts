@@ -18,17 +18,15 @@ type TestContext = {
 };
 
 vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: TestContext, next: () => Promise<void>) => {
-      if (!c.req.header('Authorization')) {
-        return c.json({ success: false, error: 'Token nao fornecido' }, 401);
-      }
-      c.set('userId', Number(c.req.header('x-test-user-id') || 1));
-      c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
-      c.set('userRole', c.req.header('x-test-role') || 'instructor');
-      await next();
-    },
+  auth: () => async (c: TestContext, next: () => Promise<void>) => {
+    if (!c.req.header('Authorization')) {
+      return c.json({ success: false, error: 'Token nao fornecido' }, 401);
+    }
+    c.set('userId', Number(c.req.header('x-test-user-id') || 1));
+    c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
+    c.set('userRole', c.req.header('x-test-role') || 'instructor');
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', async (importOriginal) => {
