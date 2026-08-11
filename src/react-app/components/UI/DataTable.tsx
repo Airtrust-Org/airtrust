@@ -178,15 +178,31 @@ export function DataTable({
               <th
                 key={column.key}
                 className={`px-6 py-3 text-left text-sm font-semibold text-neutral-900 ${
-                  column.sortable ? 'cursor-pointer hover:bg-neutral-100' : ''
+                  column.sortable ? 'hover:bg-neutral-100' : ''
                 }`}
                 style={{ width: column.width }}
-                onClick={() => column.sortable && handleSort(column.key)}
+                aria-sort={
+                  sortColumn === column.key
+                    ? sortDirection === 'asc'
+                      ? 'ascending'
+                      : 'descending'
+                    : column.sortable
+                      ? 'none'
+                      : undefined
+                }
               >
-                <div className="flex items-center gap-2">
-                  {column.label}
-                  {column.sortable && renderSortIndicator(column.key)}
-                </div>
+                {column.sortable ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSort(column.key)}
+                    className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded"
+                  >
+                    {column.label}
+                    {renderSortIndicator(column.key)}
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">{column.label}</div>
+                )}
               </th>
             ))}
             {showActions && (

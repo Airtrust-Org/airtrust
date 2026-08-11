@@ -328,14 +328,32 @@ export const GlobalTable: React.FC<GlobalTableProps> = ({
                 <th
                   key={column.key}
                   className={`px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider whitespace-nowrap ${
-                    column.sortable ? 'cursor-pointer hover:bg-neutral-100 transition-colors' : ''
+                    column.sortable ? 'hover:bg-neutral-100 transition-colors' : ''
                   }`}
-                  onClick={() => column.sortable && handleSort(column.key)}
+                  aria-sort={
+                    sortColumn === column.key
+                      ? sortDirection === 'asc'
+                        ? 'ascending'
+                        : sortDirection === 'desc'
+                          ? 'descending'
+                          : 'none'
+                      : column.sortable
+                        ? 'none'
+                        : undefined
+                  }
                 >
-                  <div className="flex items-center">
-                    {column.label}
-                    {column.sortable && renderSortIndicator(column.key)}
-                  </div>
+                  {column.sortable ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSort(column.key)}
+                      className="flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded"
+                    >
+                      {column.label}
+                      {renderSortIndicator(column.key)}
+                    </button>
+                  ) : (
+                    <div className="flex items-center">{column.label}</div>
+                  )}
                 </th>
               ))}
             </tr>
@@ -363,7 +381,7 @@ export const GlobalTable: React.FC<GlobalTableProps> = ({
                     >
                       {column.render
                         ? column.render(item[column.key], item, index)
-                        : (item[column.key] as React.ReactNode) ?? '-'}
+                        : ((item[column.key] as React.ReactNode) ?? '-')}
                     </td>
                   ))}
                 </tr>
@@ -381,24 +399,30 @@ export const GlobalTable: React.FC<GlobalTableProps> = ({
           </div>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => {
                 setCurrentPage(Math.max(1, currentPage - 1));
                 onPageChange?.(Math.max(1, currentPage - 1));
               }}
               disabled={currentPage === 1}
-              className="p-2 border border-neutral-300 rounded-lg hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 border border-neutral-300 rounded-lg hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
+              aria-label="Página anterior"
+              title="Página anterior"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" aria-hidden="true" />
             </button>
             <button
+              type="button"
               onClick={() => {
                 setCurrentPage(Math.min(totalPages, currentPage + 1));
                 onPageChange?.(Math.min(totalPages, currentPage + 1));
               }}
               disabled={currentPage === totalPages}
-              className="p-2 border border-neutral-300 rounded-lg hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 border border-neutral-300 rounded-lg hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
+              aria-label="Próxima página"
+              title="Próxima página"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </div>
