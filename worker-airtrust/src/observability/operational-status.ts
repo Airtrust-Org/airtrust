@@ -166,10 +166,7 @@ function normalizeRow(row: StatusRow) {
   };
 }
 
-export async function getOperationalStatus(
-  db: D1Database,
-  options: OperationalStatusOptions,
-) {
+export async function getOperationalStatus(db: D1Database, options: OperationalStatusOptions) {
   const limit = boundedLimit(options.limit);
   let rows: StatusRow[] = [];
 
@@ -182,10 +179,7 @@ export async function getOperationalStatus(
   } else {
     const scopeKey = `empresa:${options.empresaId}`;
     const [scoped, globalItems] = await Promise.all([
-      db
-        .prepare(buildTenantOperationalStatusQuery())
-        .bind(scopeKey, limit)
-        .all<StatusRow>(),
+      db.prepare(buildTenantOperationalStatusQuery()).bind(scopeKey, limit).all<StatusRow>(),
       db
         .prepare(buildTenantGlobalItemStatusQuery())
         .bind(options.empresaId, limit)
