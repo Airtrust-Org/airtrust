@@ -151,21 +151,26 @@ describe('controlled execution gate', () => {
     expect(result.stdout).toContain('mode_command_mismatch');
   });
 
-  it('blocks when safe_command references a quarantined migration marked NO_GO_MIGRATION_PRODUCAO', () => {
-    const result = runGenericGate(
-      baseEnv({
-        AIRTRUST_CONTROLLED_MODE: 'audit-v2-schema',
-        AIRTRUST_CONTROLLED_TARGET: 'local-copy',
-        AIRTRUST_CONTROLLED_SAFE_COMMAND:
-          'audit-v2 schema check then apply scripts/sql/manual/no-go/0432_revisao_completa_codigos_manobras.sql',
-      }),
-    );
+  it(
+    'blocks when safe_command references a quarantined migration marked NO_GO_MIGRATION_PRODUCAO',
+    () => {
+      const result = runGenericGate(
+        baseEnv({
+          AIRTRUST_CONTROLLED_MODE: 'audit-v2-schema',
+          AIRTRUST_CONTROLLED_TARGET: 'local-copy',
+          AIRTRUST_CONTROLLED_SAFE_COMMAND:
+            'audit-v2 schema check then apply scripts/sql/manual/no-go/0432_revisao_completa_codigos_manobras.sql',
+        }),
+      );
 
-    expect(result.status).toBe(2);
-    expect(result.stdout).toContain('CONTROLLED_EXECUTION_GATE=BLOCKED_BY_ENVIRONMENT_CONTRACT');
-    expect(result.stdout).toContain('no_go_migration_referenced');
-    expect(result.stdout).toContain('0432_revisao_completa_codigos_manobras.sql');
-  });
+      expect(result.status).toBe(2);
+      expect(result.stdout).toContain(
+        'CONTROLLED_EXECUTION_GATE=BLOCKED_BY_ENVIRONMENT_CONTRACT',
+      );
+      expect(result.stdout).toContain('no_go_migration_referenced');
+      expect(result.stdout).toContain('0432_revisao_completa_codigos_manobras.sql');
+    },
+  );
 
   it('blocks when safe_command references quarantined migration 0433', () => {
     const result = runGenericGate(
@@ -182,19 +187,22 @@ describe('controlled execution gate', () => {
     expect(result.stdout).toContain('0433_fix_loft_references.sql');
   });
 
-  it('blocks when safe_command references a migration file that does not exist (fail-closed)', () => {
-    const result = runGenericGate(
-      baseEnv({
-        AIRTRUST_CONTROLLED_MODE: 'audit-v2-schema',
-        AIRTRUST_CONTROLLED_TARGET: 'local-copy',
-        AIRTRUST_CONTROLLED_SAFE_COMMAND:
-          'audit-v2 schema check then apply worker-airtrust/migrations/9999_does_not_exist.sql',
-      }),
-    );
+  it(
+    'blocks when safe_command references a migration file that does not exist (fail-closed)',
+    () => {
+      const result = runGenericGate(
+        baseEnv({
+          AIRTRUST_CONTROLLED_MODE: 'audit-v2-schema',
+          AIRTRUST_CONTROLLED_TARGET: 'local-copy',
+          AIRTRUST_CONTROLLED_SAFE_COMMAND:
+            'audit-v2 schema check then apply worker-airtrust/migrations/9999_does_not_exist.sql',
+        }),
+      );
 
-    expect(result.status).toBe(2);
-    expect(result.stdout).toContain('referenced_migration_file_not_found');
-  });
+      expect(result.status).toBe(2);
+      expect(result.stdout).toContain('referenced_migration_file_not_found');
+    },
+  );
 
   it('allows safe_command referencing a migration that is NOT marked NO_GO', () => {
     const result = runGenericGate(
@@ -207,7 +215,9 @@ describe('controlled execution gate', () => {
     );
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain('CONTROLLED_EXECUTION_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION');
+    expect(result.stdout).toContain(
+      'CONTROLLED_EXECUTION_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION',
+    );
   });
 
   it('allows a local-copy scenario with fake artifacts and reviewed command', () => {
@@ -220,7 +230,9 @@ describe('controlled execution gate', () => {
     );
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain('CONTROLLED_EXECUTION_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION');
+    expect(result.stdout).toContain(
+      'CONTROLLED_EXECUTION_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION',
+    );
     expect(result.stdout).toContain('TARGET=local-copy');
     expect(result.stdout).toContain('SNAPSHOT_EVIDENCE=YES');
     expect(result.stdout).toContain('ROLLBACK_EVIDENCE=YES');
