@@ -18,7 +18,7 @@ export function buildTipoUpdatePayload(
   const fields = [
     { key: 'nome', norm: normalizeString },
     { key: 'codigo', norm: normalizeString },
-    { key: 'categoria', norm: normalizeString },
+    // categoria is display-only; categoria_id is the sole functional identity.
     { key: 'categoria_id', norm: normalizeNumber },
     { key: 'validade', norm: normalizeNumber },
     { key: 'vencimento_fim_mes', norm: (v: unknown) => (v ? 1 : 0) },
@@ -33,8 +33,6 @@ export function buildTipoUpdatePayload(
   ];
 
   for (const { key, norm } of fields) {
-    // Only include fields that actually exist in the draft object.
-    // Never send a field that was not explicitly set by the form.
     if (!Object.prototype.hasOwnProperty.call(draft, key)) {
       continue;
     }
@@ -45,9 +43,6 @@ export function buildTipoUpdatePayload(
       hasChanges = true;
     }
   }
-
-  // Handle setores separately if needed, though they might be handled in a separate PUT request as seen in Qualificacoes.tsx.
-  // Actually, Qualificacoes.tsx sends setores via a separate endpoint `.../setores`. So no need here.
 
   if (!hasChanges) {
     return null;

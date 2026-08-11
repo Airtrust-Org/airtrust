@@ -2,16 +2,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
+type MockContext = {
+  req: { header: (name: string) => string | undefined };
+  set: (key: string, value: unknown) => void;
+  get: (key: string) => unknown;
+};
+
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
+  auth: () => async (c: MockContext, next: () => Promise<void>) => {
     c.set('empresaId', Number(c.req.header('x-test-empresa-id')));
     c.set('userRole', 'admin');
     await next();
   },
 }));
-vi.mock('../../middleware/tenant', () => ({ getEmpresaId: (c: any) => c.get('empresaId') }));
+vi.mock('../../middleware/tenant', () => ({
+  getEmpresaId: (c: MockContext) => Number(c.get('empresaId')),
+}));
 vi.mock('../../middleware/rbac', () => ({
-  requireRole: () => async (_c: any, next: () => Promise<void>) => next(),
+  requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 vi.mock('../../utils/auditoria', () => ({
   registrarAuditoria: vi.fn(),
@@ -22,25 +30,48 @@ import categoriasRoutes from '../../routes/categorias';
 
 type Usage = 'canonical' | 'legacy' | 'none';
 
+function categoryRow(empresaId: number) {
+  return {
+    id: 3,
+    empresa_id: empresaId,
+    codigo: 'EAD',
+    nome: 'Atual',
+    cor: '#6B7280',
+    descricao: null,
+    ativo: 1,
+    dominio_codigo: null,
+    lms_integrada: 1,
+    created_at: '2026-08-01 10:00:00',
+    updated_at: null,
+  };
+}
+
+function schemaInfo(query: string) {
+  if (!query.includes("PRAGMA table_info('qualificacoes_categorias')")) return null;
+  return { results: [{ name: 'dominio_codigo' }, { name: 'lms_integrada' }] };
+}
+
 function createApp(usage: Usage, expectedEmpresaId = 7) {
   const calls: Array<{ query: string; args: unknown[] }> = [];
   const db = {
     prepare(query: string) {
       return {
+        all: async () => schemaInfo(query) || { results: [] },
         bind(...args: unknown[]) {
           calls.push({ query, args });
           return {
             first: async () => {
-              if (query.includes('SELECT * FROM qualificacoes_categorias')) {
-                return args[1] === expectedEmpresaId
-                  ? { id: 3, empresa_id: expectedEmpresaId, nome: 'Atual' }
-                  : null;
-              }
               if (query.includes('id <> ?')) return null;
               if (query.includes('FROM qualificacoes_tipos')) {
-                if (usage === 'canonical') return { id: 88 };
-                if (usage === 'legacy') return { id: 89 };
-                return null;
+                return { total: usage === 'none' ? 0 : 1 };
+              }
+              if (
+                query.includes('FROM qualificacoes_categorias') &&
+                query.includes('WHERE id = ?')
+              ) {
+                return Number(args[0]) === 3 && Number(args[1]) === expectedEmpresaId
+                  ? categoryRow(expectedEmpresaId)
+                  : null;
               }
               return null;
             },
@@ -65,7 +96,7 @@ describe('qualification category rename safety', () => {
         {
           method: 'PUT',
           headers: { 'content-type': 'application/json', 'x-test-empresa-id': '7' },
-          body: JSON.stringify({ nome: 'Novo' }),
+          body: JSON.stringify({ nome: 'Novo', ativo: 0 }),
         },
         { DB: db } as Env,
       );
@@ -117,19 +148,21 @@ describe('qualification category ativo field', () => {
     const db = {
       prepare(query: string) {
         return {
+          all: async () => schemaInfo(query) || { results: [] },
           bind(...args: unknown[]) {
             calls.push({ query, args });
-            const isSelect = query.includes('SELECT * FROM qualificacoes_categorias');
-            const isDuplicateCheck = query.includes('id <> ?');
             const isUpdate = query.includes('UPDATE qualificacoes_categorias');
             return {
               first: async () => {
-                if (isSelect) {
-                  if (args[1] === expectedEmpresaId || args[0] === expectedEmpresaId)
-                    return { id: 3, empresa_id: expectedEmpresaId, nome: 'EAD', ativo: 1 };
-                  return null;
+                if (query.includes('FROM qualificacoes_tipos')) return { total: 0 };
+                if (
+                  query.includes('FROM qualificacoes_categorias') &&
+                  query.includes('WHERE id = ?')
+                ) {
+                  return Number(args[0]) === 3 && Number(args[1]) === expectedEmpresaId
+                    ? categoryRow(expectedEmpresaId)
+                    : null;
                 }
-                if (isDuplicateCheck) return null;
                 return null;
               },
               run: async () => ({ meta: { changes: isUpdate ? 1 : 0 } }),
@@ -155,7 +188,7 @@ describe('qualification category ativo field', () => {
       { DB: db } as Env,
     );
     expect(response.status).toBe(200);
-    const body = await response.json() as { message?: string };
+    const body = (await response.json()) as { message?: string };
     expect(body.message).toBe('Categoria atualizada com sucesso');
   });
 
@@ -190,8 +223,9 @@ describe('qualification category ativo field', () => {
   it('blocks cross-tenant category update', async () => {
     const { app } = createAppForAtivo(7);
     const db2 = {
-      prepare() {
+      prepare(query: string) {
         return {
+          all: async () => schemaInfo(query) || { results: [] },
           bind() {
             return {
               first: async () => null,
@@ -208,7 +242,7 @@ describe('qualification category ativo field', () => {
         headers: { 'content-type': 'application/json', 'x-test-empresa-id': '8' },
         body: JSON.stringify({ ativo: 0 }),
       },
-      { DB: db2 } as any,
+      { DB: db2 } as unknown as Env,
     );
     expect(response.status).toBe(404);
   });
