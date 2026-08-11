@@ -67,16 +67,27 @@ function sourcePath(relativePath: string): string {
 }
 
 describe('parseSpreadsheetFile', () => {
-  it('parses the first XLSX worksheet without using SheetJS', async () => {
-    const file = await createSpreadsheetFile(
-      ['nome', 'horas', 'data_conclusao'],
-      [['Ana', 12, new Date('2026-08-02T00:00:00.000Z')]],
-    );
+  it('preserves XLSX date-only values in the Brazil timezone', async () => {
+    const previousTz = process.env.TZ;
+    process.env.TZ = 'America/Sao_Paulo';
 
-    const result = await parseSpreadsheetFile(file);
+    try {
+      const file = await createSpreadsheetFile(
+        ['nome', 'horas', 'data_conclusao'],
+        [['Ana', 12, new Date('2026-08-02T00:00:00.000Z')]],
+      );
 
-    expect(result.headers).toEqual(['nome', 'horas', 'data_conclusao']);
-    expect(result.rows).toEqual([{ nome: 'Ana', horas: 12, data_conclusao: '2026-08-02' }]);
+      const result = await parseSpreadsheetFile(file);
+
+      expect(result.headers).toEqual(['nome', 'horas', 'data_conclusao']);
+      expect(result.rows).toEqual([{ nome: 'Ana', horas: 12, data_conclusao: '2026-08-02' }]);
+    } finally {
+      if (previousTz === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = previousTz;
+      }
+    }
   });
 
   it('rejects duplicate and prototype-sensitive headers', async () => {

@@ -1,0 +1,130 @@
+name: One-shot readonly periodic simulator planning extract
+
+# source_reference: User-authorized simulator planning, 2026-08-11.
+# operational_decision: SELECT-only production D1 read for tenant empresa_id=6.
+# dry_run_required: true — no DDL/DML path exists in this workflow.
+# rollback_plan_required: false — this workflow performs no writes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/periodic-simulator-plan-readonly-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  d1-readonly-extract:
+    name: D1 readonly periodic simulator planning extract
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DB_NAME: airtrust-db
+      PUBLIC_KEY_B64: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQm9qQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FZOEFNSUlCaWdLQ0FZRUF0eEEwMk1tQi9iSnFZY0NjS0srVgpoV1Q0bldnVmJuY1FLYit5NWN2VFgvSXhtZkxHQjZNaFpEeDd1V0VIT01nejZjaUFDbmk2UmFqUVpJaE85eC9RCkI4Wnc3a3VKY3p6aE8wUGhaOFJHcUZmaUJTdWVaUVFLQWxJK0ZKOTJBaGZuTlFQUms5c0JZd3NrcXFaZUx3VXYKUTd4cG83ZGNqWDlmNEtiaFZveUZEVHJkaWhOQzA0M1NwRmp4VGUvK0Q2UWI2YnVWSE5IUFpmWW9Yc1NUdlFlVQpUTjJQWVJCOUV0dnBrb3NHV3NRWldxcEU1eGhLNFBGR05ING4xc29xVnNyU0pKTHBqTlptc3Nxd3FGZEU3WTVJCmtNWnkvcjI2bVMyY2JyK3M5UHZmMk9BMWk4ZlliUnNCaXNKUCtOci91K1dHMmYyc1U1R1RqUDNuaU9lajdodHYKZFhRL2F0MWs5Ym8wWG1TZUo0N09tQzFvRGhKaWpYcVhCWFJXOEFmUTN4WVNxNVozcUpvdGxxdkFvRHI1aEQvNwo2WGxJMkpiSnBseEhzTDBqUHpNS3h5OWdnRzV0dUFFSmtSS3VFWGVTbE0ySVRiMDUxcytrYTc3Mll6dFphaGVLCmZrelM0V21pQUZpUW4zOWFnRi90NEVEeGlMZ3BzV2NQeUpCbDBMb3lwblV6QWdNQkFBRT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Validate read-only preconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test "$DB_NAME" = "airtrust-db"
+          test "$(git status --porcelain)" = ""
+
+      - name: Read minimum planning dataset and encrypt before output
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/airtrust-periodic-plan"
+          mkdir -p "$work"
+          trap 'rm -rf "$work"' EXIT
+
+          query() {
+            local name="$1"
+            local sql="$2"
+            if ! npx wrangler d1 execute "$DB_NAME" --remote --command "$sql" --json >"$work/$name.json" 2>"$work/$name.err"; then
+              echo "READONLY_QUERY_FAILED:$name" >&2
+              sed -E 's/[[:alnum:]_+\/-]{24,}/[REDACTED]/g' "$work/$name.err" >&2 || true
+              exit 1
+            fi
+          }
+
+          # Query 1: active employee identity needed for the planning output only.
+          query employees "SELECT id, nome, funcao FROM funcionarios WHERE empresa_id = 6 AND deleted_at IS NULL AND COALESCE(ativo, 1) = 1 ORDER BY nome"
+
+          # Query 2: active qualification catalog, to identify the canonical periodic curriculum codes by evidence.
+          query qualification_types "SELECT id, codigo, nome, categoria FROM qualificacoes_tipos WHERE empresa_id = 6 AND deleted_at IS NULL AND COALESCE(ativo, 1) = 1 ORDER BY nome, codigo"
+
+          # Query 3: current qualification records whose expiry can require a simulator session no later than 2026-12-31.
+          # Includes overdue records and expiries through 2027-01-30 because the user's 30-day advance rule moves those deadlines into 2026.
+          query qualification_history "SELECT qh.id, qh.funcionario_id, qh.qualificacao_id, qh.qualificacao_codigo, qh.codigo, qh.data_conclusao, qh.data_vencimento, qh.status, qt.codigo AS tipo_codigo, qt.nome AS tipo_nome, qt.categoria AS tipo_categoria FROM qualificacoes_historico qh LEFT JOIN qualificacoes_tipos qt ON CAST(qt.id AS TEXT) = CAST(qh.qualificacao_id AS TEXT) AND qt.empresa_id = qh.empresa_id AND qt.deleted_at IS NULL WHERE qh.empresa_id = 6 AND qh.deleted_at IS NULL AND qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento) <= date('2027-01-30') AND date(qh.data_vencimento) >= date('2026-01-01') AND UPPER(COALESCE(qh.status, '')) <> 'RENOVADA' ORDER BY date(qh.data_vencimento), qh.funcionario_id, qh.id"
+
+          # Query 4: explicit FOLGA allocations in the planning horizon.
+          query folgas "SELECT ea.id, ea.funcionario_id, ea.escala_id, ea.quinzena_id, ea.data_inicio, ea.data_fim, ea.situacao_tipo, ea.status, ea.padrao_escala_id FROM escala_alocacoes ea JOIN escalas_mensais em ON CAST(em.id AS TEXT) = CAST(ea.escala_id AS TEXT) AND em.deleted_at IS NULL WHERE em.empresa_id = 6 AND ea.deleted_at IS NULL AND UPPER(COALESCE(ea.situacao_tipo, '')) = 'FOLGA' AND date(ea.data_fim) >= date('2026-08-11') AND date(ea.data_inicio) <= date('2026-12-31') ORDER BY ea.funcionario_id, date(ea.data_inicio)"
+
+          # Query 5: other allocations, used only to reject a nominal folga that overlaps duty/leave/training.
+          query blockers "SELECT ea.id, ea.funcionario_id, ea.escala_id, ea.quinzena_id, ea.data_inicio, ea.data_fim, ea.situacao_tipo, ea.status, ea.aeronave_id, ea.funcao, ea.padrao_escala_id FROM escala_alocacoes ea JOIN escalas_mensais em ON CAST(em.id AS TEXT) = CAST(ea.escala_id AS TEXT) AND em.deleted_at IS NULL WHERE em.empresa_id = 6 AND ea.deleted_at IS NULL AND UPPER(COALESCE(ea.situacao_tipo, '')) <> 'FOLGA' AND COALESCE(LOWER(ea.status), '') <> 'cancelado' AND date(ea.data_fim) >= date('2026-08-11') AND date(ea.data_inicio) <= date('2026-12-31') ORDER BY ea.funcionario_id, date(ea.data_inicio)"
+
+          # Query 6: monthly roster coverage, so unpublished months are distinguishable from a true absence of FOLGA.
+          query roster_months "SELECT id, ano, mes, status FROM escalas_mensais WHERE empresa_id = 6 AND deleted_at IS NULL AND ano = 2026 AND mes BETWEEN 8 AND 12 ORDER BY ano, mes"
+
+          node - "$work" <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const dir = process.argv[2];
+          const names = ['employees','qualification_types','qualification_history','folgas','blockers','roster_months'];
+          const unwrap = (v) => {
+            if (Array.isArray(v)) {
+              for (const item of v) if (item && Array.isArray(item.results)) return item.results;
+            }
+            if (v && Array.isArray(v.results)) return v.results;
+            if (v && v.result && Array.isArray(v.result.results)) return v.result.results;
+            throw new Error('Unexpected Wrangler JSON shape');
+          };
+          const out = {
+            source: 'production-d1-read-only',
+            empresa_id: 6,
+            generated_at: new Date().toISOString(),
+            git_sha: process.env.GITHUB_SHA,
+            planning_horizon: { start: '2026-08-11', end: '2026-12-31', expiry_included_through: '2027-01-30' },
+            datasets: {}
+          };
+          for (const name of names) {
+            const raw = JSON.parse(fs.readFileSync(path.join(dir, `${name}.json`), 'utf8'));
+            out.datasets[name] = unwrap(raw);
+          }
+          fs.writeFileSync(path.join(dir, 'planning.json'), JSON.stringify(out));
+          NODE
+
+          echo "$PUBLIC_KEY_B64" | base64 -d > "$work/public.pem"
+          openssl rand 32 > "$work/aes.key"
+          openssl rand 16 > "$work/iv.bin"
+          key_hex=$(xxd -p -c 256 "$work/aes.key")
+          iv_hex=$(xxd -p -c 256 "$work/iv.bin")
+          openssl enc -aes-256-cbc -K "$key_hex" -iv "$iv_hex" -in "$work/planning.json" -out "$work/planning.enc"
+          openssl pkeyutl -encrypt -pubin -inkey "$work/public.pem" -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in "$work/aes.key" -out "$work/key.enc"
+
+          echo "AIRTRUST_PLAN_ENCRYPTED_KEY_BEGIN"
+          base64 -w 120 "$work/key.enc"
+          echo "AIRTRUST_PLAN_ENCRYPTED_KEY_END"
+          echo "AIRTRUST_PLAN_IV_HEX=$iv_hex"
+          echo "AIRTRUST_PLAN_CIPHERTEXT_BEGIN"
+          base64 -w 120 "$work/planning.enc"
+          echo "AIRTRUST_PLAN_CIPHERTEXT_END"

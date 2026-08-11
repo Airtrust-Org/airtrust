@@ -12,11 +12,12 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   value,
   onChange,
   placeholder = 'Buscar...',
-  className = ''
+  className = '',
 }) => {
   return (
     <div className={`relative ${className}`}>
       <Search
+        aria-hidden="true"
         className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
         size={20}
       />
@@ -25,14 +26,17 @@ export const SearchInput: React.FC<SearchInputProps> = ({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        aria-label={placeholder}
         className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-transparent"
       />
       {value && (
         <button
+          type="button"
           onClick={() => onChange('')}
-          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          aria-label="Limpar busca"
+          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary/50 rounded-full p-0.5"
         >
-          <X size={20} />
+          <X size={20} aria-hidden="true" />
         </button>
       )}
     </div>

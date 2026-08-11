@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AdvancedDataTable } from './AdvancedDataTable';
 
-const columns = [{ key: 'nome', label: 'Nome' }];
+const columns = [{ key: 'nome', label: 'Nome', sortable: true }];
 const data = Array.from({ length: 11 }, (_, index) => ({
   id: index + 1,
   nome: `Pessoa ${index + 1}`,
@@ -61,7 +61,7 @@ describe('AdvancedDataTable accessibility', () => {
     expect(previousPage).toHaveAttribute('title', 'Página anterior');
     expect(nextPage).toHaveAttribute('title', 'Próxima página');
 
-    fireEvent.change(screen.getByPlaceholderText('Pesquisar...'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Pesquisar na tabela' }), {
       target: { value: 'Pessoa' },
     });
 
@@ -71,13 +71,34 @@ describe('AdvancedDataTable accessibility', () => {
     expect(clearSearch.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
   });
 
+  it('exposes sortable headers and pagination inputs to assistive technology', () => {
+    renderTable();
+
+    const sortHeader = screen.getByRole('columnheader', { name: 'Nome' });
+    const sortButton = screen.getByRole('button', { name: 'Nome' });
+
+    expect(sortHeader).toHaveAttribute('aria-sort', 'none');
+    expect(sortButton).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-primary-600');
+    expect(screen.getByRole('spinbutton', { name: 'Ir para página' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Itens por página' })).toBeInTheDocument();
+  });
+
+  it('names row-selection checkboxes', () => {
+    renderTable({ enableCheckboxes: true });
+
+    expect(
+      screen.getByRole('checkbox', { name: 'Selecionar todas as linhas' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('checkbox', { name: 'Selecionar linha' })).toHaveLength(10);
+  });
+
   it('preserves row actions, search clearing and pagination', () => {
     const { onView, onPageChange } = renderTable();
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Visualizar' })[0]);
     expect(onView).toHaveBeenCalledWith(1);
 
-    const searchInput = screen.getByPlaceholderText('Pesquisar...');
+    const searchInput = screen.getByRole('textbox', { name: 'Pesquisar na tabela' });
     fireEvent.change(searchInput, { target: { value: 'Pessoa' } });
     fireEvent.click(screen.getByRole('button', { name: 'Limpar busca' }));
     expect(searchInput).toHaveValue('');
