@@ -44,10 +44,12 @@ describe('renovacao automatica LMS por qualificacao EAD', () => {
     expect(source).toContain('async function ensureRenewalEmail(');
     expect(source).toContain('await ensureRenewalNotification(db, payload, result.matriculaId);');
     expect(source).toContain('await ensureRenewalEmail(env, db, payload);');
-    expect(source.indexOf('await ensureRenewalNotification(db, payload, result.matriculaId);')).toBeLessThan(
-      source.indexOf('await ensureRenewalEmail(env, db, payload);'),
+    expect(
+      source.indexOf('await ensureRenewalNotification(db, payload, result.matriculaId);'),
+    ).toBeLessThan(source.indexOf('await ensureRenewalEmail(env, db, payload);'));
+    expect(source).toContain(
+      "console.warn('[ead-renewal] Falha ao enviar email de renovação:', err);",
     );
-    expect(source).toContain("console.warn('[ead-renewal] Falha ao enviar email de renovação:', err);");
     expect(source).toContain('`${frontendUrl}/lms/cursos/${payload.curso_id}`');
   });
 });

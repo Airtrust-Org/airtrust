@@ -14,7 +14,9 @@ describe('LMS MEL Manutenção — contrato de matrícula automática', () => {
     expect(source).toContain('const access = await getEmployeeSectorAccess(c, empresaId);');
     expect(source).toContain("access.mode === 'restricted'");
     expect(source).toContain('access.setorIds.includes(setorManutencao.id)');
-    expect(source).toContain("throw new ApiError('Acesso negado: setor Manutenção fora do seu escopo', 403)");
+    expect(source).toContain(
+      "throw new ApiError('Acesso negado: setor Manutenção fora do seu escopo', 403)",
+    );
   });
 
   it('não duplica matrícula ativa e preserva o vínculo canônico curso-funcionário-empresa', () => {
