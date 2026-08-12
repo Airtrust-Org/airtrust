@@ -43,8 +43,7 @@ async function loadExistingCourseBinding(
     .prepare(
       `SELECT qualificacao_tipo_id,
               gerar_qualificacao_ao_concluir
-         FROM lms_cursos
-        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+         FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
         LIMIT 1`,
     )
     .bind(courseId, empresaId)
@@ -125,9 +124,25 @@ async function resolveCourseBinding(
   };
 }
 
+export function resolveCanonicalCourseId(routeParam: unknown, pathname: string): number | null {
+  const direct = positiveInteger(routeParam);
+  if (direct) return direct;
+
+  const segments = pathname
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const lowered = segments.map((segment) => segment.toLowerCase());
+  const cursosIndex = lowered.lastIndexOf('cursos');
+  if (cursosIndex >= 0) {
+    return positiveInteger(segments[cursosIndex + 1]);
+  }
+
+  return positiveInteger(segments[0]);
+}
+
 function courseIdFromPath(c: Context<{ Bindings: Env }>): number | null {
-  const raw = c.req.param('id');
-  return positiveInteger(raw);
+  return resolveCanonicalCourseId(c.req.param('id'), new URL(c.req.url).pathname);
 }
 
 async function normalizeCourseWrite(c: Context<{ Bindings: Env }>): Promise<CourseBinding | null> {
