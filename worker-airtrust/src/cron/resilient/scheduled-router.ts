@@ -106,7 +106,7 @@ export async function runResilientScheduledJobs(
     }
 
     if (plan.runEadRenewal) {
-      await runEadRenewalJob(env.DB, logger);
+      await runEadRenewalJob(env.DB, env, logger);
     }
 
     if (plan.runSigvoosFrms) {
