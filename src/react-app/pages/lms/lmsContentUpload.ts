@@ -22,7 +22,9 @@ type PreparedPackage = {
 };
 
 const IGNORED_ARCHIVE_SUFFIXES = ['.map'];
-const STRUCTURED_UPLOAD_CONCURRENCY = 4;
+// The Free Worker CPU budget cannot sustain four simultaneous R2 body streams
+// for media-heavy SCORM packages. Keep each authorized asset transfer isolated.
+const STRUCTURED_UPLOAD_CONCURRENCY = 1;
 
 function shouldIgnoreArchivePath(path: string): boolean {
   const lowerPath = path.toLowerCase();
