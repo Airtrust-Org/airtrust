@@ -244,9 +244,16 @@ app.post('/processar', requireRole('admin', 'manager'), async (c) => {
     .prepare(funcionariosQuery)
     .bind(empresaId, qualMEL.id, setorManutencao.id)
     .all<{
-      funcionario_id: number; funcionario_nome: string; funcionario_email: string | null;
-      funcionario_matricula: string | null; setor_nome: string; qualificacao_historico_id: number;
-      qualificacao_tipo_id: number; qualificacao_nome: string; data_vencimento: string; dias_vencida: number;
+      funcionario_id: number;
+      funcionario_nome: string;
+      funcionario_email: string | null;
+      funcionario_matricula: string | null;
+      setor_nome: string;
+      qualificacao_historico_id: number;
+      qualificacao_tipo_id: number;
+      qualificacao_nome: string;
+      data_vencimento: string;
+      dias_vencida: number;
     }>();
 
   const lista = funcionarios.results ?? [];
@@ -258,20 +265,29 @@ app.post('/processar', requireRole('admin', 'manager'), async (c) => {
     ignorados: 0,
     erros: 0,
     detalhes: [] as Array<{
-      funcionario_id: number; funcionario_nome: string;
+      funcionario_id: number;
+      funcionario_nome: string;
       status: 'MATRICULADO' | 'JA_MATRICULADO' | 'ERRO';
-      matricula_id?: number; erro?: string;
+      matricula_id?: number;
+      erro?: string;
     }>,
   };
 
   for (const func of lista) {
     try {
-      const existente = await findExistingMatricula(db, cursoMEL.id, func.funcionario_id, empresaId);
+      const existente = await findExistingMatricula(
+        db,
+        cursoMEL.id,
+        func.funcionario_id,
+        empresaId,
+      );
       if (existente && !existente.deleted_at) {
         resultado.ignorados++;
         resultado.detalhes.push({
-          funcionario_id: func.funcionario_id, funcionario_nome: func.funcionario_nome,
-          status: 'JA_MATRICULADO', matricula_id: existente.id,
+          funcionario_id: func.funcionario_id,
+          funcionario_nome: func.funcionario_nome,
+          status: 'JA_MATRICULADO',
+          matricula_id: existente.id,
         });
         continue;
       }
@@ -281,9 +297,13 @@ app.post('/processar', requireRole('admin', 'manager'), async (c) => {
           `INSERT INTO lms_matriculas (empresa_id, curso_id, funcionario_id, observacoes, matriculado_por)
            VALUES (?, ?, ?, ?, ?)`,
         )
-        .bind(empresaId, cursoMEL.id, func.funcionario_id,
+        .bind(
+          empresaId,
+          cursoMEL.id,
+          func.funcionario_id,
           `Matrícula automática: qualificação MEL vencida desde ${func.data_vencimento}`,
-          Number.isFinite(userId) && userId > 0 ? userId : null)
+          Number.isFinite(userId) && userId > 0 ? userId : null,
+        )
         .run();
 
       const matriculaId = Number(insertResult.meta.last_row_id);
@@ -293,51 +313,121 @@ app.post('/processar', requireRole('admin', 'manager'), async (c) => {
 
       // Notificação in-app
       const createdAt = new Date().toISOString();
-      const notificationId = ['lms', 'mel_manutencao_vencida', empresaId, func.funcionario_id, 'lms_matricula', matriculaId].join(':');
-      await db.prepare(
-        `INSERT OR IGNORE INTO notificacoes_inapp (id, funcionario_id, empresa_id, tipo, titulo, mensagem, referencia_id, referencia_tipo, created_at)
+      const notificationId = [
+        'lms',
+        'mel_manutencao_vencida',
+        empresaId,
+        func.funcionario_id,
+        'lms_matricula',
+        matriculaId,
+      ].join(':');
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO notificacoes_inapp (id, funcionario_id, empresa_id, tipo, titulo, mensagem, referencia_id, referencia_tipo, created_at)
          VALUES (?, ?, ?, 'mel_manutencao_vencida', '⚠️ Reciclagem MEL obrigatória',
          'Sua qualificação ' || ? || ' está vencida. Você foi matriculado automaticamente no curso ' || ? || '.',
          ?, 'lms_matricula', ?)`,
-      ).bind(notificationId, String(func.funcionario_id), empresaId, func.qualificacao_nome, cursoMEL.titulo, String(matriculaId), createdAt).run();
+        )
+        .bind(
+          notificationId,
+          String(func.funcionario_id),
+          empresaId,
+          func.qualificacao_nome,
+          cursoMEL.titulo,
+          String(matriculaId),
+          createdAt,
+        )
+        .run();
 
       // Audit log
       try {
         await logAudit(db, {
-          userId, action: 'LMS_MATRICULA_MEL_MANUTENCAO', entityType: 'lms_matricula', entityId: matriculaId,
-          newValues: { curso_id: cursoMEL.id, curso_titulo: cursoMEL.titulo, funcionario_id: func.funcionario_id, funcionario_nome: func.funcionario_nome, qualificacao_historico_id: func.qualificacao_historico_id, setor: setorManutencao.nome },
+          userId,
+          action: 'LMS_MATRICULA_MEL_MANUTENCAO',
+          entityType: 'lms_matricula',
+          entityId: matriculaId,
+          newValues: {
+            curso_id: cursoMEL.id,
+            curso_titulo: cursoMEL.titulo,
+            funcionario_id: func.funcionario_id,
+            funcionario_nome: func.funcionario_nome,
+            qualificacao_historico_id: func.qualificacao_historico_id,
+            setor: setorManutencao.nome,
+          },
         });
-      } catch (auditErr) { console.warn('[mel-manutencao] Falha ao registrar audit log:', auditErr); }
+      } catch (auditErr) {
+        console.warn('[mel-manutencao] Falha ao registrar audit log:', auditErr);
+      }
 
       // Email
       await sendMelMatriculaEmail(c.env, db, {
-        funcionarioId: func.funcionario_id, empresaId, cursoId: cursoMEL.id,
-        cursoTitulo: cursoMEL.titulo, qualificacaoNome: func.qualificacao_nome, dataVencimento: func.data_vencimento,
+        funcionarioId: func.funcionario_id,
+        empresaId,
+        cursoId: cursoMEL.id,
+        cursoTitulo: cursoMEL.titulo,
+        qualificacaoNome: func.qualificacao_nome,
+        dataVencimento: func.data_vencimento,
       });
 
       resultado.matriculados++;
-      resultado.detalhes.push({ funcionario_id: func.funcionario_id, funcionario_nome: func.funcionario_nome, status: 'MATRICULADO', matricula_id: matriculaId });
+      resultado.detalhes.push({
+        funcionario_id: func.funcionario_id,
+        funcionario_nome: func.funcionario_nome,
+        status: 'MATRICULADO',
+        matricula_id: matriculaId,
+      });
     } catch (error) {
       if (isMatriculaUniqueConstraintError(error)) {
-        const concorrente = await findExistingMatricula(db, cursoMEL.id, func.funcionario_id, empresaId);
+        const concorrente = await findExistingMatricula(
+          db,
+          cursoMEL.id,
+          func.funcionario_id,
+          empresaId,
+        );
         if (concorrente && !concorrente.deleted_at) {
           resultado.ignorados++;
-          resultado.detalhes.push({ funcionario_id: func.funcionario_id, funcionario_nome: func.funcionario_nome, status: 'JA_MATRICULADO', matricula_id: concorrente.id });
+          resultado.detalhes.push({
+            funcionario_id: func.funcionario_id,
+            funcionario_nome: func.funcionario_nome,
+            status: 'JA_MATRICULADO',
+            matricula_id: concorrente.id,
+          });
           continue;
         }
       }
       resultado.erros++;
-      resultado.detalhes.push({ funcionario_id: func.funcionario_id, funcionario_nome: func.funcionario_nome, status: 'ERRO', erro: error instanceof Error ? error.message : String(error) });
+      resultado.detalhes.push({
+        funcionario_id: func.funcionario_id,
+        funcionario_nome: func.funcionario_nome,
+        status: 'ERRO',
+        erro: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
   // 7. Auditoria do lote
   try {
     await logAudit(db, {
-      userId, action: 'LMS_MATRICULA_MEL_MANUTENCAO_LOTE', entityType: 'lms_matricula', entityId: 0,
-      newValues: { setor: setorManutencao.nome, setor_id: setorManutencao.id, qualificacao: qualMEL.nome, qualificacao_id: qualMEL.id, curso: cursoMEL.titulo, curso_id: cursoMEL.id, processados: resultado.processados, matriculados: resultado.matriculados, ignorados: resultado.ignorados, erros: resultado.erros },
+      userId,
+      action: 'LMS_MATRICULA_MEL_MANUTENCAO_LOTE',
+      entityType: 'lms_matricula',
+      entityId: 0,
+      newValues: {
+        setor: setorManutencao.nome,
+        setor_id: setorManutencao.id,
+        qualificacao: qualMEL.nome,
+        qualificacao_id: qualMEL.id,
+        curso: cursoMEL.titulo,
+        curso_id: cursoMEL.id,
+        processados: resultado.processados,
+        matriculados: resultado.matriculados,
+        ignorados: resultado.ignorados,
+        erros: resultado.erros,
+      },
     });
-  } catch (auditErr) { console.warn('[mel-manutencao] Falha ao registrar audit log do lote:', auditErr); }
+  } catch (auditErr) {
+    console.warn('[mel-manutencao] Falha ao registrar audit log do lote:', auditErr);
+  }
 
   return c.json({ success: true, data: resultado });
 });
@@ -349,19 +439,33 @@ app.get('/status', requireRole('admin', 'manager'), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const vencExpr = getQualificacoesVencimentoExpr();
 
-  const setorManutencao = await db.prepare(
-    `SELECT id, nome FROM setores WHERE empresa_id = ? AND deleted_at IS NULL AND (nome LIKE '%Manuten%' OR nome LIKE '%MANUTEN%') LIMIT 1`,
-  ).bind(empresaId).first<{ id: number; nome: string }>();
-  if (!setorManutencao) return c.json({ success: true, data: { funcionarios: [], total: 0, setor: null } });
+  const setorManutencao = await db
+    .prepare(
+      `SELECT id, nome FROM setores WHERE empresa_id = ? AND deleted_at IS NULL AND (nome LIKE '%Manuten%' OR nome LIKE '%MANUTEN%') LIMIT 1`,
+    )
+    .bind(empresaId)
+    .first<{ id: number; nome: string }>();
+  if (!setorManutencao)
+    return c.json({ success: true, data: { funcionarios: [], total: 0, setor: null } });
 
-  const qualMEL = await db.prepare(
-    `SELECT id, nome FROM qualificacoes_tipos WHERE empresa_id = ? AND deleted_at IS NULL AND (nome LIKE '%MEL%' OR codigo LIKE '%MEL%' OR codigo LIKE '%MNT_MEL%') ORDER BY CASE WHEN TRIM(codigo) = 'MEL' THEN 0 WHEN TRIM(codigo) LIKE '%MEL%' THEN 1 ELSE 2 END LIMIT 1`,
-  ).bind(empresaId).first<{ id: number; nome: string }>();
-  if (!qualMEL) return c.json({ success: true, data: { funcionarios: [], total: 0, setor: setorManutencao, qualificacao: null } });
+  const qualMEL = await db
+    .prepare(
+      `SELECT id, nome FROM qualificacoes_tipos WHERE empresa_id = ? AND deleted_at IS NULL AND (nome LIKE '%MEL%' OR codigo LIKE '%MEL%' OR codigo LIKE '%MNT_MEL%') ORDER BY CASE WHEN TRIM(codigo) = 'MEL' THEN 0 WHEN TRIM(codigo) LIKE '%MEL%' THEN 1 ELSE 2 END LIMIT 1`,
+    )
+    .bind(empresaId)
+    .first<{ id: number; nome: string }>();
+  if (!qualMEL)
+    return c.json({
+      success: true,
+      data: { funcionarios: [], total: 0, setor: setorManutencao, qualificacao: null },
+    });
 
-  const cursoMEL = await db.prepare(
-    `SELECT id, titulo FROM lms_cursos WHERE empresa_id = ? AND ativo = 1 AND deleted_at IS NULL AND qualificacao_tipo_id = ? LIMIT 1`,
-  ).bind(empresaId, qualMEL.id).first<{ id: number; titulo: string }>();
+  const cursoMEL = await db
+    .prepare(
+      `SELECT id, titulo FROM lms_cursos WHERE empresa_id = ? AND ativo = 1 AND deleted_at IS NULL AND qualificacao_tipo_id = ? LIMIT 1`,
+    )
+    .bind(empresaId, qualMEL.id)
+    .first<{ id: number; titulo: string }>();
 
   const funcionariosQuery = `
     SELECT DISTINCT f.id AS funcionario_id, f.nome AS funcionario_nome, f.email AS funcionario_email,
@@ -391,10 +495,21 @@ app.get('/status', requireRole('admin', 'manager'), async (c) => {
           AND date(${getQualificacoesVencimentoExpr('qh2', 'qt')}) > date(${vencExpr}))
     ORDER BY f.nome ASC`;
 
-  const funcionarios = await db.prepare(funcionariosQuery)
-    .bind(cursoMEL?.id ?? 0, empresaId, qualMEL.id, setorManutencao.id).all();
+  const funcionarios = await db
+    .prepare(funcionariosQuery)
+    .bind(cursoMEL?.id ?? 0, empresaId, qualMEL.id, setorManutencao.id)
+    .all();
 
-  return c.json({ success: true, data: { setor: setorManutencao, qualificacao: qualMEL, curso: cursoMEL ?? null, total: (funcionarios.results ?? []).length, funcionarios: funcionarios.results ?? [] } });
+  return c.json({
+    success: true,
+    data: {
+      setor: setorManutencao,
+      qualificacao: qualMEL,
+      curso: cursoMEL ?? null,
+      total: (funcionarios.results ?? []).length,
+      funcionarios: funcionarios.results ?? [],
+    },
+  });
 });
 
 export default app;

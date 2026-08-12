@@ -10,9 +10,7 @@ import { processarEventosParaModulo } from '../shared/handlers';
 import { CANCELLED_STATUS_VALUES, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { sendEmail } from '../lib/email';
-import {
-  ensureMatriculaCycle,
-} from '../services/lms-matricula-cycle';
+import { ensureMatriculaCycle } from '../services/lms-matricula-cycle';
 import {
   getSigvoosConfig,
   syncSigvoosForFrms,
@@ -21,7 +19,10 @@ import {
 import { carregarLimites } from '../lib/frms/db-service-config';
 import { reprocessarTripulanteCompleto } from '../lib/frms/db-service';
 import { fetchControleVoosOperationalRecords } from '../lib/frms/controle-voos-source';
-import { compareControleVoosWithLegacyJornada, type FrmsJornadaLegacyRow } from '../lib/frms/controle-voos-shadow-comparator';
+import {
+  compareControleVoosWithLegacyJornada,
+  type FrmsJornadaLegacyRow,
+} from '../lib/frms/controle-voos-shadow-comparator';
 import { isControleVoosShadowModeEnabledForEmpresa } from '../lib/frms/controle-voos-shadow-flag';
 
 function buildDailyNotificationId(parts: Array<string | number>) {
@@ -412,7 +413,10 @@ export async function runScheduledJobs(
               .first<{ nome: string; email: string | null }>();
 
             if (func?.email) {
-              const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '');
+              const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(
+                /\/$/,
+                '',
+              );
               const cursoUrl = `${frontendUrl}/lms/cursos/${row.curso_id}`;
               const nomeAluno = func.nome || `Funcionário ${row.funcionario_id}`;
 
@@ -1078,7 +1082,11 @@ async function runSigvoosFrmsDailySync(
               .all<FrmsJornadaLegacyRow>()
               .then((r) => r.results ?? []),
           ]);
-          const shadowSummary = compareControleVoosWithLegacyJornada(cvRecords, legacyJornadaRows, window);
+          const shadowSummary = compareControleVoosWithLegacyJornada(
+            cvRecords,
+            legacyJornadaRows,
+            window,
+          );
           console.log(
             `[SIGVOOS_CRON] [SHADOW] Empresa ${empresaId}: legado=${shadowSummary.totalRegistrosLegado} controle_voos=${shadowSummary.totalRegistrosControleVoos} divergencias=${shadowSummary.totalDivergencias}`,
             { divergenciasPorTipo: shadowSummary.divergenciasPorTipo },
