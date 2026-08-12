@@ -224,9 +224,7 @@ describe('lms cursos structured upload complete', () => {
       data: {
         upload_id: firstJson.data.upload_id,
         status: 'uploading',
-        uploaded_files: [
-          { path: 'media/cap08/pcm_connectors.webp', size: body.byteLength },
-        ],
+        uploaded_files: [{ path: 'media/cap08/pcm_connectors.webp', size: body.byteLength }],
       },
     });
   });
