@@ -1,0 +1,54 @@
+name: Temporary PR814 Prettier formatter
+
+on:
+  push:
+    branches:
+      - fix/lms-completion-evidence-integrity-20260804
+    paths:
+      - .github/workflows/pr814-format-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Format exact PR814 delta
+        run: |
+          npx --yes prettier@3.9.6 --write \
+            docs/ops/LMS_COMPLETION_EVIDENCE_INTEGRITY_20260804.md \
+            worker-airtrust/src/__tests__/architecture/lms-completion-single-entry-point.test.ts \
+            worker-airtrust/src/__tests__/services/lms-completion-evidence.test.ts \
+            worker-airtrust/src/middleware/lms-completion-integrity.ts \
+            worker-airtrust/src/middleware/lms-completion-persisted-progress.ts \
+            worker-airtrust/src/middleware/lms-completion-reversal.ts \
+            worker-airtrust/src/middleware/lms-enrollment-integrity.ts \
+            worker-airtrust/src/middleware/rbac.ts
+          rm -f worker-airtrust/src/__tests__/format-lms-delta-export.test.ts
+      - name: Commit formatter result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/ops/LMS_COMPLETION_EVIDENCE_INTEGRITY_20260804.md \
+            worker-airtrust/src/__tests__/architecture/lms-completion-single-entry-point.test.ts \
+            worker-airtrust/src/__tests__/services/lms-completion-evidence.test.ts \
+            worker-airtrust/src/middleware/lms-completion-integrity.ts \
+            worker-airtrust/src/middleware/lms-completion-persisted-progress.ts \
+            worker-airtrust/src/middleware/lms-completion-reversal.ts \
+            worker-airtrust/src/middleware/lms-enrollment-integrity.ts \
+            worker-airtrust/src/middleware/rbac.ts \
+            worker-airtrust/src/__tests__/format-lms-delta-export.test.ts
+          if git diff --cached --quiet; then
+            echo "No formatting delta"
+          else
+            git commit -m "style(lms): apply Prettier 3.9.6 to PR814 delta"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
