@@ -41,6 +41,17 @@ function representativeScormZip() {
   return { entries: Object.entries(files).map(([path, bytes]) => ({ path, bytes })), zip: zipSync(files) };
 }
 
+function retryScormFixture() {
+  const files: Record<string, Uint8Array> = {
+    'imsmanifest.xml': strToU8(
+      '<manifest><resources><resource identifier="course" href="index.html" /></resources></manifest>',
+    ),
+    'index.html': strToU8('<!doctype html><title>SCORM</title>'),
+    'media/cap08/pcm_connectors.webp': new Uint8Array([1, 2, 3, 4]),
+  };
+  return { entries: Object.entries(files).map(([path, bytes]) => ({ path, bytes })), zip: zipSync(files) };
+}
+
 describe('uploadStructuredLmsPackage', () => {
   beforeEach(() => {
     fetchWithAuthMock.mockReset();
@@ -87,5 +98,47 @@ describe('uploadStructuredLmsPackage', () => {
     expect(peakFileUploads).toBe(1);
     expect(result.filesUploaded).toBe(98);
     expect(fetchWithAuthMock).toHaveBeenCalledTimes(100);
+  });
+
+  it('retries a transient network/CORS failure for the same versioned asset and still completes', async () => {
+    let targetAttempts = 0;
+    const statuses: string[] = [];
+
+    fetchWithAuthMock.mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/content-upload/init')) {
+        return response({ upload_id: 'db7b6e553c535eb5e5f29063202161cfe3b59942', status: 'uploading' });
+      }
+      if (path.includes('/content-upload/file?')) {
+        if (path.includes('pcm_connectors.webp')) {
+          targetAttempts += 1;
+          if (targetAttempts === 1) throw new TypeError('Failed to fetch');
+        }
+        return response({ path: 'stored', bytes: 4 });
+      }
+      if (path.endsWith('/content-upload/complete')) {
+        return response({ files_uploaded: 3, prefix: 'lms/scorm/6/32/_versions/upload/' });
+      }
+      throw new Error(`Unexpected endpoint: ${path}`);
+    });
+
+    const fixture = retryScormFixture();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const file = {
+      name: 'aw139-manutencao.zip',
+      arrayBuffer: async () => new Uint8Array(fixture.zip).buffer,
+    } as File;
+
+    const result = await uploadStructuredLmsPackage({
+      cursoId: 32,
+      tipoConteudo: 'scorm',
+      file,
+      onStatus: (status) => statuses.push(status),
+    });
+
+    expect(targetAttempts).toBe(2);
+    expect(result.filesUploaded).toBe(3);
+    expect(statuses.some((status) => /Falha transitória.*pcm_connectors\.webp/i.test(status))).toBe(true);
+    expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).endsWith('/content-upload/complete'))).toBe(true);
   });
 });
