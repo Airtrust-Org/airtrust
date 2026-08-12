@@ -141,4 +141,52 @@ describe('uploadStructuredLmsPackage', () => {
     expect(statuses.some((status) => /Falha transitória.*pcm_connectors\.webp/i.test(status))).toBe(true);
     expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).endsWith('/content-upload/complete'))).toBe(true);
   });
+
+  it('resumes the same package without reuploading files already stored in the version prefix', async () => {
+    const fixture = retryScormFixture();
+    const [manifest, launch, target] = fixture.entries;
+    const uploadedPaths: string[] = [];
+    const statuses: string[] = [];
+
+    fetchWithAuthMock.mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/content-upload/init')) {
+        return response({
+          upload_id: 'db7b6e553c535eb5e5f29063202161cfe3b59942',
+          status: 'uploading',
+          uploaded_files: [
+            { path: manifest!.path, size: manifest!.bytes.byteLength },
+            { path: launch!.path, size: launch!.bytes.byteLength },
+          ],
+        });
+      }
+      if (path.includes('/content-upload/file?')) {
+        const requestUrl = new URL(path, 'https://airtrust.online');
+        uploadedPaths.push(requestUrl.searchParams.get('path') ?? '');
+        return response({ path: target!.path, bytes: target!.bytes.byteLength });
+      }
+      if (path.endsWith('/content-upload/complete')) {
+        return response({ files_uploaded: 3, prefix: 'lms/scorm/6/32/_versions/upload/' });
+      }
+      throw new Error(`Unexpected endpoint: ${path}`);
+    });
+
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const file = {
+      name: 'aw139-manutencao.zip',
+      arrayBuffer: async () => new Uint8Array(fixture.zip).buffer,
+    } as File;
+
+    const result = await uploadStructuredLmsPackage({
+      cursoId: 32,
+      tipoConteudo: 'scorm',
+      file,
+      onStatus: (status) => statuses.push(status),
+    });
+
+    expect(uploadedPaths).toEqual(['media/cap08/pcm_connectors.webp']);
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(3);
+    expect(result.filesUploaded).toBe(3);
+    expect(statuses.some((status) => /Retomando upload: 2 de 3 arquivos já enviados/i.test(status))).toBe(true);
+  });
 });
