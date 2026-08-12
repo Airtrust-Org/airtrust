@@ -49,8 +49,8 @@ export default function AeronaveMultiSelect({
             <button
               type="button"
               onClick={() => handleRemove(aeronave.id)}
-              className="ml-1 text-primary hover:text-primary transition-colors flex-shrink-0"
-              aria-label="Remover aeronave"
+              className="ml-1 text-primary hover:text-primary transition-colors flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-primary/50 rounded"
+              aria-label={`Remover aeronave ${aeronave.codigo}`}
             >
               <X className="w-3 h-3" aria-hidden="true" />
             </button>
@@ -62,7 +62,7 @@ export default function AeronaveMultiSelect({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white text-sm"
+        className="w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus:border-transparent bg-white text-sm"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
@@ -89,7 +89,7 @@ export default function AeronaveMultiSelect({
                 key={aeronave.id}
                 type="button"
                 onClick={() => handleSelect(aeronave.id)}
-                className="w-full text-left px-3 py-2 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none border-b border-gray-100 last:border-b-0"
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary/50 border-b border-gray-100 last:border-b-0"
               >
                 <div className="font-medium text-gray-900 truncate">{aeronave.codigo}</div>
                 {aeronave.nome && (

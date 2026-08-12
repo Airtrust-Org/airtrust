@@ -102,9 +102,10 @@ target_looks_like_production() {
 }
 
 # Defense in depth: this gate must not be usable as an alternate path to apply
-# a migration explicitly marked NO_GO_MIGRATION_PRODUCAO (or any other file
-# under worker-airtrust/migrations/) that the ledger flags as blocked. This
-# consults the SAME single source of truth as apply-migration-production.sh
+# a migration explicitly marked NO_GO_MIGRATION_PRODUCAO. Quarantined no-go
+# artifacts live under scripts/sql/manual/no-go, while canonical forward-only
+# migrations remain under worker-airtrust/migrations. Both locations consult
+# the SAME single source of truth as apply-migration-production.sh
 # (scripts/migration-no-go-lib.mjs), regardless of which "mode" is declared.
 check_safe_command_for_no_go_migrations() {
   [[ -n "$safe_command" ]] || return 0
@@ -115,7 +116,7 @@ check_safe_command_for_no_go_migrations() {
     [[ -n "$token" ]] || continue
     found_any=1
 
-    if [[ "$token" == worker-airtrust/migrations/* || "$token" == /* ]]; then
+    if [[ "$token" == worker-airtrust/migrations/* || "$token" == scripts/sql/manual/no-go/* || "$token" == /* ]]; then
       candidate="$token"
     else
       candidate="worker-airtrust/migrations/$token"

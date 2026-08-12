@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reviewed procedure for applying a single worker-airtrust/migrations/*.sql file
-# to production D1. Mirrors the gate design of scripts/run-production-db-script.sh
-# (explicit env-var gates, confirmation text, clean main branch) and adds a
-# hard block for any migration marked NO_GO_MIGRATION_PRODUCAO.
-#
-# There is no runtime bypass flag for the NO_GO block. Lifting it requires
-# removing the marker from the SQL file itself in a reviewed PR — that PR IS
-# the deliberate, auditable authorization. This is intentional: a bypass env
-# var could be set casually; editing a migration file under review cannot.
+# Reviewed procedure for applying one canonical forward migration to production
+# D1. This wrapper never enumerates worker-airtrust/migrations and refuses
+# rollback/manual/preflight/purge artifacts and NO_GO_MIGRATION_PRODUCAO files.
 
 CONFIRM_TEXT="I understand this may modify production data"
+CANONICAL_NAME_RE='^[0-9]{4}_[a-z0-9_]+\.sql$'
 
 echo "⚠️  PRODUCTION MIGRATION APPLY PATH"
-echo "   This script executes one worker-airtrust/migrations/*.sql file against production D1."
+echo "   This script executes exactly one reviewed canonical migration against production D1."
 echo "   It is blocked unless all explicit production DB write gates are set,"
 echo "   and unconditionally blocked for migrations marked NO_GO_MIGRATION_PRODUCAO."
 
@@ -33,6 +28,25 @@ case "$migration_file" in
     ;;
 esac
 
+migration_name="$(basename "$migration_file")"
+if [[ ! "$migration_name" =~ $CANONICAL_NAME_RE ]]; then
+  echo "ERROR: migration filename is not canonical forward SQL: $migration_name" >&2
+  echo "Expected pattern: ^[0-9]{4}_[a-z0-9_]+\\.sql$" >&2
+  exit 1
+fi
+
+case "${migration_name,,}" in
+  *rollback*|*purge*|*preflight*|*manual*|*diagnostic*|*diagnostico*)
+    echo "ERROR: operational/destructive SQL is not eligible for the production migration wrapper: $migration_name" >&2
+    exit 1
+    ;;
+esac
+
+if [[ -L "$migration_file" ]]; then
+  echo "ERROR: symlink migrations are not permitted: $migration_file" >&2
+  exit 1
+fi
+
 if [[ ! -f "$migration_file" ]]; then
   echo "ERROR: migration file not found: $migration_file" >&2
   exit 1
@@ -41,12 +55,9 @@ fi
 # Migrations with known ledger or execution constraints must NEVER be applied
 # through this raw `d1 execute --remote --file` path. Each case below points to
 # the reviewed, ledger-aware path that must be prepared or used instead.
-case "$(basename "$migration_file")" in
+case "$migration_name" in
   0438_controle_voos_rdv_coordenacao_workflow.sql)
     echo "ERROR: 0438 must not be applied via raw d1 execute." >&2
-    echo "Production is missing this schema, and raw execution would reproduce the" >&2
-    echo "schema/ledger drift already observed in staging because this path does not" >&2
-    echo "record the reviewed change in the Schema V2 ledger." >&2
     echo "Prepare and review the Schema V2 bundle described in:" >&2
     echo "  worker-airtrust/schema-v2/plans/0438-rdv-coordination-workflow-production.md" >&2
     echo "Then apply it only through .github/workflows/apply-schema-change-v2.yml." >&2
@@ -59,32 +70,28 @@ case "$(basename "$migration_file")" in
     exit 4
     ;;
   0441_simuladores_matriz_manobra_resolution.sql|0442_simuladores_matriz_guia_relink.sql)
-    echo "ERROR: $(basename "$migration_file") must be applied via the ledger-aware runner:" >&2
-    echo "  bash scripts/production/apply-simuladores-matriz-remote-migration.sh $(basename "$migration_file")" >&2
-    echo "That path uses 'wrangler d1 migrations apply', which updates d1_migrations." >&2
+    echo "ERROR: $migration_name must be applied via the exact governed runner:" >&2
+    echo "  bash scripts/production/apply-simuladores-matriz-remote-migration.sh $migration_name" >&2
     exit 4
     ;;
   0443_simuladores_matriz_remediation_compensation.sql)
     echo "ERROR: 0443 must be applied via its dedicated ledger-aware runner:" >&2
-    echo "  bash scripts/production/apply-simuladores-matriz-0443-remote-migration.sh 0443_simuladores_matriz_remediation_compensation.sql" >&2
-    echo "'wrangler d1 migrations apply' fails on 0443 with SQLITE_ERROR: incomplete" >&2
-    echo "input (confirmed root cause: it submits via D1's query API action, which" >&2
-    echo "cannot reliably parse this migration's size/complexity; the import API" >&2
-    echo "action used by that runner's --file submission handles it correctly and" >&2
-    echo "atomically — see docs/ops/simuladores-matriz-legacy-equivalent-remediation-runbook.md)." >&2
+    echo "  bash scripts/production/apply-simuladores-matriz-0443-remote-migration.sh $migration_name" >&2
     exit 4
     ;;
 esac
 
 no_go_check="$(node scripts/check-single-migration-no-go.mjs "$migration_file")"
-
 if [[ "$no_go_check" == "BLOCKED" ]]; then
   echo "ERROR: $migration_file is marked NO_GO_MIGRATION_PRODUCAO." >&2
   echo "This migration cannot be applied to production through this script." >&2
-  echo "See the NO_GO_MIGRATION_PRODUCAO comment inside the file for the reason and release conditions." >&2
   echo "There is no override flag. The marker must be removed via a reviewed PR before this can run." >&2
   exit 3
 fi
+
+# Fail closed if the canonical directory itself is impure before any production
+# gate or remote command can be reached.
+node scripts/guard-migrations-dir-purity.mjs >/dev/null
 
 db_env="${AIRTRUST_D1_ENV:-production}"
 db_name="${AIRTRUST_D1_DATABASE:-airtrust-db}"
@@ -115,14 +122,12 @@ if ! git diff --quiet; then
   echo "ERROR: unstaged tracked changes detected"
   exit 1
 fi
-
 if ! git diff --cached --quiet; then
   echo "ERROR: staged tracked changes detected"
   exit 1
 fi
 
 git fetch origin main >/dev/null 2>&1 || true
-
 head_sha="$(git rev-parse HEAD)"
 origin_sha="$(git rev-parse origin/main)"
 if [[ "$head_sha" != "$origin_sha" ]]; then
@@ -146,7 +151,6 @@ echo "Migration file: $migration_file"
 printf 'Command:'
 printf ' %q' "${command[@]}"
 printf '\n'
-echo ""
 echo "Proceeding with production migration execution..."
 
 "${command[@]}"

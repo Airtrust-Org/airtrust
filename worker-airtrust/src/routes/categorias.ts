@@ -1,395 +1,479 @@
 /**
- * CATEGORIAS ROUTES - Gestão de Categorias de Qualificações
+ * Qualification category catalog.
  *
- * Endpoints para gerenciar categorias:
- * - GET /api/categorias - Lista todas as categorias
- * - POST /api/categorias - Cria nova categoria
- * - PUT /api/categorias/:id - Atualiza categoria
- * - DELETE /api/categorias/:id - Remove categoria
+ * Canonical identity is (empresa_id, id). `codigo` is a stable business key;
+ * `nome` is presentation. Qualification models and histories never use a
+ * category name as functional identity.
  */
 
-import { Hono } from 'hono';
-import type { Env, QualificacaoCategoria, ApiResponse } from '../types';
+import { Hono, type Context } from 'hono';
+import type { Env, ApiResponse } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { requireRole } from '../middleware/rbac';
+import { ApiError } from '../middleware/error-handler';
 import { generateColorFromName, slugify } from '../utils/colors';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
+import {
+  assertQualificationCategoryCanBeDeactivated,
+  resolveQualificationCategoryById,
+} from '../services/qualification-category-contract';
 
 const app = new Hono<{ Bindings: Env }>();
-
 app.use('*', auth());
 
-/**
- * GET /api/categorias
- * Lista categorias de qualificações.
- * Query params opcionais:
- *   setor_ids=1,2,3 — filtra categorias que têm pelo menos um tipo vinculado aos setores indicados
- *   setor_id=11     — alias para setor_ids (um único valor)
- *   ativo=1         — retorna apenas categorias ativas (uso de criação)
- */
+type CategoryColumns = {
+  dominioCodigo: boolean;
+  lmsIntegrada: boolean;
+};
+
+type CategoryRow = {
+  id: number;
+  empresa_id: number;
+  codigo: string;
+  nome: string;
+  cor: string | null;
+  descricao: string | null;
+  ativo: number;
+  dominio_codigo: string | null;
+  lms_integrada: number;
+  created_at: string;
+  updated_at: string | null;
+};
+
+type CategoryApi = {
+  id: number;
+  codigo: string;
+  nome: string;
+  slug: string;
+  cor: string;
+  descricao: string | null;
+  ordem: number;
+  ativo: boolean;
+  dominio_codigo: string | null;
+  lms_integrada: boolean;
+  created_at: string;
+  updated_at: string | null;
+};
+
+async function loadCategoryColumns(db: D1Database): Promise<CategoryColumns> {
+  const info = await db
+    .prepare("PRAGMA table_info('qualificacoes_categorias')")
+    .all<{ name?: string }>();
+  const names = new Set((info.results || []).map((row) => String(row.name || '')));
+  return {
+    dominioCodigo: names.has('dominio_codigo'),
+    lmsIntegrada: names.has('lms_integrada'),
+  };
+}
+
+function normalizeCode(value: unknown, fallbackName: string): string {
+  const source = String(value || '').trim() || slugify(fallbackName);
+  return source
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase();
+}
+
+function categorySelect(columns: CategoryColumns): string {
+  return `id, empresa_id, codigo, nome, cor, descricao, ativo,
+    ${columns.dominioCodigo ? 'dominio_codigo' : 'NULL'} AS dominio_codigo,
+    ${columns.lmsIntegrada ? 'COALESCE(lms_integrada, 0)' : '0'} AS lms_integrada,
+    created_at, updated_at`;
+}
+
+function serializeCategory(row: CategoryRow): CategoryApi {
+  return {
+    id: Number(row.id),
+    codigo: String(row.codigo),
+    nome: String(row.nome),
+    slug: slugify(row.nome),
+    cor: row.cor || generateColorFromName(row.nome),
+    descricao: row.descricao,
+    ordem: Number(row.id),
+    ativo: Number(row.ativo) === 1,
+    dominio_codigo: row.dominio_codigo || null,
+    lms_integrada: Number(row.lms_integrada) === 1,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+async function validateDomain(db: D1Database, dominioCodigo: unknown): Promise<string | null> {
+  if (dominioCodigo == null || String(dominioCodigo).trim() === '') return null;
+  const codigo = String(dominioCodigo).trim().toUpperCase();
+  const row = await db
+    .prepare('SELECT codigo FROM dominios_operacionais WHERE codigo = ? AND ativo = 1 LIMIT 1')
+    .bind(codigo)
+    .first<{ codigo: string }>();
+  if (!row) {
+    throw new ApiError(
+      'Domínio operacional inválido ou inativo',
+      422,
+      'INVALID_OPERATIONAL_DOMAIN',
+    );
+  }
+  return codigo;
+}
+
+async function ensureUniqueLmsCategory(
+  db: D1Database,
+  empresaId: number,
+  exceptId?: number,
+): Promise<void> {
+  const row = await db
+    .prepare(
+      `SELECT id
+         FROM qualificacoes_categorias
+        WHERE empresa_id = ?
+          AND lms_integrada = 1
+          AND ativo = 1
+          AND deleted_at IS NULL
+          ${exceptId ? 'AND id <> ?' : ''}
+        LIMIT 1`,
+    )
+    .bind(...(exceptId ? [empresaId, exceptId] : [empresaId]))
+    .first<{ id: number }>();
+  if (row) {
+    throw new ApiError(
+      'O tenant já possui uma categoria ativa integrada ao LMS',
+      409,
+      'LMS_CATEGORY_ALREADY_CONFIGURED',
+    );
+  }
+}
+
+function apiErrorResponse(c: Context<{ Bindings: Env }>, error: unknown) {
+  if (error instanceof ApiError) {
+    return c.json(
+      { success: false, error: error.message, code: error.code },
+      error.statusCode as 400 | 403 | 404 | 409 | 422 | 500,
+    );
+  }
+  console.error('[QUALIFICATION_CATEGORIES_ERROR]', error);
+  return c.json({ success: false, error: 'Erro interno ao processar categoria' }, 500);
+}
+
+/** List categories. Inactive categories remain readable for historical/model reload. */
 app.get('/', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-
+  const columns = await loadCategoryColumns(db);
   const rawSetorIds = c.req.query('setor_ids') || c.req.query('setor_id');
   const apenasAtivas = c.req.query('ativo') === '1';
-  const setorIds: number[] = rawSetorIds
-    ? rawSetorIds
-        .split(',')
-        .map(Number)
-        .filter((n) => Number.isFinite(n) && n > 0)
+  const setorIds = rawSetorIds
+    ? [
+        ...new Set(
+          rawSetorIds
+            .split(',')
+            .map(Number)
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ]
     : [];
 
-  let sql: string;
-  let bindings: unknown[];
+  const conditions = ['qc.empresa_id = ?', 'qc.deleted_at IS NULL'];
+  const bindings: unknown[] = [empresaId];
+  if (apenasAtivas) conditions.push('qc.ativo = 1');
 
   if (setorIds.length > 0) {
     const placeholders = setorIds.map(() => '?').join(', ');
-    sql = `
-      SELECT DISTINCT qc.id, qc.codigo, qc.nome, qc.cor, qc.descricao, qc.ativo, qc.created_at, qc.updated_at
-      FROM qualificacoes_categorias qc
-      INNER JOIN qualificacoes_tipos qt
-        ON qt.categoria_id = qc.id
-        AND qt.empresa_id = qc.empresa_id
-        AND qt.deleted_at IS NULL
-      INNER JOIN qualificacoes_tipos_setores qts
-        ON qts.tipo_id = qt.id
-        AND qts.empresa_id = qc.empresa_id
-        AND qts.setor_id IN (${placeholders})
-      WHERE qc.empresa_id = ? AND qc.deleted_at IS NULL ${apenasAtivas ? 'AND qc.ativo = 1' : ''}
-      ORDER BY qc.id ASC
-    `;
-    bindings = [...setorIds, empresaId];
-  } else {
-    sql = `
-      SELECT id, codigo, nome, cor, descricao, ativo, created_at, updated_at
-      FROM qualificacoes_categorias
-      WHERE empresa_id = ? AND deleted_at IS NULL ${apenasAtivas ? 'AND ativo = 1' : ''}
-      ORDER BY id ASC
-    `;
-    bindings = [empresaId];
+    conditions.push(`EXISTS (
+      SELECT 1
+        FROM qualificacoes_tipos qt
+       WHERE qt.categoria_id = qc.id
+         AND qt.empresa_id = qc.empresa_id
+         AND qt.deleted_at IS NULL
+         AND qt.ativo = 1
+         AND (
+           NOT EXISTS (
+             SELECT 1 FROM qualificacoes_tipos_setores qts_any
+              WHERE qts_any.tipo_id = qt.id
+                AND qts_any.empresa_id = qt.empresa_id
+                AND qts_any.deleted_at IS NULL
+           )
+           OR EXISTS (
+             SELECT 1 FROM qualificacoes_tipos_setores qts
+              WHERE qts.tipo_id = qt.id
+                AND qts.empresa_id = qt.empresa_id
+                AND qts.deleted_at IS NULL
+                AND qts.setor_id IN (${placeholders})
+           )
+         )
+    )`);
+    bindings.push(...setorIds);
   }
 
-  const { results } = await db.prepare(sql).bind(...bindings).all<any>();
+  const result = await db
+    .prepare(
+      `SELECT ${categorySelect(columns)}
+         FROM qualificacoes_categorias qc
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY qc.id ASC`,
+    )
+    .bind(...bindings)
+    .all<CategoryRow>();
 
-  const categorias: QualificacaoCategoria[] = (results || []).map((r) => ({
-      id: r.id,
-      codigo: r.codigo,
-      nome: r.nome,
-    slug: slugify(r.nome),
-    cor: r.cor || generateColorFromName(r.nome),
-    descricao: r.descricao,
-      ordem: r.id,
-      ativo: Boolean(r.ativo),
-    created_at: r.created_at,
-    updated_at: r.updated_at,
-  }));
-
-  const response: ApiResponse<QualificacaoCategoria[]> = {
+  const response: ApiResponse<CategoryApi[]> = {
     success: true,
-    data: categorias,
+    data: (result.results || []).map(serializeCategory),
   };
-
   return c.json(response);
 });
 
-/**
- * POST /api/categorias
- * Cria uma nova categoria
- */
 app.post('/', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-
   try {
-    const body = await c.req.json();
-    const { nome, descricao } = body;
+    const columns = await loadCategoryColumns(db);
+    const body = (await c.req.json()) as Record<string, unknown>;
+    const nome = String(body.nome || '').trim();
+    if (!nome) return c.json({ success: false, error: 'Nome é obrigatório' }, 400);
 
-    if (!nome || nome.trim().length === 0) {
-      return c.json({ success: false, error: 'Nome é obrigatório' }, 400);
-    }
+    const codigo = normalizeCode(body.codigo, nome);
+    if (!codigo) return c.json({ success: false, error: 'Código é obrigatório' }, 400);
+    const dominioCodigo = columns.dominioCodigo
+      ? await validateDomain(db, body.dominio_codigo)
+      : null;
+    const lmsIntegrada = columns.lmsIntegrada && Boolean(body.lms_integrada);
+    if (lmsIntegrada) await ensureUniqueLmsCategory(db, empresaId);
 
-    const cor = generateColorFromName(nome);
-    const codigo = slugify(nome).toUpperCase();
-
-    // Verificar se categoria já existe
-    const { results: existing } = await db
+    const duplicate = await db
       .prepare(
-        `SELECT id
-         FROM qualificacoes_categorias
-         WHERE empresa_id = ?
-           AND deleted_at IS NULL
-           AND (
-             UPPER(TRIM(nome)) = UPPER(TRIM(?))
-             OR UPPER(TRIM(codigo)) = UPPER(TRIM(?))
-           )`,
+        `SELECT id FROM qualificacoes_categorias
+          WHERE empresa_id = ? AND deleted_at IS NULL
+            AND (UPPER(TRIM(nome)) = UPPER(TRIM(?)) OR UPPER(TRIM(codigo)) = UPPER(TRIM(?)))
+          LIMIT 1`,
       )
       .bind(empresaId, nome, codigo)
-      .all();
+      .first();
+    if (duplicate) return c.json({ success: false, error: 'Categoria já existe' }, 409);
 
-    if (existing && existing.length > 0) {
-      return c.json({ success: false, error: 'Categoria já existe' }, 409);
+    const insertColumns = ['empresa_id', 'nome', 'codigo', 'cor', 'descricao', 'ativo'];
+    const insertValues: unknown[] = [
+      empresaId,
+      nome,
+      codigo,
+      String(body.cor || '').trim() || generateColorFromName(nome),
+      body.descricao == null ? null : String(body.descricao),
+      body.ativo === false || body.ativo === 0 ? 0 : 1,
+    ];
+    if (columns.dominioCodigo) {
+      insertColumns.push('dominio_codigo');
+      insertValues.push(dominioCodigo);
+    }
+    if (columns.lmsIntegrada) {
+      insertColumns.push('lms_integrada');
+      insertValues.push(lmsIntegrada ? 1 : 0);
     }
 
     const result = await db
       .prepare(
-        `
-        INSERT INTO qualificacoes_categorias (
-          empresa_id,
-          nome,
-          codigo,
-          cor,
-          descricao,
-          ativo,
-          created_at,
-          updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
-      `,
+        `INSERT INTO qualificacoes_categorias
+           (${insertColumns.join(', ')}, created_at, updated_at)
+         VALUES (${insertColumns.map(() => '?').join(', ')}, datetime('now'), datetime('now'))`,
       )
-      .bind(empresaId, nome, codigo, cor, descricao || null)
+      .bind(...insertValues)
       .run();
 
-    const novaCategoria: QualificacaoCategoria = {
-      id: result.meta.last_row_id as number,
-      codigo,
-      nome,
-      slug: slugify(nome),
-      cor,
-      descricao: descricao || undefined,
-      ordem: result.meta.last_row_id as number,
-      ativo: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    const created = await db
+      .prepare(
+        `SELECT ${categorySelect(columns)} FROM qualificacoes_categorias
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+      )
+      .bind(result.meta.last_row_id, empresaId)
+      .first<CategoryRow>();
 
-    const ua = extrairUsuarioAuditoria(c);
+    if (!created) throw new ApiError('Categoria criada não pôde ser relida', 500);
     await registrarAuditoria({
       db,
       tabela: 'qualificacoes_categorias',
       acao: 'INSERT',
-      registro_id: novaCategoria.id,
-      dados_novos: body,
-      ...ua,
+      registro_id: created.id,
+      dados_novos: serializeCategory(created),
+      ...extrairUsuarioAuditoria(c),
     });
-
-    const response: ApiResponse<QualificacaoCategoria> = {
-      success: true,
-      message: 'Categoria criada com sucesso',
-      data: novaCategoria,
-    };
-
-    return c.json(response, 201);
+    return c.json(
+      { success: true, message: 'Categoria criada com sucesso', data: serializeCategory(created) },
+      201,
+    );
   } catch (error) {
-    console.error('[POST /categorias] Erro:', error);
-    return c.json({ success: false, error: 'Erro ao criar categoria' }, 500);
+    return apiErrorResponse(c, error);
   }
 });
 
-/**
- * PUT /api/categorias/:id
- * Atualiza uma categoria
- */
 app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  const id = parseInt(c.req.param('id'));
-
-  if (isNaN(id)) {
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
   }
 
   try {
-    const body = await c.req.json();
-    const { nome, descricao, cor, ativo } = body;
-
-    // Verificar se categoria existe
+    const columns = await loadCategoryColumns(db);
     const existing = await db
-      .prepare('SELECT * FROM qualificacoes_categorias WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
-      .bind(id, empresaId)
-      .first<any>();
-
-    if (!existing) {
-      return c.json({ success: false, error: 'Categoria não encontrada' }, 404);
-    }
-
-    const nextNome = nome !== undefined && nome.trim().length > 0 ? nome : existing.nome;
-    const nextCodigo = slugify(nextNome).toUpperCase();
-
-    const duplicate = await db
       .prepare(
-        `SELECT id
-         FROM qualificacoes_categorias
-         WHERE empresa_id = ?
-           AND id <> ?
-           AND deleted_at IS NULL
-           AND (
-             UPPER(TRIM(nome)) = UPPER(TRIM(?))
-             OR UPPER(TRIM(codigo)) = UPPER(TRIM(?))
-           )
-         LIMIT 1`,
+        `SELECT ${categorySelect(columns)} FROM qualificacoes_categorias
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
       )
-      .bind(empresaId, id, nextNome, nextCodigo)
-      .first();
+      .bind(id, empresaId)
+      .first<CategoryRow>();
+    if (!existing) return c.json({ success: false, error: 'Categoria não encontrada' }, 404);
 
-    if (duplicate) {
-      return c.json({ success: false, error: 'Categoria já existe' }, 409);
-    }
-
-    if (nome !== undefined && nextNome !== existing.nome) {
-      const modelosEmUso = await db
-        .prepare(
-          `SELECT id
-             FROM qualificacoes_tipos
-            WHERE empresa_id = ?
-              AND deleted_at IS NULL
-              AND (
-                categoria_id = ?
-                OR UPPER(TRIM(COALESCE(categoria, ''))) = UPPER(TRIM(?))
-              )
-            LIMIT 1`,
-        )
-        .bind(empresaId, id, existing.nome)
-        .first();
-      if (modelosEmUso) {
-        return c.json(
-          { success: false, error: 'Categoria possui modelos ativos; reclassifique-os por operação controlada antes de renomear' },
-          409,
-        );
-      }
+    const body = (await c.req.json()) as Record<string, unknown>;
+    if (
+      body.codigo !== undefined &&
+      normalizeCode(body.codigo, existing.nome) !== existing.codigo
+    ) {
+      return c.json(
+        {
+          success: false,
+          error: 'Código da categoria é imutável',
+          code: 'CATEGORY_CODE_IMMUTABLE',
+        },
+        409,
+      );
     }
 
     const updates: string[] = [];
     const params: unknown[] = [];
-
-    if (nome !== undefined && nome.trim().length > 0) {
+    if (body.nome !== undefined) {
+      const nome = String(body.nome || '').trim();
+      if (!nome) return c.json({ success: false, error: 'Nome é obrigatório' }, 400);
+      const duplicate = await db
+        .prepare(
+          `SELECT id FROM qualificacoes_categorias
+            WHERE empresa_id = ? AND id <> ? AND deleted_at IS NULL
+              AND UPPER(TRIM(nome)) = UPPER(TRIM(?)) LIMIT 1`,
+        )
+        .bind(empresaId, id, nome)
+        .first();
+      if (duplicate) return c.json({ success: false, error: 'Categoria já existe' }, 409);
       updates.push('nome = ?');
-      params.push(nextNome);
-      updates.push('codigo = ?');
-      params.push(nextCodigo);
+      params.push(nome);
     }
-
-    if (descricao !== undefined) {
+    if (body.descricao !== undefined) {
       updates.push('descricao = ?');
-      params.push(descricao);
+      params.push(body.descricao == null ? null : String(body.descricao));
     }
-
-    if (cor !== undefined) {
+    if (body.cor !== undefined) {
       updates.push('cor = ?');
-      params.push(cor);
+      params.push(body.cor == null ? null : String(body.cor));
+    }
+    if (columns.dominioCodigo && body.dominio_codigo !== undefined) {
+      updates.push('dominio_codigo = ?');
+      params.push(await validateDomain(db, body.dominio_codigo));
     }
 
-    if (ativo !== undefined) {
-      updates.push('ativo = ?');
-      params.push(ativo ? 1 : 0);
+    const nextAtivo = body.ativo === undefined ? Number(existing.ativo) === 1 : Boolean(body.ativo);
+    if (!nextAtivo && Number(existing.ativo) === 1) {
+      const category = await resolveQualificationCategoryById(db, {
+        empresaId,
+        categoriaId: id,
+      });
+      if (!category) throw new ApiError('Categoria não encontrada', 404);
+      await assertQualificationCategoryCanBeDeactivated(db, category);
+      updates.push('ativo = 0');
+    } else if (body.ativo !== undefined && nextAtivo !== (Number(existing.ativo) === 1)) {
+      updates.push('ativo = 1');
+    }
+
+    if (columns.lmsIntegrada && body.lms_integrada !== undefined) {
+      const nextLms = Boolean(body.lms_integrada);
+      if (nextLms && Number(existing.lms_integrada) !== 1) {
+        await ensureUniqueLmsCategory(db, empresaId, id);
+      }
+      updates.push('lms_integrada = ?');
+      params.push(nextLms ? 1 : 0);
     }
 
     if (updates.length === 0) {
-      return c.json({ success: false, error: 'Nenhum campo para atualizar' }, 400);
+      return c.json({
+        success: true,
+        data: serializeCategory(existing),
+        message: 'Nenhuma alteração detectada',
+      });
     }
 
-    updates.push('updated_at = datetime("now")');
-    params.push(id, empresaId);
-
-    const result = await db
+    updates.push("updated_at = datetime('now')");
+    await db
       .prepare(
-        `UPDATE qualificacoes_categorias SET ${updates.join(
-          ', ',
-        )} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        `UPDATE qualificacoes_categorias SET ${updates.join(', ')}
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
-      .bind(...params)
+      .bind(...params, id, empresaId)
       .run();
 
-    if (result.meta.changes === 0) {
-      return c.json({ success: false, error: 'Não foi possível atualizar a categoria' }, 500);
-    }
+    const updated = await db
+      .prepare(
+        `SELECT ${categorySelect(columns)} FROM qualificacoes_categorias
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+      )
+      .bind(id, empresaId)
+      .first<CategoryRow>();
+    if (!updated) throw new ApiError('Categoria atualizada não pôde ser relida', 500);
 
-    const ua2 = extrairUsuarioAuditoria(c);
     await registrarAuditoria({
       db,
       tabela: 'qualificacoes_categorias',
       acao: 'UPDATE',
       registro_id: id,
-      dados_novos: body,
-      ...ua2,
+      dados_anteriores: serializeCategory(existing),
+      dados_novos: serializeCategory(updated),
+      ...extrairUsuarioAuditoria(c),
     });
-
-    const response: ApiResponse = {
+    return c.json({
       success: true,
       message: 'Categoria atualizada com sucesso',
-    };
-
-    return c.json(response);
+      data: serializeCategory(updated),
+    });
   } catch (error) {
-    console.error('[PUT /categorias/:id] Erro:', error);
-    return c.json({ success: false, error: 'Erro ao atualizar categoria' }, 500);
+    return apiErrorResponse(c, error);
   }
 });
 
-/**
- * DELETE /api/categorias/:id
- * Remove uma categoria (soft delete)
- */
 app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  const id = parseInt(c.req.param('id'));
-
-  if (isNaN(id)) {
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
   }
 
   try {
-    const emUso = await db
-      .prepare(
-        `SELECT id
-           FROM qualificacoes_tipos
-          WHERE empresa_id = ?
-            AND deleted_at IS NULL
-            AND (categoria_id = ? OR (categoria_id IS NULL AND UPPER(TRIM(COALESCE(categoria, ''))) = UPPER(TRIM((SELECT nome FROM qualificacoes_categorias WHERE id = ? AND empresa_id = ?)))))
-          LIMIT 1`,
-      )
-      .bind(empresaId, id, id, empresaId)
-      .first();
-    if (emUso) {
-      return c.json(
-        { success: false, error: 'Categoria possui modelos ativos; reclassifique-os antes de remover ou desativar' },
-        409,
-      );
-    }
+    const category = await resolveQualificationCategoryById(db, {
+      empresaId,
+      categoriaId: id,
+    });
+    if (!category) return c.json({ success: false, error: 'Categoria não encontrada' }, 404);
+    await assertQualificationCategoryCanBeDeactivated(db, category);
 
     const result = await db
       .prepare(
         `UPDATE qualificacoes_categorias
-         SET deleted_at = datetime('now'), updated_at = datetime('now')
-         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+            SET ativo = 0, deleted_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
       .bind(id, empresaId)
       .run();
-
     if (result.meta.changes === 0) {
       return c.json({ success: false, error: 'Categoria não encontrada' }, 404);
     }
 
-    const ua3 = extrairUsuarioAuditoria(c);
     await registrarAuditoria({
       db,
       tabela: 'qualificacoes_categorias',
       acao: 'DELETE',
       registro_id: id,
-      ...ua3,
+      dados_anteriores: category,
+      ...extrairUsuarioAuditoria(c),
     });
-
-    const response: ApiResponse = {
-      success: true,
-      message: 'Categoria removida com sucesso',
-    };
-
-    return c.json(response);
+    return c.json({ success: true, message: 'Categoria removida com sucesso' });
   } catch (error) {
-    console.error('[DELETE /categorias/:id] Erro:', error);
-    return c.json({ success: false, error: 'Erro ao deletar categoria' }, 500);
+    return apiErrorResponse(c, error);
   }
 });
 

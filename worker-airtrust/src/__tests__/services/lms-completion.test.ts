@@ -10,6 +10,7 @@ function makeFakeDb(options: {
   historicoLookup?: () => { id: number } | null;
   cycleLookup?: () => { id: number } | null;
   maxCiclo?: number;
+  typeCategoryId?: number | null;
   categoryLookup?: () => Record<string, unknown> | null;
   batchImpl?: (statements: unknown[]) => Promise<unknown>;
 }) {
@@ -18,18 +19,42 @@ function makeFakeDb(options: {
 
   const db = {
     prepare: vi.fn((sql: string) => ({
-      bind: (...args: unknown[]) => ({
+      all: async () => {
+        if (sql.includes("PRAGMA table_info('qualificacoes_categorias')")) {
+          return {
+            results: [
+              { name: 'id' },
+              { name: 'empresa_id' },
+              { name: 'nome' },
+              { name: 'codigo' },
+              { name: 'ativo' },
+              { name: 'dominio_codigo' },
+              { name: 'lms_integrada' },
+              { name: 'deleted_at' },
+            ],
+          };
+        }
+        return { results: [] };
+      },
+      bind: () => ({
         first: async () => {
-          if (sql.includes('FROM qualificacoes_tipos qt')) {
+          if (sql.includes('FROM qualificacoes_tipos')) {
+            return {
+              id: 55,
+              categoria_id: options.typeCategoryId === undefined ? 13 : options.typeCategoryId,
+            };
+          }
+          if (sql.includes('FROM qualificacoes_categorias')) {
             return options.categoryLookup
               ? options.categoryLookup()
               : {
-                  tipo_categoria: 'EAD',
-                  categoria_id: 13,
-                  categoria_nome: 'EAD',
-                  categoria_empresa_id: 6,
-                  categoria_ativo: 1,
-                  categoria_deleted_at: null,
+                  id: 13,
+                  empresa_id: 6,
+                  nome: 'EAD',
+                  codigo: 'EAD',
+                  ativo: 1,
+                  dominio_codigo: 'TREINAMENTOS',
+                  lms_integrada: 1,
                 };
           }
           if (sql.includes('FROM qualificacoes_historico') && sql.includes('data_conclusao = ?')) {
@@ -183,54 +208,39 @@ describe('completeLmsMatricula', () => {
     expect(batchAttempt).toBe(1);
   });
 
-  it.each([
-    [
-      'categoria Teórico',
-      {
-        categoria_id: 3,
-        categoria_nome: 'Treinamento Teórico',
-        categoria_ativo: 1,
-        categoria_empresa_id: 6,
-        categoria_deleted_at: null,
-      },
-    ],
-    [
-      'categoria ausente',
-      {
-        categoria_id: null,
-        categoria_nome: null,
-        categoria_ativo: null,
-        categoria_empresa_id: null,
-        categoria_deleted_at: null,
-      },
-    ],
-    [
-      'categoria inativa',
-      {
-        categoria_id: 13,
-        categoria_nome: 'EAD',
-        categoria_ativo: 0,
-        categoria_empresa_id: 6,
-        categoria_deleted_at: null,
-      },
-    ],
-    [
-      'categoria de outro tenant',
-      {
-        categoria_id: 13,
-        categoria_nome: 'EAD',
-        categoria_ativo: 1,
-        categoria_empresa_id: 7,
-        categoria_deleted_at: null,
-      },
-    ],
-  ])('rejeita conclusão EAD com %s', async (_scenario, category) => {
+  it('rejeita tipo sem categoria_id canônico', async () => {
+    const db = makeFakeDb({ typeCategoryId: null });
+
+    await expect(completeLmsMatricula(baseParams(db) as never)).rejects.toMatchObject({
+      code: 'LMS_QUALIFICATION_MAPPING_INVALID',
+    });
+    expect((db as unknown as { __batchCalls: unknown[][] }).__batchCalls).toHaveLength(0);
+  });
+
+  it('rejeita categoria canônica ausente, inativa ou de outro tenant', async () => {
+    const db = makeFakeDb({ categoryLookup: () => null });
+
+    await expect(completeLmsMatricula(baseParams(db) as never)).rejects.toMatchObject({
+      code: 'LMS_QUALIFICATION_MAPPING_INVALID',
+    });
+    expect((db as unknown as { __batchCalls: unknown[][] }).__batchCalls).toHaveLength(0);
+  });
+
+  it('rejeita categoria canônica não integrada ao LMS', async () => {
     const db = makeFakeDb({
-      categoryLookup: () => ({ tipo_categoria: 'EAD', ...category }),
+      categoryLookup: () => ({
+        id: 13,
+        empresa_id: 6,
+        nome: 'Treinamento Teórico',
+        codigo: 'TEORICO',
+        ativo: 1,
+        dominio_codigo: 'TREINAMENTOS',
+        lms_integrada: 0,
+      }),
     });
 
     await expect(completeLmsMatricula(baseParams(db) as never)).rejects.toMatchObject({
-      code: 'LMS_EAD_CATEGORY_MAPPING_INVALID',
+      code: 'LMS_QUALIFICATION_CATEGORY_NOT_INTEGRATED',
     });
     expect((db as unknown as { __batchCalls: unknown[][] }).__batchCalls).toHaveLength(0);
   });

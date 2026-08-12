@@ -8,7 +8,15 @@
 
 import { useState, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CalendarDays, ClipboardCheck, Settings, Loader, Calendar, BookOpen } from 'lucide-react';
+import {
+  BookOpen,
+  Calendar,
+  CalendarDays,
+  CalendarRange,
+  ClipboardCheck,
+  Loader,
+  Settings,
+} from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import { Button as UIButton } from '@/react-app/components/UI';
@@ -20,14 +28,16 @@ const ModalNovaSessao = lazyWithRetry(
   'SimuladoresModalNovaSessao',
 );
 
-// Lazy load das tabs com preload no hover
 const TabAgenda = lazyWithRetry(
   () => import('./simuladores/agenda/CalendarioAgendamentos'),
   'SimuladoresTabAgenda',
 );
+const TabPlanejamento = lazyWithRetry(
+  () => import('./simuladores/planejamento/PlanejamentoSimuladores'),
+  'SimuladoresTabPlanejamento',
+);
 const TabFichas = lazyWithRetry(
-  () =>
-    import('./simuladores/fichas/index').then((m) => ({ default: m.FichasAvaliacaoContent })),
+  () => import('./simuladores/fichas/index').then((m) => ({ default: m.FichasAvaliacaoContent })),
   'SimuladoresTabFichas',
 );
 const TabGestaoWrapper = lazyWithRetry(
@@ -39,12 +49,20 @@ const TabGuiasInstrutor = lazyWithRetry(
   'SimuladoresTabGuiasInstrutor',
 );
 
-// Preload function para melhorar UX
-const preloadTab = (tab: 'agenda' | 'fichas' | 'gestao' | 'guias') => {
+const preloadTab = (tab: 'agenda' | 'planejamento' | 'fichas' | 'gestao' | 'guias') => {
   if (tab === 'agenda') {
     void importWithRetry(
       () => import('./simuladores/agenda/CalendarioAgendamentos'),
       'PreloadTabAgenda',
+      {
+        reloadOnChunkError: false,
+        maxAttempts: 2,
+      },
+    );
+  } else if (tab === 'planejamento') {
+    void importWithRetry(
+      () => import('./simuladores/planejamento/PlanejamentoSimuladores'),
+      'PreloadTabPlanejamento',
       {
         reloadOnChunkError: false,
         maxAttempts: 2,
@@ -68,7 +86,7 @@ const preloadTab = (tab: 'agenda' | 'fichas' | 'gestao' | 'guias') => {
   }
 };
 
-type TabType = 'agenda' | 'fichas' | 'gestao' | 'guias';
+type TabType = 'agenda' | 'planejamento' | 'fichas' | 'gestao' | 'guias';
 
 export default function Simuladores() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -76,16 +94,16 @@ export default function Simuladores() {
   const [modalNovaSessaoOpen, setModalNovaSessaoOpen] = useState(false);
   const { podeVisualizar: podeVerGuias } = useGuiasInstrutorPermissions();
 
-  // 'guias' só entra em validTabs quando a permissão real já carregou e
-  // autoriza — nunca infere de role/perfil. Enquanto carrega ou se não
-  // autorizado, cai no fallback 'agenda' (mesmo comportamento de uma aba
-  // que nunca existiu para este usuário).
-  const validTabs: TabType[] = ['agenda', 'fichas', 'gestao', ...(podeVerGuias ? (['guias'] as const) : [])];
+  const validTabs: TabType[] = [
+    'agenda',
+    'planejamento',
+    'fichas',
+    'gestao',
+    ...(podeVerGuias ? (['guias'] as const) : []),
+  ];
 
-  // Tab ativa derivada da URL, com fallback para 'agenda'
   const activeTab: TabType = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'agenda';
 
-  // Atualizar URL quando mudar tab
   const setActiveTab = (tab: TabType) => {
     const newParams = new URLSearchParams(searchParams);
     if (tab === 'agenda') {
@@ -100,6 +118,7 @@ export default function Simuladores() {
 
   const tabs = [
     { id: 'agenda' as TabType, label: 'Agenda / Calendário', icon: CalendarDays },
+    { id: 'planejamento' as TabType, label: 'Planejamento', icon: CalendarRange },
     { id: 'fichas' as TabType, label: 'Fichas de Avaliação', icon: ClipboardCheck },
     { id: 'gestao' as TabType, label: 'Gestão', icon: Settings },
     ...(podeVerGuias
@@ -109,7 +128,6 @@ export default function Simuladores() {
 
   return (
     <AppLayout>
-      {/* Page Header */}
       <PageHeader
         className="mb-6"
         title="Simuladores & Voo"
@@ -125,9 +143,7 @@ export default function Simuladores() {
         }
       />
 
-      {/* Main content container */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        {/* Tabs Navigation */}
         <div className="border-b border-slate-200 dark:border-slate-800">
           <div className="flex overflow-x-auto" role="tablist">
             {tabs.map((tab) => {
@@ -152,7 +168,6 @@ export default function Simuladores() {
           </div>
         </div>
 
-        {/* Tab Content */}
         <div className="p-4">
           <Suspense
             fallback={
@@ -162,13 +177,13 @@ export default function Simuladores() {
             }
           >
             {activeTab === 'agenda' && <TabAgenda />}
+            {activeTab === 'planejamento' && <TabPlanejamento />}
             {activeTab === 'fichas' && <TabFichas />}
             {activeTab === 'gestao' && <TabGestaoWrapper />}
             {activeTab === 'guias' && <TabGuiasInstrutor />}
           </Suspense>
         </div>
 
-        {/* Modal Nova Sessão */}
         {modalNovaSessaoOpen && (
           <Suspense
             fallback={

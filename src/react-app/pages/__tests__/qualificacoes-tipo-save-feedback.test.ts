@@ -25,7 +25,7 @@ describe('tipoSaveFeedback', () => {
     );
   });
 
-  it('monta payload do modelo com conversoes numericas e campos opcionais', () => {
+  it('monta payload do modelo com categoria_id e sem identidade textual de categoria', () => {
     expect(
       buildTipoPayload({
         nome: ' AS350 B2 ',
@@ -44,7 +44,6 @@ describe('tipoSaveFeedback', () => {
     ).toEqual({
       nome: 'AS350 B2',
       codigo: 'as350-b2',
-      categoria: 'MANUTENCAO',
       categoria_id: 17,
       conteudo_programatico: 'Conteudo',
       carga_horaria_inicial: 8,
@@ -55,6 +54,16 @@ describe('tipoSaveFeedback', () => {
       validade: 12,
       descricao: 'Descricao',
     });
+  });
+
+  it('rejeita payload sem categoria_id canônico', () => {
+    expect(() =>
+      buildTipoPayload({
+        nome: 'Curso legado',
+        categoria: 'EAD',
+        validade: 12,
+      }),
+    ).toThrow('Selecione uma categoria válida');
   });
 
   it('exibe contagem de historicos recalculados e ignorados ao editar', () => {
@@ -84,7 +93,7 @@ describe('tipoSaveFeedback', () => {
     it('inclui validade como null quando campo e null (remover vencimento)', () => {
       const payload = buildTipoPayload({
         nome: 'Curso X',
-        categoria: 'Outros',
+        categoria_id: 1,
         validade: null,
       });
       expect(Object.prototype.hasOwnProperty.call(payload, 'validade')).toBe(true);
@@ -94,7 +103,7 @@ describe('tipoSaveFeedback', () => {
     it('inclui validade como null quando valor e 0 (invalido — banco rejeita 0)', () => {
       const payload = buildTipoPayload({
         nome: 'Curso Y',
-        categoria: 'Manutenção',
+        categoria_id: 1,
         validade: 0,
       });
       expect(payload.validade).toBeNull();
@@ -103,14 +112,14 @@ describe('tipoSaveFeedback', () => {
     it('inclui validade positiva quando fornecida', () => {
       const payload = buildTipoPayload({
         nome: 'MGM',
-        categoria: 'EAD',
+        categoria_id: 1,
         validade: 24,
       });
       expect(payload.validade).toBe(24);
     });
 
     it('inclui validade mesmo quando undefined (null por default)', () => {
-      const payload = buildTipoPayload({ nome: 'X', categoria: 'Outros' });
+      const payload = buildTipoPayload({ nome: 'X', categoria_id: 1 });
       expect(Object.prototype.hasOwnProperty.call(payload, 'validade')).toBe(true);
       expect(payload.validade).toBeNull();
     });
