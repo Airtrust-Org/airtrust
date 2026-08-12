@@ -43,8 +43,7 @@ async function loadExistingCourseBinding(
     .prepare(
       `SELECT qualificacao_tipo_id,
               gerar_qualificacao_ao_concluir
-         FROM lms_cursos
-        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+         FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
         LIMIT 1`,
     )
     .bind(courseId, empresaId)
