@@ -166,6 +166,7 @@ export function extractScormLocationFromCmiJson(cmiJson: Nullable<string>) {
   }
 }
 
+/** Aceita o fallback SCORM 1.2 apenas com as evidências finais emitidas pelo wrapper. */
 export function isTrustedScorm12Finish(data: {
   lesson_status?: Nullable<string>;
   commit_event?: Nullable<string>;
