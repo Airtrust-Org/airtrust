@@ -146,12 +146,12 @@ function ErrorState({ partialSources }: { partialSources: string[] }) {
 }
 
 export default function ManagerAlertCenter() {
+  const { empresas, empresaAtualId } = useAuth();
+  const { isAdmin, isGestor, can } = usePermissions();
+
   if (!MANAGER_ALERT_CENTER_ENABLED) {
     return null;
   }
-
-  const { empresas, empresaAtualId } = useAuth();
-  const { isAdmin, isGestor, can } = usePermissions();
 
   if (!isAdmin && !isGestor) {
     return null;
@@ -183,18 +183,24 @@ function ManagerAlertCenterContent({
   const simuladoresAlertasQ = useSimuladoresAlertasQuery(enableSimuladores);
 
   const todayIso = getTodayIsoSaoPaulo();
-  const frmsSnapshot = useFrmsOperationalSnapshot({
-    data_inicio: todayIso,
-    data_fim: todayIso,
-    include_inconsistencies: true,
-  }, { enabled: enableFrms });
+  const frmsSnapshot = useFrmsOperationalSnapshot(
+    {
+      data_inicio: todayIso,
+      data_fim: todayIso,
+      include_inconsistencies: true,
+    },
+    { enabled: enableFrms },
+  );
 
   const partialSources = useMemo(() => {
     const failures: string[] = [];
-    if (enableQualificacoes && metricsQ.isError && !metricsQ.data) failures.push('Métricas de qualificações');
-    if (usesDashboardAlerts && alertasQ.isError && !alertasQ.data) failures.push('Qualificações/LMS');
+    if (enableQualificacoes && metricsQ.isError && !metricsQ.data)
+      failures.push('Métricas de qualificações');
+    if (usesDashboardAlerts && alertasQ.isError && !alertasQ.data)
+      failures.push('Qualificações/LMS');
     if (enableFrms && frmsAlertasQ.isError && !frmsAlertasQ.data) failures.push('FRMS');
-    if (enableFrms && frmsSnapshot.error && frmsSnapshot.data.length === 0) failures.push('Snapshot operacional');
+    if (enableFrms && frmsSnapshot.error && frmsSnapshot.data.length === 0)
+      failures.push('Snapshot operacional');
     if (enableSgso && sgsoChecklistQ.isError && !sgsoChecklistQ.data) failures.push('SGSO');
     if (enableSimuladores && simuladoresAlertasQ.isError && !simuladoresAlertasQ.data) {
       failures.push('Simuladores/Fichas');
@@ -255,11 +261,11 @@ function ManagerAlertCenterContent({
   );
 
   const isLoading =
-    ((enableQualificacoes &&
+    (enableQualificacoes &&
       !metricsQ.data &&
       !alertasQ.data &&
       (metricsQ.isLoading || alertasQ.isLoading)) ||
-      (enableLms && alertasQ.isLoading && !alertasQ.data)) ||
+    (enableLms && alertasQ.isLoading && !alertasQ.data) ||
     (enableFrms &&
       ((frmsAlertasQ.isLoading && !frmsAlertasQ.data) ||
         (frmsSnapshot.loading && frmsSnapshot.data.length === 0))) ||
@@ -271,7 +277,8 @@ function ManagerAlertCenterContent({
   const qualificacoesSourcesFailed = enableQualificacoes && metricsFailed && dashboardAlertsFailed;
   const lmsSourcesFailed = enableLms && dashboardAlertsFailed;
   const frmsAlertsFailed = enableFrms && frmsAlertasQ.isError && !frmsAlertasQ.data;
-  const frmsSnapshotFailed = enableFrms && Boolean(frmsSnapshot.error) && frmsSnapshot.data.length === 0;
+  const frmsSnapshotFailed =
+    enableFrms && Boolean(frmsSnapshot.error) && frmsSnapshot.data.length === 0;
   const frmsSourcesFailed = enableFrms && frmsAlertsFailed && frmsSnapshotFailed;
   const sgsoSourcesFailed = enableSgso && sgsoChecklistQ.isError && !sgsoChecklistQ.data;
   const simuladoresSourcesFailed =
@@ -286,9 +293,16 @@ function ManagerAlertCenterContent({
     (!enableSgso || sgsoSourcesFailed) &&
     (!enableSimuladores || simuladoresSourcesFailed);
 
-  const criticalCount = alerts.filter((item) => item.severity === 'CRITICO').length;
-  const attentionCount = alerts.filter((item) => item.severity === 'ATENCAO').length;
-  const informativeCount = alerts.filter((item) => item.severity === 'INFORMATIVO').length;
+  // ⚡ Bolt: Consolidated 3 array passes into a single O(N) reduce operation for counting alert severities
+  const { criticalCount, attentionCount, informativeCount } = alerts.reduce(
+    (acc, item) => {
+      if (item.severity === 'CRITICO') acc.criticalCount++;
+      else if (item.severity === 'ATENCAO') acc.attentionCount++;
+      else if (item.severity === 'INFORMATIVO') acc.informativeCount++;
+      return acc;
+    },
+    { criticalCount: 0, attentionCount: 0, informativeCount: 0 },
+  );
   const includedSources = [
     enableFrms ? 'FRMS/checagem operacional' : null,
     enableSgso ? 'SGSO' : null,
@@ -297,7 +311,9 @@ function ManagerAlertCenterContent({
     enableLms ? 'LMS obrigatório' : null,
   ].filter(Boolean) as string[];
   const includedSourcesLabel =
-    includedSources.length > 0 ? includedSources.join(', ') : 'nenhuma fonte operacional habilitada';
+    includedSources.length > 0
+      ? includedSources.join(', ')
+      : 'nenhuma fonte operacional habilitada';
 
   return (
     <section className="mb-6 rounded-3xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-amber-50/50 p-5 shadow-[0_18px_45px_-28px_rgba(15,23,42,0.35)]">
@@ -310,7 +326,8 @@ function ManagerAlertCenterContent({
             O que precisa de ação agora
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Visão operacional unificada com prioridade, ação recomendada e links seguros para o módulo de origem.
+            Visão operacional unificada com prioridade, ação recomendada e links seguros para o
+            módulo de origem.
           </p>
         </div>
 
@@ -338,7 +355,9 @@ function ManagerAlertCenterContent({
 
       <div className="mt-4">
         {isLoading ? <LoadingState /> : null}
-        {!isLoading && allTrackedSourcesFailed ? <ErrorState partialSources={partialSources} /> : null}
+        {!isLoading && allTrackedSourcesFailed ? (
+          <ErrorState partialSources={partialSources} />
+        ) : null}
         {!isLoading && !allTrackedSourcesFailed && alerts.length === 0 ? <EmptyState /> : null}
         {!isLoading && !allTrackedSourcesFailed && alerts.length > 0 ? (
           <div className="grid gap-3">
@@ -357,14 +376,16 @@ function ManagerAlertCenterContent({
               Fontes incluídas nesta versão: {includedSourcesLabel}.
             </p>
             <p className="mt-0.5">
-              Fontes pendentes: refinamentos de agregação backend, parametrização de limites e validação autenticada ponta a ponta.
+              Fontes pendentes: refinamentos de agregação backend, parametrização de limites e
+              validação autenticada ponta a ponta.
             </p>
           </div>
         </div>
         <div className="flex items-start gap-2">
           <ShieldAlert className="mt-0.5 h-4 w-4 text-slate-500" />
           <p>
-            Sem PII exposta na Home. Os detalhes permanecem restritos aos módulos já filtrados por tenant e perfil.
+            Sem PII exposta na Home. Os detalhes permanecem restritos aos módulos já filtrados por
+            tenant e perfil.
           </p>
         </div>
       </div>
