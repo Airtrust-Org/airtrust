@@ -98,6 +98,22 @@ function validateExtension(file: UploadedFile, tipoConteudo: LmsStructuredConten
   }
 }
 
+async function listUploadedOperationFiles(bucket: R2Bucket, prefix: string) {
+  const files: Array<{ path: string; size: number }> = [];
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ prefix, cursor, limit: 1000 });
+    for (const object of page.objects) {
+      if (!object.key.startsWith(prefix)) continue;
+      const path = object.key.slice(prefix.length);
+      if (!path || path === '.airtrust-upload.json') continue;
+      files.push({ path, size: object.size });
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return files;
+}
+
 async function readPackageRequest(
   c: Context<{ Bindings: Env }>,
   tipoConteudo: LmsStructuredContentType,
@@ -188,6 +204,8 @@ app.post(
       hasH5pConteudoIdColumn: hasH5pBindingColumn(c),
       idempotencyKey: parsed.data.idempotency_key ?? c.req.header('idempotency-key') ?? null,
     });
+    const uploadedFiles =
+      marker.status === 'uploading' ? await listUploadedOperationFiles(c.env.BUCKET, marker.prefix) : [];
 
     return c.json({
       success: true,
@@ -197,6 +215,7 @@ app.post(
         tipo_conteudo: marker.tipoConteudo,
         status: marker.status,
         result: marker.result ?? null,
+        uploaded_files: uploadedFiles,
       },
     });
   },
