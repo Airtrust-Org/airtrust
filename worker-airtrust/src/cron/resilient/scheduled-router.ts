@@ -3,6 +3,7 @@ import { createStructuredConsole } from '../../utils/logger';
 import { alertasDiariosHandler } from '../alertasDiarios';
 import { logCronHealthSnapshot } from './cron-health';
 import { runDailyFrmsOperations } from './daily-frms';
+import { runDomainEventDispatchJob } from './domain-events';
 import { runEadRenewalJob } from './ead-renewal';
 import { runLmsReminderJob } from './lms-reminders';
 import { runSigvoosFrmsJobs } from './sigvoos-frms';
@@ -24,7 +25,9 @@ export interface ResilientCronPlan {
   runEadRenewal: boolean;
   runDailyFrms: boolean;
   runSigvoosFrms: boolean;
+  runDomainEvents: boolean;
   runCronHealth: boolean;
+  delegateLegacy: boolean;
 }
 
 export function getResilientCronPlan(cron: string, now = new Date()): ResilientCronPlan {
@@ -37,7 +40,12 @@ export function getResilientCronPlan(cron: string, now = new Date()): ResilientC
     runEadRenewal: isTenMinute || isDaily,
     runDailyFrms: isDaily,
     runSigvoosFrms: isTenMinute,
-    runCronHealth: isDaily,
+    runDomainEvents: isTenMinute,
+    runCronHealth: isTenMinute || isDaily,
+    // The legacy handler contains broad daily maintenance blocks. It is not
+    // called for every ten-minute tick anymore; backup triggers remain fully
+    // delegated through the non-resilient branch above.
+    delegateLegacy: isDaily,
   };
 }
 
@@ -86,7 +94,7 @@ export async function runResilientScheduledJobs(
   }
 
   try {
-    // O fallback precisa ser decidido antes de alertas, e-mails ou qualquer outro efeito colateral.
+    // Decide fallback before alerts, e-mails or any other side effect.
     await assertCronStateSchemaAvailable(env.DB);
 
     if (plan.runDailyAlerts) {
@@ -103,6 +111,10 @@ export async function runResilientScheduledJobs(
 
     if (plan.runSigvoosFrms) {
       await runSigvoosFrmsJobs(env.DB, env, logger, now);
+    }
+
+    if (plan.runDomainEvents) {
+      await runDomainEventDispatchJob(env.DB, logger);
     }
 
     if (plan.runDailyFrms) {
@@ -129,7 +141,9 @@ export async function runResilientScheduledJobs(
     throw error;
   }
 
-  // Mantém rotinas genéricas do handler existente, mas neutraliza apenas os blocos
-  // LMS/EAD/SIGVOOS/FRMS que já foram executados acima.
-  await legacyHandler(withDelegatedCron(event), env, ctx);
+  if (plan.delegateLegacy) {
+    // Keep daily generic maintenance, while neutralizing the functional blocks
+    // already executed by the resilient router.
+    await legacyHandler(withDelegatedCron(event), env, ctx);
+  }
 }
