@@ -197,8 +197,7 @@ const DEFAULT_CERTIFICATE_TEMPLATE = `<!DOCTYPE html>
   <!-- QUALIFICAÇÃO -->
   <div class="training-box">
     <div class="qual-name">{{nome_qualificacao}}</div>
-    <div class="qual-meta">Carga Horária: {{carga_horaria}}h &nbsp;·&nbsp; Categoria: {{categoria}} &nbsp;·&nbsp; Código: {{codigo_qualificacao}}</div>
-    {{categoria_qualificacao_section}}
+    <div class="qual-meta">{{qual_meta_line}}</div>
   </div>
 
   <!-- CONTEÚDO PROGRAMÁTICO NR-1 -->
@@ -235,8 +234,7 @@ const MOCK_TEMPLATE_DATA: Record<string, string> = {
   '{{codigo_qualificacao}}': 'G1',
   '{{categoria}}': 'Ground',
   '{{carga_horaria}}': '40',
-  '{{categoria_qualificacao_section}}':
-    '<div class="qual-meta qual-meta-categoria">Categoria da Qualificação: Licença</div>',
+  '{{qual_meta_line}}': 'Carga Horária: 40h &nbsp;·&nbsp; Categoria: Ground &nbsp;·&nbsp; Código: G1',
   '{{instrutor_nome}}': 'Negreiros Silva Exemplo',
   '{{instrutor_codigo_anac}}': 'ANAC-009876',
   '{{instrutor_matricula}}': '00123',

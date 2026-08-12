@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   adaptTemplateHtmlForInstrutor,
   adaptTemplateHtmlForSinglePageA4,
-  buildCategoriaQualificacaoSectionHtml,
   buildConteudoProgramaticoCertificadoHtml,
+  buildQualMetaLineHtml,
   resolveCargaHorariaCertificado,
   resolveFuncionarioInstrutorNaEmpresa,
   resolveInstrutorCertificadoData,
@@ -347,18 +347,55 @@ describe('qualificacoes-certificados-helpers', () => {
     expect(html).not.toContain('column-count: 2');
   });
 
-  describe('buildCategoriaQualificacaoSectionHtml', () => {
-    it('renderiza a categoria canonica quando presente', () => {
-      expect(buildCategoriaQualificacaoSectionHtml('EAD')).toBe(
-        '<div class="qual-meta qual-meta-categoria">Categoria da Qualificação: EAD</div>',
-      );
+  describe('buildQualMetaLineHtml', () => {
+    it('junta os tres segmentos quando todos presentes', () => {
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: 4,
+          categoriaCanonica: 'EAD',
+          codigoQualificacao: 'EXA',
+        }),
+      ).toBe('Carga Horária: 4h &nbsp;·&nbsp; Categoria: EAD &nbsp;·&nbsp; Código: EXA');
     });
 
-    it('omite a secao (string vazia) quando nao ha categoria canonica resolvida', () => {
-      expect(buildCategoriaQualificacaoSectionHtml(null)).toBe('');
-      expect(buildCategoriaQualificacaoSectionHtml(undefined)).toBe('');
-      expect(buildCategoriaQualificacaoSectionHtml('')).toBe('');
-      expect(buildCategoriaQualificacaoSectionHtml('   ')).toBe('');
+    it('omite o segmento de categoria por completo quando nao ha canonica, sem separador sobrando', () => {
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: 4,
+          categoriaCanonica: null,
+          codigoQualificacao: 'EXA',
+        }),
+      ).toBe('Carga Horária: 4h &nbsp;·&nbsp; Código: EXA');
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: 4,
+          categoriaCanonica: undefined,
+          codigoQualificacao: 'EXA',
+        }),
+      ).not.toContain('Categoria');
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: 4,
+          categoriaCanonica: '   ',
+          codigoQualificacao: 'EXA',
+        }),
+      ).not.toContain('Categoria');
+    });
+
+    it('omite carga horaria e codigo quando ausentes, mantendo somente categoria', () => {
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: null,
+          categoriaCanonica: 'EAD',
+          codigoQualificacao: null,
+        }),
+      ).toBe('Categoria: EAD');
+    });
+
+    it('retorna string vazia quando nenhum segmento resolve', () => {
+      expect(
+        buildQualMetaLineHtml({ cargaHoraria: null, categoriaCanonica: null, codigoQualificacao: null }),
+      ).toBe('');
     });
   });
 });

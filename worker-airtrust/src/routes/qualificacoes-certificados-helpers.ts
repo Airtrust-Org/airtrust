@@ -1016,13 +1016,34 @@ export function buildDescricaoSectionHtml(descricao?: string | null): string {
   return `<div class="descricao-section"><div class="descricao-label">Descrição</div><div class="descricao-text">${text}</div></div>`;
 }
 
-// Categoria canônica da qualificação (qualificacoes_tipos.categoria_id ->
-// qualificacoes_categorias.nome). Omitida quando não há vínculo canônico
-// resolvido — nunca exibe null/undefined/[object Object] no certificado.
-export function buildCategoriaQualificacaoSectionHtml(categoriaNome?: string | null): string {
-  const nome = String(categoriaNome || '').trim();
-  if (!nome) return '';
-  return `<div class="qual-meta qual-meta-categoria">Categoria da Qualificação: ${nome}</div>`;
+// Linha de metadados da qualificação (carga horária / categoria / código).
+// Categoria vem exclusivamente da relação canônica
+// (qualificacoes_tipos.categoria_id -> qualificacoes_categorias.nome) —
+// nunca do campo textual legado. Cada segmento é omitido por completo
+// quando ausente, sem deixar separador "·" sobrando.
+export function buildQualMetaLineHtml(params: {
+  cargaHoraria?: number | string | null;
+  categoriaCanonica?: string | null;
+  codigoQualificacao?: string | null;
+}): string {
+  const parts: string[] = [];
+
+  const carga = params.cargaHoraria;
+  if (carga !== null && carga !== undefined && String(carga).trim() !== '') {
+    parts.push(`Carga Horária: ${carga}h`);
+  }
+
+  const categoria = String(params.categoriaCanonica || '').trim();
+  if (categoria) {
+    parts.push(`Categoria: ${categoria}`);
+  }
+
+  const codigo = String(params.codigoQualificacao || '').trim();
+  if (codigo) {
+    parts.push(`Código: ${codigo}`);
+  }
+
+  return parts.join(' &nbsp;·&nbsp; ');
 }
 
 export async function resolveConteudoProgramaticoCertificado(

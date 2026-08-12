@@ -19,7 +19,7 @@ import {
   resolveCargaHorariaCertificado,
   buildConteudoProgramaticoCertificadoHtml,
   buildDescricaoSectionHtml,
-  buildCategoriaQualificacaoSectionHtml,
+  buildQualMetaLineHtml,
   getCertificadosStorageColumns,
   backfillCertificadoAtualNaPastaVirtual,
   resolveImageDataUrl,
@@ -476,10 +476,14 @@ export async function generateCertificateForHistorico(
     funcionario_matricula: certificadoData.funcionario_matricula,
     qualificacao_nome: certificadoData.qualificacao_nome,
     qualificacao_codigo: certificadoData.qualificacao_codigo,
-    qualificacao_categoria: certificadoData.qualificacao_categoria,
-    categoria_qualificacao_section: buildCategoriaQualificacaoSectionHtml(
-      certificadoData.categoria_qualificacao_canonica,
-    ),
+    // {{categoria}} mostra exclusivamente a categoria canônica
+    // (qualificacoes_categorias.nome) — nunca o texto legado qt.categoria.
+    qualificacao_categoria: certificadoData.categoria_qualificacao_canonica || '',
+    qual_meta_line: buildQualMetaLineHtml({
+      cargaHoraria: certificadoData.carga_horaria,
+      categoriaCanonica: certificadoData.categoria_qualificacao_canonica,
+      codigoQualificacao: certificadoData.qualificacao_codigo,
+    }),
     data_conclusao: certificadoData.data_conclusao,
     data_vencimento: certificadoData.data_vencimento,
     carga_horaria: certificadoData.carga_horaria,

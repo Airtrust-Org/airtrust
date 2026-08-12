@@ -380,7 +380,7 @@ describe('generateCertificateForHistorico', () => {
     expect(bucket.delete).not.toHaveBeenCalled();
   });
 
-  it('categoria canônica presente (join qualificacoes_tipos.categoria_id -> qualificacoes_categorias.nome) -> templateData exibe "Categoria da Qualificação: EAD"', async () => {
+  it('categoria canônica presente (join qualificacoes_tipos.categoria_id -> qualificacoes_categorias.nome) -> único campo "Categoria" mostra a canônica, nunca o texto legado', async () => {
     const { db } = makeFakeD1({
       qualificacao: makeQualificacaoRow({ categoria_qualificacao_canonica: 'EAD' }),
     });
@@ -390,14 +390,14 @@ describe('generateCertificateForHistorico', () => {
     await generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {});
 
     const templateData = processTemplateWithQRMock.mock.calls[0][1] as Record<string, unknown>;
-    expect(templateData.categoria_qualificacao_section).toBe(
-      '<div class="qual-meta qual-meta-categoria">Categoria da Qualificação: EAD</div>',
+    // {{categoria}} é a canônica, não o texto legado 'TESTE' do fixture.
+    expect(templateData.qualificacao_categoria).toBe('EAD');
+    expect(templateData.qual_meta_line).toBe(
+      'Carga Horária: 8h &nbsp;·&nbsp; Categoria: EAD &nbsp;·&nbsp; Código: TST',
     );
-    // Categoria textual legada (qualificacao_categoria) permanece intacta e distinta.
-    expect(templateData.qualificacao_categoria).toBe('TESTE');
   });
 
-  it('categoria canônica ausente (qualificacoes_tipos.categoria_id sem vínculo ativo) -> secção omitida, nunca null/undefined/[object Object]', async () => {
+  it('categoria canônica ausente (qualificacoes_tipos.categoria_id sem vínculo ativo) -> campo omitido por completo, sem separador sobrando, nunca null/undefined/[object Object]', async () => {
     const { db } = makeFakeD1({
       qualificacao: makeQualificacaoRow({ categoria_qualificacao_canonica: null }),
     });
@@ -407,10 +407,9 @@ describe('generateCertificateForHistorico', () => {
     await generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {});
 
     const templateData = processTemplateWithQRMock.mock.calls[0][1] as Record<string, unknown>;
-    expect(templateData.categoria_qualificacao_section).toBe('');
-    expect(String(templateData.categoria_qualificacao_section)).not.toMatch(
-      /null|undefined|\[object Object\]/,
-    );
+    expect(templateData.qualificacao_categoria).toBe('');
+    expect(templateData.qual_meta_line).toBe('Carga Horária: 8h &nbsp;·&nbsp; Código: TST');
+    expect(String(templateData.qual_meta_line)).not.toMatch(/null|undefined|\[object Object\]/);
   });
 
   it('historico inexistente -> CERTIFICATE_HISTORY_NOT_FOUND', async () => {
