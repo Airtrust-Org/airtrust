@@ -84,10 +84,7 @@ export function requireRole(...roles: UserRole[]): MiddlewareHandler<{ Bindings:
  * @param roles Roles permitidas
  * @returns true se usuário tem uma das roles
  */
-export function hasRole<E extends { Bindings: Env }>(
-  c: Context<E>,
-  ...roles: UserRole[]
-): boolean {
+export function hasRole<E extends { Bindings: Env }>(c: Context<E>, ...roles: UserRole[]): boolean {
   const userRole = normalizeRole((c.get as (key: string) => string | undefined)('userRole'));
   return !!userRole && roles.includes(userRole);
 }

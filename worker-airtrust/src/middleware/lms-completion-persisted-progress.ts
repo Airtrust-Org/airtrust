@@ -61,9 +61,7 @@ function progressFromCmiJson(value: string | null): number | null {
  * Completion evidence must pre-exist the terminal request. The current payload,
  * including its score or self-declared location, cannot prove its own progress.
  */
-export function hasPersistedCompletionProgressEvidence(
-  row: PersistedProgressRow,
-): boolean {
+export function hasPersistedCompletionProgressEvidence(row: PersistedProgressRow): boolean {
   const matriculaProgress = Number(row.matricula_progresso_pct ?? 0);
   if (Number.isFinite(matriculaProgress) && matriculaProgress > 0) return true;
 
@@ -138,9 +136,8 @@ export async function enforcePersistedLmsProgressEvidence(
   const empresaId = parsePositiveInt(c.get('empresaId'));
   if (!matriculaId || !empresaId) return null;
 
-  const row = await c.env.DB
-    .prepare(
-      `SELECT m.progresso_pct AS matricula_progresso_pct,
+  const row = await c.env.DB.prepare(
+    `SELECT m.progresso_pct AS matricula_progresso_pct,
               p.matricula_id AS scorm_progress_id,
               p.cmi_json,
               (SELECT COUNT(*)
@@ -155,7 +152,7 @@ export async function enforcePersistedLmsProgressEvidence(
           AND m.empresa_id = ?
           AND m.deleted_at IS NULL
         LIMIT 1`,
-    )
+  )
     .bind(matriculaId, empresaId)
     .first<PersistedProgressRow>();
 

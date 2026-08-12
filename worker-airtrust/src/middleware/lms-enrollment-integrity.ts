@@ -58,15 +58,14 @@ async function readJsonClone(c: Context<EnrollmentContext>): Promise<JsonRecord>
   }
 }
 
-async function resolveActorFuncionarioId(
-  c: Context<EnrollmentContext>,
-): Promise<number | null> {
+async function resolveActorFuncionarioId(c: Context<EnrollmentContext>): Promise<number | null> {
   const direct = parsePositiveInt(c.get('funcionarioId'));
   if (direct) return direct;
   const userId = getUserId(c);
   if (!userId) return null;
-  const row = await c.env.DB
-    .prepare('SELECT funcionario_id FROM usuarios WHERE id = ? AND deleted_at IS NULL LIMIT 1')
+  const row = await c.env.DB.prepare(
+    'SELECT funcionario_id FROM usuarios WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+  )
     .bind(userId)
     .first<{ funcionario_id: number | null }>();
   return parsePositiveInt(row?.funcionario_id);
@@ -85,18 +84,12 @@ async function guardSelfEnrollment(
 
   const actorFuncionarioId = await resolveActorFuncionarioId(c);
   if (!actorFuncionarioId || actorFuncionarioId !== funcionarioId) {
-    return errorResponse(
-      c,
-      403,
-      'LMS_SELF_ENROLLMENT_OWNERSHIP_REQUIRED',
-      'Acesso negado.',
-    );
+    return errorResponse(c, 403, 'LMS_SELF_ENROLLMENT_OWNERSHIP_REQUIRED', 'Acesso negado.');
   }
 
   try {
-    const policy = await c.env.DB
-      .prepare(
-        `SELECT c.id, c.ativo, c.publicado, f.setor_id,
+    const policy = await c.env.DB.prepare(
+      `SELECT c.id, c.ativo, c.publicado, f.setor_id,
                 CASE
                   WHEN EXISTS (
                     SELECT 1
@@ -131,7 +124,7 @@ async function guardSelfEnrollment(
             AND c.empresa_id = ?
             AND c.deleted_at IS NULL
           LIMIT 1`,
-      )
+    )
       .bind(funcionarioId, cursoId, empresaId)
       .first<{
         id: number;
@@ -203,14 +196,13 @@ async function handleRematriculation(
     );
   }
 
-  const existing = await c.env.DB
-    .prepare(
-      `SELECT id, curso_id, funcionario_id, status, deleted_at, qualificacao_historico_id,
+  const existing = await c.env.DB.prepare(
+    `SELECT id, curso_id, funcionario_id, status, deleted_at, qualificacao_historico_id,
               progresso_pct, score_final, data_inicio, data_conclusao
          FROM lms_matriculas
         WHERE id = ? AND empresa_id = ?
         LIMIT 1`,
-    )
+  )
     .bind(matriculaId, empresaId)
     .first<RematriculationRow>();
 
@@ -218,7 +210,12 @@ async function handleRematriculation(
     return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
   }
   if (!existing.deleted_at && String(existing.status).toUpperCase() !== 'CANCELADO') {
-    return errorResponse(c, 409, 'LMS_REMATRICULATION_NOT_ALLOWED', 'A matrícula ainda está ativa.');
+    return errorResponse(
+      c,
+      409,
+      'LMS_REMATRICULATION_NOT_ALLOWED',
+      'A matrícula ainda está ativa.',
+    );
   }
   if (existing.qualificacao_historico_id) {
     return errorResponse(
@@ -229,13 +226,12 @@ async function handleRematriculation(
     );
   }
 
-  const progressSnapshot = await c.env.DB
-    .prepare(
-      `SELECT lesson_status, completion_status, success_status, score_raw, score_min, score_max,
+  const progressSnapshot = await c.env.DB.prepare(
+    `SELECT lesson_status, completion_status, success_status, score_raw, score_min, score_max,
               score_scaled, session_time, total_time, suspend_data, launch_data, cmi_json, session_count
          FROM lms_progresso_scorm
         WHERE matricula_id = ? AND empresa_id = ?`,
-    )
+  )
     .bind(matriculaId, empresaId)
     .first<Record<string, unknown>>();
 
@@ -259,9 +255,8 @@ async function handleRematriculation(
 
   try {
     await c.env.DB.batch([
-      c.env.DB
-        .prepare(
-          `UPDATE lms_matriculas
+      c.env.DB.prepare(
+        `UPDATE lms_matriculas
               SET status = 'NAO_INICIADO',
                   progresso_pct = 0,
                   score_final = NULL,
@@ -280,19 +275,17 @@ async function handleRematriculation(
               AND empresa_id = ?
               AND qualificacao_historico_id IS NULL
               AND (deleted_at IS NOT NULL OR status = 'CANCELADO')`,
-        )
-        .bind(
-          expiration,
-          reasonLine,
-          operationMarker,
-          reasonLine,
-          operationMarker,
-          matriculaId,
-          empresaId,
-        ),
-      c.env.DB
-        .prepare(
-          `UPDATE lms_matricula_ciclos
+      ).bind(
+        expiration,
+        reasonLine,
+        operationMarker,
+        reasonLine,
+        operationMarker,
+        matriculaId,
+        empresaId,
+      ),
+      c.env.DB.prepare(
+        `UPDATE lms_matricula_ciclos
               SET ciclo_atual = 0,
                   status = 'CANCELADO',
                   updated_at = datetime('now')
@@ -301,11 +294,9 @@ async function handleRematriculation(
               AND ciclo_atual = 1
               AND deleted_at IS NULL
               AND ${markerExists}`,
-        )
-        .bind(matriculaId, empresaId, matriculaId, empresaId, operationMarker),
-      c.env.DB
-        .prepare(
-          `UPDATE lms_progresso_scorm
+      ).bind(matriculaId, empresaId, matriculaId, empresaId, operationMarker),
+      c.env.DB.prepare(
+        `UPDATE lms_progresso_scorm
               SET lesson_status = 'not attempted',
                   completion_status = 'unknown',
                   success_status = 'unknown',
@@ -323,11 +314,9 @@ async function handleRematriculation(
             WHERE matricula_id = ?
               AND empresa_id = ?
               AND ${markerExists}`,
-        )
-        .bind(matriculaId, empresaId, matriculaId, empresaId, operationMarker),
-      c.env.DB
-        .prepare(
-          `INSERT INTO lms_matricula_ciclos
+      ).bind(matriculaId, empresaId, matriculaId, empresaId, operationMarker),
+      c.env.DB.prepare(
+        `INSERT INTO lms_matricula_ciclos
             (empresa_id, matricula_id, curso_id, funcionario_id, numero_ciclo, origem,
              status, ciclo_atual, observacoes, data_matricula, progresso_pct, tentativas,
              created_at, updated_at, deleted_at)
@@ -356,11 +345,9 @@ async function handleRematriculation(
               AND m.empresa_id = ?
               AND m.deleted_at IS NULL
               AND instr(COALESCE(m.observacoes, ''), ?) > 0`,
-        )
-        .bind(`Rematrícula autorizada: ${reason}`, matriculaId, empresaId, operationMarker),
-      c.env.DB
-        .prepare(
-          `INSERT INTO audit_logs
+      ).bind(`Rematrícula autorizada: ${reason}`, matriculaId, empresaId, operationMarker),
+      c.env.DB.prepare(
+        `INSERT INTO audit_logs
             (user_id, action, entity_type, entity_id, old_values, new_values,
              ip_address, user_agent, empresa_id, created_at)
            SELECT ?,
@@ -374,29 +361,26 @@ async function handleRematriculation(
                   ?,
                   datetime('now')
             WHERE ${markerExists}`,
-        )
-        .bind(
-          getUserId(c),
-          matriculaId,
-          JSON.stringify({ ...existing, scorm_progress: progressSnapshot ?? null }),
-          auditNewValues,
-          c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
-          c.req.header('user-agent') ?? null,
-          empresaId,
-          matriculaId,
-          empresaId,
-          operationMarker,
-        ),
-      c.env.DB
-        .prepare(
-          `UPDATE lms_matriculas
+      ).bind(
+        getUserId(c),
+        matriculaId,
+        JSON.stringify({ ...existing, scorm_progress: progressSnapshot ?? null }),
+        auditNewValues,
+        c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+        c.req.header('user-agent') ?? null,
+        empresaId,
+        matriculaId,
+        empresaId,
+        operationMarker,
+      ),
+      c.env.DB.prepare(
+        `UPDATE lms_matriculas
               SET observacoes = TRIM(REPLACE(COALESCE(observacoes, ''), ?, '')),
                   updated_at = datetime('now')
             WHERE id = ?
               AND empresa_id = ?
               AND instr(COALESCE(observacoes, ''), ?) > 0`,
-        )
-        .bind(operationMarker, matriculaId, empresaId, operationMarker),
+      ).bind(operationMarker, matriculaId, empresaId, operationMarker),
     ]);
   } catch {
     return errorResponse(
@@ -407,9 +391,8 @@ async function handleRematriculation(
     );
   }
 
-  const receipt = await c.env.DB
-    .prepare(
-      `SELECT 1 AS ok
+  const receipt = await c.env.DB.prepare(
+    `SELECT 1 AS ok
          FROM audit_logs
         WHERE action = 'LMS_REMATRICULATION'
           AND entity_type = 'lms_matriculas'
@@ -417,7 +400,7 @@ async function handleRematriculation(
           AND empresa_id = ?
           AND instr(COALESCE(new_values, ''), ?) > 0
         LIMIT 1`,
-    )
+  )
     .bind(matriculaId, empresaId, operationId)
     .first<{ ok: number }>();
 

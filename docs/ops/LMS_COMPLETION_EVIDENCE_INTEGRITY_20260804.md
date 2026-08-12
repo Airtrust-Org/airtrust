@@ -41,33 +41,33 @@ Nenhum `lesson_status=passed` isolado é suficiente.
 
 ## 3. Regras de mastery e score
 
-| Situação | Decisão |
-|---|---|
-| mastery ausente em curso avaliado | rejeitar |
-| mastery vazio, NaN, string ou fora de 0–100 | rejeitar |
-| mastery zero em curso avaliado/qualificante | rejeitar |
-| mastery ausente em curso informativo sem avaliação | permitido |
-| score zero com mastery positivo | score válido, porém reprovado |
-| score inválido | rejeitar |
-| score abaixo do mastery | reprovação prevalece |
-| `scaled` válido | converter para percentual |
-| `raw/min/max` válidos | normalizar para percentual |
-| `raw` sem escala, entre 0–100 | interpretar como percentual |
+| Situação                                           | Decisão                       |
+| -------------------------------------------------- | ----------------------------- |
+| mastery ausente em curso avaliado                  | rejeitar                      |
+| mastery vazio, NaN, string ou fora de 0–100        | rejeitar                      |
+| mastery zero em curso avaliado/qualificante        | rejeitar                      |
+| mastery ausente em curso informativo sem avaliação | permitido                     |
+| score zero com mastery positivo                    | score válido, porém reprovado |
+| score inválido                                     | rejeitar                      |
+| score abaixo do mastery                            | reprovação prevalece          |
+| `scaled` válido                                    | converter para percentual     |
+| `raw/min/max` válidos                              | normalizar para percentual    |
+| `raw` sem escala, entre 0–100                      | interpretar como percentual   |
 
 ## 4. Tabela de decisão resumida
 
-| Evidência | Resultado |
-|---|---|
-| `passed`, progresso 0 | rejeitado |
-| `passed`, sem linha/estado de progresso | rejeitado |
-| `passed`, score abaixo do mastery | reprovado/rejeitado |
-| `failed + completed` | falha prevalece |
-| `failed + passed` | falha prevalece |
-| concluído, pacote ou asset session divergente | rejeitado |
-| curso informativo, progresso 100%, sem avaliação | aceito |
-| curso qualificante, mastery e score válidos, progresso e sessão válidos | aceito |
-| repetição da mesma conclusão | decisão determinística; persistência canônica idempotente |
-| conclusão administrativa | exige papel autorizado, justificativa e evidência coerente |
+| Evidência                                                               | Resultado                                                  |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `passed`, progresso 0                                                   | rejeitado                                                  |
+| `passed`, sem linha/estado de progresso                                 | rejeitado                                                  |
+| `passed`, score abaixo do mastery                                       | reprovado/rejeitado                                        |
+| `failed + completed`                                                    | falha prevalece                                            |
+| `failed + passed`                                                       | falha prevalece                                            |
+| concluído, pacote ou asset session divergente                           | rejeitado                                                  |
+| curso informativo, progresso 100%, sem avaliação                        | aceito                                                     |
+| curso qualificante, mastery e score válidos, progresso e sessão válidos | aceito                                                     |
+| repetição da mesma conclusão                                            | decisão determinística; persistência canônica idempotente  |
+| conclusão administrativa                                                | exige papel autorizado, justificativa e evidência coerente |
 
 ## 5. Sessão de asset
 

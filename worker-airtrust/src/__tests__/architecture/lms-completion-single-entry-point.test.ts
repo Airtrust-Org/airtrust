@@ -35,10 +35,10 @@ const validationRoute = readFileSync(
 
 describe('guard:lms-completion-single-entry-point', () => {
   it('runs all LMS integrity gates after auth/tenant and before route handlers', () => {
-    expect(domainMiddleware).toContain("import { enforceLmsCompletionIntegrity }");
-    expect(domainMiddleware).toContain("import { enforceLmsCompletionReversal }");
-    expect(domainMiddleware).toContain("import { enforceLmsEnrollmentIntegrity }");
-    expect(domainMiddleware).toContain("import { enforcePersistedLmsProgressEvidence }");
+    expect(domainMiddleware).toContain('import { enforceLmsCompletionIntegrity }');
+    expect(domainMiddleware).toContain('import { enforceLmsCompletionReversal }');
+    expect(domainMiddleware).toContain('import { enforceLmsEnrollmentIntegrity }');
+    expect(domainMiddleware).toContain('import { enforcePersistedLmsProgressEvidence }');
     const reversal = domainMiddleware.indexOf('await enforceLmsCompletionReversal');
     const enrollment = domainMiddleware.indexOf('await enforceLmsEnrollmentIntegrity');
     const persisted = domainMiddleware.indexOf('await enforcePersistedLmsProgressEvidence');
@@ -90,9 +90,7 @@ describe('guard:lms-completion-single-entry-point', () => {
     expect(integrityMiddleware).toContain(
       'SELECT funcionario_id FROM usuarios WHERE id = ? AND deleted_at IS NULL',
     );
-    expect(integrityMiddleware).not.toContain(
-      'SELECT id FROM funcionarios WHERE usuario_id = ?',
-    );
+    expect(integrityMiddleware).not.toContain('SELECT id FROM funcionarios WHERE usuario_id = ?');
     expect(integrityMiddleware).toContain('LMS_PROGRESS_OWNERSHIP_REQUIRED');
     expect(integrityMiddleware).toContain('AND empresa_id = ? AND funcionario_id = ?');
   });

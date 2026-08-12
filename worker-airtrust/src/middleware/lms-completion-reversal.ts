@@ -25,11 +25,7 @@ const ALLOWED_CLASSIFICATIONS = new Set([
   'INVALIDACAO',
 ]);
 
-function jsonResponse(
-  c: Context<ReversalContext>,
-  status: number,
-  body: JsonRecord,
-): Response {
+function jsonResponse(c: Context<ReversalContext>, status: number, body: JsonRecord): Response {
   return c.json(body, status as never);
 }
 
@@ -102,7 +98,9 @@ export async function enforceLmsCompletionReversal(
 
   const body = await readJsonClone(c);
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
-  const classification = String(body.classification ?? '').trim().toUpperCase();
+  const classification = String(body.classification ?? '')
+    .trim()
+    .toUpperCase();
   if (reason.length < 10 || !ALLOWED_CLASSIFICATIONS.has(classification)) {
     return errorResponse(
       c,
@@ -112,9 +110,8 @@ export async function enforceLmsCompletionReversal(
     );
   }
 
-  const existing = await c.env.DB
-    .prepare(
-      `SELECT m.id, m.status, m.progresso_pct, m.score_final, m.funcionario_id,
+  const existing = await c.env.DB.prepare(
+    `SELECT m.id, m.status, m.progresso_pct, m.score_final, m.funcionario_id,
               m.qualificacao_historico_id,
               qh.status AS qualificacao_status, qh.certificado_arquivo_id
          FROM lms_matriculas m
@@ -123,7 +120,7 @@ export async function enforceLmsCompletionReversal(
           AND qh.empresa_id = m.empresa_id
         WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
         LIMIT 1`,
-    )
+  )
     .bind(matriculaId, empresaId)
     .first<ReversalRow>();
 
@@ -141,9 +138,8 @@ export async function enforceLmsCompletionReversal(
 
   const marker = `Conclusão LMS invalidada (${classification}): ${reason}`;
   const statements: D1PreparedStatement[] = [
-    c.env.DB
-      .prepare(
-        `UPDATE lms_matriculas
+    c.env.DB.prepare(
+      `UPDATE lms_matriculas
             SET status = 'EM_ANDAMENTO',
                 progresso_pct = MIN(COALESCE(progresso_pct, 0), 99),
                 score_final = NULL,
@@ -156,11 +152,9 @@ export async function enforceLmsCompletionReversal(
                 updated_at = datetime('now')
           WHERE id = ? AND empresa_id = ?
             AND status = 'CONCLUIDO' AND deleted_at IS NULL`,
-      )
-      .bind(marker, marker, matriculaId, empresaId),
-    c.env.DB
-      .prepare(
-        `UPDATE lms_matricula_ciclos
+    ).bind(marker, marker, matriculaId, empresaId),
+    c.env.DB.prepare(
+      `UPDATE lms_matricula_ciclos
             SET status = 'EM_ANDAMENTO',
                 data_conclusao = NULL,
                 progresso_pct = MIN(COALESCE(progresso_pct, 0), 99),
@@ -173,11 +167,9 @@ export async function enforceLmsCompletionReversal(
                 updated_at = datetime('now')
           WHERE matricula_id = ? AND empresa_id = ?
             AND ciclo_atual = 1 AND deleted_at IS NULL`,
-      )
-      .bind(marker, marker, matriculaId, empresaId),
-    c.env.DB
-      .prepare(
-        `UPDATE lms_progresso_scorm
+    ).bind(marker, marker, matriculaId, empresaId),
+    c.env.DB.prepare(
+      `UPDATE lms_progresso_scorm
             SET lesson_status = 'incomplete',
                 completion_status = 'incomplete',
                 success_status = 'unknown',
@@ -185,15 +177,13 @@ export async function enforceLmsCompletionReversal(
                 score_scaled = NULL,
                 updated_at = datetime('now')
           WHERE matricula_id = ? AND empresa_id = ?`,
-      )
-      .bind(matriculaId, empresaId),
+    ).bind(matriculaId, empresaId),
   ];
 
   if (existing.qualificacao_historico_id) {
     statements.push(
-      c.env.DB
-        .prepare(
-          `UPDATE qualificacoes_historico
+      c.env.DB.prepare(
+        `UPDATE qualificacoes_historico
               SET status = 'CANCELADA',
                   observacoes = CASE
                     WHEN COALESCE(observacoes, '') = '' THEN ?
@@ -202,22 +192,20 @@ export async function enforceLmsCompletionReversal(
                   deleted_at = COALESCE(deleted_at, datetime('now')),
                   updated_at = datetime('now')
             WHERE id = ? AND empresa_id = ? AND funcionario_id = ?`,
-        )
-        .bind(
-          marker,
-          marker,
-          existing.qualificacao_historico_id,
-          empresaId,
-          existing.funcionario_id,
-        ),
+      ).bind(
+        marker,
+        marker,
+        existing.qualificacao_historico_id,
+        empresaId,
+        existing.funcionario_id,
+      ),
     );
   }
 
   if (existing.certificado_arquivo_id && existing.qualificacao_historico_id) {
     statements.push(
-      c.env.DB
-        .prepare(
-          `UPDATE documentos
+      c.env.DB.prepare(
+        `UPDATE documentos
               SET deleted_at = COALESCE(deleted_at, datetime('now')),
                   updated_at = datetime('now')
             WHERE id = ?
@@ -228,39 +216,32 @@ export async function enforceLmsCompletionReversal(
                    AND qh.empresa_id = ?
                    AND qh.certificado_arquivo_id = documentos.id
               )`,
-        )
-        .bind(
-          existing.certificado_arquivo_id,
-          existing.qualificacao_historico_id,
-          empresaId,
-        ),
+      ).bind(existing.certificado_arquivo_id, existing.qualificacao_historico_id, empresaId),
     );
   }
 
   statements.push(
-    c.env.DB
-      .prepare(
-        `INSERT INTO audit_logs
+    c.env.DB.prepare(
+      `INSERT INTO audit_logs
           (user_id, action, entity_type, entity_id, old_values, new_values,
            ip_address, user_agent, empresa_id, created_at)
          VALUES (?, 'LMS_COMPLETION_REVERSED', 'lms_matriculas', ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      )
-      .bind(
-        getUserId(c),
-        matriculaId,
-        JSON.stringify(existing),
-        JSON.stringify({
-          status: 'EM_ANDAMENTO',
-          qualification_status: existing.qualificacao_historico_id ? 'CANCELADA' : null,
-          qualification_invalidated: Boolean(existing.qualificacao_historico_id),
-          certificate_invalidated: Boolean(existing.certificado_arquivo_id),
-          classification,
-          reason,
-        }),
-        c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
-        c.req.header('user-agent') ?? null,
-        empresaId,
-      ),
+    ).bind(
+      getUserId(c),
+      matriculaId,
+      JSON.stringify(existing),
+      JSON.stringify({
+        status: 'EM_ANDAMENTO',
+        qualification_status: existing.qualificacao_historico_id ? 'CANCELADA' : null,
+        qualification_invalidated: Boolean(existing.qualificacao_historico_id),
+        certificate_invalidated: Boolean(existing.certificado_arquivo_id),
+        classification,
+        reason,
+      }),
+      c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      c.req.header('user-agent') ?? null,
+      empresaId,
+    ),
   );
 
   try {

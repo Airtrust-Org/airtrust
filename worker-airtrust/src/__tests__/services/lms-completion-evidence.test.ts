@@ -37,15 +37,13 @@ describe('LMS completion evidence decision table', () => {
   });
 
   it('2. rejects completion without registered progress evidence', () => {
-    expect(
-      evaluateLmsCompletionEvidence(valid({ progressRowPresent: false })).code,
-    ).toBe('PROGRESS_EVIDENCE_MISSING');
+    expect(evaluateLmsCompletionEvidence(valid({ progressRowPresent: false })).code).toBe(
+      'PROGRESS_EVIDENCE_MISSING',
+    );
   });
 
   it('3. rejects passed below mastery', () => {
-    expect(evaluateLmsCompletionEvidence(valid({ scoreRaw: 69 })).code).toBe(
-      'SCORE_BELOW_MASTERY',
-    );
+    expect(evaluateLmsCompletionEvidence(valid({ scoreRaw: 69 })).code).toBe('SCORE_BELOW_MASTERY');
   });
 
   it('4. gives failed precedence over completed', () => {
@@ -75,9 +73,7 @@ describe('LMS completion evidence decision table', () => {
   });
 
   it('8. treats score zero as a valid score below positive mastery', () => {
-    expect(evaluateLmsCompletionEvidence(valid({ scoreRaw: 0 })).code).toBe(
-      'SCORE_BELOW_MASTERY',
-    );
+    expect(evaluateLmsCompletionEvidence(valid({ scoreRaw: 0 })).code).toBe('SCORE_BELOW_MASTERY');
   });
 
   it('9. rejects invalid score formats instead of coercing them', () => {
@@ -144,7 +140,10 @@ describe('LMS completion evidence decision table', () => {
   });
 
   it('14. makes concurrent candidates resolve to the same canonical decision', () => {
-    const candidates = [evaluateLmsCompletionEvidence(valid()), evaluateLmsCompletionEvidence(valid())];
+    const candidates = [
+      evaluateLmsCompletionEvidence(valid()),
+      evaluateLmsCompletionEvidence(valid()),
+    ];
     expect(candidates.every((candidate) => candidate.accepted)).toBe(true);
     expect(new Set(candidates.map((candidate) => candidate.code))).toEqual(
       new Set(['COMPLETION_ACCEPTED']),
