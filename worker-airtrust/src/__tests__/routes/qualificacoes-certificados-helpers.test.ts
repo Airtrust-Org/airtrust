@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   adaptTemplateHtmlForInstrutor,
   adaptTemplateHtmlForSinglePageA4,
+  buildCategoriaQualificacaoSectionHtml,
   buildConteudoProgramaticoCertificadoHtml,
   resolveCargaHorariaCertificado,
   resolveFuncionarioInstrutorNaEmpresa,
@@ -320,5 +321,44 @@ describe('qualificacoes-certificados-helpers', () => {
     expect(html).toContain('font-size: 6.6pt !important;');
     expect(html).toContain('margin-top: 12px !important;');
     expect(html).toContain('box-shadow: none !important;');
+  });
+
+  it('conteudo programatico usa a largura total do card (sem coluna forcada), texto quebra normalmente', () => {
+    const html = adaptTemplateHtmlForSinglePageA4(`
+      <html>
+        <head></head>
+        <body>
+          <div class="cert-page">
+            <div class="header"></div>
+            <div class="info-grid"></div>
+            <div class="training-box"></div>
+            <div class="program-section"><div class="program-content">conteudo</div></div>
+            <div class="footer">rodape</div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(html).toContain('column-count: 1 !important;');
+    expect(html).toContain('width: 100% !important;');
+    expect(html).toContain('max-width: none !important;');
+    expect(html).toContain('white-space: normal !important;');
+    expect(html).toContain('word-break: normal !important;');
+    expect(html).not.toContain('column-count: 2');
+  });
+
+  describe('buildCategoriaQualificacaoSectionHtml', () => {
+    it('renderiza a categoria canonica quando presente', () => {
+      expect(buildCategoriaQualificacaoSectionHtml('EAD')).toBe(
+        '<div class="qual-meta qual-meta-categoria">Categoria da Qualificação: EAD</div>',
+      );
+    });
+
+    it('omite a secao (string vazia) quando nao ha categoria canonica resolvida', () => {
+      expect(buildCategoriaQualificacaoSectionHtml(null)).toBe('');
+      expect(buildCategoriaQualificacaoSectionHtml(undefined)).toBe('');
+      expect(buildCategoriaQualificacaoSectionHtml('')).toBe('');
+      expect(buildCategoriaQualificacaoSectionHtml('   ')).toBe('');
+    });
   });
 });

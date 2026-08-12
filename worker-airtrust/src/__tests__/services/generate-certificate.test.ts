@@ -380,6 +380,39 @@ describe('generateCertificateForHistorico', () => {
     expect(bucket.delete).not.toHaveBeenCalled();
   });
 
+  it('categoria canônica presente (join qualificacoes_tipos.categoria_id -> qualificacoes_categorias.nome) -> templateData exibe "Categoria da Qualificação: EAD"', async () => {
+    const { db } = makeFakeD1({
+      qualificacao: makeQualificacaoRow({ categoria_qualificacao_canonica: 'EAD' }),
+    });
+    const bucket = makeBucket();
+    const env = makeEnv(db, bucket);
+
+    await generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {});
+
+    const templateData = processTemplateWithQRMock.mock.calls[0][1] as Record<string, unknown>;
+    expect(templateData.categoria_qualificacao_section).toBe(
+      '<div class="qual-meta qual-meta-categoria">Categoria da Qualificação: EAD</div>',
+    );
+    // Categoria textual legada (qualificacao_categoria) permanece intacta e distinta.
+    expect(templateData.qualificacao_categoria).toBe('TESTE');
+  });
+
+  it('categoria canônica ausente (qualificacoes_tipos.categoria_id sem vínculo ativo) -> secção omitida, nunca null/undefined/[object Object]', async () => {
+    const { db } = makeFakeD1({
+      qualificacao: makeQualificacaoRow({ categoria_qualificacao_canonica: null }),
+    });
+    const bucket = makeBucket();
+    const env = makeEnv(db, bucket);
+
+    await generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {});
+
+    const templateData = processTemplateWithQRMock.mock.calls[0][1] as Record<string, unknown>;
+    expect(templateData.categoria_qualificacao_section).toBe('');
+    expect(String(templateData.categoria_qualificacao_section)).not.toMatch(
+      /null|undefined|\[object Object\]/,
+    );
+  });
+
   it('historico inexistente -> CERTIFICATE_HISTORY_NOT_FOUND', async () => {
     const { db } = makeFakeD1({ qualificacao: null });
     const bucket = makeBucket();

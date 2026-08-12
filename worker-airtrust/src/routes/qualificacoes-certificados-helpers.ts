@@ -729,9 +729,12 @@ function injectInstrutorPrintStyle(templateHtml: string): string {
     padding-bottom: 4px !important;
   }
   .program-content {
-    column-count: 2 !important;
-    column-gap: 16px !important;
-    column-fill: auto !important;
+    column-count: 1 !important;
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+    white-space: normal !important;
+    word-break: normal !important;
     font-size: 6.6pt !important;
     line-height: 1.16 !important;
     max-height: none !important;
@@ -739,6 +742,8 @@ function injectInstrutorPrintStyle(templateHtml: string): string {
     flex: 1 1 auto !important;
   }
   .program-item {
+    display: block !important;
+    width: 100% !important;
     margin-bottom: 2px !important;
     break-inside: avoid !important;
   }
@@ -1009,6 +1014,15 @@ export function buildDescricaoSectionHtml(descricao?: string | null): string {
   const text = String(descricao || '').trim();
   if (!text) return '';
   return `<div class="descricao-section"><div class="descricao-label">Descrição</div><div class="descricao-text">${text}</div></div>`;
+}
+
+// Categoria canônica da qualificação (qualificacoes_tipos.categoria_id ->
+// qualificacoes_categorias.nome). Omitida quando não há vínculo canônico
+// resolvido — nunca exibe null/undefined/[object Object] no certificado.
+export function buildCategoriaQualificacaoSectionHtml(categoriaNome?: string | null): string {
+  const nome = String(categoriaNome || '').trim();
+  if (!nome) return '';
+  return `<div class="qual-meta qual-meta-categoria">Categoria da Qualificação: ${nome}</div>`;
 }
 
 export async function resolveConteudoProgramaticoCertificado(
