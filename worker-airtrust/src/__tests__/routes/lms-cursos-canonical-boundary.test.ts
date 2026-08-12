@@ -1,8 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldValidateCourseQualificationBinding } from '../../routes/lms-cursos-canonical-boundary';
+import {
+  resolveCanonicalCourseId,
+  shouldValidateCourseQualificationBinding,
+} from '../../routes/lms-cursos-canonical-boundary';
 
 describe('lms course canonical qualification boundary', () => {
+  it('resolve o curso pelo pathname quando o middleware ainda não recebeu o param :id', () => {
+    expect(resolveCanonicalCourseId(undefined, '/api/lms/cursos/32')).toBe(32);
+    expect(resolveCanonicalCourseId(undefined, '/lms/cursos/32')).toBe(32);
+    expect(resolveCanonicalCourseId(undefined, '/32')).toBe(32);
+  });
+
+  it('prioriza o param de rota quando disponível', () => {
+    expect(resolveCanonicalCourseId('32', '/api/lms/cursos/99')).toBe(32);
+  });
+
+  it('não confunde ações do catálogo com id de curso', () => {
+    expect(resolveCanonicalCourseId(undefined, '/api/lms/cursos/sync-ead')).toBeNull();
+  });
+
   it('preserva vínculo histórico inalterado em edição de metadados/conteúdo', () => {
     expect(
       shouldValidateCourseQualificationBinding({
