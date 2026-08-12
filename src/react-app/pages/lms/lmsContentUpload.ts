@@ -25,6 +25,8 @@ const IGNORED_ARCHIVE_SUFFIXES = ['.map'];
 // The Free Worker CPU budget cannot sustain four simultaneous R2 body streams
 // for media-heavy SCORM packages. Keep each authorized asset transfer isolated.
 const STRUCTURED_UPLOAD_CONCURRENCY = 1;
+const STRUCTURED_UPLOAD_MAX_ATTEMPTS = 4;
+const STRUCTURED_UPLOAD_RETRY_BASE_MS = 250;
 
 function shouldIgnoreArchivePath(path: string): boolean {
   const lowerPath = path.toLowerCase();
@@ -76,6 +78,22 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
     }
     throw new Error(text || `HTTP ${response.status}`);
   }
+}
+
+function isRetryableUploadResponse(response: Response) {
+  return response.status === 408 || response.status === 425 || response.status === 429 || response.status >= 500;
+}
+
+function isRetryableUploadError(error: unknown) {
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof Error)) return false;
+  return /failed to fetch|networkerror|network request failed|load failed/i.test(error.message);
+}
+
+function waitForRetry(attempt: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, STRUCTURED_UPLOAD_RETRY_BASE_MS * attempt);
+  });
 }
 
 function parseH5pType(h5pJsonText: string): string | null {
@@ -188,14 +206,37 @@ export async function uploadStructuredLmsPackage(params: {
   let completedFiles = 0;
   async function uploadEntry(entry: PreparedFile) {
     const query = new URLSearchParams({ tipo_conteudo: tipoConteudo, upload_id: init.upload_id, path: entry.path });
-    const response = await fetchWithAuth(`/api/lms/cursos/${cursoId}/content-upload/file?${query}`, {
-      method: 'POST', headers: { 'Content-Type': entry.mimeType }, body: entry.bytes,
-    });
-    await parseApiResponse(response);
-    uploadedBytes += entry.size;
-    completedFiles += 1;
-    onStatus?.(`Enviando arquivo ${completedFiles} de ${prepared.files.length}...`);
-    onProgress?.(Math.min(18 + Math.round((uploadedBytes / prepared.totalBytes) * 72), 92));
+    const endpoint = `/api/lms/cursos/${cursoId}/content-upload/file?${query}`;
+
+    for (let attempt = 1; attempt <= STRUCTURED_UPLOAD_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const response = await fetchWithAuth(endpoint, {
+          method: 'POST', headers: { 'Content-Type': entry.mimeType }, body: entry.bytes,
+        });
+        if (response.ok) {
+          await parseApiResponse(response);
+          uploadedBytes += entry.size;
+          completedFiles += 1;
+          onStatus?.(`Enviando arquivo ${completedFiles} de ${prepared.files.length}...`);
+          onProgress?.(Math.min(18 + Math.round((uploadedBytes / prepared.totalBytes) * 72), 92));
+          return;
+        }
+        if (!isRetryableUploadResponse(response) || attempt === STRUCTURED_UPLOAD_MAX_ATTEMPTS) {
+          await parseApiResponse(response);
+        }
+      } catch (error) {
+        if (!isRetryableUploadError(error) || attempt === STRUCTURED_UPLOAD_MAX_ATTEMPTS) {
+          throw error;
+        }
+      }
+
+      onStatus?.(
+        `Falha transitória ao enviar ${entry.path}. Tentando novamente (${attempt + 1}/${STRUCTURED_UPLOAD_MAX_ATTEMPTS})...`,
+      );
+      await waitForRetry(attempt);
+    }
+
+    throw new Error(`Falha ao enviar ${entry.path}`);
   }
 
   for (let index = 0; index < prepared.files.length; index += STRUCTURED_UPLOAD_CONCURRENCY) {
