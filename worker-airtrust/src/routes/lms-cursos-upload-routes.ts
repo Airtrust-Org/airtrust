@@ -205,7 +205,9 @@ app.post(
       idempotencyKey: parsed.data.idempotency_key ?? c.req.header('idempotency-key') ?? null,
     });
     const uploadedFiles =
-      marker.status === 'uploading' ? await listUploadedOperationFiles(c.env.BUCKET, marker.prefix) : [];
+      marker.status === 'uploading'
+        ? await listUploadedOperationFiles(c.env.BUCKET, marker.prefix)
+        : [];
 
     return c.json({
       success: true,
