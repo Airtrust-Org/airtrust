@@ -23,7 +23,7 @@ jobs:
       - name: Format exact PR880 delta
         run: |
           npx --yes prettier@3.9.6 --write \
-            worker-airtrust/src/scheduled-handler.ts \
+            worker-airtrust/src/cron/scheduled-handler.ts \
             worker-airtrust/src/routes/lms-matriculas-mel-manutencao.ts
           rm -f worker-airtrust/src/__tests__/format-pr880-export.test.ts
       - name: Commit formatter result
@@ -31,7 +31,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            worker-airtrust/src/scheduled-handler.ts \
+            worker-airtrust/src/cron/scheduled-handler.ts \
             worker-airtrust/src/routes/lms-matriculas-mel-manutencao.ts \
             worker-airtrust/src/__tests__/format-pr880-export.test.ts
           if git diff --cached --quiet; then
