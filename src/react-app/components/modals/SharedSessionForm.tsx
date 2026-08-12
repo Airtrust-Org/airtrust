@@ -227,7 +227,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const [stepMessage, setStepMessage] = useState<string | null>(null);
   const [modelos, setModelos] = useState<ModeloSessao[]>([]);
   const [loadingModelos, setLoadingModelos] = useState(false);
-  const [modelosErro, setModelosErro] = useState<string | null>(null);
   const [hasProtectedFicha, setHasProtectedFicha] = useState(false);
 
   const participantIds = useMemo(
@@ -343,7 +342,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
 
   const fetchModelos = useCallback(async () => {
     setModelos([]);
-    setModelosErro(null);
     if (!simuladorModelo || !simuladorId) return;
 
     setLoadingModelos(true);
@@ -361,7 +359,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       const body = await response.json();
       setModelos(Array.isArray(body?.data) ? body.data : []);
     } catch (error) {
-      setModelosErro(error instanceof Error ? error.message : 'Erro ao carregar modelos.');
+      toast.error(error instanceof Error ? error.message : 'Erro ao carregar modelos.');
     } finally {
       setLoadingModelos(false);
     }
@@ -372,7 +370,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       void fetchModelos();
     } else {
       setModelos([]);
-      setModelosErro(null);
     }
   }, [fetchModelos, reservationReady]);
 
@@ -464,7 +461,8 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           // Fallback: resolve modelo_sessao_id via atribuicoes diretas (top-level do detail)
           if (!modeloId) {
             const atribuicao = (detail.atribuicoes || []).find(
-              (a: any) => Number(a.funcionario_id) === Number(participant.funcionario_id)
+              (a: { funcionario_id?: number | string | null; modelo_sessao_id?: number | string | null; gera_ficha?: number | boolean }) =>
+                Number(a.funcionario_id) === Number(participant.funcionario_id),
             );
             if (atribuicao?.modelo_sessao_id) {
               modeloId = Number(atribuicao.modelo_sessao_id);
@@ -530,7 +528,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     return () => {
       mounted = false;
     };
-  }, [editSessionId, funcionarios, horarioFim, horarioInicio]);
+  }, [conversionSeed, editSessionId, funcionarios, horarioFim, horarioInicio]);
 
   const modelById = useMemo(() => {
     const map = new Map<number, ModeloSessao>();

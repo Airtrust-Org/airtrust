@@ -16,13 +16,17 @@ vi.mock('@/react-app/config/sharedSessions', async () => {
   const actual = await vi.importActual('@/react-app/config/sharedSessions');
   return {
     ...actual,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     createSharedSession: (...args: any[]) => mockCreateSharedSession(...args),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     updateSharedSession: (...args: any[]) => mockUpdateSharedSession(...args),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getSharedSession: (...args: any[]) => mockGetSharedSession(...args),
   };
 });
 
 vi.mock('@/react-app/components/simuladores/FuncionarioCombobox', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   FuncionarioCombobox: (props: any) => (
     <div data-testid="funcionario-combobox">
       <input
@@ -49,7 +53,6 @@ vi.mock('sonner', () => ({
 }));
 
 import SharedSessionForm from '../SharedSessionForm';
-import { toast } from 'sonner';
 
 const BASE_PROPS = {
   onClose: vi.fn(),
