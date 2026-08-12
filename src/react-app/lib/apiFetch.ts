@@ -277,21 +277,23 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
       let triedAlt = false;
 
       const tryOnce = async (originToUse: string): Promise<Response> => {
+        let candidate: URL;
         try {
-          const candidate = new URL(rawInput, window.location.origin);
-          if (
-            candidate.origin === window.location.origin &&
-            candidate.pathname.startsWith('/api/')
-          ) {
-            return await originalFetch(originToUse + candidate.pathname + candidate.search, init);
-          }
-          if (isRelativeApiInput(rawInput)) {
-            return await originalFetch(originToUse + rawInput, init);
-          }
-          return await originalFetch(input, init);
+          candidate = new URL(rawInput, window.location.origin);
         } catch {
-          return await originalFetch(input, init);
+          return originalFetch(input, init);
         }
+
+        if (
+          candidate.origin === window.location.origin &&
+          candidate.pathname.startsWith('/api/')
+        ) {
+          return originalFetch(originToUse + candidate.pathname + candidate.search, init);
+        }
+        if (isRelativeApiInput(rawInput)) {
+          return originalFetch(originToUse + rawInput, init);
+        }
+        return originalFetch(input, init);
       };
 
       const response = await tryOnce(apiOrigin);
