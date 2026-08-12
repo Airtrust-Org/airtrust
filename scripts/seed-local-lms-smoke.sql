@@ -1,9 +1,20 @@
 PRAGMA foreign_keys = OFF;
 
 -- source_reference: EAD reconciliation incident / local LMS smoke fixture.
--- operational_decision: Seed only the canonical tenant-6 EAD category and type.
+-- operational_decision: Seed only synthetic local prerequisites required by the canonical LMS/auth flow.
 -- dry_run_required: YES — this file is consumed only by the resettable local smoke database.
 -- rollback_plan_required: YES — scripts/setup-local-lms-smoke-db.sh --reset recreates the fixture.
+
+-- Login is intentionally fail-closed when the distributed D1 rate limiter cannot
+-- validate a request. Production already receives this table from migration 0289;
+-- the disposable LMS smoke schema must provide the same prerequisite rather than
+-- weakening the limiter or enabling an in-memory fallback.
+CREATE TABLE IF NOT EXISTS rate_limit_store (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0,
+  reset_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rate_limit_reset ON rate_limit_store(reset_at);
 
 INSERT OR IGNORE INTO empresas (
   id,
