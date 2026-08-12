@@ -146,12 +146,12 @@ function ErrorState({ partialSources }: { partialSources: string[] }) {
 }
 
 export default function ManagerAlertCenter() {
+  const { empresas, empresaAtualId } = useAuth();
+  const { isAdmin, isGestor, can } = usePermissions();
+
   if (!MANAGER_ALERT_CENTER_ENABLED) {
     return null;
   }
-
-  const { empresas, empresaAtualId } = useAuth();
-  const { isAdmin, isGestor, can } = usePermissions();
 
   if (!isAdmin && !isGestor) {
     return null;
