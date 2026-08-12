@@ -148,6 +148,18 @@ describe('SharedSessionForm rendered', () => {
     expect(option?.textContent).not.toContain('@M2026.07-V2');
   });
 
+  it('mantém o código canônico limpo no resumo final', async () => {
+    renderForm();
+    await selectPilot(0, 'Ramos');
+    await selectPilot(1, 'Dieter');
+    await selectTripulanteModel(0, '63');
+    await selectTripulanteModel(1, '64');
+    await goToSegments();
+
+    expect(screen.getByText('SK76-I-01/12')).toBeInTheDocument();
+    expect(screen.queryByText('SK76-I-01/12@M2026.07-V2')).not.toBeInTheDocument();
+  });
+
   it('bloqueia a etapa de segmentos até a tripulação ser definida', async () => {
     renderForm();
 
