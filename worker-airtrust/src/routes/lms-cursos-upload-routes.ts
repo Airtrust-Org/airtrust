@@ -10,6 +10,7 @@ import {
 } from '../lib/lms/lms-content-upload-service';
 import {
   LMS_PACKAGE_LIMITS,
+  normalizeLmsArchivePath,
   type LmsStructuredContentType,
 } from '../lib/lms/lms-package-validator';
 import { getLmsSchemaSnapshot } from '../lib/lms/lms-schema-state';
@@ -218,24 +219,41 @@ app.post(
       LMS_PACKAGE_LIMITS.maxFileBytes,
       'Arquivo individual',
     );
-    // Browser uploads include Content-Length, so stream directly to R2 instead
-    // of charging Worker CPU to copy each SCORM media file into memory.
-    const bufferedBody =
-      contentLength === null || !c.req.raw.body ? new Uint8Array(await c.req.arrayBuffer()) : null;
+
+    // A browser/HTTP2 request is not guaranteed to expose Content-Length to
+    // the Worker. Never fall back to arrayBuffer() just because the header is
+    // absent: R2 accepts the request ReadableStream directly. The real stored
+    // size is verified below with HEAD before the response is accepted.
+    const bufferedBody = !c.req.raw.body ? new Uint8Array(await c.req.arrayBuffer()) : null;
     const body = bufferedBody ?? c.req.raw.body!;
-    const byteLength = contentLength ?? bufferedBody!.byteLength;
+    const byteLength = contentLength ?? bufferedBody?.byteLength ?? 0;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
 
     const data = await putLmsContentUploadFile({
       bucket: c.env.BUCKET,
-      empresaId: getEmpresaIdSafe(c),
-      cursoId: Number(c.req.param('id')),
+      empresaId,
+      cursoId,
       tipoConteudo,
       operationId: uploadId,
       path,
       body,
       byteLength,
     });
-    return c.json({ success: true, data });
+
+    const normalizedPath = normalizeLmsArchivePath(path);
+    if (!normalizedPath) throw new ApiError('Caminho de arquivo inválido', 400);
+    const storedKey = `lms/${tipoConteudo}/${empresaId}/${cursoId}/_versions/${uploadId}/${normalizedPath}`;
+    const stored = await c.env.BUCKET.head(storedKey);
+    if (!stored) {
+      throw new ApiError('Arquivo não confirmado no storage', 500);
+    }
+    if (stored.size > LMS_PACKAGE_LIMITS.maxFileBytes) {
+      await c.env.BUCKET.delete(storedKey);
+      throw new ApiError('Arquivo individual excede o limite de 64 MB', 413);
+    }
+
+    return c.json({ success: true, data: { ...data, bytes: stored.size } });
   },
 );
 
