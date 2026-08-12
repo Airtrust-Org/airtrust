@@ -652,7 +652,7 @@ router.get(
     const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
     const limitRaw = c.req.query('limit');
     const limitParsed = parseInt(limitRaw || '200', 10);
-    const limitFinal = Math.min(Math.max(limitParsed, 1), 500);
+    const limitFinal = Math.min(Math.max(limitParsed, 1), 75);
     const categoria = String(c.req.query('categoria') || '').trim();
     const categoriaIdRaw = parseInt(c.req.query('categoria_id') || '', 10);
     const categoriaId = Number.isFinite(categoriaIdRaw) && categoriaIdRaw > 0 ? categoriaIdRaw : 0;
