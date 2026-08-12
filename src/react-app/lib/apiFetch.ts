@@ -284,10 +284,7 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
           return originalFetch(input, init);
         }
 
-        if (
-          candidate.origin === window.location.origin &&
-          candidate.pathname.startsWith('/api/')
-        ) {
+        if (candidate.origin === window.location.origin && candidate.pathname.startsWith('/api/')) {
           return originalFetch(originToUse + candidate.pathname + candidate.search, init);
         }
         if (isRelativeApiInput(rawInput)) {
