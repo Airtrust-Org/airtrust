@@ -186,6 +186,49 @@ describe('lms cursos structured upload complete', () => {
     });
   });
 
+  it('retorna os arquivos já presentes quando a mesma operação idempotente é retomada', async () => {
+    const bucket = new Bucket();
+    const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;
+    const idempotencyKey = 'scorm:resume-test';
+    const firstInit = await app().request(
+      '/cursos/12/content-upload/init',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ tipo_conteudo: 'scorm', idempotency_key: idempotencyKey }),
+      },
+      env,
+    );
+    const firstJson = (await firstInit.json()) as { data: { upload_id: string } };
+    const body = new TextEncoder().encode('already-stored');
+    const stored = await app().request(
+      `/cursos/12/content-upload/file?tipo_conteudo=scorm&upload_id=${firstJson.data.upload_id}&path=media/cap08/pcm_connectors.webp`,
+      { method: 'POST', body },
+      env,
+    );
+    expect(stored.status).toBe(200);
+
+    const resumedInit = await app().request(
+      '/cursos/12/content-upload/init',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ tipo_conteudo: 'scorm', idempotency_key: idempotencyKey }),
+      },
+      env,
+    );
+
+    expect(resumedInit.status).toBe(200);
+    await expect(resumedInit.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        upload_id: firstJson.data.upload_id,
+        status: 'uploading',
+        uploaded_files: [{ path: 'media/cap08/pcm_connectors.webp', size: body.byteLength }],
+      },
+    });
+  });
+
   it('não aceita arquivo legado fora da versão para mascarar launch ausente', async () => {
     const bucket = new Bucket();
     const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;

@@ -21,10 +21,17 @@ type PreparedPackage = {
   packageHash: string;
 };
 
+type UploadedFileSnapshot = {
+  path: string;
+  size: number;
+};
+
 const IGNORED_ARCHIVE_SUFFIXES = ['.map'];
 // The Free Worker CPU budget cannot sustain four simultaneous R2 body streams
 // for media-heavy SCORM packages. Keep each authorized asset transfer isolated.
 const STRUCTURED_UPLOAD_CONCURRENCY = 1;
+const STRUCTURED_UPLOAD_MAX_ATTEMPTS = 4;
+const STRUCTURED_UPLOAD_RETRY_BASE_MS = 250;
 
 function shouldIgnoreArchivePath(path: string): boolean {
   const lowerPath = path.toLowerCase();
@@ -76,6 +83,22 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
     }
     throw new Error(text || `HTTP ${response.status}`);
   }
+}
+
+function isRetryableUploadResponse(response: Response) {
+  return response.status === 408 || response.status === 425 || response.status === 429 || response.status >= 500;
+}
+
+function isRetryableUploadError(error: unknown) {
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof Error)) return false;
+  return /failed to fetch|networkerror|network request failed|load failed/i.test(error.message);
+}
+
+function waitForRetry(attempt: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, STRUCTURED_UPLOAD_RETRY_BASE_MS * attempt);
+  });
 }
 
 function parseH5pType(h5pJsonText: string): string | null {
@@ -171,6 +194,7 @@ export async function uploadStructuredLmsPackage(params: {
     upload_id: string;
     status?: 'uploading' | 'completed';
     result?: Record<string, unknown> | null;
+    uploaded_files?: UploadedFileSnapshot[];
   }>(initResponse);
   if (init.status === 'completed' && init.result) {
     onProgress?.(100);
@@ -184,22 +208,60 @@ export async function uploadStructuredLmsPackage(params: {
     };
   }
 
+  const uploadedFileSizes = new Map(
+    (init.uploaded_files ?? []).map((entry) => [entry.path, entry.size] as const),
+  );
   let uploadedBytes = 0;
   let completedFiles = 0;
-  async function uploadEntry(entry: PreparedFile) {
-    const query = new URLSearchParams({ tipo_conteudo: tipoConteudo, upload_id: init.upload_id, path: entry.path });
-    const response = await fetchWithAuth(`/api/lms/cursos/${cursoId}/content-upload/file?${query}`, {
-      method: 'POST', headers: { 'Content-Type': entry.mimeType }, body: entry.bytes,
-    });
-    await parseApiResponse(response);
+  const pendingFiles = prepared.files.filter((entry) => {
+    if (uploadedFileSizes.get(entry.path) !== entry.size) return true;
     uploadedBytes += entry.size;
     completedFiles += 1;
-    onStatus?.(`Enviando arquivo ${completedFiles} de ${prepared.files.length}...`);
+    return false;
+  });
+
+  if (completedFiles > 0) {
+    onStatus?.(`Retomando upload: ${completedFiles} de ${prepared.files.length} arquivos já enviados.`);
     onProgress?.(Math.min(18 + Math.round((uploadedBytes / prepared.totalBytes) * 72), 92));
   }
 
-  for (let index = 0; index < prepared.files.length; index += STRUCTURED_UPLOAD_CONCURRENCY) {
-    await Promise.all(prepared.files.slice(index, index + STRUCTURED_UPLOAD_CONCURRENCY).map(uploadEntry));
+  async function uploadEntry(entry: PreparedFile) {
+    const query = new URLSearchParams({ tipo_conteudo: tipoConteudo, upload_id: init.upload_id, path: entry.path });
+    const endpoint = `/api/lms/cursos/${cursoId}/content-upload/file?${query}`;
+
+    for (let attempt = 1; attempt <= STRUCTURED_UPLOAD_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const response = await fetchWithAuth(endpoint, {
+          method: 'POST', headers: { 'Content-Type': entry.mimeType }, body: entry.bytes,
+        });
+        if (response.ok) {
+          await parseApiResponse(response);
+          uploadedBytes += entry.size;
+          completedFiles += 1;
+          onStatus?.(`Enviando arquivo ${completedFiles} de ${prepared.files.length}...`);
+          onProgress?.(Math.min(18 + Math.round((uploadedBytes / prepared.totalBytes) * 72), 92));
+          return;
+        }
+        if (!isRetryableUploadResponse(response) || attempt === STRUCTURED_UPLOAD_MAX_ATTEMPTS) {
+          await parseApiResponse(response);
+        }
+      } catch (error) {
+        if (!isRetryableUploadError(error) || attempt === STRUCTURED_UPLOAD_MAX_ATTEMPTS) {
+          throw error;
+        }
+      }
+
+      onStatus?.(
+        `Falha transitória ao enviar ${entry.path}. Tentando novamente (${attempt + 1}/${STRUCTURED_UPLOAD_MAX_ATTEMPTS})...`,
+      );
+      await waitForRetry(attempt);
+    }
+
+    throw new Error(`Falha ao enviar ${entry.path}`);
+  }
+
+  for (let index = 0; index < pendingFiles.length; index += STRUCTURED_UPLOAD_CONCURRENCY) {
+    await Promise.all(pendingFiles.slice(index, index + STRUCTURED_UPLOAD_CONCURRENCY).map(uploadEntry));
   }
 
   onStatus?.('Validando e ativando a nova versão...');
