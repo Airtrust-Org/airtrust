@@ -21,6 +21,11 @@ type PreparedPackage = {
   packageHash: string;
 };
 
+type UploadedFileSnapshot = {
+  path: string;
+  size: number;
+};
+
 const IGNORED_ARCHIVE_SUFFIXES = ['.map'];
 // The Free Worker CPU budget cannot sustain four simultaneous R2 body streams
 // for media-heavy SCORM packages. Keep each authorized asset transfer isolated.
@@ -189,6 +194,7 @@ export async function uploadStructuredLmsPackage(params: {
     upload_id: string;
     status?: 'uploading' | 'completed';
     result?: Record<string, unknown> | null;
+    uploaded_files?: UploadedFileSnapshot[];
   }>(initResponse);
   if (init.status === 'completed' && init.result) {
     onProgress?.(100);
@@ -202,8 +208,23 @@ export async function uploadStructuredLmsPackage(params: {
     };
   }
 
+  const uploadedFileSizes = new Map(
+    (init.uploaded_files ?? []).map((entry) => [entry.path, entry.size] as const),
+  );
   let uploadedBytes = 0;
   let completedFiles = 0;
+  const pendingFiles = prepared.files.filter((entry) => {
+    if (uploadedFileSizes.get(entry.path) !== entry.size) return true;
+    uploadedBytes += entry.size;
+    completedFiles += 1;
+    return false;
+  });
+
+  if (completedFiles > 0) {
+    onStatus?.(`Retomando upload: ${completedFiles} de ${prepared.files.length} arquivos já enviados.`);
+    onProgress?.(Math.min(18 + Math.round((uploadedBytes / prepared.totalBytes) * 72), 92));
+  }
+
   async function uploadEntry(entry: PreparedFile) {
     const query = new URLSearchParams({ tipo_conteudo: tipoConteudo, upload_id: init.upload_id, path: entry.path });
     const endpoint = `/api/lms/cursos/${cursoId}/content-upload/file?${query}`;
@@ -239,8 +260,8 @@ export async function uploadStructuredLmsPackage(params: {
     throw new Error(`Falha ao enviar ${entry.path}`);
   }
 
-  for (let index = 0; index < prepared.files.length; index += STRUCTURED_UPLOAD_CONCURRENCY) {
-    await Promise.all(prepared.files.slice(index, index + STRUCTURED_UPLOAD_CONCURRENCY).map(uploadEntry));
+  for (let index = 0; index < pendingFiles.length; index += STRUCTURED_UPLOAD_CONCURRENCY) {
+    await Promise.all(pendingFiles.slice(index, index + STRUCTURED_UPLOAD_CONCURRENCY).map(uploadEntry));
   }
 
   onStatus?.('Validando e ativando a nova versão...');
