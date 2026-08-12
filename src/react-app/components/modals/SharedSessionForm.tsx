@@ -38,6 +38,7 @@ interface Funcionario {
 interface ModeloSessao {
   id: number;
   codigo: string;
+  codigo_canonico?: string | null;
   nome: string;
   tipo?: string | null;
   modelo_aeronave?: string | null;
@@ -162,8 +163,12 @@ function formatMinutes(value: number): string {
   return `${Math.floor(value / 60)}h${String(value % 60).padStart(2, '0')}`;
 }
 
+function getModelDisplayCode(model: ModeloSessao): string {
+  return model.codigo_canonico?.trim() || model.codigo;
+}
+
 function formatModelOption(model: ModeloSessao): string {
-  const title = [model.codigo, model.nome].filter(Boolean).join(' - ');
+  const title = [getModelDisplayCode(model), model.nome].filter(Boolean).join(' - ');
   const details = [
     model.tipo_sessao_codigo || model.tipo_sessao_nome || model.tipo,
     model.modelo_aeronave,
@@ -559,7 +564,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         if (participant.cumpre_treinamento) {
           curricular = total;
           const model = participant.modelo_sessao_id ? modelById.get(participant.modelo_sessao_id) : null;
-          if (model?.codigo) models.add(model.codigo);
+          if (model) models.add(getModelDisplayCode(model));
         }
 
         return {
