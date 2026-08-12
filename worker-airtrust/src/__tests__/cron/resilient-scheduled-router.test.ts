@@ -40,14 +40,18 @@ describe('resilient scheduled router', () => {
       runEadRenewal: true,
       runDailyFrms: false,
       runSigvoosFrms: true,
-      runCronHealth: false,
+      runDomainEvents: true,
+      runCronHealth: true,
+      delegateLegacy: false,
     });
 
     const daily = getResilientCronPlan('0 8 * * *', atEightUtc);
     expect(daily.runDailyAlerts).toBe(true);
     expect(daily.runDailyFrms).toBe(true);
     expect(daily.runSigvoosFrms).toBe(false);
+    expect(daily.runDomainEvents).toBe(false);
     expect(daily.runCronHealth).toBe(true);
+    expect(daily.delegateLegacy).toBe(true);
   });
 
   it('delega triggers não relacionados sem ativar jobs resilientes', () => {
@@ -74,6 +78,12 @@ describe('resilient scheduled router', () => {
     expect(schemaProbeIndex).toBeLessThan(dailyAlertsIndex);
   });
 
+  it('não executa o handler monolítico em cada tick de dez minutos', () => {
+    const tenMinute = getResilientCronPlan('*/10 * * * *');
+    expect(tenMinute.delegateLegacy).toBe(false);
+    expect(tenMinute.runDomainEvents).toBe(true);
+  });
+
   it('ativa o roteador no entrypoint sem alterar os triggers oficiais', () => {
     const entrypoint = readFileSync(
       resolve(process.cwd(), 'src/runtime/worker-entrypoint.ts'),
@@ -91,6 +101,7 @@ describe('resilient scheduled router', () => {
     expect(router).toContain("const LEGACY_DELEGATED_CRON = '__airtrust_resilient_delegated__'");
     expect(router).toContain('Schema resiliente ausente; usando handler legado');
     expect(router).toContain('logCronHealthSnapshot(env.DB, logger, now)');
+    expect(router).toContain('runDomainEventDispatchJob(env.DB, logger)');
   });
 });
 

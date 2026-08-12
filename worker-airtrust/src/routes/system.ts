@@ -4,15 +4,12 @@ import edbShadowPreviewRoutes from './edb-shadow-preview';
 import { checkPermission, getEmpresaId } from '../middleware/tenant';
 import { ApiError } from '../middleware/error-handler';
 import { isEdbShadowPilotEnabledForTenant } from '../lib/edb/edb-shadow-pilot-flag';
+import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
+import { getOperationalStatus } from '../observability/operational-status';
+import { getReleaseMetadata } from '../services/release-metadata';
 
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
-import { getReleaseMetadata } from '../services/release-metadata';
-
-/**
- * Aplica headers no-cache para impedir que o CDN do Cloudflare sirva
- * respostas stale com versão antiga após um deploy.
- */
 function setNoCacheHeaders(c: { header: (name: string, value: string) => void }) {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0');
   c.header('Pragma', 'no-cache');
@@ -22,10 +19,11 @@ function setNoCacheHeaders(c: { header: (name: string, value: string) => void })
   c.header('Cloudflare-CDN-Cache-Control', 'no-store');
 }
 
-/**
- * Registra rotas públicas/sistema no app principal.
- * Paths e contratos preservados do index.ts original.
- */
+function getFrontVersion(env: Env): string | null {
+  const value = Reflect.get(env, 'FRONT_VERSION');
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
 export function registerSystemRoutes(app: SystemApp) {
   app.get('/api/edb/capability', (c) => {
     const tenantId = getEmpresaId(c);
@@ -59,11 +57,6 @@ export function registerSystemRoutes(app: SystemApp) {
 
   app.route('/api/edb', edbShadowPreviewRoutes);
 
-  /**
-   * GET /api/health
-   * Health check completo - verifica D1, R2, KV e métricas.
-   * No-cache: versão deve refletir o deploy atual, nunca stale.
-   */
   app.get('/api/health', async (c) => {
     setNoCacheHeaders(c);
 
@@ -71,10 +64,11 @@ export function registerSystemRoutes(app: SystemApp) {
     const checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }> = {};
     let overallHealthy = true;
 
-    // 1. Verificar D1 Database
     try {
       const dbStart = Date.now();
-      const dbTest = await c.env.DB.prepare('SELECT 1 as test').first<{ test: number }>();
+      const dbTest = await c.env.DB.prepare('SELECT 1 as test').first<{
+        test: number;
+      }>();
       checks.database = {
         status: dbTest?.test === 1 ? 'ok' : 'error',
         latency: Date.now() - dbStart,
@@ -88,28 +82,24 @@ export function registerSystemRoutes(app: SystemApp) {
       overallHealthy = false;
     }
 
-    // 2. Verificar R2 Bucket (se disponível)
     try {
       if (c.env.BUCKET) {
         const r2Start = Date.now();
-        // Apenas lista 1 objeto para verificar conectividade
         await c.env.BUCKET.list({ limit: 1 });
         checks.storage = {
           status: 'ok',
           latency: Date.now() - r2Start,
         };
       } else {
-        checks.storage = { status: 'ok', latency: 0 }; // R2 não configurado, não é erro
+        checks.storage = { status: 'ok', latency: 0 };
       }
     } catch {
       checks.storage = {
         status: 'error',
         error: 'Erro interno do servidor',
       };
-      // R2 não é crítico, não marca como unhealthy
     }
 
-    // 3. Métricas básicas — versão canónica partilhada com /api/version
     const metadata = getReleaseMetadata(c.env);
     const stats = {
       timestamp: new Date().toISOString(),
@@ -133,25 +123,20 @@ export function registerSystemRoutes(app: SystemApp) {
         stats,
         latency: totalLatency,
       });
-    } else {
-      return c.json(
-        {
-          success: false,
-          status: 'unhealthy',
-          checks,
-          stats,
-          latency: totalLatency,
-        },
-        503,
-      );
     }
+
+    return c.json(
+      {
+        success: false,
+        status: 'unhealthy',
+        checks,
+        stats,
+        latency: totalLatency,
+      },
+      503,
+    );
   });
 
-  /**
-   * GET /api/version
-   * Exibe informações da versão/build atual do backend.
-   * No-cache: versão deve refletir o deploy atual, nunca stale.
-   */
   app.get('/api/version', (c) => {
     setNoCacheHeaders(c);
 
@@ -175,11 +160,6 @@ export function registerSystemRoutes(app: SystemApp) {
     });
   });
 
-  /**
-   * GET /api/status
-   * Health + versões (backend e opcionalmente frontend, se variável estiver configurada).
-   * No-cache: versão deve refletir o deploy atual.
-   */
   app.get('/api/status', (c) => {
     setNoCacheHeaders(c);
 
@@ -188,28 +168,42 @@ export function registerSystemRoutes(app: SystemApp) {
     return c.json({
       success: true,
       backend_version: metadata.version,
-      // opcional: configure FRONT_VERSION no deploy para refletir a versão do front
-      frontend_version: (c.env as unknown as Record<string, string>).FRONT_VERSION || null,
+      frontend_version: getFrontVersion(c.env),
       environment: metadata.environment,
       timestamp: new Date().toISOString(),
     });
   });
 
   /**
-   * GET /api/system/health
-   * Alias para compatibilidade com o frontend (/sistema)
+   * Durable operational status. Platform administrators receive the global
+   * view; tenant administrators receive only their tenant scopes and global
+   * ledger items whose payload carries the same internal empresa_id.
    */
+  app.get('/api/system/operations/cron', async (c) => {
+    setNoCacheHeaders(c);
+    const empresaId = getEmpresaId(c);
+    const platformState = await resolvePlatformAccessState(c.env.DB, c.get('userId'));
+    const platformAdmin = isPlatformAdminAccess(platformState);
+
+    if (!platformAdmin && !checkPermission(c, 'admin')) {
+      throw new ApiError('Acesso negado', 403, 'OPERATIONAL_STATUS_FORBIDDEN');
+    }
+
+    const requestedLimit = Number(c.req.query('limit') || 100);
+    const data = await getOperationalStatus(c.env.DB, {
+      platformAdmin,
+      empresaId,
+      limit: requestedLimit,
+    });
+
+    return c.json({ success: true, data });
+  });
+
   app.get('/api/system/health', async (c) => {
-    // Reutiliza a mesma lógica do /api/health
     const url = new URL(c.req.url);
-    // Encaminha mantendo quaisquer query params
     return c.redirect(`/api/health${url.search}`, 307);
   });
 
-  /**
-   * GET /api/sistema/health
-   * Alias em português para compatibilidade
-   */
   app.get('/api/sistema/health', async (c) => {
     const url = new URL(c.req.url);
     return c.redirect(`/api/health${url.search}`, 307);
