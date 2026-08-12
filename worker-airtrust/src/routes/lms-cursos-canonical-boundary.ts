@@ -19,6 +19,11 @@ type CourseBinding = {
   lmsIntegrada: boolean;
 };
 
+type ExistingCourseBinding = {
+  tipoId: number | null;
+  gerarQualificacao: boolean;
+};
+
 function isJsonObject(value: unknown): value is JsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -28,22 +33,45 @@ function positiveInteger(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-async function loadExistingCourseTypeId(
+async function loadExistingCourseBinding(
   db: D1Database,
   empresaId: number,
   courseId: number | null,
-): Promise<number | null> {
+): Promise<ExistingCourseBinding | null> {
   if (!courseId) return null;
   const row = await db
     .prepare(
-      `SELECT qualificacao_tipo_id
+      `SELECT qualificacao_tipo_id,
+              gerar_qualificacao_ao_concluir
          FROM lms_cursos
         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
         LIMIT 1`,
     )
     .bind(courseId, empresaId)
-    .first<{ qualificacao_tipo_id: number | null }>();
-  return positiveInteger(row?.qualificacao_tipo_id);
+    .first<{
+      qualificacao_tipo_id: number | null;
+      gerar_qualificacao_ao_concluir: number | null;
+    }>();
+  if (!row) return null;
+  return {
+    tipoId: positiveInteger(row.qualificacao_tipo_id),
+    gerarQualificacao: Number(row.gerar_qualificacao_ao_concluir || 0) === 1,
+  };
+}
+
+export function shouldValidateCourseQualificationBinding(params: {
+  courseId: number | null;
+  existingBinding: ExistingCourseBinding | null;
+  requestedTipoId: number | null;
+  requestedGerarQualificacao: boolean;
+}) {
+  if (!params.courseId || !params.existingBinding) {
+    return params.requestedTipoId !== null;
+  }
+  return (
+    params.requestedTipoId !== params.existingBinding.tipoId ||
+    params.requestedGerarQualificacao !== params.existingBinding.gerarQualificacao
+  );
 }
 
 async function resolveCourseBinding(
@@ -110,14 +138,18 @@ async function normalizeCourseWrite(c: Context<{ Bindings: Env }>): Promise<Cour
   const empresaId = getEmpresaIdSafe(c);
   const original = (await c.req.json()) as JsonObject;
   const courseId = courseIdFromPath(c);
+  const existingBinding = await loadExistingCourseBinding(c.env.DB, empresaId, courseId);
+  const hasExplicitTypeId = Object.prototype.hasOwnProperty.call(original, 'qualificacao_tipo_id');
   const explicitTypeId = positiveInteger(original.qualificacao_tipo_id);
-  const existingTypeId = explicitTypeId
-    ? null
-    : await loadExistingCourseTypeId(c.env.DB, empresaId, courseId);
-  const tipoId = explicitTypeId || existingTypeId;
-  const gerarQualificacao =
-    original.gerar_qualificacao_ao_concluir === true ||
-    Number(original.gerar_qualificacao_ao_concluir || 0) === 1;
+  const tipoId = hasExplicitTypeId ? explicitTypeId : (existingBinding?.tipoId ?? null);
+  const hasExplicitGerarQualificacao = Object.prototype.hasOwnProperty.call(
+    original,
+    'gerar_qualificacao_ao_concluir',
+  );
+  const gerarQualificacao = hasExplicitGerarQualificacao
+    ? original.gerar_qualificacao_ao_concluir === true ||
+      Number(original.gerar_qualificacao_ao_concluir || 0) === 1
+    : (existingBinding?.gerarQualificacao ?? false);
   const legacyFormatRequested = positiveInteger(original.formato_id) !== null;
   const legacyEadText = ['EAD', 'TREINAMENTO EAD'].includes(
     String(original.categoria || '')
@@ -138,8 +170,15 @@ async function normalizeCourseWrite(c: Context<{ Bindings: Env }>): Promise<Cour
   delete normalized.formato_id;
   delete normalized.formato_codigo;
 
+  const validateBinding = shouldValidateCourseQualificationBinding({
+    courseId,
+    existingBinding,
+    requestedTipoId: tipoId,
+    requestedGerarQualificacao: gerarQualificacao,
+  });
+
   let binding: CourseBinding | null = null;
-  if (tipoId) {
+  if (tipoId && validateBinding) {
     binding = await resolveCourseBinding(c.env.DB, empresaId, tipoId);
     normalized.qualificacao_tipo_id = tipoId;
     normalized.gerar_qualificacao_ao_concluir = gerarQualificacao ? 1 : 0;
@@ -147,7 +186,7 @@ async function normalizeCourseWrite(c: Context<{ Bindings: Env }>): Promise<Cour
     // The DB trigger overwrites it with the canonical category snapshot.
     normalized.categoria = 'EAD';
     normalized.dominio_codigo = binding.dominioCodigo;
-  } else {
+  } else if (!tipoId) {
     normalized.qualificacao_tipo_id = null;
     normalized.gerar_qualificacao_ao_concluir = 0;
   }

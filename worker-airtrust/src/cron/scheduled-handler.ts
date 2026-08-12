@@ -9,10 +9,8 @@ import { createStructuredConsole } from '../utils/logger';
 import { processarEventosParaModulo } from '../shared/handlers';
 import { CANCELLED_STATUS_VALUES, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
-import {
-  ensureMatriculaCycle,
-  hasActiveMatriculaCycle,
-} from '../services/lms-matricula-cycle';
+import { sendEmail } from '../lib/email';
+import { ensureMatriculaCycle } from '../services/lms-matricula-cycle';
 import {
   getSigvoosConfig,
   syncSigvoosForFrms,
@@ -21,7 +19,10 @@ import {
 import { carregarLimites } from '../lib/frms/db-service-config';
 import { reprocessarTripulanteCompleto } from '../lib/frms/db-service';
 import { fetchControleVoosOperationalRecords } from '../lib/frms/controle-voos-source';
-import { compareControleVoosWithLegacyJornada, type FrmsJornadaLegacyRow } from '../lib/frms/controle-voos-shadow-comparator';
+import {
+  compareControleVoosWithLegacyJornada,
+  type FrmsJornadaLegacyRow,
+} from '../lib/frms/controle-voos-shadow-comparator';
 import { isControleVoosShadowModeEnabledForEmpresa } from '../lib/frms/controle-voos-shadow-flag';
 
 function buildDailyNotificationId(parts: Array<string | number>) {
@@ -402,6 +403,49 @@ export async function runScheduledJobs(
               new Date().toISOString(),
             )
             .run();
+
+          // Enviar email de notificação ao funcionário (fire-and-forget)
+          try {
+            const func = await env.DB.prepare(
+              `SELECT nome, email FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+            )
+              .bind(row.funcionario_id, row.empresa_id)
+              .first<{ nome: string; email: string | null }>();
+
+            if (func?.email) {
+              const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(
+                /\/$/,
+                '',
+              );
+              const cursoUrl = `${frontendUrl}/lms/cursos/${row.curso_id}`;
+              const nomeAluno = func.nome || `Funcionário ${row.funcionario_id}`;
+
+              await sendEmail(env, {
+                to: [{ email: func.email, name: nomeAluno }],
+                subject: `Treinamento disponível: ${row.curso_titulo}`,
+                textContent: [
+                  `Olá ${nomeAluno},`,
+                  '',
+                  `Sua qualificação EAD vence em breve. Você foi matriculado automaticamente no curso: ${row.curso_titulo}`,
+                  '',
+                  `Acesse: ${cursoUrl}`,
+                  '',
+                  'Este e-mail foi enviado automaticamente pela plataforma AirTrust.',
+                ].join('\n'),
+                htmlContent: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+                  <p>Olá <strong>${nomeAluno}</strong>,</p>
+                  <p>Sua qualificação EAD vence em breve. Você foi matriculado automaticamente no curso:</p>
+                  <div style="background:#f0f9ff;border-left:4px solid #3b82f6;padding:12px 16px;margin:12px 0;border-radius:4px">
+                    <p style="font-size:16px;font-weight:600;margin:0;color:#1e3a5f">${row.curso_titulo}</p>
+                  </div>
+                  <p style="margin:24px 0"><a href="${cursoUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">Acessar curso</a></p>
+                  <p style="color:#6b7280;font-size:12px;margin-top:24px">Este e-mail foi enviado automaticamente pela plataforma AirTrust.</p>
+                </div>`,
+              });
+            }
+          } catch (emailErr) {
+            console.warn('[CRON] ⚠️ Falha ao enviar email de renovação EAD:', emailErr);
+          }
 
           matriculasCriadas++;
         } catch (err) {
@@ -1038,7 +1082,11 @@ async function runSigvoosFrmsDailySync(
               .all<FrmsJornadaLegacyRow>()
               .then((r) => r.results ?? []),
           ]);
-          const shadowSummary = compareControleVoosWithLegacyJornada(cvRecords, legacyJornadaRows, window);
+          const shadowSummary = compareControleVoosWithLegacyJornada(
+            cvRecords,
+            legacyJornadaRows,
+            window,
+          );
           console.log(
             `[SIGVOOS_CRON] [SHADOW] Empresa ${empresaId}: legado=${shadowSummary.totalRegistrosLegado} controle_voos=${shadowSummary.totalRegistrosControleVoos} divergencias=${shadowSummary.totalDivergencias}`,
             { divergenciasPorTipo: shadowSummary.divergenciasPorTipo },

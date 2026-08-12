@@ -1,16 +1,15 @@
 import type { Context, Next } from 'hono';
 import { processarEventosParaModulo } from '../shared/handlers';
+import type { AppEnv } from '../types';
 import { createLogger, toError } from '../utils/logger';
+import { enforceLmsCompletionIntegrity } from './lms-completion-integrity';
+import { enforcePersistedLmsProgressEvidence } from './lms-completion-persisted-progress';
+import { enforceLmsCompletionReversal } from './lms-completion-reversal';
+import { enforceLmsEnrollmentIntegrity } from './lms-enrollment-integrity';
 
 type DomainEventContext = {
-  Bindings: {
-    DB: D1Database;
-    ENVIRONMENT?: string;
-  };
-  Variables: {
-    requestId?: string;
-    empresaId?: string | number;
-    userId?: string | number;
+  Bindings: AppEnv['Bindings'];
+  Variables: AppEnv['Variables'] & {
     user?: {
       id?: number;
       empresa_id?: string | number;
@@ -30,14 +29,8 @@ const ROTA_MODULO: Record<string, string> = {
 };
 
 function getEmpresaIdSafe(c: Context<DomainEventContext>): string | undefined {
-  const direct = c.get('empresaId');
-  if (direct !== undefined && direct !== null && direct !== '') return String(direct);
-
-  const user = c.get('user');
-  if (user?.empresa_id !== undefined && user.empresa_id !== null) return String(user.empresa_id);
-
-  const queryEmpresaId = c.req.query('empresa_id');
-  return queryEmpresaId || undefined;
+  const empresaId = c.get('empresaId');
+  return empresaId ? String(empresaId) : undefined;
 }
 
 function isAccessMutation(method: string, path: string): boolean {
@@ -61,14 +54,18 @@ async function recordMutationReceipt(
   path: string,
   empresaId: string | undefined,
 ): Promise<void> {
-  const requestId = c.get('requestId');
+  const requestId =
+    c.res.headers.get('x-request-id') ??
+    c.req.header('x-request-id') ??
+    c.req.header('cf-ray') ??
+    null;
   const userId = c.get('userId') ?? c.get('user')?.id;
   const payload = {
     method,
     path,
     status: c.res.status,
     empresa_id: empresaId || null,
-    request_id: requestId || null,
+    request_id: requestId,
   };
 
   await c.env.DB.prepare(
@@ -80,7 +77,7 @@ async function recordMutationReceipt(
       method === 'DELETE' ? 'HTTP_DELETE' : 'HTTP_ACCESS_MUTATION',
       getPathRecordId(path),
       JSON.stringify(payload),
-      userId !== undefined && userId !== null ? String(userId) : null,
+      userId ? String(userId) : null,
     )
     .run();
 }
@@ -90,6 +87,23 @@ export function domainEventProcessorMiddleware() {
     const path = c.req.path;
     const method = c.req.method;
     const modulo = Object.entries(ROTA_MODULO).find(([rota]) => path.startsWith(rota))?.[1];
+
+    // Auth and tenant were resolved by the global middleware before this point.
+    // Reversal has a governed schema-aware entry point and must preempt legacy handlers.
+    const reversalResponse = await enforceLmsCompletionReversal(c);
+    if (reversalResponse) return reversalResponse;
+
+    // Enrollment/rematriculation policy must preempt the broader legacy handlers.
+    const enrollmentResponse = await enforceLmsEnrollmentIntegrity(c);
+    if (enrollmentResponse) return enrollmentResponse;
+
+    // A terminal payload cannot prove its own progress. Require earlier evidence first.
+    const persistedProgressResponse = await enforcePersistedLmsProgressEvidence(c);
+    if (persistedProgressResponse) return persistedProgressResponse;
+
+    // LMS completion/progress integrity must run before any legacy route handler.
+    const integrityResponse = await enforceLmsCompletionIntegrity(c);
+    if (integrityResponse) return integrityResponse;
 
     await next();
 
