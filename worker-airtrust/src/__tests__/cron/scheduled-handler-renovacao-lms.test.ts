@@ -33,4 +33,21 @@ describe('renovacao automatica LMS por qualificacao EAD', () => {
     expect(source).toContain('MATRICULA_CYCLE_NOTIFICATION_READY');
     expect(source).toContain('EXISTING_INACTIVE_PRESERVED');
   });
+
+  it('envia email focado da renovação somente após matrícula e notificação, sem tornar o job bloqueante', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/cron/resilient/ead-renewal.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { sendEmail } from '../../lib/email';");
+    expect(source).toContain('async function ensureRenewalEmail(');
+    expect(source).toContain('await ensureRenewalNotification(db, payload, result.matriculaId);');
+    expect(source).toContain('await ensureRenewalEmail(env, db, payload);');
+    expect(source.indexOf('await ensureRenewalNotification(db, payload, result.matriculaId);')).toBeLessThan(
+      source.indexOf('await ensureRenewalEmail(env, db, payload);'),
+    );
+    expect(source).toContain("console.warn('[ead-renewal] Falha ao enviar email de renovação:', err);");
+    expect(source).toContain('`${frontendUrl}/lms/cursos/${payload.curso_id}`');
+  });
 });
