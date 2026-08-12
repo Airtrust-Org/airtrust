@@ -94,7 +94,7 @@ class Bucket {
           ? new Uint8Array(await new Response(value).arrayBuffer())
           : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     this.objects.set(key, new Uint8Array(bytes));
-    return {};
+    return { key, size: bytes.byteLength };
   }
   async get(key: string) {
     const bytes = this.objects.get(key);
@@ -105,6 +105,11 @@ class Bucket {
       arrayBuffer: async () =>
         bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
     };
+  }
+  async head(key: string) {
+    const bytes = this.objects.get(key);
+    if (!bytes) return null;
+    return { key, size: bytes.byteLength };
   }
   async list({ prefix = '' }: { prefix?: string }) {
     return {
@@ -148,6 +153,37 @@ describe('lms cursos structured upload complete', () => {
 
     expect(response.status).toBe(200);
     expect(bucket.putValues.at(-1)).toBeInstanceOf(ReadableStream);
+  });
+
+  it('encaminha arquivos sem Content-Length diretamente ao R2 sem bufferizar o body', async () => {
+    const bucket = new Bucket();
+    const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;
+    const init = await app().request(
+      '/cursos/12/content-upload/init',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo_conteudo: 'scorm' }),
+      },
+      env,
+    );
+    const initJson = (await init.json()) as { data: { upload_id: string } };
+    const body = new TextEncoder().encode('media-heavy-payload');
+    const response = await app().request(
+      `/cursos/12/content-upload/file?tipo_conteudo=scorm&upload_id=${initJson.data.upload_id}&path=media/pcm_sensors.webp`,
+      {
+        method: 'POST',
+        body,
+      },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(bucket.putValues.at(-1)).toBeInstanceOf(ReadableStream);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { bytes: body.byteLength },
+    });
   });
 
   it('não aceita arquivo legado fora da versão para mascarar launch ausente', async () => {
