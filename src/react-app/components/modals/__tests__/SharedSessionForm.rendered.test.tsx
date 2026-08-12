@@ -104,7 +104,8 @@ describe('SharedSessionForm rendered', () => {
             data: [
               {
                 id: 63,
-                codigo: 'SK76-I-01/12',
+                codigo: 'SK76-I-01/12@M2026.07-V2',
+                codigo_canonico: 'SK76-I-01/12',
                 nome: 'Inicial',
                 tipo_sessao_codigo: 'INI',
                 modelo_aeronave: 'SK76',
@@ -131,6 +132,20 @@ describe('SharedSessionForm rendered', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('exibe o código canônico limpo no seletor de modelo da ficha', async () => {
+    renderForm();
+    await selectPilot(0, 'Ramos');
+
+    const selects = await screen.findAllByLabelText('Modelo da ficha');
+    await waitFor(() => expect((selects[0] as HTMLSelectElement).options.length).toBeGreaterThan(1));
+
+    const option = Array.from((selects[0] as HTMLSelectElement).options).find(
+      (item) => item.value === '63',
+    );
+    expect(option?.textContent).toContain('SK76-I-01/12 - Inicial');
+    expect(option?.textContent).not.toContain('@M2026.07-V2');
   });
 
   it('bloqueia a etapa de segmentos até a tripulação ser definida', async () => {
