@@ -14,7 +14,7 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return {
     ...actual,
-  getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
+    getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
   };
 });
 
@@ -73,7 +73,10 @@ function createDbMock(options?: {
               hora_inicio: options?.sessionTime || '00:00',
             };
           }
-          if (query.includes('SELECT COUNT(DISTINCT id) AS total') && query.includes('FROM funcionarios')) {
+          if (
+            query.includes('SELECT COUNT(DISTINCT id) AS total') &&
+            query.includes('FROM funcionarios')
+          ) {
             return { total: options?.invalidTenantLink ? 1 : 2 };
           }
           // getFichaWithInstructorMeta() (introduced in PR #307, simuladores-fichas.ts
@@ -102,7 +105,11 @@ function createDbMock(options?: {
               resultado_final: null,
             };
           }
-          if (query.includes('SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL')) {
+          if (
+            query.includes(
+              'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
+            )
+          ) {
             return {
               id: 901,
               uuid: 'fs-901',
@@ -130,7 +137,17 @@ function createDbMock(options?: {
           }
           return null;
         },
-        all: async () => ({ results: [] }),
+        all: async () => {
+          if (query.includes('SELECT ordem, resultado FROM fichas_sessao_manobras')) {
+            return {
+              results: [
+                { ordem: 1, resultado: null },
+                { ordem: 2, resultado: null },
+              ],
+            };
+          }
+          return { results: [] };
+        },
         run: async () => {
           runs.push({ query, args });
           return { meta: { changes: 1, last_row_id: 901 } };
@@ -144,6 +161,7 @@ function createDbMock(options?: {
         run: () => bind().run(),
       };
     }),
+    batch: async (statements: unknown[]) => statements.map(() => ({ meta: { changes: 1 } })),
   } as unknown as D1Database;
 
   return { db, runs };
@@ -224,6 +242,30 @@ describe('simuladores fichas tenant-aware writes', () => {
     expect(runs.some((item) => item.query.includes('UPDATE fichas_sessao SET status='))).toBe(
       false,
     );
+  });
+
+  it('PUT /fichas/:id aceita rascunho parcial sem avançar o status', async () => {
+    const { db } = createDbMock({ manobrasCount: 2 });
+
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recalculate_status: false,
+          observacoes: 'Rascunho parcial',
+          manobras: [{ ordem: 1, resultado: 8, observacoes: 'Primeira nota' }],
+        }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { status: 'AGUARDANDO_ASSINATURA_ALUNO' },
+    });
   });
 
   it('POST /fichas/:id/assinar bloqueia assinatura quando ficha não tem manobras', async () => {
@@ -336,8 +378,12 @@ describe('simuladores fichas tenant-aware writes', () => {
       code: 'FICHA_NOT_AVAILABLE_YET',
       error: 'Ficha disponível no dia da sessão',
     });
-    expect(runs.some((item) => item.query.includes('UPDATE fichas_sessao_manobras SET resultado='))).toBe(false);
-    expect(runs.some((item) => item.query.includes('INSERT INTO fichas_sessao_manobras'))).toBe(false);
+    expect(
+      runs.some((item) => item.query.includes('UPDATE fichas_sessao_manobras SET resultado=')),
+    ).toBe(false);
+    expect(runs.some((item) => item.query.includes('INSERT INTO fichas_sessao_manobras'))).toBe(
+      false,
+    );
   });
 
   it('POST /fichas-simulador/:id/popular-manobras bloqueia sessão futura', async () => {
@@ -360,6 +406,8 @@ describe('simuladores fichas tenant-aware writes', () => {
       code: 'FICHA_NOT_AVAILABLE_YET',
       error: 'Ficha disponível no dia da sessão',
     });
-    expect(runs.some((item) => item.query.includes('INSERT INTO fichas_sessao_manobras'))).toBe(false);
+    expect(runs.some((item) => item.query.includes('INSERT INTO fichas_sessao_manobras'))).toBe(
+      false,
+    );
   });
 });

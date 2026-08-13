@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Save, Info, ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
@@ -131,6 +132,16 @@ export default function ModalAvaliarFicha({
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined') return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
   // Carregar ficha quando modal abrir
   useEffect(() => {
     if (isOpen && fichaId) {
@@ -227,7 +238,7 @@ export default function ModalAvaliarFicha({
     );
   };
 
-  const salvarDados = async () => {
+  const salvarDados = async ({ finalizar }: { finalizar: boolean }) => {
     const response = await fetch(`${API_BASE_URL}/simuladores/fichas/${fichaId}`, {
       method: 'PUT',
       headers: {
@@ -236,7 +247,7 @@ export default function ModalAvaliarFicha({
       },
       body: JSON.stringify({
         expected_updated_at: fichaContexto.updated_at || undefined,
-        recalculate_status: true,
+        recalculate_status: finalizar,
         observacoes: observacoesGerais,
         manobras: manobras.map((m) => ({
           ordem: m.ordem,
@@ -246,18 +257,24 @@ export default function ModalAvaliarFicha({
       }),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Erro ao salvar avaliação');
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.success || !result?.data) {
+      throw new Error(result?.error || 'Erro ao salvar avaliação');
     }
+
+    if (typeof result.data.updated_at === 'string' && result.data.updated_at) {
+      setFichaContexto((current) => ({ ...current, updated_at: result.data.updated_at }));
+    }
+
+    return result.data as { status?: string | null };
   };
 
   /** Salva rascunho sem fechar o modal */
   const handleSalvarRascunho = async () => {
     try {
       setSalvando(true);
-      await salvarDados();
-      toast.success('Rascunho salvo!');
+      await salvarDados({ finalizar: false });
+      toast.success('Rascunho salvo');
     } catch (error) {
       console.error('❌ Erro ao salvar rascunho:', error);
       toast.error(error instanceof Error ? error.message : 'Erro ao salvar');
@@ -268,9 +285,20 @@ export default function ModalAvaliarFicha({
 
   /** Finaliza: salva e fecha */
   const handleFinalizar = async () => {
+    const manobrasPendentes = manobras.filter((manobra) => manobra.resultado === null).length;
+    if (manobrasPendentes > 0) {
+      toast.error(`Existem ${manobrasPendentes} manobras sem avaliação.`);
+      return;
+    }
+
     try {
       setSalvando(true);
-      await salvarDados();
+      const fichaAtualizada = await salvarDados({ finalizar: true });
+      if (fichaAtualizada.status !== 'AGUARDANDO_ASSINATURA_ALUNO') {
+        throw new Error(
+          'A avaliação foi salva, mas a ficha não avançou para a assinatura do aluno. Verifique o status antes de continuar.',
+        );
+      }
       toast.success('Avaliação finalizada com sucesso!');
       onSucesso();
       onClose();
@@ -391,8 +419,11 @@ export default function ModalAvaliarFicha({
     );
   };
 
-  return (
-    <div className="fixed inset-0 z-modal overflow-y-auto bg-gray-50">
+  const modal = (
+    <div
+      data-testid="ficha-evaluation-modal"
+      className="fixed inset-0 z-modal overflow-y-auto bg-gray-50"
+    >
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
@@ -610,4 +641,6 @@ export default function ModalAvaliarFicha({
       </div>
     </div>
   );
+
+  return typeof document === 'undefined' ? modal : createPortal(modal, document.body);
 }

@@ -916,6 +916,7 @@ app.get('/fichas/:id', async (c) => {
         fs.assinatura_instrutor_ip,
         fs.assinatura_aluno_imagem,
         fs.assinatura_instrutor_imagem,
+        fs.updated_at,
         fs.colaborador_id_aluno,
         fs.atribuicao_curricular_id,
         fs.tipo_sessao as ficha_tipo_sessao,
@@ -1254,6 +1255,7 @@ app.get('/fichas/:id', async (c) => {
       notechs_status: notechsStatus,
       missing_notechs_count: notechsMissingCount,
       created_at: f.ficha_created_at || null,
+      updated_at: f.updated_at || null,
     };
 
     return c.json({ success: true, data: ficha });
@@ -1750,7 +1752,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
           ([, resultado]) => resultado === null || resultado === undefined || resultado === '',
         )
         .map(([ordem]) => ordem);
-      if (manobrasPendentes.length > 0) {
+      if (b.recalculate_status === true && manobrasPendentes.length > 0) {
         return c.json(
           {
             success: false,
