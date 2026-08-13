@@ -729,9 +729,12 @@ function injectInstrutorPrintStyle(templateHtml: string): string {
     padding-bottom: 4px !important;
   }
   .program-content {
-    column-count: 2 !important;
-    column-gap: 16px !important;
-    column-fill: auto !important;
+    column-count: 1 !important;
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+    white-space: normal !important;
+    word-break: normal !important;
     font-size: 6.6pt !important;
     line-height: 1.16 !important;
     max-height: none !important;
@@ -739,6 +742,8 @@ function injectInstrutorPrintStyle(templateHtml: string): string {
     flex: 1 1 auto !important;
   }
   .program-item {
+    display: block !important;
+    width: 100% !important;
     margin-bottom: 2px !important;
     break-inside: avoid !important;
   }
@@ -1009,6 +1014,36 @@ export function buildDescricaoSectionHtml(descricao?: string | null): string {
   const text = String(descricao || '').trim();
   if (!text) return '';
   return `<div class="descricao-section"><div class="descricao-label">Descrição</div><div class="descricao-text">${text}</div></div>`;
+}
+
+// Linha de metadados da qualificação (carga horária / categoria / código).
+// Categoria vem exclusivamente da relação canônica
+// (qualificacoes_tipos.categoria_id -> qualificacoes_categorias.nome) —
+// nunca do campo textual legado. Cada segmento é omitido por completo
+// quando ausente, sem deixar separador "·" sobrando.
+export function buildQualMetaLineHtml(params: {
+  cargaHoraria?: number | string | null;
+  categoriaCanonica?: string | null;
+  codigoQualificacao?: string | null;
+}): string {
+  const parts: string[] = [];
+
+  const carga = params.cargaHoraria;
+  if (carga !== null && carga !== undefined && String(carga).trim() !== '') {
+    parts.push(`Carga Horária: ${carga}h`);
+  }
+
+  const categoria = String(params.categoriaCanonica || '').trim();
+  if (categoria) {
+    parts.push(`Categoria: ${categoria}`);
+  }
+
+  const codigo = String(params.codigoQualificacao || '').trim();
+  if (codigo) {
+    parts.push(`Código: ${codigo}`);
+  }
+
+  return parts.join(' &nbsp;·&nbsp; ');
 }
 
 export async function resolveConteudoProgramaticoCertificado(
