@@ -533,6 +533,17 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
       });
     }
 
+    // `validade_meses` foi adicionada a qualificacoes_tipos depois de tenants
+    // legados já existentes. A matriz é somente leitura e pode calcular o
+    // status por data_vencimento quando essa coluna ainda não existir.
+    const tipoCols = await db.prepare(`PRAGMA table_info('qualificacoes_tipos')`).all<{
+      name: string;
+    }>();
+    const tipoColSet = new Set((tipoCols.results || []).map((column) => String(column.name || '')));
+    const validadeMesesExpr = tipoColSet.has('validade_meses')
+      ? 'qt.validade_meses'
+      : 'NULL AS validade_meses';
+
     // Requisitos da matriz para essa função
     const { results: requisitos } = await db
       .prepare(
@@ -541,7 +552,7 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
          m.qualificacao_tipo_id,
          qt.nome AS qualificacao_tipo_nome,
          qt.codigo AS qualificacao_tipo_codigo,
-         qt.validade_meses,
+         ${validadeMesesExpr},
          m.obrigatoriedade,
          m.critico_operacional,
          m.origem,
