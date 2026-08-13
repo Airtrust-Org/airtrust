@@ -2272,7 +2272,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       return 'true';
     },
     LMSFinish: function() {
-      diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
+      probeFrameProgress(); var finalLocation = parseLocationMarker(getScormLocation()); if (finalLocation && finalLocation.total != null && finalLocation.current >= finalLocation.total) notifyCompletionPending('saving', 'finish-at-final-location'); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
       commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';

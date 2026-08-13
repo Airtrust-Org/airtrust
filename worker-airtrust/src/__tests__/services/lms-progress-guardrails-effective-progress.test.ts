@@ -8,7 +8,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { resolveLmsEffectiveProgress } from '../../services/lms-progress-guardrails';
+import {
+  buildScormCompletionDiagnostic,
+  resolveLmsEffectiveProgress,
+} from '../../services/lms-progress-guardrails';
 
 describe('resolveLmsEffectiveProgress', () => {
   it('CONCLUIDO reporta progresso efetivo 100 independente do bruto', () => {
@@ -75,16 +78,18 @@ describe('resolveLmsEffectiveProgress', () => {
       completion_state: 'IN_PROGRESS',
       progresso_efetivo: 50,
     });
-    expect(resolveLmsEffectiveProgress({ status: 'STATUS_DESCONHECIDO', progressoBruto: 100 })).toMatchObject(
-      {
-        completion_state: 'PENDING_FINAL_STEP',
-        progresso_efetivo: 99,
-      },
-    );
+    expect(
+      resolveLmsEffectiveProgress({ status: 'STATUS_DESCONHECIDO', progressoBruto: 100 }),
+    ).toMatchObject({
+      completion_state: 'PENDING_FINAL_STEP',
+      progresso_efetivo: 99,
+    });
   });
 
   it('normaliza progresso bruto fora de faixa (negativo/NaN/>100)', () => {
-    expect(resolveLmsEffectiveProgress({ status: 'EM_ANDAMENTO', progressoBruto: -10 })).toMatchObject({
+    expect(
+      resolveLmsEffectiveProgress({ status: 'EM_ANDAMENTO', progressoBruto: -10 }),
+    ).toMatchObject({
       progresso_bruto: 0,
       progresso_efetivo: 0,
     });
@@ -94,10 +99,78 @@ describe('resolveLmsEffectiveProgress', () => {
       progresso_bruto: 0,
       progresso_efetivo: 0,
     });
-    expect(resolveLmsEffectiveProgress({ status: 'EM_ANDAMENTO', progressoBruto: 250 })).toMatchObject({
+    expect(
+      resolveLmsEffectiveProgress({ status: 'EM_ANDAMENTO', progressoBruto: 250 }),
+    ).toMatchObject({
       progresso_bruto: 100,
       progresso_efetivo: 99,
       completion_state: 'PENDING_FINAL_STEP',
+    });
+  });
+});
+
+describe('buildScormCompletionDiagnostic — SCORM 1.2 Finish confiável', () => {
+  const finalSnapshot = {
+    lessonStatus: 'incomplete',
+    scoreRaw: 96,
+    scoreMax: 100,
+    masteryScore: 70,
+    progressoPct: 100,
+    cmiJson: JSON.stringify({
+      'cmi.core.lesson_status': 'incomplete',
+      'cmi.core.lesson_location': '405/405',
+      'cmi.core.score.raw': '96',
+    }),
+    suspendData: 'checkpoint-final-aw139',
+    sessionTime: '0000:10:00.00',
+  };
+
+  it('aceita Finish observado no último slide com mastery atingido', () => {
+    expect(
+      buildScormCompletionDiagnostic({
+        ...finalSnapshot,
+        commitEvent: 'SCORM_FINISH',
+        completionCandidate: true,
+        completionObservedAt: '2026-08-12T18:42:00.000Z',
+      }),
+    ).toMatchObject({
+      status: 'accepted',
+      code: 'SCORM_COMPLETION_ACCEPTED',
+      explicit_completion: false,
+      reached_final_location: true,
+      final_commit_observed: true,
+      reasons: expect.arrayContaining(['trusted-scorm-1.2-finish']),
+    });
+  });
+
+  it('mantém commit comum sem status conclusivo como candidato, não como sucesso', () => {
+    expect(
+      buildScormCompletionDiagnostic({
+        ...finalSnapshot,
+        commitEvent: 'SCORM_COMMIT',
+        completionCandidate: true,
+        completionObservedAt: '2026-08-12T18:42:00.000Z',
+      }),
+    ).toMatchObject({
+      status: 'candidate',
+      code: 'SCORM_STATUS_INCONSISTENT',
+      explicit_completion: false,
+    });
+  });
+
+  it('rejeita status realmente contraditório mesmo com Finish no slide final', () => {
+    expect(
+      buildScormCompletionDiagnostic({
+        ...finalSnapshot,
+        lessonStatus: 'failed',
+        commitEvent: 'SCORM_FINISH',
+        completionCandidate: true,
+        completionObservedAt: '2026-08-12T18:42:00.000Z',
+      }),
+    ).toMatchObject({
+      status: 'rejected',
+      code: 'SCORM_COMPLETION_REJECTED',
+      explicit_failure: true,
     });
   });
 });

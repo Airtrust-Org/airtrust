@@ -18,11 +18,12 @@ const {
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
-    c.set('userId', 42);
-    c.set('userRole', 'admin');
-    await next();
-  },
+  auth:
+    () => async (c: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
+      c.set('userId', 42);
+      c.set('userRole', 'admin');
+      await next();
+    },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
@@ -48,8 +49,14 @@ vi.mock('../../services/lms-completion', async () => {
 
 vi.mock('../../services/lms-matricula-cycle', () => ({
   ensureMatriculaCycle: ensureMatriculaCycleMock,
-  hasActiveMatriculaCycle: (record: { status?: string | null; deleted_at?: string | null } | null) =>
-    Boolean(record && !record.deleted_at && ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(record.status))),
+  hasActiveMatriculaCycle: (
+    record: { status?: string | null; deleted_at?: string | null } | null,
+  ) =>
+    Boolean(
+      record &&
+      !record.deleted_at &&
+      ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(record.status)),
+    ),
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
 }));
 
@@ -910,7 +917,7 @@ describe('lms matriculas progress integrity', () => {
     expect(matriculaUpdate?.args[1]).toBe(55);
   });
 
-  it('marca inconsistencia auditavel quando score atinge mastery no slide final sem status conclusivo', async () => {
+  it('conclui SCORM 1.2 no Finish confiavel quando mastery e slide final foram confirmados', async () => {
     const { db } = createMockDb([
       [
         'FROM lms_matriculas m',
@@ -1004,24 +1011,105 @@ describe('lms matriculas progress integrity', () => {
       success: true,
       data: {
         matricula_id: 326,
-        novo_status: 'EM_ANDAMENTO',
+        novo_status: 'CONCLUIDO',
         qualificacao_gerada: null,
         completion_diagnostic: {
-          status: 'candidate',
-          code: 'SCORM_COMPLETION_CANDIDATE',
-          can_finalize: true,
+          status: 'accepted',
+          code: 'SCORM_COMPLETION_ACCEPTED',
+          can_finalize: false,
           reached_final_location: true,
+          final_commit_observed: true,
         },
       },
     });
-    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
     expect(logAuditMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        action: 'SCORM_COMPLETION_CANDIDATE',
+        action: 'SCORM_COMPLETION_ACCEPTED',
         entityId: 326,
       }),
     );
+  });
+
+  it('trata Finish duplicado de matrícula já concluída como idempotente e não regride estado', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 326,
+            empresa_id: 1,
+            funcionario_id: 80,
+            status: 'CONCLUIDO',
+            progresso_pct: 100,
+            tentativas: 1,
+            qualificacao_historico_id: 9001,
+            scorm_mastery_score: 70,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 130,
+            curso_id: 32,
+            curso_titulo: 'AW139 - Manutencao',
+            qualificacao_codigo: 'MNT_AW139',
+            qualificacao_nome: 'AW139 - Manutencao',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 36,
+          }),
+        },
+      ],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => ({
+            lesson_status: 'incomplete',
+            completion_status: null,
+            success_status: null,
+            score_raw: 96,
+            score_max: 100,
+            score_min: 0,
+            score_scaled: 0.96,
+            session_time: '0000:10:00.00',
+            total_time: '0001:00:00.00',
+            suspend_data: 'checkpoint-final-aw139',
+            launch_data: null,
+            cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '405/405' }),
+          }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/commit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 326,
+          lesson_status: 'incomplete',
+          score_raw: 96,
+          score_max: 100,
+          commit_event: 'SCORM_FINISH',
+          completion_candidate: true,
+          completion_observed_at: '2026-08-12T18:42:00.000Z',
+          cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '405/405' }),
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        status: 'CONCLUIDO',
+        progresso_pct: 100,
+        ignoredDowngrade: true,
+      },
+    });
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+    expect(calls.some((call) => call.method === 'run')).toBe(false);
   });
 
   it('bloqueia finalizacao manual sem evidencia SCORM suficiente', async () => {
@@ -1179,9 +1267,9 @@ describe('lms matriculas progress integrity', () => {
       },
     });
     expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
-    expect(calls.some((call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'))).toBe(
-      false,
-    );
+    expect(
+      calls.some((call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas')),
+    ).toBe(false);
   });
 
   it('preserva a finalizacao manual de conteudo nao-scorm usada pelos players PDF e PPTX', async () => {
@@ -1288,7 +1376,10 @@ describe('lms matriculas progress integrity', () => {
         },
       ],
       ['FROM lms_progresso_scorm', { first: () => null }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
     ]);
 
@@ -1354,7 +1445,10 @@ describe('lms matriculas progress integrity', () => {
         },
       ],
       ['FROM lms_progresso_scorm', { first: () => null }],
-      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) }],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        { run: () => ({ meta: { changes: 1, last_row_id: 0 } }) },
+      ],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
     ]);
 
