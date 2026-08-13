@@ -42,6 +42,7 @@ import {
   resolveOperationalHours,
 } from '../../../src/shared/simuladores/ficha-header';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
+import type { FichaPdfNota } from '../services/pdf-ficha.service';
 import fichasSimuladorRoutes from './simuladores-fichas-simulador';
 import fichasAcoesRoutes from './simuladores-fichas-acoes';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
@@ -1546,7 +1547,13 @@ app.post('/fichas/:id/pdf', async (c) => {
         ordem: Number(man.ordem || 0),
         descricao: String(man.descricao || ''),
         codigo: String(man.codigo || ''),
-        resultado: Number.isFinite(Number(man.resultado)) ? Number(man.resultado) : null,
+        resultado: (String(man.resultado || '')
+          .trim()
+          .toUpperCase() === 'NR'
+          ? 'NR'
+          : Number.isFinite(Number(man.resultado))
+            ? Number(man.resultado)
+            : null) as FichaPdfNota,
         categoria: man.categoria == null ? null : String(man.categoria),
         observacoes: man.observacoes == null ? null : String(man.observacoes),
         tripulante: man.tripulante == null ? 'AB' : String(man.tripulante),
