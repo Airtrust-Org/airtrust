@@ -144,6 +144,96 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     await new Promise((r) => setTimeout(r, 850));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('LMSFinish no slide final envia candidato de conclusão confiável uma única vez', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 346,
+      titulo: 'AW139 - Manutenção',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/32/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_status': 'incomplete',
+        'cmi.core.lesson_location': '405/405',
+        'cmi.core.score.raw': '96',
+        'cmi.core.score.max': '100',
+      }),
+      hasResumeState: true,
+    });
+
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+
+    api.LMSFinish();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, request] = fetchMock.mock.calls[0] as [string, { body: string }];
+    const body = JSON.parse(request.body) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      matricula_id: 346,
+      commit_event: 'SCORM_FINISH',
+      completion_candidate: true,
+      lesson_status: 'incomplete',
+      score_raw: 96,
+    });
+    expect(body.completion_observed_at).toEqual(expect.any(String));
+  });
+
+  it('repete o mesmo Finish após falha HTTP transitória sem perder o candidato final', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        clone() {
+          return {
+            json: async () => ({
+              success: true,
+              data: { progresso_pct: 100, novo_status: 'CONCLUIDO' },
+            }),
+          };
+        },
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 346,
+      titulo: 'AW139 - Manutenção',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/32/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_status': 'incomplete',
+        'cmi.core.lesson_location': '405/405',
+        'cmi.core.score.raw': '96',
+        'cmi.core.score.max': '100',
+      }),
+      hasResumeState: true,
+    });
+
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSFinish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, retryRequest] = fetchMock.mock.calls[1] as [string, { body: string }];
+    expect(JSON.parse(retryRequest.body)).toMatchObject({
+      commit_event: 'SCORM_FINISH',
+      completion_candidate: true,
+      lesson_status: 'incomplete',
+    });
+  });
 });
 
 describe('Wrapper SCORM real (execução em jsdom) — REVIEW_MODE nunca chama o endpoint de conclusão', () => {
@@ -222,5 +312,67 @@ describe('Wrapper SCORM real (execução em jsdom) — REVIEW_MODE nunca chama o
     await new Promise((r) => setTimeout(r, 850));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Wrapper SCORM real (execução em jsdom) — keepalive só no unload/hide', () => {
+  beforeEach(() => {
+    setupDom();
+    g.localStorage?.clear();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('commit rotineiro (SetValue) não usa keepalive', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 42,
+      titulo: 'Curso teste',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/scorm/commit/42',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: '{}',
+      hasResumeState: false,
+    });
+
+    new Function(extractWrapperScript(html))();
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSSetValue('cmi.core.lesson_location', '5/103');
+    await new Promise((r) => setTimeout(r, 850));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, options] = fetchMock.mock.calls[0];
+    expect(options.keepalive).toBe(false);
+  });
+
+  it('commit de beforeunload usa keepalive (precisa sobreviver ao teardown da página)', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 42,
+      titulo: 'Curso teste',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/scorm/commit/42',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: '{}',
+      hasResumeState: false,
+    });
+
+    new Function(extractWrapperScript(html))();
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+
+    g.window.dispatchEvent(new g.Event('pagehide'));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(fetchMock).toHaveBeenCalled();
+    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+    expect(lastCall[1].keepalive).toBe(true);
   });
 });

@@ -14,6 +14,7 @@ export interface CertificadoData {
   qualificacao_nome: string;
   qualificacao_codigo: string;
   qualificacao_categoria: string;
+  categoria_qualificacao_canonica?: string;
   data_conclusao: string;
   data_vencimento: string;
   numero_certificado: string;

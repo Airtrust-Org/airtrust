@@ -4,6 +4,7 @@ import {
   adaptTemplateHtmlForInstrutor,
   adaptTemplateHtmlForSinglePageA4,
   buildConteudoProgramaticoCertificadoHtml,
+  buildQualMetaLineHtml,
   resolveCargaHorariaCertificado,
   resolveFuncionarioInstrutorNaEmpresa,
   resolveInstrutorCertificadoData,
@@ -320,5 +321,81 @@ describe('qualificacoes-certificados-helpers', () => {
     expect(html).toContain('font-size: 6.6pt !important;');
     expect(html).toContain('margin-top: 12px !important;');
     expect(html).toContain('box-shadow: none !important;');
+  });
+
+  it('conteudo programatico usa a largura total do card (sem coluna forcada), texto quebra normalmente', () => {
+    const html = adaptTemplateHtmlForSinglePageA4(`
+      <html>
+        <head></head>
+        <body>
+          <div class="cert-page">
+            <div class="header"></div>
+            <div class="info-grid"></div>
+            <div class="training-box"></div>
+            <div class="program-section"><div class="program-content">conteudo</div></div>
+            <div class="footer">rodape</div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(html).toContain('column-count: 1 !important;');
+    expect(html).toContain('width: 100% !important;');
+    expect(html).toContain('max-width: none !important;');
+    expect(html).toContain('white-space: normal !important;');
+    expect(html).toContain('word-break: normal !important;');
+    expect(html).not.toContain('column-count: 2');
+  });
+
+  describe('buildQualMetaLineHtml', () => {
+    it('junta os tres segmentos quando todos presentes', () => {
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: 4,
+          categoriaCanonica: 'EAD',
+          codigoQualificacao: 'EXA',
+        }),
+      ).toBe('Carga Horária: 4h &nbsp;·&nbsp; Categoria: EAD &nbsp;·&nbsp; Código: EXA');
+    });
+
+    it('omite o segmento de categoria por completo quando nao ha canonica, sem separador sobrando', () => {
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: 4,
+          categoriaCanonica: null,
+          codigoQualificacao: 'EXA',
+        }),
+      ).toBe('Carga Horária: 4h &nbsp;·&nbsp; Código: EXA');
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: 4,
+          categoriaCanonica: undefined,
+          codigoQualificacao: 'EXA',
+        }),
+      ).not.toContain('Categoria');
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: 4,
+          categoriaCanonica: '   ',
+          codigoQualificacao: 'EXA',
+        }),
+      ).not.toContain('Categoria');
+    });
+
+    it('omite carga horaria e codigo quando ausentes, mantendo somente categoria', () => {
+      expect(
+        buildQualMetaLineHtml({
+          cargaHoraria: null,
+          categoriaCanonica: 'EAD',
+          codigoQualificacao: null,
+        }),
+      ).toBe('Categoria: EAD');
+    });
+
+    it('retorna string vazia quando nenhum segmento resolve', () => {
+      expect(
+        buildQualMetaLineHtml({ cargaHoraria: null, categoriaCanonica: null, codigoQualificacao: null }),
+      ).toBe('');
+    });
   });
 });

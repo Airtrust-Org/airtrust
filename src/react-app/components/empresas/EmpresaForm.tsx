@@ -138,10 +138,11 @@ const DEFAULT_CERTIFICATE_TEMPLATE = `<!DOCTYPE html>
       padding-bottom: 5px; border-bottom: 1px solid #e5e5ea;
     }
     .program-content {
-      column-count: 2; column-gap: 18px;
+      column-count: 1; width: 100%; max-width: none; box-sizing: border-box;
+      white-space: normal; word-break: normal;
       font-size: 6.6pt; color: #424245; line-height: 1.18;
     }
-    .program-item { display: block; margin-bottom: 2px; }
+    .program-item { display: block; width: 100%; margin-bottom: 2px; }
     /* FOOTER */
     .footer {
       border-top: 1px solid #e5e5ea; padding-top: 12px;
@@ -196,7 +197,7 @@ const DEFAULT_CERTIFICATE_TEMPLATE = `<!DOCTYPE html>
   <!-- QUALIFICAÇÃO -->
   <div class="training-box">
     <div class="qual-name">{{nome_qualificacao}}</div>
-    <div class="qual-meta">Carga Horária: {{carga_horaria}}h &nbsp;·&nbsp; Categoria: {{categoria}} &nbsp;·&nbsp; Código: {{codigo_qualificacao}}</div>
+    <div class="qual-meta">{{qual_meta_line}}</div>
   </div>
 
   <!-- CONTEÚDO PROGRAMÁTICO NR-1 -->
@@ -233,6 +234,7 @@ const MOCK_TEMPLATE_DATA: Record<string, string> = {
   '{{codigo_qualificacao}}': 'G1',
   '{{categoria}}': 'Ground',
   '{{carga_horaria}}': '40',
+  '{{qual_meta_line}}': 'Carga Horária: 40h &nbsp;·&nbsp; Categoria: Ground &nbsp;·&nbsp; Código: G1',
   '{{instrutor_nome}}': 'Negreiros Silva Exemplo',
   '{{instrutor_codigo_anac}}': 'ANAC-009876',
   '{{instrutor_matricula}}': '00123',

@@ -23,6 +23,7 @@ import {
 import {
   buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
+  isTrustedScorm12Finish,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
@@ -385,7 +386,7 @@ function buildMatriculaCompletionDiagnostic(params: {
       }
     | null
     | undefined;
-  commitEvent?: string | null;
+  commit?: z.infer<typeof ScormCommitSchema>;
 }) {
   const base = buildScormCompletionDiagnostic({
     lessonStatus: params.scorm?.lesson_status ?? null,
@@ -400,7 +401,7 @@ function buildMatriculaCompletionDiagnostic(params: {
     suspendData: params.scorm?.suspend_data ?? null,
     sessionTime: params.scorm?.session_time ?? null,
     totalTime: params.scorm?.total_time ?? null,
-    commitEvent: params.commitEvent ?? null,
+    commit: params.commit,
   });
 
   return {
@@ -553,6 +554,7 @@ function isScormSuccess(
   const effectiveScorePct = Number(options?.effectiveScorePct);
   const meetsMasteryScore =
     !hasMasteryScore || (Number.isFinite(effectiveScorePct) && effectiveScorePct >= masteryScore);
+  if (isTrustedScorm12Finish(data)) return meetsMasteryScore;
   // SCORM 1.2
   if (ls === 'passed') return true;
   if (ls === 'completed') return meetsMasteryScore;
@@ -1600,7 +1602,7 @@ app.post('/scorm/commit', async (c) => {
     matriculaStatus: matricula.status,
     progressoPct,
     masteryScore: matricula.scorm_mastery_score,
-    commitEvent: d.commit_event ?? null,
+    commit: d,
     scorm: {
       lesson_status: preferScormValue(
         scormAtual?.lesson_status ?? null,
@@ -1634,7 +1636,6 @@ app.post('/scorm/commit', async (c) => {
       cmi_json: mergedCmiJson,
     },
   });
-
   // Upsert progresso SCORM
   await db
     .prepare(

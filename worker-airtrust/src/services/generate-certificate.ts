@@ -19,6 +19,7 @@ import {
   resolveCargaHorariaCertificado,
   buildConteudoProgramaticoCertificadoHtml,
   buildDescricaoSectionHtml,
+  buildQualMetaLineHtml,
   getCertificadosStorageColumns,
   backfillCertificadoAtualNaPastaVirtual,
   resolveImageDataUrl,
@@ -252,13 +253,16 @@ export async function generateCertificateForHistorico(
         ${tiposHasCargaRecorrente ? 'qt.carga_horaria_recorrente' : 'NULL'} AS carga_horaria_recorrente,
         qt.conteudo_programatico AS conteudo_programatico,
         qt.descricao AS qualificacao_descricao,
-        COALESCE(qt.vencimento_fim_mes, 0) AS vencimento_fim_mes
+        COALESCE(qt.vencimento_fim_mes, 0) AS vencimento_fim_mes,
+        qc.nome AS categoria_qualificacao_canonica
       FROM qualificacoes_historico qh
       LEFT JOIN funcionarios f ON qh.funcionario_id = f.id AND f.deleted_at IS NULL
       LEFT JOIN qualificacoes_tipos qt ON qh.qualificacao_id = qt.id AND qt.deleted_at IS NULL
+      LEFT JOIN qualificacoes_categorias qc
+        ON qc.id = qt.categoria_id AND qc.deleted_at IS NULL AND qc.ativo = 1 AND qc.empresa_id = ?
       WHERE qh.id = ? AND qh.deleted_at IS NULL AND f.empresa_id = ?`,
     )
-    .bind(historicoId, empresaId)
+    .bind(empresaId, historicoId, empresaId)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .first()) as any;
 
@@ -370,6 +374,7 @@ export async function generateCertificateForHistorico(
     qualificacao_nome: qualificacao.qualificacao_nome || qualificacao.tipo_codigo || '',
     qualificacao_codigo: qualificacao.qualificacao_codigo || qualificacao.codigo || '',
     qualificacao_categoria: qualificacao.qualificacao_categoria || qualificacao.categoria || '',
+    categoria_qualificacao_canonica: qualificacao.categoria_qualificacao_canonica || undefined,
     data_conclusao: dataConclusaoCertificado,
     data_vencimento: dataVencimentoCertificado,
     numero_certificado: nomeArquivo.replace('.pdf', ''),
@@ -471,7 +476,14 @@ export async function generateCertificateForHistorico(
     funcionario_matricula: certificadoData.funcionario_matricula,
     qualificacao_nome: certificadoData.qualificacao_nome,
     qualificacao_codigo: certificadoData.qualificacao_codigo,
-    qualificacao_categoria: certificadoData.qualificacao_categoria,
+    // {{categoria}} mostra exclusivamente a categoria canônica
+    // (qualificacoes_categorias.nome) — nunca o texto legado qt.categoria.
+    qualificacao_categoria: certificadoData.categoria_qualificacao_canonica || '',
+    qual_meta_line: buildQualMetaLineHtml({
+      cargaHoraria: certificadoData.carga_horaria,
+      categoriaCanonica: certificadoData.categoria_qualificacao_canonica,
+      codigoQualificacao: certificadoData.qualificacao_codigo,
+    }),
     data_conclusao: certificadoData.data_conclusao,
     data_vencimento: certificadoData.data_vencimento,
     carga_horaria: certificadoData.carga_horaria,

@@ -1,5 +1,8 @@
 type Nullable<T> = T | null | undefined;
 
+// See matching constant/comment in worker-airtrust/src/routes/lms-assets.ts.
+const SUSPEND_DATA_NEAR_LIMIT_THRESHOLD = 3800;
+
 export type ScormCompletionDiagnosticCode =
   | 'SCORM_COMPLETION_ACCEPTED'
   | 'SCORM_COMPLETION_CANDIDATE'
@@ -34,7 +37,10 @@ export function normalizeMatriculaStatus(status: Nullable<string>) {
     .toUpperCase();
 }
 
-export function mergeMonotonicMatriculaStatus(current: Nullable<string>, desired: Nullable<string>) {
+export function mergeMonotonicMatriculaStatus(
+  current: Nullable<string>,
+  desired: Nullable<string>,
+) {
   const currentStatus = normalizeMatriculaStatus(current);
   const desiredStatus = normalizeMatriculaStatus(desired);
 
@@ -48,10 +54,8 @@ export function mergeMonotonicMatriculaStatus(current: Nullable<string>, desired
 }
 
 export function mergeMonotonicNumber(current: Nullable<number>, incoming: Nullable<number>) {
-  const currentNumber =
-    current == null ? null : Number(current);
-  const incomingNumber =
-    incoming == null ? null : Number(incoming);
+  const currentNumber = current == null ? null : Number(current);
+  const incomingNumber = incoming == null ? null : Number(incoming);
 
   if (!Number.isFinite(incomingNumber)) {
     return Number.isFinite(currentNumber) ? currentNumber! : null;
@@ -76,7 +80,10 @@ export function scormStatusIndicatesCompletion(params: {
   const successStatus = normalizeScormToken(params.successStatus);
 
   if (lessonStatus === 'passed' || lessonStatus === 'completed') return true;
-  return completionStatus === 'completed' && (!successStatus || successStatus === 'passed' || successStatus === 'unknown');
+  return (
+    completionStatus === 'completed' &&
+    (!successStatus || successStatus === 'passed' || successStatus === 'unknown')
+  );
 }
 
 export function scormStatusIndicatesFailure(params: {
@@ -116,7 +123,9 @@ export function parseScormLocationMarker(
   return null;
 }
 
-export function parseScormLocationPair(location: unknown): { current: number; total: number } | null {
+export function parseScormLocationPair(
+  location: unknown,
+): { current: number; total: number } | null {
   const marker = parseScormLocationMarker(location);
   if (!marker || marker.total == null) return null;
   return { current: marker.current, total: marker.total };
@@ -158,6 +167,25 @@ export function extractScormLocationFromCmiJson(cmiJson: Nullable<string>) {
   } catch {
     return null;
   }
+}
+
+/** Aceita o fallback SCORM 1.2 apenas com as evidências finais emitidas pelo wrapper. */
+export function isTrustedScorm12Finish(data: {
+  lesson_status?: Nullable<string>;
+  commit_event?: Nullable<string>;
+  completion_candidate?: Nullable<boolean>;
+  completion_observed_at?: Nullable<string>;
+  cmi_json?: Nullable<string>;
+}) {
+  const location = extractScormLocationFromCmiJson(data.cmi_json);
+  return (
+    normalizeScormToken(data.lesson_status) === 'incomplete' &&
+    normalizeCommitEvent(data.commit_event) === 'SCORM_FINISH' &&
+    data.completion_candidate === true &&
+    Number.isFinite(Date.parse(String(data.completion_observed_at ?? ''))) &&
+    location?.total != null &&
+    location.current >= location.total
+  );
 }
 
 type ScormSnapshotInput = {
@@ -223,7 +251,11 @@ export function shouldPreferIncomingScormState(params: {
   return true;
 }
 
-export function preferScormValue<T>(current: Nullable<T>, incoming: Nullable<T>, preferIncoming: boolean) {
+export function preferScormValue<T>(
+  current: Nullable<T>,
+  incoming: Nullable<T>,
+  preferIncoming: boolean,
+) {
   if (preferIncoming) return incoming ?? current ?? null;
   return current ?? incoming ?? null;
 }
@@ -306,15 +338,21 @@ export function mergeScormRuntimeState(params: {
     Boolean(currentLocationValue) && (!incomingLocationValue || blockedLocationRegression);
   const mergedLocationValue = preservedLocationFromCurrent
     ? currentLocationValue
-    : incomingLocationValue ?? currentLocationValue;
+    : (incomingLocationValue ?? currentLocationValue);
 
   const currentSuspendData = normalizeScormText(params.currentSuspendData);
   const incomingSuspendData = normalizeScormText(params.incomingSuspendData);
   const blockedEmptySuspendData = Boolean(currentSuspendData) && !incomingSuspendData;
+  // Mirrors the wrapper-level exemption in lms-assets.ts: a shorter write is
+  // only blocked when the current value is NOT already crowding the SCORM
+  // 1.2 practical suspend_data ceiling (~4096 bytes). A write shrinking a
+  // near-limit value is treated as intentional finalization, not the
+  // accidental mid-session reset this guard defends against.
   const blockedShorterSuspendData = Boolean(
     currentSuspendData &&
       incomingSuspendData &&
-      incomingSuspendData.length < currentSuspendData.length,
+      incomingSuspendData.length < currentSuspendData.length &&
+      currentSuspendData.length < SUSPEND_DATA_NEAR_LIMIT_THRESHOLD,
   );
   const mergedSuspendData: string | null = (() => {
     if (blockedEmptySuspendData || blockedShorterSuspendData) {
@@ -331,7 +369,9 @@ export function mergeScormRuntimeState(params: {
   }
 
   return {
-    cmiJson: mergedCmi ? JSON.stringify(mergedCmi) : params.incomingCmiJson ?? params.currentCmiJson ?? null,
+    cmiJson: mergedCmi
+      ? JSON.stringify(mergedCmi)
+      : (params.incomingCmiJson ?? params.currentCmiJson ?? null),
     suspendData: mergedSuspendData ?? null,
     location: parseScormLocationMarker(mergedLocationValue),
     decisions: {
@@ -348,8 +388,7 @@ export function resolveScormScorePct(params: {
   scoreMax?: Nullable<number>;
   scoreScaled?: Nullable<number>;
 }) {
-  const scaled =
-    params.scoreScaled == null ? null : Number(params.scoreScaled);
+  const scaled = params.scoreScaled == null ? null : Number(params.scoreScaled);
   if (scaled != null && Number.isFinite(scaled) && scaled >= 0) {
     return clampPct(scaled * 100);
   }
@@ -388,6 +427,13 @@ export function buildScormCompletionDiagnostic(params: {
   sessionTime?: Nullable<string>;
   totalTime?: Nullable<string>;
   commitEvent?: Nullable<string>;
+  completionCandidate?: Nullable<boolean>;
+  completionObservedAt?: Nullable<string>;
+  commit?: {
+    commit_event?: Nullable<string>;
+    completion_candidate?: Nullable<boolean>;
+    completion_observed_at?: Nullable<string>;
+  };
 }): ScormCompletionDiagnostic {
   const locationMarker = extractScormLocationFromCmiJson(params.cmiJson);
   const inferredProgressPct = inferScormProgressPct(params.cmiJson);
@@ -397,8 +443,7 @@ export function buildScormCompletionDiagnostic(params: {
     scoreMax: params.scoreMax,
     scoreScaled: params.scoreScaled,
   });
-  const masteryScore =
-    params.masteryScore == null ? null : Number(params.masteryScore);
+  const masteryScore = params.masteryScore == null ? null : Number(params.masteryScore);
   const hasMasteryScore = Number.isFinite(masteryScore) && Number(masteryScore) > 0;
   const masteryMet =
     !hasMasteryScore ||
@@ -416,13 +461,17 @@ export function buildScormCompletionDiagnostic(params: {
     locationMarker != null && locationMarker.total != null && locationMarker.total > 0
       ? locationMarker.current >= locationMarker.total
       : false;
+  const commitEvent = params.commitEvent ?? params.commit?.commit_event;
   const finalCommitObserved = [
     'SCORM_FINISH',
     'SCORM_COMPLETION_CANDIDATE',
     'SCORM_BEFORE_UNLOAD_COMMIT',
     'SCORM_VISIBILITY_COMMIT',
-  ].includes(normalizeCommitEvent(params.commitEvent) ?? '');
-  const progressSignal = Math.max(Number.isFinite(progressoPct) ? progressoPct : 0, inferredProgressPct ?? 0);
+  ].includes(normalizeCommitEvent(commitEvent) ?? '');
+  const progressSignal = Math.max(
+    Number.isFinite(progressoPct) ? progressoPct : 0,
+    inferredProgressPct ?? 0,
+  );
   const nearFinalProgress = progressSignal >= 99;
   const hasRuntimeEvidence =
     Boolean(locationMarker) ||
@@ -436,6 +485,15 @@ export function buildScormCompletionDiagnostic(params: {
     masteryMet &&
     hasRuntimeEvidence &&
     (reachedFinalLocation || nearFinalProgress);
+  const trustedScorm12Finish =
+    candidate &&
+    isTrustedScorm12Finish({
+      lesson_status: params.lessonStatus,
+      commit_event: commitEvent,
+      completion_candidate: params.completionCandidate ?? params.commit?.completion_candidate,
+      completion_observed_at: params.completionObservedAt ?? params.commit?.completion_observed_at,
+      cmi_json: params.cmiJson,
+    });
   const highScoreWithoutCompletion =
     !explicitCompletion &&
     !explicitFailure &&
@@ -456,15 +514,16 @@ export function buildScormCompletionDiagnostic(params: {
   if (nearFinalProgress) reasons.push('progress-near-100');
   if (highScoreWithoutCompletion) reasons.push('high-score-without-completion-status');
   if (finalCommitObserved) reasons.push('final-commit-observed');
+  if (trustedScorm12Finish) reasons.push('trusted-scorm-1.2-finish');
   if (hasRuntimeEvidence) reasons.push('runtime-evidence-present');
 
-  if (explicitCompletion) {
+  if (explicitCompletion || trustedScorm12Finish) {
     return {
       status: 'accepted',
       code: 'SCORM_COMPLETION_ACCEPTED',
       reasons,
       can_finalize: false,
-      explicit_completion: true,
+      explicit_completion: explicitCompletion,
       explicit_failure: false,
       mastery_score: hasMasteryScore ? Number(masteryScore) : null,
       score_pct: scorePct,
@@ -474,7 +533,7 @@ export function buildScormCompletionDiagnostic(params: {
       reached_final_location: reachedFinalLocation,
       final_commit_observed: finalCommitObserved,
       has_runtime_evidence: hasRuntimeEvidence,
-      commit_event: normalizeCommitEvent(params.commitEvent),
+      commit_event: normalizeCommitEvent(commitEvent),
     };
   }
 
@@ -494,7 +553,7 @@ export function buildScormCompletionDiagnostic(params: {
       reached_final_location: reachedFinalLocation,
       final_commit_observed: finalCommitObserved,
       has_runtime_evidence: hasRuntimeEvidence,
-      commit_event: normalizeCommitEvent(params.commitEvent),
+      commit_event: normalizeCommitEvent(commitEvent),
     };
   }
 
@@ -514,7 +573,7 @@ export function buildScormCompletionDiagnostic(params: {
       reached_final_location: reachedFinalLocation,
       final_commit_observed: finalCommitObserved,
       has_runtime_evidence: hasRuntimeEvidence,
-      commit_event: normalizeCommitEvent(params.commitEvent),
+      commit_event: normalizeCommitEvent(commitEvent),
     };
   }
 
@@ -553,7 +612,7 @@ export function buildScormCompletionDiagnostic(params: {
     reached_final_location: reachedFinalLocation,
     final_commit_observed: finalCommitObserved,
     has_runtime_evidence: hasRuntimeEvidence,
-    commit_event: normalizeCommitEvent(params.commitEvent),
+    commit_event: normalizeCommitEvent(commitEvent),
   };
 }
 
@@ -565,12 +624,7 @@ export function buildScormCompletionDiagnostic(params: {
 // impedir qualificação/certificado/validade prematuros. Ver PENDING_FINAL_STEP.
 
 export type LmsCompletionState =
-  | 'COMPLETED'
-  | 'PENDING_FINAL_STEP'
-  | 'IN_PROGRESS'
-  | 'NOT_STARTED'
-  | 'FAILED'
-  | 'CANCELLED';
+  'COMPLETED' | 'PENDING_FINAL_STEP' | 'IN_PROGRESS' | 'NOT_STARTED' | 'FAILED' | 'CANCELLED';
 
 export type LmsCompletionReasonCode =
   | 'MATRICULA_CONCLUIDA'

@@ -1,5 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { buildScormCompletionDiagnostic } from '../services/lms-progress-guardrails';
+import {
+  buildScormCompletionDiagnostic,
+  resolveLmsEffectiveProgress,
+} from '../services/lms-progress-guardrails';
 
 /**
  * lmsRelatoriosRepository.ts
@@ -46,6 +49,7 @@ export type ExpiracaoRow = {
   status: string;
   data_expiracao: string;
   progresso_pct: number;
+  progresso_efetivo: number;
   dias_restantes: number;
 };
 
@@ -58,6 +62,7 @@ export type ScormConclusaoInconsistenteRow = {
   curso_titulo: string;
   status: string;
   progresso_pct: number;
+  progresso_efetivo: number;
   score_pct: number | null;
   mastery_score: number | null;
   location: string | null;
@@ -310,7 +315,13 @@ export async function getExpiracaoRows(
     .bind(empresaId, diasClamped, ...setorFilter.bindings)
     .all<ExpiracaoRow>();
 
-  return results.results || [];
+  return (results.results || []).map((row) => ({
+    ...row,
+    progresso_efetivo: resolveLmsEffectiveProgress({
+      status: row.status,
+      progressoBruto: row.progresso_pct,
+    }).progresso_efetivo,
+  }));
 }
 
 type ScormConclusaoInconsistenteLightRow = {
@@ -562,6 +573,10 @@ export async function getScormConclusaoInconsistenteRows(
         curso_titulo: row.curso_titulo,
         status: row.status,
         progresso_pct: row.progresso_pct,
+        progresso_efetivo: resolveLmsEffectiveProgress({
+          status: row.status,
+          progressoBruto: row.progresso_pct,
+        }).progresso_efetivo,
         score_pct: diagnostic.score_pct,
         mastery_score: diagnostic.mastery_score,
         location: diagnostic.location,
