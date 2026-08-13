@@ -314,3 +314,65 @@ describe('Wrapper SCORM real (execução em jsdom) — REVIEW_MODE nunca chama o
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Wrapper SCORM real (execução em jsdom) — keepalive só no unload/hide', () => {
+  beforeEach(() => {
+    setupDom();
+    g.localStorage?.clear();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('commit rotineiro (SetValue) não usa keepalive', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 42,
+      titulo: 'Curso teste',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/scorm/commit/42',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: '{}',
+      hasResumeState: false,
+    });
+
+    new Function(extractWrapperScript(html))();
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSSetValue('cmi.core.lesson_location', '5/103');
+    await new Promise((r) => setTimeout(r, 850));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, options] = fetchMock.mock.calls[0];
+    expect(options.keepalive).toBe(false);
+  });
+
+  it('commit de beforeunload usa keepalive (precisa sobreviver ao teardown da página)', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 42,
+      titulo: 'Curso teste',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/scorm/commit/42',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: '{}',
+      hasResumeState: false,
+    });
+
+    new Function(extractWrapperScript(html))();
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+
+    g.window.dispatchEvent(new g.Event('pagehide'));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(fetchMock).toHaveBeenCalled();
+    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+    expect(lastCall[1].keepalive).toBe(true);
+  });
+});

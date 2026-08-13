@@ -1,5 +1,8 @@
 type Nullable<T> = T | null | undefined;
 
+// See matching constant/comment in worker-airtrust/src/routes/lms-assets.ts.
+const SUSPEND_DATA_NEAR_LIMIT_THRESHOLD = 3800;
+
 export type ScormCompletionDiagnosticCode =
   | 'SCORM_COMPLETION_ACCEPTED'
   | 'SCORM_COMPLETION_CANDIDATE'
@@ -340,10 +343,16 @@ export function mergeScormRuntimeState(params: {
   const currentSuspendData = normalizeScormText(params.currentSuspendData);
   const incomingSuspendData = normalizeScormText(params.incomingSuspendData);
   const blockedEmptySuspendData = Boolean(currentSuspendData) && !incomingSuspendData;
+  // Mirrors the wrapper-level exemption in lms-assets.ts: a shorter write is
+  // only blocked when the current value is NOT already crowding the SCORM
+  // 1.2 practical suspend_data ceiling (~4096 bytes). A write shrinking a
+  // near-limit value is treated as intentional finalization, not the
+  // accidental mid-session reset this guard defends against.
   const blockedShorterSuspendData = Boolean(
     currentSuspendData &&
-    incomingSuspendData &&
-    incomingSuspendData.length < currentSuspendData.length,
+      incomingSuspendData &&
+      incomingSuspendData.length < currentSuspendData.length &&
+      currentSuspendData.length < SUSPEND_DATA_NEAR_LIMIT_THRESHOLD,
   );
   const mergedSuspendData: string | null = (() => {
     if (blockedEmptySuspendData || blockedShorterSuspendData) {

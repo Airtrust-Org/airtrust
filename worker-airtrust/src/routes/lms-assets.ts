@@ -1590,18 +1590,19 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
     return { value: nextText, blocked: false, reason: 'accepted-location' };
   }
 
+  var SUSPEND_DATA_NEAR_LIMIT_THRESHOLD = 3800; // shrink near SCORM 1.2's ~4096B suspend_data ceiling = finalization, not a mid-session reset
   function protectSuspendDataValue(currentValue, nextValue) {
     var currentText = typeof currentValue === 'string' ? currentValue : '';
     var nextText = typeof nextValue === 'string' ? nextValue : '';
-
     if (currentText && !nextText.trim()) {
       return { value: currentText, blocked: true, reason: 'empty-suspend-data' };
     }
-
     if (currentText && nextText && nextText.length < currentText.length) {
+      if (currentText.length >= SUSPEND_DATA_NEAR_LIMIT_THRESHOLD) {
+        return { value: nextText, blocked: false, reason: 'accepted-suspend-data-near-limit-shrink' };
+      }
       return { value: currentText, blocked: true, reason: 'shorter-suspend-data' };
     }
-
     return { value: nextText || currentText || '', blocked: false, reason: 'accepted-suspend-data' };
   }
 
@@ -1909,6 +1910,11 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         completion_candidate: completionPending ? true : null,
         completion_observed_at: completionObservedAt,
       }, data);
+      // Browsers cap the TOTAL body size across in-flight keepalive fetches
+      // per page (~64KB). Setting it on every commit exhausted that shared
+      // quota over a long session, permanently breaking all further commits
+      // with "Failed to fetch". Reserve it for page teardown only.
+      var needsKeepalive = eventType === 'SCORM_BEFORE_UNLOAD_COMMIT' || eventType === 'SCORM_VISIBILITY_COMMIT';
       return fetch(COMMIT_URL, {
         method: 'POST',
         headers: {
@@ -1916,7 +1922,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
           'Authorization': 'Bearer ' + freshToken,
         },
         body: JSON.stringify(requestBody),
-        keepalive: true,
+        keepalive: needsKeepalive,
       });
     }).then(function(response) {
       if (response && response.status === 401 && (attempt || 0) < 1) {

@@ -48,7 +48,18 @@ const LARGE_FILE_LINE_CAPS = {
   // switched Access-Control-Allow-Origin from a hardcoded '*' to the shared
   // buildAssetHeaders() resolver (credentials-incompatible wildcard blocked thumbnails
   // in every tenant's browser). Same incident as the SCORM upload 500 hotfix.
-  'routes/lms-assets.ts': 2562,
+  // Cap raised 2026-08-13: counted 2563 — protectSuspendDataValue() now allows
+  // cmi.suspend_data to shrink when the current value is already near the
+  // SCORM 1.2 ~4096-byte ceiling, treating it as intentional finalization
+  // rather than the accidental mid-session reset the guard defends against
+  // (see docs/AIRTRUST_LMS_SCORM_AW139_RECURRING_PROGRESS_RESET_20260623.md).
+  // Cap raised 2026-08-13 (same day, live incident): counted 2568 — the
+  // commit() fetch stopped setting keepalive:true unconditionally. Browsers
+  // cap total in-flight keepalive body size per page; setting it on every
+  // routine commit exhausted that shared quota during long sessions,
+  // permanently breaking all further saves with "Failed to fetch" (observed
+  // live on curso PT6C-67C, matricula 390).
+  'routes/lms-assets.ts': 2568,
   // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
   // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,
   // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.
