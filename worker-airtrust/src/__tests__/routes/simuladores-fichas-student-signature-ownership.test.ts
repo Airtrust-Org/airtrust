@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetFichaInstructorMetaSchemaCache } from '../../utils/ficha-instructor-meta-schema';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 vi.mock('../../middleware/auth', () => ({
@@ -14,7 +15,7 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return {
     ...actual,
-  getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
+    getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
   };
 });
 
@@ -49,7 +50,7 @@ import { errorHandler } from '../../middleware/error-handler';
 // status code instead of Hono's generic 500.
 simuladoresFichasRoutes.onError(errorHandler);
 
-function createDb() {
+function createDb(options: { alunoJaAssinou?: boolean } = {}) {
   const fichaRow = {
     id: 500,
     uuid: 'ficha-500-uuid',
@@ -57,7 +58,7 @@ function createDb() {
     colaborador_id_aluno: 10,
     instrutor_id: 20,
     status: 'AGUARDANDO_ASSINATURA_ALUNO',
-    assinatura_aluno_timestamp: null,
+    assinatura_aluno_timestamp: options.alunoJaAssinou ? '2026-08-13T12:00:00.000Z' : null,
     assinatura_instrutor_timestamp: null,
     assinatura_aluno_ip: null,
     assinatura_aluno_imagem: null,
@@ -73,7 +74,10 @@ function createDb() {
         first: async () => {
           const userId = String(args[0] ?? '');
 
-          if (query.includes('FROM fichas_sessao') && (query.includes('fs.id = ?') || query.includes('fs.id=?'))) {
+          if (
+            query.includes('FROM fichas_sessao') &&
+            (query.includes('fs.id = ?') || query.includes('fs.id=?'))
+          ) {
             if (args[1] === '999') return null;
             return fichaRow;
           }
@@ -96,7 +100,12 @@ function createDb() {
         run: async () => ({ meta: { changes: 1, last_row_id: 501 } }),
       });
 
-      return { bind, first: () => bind().first(), all: () => bind().all(), run: () => bind().run() };
+      return {
+        bind,
+        first: () => bind().first(),
+        all: () => bind().all(),
+        run: () => bind().run(),
+      };
     }),
   } as unknown as D1Database;
 
@@ -105,7 +114,7 @@ function createDb() {
 
 function mockEnv(overrides: Record<string, unknown> = {}) {
   return {
-    DB: createDb(),
+    DB: createDb({ alunoJaAssinou: Boolean(overrides.alunoJaAssinou) }),
     __mockUserId: overrides.userId ?? 101,
     __mockUserRole: overrides.userRole ?? 'manager',
     __mockEmpresaId: overrides.empresaId ?? 6,
@@ -115,6 +124,7 @@ function mockEnv(overrides: Record<string, unknown> = {}) {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('POST /fichas/:id/assinar — student signature ownership', () => {
+  beforeEach(resetFichaInstructorMetaSchemaCache);
   const basePayload = { tipo: 'ALUNO' };
   const baseUrl = 'http://localhost/fichas/500/assinar';
 
@@ -151,6 +161,25 @@ describe('POST /fichas/:id/assinar — student signature ownership', () => {
     // Aceita 200 (sucesso) ou 400 (campos de ficha mock ausentes).
     // O importante é que NÃO seja 403 (bloqueio de identidade).
     expect(response.status).not.toBe(403);
+  });
+
+  it('instrutor assina sem 500 quando a tabela de metadata está ausente', async () => {
+    const env = mockEnv({ userId: 101, userRole: 'instrutor', alunoJaAssinou: true });
+
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request(baseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'INSTRUTOR', aprovado: true }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { status: 'APROVADO' },
+    });
   });
 
   it('usuário sem vínculo funcional recebe erro controlado', async () => {
