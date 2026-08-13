@@ -73,6 +73,8 @@ const NOTECHS_CALIBRATION_WARNING =
 const REGULATORY_DISCLAIMER =
   'Esta ficha é instrumento interno de treinamento e avaliação operacional da empresa. Não substitui FAP oficial, documento ANAC, homologação, aprovação ou aceite formal da ANAC. A aderência regulatória deve ser verificada contra os documentos oficiais vigentes da empresa, da ANAC e dos contratantes aplicáveis.';
 
+export type FichaPdfNota = number | 'NR' | null;
+
 interface FichaPDFData {
   fichaId: string;
   sessao_codigo?: string;
@@ -106,11 +108,28 @@ interface FichaPDFData {
     ordem: number;
     descricao: string;
     codigo: string;
-    resultado: number | null;
+    resultado: FichaPdfNota;
     categoria?: string | null;
     observacoes?: string | null;
     tripulante?: string | null;
   }>;
+}
+
+export function getFichaPdfStatusPresentation(status: string): string {
+  const normalized = String(status || '')
+    .trim()
+    .toUpperCase();
+  const labels: Record<string, string> = {
+    APROVADO: 'APROVADO',
+    NAO_APROVADO: 'NÃO APROVADO',
+    REPROVADO: 'NÃO APROVADO',
+    PENDENTE: 'PENDENTE',
+    AVALIACAO_PENDENTE: 'PENDENTE',
+    AGUARDANDO_ASSINATURA_ALUNO: 'AGUARDANDO ASSINATURA DO ALUNO',
+    AGUARDANDO_ASSINATURA_INSTRUTOR: 'AGUARDANDO ASSINATURA DO INSTRUTOR',
+  };
+
+  return labels[normalized] || normalized.replace(/_/g, ' ') || 'PENDENTE';
 }
 
 const PAGE = {
@@ -294,9 +313,15 @@ function drawHeader(
 
   drawText(page, title1, PAGE.margin, titleY, fontBold, 10, COLOR.text);
 
-  const badgeText = dados.status === 'PENDENTE' ? 'PENDENTE' : 'ASSINADO';
-  const badgeColor = dados.status === 'PENDENTE' ? COLOR.danger : COLOR.success;
-  const badgeWidth = 82;
+  const badgeText = getFichaPdfStatusPresentation(dados.status);
+  const badgeColor = [
+    'PENDENTE',
+    'AGUARDANDO ASSINATURA DO ALUNO',
+    'AGUARDANDO ASSINATURA DO INSTRUTOR',
+  ].includes(badgeText)
+    ? COLOR.danger
+    : COLOR.success;
+  const badgeWidth = Math.max(82, fontBold.widthOfTextAtSize(badgeText, 7) + 18);
   const badgeHeight = 20;
   const badgeX = PAGE.margin + contentWidth - badgeWidth;
   const badgeY = titleY - 8;
@@ -349,19 +374,6 @@ function drawInfoSection(
     equipamentoUtilizado: dados.equipamento_utilizado,
     dispositivoIdentificacao: dados.dispositivo_identificacao,
     assentoInstrucaoUtilizado: dados.assento_instrucao_utilizado,
-  });
-
-  const boxTop = startY - 2;
-  const rowHeight = 18;
-  const boxHeight = rows.length * rowHeight + 10;
-  page.drawRectangle({
-    x: PAGE.margin,
-    y: boxTop - boxHeight,
-    width: contentWidth,
-    height: boxHeight,
-    color: COLOR.bgLight,
-    borderColor: COLOR.border,
-    borderWidth: 0.5,
   });
 
   const FIELD_WEIGHT_BY_LABEL: Record<string, number> = {
@@ -419,10 +431,9 @@ function drawInfoSection(
     return truncated ? `${truncated}${ellipsis}` : ellipsis;
   };
 
-  let currentRowTop = boxTop - 14;
-  for (const row of rows) {
+  const rowLayouts = rows.map((row) => {
     const fieldBoxes = getFieldBoxes(row);
-    row.forEach((field, index) => {
+    const fields = row.map((field, index) => {
       const box = fieldBoxes[index] ||
         fieldBoxes.at(-1) || { x: PAGE.margin + 6, width: contentWidth - 12 };
       const labelText = `${field.label}:`;
@@ -431,18 +442,53 @@ function drawInfoSection(
       const labelWidth = fontBold.widthOfTextAtSize(labelText, labelSize);
       const valueX = box.x + labelWidth + 4;
       const valueWidth = Math.max(14, box.width - labelWidth - 5);
-      drawText(page, labelText, box.x, currentRowTop, fontBold, labelSize, COLOR.textSecondary);
+      const valueLines =
+        field.label === 'Instrutor'
+          ? wrapText(field.value, fontRegular, valueSize, valueWidth)
+          : [fitTextToWidth(field.value, valueWidth, fontRegular, valueSize)];
+      return { box, labelText, labelSize, valueSize, valueX, valueLines };
+    });
+    const maxLines = Math.max(1, ...fields.map((field) => field.valueLines.length));
+    return { fields, height: Math.max(18, 11 + maxLines * 8) };
+  });
+
+  const boxTop = startY - 2;
+  const boxHeight = rowLayouts.reduce((total, row) => total + row.height, 0) + 10;
+  page.drawRectangle({
+    x: PAGE.margin,
+    y: boxTop - boxHeight,
+    width: contentWidth,
+    height: boxHeight,
+    color: COLOR.bgLight,
+    borderColor: COLOR.border,
+    borderWidth: 0.5,
+  });
+
+  let currentRowTop = boxTop - 14;
+  for (const row of rowLayouts) {
+    row.fields.forEach((field) => {
       drawText(
         page,
-        fitTextToWidth(field.value, valueWidth, fontRegular, valueSize),
-        valueX,
+        field.labelText,
+        field.box.x,
         currentRowTop,
-        fontRegular,
-        valueSize,
-        COLOR.text,
+        fontBold,
+        field.labelSize,
+        COLOR.textSecondary,
+      );
+      field.valueLines.forEach((line, lineIndex) =>
+        drawText(
+          page,
+          line,
+          field.valueX,
+          currentRowTop - lineIndex * 8,
+          fontRegular,
+          field.valueSize,
+          COLOR.text,
+        ),
       );
     });
-    currentRowTop -= rowHeight;
+    currentRowTop -= row.height;
   }
 
   return boxTop - boxHeight - 8;
@@ -718,22 +764,23 @@ function drawManobrasSection(
     const badgeX = colNota.x + (colNota.w - badgeSize) / 2;
     const badgeY = position.y - Math.min(rowHeight, ROW_H_BASE) + 2;
     if (row.resultado !== null) {
+      const isNr = row.resultado === 'NR';
       position.page.drawRectangle({
         x: badgeX,
         y: badgeY,
         width: badgeSize,
         height: badgeSize,
-        color: getScoreBgColor(row.resultado),
+        color: isNr ? COLOR.border : getScoreBgColor(Number(row.resultado)),
       });
       drawTextCentered(
         position.page,
         String(row.resultado),
         badgeX,
-        badgeY + 3,
+        badgeY + (isNr ? 3.4 : 3),
         badgeSize,
         fontBold,
-        7,
-        COLOR.white,
+        isNr ? 5.5 : 7,
+        isNr ? COLOR.text : COLOR.white,
       );
     } else {
       position.page.drawRectangle({
