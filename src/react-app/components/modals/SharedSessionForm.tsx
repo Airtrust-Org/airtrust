@@ -38,6 +38,7 @@ interface Funcionario {
 interface ModeloSessao {
   id: number;
   codigo: string;
+  codigo_canonico?: string | null;
   nome: string;
   tipo?: string | null;
   modelo_aeronave?: string | null;
@@ -162,8 +163,12 @@ function formatMinutes(value: number): string {
   return `${Math.floor(value / 60)}h${String(value % 60).padStart(2, '0')}`;
 }
 
+function getModelDisplayCode(model: ModeloSessao): string {
+  return model.codigo_canonico?.trim() || model.codigo;
+}
+
 function formatModelOption(model: ModeloSessao): string {
-  const title = [model.codigo, model.nome].filter(Boolean).join(' - ');
+  const title = [getModelDisplayCode(model), model.nome].filter(Boolean).join(' - ');
   const details = [
     model.tipo_sessao_codigo || model.tipo_sessao_nome || model.tipo,
     model.modelo_aeronave,
@@ -222,7 +227,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
   const [stepMessage, setStepMessage] = useState<string | null>(null);
   const [modelos, setModelos] = useState<ModeloSessao[]>([]);
   const [loadingModelos, setLoadingModelos] = useState(false);
-  const [modelosErro, setModelosErro] = useState<string | null>(null);
   const [hasProtectedFicha, setHasProtectedFicha] = useState(false);
 
   const participantIds = useMemo(
@@ -338,7 +342,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
 
   const fetchModelos = useCallback(async () => {
     setModelos([]);
-    setModelosErro(null);
     if (!simuladorModelo || !simuladorId) return;
 
     setLoadingModelos(true);
@@ -356,7 +359,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       const body = await response.json();
       setModelos(Array.isArray(body?.data) ? body.data : []);
     } catch (error) {
-      setModelosErro(error instanceof Error ? error.message : 'Erro ao carregar modelos.');
+      toast.error(error instanceof Error ? error.message : 'Erro ao carregar modelos.');
     } finally {
       setLoadingModelos(false);
     }
@@ -367,7 +370,6 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       void fetchModelos();
     } else {
       setModelos([]);
-      setModelosErro(null);
     }
   }, [fetchModelos, reservationReady]);
 
@@ -459,7 +461,8 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
           // Fallback: resolve modelo_sessao_id via atribuicoes diretas (top-level do detail)
           if (!modeloId) {
             const atribuicao = (detail.atribuicoes || []).find(
-              (a: any) => Number(a.funcionario_id) === Number(participant.funcionario_id)
+              (a: { funcionario_id?: number | string | null; modelo_sessao_id?: number | string | null; gera_ficha?: number | boolean }) =>
+                Number(a.funcionario_id) === Number(participant.funcionario_id),
             );
             if (atribuicao?.modelo_sessao_id) {
               modeloId = Number(atribuicao.modelo_sessao_id);
@@ -525,7 +528,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
     return () => {
       mounted = false;
     };
-  }, [editSessionId, funcionarios, horarioFim, horarioInicio]);
+  }, [conversionSeed, editSessionId, funcionarios, horarioFim, horarioInicio]);
 
   const modelById = useMemo(() => {
     const map = new Map<number, ModeloSessao>();
@@ -559,7 +562,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
         if (participant.cumpre_treinamento) {
           curricular = total;
           const model = participant.modelo_sessao_id ? modelById.get(participant.modelo_sessao_id) : null;
-          if (model?.codigo) models.add(model.codigo);
+          if (model) models.add(getModelDisplayCode(model));
         }
 
         return {
