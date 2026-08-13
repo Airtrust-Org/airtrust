@@ -1271,6 +1271,8 @@ export interface ExpiracaoMatricula {
   status: string;
   data_expiracao: string;
   progresso_pct: number;
+  /** Progresso efetivo (resolveLmsEffectiveProgress) — só 100 quando status é CONCLUIDO. Preferir sobre progresso_pct bruto para exibição. */
+  progresso_efetivo: number;
   dias_restantes: number;
 }
 
@@ -1283,6 +1285,8 @@ export interface LmsScormConclusaoInconsistente {
   curso_titulo: string;
   status: string;
   progresso_pct: number;
+  /** Progresso efetivo (resolveLmsEffectiveProgress) — só 100 quando status é CONCLUIDO. Preferir sobre progresso_pct bruto para exibição. */
+  progresso_efetivo: number;
   score_pct: number | null;
   mastery_score: number | null;
   location: string | null;

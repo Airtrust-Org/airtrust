@@ -499,20 +499,21 @@ export function LmsStatPill({
 export function LmsEnrollmentMeta({
   matricula,
 }: {
-  matricula?: Pick<LmsMatricula, 'status' | 'progresso_pct'> & {
+  matricula?: Pick<LmsMatricula, 'status' | 'progresso_pct' | 'progresso_efetivo'> & {
     carga_horaria_minutos?: number | null;
   };
 }) {
   const status = matricula?.status
     ? getMatriculaStatusMeta(matricula.status)
     : getMatriculaStatusMeta('DISPONIVEL');
+  const displayProgress = matricula?.progresso_efetivo ?? matricula?.progresso_pct;
   return (
     <div className="flex items-center gap-2">
       <LmsStatPill status={status} />
-      {typeof matricula?.progresso_pct === 'number' && matricula.status !== 'NAO_INICIADO' ? (
+      {typeof displayProgress === 'number' && matricula?.status !== 'NAO_INICIADO' ? (
         <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
           <TrendingUp className="h-3.5 w-3.5" />
-          {matricula.progresso_pct}%
+          {displayProgress}%
         </span>
       ) : null}
       <LmsInfoChip icon={<Clock3 className="h-3.5 w-3.5" />}>

@@ -92,7 +92,7 @@ export default function LmsRelatorios() {
       'Funcionário,Função,Base,Curso,Status,Expiração,Dias Restantes,Progresso %',
       ...expiracoes.map(
         (r) =>
-          `"${r.funcionario_nome}","${r.funcao ?? ''}","${r.base ?? ''}","${r.curso_titulo}",${r.status},${r.data_expiracao},${r.dias_restantes},${r.progresso_pct}`,
+          `"${r.funcionario_nome}","${r.funcao ?? ''}","${r.base ?? ''}","${r.curso_titulo}",${r.status},${r.data_expiracao},${r.dias_restantes},${r.progresso_efetivo ?? r.progresso_pct}`,
       ),
     ];
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -108,7 +108,7 @@ export default function LmsRelatorios() {
       'Funcionario,Funcao,Curso,Status,Progresso %,Score %,Mastery,Location,Diagnostico,Ultimo Commit',
       ...conclusoesInconsistentes.map(
         (r) =>
-          `"${r.funcionario_nome}","${r.funcao ?? ''}","${r.curso_titulo}",${r.status},${r.progresso_pct},${r.score_pct ?? ''},${r.mastery_score ?? ''},"${r.location ?? ''}",${r.diagnostic_code},${r.last_commit_at ?? ''}`,
+          `"${r.funcionario_nome}","${r.funcao ?? ''}","${r.curso_titulo}",${r.status},${r.progresso_efetivo ?? r.progresso_pct},${r.score_pct ?? ''},${r.mastery_score ?? ''},"${r.location ?? ''}",${r.diagnostic_code},${r.last_commit_at ?? ''}`,
       ),
     ];
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -529,7 +529,7 @@ export default function LmsRelatorios() {
                             <td className="px-4 py-4 text-slate-700 dark:text-slate-300">{row.curso_titulo}</td>
                             <td className="px-4 py-4 text-slate-600 dark:text-slate-400">{row.status}</td>
                             <td className="px-4 py-4 text-right text-slate-600 dark:text-slate-400">
-                              {row.progresso_pct}%
+                              {row.progresso_efetivo ?? row.progresso_pct}%
                             </td>
                             <td className="px-4 py-4 text-right text-slate-600 dark:text-slate-400">
                               {row.score_pct != null ? `${row.score_pct}%` : '—'}
