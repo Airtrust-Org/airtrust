@@ -10,3 +10,6 @@ package-lock.json
 docs/regulatory/edb/ADR_EDB_REGULATED_SCHEMA_D1_R2_READINESS_20260802.md
 # Legacy route baseline; new TypeScript regressions remain guarded by delta checks.
 worker-airtrust/src/routes/qualificacoes/historico.ts
+# Legacy formatting baseline; new regressions remain guarded by eslint/tsc delta checks.
+src/react-app/components/modals/SharedSessionForm.tsx
+src/react-app/components/modals/__tests__/SharedSessionForm.rendered.test.tsx

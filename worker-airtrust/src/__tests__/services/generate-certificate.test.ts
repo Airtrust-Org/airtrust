@@ -380,6 +380,38 @@ describe('generateCertificateForHistorico', () => {
     expect(bucket.delete).not.toHaveBeenCalled();
   });
 
+  it('categoria canônica presente (join qualificacoes_tipos.categoria_id -> qualificacoes_categorias.nome) -> único campo "Categoria" mostra a canônica, nunca o texto legado', async () => {
+    const { db } = makeFakeD1({
+      qualificacao: makeQualificacaoRow({ categoria_qualificacao_canonica: 'EAD' }),
+    });
+    const bucket = makeBucket();
+    const env = makeEnv(db, bucket);
+
+    await generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {});
+
+    const templateData = processTemplateWithQRMock.mock.calls[0][1] as Record<string, unknown>;
+    // {{categoria}} é a canônica, não o texto legado 'TESTE' do fixture.
+    expect(templateData.qualificacao_categoria).toBe('EAD');
+    expect(templateData.qual_meta_line).toBe(
+      'Carga Horária: 8h &nbsp;·&nbsp; Categoria: EAD &nbsp;·&nbsp; Código: TST',
+    );
+  });
+
+  it('categoria canônica ausente (qualificacoes_tipos.categoria_id sem vínculo ativo) -> campo omitido por completo, sem separador sobrando, nunca null/undefined/[object Object]', async () => {
+    const { db } = makeFakeD1({
+      qualificacao: makeQualificacaoRow({ categoria_qualificacao_canonica: null }),
+    });
+    const bucket = makeBucket();
+    const env = makeEnv(db, bucket);
+
+    await generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {});
+
+    const templateData = processTemplateWithQRMock.mock.calls[0][1] as Record<string, unknown>;
+    expect(templateData.qualificacao_categoria).toBe('');
+    expect(templateData.qual_meta_line).toBe('Carga Horária: 8h &nbsp;·&nbsp; Código: TST');
+    expect(String(templateData.qual_meta_line)).not.toMatch(/null|undefined|\[object Object\]/);
+  });
+
   it('historico inexistente -> CERTIFICATE_HISTORY_NOT_FOUND', async () => {
     const { db } = makeFakeD1({ qualificacao: null });
     const bucket = makeBucket();
