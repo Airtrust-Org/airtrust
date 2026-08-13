@@ -21,9 +21,13 @@ import {
   isInstructorSpecialSession,
   normalizeInstructionSeatValue,
 } from '../../../src/shared/simuladores/ficha-header';
+import { requireOperationalAccess } from '../services/operational-domain-access';
 import {
-  requireOperationalAccess,
-  } from '../services/operational-domain-access';
+  fichaInstructorMetaJoin,
+  fichaInstructorMetaSelect,
+  getFichaInstructorMetaSchema,
+  type FichaInstructorMetaSchema,
+} from '../utils/ficha-instructor-meta-schema';
 
 // Fichas de sessão de simulador são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md. This guard does NOT block based
@@ -32,18 +36,6 @@ const requireOperacoesFicha = (action: 'complete' | 'cancel') =>
   requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' });
 
 const app = new Hono<{ Bindings: Env }>();
-
-const FICHA_INSTRUCTOR_META_SELECT = `
-  fsi.equipamento_utilizado AS equipamento_utilizado,
-  fsi.dispositivo_identificacao AS dispositivo_identificacao,
-  fsi.assento_instrucao_utilizado AS assento_instrucao_utilizado
-`;
-
-const FICHA_INSTRUCTOR_META_JOIN = `
-  LEFT JOIN fichas_sessao_instrutor_meta fsi
-    ON fsi.ficha_id = fs.id
-   AND fsi.empresa_id = fs.empresa_id
-`;
 
 // ─── Helper: sanitize string for file names ────────────────────────────────
 function sanitizeForFilename(str: string, maxLen: number): string {
@@ -115,14 +107,16 @@ async function arquivarFichaAutomaticamente(db: D1Database, fichaId: string): Pr
     }
 
     const nomeFuncionario = sanitizeForFilename((ficha.aluno_nome as string) || 'SEM_NOME', 25);
-    const nomeSessao     = sanitizeForFilename((ficha.sessao_titulo as string) || 'SESSAO', 20);
-    const dataSessao     = ((ficha.sessao_data as string) || new Date().toISOString().split('T')[0]).replace(/-/g, '');
+    const nomeSessao = sanitizeForFilename((ficha.sessao_titulo as string) || 'SESSAO', 20);
+    const dataSessao = (
+      (ficha.sessao_data as string) || new Date().toISOString().split('T')[0]
+    ).replace(/-/g, '');
     // DDMMAAAA
     const [ano, mes, dia] = ((ficha.sessao_data as string) || '').split('-');
     const dataFile = ano ? `${dia}${mes}${ano}` : dataSessao;
-    const idPadded     = fichaId.padStart(6, '0');
-    const nomeArquivo  = `SIM-${nomeFuncionario}-${nomeSessao}-${dataFile}-${idPadded}.pdf`;
-    const caminhoR2    = `pasta-virtual/${ficha.colaborador_id_aluno}/simuladores/${nomeArquivo}`;
+    const idPadded = fichaId.padStart(6, '0');
+    const nomeArquivo = `SIM-${nomeFuncionario}-${nomeSessao}-${dataFile}-${idPadded}.pdf`;
+    const caminhoR2 = `pasta-virtual/${ficha.colaborador_id_aluno}/simuladores/${nomeArquivo}`;
 
     // Inserir na pasta_virtual (idempotente via ON CONFLICT IGNORE se houver unique)
     await db
@@ -190,14 +184,15 @@ async function getFichaWithInstructorMeta(
   db: D1Database,
   fichaId: string | number,
   empresaId: string | number,
+  schema: FichaInstructorMetaSchema,
 ) {
   return db
     .prepare(
       `SELECT
         fs.*,
-        ${FICHA_INSTRUCTOR_META_SELECT}
+        ${fichaInstructorMetaSelect(schema)}
       FROM fichas_sessao fs
-      ${FICHA_INSTRUCTOR_META_JOIN}
+      ${fichaInstructorMetaJoin(schema)}
       WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`,
     )
     .bind(String(fichaId), String(empresaId))
@@ -305,8 +300,9 @@ app.post('/fichas/:id/assinar', async (c) => {
       return c.json({ success: false, error: 'tipo:ALUNO ou INSTRUTOR' }, 400);
 
     const gerarQualificacao = b.gerar_qualificacao === true;
+    const instructorMetaSchema = await getFichaInstructorMetaSchema(c.env.DB);
 
-    const f = await getFichaWithInstructorMeta(c.env.DB, id, empresaId);
+    const f = await getFichaWithInstructorMeta(c.env.DB, id, empresaId, instructorMetaSchema);
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
     const availability = await getFichaAvailabilityFromDb(c.env.DB, id);
@@ -337,8 +333,7 @@ app.post('/fichas/:id/assinar', async (c) => {
         {
           success: false,
           code: 'FICHA_SEM_MANOBRAS',
-          error:
-            'Ficha sem manobras. Corrija o cadastro do modelo antes de assinar esta ficha.',
+          error: 'Ficha sem manobras. Corrija o cadastro do modelo antes de assinar esta ficha.',
         },
         409,
       );
@@ -363,11 +358,14 @@ app.post('/fichas/:id/assinar', async (c) => {
       if (!funcId) return c.json({ success: false, error: 'Usuário sem vínculo funcional' }, 403);
 
       if (b.tipo === 'ALUNO' && String(f.colaborador_id_aluno) !== String(funcId)) {
-        return c.json({
-          success: false,
-          code: 'STUDENT_SIGNATURE_FORBIDDEN',
-          error: 'Apenas o aluno avaliado pode assinar como aluno',
-        }, 403);
+        return c.json(
+          {
+            success: false,
+            code: 'STUDENT_SIGNATURE_FORBIDDEN',
+            error: 'Apenas o aluno avaliado pode assinar como aluno',
+          },
+          403,
+        );
       }
       // Para assinar como INSTRUTOR: deve ser o instrutor da ficha
       // (mesmo que também seja aluno em outra ficha, aqui o papel é de instrutor)
@@ -524,7 +522,7 @@ app.post('/fichas/:id/assinar', async (c) => {
       await arquivarFichaAutomaticamente(c.env.DB, id);
     }
 
-    const fa = await getFichaWithInstructorMeta(c.env.DB, id, empresaId);
+    const fa = await getFichaWithInstructorMeta(c.env.DB, id, empresaId, instructorMetaSchema);
     await audit(c.env.DB, {
       tabela: 'fichas_sessao',
       acao: 'UPDATE',

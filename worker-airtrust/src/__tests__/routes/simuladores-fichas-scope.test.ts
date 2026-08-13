@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
+import { resetFichaInstructorMetaSchemaCache } from '../../utils/ficha-instructor-meta-schema';
 
 const getEmployeeSectorAccessMock = vi.hoisted(() => vi.fn());
 
@@ -291,6 +292,8 @@ function createFichasDb(options?: { instructorMetaTableMissing?: boolean }) {
 }
 
 describe('simuladores fichas scope guards', () => {
+  beforeEach(resetFichaInstructorMetaSchemaCache);
+
   it('GET /fichas filtra fichas fora do escopo setorial do gestor', async () => {
     getEmployeeSectorAccessMock.mockResolvedValue({
       mode: 'restricted',
@@ -604,6 +607,24 @@ describe('simuladores fichas scope guards', () => {
     );
 
     expect(resp.status).not.toBe(409);
+  });
+
+  it('GET /fichas/:id retorna 200 sem a tabela opcional de metadata', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+    const { db } = createFichasDb({ instructorMetaTableMissing: true });
+
+    const resp = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901'),
+      { DB: db, __mockEmpresaId: 6, __mockRole: 'admin' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(resp.status).toBe(200);
+    await expect(resp.json()).resolves.toMatchObject({ success: true, data: { id: 901 } });
   });
 
   it('POST /fichas/:id/pdf permite ficha disponivel (availability gate) e retorna um PDF valido', async () => {
