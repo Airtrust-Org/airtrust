@@ -1,0 +1,269 @@
+name: Manual Required Checks (Contingency)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_API_URL: http://127.0.0.1:8787
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: GitHub Actions context guard
+        run: |
+          node --test scripts/ci/check-github-workflow-contexts.test.mjs
+          node --test scripts/ci/check-audit-round2-regressions.test.mjs
+          node scripts/ci/check-github-workflow-contexts.mjs
+          node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
+
+      - name: guard:migrations-dir-purity
+        run: |
+          node --test scripts/__tests__/migration-deploy-safety.test.mjs scripts/__tests__/migration-no-go-guard.test.mjs scripts/__tests__/operational-sql-renames.test.mjs
+          node scripts/guard-migrations-dir-purity.mjs --dry-run
+          node scripts/guard-no-generic-remote-migrations.mjs
+          node scripts/check-no-go-migrations.mjs
+
+      - name: Install
+        run: npm ci
+
+      - name: URL guard
+        run: npm run lint:api-base
+        env:
+          CI: true
+          VITE_API_URL: http://127.0.0.1:8787
+
+      - name: Build
+        run: npm run build
+
+  worker-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: cd worker-airtrust && npm ci
+
+      - name: Worker typecheck
+        run: cd worker-airtrust && npx tsc --noEmit
+
+      - name: Worker unit tests
+        run: cd worker-airtrust && npx vitest run
+
+  lms-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: Install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y sqlite3
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: cd worker-airtrust && npm ci
+
+      - name: Write local dev vars
+        run: |
+          JWT_SECRET="$(openssl rand -hex 32)"
+          cat > worker-airtrust/.dev.vars <<EOFVARS
+          JWT_SECRET=$JWT_SECRET
+          EOFVARS
+
+      - name: Setup local database
+        run: npm run setup:lms:local:reset
+
+      - name: Run integrity guardrails
+        run: npm run integrity:ci
+
+      - name: Start local worker
+        run: |
+          npm run dev:worker:local > /tmp/airtrust-worker.log 2>&1 &
+          echo $! > /tmp/airtrust-worker.pid
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8787/api/health >/dev/null; then
+              echo "Local worker ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/airtrust-worker.log
+          exit 1
+
+      - name: Run LMS smoke
+        run: npm run smoke:lms:local
+
+      - name: Worker log on failure
+        if: failure()
+        run: cat /tmp/airtrust-worker.log || true
+
+      - name: Upload worker log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lms-smoke-worker-log-manual
+          path: /tmp/airtrust-worker.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop local worker
+        if: always()
+        run: |
+          if [ -f /tmp/airtrust-worker.pid ]; then
+            kill "$(cat /tmp/airtrust-worker.pid)" || true
+          fi
+          rm -f worker-airtrust/.dev.vars
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Ensure base ref is available for delta guards
+        run: git fetch origin main --quiet
+      - name: Run CI safety guards
+        run: npm run lint
+        env:
+          CI: true
+          VITE_API_URL: http://127.0.0.1:8787
+      - name: Run migration NO_GO guard tests
+        run: node --test scripts/__tests__/migration-no-go-guard.test.mjs
+      - name: Run TypeScript delta guard tests
+        run: node --test scripts/__tests__/typescript-delta-guard.test.mjs
+      - name: Run lint and format delta guard tests
+        run: node --test scripts/__tests__/lint-format-delta-guard.test.mjs
+      - name: Run risk-based test delta guard tests
+        run: node --test scripts/__tests__/risk-test-delta-guard.test.mjs
+      - name: Block new ESLint and Prettier violations
+        run: node scripts/guard-lint-format-delta.mjs
+      - name: Require focused tests for high-risk runtime changes
+        run: node scripts/guard-risk-test-delta.mjs
+      - name: Run dangerous-ops guard (self-protected invariants)
+        run: npm run ops:guard
+      - name: Run self-protected invariant mutation tests
+        run: node --test scripts/__tests__/self-protected-invariants-guard.test.mjs
+      - name: Run hardened production post-deploy smoke tests
+        run: node --test scripts/__tests__/smoke-production-postdeploy.test.mjs
+      - name: Inventory legacy ESLint baseline
+        run: npx eslint "./src/**/*.{js,jsx,ts,tsx}" --max-warnings=0 || true
+      - name: Inventory legacy Prettier baseline
+        run: npx --yes prettier@3.9.6 --check . || true
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test:run
+
+      - name: Generate coverage with threshold (30%+)
+        run: npm run test:coverage
+        continue-on-error: false
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run credential-free public E2E smoke
+        run: npx playwright test --config=playwright.ci.config.ts
+        env:
+          CI: true
+          VITE_API_URL: http://127.0.0.1:8787
+
+      - name: Upload E2E diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-e2e-smoke-diagnostics-manual
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  check-demo-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Make scripts executable
+        run: |
+          chmod +x ./scripts/ci-demo-data-check.sh
+          chmod +x ./scripts/ci-internal-docs-check.sh
+          chmod +x ./scripts/production-audit-check.sh
+
+      - name: Test internal documents guard
+        run: ./scripts/ci-internal-docs-check.sh --test
+
+      - name: Block sensitive internal documents
+        run: ./scripts/ci-internal-docs-check.sh
+
+      - name: Build application
+        run: npm run build
+        env:
+          VITE_API_URL: http://127.0.0.1:8787
+
+      - name: Run demo data and production audit checks
+        run: npm run check:demo-data
