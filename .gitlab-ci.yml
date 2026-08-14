@@ -60,11 +60,15 @@ worker-typecheck:
   image: node:24
   needs: []
   cache:
-    key: "worker-npm-$CI_COMMIT_REF_SLUG"
+    key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
-      - .npm-worker/
+      - .npm/
   before_script:
-    - npm ci --prefix worker-airtrust --cache .npm-worker --prefer-offline
+    # Worker source imports shared/root modules (zod, exceljs, date-fns,
+    # src/react-app/types/*) — root install is required before the worker
+    # typecheck can resolve them, same as worker-tests-1/2 below.
+    - npm ci --cache .npm --prefer-offline
+    - npm ci --prefix worker-airtrust --cache .npm --prefer-offline
   script:
     - cd worker-airtrust
     - npx tsc --noEmit
