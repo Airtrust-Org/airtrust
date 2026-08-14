@@ -31,6 +31,8 @@ test:
   stage: test
   image: node:24
   before_script:
+    - apt-get update && apt-get install -y --no-install-recommends sqlite3
+    - sqlite3 --version
     - npm ci
   script:
     - npm run test:run
