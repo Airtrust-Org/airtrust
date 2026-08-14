@@ -40,8 +40,7 @@ worker-tests:
   image: node:24
   before_script:
     - npm ci
-    - cd worker-airtrust
-    - npm ci
+    - npm ci --prefix worker-airtrust
   script:
     - cd worker-airtrust
     - npx tsc --noEmit
