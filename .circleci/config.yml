@@ -1,0 +1,201 @@
+version: 2.1
+
+executors:
+  node:
+    docker:
+      - image: node:24
+    working_directory: /home/node/project
+
+commands:
+  npm_ci_root:
+    steps:
+      - restore_cache:
+          keys:
+            - npm-root-v1-{{ checksum "package-lock.json" }}
+            - npm-root-v1-
+      - run:
+          name: npm ci (root)
+          command: npm ci --cache ~/.npm --prefer-offline
+      - save_cache:
+          key: npm-root-v1-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+  npm_ci_worker:
+    steps:
+      - restore_cache:
+          keys:
+            - npm-worker-v1-{{ checksum "worker-airtrust/package-lock.json" }}
+            - npm-worker-v1-
+      - run:
+          name: npm ci (worker-airtrust)
+          command: npm ci --prefix worker-airtrust --cache ~/.npm-worker --prefer-offline
+      - save_cache:
+          key: npm-worker-v1-{{ checksum "worker-airtrust/package-lock.json" }}
+          paths:
+            - ~/.npm-worker
+  install_sqlite3:
+    steps:
+      - run:
+          name: install sqlite3
+          command: apt-get update && apt-get install -y --no-install-recommends sqlite3 && sqlite3 --version
+
+jobs:
+  lint:
+    executor: node
+    resource_class: small
+    environment:
+      VITE_API_URL: "http://127.0.0.1:8787"
+    steps:
+      - checkout
+      - npm_ci_root
+      - run:
+          name: npm run lint
+          command: npm run lint
+
+  build-content-gates:
+    executor: node
+    resource_class: medium
+    environment:
+      VITE_API_URL: "http://127.0.0.1:8787"
+    steps:
+      - checkout
+      - run:
+          name: install ripgrep
+          command: apt-get update && apt-get install -y --no-install-recommends ripgrep
+      - npm_ci_root
+      - run:
+          name: internal docs check (self-test)
+          command: chmod +x ./scripts/ci-demo-data-check.sh ./scripts/ci-internal-docs-check.sh ./scripts/production-audit-check.sh && ./scripts/ci-internal-docs-check.sh --test
+      - run:
+          name: internal docs check
+          command: ./scripts/ci-internal-docs-check.sh
+      - run:
+          name: build
+          command: VITE_API_URL=http://127.0.0.1:8787 npm run build
+      - run:
+          name: check:demo-data
+          command: npm run check:demo-data
+      - store_artifacts:
+          path: dist
+          destination: dist
+
+  frontend-coverage:
+    executor: node
+    resource_class: large
+    steps:
+      - checkout
+      - install_sqlite3
+      - npm_ci_root
+      - run:
+          name: npm run test:coverage
+          command: npm run test:coverage
+      - store_artifacts:
+          path: coverage
+          destination: coverage
+
+  worker-typecheck:
+    executor: node
+    resource_class: medium
+    steps:
+      - checkout
+      - npm_ci_root
+      - npm_ci_worker
+      - run:
+          name: worker tsc --noEmit
+          command: cd worker-airtrust && npx tsc --noEmit
+
+  worker-tests-1:
+    executor: node
+    resource_class: large
+    steps:
+      - checkout
+      - install_sqlite3
+      - npm_ci_root
+      - npm_ci_worker
+      - run:
+          name: vitest shard 1/2
+          command: cd worker-airtrust && npx vitest run --shard=1/2
+
+  worker-tests-2:
+    executor: node
+    resource_class: large
+    steps:
+      - checkout
+      - install_sqlite3
+      - npm_ci_root
+      - npm_ci_worker
+      - run:
+          name: vitest shard 2/2
+          command: cd worker-airtrust && npx vitest run --shard=2/2
+
+  lms-smoke:
+    executor: node
+    resource_class: medium+
+    steps:
+      - checkout
+      - install_sqlite3
+      - npm_ci_root
+      - npm_ci_worker
+      - run:
+          name: lms smoke
+          command: |
+            JWT_SECRET="$(openssl rand -hex 32)"
+            printf 'JWT_SECRET=%s\n' "$JWT_SECRET" > worker-airtrust/.dev.vars
+            npm run setup:lms:local:reset
+            npm run integrity:ci
+            npm run dev:worker:local > airtrust-worker.log 2>&1 &
+            echo $! > /tmp/airtrust-worker.pid
+            for i in $(seq 1 60); do
+              if curl -fsS http://localhost:8787/api/health >/dev/null; then
+                echo "Local worker ready"
+                break
+              fi
+              if [ "$i" -eq 60 ]; then
+                cat airtrust-worker.log
+                exit 1
+              fi
+              sleep 2
+            done
+            npm run smoke:lms:local
+      - run:
+          name: cleanup
+          when: always
+          command: |
+            if [ -f /tmp/airtrust-worker.pid ]; then
+              kill "$(cat /tmp/airtrust-worker.pid)" || true
+            fi
+            rm -f worker-airtrust/.dev.vars
+      - store_artifacts:
+          path: airtrust-worker.log
+          destination: airtrust-worker.log
+
+  public-e2e:
+    executor: node
+    resource_class: medium+
+    environment:
+      CI: "true"
+      VITE_API_URL: "http://127.0.0.1:8787"
+    steps:
+      - checkout
+      - npm_ci_root
+      - run:
+          name: playwright install chromium
+          command: npx playwright install --with-deps chromium
+      - run:
+          name: playwright test
+          command: npx playwright test --config=playwright.ci.config.ts
+      - store_artifacts:
+          path: test-results
+          destination: test-results
+
+workflows:
+  optimized-pipeline:
+    jobs:
+      - lint
+      - build-content-gates
+      - frontend-coverage
+      - worker-typecheck
+      - worker-tests-1
+      - worker-tests-2
+      - lms-smoke
+      - public-e2e
