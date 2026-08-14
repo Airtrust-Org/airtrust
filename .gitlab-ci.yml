@@ -2,6 +2,10 @@ stages:
   - validate
   - test
 
+default:
+  tags:
+    - airtrust-local
+
 lint:
   stage: validate
   image: node:24
