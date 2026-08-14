@@ -3,35 +3,21 @@ stages:
   - test
   - build
 
-default:
-  image: node:24
-  interruptible: true
-  cache:
-    key:
-      files:
-        - package-lock.json
-    paths:
-      - .npm/
-    policy: pull-push
-  before_script:
-    - npm ci --cache .npm --prefer-offline
-
-workflow:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS == null
-
 lint:
   stage: validate
+  image: node:24
+  before_script:
+    - npm ci
   script:
     - npm run lint
   variables:
-    CI: "true"
-    VITE_API_URL: http://127.0.0.1:8787
+    VITE_API_URL: "http://127.0.0.1:8787"
 
 check-demo-data:
   stage: validate
+  image: node:24
+  before_script:
+    - npm ci
   script:
     - chmod +x ./scripts/ci-internal-docs-check.sh ./scripts/production-audit-check.sh
     - ./scripts/ci-internal-docs-check.sh --test
@@ -39,38 +25,46 @@ check-demo-data:
     - npm run build
     - npm run check:demo-data
   variables:
-    VITE_API_URL: http://127.0.0.1:8787
+    VITE_API_URL: "http://127.0.0.1:8787"
 
 test:
   stage: test
+  image: node:24
+  before_script:
+    - npm ci
   script:
     - npm run test:run
 
 worker-tests:
   stage: test
+  image: node:24
+  before_script:
+    - npm ci
+    - cd worker-airtrust
+    - npm ci
   script:
     - cd worker-airtrust
-    - npm ci --cache ../.npm --prefer-offline
     - npx tsc --noEmit
     - npx vitest run
 
 lms-smoke:
   stage: test
+  image: node:24
   before_script:
-    - apt-get update && apt-get install -y --no-install-recommends sqlite3
-    - npm ci --cache .npm --prefer-offline
-    - cd worker-airtrust && npm ci --cache ../.npm --prefer-offline && cd ..
+    - apt-get update
+    - apt-get install -y --no-install-recommends sqlite3
+    - npm ci
+    - cd worker-airtrust
+    - npm ci
+    - cd ..
   script:
-    - |
-      JWT_SECRET="$(openssl rand -hex 32)"
-      cat > worker-airtrust/.dev.vars <<EOFVARS
-      JWT_SECRET=$JWT_SECRET
-      EOFVARS
+    - JWT_SECRET="$(openssl rand -hex 32)"
+    - echo "JWT_SECRET=$JWT_SECRET" > worker-airtrust/.dev.vars
     - npm run setup:lms:local:reset
     - npm run integrity:ci
+    - nohup npm run dev:worker:local > airtrust-worker.log 2>&1 &
+    - echo $! > airtrust-worker.pid
     - |
-      npm run dev:worker:local > /tmp/airtrust-worker.log 2>&1 &
-      echo $! > /tmp/airtrust-worker.pid
       for i in $(seq 1 60); do
         if curl -fsS http://localhost:8787/api/health >/dev/null; then
           echo "Local worker ready"
@@ -78,24 +72,27 @@ lms-smoke:
         fi
         sleep 2
         if [ "$i" = "60" ]; then
-          cat /tmp/airtrust-worker.log
+          cat airtrust-worker.log
           exit 1
         fi
       done
     - npm run smoke:lms:local
   after_script:
-    - cat /tmp/airtrust-worker.log 2>/dev/null || true
-    - if [ -f /tmp/airtrust-worker.pid ]; then kill "$(cat /tmp/airtrust-worker.pid)" || true; fi
+    - cat airtrust-worker.log 2>/dev/null || true
+    - if [ -f airtrust-worker.pid ]; then kill "$(cat airtrust-worker.pid)" || true; fi
     - rm -f worker-airtrust/.dev.vars
   artifacts:
     when: on_failure
     paths:
-      - /tmp/airtrust-worker.log
+      - airtrust-worker.log
     expire_in: 7 days
 
 build:
   stage: build
+  image: node:24
+  before_script:
+    - npm ci
   script:
     - npm run build
   variables:
-    VITE_API_URL: http://127.0.0.1:8787
+    VITE_API_URL: "http://127.0.0.1:8787"
