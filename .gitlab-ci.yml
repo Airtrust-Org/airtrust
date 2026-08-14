@@ -39,6 +39,8 @@ worker-tests:
   stage: test
   image: node:24
   before_script:
+    - apt-get update && apt-get install -y --no-install-recommends sqlite3
+    - sqlite3 --version
     - npm ci
     - npm ci --prefix worker-airtrust
   script:
