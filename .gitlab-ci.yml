@@ -24,6 +24,10 @@ build-content-gates:
     paths:
       - .npm/
   before_script:
+    # ci-demo-data-check.sh and production-audit-check.sh (run below via
+    # check:demo-data) hard-require `rg` with set -euo pipefail and no
+    # fallback; it is not an npm dependency, so it must be installed here.
+    - apt-get update && apt-get install -y --no-install-recommends ripgrep
     - npm ci --cache .npm --prefer-offline
   script:
     - chmod +x ./scripts/ci-demo-data-check.sh ./scripts/ci-internal-docs-check.sh ./scripts/production-audit-check.sh
