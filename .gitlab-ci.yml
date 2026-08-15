@@ -232,10 +232,14 @@ deploy-staging:
   environment:
     name: staging
     url: https://staging.airtrust.pages.dev
-  # No needs: on the GitLab test/build jobs — those are manual-only now
-  # (CI moved to CircleCI). The operator triggering this job is
-  # responsible for confirming CircleCI is 8/8 PASS for this exact SHA
-  # before clicking run; see .circleci/config.yml.
+  # needs: [] (not simply omitted) — GitLab's implicit stage ordering
+  # otherwise still blocks this deploy stage job behind the validate/test
+  # stages until those jobs reach a terminal state, even though this job
+  # has no explicit job-level dependency on them. Same fix pattern as
+  # the 8 test/build jobs above (moved to CircleCI, manual-only here;
+  # the operator is responsible for confirming CircleCI 8/8 PASS for
+  # this exact SHA before clicking run; see .circleci/config.yml).
+  needs: []
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual
