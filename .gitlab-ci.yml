@@ -232,16 +232,10 @@ deploy-staging:
   environment:
     name: staging
     url: https://staging.airtrust.pages.dev
-  needs:
-    - lint
-    - build-content-gates
-    - frontend-coverage
-    - frontend-typecheck
-    - worker-typecheck
-    - worker-tests-1
-    - worker-tests-2
-    - lms-smoke
-    - public-e2e
+  # No needs: on the GitLab test/build jobs — those are manual-only now
+  # (CI moved to CircleCI). The operator triggering this job is
+  # responsible for confirming CircleCI is 8/8 PASS for this exact SHA
+  # before clicking run; see .circleci/config.yml.
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual
