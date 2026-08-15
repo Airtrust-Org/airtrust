@@ -20,7 +20,11 @@ function runSqlite(dbPath: string, sql: string): string {
 }
 
 async function loadLib() {
-  return import(`file://${LIB_PATH}`);
+  // Vitest's Vite-based SSR module runner resolves dynamic import() ids as
+  // plain filesystem paths, not encoded file:// URLs — a file:// URL here
+  // fails to resolve on any checkout path containing spaces (e.g. this repo
+  // under a "Meu Drive"-named Google Drive sync folder).
+  return import(LIB_PATH);
 }
 
 function setupDb() {

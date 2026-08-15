@@ -24,7 +24,7 @@ const bcrypt = require('bcryptjs');
 
 const ALLOWED_D1_NAME = 'airtrust-db-staging-baseline-20260701';
 const BLOCKED_D1_SUBSTRINGS = ['prod', 'production'];
-const WORKER_DIR = new URL('../../worker-airtrust/', import.meta.url).pathname;
+const WORKER_DIR = decodeURIComponent(new URL('../../worker-airtrust/', import.meta.url).pathname);
 
 function validateD1Target(name) {
   const trimmed = String(name).trim();

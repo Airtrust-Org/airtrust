@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 const INTERNAL_EXACT_NAMES = new Set(['d1_migrations']);
 const INTERNAL_REASON_CODES = new Set(['sqlite_internal', 'cloudflare_internal', 'internal_ledger']);
@@ -719,6 +720,6 @@ function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }

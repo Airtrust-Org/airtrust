@@ -11,8 +11,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { analyzeObjects, renderSql, writeArtifacts } from '../export-d1-schema-only.mjs';
+import { fileURLToPath } from 'node:url';
 
-const ROOT_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function findingCodes(result) {
   return result.findings.map((finding) => finding.code);

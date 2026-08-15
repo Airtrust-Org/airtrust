@@ -4,6 +4,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import {
+import { fileURLToPath } from 'node:url';
   PRODUCTION_TARGET,
   assertCleanMain,
   assertPathOutsideRepo,
@@ -17,7 +18,7 @@ import {
 } from './lib/backup-d1-readonly.mjs';
 import { runCommand } from './lib/simuladores-matriz-preflight.mjs';
 
-const REPO_ROOT = resolve(dirname(new URL(import.meta.url).pathname), '..', '..');
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function arg(name) {
   const index = process.argv.indexOf(name);

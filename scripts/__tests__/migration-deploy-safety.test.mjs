@@ -7,8 +7,9 @@ import test from 'node:test';
 
 import { findGenericRemoteMigrationApplyViolations } from '../guard-no-generic-remote-migrations.mjs';
 import { inspectMigrationsDirectory } from '../migration-directory-policy.mjs';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 function withTempDir(callback) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'airtrust-migrations-safety-'));

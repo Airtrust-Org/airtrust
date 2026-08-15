@@ -94,7 +94,7 @@ function runReadOnlyQuery(dbName, sql) {
       sql,
       '--json',
     ],
-    { cwd: new URL('../../worker-airtrust', import.meta.url).pathname, encoding: 'utf8' },
+    { cwd: decodeURIComponent(new URL('../../worker-airtrust', import.meta.url).pathname), encoding: 'utf8' },
   );
   if (result.status !== 0) {
     throw new Error(`Falha ao executar consulta read-only: ${result.stderr || result.stdout}`);

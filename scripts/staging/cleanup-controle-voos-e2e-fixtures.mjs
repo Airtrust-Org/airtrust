@@ -15,7 +15,7 @@ import { dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const ALLOWED_D1_NAME = 'airtrust-db-staging-baseline-20260701';
-const WORKER_DIR = new URL('../../worker-airtrust/', import.meta.url).pathname;
+const WORKER_DIR = decodeURIComponent(new URL('../../worker-airtrust/', import.meta.url).pathname);
 
 function log(msg) {
   process.stderr.write(`[cleanup-cv-e2e] ${msg}\n`);

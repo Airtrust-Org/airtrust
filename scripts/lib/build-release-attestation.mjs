@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Deterministic post-deploy (or post-attempt) release attestation builder.
@@ -156,7 +157,7 @@ export function buildReleaseAttestation(fields) {
   return { attestation, attestationSha256, attestationObject: ordered };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { writeFileSync } = await import('node:fs');
   const inputArg = process.argv[2];
   if (!inputArg) throw new Error('usage: build-release-attestation.mjs <fields-json|-> [outputPath]');

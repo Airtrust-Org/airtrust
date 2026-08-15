@@ -8,7 +8,7 @@
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { checkWorkflowContent } from './cloudflare-secret-contract-lib.mjs';
 
@@ -32,7 +32,7 @@ export function runGuard() {
   return violations;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const violations = runGuard();
   if (violations.length > 0) {
     console.error('guard:cloudflare-secret-contract FAILED');

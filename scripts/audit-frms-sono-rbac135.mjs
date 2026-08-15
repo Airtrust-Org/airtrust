@@ -9,7 +9,7 @@ const API_BASE = 'https://airtrust-api-production.airtrust.workers.dev/api';
 const DEFAULT_EMAIL = process.env.AIRTRUST_AUDIT_EMAIL || 'admin@airtrust.com';
 const DEFAULT_PASSWORD = process.env.AIRTRUST_AUDIT_PASSWORD || 'Admin@123';
 
-const ROOT_DIR = resolve(new URL('..', import.meta.url).pathname);
+const ROOT_DIR = resolve(decodeURIComponent(new URL('..', import.meta.url).pathname));
 const WORKER_DIR = resolve(ROOT_DIR, 'worker-airtrust');
 
 function parseArgs(argv) {

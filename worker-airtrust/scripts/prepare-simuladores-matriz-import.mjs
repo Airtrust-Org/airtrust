@@ -11,6 +11,7 @@ import path from 'node:path';
 import process from 'node:process';
 import XLSX from 'xlsx';
 import {
+import { fileURLToPath } from 'node:url';
   createDeterministicPlan,
   sha256,
   sealPlan,
@@ -262,7 +263,7 @@ if (Object.keys(sourceHashes).length !== EXPECTED_SOURCE_HASH_COUNT) {
   );
 }
 const contract = loadSessionContract(
-  defaultContractPath(path.join(path.dirname(new URL(import.meta.url).pathname), '..')),
+  defaultContractPath(path.join(path.dirname(fileURLToPath(import.meta.url)), '..')),
 );
 const contractSummary = validateSessionContract(contract);
 const loftSummary = {

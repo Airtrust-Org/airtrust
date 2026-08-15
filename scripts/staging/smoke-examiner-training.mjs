@@ -23,6 +23,7 @@
 // validators, and update this script if any field name has drifted.
 
 import {
+import { pathToFileURL } from 'node:url';
   assert,
   assertAllowedStagingBaseUrl,
   extractAccessToken,
@@ -748,7 +749,7 @@ async function main() {
 // Executa apenas quando chamado diretamente (node scripts/staging/smoke-examiner-training.mjs),
 // nunca quando importado por um teste unitário dos helpers acima (evita golpear
 // staging de verdade só por causa de um import estático em scripts/__tests__/*.test.mjs).
-const isMainModule = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMainModule) {
   main().catch((err) => {
     console.error(String(err?.message || err));

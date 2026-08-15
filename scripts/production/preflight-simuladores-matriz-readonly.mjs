@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { assertAllowedProductionBaseUrl, fetchJson } from '../smoke-auth-common.mjs';
 import {
+import { fileURLToPath } from 'node:url';
   assertCleanMain,
   assertProductionTarget,
   resolveProductionTargetFromConfig,
@@ -21,7 +22,7 @@ import {
   runCommand,
 } from './lib/simuladores-matriz-preflight.mjs';
 
-const REPO_ROOT = resolve(dirname(new URL(import.meta.url).pathname), '..', '..');
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_BASE_URL = 'https://api.airtrust.online';
 const DEFAULT_TENANT_STATE = '/tmp/airtrust-tenant-state.json';
 const DEFAULT_PLAN_DIR = '/tmp/airtrust-simuladores-plan';

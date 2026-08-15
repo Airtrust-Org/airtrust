@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 /**
  * Teste das funcionalidades de datas brasileiras no AirTrust
  * Validar parsing, conversão e importação de certificações
@@ -192,7 +193,7 @@ const runAllTests = async () => {
 };
 
 // Auto-executar se chamado diretamente
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   runAllTests().then((success) => {
     process.exit(success ? 0 : 1);
   });

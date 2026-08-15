@@ -172,7 +172,7 @@ describe('escala-mensal-integrada pure helpers', () => {
 
 describe('escala-mensal-integrada training source contract', () => {
   const source = readFileSync(
-    new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname,
+    decodeURIComponent(new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname),
     'utf8',
   );
 
@@ -288,7 +288,7 @@ describe('escala-mensal-integrada — correções de auditoria', () => {
 
 describe('escala-mensal-integrada — contrato de tenant/filtros/parcialidade', () => {
   const source = readFileSync(
-    new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname,
+    decodeURIComponent(new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname),
     'utf8',
   );
 
@@ -363,7 +363,7 @@ describe('escala-mensal-integrada — qualificação date integrity', () => {
     // aparecerá no grid do mês corrente (days[event.date] não inclui maio),
     // mas ainda será contabilizado no sumário do tripulante.
     const source = readFileSync(
-      new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname,
+      decodeURIComponent(new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname),
       'utf8',
     );
 
@@ -385,7 +385,7 @@ describe('escala-mensal-integrada — qualificação date integrity', () => {
 
   it('qualificação com vencimento dentro do mês aparece na data correta', () => {
     const source = readFileSync(
-      new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname,
+      decodeURIComponent(new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname),
       'utf8',
     );
     // Verifica que há lógica para usar a data real quando dentro do mês
@@ -396,7 +396,7 @@ describe('escala-mensal-integrada — qualificação date integrity', () => {
 
 describe('aeronaves — contrato de filtro somenteAtivas', () => {
   const source = readFileSync(
-    new URL('../../routes/aeronaves.ts', import.meta.url).pathname,
+    decodeURIComponent(new URL('../../routes/aeronaves.ts', import.meta.url).pathname),
     'utf8',
   );
 
@@ -422,7 +422,7 @@ describe('aeronaves — contrato de filtro somenteAtivas', () => {
 
 describe('evd — aeronaves não converte erro em lista vazia silenciosa', () => {
   const source = readFileSync(
-    new URL('../../routes/aeronaves.ts', import.meta.url).pathname,
+    decodeURIComponent(new URL('../../routes/aeronaves.ts', import.meta.url).pathname),
     'utf8',
   );
 
@@ -444,15 +444,15 @@ describe('evd — aeronaves não converte erro em lista vazia silenciosa', () =>
 
 describe('treinamentos — conclusão e geração de qualificação', () => {
   const integrationSource = readFileSync(
-    new URL('../../services/treinamentos-planejados-integration.ts', import.meta.url).pathname,
+    decodeURIComponent(new URL('../../services/treinamentos-planejados-integration.ts', import.meta.url).pathname),
     'utf8',
   );
   const routesSource = readFileSync(
-    new URL('../../routes/treinamentos-planejados.ts', import.meta.url).pathname,
+    decodeURIComponent(new URL('../../routes/treinamentos-planejados.ts', import.meta.url).pathname),
     'utf8',
   );
   const expirationSource = readFileSync(
-    new URL('../../utils/qualificacoes-expiration.ts', import.meta.url).pathname,
+    decodeURIComponent(new URL('../../utils/qualificacoes-expiration.ts', import.meta.url).pathname),
     'utf8',
   );
 

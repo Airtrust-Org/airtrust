@@ -15,7 +15,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 
-import {
+import { import { fileURLToPath, pathToFileURL } from 'node:url';
   checkAddedContent,
   isBannedNewFile,
   isProductionTsFile,
@@ -132,7 +132,7 @@ export function runGuard({ cwd = process.cwd(), baseRef } = {}) {
 }
 
 function main() {
-  const cwd = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const cwd = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const { violations, bannedFiles, baseRef, mergeBase } = runGuard({ cwd });
 
   if (bannedFiles.length === 0 && violations.length === 0) {
@@ -173,6 +173,6 @@ function main() {
   process.exit(1);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }

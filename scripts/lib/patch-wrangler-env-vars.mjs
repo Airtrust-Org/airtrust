@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 const STAMP = /^[A-Za-z0-9._:-]+$/;
 
@@ -71,7 +72,7 @@ export function patchWranglerEnvVars(source, { environment, appVersion, buildTim
   return result;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [sourcePath, outputPath, environment, appVersion, buildTime, extraVarsJson] = process.argv.slice(2);
   if (!sourcePath || !outputPath) throw new Error('usage: source output environment version buildTime [extraVarsJson]');
   const extraVars = extraVarsJson ? JSON.parse(extraVarsJson) : {};

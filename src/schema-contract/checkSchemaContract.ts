@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export type ContractSeverity = 'PASS' | 'WARNING' | 'FAIL';
 
@@ -597,7 +598,7 @@ function readRemoteTable(workerDir: string, dbName: string, envName: string, tab
 }
 
 export function buildProductionSnapshot(contract: SchemaContract, opts?: { rootDir?: string; dbName?: string; envName?: string }): StructuralSnapshot {
-  const rootDir = opts?.rootDir ?? path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+  const rootDir = opts?.rootDir ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
   const workerDir = path.join(rootDir, 'worker-airtrust');
   const dbName = opts?.dbName ?? 'airtrust-db';
   const envName = opts?.envName ?? 'production';

@@ -1024,7 +1024,7 @@ describe('treinamentos planejados integration service', () => {
 
   it('A3: a conclusão via solicitações preenche resultado/data para emitir a qualificação', () => {
     const source = readFileSync(
-      new URL('../../services/treinamentos-planejados-integration.ts', import.meta.url).pathname,
+      decodeURIComponent(new URL('../../services/treinamentos-planejados-integration.ts', import.meta.url).pathname),
       'utf8',
     );
     // O caminho legado (solicitações) deve usar a MESMA semântica do endpoint novo:

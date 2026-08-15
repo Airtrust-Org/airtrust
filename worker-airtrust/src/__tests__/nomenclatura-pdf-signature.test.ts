@@ -45,7 +45,7 @@ describe('validarAssinaturaPDF', () => {
   });
 
   it('keeps the upload route validating bytes before writing to R2', () => {
-    const routePath = new URL('../routes/pasta-virtual.ts', import.meta.url).pathname;
+    const routePath = decodeURIComponent(new URL('../routes/pasta-virtual.ts', import.meta.url).pathname);
     const routeSource = readFileSync(routePath, 'utf8');
     const validationIndex = routeSource.indexOf('validarAssinaturaPDF(uint8Array)');
     const uploadIndex = routeSource.indexOf('await bucket.put(r2Key, uint8Array');

@@ -26,7 +26,7 @@ import { spawnSync } from 'node:child_process';
 const ALLOWED_D1_NAME = 'airtrust-db-staging-baseline-20260701';
 const ALLOWED_D1_DATABASE_ID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
 const MIGRATION_NAME = '0444_controle_voos_versao.sql';
-const WORKER_DIR = new URL('../../worker-airtrust/', import.meta.url).pathname;
+const WORKER_DIR = decodeURIComponent(new URL('../../worker-airtrust/', import.meta.url).pathname);
 const MIGRATION_FILE = join(WORKER_DIR, 'migrations', MIGRATION_NAME);
 
 function log(msg) {

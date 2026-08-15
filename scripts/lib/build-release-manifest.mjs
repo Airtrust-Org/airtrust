@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Deterministic release-manifest builder shared by the production Worker-only
@@ -155,7 +156,7 @@ export function buildReleaseManifest(fields) {
 // manifest to the path in argv[3] (or stdout if omitted), and prints the
 // manifest SHA-256 as the last line to stdout. Kept dependency-free so the
 // deploy shell scripts can call it directly.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { readFileSync, writeFileSync } = await import('node:fs');
   const inputArg = process.argv[2];
   if (!inputArg) throw new Error('usage: build-release-manifest.mjs <fields-json|-> [outputPath]');

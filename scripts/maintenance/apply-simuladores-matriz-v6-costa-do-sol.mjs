@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 import {
   buildModelMetadataObservacoes,
@@ -17,7 +17,7 @@ import {
   loadSimuladoresMatrizV6Data,
 } from './lib/simuladores-matriz-v6-data.mjs';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const LOCAL_DB_GLOB = path.join(
   ROOT,
   'worker-airtrust',

@@ -179,11 +179,11 @@ describe('getScormConclusaoInconsistenteRows lightweight pagination', () => {
 });
 
 const matriculasSource = readFileSync(
-  new URL('../../routes/lms-matriculas.ts', import.meta.url).pathname,
+  decodeURIComponent(new URL('../../routes/lms-matriculas.ts', import.meta.url).pathname),
   'utf8',
 );
 const progressoSource = readFileSync(
-  new URL('../../routes/lms-progresso.ts', import.meta.url).pathname,
+  decodeURIComponent(new URL('../../routes/lms-progresso.ts', import.meta.url).pathname),
   'utf8',
 );
 

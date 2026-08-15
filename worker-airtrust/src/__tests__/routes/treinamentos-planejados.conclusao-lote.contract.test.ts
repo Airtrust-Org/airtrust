@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(
-  new URL('../../routes/treinamentos-planejados.ts', import.meta.url).pathname,
+  decodeURIComponent(new URL('../../routes/treinamentos-planejados.ts', import.meta.url).pathname),
   'utf8',
 );
 
