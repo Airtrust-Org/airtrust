@@ -3,6 +3,16 @@ stages:
   - test
   - deploy
 
+# CI/tests moved to CircleCI (see .circleci/config.yml). These jobs stay
+# versioned as reference and remain manually runnable, but no longer fire
+# automatically on push/MR, so no shared-runner compute minutes are
+# consumed by this file. deploy-staging already has its own `rules:`
+# block (main-only, manual), which fully overrides this default and is
+# therefore unaffected — still exactly as configured.
+default:
+  rules:
+    - when: manual
+
 lint:
   stage: validate
   image: node:24
