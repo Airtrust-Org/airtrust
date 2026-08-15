@@ -42,6 +42,7 @@ import {
   resolveOperationalHours,
 } from '../../../src/shared/simuladores/ficha-header';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
+import type { FichaPdfNota } from '../services/pdf-ficha.service';
 import fichasSimuladorRoutes from './simuladores-fichas-simulador';
 import fichasAcoesRoutes from './simuladores-fichas-acoes';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
@@ -50,6 +51,12 @@ import {
   resolveOperationalReadScope,
   normalizeTenantRole,
 } from '../services/operational-domain-access';
+import {
+  fichaInstructorMetaJoin,
+  fichaInstructorMetaSelect,
+  getFichaInstructorMetaSchema,
+  type FichaInstructorMetaSchema,
+} from '../utils/ficha-instructor-meta-schema';
 
 // Fichas de sessão de simulador são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md. This guard does NOT block based
@@ -158,18 +165,6 @@ type FichaUpdatePayload = {
 // Todos os endpoints de fichas requerem autenticação
 app.use('*', auth());
 
-const FICHA_INSTRUCTOR_META_SELECT = `
-  fsi.equipamento_utilizado AS equipamento_utilizado,
-  fsi.dispositivo_identificacao AS dispositivo_identificacao,
-  fsi.assento_instrucao_utilizado AS assento_instrucao_utilizado
-`;
-
-const FICHA_INSTRUCTOR_META_JOIN = `
-  LEFT JOIN fichas_sessao_instrutor_meta fsi
-    ON fsi.ficha_id = fs.id
-   AND fsi.empresa_id = fs.empresa_id
-`;
-
 // ─── Helper: busca funcionario_id do usuário autenticado ───────────────────
 async function getFuncionarioId(
   db: D1Database,
@@ -199,14 +194,15 @@ async function getFichaWithInstructorMeta(
   db: D1Database,
   fichaId: string | number,
   empresaId: string | number,
+  schema: FichaInstructorMetaSchema,
 ) {
   return db
     .prepare(
       `SELECT
         fs.*,
-        ${FICHA_INSTRUCTOR_META_SELECT}
+        ${fichaInstructorMetaSelect(schema)}
       FROM fichas_sessao fs
-      ${FICHA_INSTRUCTOR_META_JOIN}
+      ${fichaInstructorMetaJoin(schema)}
       WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`,
     )
     .bind(String(fichaId), String(empresaId))
@@ -895,6 +891,7 @@ app.get('/fichas/:id', async (c) => {
     const role = getContextUserRole(c);
     const tenantEmpresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
+    const instructorMetaSchema = await getFichaInstructorMetaSchema(c.env.DB);
 
     const f = await c.env.DB.prepare(
       `SELECT 
@@ -907,7 +904,7 @@ app.get('/fichas/:id', async (c) => {
         fs.resultado_final,
         fs.carga_horaria_pf,
         fs.carga_horaria_pm,
-        ${FICHA_INSTRUCTOR_META_SELECT},
+        ${fichaInstructorMetaSelect(instructorMetaSchema)},
         fs.observacoes,
         fs.data_sessao,
         fs.assinatura_aluno_timestamp,
@@ -916,6 +913,7 @@ app.get('/fichas/:id', async (c) => {
         fs.assinatura_instrutor_ip,
         fs.assinatura_aluno_imagem,
         fs.assinatura_instrutor_imagem,
+        fs.updated_at,
         fs.colaborador_id_aluno,
         fs.atribuicao_curricular_id,
         fs.tipo_sessao as ficha_tipo_sessao,
@@ -980,7 +978,7 @@ app.get('/fichas/:id', async (c) => {
        AND sa.empresa_id = fs.empresa_id
       INNER JOIN funcionarios ft ON fs.colaborador_id_aluno = ft.id AND ft.deleted_at IS NULL
       INNER JOIN funcionarios fi ON fs.instrutor_id = fi.id AND fi.deleted_at IS NULL
-      ${FICHA_INSTRUCTOR_META_JOIN}
+      ${fichaInstructorMetaJoin(instructorMetaSchema)}
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
       LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
       LEFT JOIN sessoes_participantes sp ON sp.sessao_id = sa.id
@@ -1254,6 +1252,7 @@ app.get('/fichas/:id', async (c) => {
       notechs_status: notechsStatus,
       missing_notechs_count: notechsMissingCount,
       created_at: f.ficha_created_at || null,
+      updated_at: f.updated_at || null,
     };
 
     return c.json({ success: true, data: ficha });
@@ -1278,6 +1277,7 @@ app.post('/fichas/:id/pdf', async (c) => {
     const role = getContextUserRole(c);
     const tenantEmpresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
+    const instructorMetaSchema = await getFichaInstructorMetaSchema(c.env.DB);
 
     const f = await c.env.DB.prepare(
       `SELECT
@@ -1324,29 +1324,21 @@ app.post('/fichas/:id/pdf', async (c) => {
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
 
-    // fichas_sessao_instrutor_meta é opcional: ambientes cuja migration
-    // 0429_instructor_event_models ainda não foi aplicada não têm essa
-    // tabela. Buscar em query separada e degradar para null em vez de
-    // derrubar a geração inteira do PDF por causa de metadado decorativo
-    // (equipamento/dispositivo/assento já têm fallback em dadosPDF).
+    // The metadata side table is optional in legacy databases. Do not prepare
+    // a query against it when introspection already proved it is absent.
     type InstructorMetaRow = {
       equipamento_utilizado?: string | null;
       dispositivo_identificacao?: string | null;
       assento_instrucao_utilizado?: string | null;
     };
     let instructorMeta: InstructorMetaRow | null = null;
-    try {
+    if (instructorMetaSchema.hasMetaTable) {
       instructorMeta = await c.env.DB.prepare(
-        `SELECT ${FICHA_INSTRUCTOR_META_SELECT} FROM fichas_sessao_instrutor_meta fsi
+        `SELECT ${fichaInstructorMetaSelect(instructorMetaSchema)} FROM fichas_sessao_instrutor_meta fsi
          WHERE fsi.ficha_id = ? AND fsi.empresa_id = ?`,
       )
         .bind(fichaId, tenantEmpresaId)
         .first<InstructorMetaRow>();
-    } catch (metaError) {
-      console.warn(
-        '[FICHA PDF] fichas_sessao_instrutor_meta indisponível (tabela ausente ou erro transitório) — seguindo sem metadado de instrutor:',
-        metaError,
-      );
     }
     if (instructorMeta) {
       f.equipamento_utilizado = instructorMeta.equipamento_utilizado;
@@ -1555,7 +1547,13 @@ app.post('/fichas/:id/pdf', async (c) => {
         ordem: Number(man.ordem || 0),
         descricao: String(man.descricao || ''),
         codigo: String(man.codigo || ''),
-        resultado: Number.isFinite(Number(man.resultado)) ? Number(man.resultado) : null,
+        resultado: (String(man.resultado || '')
+          .trim()
+          .toUpperCase() === 'NR'
+          ? 'NR'
+          : Number.isFinite(Number(man.resultado))
+            ? Number(man.resultado)
+            : null) as FichaPdfNota,
         categoria: man.categoria == null ? null : String(man.categoria),
         observacoes: man.observacoes == null ? null : String(man.observacoes),
         tripulante: man.tripulante == null ? 'AB' : String(man.tripulante),
@@ -1626,7 +1624,8 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     const tenantEmpresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
     const b = await c.req.json<FichaUpdatePayload>();
-    const a = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId);
+    const instructorMetaSchema = await getFichaInstructorMetaSchema(c.env.DB);
+    const a = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId, instructorMetaSchema);
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
     const expectedUpdatedAt =
@@ -1750,7 +1749,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
           ([, resultado]) => resultado === null || resultado === undefined || resultado === '',
         )
         .map(([ordem]) => ordem);
-      if (manobrasPendentes.length > 0) {
+      if (b.recalculate_status === true && manobrasPendentes.length > 0) {
         return c.json(
           {
             success: false,
@@ -1891,7 +1890,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       );
     }
 
-    if (expectedUpdatedAt) {
+    if (instructorMetaSchema.hasMetaTable && expectedUpdatedAt) {
       statements.push(
         c.env.DB.prepare(
           `INSERT INTO fichas_sessao_instrutor_meta (
@@ -1921,7 +1920,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
           expectedUpdatedAt,
         ),
       );
-    } else {
+    } else if (instructorMetaSchema.hasMetaTable) {
       statements.push(
         c.env.DB.prepare(
           `INSERT INTO fichas_sessao_instrutor_meta (
@@ -1942,6 +1941,37 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
           assentoInstrucaoCanonico,
           writeTimestamp,
         ),
+      );
+    } else if (instructorMetaSchema.legacyColumns.size > 0) {
+      // Some pre-0429 installations stored these values directly on the ficha.
+      // Persist only columns that introspection proved exist; do not create a
+      // surrogate store when the legacy schema has nowhere to keep metadata.
+      const legacyValues = {
+        equipamento_utilizado: equipamentoUtilizado,
+        dispositivo_identificacao: dispositivoIdentificacao,
+        assento_instrucao_utilizado: assentoInstrucaoCanonico,
+      };
+      const legacyColumns = [...instructorMetaSchema.legacyColumns];
+      const assignments = legacyColumns.map((column) => `${column} = ?`).join(', ');
+      const legacyStatement = c.env.DB.prepare(
+        `UPDATE fichas_sessao SET ${assignments}
+         WHERE id = ? AND empresa_id = ?${versionGuard}`,
+      );
+      statements.push(
+        expectedUpdatedAt
+          ? legacyStatement.bind(
+              ...legacyColumns.map((column) => legacyValues[column]),
+              id,
+              tenantEmpresaId,
+              id,
+              tenantEmpresaId,
+              expectedUpdatedAt,
+            )
+          : legacyStatement.bind(
+              ...legacyColumns.map((column) => legacyValues[column]),
+              id,
+              tenantEmpresaId,
+            ),
       );
     }
 
@@ -1981,7 +2011,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       );
     }
 
-    const u = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId);
+    const u = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId, instructorMetaSchema);
     await audit(c.env.DB, {
       tabela: 'fichas_sessao',
       acao: 'UPDATE',
