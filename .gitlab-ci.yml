@@ -6,16 +6,16 @@ stages:
 # CI/tests moved to CircleCI (see .circleci/config.yml). These jobs stay
 # versioned as reference and remain manually runnable, but no longer fire
 # automatically on push/MR, so no shared-runner compute minutes are
-# consumed by this file. deploy-staging already has its own `rules:`
-# block (main-only, manual), which fully overrides this default and is
-# therefore unaffected — still exactly as configured.
-default:
-  rules:
-    - when: manual
+# consumed by this file. Each job below carries its own `rules: [when:
+# manual]` (default: does not support rules: as a key — GitLab rejects
+# it with "default config contains unknown keys: rules"). deploy-staging
+# keeps its own separate rules: block (main-only, manual), untouched.
 
 lint:
   stage: validate
   image: node:24
+  rules:
+    - when: manual
   cache:
     key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
@@ -30,6 +30,8 @@ lint:
 build-content-gates:
   stage: validate
   image: node:24
+  rules:
+    - when: manual
   cache:
     key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
@@ -56,6 +58,8 @@ frontend-coverage:
   stage: test
   image: node:24
   needs: []
+  rules:
+    - when: manual
   cache:
     key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
@@ -76,6 +80,8 @@ frontend-typecheck:
   stage: test
   image: node:24
   needs: []
+  rules:
+    - when: manual
   # allow_failure: pre-existing `tsc` errors on main (unrelated Simuladores/
   # PDF-ficha/timezone modules) predate this job's introduction. Kept
   # non-blocking so it's visible without gating deploys; see
@@ -95,6 +101,8 @@ worker-typecheck:
   stage: test
   image: node:24
   needs: []
+  rules:
+    - when: manual
   cache:
     key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
@@ -113,6 +121,8 @@ worker-tests-1:
   stage: test
   image: node:24
   needs: []
+  rules:
+    - when: manual
   cache:
     key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
@@ -130,6 +140,8 @@ worker-tests-2:
   stage: test
   image: node:24
   needs: []
+  rules:
+    - when: manual
   cache:
     key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
@@ -147,6 +159,8 @@ lms-smoke:
   stage: test
   image: node:24
   needs: []
+  rules:
+    - when: manual
   cache:
     key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
@@ -195,6 +209,8 @@ public-e2e:
   stage: test
   image: node:24
   needs: []
+  rules:
+    - when: manual
   cache:
     key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
