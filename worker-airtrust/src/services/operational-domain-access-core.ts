@@ -724,7 +724,7 @@ export function requireOperationalAccess(
           const row = await c.env.DB.prepare(
             `SELECT sa.instrutor_id, sa.examinador_id, fs.colaborador_id_aluno
              FROM fichas_sessao fs
-             LEFT JOIN simulador_agendamentos sa ON sa.id = fs.sessao_id AND sa.empresa_id = fs.empresa_id
+             LEFT JOIN simulador_agendamentos sa ON sa.id = fs.agendamento_slot_id AND sa.empresa_id = fs.empresa_id
              WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`,
           )
             .bind(resourceId, empresaId)

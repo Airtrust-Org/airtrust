@@ -81,6 +81,27 @@ function createDbMock(options?: {
           ) {
             return { total: options?.invalidTenantLink ? 1 : 2 };
           }
+          // operational-domain-access-core.ts: pedagogical-bypass — resolves the
+          // caller's funcionario_id first; the sessao_id/agendamento_slot_id
+          // lookup below is only reached when this returns a real funcionario.
+          if (query.includes('SELECT f.id FROM usuarios u') && query.includes('JOIN funcionarios f')) {
+            return { id: 999 };
+          }
+          // operational-domain-access-core.ts: pedagogical-bypass lookup for
+          // resourceType 'simulador_ficha'. Mirrors real D1/SQLite behavior —
+          // fichas_sessao has no `sessao_id` column (it's `agendamento_slot_id`);
+          // referencing the wrong one throws exactly like production did. Must be
+          // checked before the broader getFichaWithInstructorMeta match below,
+          // since both share the same trailing WHERE clause text.
+          if (
+            query.includes('sa.instrutor_id, sa.examinador_id, fs.colaborador_id_aluno') &&
+            query.includes('FROM fichas_sessao fs')
+          ) {
+            if (query.includes('fs.sessao_id')) {
+              throw new Error('D1_ERROR: no such column: fs.sessao_id: SQLITE_ERROR');
+            }
+            return { instrutor_id: 11, examinador_id: null, colaborador_id_aluno: 10 };
+          }
           // getFichaWithInstructorMeta() (introduced in PR #307, simuladores-fichas.ts
           // and simuladores-fichas-acoes.ts) joins fichas_sessao_instrutor_meta instead
           // of the plain SELECT below. Match on the stable tenant-scoped WHERE clause
@@ -302,6 +323,27 @@ describe('simuladores fichas tenant-aware writes', () => {
     // One consolidated maneuver UPDATE + ficha header. Production may add one
     // instructor-meta UPSERT when the compatibility table is present.
     expect(batchSizes[0]).toBeLessThanOrEqual(3);
+  });
+
+  it('PUT /fichas/:id nao falha com D1_ERROR no lookup de bypass pedagogico (fs.agendamento_slot_id, nao fs.sessao_id)', async () => {
+    const { db } = createDbMock();
+
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recalculate_status: false,
+          observacoes: 'Rascunho',
+          manobras: [],
+        }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ success: true });
   });
 
   it('POST /fichas/:id/assinar bloqueia assinatura quando ficha não tem manobras', async () => {
