@@ -1,10 +1,7 @@
 stages:
   - validate
   - test
-
-default:
-  tags:
-    - airtrust-local
+  - deploy
 
 lint:
   stage: validate
@@ -64,6 +61,19 @@ frontend-coverage:
     expire_in: 7 days
     paths:
       - coverage/
+
+frontend-typecheck:
+  stage: test
+  image: node:24
+  needs: []
+  cache:
+    key: "npm-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .npm/
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  script:
+    - npm run typecheck
 
 worker-typecheck:
   stage: test
@@ -183,3 +193,331 @@ public-e2e:
     expire_in: 7 days
     paths:
       - test-results/
+
+deploy-staging:
+  stage: deploy
+  image: node:24
+  environment:
+    name: staging
+    url: https://staging.airtrust.pages.dev
+  needs:
+    - lint
+    - build-content-gates
+    - frontend-coverage
+    - frontend-typecheck
+    - worker-typecheck
+    - worker-tests-1
+    - worker-tests-2
+    - lms-smoke
+    - public-e2e
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  variables:
+    GIT_DEPTH: "0"
+    ALLOWED_STAGING_WORKER_NAME: "airtrust-api-staging"
+    BLOCKED_PRODUCTION_WORKER_NAME: "airtrust-api-production"
+    ALLOWED_STAGING_DB_NAME: "airtrust-db-staging-baseline-20260701"
+    ALLOWED_STAGING_DB_ID: "bf9963f4-eb12-439b-a830-20bbf577ac22"
+    BLOCKED_PRODUCTION_DB_ID: "7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
+    ALLOWED_STAGING_BUCKET_NAME: "airtrust-storage-staging"
+    BLOCKED_PRODUCTION_BUCKET_NAME: "airtrust-storage"
+    BLOCKED_PRODUCTION_HOST: "api.airtrust.online"
+    PAGES_PROJECT_NAME: "airtrust"
+    PAGES_STAGING_BRANCH: "staging"
+    STAGING_WORKER_API_URL: "https://airtrust-api-staging.airtrust.workers.dev/api"
+    STAGING_PAGES_URL: "https://staging.airtrust.pages.dev"
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends python3
+    - npm ci
+    - npm ci --prefix worker-airtrust
+  script:
+    - |
+      set -euo pipefail
+
+      echo "### 0. Guard: this CI file must never reference production identifiers outside the BLOCKED_* guard variables ###"
+      if grep -n "${BLOCKED_PRODUCTION_DB_ID}\|${BLOCKED_PRODUCTION_HOST}" .gitlab-ci.yml | grep -vi "BLOCKED_PRODUCTION"; then
+        echo "Production identifiers found in .gitlab-ci.yml outside guard variables." >&2
+        exit 1
+      fi
+      echo "OK: no stray production identifiers in .gitlab-ci.yml"
+
+      echo "### 1. Provenance inputs ###"
+      SOURCE_SHA="$CI_COMMIT_SHA"
+      SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')"
+      BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+      SHORT_SHA="${SOURCE_SHA:0:7}"
+      APP_VERSION="staging-${BUILD_TIME}-${SHORT_SHA}"
+      echo "source_sha=$SOURCE_SHA"
+      echo "source_tree=$SOURCE_TREE"
+      echo "app_version=$APP_VERSION"
+
+      echo "### 2. Capture pre-deploy state for rollback ###"
+      cd worker-airtrust
+      PRE_WORKER_VERSION="$(CLOUDFLARE_API_TOKEN=${CLOUDFLARE_WORKER_API_TOKEN} CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID} npx wrangler deployments list --name "$ALLOWED_STAGING_WORKER_NAME" 2>&1 | grep -m1 -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' || echo unavailable)"
+      echo "pre_deploy_worker_version_id=$PRE_WORKER_VERSION"
+      echo "$PRE_WORKER_VERSION" > /tmp/pre_worker_version.txt
+      cd ..
+
+      # Previous Worker's own reported provenance (not the deploy log — the
+      # live endpoint), captured BEFORE this run touches anything.
+      PRE_WORKER_SHA="unavailable"
+      if curl -fsS -o /tmp/pre_version_body.json "$STAGING_WORKER_API_URL/version" 2>/dev/null; then
+        PRE_WORKER_SHA="$(node -e 'try{const d=JSON.parse(require("fs").readFileSync("/tmp/pre_version_body.json","utf8"));console.log(d.sourceSha||"unavailable")}catch(e){console.log("unavailable")}')"
+      fi
+      echo "pre_deploy_worker_source_sha=$PRE_WORKER_SHA"
+
+      # Previous Pages deployment for the staging branch, via the Cloudflare
+      # API directly (structured JSON, not table-output scraping) so the
+      # commit hash comes from a field, not a parse guess.
+      PAGES_DEPLOYMENTS_JSON="$(curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_PAGES_API_TOKEN}" \
+        "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT_NAME}/deployments?env=preview" || echo '{}')"
+      read -r PRE_PAGES_DEPLOYMENT PRE_PAGES_SHA <<PARSED
+      $(node -e '
+        let data = {};
+        try { data = JSON.parse(process.argv[1]); } catch (e) {}
+        const branch = process.argv[2];
+        const deployments = (data.result || []).filter(
+          (d) => d.deployment_trigger && d.deployment_trigger.metadata && d.deployment_trigger.metadata.branch === branch,
+        );
+        deployments.sort((a, b) => new Date(b.created_on) - new Date(a.created_on));
+        const top = deployments[0];
+        if (!top) { console.log("unavailable unavailable"); process.exit(0); }
+        console.log(`${top.id} ${top.deployment_trigger.metadata.commit_hash || "unavailable"}`);
+      ' "$PAGES_DEPLOYMENTS_JSON" "$PAGES_STAGING_BRANCH")
+      PARSED
+      echo "pre_deploy_pages_deployment_id=$PRE_PAGES_DEPLOYMENT"
+      echo "pre_deploy_pages_source_sha=$PRE_PAGES_SHA"
+      echo "$PRE_PAGES_DEPLOYMENT" > /tmp/pre_pages_deployment.txt
+      echo "$PRE_PAGES_SHA" > /tmp/pre_pages_sha.txt
+
+      echo "### 2b. Validate the previous release SHA is safe to roll back to ###"
+      if [ "$PRE_WORKER_SHA" = "unavailable" ] || [ -z "$PRE_WORKER_SHA" ]; then
+        echo "Could not determine the currently-active Worker's source SHA. ABORTING before any write." >&2
+        exit 1
+      fi
+      if [ "$PRE_PAGES_SHA" = "unavailable" ] || [ -z "$PRE_PAGES_SHA" ]; then
+        echo "Could not determine the currently-active Pages deployment's source SHA. ABORTING before any write." >&2
+        exit 1
+      fi
+      if [ "$PRE_WORKER_SHA" != "$PRE_PAGES_SHA" ]; then
+        echo "Worker and Pages are already on different source SHAs before this run (worker=$PRE_WORKER_SHA, pages=$PRE_PAGES_SHA) — cannot identify a single safe rollback target. ABORTING before any write." >&2
+        exit 1
+      fi
+      if ! git cat-file -e "${PRE_PAGES_SHA}^{commit}" 2>/dev/null; then
+        echo "Previous release SHA $PRE_PAGES_SHA is not a recoverable commit in this checkout (GIT_DEPTH=0 clone). ABORTING before any write." >&2
+        exit 1
+      fi
+      echo "Previous release confirmed and recoverable: $PRE_PAGES_SHA (Worker + Pages agree, commit exists in history)"
+
+      echo "### 3. Stamp staging wrangler config with provenance (scratch copy, never the tracked wrangler.toml) ###"
+      cd worker-airtrust
+      node - "$PWD/wrangler.toml" "$PWD/wrangler.staging.gitlab.toml" "$APP_VERSION" "$BUILD_TIME" <<'NODE'
+      const fs = require('fs');
+      const [sourcePath, outputPath, version, buildTime] = process.argv.slice(2);
+      const source = fs.readFileSync(sourcePath, 'utf8');
+      const stagingStart = source.indexOf('[env.staging]');
+      const productionStart = source.indexOf('\n[env.production]', stagingStart);
+      const before = source.slice(0, stagingStart);
+      const stagingBlock = source.slice(stagingStart, productionStart);
+      const after = source.slice(productionStart);
+      const patchedBlock = stagingBlock
+        .replace(/^APP_VERSION = ".*"$/m, `APP_VERSION = "${version}"`)
+        .replace(/^APP_BUILD_TIME = ".*"$/m, `APP_BUILD_TIME = "${buildTime}"`);
+      fs.writeFileSync(outputPath, before + patchedBlock + after);
+      NODE
+
+      echo "### 4. Dry-run deploy to compute the bundle hash before publishing anything ###"
+      BUNDLE_DIR="$(mktemp -d ./.tmp-worker-bundle-XXXXXX)"
+      CLOUDFLARE_API_TOKEN=${CLOUDFLARE_WORKER_API_TOKEN} CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID} \
+        npx wrangler deploy --env staging --config wrangler.toml --dry-run --outdir "$BUNDLE_DIR"
+      BUNDLE_FILE="$(find "$BUNDLE_DIR" -maxdepth 1 -name '*.js' | sort | head -n1)"
+      if [ -z "$BUNDLE_FILE" ]; then echo "No bundled Worker module found in dry-run." >&2; exit 1; fi
+      BUNDLE_SHA256="$(sha256sum "$BUNDLE_FILE" | awk '{print $1}')"
+      echo "worker_bundle_sha256=$BUNDLE_SHA256"
+      rm -rf "$BUNDLE_DIR"
+
+      node ../scripts/lib/patch-wrangler-env-vars.mjs \
+        wrangler.staging.gitlab.toml wrangler.staging.gitlab.toml staging \
+        "$APP_VERSION" "$BUILD_TIME" \
+        "$(node -e 'console.log(JSON.stringify({AIRTRUST_SOURCE_SHA: process.argv[1], AIRTRUST_SOURCE_TREE: process.argv[2], AIRTRUST_WORKER_BUNDLE_SHA256: process.argv[3]}))' "$SOURCE_SHA" "$SOURCE_TREE" "$BUNDLE_SHA256")"
+
+      echo "### 5. Validate the effective staging config never resolves to production ###"
+      python3 ../scripts/staging/assert-staging-worker-targets.py \
+        --config wrangler.staging.gitlab.toml \
+        --allowed-worker-name "$ALLOWED_STAGING_WORKER_NAME" \
+        --blocked-production-worker-name "$BLOCKED_PRODUCTION_WORKER_NAME" \
+        --allowed-db-name "$ALLOWED_STAGING_DB_NAME" \
+        --allowed-db-id "$ALLOWED_STAGING_DB_ID" \
+        --blocked-production-db-id "$BLOCKED_PRODUCTION_DB_ID" \
+        --allowed-bucket-name "$ALLOWED_STAGING_BUCKET_NAME" \
+        --blocked-production-bucket-name "$BLOCKED_PRODUCTION_BUCKET_NAME" \
+        --blocked-production-host "$BLOCKED_PRODUCTION_HOST"
+
+      echo "### 6. Deploy Worker (staging) ###"
+      REAL_BUNDLE_DIR="$(mktemp -d ./.tmp-worker-bundle-XXXXXX)"
+      CLOUDFLARE_API_TOKEN=${CLOUDFLARE_WORKER_API_TOKEN} CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID} \
+        npx wrangler deploy --env staging --config wrangler.staging.gitlab.toml --outdir "$REAL_BUNDLE_DIR" 2>&1 | tee /tmp/worker-deploy-staging.log
+      REAL_BUNDLE_FILE="$(find "$REAL_BUNDLE_DIR" -maxdepth 1 -name '*.js' | sort | head -n1)"
+      if [ -z "$REAL_BUNDLE_FILE" ]; then echo "No bundled Worker module captured from the real deploy." >&2; exit 1; fi
+      REAL_BUNDLE_SHA256="$(sha256sum "$REAL_BUNDLE_FILE" | awk '{print $1}')"
+      if [ "$REAL_BUNDLE_SHA256" != "$BUNDLE_SHA256" ]; then
+        echo "Bundle hash mismatch: published ($BUNDLE_SHA256) != real deploy ($REAL_BUNDLE_SHA256)" >&2
+        exit 1
+      fi
+      echo "Real deploy bundle hash matches published hash: $REAL_BUNDLE_SHA256"
+      WORKER_VERSION_ID="$(node ../scripts/parse-worker-version-id.mjs /tmp/worker-deploy-staging.log || echo unavailable)"
+      echo "new_worker_version_id=$WORKER_VERSION_ID"
+      echo "$WORKER_VERSION_ID" > /tmp/new_worker_version.txt
+      touch /tmp/worker_deployed_ok
+      rm -rf "$REAL_BUNDLE_DIR"
+
+      echo "### 7. Verify Worker provenance endpoint (must reflect this exact commit, never dev-local/latest/empty) ###"
+      for i in 1 2 3 4 5 6; do
+        curl -fsS -o /tmp/version_body.json "$STAGING_WORKER_API_URL/version" || true
+        grep -q "$APP_VERSION" /tmp/version_body.json 2>/dev/null && break
+        sleep 10
+      done
+      cat /tmp/version_body.json
+      grep -q "$APP_VERSION" /tmp/version_body.json || { echo "Provenance mismatch after deploy." >&2; exit 1; }
+      grep -qE '"environment":"staging"' /tmp/version_body.json || { echo "Version endpoint did not report environment=staging." >&2; exit 1; }
+      grep -q "\"sourceSha\":\"$SOURCE_SHA\"" /tmp/version_body.json || { echo "Source SHA mismatch after deploy." >&2; exit 1; }
+
+      echo "### 8. Build frontend against staging API and stamp the same APP_VERSION ###"
+      cd ..
+      VITE_APP_VERSION="$APP_VERSION" \
+        VITE_API_URL="$STAGING_WORKER_API_URL" \
+        VITE_DEV_PROXY_TARGET="https://airtrust-api-staging.airtrust.workers.dev" \
+        APP_VERSION="$APP_VERSION" APP_BUILD_TIME="$BUILD_TIME" \
+        npm run build
+      bash scripts/stamp-build-version.sh dist/client/index.html
+
+      echo "### 9. Assert never deploying to the production Pages branch ###"
+      if [ "$PAGES_STAGING_BRANCH" = "production" ]; then
+        echo "PAGES_STAGING_BRANCH must never be 'production'." >&2
+        exit 1
+      fi
+
+      echo "### 10. Deploy Pages (staging preview branch) ###"
+      CLOUDFLARE_API_TOKEN=${CLOUDFLARE_PAGES_API_TOKEN} CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID} \
+        npx wrangler pages deploy dist/client \
+        --project-name="$PAGES_PROJECT_NAME" \
+        --branch="$PAGES_STAGING_BRANCH" \
+        --commit-hash="$SOURCE_SHA" 2>&1 | tee /tmp/pages-deploy-staging.log
+      touch /tmp/pages_deployed_ok
+
+      echo "### 11. Post-deploy smoke (non-mutating) ###"
+      curl -fsS -o /dev/null -w "worker /api/health -> %{http_code}\n" "$STAGING_WORKER_API_URL/health"
+      curl -fsS -o /dev/null -w "worker /api/version -> %{http_code}\n" "$STAGING_WORKER_API_URL/version"
+      curl -fsS -o /dev/null -w "pages / -> %{http_code}\n" "$STAGING_PAGES_URL/"
+      curl -fsS -o /dev/null -w "pages /login -> %{http_code}\n" "$STAGING_PAGES_URL/login"
+      curl -fsS -o /dev/null -w "pages /sw.js -> %{http_code}\n" "$STAGING_PAGES_URL/sw.js"
+      MAIN_ASSET="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' dist/client/index.html | head -n1)"
+      if [ -n "$MAIN_ASSET" ]; then
+        curl -fsS -o /dev/null -w "pages $MAIN_ASSET -> %{http_code}\n" "$STAGING_PAGES_URL$MAIN_ASSET"
+      else
+        echo "Main JS asset path not found in dist/client/index.html — skipping asset smoke." >&2
+      fi
+
+      echo "### RELEASE SUMMARY ###"
+      echo "source_sha=$SOURCE_SHA"
+      echo "source_tree=$SOURCE_TREE"
+      echo "app_version=$APP_VERSION"
+      echo "worker_bundle_sha256=$BUNDLE_SHA256"
+      echo "new_worker_version_id=$WORKER_VERSION_ID"
+      echo "pre_deploy_worker_version_id=$PRE_WORKER_VERSION"
+      echo "pre_deploy_pages_deployment_id=$PRE_PAGES_DEPLOYMENT"
+      echo "No production action was taken by this job."
+  after_script:
+    - |
+      set +e
+
+      if [ "$CI_JOB_STATUS" != "failed" ]; then
+        echo "Job did not fail — nothing to roll back."
+        exit 0
+      fi
+
+      if [ ! -f /tmp/worker_deployed_ok ]; then
+        echo "No publish occurred before failure — nothing to roll back."
+        exit 0
+      fi
+
+      echo "=== ROLLBACK: A. Worker -> pre-deploy Version ID ==="
+      PRE_WORKER_ID="$(cat /tmp/pre_worker_version.txt 2>/dev/null || echo unavailable)"
+      if [ "$PRE_WORKER_ID" != "unavailable" ] && [ -n "$PRE_WORKER_ID" ]; then
+        (
+          cd worker-airtrust || exit 1
+          CLOUDFLARE_API_TOKEN=${CLOUDFLARE_WORKER_API_TOKEN} CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID} \
+            npx wrangler rollback "$PRE_WORKER_ID" --env staging --message "auto-rollback: pipeline $CI_PIPELINE_ID"
+        )
+        if [ $? -eq 0 ]; then
+          echo "Worker rolled back to $PRE_WORKER_ID"
+        else
+          echo "WORKER ROLLBACK FAILED — MANUAL INTERVENTION REQUIRED (target version: $PRE_WORKER_ID)" >&2
+        fi
+      else
+        echo "No pre-deploy Worker version was captured — cannot auto-rollback Worker. MANUAL INTERVENTION REQUIRED." >&2
+      fi
+
+      if [ ! -f /tmp/pages_deployed_ok ]; then
+        echo "Pages had not published yet when the failure occurred — Worker rollback above is sufficient."
+        exit 0
+      fi
+
+      echo "=== ROLLBACK: B. Pages -> forward-rollback to previous release (no dashboard/native rollback) ==="
+      PRE_PAGES_SHA="$(cat /tmp/pre_pages_sha.txt 2>/dev/null || echo unavailable)"
+      if [ "$PRE_PAGES_SHA" = "unavailable" ] || [ -z "$PRE_PAGES_SHA" ]; then
+        echo "No pre-deploy Pages source SHA was captured — cannot forward-rollback Pages. MANUAL INTERVENTION REQUIRED (Worker was rolled back; Pages was not)." >&2
+        exit 0
+      fi
+
+      ROLLBACK_DIR="$(mktemp -d /tmp/airtrust-pages-rollback-XXXXXX)"
+      git worktree add --detach "$ROLLBACK_DIR" "$PRE_PAGES_SHA"
+      if [ $? -ne 0 ]; then
+        echo "PAGES FORWARD-ROLLBACK FAILED: could not check out $PRE_PAGES_SHA. MANUAL INTERVENTION REQUIRED." >&2
+        exit 0
+      fi
+      ACTUAL_SHA="$(git -C "$ROLLBACK_DIR" rev-parse HEAD)"
+      if [ "$ACTUAL_SHA" != "$PRE_PAGES_SHA" ]; then
+        echo "PAGES FORWARD-ROLLBACK ABORTED: checkout SHA mismatch (expected $PRE_PAGES_SHA, got $ACTUAL_SHA). MANUAL INTERVENTION REQUIRED." >&2
+        git worktree remove --force "$ROLLBACK_DIR" 2>/dev/null
+        exit 0
+      fi
+      echo "Rollback checkout confirmed at exactly $PRE_PAGES_SHA (detached, no commit/branch created)"
+
+      ROLLBACK_APP_VERSION="rollback-$(date -u +%Y%m%dT%H%M%SZ)-${PRE_PAGES_SHA:0:7}"
+      (
+        cd "$ROLLBACK_DIR" || exit 1
+        npm ci \
+          && VITE_APP_VERSION="$ROLLBACK_APP_VERSION" \
+             VITE_API_URL="$STAGING_WORKER_API_URL" \
+             VITE_DEV_PROXY_TARGET="https://airtrust-api-staging.airtrust.workers.dev" \
+             APP_VERSION="$ROLLBACK_APP_VERSION" \
+             npm run build \
+          && bash scripts/stamp-build-version.sh dist/client/index.html \
+          && CLOUDFLARE_API_TOKEN=${CLOUDFLARE_PAGES_API_TOKEN} CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID} \
+             npx wrangler pages deploy dist/client \
+               --project-name="$PAGES_PROJECT_NAME" \
+               --branch="$PAGES_STAGING_BRANCH" \
+               --commit-hash="$PRE_PAGES_SHA"
+        )
+      ROLLBACK_DEPLOY_STATUS=$?
+      git worktree remove --force "$ROLLBACK_DIR" 2>/dev/null
+
+      if [ $ROLLBACK_DEPLOY_STATUS -ne 0 ]; then
+        echo "PAGES FORWARD-ROLLBACK FAILED during rebuild/redeploy. MANUAL INTERVENTION REQUIRED (Worker was rolled back to $PRE_WORKER_ID; Pages is still on the failed release)." >&2
+        exit 0
+      fi
+      echo "Pages forward-rolled back: new deployment published for previous source $PRE_PAGES_SHA"
+
+      echo "=== Post-rollback verification ==="
+      curl -fsS -o /tmp/rollback_version_body.json "$STAGING_WORKER_API_URL/version" 2>/dev/null
+      cat /tmp/rollback_version_body.json 2>/dev/null
+      curl -fsS -o /dev/null -w "post-rollback worker /api/health -> %{http_code}\n" "$STAGING_WORKER_API_URL/health" 2>/dev/null
+      curl -fsS -o /dev/null -w "post-rollback pages / -> %{http_code}\n" "$STAGING_PAGES_URL/" 2>/dev/null
+      echo "Staging restored to previous release: source_sha=$PRE_PAGES_SHA (Worker version=$PRE_WORKER_ID, Pages redeployed from the same commit). Worker and Pages are aligned again — no mixed release left in place."
+  artifacts:
+    when: always
+    paths:
+      - worker-airtrust/wrangler.staging.gitlab.toml
+    expire_in: 30 days
