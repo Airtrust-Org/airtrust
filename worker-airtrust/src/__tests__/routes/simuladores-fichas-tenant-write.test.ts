@@ -54,10 +54,12 @@ import simuladoresFichasRoutes from '../../routes/simuladores-fichas';
 function createDbMock(options?: {
   invalidTenantLink?: boolean;
   manobrasCount?: number;
+  manobrasRowsCount?: number;
   sessionDate?: string;
   sessionTime?: string;
 }) {
   const runs: Array<{ query: string; args: unknown[] }> = [];
+  const batchSizes: number[] = [];
 
   const db = {
     prepare: vi.fn((query: string) => {
@@ -139,11 +141,12 @@ function createDbMock(options?: {
         },
         all: async () => {
           if (query.includes('SELECT ordem, resultado FROM fichas_sessao_manobras')) {
+            const rowsCount = options?.manobrasRowsCount ?? 2;
             return {
-              results: [
-                { ordem: 1, resultado: null },
-                { ordem: 2, resultado: null },
-              ],
+              results: Array.from({ length: rowsCount }, (_, index) => ({
+                ordem: index + 1,
+                resultado: null,
+              })),
             };
           }
           return { results: [] };
@@ -161,10 +164,13 @@ function createDbMock(options?: {
         run: () => bind().run(),
       };
     }),
-    batch: async (statements: unknown[]) => statements.map(() => ({ meta: { changes: 1 } })),
+    batch: async (statements: unknown[]) => {
+      batchSizes.push(statements.length);
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    },
   } as unknown as D1Database;
 
-  return { db, runs };
+  return { db, runs, batchSizes };
 }
 
 describe('simuladores fichas tenant-aware writes', () => {
@@ -266,6 +272,36 @@ describe('simuladores fichas tenant-aware writes', () => {
       success: true,
       data: { status: 'AGUARDANDO_ASSINATURA_ALUNO' },
     });
+  });
+
+  it('PUT /fichas/:id consolida rascunho com 33 manobras sem uma query D1 por linha', async () => {
+    const { db, batchSizes } = createDbMock({ manobrasRowsCount: 33 });
+    const manobras = Array.from({ length: 33 }, (_, index) => ({
+      ordem: index + 1,
+      resultado: 9,
+      observacoes: '',
+    }));
+
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recalculate_status: false,
+          observacoes: 'Rascunho completo',
+          manobras,
+        }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ success: true });
+    expect(batchSizes).toHaveLength(1);
+    // One consolidated maneuver UPDATE + ficha header. Production may add one
+    // instructor-meta UPSERT when the compatibility table is present.
+    expect(batchSizes[0]).toBeLessThanOrEqual(3);
   });
 
   it('POST /fichas/:id/assinar bloqueia assinatura quando ficha não tem manobras', async () => {

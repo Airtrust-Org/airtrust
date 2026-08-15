@@ -1709,7 +1709,10 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     // 1) Validate the complete maneuver payload before writing anything.
     // D1 has no interactive transaction across individual .run() calls; all maneuver
     // writes are therefore prepared first and committed later in one db.batch().
-    const manobraUpdates: Array<{ ordem: number; resultado: unknown; observacoes: string }> = [];
+    const manobraUpdatesByOrdem = new Map<
+      number,
+      { ordem: number; resultado: unknown; observacoes: string }
+    >();
     if (Array.isArray(b.manobras) && b.manobras.length > 0) {
       const atuais = await c.env.DB.prepare(
         'SELECT ordem, resultado FROM fichas_sessao_manobras WHERE ficha_id = ? AND deleted_at IS NULL ORDER BY ordem',
@@ -1740,7 +1743,9 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
           resultado: m?.resultado ?? null,
           observacoes: String(m?.observacoes ?? ''),
         };
-        manobraUpdates.push(update);
+        // The client may resend the same maneuver in a draft. Preserve the existing
+        // last-write-wins behavior while allowing persistence to consolidate rows.
+        manobraUpdatesByOrdem.set(ordem, update);
         atuaisPorOrdem.set(ordem, update.resultado);
       }
 
@@ -1762,6 +1767,8 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
         );
       }
     }
+
+    const manobraUpdates = [...manobraUpdatesByOrdem.values()];
 
     // 2) Determine new status
     let newStatus = b.status || a.status;
@@ -1862,32 +1869,37 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       ? ' AND EXISTS (SELECT 1 FROM fichas_sessao fs WHERE fs.id = ? AND fs.empresa_id = ? AND fs.updated_at = ?)'
       : '';
 
-    for (const manobra of manobraUpdates) {
+    // D1 counts every statement in a batch against the Worker invocation query budget.
+    // A full ficha can contain dozens of maneuvers, so persisting one UPDATE per row can
+    // exhaust that budget after auth/RBAC/schema reads. Consolidate validated rows with
+    // CASE expressions. 40 rows keep each statement below D1's bound-parameter limit.
+    const MANOBRAS_PER_UPDATE = 40;
+    for (let offset = 0; offset < manobraUpdates.length; offset += MANOBRAS_PER_UPDATE) {
+      const chunk = manobraUpdates.slice(offset, offset + MANOBRAS_PER_UPDATE);
+      const ordens = chunk.map((manobra) => String(manobra.ordem)).join(', ');
+      const resultadoCases = chunk.map((manobra) => `WHEN ${manobra.ordem} THEN ?`).join(' ');
+      const observacoesCases = chunk
+        .map((manobra) => `WHEN ${manobra.ordem} THEN ?`)
+        .join(' ');
       const statement = c.env.DB.prepare(
         `UPDATE fichas_sessao_manobras
-            SET resultado = ?, observacoes = ?, updated_at = ?
-          WHERE ficha_id = ? AND ordem = ? AND deleted_at IS NULL${versionGuard}`,
+            SET resultado = CASE ordem ${resultadoCases} ELSE resultado END,
+                observacoes = CASE ordem ${observacoesCases} ELSE observacoes END,
+                updated_at = ?
+          WHERE ficha_id = ?
+            AND ordem IN (${ordens})
+            AND deleted_at IS NULL${versionGuard}`,
       );
-      statements.push(
-        expectedUpdatedAt
-          ? statement.bind(
-              manobra.resultado,
-              manobra.observacoes,
-              writeTimestamp,
-              id,
-              manobra.ordem,
-              id,
-              tenantEmpresaId,
-              expectedUpdatedAt,
-            )
-          : statement.bind(
-              manobra.resultado,
-              manobra.observacoes,
-              writeTimestamp,
-              id,
-              manobra.ordem,
-            ),
-      );
+      const bindValues: unknown[] = [
+        ...chunk.map((manobra) => manobra.resultado),
+        ...chunk.map((manobra) => manobra.observacoes),
+        writeTimestamp,
+        id,
+      ];
+      if (expectedUpdatedAt) {
+        bindValues.push(id, tenantEmpresaId, expectedUpdatedAt);
+      }
+      statements.push(statement.bind(...bindValues));
     }
 
     if (instructorMetaSchema.hasMetaTable && expectedUpdatedAt) {
@@ -2062,7 +2074,9 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     }
 
     return c.json({ success: true, data: u });
-  } catch {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[simuladores/fichas/:id PUT] Erro ao salvar ficha:', errorMessage);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
