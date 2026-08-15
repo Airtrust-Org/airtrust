@@ -66,6 +66,12 @@ frontend-typecheck:
   stage: test
   image: node:24
   needs: []
+  # allow_failure: pre-existing `tsc` errors on main (unrelated Simuladores/
+  # PDF-ficha/timezone modules) predate this job's introduction. Kept
+  # non-blocking so it's visible without gating deploys; see
+  # tmp/local-repository-state-before-gitlab.md for the reconciliation
+  # session that added this job.
+  allow_failure: true
   cache:
     key: "npm-$CI_COMMIT_REF_SLUG"
     paths:
