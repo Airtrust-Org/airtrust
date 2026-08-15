@@ -293,7 +293,12 @@ deploy-staging:
       # live endpoint), captured BEFORE this run touches anything.
       PRE_WORKER_SHA="unavailable"
       if curl -fsS -o /tmp/pre_version_body.json "$STAGING_WORKER_API_URL/version" 2>/dev/null; then
-        PRE_WORKER_SHA="$(node -e 'try{const d=JSON.parse(require("fs").readFileSync("/tmp/pre_version_body.json","utf8"));console.log(d.sourceSha||"unavailable")}catch(e){console.log("unavailable")}')"
+        # /api/version follows this repo's standard { success, data } envelope
+        # (see CLAUDE.md route conventions) — sourceSha lives under data, not
+        # at the top level. Also requires a well-formed 40-char hex SHA-1
+        # before accepting it; anything else falls back to "unavailable" so
+        # the existing abort-before-write check below still fires.
+        PRE_WORKER_SHA="$(node -e 'try{const d=JSON.parse(require("fs").readFileSync("/tmp/pre_version_body.json","utf8"));const s=(d.data&&d.data.sourceSha)||"";console.log(/^[0-9a-f]{40}$/i.test(s)?s:"unavailable")}catch(e){console.log("unavailable")}')"
       fi
       echo "pre_deploy_worker_source_sha=$PRE_WORKER_SHA"
 
