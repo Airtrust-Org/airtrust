@@ -2033,7 +2033,15 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     });
 
     if (tenantEmpresaId && String(newStatus).toUpperCase() === 'CONCLUIDA') {
-      await syncHorasVooFromSimulador(c.env.DB, Number(id), tenantEmpresaId);
+      try {
+        await syncHorasVooFromSimulador(c.env.DB, Number(id), tenantEmpresaId);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(
+          '[simuladores/fichas/:id PUT] Falha ao sincronizar horas de voo após salvar ficha:',
+          errorMessage,
+        );
+      }
     }
 
     // Notificar aluno quando avaliação for concluída e aguardar assinatura
