@@ -19,7 +19,29 @@ import { registrarAuditoria } from '../utils/auditoria';
 import { normalizarTipoDocumento } from '../utils/nomenclatura-padronizada';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
+import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
 import pastaVirtualExtraRoutes from './pasta-virtual-extra';
+
+// Cross-tenant and out-of-scope funcionario lookups must both fold into the
+// same 404 — assertFuncionarioInScope's 403 would leak that the id exists in
+// another tenant, which documentos-tenant-isolation.test.ts guards against.
+async function isFuncionarioInScope(
+  db: D1Database,
+  empresaId: number,
+  funcionarioId: number,
+  access: Awaited<ReturnType<typeof getEmployeeSectorAccess>>,
+): Promise<boolean> {
+  const scope = employeeSectorSql(access, 'f');
+  const row = await db
+    .prepare(
+      `SELECT f.id FROM funcionarios f
+       WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL AND ${scope.clause}
+       LIMIT 1`,
+    )
+    .bind(funcionarioId, empresaId, ...scope.bindings)
+    .first<{ id: number }>();
+  return Boolean(row?.id);
+}
 
 const app = new Hono<AppEnv>();
 
@@ -101,6 +123,11 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
 
   if (isNaN(funcionarioId)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
+  }
+
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  if (!(await isFuncionarioInScope(db, empresaId, funcionarioId, access))) {
+    return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
   }
 
   try {
@@ -330,6 +357,11 @@ app.get('/:id', auth(), async (c) => {
 
   if (isNaN(funcionarioId)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
+  }
+
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  if (!(await isFuncionarioInScope(db, empresaId, funcionarioId, access))) {
+    return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
   }
 
   try {
@@ -604,8 +636,14 @@ app.get('/', auth(), async (c) => {
   const page = parseInt(c.req.query('page') || '1');
   const limit = parseInt(c.req.query('limit') || '50');
 
-  const whereClauses: string[] = ['d.deleted_at IS NULL', 'f.empresa_id = ?'];
-  const bindings: unknown[] = [empresaId];
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const employeeScope = employeeSectorSql(access, 'f');
+  const whereClauses: string[] = [
+    'd.deleted_at IS NULL',
+    'f.empresa_id = ?',
+    employeeScope.clause,
+  ];
+  const bindings: unknown[] = [empresaId, ...employeeScope.bindings];
 
   if (funcionarioId) {
     whereClauses.push('d.funcionario_id = ?');
@@ -680,6 +718,9 @@ app.get('/', auth(), async (c) => {
 app.post('/upload', auth(), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
+  const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const employeeScope = employeeSectorSql(access, 'f');
 
   try {
     const formData = await c.req.formData();
@@ -711,13 +752,18 @@ app.post('/upload', auth(), async (c) => {
       return c.json({ success: false, error: validacao.erro }, 400);
     }
 
-    // Buscar funcionário dentro do tenant antes de qualquer operação R2.
-    const empresaId = getEmpresaId(c);
+    // Buscar funcionário dentro do tenant e do escopo autorizado antes de qualquer operação R2.
     const funcionario = await db
       .prepare(
-        'SELECT cpf, nome FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        `SELECT f.cpf, f.nome
+           FROM funcionarios f
+          WHERE f.id = ?
+            AND f.empresa_id = ?
+            AND f.deleted_at IS NULL
+            AND ${employeeScope.clause}
+          LIMIT 1`,
       )
-      .bind(funcionarioId, empresaId)
+      .bind(funcionarioId, empresaId, ...employeeScope.bindings)
       .first<{ cpf: string; nome: string }>();
 
     if (!funcionario) {
@@ -964,6 +1010,8 @@ app.get('/download/:id', auth(), async (c) => {
   const bucket = c.env.BUCKET;
   const id = parseInt(c.req.param('id'));
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const employeeScope = employeeSectorSql(access, 'f');
 
   if (isNaN(id)) {
     badRequest('ID inválido');
@@ -975,9 +1023,12 @@ app.get('/download/:id', auth(), async (c) => {
       `SELECT d.*
        FROM documentos d
        INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
-       WHERE d.id = ? AND d.deleted_at IS NULL AND f.empresa_id = ?`,
+       WHERE d.id = ?
+         AND d.deleted_at IS NULL
+         AND f.empresa_id = ?
+         AND ${employeeScope.clause}`,
     )
-    .bind(id, empresaId)
+    .bind(id, empresaId, ...employeeScope.bindings)
     .first<Documento>();
 
   if (!documento) {
@@ -1030,6 +1081,8 @@ app.get('/stream/:id', auth(), async (c) => {
   const bucket = c.env.BUCKET;
   const id = parseInt(c.req.param('id'));
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const employeeScope = employeeSectorSql(access, 'f');
 
   if (isNaN(id)) {
     badRequest('ID inválido');
@@ -1041,9 +1094,12 @@ app.get('/stream/:id', auth(), async (c) => {
       `SELECT d.*
        FROM documentos d
        INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
-       WHERE d.id = ? AND d.deleted_at IS NULL AND f.empresa_id = ?`,
+       WHERE d.id = ?
+         AND d.deleted_at IS NULL
+         AND f.empresa_id = ?
+         AND ${employeeScope.clause}`,
     )
-    .bind(id, empresaId)
+    .bind(id, empresaId, ...employeeScope.bindings)
     .first<Documento>();
 
   if (!documento) {
