@@ -1320,6 +1320,12 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   var autosaveTimer = null;
   var interactionProbeTimer = null;
   var lastCommittedFingerprint = '';
+  // Serialize runtime saves. Slow networks could previously leave multiple
+  // LMSCommit/autosave requests in flight for the same enrollment, amplifying
+  // D1 writes and causing transient save failures. Keep only the latest queued
+  // state while preserving final-completion events.
+  var commitInFlight = false;
+  var queuedCommit = null;
   var completionPending = false;
   var completionObservedAt = null;
   var autosaveReady = false;
@@ -1890,20 +1896,59 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
     }
   }
 
+  function isFinalCommitEvent(eventType) {
+    return [
+      'SCORM_FINISH',
+      'SCORM_COMPLETION_CANDIDATE',
+      'SCORM_BEFORE_UNLOAD_COMMIT',
+      'SCORM_VISIBILITY_COMMIT',
+    ].indexOf(String(eventType || '').toUpperCase()) !== -1;
+  }
+
+  function isRetryableCommitStatus(status) {
+    return status === 408 || status === 425 || status === 429 || status >= 500;
+  }
+
+  function queueLatestCommit(data, eventType) {
+    if (!queuedCommit || isFinalCommitEvent(eventType) || !isFinalCommitEvent(queuedCommit.eventType)) {
+      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
+    }
+  }
+
+  function flushQueuedCommit() {
+    if (commitInFlight || !queuedCommit) return;
+    var next = queuedCommit;
+    queuedCommit = null;
+    commit(next.data, 0, next.eventType);
+  }
+
   function commit(data, attempt, eventType) {
     if (PREVIEW_MODE || REVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
       diag(' COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' review=' + REVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
       return Promise.resolve();
     }
+
+    var currentAttempt = attempt || 0;
+    if (currentAttempt === 0 && commitInFlight) {
+      queueLatestCommit(data, eventType);
+      diag(' COMMIT_QUEUED event=' + (eventType || '?'));
+      return Promise.resolve(null);
+    }
+    if (currentAttempt === 0) commitInFlight = true;
+
     var payloadFingerprint = fingerprintPayload(data);
     emitTelemetry(eventType || 'SCORM_COMMIT', {
       decision: 'accepted',
       reason: 'commit-dispatched',
       field: null,
     });
-    diag(' COMMIT_FETCH_START event=' + (eventType || '?') + ' attempt=' + (attempt || 0) + ' has_loc=' + (!!getScormLocation() ? '1' : '0'));
-    return getFreshToken('commit').then(function(freshToken) {
-      if (!freshToken) { diag(' COMMIT_NO_TOKEN'); return null; }
+    diag(' COMMIT_FETCH_START event=' + (eventType || '?') + ' attempt=' + currentAttempt + ' has_loc=' + (!!getScormLocation() ? '1' : '0'));
+
+    var requestPromise = getFreshToken('commit').then(function(freshToken) {
+      if (!freshToken) {
+        diag(' COMMIT_NO_TOKEN');
+        return null;
+      }
       var requestBody = Object.assign({
         matricula_id: MATRICULA_ID,
         commit_event: eventType || 'SCORM_COMMIT',
@@ -1911,9 +1956,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         completion_observed_at: completionObservedAt,
       }, data);
       // Browsers cap the TOTAL body size across in-flight keepalive fetches
-      // per page (~64KB). Setting it on every commit exhausted that shared
-      // quota over a long session, permanently breaking all further commits
-      // with "Failed to fetch". Reserve it for page teardown only.
+      // per page (~64KB). Reserve keepalive for teardown only.
       var needsKeepalive = eventType === 'SCORM_BEFORE_UNLOAD_COMMIT' || eventType === 'SCORM_VISIBILITY_COMMIT';
       return fetch(COMMIT_URL, {
         method: 'POST',
@@ -1925,13 +1968,6 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         keepalive: needsKeepalive,
       });
     }).then(function(response) {
-      if (response && response.status === 401 && (attempt || 0) < 1) {
-        diag(' COMMIT_FETCH_STATUS=401 retrying');
-        TOKEN = '';
-        requestFreshToken('retry-after-401');
-        return commit(data, (attempt || 0) + 1, eventType);
-      }
-
       if (response && response.ok) {
         diag(' COMMIT_FETCH_STATUS=' + String(response.status) + ' OK');
         setStatus('Progresso salvo', true);
@@ -1954,7 +1990,11 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
           }
 
           if (json.data.completion_diagnostic && json.data.completion_diagnostic.status === 'candidate') {
-            notifyCompletionPending('pending', json.data.completion_diagnostic.code || null);
+            // High progress/final location alone is not a completion event. Keep
+            // the runtime quiet unless this session actually observed one.
+            if (completionPending) {
+              notifyCompletionPending('pending', json.data.completion_diagnostic.code || null);
+            }
             return;
           }
 
@@ -1965,44 +2005,73 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
             );
           }
         }).catch(function() { return null; });
-      } else if (response) {
-        diag(' COMMIT_FETCH_STATUS=' + String(response.status) + ' ERROR');
-        setStatus('Falha ao salvar progresso. Tentando novamente...', true, true);
+        return response;
+      }
+
+      if (!response) return response;
+      var status = Number(response.status || 0);
+      var retryable = isRetryableCommitStatus(status);
+      diag(' COMMIT_FETCH_STATUS=' + String(status) + ' ERROR retryable=' + (retryable ? '1' : '0'));
+
+      if (retryable && currentAttempt < 2) {
+        setStatus('Falha temporária ao salvar progresso. Tentando novamente...', true, true);
         postToParent({
           type: 'lms:save-error',
           matriculaId: MATRICULA_ID,
-          reason: 'http-' + String(response.status),
-          attempt: (attempt || 0),
+          reason: 'http-' + String(status),
+          attempt: currentAttempt,
         });
-        if ((attempt || 0) >= 2 && completionPending) {
-          notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'http-' + String(response.status));
-        }
-        if ((attempt || 0) < 2) {
-          window.setTimeout(function() {
-            commit(data, (attempt || 0) + 1, eventType);
-          }, 1200);
-        }
+        return new Promise(function(resolve) { window.setTimeout(resolve, 1200); }).then(function() {
+          return commit(data, currentAttempt + 1, eventType);
+        });
       }
 
+      setStatus('Não foi possível salvar o progresso.', true, true);
+      postToParent({
+        type: 'lms:save-error',
+        matriculaId: MATRICULA_ID,
+        reason: 'http-' + String(status),
+        attempt: currentAttempt,
+      });
+      if (completionPending) {
+        notifyCompletionError(
+          status >= 500 || status === 429 ? 'SCORM_FINAL_COMMIT_MISSING' : 'SCORM_COMMIT_REJECTED',
+          'http-' + String(status),
+        );
+      }
       return response;
     }).catch(function(e) {
       console.warn('[SCORM] commit error', e);
-      setStatus('Falha ao salvar progresso. Tentando novamente...', true, true);
+      if (currentAttempt < 2) {
+        setStatus('Falha temporária ao salvar progresso. Tentando novamente...', true, true);
+        postToParent({
+          type: 'lms:save-error',
+          matriculaId: MATRICULA_ID,
+          reason: 'network-error',
+          attempt: currentAttempt,
+        });
+        return new Promise(function(resolve) { window.setTimeout(resolve, 1200); }).then(function() {
+          return commit(data, currentAttempt + 1, eventType);
+        });
+      }
+
+      setStatus('Não foi possível salvar o progresso.', true, true);
       postToParent({
         type: 'lms:save-error',
         matriculaId: MATRICULA_ID,
         reason: 'network-error',
-        attempt: (attempt || 0),
+        attempt: currentAttempt,
       });
-      if ((attempt || 0) >= 2 && completionPending) {
+      if (completionPending) {
         notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'network-error');
       }
-      if ((attempt || 0) < 2) {
-        window.setTimeout(function() {
-          commit(data, (attempt || 0) + 1, eventType);
-        }, 1200);
-      }
       return null;
+    });
+
+    if (currentAttempt !== 0) return requestPromise;
+    return requestPromise.finally(function() {
+      commitInFlight = false;
+      flushQueuedCommit();
     });
   }
 

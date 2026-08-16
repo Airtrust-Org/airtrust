@@ -58,7 +58,7 @@ describe('uploadStructuredLmsPackage', () => {
     extractBrowserLmsPackageMock.mockReset();
   });
 
-  it('serializes a media-heavy SCORM package so only one Worker body stream is active', async () => {
+  it('uploads a media-heavy SCORM package with at most two small Worker body streams active', async () => {
     let activeFileUploads = 0;
     let peakFileUploads = 0;
 
@@ -95,9 +95,42 @@ describe('uploadStructuredLmsPackage', () => {
       file,
     });
 
-    expect(peakFileUploads).toBe(1);
+    expect(peakFileUploads).toBe(2);
     expect(result.filesUploaded).toBe(98);
     expect(fetchWithAuthMock).toHaveBeenCalledTimes(100);
+  });
+
+  it('keeps a file of at least 4 MB isolated from other uploads', async () => {
+    let activeFileUploads = 0;
+    let largeUploadOverlapped = false;
+    const large = new Uint8Array(4 * 1024 * 1024);
+    const fixture = retryScormFixture();
+    fixture.entries.push({ path: 'media/large.webm', bytes: large });
+
+    fetchWithAuthMock.mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/content-upload/init')) return response({ upload_id: 'upload-large', status: 'uploading' });
+      if (path.includes('/content-upload/file?')) {
+        const isLarge = path.includes('large.webm');
+        activeFileUploads += 1;
+        if (isLarge && activeFileUploads > 1) largeUploadOverlapped = true;
+        await Promise.resolve();
+        activeFileUploads -= 1;
+        return response({ path: 'stored', bytes: 1 });
+      }
+      if (path.endsWith('/content-upload/complete')) return response({ files_uploaded: fixture.entries.length, prefix: 'lms/scorm/6/32/' });
+      throw new Error(`Unexpected endpoint: ${path}`);
+    });
+
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const result = await uploadStructuredLmsPackage({
+      cursoId: 32,
+      tipoConteudo: 'scorm',
+      file: { name: 'mixed-size-scorm.zip', arrayBuffer: async () => fixture.zip.buffer } as File,
+    });
+
+    expect(largeUploadOverlapped).toBe(false);
+    expect(result.filesUploaded).toBe(fixture.entries.length);
   });
 
   it('retries a transient network/CORS failure for the same versioned asset and still completes', async () => {

@@ -60,6 +60,16 @@ function readLocationFromCmiJson(cmiJson: string | null | undefined): string | n
   }
 }
 
+export function resolveLmsDisplayProgress(params: {
+  completed: boolean;
+  matriculaStatus: string | null | undefined;
+  mergedProgress: number;
+}) {
+  return params.completed || params.matriculaStatus === 'CONCLUIDO'
+    ? 100
+    : Math.min(99, params.mergedProgress);
+}
+
 /**
  * Quantas vezes toleramos um diagnóstico "candidate" (SCORM ainda não
  * confirmou status explícito) antes de parar de tentar e mostrar o
@@ -147,7 +157,11 @@ export default function LmsPlayer() {
   const completionDiagnostic = matricula?.completion_diagnostic ?? null;
   const hasCompletionDate = Boolean(matricula?.data_conclusao);
   const isCompletedState = completed || matricula?.status === 'CONCLUIDO' || hasCompletionDate;
-  const displayProgress = completed || matricula?.status === 'CONCLUIDO' ? 100 : mergedProgress;
+  const displayProgress = resolveLmsDisplayProgress({
+    completed,
+    matriculaStatus: matricula?.status,
+    mergedProgress,
+  });
   const isScormContent = (matricula?.tipo_conteudo ?? 'scorm') === 'scorm';
   const canFinalize =
     !isCompletedState &&
