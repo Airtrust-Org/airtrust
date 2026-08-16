@@ -28,8 +28,10 @@ type UploadedFileSnapshot = {
 
 const IGNORED_ARCHIVE_SUFFIXES = ['.map'];
 // The Free Worker CPU budget cannot sustain four simultaneous R2 body streams
-// for media-heavy SCORM packages. Keep each authorized asset transfer isolated.
-const STRUCTURED_UPLOAD_CONCURRENCY = 1;
+// for media-heavy SCORM packages. Two small assets can share a batch, while a
+// large body remains isolated to preserve the Worker CPU/R2 safety boundary.
+const STRUCTURED_UPLOAD_CONCURRENCY = 2;
+const STRUCTURED_UPLOAD_SHARED_BATCH_MAX_BYTES = 4 * 1024 * 1024;
 const STRUCTURED_UPLOAD_MAX_ATTEMPTS = 4;
 const STRUCTURED_UPLOAD_RETRY_BASE_MS = 250;
 
@@ -260,8 +262,15 @@ export async function uploadStructuredLmsPackage(params: {
     throw new Error(`Falha ao enviar ${entry.path}`);
   }
 
-  for (let index = 0; index < pendingFiles.length; index += STRUCTURED_UPLOAD_CONCURRENCY) {
-    await Promise.all(pendingFiles.slice(index, index + STRUCTURED_UPLOAD_CONCURRENCY).map(uploadEntry));
+  for (let index = 0; index < pendingFiles.length;) {
+    const first = pendingFiles[index]!;
+    const batch = first.size >= STRUCTURED_UPLOAD_SHARED_BATCH_MAX_BYTES
+      ? [first]
+      : pendingFiles
+        .slice(index, index + STRUCTURED_UPLOAD_CONCURRENCY)
+        .filter((entry) => entry.size < STRUCTURED_UPLOAD_SHARED_BATCH_MAX_BYTES);
+    await Promise.all(batch.map(uploadEntry));
+    index += batch.length;
   }
 
   onStatus?.('Validando e ativando a nova versão...');
