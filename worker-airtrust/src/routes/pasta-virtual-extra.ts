@@ -11,6 +11,7 @@ import { AppError } from '../utils/errors';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
+import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
 import {
   gerarChaveR2,
   gerarNomeArquivoPadronizado,
@@ -19,6 +20,26 @@ import {
 } from '../utils/nomenclatura-padronizada';
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Cross-tenant and out-of-scope funcionario lookups must both fold into the
+// same 404 — a 403 here would leak that the id exists in another tenant.
+async function isFuncionarioInScope(
+  db: D1Database,
+  empresaId: number,
+  funcionarioId: number,
+  access: Awaited<ReturnType<typeof getEmployeeSectorAccess>>,
+): Promise<boolean> {
+  const scope = employeeSectorSql(access, 'f');
+  const row = await db
+    .prepare(
+      `SELECT f.id FROM funcionarios f
+       WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL AND ${scope.clause}
+       LIMIT 1`,
+    )
+    .bind(funcionarioId, empresaId, ...scope.bindings)
+    .first<{ id: number }>();
+  return Boolean(row?.id);
+}
 
 /**
  * GET /api/pasta-virtual/download-certificados/:funcionario_id
@@ -33,6 +54,11 @@ app.get('/download-certificados/:funcionario_id', auth(), async (c) => {
 
   if (isNaN(funcionarioId)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
+  }
+
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  if (!(await isFuncionarioInScope(db, empresaId, funcionarioId, access))) {
+    return jsonError(c, 'Funcionário não encontrado', 404, 'FUNCIONARIO_NOT_FOUND');
   }
 
   try {
@@ -155,11 +181,16 @@ app.get('/download-certificados/:funcionario_id', auth(), async (c) => {
  */
 
 app.get('/:id/documentos', auth(), async (c) => {
+  const db = c.env.DB;
+  const funcionarioId = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
+  if (isNaN(funcionarioId)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  if (!(await isFuncionarioInScope(db, empresaId, funcionarioId, access))) {
+    return jsonError(c, 'Funcionário não encontrado', 404, 'FUNCIONARIO_NOT_FOUND');
+  }
+
   try {
-    const db = c.env.DB;
-    const funcionarioId = parseInt(c.req.param('id'));
-    const empresaId = getEmpresaId(c);
-    if (isNaN(funcionarioId)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
     const { results } = await db
       .prepare(
         `SELECT d.id, d.uuid, d.funcionario_id, d.nome_arquivo as nome, d.tipo, d.tamanho,
@@ -179,17 +210,26 @@ app.get('/:id/documentos', auth(), async (c) => {
 });
 
 app.post('/:id/upload', auth(), async (c) => {
+  const db = c.env.DB;
+  const bucket = c.env.BUCKET;
+  const funcionarioId = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
+  if (isNaN(funcionarioId)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const employeeScope = employeeSectorSql(access, 'f');
+
   try {
-    const db = c.env.DB;
-    const bucket = c.env.BUCKET;
-    const funcionarioId = parseInt(c.req.param('id'));
-    const empresaId = getEmpresaId(c);
-    if (isNaN(funcionarioId)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
     const funcionario = await db
       .prepare(
-        'SELECT id, nome, cpf FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        `SELECT f.id, f.nome, f.cpf
+           FROM funcionarios f
+          WHERE f.id = ?
+            AND f.empresa_id = ?
+            AND f.deleted_at IS NULL
+            AND ${employeeScope.clause}
+          LIMIT 1`,
       )
-      .bind(funcionarioId, empresaId)
+      .bind(funcionarioId, empresaId, ...employeeScope.bindings)
       .first<{ id: number; nome: string; cpf: string | null }>();
     if (!funcionario) {
       return jsonError(c, 'Funcionário não encontrado', 404, 'FUNCIONARIO_NOT_FOUND');
