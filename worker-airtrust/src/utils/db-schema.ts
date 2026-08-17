@@ -20,6 +20,11 @@ interface UsuariosSchema {
 }
 let _usuariosSchema: UsuariosSchema | null = null;
 
+// P0-AUTH-001 hardening: cache se refresh_tokens já possui a coluna empresa_id
+// (migration 0461, ainda não aplicada em todos os ambientes). Enquanto a coluna
+// não existir, o refresh cai no caminho legado documentado (sem pinning).
+let _hasRefreshTokensEmpresaId: boolean | null = null;
+
 const USUARIOS_EMPRESAS_SQL =
   "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'usuarios_empresas' LIMIT 1";
 
@@ -50,9 +55,23 @@ export async function getUsuariosSchema(db: D1Database): Promise<UsuariosSchema>
 }
 
 /**
+ * Retorna se refresh_tokens já possui a coluna empresa_id (migration 0461).
+ * Resultado cacheado após primeira chamada.
+ */
+export async function hasRefreshTokensEmpresaIdColumn(db: D1Database): Promise<boolean> {
+  if (_hasRefreshTokensEmpresaId !== null) return _hasRefreshTokensEmpresaId;
+  const columns =
+    (await db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>()).results ||
+    [];
+  _hasRefreshTokensEmpresaId = columns.some((col) => col.name === 'empresa_id');
+  return _hasRefreshTokensEmpresaId;
+}
+
+/**
  * Reseta o cache (útil em testes).
  */
 export function resetSchemaCache(): void {
   _hasUsuariosEmpresas = null;
   _usuariosSchema = null;
+  _hasRefreshTokensEmpresaId = null;
 }

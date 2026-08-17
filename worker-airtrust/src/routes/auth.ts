@@ -19,7 +19,11 @@ import { auth } from '../middleware/auth';
 import { rateLimiter, rateLimitPresets } from '../middleware/rate-limit';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { createLogger, toError } from '../utils/logger';
-import { hasUsuariosEmpresasTable, getUsuariosSchema } from '../utils/db-schema';
+import {
+  hasUsuariosEmpresasTable,
+  getUsuariosSchema,
+  hasRefreshTokensEmpresaIdColumn,
+} from '../utils/db-schema';
 import { logAudit } from '../utils/db'; // SECURITY: Import audit logging
 import { buildAuditMetadata } from '../lib/audit/context';
 import { enviarEmailAlert } from '../cron/notificacoes';
@@ -415,24 +419,94 @@ async function enforceRefreshTokenLimit(db: D1Database, userId: number): Promise
 
 async function persistRefreshToken(
   db: D1Database,
-  payload: { userId: number; refreshToken: string; expiresAt: string; accessTokenJti: string },
+  payload: {
+    userId: number;
+    refreshToken: string;
+    expiresAt: string;
+    accessTokenJti: string;
+    // P0-AUTH-001: empresa vinculada ao token no momento da emissão. Pinada na
+    // linha do refresh_token (quando a coluna existe — migration 0461) para que
+    // futuras rotações NUNCA re-derivem o tenant a partir do estado atual do
+    // usuário (ex.: is_primary alterado por outra sessão/select-empresa).
+    empresaId?: number;
+  },
 ): Promise<void> {
   await cleanupExpiredRefreshTokens(db);
 
-  await db
-    .prepare(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
-    )
-    .bind(payload.userId, payload.refreshToken, payload.expiresAt, payload.accessTokenJti)
-    .run()
-    .catch(() =>
-      db
-        .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
-        .bind(payload.userId, payload.refreshToken, payload.expiresAt)
-        .run(),
-    );
+  const hasEmpresaIdCol = await hasRefreshTokensEmpresaIdColumn(db);
+
+  if (hasEmpresaIdCol && typeof payload.empresaId === 'number') {
+    await db
+      .prepare(
+        'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti, empresa_id) VALUES (?, ?, ?, ?, ?)',
+      )
+      .bind(
+        payload.userId,
+        payload.refreshToken,
+        payload.expiresAt,
+        payload.accessTokenJti,
+        payload.empresaId,
+      )
+      .run()
+      .catch(() =>
+        db
+          .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
+          .bind(payload.userId, payload.refreshToken, payload.expiresAt)
+          .run(),
+      );
+  } else {
+    // Caminho legado (coluna empresa_id ainda não migrada): documentado como
+    // limitação em CLAUDE.md — "se migration não autorizada, implementar com
+    // schema existente". O refresh cai de volta em resolveUserEmpresaId().
+    await db
+      .prepare(
+        'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
+      )
+      .bind(payload.userId, payload.refreshToken, payload.expiresAt, payload.accessTokenJti)
+      .run()
+      .catch(() =>
+        db
+          .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
+          .bind(payload.userId, payload.refreshToken, payload.expiresAt)
+          .run(),
+      );
+  }
 
   await enforceRefreshTokenLimit(db, payload.userId);
+}
+
+/**
+ * P0-AUTH-001: confirma que o usuário ainda possui vínculo ativo com a empresa
+ * pinada no refresh token. Se o acesso foi revogado após a emissão do token, o
+ * refresh deve falhar de forma limpa em vez de silenciosamente trocar de tenant.
+ */
+async function verifyUserEmpresaMembership(
+  db: D1Database,
+  userId: number,
+  empresaId: number,
+): Promise<boolean> {
+  if (!(await hasUsuariosEmpresasTable(db))) {
+    // Schema legado sem tabela de vínculos — não há como validar; assume ok.
+    return true;
+  }
+
+  const row = await db
+    .prepare(
+      `
+        SELECT 1 AS found
+        FROM usuarios_empresas ue
+        INNER JOIN empresas e ON e.id = ue.empresa_id
+        WHERE ue.usuario_id = ?
+          AND ue.empresa_id = ?
+          AND e.deleted_at IS NULL
+          AND e.ativo = 1
+        LIMIT 1
+      `,
+    )
+    .bind(userId, empresaId)
+    .first<{ found: number }>();
+
+  return Boolean(row?.found);
 }
 
 /**
@@ -1141,6 +1215,7 @@ authRoutes.post(
           refreshToken,
           expiresAt,
           accessTokenJti: jti,
+          empresaId,
         });
         logStep('refresh_token_saved', { userId: authenticatedUser.id });
       } catch (refreshErr) {
@@ -1241,15 +1316,24 @@ authRoutes.post(
       }
 
       const db = c.env.DB;
+      const hasEmpresaIdCol = await hasRefreshTokensEmpresaIdColumn(db);
 
       type RefreshTokenRecord = {
         user_id: number;
         revoked_at: string | null;
         expires_at: string;
+        empresa_id: number | null;
       } | null;
       const refreshTokenRecord = await db
         .prepare(
-          `
+          hasEmpresaIdCol
+            ? `
+        SELECT rt.user_id, rt.revoked_at, rt.expires_at, rt.empresa_id
+        FROM refresh_tokens rt
+        WHERE rt.token = ?
+        LIMIT 1
+      `
+            : `
         SELECT rt.user_id, rt.revoked_at, rt.expires_at
         FROM refresh_tokens rt
         WHERE rt.token = ?
@@ -1274,6 +1358,73 @@ authRoutes.post(
 
       if (expiredRow?.expired) {
         throw unauthorized('Refresh token expirado', 'REFRESH_TOKEN_EXPIRED');
+      }
+
+      // P0-AUTH-001: resolução do tenant do refresh.
+      // Se a coluna empresa_id existe (migration 0461):
+      //  - token sem empresa_id (emitido antes da migration) é legado — não há
+      //    como provar retroativamente o tenant original, então força re-login
+      //    em vez de silenciosamente herdar o tenant atual do usuário.
+      //  - token com empresa_id pinada é validado contra o vínculo ATIVO do
+      //    usuário com aquela empresa (acesso pode ter sido revogado depois).
+      // Se a coluna ainda não existe em produção, cai no caminho legado
+      // documentado (resolveUserEmpresaId por estado atual) — limitação
+      // conhecida até a migration 0461 ser aplicada.
+      let pinnedEmpresaId: number | null = null;
+      if (hasEmpresaIdCol) {
+        if (refreshTokenRecord.empresa_id === null || refreshTokenRecord.empresa_id === undefined) {
+          await db
+            .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
+            .bind(refreshToken)
+            .run()
+            .catch(() => null);
+          throw unauthorized(
+            'Sessão legada sem tenant vinculado. Faça login novamente.',
+            'LEGACY_TOKEN_REQUIRES_REAUTH',
+          );
+        }
+
+        pinnedEmpresaId = refreshTokenRecord.empresa_id;
+        const stillMember = await verifyUserEmpresaMembership(
+          db,
+          refreshTokenRecord.user_id,
+          pinnedEmpresaId,
+        );
+        if (!stillMember) {
+          await db
+            .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
+            .bind(refreshToken)
+            .run()
+            .catch(() => null);
+          throw unauthorized(
+            'Acesso à empresa desta sessão foi revogado.',
+            'TENANT_ACCESS_REVOKED',
+          );
+        }
+      }
+
+      // P1-AUTH-002: rotação via CAS — só marca revoked_at se o token ainda
+      // estava válido (revoked_at IS NULL e não expirado) no momento exato do
+      // UPDATE. Se duas requisições de refresh concorrentes usam o mesmo
+      // token, apenas uma altera a linha (meta.changes === 1); a outra recebe
+      // meta.changes === 0 e é rejeitada como replay, em vez de ambas
+      // rotacionarem com sucesso (double-spend).
+      const casResult = await db
+        .prepare(
+          `UPDATE refresh_tokens
+             SET revoked_at = datetime('now')
+           WHERE token = ?
+             AND revoked_at IS NULL
+             AND expires_at > datetime('now')`,
+        )
+        .bind(refreshToken)
+        .run();
+
+      if (Number(casResult.meta?.changes ?? 0) !== 1) {
+        throw unauthorized(
+          'Refresh token já utilizado ou inválido (possível replay).',
+          'REFRESH_TOKEN_REPLAYED',
+        );
       }
 
       const { activeWhere } = await getUsuariosSchema(db);
@@ -1301,21 +1452,13 @@ authRoutes.post(
         .first<TokenRecord>();
 
       if (!tokenRecord) {
-        await db
-          .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
-          .bind(refreshToken)
-          .run()
-          .catch(() => null);
         throw unauthorized('Usuário inativo ou removido', 'USER_INACTIVE');
       }
 
       const jwtSecret = c.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET não configurado no ambiente');
       const userId = (tokenRecord as NonNullable<TokenRecord>).user_id;
-      const empresaId = await resolveUserEmpresaId(
-        db,
-        (tokenRecord as NonNullable<TokenRecord>).user_id,
-      );
+      const empresaId = pinnedEmpresaId ?? (await resolveUserEmpresaId(db, userId));
       const resolvedRole = await resolveAuthRoleForUser(db, userId, empresaId, tokenRecord.perfil);
 
       // Recarregar permissões individuais (overrides GRANT/DENY)
@@ -1344,20 +1487,18 @@ authRoutes.post(
         ACCESS_TOKEN_TTL_SECONDS,
       );
 
-      // Rotação de refresh token
+      // Rotação de refresh token. O token antigo já foi revogado atomicamente
+      // pelo CAS acima — aqui apenas persistimos o novo, pinado na mesma
+      // empresa (quando a coluna existir).
       const newRefreshToken = generateRefreshToken();
       const newExpiresAt = getRefreshTokenExpiry(REFRESH_TOKEN_TTL_DAYS);
-
-      await db
-        .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
-        .bind(refreshToken)
-        .run();
 
       await persistRefreshToken(db, {
         userId: (tokenRecord as NonNullable<TokenRecord>).user_id,
         refreshToken: newRefreshToken,
         expiresAt: newExpiresAt,
         accessTokenJti: newJti,
+        empresaId,
       });
 
       return c.json({

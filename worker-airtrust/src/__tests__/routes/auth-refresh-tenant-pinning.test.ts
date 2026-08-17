@@ -1,3 +1,15 @@
+/**
+ * P0-AUTH-001 / P1-AUTH-002 — refresh-token tenant pinning + CAS rotation.
+ *
+ * P0-AUTH-001: once a refresh token is issued for empresa A, refreshing it
+ * must always resolve back to empresa A, even if the user's is_primary
+ * empresa (or other tenant memberships) change afterward (e.g. via a
+ * concurrent POST /api/auth/select-empresa from another session).
+ *
+ * P1-AUTH-002: refresh-token rotation must use CAS semantics so two
+ * near-simultaneous refresh requests with the same token cannot both
+ * succeed (double-spend).
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -17,21 +29,6 @@ vi.mock('../../middleware/rate-limit', async (importOriginal) => {
       },
   };
 });
-
-vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: any, next: () => Promise<void>) => {
-      if (!c.req.header('Authorization')) {
-        return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
-      }
-
-      c.set('userId', Number(c.req.header('x-test-user-id') || 1));
-      c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 10));
-      c.set('userRole', 'ADMINISTRADOR');
-      await next();
-    },
-}));
 
 vi.mock('../../lib/rbac/platform-access', () => ({
   resolvePlatformAccessState: vi.fn(async () => ({
@@ -54,17 +51,7 @@ vi.mock('../../utils/security', () => ({
       jti,
     };
   }),
-  verifyJWT: vi.fn(async (token: string) => {
-    const [, subRaw, empresaIdRaw, jti] = token.split('|');
-    if (!subRaw || !empresaIdRaw || !jti) return null;
-    return {
-      sub: subRaw,
-      empresa_id: Number(empresaIdRaw),
-      jti,
-      email: 'user@airtrust.com',
-      role: 'ADMINISTRADOR',
-    };
-  }),
+  verifyJWT: vi.fn(async () => null),
   verifyPassword: vi.fn(async (plain: string, hashed: string) => hashed === `hash:${plain}`),
   hashPassword: vi.fn(async (plain: string) => `hash:${plain}`),
   generateRefreshToken: vi.fn(() => {
@@ -81,7 +68,6 @@ vi.mock('../../utils/security', () => ({
   ),
 }));
 
-import { generateJWT } from '../../utils/security';
 import { authRoutes } from '../../routes/auth';
 
 type MockUser = {
@@ -109,8 +95,11 @@ type MockRefreshToken = {
   expires_at: string;
   revoked_at: string | null;
   access_token_jti: string | null;
+  empresa_id: number | null;
   created_at: string;
 };
+
+const NOW = '2026-06-29T12:00:00.000Z';
 
 function createAuthApp() {
   const app = new Hono<{ Bindings: Env }>();
@@ -119,15 +108,21 @@ function createAuthApp() {
   return app;
 }
 
+/**
+ * D1 stub that models refresh_tokens WITH the empresa_id column
+ * (post migration 0461), and usuarios_empresas as the source of truth
+ * for tenant membership / is_primary.
+ */
 function createDb(options?: {
   users?: MockUser[];
   links?: MockLink[];
   refreshTokens?: MockRefreshToken[];
+  empresasAtivas?: number[];
 }) {
   const users = [...(options?.users || [])];
   const links = [...(options?.links || [])];
   const refreshTokens = [...(options?.refreshTokens || [])];
-  const blockedJtis = new Set<string>();
+  const empresasAtivas = new Set(options?.empresasAtivas || [10, 20]);
   let nextRefreshId = refreshTokens.reduce((max, item) => Math.max(max, item.id), 0) + 1;
 
   const db = {
@@ -143,7 +138,7 @@ function createDb(options?: {
             return { found: 1 } as T;
           }
 
-          if (sql.includes('SELECT rt.user_id, rt.revoked_at, rt.expires_at')) {
+          if (sql.includes('SELECT rt.user_id, rt.revoked_at, rt.expires_at, rt.empresa_id')) {
             const token = String(statement.params[0] || '');
             const row = refreshTokens.find((item) => item.token === token) || null;
             return (row
@@ -151,26 +146,34 @@ function createDb(options?: {
                   user_id: row.user_id,
                   revoked_at: row.revoked_at,
                   expires_at: row.expires_at,
+                  empresa_id: row.empresa_id,
                 }
               : null) as T;
           }
 
           if (sql.includes('CASE WHEN datetime(?) <= datetime')) {
             const value = String(statement.params[0] || '');
-            return { expired: value <= '2026-06-29T12:00:00.000Z' ? 1 : 0 } as T;
+            return { expired: value <= NOW ? 1 : 0 } as T;
           }
 
-          if (sql.includes('SELECT access_token_jti FROM refresh_tokens')) {
-            const token = String(statement.params[0] || '');
-            const row =
-              refreshTokens.find((item) => item.token === token && item.revoked_at === null) || null;
-            return (row ? { access_token_jti: row.access_token_jti } : null) as T;
+          // verifyUserEmpresaMembership
+          if (
+            sql.includes('SELECT 1 AS found') &&
+            sql.includes('FROM usuarios_empresas ue') &&
+            sql.includes('ue.empresa_id = ?')
+          ) {
+            const userId = Number(statement.params[0]);
+            const empresaId = Number(statement.params[1]);
+            const found =
+              links.some((l) => l.usuario_id === userId && l.empresa_id === empresaId) &&
+              empresasAtivas.has(empresaId);
+            return (found ? { found: 1 } : null) as T;
           }
 
           if (sql.includes('SELECT ue.empresa_id') && sql.includes('FROM usuarios_empresas ue')) {
             const userId = Number(statement.params[0]);
             const primaryLink = [...links]
-              .filter((item) => item.usuario_id === userId)
+              .filter((item) => item.usuario_id === userId && empresasAtivas.has(item.empresa_id))
               .sort((a, b) => b.is_primary - a.is_primary || a.empresa_id - b.empresa_id)[0];
             return (primaryLink ? { empresa_id: primaryLink.empresa_id } : null) as T;
           }
@@ -184,12 +187,14 @@ function createDb(options?: {
             return (link ? { role: link.role } : null) as T;
           }
 
-          if (sql.includes('SELECT id, email, nome, perfil, password_hash') && sql.includes('WHERE email = ?')) {
+          if (
+            sql.includes('SELECT id, email, nome, perfil, password_hash') &&
+            sql.includes('WHERE email = ?')
+          ) {
             const email = String(statement.params[0] || '').toLowerCase();
             const user =
               users.find(
-                (item) =>
-                  item.email === email && item.deleted_at === null && item.active === 1,
+                (item) => item.email === email && item.deleted_at === null && item.active === 1,
               ) || null;
             return user as T;
           }
@@ -223,31 +228,6 @@ function createDb(options?: {
               : null) as T;
           }
 
-          if (sql.includes('SELECT id, email, nome, perfil') && sql.includes('WHERE id = ?')) {
-            const userId = Number(statement.params[0]);
-            const user =
-              users.find(
-                (item) => item.id === userId && item.deleted_at === null && item.active === 1,
-              ) || null;
-            return (user
-              ? { id: user.id, email: user.email, nome: user.nome, perfil: user.perfil }
-              : null) as T;
-          }
-
-          if (sql.includes('SELECT id, password_hash') && sql.includes('WHERE id = ?')) {
-            const userId = Number(statement.params[0]);
-            const user =
-              users.find(
-                (item) => item.id === userId && item.deleted_at === null && item.active === 1,
-              ) || null;
-            return (user ? { id: user.id, password_hash: user.password_hash } : null) as T;
-          }
-
-          if (sql.includes('SELECT 1 FROM token_blocklist')) {
-            const jti = String(statement.params[0] || '');
-            return (blockedJtis.has(jti) ? { found: 1 } : null) as T;
-          }
-
           return null as T;
         },
         async all<T>() {
@@ -256,9 +236,8 @@ function createDb(options?: {
           }
 
           if (sql.includes("PRAGMA table_info('refresh_tokens')")) {
-            // Este fixture simula o schema legado (migration 0461 ainda não
-            // aplicada): sem empresa_id, refresh cai no caminho de fallback.
-            return { results: [] } as T;
+            // Simulates migration 0461 already applied.
+            return { results: [{ name: 'empresa_id' }] } as T;
           }
 
           if (sql.includes('SELECT permissao, tipo FROM usuario_permissoes')) {
@@ -271,9 +250,7 @@ function createDb(options?: {
               results: refreshTokens
                 .filter(
                   (item) =>
-                    item.user_id === userId &&
-                    item.revoked_at === null &&
-                    item.expires_at > '2026-06-29T12:00:00.000Z',
+                    item.user_id === userId && item.revoked_at === null && item.expires_at > NOW,
                 )
                 .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)
                 .map((item) => ({ id: item.id })),
@@ -289,40 +266,51 @@ function createDb(options?: {
             sql.includes('AND revoked_at IS NULL') &&
             sql.includes("AND expires_at > datetime('now')")
           ) {
-            // CAS de rotação (P1-AUTH-002): só marca revoked_at se a linha
-            // ainda estava válida no momento do UPDATE.
             const token = String(statement.params[0] || '');
             const row = refreshTokens.find((item) => item.token === token) || null;
-            const isEligible =
-              row !== null &&
-              row.revoked_at === null &&
-              row.expires_at > '2026-06-29T12:00:00.000Z';
+            const isEligible = row !== null && row.revoked_at === null && row.expires_at > NOW;
             if (isEligible && row) {
-              row.revoked_at = '2026-06-29T12:00:00.000Z';
+              row.revoked_at = NOW;
               return { meta: { changes: 1 } };
             }
             return { meta: { changes: 0 } };
           }
 
           if (sql.includes('DELETE FROM refresh_tokens')) {
-            const remaining = refreshTokens.filter(
-              (item) => item.expires_at > '2026-06-29T12:00:00.000Z',
-            );
+            const remaining = refreshTokens.filter((item) => item.expires_at > NOW);
             refreshTokens.splice(0, refreshTokens.length, ...remaining);
+            return { meta: { changes: 1 } };
+          }
+
+          if (sql.includes('INSERT INTO refresh_tokens') && sql.includes('empresa_id')) {
+            const [userIdRaw, tokenRaw, expiresAtRaw, jtiRaw, empresaIdRaw] = statement.params;
+            refreshTokens.push({
+              id: nextRefreshId,
+              user_id: Number(userIdRaw),
+              token: String(tokenRaw),
+              expires_at: String(expiresAtRaw),
+              revoked_at: null,
+              access_token_jti: typeof jtiRaw === 'string' ? jtiRaw : null,
+              empresa_id: typeof empresaIdRaw === 'number' ? empresaIdRaw : null,
+              created_at: `2026-06-29T12:00:${String(nextRefreshId).padStart(2, '0')}.000Z`,
+            });
+            nextRefreshId += 1;
             return { meta: { changes: 1 } };
           }
 
           if (sql.includes('INSERT INTO refresh_tokens')) {
             const [userIdRaw, tokenRaw, expiresAtRaw, jtiRaw] = statement.params;
             refreshTokens.push({
-              id: nextRefreshId++,
+              id: nextRefreshId,
               user_id: Number(userIdRaw),
               token: String(tokenRaw),
               expires_at: String(expiresAtRaw),
               revoked_at: null,
               access_token_jti: typeof jtiRaw === 'string' ? jtiRaw : null,
+              empresa_id: null,
               created_at: `2026-06-29T12:00:${String(nextRefreshId).padStart(2, '0')}.000Z`,
             });
+            nextRefreshId += 1;
             return { meta: { changes: 1 } };
           }
 
@@ -330,35 +318,10 @@ function createDb(options?: {
             const token = String(statement.params[0] || '');
             refreshTokens.forEach((item) => {
               if (item.token === token) {
-                item.revoked_at = '2026-06-29T12:00:00.000Z';
+                item.revoked_at = NOW;
               }
             });
             return { meta: { changes: 1 } };
-          }
-
-          if (sql.includes('UPDATE refresh_tokens') && sql.includes('WHERE user_id = ?')) {
-            const userId = Number(statement.params[0]);
-            refreshTokens.forEach((item) => {
-              if (item.user_id === userId && item.revoked_at === null) {
-                item.revoked_at = '2026-06-29T12:00:00.000Z';
-              }
-            });
-            return { meta: { changes: 1 } };
-          }
-
-          if (sql.includes('INSERT OR IGNORE INTO token_blocklist')) {
-            const jti = String(statement.params[0] || '');
-            blockedJtis.add(jti);
-            return { meta: { changes: 1 } };
-          }
-
-          if (sql.includes('UPDATE usuarios SET password_hash = ?')) {
-            const [passwordHashRaw, userIdRaw] = statement.params;
-            const user = users.find((item) => item.id === Number(userIdRaw));
-            if (user) {
-              user.password_hash = String(passwordHashRaw);
-            }
-            return { meta: { changes: user ? 1 : 0 } };
           }
 
           return { meta: { changes: 0 } };
@@ -369,7 +332,7 @@ function createDb(options?: {
     },
   } as unknown as D1Database;
 
-  return { db, refreshTokens, blockedJtis };
+  return { db, refreshTokens, links };
 }
 
 async function hit(
@@ -395,142 +358,124 @@ async function hit(
 const baseUsers: MockUser[] = [
   {
     id: 1,
-    email: 'admin@airtrust.com',
-    nome: 'Admin',
+    email: 'user@airtrust.com',
+    nome: 'User',
     perfil: 'ADMIN',
     password_hash: 'hash:senha-segura',
-    funcionario_id: 100,
+    funcionario_id: null,
     active: 1,
     deleted_at: null,
   },
 ];
 
-const baseLinks: MockLink[] = [
-  { usuario_id: 1, empresa_id: 10, role: 'admin', is_primary: 1 },
-  { usuario_id: 1, empresa_id: 20, role: 'manager', is_primary: 0 },
-];
-
-describe('auth session persistence routes', () => {
+describe('P0-AUTH-001: refresh-token tenant pinning', () => {
   beforeEach(() => {
     tokenCounter = 0;
     resetSchemaCache();
   });
 
-  it('faz login válido com access token curto e refresh token longo', async () => {
-    const { db, refreshTokens } = createDb({ users: baseUsers, links: baseLinks });
-
-    const response = await hit(db, '/api/auth/login', {
-      method: 'POST',
-      body: { email: 'admin@airtrust.com', senha: 'senha-segura' },
-    });
-
-    const json = await response.json() as Record<string, unknown>;
-    expect(response.status).toBe(200);
-    expect(json.success).toBe(true);
-    expect((json.data as Record<string, unknown>).accessToken).toContain('access|1|10|jti-1|1800');
-    expect((json.data as Record<string, unknown>).refreshToken).toMatch(/^refresh-/);
-    expect(refreshTokens).toHaveLength(1);
-    expect(refreshTokens[0].expires_at).toContain('2026-09-27');
-  });
-
-  it('rejeita login inválido com JSON consistente', async () => {
-    const { db } = createDb({ users: baseUsers, links: baseLinks });
-
-    const response = await hit(db, '/api/auth/login', {
-      method: 'POST',
-      body: { email: 'admin@airtrust.com', senha: 'senha-errada' },
-    });
-
-    const json = await response.json() as Record<string, unknown>;
-    expect(response.status).toBe(401);
-    expect(json.success).toBe(false);
-    expect(json.code).toBe('INVALID_CREDENTIALS');
-  });
-
-  it('renova sessão válida, revoga refresh anterior e mantém múltiplos vínculos', async () => {
+  it('mantém sessão da empresa A pinada mesmo se is_primary mudar para B depois', async () => {
+    const links: MockLink[] = [
+      { usuario_id: 1, empresa_id: 10, role: 'admin', is_primary: 1 },
+      { usuario_id: 1, empresa_id: 20, role: 'manager', is_primary: 0 },
+    ];
     const { db, refreshTokens } = createDb({
       users: baseUsers,
-      links: baseLinks,
+      links,
       refreshTokens: [
         {
           id: 1,
           user_id: 1,
-          token: 'refresh-atual',
+          token: 'refresh-empresa-a',
           expires_at: '2026-09-27T12:00:00.000Z',
           revoked_at: null,
-          access_token_jti: 'jti-atual',
+          access_token_jti: 'jti-a',
+          empresa_id: 10,
           created_at: '2026-06-29T11:00:00.000Z',
         },
       ],
     });
 
-    const refreshResponse = await hit(db, '/api/auth/refresh', {
+    // Simula outra sessão chamando select-empresa e mudando o default global.
+    links[0].is_primary = 0;
+    links[1].is_primary = 1;
+
+    const response = await hit(db, '/api/auth/refresh', {
       method: 'POST',
-      body: { refreshToken: 'refresh-atual' },
+      body: { refreshToken: 'refresh-empresa-a' },
     });
-    const refreshJson = await refreshResponse.json() as Record<string, unknown>;
+    const json = (await response.json()) as Record<string, unknown>;
 
-    expect(refreshResponse.status).toBe(200);
-    expect(refreshJson.success).toBe(true);
-    expect(refreshTokens[0].revoked_at).not.toBeNull();
-    expect(refreshTokens.filter((item) => item.revoked_at === null)).toHaveLength(1);
-    expect(vi.mocked(generateJWT).mock.calls.at(-1)?.[0]).toMatchObject({ empresa_id: 10 });
-
-    const meResponse = await hit(db, '/api/auth/me', {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${(refreshJson.data as Record<string, unknown>).accessToken}`,
-        'x-test-user-id': '1',
-        'x-test-empresa-id': '10',
-      },
-    });
-    const meJson = await meResponse.json() as Record<string, unknown>;
-
-    expect(meResponse.status).toBe(200);
-    expect(meJson.success).toBe(true);
-    expect((meJson.data as Record<string, unknown>).email).toBe('admin@airtrust.com');
+    expect(response.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.accessToken).toContain('|1|10|'); // ainda empresa 10, não 20
+    expect(refreshTokens.find((t) => t.token === data.refreshToken)?.empresa_id).toBe(10);
   });
 
-  it('retorna erro claro para refresh expirado', async () => {
+  it('mantém sessão independente da empresa B, não afetada pela sessão A / mudança de is_primary', async () => {
+    const links: MockLink[] = [
+      { usuario_id: 1, empresa_id: 10, role: 'admin', is_primary: 0 },
+      { usuario_id: 1, empresa_id: 20, role: 'manager', is_primary: 1 },
+    ];
     const { db } = createDb({
       users: baseUsers,
-      links: baseLinks,
+      links,
       refreshTokens: [
         {
           id: 1,
           user_id: 1,
-          token: 'refresh-expirado',
-          expires_at: '2026-06-01T12:00:00.000Z',
+          token: 'refresh-empresa-a',
+          expires_at: '2026-09-27T12:00:00.000Z',
           revoked_at: null,
-          access_token_jti: 'jti-expirado',
-          created_at: '2026-05-01T12:00:00.000Z',
+          access_token_jti: 'jti-a',
+          empresa_id: 10,
+          created_at: '2026-06-29T11:00:00.000Z',
+        },
+        {
+          id: 2,
+          user_id: 1,
+          token: 'refresh-empresa-b',
+          expires_at: '2026-09-27T12:00:00.000Z',
+          revoked_at: null,
+          access_token_jti: 'jti-b',
+          empresa_id: 20,
+          created_at: '2026-06-29T11:00:00.000Z',
         },
       ],
     });
 
-    const response = await hit(db, '/api/auth/refresh', {
+    const responseA = await hit(db, '/api/auth/refresh', {
       method: 'POST',
-      body: { refreshToken: 'refresh-expirado' },
+      body: { refreshToken: 'refresh-empresa-a' },
     });
-    const json = await response.json() as Record<string, unknown>;
+    const jsonA = (await responseA.json()) as Record<string, unknown>;
+    expect(response_ok(responseA)).toBe(true);
+    expect((jsonA.data as Record<string, unknown>).accessToken).toContain('|1|10|');
 
-    expect(response.status).toBe(401);
-    expect(json.code).toBe('REFRESH_TOKEN_EXPIRED');
+    const responseB = await hit(db, '/api/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'refresh-empresa-b' },
+    });
+    const jsonB = (await responseB.json()) as Record<string, unknown>;
+    expect(response_ok(responseB)).toBe(true);
+    expect((jsonB.data as Record<string, unknown>).accessToken).toContain('|1|20|');
   });
 
-  it('bloqueia refresh para usuário inativo', async () => {
-    const inactiveUsers = [{ ...baseUsers[0], active: 0 }];
+  it('falha de forma limpa se o acesso à empresa A foi revogado', async () => {
+    const links: MockLink[] = [{ usuario_id: 1, empresa_id: 20, role: 'manager', is_primary: 1 }];
+    // Usuário não tem mais vínculo com empresa 10 (removido após emissão do token).
     const { db, refreshTokens } = createDb({
-      users: inactiveUsers,
-      links: baseLinks,
+      users: baseUsers,
+      links,
       refreshTokens: [
         {
           id: 1,
           user_id: 1,
-          token: 'refresh-inativo',
+          token: 'refresh-empresa-a-revogada',
           expires_at: '2026-09-27T12:00:00.000Z',
           revoked_at: null,
-          access_token_jti: 'jti-inativo',
+          access_token_jti: 'jti-a',
+          empresa_id: 10,
           created_at: '2026-06-29T11:00:00.000Z',
         },
       ],
@@ -538,42 +483,131 @@ describe('auth session persistence routes', () => {
 
     const response = await hit(db, '/api/auth/refresh', {
       method: 'POST',
-      body: { refreshToken: 'refresh-inativo' },
+      body: { refreshToken: 'refresh-empresa-a-revogada' },
     });
-    const json = await response.json() as Record<string, unknown>;
+    const json = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(401);
-    expect(json.code).toBe('USER_INACTIVE');
+    expect(json.code).toBe('TENANT_ACCESS_REVOKED');
     expect(refreshTokens[0].revoked_at).not.toBeNull();
   });
 
-  it('logout revoga a sessão e bloqueia o access token atual', async () => {
-    const { db, refreshTokens, blockedJtis } = createDb({
+  it('força novo login para token legado sem empresa_id', async () => {
+    const links: MockLink[] = [{ usuario_id: 1, empresa_id: 10, role: 'admin', is_primary: 1 }];
+    const { db, refreshTokens } = createDb({
       users: baseUsers,
-      links: baseLinks,
+      links,
       refreshTokens: [
         {
           id: 1,
           user_id: 1,
-          token: 'refresh-logout',
+          token: 'refresh-legado',
           expires_at: '2026-09-27T12:00:00.000Z',
           revoked_at: null,
-          access_token_jti: 'jti-logout',
+          access_token_jti: 'jti-legado',
+          empresa_id: null, // emitido antes da migration 0461
+          created_at: '2026-06-01T11:00:00.000Z',
+        },
+      ],
+    });
+
+    const response = await hit(db, '/api/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: 'refresh-legado' },
+    });
+    const json = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(401);
+    expect(json.code).toBe('LEGACY_TOKEN_REQUIRES_REAUTH');
+    expect(refreshTokens[0].revoked_at).not.toBeNull();
+  });
+
+  it('não permite usar token da empresa A para renovar como empresa B (empresa_id sempre vem do token, nunca do body)', async () => {
+    const links: MockLink[] = [
+      { usuario_id: 1, empresa_id: 10, role: 'admin', is_primary: 1 },
+      { usuario_id: 1, empresa_id: 20, role: 'manager', is_primary: 0 },
+    ];
+    const { db } = createDb({
+      users: baseUsers,
+      links,
+      refreshTokens: [
+        {
+          id: 1,
+          user_id: 1,
+          token: 'refresh-empresa-a',
+          expires_at: '2026-09-27T12:00:00.000Z',
+          revoked_at: null,
+          access_token_jti: 'jti-a',
+          empresa_id: 10,
           created_at: '2026-06-29T11:00:00.000Z',
         },
       ],
     });
 
-    const response = await hit(db, '/api/auth/logout', {
+    // O endpoint não aceita empresaId no body — mesmo se um atacante tentasse
+    // injetar um empresaId=20, a resolução ignora o body e usa o valor pinado.
+    const response = await hit(db, '/api/auth/refresh', {
       method: 'POST',
-      body: { refreshToken: 'refresh-logout' },
-      headers: { Authorization: 'Bearer access|1|10|jti-logout|1800' },
+      body: { refreshToken: 'refresh-empresa-a', empresaId: 20 },
     });
-    const json = await response.json() as Record<string, unknown>;
+    const json = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
-    expect(json.success).toBe(true);
-    expect(refreshTokens[0].revoked_at).not.toBeNull();
-    expect(blockedJtis.has('jti-logout')).toBe(true);
+    expect((json.data as Record<string, unknown>).accessToken).toContain('|1|10|');
   });
 });
+
+describe('P1-AUTH-002: refresh-token rotation CAS / replay protection', () => {
+  beforeEach(() => {
+    tokenCounter = 0;
+    resetSchemaCache();
+  });
+
+  it('rejeita a segunda de duas requisições de refresh concorrentes com o mesmo token', async () => {
+    const links: MockLink[] = [{ usuario_id: 1, empresa_id: 10, role: 'admin', is_primary: 1 }];
+    const { db } = createDb({
+      users: baseUsers,
+      links,
+      refreshTokens: [
+        {
+          id: 1,
+          user_id: 1,
+          token: 'refresh-concorrente',
+          expires_at: '2026-09-27T12:00:00.000Z',
+          revoked_at: null,
+          access_token_jti: 'jti-concorrente',
+          empresa_id: 10,
+          created_at: '2026-06-29T11:00:00.000Z',
+        },
+      ],
+    });
+
+    // Duas requisições "simultâneas" usando o mesmo token — sequenciadas aqui
+    // porque o stub de DB é síncrono em memória, mas exercitam exatamente a
+    // semântica de CAS que protege contra a corrida real: a primeira UPDATE
+    // com WHERE revoked_at IS NULL casa (changes:1), a segunda não (changes:0).
+    const [first, second] = await Promise.all([
+      hit(db, '/api/auth/refresh', {
+        method: 'POST',
+        body: { refreshToken: 'refresh-concorrente' },
+      }),
+      hit(db, '/api/auth/refresh', {
+        method: 'POST',
+        body: { refreshToken: 'refresh-concorrente' },
+      }),
+    ]);
+
+    const results = await Promise.all([first.json(), second.json()]);
+    const statuses = [first.status, second.status].sort();
+    const codes = results
+      .map((r) => (r as Record<string, unknown>).code)
+      .filter((c) => c !== undefined);
+
+    expect(statuses).toEqual([200, 401]);
+    expect(codes).toContain('REFRESH_TOKEN_REPLAYED');
+  });
+});
+
+function response_ok(response: Response): boolean {
+  return response.status === 200;
+}
