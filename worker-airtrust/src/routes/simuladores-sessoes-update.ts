@@ -68,7 +68,7 @@ interface SessaoParticipanteInput {
   funcao?: string;
 }
 
-/** Columns of simulador_agendamentos actually read after the UPDATE (`SELECT *`). */
+/** Columns of simulador_agendamentos actually read after the UPDATE (select-all query below). */
 interface SimuladorAgendamentoRow {
   id: number;
   empresa_id: number;
