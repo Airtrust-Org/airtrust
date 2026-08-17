@@ -520,6 +520,7 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
 
     // Criar qualificações PLANEJADAS se a sessão ainda não as tiver (ex: sessão criada antes do deploy)
     const diag: Record<string, unknown> = {};
+    let scaleIntegrationError: string | null = null;
     const hasPlanejadas = await c.env.DB.prepare(
       `SELECT 1 FROM qualificacoes_historico
        WHERE sessao_id=?
@@ -943,27 +944,39 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
           .run();
       }
 
-      for (const fid of removidos) {
-        await removeManagedEscalaEvents({
-          db: c.env.DB,
-          funcionarioId: fid,
-          origem: 'simuladores',
-          linkId: `sim_sessao:${id}`,
+      try {
+        for (const fid of removidos) {
+          await removeManagedEscalaEvents({
+            db: c.env.DB,
+            funcionarioId: fid,
+            origem: 'simuladores',
+            linkId: `sim_sessao:${id}`,
+          });
+        }
+
+        await syncSessaoEscalaEventos(c.env.DB, {
+          empresaId,
+          sessaoId: id,
+          simuladorId: simuladorIdFinal,
+          data: dataFinal,
+          status: b.status ?? a.status,
+          temaSessao: b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
+          tipoSessao: b.tipo_sessao ?? a.tipo_sessao,
+          observacoes: b.observacoes !== undefined ? b.observacoes : a.observacoes,
+          participantes: novosValidos.map((part: any) => ({ funcionario_id: part.funcionario_id })),
+          createdBy: String((c as any).get('userId') || 'system'),
+        });
+      } catch (error) {
+        // A sessão principal já foi persistida acima — não deixar a falha da
+        // integração de Escalas propagar para o catch externo (que responderia
+        // 500 apesar do estado principal estar correto). Reportar via 409 abaixo.
+        scaleIntegrationError = 'SIMULATOR_SCALE_SYNC_FAILED';
+        console.error('[PUT /sessoes] Sessão salva com integração de escala pendente', {
+          sessaoId: id,
+          empresaId,
+          errorName: error instanceof Error ? error.name : 'UnknownError',
         });
       }
-
-      await syncSessaoEscalaEventos(c.env.DB, {
-        empresaId,
-        sessaoId: id,
-        simuladorId: simuladorIdFinal,
-        data: dataFinal,
-        status: b.status ?? a.status,
-        temaSessao: b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
-        tipoSessao: b.tipo_sessao ?? a.tipo_sessao,
-        observacoes: b.observacoes !== undefined ? b.observacoes : a.observacoes,
-        participantes: novosValidos.map((part: any) => ({ funcionario_id: part.funcionario_id })),
-        createdBy: String((c as any).get('userId') || 'system'),
-      });
     }
 
     const u = await c.env.DB.prepare(
@@ -1003,20 +1016,30 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
         .bind(id)
         .all<{ funcionario_id: string | number }>();
 
-      await syncSessaoEscalaEventos(c.env.DB, {
-        empresaId,
-        sessaoId: id,
-        simuladorId: (u as any)?.simulador_id,
-        data: String((u as any)?.data || dataFinal),
-        status: (u as any)?.status,
-        temaSessao: (u as any)?.nome || null,
-        tipoSessao: (u as any)?.tipo_sessao || null,
-        observacoes: (u as any)?.observacoes || null,
-        participantes: (participantesAtivos.results || []).map((item) => ({
-          funcionario_id: item.funcionario_id,
-        })),
-        createdBy: String((c as any).get('userId') || 'system'),
-      });
+      try {
+        await syncSessaoEscalaEventos(c.env.DB, {
+          empresaId,
+          sessaoId: id,
+          simuladorId: (u as any)?.simulador_id,
+          data: String((u as any)?.data || dataFinal),
+          status: (u as any)?.status,
+          temaSessao: (u as any)?.nome || null,
+          tipoSessao: (u as any)?.tipo_sessao || null,
+          observacoes: (u as any)?.observacoes || null,
+          participantes: (participantesAtivos.results || []).map((item) => ({
+            funcionario_id: item.funcionario_id,
+          })),
+          createdBy: String((c as any).get('userId') || 'system'),
+        });
+      } catch (error) {
+        // Idem: sessão já persistida — não deixar propagar para o catch externo.
+        scaleIntegrationError = 'SIMULATOR_SCALE_SYNC_FAILED';
+        console.error('[PUT /sessoes] Sessão salva com integração de escala pendente', {
+          sessaoId: id,
+          empresaId,
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
+      }
     }
 
     try {
@@ -1099,6 +1122,39 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       } catch (err) {
         console.error('[fichaEmails] Erro ao buscar fichas para notificação:', err);
       }
+    }
+
+    const qualificationIntegrationFailed =
+      diag.resultado === 'erro' || Boolean(diag.qualificacoesConcluidasErro);
+    if (qualificationIntegrationFailed || scaleIntegrationError) {
+      const code =
+        qualificationIntegrationFailed && scaleIntegrationError
+          ? 'SIMULATOR_INTEGRATION_PENDING'
+          : qualificationIntegrationFailed
+            ? 'SIMULATOR_QUALIFICATION_INTEGRATION_PENDING'
+            : 'SIMULATOR_SCALE_INTEGRATION_PENDING';
+      console.error('[PUT /sessoes] Sessão salva com integração pendente', {
+        sessaoId: id,
+        empresaId,
+        plannedError: diag.erro || null,
+        completionError: diag.qualificacoesConcluidasErro || null,
+        scaleError: scaleIntegrationError,
+      });
+      return c.json(
+        {
+          success: false,
+          partial: true,
+          code,
+          error:
+            'Sessão salva, mas uma integração derivada ficou pendente. O estado principal foi preservado.',
+          data: u,
+          primary_saved: true,
+          qualification_synced: !qualificationIntegrationFailed,
+          scale_synced: !scaleIntegrationError,
+          _diag_planejadas: diag,
+        },
+        409,
+      );
     }
 
     return c.json({ success: true, data: u, _diag_planejadas: diag });

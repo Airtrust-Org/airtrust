@@ -1367,6 +1367,7 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
 
       if (fallbackModelo) modeloIdParaQual = fallbackModelo.id;
     }
+    let plannedQualificationIntegrationError: string | null = null;
     if (modeloIdParaQual) {
       try {
         await criarQualificacoesPlanejadas(c.env.DB, {
@@ -1378,8 +1379,15 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
           empresaId,
         });
       } catch (err) {
-        // Não bloquear o fluxo principal — apenas registrar
-        console.error('[QUAL_PLANEJADA] Falha ao criar qualificações planejadas:', err);
+        // Não bloquear o rollback do fluxo principal — a sessão já foi criada e deve
+        // ser preservada. Reportar a integração pendente via 409 explícito abaixo,
+        // em vez de mascarar a falha como sucesso (201) ou derrubar a sessão criada.
+        plannedQualificationIntegrationError = 'PLANNED_QUALIFICATION_SYNC_FAILED';
+        console.error('[QUAL_PLANEJADA] Sessão criada com integração de qualificações pendente:', {
+          sessaoId: sessao_id,
+          empresaId,
+          errorName: err instanceof Error ? err.name : 'UnknownError',
+        });
       }
     }
 
@@ -1423,6 +1431,28 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
     );
 
     createdSessaoId = null;
+
+    if (plannedQualificationIntegrationError) {
+      return c.json(
+        {
+          success: false,
+          partial: true,
+          code: 'SIMULATOR_QUALIFICATION_INTEGRATION_PENDING',
+          error:
+            'Sessão criada, mas a sincronização de qualificações ficou pendente. O estado principal foi preservado.',
+          data: {
+            sessao_id,
+            participantes: participantes.length,
+            fichas_criadas,
+            tema: tema_sessao,
+          },
+          primary_saved: true,
+          qualification_synced: false,
+        },
+        409,
+      );
+    }
+
     return c.json(
       {
         success: true,
