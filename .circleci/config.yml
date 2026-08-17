@@ -100,8 +100,8 @@ jobs:
       - checkout
       - npm_ci_root
       - run:
-          name: npm run typecheck
-          command: npm run typecheck
+          name: npm run typecheck:ratchet
+          command: npm run typecheck:ratchet
 
   worker-typecheck:
     executor: node
