@@ -2459,7 +2459,12 @@ export async function syncSigvoosForFrms(
         identificadorSigvoos: first.identificadorSigvoos,
         name: first.tripulanteNome,
       });
-      const matchedOperational = matched?.elegivelFrms ? matched : null;
+      // P1-SIG-003: NOME_FUZZY is a name-similarity heuristic, not a proven
+      // identity. It must not auto-confirm into official FRMS jornadas —
+      // require a manual mapping (which then resolves as MANUAL on the
+      // next sync) before it can feed hours/jornada/rolling/alerts.
+      const matchedOperational =
+        matched?.elegivelFrms && matched.fonteResolucao !== 'NOME_FUZZY' ? matched : null;
       const byMonth = groupDaysByMonth(days);
 
       for (const [monthKey, monthDays] of byMonth.entries()) {
@@ -2482,7 +2487,9 @@ export async function syncSigvoosForFrms(
               : [
                   matched?.motivoInelegibilidade === 'NAO_TRIPULANTE_OPERACIONAL'
                     ? 'Funcionario resolvido no cadastro, mas sem funcao/cargo elegivel para FRMS operacional.'
-                    : 'Tripulante nao localizado automaticamente no AirTrust.',
+                    : matched?.elegivelFrms && matched.fonteResolucao === 'NOME_FUZZY'
+                      ? 'Identidade resolvida apenas por similaridade de nome; requer confirmacao manual antes de alimentar FRMS.'
+                      : 'Tripulante nao localizado automaticamente no AirTrust.',
                 ],
           }),
         );
@@ -2512,9 +2519,12 @@ export async function syncSigvoosForFrms(
           canacSigvoos: monthly.canac,
           competencia: `${monthly.ano}-${String(monthly.mes).padStart(2, '0')}`,
           jornadas: monthly.preview.total_dias,
-          motivo:
-            monthly.preview.avisos?.some((aviso) => aviso.includes('sem funcao/cargo elegivel'))
-              ? 'NAO_TRIPULANTE_OPERACIONAL'
+          motivo: monthly.preview.avisos?.some((aviso) =>
+            aviso.includes('sem funcao/cargo elegivel'),
+          )
+            ? 'NAO_TRIPULANTE_OPERACIONAL'
+            : monthly.preview.avisos?.some((aviso) => aviso.includes('requer confirmacao manual'))
+              ? 'IDENTIDADE_REQUER_CONFIRMACAO'
               : 'NAO_ENCONTRADO',
           payload: {
             fonte_resolucao: monthly.fonteResolucao,
@@ -2721,6 +2731,21 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
         mes: row.mes,
         resolved: false,
         error: 'Funcionario resolvido, mas sem funcao/cargo elegivel para FRMS operacional',
+      });
+      continue;
+    }
+
+    // P1-SIG-003: a NOME_FUZZY match is a similarity heuristic, not proven
+    // identity — reprocessing must not silently confirm it. Keep the
+    // pendencia open and require an explicit manual mapping first.
+    if (matched.fonteResolucao === 'NOME_FUZZY') {
+      result.detalhes.push({
+        importacao_id: row.id,
+        tripulante_nome: nomeSigvoos,
+        ano: row.ano,
+        mes: row.mes,
+        resolved: false,
+        error: 'Identidade resolvida apenas por similaridade de nome; requer mapeamento manual',
       });
       continue;
     }
