@@ -7,7 +7,7 @@
  */
 
 import { Hono } from 'hono';
-import type { AppEnv } from '../types';
+import type { Env } from '../types';
 import {
   isCompletedStatus,
   PLANNED_QUALIFICATION_STATUS_VALUES,
@@ -47,10 +47,19 @@ import {
 const requireOperacoesSessao = (action: 'update' | 'delete') =>
   requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_sessao' });
 
-const app = new Hono<AppEnv>();
+const app = new Hono<{ Bindings: Env }>();
 
 async function runUpdate(db: D1Database, sql: string, ...args: unknown[]) {
   return db.prepare(sql).bind(...args).run();
+}
+
+/**
+ * Extrai o userId do contexto Hono autenticado sem recorrer a `as any` —
+ * mesmo padrão estrutural usado em `simuladores-fichas.ts`
+ * (`getContextUserId`) e `escalas-alocacoes-helpers-internal.ts` (`getUserId`).
+ */
+function getContextUserId(c: { get: (k: string) => unknown }): string {
+  return String(c.get('userId') || 'system');
 }
 
 /** Shape of a participante item as received in the PUT /sessoes/:id request body. */
@@ -730,7 +739,8 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
 
       // IDs novos enviados pelo frontend
       const novosValidos = (b.participantes as SessaoParticipanteInput[]).filter(
-        (p) => p.funcionario_id,
+        (p): p is SessaoParticipanteInput & { funcionario_id: string | number } =>
+          Boolean(p.funcionario_id),
       );
 
       // ── Bloqueio de autoavaliação: instrutor não pode ser participante ────
@@ -984,7 +994,7 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
           tipoSessao: b.tipo_sessao ?? a.tipo_sessao,
           observacoes: b.observacoes !== undefined ? b.observacoes : a.observacoes,
           participantes: novosValidos.map((part) => ({ funcionario_id: part.funcionario_id })),
-          createdBy: String(c.get('userId') || 'system'),
+          createdBy: getContextUserId(c),
         });
       } catch (error) {
         // A sessão principal já foi persistida acima — não deixar a falha da
@@ -1049,7 +1059,7 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
           participantes: (participantesAtivos.results || []).map((item) => ({
             funcionario_id: item.funcionario_id,
           })),
-          createdBy: String(c.get('userId') || 'system'),
+          createdBy: getContextUserId(c),
         });
       } catch (error) {
         // Idem: sessão já persistida — não deixar propagar para o catch externo.
