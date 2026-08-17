@@ -7,7 +7,7 @@
  */
 
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { AppEnv } from '../types';
 import {
   isCompletedStatus,
   PLANNED_QUALIFICATION_STATUS_VALUES,
@@ -47,10 +47,28 @@ import {
 const requireOperacoesSessao = (action: 'update' | 'delete') =>
   requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_sessao' });
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AppEnv>();
 
 async function runUpdate(db: D1Database, sql: string, ...args: unknown[]) {
   return db.prepare(sql).bind(...args).run();
+}
+
+/** Shape of a participante item as received in the PUT /sessoes/:id request body. */
+interface SessaoParticipanteInput {
+  funcionario_id?: string | number;
+  funcao?: string;
+}
+
+/** Columns of simulador_agendamentos actually read after the UPDATE (`SELECT *`). */
+interface SimuladorAgendamentoRow {
+  id: number;
+  empresa_id: number;
+  simulador_id: number | null;
+  data: string;
+  status: string | null;
+  nome: string | null;
+  tipo_sessao: string | null;
+  observacoes: string | null;
 }
 
 app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
@@ -711,7 +729,9 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       );
 
       // IDs novos enviados pelo frontend
-      const novosValidos = b.participantes.filter((p: any) => p.funcionario_id);
+      const novosValidos = (b.participantes as SessaoParticipanteInput[]).filter(
+        (p) => p.funcionario_id,
+      );
 
       // ── Bloqueio de autoavaliação: instrutor não pode ser participante ────
       const instrutorEfetivo =
@@ -963,8 +983,8 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
           temaSessao: b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
           tipoSessao: b.tipo_sessao ?? a.tipo_sessao,
           observacoes: b.observacoes !== undefined ? b.observacoes : a.observacoes,
-          participantes: novosValidos.map((part: any) => ({ funcionario_id: part.funcionario_id })),
-          createdBy: String((c as any).get('userId') || 'system'),
+          participantes: novosValidos.map((part) => ({ funcionario_id: part.funcionario_id })),
+          createdBy: String(c.get('userId') || 'system'),
         });
       } catch (error) {
         // A sessão principal já foi persistida acima — não deixar a falha da
@@ -983,7 +1003,7 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       'SELECT * FROM simulador_agendamentos WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
       .bind(id, empresaId)
-      .first<any>();
+      .first<SimuladorAgendamentoRow>();
 
     const statusAnterior = String((a as any)?.status || '').toUpperCase();
     const statusNovo = String((u as any)?.status || '').toUpperCase();
@@ -1020,16 +1040,16 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
         await syncSessaoEscalaEventos(c.env.DB, {
           empresaId,
           sessaoId: id,
-          simuladorId: (u as any)?.simulador_id,
-          data: String((u as any)?.data || dataFinal),
-          status: (u as any)?.status,
-          temaSessao: (u as any)?.nome || null,
-          tipoSessao: (u as any)?.tipo_sessao || null,
-          observacoes: (u as any)?.observacoes || null,
+          simuladorId: u?.simulador_id,
+          data: String(u?.data || dataFinal),
+          status: u?.status,
+          temaSessao: u?.nome || null,
+          tipoSessao: u?.tipo_sessao || null,
+          observacoes: u?.observacoes || null,
           participantes: (participantesAtivos.results || []).map((item) => ({
             funcionario_id: item.funcionario_id,
           })),
-          createdBy: String((c as any).get('userId') || 'system'),
+          createdBy: String(c.get('userId') || 'system'),
         });
       } catch (error) {
         // Idem: sessão já persistida — não deixar propagar para o catch externo.
