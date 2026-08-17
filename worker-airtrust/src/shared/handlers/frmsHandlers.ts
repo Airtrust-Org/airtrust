@@ -3,6 +3,17 @@ import { registerHandler } from '../eventProcessor';
 
 async function upsertCargaTrabalho(db: D1Database, payload: Record<string, unknown>) {
   if (!payload.funcionario_id || !payload.empresa_id) return;
+
+  // Defense-in-depth: prove the referenced funcionario belongs to the event's
+  // empresa_id before inserting a tenant-stamped row that references it.
+  const owned = await db
+    .prepare(
+      `SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(String(payload.funcionario_id), Number(payload.empresa_id))
+    .first<{ id: number }>();
+  if (!owned) return;
+
   await db
     .prepare(
       `INSERT OR IGNORE INTO frms_carga_trabalho

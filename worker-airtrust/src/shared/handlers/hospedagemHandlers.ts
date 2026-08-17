@@ -39,6 +39,20 @@ export async function handleTripulanteAlocadoHospedagem(
   const dataInicio = payload.data_inicio ? String(payload.data_inicio) : null;
   const dataFim = payload.data_fim ? String(payload.data_fim) : null;
 
+  // Defense-in-depth: prove the referenced funcionario belongs to the event's
+  // empresa_id before inserting a tenant-stamped hospedagem_sugestao that
+  // references it. The baseOrigem-enrichment lookup above only runs when
+  // base_origem is missing from the payload, so it can't be relied on as
+  // the sole ownership proof.
+  if (!Number.isFinite(empresaId) || empresaId <= 0) return;
+  const owned = await db
+    .prepare(
+      `SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(funcionarioId, empresaId)
+    .first<{ id: number }>();
+  if (!owned) return;
+
   await db
     .prepare(
       `INSERT INTO hospedagem_sugestoes

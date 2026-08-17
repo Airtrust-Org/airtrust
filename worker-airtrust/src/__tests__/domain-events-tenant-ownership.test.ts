@@ -43,6 +43,8 @@ class FakeDb {
   sessoesParticipantes: Array<{ sessao_id: number; funcionario_id: number; deleted_at: null }> = [];
   hospedagens: Array<{ id: number; funcionario_id: number; status: string; deleted_at: null }> = [];
   qualificacoesPendencias: Array<{ funcionario_id: string; empresa_id: number }> = [];
+  frmsCargaTrabalhoInserts: Array<{ funcionario_id: string; empresa_id: number }> = [];
+  hospedagemSugestoes: Array<{ funcionario_id: string; empresa_id: number }> = [];
 
   writes = 0;
 
@@ -153,6 +155,18 @@ class FakeDb {
       }
       this.writes += changes;
       return { meta: { changes } };
+    }
+    if (sql.includes('INSERT OR IGNORE INTO frms_carga_trabalho')) {
+      const [, empresaId, funcionarioId] = b as [string, number, string];
+      this.frmsCargaTrabalhoInserts.push({ funcionario_id: funcionarioId, empresa_id: empresaId });
+      this.writes += 1;
+      return { meta: { changes: 1 } };
+    }
+    if (sql.includes('INSERT INTO hospedagem_sugestoes')) {
+      const [, empresaId, funcionarioId] = b as [string, number, string];
+      this.hospedagemSugestoes.push({ funcionario_id: funcionarioId, empresa_id: empresaId });
+      this.writes += 1;
+      return { meta: { changes: 1 } };
     }
     if (sql.includes('INSERT INTO qualificacoes_pendencias')) {
       const [, empresaId, funcionarioId] = b as [string, number, string];
@@ -361,5 +375,69 @@ describe('domain event handlers reject cross-tenant entity references (A/B misma
     const result = await processarEventosParaModulo(asD1(db), '1', 'qualificacoes');
     expect(result.processados).toBe(1);
     expect(db.qualificacoesPendencias).toHaveLength(1);
+  });
+
+  it('frms: TRIPULANTE_ALOCADO does not insert carga_trabalho referencing another tenant funcionario', async () => {
+    const db = new FakeDb();
+    db.funcionarios.set('50', 2); // funcionario 50 belongs to tenant B
+    db.addEvent(
+      1,
+      'frms',
+      'TRIPULANTE_ALOCADO',
+      { empresa_id: 1, funcionario_id: '50', tripulacao_id: 'trip-1' },
+      'frms',
+    );
+
+    const result = await processarEventosParaModulo(asD1(db), '1', 'frms');
+    expect(result.processados).toBe(1);
+    expect(db.frmsCargaTrabalhoInserts).toHaveLength(0);
+  });
+
+  it('frms: legitimate same-tenant TRIPULANTE_ALOCADO still inserts carga_trabalho', async () => {
+    const db = new FakeDb();
+    db.funcionarios.set('50', 1);
+    db.addEvent(
+      1,
+      'frms',
+      'TRIPULANTE_ALOCADO',
+      { empresa_id: 1, funcionario_id: '50', tripulacao_id: 'trip-1' },
+      'frms',
+    );
+
+    const result = await processarEventosParaModulo(asD1(db), '1', 'frms');
+    expect(result.processados).toBe(1);
+    expect(db.frmsCargaTrabalhoInserts).toHaveLength(1);
+  });
+
+  it('hospedagem: TRIPULANTE_ALOCADO does not create sugestao referencing another tenant funcionario', async () => {
+    const db = new FakeDb();
+    db.funcionarios.set('50', 2); // funcionario 50 belongs to tenant B
+    db.addEvent(
+      1,
+      'hospedagem',
+      'TRIPULANTE_ALOCADO',
+      { empresa_id: 1, funcionario_id: '50', base_destino: 'GRU', base_origem: 'CGH' },
+      'hospedagem',
+    );
+
+    const result = await processarEventosParaModulo(asD1(db), '1', 'hospedagem');
+    expect(result.processados).toBe(1);
+    expect(db.hospedagemSugestoes).toHaveLength(0);
+  });
+
+  it('hospedagem: legitimate same-tenant TRIPULANTE_ALOCADO still creates sugestao', async () => {
+    const db = new FakeDb();
+    db.funcionarios.set('50', 1);
+    db.addEvent(
+      1,
+      'hospedagem',
+      'TRIPULANTE_ALOCADO',
+      { empresa_id: 1, funcionario_id: '50', base_destino: 'GRU', base_origem: 'CGH' },
+      'hospedagem',
+    );
+
+    const result = await processarEventosParaModulo(asD1(db), '1', 'hospedagem');
+    expect(result.processados).toBe(1);
+    expect(db.hospedagemSugestoes).toHaveLength(1);
   });
 });
