@@ -11,6 +11,12 @@ import { AppError } from '../utils/errors';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { createLogger, toError } from '../utils/logger';
+import { recordLegacyAndCanonicalAudit } from '../lib/audit/record-legacy-and-canonical-audit';
+import {
+  buildAuditMetadata,
+  buildLegacyAuditPayload,
+  buildLegacyAuditoriaActor,
+} from '../lib/audit/context';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -20,7 +26,9 @@ const PLANNED_STATUSES = ['PLANEJADA', 'PLANEJADO'];
 const CANCELLED_STATUSES = ['CANCELADA', 'CANCELADO'];
 
 function isEligibleForRenovada(status: unknown): boolean {
-  const upper = String(status || '').trim().toUpperCase();
+  const upper = String(status || '')
+    .trim()
+    .toUpperCase();
   if (PLANNED_STATUSES.includes(upper)) return false;
   if (CANCELLED_STATUSES.includes(upper)) return false;
   return true;
@@ -63,9 +71,7 @@ async function findRenovadaCandidates(
   empresaId: number,
   setorId: number | null,
 ): Promise<PreviewItem[]> {
-  const setorClause = setorId
-    ? 'AND f.setor_id = ?'
-    : '';
+  const setorClause = setorId ? 'AND f.setor_id = ?' : '';
   const setorBinding = setorId ? [setorId] : [];
 
   const { results: grupos } = await db
@@ -119,7 +125,10 @@ async function findRenovadaCandidates(
 
     for (let i = 0; i < rows.length - 1; i++) {
       const antigo = rows[i];
-      if (Number(antigo.renovada) === 1 || String(antigo.status || '').toUpperCase() === 'RENOVADA') {
+      if (
+        Number(antigo.renovada) === 1 ||
+        String(antigo.status || '').toUpperCase() === 'RENOVADA'
+      ) {
         continue; // already renovada
       }
       if (!isEligibleForRenovada(antigo.status)) continue;
@@ -145,6 +154,88 @@ async function findRenovadaCandidates(
   return items;
 }
 
+// D1 counts every statement in a batch against the Worker invocation query budget
+// (see simuladores-fichas.ts MANOBRAS_PER_UPDATE for the same constraint). Consolidate
+// into id IN (...) / CASE-keyed chunks and run them through a single db.batch — one
+// all-or-nothing transaction instead of two sequential UPDATEs per candidate, so a
+// mid-run failure can't leave some pairs marked RENOVADA and others untouched.
+const RENOVADAS_PER_UPDATE = 40;
+
+// Exported so fix-renovadas-schema.test.ts can run these against a real sqlite3
+// process instead of a string-matching D1 mock.
+export function buildMarkRenovadaSql(idCount: number): string {
+  const placeholders = Array.from({ length: idCount }, () => '?').join(', ');
+  return `UPDATE qualificacoes_historico
+              SET renovada = 1,
+                  status = 'RENOVADA',
+                  updated_at = datetime('now')
+            WHERE empresa_id = ?
+              AND deleted_at IS NULL
+              AND id IN (${placeholders})`;
+}
+
+export function buildLinkRenovacaoDeSql(idsMaisRecente: number[]): string {
+  const cases = idsMaisRecente.map((id) => `WHEN ${id} THEN ?`).join(' ');
+  const placeholders = idsMaisRecente.map(() => '?').join(', ');
+  return `UPDATE qualificacoes_historico
+              SET renovacao_de = CASE
+                    WHEN renovacao_de IS NOT NULL THEN renovacao_de
+                    ELSE (CASE id ${cases} END)
+                  END,
+                  updated_at = datetime('now')
+            WHERE empresa_id = ?
+              AND deleted_at IS NULL
+              AND id IN (${placeholders})`;
+}
+
+async function applyRenovadaCandidates(
+  db: D1Database,
+  empresaId: number,
+  candidates: PreviewItem[],
+): Promise<{ totalRenovadas: number; totalVinculadas: number }> {
+  if (candidates.length === 0) return { totalRenovadas: 0, totalVinculadas: 0 };
+
+  const statements: D1PreparedStatement[] = [];
+
+  for (let offset = 0; offset < candidates.length; offset += RENOVADAS_PER_UPDATE) {
+    const chunk = candidates.slice(offset, offset + RENOVADAS_PER_UPDATE);
+    const antigoIds = chunk.map((item) => item.id_antigo);
+    statements.push(
+      db.prepare(buildMarkRenovadaSql(antigoIds.length)).bind(empresaId, ...antigoIds),
+    );
+  }
+
+  // The original sequential loop wrote renovacao_de on id_mais_recente only when it
+  // was still NULL ("WHEN renovacao_de IS NULL THEN <id_antigo> ELSE renovacao_de"),
+  // run oldest-candidate-first per group — so only the first candidate targeting a
+  // given id_mais_recente could ever set it; every later one landed on the ELSE
+  // no-op. `candidates` is already ordered oldest-first per group, so dedupe up
+  // front to keep that same "oldest antigo wins the link" outcome before batching.
+  const linkTargets = new Map<number, number>();
+  for (const candidate of candidates) {
+    if (!linkTargets.has(candidate.id_mais_recente)) {
+      linkTargets.set(candidate.id_mais_recente, candidate.id_antigo);
+    }
+  }
+  const linkEntries = [...linkTargets.entries()];
+
+  for (let offset = 0; offset < linkEntries.length; offset += RENOVADAS_PER_UPDATE) {
+    const chunk = linkEntries.slice(offset, offset + RENOVADAS_PER_UPDATE);
+    const ids = chunk.map(([idMaisRecente]) => idMaisRecente);
+    statements.push(
+      db
+        .prepare(buildLinkRenovacaoDeSql(ids))
+        .bind(...chunk.map(([, idAntigo]) => idAntigo), empresaId, ...ids),
+    );
+  }
+
+  await db.batch(statements);
+
+  // Matches the original loop's reporting: both counters track candidates processed,
+  // not rows actually mutated (a link target already set is still counted as "vinculada").
+  return { totalRenovadas: candidates.length, totalVinculadas: candidates.length };
+}
+
 /**
  * GET /fix-renovadas/preview
  * Preview somente-leitura: lista candidatos a RENOVADA sem aplicar mudanças
@@ -159,7 +250,11 @@ app.get('/preview', async (c) => {
     const setorIdRaw = c.req.query('setor_id');
     const setorId = setorIdRaw ? Number(setorIdRaw) : null;
 
-    const items = await findRenovadaCandidates(db, empresaId, Number.isFinite(setorId) && setorId! > 0 ? setorId : null);
+    const items = await findRenovadaCandidates(
+      db,
+      empresaId,
+      Number.isFinite(setorId) && setorId! > 0 ? setorId : null,
+    );
 
     return c.json({
       success: true,
@@ -172,9 +267,14 @@ app.get('/preview', async (c) => {
   } catch (error) {
     createLogger(c, 'FixRenovadas').error('Erro no preview de renovadas', toError(error));
     if (error instanceof AppError) {
-      const status4xx = Math.floor(error.status / 100) === 4 ? (error.status as 400 | 401 | 403 | 404) : null;
-      if (status4xx) return c.json({ success: false, error: error.message, code: error.code }, status4xx);
-      return c.json({ success: false, error: 'Erro interno ao processar solicitação', code: error.code }, 500);
+      const status4xx =
+        Math.floor(error.status / 100) === 4 ? (error.status as 400 | 401 | 403 | 404) : null;
+      if (status4xx)
+        return c.json({ success: false, error: error.message, code: error.code }, status4xx);
+      return c.json(
+        { success: false, error: 'Erro interno ao processar solicitação', code: error.code },
+        500,
+      );
     }
     return c.json({ success: false, error: 'Erro ao gerar preview' }, 500);
   }
@@ -222,39 +322,53 @@ app.post('/', async (c) => {
       });
     }
 
-    // Apply updates
-    let totalRenovadas = 0;
-    let totalVinculadas = 0;
+    // Apply updates — one atomic db.batch instead of 2*N sequential awaits, so a
+    // mid-run failure can't leave some pairs marked RENOVADA and others untouched.
+    const { totalRenovadas, totalVinculadas } = await applyRenovadaCandidates(
+      db,
+      empresaId,
+      candidates,
+    );
 
-    for (const candidate of candidates) {
-      // Mark older record as RENOVADA
-      await db
-        .prepare(
-          `UPDATE qualificacoes_historico
-              SET renovada = 1,
-                  status = 'RENOVADA',
-                  updated_at = datetime('now')
-            WHERE id = ?
-              AND empresa_id = ?
-              AND deleted_at IS NULL`,
-        )
-        .bind(candidate.id_antigo, empresaId)
-        .run();
-      totalRenovadas++;
+    if (totalRenovadas > 0) {
+      const actorUserId = Number((c.get('userId' as never) as unknown) || 0) || null;
+      const actorRoleRaw = c.get('userRole' as never) as unknown;
+      const actorRole = typeof actorRoleRaw === 'string' ? actorRoleRaw : null;
+      const auditMetadata = buildAuditMetadata(c, {
+        operation: 'QUALIFICACOES_HISTORICO_FIX_RENOVADAS',
+        setor_id: setorId,
+        total_renovadas: totalRenovadas,
+        total_vinculadas: totalVinculadas,
+      });
 
-      // Set renovacao_de on the newer record (only if the pair hasn't been linked yet)
-      await db
-        .prepare(
-          `UPDATE qualificacoes_historico
-              SET renovacao_de = CASE WHEN renovacao_de IS NULL THEN ? ELSE renovacao_de END,
-                  updated_at = datetime('now')
-            WHERE id = ?
-              AND empresa_id = ?
-              AND deleted_at IS NULL`,
-        )
-        .bind(candidate.id_antigo, candidate.id_mais_recente, empresaId)
-        .run();
-      totalVinculadas++;
+      await recordLegacyAndCanonicalAudit({
+        db,
+        legacyAuditoria: {
+          tabela: 'qualificacoes_historico',
+          acao: 'BULK_UPDATE',
+          registro_id: empresaId,
+          dados_novos: buildLegacyAuditPayload(
+            c,
+            { ids_antigos: candidates.map((candidate) => candidate.id_antigo) },
+            auditMetadata,
+          ),
+          ...buildLegacyAuditoriaActor(c),
+        },
+        canonicalEvent: {
+          empresaId,
+          targetEmpresaId: empresaId,
+          actorUserId,
+          actorEmpresaId: empresaId,
+          actorRole,
+          eventCategory: 'ADMIN_OPERATION',
+          eventAction: 'QUALIFICACOES_HISTORICO_FIX_RENOVADAS',
+          entityType: 'qualificacoes_historico',
+          entityId: empresaId,
+          riskLevel: 'high',
+          metadata: auditMetadata,
+          retentionClass: 'SECURITY_LONG',
+        },
+      });
     }
 
     const executionTime = Date.now() - startTime;
@@ -282,9 +396,14 @@ app.post('/', async (c) => {
     createLogger(c, 'FixRenovadas').error('Erro ao corrigir renovadas', toError(error));
 
     if (error instanceof AppError) {
-      const status4xx = Math.floor(error.status / 100) === 4 ? (error.status as 400 | 401 | 403 | 404) : null;
-      if (status4xx) return c.json({ success: false, error: error.message, code: error.code }, status4xx);
-      return c.json({ success: false, error: 'Erro interno ao processar solicitação', code: error.code }, 500);
+      const status4xx =
+        Math.floor(error.status / 100) === 4 ? (error.status as 400 | 401 | 403 | 404) : null;
+      if (status4xx)
+        return c.json({ success: false, error: error.message, code: error.code }, status4xx);
+      return c.json(
+        { success: false, error: 'Erro interno ao processar solicitação', code: error.code },
+        500,
+      );
     }
 
     return c.json({ success: false, error: 'Erro ao corrigir renovadas' }, 500);
@@ -321,7 +440,10 @@ app.get('/stats', async (c) => {
 
     return c.json({ success: true, data: stats });
   } catch (error) {
-    createLogger(c, 'FixRenovadas').error('Erro ao buscar estatísticas de renovadas', toError(error));
+    createLogger(c, 'FixRenovadas').error(
+      'Erro ao buscar estatísticas de renovadas',
+      toError(error),
+    );
     return c.json({ success: false, error: 'Erro ao buscar estatísticas' }, 500);
   }
 });

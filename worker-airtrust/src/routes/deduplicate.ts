@@ -13,6 +13,12 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { AppError } from '../utils/errors';
+import { recordLegacyAndCanonicalAudit } from '../lib/audit/record-legacy-and-canonical-audit';
+import {
+  buildAuditMetadata,
+  buildLegacyAuditPayload,
+  buildLegacyAuditoriaActor,
+} from '../lib/audit/context';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth(), requireRole('admin'));
@@ -50,7 +56,8 @@ function toBooleanFlag(value: unknown): boolean | undefined {
 }
 
 function resolveApplyMode(c: Context, body: unknown): boolean {
-  const payload = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+  const payload =
+    typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
   const queryApply = toBooleanFlag(c.req.query('apply'));
   const queryDryRun = toBooleanFlag(c.req.query('dryRun') ?? c.req.query('dry_run'));
   const bodyApply = toBooleanFlag(payload.apply);
@@ -69,13 +76,10 @@ function resolveEmpresaIdOrThrow(c: Context): number {
   return empresaId;
 }
 
-async function listDuplicateGroups(
-  db: D1Database,
-  empresaId: number,
-): Promise<DeduplicateGroupRow[]> {
-  const { results } = await db
-    .prepare(
-      `
+// Exported so horas-voo-simulador-schema.test.ts's sibling for this endpoint
+// (deduplicate-schema.test.ts) can run the literal query against a real sqlite3
+// process instead of a string-matching D1 mock.
+export const DEDUPLICATE_GROUP_QUERY_SQL = `
       SELECT
         funcionario_cpf,
         qualificacao_codigo,
@@ -87,8 +91,44 @@ async function listDuplicateGroups(
       GROUP BY funcionario_cpf, qualificacao_codigo, data_vencimento
       HAVING COUNT(*) > 1
       ORDER BY funcionario_cpf, qualificacao_codigo
-    `,
-    )
+    `;
+
+export const DEDUPLICATE_RECORDS_QUERY_SQL = `
+      SELECT id, data_conclusao, created_at
+      FROM qualificacoes_historico
+      WHERE empresa_id = ?
+        AND funcionario_cpf = ?
+        AND qualificacao_codigo = ?
+        AND (
+          data_vencimento = ?
+          OR (data_vencimento IS NULL AND ? IS NULL)
+        )
+        AND deleted_at IS NULL
+      ORDER BY
+        data_conclusao DESC NULLS LAST,
+        created_at DESC,
+        id DESC
+    `;
+
+export function buildDeduplicateSoftDeleteSql(idCount: number): string {
+  const placeholders = Array.from({ length: idCount }, () => '?').join(', ');
+  return `
+      UPDATE qualificacoes_historico
+      SET
+        deleted_at = datetime('now'),
+        updated_at = datetime('now')
+      WHERE empresa_id = ?
+        AND deleted_at IS NULL
+        AND id IN (${placeholders})
+    `;
+}
+
+async function listDuplicateGroups(
+  db: D1Database,
+  empresaId: number,
+): Promise<DeduplicateGroupRow[]> {
+  const { results } = await db
+    .prepare(DEDUPLICATE_GROUP_QUERY_SQL)
     .bind(empresaId)
     .all<DeduplicateGroupRow>();
 
@@ -106,24 +146,7 @@ async function listGroupRecords(
   group: DeduplicateGroupRow,
 ): Promise<DeduplicateRecordRow[]> {
   const { results } = await db
-    .prepare(
-      `
-      SELECT id, data_conclusao, created_at
-      FROM qualificacoes_historico
-      WHERE empresa_id = ?
-        AND funcionario_cpf = ?
-        AND qualificacao_codigo = ?
-        AND (
-          data_vencimento = ?
-          OR (data_vencimento IS NULL AND ? IS NULL)
-        )
-        AND deleted_at IS NULL
-      ORDER BY
-        data_conclusao DESC NULLS LAST,
-        created_at DESC,
-        id DESC
-    `,
-    )
+    .prepare(DEDUPLICATE_RECORDS_QUERY_SQL)
     .bind(
       empresaId,
       group.funcionario_cpf,
@@ -172,27 +195,34 @@ async function buildDeduplicateCandidates(
   return candidates;
 }
 
-async function softDeleteByIdAndEmpresa(
+// D1 counts every statement in a batch against the Worker invocation query budget
+// (see simuladores-fichas.ts MANOBRAS_PER_UPDATE for the same constraint). A dedupe
+// pass can touch far more rows than a single ficha, so removal is consolidated into
+// `id IN (...)` chunks and run through db.batch — one all-or-nothing transaction
+// instead of one UPDATE per row, so a mid-run failure can't leave half the
+// duplicates removed and half still active.
+const DEDUPLICATE_IDS_PER_STATEMENT = 200;
+
+async function softDeleteManyByEmpresa(
   db: D1Database,
-  id: number,
+  ids: number[],
   empresaId: number,
 ): Promise<number> {
-  const result = await db
-    .prepare(
-      `
-      UPDATE qualificacoes_historico
-      SET
-        deleted_at = datetime('now'),
-        updated_at = datetime('now')
-      WHERE id = ?
-        AND empresa_id = ?
-        AND deleted_at IS NULL
-    `,
-    )
-    .bind(id, empresaId)
-    .run();
+  if (ids.length === 0) return 0;
 
-  return Number((result.meta as { changes?: number } | undefined)?.changes || 0);
+  const statements: D1PreparedStatement[] = [];
+  for (let offset = 0; offset < ids.length; offset += DEDUPLICATE_IDS_PER_STATEMENT) {
+    const chunk = ids.slice(offset, offset + DEDUPLICATE_IDS_PER_STATEMENT);
+    statements.push(
+      db.prepare(buildDeduplicateSoftDeleteSql(chunk.length)).bind(empresaId, ...chunk),
+    );
+  }
+
+  const results = await db.batch(statements);
+  return results.reduce(
+    (sum, result) => sum + Number((result.meta as { changes?: number } | undefined)?.changes || 0),
+    0,
+  );
 }
 
 /**
@@ -218,10 +248,43 @@ app.post('/', async (c) => {
     let totalRemoved = 0;
 
     if (applyRequested) {
-      for (const group of candidateGroups) {
-        for (const id of group.remover_ids) {
-          totalRemoved += await softDeleteByIdAndEmpresa(db, id, empresaId);
-        }
+      const idsToRemove = candidateGroups.flatMap((group) => group.remover_ids);
+      totalRemoved = await softDeleteManyByEmpresa(db, idsToRemove, empresaId);
+
+      if (totalRemoved > 0) {
+        const actorUserId = Number((c.get('userId' as never) as unknown) || 0) || null;
+        const actorRoleRaw = c.get('userRole' as never) as unknown;
+        const actorRole = typeof actorRoleRaw === 'string' ? actorRoleRaw : null;
+        const auditMetadata = buildAuditMetadata(c, {
+          operation: 'QUALIFICACOES_HISTORICO_DEDUPLICATE',
+          total_grupos: totalCandidates,
+          total_removidos: totalRemoved,
+        });
+
+        await recordLegacyAndCanonicalAudit({
+          db,
+          legacyAuditoria: {
+            tabela: 'qualificacoes_historico',
+            acao: 'BULK_UPDATE',
+            registro_id: empresaId,
+            dados_novos: buildLegacyAuditPayload(c, { ids_removidos: idsToRemove }, auditMetadata),
+            ...buildLegacyAuditoriaActor(c),
+          },
+          canonicalEvent: {
+            empresaId,
+            targetEmpresaId: empresaId,
+            actorUserId,
+            actorEmpresaId: empresaId,
+            actorRole,
+            eventCategory: 'ADMIN_OPERATION',
+            eventAction: 'QUALIFICACOES_HISTORICO_DEDUPLICATE',
+            entityType: 'qualificacoes_historico',
+            entityId: empresaId,
+            riskLevel: 'high',
+            metadata: auditMetadata,
+            retentionClass: 'SECURITY_LONG',
+          },
+        });
       }
     }
 

@@ -64,6 +64,7 @@ function buildGroupKey(group: {
 function createMockDb(dataByTenant: Record<number, TenantDataset>) {
   const calls: QueryCall[] = [];
   const updateCalls: Array<{ id: number; empresaId: number }> = [];
+  const batchSizes: number[] = [];
   const idToTenant = new Map<number, number>();
 
   for (const [tenantIdText, dataset] of Object.entries(dataByTenant)) {
@@ -77,43 +78,52 @@ function createMockDb(dataByTenant: Record<number, TenantDataset>) {
 
   const db = {
     prepare: (query: string) => ({
-      bind: (...args: unknown[]) => ({
-        all: async () => {
-          calls.push({ query, args, method: 'all' });
-          if (query.includes('GROUP BY funcionario_cpf, qualificacao_codigo, data_vencimento')) {
-            const empresaId = Number(args[0]);
-            return { results: dataByTenant[empresaId]?.groups ?? [] };
-          }
-          if (query.includes('SELECT id, data_conclusao, created_at')) {
-            const empresaId = Number(args[0]);
-            const key = buildGroupKey({
-              funcionario_cpf: (args[1] as string | null) ?? null,
-              qualificacao_codigo: (args[2] as string | null) ?? null,
-              data_vencimento: (args[3] as string | null) ?? null,
-            });
-            return { results: dataByTenant[empresaId]?.recordsByKey[key] ?? [] };
-          }
-          return { results: [] };
-        },
-        run: async () => {
-          calls.push({ query, args, method: 'run' });
-          if (query.includes('UPDATE qualificacoes_historico')) {
-            const id = Number(args[0]);
-            const empresaId = Number(args[1]);
-            updateCalls.push({ id, empresaId });
-            return {
-              meta: {
-                changes: idToTenant.get(id) === empresaId ? 1 : 0,
-              },
-            };
-          }
-          return { meta: { changes: 0 } };
-        },
-      }),
+      bind: (...args: unknown[]) => {
+        const stmt = {
+          all: async () => {
+            calls.push({ query, args, method: 'all' });
+            if (query.includes('GROUP BY funcionario_cpf, qualificacao_codigo, data_vencimento')) {
+              const empresaId = Number(args[0]);
+              return { results: dataByTenant[empresaId]?.groups ?? [] };
+            }
+            if (query.includes('SELECT id, data_conclusao, created_at')) {
+              const empresaId = Number(args[0]);
+              const key = buildGroupKey({
+                funcionario_cpf: (args[1] as string | null) ?? null,
+                qualificacao_codigo: (args[2] as string | null) ?? null,
+                data_vencimento: (args[3] as string | null) ?? null,
+              });
+              return { results: dataByTenant[empresaId]?.recordsByKey[key] ?? [] };
+            }
+            return { results: [] };
+          },
+          run: async () => {
+            calls.push({ query, args, method: 'run' });
+            if (query.includes('UPDATE qualificacoes_historico') && query.includes('id IN (')) {
+              // bind order for the batched removal is (empresaId, ...ids) — see
+              // softDeleteManyByEmpresa in routes/deduplicate.ts.
+              const empresaId = Number(args[0]);
+              const ids = args.slice(1).map((value) => Number(value));
+              let changes = 0;
+              for (const id of ids) {
+                updateCalls.push({ id, empresaId });
+                if (idToTenant.get(id) === empresaId) changes++;
+              }
+              return { meta: { changes } };
+            }
+            return { meta: { changes: 0 } };
+          },
+        };
+        return stmt;
+      },
     }),
+    batch: async (statements: Array<{ run: () => Promise<unknown> }>) => {
+      batchSizes.push(statements.length);
+      return Promise.all(statements.map((statement) => statement.run()));
+    },
   } as unknown as D1Database;
 
-  return { db, calls, updateCalls };
+  return { db, calls, updateCalls, batchSizes };
 }
 
 function createTestApp() {
@@ -282,11 +292,35 @@ describe('deduplicate route guards', () => {
     const groupQuery = calls.find((call) =>
       call.query.includes('GROUP BY funcionario_cpf, qualificacao_codigo, data_vencimento'),
     );
-    const recordsQuery = calls.find((call) => call.query.includes('SELECT id, data_conclusao, created_at'));
+    const recordsQuery = calls.find((call) =>
+      call.query.includes('SELECT id, data_conclusao, created_at'),
+    );
     const updateQuery = calls.find((call) => call.query.includes('UPDATE qualificacoes_historico'));
 
     expect(groupQuery?.query).toContain('AND empresa_id = ?');
     expect(recordsQuery?.query).toContain('WHERE empresa_id = ?');
-    expect(updateQuery?.query).toContain('AND empresa_id = ?');
+    expect(updateQuery?.query).toContain('empresa_id = ?');
+    expect(updateQuery?.query).toContain('id IN (');
+  });
+
+  it('removes duplicates through a single atomic db.batch, not per-row sequential writes', async () => {
+    const { db, batchSizes } = createMockDb(makeDataset());
+    const app = createTestApp();
+
+    const response = await app.fetch(
+      new Request('http://localhost/deduplicate?apply=true', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-role': 'admin', 'x-empresa-id': '1' },
+        body: JSON.stringify({ apply: true }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    // Two candidate ids (102, 103), both under the 200-id-per-statement chunk size:
+    // exactly one db.batch call carrying one UPDATE statement, not two separate writes.
+    expect(batchSizes).toHaveLength(1);
+    expect(batchSizes[0]).toBe(1);
   });
 });
