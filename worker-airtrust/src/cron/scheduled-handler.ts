@@ -731,6 +731,7 @@ export async function runScheduledJobs(
         SELECT
           qh.funcionario_id,
           f.nome,
+          f.empresa_id,
           COUNT(*) as total_historico,
           SUM(CASE WHEN qh.deleted_at IS NULL THEN 1 ELSE 0 END) as ativos
         FROM qualificacoes_historico qh
@@ -739,28 +740,51 @@ export async function runScheduledJobs(
         GROUP BY qh.funcionario_id
         HAVING total_historico > 0 AND ativos = 0
       `,
-      ).all<{ funcionario_id: number; nome: string; total_historico: number; ativos: number }>();
+      ).all<{
+        funcionario_id: number;
+        nome: string;
+        empresa_id: number | null;
+        total_historico: number;
+        ativos: number;
+      }>();
 
       if (suspeitos.results?.length) {
-        const nomes = suspeitos.results
+        const todosNomes = suspeitos.results
           .map((row) => `${row.nome} (#${row.funcionario_id}, ${row.total_historico} registros)`)
           .join('; ');
         console.warn(
-          `[CRON] ⚠️ AUDITORIA SOFT-DELETE: ${suspeitos.results.length} funcionário(s) com qualificações todas deletadas: ${nomes}`,
+          `[CRON] ⚠️ AUDITORIA SOFT-DELETE: ${suspeitos.results.length} funcionário(s) com qualificações todas deletadas: ${todosNomes}`,
         );
 
-        // Global/platform audit notification: keep empresa_id NULL intentionally.
-        await env.DB.prepare(
-          `
-          INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
-          VALUES ('ALERTA_DADOS', 'ALTA', 'Auditoria: Qualificações removidas em massa', ?, 'auditoria', ?, NULL, datetime('now'), datetime('now'))
-        `,
-        )
-          .bind(
-            `${suspeitos.results.length} funcionário(s) com TODOS os registros de qualificações marcados como deletados. Verificar manualmente: ${nomes}`,
-            JSON.stringify({ funcionarios: suspeitos.results }),
+        // Contains employee names/PII — must be scoped per tenant, never a single
+        // cross-tenant record. Group findings by empresa_id and emit one
+        // notification per affected tenant.
+        const porEmpresa = new Map<number, typeof suspeitos.results>();
+        for (const row of suspeitos.results) {
+          if (row.empresa_id == null) continue;
+          const lista = porEmpresa.get(row.empresa_id) || [];
+          lista.push(row);
+          porEmpresa.set(row.empresa_id, lista);
+        }
+
+        for (const [empresaId, rows] of porEmpresa) {
+          const nomes = rows
+            .map((row) => `${row.nome} (#${row.funcionario_id}, ${row.total_historico} registros)`)
+            .join('; ');
+
+          await env.DB.prepare(
+            `
+            INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+            VALUES ('ALERTA_DADOS', 'ALTA', 'Auditoria: Qualificações removidas em massa', ?, 'auditoria', ?, ?, datetime('now'), datetime('now'))
+          `,
           )
-          .run();
+            .bind(
+              `${rows.length} funcionário(s) com TODOS os registros de qualificações marcados como deletados. Verificar manualmente: ${nomes}`,
+              JSON.stringify({ funcionarios: rows }),
+              empresaId,
+            )
+            .run();
+        }
       } else {
         console.log('[CRON] ✅ Auditoria soft-delete: nenhuma anomalia detectada');
       }
@@ -779,6 +803,10 @@ export async function runScheduledJobs(
 
         if (totalAnomalias > 0) {
           // Global/platform audit notification: keep empresa_id NULL intentionally.
+          // Unlike the soft-delete and weekly-qualifications audits below, this
+          // payload carries only aggregate counts (no employee names or other
+          // tenant-identifying records), so a single cross-tenant notification
+          // does not leak PII.
           await env.DB.prepare(
             `INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
              VALUES ('ALERTA_DADOS', 'ALTA', 'Auditoria diária FRMS: inconsistências detectadas', ?, 'auditoria', ?, NULL, datetime('now'), datetime('now'))`,
@@ -824,6 +852,7 @@ export async function runScheduledJobs(
         const vencExpr = getQualificacoesVencimentoExpr();
         const qualifs90 = await env.DB.prepare(
           `SELECT
+                f.empresa_id AS empresa_id,
                 f.nome AS funcionario_nome,
                 COALESCE(qh.qualificacao_codigo, qt.codigo) AS codigo,
                 qt.nome AS qualificacao_nome,
@@ -845,8 +874,9 @@ export async function runScheduledJobs(
                  WHERE sub.deleted_at IS NULL
                  GROUP BY sub.funcionario_id, COALESCE(sub.qualificacao_codigo, sub.qualificacao_id)
                )
-             ORDER BY dias_restantes ASC`,
+             ORDER BY f.empresa_id ASC, dias_restantes ASC`,
         ).all<{
+          empresa_id: number | null;
           funcionario_nome: string;
           codigo: string;
           qualificacao_nome: string;
@@ -857,37 +887,50 @@ export async function runScheduledJobs(
 
         const items = qualifs90.results || [];
         if (items.length > 0) {
-          const criticos = items.filter((item) => item.dias_restantes <= 30);
-          const alertas = items.filter(
-            (item) => item.dias_restantes > 30 && item.dias_restantes <= 60,
-          );
-          const avisos = items.filter((item) => item.dias_restantes > 60);
-          const linhas = items
-            .slice(0, 50)
-            .map(
-              (item) =>
-                `• ${item.funcionario_nome} — ${item.codigo} (${item.qualificacao_nome || ''}) — ${item.dias_restantes}d`,
-            )
-            .join('\n');
+          // Contains employee names/PII — must be scoped per tenant, never a
+          // single cross-tenant record. Group by empresa_id and emit one
+          // notification per affected tenant, each with only that tenant's data.
+          const porEmpresa = new Map<number, typeof items>();
+          for (const item of items) {
+            if (item.empresa_id == null) continue;
+            const lista = porEmpresa.get(item.empresa_id) || [];
+            lista.push(item);
+            porEmpresa.set(item.empresa_id, lista);
+          }
 
-          // Global/platform weekly summary: keep empresa_id NULL intentionally.
-          await env.DB.prepare(
-            `INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
-               VALUES ('ALERTA_SEMANAL_QUALIFICACOES', 'ALTA',
-                 'Resumo semanal: qualificações expirando em ≤90 dias',
-                 ?, 'qualificacoes',
-                 ?, NULL, datetime('now'), datetime('now'))`,
-          )
-            .bind(
-              `${items.length} qualificações expiram nos próximos 90 dias (${criticos.length} críticas ≤30d, ${alertas.length} alerta ≤60d, ${avisos.length} aviso ≤90d).\n\n${linhas}`,
-              JSON.stringify({
-                total: items.length,
-                criticos: criticos.length,
-                alertas: alertas.length,
-                avisos: avisos.length,
-              }),
+          for (const [empresaId, empresaItems] of porEmpresa) {
+            const criticos = empresaItems.filter((item) => item.dias_restantes <= 30);
+            const alertas = empresaItems.filter(
+              (item) => item.dias_restantes > 30 && item.dias_restantes <= 60,
+            );
+            const avisos = empresaItems.filter((item) => item.dias_restantes > 60);
+            const linhas = empresaItems
+              .slice(0, 50)
+              .map(
+                (item) =>
+                  `• ${item.funcionario_nome} — ${item.codigo} (${item.qualificacao_nome || ''}) — ${item.dias_restantes}d`,
+              )
+              .join('\n');
+
+            await env.DB.prepare(
+              `INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+                 VALUES ('ALERTA_SEMANAL_QUALIFICACOES', 'ALTA',
+                   'Resumo semanal: qualificações expirando em ≤90 dias',
+                   ?, 'qualificacoes',
+                   ?, ?, datetime('now'), datetime('now'))`,
             )
-            .run();
+              .bind(
+                `${empresaItems.length} qualificações expiram nos próximos 90 dias (${criticos.length} críticas ≤30d, ${alertas.length} alerta ≤60d, ${avisos.length} aviso ≤90d).\n\n${linhas}`,
+                JSON.stringify({
+                  total: empresaItems.length,
+                  criticos: criticos.length,
+                  alertas: alertas.length,
+                  avisos: avisos.length,
+                }),
+                empresaId,
+              )
+              .run();
+          }
           console.log(`[CRON] ✅ Alerta semanal: ${items.length} qualificações ≤90d`);
         } else {
           console.log('[CRON] ✅ Alerta semanal: nenhuma qualificação ≤90d');
