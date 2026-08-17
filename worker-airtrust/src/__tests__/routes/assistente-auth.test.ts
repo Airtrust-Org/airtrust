@@ -44,12 +44,16 @@ import assistenteRoutes from '../../routes/assistente';
 
 function createMockDb(): D1Database {
   return {
-    prepare: vi.fn(() => ({
-      bind: () => ({
+    prepare: vi.fn(() => {
+      const bind = () => ({
         first: async () => null,
         all: async () => ({ results: [] }),
-      }),
-    })),
+      });
+      // Real D1 (and getEmployeeSectorAccess's tableHasColumn / setores_gestores
+      // lookups, hit for the assistente's new sector-scoping) allow .all()/.first()
+      // straight off prepare() when the statement takes no placeholders.
+      return { bind, first: () => bind().first(), all: () => bind().all() };
+    }),
   } as unknown as D1Database;
 }
 
