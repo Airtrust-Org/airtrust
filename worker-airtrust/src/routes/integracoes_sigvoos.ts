@@ -466,13 +466,25 @@ sigvoosRouter.post('/mapeamento-manual', async (c) => {
     );
   }
 
-  const mapping = await upsertSigvoosManualMapping(c.env.DB, empresaId, {
-    nomeSigvoos: parsed.data.nome_sigvoos,
-    canacSigvoos: parsed.data.canac_sigvoos,
-    funcionarioId: parsed.data.funcionario_id,
-  });
+  try {
+    const mapping = await upsertSigvoosManualMapping(c.env.DB, empresaId, {
+      nomeSigvoos: parsed.data.nome_sigvoos,
+      canacSigvoos: parsed.data.canac_sigvoos,
+      funcionarioId: parsed.data.funcionario_id,
+    });
 
-  return c.json({ success: true, data: mapping });
+    return c.json({ success: true, data: mapping });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err ?? 'unknown');
+    if (msg === 'SIGVOOS_MAPPING_TARGET_OUT_OF_SCOPE') {
+      return c.json({ success: false, error: msg, code: msg }, 403);
+    }
+    if (msg === 'SIGVOOS_MANUAL_MAPPING_INVALID') {
+      return c.json({ success: false, error: msg, code: msg }, 400);
+    }
+    console.error('[sigvoos] mapeamento-manual POST 500:', msg);
+    return c.json({ success: false, error: msg, code: 'INTERNAL_ERROR' }, 500);
+  }
 });
 
 sigvoosRouter.post(

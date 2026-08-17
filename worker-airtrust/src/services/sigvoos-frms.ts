@@ -824,7 +824,9 @@ async function loadSigvoosManualMappings(
               m.created_at,
               m.updated_at
          FROM sigvoos_mapeamento_manual m
-         JOIN funcionarios f ON f.id = m.funcionario_id
+         JOIN funcionarios f
+           ON f.id = m.funcionario_id
+          AND (m.empresa_id IS NULL OR f.empresa_id = m.empresa_id)
         WHERE m.deleted_at IS NULL
           AND f.deleted_at IS NULL
           AND (m.empresa_id = ? OR (m.empresa_id IS NULL AND ? IS NULL))
@@ -838,7 +840,9 @@ async function loadSigvoosManualMappings(
               m.created_at,
               m.updated_at
          FROM integracoes_sigvoos_mapeamentos m
-         JOIN funcionarios f ON f.id = m.funcionario_id
+         JOIN funcionarios f
+           ON f.id = m.funcionario_id
+          AND (m.empresa_id IS NULL OR f.empresa_id = m.empresa_id)
         WHERE m.deleted_at IS NULL
           AND f.deleted_at IS NULL
           AND (m.empresa_id = ? OR (m.empresa_id IS NULL AND ? IS NULL))
@@ -917,6 +921,22 @@ export async function upsertSigvoosManualMapping(
 
   if (!nomeSigvoos || !Number.isFinite(funcionarioId)) {
     throw new Error('SIGVOOS_MANUAL_MAPPING_INVALID');
+  }
+
+  const funcionarioInScope = await db
+    .prepare(
+      `SELECT id
+         FROM funcionarios
+        WHERE id = ?
+          AND empresa_id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(funcionarioId, resolvedEmpresaId ?? null)
+    .first<{ id: number }>();
+
+  if (!funcionarioInScope) {
+    throw new Error('SIGVOOS_MAPPING_TARGET_OUT_OF_SCOPE');
   }
 
   const existing = await findSigvoosManualMapping(
