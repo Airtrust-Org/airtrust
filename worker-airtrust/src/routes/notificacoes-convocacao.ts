@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
 import {
   EMAIL_CONVOCACAO_ASSINATURA_PADRAO,
   EMAIL_CONVOCACAO_ASSUNTO_PADRAO,
@@ -25,37 +26,41 @@ const notificacoesConvocacaoRoutes = new Hono<{ Bindings: Env }>();
 
 notificacoesConvocacaoRoutes.use('*', auth());
 
-notificacoesConvocacaoRoutes.get('/convocacoes/config', async (c) => {
-  const empresaId = getEmpresaId(c);
-  const empresa = await c.env.DB.prepare(
-    'SELECT nome FROM empresas WHERE id = ? AND deleted_at IS NULL',
-  )
-    .bind(empresaId)
-    .first<{ nome?: string | null }>();
-  const empresaNome = String(empresa?.nome || '').trim() || 'AirTrust';
+notificacoesConvocacaoRoutes.get(
+  '/convocacoes/config',
+  requireRole('admin', 'manager'),
+  async (c) => {
+    const empresaId = getEmpresaId(c);
+    const empresa = await c.env.DB.prepare(
+      'SELECT nome FROM empresas WHERE id = ? AND deleted_at IS NULL',
+    )
+      .bind(empresaId)
+      .first<{ nome?: string | null }>();
+    const empresaNome = String(empresa?.nome || '').trim() || 'AirTrust';
 
-  const config = await getEmailConvocacaoConfig(c.env.DB, empresaId);
-  const gestores = await listGestoresCopia(c.env.DB, empresaId, false);
+    const config = await getEmailConvocacaoConfig(c.env.DB, empresaId);
+    const gestores = await listGestoresCopia(c.env.DB, empresaId, false);
 
-  return c.json({
-    success: true,
-    data: {
-      ...config,
-      gestores,
-      defaults: {
-        smtp_host: 'smtp-relay.brevo.com',
-        smtp_port: 587,
-        smtp_security: 'TLS' as const,
-        smtp_user: c.env.BREVO_FROM_EMAIL || 'treinamento@airtrust.online',
-        sender_name: c.env.BREVO_FROM_NAME || empresaNome,
-        reply_to: c.env.BREVO_FROM_EMAIL || 'treinamento@airtrust.online',
-        assunto_padrao: EMAIL_CONVOCACAO_ASSUNTO_PADRAO,
-        assinatura_html: `<p>Atenciosamente,</p><p><strong>${empresaNome}</strong><br/>Departamento de Treinamento</p>`,
-        template_html: EMAIL_CONVOCACAO_TEMPLATE_PADRAO,
+    return c.json({
+      success: true,
+      data: {
+        ...config,
+        gestores,
+        defaults: {
+          smtp_host: 'smtp-relay.brevo.com',
+          smtp_port: 587,
+          smtp_security: 'TLS' as const,
+          smtp_user: c.env.BREVO_FROM_EMAIL || 'treinamento@airtrust.online',
+          sender_name: c.env.BREVO_FROM_NAME || empresaNome,
+          reply_to: c.env.BREVO_FROM_EMAIL || 'treinamento@airtrust.online',
+          assunto_padrao: EMAIL_CONVOCACAO_ASSUNTO_PADRAO,
+          assinatura_html: `<p>Atenciosamente,</p><p><strong>${empresaNome}</strong><br/>Departamento de Treinamento</p>`,
+          template_html: EMAIL_CONVOCACAO_TEMPLATE_PADRAO,
+        },
       },
-    },
-  });
-});
+    });
+  },
+);
 
 notificacoesConvocacaoRoutes.put(
   '/convocacoes/config',
@@ -81,8 +86,15 @@ notificacoesConvocacaoRoutes.put(
         },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erro ao salvar configurações';
-      return c.json({ success: false, error: message }, 400);
+      console.error('[notificacoes/convocacoes/config PUT] Falha ao salvar configuração:', error);
+      return c.json(
+        {
+          success: false,
+          error: 'Não foi possível salvar a configuração de convocação',
+          code: 'CONVOCACAO_CONFIG_SAVE_FAILED',
+        },
+        400,
+      );
     }
   },
 );
@@ -156,10 +168,18 @@ notificacoesConvocacaoRoutes.post(
 
       return c.json({ success: true, data: { sent: true } });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erro ao enviar e-mail de teste';
+      const message = error instanceof Error ? error.message : '';
       const status = message === 'EMAIL_NOT_CONFIGURED' ? 400 : 502;
+      console.error('[notificacoes/convocacoes/config/enviar-teste] Falha de envio:', error);
       return c.json(
-        { success: false, error: message, code: 'CONVOCACAO_EMAIL_TEST_FAILED' },
+        {
+          success: false,
+          error:
+            status === 400
+              ? 'Configuração de e-mail incompleta'
+              : 'Não foi possível enviar o e-mail de teste',
+          code: 'CONVOCACAO_EMAIL_TEST_FAILED',
+        },
         status,
       );
     }
@@ -172,6 +192,7 @@ notificacoesConvocacaoRoutes.post(
   async (c) => {
     try {
       const empresaId = getEmpresaId(c);
+      const access = await getEmployeeSectorAccess(c, empresaId);
       const body = (await c.req.json().catch(() => ({}))) as {
         qualificacao_id?: number;
         qualificacao_codigo?: string;
@@ -239,6 +260,7 @@ notificacoesConvocacaoRoutes.post(
 
       if (turmaFuncionarioIds.length > 0) {
         const placeholders = turmaFuncionarioIds.map(() => '?').join(',');
+        const funcionarioScope = employeeSectorSql(access, 'f');
         const idsOrderMap = new Map<number, number>();
         turmaFuncionarioIds.forEach((id, index) => idsOrderMap.set(id, index));
 
@@ -253,9 +275,10 @@ notificacoesConvocacaoRoutes.post(
               WHERE f.empresa_id = ?
                 AND f.deleted_at IS NULL
                 AND f.id IN (${placeholders})
+                AND ${funcionarioScope.clause}
             `,
         )
-          .bind(empresaId, ...turmaFuncionarioIds)
+          .bind(empresaId, ...turmaFuncionarioIds, ...funcionarioScope.bindings)
           .all<{
             funcionario_id: number;
             funcionario_nome: string | null;
@@ -326,6 +349,7 @@ notificacoesConvocacaoRoutes.post(
           );
         }
 
+        const funcionarioScope = employeeSectorSql(access, 'f');
         const queryBase = `
           SELECT
             qh.id AS historico_id,
@@ -338,14 +362,21 @@ notificacoesConvocacaoRoutes.post(
             f.matricula AS funcionario_matricula,
             f.email AS funcionario_email
           FROM qualificacoes_historico qh
-          LEFT JOIN qualificacoes_tipos qt ON qt.id = ${qualificacaoIdExpr || 'NULL'} AND qt.deleted_at IS NULL
-          INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+          LEFT JOIN qualificacoes_tipos qt
+            ON qt.id = ${qualificacaoIdExpr || 'NULL'}
+           AND qt.empresa_id = qh.empresa_id
+           AND qt.deleted_at IS NULL
+          INNER JOIN funcionarios f
+            ON f.id = qh.funcionario_id
+           AND f.empresa_id = qh.empresa_id
+           AND f.deleted_at IS NULL
           WHERE qh.empresa_id = ?
             AND qh.deleted_at IS NULL
-              AND date(${dataPlanejadaExpr}) = date(?)
+            AND date(${dataPlanejadaExpr}) = date(?)
+            AND ${funcionarioScope.clause}
         `;
 
-        const params: unknown[] = [empresaId, dataPlanejada];
+        const params: unknown[] = [empresaId, dataPlanejada, ...funcionarioScope.bindings];
         let sql = queryBase;
         if (qualificacaoId > 0 && qualificacaoCodigo) {
           sql += ` AND (${qualificacaoIdExpr} = ? OR UPPER(${qualificacaoCodigoExpr}) = ?)`;
@@ -525,32 +556,59 @@ notificacoesConvocacaoRoutes.post(
         },
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Erro ao enviar convocação por turma planejada';
+      console.error(
+        '[notificacoes/convocacoes/planejadas/enviar] Falha ao enviar convocação:',
+        error,
+      );
       return c.json(
-        { success: false, error: message, code: 'CONVOCACAO_PLANEJADA_SEND_FAILED' },
+        {
+          success: false,
+          error: 'Não foi possível concluir o envio da convocação',
+          code: 'CONVOCACAO_PLANEJADA_SEND_FAILED',
+        },
         500,
       );
     }
   },
 );
 
-notificacoesConvocacaoRoutes.get('/convocacoes/gestores', async (c) => {
-  const empresaId = getEmpresaId(c);
-  const funcionarioIdRaw = c.req.query('funcionario_id');
-  const funcionarioId = funcionarioIdRaw ? Number(funcionarioIdRaw) : null;
-  let gestores;
-  if (funcionarioId && Number.isInteger(funcionarioId) && funcionarioId > 0) {
-    // If funcionario_id provided, filter by their sector
-    const { getGestoresByFuncionarioSetor } = await import('../services/setores-gestores');
-    gestores = await getGestoresByFuncionarioSetor(c.env.DB, empresaId, funcionarioId);
-  } else {
-    // Otherwise, return all active gestores (default behavior)
-    gestores = await listGestoresCopia(c.env.DB, empresaId, false);
-  }
+notificacoesConvocacaoRoutes.get(
+  '/convocacoes/gestores',
+  requireRole('admin', 'manager'),
+  async (c) => {
+    const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const funcionarioIdRaw = c.req.query('funcionario_id');
+    const funcionarioId = funcionarioIdRaw ? Number(funcionarioIdRaw) : null;
+    let gestores;
+    if (funcionarioId && Number.isInteger(funcionarioId) && funcionarioId > 0) {
+      const funcionarioScope = employeeSectorSql(access, 'f');
+      const inScope = await c.env.DB.prepare(
+        `SELECT f.id
+         FROM funcionarios f
+        WHERE f.id = ?
+          AND f.empresa_id = ?
+          AND f.deleted_at IS NULL
+          AND ${funcionarioScope.clause}
+        LIMIT 1`,
+      )
+        .bind(funcionarioId, empresaId, ...funcionarioScope.bindings)
+        .first<{ id: number }>();
 
-  return c.json({ success: true, data: gestores });
-});
+      if (!inScope?.id) {
+        return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+      }
+
+      const { getGestoresByFuncionarioSetor } = await import('../services/setores-gestores');
+      gestores = await getGestoresByFuncionarioSetor(c.env.DB, empresaId, funcionarioId);
+    } else {
+      // Otherwise, return all active gestores (default behavior)
+      gestores = await listGestoresCopia(c.env.DB, empresaId, false);
+    }
+
+    return c.json({ success: true, data: gestores });
+  },
+);
 
 notificacoesConvocacaoRoutes.post(
   '/convocacoes/gestores',
