@@ -15,17 +15,17 @@ import type {
   SystemHealth,
 } from '../../../src/react-app/types/dashboard.types';
 import {
+  CANCELLED_STATUS_VALUES,
   COMPLETED_STATUS_SQL,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
   SCHEDULED_SESSION_STATUS_SQL,
+  sqlStatusEqualsAny,
 } from '../lib/status/status-codes';
 import {
   getTaxaConclusaoMensalMetricRows,
   getUtilizacaoSimuladoresMetricRows,
 } from '../repositories/dashboardMetricsRepository';
-import {
-  buildFuncionarioScopeWhere,
-  type EmployeeSectorAccess,
-} from './employee-sector-access';
+import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from './employee-sector-access';
 import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
@@ -33,6 +33,65 @@ import {
 } from '../utils/qualificacoes-alerta-config';
 
 const SIMULADORES_OPERATIONAL_TIMEZONE = 'America/Sao_Paulo';
+
+function buildCurrentOperationalQualificationPredicate(alias = 'qh'): string {
+  const statusExpr = `UPPER(COALESCE(${alias}.status, ''))`;
+  const cancelled = sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES);
+  const planned = sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES);
+  const successorStatusExpr = "UPPER(COALESCE(qh_next.status, ''))";
+  const successorCancelled = sqlStatusEqualsAny(successorStatusExpr, CANCELLED_STATUS_VALUES);
+  const successorPlanned = sqlStatusEqualsAny(
+    successorStatusExpr,
+    PLANNED_QUALIFICATION_STATUS_VALUES,
+  );
+
+  return `(${alias}.deleted_at IS NULL
+    AND NOT (${cancelled})
+    AND NOT (${planned})
+    AND ${alias}.data_conclusao IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM qualificacoes_historico qh_next
+      WHERE qh_next.empresa_id = ${alias}.empresa_id
+        AND qh_next.renovacao_de = ${alias}.id
+        AND qh_next.deleted_at IS NULL
+        AND qh_next.data_conclusao IS NOT NULL
+        AND NOT (${successorCancelled})
+        AND NOT (${successorPlanned})
+    ))`;
+}
+
+function buildHistoricalOperationalQualificationPredicate(
+  alias: string,
+  cutoffSql: string,
+): string {
+  const statusExpr = `UPPER(COALESCE(${alias}.status, ''))`;
+  const cancelled = sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES);
+  const planned = sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES);
+  const successorStatusExpr = "UPPER(COALESCE(qh_next.status, ''))";
+  const successorCancelled = sqlStatusEqualsAny(successorStatusExpr, CANCELLED_STATUS_VALUES);
+  const successorPlanned = sqlStatusEqualsAny(
+    successorStatusExpr,
+    PLANNED_QUALIFICATION_STATUS_VALUES,
+  );
+
+  return `(${alias}.deleted_at IS NULL
+    AND NOT (${cancelled})
+    AND NOT (${planned})
+    AND ${alias}.data_conclusao IS NOT NULL
+    AND date(${alias}.data_conclusao) <= date(${cutoffSql})
+    AND NOT EXISTS (
+      SELECT 1
+      FROM qualificacoes_historico qh_next
+      WHERE qh_next.empresa_id = ${alias}.empresa_id
+        AND qh_next.renovacao_de = ${alias}.id
+        AND qh_next.deleted_at IS NULL
+        AND qh_next.data_conclusao IS NOT NULL
+        AND date(qh_next.data_conclusao) <= date(${cutoffSql})
+        AND NOT (${successorCancelled})
+        AND NOT (${successorPlanned})
+    ))`;
+}
 
 function getSaoPauloDateTimeKey(now = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -218,6 +277,7 @@ export async function getDashboardMetrics(
     const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
     const hojeSp = getTodayIsoSaoPaulo();
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
+    const currentQualificationPredicate = buildCurrentOperationalQualificationPredicate('qh');
     const employeeScope = buildEmployeeScopeSql(access, 'f');
     const sessionScope = buildSessionScopeSql(access, 'simulador_agendamentos');
 
@@ -243,33 +303,28 @@ export async function getDashboardMetrics(
           `SELECT
              COUNT(*) as total_qualificacoes,
              SUM(CASE
-               WHEN qh.renovada = 1 THEN 0
-               WHEN ${vencimentoExpr} IS NULL THEN 0
+               WHEN ${vencimentoExpr} IS NULL THEN 1
                WHEN date(${vencimentoExpr}) > date(?, '+' || ? || ' days') THEN 1
                ELSE 0
              END) as validas,
              SUM(CASE
-               WHEN qh.renovada = 1 THEN 0
                WHEN ${vencimentoExpr} IS NULL THEN 0
                WHEN date(${vencimentoExpr}) >= date(?)
                 AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days') THEN 1
                ELSE 0
              END) as vencendo_30,
              SUM(CASE
-               WHEN qh.renovada = 1 THEN 0
                WHEN ${vencimentoExpr} IS NULL THEN 0
                WHEN date(${vencimentoExpr}) < date(?) THEN 1
                ELSE 0
              END) as vencidas,
              COUNT(DISTINCT CASE
-               WHEN qh.renovada = 0
-               AND ${vencimentoExpr} IS NOT NULL
+               WHEN ${vencimentoExpr} IS NOT NULL
                AND date(${vencimentoExpr}) BETWEEN date(?) AND date(?, '+' || ? || ' days')
                THEN qh.funcionario_id
              END) as tripulantes_vencendo,
              COUNT(DISTINCT CASE
-               WHEN qh.renovada = 0
-               AND ${vencimentoExpr} IS NOT NULL
+               WHEN ${vencimentoExpr} IS NOT NULL
                AND date(${vencimentoExpr}) < date(?)
                THEN qh.funcionario_id
              END) as tripulantes_vencidos
@@ -277,9 +332,11 @@ export async function getDashboardMetrics(
            JOIN funcionarios f ON f.id = qh.funcionario_id
            JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
            WHERE qh.deleted_at IS NULL
+           AND ${currentQualificationPredicate}
            AND f.deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND f.empresa_id = ?
+           AND qh.empresa_id = f.empresa_id
            AND ${employeeScope.clause}`,
         )
         .bind(
@@ -436,6 +493,7 @@ export async function getDashboardAlerts(
     const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
     const hojeSp = getTodayIsoSaoPaulo();
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
+    const currentQualificationPredicate = buildCurrentOperationalQualificationPredicate('qh');
     const employeeScope = buildEmployeeScopeSql(access, 'f');
 
     const results = await db
@@ -464,8 +522,9 @@ export async function getDashboardAlerts(
          AND f.deleted_at IS NULL
          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
          AND f.empresa_id = ?
+         AND qh.empresa_id = f.empresa_id
          AND ${employeeScope.clause}
-         AND qh.renovada = 0
+         AND ${currentQualificationPredicate}
          AND ${vencimentoExpr} IS NOT NULL
          AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days')
          ORDER BY
@@ -607,6 +666,11 @@ export async function getComplianceScore(
     const employeeScope = buildEmployeeScopeSql(access, 'f');
     const sessionScope = buildSessionScopeSql(access, 'simulador_agendamentos');
     const vencimentoExpr = getQualificacoesVencimentoExpr();
+    const currentQualificationPredicate = buildCurrentOperationalQualificationPredicate('qh');
+    const previousMonthQualificationPredicate = buildHistoricalOperationalQualificationPredicate(
+      'qh',
+      "date('now', '-1 month')",
+    );
     const [qualificacoes, simuladores, qualificacoesAnterior, lmsCompliance] = await Promise.all([
       // % de qualificações válidas (cálculo dinâmico de vencimento)
       db
@@ -631,12 +695,12 @@ export async function getComplianceScore(
            JOIN funcionarios f ON f.id = qh.funcionario_id
            JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
            WHERE qh.deleted_at IS NULL
+           AND ${currentQualificationPredicate}
            AND f.deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND f.empresa_id = ?
-           AND ${employeeScope.clause}
-           AND qh.renovada = 0
-           AND qh.data_conclusao IS NOT NULL`,
+           AND qh.empresa_id = f.empresa_id
+           AND ${employeeScope.clause}`,
         )
         .bind(empresaId, ...employeeScope.bindings)
         .first<{
@@ -684,13 +748,12 @@ export async function getComplianceScore(
            JOIN funcionarios f ON f.id = qh.funcionario_id
            JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
            WHERE qh.deleted_at IS NULL
+           AND ${previousMonthQualificationPredicate}
            AND f.deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND f.empresa_id = ?
-           AND ${employeeScope.clause}
-           AND qh.renovada = 0
-           AND qh.data_conclusao IS NOT NULL
-           AND qh.data_conclusao <= date('now', '-1 month')`,
+           AND qh.empresa_id = f.empresa_id
+           AND ${employeeScope.clause}`,
         )
         .bind(empresaId, ...employeeScope.bindings)
         .first<{ percentual_qualificacoes_validas_anterior: number }>(),
@@ -937,9 +1000,14 @@ export async function getAtividadesRecentes(
              qh.created_at as timestamp,
              qt.nome as qualificacao_nome
            FROM qualificacoes_historico qh
-           JOIN funcionarios f ON f.id = qh.funcionario_id
-           JOIN qualificacoes_tipos qt ON qt.codigo = qh.qualificacao_codigo
-           WHERE qh.deleted_at IS NULL
+           JOIN funcionarios f
+             ON f.id = qh.funcionario_id
+            AND f.empresa_id = qh.empresa_id
+           JOIN qualificacoes_tipos qt
+             ON qt.id = qh.qualificacao_id
+            AND qt.empresa_id = qh.empresa_id
+            AND qt.deleted_at IS NULL
+           WHERE ${buildCurrentOperationalQualificationPredicate('qh')}
            AND f.deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND f.empresa_id = ?
@@ -1276,9 +1344,8 @@ export async function getDashboardSimuladoresAlerts(
   const fichaScope = buildFichaScopeSql(access, 'f');
   const participantScope = buildEmployeeScopeSql(access, 'f_alert_participant');
   const nowKey = getSaoPauloDateTimeKey();
-  const safeHorizonHours = Number.isInteger(horizonHours) && horizonHours > 0
-    ? Math.min(horizonHours, 168)
-    : 24;
+  const safeHorizonHours =
+    Number.isInteger(horizonHours) && horizonHours > 0 ? Math.min(horizonHours, 168) : 24;
   const windowEndKey = getSaoPauloDateTimeKey(
     new Date(Date.now() + safeHorizonHours * 60 * 60 * 1000),
   );
@@ -1373,13 +1440,7 @@ export async function getDashboardSimuladoresAlerts(
            HAVING fichas_incompletas > 0
          ) pendencias`,
       )
-      .bind(
-        empresaId,
-        empresaId,
-        ...participantScope.bindings,
-        nowKey,
-        windowEndKey,
-      )
+      .bind(empresaId, empresaId, ...participantScope.bindings, nowKey, windowEndKey)
       .first<{ total: number }>(),
     hasEdicoesTable
       ? db
@@ -1399,12 +1460,7 @@ export async function getDashboardSimuladoresAlerts(
                AND ${sessionScope.clause}
                AND ${fichaScope.clause}`,
           )
-          .bind(
-            empresaId,
-            empresaId,
-            ...sessionScope.bindings,
-            ...fichaScope.bindings,
-          )
+          .bind(empresaId, empresaId, ...sessionScope.bindings, ...fichaScope.bindings)
           .first<{ total: number }>()
       : Promise.resolve({ total: 0 }),
   ]);
