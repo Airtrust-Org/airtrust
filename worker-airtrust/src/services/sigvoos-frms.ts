@@ -2035,6 +2035,7 @@ async function resolveSigvoosPendenciaByImportacao(
   db: D1Database,
   importacaoId: string,
   funcionarioId: string | null,
+  empresaId?: number | null,
 ): Promise<void> {
   await db
     .prepare(
@@ -2044,9 +2045,10 @@ async function resolveSigvoosPendenciaByImportacao(
               updated_at = ?,
               deleted_at = NULL
         WHERE importacao_id = ?
+          AND empresa_id = ?
           AND deleted_at IS NULL`,
     )
-    .bind(funcionarioId ? Number(funcionarioId) : null, now(), importacaoId)
+    .bind(funcionarioId ? Number(funcionarioId) : null, now(), importacaoId, empresaId ?? null)
     .run();
 }
 
@@ -2549,6 +2551,7 @@ export async function syncSigvoosForFrms(
           db,
           monthly.preview.importacao_id,
           monthly.tripulanteId,
+          resolvedEmpresaId,
         );
         importados = result.importados;
         substituidos = result.substituidos;
@@ -2636,13 +2639,22 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
 
   const rows = await db
     .prepare(
-      `SELECT id, canac, nome_fira, ano, mes, preview_json
-       FROM frms_importacao_fira
-       WHERE tripulante_id IS NULL
-         AND deleted_at IS NULL
-         AND arquivo_nome LIKE 'SIGVOOS_%'
-       ORDER BY ano DESC, mes DESC, created_at DESC`,
+      `SELECT f.id, f.canac, f.nome_fira, f.ano, f.mes, f.preview_json
+       FROM frms_importacao_fira f
+       WHERE f.tripulante_id IS NULL
+         AND f.deleted_at IS NULL
+         AND f.arquivo_nome LIKE 'SIGVOOS_%'
+         AND EXISTS (
+           SELECT 1
+             FROM frms_jornada_pendente jp
+            WHERE jp.importacao_id = f.id
+              AND jp.empresa_id = ?
+              AND jp.deleted_at IS NULL
+              AND jp.status = 'PENDENTE'
+         )
+       ORDER BY f.ano DESC, f.mes DESC, f.created_at DESC`,
     )
+    .bind(empresaId ?? null)
     .all<{
       id: string;
       canac: string | null;
@@ -2713,11 +2725,27 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       continue;
     }
 
-    // Update frms_importacao_fira with the resolved tripulante_id
+    // Update frms_importacao_fira with the resolved tripulante_id.
+    // Ownership is re-proven here (not just in the SELECT above) so the
+    // UPDATE stays fail-closed even if this function is ever called with
+    // a stale row id from another source.
     const timestamp = now();
     await db
-      .prepare(`UPDATE frms_importacao_fira SET tripulante_id = ?, updated_at = ? WHERE id = ?`)
-      .bind(matched.id, timestamp, row.id)
+      .prepare(
+        `UPDATE frms_importacao_fira
+            SET tripulante_id = ?, updated_at = ?
+          WHERE id = ?
+            AND tripulante_id IS NULL
+            AND EXISTS (
+              SELECT 1
+                FROM frms_jornada_pendente jp
+               WHERE jp.importacao_id = frms_importacao_fira.id
+                 AND jp.empresa_id = ?
+                 AND jp.deleted_at IS NULL
+                 AND jp.status = 'PENDENTE'
+            )`,
+      )
+      .bind(matched.id, timestamp, row.id, empresaId ?? null)
       .run();
 
     // Update preview_json with the resolved tripulante_id
@@ -2743,7 +2771,7 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       if (relabelDates.length > 0) {
         await relabelImportedJornadasAsSigvoos(db, matched.id, relabelDates, timestamp);
       }
-      await resolveSigvoosPendenciaByImportacao(db, row.id, matched.id);
+      await resolveSigvoosPendenciaByImportacao(db, row.id, matched.id, empresaId);
 
       result.totalResolvidos++;
       result.totalImportados += confirmResult.importados;
