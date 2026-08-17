@@ -944,6 +944,33 @@ async function getTodayYmdForTenant(db: D1Database, empresaId: number): Promise<
   }
 }
 
+// Envolve syncTreinamentoPlanejadoIntegration para os caminhos pós-commit: a mutação principal
+// já foi persistida quando esta função é chamada, então uma falha na integração não pode virar
+// um 500 genérico (o usuário reexecutaria uma ação que já teve efeito). Em vez disso o erro é
+// logado com segurança e o chamador decide como sinalizar TRAINING_INTEGRATION_PENDING (409).
+async function trySyncTreinamentoPlanejadoIntegration(params: {
+  db: D1Database;
+  empresaId: number;
+  treinamentoId: number;
+  removedParticipants?: Array<{
+    id: number;
+    funcionario_id: number;
+    qualificacao_historico_id: number | null;
+  }>;
+}): Promise<boolean> {
+  try {
+    await syncTreinamentoPlanejadoIntegration(params);
+    return true;
+  } catch (error) {
+    console.error('treinamento_integration_pending', {
+      empresaId: params.empresaId,
+      treinamentoId: params.treinamentoId,
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    });
+    return false;
+  }
+}
+
 function normalizeSourceFilter(raw: string | null | undefined): ConsolidatedSource | null {
   const normalized = String(raw || '')
     .trim()
@@ -2857,7 +2884,7 @@ treinamentosPlanejadosRoutes.patch(
         : false;
     });
 
-    await syncTreinamentoPlanejadoIntegration({
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
       db,
       empresaId,
       treinamentoId,
@@ -2879,6 +2906,19 @@ treinamentosPlanejadosRoutes.patch(
       },
       ...ua,
     });
+
+    if (!integrationOk) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Alteração salva, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true },
+        },
+        409,
+      );
+    }
 
     return c.json({ success: true, data: { id: treinamentoId } });
   },
@@ -2924,7 +2964,7 @@ treinamentosPlanejadosRoutes.post(
     }
     const previousParticipants = await loadParticipanteLinks(db, treinamentoId);
     await replaceParticipantes(db, treinamentoId, participanteIds);
-    await syncTreinamentoPlanejadoIntegration({
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
       db,
       empresaId,
       treinamentoId,
@@ -2944,6 +2984,19 @@ treinamentosPlanejadosRoutes.post(
       },
       ...ua,
     });
+
+    if (!integrationOk) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Participantes salvos, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true },
+        },
+        409,
+      );
+    }
 
     return c.json({
       success: true,
@@ -3036,7 +3089,7 @@ treinamentosPlanejadosRoutes.patch(
       .bind(...params)
       .run();
 
-    await syncTreinamentoPlanejadoIntegration({
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
       db,
       empresaId,
       treinamentoId,
@@ -3058,6 +3111,19 @@ treinamentosPlanejadosRoutes.patch(
       },
       ...ua,
     });
+
+    if (!integrationOk) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Presença salva, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true },
+        },
+        409,
+      );
+    }
 
     return c.json({
       success: true,
@@ -3161,6 +3227,7 @@ treinamentosPlanejadosRoutes.patch(
     const ua = extrairUsuarioAuditoria(c);
     const erros: string[] = [];
     const participantesAtualizados = new Set<number>();
+    const conclusionStatements: D1PreparedStatement[] = [];
     let atualizados = 0;
 
     for (const [funcionarioId, participanteInput] of payloadByFuncionario.entries()) {
@@ -3233,16 +3300,17 @@ treinamentosPlanejadosRoutes.patch(
         continue;
       }
 
-      params.push(participanteAtual.id);
-      await db
-        .prepare(
-          `UPDATE treinamentos_participantes
-              SET ${updates.join(', ')},
-                  updated_at = datetime('now')
-            WHERE id = ?`,
-        )
-        .bind(...params)
-        .run();
+      params.push(participanteAtual.id, treinamentoId);
+      conclusionStatements.push(
+        db
+          .prepare(
+            `UPDATE treinamentos_participantes
+                SET ${updates.join(', ')},
+                    updated_at = datetime('now')
+              WHERE id = ? AND treinamento_id = ?`,
+          )
+          .bind(...params),
+      );
 
       participantesAtualizados.add(funcionarioId);
       atualizados += 1;
@@ -3259,8 +3327,15 @@ treinamentosPlanejadosRoutes.patch(
       );
     }
 
+    if (conclusionStatements.length > 0) {
+      // Atômico: todos os writes aceitos aplicam juntos ou nenhum aplica — evita participantes
+      // parcialmente concluídos se um statement D1 falhar no meio do lote.
+      await db.batch(conclusionStatements);
+    }
+
+    let integrationOk = true;
     if (atualizados > 0) {
-      await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+      integrationOk = await trySyncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
       await registrarAuditoria({
         db,
         tabela: 'treinamentos_planejados',
@@ -3276,6 +3351,19 @@ treinamentosPlanejadosRoutes.patch(
         },
         ...ua,
       });
+    }
+
+    if (!integrationOk) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Conclusão salva, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true, atualizados, erros },
+        },
+        409,
+      );
     }
 
     const { items: itemsAtualizados } = await listEventos(db, empresaId, { treinamentoId });
@@ -3425,7 +3513,7 @@ treinamentosPlanejadosRoutes.patch(
                 concluido_por = ?,
                 observacoes = COALESCE(?, observacoes),
                 updated_at = datetime('now')
-          WHERE id = ?`,
+          WHERE id = ? AND treinamento_id = ?`,
       )
       .bind(
         parsed.data.resultado,
@@ -3436,10 +3524,15 @@ treinamentosPlanejadosRoutes.patch(
         ua.usuario_id ?? null,
         toNullableText(parsed.data.observacoes),
         participant.id,
+        treinamentoId,
       )
       .run();
 
-    await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
+      db,
+      empresaId,
+      treinamentoId,
+    });
     await registrarAuditoria({
       db,
       tabela: 'treinamentos_planejados',
@@ -3453,6 +3546,24 @@ treinamentosPlanejadosRoutes.patch(
       },
       ...ua,
     });
+
+    if (!integrationOk) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Conclusão salva, mas a integração de qualificação/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: {
+            id: treinamentoId,
+            funcionario_id: parsed.data.funcionario_id,
+            committed: true,
+            retryable: true,
+          },
+        },
+        409,
+      );
+    }
 
     const generated = await db
       .prepare(
@@ -3580,11 +3691,23 @@ treinamentosPlanejadosRoutes.delete(
       .bind(treinamentoId, empresaId)
       .run();
 
-    await syncTreinamentoPlanejadoIntegration({
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
       db,
       empresaId,
       treinamentoId,
     });
+    if (!integrationOk) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Treinamento marcado como cancelado, mas a integração ficou pendente. Repita a exclusão para concluir a reconciliação.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true },
+        },
+        409,
+      );
+    }
 
     await db
       .prepare(
