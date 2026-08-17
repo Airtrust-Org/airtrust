@@ -36,6 +36,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
 import { FratApprovalSchema, FratEvaluationSchema, scoreFratResponses } from '../lib/sgso-next-gen';
+import { requireRole } from '../middleware/rbac';
 import {
   type AppCtx,
   type InvestigationType,
@@ -364,7 +365,7 @@ return c.json(
   }
 });
 
-extra.post('/frat/avaliacoes/:id/aprovacoes', async (c) => {
+extra.post('/frat/avaliacoes/:id/aprovacoes', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c as AppCtx);
@@ -430,7 +431,7 @@ return c.json(
 });
 
 // ─── FRAT: Escalação Multi-Nível (L1 → L2 → OPS) ─────────────────────────────
-extra.patch('/frat/avaliacoes/:id/escalacao', async (c) => {
+extra.patch('/frat/avaliacoes/:id/escalacao', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c as AppCtx);
@@ -755,7 +756,7 @@ return c.json(
   }
 });
 
-extra.post('/moc/registros', async (c) => {
+extra.post('/moc/registros', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c as AppCtx);
@@ -813,7 +814,7 @@ return c.json(
   }
 });
 
-extra.patch('/moc/registros/:id/workflow', async (c) => {
+extra.patch('/moc/registros/:id/workflow', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c as AppCtx);
@@ -920,7 +921,7 @@ return c.json(
   }
 });
 
-extra.post('/licoes-aprendidas/:id/publicar-edapp', async (c) => {
+extra.post('/licoes-aprendidas/:id/publicar-edapp', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c as AppCtx);
