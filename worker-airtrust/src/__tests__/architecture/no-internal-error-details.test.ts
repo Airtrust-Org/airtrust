@@ -27,8 +27,32 @@ function collectMatches(text: string, regex: RegExp): string[] {
   return [...text.matchAll(regex)].map((match) => match[0].replace(/\s+/g, ' ').trim());
 }
 
+// Delimits each `c.json(...)` call by balancing parens from the opening `(`
+// instead of stopping at the first `\n\s*);` anywhere after it. The old
+// non-greedy regex could run past the real end of a call (e.g. into a
+// subsequent multi-line function call, or the enclosing catch block) whenever
+// the call's own closing looked like `\n    });` (object literal, then paren)
+// rather than a bare `\n    );` — producing both false positives (unrelated
+// code swept into the "block") and false negatives (the real violation
+// sitting past the accidental early match).
 function collectJsonReturns(text: string): string[] {
-  return [...text.matchAll(/return\s+c\.json\([\s\S]*?\n\s*\);/g)].map((match) => match[0]);
+  const results: string[] = [];
+  const opener = /return\s+c\.json\(/g;
+  let match: RegExpExecArray | null;
+  while ((match = opener.exec(text))) {
+    const start = match.index;
+    let depth = 1;
+    let i = match.index + match[0].length;
+    while (i < text.length && depth > 0) {
+      if (text[i] === '(') depth++;
+      else if (text[i] === ')') depth--;
+      i++;
+    }
+    if (depth !== 0) continue; // unbalanced — skip rather than mis-slice
+    if (text[i] === ';') i++;
+    results.push(text.slice(start, i));
+  }
+  return results;
 }
 
 describe('client-facing error payloads', () => {
@@ -38,7 +62,9 @@ describe('client-facing error payloads', () => {
       .flatMap((file) => {
         const source = readFileSync(file, 'utf8');
         const routePath = relative(process.cwd(), file);
-        const jsonReturns = collectJsonReturns(source).filter((block) => block.includes('success: false'));
+        const jsonReturns = collectJsonReturns(source).filter((block) =>
+          block.includes('success: false'),
+        );
         const rawMessageIn500 = jsonReturns.flatMap((block) =>
           block.includes(',\n      500') || block.includes(', 500')
             ? collectMatches(block, /error:\s*(?:error|err|e)\??\.message/g)

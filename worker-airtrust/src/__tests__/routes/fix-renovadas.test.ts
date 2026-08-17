@@ -76,18 +76,33 @@ function createDb(scenario: {
         },
         first: async () => null,
         run: async () => {
+          // Bulk shapes from applyRenovadaCandidates (routes/fix-renovadas.ts):
+          // "SET renovada" binds (empresaId, ...antigoIds); "SET renovacao_de" binds
+          // (...idAntigoValues, empresaId, ...idsMaisRecente).
           if (sql.includes('SET renovada = 1')) {
-            updates.push(`RENOVADA:${_args[0]}`);
+            for (const id of _args.slice(1)) updates.push(`RENOVADA:${id}`);
           }
           if (sql.includes('SET renovacao_de')) {
-            updates.push(`LINK:${_args[1]}->${_args[0]}`);
+            const idsCount = (sql.match(/WHEN \d+ THEN \?/g) || []).length;
+            const idAntigoValues = _args.slice(0, idsCount);
+            const idsMaisRecente = _args.slice(idsCount + 1);
+            idsMaisRecente.forEach((recenteId, index) => {
+              updates.push(`LINK:${recenteId}->${idAntigoValues[index]}`);
+            });
           }
           return { meta: { changes: 1 } };
         },
       });
 
-      return { bind, first: () => bind().first(), all: () => bind().all(), run: () => bind().run() };
+      return {
+        bind,
+        first: () => bind().first(),
+        all: () => bind().all(),
+        run: () => bind().run(),
+      };
     }),
+    batch: async (statements: Array<{ run: () => Promise<unknown> }>) =>
+      Promise.all(statements.map((statement) => statement.run())),
   } as unknown as D1Database;
 
   return { db, updates };
@@ -115,21 +130,43 @@ describe('Cenário 1 — Renovação simples', () => {
       grupos: [{ funcionario_id: 1, qualificacao_codigo: 'MNT_MEL', total: 2 }],
       registrosPorGrupo: {
         MNT_MEL: [
-          { id: 10, funcionario_id: 1, data_conclusao: PAST_FAR, data_vencimento: '2022-01-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Ana', setor_nome: 'Manutenção' },
-          { id: 20, funcionario_id: 1, data_conclusao: PAST_NEAR, data_vencimento: FUTURE, status: 'VALIDA', renovada: 0, funcionario_nome: 'Ana', setor_nome: 'Manutenção' },
+          {
+            id: 10,
+            funcionario_id: 1,
+            data_conclusao: PAST_FAR,
+            data_vencimento: '2022-01-01',
+            status: 'VENCIDA',
+            renovada: 0,
+            funcionario_nome: 'Ana',
+            setor_nome: 'Manutenção',
+          },
+          {
+            id: 20,
+            funcionario_id: 1,
+            data_conclusao: PAST_NEAR,
+            data_vencimento: FUTURE,
+            status: 'VALIDA',
+            renovada: 0,
+            funcionario_nome: 'Ana',
+            setor_nome: 'Manutenção',
+          },
         ],
       },
       updatesCapture: updates,
     });
 
     const app = createApp();
-    const res = await app.request('/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dry_run: false }),
-    }, makeEnv(db));
+    const res = await app.request(
+      '/',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run: false }),
+      },
+      makeEnv(db),
+    );
 
-    const body = await res.json() as { success: boolean; data: { total_renovadas: number } };
+    const body = (await res.json()) as { success: boolean; data: { total_renovadas: number } };
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
     expect(body.data.total_renovadas).toBe(1);
@@ -145,15 +182,39 @@ describe('Cenário 2 — Novo registro também vencido', () => {
       grupos: [{ funcionario_id: 2, qualificacao_codigo: 'MNT_MGM', total: 2 }],
       registrosPorGrupo: {
         MNT_MGM: [
-          { id: 30, funcionario_id: 2, data_conclusao: '2020-01-01', data_vencimento: '2021-01-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Bruno', setor_nome: 'Manutenção' },
-          { id: 40, funcionario_id: 2, data_conclusao: '2022-01-01', data_vencimento: '2023-01-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Bruno', setor_nome: 'Manutenção' },
+          {
+            id: 30,
+            funcionario_id: 2,
+            data_conclusao: '2020-01-01',
+            data_vencimento: '2021-01-01',
+            status: 'VENCIDA',
+            renovada: 0,
+            funcionario_nome: 'Bruno',
+            setor_nome: 'Manutenção',
+          },
+          {
+            id: 40,
+            funcionario_id: 2,
+            data_conclusao: '2022-01-01',
+            data_vencimento: '2023-01-01',
+            status: 'VENCIDA',
+            renovada: 0,
+            funcionario_nome: 'Bruno',
+            setor_nome: 'Manutenção',
+          },
         ],
       },
     });
 
     const app = createApp();
     const res = await app.request('/preview', { method: 'GET' }, makeEnv(db));
-    const body = await res.json() as { success: boolean; data: { total_candidatos: number; items: Array<{ id_antigo: number; novo_status_proposto: string }> } };
+    const body = (await res.json()) as {
+      success: boolean;
+      data: {
+        total_candidatos: number;
+        items: Array<{ id_antigo: number; novo_status_proposto: string }>;
+      };
+    };
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
@@ -178,7 +239,7 @@ describe('Cenário 3 — Vencida real sem renovação', () => {
 
     const app = createApp();
     const res = await app.request('/preview', { method: 'GET' }, makeEnv(db));
-    const body = await res.json() as { success: boolean; data: { total_candidatos: number } };
+    const body = (await res.json()) as { success: boolean; data: { total_candidatos: number } };
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
@@ -198,7 +259,7 @@ describe('Cenário 4 — Qualificações diferentes não se renovam', () => {
 
     const app = createApp();
     const res = await app.request('/preview', { method: 'GET' }, makeEnv(db));
-    const body = await res.json() as { success: boolean; data: { total_candidatos: number } };
+    const body = (await res.json()) as { success: boolean; data: { total_candidatos: number } };
 
     expect(body.data.total_candidatos).toBe(0);
   });
@@ -211,19 +272,58 @@ describe('Cenário 4 — Qualificações diferentes não se renovam', () => {
       ],
       registrosPorGrupo: {
         MNT_PROD_AS350: [
-          { id: 50, funcionario_id: 3, data_conclusao: '2021-01-01', data_vencimento: '2022-01-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Carlos', setor_nome: 'Manutenção' },
-          { id: 51, funcionario_id: 3, data_conclusao: '2023-01-01', data_vencimento: FUTURE, status: 'VALIDA', renovada: 0, funcionario_nome: 'Carlos', setor_nome: 'Manutenção' },
+          {
+            id: 50,
+            funcionario_id: 3,
+            data_conclusao: '2021-01-01',
+            data_vencimento: '2022-01-01',
+            status: 'VENCIDA',
+            renovada: 0,
+            funcionario_nome: 'Carlos',
+            setor_nome: 'Manutenção',
+          },
+          {
+            id: 51,
+            funcionario_id: 3,
+            data_conclusao: '2023-01-01',
+            data_vencimento: FUTURE,
+            status: 'VALIDA',
+            renovada: 0,
+            funcionario_nome: 'Carlos',
+            setor_nome: 'Manutenção',
+          },
         ],
         MNT_PROD_SK76: [
-          { id: 60, funcionario_id: 3, data_conclusao: '2021-06-01', data_vencimento: '2022-06-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Carlos', setor_nome: 'Manutenção' },
-          { id: 61, funcionario_id: 3, data_conclusao: '2023-06-01', data_vencimento: FUTURE, status: 'VALIDA', renovada: 0, funcionario_nome: 'Carlos', setor_nome: 'Manutenção' },
+          {
+            id: 60,
+            funcionario_id: 3,
+            data_conclusao: '2021-06-01',
+            data_vencimento: '2022-06-01',
+            status: 'VENCIDA',
+            renovada: 0,
+            funcionario_nome: 'Carlos',
+            setor_nome: 'Manutenção',
+          },
+          {
+            id: 61,
+            funcionario_id: 3,
+            data_conclusao: '2023-06-01',
+            data_vencimento: FUTURE,
+            status: 'VALIDA',
+            renovada: 0,
+            funcionario_nome: 'Carlos',
+            setor_nome: 'Manutenção',
+          },
         ],
       },
     });
 
     const app = createApp();
     const res = await app.request('/preview', { method: 'GET' }, makeEnv(db));
-    const body = await res.json() as { success: boolean; data: { total_candidatos: number; items: Array<{ id_antigo: number }> } };
+    const body = (await res.json()) as {
+      success: boolean;
+      data: { total_candidatos: number; items: Array<{ id_antigo: number }> };
+    };
 
     expect(body.data.total_candidatos).toBe(2);
     // Each group contributes its own old record — they are NOT mixed
@@ -245,7 +345,7 @@ describe('Cenário 5 — Planejado não renova vencido', () => {
 
     const app = createApp();
     const res = await app.request('/preview', { method: 'GET' }, makeEnv(db));
-    const body = await res.json() as { success: boolean; data: { total_candidatos: number } };
+    const body = (await res.json()) as { success: boolean; data: { total_candidatos: number } };
 
     expect(body.data.total_candidatos).toBe(0);
   });
@@ -257,7 +357,16 @@ describe('Cenário 5 — Planejado não renova vencido', () => {
       registrosPorGrupo: {
         MNT_IRM: [
           // Only 1 non-PLANEJADA row → per-group count <= 1 → no candidates
-          { id: 70, funcionario_id: 4, data_conclusao: '2022-01-01', data_vencimento: '2023-01-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Diana', setor_nome: 'Manutenção' },
+          {
+            id: 70,
+            funcionario_id: 4,
+            data_conclusao: '2022-01-01',
+            data_vencimento: '2023-01-01',
+            status: 'VENCIDA',
+            renovada: 0,
+            funcionario_nome: 'Diana',
+            setor_nome: 'Manutenção',
+          },
           // Planejada is excluded by the per-group query (status NOT IN PLANEJADA list)
           // but if it slips through, it should NOT become the id_mais_recente that drives RENOVADA
         ],
@@ -266,7 +375,7 @@ describe('Cenário 5 — Planejado não renova vencido', () => {
 
     const app = createApp();
     const res = await app.request('/preview', { method: 'GET' }, makeEnv(db));
-    const body = await res.json() as { success: boolean; data: { total_candidatos: number } };
+    const body = (await res.json()) as { success: boolean; data: { total_candidatos: number } };
 
     // Single non-PLANEJADA row → rows.length === 1 → no candidates
     expect(body.data.total_candidatos).toBe(0);
@@ -282,18 +391,48 @@ describe('Cenário 6 — Manutenção MNT_* multi-ciclo', () => {
       grupos: [{ funcionario_id: 5, qualificacao_codigo: 'MNT_SGSO', total: 3 }],
       registrosPorGrupo: {
         MNT_SGSO: [
-          { id: 100, funcionario_id: 5, data_conclusao: '2019-01-01', data_vencimento: '2020-01-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Eduardo', setor_nome: 'Manutenção' },
-          { id: 101, funcionario_id: 5, data_conclusao: '2021-01-01', data_vencimento: '2022-01-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Eduardo', setor_nome: 'Manutenção' },
-          { id: 102, funcionario_id: 5, data_conclusao: '2024-01-01', data_vencimento: '2025-01-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Eduardo', setor_nome: 'Manutenção' },
+          {
+            id: 100,
+            funcionario_id: 5,
+            data_conclusao: '2019-01-01',
+            data_vencimento: '2020-01-01',
+            status: 'VENCIDA',
+            renovada: 0,
+            funcionario_nome: 'Eduardo',
+            setor_nome: 'Manutenção',
+          },
+          {
+            id: 101,
+            funcionario_id: 5,
+            data_conclusao: '2021-01-01',
+            data_vencimento: '2022-01-01',
+            status: 'VENCIDA',
+            renovada: 0,
+            funcionario_nome: 'Eduardo',
+            setor_nome: 'Manutenção',
+          },
+          {
+            id: 102,
+            funcionario_id: 5,
+            data_conclusao: '2024-01-01',
+            data_vencimento: '2025-01-01',
+            status: 'VENCIDA',
+            renovada: 0,
+            funcionario_nome: 'Eduardo',
+            setor_nome: 'Manutenção',
+          },
         ],
       },
     });
 
     const app = createApp();
     const res = await app.request('/preview', { method: 'GET' }, makeEnv(db));
-    const body = await res.json() as {
+    const body = (await res.json()) as {
       success: boolean;
-      data: { total_candidatos: number; items: Array<{ id_antigo: number; id_mais_recente: number }> };
+      data: {
+        total_candidatos: number;
+        items: Array<{ id_antigo: number; id_mais_recente: number }>;
+      };
     };
 
     expect(res.status).toBe(200);
@@ -314,15 +453,33 @@ describe('Cenário 6 — Manutenção MNT_* multi-ciclo', () => {
       registrosPorGrupo: {
         MNT_MEL: [
           // already renovada — should be skipped
-          { id: 200, funcionario_id: 6, data_conclusao: '2020-01-01', data_vencimento: '2021-01-01', status: 'RENOVADA', renovada: 1, funcionario_nome: 'Flávia', setor_nome: 'Manutenção' },
-          { id: 201, funcionario_id: 6, data_conclusao: '2023-01-01', data_vencimento: FUTURE, status: 'VALIDA', renovada: 0, funcionario_nome: 'Flávia', setor_nome: 'Manutenção' },
+          {
+            id: 200,
+            funcionario_id: 6,
+            data_conclusao: '2020-01-01',
+            data_vencimento: '2021-01-01',
+            status: 'RENOVADA',
+            renovada: 1,
+            funcionario_nome: 'Flávia',
+            setor_nome: 'Manutenção',
+          },
+          {
+            id: 201,
+            funcionario_id: 6,
+            data_conclusao: '2023-01-01',
+            data_vencimento: FUTURE,
+            status: 'VALIDA',
+            renovada: 0,
+            funcionario_nome: 'Flávia',
+            setor_nome: 'Manutenção',
+          },
         ],
       },
     });
 
     const app = createApp();
     const res = await app.request('/preview', { method: 'GET' }, makeEnv(db));
-    const body = await res.json() as { success: boolean; data: { total_candidatos: number } };
+    const body = (await res.json()) as { success: boolean; data: { total_candidatos: number } };
 
     expect(body.data.total_candidatos).toBe(0);
   });
@@ -344,8 +501,26 @@ describe('dry_run mode', () => {
             }
             return {
               results: [
-                { id: 300, funcionario_id: 7, data_conclusao: '2020-01-01', data_vencimento: '2021-01-01', status: 'VENCIDA', renovada: 0, funcionario_nome: 'Gabi', setor_nome: 'Manutenção' },
-                { id: 301, funcionario_id: 7, data_conclusao: '2023-01-01', data_vencimento: FUTURE, status: 'VALIDA', renovada: 0, funcionario_nome: 'Gabi', setor_nome: 'Manutenção' },
+                {
+                  id: 300,
+                  funcionario_id: 7,
+                  data_conclusao: '2020-01-01',
+                  data_vencimento: '2021-01-01',
+                  status: 'VENCIDA',
+                  renovada: 0,
+                  funcionario_nome: 'Gabi',
+                  setor_nome: 'Manutenção',
+                },
+                {
+                  id: 301,
+                  funcionario_id: 7,
+                  data_conclusao: '2023-01-01',
+                  data_vencimento: FUTURE,
+                  status: 'VALIDA',
+                  renovada: 0,
+                  funcionario_nome: 'Gabi',
+                  setor_nome: 'Manutenção',
+                },
               ],
             };
           },
@@ -355,18 +530,30 @@ describe('dry_run mode', () => {
             return { meta: { changes: 1 } };
           },
         });
-        return { bind, first: () => bind().first(), all: () => bind().all(), run: () => bind().run() };
+        return {
+          bind,
+          first: () => bind().first(),
+          all: () => bind().all(),
+          run: () => bind().run(),
+        };
       }),
     } as unknown as D1Database;
 
     const app = createApp();
-    const res = await app.request('/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dry_run: true }),
-    }, makeEnv(db));
+    const res = await app.request(
+      '/',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run: true }),
+      },
+      makeEnv(db),
+    );
 
-    const body = await res.json() as { success: boolean; data: { dry_run: boolean; total_candidatos: number } };
+    const body = (await res.json()) as {
+      success: boolean;
+      data: { dry_run: boolean; total_candidatos: number };
+    };
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
     expect(body.data.dry_run).toBe(true);
@@ -387,16 +574,28 @@ describe('GET /stats', () => {
         expect(sql).toContain('empresa_id');
         return {
           bind: (..._args: unknown[]) => ({
-            first: async () => ({ total: 10, renovadas: 3, vinculadas: 3, total_funcionarios: 5, funcionarios_com_renovacao: 2 }),
+            first: async () => ({
+              total: 10,
+              renovadas: 3,
+              vinculadas: 3,
+              total_funcionarios: 5,
+              funcionarios_com_renovacao: 2,
+            }),
           }),
-          first: async () => ({ total: 10, renovadas: 3, vinculadas: 3, total_funcionarios: 5, funcionarios_com_renovacao: 2 }),
+          first: async () => ({
+            total: 10,
+            renovadas: 3,
+            vinculadas: 3,
+            total_funcionarios: 5,
+            funcionarios_com_renovacao: 2,
+          }),
         };
       }),
     } as unknown as D1Database;
 
     const app = createApp();
     const res = await app.request('/stats', { method: 'GET' }, makeEnv(db));
-    const body = await res.json() as { success: boolean; data: { renovadas: number } };
+    const body = (await res.json()) as { success: boolean; data: { renovadas: number } };
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
