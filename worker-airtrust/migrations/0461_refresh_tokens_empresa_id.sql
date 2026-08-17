@@ -18,6 +18,18 @@
 --   (by design — those sessions must re-authenticate), so rollback only
 --   restores the schema, not the revoked sessions.
 --
+-- STATUS as of the select-empresa session-scoping follow-up (same branch):
+--   this migration is STILL NOT APPLIED in any environment. Until it is,
+--   worker-airtrust/src/routes/auth.ts detects the missing empresa_id
+--   column at runtime (hasRefreshTokensEmpresaIdColumn) and falls back to
+--   re-deriving the tenant from resolveUserEmpresaId() on refresh — the
+--   pre-existing, documented-limitation behavior. P0-AUTH-001 is only
+--   FULLY closed (refresh tokens hard-pinned to their issuing tenant, with
+--   no re-derivation fallback) once this migration is applied. The related
+--   select-empresa fix (no longer mutating is_primary globally, minting a
+--   session-scoped token pair instead) does NOT depend on this migration
+--   and is already fully active regardless of whether it's applied.
+--
 -- P0-AUTH-001 hardening: today refresh_tokens has no empresa_id
 -- column, so POST /api/auth/refresh re-derives the tenant on every
 -- call via resolveUserEmpresaId(), which reads the user's CURRENT

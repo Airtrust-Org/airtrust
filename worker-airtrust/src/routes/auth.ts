@@ -1778,7 +1778,20 @@ authRoutes.get('/empresas', auth(), async (c) => {
   const userId = typeof userIdRaw === 'string' ? Number(userIdRaw) : (userIdRaw as number);
 
   const db = c.env.DB;
-  const empresaIdAtual = await resolveUserEmpresaId(db, userId);
+  // P0-AUTH-001 follow-up: a empresa "atual" da sessão vem do tenant pinado
+  // no JWT (setado por auth() a partir de payload.empresa_id), nunca de
+  // is_primary — is_primary reflete apenas o default usado em NOVOS logins,
+  // não a sessão ativa. Ver POST /select-empresa, que já não mais escreve
+  // nessa coluna.
+  const empresaIdFromJwt = c.get('empresaId');
+  const empresaIdAtualFromJwt =
+    typeof empresaIdFromJwt === 'string'
+      ? Number(empresaIdFromJwt)
+      : (empresaIdFromJwt as number | undefined);
+  const empresaIdAtual =
+    typeof empresaIdAtualFromJwt === 'number' && Number.isFinite(empresaIdAtualFromJwt) && empresaIdAtualFromJwt > 0
+      ? empresaIdAtualFromJwt
+      : await resolveUserEmpresaId(db, userId);
   const platformAccessState = await resolvePlatformAccessState(db, userId);
   const isPlatformAdmin = isPlatformAdminAccess(platformAccessState);
 
@@ -1914,17 +1927,14 @@ authRoutes.post('/select-empresa', auth(), async (c) => {
       .catch(() => null);
   }
 
-  await db
-    .prepare(
-      `
-      UPDATE usuarios_empresas
-      SET is_primary = CASE WHEN empresa_id = ? THEN 1 ELSE 0 END
-      WHERE usuario_id = ?
-    `,
-    )
-    .bind(targetEmpresaId, userId)
-    .run();
-
+  // P0-AUTH-001 follow-up: select-empresa NÃO deve mais mudar o default
+  // global do usuário (is_primary). is_primary continua existindo e
+  // continua sendo o default usado por um login NOVO (sem sessão prévia),
+  // mas trocar a empresa ativa de UMA sessão não pode vazar para as demais
+  // sessões/abas do mesmo usuário — daí a remoção do UPDATE que existia
+  // aqui antes. A sessão atual passa a ser inteiramente carregada por um
+  // novo par access+refresh token pinado em targetEmpresaId, devolvido ao
+  // chamador; nenhuma outra sessão/refresh token é tocada.
   type UserRow = { id: number; email: string; perfil: string; nome: string } | null;
   const user = await db
     .prepare(
@@ -1942,7 +1952,7 @@ authRoutes.post('/select-empresa', auth(), async (c) => {
     throw unauthorized('Usuário não encontrado', 'USER_NOT_FOUND');
   }
 
-  const { token: accessToken } = await issueAccessTokenForEmpresa(c, {
+  const { token: accessToken, jti } = await issueAccessTokenForEmpresa(c, {
     userId,
     email: user.email,
     role: await resolveAuthRoleForUser(db, userId, targetEmpresaId, vinculo.role || user.perfil),
@@ -1950,10 +1960,25 @@ authRoutes.post('/select-empresa', auth(), async (c) => {
     empresaId: targetEmpresaId,
   });
 
+  // Emite um refresh token NOVO e independente, pinado em targetEmpresaId,
+  // para esta sessão/dispositivo. Nenhum refresh token pré-existente (desta
+  // ou de outras sessões) é revogado ou alterado aqui — select-empresa troca
+  // o tenant ativo de UMA sessão, não do usuário como um todo.
+  const newRefreshToken = generateRefreshToken();
+  const newRefreshExpiresAt = getRefreshTokenExpiry(REFRESH_TOKEN_TTL_DAYS);
+  await persistRefreshToken(db, {
+    userId,
+    refreshToken: newRefreshToken,
+    expiresAt: newRefreshExpiresAt,
+    accessTokenJti: jti,
+    empresaId: targetEmpresaId,
+  });
+
   return c.json({
     success: true,
     data: {
       accessToken,
+      refreshToken: newRefreshToken,
       empresa: {
         id: vinculo.empresa_id,
         nome: vinculo.empresa_nome,
