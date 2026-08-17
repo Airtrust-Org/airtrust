@@ -31,13 +31,15 @@ registerHandler('frms', 'TRIPULANTE_ALTERADO', async (db, _tipo, payload) => {
 });
 
 registerHandler('frms', 'TRIPULANTE_REMOVIDO', async (db, _tipo, payload) => {
-  if (!payload.tripulacao_id) return;
+  if (!payload.tripulacao_id || !payload.empresa_id) return;
+  // Defense-in-depth: scope by empresa_id in addition to escala_tripulacao_id so a
+  // payload id that (due to an upstream bug) belongs to another tenant cannot delete rows.
   await db
     .prepare(
       `UPDATE frms_carga_trabalho
        SET deleted_at = CURRENT_TIMESTAMP
-       WHERE escala_tripulacao_id = ? AND deleted_at IS NULL`,
+       WHERE escala_tripulacao_id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
-    .bind(String(payload.tripulacao_id))
+    .bind(String(payload.tripulacao_id), Number(payload.empresa_id))
     .run();
 });

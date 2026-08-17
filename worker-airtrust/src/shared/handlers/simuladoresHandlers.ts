@@ -1,8 +1,10 @@
 import { registerHandler } from '../eventProcessor';
 
 registerHandler('simuladores', 'FUNCIONARIO_INATIVADO', async (db, _tipo, payload) => {
-  if (!payload.funcionario_id) return;
+  if (!payload.funcionario_id || !payload.empresa_id) return;
 
+  // Defense-in-depth: never trust the payload's funcionario_id alone. Confirm it
+  // actually belongs to the tenant that owns this domain event before writing.
   await db
     .prepare(
       `UPDATE simulador_agendamentos
@@ -16,8 +18,11 @@ registerHandler('simuladores', 'FUNCIONARIO_INATIVADO', async (db, _tipo, payloa
            AND deleted_at IS NULL
        )
          AND UPPER(COALESCE(status, 'AGENDADO')) IN ('PENDENTE', 'AGENDADO')
-         AND deleted_at IS NULL`,
+         AND deleted_at IS NULL
+         AND funcionario_id IN (
+           SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+         )`,
     )
-    .bind(Number(payload.funcionario_id))
+    .bind(Number(payload.funcionario_id), Number(payload.funcionario_id), Number(payload.empresa_id))
     .run();
 });
