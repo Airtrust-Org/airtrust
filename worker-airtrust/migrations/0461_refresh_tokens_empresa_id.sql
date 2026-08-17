@@ -12,11 +12,14 @@
 -- dry_run_required: yes; run the UPDATE as a SELECT COUNT(*) first in
 --   each environment to confirm the expected number of legacy sessions
 --   being revoked before applying.
--- rollback_plan_required: yes; ALTER TABLE refresh_tokens DROP COLUMN
---   empresa_id (SQLite 3.35+) and DROP INDEX idx_refresh_tokens_empresa
---   reverts the schema change. The revoked_at UPDATE is not reversible
---   (by design — those sessions must re-authenticate), so rollback only
---   restores the schema, not the revoked sessions.
+-- rollback_plan_required: yes; run in this exact order (verified locally
+--   against a disposable SQLite file — dropping the column first errors
+--   with "no such column: empresa_id" while the index still references it):
+--     DROP INDEX idx_refresh_tokens_empresa;
+--     ALTER TABLE refresh_tokens DROP COLUMN empresa_id;  -- SQLite 3.35+
+--   The revoked_at UPDATE is not reversible (by design — those sessions
+--   must re-authenticate), so rollback only restores the schema, not the
+--   revoked sessions.
 --
 -- STATUS as of the select-empresa session-scoping follow-up (same branch):
 --   this migration is STILL NOT APPLIED in any environment. Until it is,
