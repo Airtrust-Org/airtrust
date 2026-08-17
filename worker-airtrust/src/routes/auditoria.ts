@@ -34,11 +34,6 @@ app.get('/', async (c) => {
       : hasRenovada
         ? 'COALESCE(h.renovada, 0) = 1'
         : '0 = 1';
-    const vinculoExprSemAlias = hasRenovacaoDe
-      ? 'renovacao_de IS NOT NULL'
-      : hasRenovada
-        ? 'COALESCE(renovada, 0) = 1'
-        : '0 = 1';
     const vinculoExprQh = hasRenovacaoDe
       ? 'qh.renovacao_de IS NOT NULL'
       : hasRenovada
@@ -46,10 +41,14 @@ app.get('/', async (c) => {
         : '0 = 1';
 
     const cpfsQuery = c.req.query('cpfs') || '';
-    const cpfsFormatados = cpfsQuery
-      .split(',')
-      .map((cpf) => cpf.trim())
-      .filter(Boolean);
+    const cpfsFormatados = [
+      ...new Set(
+        cpfsQuery
+          .split(',')
+          .map((cpf) => cpf.trim())
+          .filter(Boolean),
+      ),
+    ];
 
     if (cpfsFormatados.length === 0) {
       return c.json(
@@ -62,11 +61,23 @@ app.get('/', async (c) => {
       );
     }
 
-    // Remover formatação (só números)
-    const cpfsSemFormatacao = cpfsFormatados.map((cpf) => cpf.replace(/[.-]/g, ''));
+    // Evita amplificação e estouro do limite de bind parameters ao tentar os
+    // formatos original + somente dígitos em todas as consultas desta auditoria.
+    if (cpfsFormatados.length > 40) {
+      return c.json(
+        {
+          success: false,
+          error: 'Máximo de 40 CPFs por auditoria',
+          code: 'CPFS_LIMIT_EXCEEDED',
+        },
+        400,
+      );
+    }
 
-    // Tentar ambos os formatos
-    const cpfs = [...cpfsFormatados, ...cpfsSemFormatacao];
+    // Remover qualquer formatação (só números) e deduplicar para não consumir
+    // parâmetros D1 com duas representações idênticas do mesmo CPF.
+    const cpfsSemFormatacao = cpfsFormatados.map((cpf) => cpf.replace(/\D/g, '')).filter(Boolean);
+    const cpfs = [...new Set([...cpfsFormatados, ...cpfsSemFormatacao])];
 
     // Lista de códigos de qualificação do CSV
     const codigos = [
@@ -126,7 +137,7 @@ app.get('/', async (c) => {
       .all();
 
     const cpfsNaoEncontrados = cpfsFormatados.filter((cpf) => {
-      const cpfSemFormatacao = cpf.replace(/[.-]/g, '');
+      const cpfSemFormatacao = cpf.replace(/\D/g, '');
       return !funcionarios.find(
         (f) =>
           (f as { cpf: string }).cpf === cpf || (f as { cpf: string }).cpf === cpfSemFormatacao,
@@ -168,15 +179,20 @@ app.get('/', async (c) => {
         COUNT(*) AS total_duplicatas
       FROM qualificacoes_historico h
       WHERE h.deleted_at IS NULL
+        AND h.empresa_id = ?
         AND h.funcionario_cpf IN (${cpfs.map(() => '?').join(',')})
-        AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.cpf = h.funcionario_cpf AND f.empresa_id = ?)
+        AND EXISTS (
+          SELECT 1 FROM funcionarios f
+           WHERE f.cpf = h.funcionario_cpf
+             AND f.empresa_id = h.empresa_id
+        )
       GROUP BY h.funcionario_cpf, h.qualificacao_codigo, h.data_vencimento
       HAVING COUNT(*) > 1
       ORDER BY total_duplicatas DESC
       LIMIT 50
     `,
       )
-      .bind(...cpfs, empresaId)
+      .bind(empresaId, ...cpfs)
       .all();
 
     // 4. VERIFICAR REGISTROS VENCIDOS
@@ -190,14 +206,19 @@ app.get('/', async (c) => {
         CAST((julianday('now') - julianday(h.data_vencimento)) AS INTEGER) AS dias_vencido
       FROM qualificacoes_historico h
       WHERE h.deleted_at IS NULL
+        AND h.empresa_id = ?
         AND h.data_vencimento < date('now')
         AND h.funcionario_cpf IN (${cpfs.map(() => '?').join(',')})
-        AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.cpf = h.funcionario_cpf AND f.empresa_id = ?)
+        AND EXISTS (
+          SELECT 1 FROM funcionarios f
+           WHERE f.cpf = h.funcionario_cpf
+             AND f.empresa_id = h.empresa_id
+        )
       ORDER BY dias_vencido DESC
       LIMIT 30
     `,
       )
-      .bind(...cpfs, empresaId)
+      .bind(empresaId, ...cpfs)
       .all();
 
     // 5. CANDIDATOS A RENOVAÇÃO
@@ -211,15 +232,20 @@ app.get('/', async (c) => {
         SUM(CASE WHEN ${vinculoExpr} THEN 1 ELSE 0 END) AS registros_com_vinculo
       FROM qualificacoes_historico h
       WHERE h.deleted_at IS NULL
+        AND h.empresa_id = ?
         AND h.funcionario_cpf IN (${cpfs.map(() => '?').join(',')})
-        AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.cpf = h.funcionario_cpf AND f.empresa_id = ?)
+        AND EXISTS (
+          SELECT 1 FROM funcionarios f
+           WHERE f.cpf = h.funcionario_cpf
+             AND f.empresa_id = h.empresa_id
+        )
       GROUP BY h.funcionario_cpf, h.qualificacao_codigo
       HAVING total_registros > 1
       ORDER BY total_registros DESC
       LIMIT 50
     `,
       )
-      .bind(...cpfs, empresaId)
+      .bind(empresaId, ...cpfs)
       .all();
 
     // 6. RESUMO GERAL — scoped to current tenant
@@ -229,10 +255,23 @@ app.get('/', async (c) => {
       SELECT
         (SELECT COUNT(*) FROM funcionarios WHERE deleted_at IS NULL AND ativo = 1 AND empresa_id = ?) AS total_funcionarios,
         (SELECT COUNT(*) FROM qualificacoes_tipos WHERE deleted_at IS NULL AND empresa_id = ?) AS total_qualificacoes,
-        (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.deleted_at IS NULL
-          AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = qh.funcionario_id AND f.empresa_id = ?)) AS total_historico,
-        (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.deleted_at IS NULL AND ${vinculoExprQh}
-          AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = qh.funcionario_id AND f.empresa_id = ?)) AS historico_com_vinculo
+        (SELECT COUNT(*) FROM qualificacoes_historico qh
+          WHERE qh.deleted_at IS NULL
+            AND qh.empresa_id = ?
+            AND EXISTS (
+              SELECT 1 FROM funcionarios f
+               WHERE f.id = qh.funcionario_id
+                 AND f.empresa_id = qh.empresa_id
+            )) AS total_historico,
+        (SELECT COUNT(*) FROM qualificacoes_historico qh
+          WHERE qh.deleted_at IS NULL
+            AND qh.empresa_id = ?
+            AND ${vinculoExprQh}
+            AND EXISTS (
+              SELECT 1 FROM funcionarios f
+               WHERE f.id = qh.funcionario_id
+                 AND f.empresa_id = qh.empresa_id
+            )) AS historico_com_vinculo
     `,
       )
       .bind(empresaId, empresaId, empresaId, empresaId)
