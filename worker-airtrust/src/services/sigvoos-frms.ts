@@ -824,7 +824,9 @@ async function loadSigvoosManualMappings(
               m.created_at,
               m.updated_at
          FROM sigvoos_mapeamento_manual m
-         JOIN funcionarios f ON f.id = m.funcionario_id
+         JOIN funcionarios f
+           ON f.id = m.funcionario_id
+          AND (m.empresa_id IS NULL OR f.empresa_id = m.empresa_id)
         WHERE m.deleted_at IS NULL
           AND f.deleted_at IS NULL
           AND (m.empresa_id = ? OR (m.empresa_id IS NULL AND ? IS NULL))
@@ -838,7 +840,9 @@ async function loadSigvoosManualMappings(
               m.created_at,
               m.updated_at
          FROM integracoes_sigvoos_mapeamentos m
-         JOIN funcionarios f ON f.id = m.funcionario_id
+         JOIN funcionarios f
+           ON f.id = m.funcionario_id
+          AND (m.empresa_id IS NULL OR f.empresa_id = m.empresa_id)
         WHERE m.deleted_at IS NULL
           AND f.deleted_at IS NULL
           AND (m.empresa_id = ? OR (m.empresa_id IS NULL AND ? IS NULL))
@@ -917,6 +921,22 @@ export async function upsertSigvoosManualMapping(
 
   if (!nomeSigvoos || !Number.isFinite(funcionarioId)) {
     throw new Error('SIGVOOS_MANUAL_MAPPING_INVALID');
+  }
+
+  const funcionarioInScope = await db
+    .prepare(
+      `SELECT id
+         FROM funcionarios
+        WHERE id = ?
+          AND empresa_id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(funcionarioId, resolvedEmpresaId ?? null)
+    .first<{ id: number }>();
+
+  if (!funcionarioInScope) {
+    throw new Error('SIGVOOS_MAPPING_TARGET_OUT_OF_SCOPE');
   }
 
   const existing = await findSigvoosManualMapping(
@@ -2015,6 +2035,7 @@ async function resolveSigvoosPendenciaByImportacao(
   db: D1Database,
   importacaoId: string,
   funcionarioId: string | null,
+  empresaId?: number | null,
 ): Promise<void> {
   await db
     .prepare(
@@ -2024,9 +2045,10 @@ async function resolveSigvoosPendenciaByImportacao(
               updated_at = ?,
               deleted_at = NULL
         WHERE importacao_id = ?
+          AND empresa_id = ?
           AND deleted_at IS NULL`,
     )
-    .bind(funcionarioId ? Number(funcionarioId) : null, now(), importacaoId)
+    .bind(funcionarioId ? Number(funcionarioId) : null, now(), importacaoId, empresaId ?? null)
     .run();
 }
 
@@ -2437,7 +2459,12 @@ export async function syncSigvoosForFrms(
         identificadorSigvoos: first.identificadorSigvoos,
         name: first.tripulanteNome,
       });
-      const matchedOperational = matched?.elegivelFrms ? matched : null;
+      // P1-SIG-003: NOME_FUZZY is a name-similarity heuristic, not a proven
+      // identity. It must not auto-confirm into official FRMS jornadas —
+      // require a manual mapping (which then resolves as MANUAL on the
+      // next sync) before it can feed hours/jornada/rolling/alerts.
+      const matchedOperational =
+        matched?.elegivelFrms && matched.fonteResolucao !== 'NOME_FUZZY' ? matched : null;
       const byMonth = groupDaysByMonth(days);
 
       for (const [monthKey, monthDays] of byMonth.entries()) {
@@ -2460,7 +2487,9 @@ export async function syncSigvoosForFrms(
               : [
                   matched?.motivoInelegibilidade === 'NAO_TRIPULANTE_OPERACIONAL'
                     ? 'Funcionario resolvido no cadastro, mas sem funcao/cargo elegivel para FRMS operacional.'
-                    : 'Tripulante nao localizado automaticamente no AirTrust.',
+                    : matched?.elegivelFrms && matched.fonteResolucao === 'NOME_FUZZY'
+                      ? 'Identidade resolvida apenas por similaridade de nome; requer confirmacao manual antes de alimentar FRMS.'
+                      : 'Tripulante nao localizado automaticamente no AirTrust.',
                 ],
           }),
         );
@@ -2490,9 +2519,12 @@ export async function syncSigvoosForFrms(
           canacSigvoos: monthly.canac,
           competencia: `${monthly.ano}-${String(monthly.mes).padStart(2, '0')}`,
           jornadas: monthly.preview.total_dias,
-          motivo:
-            monthly.preview.avisos?.some((aviso) => aviso.includes('sem funcao/cargo elegivel'))
-              ? 'NAO_TRIPULANTE_OPERACIONAL'
+          motivo: monthly.preview.avisos?.some((aviso) =>
+            aviso.includes('sem funcao/cargo elegivel'),
+          )
+            ? 'NAO_TRIPULANTE_OPERACIONAL'
+            : monthly.preview.avisos?.some((aviso) => aviso.includes('requer confirmacao manual'))
+              ? 'IDENTIDADE_REQUER_CONFIRMACAO'
               : 'NAO_ENCONTRADO',
           payload: {
             fonte_resolucao: monthly.fonteResolucao,
@@ -2529,6 +2561,7 @@ export async function syncSigvoosForFrms(
           db,
           monthly.preview.importacao_id,
           monthly.tripulanteId,
+          resolvedEmpresaId,
         );
         importados = result.importados;
         substituidos = result.substituidos;
@@ -2616,13 +2649,22 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
 
   const rows = await db
     .prepare(
-      `SELECT id, canac, nome_fira, ano, mes, preview_json
-       FROM frms_importacao_fira
-       WHERE tripulante_id IS NULL
-         AND deleted_at IS NULL
-         AND arquivo_nome LIKE 'SIGVOOS_%'
-       ORDER BY ano DESC, mes DESC, created_at DESC`,
+      `SELECT f.id, f.canac, f.nome_fira, f.ano, f.mes, f.preview_json
+       FROM frms_importacao_fira f
+       WHERE f.tripulante_id IS NULL
+         AND f.deleted_at IS NULL
+         AND f.arquivo_nome LIKE 'SIGVOOS_%'
+         AND EXISTS (
+           SELECT 1
+             FROM frms_jornada_pendente jp
+            WHERE jp.importacao_id = f.id
+              AND jp.empresa_id = ?
+              AND jp.deleted_at IS NULL
+              AND jp.status = 'PENDENTE'
+         )
+       ORDER BY f.ano DESC, f.mes DESC, f.created_at DESC`,
     )
+    .bind(empresaId ?? null)
     .all<{
       id: string;
       canac: string | null;
@@ -2693,11 +2735,42 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       continue;
     }
 
-    // Update frms_importacao_fira with the resolved tripulante_id
+    // P1-SIG-003: a NOME_FUZZY match is a similarity heuristic, not proven
+    // identity — reprocessing must not silently confirm it. Keep the
+    // pendencia open and require an explicit manual mapping first.
+    if (matched.fonteResolucao === 'NOME_FUZZY') {
+      result.detalhes.push({
+        importacao_id: row.id,
+        tripulante_nome: nomeSigvoos,
+        ano: row.ano,
+        mes: row.mes,
+        resolved: false,
+        error: 'Identidade resolvida apenas por similaridade de nome; requer mapeamento manual',
+      });
+      continue;
+    }
+
+    // Update frms_importacao_fira with the resolved tripulante_id.
+    // Ownership is re-proven here (not just in the SELECT above) so the
+    // UPDATE stays fail-closed even if this function is ever called with
+    // a stale row id from another source.
     const timestamp = now();
     await db
-      .prepare(`UPDATE frms_importacao_fira SET tripulante_id = ?, updated_at = ? WHERE id = ?`)
-      .bind(matched.id, timestamp, row.id)
+      .prepare(
+        `UPDATE frms_importacao_fira
+            SET tripulante_id = ?, updated_at = ?
+          WHERE id = ?
+            AND tripulante_id IS NULL
+            AND EXISTS (
+              SELECT 1
+                FROM frms_jornada_pendente jp
+               WHERE jp.importacao_id = frms_importacao_fira.id
+                 AND jp.empresa_id = ?
+                 AND jp.deleted_at IS NULL
+                 AND jp.status = 'PENDENTE'
+            )`,
+      )
+      .bind(matched.id, timestamp, row.id, empresaId ?? null)
       .run();
 
     // Update preview_json with the resolved tripulante_id
@@ -2723,7 +2796,7 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       if (relabelDates.length > 0) {
         await relabelImportedJornadasAsSigvoos(db, matched.id, relabelDates, timestamp);
       }
-      await resolveSigvoosPendenciaByImportacao(db, row.id, matched.id);
+      await resolveSigvoosPendenciaByImportacao(db, row.id, matched.id, empresaId);
 
       result.totalResolvidos++;
       result.totalImportados += confirmResult.importados;
