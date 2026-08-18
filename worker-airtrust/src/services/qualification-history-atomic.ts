@@ -1214,6 +1214,113 @@ export async function renewQualificationHistoryAtomic(
   };
 }
 
+export interface ReconcileQualificationLineageInput {
+  empresaId: number;
+  funcionarioId: number;
+  qualificationCode: string;
+}
+
+export interface ReconcileQualificationLineageResult {
+  /** Ordered chronologically oldest -> newest; last entry is current (not RENOVADA). */
+  chain: Array<{ id: number; renovacaoDe: number | null; materialized: 'CONCLUIDA' | 'RENOVADA' }>;
+}
+
+/**
+ * Recomputes the ENTIRE renewal chain for one (empresa, funcionario,
+ * qualification code) lineage from scratch, purely from each row's current
+ * `data_conclusao` and `id` — the only two facts the canonical invariant
+ * (`successor.renovacao_de = predecessor.id`, chronologically immediate)
+ * actually depends on. Deliberately does not try to patch a single edge;
+ * recomputing the whole (small — realistically a handful of rows per
+ * lineage) small chain is simpler to prove correct and naturally handles
+ * any prior corruption (stale renovacao_de, wrong renovada flags, gaps left
+ * by a deleted row) rather than requiring bespoke "move forward"/"move
+ * backward" logic for every possible edit.
+ *
+ * Used as the shared repair step after any structural change to a lineage:
+ * confirming a PLANEJADA row, deleting a row, or editing data_conclusao.
+ * Callers that already know they're mutating exactly one lineage should
+ * call this once, atomically, right after the mutation.
+ *
+ * PLANEJADA/CANCELADA rows are excluded entirely (not part of the
+ * operational chain). Rows without data_conclusao are excluded (can't be
+ * chronologically ordered). Ties on identical data_conclusao are broken by
+ * id, consistent with settleQualificationHistoryAtomic.
+ */
+export async function reconcileQualificationLineageAtomic(
+  db: D1Database,
+  input: ReconcileQualificationLineageInput,
+): Promise<ReconcileQualificationLineageResult> {
+  assertPositiveInteger(input.empresaId, 'empresa_id');
+  assertPositiveInteger(input.funcionarioId, 'funcionario_id');
+  const qualificationCode = normalizeCode(input.qualificationCode);
+  if (!qualificationCode) {
+    throw new QualificationAtomicError(
+      'INVALID_QUALIFICATION_CODE',
+      400,
+      'Código da qualificação é obrigatório',
+    );
+  }
+
+  const rows = await db
+    .prepare(
+      `SELECT id, status, renovacao_de
+         FROM qualificacoes_historico
+        WHERE empresa_id = ?
+          AND funcionario_id = ?
+          AND UPPER(COALESCE(qualificacao_codigo, '')) = UPPER(?)
+          AND deleted_at IS NULL
+          AND data_conclusao IS NOT NULL
+          AND UPPER(COALESCE(status, '')) NOT IN ('PLANEJADA', 'PLANEJADO', 'CANCELADA', 'CANCELADO')
+        ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) ASC, id ASC`,
+    )
+    .bind(input.empresaId, input.funcionarioId, qualificationCode)
+    .all<{ id: number; status: string; renovacao_de: number | null }>();
+
+  const ordered = rows.results ?? [];
+  const chain: ReconcileQualificationLineageResult['chain'] = [];
+  const statements: ReturnType<D1Database['prepare']>[] = [];
+
+  for (let i = 0; i < ordered.length; i += 1) {
+    const row = ordered[i];
+    const predecessor = i > 0 ? ordered[i - 1] : null;
+    const isCurrent = i === ordered.length - 1;
+    const materialized: 'CONCLUIDA' | 'RENOVADA' = isCurrent ? 'CONCLUIDA' : 'RENOVADA';
+    const desiredRenovacaoDe = predecessor?.id ?? null;
+    const desiredRenovada = isCurrent ? 0 : 1;
+
+    chain.push({ id: row.id, renovacaoDe: desiredRenovacaoDe, materialized });
+
+    const currentRenovacaoDe = row.renovacao_de ?? null;
+    const currentStatus = normalizeCode(row.status);
+    const needsUpdate =
+      currentRenovacaoDe !== desiredRenovacaoDe ||
+      (isCurrent ? currentStatus === 'RENOVADA' : currentStatus !== 'RENOVADA');
+
+    if (needsUpdate) {
+      statements.push(
+        db
+          .prepare(
+            `UPDATE qualificacoes_historico
+                SET renovacao_de = ?,
+                    renovada = ?,
+                    status = CASE WHEN ? = 1 THEN 'RENOVADA' ELSE 'CONCLUIDA' END,
+                    updated_at = datetime('now')
+              WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+          )
+          .bind(desiredRenovacaoDe, desiredRenovada, desiredRenovada, row.id, input.empresaId),
+      );
+    }
+  }
+
+  if (statements.length > 0) {
+    const results = await db.batch(statements);
+    assertBatchSucceeded(results, 'A reconciliação da cadeia de qualificação');
+  }
+
+  return { chain };
+}
+
 export async function settleQualificationComplementaryEffects(
   effects: Record<string, () => Promise<unknown>>,
 ): Promise<string[]> {

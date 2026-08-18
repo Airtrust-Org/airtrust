@@ -490,7 +490,7 @@ export async function historicoPertenceEmpresa(
     .prepare(
       `SELECT qh.id, qh.funcionario_id, qh.qualificacao_codigo, qh.status, qh.renovada
        FROM qualificacoes_historico qh
-       INNER JOIN funcionarios f ON f.id = qh.funcionario_id
+       INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id
        WHERE qh.id = ?
          AND qh.deleted_at IS NULL
          AND f.deleted_at IS NULL
