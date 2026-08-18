@@ -556,6 +556,214 @@ async function findMostRecentRenewedPredecessor(
   return row?.id ?? null;
 }
 
+/**
+ * Chronologically-immediate-predecessor semantics used throughout this
+ * module (both here and in the correlated UPDATE inside
+ * settleQualificationHistoryAtomic): the immediate predecessor of a target
+ * row is whatever real completion (not PLANEJADA, not CANCELADA) for the
+ * same empresa/funcionario/qualification code sits strictly before the
+ * target's completion date — regardless of its current renovada flag/
+ * status, since those legacy fields can be wrong and are not the source of
+ * truth (only `renovacao_de` is). Ties on identical data_conclusao are
+ * broken deterministically by the highest id (== most recently inserted/
+ * realized) rather than treated as ambiguous: id order is a legitimate
+ * total order here, not an arbitrary pick.
+ */
+export interface SettleQualificationHistoryInput {
+  empresaId: number;
+  funcionarioId: number;
+  qualificationId: number | null;
+  qualificationCode: string;
+  category: string | null;
+  completionDate: string;
+  expiryDate: string | null;
+  validityMonths: number | null;
+  instructor: string | null;
+  observations: string | null;
+  workload: number | null;
+  trainingType: QualificationTrainingType;
+}
+
+export interface SettleQualificationHistoryResult {
+  id: number;
+  action: QualificationMutationAction;
+  predecessorId: number | null;
+}
+
+/**
+ * Canonical settlement primitive: realizes/converges a CONCLUIDA
+ * qualification history row and its position in the renewal chain,
+ * tenant-scoped, atomic, idempotent, and reentrant from any intermediate
+ * state. Callers (LMS completion, Treinamentos completion, and any future
+ * writer) should use this instead of hand-rolling renovacao_de/renovada
+ * logic.
+ *
+ * Guaranteed post-conditions on success:
+ * 1. A CONCLUIDA row exists for (empresa, funcionario, code, completionDate).
+ * 2. That row's `renovacao_de` points at the chronologically immediate
+ *    predecessor (see the chronological-succession doc above), or NULL if none.
+ * 3. Every older, non-terminal (not PLANEJADA/CANCELADA/already-RENOVADA)
+ *    row for the same lineage dated on/before the target's completion date
+ *    is materialized as renovada=1/status=RENOVADA — including legacy
+ *    predecessors beyond just the immediate one.
+ * 4. Rows dated after the target's completion date are never touched
+ *    (retroactive completion cannot mutate the future).
+ * 5. Re-invoking with the same input from any intermediate state (e.g.
+ *    after a fault that left renovacao_de unset, or left an older
+ *    predecessor un-marked) converges to the same final state — every
+ *    statement here is a conditional, current-state-derived UPDATE/INSERT,
+ *    not a blind append.
+ */
+export async function settleQualificationHistoryAtomic(
+  db: D1Database,
+  input: SettleQualificationHistoryInput,
+): Promise<SettleQualificationHistoryResult> {
+  const qualificationCode = normalizeCode(input.qualificationCode);
+  validateCommonInput({ ...input, qualificationCode });
+
+  const statements: ReturnType<D1Database['prepare']>[] = [];
+
+  const insertResultIndex = statements.length;
+  statements.push(
+    db
+      .prepare(
+        `INSERT INTO qualificacoes_historico (
+           funcionario_id,
+           qualificacao_id,
+           qualificacao_codigo,
+           categoria,
+           data_conclusao,
+           data_vencimento,
+           validade_meses,
+           instrutor,
+           observacoes,
+           status,
+           renovada,
+           carga_horaria,
+           tipo_treinamento,
+           empresa_id,
+           renovacao_de,
+           created_at,
+           updated_at
+         )
+         SELECT f.id,
+                qt.id,
+                qt.codigo,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                'CONCLUIDA',
+                0,
+                ?,
+                ?,
+                f.empresa_id,
+                NULL,
+                datetime('now'),
+                datetime('now')
+           FROM funcionarios f
+           INNER JOIN qualificacoes_tipos qt
+             ON qt.id = ?
+            AND qt.empresa_id = f.empresa_id
+            AND qt.deleted_at IS NULL
+          WHERE f.id = ?
+            AND f.empresa_id = ?
+            AND f.deleted_at IS NULL
+         ON CONFLICT DO NOTHING`,
+      )
+      .bind(
+        input.category,
+        input.completionDate,
+        input.expiryDate,
+        input.validityMonths,
+        input.instructor,
+        input.observations,
+        input.workload,
+        input.trainingType,
+        input.qualificationId,
+        input.funcionarioId,
+        input.empresaId,
+      ),
+  );
+
+  // Reentrant repair: if the target row already existed (created by an
+  // earlier partial/faulted attempt, or by a legacy writer that never set
+  // renovacao_de), backfill it here — a no-op UPDATE if already correct.
+  // `qh` (the outer, exactly-one-row target) is correlated into the
+  // predecessor subquery so the target can never match itself, without
+  // needing to know its id before the UPDATE runs.
+  statements.push(
+    db
+      .prepare(
+        `UPDATE qualificacoes_historico AS qh
+            SET renovacao_de = (
+              SELECT pred.id
+                FROM qualificacoes_historico pred
+               WHERE pred.empresa_id = qh.empresa_id
+                 AND pred.funcionario_id = qh.funcionario_id
+                 AND UPPER(COALESCE(pred.qualificacao_codigo, '')) = UPPER(qh.qualificacao_codigo)
+                 AND pred.id <> qh.id
+                 AND pred.deleted_at IS NULL
+                 AND UPPER(COALESCE(pred.status, '')) NOT IN ('PLANEJADA', 'PLANEJADO', 'CANCELADA', 'CANCELADO')
+                 AND (
+                   date(COALESCE(pred.data_conclusao, '1900-01-01')) < date(qh.data_conclusao)
+                   OR (
+                     date(COALESCE(pred.data_conclusao, '1900-01-01')) = date(qh.data_conclusao)
+                     AND pred.id < qh.id
+                   )
+                 )
+               ORDER BY date(COALESCE(pred.data_conclusao, '1900-01-01')) DESC, pred.id DESC
+               LIMIT 1
+            ),
+                updated_at = datetime('now')
+          WHERE qh.empresa_id = ?
+            AND qh.funcionario_id = ?
+            AND UPPER(COALESCE(qh.qualificacao_codigo, '')) = UPPER(?)
+            AND qh.data_conclusao = ?
+            AND qh.deleted_at IS NULL
+            AND UPPER(COALESCE(qh.status, '')) = 'CONCLUIDA'`,
+      )
+      .bind(input.empresaId, input.funcionarioId, qualificationCode, input.completionDate),
+  );
+
+  statements.push(
+    buildOlderHistoryUpdate(db, {
+      empresaId: input.empresaId,
+      funcionarioId: input.funcionarioId,
+      qualificationId: input.qualificationId,
+      qualificationCode,
+      completionDate: input.completionDate,
+    }),
+  );
+
+  const results = await db.batch(statements);
+  assertBatchSucceeded(results, 'O settlement da qualificação');
+  const created = Number(results[insertResultIndex]?.meta?.changes || 0) > 0;
+
+  const row = await findExactHistory(db, {
+    empresaId: input.empresaId,
+    funcionarioId: input.funcionarioId,
+    qualificationCode,
+    completionDate: input.completionDate,
+  });
+
+  if (!row) {
+    throw new QualificationAtomicError(
+      'QUALIFICATION_CORE_NOT_CREATED',
+      409,
+      'A qualificação não foi settled; funcionário ou tipo não pertence ao tenant informado',
+    );
+  }
+
+  return {
+    id: row.id,
+    action: created ? 'created' : 'idempotent',
+    predecessorId: row.renovacao_de ?? null,
+  };
+}
+
 export async function createQualificationHistoryAtomic(
   db: D1Database,
   input: AtomicQualificationCreateInput,
@@ -682,6 +890,47 @@ export async function createQualificationHistoryAtomic(
       completionDate: input.completionDate,
     }),
   );
+
+  // Closes the historical gap where this plain-create path never linked the
+  // new/found CONCLUIDA row into the canonical renewal chain — only PLANEJADA
+  // → CONCLUIDA realization gets renovacao_de wired here; a still-PLANEJADA
+  // create must not join the chain until it is genuinely realized. Reentrant:
+  // a no-op if renovacao_de is already correct.
+  if (input.status === 'CONCLUIDA') {
+    statements.push(
+      db
+        .prepare(
+          `UPDATE qualificacoes_historico AS qh
+              SET renovacao_de = (
+                SELECT pred.id
+                  FROM qualificacoes_historico pred
+                 WHERE pred.empresa_id = qh.empresa_id
+                   AND pred.funcionario_id = qh.funcionario_id
+                   AND UPPER(COALESCE(pred.qualificacao_codigo, '')) = UPPER(qh.qualificacao_codigo)
+                   AND pred.id <> qh.id
+                   AND pred.deleted_at IS NULL
+                   AND UPPER(COALESCE(pred.status, '')) NOT IN ('PLANEJADA', 'PLANEJADO', 'CANCELADA', 'CANCELADO')
+                   AND (
+                     date(COALESCE(pred.data_conclusao, '1900-01-01')) < date(qh.data_conclusao)
+                     OR (
+                       date(COALESCE(pred.data_conclusao, '1900-01-01')) = date(qh.data_conclusao)
+                       AND pred.id < qh.id
+                     )
+                   )
+                 ORDER BY date(COALESCE(pred.data_conclusao, '1900-01-01')) DESC, pred.id DESC
+                 LIMIT 1
+              ),
+                  updated_at = datetime('now')
+            WHERE qh.empresa_id = ?
+              AND qh.funcionario_id = ?
+              AND UPPER(COALESCE(qh.qualificacao_codigo, '')) = UPPER(?)
+              AND qh.data_conclusao = ?
+              AND qh.deleted_at IS NULL
+              AND UPPER(COALESCE(qh.status, '')) = 'CONCLUIDA'`,
+        )
+        .bind(input.empresaId, input.funcionarioId, qualificationCode, input.completionDate),
+    );
+  }
 
   if (input.requiredRelation) {
     appendRequiredRelationStatements(statements, db, {
