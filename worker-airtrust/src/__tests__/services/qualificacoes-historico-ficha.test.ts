@@ -194,6 +194,12 @@ describe('upsertQualificacaoHistoricoDaFicha', () => {
         },
       ],
       [
+        'SET renovacao_de = (',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+      [
         'SELECT * FROM qualificacoes_historico WHERE id=? AND deleted_at IS NULL',
         {
           first: () => ({
