@@ -203,36 +203,46 @@ export async function assertAlertaEmpresa(
 
 export async function resolveFuncionarioId(c: FrmsAppContext): Promise<string> {
   const userId = String(c.get('userId') || '0');
+  const empresaId = getEmpresaIdSafe(c);
 
-  const byFuncionario = await c.env.DB.prepare(
-    `SELECT id
-       FROM funcionarios
-      WHERE id = ?
-        AND deleted_at IS NULL
-        AND COALESCE(ativo, 1) = 1
-        AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-      LIMIT 1`,
-  )
-    .bind(Number(userId))
-    .first<{ id: number }>();
-
-  if (byFuncionario?.id) return String(byFuncionario.id);
-
+  // Primary path: prefer the explicit usuarios.funcionario_id link, tenant-scoped.
+  // This must run before any raw-userId-as-funcionario_id fallback, otherwise a
+  // userId that happens to collide with another tenant's funcionarios.id would be
+  // returned as if it were the caller's own employee record.
   const byUsuario = await c.env.DB.prepare(
     `SELECT f.id
        FROM usuarios u
        JOIN funcionarios f ON f.id = u.funcionario_id
       WHERE u.id = ?
+        AND f.empresa_id = ?
         AND (u.deleted_at IS NULL OR u.deleted_at = 0)
         AND f.deleted_at IS NULL
         AND COALESCE(f.ativo, 1) = 1
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
       LIMIT 1`,
   )
-    .bind(Number(userId))
+    .bind(Number(userId), empresaId)
     .first<{ id: number }>();
 
   if (byUsuario?.id) return String(byUsuario.id);
+
+  // Legacy fallback for tokens whose sub is itself a funcionarios.id. Still
+  // tenant-scoped: funcionarios.id is not globally unique across tenants, so
+  // this must never be a blind numeric passthrough.
+  const byFuncionario = await c.env.DB.prepare(
+    `SELECT id
+       FROM funcionarios
+      WHERE id = ?
+        AND empresa_id = ?
+        AND deleted_at IS NULL
+        AND COALESCE(ativo, 1) = 1
+        AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
+      LIMIT 1`,
+  )
+    .bind(Number(userId), empresaId)
+    .first<{ id: number }>();
+
+  if (byFuncionario?.id) return String(byFuncionario.id);
 
   return userId;
 }
