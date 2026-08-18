@@ -34,10 +34,12 @@ const LARGE_FILE_LINE_CAPS = {
   // wired into /minhas, /minhas-ead, /:id, /curso/:id and PATCH /:id/status;
   // qualification_link_state and certificate_state exposed for the
   // CardMeusEAD Rever/certificate UI).
-  // Cap raised 2026-07-30: counted 3558 (PR #548 hardening — curso_id added
-  // to SCORM/finalizar/PATCH queries; gerar_qualificacao_ao_concluir added to
-  // PATCH status query; canonical completion params expanded; lint fix).
-  'routes/lms-matriculas.ts': 3558,
+  // Cap raised 2026-08-18: counted 3564 (fix/lms-tenant-relations-fail-closed
+  // — added empresa_id predicates to lms_cursos/qualificacoes_tipos/
+  // funcionarios/qualificacoes_historico joins across ~10 sites so a
+  // corrupted cross-tenant curso_id/funcionario_id/qualificacao_id can no
+  // longer leak another tenant's data or feed a completion write).
+  'routes/lms-matriculas.ts': 3565,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   'routes/frms-fadiga-checkin.ts': 2021,
   // Cap raised 2026-07-31: counted 2548 after scoped short-lived asset sessions,

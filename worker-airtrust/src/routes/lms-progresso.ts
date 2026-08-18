@@ -232,8 +232,8 @@ app.post('/xapi/statements', async (c) => {
         qt.validade AS qualificacao_validade,
         qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
       FROM lms_matriculas m
-      JOIN lms_cursos c ON c.id = m.curso_id
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
+      JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.empresa_id = m.empresa_id
       WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
     `,
     )

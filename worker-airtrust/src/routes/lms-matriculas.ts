@@ -276,6 +276,7 @@ async function readMatriculaForCourseList(
          FROM lms_matriculas m
          LEFT JOIN funcionarios f
            ON f.id = m.funcionario_id
+          AND f.empresa_id = m.empresa_id
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
@@ -618,12 +619,14 @@ app.get('/minhas-ead', async (c) => {
           ELSE 'NOT_REQUIRED'
         END AS certificate_state
       FROM lms_matriculas m
-      JOIN lms_cursos c ON c.id = m.curso_id
+      JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
       LEFT JOIN qualificacoes_historico qh
         ON qh.id = m.qualificacao_historico_id
+        AND qh.empresa_id = m.empresa_id
         AND qh.deleted_at IS NULL
       LEFT JOIN qualificacoes_tipos qt
         ON qt.id = qh.qualificacao_id
+        AND qt.empresa_id = m.empresa_id
         AND qt.deleted_at IS NULL
       WHERE m.funcionario_id = ?
         AND m.empresa_id = ?
@@ -680,7 +683,7 @@ app.get('/minhas', async (c) => {
     .prepare(
       `SELECT COUNT(*) AS n
          FROM lms_matriculas m
-         JOIN lms_cursos c ON c.id = m.curso_id
+         JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
         WHERE m.funcionario_id = ?
           AND m.empresa_id = ?
           AND m.deleted_at IS NULL
@@ -696,7 +699,7 @@ app.get('/minhas', async (c) => {
         c.titulo, c.categoria, c.carga_horaria_minutos, c.thumbnail_r2_key,
           c.tipo_conteudo, c.scorm_versao, c.publicado
       FROM lms_matriculas m
-      JOIN lms_cursos c ON c.id = m.curso_id
+      JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
       WHERE m.funcionario_id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
         AND c.deleted_at IS NULL
       ORDER BY m.updated_at DESC
@@ -771,6 +774,7 @@ app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
                    SELECT 1
                      FROM funcionarios fx
                     WHERE fx.id = m.funcionario_id
+                      AND fx.empresa_id = m.empresa_id
                       AND fx.deleted_at IS NULL
                       AND COALESCE(fx.ativo, 1) = 1
                       AND UPPER(COALESCE(NULLIF(TRIM(fx.status), ''), 'ATIVO')) = 'ATIVO'
@@ -794,6 +798,7 @@ app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
       FROM lms_matriculas m
       LEFT JOIN funcionarios f
         ON f.id = m.funcionario_id
+       AND f.empresa_id = m.empresa_id
        AND f.deleted_at IS NULL
        AND COALESCE(f.ativo, 1) = 1
        AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
@@ -844,14 +849,15 @@ app.get('/:id', async (c) => {
           qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
         f.nome AS funcionario_nome
       FROM lms_matriculas m
-      JOIN lms_cursos c ON c.id = m.curso_id
-        LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
+      JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
+        LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.empresa_id = m.empresa_id
         LEFT JOIN lms_h5p_conteudos h
           ON h.empresa_id = c.empresa_id
          AND h.r2_key = c.scorm_package_r2_prefix
          AND h.deleted_at IS NULL
       LEFT JOIN funcionarios f
         ON f.id = m.funcionario_id
+       AND f.empresa_id = m.empresa_id
        AND f.deleted_at IS NULL
        AND COALESCE(f.ativo, 1) = 1
        AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
@@ -860,6 +866,7 @@ app.get('/:id', async (c) => {
           SELECT 1
             FROM funcionarios fx
            WHERE fx.id = m.funcionario_id
+             AND fx.empresa_id = m.empresa_id
              AND fx.deleted_at IS NULL
              AND COALESCE(fx.ativo, 1) = 1
              AND UPPER(COALESCE(NULLIF(TRIM(fx.status), ''), 'ATIVO')) = 'ATIVO'
@@ -1438,8 +1445,8 @@ app.post('/scorm/commit', async (c) => {
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
         qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
       FROM lms_matriculas m
-      JOIN lms_cursos c ON c.id = m.curso_id
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
+      JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.empresa_id = m.empresa_id
       WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
     `,
     )
@@ -1990,8 +1997,8 @@ app.post('/:id/finalizar', async (c) => {
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
               qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
          FROM lms_matriculas m
-         JOIN lms_cursos c ON c.id = m.curso_id
-         LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
+         JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
+         LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.empresa_id = m.empresa_id
         WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL`,
     )
     .bind(matriculaId, empresaId)
@@ -2236,7 +2243,7 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
               qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
          FROM lms_matriculas m
          JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
-         LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.deleted_at IS NULL
+         LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.empresa_id = m.empresa_id AND qt.deleted_at IS NULL
         WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL`,
     )
     .bind(matriculaId, empresaId)
