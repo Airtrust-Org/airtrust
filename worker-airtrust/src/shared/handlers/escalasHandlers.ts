@@ -198,27 +198,40 @@ registerHandler('escalas', 'SIMULADOR_PENDENTE_VENCENDO', async (db, _tipo, payl
 });
 
 registerHandler('escalas', 'HOSPEDAGEM_RESERVADA', async (db, _tipo, payload) => {
-  if (!payload.escala_tripulacao_id) return;
+  if (!payload.escala_tripulacao_id || !payload.empresa_id) return;
+  // Defense-in-depth: escala_tripulacoes has no empresa_id column of its own, so
+  // ownership is verified via its parent escalas_mensais row before writing.
   await db
     .prepare(
       `UPDATE escala_tripulacoes
        SET observacoes = COALESCE(observacoes,'') || ' [Hospedagem: ' || ? || ']',
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND deleted_at IS NULL`,
+       WHERE id = ? AND deleted_at IS NULL
+         AND escala_id IN (
+           SELECT id FROM escalas_mensais WHERE empresa_id = ? AND deleted_at IS NULL
+         )`,
     )
-    .bind(String(payload.hospedagem_nome ?? 'reservada'), String(payload.escala_tripulacao_id))
+    .bind(
+      String(payload.hospedagem_nome ?? 'reservada'),
+      String(payload.escala_tripulacao_id),
+      Number(payload.empresa_id),
+    )
     .run();
 });
 
 registerHandler('escalas', 'HOSPEDAGEM_CANCELADA', async (db, _tipo, payload) => {
-  if (!payload.escala_tripulacao_id) return;
+  if (!payload.escala_tripulacao_id || !payload.empresa_id) return;
+  // Defense-in-depth: same ownership check as HOSPEDAGEM_RESERVADA above.
   await db
     .prepare(
       `UPDATE escala_tripulacoes
        SET observacoes = REPLACE(COALESCE(observacoes,''), ' [Hospedagem: reservada]', ' [Hospedagem: cancelada]'),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND deleted_at IS NULL`,
+       WHERE id = ? AND deleted_at IS NULL
+         AND escala_id IN (
+           SELECT id FROM escalas_mensais WHERE empresa_id = ? AND deleted_at IS NULL
+         )`,
     )
-    .bind(String(payload.escala_tripulacao_id))
+    .bind(String(payload.escala_tripulacao_id), Number(payload.empresa_id))
     .run();
 });

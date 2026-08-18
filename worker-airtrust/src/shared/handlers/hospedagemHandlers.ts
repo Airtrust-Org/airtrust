@@ -39,6 +39,20 @@ export async function handleTripulanteAlocadoHospedagem(
   const dataInicio = payload.data_inicio ? String(payload.data_inicio) : null;
   const dataFim = payload.data_fim ? String(payload.data_fim) : null;
 
+  // Defense-in-depth: prove the referenced funcionario belongs to the event's
+  // empresa_id before inserting a tenant-stamped hospedagem_sugestao that
+  // references it. The baseOrigem-enrichment lookup above only runs when
+  // base_origem is missing from the payload, so it can't be relied on as
+  // the sole ownership proof.
+  if (!Number.isFinite(empresaId) || empresaId <= 0) return;
+  const owned = await db
+    .prepare(
+      `SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(funcionarioId, empresaId)
+    .first<{ id: number }>();
+  if (!owned) return;
+
   await db
     .prepare(
       `INSERT INTO hospedagem_sugestoes
@@ -80,8 +94,10 @@ registerHandler('hospedagem', 'TRIPULANTE_ALOCADO', async (db, _tipo, payload) =
 });
 
 registerHandler('hospedagem', 'FUNCIONARIO_INATIVADO', async (db, _tipo, payload) => {
-  if (!payload.funcionario_id) return;
+  if (!payload.funcionario_id || !payload.empresa_id) return;
 
+  // Defense-in-depth: hospedagens has no empresa_id column of its own, so ownership
+  // is verified via the referenced funcionario before writing.
   await db
     .prepare(
       `UPDATE hospedagens
@@ -90,8 +106,11 @@ registerHandler('hospedagem', 'FUNCIONARIO_INATIVADO', async (db, _tipo, payload
            updated_at = CURRENT_TIMESTAMP
        WHERE funcionario_id = ?
          AND status IN ('reservado', 'confirmado')
-         AND deleted_at IS NULL`,
+         AND deleted_at IS NULL
+         AND funcionario_id IN (
+           SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+         )`,
     )
-    .bind(Number(payload.funcionario_id))
+    .bind(Number(payload.funcionario_id), Number(payload.funcionario_id), Number(payload.empresa_id))
     .run();
 });

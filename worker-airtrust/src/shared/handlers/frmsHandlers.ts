@@ -3,6 +3,17 @@ import { registerHandler } from '../eventProcessor';
 
 async function upsertCargaTrabalho(db: D1Database, payload: Record<string, unknown>) {
   if (!payload.funcionario_id || !payload.empresa_id) return;
+
+  // Defense-in-depth: prove the referenced funcionario belongs to the event's
+  // empresa_id before inserting a tenant-stamped row that references it.
+  const owned = await db
+    .prepare(
+      `SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(String(payload.funcionario_id), Number(payload.empresa_id))
+    .first<{ id: number }>();
+  if (!owned) return;
+
   await db
     .prepare(
       `INSERT OR IGNORE INTO frms_carga_trabalho
@@ -31,13 +42,15 @@ registerHandler('frms', 'TRIPULANTE_ALTERADO', async (db, _tipo, payload) => {
 });
 
 registerHandler('frms', 'TRIPULANTE_REMOVIDO', async (db, _tipo, payload) => {
-  if (!payload.tripulacao_id) return;
+  if (!payload.tripulacao_id || !payload.empresa_id) return;
+  // Defense-in-depth: scope by empresa_id in addition to escala_tripulacao_id so a
+  // payload id that (due to an upstream bug) belongs to another tenant cannot delete rows.
   await db
     .prepare(
       `UPDATE frms_carga_trabalho
        SET deleted_at = CURRENT_TIMESTAMP
-       WHERE escala_tripulacao_id = ? AND deleted_at IS NULL`,
+       WHERE escala_tripulacao_id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
-    .bind(String(payload.tripulacao_id))
+    .bind(String(payload.tripulacao_id), Number(payload.empresa_id))
     .run();
 });
