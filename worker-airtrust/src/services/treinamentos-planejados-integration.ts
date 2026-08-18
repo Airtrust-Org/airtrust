@@ -60,6 +60,7 @@ type HistoricoPlanejadoRow = {
   status: string | null;
   observacoes: string | null;
   data_conclusao: string | null;
+  renovacao_de?: number | null;
 };
 
 type SolicitacaoRow = {
@@ -238,7 +239,7 @@ async function loadHistoricoById(
   return (
     (await db
       .prepare(
-        `SELECT id, funcionario_id, qualificacao_codigo, status, observacoes, data_conclusao
+        `SELECT id, funcionario_id, qualificacao_codigo, status, observacoes, data_conclusao, renovacao_de
            FROM qualificacoes_historico
           WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
@@ -669,6 +670,7 @@ async function concluirHistoricoPlanejado(
     // A4: correção de data em qualificação JÁ concluída — recalcula data/vencimento do
     // histórico (sem duplicar) e mantém o vínculo idempotente coerente. RENOVADA não é
     // re-datada (já foi superada por um registro mais novo).
+    let dateCorrected = false;
     if (
       currentStatus === QUALIFICACAO_STATUS.CONCLUIDA &&
       existing?.data_conclusao &&
@@ -691,6 +693,7 @@ async function concluirHistoricoPlanejado(
         )
         .bind(dataConclusaoCorrigida, dataVencimentoCorrigida, upserted.historicoId, empresaId)
         .run();
+      dateCorrected = true;
     }
     await ensureGeneratedQualificationLink(
       db,
@@ -700,7 +703,25 @@ async function concluirHistoricoPlanejado(
       upserted.historicoId,
       dataConclusaoCorrigida,
     );
-    return false;
+
+    // TRAIN-002 retry-convergence: even on this idempotent-reuse path (no
+    // status transition), repair a missing renovacao_de chain link — a
+    // prior attempt may have transitioned status to CONCLUIDA and then
+    // faulted before linking the predecessor. Returning early here without
+    // this repair would let the chain stay broken forever on retry.
+    let chainRepaired = false;
+    if (currentStatus === QUALIFICACAO_STATUS.CONCLUIDA && existing && !existing.renovacao_de) {
+      chainRepaired = await linkImmediatePredecessorIfMissing(
+        db,
+        empresaId,
+        evento.qualificacao_codigo,
+        participante.funcionario_id,
+        upserted.historicoId,
+        existing.data_conclusao || dataConclusaoCorrigida,
+      );
+    }
+
+    return dateCorrected || chainRepaired;
   }
 
   const dataConclusao = participante.data_conclusao_efetiva as string;
@@ -712,29 +733,6 @@ async function concluirHistoricoPlanejado(
     dataConclusao,
     validadeMeses,
     Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1,
-  );
-
-  await db
-    .prepare(
-      `UPDATE qualificacoes_historico
-          SET status = '${QUALIFICACAO_STATUS.CONCLUIDA}',
-              data_conclusao = ?,
-              data_vencimento = ?,
-              data_confirmacao = datetime('now'),
-              confirmada_por = NULL,
-              updated_at = datetime('now')
-        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-    )
-    .bind(dataConclusao, dataVencimento, upserted.historicoId, empresaId)
-    .run();
-
-  await ensureGeneratedQualificationLink(
-    db,
-    empresaId,
-    evento,
-    participante,
-    upserted.historicoId,
-    dataConclusao,
   );
 
   // M5: ao concluir um treinamento (inclusive retroativo), só pode ser marcado como
@@ -764,18 +762,57 @@ async function concluirHistoricoPlanejado(
     )
     .first<{ id: number }>();
 
-  if (anterior?.id) {
-    await db
+  // TRAIN-002: transition, chain-link, and predecessor materialization now
+  // commit atomically in one db.batch() — previously these were 2-3
+  // separate .run() calls, so a fault between them could leave a CONCLUIDA
+  // row with renovacao_de never set (the canonical chain invariant broken)
+  // or a predecessor never materialized RENOVADA.
+  const statements = [
+    db
       .prepare(
         `UPDATE qualificacoes_historico
-            SET renovada = 1,
-                status = 'RENOVADA',
+            SET status = '${QUALIFICACAO_STATUS.CONCLUIDA}',
+                data_conclusao = ?,
+                data_vencimento = ?,
+                data_confirmacao = datetime('now'),
+                confirmada_por = NULL,
                 updated_at = datetime('now')
           WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
-      .bind(anterior.id, empresaId)
-      .run();
+      .bind(dataConclusao, dataVencimento, upserted.historicoId, empresaId),
+  ];
+
+  if (anterior?.id) {
+    statements.push(
+      db
+        .prepare(
+          `UPDATE qualificacoes_historico
+              SET renovacao_de = ?, updated_at = datetime('now')
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(anterior.id, upserted.historicoId, empresaId),
+      db
+        .prepare(
+          `UPDATE qualificacoes_historico
+              SET renovada = 1,
+                  status = 'RENOVADA',
+                  updated_at = datetime('now')
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(anterior.id, empresaId),
+    );
   }
+
+  await db.batch(statements);
+
+  await ensureGeneratedQualificationLink(
+    db,
+    empresaId,
+    evento,
+    participante,
+    upserted.historicoId,
+    dataConclusao,
+  );
 
   try {
     await publishQualificacaoEvent(
@@ -792,6 +829,62 @@ async function concluirHistoricoPlanejado(
     console.error('planned_training_publish_event_error', error);
   }
 
+  return true;
+}
+
+/**
+ * TRAIN-002 retry-convergence repair: called only on the idempotent-reuse
+ * path (target already CONCLUIDA) when renovacao_de is missing — links it
+ * to the same immediate predecessor the fresh-realization path would have
+ * picked, and materializes that predecessor RENOVADA if it wasn't already.
+ * A no-op (returns false) if there is no eligible predecessor.
+ */
+async function linkImmediatePredecessorIfMissing(
+  db: D1Database,
+  empresaId: number,
+  qualificacaoCodigo: string,
+  funcionarioId: number,
+  historicoId: number,
+  dataConclusao: string,
+): Promise<boolean> {
+  const anterior = await db
+    .prepare(
+      `SELECT id
+         FROM qualificacoes_historico
+        WHERE empresa_id = ?
+          AND funcionario_id = ?
+          AND qualificacao_codigo = ?
+          AND id <> ?
+          AND deleted_at IS NULL
+          AND ${sqlStatusEqualsAny('status', COMPLETED_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA)}
+          AND date(COALESCE(data_conclusao, '1900-01-01')) < date(?)
+        ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
+        LIMIT 1`,
+    )
+    .bind(empresaId, funcionarioId, qualificacaoCodigo, historicoId, dataConclusao)
+    .first<{ id: number }>();
+
+  if (!anterior?.id) return false;
+
+  const statements = [
+    db
+      .prepare(
+        `UPDATE qualificacoes_historico
+            SET renovacao_de = ?, updated_at = datetime('now')
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND renovacao_de IS NULL`,
+      )
+      .bind(anterior.id, historicoId, empresaId),
+    db
+      .prepare(
+        `UPDATE qualificacoes_historico
+            SET renovada = 1,
+                status = 'RENOVADA',
+                updated_at = datetime('now')
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND COALESCE(renovada, 0) = 0`,
+      )
+      .bind(anterior.id, empresaId),
+  ];
+  await db.batch(statements);
   return true;
 }
 
