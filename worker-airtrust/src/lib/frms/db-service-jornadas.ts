@@ -1316,6 +1316,7 @@ export async function importarSimulador(
 
 export async function listarTripulantesAtivos(
   db: D1Database,
+  empresaId?: number,
 ): Promise<Array<{ id: number; nome: string; empresa_id: number | null }>> {
   // Buscar tripulantes que têm jornadas FRMS registradas,
   // incluindo empresa_id do funcionário como fonte autoritativa de tenant
@@ -1327,8 +1328,10 @@ export async function listarTripulantesAtivos(
        FROM frms_jornada j
        LEFT JOIN funcionarios p ON p.id = CAST(j.tripulante_id AS INTEGER) AND p.deleted_at IS NULL
        WHERE j.deleted_at IS NULL
+         AND (? IS NULL OR p.empresa_id = ?)
        ORDER BY nome`,
     )
+    .bind(empresaId ?? null, empresaId ?? null)
     .all<{ id: number; nome: string; empresa_id: number | null }>();
   return rows.results || [];
 }
@@ -1368,13 +1371,16 @@ export async function reprocessarTripulanteCompleto(
  * Chamado automaticamente quando configurações são alteradas.
  * Garante que fatorização, acúmulo rolling e alertas reflitam os novos parâmetros.
  */
-export async function reprocessarTodosTripulantes(db: D1Database): Promise<{
+export async function reprocessarTodosTripulantes(
+  db: D1Database,
+  empresaId?: number,
+): Promise<{
   tripulantes: number;
   jornadas: number;
   erros: number;
 }> {
   const limites = await carregarLimites(db);
-  const tripulantes = await listarTripulantesAtivos(db);
+  const tripulantes = await listarTripulantesAtivos(db, empresaId);
   let totalJornadas = 0;
   let erros = 0;
   for (const trip of tripulantes) {

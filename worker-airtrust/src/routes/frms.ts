@@ -2190,12 +2190,20 @@ frmsRoutes.post(
     const impersonationDenied = await assertNoImpersonation(c, 'FRMS_REPROCESS_IMPERSONATION_BLOCKED');
     if (impersonationDenied) return impersonationDenied;
 
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Contexto de empresa inválido', code: 'INVALID_TENANT_CONTEXT' },
+        403,
+      );
+    }
+
     const operationId = crypto.randomUUID();
     const startedAt = Date.now();
     c.executionCtx.waitUntil(
       (async () => {
         try {
-          const result = await reprocessarTodosTripulantes(c.env.DB);
+          const result = await reprocessarTodosTripulantes(c.env.DB, empresaId);
           await recordMaintenanceAudit(c, {
             action: 'FRMS_REPROCESS_ALL',
             module: 'frms',
@@ -2243,7 +2251,14 @@ frmsRoutes.get(
   '/tripulantes-ativos',
   requireRole('admin'),
   safe(async (c) => {
-    const tripulantes = await listarTripulantesAtivos(c.env.DB);
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Contexto de empresa inválido', code: 'INVALID_TENANT_CONTEXT' },
+        403,
+      );
+    }
+    const tripulantes = await listarTripulantesAtivos(c.env.DB, empresaId);
     return c.json({ success: true, data: tripulantes });
   }),
 );
