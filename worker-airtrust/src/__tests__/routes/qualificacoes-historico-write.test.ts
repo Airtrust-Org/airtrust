@@ -106,7 +106,9 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
 
       const executeRun = async (args: unknown[]) => {
         calls.push({ query, args, method: 'run' });
-        return handler.run ? handler.run(args) : { meta: { changes: 1, last_row_id: 0 } };
+        return handler.run
+          ? handler.run(args)
+          : { success: true, meta: { changes: 1, last_row_id: 0 } };
       };
 
       return {
@@ -119,6 +121,13 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
           run: async () => executeRun(args),
         }),
       };
+    }),
+    batch: vi.fn(async (statements: Array<{ run: () => Promise<unknown> }>) => {
+      const results = [];
+      for (const statement of statements) {
+        results.push(await statement.run());
+      }
+      return results;
     }),
   } as unknown as D1Database;
 
@@ -238,6 +247,7 @@ describe('qualificacoes historico write router', () => {
       'RECORRENTE',
       8,
       123,
+      1,
     ]);
 
     const retryCall = calls.find(
@@ -356,15 +366,22 @@ describe('qualificacoes historico write router', () => {
         },
       ],
       [
-        "COALESCE(status, 'CONCLUIDA') = 'CONCLUIDA'",
+        // reconcileQualificationLineageAtomic's lineage SELECT — 222 is the
+        // older predecessor, 321 the just-confirmed target (now CONCLUIDA).
+        "ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) ASC, id ASC",
         {
-          first: () => ({ id: 222 }),
+          all: () => ({
+            results: [
+              { id: 222, status: 'CONCLUIDA', renovacao_de: null },
+              { id: 321, status: 'CONCLUIDA', renovacao_de: null },
+            ],
+          }),
         },
       ],
       [
-        "SET renovada = 1,\n                    status = 'RENOVADA'",
+        'SET renovacao_de = ?',
         {
-          run: () => ({ meta: { changes: 1 } }),
+          run: () => ({ success: true, meta: { changes: 1 } }),
         },
       ],
     ]);
@@ -395,10 +412,19 @@ describe('qualificacoes historico write router', () => {
     const renovarCall = calls.find(
       (call) =>
         call.method === 'run' &&
-        call.query.includes('SET renovada = 1') &&
-        call.query.includes("status = 'RENOVADA'"),
+        call.query.includes('SET renovacao_de = ?') &&
+        call.args[3] === 222,
     );
-    expect(renovarCall?.args).toEqual([222]);
+    // predecessor (222): renovacao_de=null (no predecessor of its own), renovada=1/RENOVADA.
+    expect(renovarCall?.args).toEqual([null, 1, 1, 222, 1]);
+    const targetCall = calls.find(
+      (call) =>
+        call.method === 'run' &&
+        call.query.includes('SET renovacao_de = ?') &&
+        call.args[3] === 321,
+    );
+    // target (321): renovacao_de=222 (the predecessor), renovada=0/CONCLUIDA.
+    expect(targetCall?.args).toEqual([222, 0, 0, 321, 1]);
     expect(publishQualificacaoEventMock).toHaveBeenCalledWith(
       db,
       'created',

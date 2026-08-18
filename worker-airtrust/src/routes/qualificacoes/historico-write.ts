@@ -41,6 +41,7 @@ import {
 } from '../../services/qualificacoes-g1-sem';
 import { ensureCertificateForQualification } from '../../services/ensure-certificate';
 import { requireOperationalAccess } from '../../services/operational-domain-access';
+import { reconcileQualificationLineageAtomic } from '../../services/qualification-history-atomic';
 
 // Qualificação histórico domain varies per row (via categoria.dominio_codigo
 // — can be OPERACOES, MANUTENCAO, etc.), so actions on an EXISTING record
@@ -1004,15 +1005,15 @@ writeRouter.put(
 
     await db
       .prepare(
-        `UPDATE qualificacoes_historico 
-         SET data_conclusao = ?, 
-             data_vencimento = ?, 
+        `UPDATE qualificacoes_historico
+         SET data_conclusao = ?,
+             data_vencimento = ?,
              instrutor = ?,
              observacoes = ?,
              tipo_treinamento = ?,
              carga_horaria = ?,
              updated_at = datetime('now')
-         WHERE id = ? AND deleted_at IS NULL`,
+         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
       .bind(
         data_conclusao,
@@ -1022,8 +1023,20 @@ writeRouter.put(
         tipoTreinamentoFinal,
         cargaHorariaEfetiva,
         id,
+        tenantCtx.empresaId,
       )
       .run();
+
+    // The edited data_conclusao may have moved this row's chronological
+    // position within its lineage — re-derive renovacao_de/predecessor
+    // materialization for the whole chain rather than leaving stale links.
+    if (existing.qualificacao_codigo) {
+      await reconcileQualificationLineageAtomic(db, {
+        empresaId: tenantCtx.empresaId,
+        funcionarioId: existing.funcionario_id,
+        qualificationCode: existing.qualificacao_codigo,
+      });
+    }
 
     let registroAtualizado = await db
       .prepare(
@@ -1318,24 +1331,37 @@ writeRouter.post(
     // Atualizar para CONCLUIDA
     await db
       .prepare(
-        `UPDATE qualificacoes_historico 
+        `UPDATE qualificacoes_historico
          SET status = '${QUALIFICACAO_STATUS.CONCLUIDA}',
-             data_confirmacao = datetime('now'), 
+             data_confirmacao = datetime('now'),
              confirmada_por = ?,
              updated_at = datetime('now')
-         WHERE id = ?`,
+         WHERE id = ? AND empresa_id = ?`,
       )
-      .bind(userId, id)
+      .bind(userId, id, tenantCtx.empresaId)
       .run();
 
-    // Opcional: renovar automaticamente a qualificação anterior equivalente
+    // Canonical settlement: successor.renovacao_de = predecessor.id is the
+    // SSOT invariant and must always be correct, independent of
+    // renovar_anterior (a legacy cosmetic knob kept for API compatibility —
+    // see below) — recomputes the whole lineage from current data_conclusao
+    // values rather than hand-picking a single predecessor.
     let registroAnteriorRenovadoId: number | null = null;
-    if (renovarAnterior) {
+    if (renovarAnterior && existing.qualificacao_codigo) {
+      const reconciled = await reconcileQualificationLineageAtomic(db, {
+        empresaId: tenantCtx.empresaId,
+        funcionarioId: existing.funcionario_id,
+        qualificationCode: existing.qualificacao_codigo,
+      });
+      const target = reconciled.chain.find((row) => row.id === id);
+      registroAnteriorRenovadoId = target?.renovacaoDe ?? null;
+    } else {
       const anterior = await db
         .prepare(
           `SELECT id
              FROM qualificacoes_historico
-            WHERE funcionario_id = ?
+            WHERE empresa_id = ?
+              AND funcionario_id = ?
               AND qualificacao_codigo = ?
               AND id <> ?
               AND deleted_at IS NULL
@@ -1344,7 +1370,7 @@ writeRouter.post(
             ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
             LIMIT 1`,
         )
-        .bind(existing.funcionario_id, existing.qualificacao_codigo, id)
+        .bind(tenantCtx.empresaId, existing.funcionario_id, existing.qualificacao_codigo, id)
         .first<{ id: number }>();
 
       if (anterior?.id) {
@@ -1354,9 +1380,9 @@ writeRouter.post(
                 SET renovada = 1,
                     status = 'RENOVADA',
                     updated_at = datetime('now')
-              WHERE id = ? AND deleted_at IS NULL`,
+              WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
           )
-          .bind(anterior.id)
+          .bind(anterior.id, tenantCtx.empresaId)
           .run();
         registroAnteriorRenovadoId = anterior.id;
       }
@@ -1509,6 +1535,18 @@ writeRouter.delete(
       )
       .bind(id, tenantCtx.empresaId)
       .run();
+
+    // Deleting a row that was a real successor (or predecessor) breaks the
+    // lineage — a predecessor left materialized RENOVADA with no real
+    // successor, or a gap where the chain should now skip past the deleted
+    // row entirely. Recompute the whole lineage from what remains.
+    if (exists.qualificacao_codigo) {
+      await reconcileQualificationLineageAtomic(db, {
+        empresaId: tenantCtx.empresaId,
+        funcionarioId: exists.funcionario_id,
+        qualificationCode: exists.qualificacao_codigo,
+      });
+    }
 
     // Invalidar cache
     await invalidateMaterializedStats(db);
