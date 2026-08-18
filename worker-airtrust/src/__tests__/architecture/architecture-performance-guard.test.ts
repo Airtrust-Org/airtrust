@@ -91,6 +91,11 @@ const SQL_PREPARE_CAPS = {
   // resolveLmsEffectiveProgress-enriched /minhas-ead and /curso/:id mapping
   // plus the observações UPDATE split out of the canonical completion path.
   'routes/lms-matriculas.ts': 48,
+  // New offender 2026-08-18 (fix/qualification-writer-convergence, TRAIN-002):
+  // +1 .prepare() for the renovacao_de chain-link UPDATE, split out from the
+  // status-transition UPDATE so both the fresh-realization and the
+  // idempotent-retry-repair paths can atomically batch it.
+  'services/treinamentos-planejados-integration.ts': 43,
 } as const;
 
 const HIGH_SQL_LIMIT_CAPS = {

@@ -67,6 +67,7 @@ type MockHistory = {
   data_conclusao: string | null;
   data_vencimento: string | null;
   renovada: number;
+  renovacao_de?: number | null;
 };
 
 type MockRequest = {
@@ -539,6 +540,20 @@ function createMockDb(state: MockState): D1Database {
 
         if (
           query.includes('UPDATE qualificacoes_historico') &&
+          query.includes('SET renovacao_de = ?')
+        ) {
+          const [renovacaoDe, historicoId, empresaId] = args as [number, number, number];
+          const history = state.histories.find(
+            (item) => item.id === historicoId && item.empresa_id === empresaId,
+          );
+          if (history) {
+            history.renovacao_de = renovacaoDe;
+          }
+          return { meta: { changes: history ? 1 : 0, last_row_id: 0 } };
+        }
+
+        if (
+          query.includes('UPDATE qualificacoes_historico') &&
           query.includes('SET renovada = 1')
         ) {
           const [historicoId, empresaId] = args as [number, number];
@@ -632,8 +647,28 @@ function createMockDb(state: MockState): D1Database {
         }),
       };
     },
-    // R1/R2/R3: sync to escala_eventos uses db.batch(); accept silently in unit tests.
-    batch: async () => [],
+    // Executes each already-bound statement via the same handlers as .run()
+    // when this mock models the query (so batched qualificacoes_historico
+    // writes actually mutate state and can be asserted on); statements this
+    // mock never modeled (e.g. escala_eventos sync) are silently accepted,
+    // preserving the previous blanket no-op behavior for those callers —
+    // R1/R2/R3 sync to escala_eventos is exercised via its own test suite,
+    // not this file.
+    batch: async (statements: Array<{ run: () => Promise<unknown> }>) => {
+      const results = [];
+      for (const statement of statements) {
+        try {
+          results.push(await statement.run());
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Unhandled run query')) {
+            results.push({ meta: { changes: 0, last_row_id: 0 } });
+            continue;
+          }
+          throw error;
+        }
+      }
+      return results;
+    },
   } as unknown as D1Database;
 }
 
@@ -1004,6 +1039,71 @@ describe('treinamentos planejados integration service', () => {
     // 900 é posterior -> NÃO pode ser marcado como renovado por conclusão retroativa.
     expect(byId(900).status).toBe('CONCLUIDA');
     expect(byId(900).renovada).toBe(0);
+    // TRAIN-002: renovacao_de aponta para o predecessor cronologicamente
+    // imediato (700, 2026-01-01) — nunca para 900, que é posterior a 801.
+    expect(byId(801).renovacao_de).toBe(700);
+  });
+
+  it('TRAIN-002: retry após conclusão parcial (status já CONCLUIDA, renovacao_de nunca setado) repara a cadeia sem duplicar nem pular o predecessor', async () => {
+    const state = buildBaseState('CONCLUIDO');
+    state.participants[0] = {
+      ...state.participants[0],
+      qualificacao_historico_id: 801,
+      presente: 1,
+      aprovado: 1,
+      resultado: 'APROVADO',
+      data_conclusao_efetiva: '2026-06-22',
+    };
+    state.histories = [
+      {
+        id: 700,
+        empresa_id: 1,
+        funcionario_id: 11,
+        qualificacao_id: 9,
+        qualificacao_codigo: 'CRM',
+        categoria: 'TREINAMENTO',
+        status: 'CONCLUIDA',
+        observacoes: 'Antigo',
+        data_conclusao: '2026-01-01',
+        data_vencimento: '2027-01-01',
+        renovada: 0,
+      },
+      // Simulates the exact fault scenario TRAIN-002 targets: a prior
+      // attempt already transitioned this row to CONCLUIDA but crashed
+      // before the chain-linking step — renovacao_de was never set and
+      // the predecessor (700) was never materialized RENOVADA.
+      {
+        id: 801,
+        empresa_id: 1,
+        funcionario_id: 11,
+        qualificacao_id: 9,
+        qualificacao_codigo: 'CRM',
+        categoria: 'TREINAMENTO',
+        status: 'CONCLUIDA',
+        observacoes: 'Origem: Treinamento Planejado #77',
+        data_conclusao: '2026-06-22',
+        data_vencimento: '2027-06-22',
+        renovada: 0,
+        renovacao_de: null,
+      },
+    ];
+    const db = createMockDb(state);
+
+    // Retry: must NOT return early/no-op just because status is already
+    // CONCLUIDA — must repair the missing chain link.
+    await syncTreinamentoPlanejadoIntegration({ db, empresaId: 1, treinamentoId: 77 });
+
+    const byId = (id: number) => state.histories.find((h) => h.id === id)!;
+    expect(byId(801).renovacao_de).toBe(700);
+    expect(byId(700).status).toBe('RENOVADA');
+    expect(byId(700).renovada).toBe(1);
+    expect(state.histories).toHaveLength(2); // no duplicate row created by the retry
+
+    // A second retry (N retries) must converge to the exact same state —
+    // no further mutation, no error, no duplication.
+    await syncTreinamentoPlanejadoIntegration({ db, empresaId: 1, treinamentoId: 77 });
+    expect(byId(801).renovacao_de).toBe(700);
+    expect(state.histories).toHaveLength(2);
   });
 
   it('M3: turma é encerrada (CONCLUIDO) quando todos os participantes têm resultado final', async () => {
