@@ -22,6 +22,10 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import {
+  createQualificationHistoryAtomic,
+  QualificationAtomicError,
+} from '../services/qualification-history-atomic';
+import {
   sincronizarSolicitacaoAgendadaComTreinamentoPlanejado,
   sincronizarSolicitacaoConcluidaComTreinamentoPlanejado,
 } from '../services/treinamentos-planejados-integration';
@@ -354,9 +358,9 @@ solicitacoesRoutes.post(
 
     await db
       .prepare(
-        "UPDATE solicitacoes_treinamento SET status = 'CONCLUIDA', data_realizada = ?, updated_at = ? WHERE id = ?",
+        "UPDATE solicitacoes_treinamento SET status = 'CONCLUIDA', data_realizada = ?, updated_at = ? WHERE id = ? AND empresa_id = ?",
       )
-      .bind(dataRealizada, now, id)
+      .bind(dataRealizada, now, id, empresaId)
       .run();
 
     const trainingSync = await sincronizarSolicitacaoConcluidaComTreinamentoPlanejado({
@@ -366,46 +370,70 @@ solicitacoesRoutes.post(
       dataRealizada,
     });
 
-    // Gerar qualificação quando a solicitação é conclusa e tem qualificacao_id
-    if (item.qualificacao_id && item.qualificacao_codigo && !trainingSync.qualificacaoHistoricoId) {
-      try {
-        const validadeMeses =
-          typeof item.qualificacao_validade === 'number' && item.qualificacao_validade > 0
-            ? item.qualificacao_validade
-            : 12;
-        const dataVencimento = new Date(dataRealizada);
-        dataVencimento.setMonth(dataVencimento.getMonth() + validadeMeses);
-        const dataVencimentoStr = dataVencimento.toISOString().slice(0, 10);
+    // Gera a qualificação quando a solicitação foi concluída sem estar
+    // vinculada a uma turma/treinamento planejado formal (ad-hoc) — o caso
+    // vinculado já converge via sincronizarSolicitacaoConcluidaComTreinamentoPlanejado
+    // -> concluirHistoricoPlanejado (TRAIN-002). Usa o mesmo primitive
+    // canônico usado pelos demais writers: tenant-scoped (INNER JOIN
+    // funcionarios/qualificacoes_tipos), atômico, e agora encadeia
+    // renovacao_de + materializa o predecessor imediato corretamente.
+    //
+    // O core desta solicitação (status CONCLUIDA) já foi persistido acima —
+    // uma falha aqui NUNCA pode ser mascarada como sucesso silencioso nem
+    // reportada como se nada tivesse sido salvo: retorna 409 explícito com
+    // committed=true/retryable=true, o mesmo contrato já usado em
+    // TRAINING_INTEGRATION_PENDING (treinamentos-planejados.ts).
+    let qualificacaoHistoricoId = trainingSync.qualificacaoHistoricoId ?? null;
+    if (item.qualificacao_id && item.qualificacao_codigo && !qualificacaoHistoricoId) {
+      const validadeMeses =
+        typeof item.qualificacao_validade === 'number' && item.qualificacao_validade > 0
+          ? item.qualificacao_validade
+          : 12;
+      const dataVencimento = new Date(dataRealizada);
+      dataVencimento.setMonth(dataVencimento.getMonth() + validadeMeses);
+      const dataVencimentoStr = dataVencimento.toISOString().slice(0, 10);
 
-        await db
-          .prepare(
-            `INSERT INTO qualificacoes_historico (
-               funcionario_id, qualificacao_id, qualificacao_codigo, tipo_codigo, codigo,
-               categoria, data_conclusao, data_vencimento, validade_meses, observacoes,
-               empresa_id, tipo, tipo_treinamento, status, origem_tipo, created_at, updated_at
-             ) VALUES (?, ?, ?, 'TREINAMENTO', ?, ?, ?, ?, ?, ?, ?, 'PRESENCIAL', ?, 'CONCLUIDA', 'PRESENCIAL', datetime('now'), datetime('now'))`,
-          )
-          .bind(
-            item.solicitante_id,
-            item.qualificacao_id,
-            item.qualificacao_codigo,
-            item.qualificacao_codigo,
-            item.qualificacao_categoria ?? 'TREINAMENTO',
-            dataRealizada,
-            dataVencimentoStr,
-            validadeMeses,
-            `Origem: Solicitação de Treinamento #${item.id}`,
-            empresaId,
-            item.tipo_treinamento ?? 'RECORRENTE',
-          )
-          .run();
+      try {
+        const result = await createQualificationHistoryAtomic(db, {
+          empresaId,
+          funcionarioId: item.solicitante_id,
+          qualificationId: item.qualificacao_id,
+          qualificationCode: item.qualificacao_codigo,
+          category: item.qualificacao_categoria ?? 'TREINAMENTO',
+          completionDate: dataRealizada,
+          expiryDate: dataVencimentoStr,
+          validityMonths: validadeMeses,
+          instructor: null,
+          observations: `Origem: Solicitação de Treinamento #${item.id}`,
+          status: 'CONCLUIDA',
+          workload: null,
+          trainingType: (item.tipo_treinamento as
+            | 'INICIAL'
+            | 'RECORRENTE'
+            | 'SEMESTRAL'
+            | 'UPGRADE'
+            | 'ESPECIFICO') || 'RECORRENTE',
+        });
+        qualificacaoHistoricoId = result.id;
       } catch (qualErr) {
-        console.error('[SOLICITACAO] Erro ao gerar qualificação ao concluir:', qualErr);
-        // não bloqueia a conclusão
+        console.error('[SOLICITACAO] Falha ao settle da qualificação ao concluir:', qualErr);
+        return c.json(
+          {
+            success: false,
+            error:
+              'Solicitação concluída, mas a qualificação não pôde ser garantida. Tente sincronizar novamente.',
+            code:
+              qualErr instanceof QualificationAtomicError
+                ? qualErr.code
+                : 'SOLICITACAO_QUALIFICATION_PENDING',
+            data: { id, committed: true, retryable: true },
+          },
+          409,
+        );
       }
     }
 
-    return c.json({ success: true });
+    return c.json({ success: true, data: { id, qualificacao_historico_id: qualificacaoHistoricoId } });
   },
 );
 
