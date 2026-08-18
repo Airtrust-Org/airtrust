@@ -26,6 +26,11 @@ import { enviarEmailAlert } from '../cron/notificacoes';
 import { isAdminRole, normalizeAirtrustRole } from '../utils/role-resolution';
 import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { isManagerPerfil } from '../services/setores-gestores';
+import {
+  cleanupExpiredRefreshTokens,
+  persistRefreshToken,
+  resolveAndRotateRefreshToken,
+} from '../services/auth-refresh-token';
 
 // Tipar variáveis adicionadas ao contexto pelo middleware auth()
 type AuthVars = {
@@ -40,7 +45,6 @@ type AuthVars = {
 const authRoutes = new Hono<{ Bindings: Env; Variables: AuthVars }>();
 const ACCESS_TOKEN_TTL_SECONDS = 30 * 60;
 const REFRESH_TOKEN_TTL_DAYS = 90;
-const MAX_ACTIVE_REFRESH_TOKENS_PER_USER = 8;
 
 // Tabela convites_usuarios criada via migration 0290 — não mais DDL em runtime.
 
@@ -372,67 +376,6 @@ async function issueAccessTokenForEmpresa(
     jwtSecret,
     ACCESS_TOKEN_TTL_SECONDS,
   );
-}
-
-async function cleanupExpiredRefreshTokens(db: D1Database): Promise<void> {
-  await db
-    .prepare(
-      `DELETE FROM refresh_tokens
-       WHERE expires_at <= datetime('now')`,
-    )
-    .run()
-    .catch(() => null);
-}
-
-async function enforceRefreshTokenLimit(db: D1Database, userId: number): Promise<void> {
-  const activeTokens = await db
-    .prepare(
-      `SELECT id
-       FROM refresh_tokens
-       WHERE user_id = ?
-         AND revoked_at IS NULL
-         AND expires_at > datetime('now')
-       ORDER BY datetime(created_at) DESC, id DESC`,
-    )
-    .bind(userId)
-    .all<{ id: number }>()
-    .catch(() => ({ results: [] as Array<{ id: number }> }));
-
-  const staleTokens = (activeTokens.results || []).slice(MAX_ACTIVE_REFRESH_TOKENS_PER_USER);
-
-  for (const token of staleTokens) {
-    await db
-      .prepare(
-        `UPDATE refresh_tokens
-         SET revoked_at = COALESCE(revoked_at, datetime('now'))
-         WHERE id = ?`,
-      )
-      .bind(token.id)
-      .run()
-      .catch(() => null);
-  }
-}
-
-async function persistRefreshToken(
-  db: D1Database,
-  payload: { userId: number; refreshToken: string; expiresAt: string; accessTokenJti: string },
-): Promise<void> {
-  await cleanupExpiredRefreshTokens(db);
-
-  await db
-    .prepare(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
-    )
-    .bind(payload.userId, payload.refreshToken, payload.expiresAt, payload.accessTokenJti)
-    .run()
-    .catch(() =>
-      db
-        .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
-        .bind(payload.userId, payload.refreshToken, payload.expiresAt)
-        .run(),
-    );
-
-  await enforceRefreshTokenLimit(db, payload.userId);
 }
 
 /**
@@ -1141,6 +1084,7 @@ authRoutes.post(
           refreshToken,
           expiresAt,
           accessTokenJti: jti,
+          empresaId,
         });
         logStep('refresh_token_saved', { userId: authenticatedUser.id });
       } catch (refreshErr) {
@@ -1242,39 +1186,10 @@ authRoutes.post(
 
       const db = c.env.DB;
 
-      type RefreshTokenRecord = {
-        user_id: number;
-        revoked_at: string | null;
-        expires_at: string;
-      } | null;
-      const refreshTokenRecord = await db
-        .prepare(
-          `
-        SELECT rt.user_id, rt.revoked_at, rt.expires_at
-        FROM refresh_tokens rt
-        WHERE rt.token = ?
-        LIMIT 1
-      `,
-        )
-        .bind(refreshToken)
-        .first<RefreshTokenRecord>();
-
-      if (!refreshTokenRecord) {
-        throw unauthorized('Refresh token inválido', 'INVALID_REFRESH_TOKEN');
-      }
-
-      if (refreshTokenRecord.revoked_at) {
-        throw unauthorized('Refresh token revogado', 'REFRESH_TOKEN_REVOKED');
-      }
-
-      const expiredRow = await db
-        .prepare(`SELECT CASE WHEN datetime(?) <= datetime('now') THEN 1 ELSE 0 END AS expired`)
-        .bind(refreshTokenRecord.expires_at)
-        .first<{ expired: number }>();
-
-      if (expiredRow?.expired) {
-        throw unauthorized('Refresh token expirado', 'REFRESH_TOKEN_EXPIRED');
-      }
+      // P0-AUTH-001/P1-AUTH-002: valida o refresh token (revogado/expirado/
+      // legado sem tenant/membership revogada) e rotaciona atomicamente via
+      // CAS para prevenir replay. Ver services/auth-refresh-token.ts.
+      const { empresaId: pinnedEmpresaId } = await resolveAndRotateRefreshToken(db, refreshToken);
 
       const { activeWhere } = await getUsuariosSchema(db);
 
@@ -1301,21 +1216,13 @@ authRoutes.post(
         .first<TokenRecord>();
 
       if (!tokenRecord) {
-        await db
-          .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
-          .bind(refreshToken)
-          .run()
-          .catch(() => null);
         throw unauthorized('Usuário inativo ou removido', 'USER_INACTIVE');
       }
 
       const jwtSecret = c.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET não configurado no ambiente');
       const userId = (tokenRecord as NonNullable<TokenRecord>).user_id;
-      const empresaId = await resolveUserEmpresaId(
-        db,
-        (tokenRecord as NonNullable<TokenRecord>).user_id,
-      );
+      const empresaId = pinnedEmpresaId ?? (await resolveUserEmpresaId(db, userId));
       const resolvedRole = await resolveAuthRoleForUser(db, userId, empresaId, tokenRecord.perfil);
 
       // Recarregar permissões individuais (overrides GRANT/DENY)
@@ -1344,20 +1251,18 @@ authRoutes.post(
         ACCESS_TOKEN_TTL_SECONDS,
       );
 
-      // Rotação de refresh token
+      // Rotação de refresh token. O token antigo já foi revogado atomicamente
+      // pelo CAS acima — aqui apenas persistimos o novo, pinado na mesma
+      // empresa (quando a coluna existir).
       const newRefreshToken = generateRefreshToken();
       const newExpiresAt = getRefreshTokenExpiry(REFRESH_TOKEN_TTL_DAYS);
-
-      await db
-        .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
-        .bind(refreshToken)
-        .run();
 
       await persistRefreshToken(db, {
         userId: (tokenRecord as NonNullable<TokenRecord>).user_id,
         refreshToken: newRefreshToken,
         expiresAt: newExpiresAt,
         accessTokenJti: newJti,
+        empresaId,
       });
 
       return c.json({
@@ -1637,7 +1542,20 @@ authRoutes.get('/empresas', auth(), async (c) => {
   const userId = typeof userIdRaw === 'string' ? Number(userIdRaw) : (userIdRaw as number);
 
   const db = c.env.DB;
-  const empresaIdAtual = await resolveUserEmpresaId(db, userId);
+  // P0-AUTH-001 follow-up: a empresa "atual" da sessão vem do tenant pinado
+  // no JWT (setado por auth() a partir de payload.empresa_id), nunca de
+  // is_primary — is_primary reflete apenas o default usado em NOVOS logins,
+  // não a sessão ativa. Ver POST /select-empresa, que já não mais escreve
+  // nessa coluna.
+  const empresaIdFromJwt = c.get('empresaId');
+  const empresaIdAtualFromJwt =
+    typeof empresaIdFromJwt === 'string'
+      ? Number(empresaIdFromJwt)
+      : (empresaIdFromJwt as number | undefined);
+  const empresaIdAtual =
+    typeof empresaIdAtualFromJwt === 'number' && Number.isFinite(empresaIdAtualFromJwt) && empresaIdAtualFromJwt > 0
+      ? empresaIdAtualFromJwt
+      : await resolveUserEmpresaId(db, userId);
   const platformAccessState = await resolvePlatformAccessState(db, userId);
   const isPlatformAdmin = isPlatformAdminAccess(platformAccessState);
 
@@ -1773,17 +1691,14 @@ authRoutes.post('/select-empresa', auth(), async (c) => {
       .catch(() => null);
   }
 
-  await db
-    .prepare(
-      `
-      UPDATE usuarios_empresas
-      SET is_primary = CASE WHEN empresa_id = ? THEN 1 ELSE 0 END
-      WHERE usuario_id = ?
-    `,
-    )
-    .bind(targetEmpresaId, userId)
-    .run();
-
+  // P0-AUTH-001 follow-up: select-empresa NÃO deve mais mudar o default
+  // global do usuário (is_primary). is_primary continua existindo e
+  // continua sendo o default usado por um login NOVO (sem sessão prévia),
+  // mas trocar a empresa ativa de UMA sessão não pode vazar para as demais
+  // sessões/abas do mesmo usuário — daí a remoção do UPDATE que existia
+  // aqui antes. A sessão atual passa a ser inteiramente carregada por um
+  // novo par access+refresh token pinado em targetEmpresaId, devolvido ao
+  // chamador; nenhuma outra sessão/refresh token é tocada.
   type UserRow = { id: number; email: string; perfil: string; nome: string } | null;
   const user = await db
     .prepare(
@@ -1801,7 +1716,7 @@ authRoutes.post('/select-empresa', auth(), async (c) => {
     throw unauthorized('Usuário não encontrado', 'USER_NOT_FOUND');
   }
 
-  const { token: accessToken } = await issueAccessTokenForEmpresa(c, {
+  const { token: accessToken, jti } = await issueAccessTokenForEmpresa(c, {
     userId,
     email: user.email,
     role: await resolveAuthRoleForUser(db, userId, targetEmpresaId, vinculo.role || user.perfil),
@@ -1809,10 +1724,25 @@ authRoutes.post('/select-empresa', auth(), async (c) => {
     empresaId: targetEmpresaId,
   });
 
+  // Emite um refresh token NOVO e independente, pinado em targetEmpresaId,
+  // para esta sessão/dispositivo. Nenhum refresh token pré-existente (desta
+  // ou de outras sessões) é revogado ou alterado aqui — select-empresa troca
+  // o tenant ativo de UMA sessão, não do usuário como um todo.
+  const newRefreshToken = generateRefreshToken();
+  const newRefreshExpiresAt = getRefreshTokenExpiry(REFRESH_TOKEN_TTL_DAYS);
+  await persistRefreshToken(db, {
+    userId,
+    refreshToken: newRefreshToken,
+    expiresAt: newRefreshExpiresAt,
+    accessTokenJti: jti,
+    empresaId: targetEmpresaId,
+  });
+
   return c.json({
     success: true,
     data: {
       accessToken,
+      refreshToken: newRefreshToken,
       empresa: {
         id: vinculo.empresa_id,
         nome: vinculo.empresa_nome,
