@@ -57,11 +57,14 @@ export interface CompleteLmsMatriculaParams {
 
 type PreBatchState = {
   existingHistoricoId: number | null;
+  existingHistoricoStatus: string | null;
   anteriorAtivaId: number | null;
   anteriorAtivaObservacoes: string | null;
   currentCycleId: number | null;
   nextNumeroCiclo: number;
 };
+
+const LMS_REUSABLE_STATUSES = new Set(['CONCLUIDA', 'PLANEJADA', 'PLANEJADO']);
 
 function isConcurrentQualificationUniqueConstraint(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error || '');
@@ -124,10 +127,10 @@ async function validateExistingHistoricoId(
   funcionarioId: number,
   qualificacaoCodigo: string,
   dataConclusao: string,
-): Promise<number | null> {
+): Promise<{ id: number; status: string | null } | null> {
   const row = await db
     .prepare(
-      `SELECT id FROM qualificacoes_historico
+      `SELECT id, status FROM qualificacoes_historico
         WHERE id = ?
           AND empresa_id = ?
           AND funcionario_id = ?
@@ -137,8 +140,8 @@ async function validateExistingHistoricoId(
         LIMIT 1`,
     )
     .bind(id, empresaId, funcionarioId, qualificacaoCodigo, dataConclusao)
-    .first<{ id: number }>();
-  return row?.id ?? null;
+    .first<{ id: number; status: string | null }>();
+  return row ?? null;
 }
 
 async function readPreBatchState(
@@ -146,9 +149,9 @@ async function readPreBatchState(
   params: CompleteLmsMatriculaParams,
   qualificacaoCodigo: string,
 ): Promise<PreBatchState> {
-  let validatedHistoricoId: number | null = null;
+  let validated: { id: number; status: string | null } | null = null;
   if (params.existingHistoricoId) {
-    validatedHistoricoId = await validateExistingHistoricoId(
+    validated = await validateExistingHistoricoId(
       db,
       params.existingHistoricoId,
       params.empresaId,
@@ -158,27 +161,34 @@ async function readPreBatchState(
     );
   }
 
-  const existingHistorico =
-    validatedHistoricoId ??
-    (
-      await db
-        .prepare(
-          `SELECT id
-             FROM qualificacoes_historico
-            WHERE empresa_id = ?
-              AND funcionario_id = ?
-              AND qualificacao_codigo = ?
-              AND data_conclusao = ?
-              AND deleted_at IS NULL
-            ORDER BY id DESC
-            LIMIT 1`,
-        )
-        .bind(params.empresaId, params.funcionarioId, qualificacaoCodigo, params.dataConclusao)
-        .first<{ id: number }>()
-    )?.id ??
-    null;
+  const fallbackExisting =
+    validated ??
+    (await db
+      .prepare(
+        `SELECT id, status
+           FROM qualificacoes_historico
+          WHERE empresa_id = ?
+            AND funcionario_id = ?
+            AND qualificacao_codigo = ?
+            AND data_conclusao = ?
+            AND deleted_at IS NULL
+          ORDER BY id DESC
+          LIMIT 1`,
+      )
+      .bind(params.empresaId, params.funcionarioId, qualificacaoCodigo, params.dataConclusao)
+      .first<{ id: number; status: string | null }>());
 
-  const anteriorAtiva = existingHistorico
+  const existingHistorico = fallbackExisting?.id ?? null;
+  const existingHistoricoStatus = fallbackExisting?.status ?? null;
+  // A predecessor still needs to be found/materialized both when creating a
+  // fresh row AND when realizing a reused PLANEJADA row into CONCLUIDA now —
+  // only a genuinely idempotent CONCLUIDA reuse has no predecessor work to do.
+  const willRealizeOrCreate =
+    !existingHistorico ||
+    existingHistoricoStatus === 'PLANEJADA' ||
+    existingHistoricoStatus === 'PLANEJADO';
+
+  const anteriorAtiva = !willRealizeOrCreate
     ? null
     : await db
         .prepare(
@@ -221,6 +231,7 @@ async function readPreBatchState(
 
   return {
     existingHistoricoId: existingHistorico,
+    existingHistoricoStatus,
     anteriorAtivaId: anteriorAtiva?.id ?? null,
     anteriorAtivaObservacoes: anteriorAtiva?.observacoes ?? null,
     currentCycleId: currentCycle?.id ?? null,
@@ -296,7 +307,34 @@ export function buildCompletionBatchStatements(
     params.dataConclusao,
   ];
 
-  if (needsInsert && pre.anteriorAtivaId) {
+  // LMS-P0-1: reusing an existing PLANEJADA row (same funcionario/code/date,
+  // presumably created by a training/import flow ahead of the LMS course)
+  // must realize it as CONCLUIDA now, not leave it stuck PLANEJADA while the
+  // matricula itself gets marked CONCLUIDO below. completeLmsMatricula
+  // already fail-closes before reaching this function for CANCELADA/RENOVADA/
+  // unknown statuses — this only ever sees CONCLUIDA (idempotent, no-op here)
+  // or PLANEJADA (realize) for the reuse path.
+  const needsRealize =
+    !needsInsert &&
+    (pre.existingHistoricoStatus === 'PLANEJADA' || pre.existingHistoricoStatus === 'PLANEJADO');
+  if (needsRealize) {
+    statements.push({
+      sql: `UPDATE qualificacoes_historico
+               SET status = 'CONCLUIDA',
+                   renovacao_de = ?,
+                   observacoes = ?,
+                   updated_at = datetime('now')
+             WHERE id = ${historicoIdSubquery} AND empresa_id = ? AND deleted_at IS NULL AND UPPER(COALESCE(status, '')) IN ('PLANEJADA', 'PLANEJADO')`,
+      args: [
+        pre.anteriorAtivaId,
+        `Origem: LMS | Realizada ao concluir: ${params.cursoTitulo}`,
+        ...historicoIdArgs,
+        params.empresaId,
+      ],
+    });
+  }
+
+  if ((needsInsert || needsRealize) && pre.anteriorAtivaId) {
     statements.push({
       sql: `UPDATE qualificacoes_historico
                SET renovada = 1, status = 'RENOVADA', updated_at = datetime('now'), observacoes = ?
@@ -599,6 +637,28 @@ export async function completeLmsMatricula(
     qualificacaoCategoriaCodigo: category.codigo,
   };
   const pre = await readPreBatchState(db, canonicalParams, qualificacaoCodigo);
+
+  // LMS-P0-1: an existing row at this exact (funcionario, code, date) with a
+  // status other than CONCLUIDA/PLANEJADA (reusable/realizable) must fail
+  // closed — the matricula must NOT be marked CONCLUIDO on top of a
+  // CANCELADA or already-RENOVADA (superseded) qualification record, nor on
+  // an unrecognized status. Reject before touching lms_matriculas at all.
+  if (
+    pre.existingHistoricoId &&
+    pre.existingHistoricoStatus !== null &&
+    !LMS_REUSABLE_STATUSES.has(pre.existingHistoricoStatus)
+  ) {
+    await logRejectionAudit(
+      db,
+      params,
+      `Histórico existente #${pre.existingHistoricoId} tem status incompatível para reuso: ${pre.existingHistoricoStatus}`,
+    );
+    throw new LmsCompletionRejectedError(
+      `A qualificação já possui um registro com status ${pre.existingHistoricoStatus}, que não pode ser reutilizado para concluir esta matrícula`,
+      'LMS_QUALIFICATION_STATUS_INCOMPATIBLE',
+    );
+  }
+
   const wasReuse = pre.existingHistoricoId !== null;
   const statements = buildCompletionBatchStatements(canonicalParams, pre);
 

@@ -135,6 +135,7 @@ function baseParams(overrides: Partial<Parameters<typeof buildCompletionBatchSta
 
 const preNoAnterior = {
   existingHistoricoId: null,
+  existingHistoricoStatus: null,
   anteriorAtivaId: null,
   anteriorAtivaObservacoes: null,
   currentCycleId: null,
