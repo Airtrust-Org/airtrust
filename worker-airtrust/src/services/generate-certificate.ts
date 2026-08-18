@@ -256,13 +256,13 @@ export async function generateCertificateForHistorico(
         COALESCE(qt.vencimento_fim_mes, 0) AS vencimento_fim_mes,
         qc.nome AS categoria_qualificacao_canonica
       FROM qualificacoes_historico qh
-      LEFT JOIN funcionarios f ON qh.funcionario_id = f.id AND f.deleted_at IS NULL
-      LEFT JOIN qualificacoes_tipos qt ON qh.qualificacao_id = qt.id AND qt.deleted_at IS NULL
+      LEFT JOIN funcionarios f ON qh.funcionario_id = f.id AND f.deleted_at IS NULL AND f.empresa_id = ?
+      LEFT JOIN qualificacoes_tipos qt ON qh.qualificacao_id = qt.id AND qt.deleted_at IS NULL AND qt.empresa_id = ?
       LEFT JOIN qualificacoes_categorias qc
         ON qc.id = qt.categoria_id AND qc.deleted_at IS NULL AND qc.ativo = 1 AND qc.empresa_id = ?
-      WHERE qh.id = ? AND qh.deleted_at IS NULL AND f.empresa_id = ?`,
+      WHERE qh.id = ? AND qh.deleted_at IS NULL AND qh.empresa_id = ? AND f.id IS NOT NULL`,
     )
-    .bind(empresaId, historicoId, empresaId)
+    .bind(empresaId, empresaId, empresaId, historicoId, empresaId)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .first()) as any;
 
