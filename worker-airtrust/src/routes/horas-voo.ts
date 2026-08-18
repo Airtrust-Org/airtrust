@@ -7,6 +7,7 @@ import { getEmpresaIdSafe } from './escalas-shared';
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
 import type { Env } from '../types';
 import { parseHorasToMinutes } from './horas-voo.types';
+import { assertFuncionarioInScope, getEmployeeSectorAccess } from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -143,6 +144,9 @@ app.post('/:funcionario_id/saldo', requireRole('admin', 'manager'), async (c) =>
     throw new ApiError('funcionario_id ou empresa_id inválido', 400);
   }
 
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  await assertFuncionarioInScope(db, empresaId, funcionarioId, access);
+
   const parsed = saldoSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -274,6 +278,9 @@ app.delete('/:funcionario_id/saldo', requireRole('admin'), async (c) => {
   if (!empresaId || !funcionarioId) {
     throw new ApiError('funcionario_id ou empresa_id inválido', 400);
   }
+
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  await assertFuncionarioInScope(db, empresaId, funcionarioId, access);
 
   const existing = await db
     .prepare(
@@ -416,6 +423,9 @@ app.post('/:funcionario_id/lancamentos', requireRole('admin', 'manager'), async 
     throw new ApiError('funcionario_id ou empresa_id inválido', 400);
   }
 
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  await assertFuncionarioInScope(db, empresaId, funcionarioId, access);
+
   const parsed = lancamentoSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -496,6 +506,9 @@ app.put(
       throw new ApiError('Parâmetros inválidos', 400);
     }
 
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    await assertFuncionarioInScope(db, empresaId, funcionarioId, access);
+
     const existing = await db
       .prepare(
         `SELECT *
@@ -532,7 +545,7 @@ app.put(
            duracao_noturna_min = ?, duracao_instrumento_min = ?, duracao_instrucao_min = ?,
            pousos_dia = ?, pousos_noite = ?, hoist_cycles = ?, funcao = ?, tipo_operacao = ?,
            is_simulador = ?, observacoes = ?, numero_voo = ?, updated_at = datetime('now')
-       WHERE id = ? AND empresa_id = ?`,
+       WHERE id = ? AND funcionario_id = ? AND empresa_id = ?`,
       )
       .bind(
         data.data_voo,
@@ -556,6 +569,7 @@ app.put(
         data.observacoes || null,
         data.numero_voo || null,
         lancamentoId,
+        funcionarioId,
         empresaId,
       )
       .run();
@@ -593,6 +607,9 @@ app.delete(
       throw new ApiError('Parâmetros inválidos', 400);
     }
 
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    await assertFuncionarioInScope(db, empresaId, funcionarioId, access);
+
     const existing = await db
       .prepare(
         `SELECT *
@@ -611,9 +628,9 @@ app.delete(
       .prepare(
         `UPDATE horas_voo_lancamentos
        SET deleted_at = datetime('now'), updated_at = datetime('now')
-       WHERE id = ? AND empresa_id = ?`,
+       WHERE id = ? AND funcionario_id = ? AND empresa_id = ?`,
       )
-      .bind(lancamentoId, empresaId)
+      .bind(lancamentoId, funcionarioId, empresaId)
       .run();
 
     const ua = extrairUsuarioAuditoria(c);
@@ -768,6 +785,9 @@ app.post('/:funcionario_id/importar-xlsx', requireRole('admin', 'manager'), asyn
   const empresaId = getEmpresaIdSafe(c);
   const funcionarioId = Number(c.req.param('funcionario_id'));
   if (!empresaId || !funcionarioId) throw new ApiError('Parâmetros inválidos', 400);
+
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  await assertFuncionarioInScope(db, empresaId, funcionarioId, access);
 
   const formData = await c.req.formData();
   const file = formData.get('file') as File | null;
