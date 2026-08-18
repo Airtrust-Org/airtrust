@@ -23,7 +23,11 @@ export {
 export const API_BASE_URL = resolveApiBase();
 export const AUTH_TOKEN_CHANGED_EVENT = 'airtrust:token-changed';
 export const AUTH_PERSIST_LOGIN_KEY = 'airtrust_persist_login';
-const DEFAULT_PERSIST_LOGIN = true;
+// Session-only by default — a shared/public device left logged in shouldn't
+// silently persist a token to localStorage until the user opts in via the
+// "remember me" checkbox (LoginSimple.tsx). Only the default flips here; once
+// setPersistLogin() has ever been called, the stored preference wins.
+const DEFAULT_PERSIST_LOGIN = false;
 
 // ===== TOKEN STORAGE (Memory-based for security) =====
 let cachedToken: string | null = null;

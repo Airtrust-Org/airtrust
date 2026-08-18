@@ -56,6 +56,12 @@ describe('auth session storage', () => {
     });
   });
 
+  it('usa sessão temporária quando a preferência de lembrar login ainda não existe', async () => {
+    const module = await import('../api');
+
+    expect(module.getPersistLogin()).toBe(false);
+  });
+
   it('lê token persistente sem migrar para sessionStorage', async () => {
     const module = await import('../api');
     const accessToken = makeJwt(3600);
