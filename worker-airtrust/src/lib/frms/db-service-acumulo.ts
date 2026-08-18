@@ -486,6 +486,7 @@ export async function buscarAcumuloFrota(
   empresaId?: number,
   periodoDias = 30,
   quinzenaReferencia?: 'Q1' | 'Q2',
+  sectorScope?: { clause: string; bindings: number[] },
 ): Promise<
   Array<{
     tripulante_id: string;
@@ -564,6 +565,7 @@ export async function buscarAcumuloFrota(
            )
          WHERE p.deleted_at IS NULL
            AND (? IS NULL OR p.empresa_id = ?)
+           AND ${sectorScope?.clause ?? '1 = 1'}
          GROUP BY t.tripulante_id
          HAVING COALESCE(SUM(CASE WHEN j.data >= ? AND j.data <= ? THEN j.horas_voo_minutos ELSE 0 END), 0) > 0
          ORDER BY hv_mes_min DESC`,
@@ -575,6 +577,7 @@ export async function buscarAcumuloFrota(
         periodoFim,
         empresaId ?? null,
         empresaId ?? null,
+        ...(sectorScope?.bindings ?? []),
         periodoInicio,
         periodoFim,
       )
@@ -668,6 +671,7 @@ export async function buscarAcumuloFrota(
            AND ar.data_referencia >= date('now', '-' || ? || ' days')
            AND ar.data_referencia <= date('now')
            AND (? IS NULL OR p.empresa_id = ?)
+           AND ${sectorScope?.clause ?? '1 = 1'}
        )
        SELECT tripulante_id,
               nome,
@@ -684,7 +688,7 @@ export async function buscarAcumuloFrota(
        WHERE rn = 1
        ORDER BY pct_sort DESC, nome ASC`,
     )
-    .bind(periodoDias, empresaId ?? null, empresaId ?? null)
+    .bind(periodoDias, empresaId ?? null, empresaId ?? null, ...(sectorScope?.bindings ?? []))
     .all();
 
   const [limites, rows] = await Promise.all([limitesPromise, rowsPromise]);

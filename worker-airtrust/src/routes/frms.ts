@@ -80,6 +80,7 @@ import { syncHorasVooFromFrmsJornada } from '../shared/handlers/horasVooFromFrms
 import { recalcularPipeline } from '../lib/frms/db-service-jornadas';
 import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
+import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
 import fadigaAcumulada from './frms-fadiga-acumulada';
 import firaRoutes from './frms-fira';
 import frmsRelatoriosConfig from './frms-relatorios-config';
@@ -3287,7 +3288,16 @@ frmsRoutes.get(
     }
     const quinzena: 'Q1' | 'Q2' | undefined =
       quinzenaParam === 'Q1' || quinzenaParam === 'Q2' ? quinzenaParam : undefined;
-    const frota = await buscarAcumuloFrota(c.env.DB, mes, empresaId, periodo, quinzena);
+    const sectorAccess = await getEmployeeSectorAccess(c, empresaId ?? 0);
+    const sectorScope = buildFuncionarioScopeWhere(sectorAccess, 'p');
+    const frota = await buscarAcumuloFrota(
+      c.env.DB,
+      mes,
+      empresaId,
+      periodo,
+      quinzena,
+      sectorScope,
+    );
     return c.json({ success: true, data: frota });
   }),
 );
