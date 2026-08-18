@@ -46,8 +46,8 @@ function createMockDb(opts: MockOpts = {}) {
   const calls: Array<{ query: string; args: unknown[] }> = [];
 
   const db = {
-    prepare: vi.fn((query: string) => ({
-      bind: (...args: unknown[]) => {
+    prepare: vi.fn((query: string) => {
+      const bind = (...args: unknown[]) => {
         calls.push({ query, args });
 
         if (
@@ -78,7 +78,9 @@ function createMockDb(opts: MockOpts = {}) {
         }
 
         if (
-          query.includes('SELECT id, numero_protocolo, tipo, status, created_at, tipo_investigacao FROM sgso_relatos')
+          query.includes(
+            'SELECT id, numero_protocolo, tipo, status, created_at, tipo_investigacao FROM sgso_relatos',
+          )
         ) {
           const [relatoId, empresaId] = args;
           if (relatoId === 'relato-a' && Number(empresaId) === 77) {
@@ -119,8 +121,20 @@ function createMockDb(opts: MockOpts = {}) {
           all: async () => ({ results: [] }),
           run: async () => ({ meta: { changes: 0 } }),
         };
-      },
-    })),
+      };
+
+      // Real D1 lets .all()/.first()/.run() be called straight off prepare()
+      // when the statement has no placeholders (e.g. tableHasColumn's bare
+      // `PRAGMA table_info(...)`, hit via getEmployeeSectorAccess for the
+      // RELPREV read-scope check) — mirror that instead of requiring .bind()
+      // first for every call.
+      return {
+        bind,
+        first: () => (bind() as any).first(),
+        all: () => (bind() as any).all(),
+        run: () => (bind() as any).run(),
+      };
+    }),
   } as unknown as D1Database;
 
   return { db, calls };
@@ -180,11 +194,11 @@ describe('sgso nextgen relatos/acoes guards', () => {
     const app = createSgsoApp();
     const { db, calls } = createMockDb();
 
-    const response = await app.request(
-      '/sgso/relprev/submissoes?limit=20',
-      { method: 'GET' },
-      { DB: db, __authMode: 'ok', __mockEmpresaId: 77 } as unknown as Env,
-    );
+    const response = await app.request('/sgso/relprev/submissoes?limit=20', { method: 'GET' }, {
+      DB: db,
+      __authMode: 'ok',
+      __mockEmpresaId: 77,
+    } as unknown as Env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -257,11 +271,11 @@ describe('sgso nextgen relatos/acoes guards', () => {
     const app = createSgsoApp();
     const { db } = createMockDb({ failRelprevList: true });
 
-    const response = await app.request(
-      '/sgso/relprev/submissoes?limit=20',
-      { method: 'GET' },
-      { DB: db, __authMode: 'ok', __mockEmpresaId: 77 } as unknown as Env,
-    );
+    const response = await app.request('/sgso/relprev/submissoes?limit=20', { method: 'GET' }, {
+      DB: db,
+      __authMode: 'ok',
+      __mockEmpresaId: 77,
+    } as unknown as Env);
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toMatchObject({

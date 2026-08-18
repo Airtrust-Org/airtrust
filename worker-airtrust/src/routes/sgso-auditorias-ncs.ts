@@ -132,7 +132,7 @@ async function recalculateAuditMetrics(
 // AUDITORIAS
 // ─────────────────────────────────────────────────────────────
 
-app.get('/auditorias', async (c) => {
+app.get('/auditorias', requireSgsoManager, async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const db = c.env.DB;
@@ -290,7 +290,7 @@ app.post('/auditorias', requireSgsoManager, async (c) => {
   }
 });
 
-app.get('/auditorias/:id', async (c) => {
+app.get('/auditorias/:id', requireSgsoManager, async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const db = c.env.DB;
@@ -614,7 +614,7 @@ app.post('/auditorias/:id/concluir', requireSgsoManager, async (c) => {
 // NÃO CONFORMIDADES
 // ─────────────────────────────────────────────────────────────
 
-app.get('/nao-conformidades', async (c) => {
+app.get('/nao-conformidades', requireSgsoManager, async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const db = c.env.DB;
@@ -680,9 +680,9 @@ app.post('/nao-conformidades', requireSgsoManager, async (c) => {
       causa_raiz: z.string().trim().optional(),
       responsavel_id: z.number().int().positive().optional(),
       prazo_resolucao: z.string().optional(),
-      auditoria_id: z.string().optional(),
-      relato_id: z.string().optional(),
-      barreira_id: z.string().optional(),
+      auditoria_id: z.string().trim().min(1).optional(),
+      relato_id: z.string().trim().min(1).optional(),
+      barreira_id: z.string().trim().min(1).optional(),
     });
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
@@ -703,65 +703,97 @@ app.post('/nao-conformidades', requireSgsoManager, async (c) => {
       if (!owner) return c.json({ success: false, error: 'Responsável inválido' }, 400);
     }
 
-    const ts = now();
-    const result = await db
-      .prepare(
-        `INSERT INTO sgso_nao_conformidades
-         (empresa_id, auditoria_id, relato_id, tipo, descricao, rbac_referencia, causa_raiz,
-          responsavel_id, prazo_resolucao, status, created_by, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,'ABERTA',?,?,?)`,
-      )
-      .bind(
-        empresaId,
-        d.auditoria_id ?? null,
-        d.relato_id ?? null,
-        d.tipo,
-        d.descricao,
-        d.rbac_referencia ?? null,
-        d.causa_raiz ?? null,
-        d.responsavel_id ?? null,
-        d.prazo_resolucao ?? null,
-        uid,
-        ts,
-        ts,
-      )
-      .run();
-
-    if (d.tipo === 'MAJOR' && d.barreira_id) {
-      const barrierUpdate = await db
+    // Optional foreign references are tenant-owned too. Validate all of them before
+    // the first write so an invalid/cross-tenant reference cannot leave a partial NC.
+    if (d.auditoria_id) {
+      const auditoria = await db
         .prepare(
-          `UPDATE sgso_bowtie_barreiras
-              SET status_saude = CASE WHEN status_saude = 'OPERANTE' THEN 'DEGRADADA' ELSE status_saude END,
-                  updated_at = ?
-            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+          'SELECT id FROM sgso_auditorias WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
         )
-        .bind(ts, d.barreira_id, empresaId)
-        .run();
-      if ((barrierUpdate.meta?.changes ?? 0) === 0) {
-        return c.json(
-          {
-            success: true,
-            data: { id: result.meta.last_row_id },
-            warning: 'NC criada, mas a barreira informada não foi encontrada no tenant',
-          },
-          207,
-        );
-      }
-
-      await db
-        .prepare(
-          `INSERT INTO sgso_bowtie_barreira_historico
-           (barreira_id, empresa_id, status_anterior, status_novo, motivo, alterado_por, alterado_em)
-           SELECT id, empresa_id, 'OPERANTE', 'DEGRADADA',
-                  'NC MAJOR aberta automaticamente', ?, ?
-             FROM sgso_bowtie_barreiras
-            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
-              AND status_saude = 'DEGRADADA'`,
-        )
-        .bind(uid, ts, d.barreira_id, empresaId)
-        .run();
+        .bind(d.auditoria_id, empresaId)
+        .first();
+      if (!auditoria) return c.json({ success: false, error: 'Auditoria inválida' }, 400);
     }
 
+    if (d.relato_id) {
+      const relato = await db
+        .prepare(
+          'SELECT id FROM sgso_relatos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        )
+        .bind(d.relato_id, empresaId)
+        .first();
+      if (!relato) return c.json({ success: false, error: 'Relato inválido' }, 400);
+    }
+
+    let barreira: { id: string; status_saude: string | null } | null = null;
+    if (d.barreira_id) {
+      barreira = await db
+        .prepare(
+          `SELECT id, status_saude
+             FROM sgso_bowtie_barreiras
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(d.barreira_id, empresaId)
+        .first<{ id: string; status_saude: string | null }>();
+      if (!barreira) return c.json({ success: false, error: 'Barreira inválida' }, 400);
+    }
+
+    const ts = now();
+    const statements = [
+      db
+        .prepare(
+          `INSERT INTO sgso_nao_conformidades
+           (empresa_id, auditoria_id, relato_id, tipo, descricao, rbac_referencia, causa_raiz,
+            responsavel_id, prazo_resolucao, status, created_by, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,'ABERTA',?,?,?)`,
+        )
+        .bind(
+          empresaId,
+          d.auditoria_id ?? null,
+          d.relato_id ?? null,
+          d.tipo,
+          d.descricao,
+          d.rbac_referencia ?? null,
+          d.causa_raiz ?? null,
+          d.responsavel_id ?? null,
+          d.prazo_resolucao ?? null,
+          uid,
+          ts,
+          ts,
+        ),
+    ];
+
+    if (d.tipo === 'MAJOR' && d.barreira_id && barreira?.status_saude === 'OPERANTE') {
+      // Keep the NC, barrier transition and its history in one D1 batch. The
+      // status predicate prevents duplicate/false OPERANTE -> DEGRADADA history
+      // if another request changed the barrier between validation and the batch.
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO sgso_bowtie_barreira_historico
+             (barreira_id, empresa_id, status_anterior, status_novo, motivo, alterado_por, alterado_em)
+             SELECT id, empresa_id, 'OPERANTE', 'DEGRADADA',
+                    'NC MAJOR aberta automaticamente', ?, ?
+               FROM sgso_bowtie_barreiras
+              WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+                AND status_saude = 'OPERANTE'`,
+          )
+          .bind(uid, ts, d.barreira_id, empresaId),
+      );
+      statements.push(
+        db
+          .prepare(
+            `UPDATE sgso_bowtie_barreiras
+                SET status_saude = 'DEGRADADA',
+                    updated_at = ?
+              WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+                AND status_saude = 'OPERANTE'`,
+          )
+          .bind(ts, d.barreira_id, empresaId),
+      );
+    }
+
+    const [result] = await db.batch(statements);
     return c.json({ success: true, data: { id: result.meta.last_row_id } }, 201);
   } catch (err) {
     return sgsoErrorResponse(c, err, 'Erro ao criar NC', 'SGSO_NC_CREATE_ERROR');

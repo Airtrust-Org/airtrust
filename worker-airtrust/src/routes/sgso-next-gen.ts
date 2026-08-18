@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
+import { requireRole } from '../middleware/rbac';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 // ─────────────────────────────────────────────────────────────────────────────
 // DÍVIDA TÉCNICA — LMS Integration (Bloco 7 / Auditoria LMS-2026-04)
 //
@@ -51,6 +53,23 @@ import {
 } from './sgso-next-gen-helpers';
 
 const nextGen = new Hono<{ Bindings: Env; Variables: { userId?: string } }>();
+
+// EmployeeSectorAccess only has 'all' | 'restricted' | 'self' (see
+// services/employee-sector-access.ts) — 'restricted' is sector-scoped visibility,
+// not full read of every submission, so only 'all' (full admin) gets unrestricted
+// access here. Everyone else, including sector-scoped managers, sees only their
+// own RELPREV submissions rather than assuming a broader "manages this sector"
+// grant that this endpoint has no sector/reporter linkage to verify.
+async function getRelprevReadScope(
+  c: AppCtx,
+  empresaId: number,
+): Promise<{ clause: string; bindings: number[] }> {
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  if (access.mode === 'all') {
+    return { clause: '1 = 1', bindings: [] };
+  }
+  return { clause: 'r.created_by = ?', bindings: [getUid(c)] };
+}
 
 nextGen.post('/relprev/submissoes', async (c) => {
   try {
@@ -326,6 +345,7 @@ nextGen.get('/relprev/submissoes', async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const db = c.env.DB;
+    const readScope = await getRelprevReadScope(c as AppCtx, empresaId);
     const { limit = '20' } = c.req.query();
     const limitNum = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
 
@@ -338,10 +358,11 @@ nextGen.get('/relprev/submissoes', async (c) => {
          JOIN sgso_relato_capturas rc ON rc.relato_id = r.id
          LEFT JOIN sgso_relato_ia_triagem ai ON ai.relato_id = r.id
          WHERE r.empresa_id = ? AND r.deleted_at IS NULL
+           AND ${readScope.clause}
          ORDER BY r.created_at DESC
          LIMIT ?`,
       )
-      .bind(empresaId, limitNum)
+      .bind(empresaId, ...readScope.bindings, limitNum)
       .all<Record<string, unknown>>();
 
     return c.json({ success: true, data: rows.results });
@@ -363,6 +384,7 @@ nextGen.get('/relprev/submissoes/:id', async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const db = c.env.DB;
+    const readScope = await getRelprevReadScope(c as AppCtx, empresaId);
     const { id } = c.req.param();
     const row = await db
       .prepare(
@@ -376,9 +398,10 @@ nextGen.get('/relprev/submissoes/:id', async (c) => {
          JOIN sgso_relato_capturas rc ON rc.relato_id = r.id
          LEFT JOIN sgso_relato_privacidade rp ON rp.relato_id = r.id
          LEFT JOIN sgso_relato_ia_triagem ai ON ai.relato_id = r.id
-         WHERE r.id = ? AND r.empresa_id = ? AND r.deleted_at IS NULL`,
+         WHERE r.id = ? AND r.empresa_id = ? AND r.deleted_at IS NULL
+           AND ${readScope.clause}`,
       )
-      .bind(id, empresaId)
+      .bind(id, empresaId, ...readScope.bindings)
       .first<Record<string, unknown>>();
 
     if (!row) return c.json({ success: false, error: 'Submissão não encontrada' }, 404);
@@ -397,7 +420,7 @@ return c.json(
   }
 });
 
-nextGen.get('/relprev/submissoes/:id/workflow', async (c) => {
+nextGen.get('/relprev/submissoes/:id/workflow', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const db = c.env.DB;
@@ -438,7 +461,7 @@ return c.json(
   }
 });
 
-nextGen.get('/relprev/triagem/pendentes', async (c) => {
+nextGen.get('/relprev/triagem/pendentes', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const db = c.env.DB;
@@ -454,7 +477,7 @@ nextGen.get('/relprev/triagem/pendentes', async (c) => {
                 f.nome AS investigador_nome
          FROM sgso_relatos r
          LEFT JOIN sgso_relato_ia_triagem ai ON ai.relato_id = r.id
-         LEFT JOIN funcionarios f ON f.id = r.investigador_id
+         LEFT JOIN funcionarios f ON f.id = r.investigador_id AND f.empresa_id = r.empresa_id AND f.deleted_at IS NULL
          WHERE r.empresa_id = ? AND r.deleted_at IS NULL
            AND r.status IN ('ABERTO', 'EM_TRIAGEM', 'EM_INVESTIGACAO')
          ORDER BY r.sla_triagem_violado DESC, r.created_at ASC
@@ -494,7 +517,7 @@ return c.json(
   }
 });
 
-nextGen.patch('/relprev/submissoes/:id/workflow', async (c) => {
+nextGen.patch('/relprev/submissoes/:id/workflow', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c);
@@ -774,7 +797,7 @@ return c.json(
   }
 });
 
-nextGen.post('/bowtie/cenarios', async (c) => {
+nextGen.post('/bowtie/cenarios', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c);
@@ -1003,7 +1026,7 @@ return c.json(
   }
 });
 
-nextGen.patch('/bowtie/barreiras/:id/status', async (c) => {
+nextGen.patch('/bowtie/barreiras/:id/status', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c);

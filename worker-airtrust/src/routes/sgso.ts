@@ -19,6 +19,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import sgsoNextGenRoutes from './sgso-next-gen';
 import sgsoAuditoriasNcsRoutes from './sgso-auditorias-ncs';
@@ -484,7 +485,7 @@ sgso.get('/relatos/:id', async (c) => {
 });
 
 // PATCH /api/sgso/relatos/:id/status
-sgso.patch('/relatos/:id/status', async (c) => {
+sgso.patch('/relatos/:id/status', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c);
@@ -584,7 +585,7 @@ sgso.get('/relatos/:id/historico', async (c) => {
 // ─────────────────────────────────────────────────────────────
 
 // POST /api/sgso/relatos/:id/avaliacao-risco
-sgso.post('/relatos/:id/avaliacao-risco', async (c) => {
+sgso.post('/relatos/:id/avaliacao-risco', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c);
@@ -745,7 +746,7 @@ sgso.post('/relatos/:id/avaliacao-risco', async (c) => {
 // ─────────────────────────────────────────────────────────────
 
 // POST /api/sgso/relatos/:id/fatores-humanos
-sgso.post('/relatos/:id/fatores-humanos', async (c) => {
+sgso.post('/relatos/:id/fatores-humanos', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c);
@@ -867,7 +868,7 @@ sgso.get('/fatores-humanos/categorias', (c) => {
 // ─────────────────────────────────────────────────────────────
 
 // POST /api/sgso/relatos/:id/acoes
-sgso.post('/relatos/:id/acoes', async (c) => {
+sgso.post('/relatos/:id/acoes', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c);
@@ -941,7 +942,7 @@ sgso.post('/relatos/:id/acoes', async (c) => {
 });
 
 // PATCH /api/sgso/acoes/:id
-sgso.patch('/acoes/:id', async (c) => {
+sgso.patch('/acoes/:id', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c);
@@ -1038,6 +1039,5 @@ sgso.post('/relatos/:id/comentarios', async (c) => {
     return sgsoErrorResponse(c, err, 'Erro ao salvar comentário', 'SGSO_COMMENT_SAVE_ERROR');
   }
 });
-
 
 export default sgso;
