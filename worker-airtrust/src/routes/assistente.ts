@@ -8,6 +8,8 @@ import {
   getDashboardAlerts,
   getDashboardMetrics,
 } from '../services/dashboardService';
+import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
+import type { EmployeeSectorAccess } from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -336,9 +338,11 @@ async function resolverFuncionarioConsulta(
   db: D1Database,
   empresaId: string,
   message: string,
+  access: EmployeeSectorAccess,
   funcionarioAtual?: { funcionarioId: string; nome: string } | null,
 ): Promise<{ id: number; nome: string } | null> {
   const normalized = normalizeSearchText(message);
+  const employeeScope = employeeSectorSql(access, 'f');
 
   if (funcionarioAtual && /\b(meu|minha|meus|minhas|eu)\b/.test(normalized)) {
     return { id: Number(funcionarioAtual.funcionarioId), nome: funcionarioAtual.nome };
@@ -346,15 +350,16 @@ async function resolverFuncionarioConsulta(
 
   const fullNameMatch = await db
     .prepare(
-      `SELECT id, nome
-       FROM funcionarios
-       WHERE empresa_id = ?
-         AND deleted_at IS NULL
-         AND instr(LOWER(?), LOWER(nome)) > 0
-       ORDER BY LENGTH(nome) DESC
+      `SELECT f.id, f.nome
+       FROM funcionarios f
+       WHERE f.empresa_id = ?
+         AND f.deleted_at IS NULL
+         AND instr(LOWER(?), LOWER(f.nome)) > 0
+         AND ${employeeScope.clause}
+       ORDER BY LENGTH(f.nome) DESC
        LIMIT 1`,
     )
-    .bind(empresaId, message)
+    .bind(empresaId, message, ...employeeScope.bindings)
     .first<{ id: number; nome: string }>();
 
   if (fullNameMatch) {
@@ -372,17 +377,20 @@ async function resolverFuncionarioConsulta(
       : null;
   }
 
-  const scoreExpr = tokens.map(() => `CASE WHEN LOWER(nome) LIKE ? THEN 1 ELSE 0 END`).join(' + ');
+  const scoreExpr = tokens
+    .map(() => `CASE WHEN LOWER(f.nome) LIKE ? THEN 1 ELSE 0 END`)
+    .join(' + ');
   const candidate = await db
     .prepare(
-      `SELECT id, nome, ${scoreExpr} as score
-       FROM funcionarios
-       WHERE empresa_id = ?
-         AND deleted_at IS NULL
-       ORDER BY score DESC, LENGTH(nome) ASC
+      `SELECT f.id, f.nome, ${scoreExpr} as score
+       FROM funcionarios f
+       WHERE f.empresa_id = ?
+         AND f.deleted_at IS NULL
+         AND ${employeeScope.clause}
+       ORDER BY score DESC, LENGTH(f.nome) ASC
        LIMIT 1`,
     )
-    .bind(...tokens.map((token) => `%${token}%`), empresaId)
+    .bind(...tokens.map((token) => `%${token}%`), empresaId, ...employeeScope.bindings)
     .first<{ id: number; nome: string; score: number }>();
 
   const minScore = tokens.length > 1 ? 2 : 1;
@@ -399,13 +407,14 @@ async function consultarQualificacoesRelacionadas(
   db: D1Database,
   empresaId: string,
   message: string,
+  access: EmployeeSectorAccess,
   funcionarioAtual?: { funcionarioId: string; nome: string } | null,
 ): Promise<HomeAssistantContext['consultaQualificacoes']> {
   if (!shouldConsultarQualificacoes(message)) {
     return null;
   }
 
-  const alvo = await resolverFuncionarioConsulta(db, empresaId, message, funcionarioAtual);
+  const alvo = await resolverFuncionarioConsulta(db, empresaId, message, access, funcionarioAtual);
   if (!alvo) {
     return null;
   }
@@ -432,9 +441,15 @@ async function consultarQualificacoesRelacionadas(
          qh.data_vencimento,
          qh.status
        FROM qualificacoes_historico qh
-       INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
-       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
-       WHERE f.empresa_id = ?
+       INNER JOIN funcionarios f
+         ON f.id = qh.funcionario_id
+        AND f.empresa_id = qh.empresa_id
+        AND f.deleted_at IS NULL
+       LEFT JOIN qualificacoes_tipos qt
+         ON qt.id = qh.qualificacao_id
+        AND qt.empresa_id = qh.empresa_id
+        AND qt.deleted_at IS NULL
+       WHERE qh.empresa_id = ?
          AND qh.deleted_at IS NULL
          AND qh.funcionario_id = ?
          ${filtrosSql}
@@ -748,12 +763,13 @@ app.post('/home-perfil/chat', async (c) => {
 
   const roleNormalizado = normalizarRole(userRole);
   const funcionario = await getFuncionarioContext(c.env.DB, String(userId), String(empresaId));
+  const access = await getEmployeeSectorAccess(c, empresaId);
   const [metrics, compliance, alertas, atividades, resumoFichas, consultaQualificacoes] =
     await Promise.all([
-      getDashboardMetrics(c.env.DB, empresaId),
-      getComplianceScore(c.env.DB, empresaId),
-      getDashboardAlerts(c.env.DB, empresaId),
-      getAtividadesRecentes(c.env.DB, empresaId),
+      getDashboardMetrics(c.env.DB, empresaId, access),
+      getComplianceScore(c.env.DB, empresaId, access),
+      getDashboardAlerts(c.env.DB, empresaId, access),
+      getAtividadesRecentes(c.env.DB, empresaId, access),
       funcionario
         ? carregarResumoFichas(c.env.DB, String(empresaId), funcionario.funcionarioId)
         : Promise.resolve({
@@ -762,7 +778,13 @@ app.post('/home-perfil/chat', async (c) => {
             pendentes: [],
             concluidasRecentes: [],
           }),
-      consultarQualificacoesRelacionadas(c.env.DB, String(empresaId), parsed.data.message, funcionario),
+      consultarQualificacoesRelacionadas(
+        c.env.DB,
+        String(empresaId),
+        parsed.data.message,
+        access,
+        funcionario,
+      ),
     ]);
 
   const context: HomeAssistantContext = {
