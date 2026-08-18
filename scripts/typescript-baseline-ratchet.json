@@ -1,0 +1,2030 @@
+{
+  "sourceSha": "0ff8a839f12630f25dd061a5399997b9cb5ed04a",
+  "generatedAt": "2026-08-18T01:17:47.335Z",
+  "diagnosticCount": 289,
+  "diagnostics": [
+    {
+      "file": "src/lib/sw-manager.tsx",
+      "line": 52,
+      "column": 3,
+      "code": "TS4104",
+      "message": "The type 'readonly ServiceWorkerRegistration[]' is 'readonly' and cannot be assigned to the mutable type 'ServiceWorkerRegistration[]'."
+    },
+    {
+      "file": "src/react-app/components/admin/FuncoesManagement.tsx",
+      "line": 226,
+      "column": 68,
+      "code": "TS2322",
+      "message": "Type 'Error' is not assignable to type 'ReactNode'."
+    },
+    {
+      "file": "src/react-app/components/admin/FuncoesManagement.tsx",
+      "line": 227,
+      "column": 35,
+      "code": "TS2322",
+      "message": "Type '(options?: RefetchOptions | undefined) => Promise<QueryObserverResult<any, Error>>' is not assignable to type 'MouseEventHandler<HTMLButtonElement>'. Types of parameters 'options' and 'event' are incompatible. Type 'MouseEvent<HTMLButtonElement, MouseEvent>' has no properties in common with type 'RefetchOptions'."
+    },
+    {
+      "file": "src/react-app/components/admin/FuncoesManagement.tsx",
+      "line": 300,
+      "column": 33,
+      "code": "TS7006",
+      "message": "Parameter 'funcao' implicitly has an 'any' type."
+    },
+    {
+      "file": "src/react-app/components/admin/FuncoesManagement.tsx",
+      "line": 7,
+      "column": 30,
+      "code": "TS2307",
+      "message": "Cannot find module '../ImportarCSVModal' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/components/dashboard/AlertWidget.tsx",
+      "line": 63,
+      "column": 17,
+      "code": "TS18048",
+      "message": "'alerta.diasRestantes' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/components/dashboard/AlertWidget.tsx",
+      "line": 85,
+      "column": 21,
+      "code": "TS2322",
+      "message": "Type 'string | undefined' is not assignable to type 'string'. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/components/dashboard/EnhancedMetricCard.tsx",
+      "line": 174,
+      "column": 6,
+      "code": "TS2322",
+      "message": "Type '{ children: Element; className: string; to: string; } | { children: Element; className: string; to?: undefined; }' is not assignable to type 'IntrinsicAttributes & LinkProps & RefAttributes<HTMLAnchorElement> & ClassAttributes<HTMLDivElement> & HTMLAttributes<...>'. Type '{ children: Element; className: string; to?: undefined; }' is not assignable to type 'LinkProps'. Types of property 'to' are incompatible. Type 'undefined' is not assignable to type 'To'."
+    },
+    {
+      "file": "src/react-app/components/dashboard/EnhancedMetricCard.tsx",
+      "line": 32,
+      "column": 6,
+      "code": "TS2322",
+      "message": "Type '{ children: (false | \"\" | Element | undefined)[]; className: string; to: string; } | { children: (false | \"\" | Element | undefined)[]; className: string; to?: undefined; }' is not assignable to type 'IntrinsicAttributes & LinkProps & RefAttributes<HTMLAnchorElement> & ClassAttributes<HTMLDivElement> & HTMLAttributes<...>'. Type '{ children: (false | \"\" | Element | undefined)[]; className: string; to?: undefined; }' is not assignable to type 'LinkProps'. Types of property 'to' are incompatible. Type 'undefined' is not assignable to type 'To'."
+    },
+    {
+      "file": "src/react-app/components/forms/AgendamentoForm.tsx",
+      "line": 180,
+      "column": 66,
+      "code": "TS2322",
+      "message": "Type '{ children: string; type: \"submit\"; disabled: boolean; loading: boolean; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'. Property 'loading' does not exist on type 'IntrinsicAttributes & ButtonProps'. Did you mean 'isLoading'?"
+    },
+    {
+      "file": "src/react-app/components/FuncionarioCard.tsx",
+      "line": 191,
+      "column": 65,
+      "code": "TS2339",
+      "message": "Property 'data' does not exist on type '{}'."
+    },
+    {
+      "file": "src/react-app/components/FuncionarioCard.tsx",
+      "line": 196,
+      "column": 24,
+      "code": "TS2339",
+      "message": "Property 'data' does not exist on type '{}'."
+    },
+    {
+      "file": "src/react-app/components/FuncionarioCard.tsx",
+      "line": 197,
+      "column": 74,
+      "code": "TS2339",
+      "message": "Property 'data' does not exist on type '{}'."
+    },
+    {
+      "file": "src/react-app/components/FuncionarioCard.tsx",
+      "line": 2,
+      "column": 3,
+      "code": "TS2724",
+      "message": "'\"../hooks/useFuncionarios\"' has no exported member named 'useFuncionario'. Did you mean 'useFuncionarios'?"
+    },
+    {
+      "file": "src/react-app/components/FuncionarioCard.tsx",
+      "line": 235,
+      "column": 26,
+      "code": "TS2503",
+      "message": "Cannot find namespace 'JSX'."
+    },
+    {
+      "file": "src/react-app/components/funcionarios/FuncionarioForm.tsx",
+      "line": 102,
+      "column": 74,
+      "code": "TS2339",
+      "message": "Property 'cargo' does not exist on type 'FuncionarioFormData'."
+    },
+    {
+      "file": "src/react-app/components/funcionarios/FuncionarioForm.tsx",
+      "line": 197,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'cargo' does not exist on type 'FuncionarioFormData'."
+    },
+    {
+      "file": "src/react-app/components/funcionarios/FuncionarioForm.tsx",
+      "line": 51,
+      "column": 25,
+      "code": "TS2339",
+      "message": "Property 'cargo' does not exist on type 'Funcionario'."
+    },
+    {
+      "file": "src/react-app/components/funcionarios/FuncionarioForm.tsx",
+      "line": 51,
+      "column": 5,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'cargo' does not exist in type 'FuncionarioFormData | (() => FuncionarioFormData)'."
+    },
+    {
+      "file": "src/react-app/components/funcionarios/FuncionarioList.tsx",
+      "line": 85,
+      "column": 19,
+      "code": "TS2339",
+      "message": "Property 'cargo' does not exist on type 'FuncionarioUnificado'."
+    },
+    {
+      "file": "src/react-app/components/HomeRouter.tsx",
+      "line": 49,
+      "column": 52,
+      "code": "TS2345",
+      "message": "Argument of type 'import(\"<repo>/src/types/index\").Funcionario' is not assignable to parameter of type 'import(\"<repo>/src/react-app/types/index\").Funcionario'. Property 'status' is missing in type 'import(\"<repo>/src/types/index\").Funcionario' but required in type 'import(\"<repo>/src/react-app/types/index\").Funcionario'."
+    },
+    {
+      "file": "src/react-app/components/layout/Header.tsx",
+      "line": 163,
+      "column": 22,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'User'."
+    },
+    {
+      "file": "src/react-app/components/layout/Header.tsx",
+      "line": 179,
+      "column": 76,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'User'."
+    },
+    {
+      "file": "src/react-app/components/layout/Header.tsx",
+      "line": 277,
+      "column": 26,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'User'."
+    },
+    {
+      "file": "src/react-app/components/layout/Header.tsx",
+      "line": 280,
+      "column": 78,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'User'."
+    },
+    {
+      "file": "src/react-app/components/modals/index.ts",
+      "line": 5,
+      "column": 34,
+      "code": "TS2307",
+      "message": "Cannot find module './FuncionarioModal' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/components/modals/index.ts",
+      "line": 6,
+      "column": 40,
+      "code": "TS2307",
+      "message": "Cannot find module './ModalUploadCertificado' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/components/modals/ModalCertificado.tsx",
+      "line": 203,
+      "column": 7,
+      "code": "TS2322",
+      "message": "Type '{ length: number; toString(): string; toLocaleString(): string; toLocaleString(locales: string | string[], options?: (NumberFormatOptions & DateTimeFormatOptions) | undefined): string; ... 32 more ...; Authorization: string; } | ... 4 more ... | { ...; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/components/modals/ModalCertificado.tsx",
+      "line": 476,
+      "column": 13,
+      "code": "TS2322",
+      "message": "Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/components/modals/ModalCertificado.tsx",
+      "line": 490,
+      "column": 11,
+      "code": "TS2322",
+      "message": "Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/components/modals/ModalNovaSessao.tsx",
+      "line": 1661,
+      "column": 11,
+      "code": "TS2322",
+      "message": "Type '(number | null)[]' is not assignable to type '(string | number)[]'. Type 'number | null' is not assignable to type 'string | number'. Type 'null' is not assignable to type 'string | number'."
+    },
+    {
+      "file": "src/react-app/components/modals/ModalNovaSessao.tsx",
+      "line": 261,
+      "column": 48,
+      "code": "TS2345",
+      "message": "Argument of type '{ status?: string | undefined; fichas?: unknown[] | undefined; } | null' is not assignable to parameter of type 'SimpleSessionEvidenceCheck | null | undefined'. Type '{ status?: string | undefined; fichas?: unknown[] | undefined; }' is not assignable to type 'SimpleSessionEvidenceCheck'. Types of property 'fichas' are incompatible. Type 'unknown[] | undefined' is not assignable to type '{ status?: string | null | undefined; assinatura_aluno_timestamp?: string | null | undefined; assinatura_instrutor_timestamp?: string | null | undefined; assinatura_tripulante?: number | ... 2 more ... | undefined; assinatura_instrutor?: number | ... 2 more ... | undefined; resultado_final?: string | ... 1 more ... ...'. Type 'unknown[]' is not assignable to type '{ status?: string | null | undefined; assinatura_aluno_timestamp?: string | null | undefined; assinatura_instrutor_timestamp?: string | null | undefined; assinatura_tripulante?: number | ... 2 more ... | undefined; assinatura_instrutor?: number | ... 2 more ... | undefined; resultado_final?: string | ... 1 more ... ...'. Type 'unknown' is not assignable to type '{ status?: string | null | undefined; assinatura_aluno_timestamp?: string | null | undefined; assinatura_instrutor_timestamp?: string | null | undefined; assinatura_tripulante?: number | ... 2 more ... | undefined; assinatura_instrutor?: number | ... 2 more ... | undefined; resultado_final?: string | ... 1 more ... ...'."
+    },
+    {
+      "file": "src/react-app/components/modals/ModalNovaSessao.tsx",
+      "line": 472,
+      "column": 69,
+      "code": "TS2551",
+      "message": "Property 'examinador_nome' does not exist on type 'SessaoParaEditar'. Did you mean 'examinador_id'?"
+    },
+    {
+      "file": "src/react-app/components/modals/ModalNovaSessao.tsx",
+      "line": 551,
+      "column": 65,
+      "code": "TS2551",
+      "message": "Property 'examinador_nome' does not exist on type 'SessaoParaEditar'. Did you mean 'examinador_id'?"
+    },
+    {
+      "file": "src/react-app/components/modals/SharedSessionForm.tsx",
+      "line": 629,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '{ id: number | undefined; inicio: string; fim: string; funcoes: { funcionario_id: number; funcao: \"PF\" | \"PM\"; }[]; atribuicao_funcionario_ids: number[]; finalidade_codigo: \"OUTRO\"; }[]' is not assignable to type 'SharedSessionSegment[]'. Property 'participantes' is missing in type '{ id: number | undefined; inicio: string; fim: string; funcoes: { funcionario_id: number; funcao: \"PF\" | \"PM\"; }[]; atribuicao_funcionario_ids: number[]; finalidade_codigo: \"OUTRO\"; }' but required in type 'SharedSessionSegment'."
+    },
+    {
+      "file": "src/react-app/components/modals/SharedSessionForm.tsx",
+      "line": 793,
+      "column": 13,
+      "code": "TS2322",
+      "message": "Type 'Funcionario | null' is not assignable to type 'Funcionario | null | undefined'. Type 'Funcionario' is missing the following properties from type 'Funcionario': funcao, status"
+    },
+    {
+      "file": "src/react-app/components/OptimizedMainSidebar.tsx",
+      "line": 292,
+      "column": 75,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'User'."
+    },
+    {
+      "file": "src/react-app/components/OptimizedMainSidebar.tsx",
+      "line": 293,
+      "column": 54,
+      "code": "TS2339",
+      "message": "Property 'perfil' does not exist on type 'User'."
+    },
+    {
+      "file": "src/react-app/components/qualificacoes/ModalCertificados.tsx",
+      "line": 251,
+      "column": 26,
+      "code": "TS2349",
+      "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
+    },
+    {
+      "file": "src/react-app/components/qualificacoes/ModalCertificados.tsx",
+      "line": 64,
+      "column": 26,
+      "code": "TS2349",
+      "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
+    },
+    {
+      "file": "src/react-app/components/qualificacoes/ModalCertificados.tsx",
+      "line": 97,
+      "column": 26,
+      "code": "TS2349",
+      "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
+    },
+    {
+      "file": "src/react-app/components/shared/index.ts",
+      "line": 1,
+      "column": 15,
+      "code": "TS2307",
+      "message": "Cannot find module './Button' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/components/shared/index.ts",
+      "line": 2,
+      "column": 15,
+      "code": "TS2307",
+      "message": "Cannot find module './LoadingSpinner' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/components/shared/index.ts",
+      "line": 4,
+      "column": 15,
+      "code": "TS2307",
+      "message": "Cannot find module './Badge' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/components/shared/index.ts",
+      "line": 5,
+      "column": 15,
+      "code": "TS2307",
+      "message": "Cannot find module './Card' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/components/shared/index.ts",
+      "line": 6,
+      "column": 15,
+      "code": "TS2307",
+      "message": "Cannot find module './DataTable' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/components/shared/WizardModal.tsx",
+      "line": 105,
+      "column": 13,
+      "code": "TS2769",
+      "message": "No overload matches this call. The last overload gave the following error. Object literal may only specify known properties, and 'formData' does not exist in type 'Partial<unknown> & Attributes'."
+    },
+    {
+      "file": "src/react-app/components/simuladores/AvaliacaoManobras.tsx",
+      "line": 111,
+      "column": 9,
+      "code": "TS2304",
+      "message": "Cannot find name 'showAlertDialog'."
+    },
+    {
+      "file": "src/react-app/components/simuladores/AvaliacaoManobras.tsx",
+      "line": 241,
+      "column": 9,
+      "code": "TS2304",
+      "message": "Cannot find name 'showAlertDialog'."
+    },
+    {
+      "file": "src/react-app/components/simuladores/ParticipantsEditor.tsx",
+      "line": 3,
+      "column": 32,
+      "code": "TS2307",
+      "message": "Cannot find module '../../services/simuladoresApi' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/config/deployment.ts",
+      "line": 2,
+      "column": 10,
+      "code": "TS2304",
+      "message": "Cannot find name '__APP_BUILD_VERSION__'."
+    },
+    {
+      "file": "src/react-app/config/deployment.ts",
+      "line": 2,
+      "column": 50,
+      "code": "TS2304",
+      "message": "Cannot find name '__APP_BUILD_VERSION__'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useFuncionariosAtivos.ts",
+      "line": 10,
+      "column": 14,
+      "code": "TS18048",
+      "message": "'res' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useFuncionariosAtivos.ts",
+      "line": 10,
+      "column": 18,
+      "code": "TS2339",
+      "message": "Property 'data' does not exist on type 'FuncionarioResumo[]'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useFuncionariosAtivos.ts",
+      "line": 9,
+      "column": 12,
+      "code": "TS18048",
+      "message": "'res' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useFuncionariosAtivos.ts",
+      "line": 9,
+      "column": 16,
+      "code": "TS2339",
+      "message": "Property 'success' does not exist on type 'FuncionarioResumo[]'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useFuncionariosAtivos.ts",
+      "line": 9,
+      "column": 41,
+      "code": "TS18048",
+      "message": "'res' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useFuncionariosAtivos.ts",
+      "line": 9,
+      "column": 45,
+      "code": "TS2339",
+      "message": "Property 'error' does not exist on type 'FuncionarioResumo[]'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useHistoricoQualificacoes.ts",
+      "line": 17,
+      "column": 12,
+      "code": "TS18048",
+      "message": "'res' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useHistoricoQualificacoes.ts",
+      "line": 17,
+      "column": 16,
+      "code": "TS2339",
+      "message": "Property 'success' does not exist on type 'HistoricoQualificacao[]'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useHistoricoQualificacoes.ts",
+      "line": 17,
+      "column": 41,
+      "code": "TS18048",
+      "message": "'res' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useHistoricoQualificacoes.ts",
+      "line": 17,
+      "column": 45,
+      "code": "TS2339",
+      "message": "Property 'error' does not exist on type 'HistoricoQualificacao[]'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useTiposQualificacao.ts",
+      "line": 10,
+      "column": 14,
+      "code": "TS18048",
+      "message": "'res' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useTiposQualificacao.ts",
+      "line": 10,
+      "column": 18,
+      "code": "TS2339",
+      "message": "Property 'data' does not exist on type 'TipoQualificacaoResumo[]'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useTiposQualificacao.ts",
+      "line": 9,
+      "column": 12,
+      "code": "TS18048",
+      "message": "'res' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useTiposQualificacao.ts",
+      "line": 9,
+      "column": 16,
+      "code": "TS2339",
+      "message": "Property 'success' does not exist on type 'TipoQualificacaoResumo[]'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useTiposQualificacao.ts",
+      "line": 9,
+      "column": 41,
+      "code": "TS18048",
+      "message": "'res' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/hooks/qualificacoes/useTiposQualificacao.ts",
+      "line": 9,
+      "column": 45,
+      "code": "TS2339",
+      "message": "Property 'error' does not exist on type 'TipoQualificacaoResumo[]'."
+    },
+    {
+      "file": "src/react-app/hooks/useDataLayer.ts",
+      "line": 10,
+      "column": 61,
+      "code": "TS2307",
+      "message": "Cannot find module '../worker/services/queries' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/hooks/useFormValidation.ts",
+      "line": 15,
+      "column": 27,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 4, '(schema: Zod3Type<any, any>, schemaOptions?: ParseParams | undefined, resolverOptions?: NonRawResolverOptions | undefined): Resolver<...>', gave the following error. Argument of type 'ZodType<any, ZodTypeDef, any>' is not assignable to parameter of type 'Zod3Type<any, any>'. Types of property '_def' are incompatible. Property 'typeName' is missing in type 'ZodTypeDef' but required in type '{ typeName: string; }'. Overload 2 of 4, '(schema: $ZodType<unknown, FieldValues, $ZodTypeInternals<unknown, FieldValues>>, schemaOptions?: ParseContext<$ZodIssue> | undefined, resolverOptions?: NonRawResolverOptions | undefined): Resolver<...>', gave the following error. Argument of type 'ZodType<any, ZodTypeDef, any>' is not assignable to parameter of type '$ZodType<unknown, FieldValues, $ZodTypeInternals<unknown, FieldValues>>'. Property '_zod' is missing in type 'ZodType<any, ZodTypeDef, any>' but required in type '$ZodType<unknown, FieldValues, $ZodTypeInternals<unknown, FieldValues>>'."
+    },
+    {
+      "file": "src/react-app/hooks/useFormValidation.ts",
+      "line": 29,
+      "column": 24,
+      "code": "TS2345",
+      "message": "Argument of type 'keyof T' is not assignable to parameter of type 'Path<T>'. Type 'string | number | symbol' is not assignable to type 'Path<T>'. Type 'string' is not assignable to type 'Path<T>'."
+    },
+    {
+      "file": "src/react-app/hooks/useQualificacoesExt.ts",
+      "line": 211,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '{ qualificacao_status: string | null; tem_certificado: number; certificado_url: string | null | undefined; status: string; id: number; funcionario_id: number; qualificacao_id: number; ... 43 more ...; updated_at?: string | undefined; }[]' is not assignable to type 'HistoricoQualificacao[]'. Type '{ qualificacao_status: string | null; tem_certificado: number; certificado_url: string | null | undefined; status: string; id: number; funcionario_id: number; qualificacao_id: number; ... 43 more ...; updated_at?: string; }' is not assignable to type 'HistoricoQualificacao'. Types of property 'qualificacao_status' are incompatible. Type 'string | null' is not assignable to type 'string | undefined'. Type 'null' is not assignable to type 'string | undefined'."
+    },
+    {
+      "file": "src/react-app/hooks/useSimuladores.ts",
+      "line": 132,
+      "column": 22,
+      "code": "TS2345",
+      "message": "Argument of type '{}' is not assignable to parameter of type 'SetStateAction<Sessao[]>'."
+    },
+    {
+      "file": "src/react-app/hooks/useSimuladores.ts",
+      "line": 226,
+      "column": 21,
+      "code": "TS2345",
+      "message": "Argument of type '{}' is not assignable to parameter of type 'SetStateAction<Ficha[]>'."
+    },
+    {
+      "file": "src/react-app/hooks/useSimuladores.ts",
+      "line": 309,
+      "column": 30,
+      "code": "TS2339",
+      "message": "Property 'getBlob' does not exist on type 'HttpClient'."
+    },
+    {
+      "file": "src/react-app/hooks/useSimuladores.ts",
+      "line": 345,
+      "column": 23,
+      "code": "TS2345",
+      "message": "Argument of type '{}' is not assignable to parameter of type 'SetStateAction<Manobra[]>'."
+    },
+    {
+      "file": "src/react-app/hooks/useSimuladores.ts",
+      "line": 457,
+      "column": 24,
+      "code": "TS2345",
+      "message": "Argument of type '{}' is not assignable to parameter of type 'SetStateAction<Simulador[]>'."
+    },
+    {
+      "file": "src/react-app/hooks/useTreinamentosPlanejados.ts",
+      "line": 414,
+      "column": 82,
+      "code": "TS2345",
+      "message": "Argument of type 'TreinamentoPlanejadoFiltros' is not assignable to parameter of type 'Record<string, unknown>'. Index signature for type 'string' is missing in type 'TreinamentoPlanejadoFiltros'."
+    },
+    {
+      "file": "src/react-app/hooks/useTreinamentosPlanejados.ts",
+      "line": 426,
+      "column": 51,
+      "code": "TS2345",
+      "message": "Argument of type 'TreinamentoPlanejadoFiltros & { mes?: string | undefined; }' is not assignable to parameter of type 'Record<string, unknown>'. Index signature for type 'string' is missing in type 'TreinamentoPlanejadoFiltros & { mes?: string | undefined; }'."
+    },
+    {
+      "file": "src/react-app/hooks/useTreinamentosPlanejados.ts",
+      "line": 437,
+      "column": 50,
+      "code": "TS2345",
+      "message": "Argument of type 'TreinamentoPlanejadoFiltros' is not assignable to parameter of type 'Record<string, unknown>'. Index signature for type 'string' is missing in type 'TreinamentoPlanejadoFiltros'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 190,
+      "column": 19,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'codigo' does not exist in type 'SetStateAction<AeronaveFormData>'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 286,
+      "column": 37,
+      "code": "TS2339",
+      "message": "Property 'codigo' does not exist on type 'Aeronave'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 291,
+      "column": 87,
+      "code": "TS2339",
+      "message": "Property 'nome' does not exist on type 'Aeronave'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 294,
+      "column": 75,
+      "code": "TS2339",
+      "message": "Property 'fabricante' does not exist on type 'Aeronave'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 332,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'codigo' does not exist on type 'AeronaveFormData'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 333,
+      "column": 59,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'codigo' does not exist in type 'SetStateAction<AeronaveFormData>'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 344,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'nome' does not exist on type 'AeronaveFormData'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 345,
+      "column": 59,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'nome' does not exist in type 'SetStateAction<AeronaveFormData>'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 355,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'fabricante' does not exist on type 'AeronaveFormData'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 356,
+      "column": 59,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'fabricante' does not exist in type 'SetStateAction<AeronaveFormData>'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 385,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'codigo' does not exist on type 'AeronaveFormData'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 386,
+      "column": 59,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'codigo' does not exist in type 'SetStateAction<AeronaveFormData>'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 396,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'nome' does not exist on type 'AeronaveFormData'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 397,
+      "column": 59,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'nome' does not exist in type 'SetStateAction<AeronaveFormData>'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 406,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'fabricante' does not exist on type 'AeronaveFormData'."
+    },
+    {
+      "file": "src/react-app/pages/Aeronaves.tsx",
+      "line": 407,
+      "column": 59,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'fabricante' does not exist in type 'SetStateAction<AeronaveFormData>'."
+    },
+    {
+      "file": "src/react-app/pages/AvaliarFicha.tsx",
+      "line": 163,
+      "column": 7,
+      "code": "TS2304",
+      "message": "Cannot find name 'showAlertDialog'."
+    },
+    {
+      "file": "src/react-app/pages/AvaliarFicha.tsx",
+      "line": 62,
+      "column": 9,
+      "code": "TS2304",
+      "message": "Cannot find name 'showAlertDialog'."
+    },
+    {
+      "file": "src/react-app/pages/Certificacoes.tsx",
+      "line": 165,
+      "column": 7,
+      "code": "TS2304",
+      "message": "Cannot find name 'showAlertDialog'."
+    },
+    {
+      "file": "src/react-app/pages/Configuracoes/Backup.tsx",
+      "line": 1166,
+      "column": 58,
+      "code": "TS2322",
+      "message": "Type '{ className: string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, \"ref\"> & RefAttributes<SVGSVGElement>'. Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, \"ref\"> & RefAttributes<SVGSVGElement>'."
+    },
+    {
+      "file": "src/react-app/pages/Configuracoes/Importacao.tsx",
+      "line": 183,
+      "column": 5,
+      "code": "TS2322",
+      "message": "Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/Configuracoes/Usuarios.tsx",
+      "line": 278,
+      "column": 13,
+      "code": "TS2345",
+      "message": "Argument of type '\"settings.users.success.inviteSent\"' is not assignable to parameter of type 'TranslationKey'."
+    },
+    {
+      "file": "src/react-app/pages/controle-voos/ControleVoosRdvDetalhe.tsx",
+      "line": 263,
+      "column": 45,
+      "code": "TS2345",
+      "message": "Argument of type 'CvVoo | undefined' is not assignable to parameter of type '{ prefixo: string; data_programacao: string; }'. Type 'undefined' is not assignable to type '{ prefixo: string; data_programacao: string; }'."
+    },
+    {
+      "file": "src/react-app/pages/controle-voos/ControleVoosRdvDetalhe.tsx",
+      "line": 283,
+      "column": 45,
+      "code": "TS2345",
+      "message": "Argument of type 'CvVoo | undefined' is not assignable to parameter of type '{ prefixo: string; data_programacao: string; }'. Type 'undefined' is not assignable to type '{ prefixo: string; data_programacao: string; }'."
+    },
+    {
+      "file": "src/react-app/pages/DashboardNew.tsx",
+      "line": 295,
+      "column": 47,
+      "code": "TS2339",
+      "message": "Property 'table' does not exist on type '{ check?: string | undefined; module?: string | undefined; table?: string | undefined; status: string; details?: string | undefined; error?: string | undefined; } | { check: string; status: string; details: string | undefined; }'. Property 'table' does not exist on type '{ check: string; status: string; details: string | undefined; }'."
+    },
+    {
+      "file": "src/react-app/pages/DashboardNew.tsx",
+      "line": 295,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'module' does not exist on type '{ check?: string | undefined; module?: string | undefined; table?: string | undefined; status: string; details?: string | undefined; error?: string | undefined; } | { check: string; status: string; details: string | undefined; }'. Property 'module' does not exist on type '{ check: string; status: string; details: string | undefined; }'."
+    },
+    {
+      "file": "src/react-app/pages/DashboardNew.tsx",
+      "line": 299,
+      "column": 45,
+      "code": "TS2339",
+      "message": "Property 'table' does not exist on type '{ check?: string | undefined; module?: string | undefined; table?: string | undefined; status: string; details?: string | undefined; error?: string | undefined; } | { check: string; status: string; details: string | undefined; }'. Property 'table' does not exist on type '{ check: string; status: string; details: string | undefined; }'."
+    },
+    {
+      "file": "src/react-app/pages/DashboardNew.tsx",
+      "line": 299,
+      "column": 60,
+      "code": "TS2339",
+      "message": "Property 'module' does not exist on type '{ check?: string | undefined; module?: string | undefined; table?: string | undefined; status: string; details?: string | undefined; error?: string | undefined; } | { check: string; status: string; details: string | undefined; }'. Property 'module' does not exist on type '{ check: string; status: string; details: string | undefined; }'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/DayCell.tsx",
+      "line": 198,
+      "column": 24,
+      "code": "TS2339",
+      "message": "Property 'auto_gerado' does not exist on type 'EscalaEvento'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/DayCell.tsx",
+      "line": 226,
+      "column": 17,
+      "code": "TS2345",
+      "message": "Argument of type '{ type: \"DISPONIVEL\" | \"FERIAS\" | \"LICENCA\" | \"FOLGA\" | \"CHEQUE\" | \"SIMULADOR\" | \"EXAME_MEDICO\" | \"CURSO\" | \"ALOCACAO\" | \"ALOCACAO_Q2\" | \"STANDBY\" | \"CONFLITO\" | \"VAZIO\" | \"AVULSA\"; ... 4 more ...; textColor: string; }' is not assignable to parameter of type '{ autoGerado: any; label: string; backgroundColor?: string | undefined; type: EventType; extra?: string | undefined; badgeLabel?: string | undefined; textColor?: string | undefined; }'. Property 'autoGerado' is missing in type '{ type: \"DISPONIVEL\" | \"FERIAS\" | \"LICENCA\" | \"FOLGA\" | \"CHEQUE\" | \"SIMULADOR\" | \"EXAME_MEDICO\" | \"CURSO\" | \"ALOCACAO\" | \"ALOCACAO_Q2\" | \"STANDBY\" | \"CONFLITO\" | \"VAZIO\" | \"AVULSA\"; ... 4 more ...; textColor: string; }' but required in type '{ autoGerado: any; label: string; backgroundColor?: string | undefined; type: EventType; extra?: string | undefined; badgeLabel?: string | undefined; textColor?: string | undefined; }'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/DayCell.tsx",
+      "line": 244,
+      "column": 17,
+      "code": "TS2345",
+      "message": "Argument of type '{ type: \"FOLGA\"; label: string; badgeLabel: string; backgroundColor: string; textColor: string; }' is not assignable to parameter of type '{ autoGerado: any; label: string; backgroundColor?: string | undefined; type: EventType; extra?: string | undefined; badgeLabel?: string | undefined; textColor?: string | undefined; }'. Property 'autoGerado' is missing in type '{ type: \"FOLGA\"; label: string; badgeLabel: string; backgroundColor: string; textColor: string; }' but required in type '{ autoGerado: any; label: string; backgroundColor?: string | undefined; type: EventType; extra?: string | undefined; badgeLabel?: string | undefined; textColor?: string | undefined; }'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx",
+      "line": 219,
+      "column": 3,
+      "code": "TS2322",
+      "message": "Type '{ funcionarioId: string; nome: string; nomeGuerra: string | null; matricula: string | null; funcao: string | null; modelo: string | null; quinzenaPreferencial: number | null; situacoes: EscalaAlocacao[]; situacaoReferencia: EscalaAlocacao; situacoesVisiveis: EscalaAlocacao[]; }[]' is not assignable to type 'LinhaSituacaoTripulante[]'. Type '{ funcionarioId: string; nome: string; nomeGuerra: string | null; matricula: string | null; funcao: string | null; modelo: string | null; quinzenaPreferencial: number | null; situacoes: EscalaAlocacao[]; situacaoReferencia: EscalaAlocacao; situacoesVisiveis: EscalaAlocacao[]; }' is not assignable to type 'LinhaSituacaoTripulante'. Types of property 'quinzenaPreferencial' are incompatible. Type 'number | null' is not assignable to type '1 | 2 | null'. Type 'number' is not assignable to type '1 | 2 | null'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx",
+      "line": 234,
+      "column": 47,
+      "code": "TS2367",
+      "message": "This comparison appears to be unintentional because the types '\"FERIAS\" | \"SIM\" | \"CURSO\" | \"MED\" | \"AFT\" | \"STB\" | null | undefined' and '\"FOLGA\"' have no overlap."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx",
+      "line": 245,
+      "column": 55,
+      "code": "TS2345",
+      "message": "Argument of type 'number | null' is not assignable to parameter of type '1 | 2 | null'. Type 'number' is not assignable to type '1 | 2 | null'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx",
+      "line": 248,
+      "column": 13,
+      "code": "TS2367",
+      "message": "This comparison appears to be unintentional because the types '\"FERIAS\" | \"SIM\" | \"CURSO\" | \"MED\" | \"AFT\" | \"STB\" | null | undefined' and '\"FOLGA\"' have no overlap."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx",
+      "line": 263,
+      "column": 46,
+      "code": "TS2367",
+      "message": "This comparison appears to be unintentional because the types '\"FERIAS\" | \"SIM\" | \"CURSO\" | \"MED\" | \"AFT\" | \"STB\" | null | undefined' and '\"FOLGA\"' have no overlap."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx",
+      "line": 364,
+      "column": 10,
+      "code": "TS2678",
+      "message": "Type '\"FOLGA\"' is not comparable to type '\"FERIAS\" | \"SIM\" | \"CURSO\" | \"MED\" | \"AFT\" | \"STB\" | null | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/LinhaSituacao.tsx",
+      "line": 46,
+      "column": 10,
+      "code": "TS2678",
+      "message": "Type '\"FOLGA\"' is not comparable to type '\"FERIAS\" | \"SIM\" | \"CURSO\" | \"MED\" | \"AFT\" | \"STB\" | null | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/EscalaCalendario/LinhaSituacao.tsx",
+      "line": 90,
+      "column": 10,
+      "code": "TS2678",
+      "message": "Type '\"FOLGA\"' is not comparable to type '\"FERIAS\" | \"SIM\" | \"CURSO\" | \"MED\" | \"AFT\" | \"STB\" | null | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalAdicionarEvento.tsx",
+      "line": 83,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'string' is not assignable to type 'TipoEvento'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx",
+      "line": 172,
+      "column": 9,
+      "code": "TS2345",
+      "message": "Argument of type 'EscalaAlocacao | null' is not assignable to parameter of type 'EscalaAlocacao | undefined'. Type 'null' is not assignable to type 'EscalaAlocacao | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx",
+      "line": 313,
+      "column": 15,
+      "code": "TS2345",
+      "message": "Argument of type '\"INSTRUTOR\" | \"PIC\" | \"SIC\" | \"PIC_CHK\" | \"SIC_CHK\" | \"FLEX\" | null' is not assignable to parameter of type 'SetStateAction<\"INSTRUTOR\" | \"PIC\" | \"SIC\" | \"PIC_CHK\" | \"SIC_CHK\" | \"FLEX\">'. Type 'null' is not assignable to type 'SetStateAction<\"INSTRUTOR\" | \"PIC\" | \"SIC\" | \"PIC_CHK\" | \"SIC_CHK\" | \"FLEX\">'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx",
+      "line": 400,
+      "column": 9,
+      "code": "TS2367",
+      "message": "This comparison appears to be unintentional because the types '\"primeira\" | \"segunda\"' and '\"personalizada\"' have no overlap."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx",
+      "line": 440,
+      "column": 13,
+      "code": "TS2367",
+      "message": "This comparison appears to be unintentional because the types '\"FERIAS\" | \"SIM\" | \"CURSO\" | \"MED\" | \"AFT\" | \"STB\" | null | undefined' and '\"FOLGA\"' have no overlap."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx",
+      "line": 137,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'string' is not assignable to type 'TipoEvento | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx",
+      "line": 349,
+      "column": 44,
+      "code": "TS2551",
+      "message": "Property 'corBg' does not exist on type 'TipoEventoConfig'. Did you mean 'cor'?"
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalExportarEscalaPdf.tsx",
+      "line": 56,
+      "column": 7,
+      "code": "TS2322",
+      "message": "Type '{ children: Element; isOpen: boolean; onClose: () => void; title: string; subtitle: string; size: \"lg\"; footer: Element; }' is not assignable to type 'IntrinsicAttributes & ModalProps'. Property 'subtitle' does not exist on type 'IntrinsicAttributes & ModalProps'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalFeriasAfastamentoGlobal.tsx",
+      "line": 127,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '{ 'Content-Type': string; Authorization: string; } | { 'Content-Type': string; Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ 'Content-Type': string; Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ 'Content-Type': string; Authorization?: undefined; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/ModalFeriasAfastamentoGlobal.tsx",
+      "line": 66,
+      "column": 11,
+      "code": "TS2322",
+      "message": "Type '{ 'Cache-Control': string; Authorization: string; } | { 'Cache-Control': string; Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ 'Cache-Control': string; Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ 'Cache-Control': string; Authorization?: undefined; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/components/Modais/tripulacao-utils.ts",
+      "line": 261,
+      "column": 5,
+      "code": "TS2322",
+      "message": "Type 'string | null' is not assignable to type 'string'. Type 'null' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx",
+      "line": 1383,
+      "column": 65,
+      "code": "TS2322",
+      "message": "Type '{ children: string; onClick: () => undefined; loading: boolean; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'. Property 'loading' does not exist on type 'IntrinsicAttributes & ButtonProps'. Did you mean 'isLoading'?"
+    },
+    {
+      "file": "src/react-app/pages/escalas/EscalaPageContext.tsx",
+      "line": 1090,
+      "column": 5,
+      "code": "TS2322",
+      "message": "Type '(v: \"aeronave\" | \"tripulante\") => void' is not assignable to type '(v: string) => void'. Types of parameters 'v' and 'v' are incompatible. Type 'string' is not assignable to type '\"aeronave\" | \"tripulante\"'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/EscalaPageContext.tsx",
+      "line": 1098,
+      "column": 5,
+      "code": "TS2322",
+      "message": "Type '(p: PainelId | null) => void' is not assignable to type '(v: string | null) => void'. Types of parameters 'p' and 'v' are incompatible. Type 'string | null' is not assignable to type 'PainelId | null'. Type 'string' is not assignable to type 'PainelId | null'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/hooks/queries/escalas-infra.ts",
+      "line": 188,
+      "column": 35,
+      "code": "TS2365",
+      "message": "Operator '>=' cannot be applied to types 'string | number' and 'number'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/hooks/queries/useEscalaQuery.ts",
+      "line": 2,
+      "column": 3,
+      "code": "TS2724",
+      "message": "'\"./useEscalasQuery\"' has no exported member named 'useEscalaDetalheQuery'. Did you mean 'useEscalasQuery'?"
+    },
+    {
+      "file": "src/react-app/pages/escalas/hooks/queries/useEscalaQuery.ts",
+      "line": 3,
+      "column": 3,
+      "code": "TS2724",
+      "message": "'\"./useEscalasQuery\"' has no exported member named 'useEscalaDetalheQuery'. Did you mean 'useEscalasQuery'?"
+    },
+    {
+      "file": "src/react-app/pages/escalas/hooks/queries/useEscalaQuery.ts",
+      "line": 4,
+      "column": 3,
+      "code": "TS2724",
+      "message": "'\"./useEscalasQuery\"' has no exported member named 'useEscalasListQuery'. Did you mean 'useEscalasQuery'?"
+    },
+    {
+      "file": "src/react-app/pages/escalas/MinhaEscalaPage.tsx",
+      "line": 167,
+      "column": 64,
+      "code": "TS2554",
+      "message": "Expected 1 arguments, but got 2."
+    },
+    {
+      "file": "src/react-app/pages/escalas/MinhaEscalaPage.tsx",
+      "line": 245,
+      "column": 11,
+      "code": "TS2322",
+      "message": "Type '{ title: string; subtitle: string; icon: string; }' is not assignable to type 'IntrinsicAttributes & PageHeaderProps'. Property 'icon' does not exist on type 'IntrinsicAttributes & PageHeaderProps'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/quinzena-tokens.ts",
+      "line": 46,
+      "column": 21,
+      "code": "TS2322",
+      "message": "Type '\"Q1\"' is not assignable to type '\"1Q\" | \"2Q\" | null'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/quinzena-tokens.ts",
+      "line": 47,
+      "column": 21,
+      "code": "TS2322",
+      "message": "Type '\"Q2\"' is not assignable to type '\"1Q\" | \"2Q\" | null'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/utils/dayCellState.ts",
+      "line": 33,
+      "column": 14,
+      "code": "TS2339",
+      "message": "Property 'auto_gerado' does not exist on type 'EscalaEvento'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/utils/dayCellState.ts",
+      "line": 36,
+      "column": 14,
+      "code": "TS2339",
+      "message": "Property 'auto_gerado' does not exist on type 'EscalaEvento'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/utils/dayCellState.ts",
+      "line": 52,
+      "column": 7,
+      "code": "TS2367",
+      "message": "This comparison appears to be unintentional because the types 'TipoEvento' and '\"alocacao_aeronave\"' have no overlap."
+    },
+    {
+      "file": "src/react-app/pages/escalas/utils/dayCellState.ts",
+      "line": 53,
+      "column": 7,
+      "code": "TS2367",
+      "message": "This comparison appears to be unintentional because the types 'TipoEvento' and '\"ALOCACAO\"' have no overlap."
+    },
+    {
+      "file": "src/react-app/pages/escalas/utils/exportarEscalaPDF.ts",
+      "line": 1055,
+      "column": 40,
+      "code": "TS2345",
+      "message": "Argument of type '{ element: HTMLElement | null; kind: \"aeronaves\"; } | { element: HTMLElement | null; kind: \"tripulantes\"; }' is not assignable to parameter of type 'ExportSource'. Type '{ element: HTMLElement | null; kind: \"aeronaves\"; }' is not assignable to type 'ExportSource'. Types of property 'element' are incompatible. Type 'HTMLElement | null' is not assignable to type 'HTMLElement'. Type 'null' is not assignable to type 'HTMLElement'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/utils/exportarEscalaPDF.ts",
+      "line": 762,
+      "column": 21,
+      "code": "TS2339",
+      "message": "Property 'webkitFontSmoothing' does not exist on type 'CSSStyleDeclaration'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/views/EscalasDetalheView.tsx",
+      "line": 2060,
+      "column": 15,
+      "code": "TS2322",
+      "message": "Type 'string' is not assignable to type '\"aeronave\" | \"tripulante\"'."
+    },
+    {
+      "file": "src/react-app/pages/escalas/views/EscalasDetalheView.tsx",
+      "line": 370,
+      "column": 37,
+      "code": "TS2551",
+      "message": "Property 'publicado_por_nome' does not exist on type 'EscalaMensal'. Did you mean 'publicado_por'?"
+    },
+    {
+      "file": "src/react-app/pages/FichaFuncionarioPage.tsx",
+      "line": 1523,
+      "column": 41,
+      "code": "TS2345",
+      "message": "Argument of type 'string | null | undefined' is not assignable to parameter of type 'string | undefined'. Type 'null' is not assignable to type 'string | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/FichaFuncionarioPage.tsx",
+      "line": 1559,
+      "column": 41,
+      "code": "TS2345",
+      "message": "Argument of type 'string | null | undefined' is not assignable to parameter of type 'string | undefined'. Type 'null' is not assignable to type 'string | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/FichaFuncionarioPage.tsx",
+      "line": 815,
+      "column": 29,
+      "code": "TS2345",
+      "message": "Argument of type 'number | null | undefined' is not assignable to parameter of type 'number | null'. Type 'undefined' is not assignable to type 'number | null'."
+    },
+    {
+      "file": "src/react-app/pages/frms/firaUploadFallback.ts",
+      "line": 734,
+      "column": 17,
+      "code": "TS2352",
+      "message": "Conversion of type 'typeof import(\"<repo>/node_modules/pdfjs-dist/legacy/build/pdf\")' to type 'PdfJsModule' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first. The types of 'getDocument(...).promise' are incompatible between these types. Type 'Promise<PDFDocumentProxy>' is not comparable to type 'Promise<{ numPages: number; getPage: (pageNumber: number) => Promise<{ getTextContent: () => Promise<{ items: { str?: string | undefined; transform?: number[] | undefined; }[]; }>; getViewport: (params: { ...; }) => { ...; }; render: (params: { ...; }) => { ...; }; cleanup: () => void; }>; }>'. Type 'PDFDocumentProxy' is not comparable to type '{ numPages: number; getPage: (pageNumber: number) => Promise<{ getTextContent: () => Promise<{ items: { str?: string | undefined; transform?: number[] | undefined; }[]; }>; getViewport: (params: { scale: number; }) => { ...; }; render: (params: { ...; }) => { ...; }; cleanup: () => void; }>; }'. The types returned by 'getPage(...)' are incompatible between these types. Type 'Promise<PDFPageProxy>' is not comparable to type 'Promise<{ getTextContent: () => Promise<{ items: { str?: string | undefined; transform?: number[] | undefined; }[]; }>; getViewport: (params: { scale: number; }) => { width: number; height: number; }; render: (params: { ...; }) => { ...; }; cleanup: () => void; }>'. Type 'PDFPageProxy' is not comparable to type '{ getTextContent: () => Promise<{ items: { str?: string | undefined; transform?: number[] | undefined; }[]; }>; getViewport: (params: { scale: number; }) => { width: number; height: number; }; render: (params: { ...; }) => { ...; }; cleanup: () => void; }'. Types of property 'render' are incompatible. Type '({ canvasContext, viewport, intent, annotationMode, transform, background, optionalContentConfigPromise, annotationCanvasMap, pageColors, printAnnotationStorage, isEditing, }: RenderParameters) => RenderTask' is not comparable to type '(params: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number; }; }) => { promise: Promise<void>; }'. Types of parameters '__0' and 'params' are incompatible. Type '{ canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number; }; }' is not comparable to type 'RenderParameters'. Types of property 'viewport' are incompatible. Type '{ width: number; height: number; }' is missing the following properties from type 'PageViewport': viewBox, scale, rotation, offsetX, and 7 more."
+    },
+    {
+      "file": "src/react-app/pages/frms/firaUploadFallback.ts",
+      "line": 797,
+      "column": 17,
+      "code": "TS2352",
+      "message": "Conversion of type 'typeof import(\"<repo>/node_modules/pdfjs-dist/legacy/build/pdf\")' to type 'PdfJsModule' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first. The types of 'getDocument(...).promise' are incompatible between these types. Type 'Promise<PDFDocumentProxy>' is not comparable to type 'Promise<{ numPages: number; getPage: (pageNumber: number) => Promise<{ getTextContent: () => Promise<{ items: { str?: string | undefined; transform?: number[] | undefined; }[]; }>; getViewport: (params: { ...; }) => { ...; }; render: (params: { ...; }) => { ...; }; cleanup: () => void; }>; }>'. Type 'PDFDocumentProxy' is not comparable to type '{ numPages: number; getPage: (pageNumber: number) => Promise<{ getTextContent: () => Promise<{ items: { str?: string | undefined; transform?: number[] | undefined; }[]; }>; getViewport: (params: { scale: number; }) => { ...; }; render: (params: { ...; }) => { ...; }; cleanup: () => void; }>; }'. The types returned by 'getPage(...)' are incompatible between these types. Type 'Promise<PDFPageProxy>' is not comparable to type 'Promise<{ getTextContent: () => Promise<{ items: { str?: string | undefined; transform?: number[] | undefined; }[]; }>; getViewport: (params: { scale: number; }) => { width: number; height: number; }; render: (params: { ...; }) => { ...; }; cleanup: () => void; }>'. Type 'PDFPageProxy' is not comparable to type '{ getTextContent: () => Promise<{ items: { str?: string | undefined; transform?: number[] | undefined; }[]; }>; getViewport: (params: { scale: number; }) => { width: number; height: number; }; render: (params: { ...; }) => { ...; }; cleanup: () => void; }'. Types of property 'render' are incompatible. Type '({ canvasContext, viewport, intent, annotationMode, transform, background, optionalContentConfigPromise, annotationCanvasMap, pageColors, printAnnotationStorage, isEditing, }: RenderParameters) => RenderTask' is not comparable to type '(params: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number; }; }) => { promise: Promise<void>; }'. Types of parameters '__0' and 'params' are incompatible. Type '{ canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number; }; }' is not comparable to type 'RenderParameters'. Types of property 'viewport' are incompatible. Type '{ width: number; height: number; }' is missing the following properties from type 'PageViewport': viewBox, scale, rotation, offsetX, and 7 more."
+    },
+    {
+      "file": "src/react-app/pages/frms/firaUploadFallback.ts",
+      "line": 802,
+      "column": 21,
+      "code": "TS2352",
+      "message": "Conversion of type '{ default: typeof Tesseract; createScheduler(): Scheduler; createWorker(langs?: string | string[] | Lang[] | undefined, oem?: OEM | undefined, options?: Partial<WorkerOptions> | undefined, config?: string | ... 1 more ... | undefined): Promise<...>; ... 5 more ...; imageType: typeof imageType; }' to type 'TesseractModule' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first. The types of 'PSM.SINGLE_LINE' are incompatible between these types. Type 'Tesseract.PSM' is not comparable to type 'number'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsCheckinFadiga.tsx",
+      "line": 312,
+      "column": 27,
+      "code": "TS2345",
+      "message": "Argument of type '(r: Record<string, unknown>) => JSX.Element' is not assignable to parameter of type '(value: FadigaPainelEquipeItem, index: number, array: FadigaPainelEquipeItem[]) => Element'. Types of parameters 'r' and 'value' are incompatible. Type 'FadigaPainelEquipeItem' is not assignable to type 'Record<string, unknown>'. Index signature for type 'string' is missing in type 'FadigaPainelEquipeItem'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
+      "line": 565,
+      "column": 14,
+      "code": "TS2345",
+      "message": "Argument of type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to parameter of type 'SetStateAction<ControlFilters>'. Type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to type 'ControlFilters'. Type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to type 'FrmsOperationalSnapshotFilters'. Types of property 'status' are incompatible. Type 'string' is not assignable to type '\"\" | FrmsOperationalSnapshotStatus | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
+      "line": 566,
+      "column": 23,
+      "code": "TS2345",
+      "message": "Argument of type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to parameter of type 'SetStateAction<ControlFilters>'. Type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to type 'ControlFilters'. Type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to type 'FrmsOperationalSnapshotFilters'. Types of property 'status' are incompatible. Type 'string' is not assignable to type '\"\" | FrmsOperationalSnapshotStatus | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
+      "line": 631,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'totalMonitored' does not exist on type 'FortnightOperationalSummaryView'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
+      "line": 632,
+      "column": 37,
+      "code": "TS2339",
+      "message": "Property 'totalMonitored' does not exist on type 'FortnightOperationalSummaryView'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
+      "line": 635,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'pendingCheckins' does not exist on type 'FortnightOperationalSummaryView'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
+      "line": 636,
+      "column": 40,
+      "code": "TS2339",
+      "message": "Property 'pendingCheckins' does not exist on type 'FortnightOperationalSummaryView'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsFadigaAcumulada.tsx",
+      "line": 214,
+      "column": 5,
+      "code": "TS2345",
+      "message": "Argument of type 'string | null' is not assignable to parameter of type 'string'. Type 'null' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsFichaTripulante.tsx",
+      "line": 530,
+      "column": 21,
+      "code": "TS2339",
+      "message": "Property 'effectiveness' does not exist on type '{ nome?: string | undefined; rolling: FrmsAcumuloRolling | null; mensal: Record<string, number> | null; limites: Record<string, number> | null; }'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsFichaTripulante.tsx",
+      "line": 538,
+      "column": 44,
+      "code": "TS2339",
+      "message": "Property 'effectiveness' does not exist on type '{ nome?: string | undefined; rolling: FrmsAcumuloRolling | null; mensal: Record<string, number> | null; limites: Record<string, number> | null; }'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsFichaTripulante.tsx",
+      "line": 539,
+      "column": 46,
+      "code": "TS2339",
+      "message": "Property 'effectiveness' does not exist on type '{ nome?: string | undefined; rolling: FrmsAcumuloRolling | null; mensal: Record<string, number> | null; limites: Record<string, number> | null; }'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsFichaTripulante.tsx",
+      "line": 541,
+      "column": 27,
+      "code": "TS2339",
+      "message": "Property 'effectiveness' does not exist on type '{ nome?: string | undefined; rolling: FrmsAcumuloRolling | null; mensal: Record<string, number> | null; limites: Record<string, number> | null; }'."
+    },
+    {
+      "file": "src/react-app/pages/frms/FrmsFichaTripulante.tsx",
+      "line": 566,
+      "column": 39,
+      "code": "TS2339",
+      "message": "Property 'effectiveness' does not exist on type '{ nome?: string | undefined; rolling: FrmsAcumuloRolling | null; mensal: Record<string, number> | null; limites: Record<string, number> | null; }'."
+    },
+    {
+      "file": "src/react-app/pages/Funcionarios.tsx",
+      "line": 73,
+      "column": 27,
+      "code": "TS2344",
+      "message": "Type 'FuncionariosFilters' does not satisfy the constraint 'Record<string, unknown>'. Index signature for type 'string' is missing in type 'FuncionariosFilters'."
+    },
+    {
+      "file": "src/react-app/pages/funcionarios/FuncionariosDashboard.tsx",
+      "line": 51,
+      "column": 14,
+      "code": "TS2739",
+      "message": "Type '{}' is missing the following properties from type 'ListaFuncionariosProps': termoBusca, statusFilter, configColunasAberto, onToggleConfigColunas"
+    },
+    {
+      "file": "src/react-app/pages/funcionarios/FuncionariosWrapper.tsx",
+      "line": 152,
+      "column": 21,
+      "code": "TS2345",
+      "message": "Argument of type 'string' is not assignable to parameter of type 'number'."
+    },
+    {
+      "file": "src/react-app/pages/funcionarios/ListaDocumentos.tsx",
+      "line": 43,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/funcionarios/ListaDocumentos.tsx",
+      "line": 68,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/funcionarios/ListaDocumentos.tsx",
+      "line": 98,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/funcionarios/ModalFuncionario.tsx",
+      "line": 1891,
+      "column": 47,
+      "code": "TS2339",
+      "message": "Property 'nome' does not exist on type '{ id?: number | undefined; }'."
+    },
+    {
+      "file": "src/react-app/pages/funcionarios/ModalFuncionario.tsx",
+      "line": 1891,
+      "column": 67,
+      "code": "TS2339",
+      "message": "Property 'guerra' does not exist on type '{ id?: number | undefined; }'."
+    },
+    {
+      "file": "src/react-app/pages/funcionarios/ModalFuncionario.tsx",
+      "line": 400,
+      "column": 21,
+      "code": "TS2345",
+      "message": "Argument of type '{ id: null; nome: string; guerra: string; cpf: string; rg: string; nascimento: string; sexo: string; nacionalidade: string; telefone_emergencia: string; contato_emergencia_nome: string; email: string; ... 31 more ...; observacoes: string; }' is not assignable to parameter of type 'SetStateAction<{ id: number | null; nome: string; guerra: string; cpf: string; rg: string; nascimento: string; sexo: string; nacionalidade: string; telefone_emergencia: string; contato_emergencia_nome: string; ... 33 more ...; quinzena: QuinzenaPreferencia; }>'. Property 'quinzena' is missing in type '{ id: null; nome: string; guerra: string; cpf: string; rg: string; nascimento: string; sexo: string; nacionalidade: string; telefone_emergencia: string; contato_emergencia_nome: string; email: string; ... 31 more ...; observacoes: string; }' but required in type '{ id: number | null; nome: string; guerra: string; cpf: string; rg: string; nascimento: string; sexo: string; nacionalidade: string; telefone_emergencia: string; contato_emergencia_nome: string; ... 33 more ...; quinzena: QuinzenaPreferencia; }'."
+    },
+    {
+      "file": "src/react-app/pages/funcionarios/PerfilFuncionario.tsx",
+      "line": 282,
+      "column": 40,
+      "code": "TS2552",
+      "message": "Cannot find name 'navigate'. Did you mean 'navigator'?"
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsCatalogo.tsx",
+      "line": 1833,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'skipPurge' does not exist on type '{ contentFile: File | null; thumbnailFile: File | null; }'."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsCatalogo.tsx",
+      "line": 1840,
+      "column": 13,
+      "code": "TS2322",
+      "message": "Type '\"scorm\" | \"h5p\" | undefined' is not assignable to type 'TipoConteudo'. Type 'undefined' is not assignable to type 'TipoConteudo'."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsCatalogo.tsx",
+      "line": 2005,
+      "column": 39,
+      "code": "TS2322",
+      "message": "Type 'string | null' is not assignable to type 'string | number | readonly string[] | undefined'. Type 'null' is not assignable to type 'string | number | readonly string[] | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsMatriculas.tsx",
+      "line": 957,
+      "column": 54,
+      "code": "TS2551",
+      "message": "Property 'replaceAll' does not exist on type 'MatriculaStatus'. Did you mean 'replace'? Property 'replaceAll' does not exist on type '\"EM_ANDAMENTO\"'."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsPlayer.tsx",
+      "line": 417,
+      "column": 7,
+      "code": "TS2367",
+      "message": "This comparison appears to be unintentional because the types '\"none\" | \"rejected\"' and '\"candidate\"' have no overlap."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsPlayerH5p.tsx",
+      "line": 192,
+      "column": 40,
+      "code": "TS7016",
+      "message": "Could not find a declaration file for module 'h5p-standalone'. '<repo>/node_modules/h5p-standalone/dist/main.bundle.js' implicitly has an 'any' type. Try `npm i --save-dev @types/h5p-standalone` if it exists or add a new declaration (.d.ts) file containing `declare module 'h5p-standalone';`"
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsPlayerH5p.tsx",
+      "line": 239,
+      "column": 28,
+      "code": "TS2345",
+      "message": "Argument of type '{ matricula_id: number; actor: Record<string, unknown>; verb: { id: string; display: Record<string, string> | undefined; }; object: { id: string; objectType: string; }; result: PostXapiStatementResult | undefined; context: Record<...> | undefined; timestamp: string; }' is not assignable to parameter of type 'PostXapiStatementDTO'. Types of property 'result' are incompatible. Type 'PostXapiStatementResult | undefined' is not assignable to type '{ success?: boolean | undefined; completion?: boolean | undefined; score?: { raw?: number | undefined; max?: number | undefined; min?: number | undefined; scaled?: number | undefined; } | undefined; duration?: string | undefined; } | undefined'. Type 'PostXapiStatementResult' has no properties in common with type '{ success?: boolean | undefined; completion?: boolean | undefined; score?: { raw?: number | undefined; max?: number | undefined; min?: number | undefined; scaled?: number | undefined; } | undefined; duration?: string | undefined; }'."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsPlayerH5p.tsx",
+      "line": 259,
+      "column": 13,
+      "code": "TS2722",
+      "message": "Cannot invoke an object which is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsPreviewPlayer.tsx",
+      "line": 157,
+      "column": 58,
+      "code": "TS18048",
+      "message": "'curso' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsPreviewPlayer.tsx",
+      "line": 168,
+      "column": 48,
+      "code": "TS18048",
+      "message": "'curso' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsPreviewPlayer.tsx",
+      "line": 169,
+      "column": 49,
+      "code": "TS18048",
+      "message": "'curso' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/lms/LmsRelatorios.tsx",
+      "line": 523,
+      "column": 50,
+      "code": "TS2322",
+      "message": "Type '{ id: number; nome: string; }' is not assignable to type 'IntrinsicAttributes & FuncionarioLinkProps'. Property 'id' does not exist on type 'IntrinsicAttributes & FuncionarioLinkProps'."
+    },
+    {
+      "file": "src/react-app/pages/LoginSimple.tsx",
+      "line": 137,
+      "column": 15,
+      "code": "TS2322",
+      "message": "Type 'Element' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/LoginSimple.tsx",
+      "line": 148,
+      "column": 15,
+      "code": "TS2322",
+      "message": "Type 'Element' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/mro/data/mroMockData.ts",
+      "line": 107,
+      "column": 108,
+      "code": "TS2322",
+      "message": "Type '\"FH\"' is not assignable to type '\"HT\" | \"FC\" | \"CY\" | \"DY\" | \"MO\"'."
+    },
+    {
+      "file": "src/react-app/pages/mro/data/mroMockData.ts",
+      "line": 108,
+      "column": 104,
+      "code": "TS2322",
+      "message": "Type '\"FH\"' is not assignable to type '\"HT\" | \"FC\" | \"CY\" | \"DY\" | \"MO\"'."
+    },
+    {
+      "file": "src/react-app/pages/mro/data/mroMockData.ts",
+      "line": 111,
+      "column": 103,
+      "code": "TS2322",
+      "message": "Type '\"FH\"' is not assignable to type '\"HT\" | \"FC\" | \"CY\" | \"DY\" | \"MO\"'."
+    },
+    {
+      "file": "src/react-app/pages/mro/data/mroMockData.ts",
+      "line": 114,
+      "column": 81,
+      "code": "TS2322",
+      "message": "Type '\"FH\"' is not assignable to type '\"HT\" | \"FC\" | \"CY\" | \"DY\" | \"MO\"'."
+    },
+    {
+      "file": "src/react-app/pages/mro/data/mroMockData.ts",
+      "line": 115,
+      "column": 94,
+      "code": "TS2322",
+      "message": "Type '\"FH\"' is not assignable to type '\"HT\" | \"FC\" | \"CY\" | \"DY\" | \"MO\"'."
+    },
+    {
+      "file": "src/react-app/pages/mro/data/mroMockData.ts",
+      "line": 116,
+      "column": 89,
+      "code": "TS2322",
+      "message": "Type '\"FH\"' is not assignable to type '\"HT\" | \"FC\" | \"CY\" | \"DY\" | \"MO\"'."
+    },
+    {
+      "file": "src/react-app/pages/mro/data/mroMockData.ts",
+      "line": 117,
+      "column": 106,
+      "code": "TS2322",
+      "message": "Type '\"FH\"' is not assignable to type '\"HT\" | \"FC\" | \"CY\" | \"DY\" | \"MO\"'."
+    },
+    {
+      "file": "src/react-app/pages/Qualificacoes.tsx",
+      "line": 1312,
+      "column": 5,
+      "code": "TS2322",
+      "message": "Type '(url: string, options?: RequestInit, retry?: boolean) => Promise<Response>' is not assignable to type '(input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<{ ok: boolean; json: () => Promise<any>; }>'. Types of parameters 'url' and 'input' are incompatible. Type 'RequestInfo | URL' is not assignable to type 'string'. Type 'Request' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/Qualificacoes.tsx",
+      "line": 1314,
+      "column": 5,
+      "code": "TS2322",
+      "message": "Type '(evento: ModuloEvento) => void' is not assignable to type '(payload: { modulo: string; tipo: string; funcionarioIds?: number[] | undefined; }) => void'. Types of parameters 'evento' and 'payload' are incompatible. Type '{ modulo: string; tipo: string; funcionarioIds?: number[] | undefined; }' is not assignable to type 'ModuloEvento'. Types of property 'modulo' are incompatible. Type 'string' is not assignable to type '\"qualificacoes\" | \"simuladores\" | \"funcionarios\" | \"escalas\" | \"frms\" | \"compliance\" | \"pasta_virtual\"'."
+    },
+    {
+      "file": "src/react-app/pages/Qualificacoes.tsx",
+      "line": 364,
+      "column": 27,
+      "code": "TS2344",
+      "message": "Type 'QualificacoesModelosPrefs' does not satisfy the constraint 'Record<string, unknown>'. Index signature for type 'string' is missing in type 'QualificacoesModelosPrefs'."
+    },
+    {
+      "file": "src/react-app/pages/Qualificacoes.tsx",
+      "line": 3747,
+      "column": 28,
+      "code": "TS2304",
+      "message": "Cannot find name 'formatDateLabel'."
+    },
+    {
+      "file": "src/react-app/pages/Qualificacoes.tsx",
+      "line": 4586,
+      "column": 51,
+      "code": "TS2304",
+      "message": "Cannot find name 'QualificacaoTipoDTO'."
+    },
+    {
+      "file": "src/react-app/pages/Qualificacoes.tsx",
+      "line": 485,
+      "column": 73,
+      "code": "TS2304",
+      "message": "Cannot find name 'QualificacaoTipoDTO'."
+    },
+    {
+      "file": "src/react-app/pages/Qualificacoes.tsx",
+      "line": 4934,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '() => Promise<boolean>' is not assignable to type '() => void | Promise<void>'. Type 'Promise<boolean>' is not assignable to type 'void | Promise<void>'. Type 'Promise<boolean>' is not assignable to type 'Promise<void>'. Type 'boolean' is not assignable to type 'void'."
+    },
+    {
+      "file": "src/react-app/pages/Qualificacoes.tsx",
+      "line": 911,
+      "column": 31,
+      "code": "TS2345",
+      "message": "Argument of type '(prev: HistoricoItem | null) => HistoricoItem | { tem_certificado: number; certificado_url: string | null; certificado_arquivo_id: number | null; ... 49 more ...; tipo_nome?: string | undefined; } | null' is not assignable to parameter of type 'SetStateAction<HistoricoItem | null>'. Type '(prev: HistoricoItem | null) => HistoricoItem | { tem_certificado: number; certificado_url: string | null; certificado_arquivo_id: number | null; ... 49 more ...; tipo_nome?: string | undefined; } | null' is not assignable to type '(prevState: HistoricoItem | null) => HistoricoItem | null'. Type 'HistoricoItem | { tem_certificado: number; certificado_url: string | null; certificado_arquivo_id: number | null; id: number; funcionario_id: number; qualificacao_id: number; ... 46 more ...; tipo_nome?: string | undefined; } | null' is not assignable to type 'HistoricoItem | null'. Type '{ tem_certificado: number; certificado_url: string | null; certificado_arquivo_id: number | null; id: number; funcionario_id: number; qualificacao_id: number; status?: string; qualificacao_status?: string; ... 44 more ...; tipo_nome?: string; }' is not assignable to type 'HistoricoItem'. Type '{ tem_certificado: number; certificado_url: string | null; certificado_arquivo_id: number | null; id: number; funcionario_id: number; qualificacao_id: number; status?: string; qualificacao_status?: string; ... 44 more ...; tipo_nome?: string; }' is not assignable to type 'HistoricoQualificacao'. Types of property 'certificado_url' are incompatible. Type 'string | null' is not assignable to type 'string | undefined'. Type 'null' is not assignable to type 'string | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/components/QualificacoesFilters.tsx",
+      "line": 78,
+      "column": 25,
+      "code": "TS2339",
+      "message": "Property 'modelo' does not exist on type '{ id: number; nome: string; codigo: string; }'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/components/QualificacoesFilters.tsx",
+      "line": 78,
+      "column": 43,
+      "code": "TS2339",
+      "message": "Property 'prefixo' does not exist on type '{ id: number; nome: string; codigo: string; }'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/components/QualificacoesFilters.tsx",
+      "line": 78,
+      "column": 67,
+      "code": "TS2339",
+      "message": "Property 'prefixo' does not exist on type '{ id: number; nome: string; codigo: string; }'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/Dashboard.tsx",
+      "line": 12,
+      "column": 29,
+      "code": "TS2307",
+      "message": "Cannot find module '@/react-app/components/qualificacoes/DashboardCharts' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 159,
+      "column": 12,
+      "code": "TS2304",
+      "message": "Cannot find name 'Doughnut'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 17,
+      "column": 1,
+      "code": "TS2304",
+      "message": "Cannot find name 'ChartJS'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 175,
+      "column": 12,
+      "code": "TS2304",
+      "message": "Cannot find name 'Bar'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 18,
+      "column": 3,
+      "code": "TS2304",
+      "message": "Cannot find name 'CategoryScale'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 19,
+      "column": 3,
+      "code": "TS2304",
+      "message": "Cannot find name 'LinearScale'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 196,
+      "column": 10,
+      "code": "TS2304",
+      "message": "Cannot find name 'Line'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 20,
+      "column": 3,
+      "code": "TS2304",
+      "message": "Cannot find name 'BarElement'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 21,
+      "column": 3,
+      "code": "TS2304",
+      "message": "Cannot find name 'LineElement'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 216,
+      "column": 10,
+      "code": "TS2304",
+      "message": "Cannot find name 'Bar'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 22,
+      "column": 3,
+      "code": "TS2304",
+      "message": "Cannot find name 'PointElement'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 23,
+      "column": 3,
+      "code": "TS2304",
+      "message": "Cannot find name 'ArcElement'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 24,
+      "column": 3,
+      "code": "TS2304",
+      "message": "Cannot find name 'Title'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 25,
+      "column": 3,
+      "code": "TS2304",
+      "message": "Cannot find name 'Tooltip'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
+      "line": 26,
+      "column": 3,
+      "code": "TS2304",
+      "message": "Cannot find name 'Legend'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/FormularioQualificacao.tsx",
+      "line": 2,
+      "column": 10,
+      "code": "TS2300",
+      "message": "Duplicate identifier 'toast'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/FormularioQualificacao.tsx",
+      "line": 7,
+      "column": 10,
+      "code": "TS2300",
+      "message": "Duplicate identifier 'toast'."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/hooks/useQualificacoesFiltros.ts",
+      "line": 8,
+      "column": 33,
+      "code": "TS2307",
+      "message": "Cannot find module '@/react-app/utils/types' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/pages/qualificacoes/hooks/useQualificacoesMutations.ts",
+      "line": 174,
+      "column": 20,
+      "code": "TS2339",
+      "message": "Property 'status' does not exist on type '{ ok: boolean; json: () => Promise<any>; }'."
+    },
+    {
+      "file": "src/react-app/pages/ReclassificacaoQualificacoes.tsx",
+      "line": 107,
+      "column": 30,
+      "code": "TS2349",
+      "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
+    },
+    {
+      "file": "src/react-app/pages/ReclassificacaoQualificacoes.tsx",
+      "line": 123,
+      "column": 9,
+      "code": "TS2304",
+      "message": "Cannot find name 'showAlertDialog'."
+    },
+    {
+      "file": "src/react-app/pages/ReclassificacaoQualificacoes.tsx",
+      "line": 342,
+      "column": 75,
+      "code": "TS2322",
+      "message": "Type '{ className: string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, \"ref\"> & RefAttributes<SVGSVGElement>'. Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, \"ref\"> & RefAttributes<SVGSVGElement>'."
+    },
+    {
+      "file": "src/react-app/pages/ReclassificacaoQualificacoes.tsx",
+      "line": 84,
+      "column": 28,
+      "code": "TS2349",
+      "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
+    },
+    {
+      "file": "src/react-app/pages/ReclassificacaoQualificacoes.tsx",
+      "line": 89,
+      "column": 28,
+      "code": "TS2349",
+      "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx",
+      "line": 304,
+      "column": 82,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx",
+      "line": 545,
+      "column": 11,
+      "code": "TS18048",
+      "message": "'p.nome' is possibly 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/categorias/index.tsx",
+      "line": 118,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/categorias/index.tsx",
+      "line": 45,
+      "column": 80,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/categorias/index.tsx",
+      "line": 92,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/configuracoes/index.tsx",
+      "line": 46,
+      "column": 50,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/configuracoes/index.tsx",
+      "line": 47,
+      "column": 59,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/configuracoes/index.tsx",
+      "line": 48,
+      "column": 61,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/configuracoes/index.tsx",
+      "line": 49,
+      "column": 63,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/configuracoes/index.tsx",
+      "line": 50,
+      "column": 65,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/manobras/index.tsx",
+      "line": 104,
+      "column": 80,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/manobras/index.tsx",
+      "line": 162,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/manobras/index.tsx",
+      "line": 189,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/manobras/index.tsx",
+      "line": 90,
+      "column": 43,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 259,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 270,
+      "column": 77,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 280,
+      "column": 69,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 291,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 305,
+      "column": 11,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 332,
+      "column": 11,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 429,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 492,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 505,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 530,
+      "column": 7,
+      "code": "TS2322",
+      "message": "Type 'ManobraSelecionada | { manobra_id: number; manobra_codigo: string; manobra_descricao: string; manobra_nome: string | null; ordem: number; tripulante: Tripulante; }' is not assignable to type 'ManobraSelecionada'. Type '{ manobra_id: number; manobra_codigo: string; manobra_descricao: string; manobra_nome: string | null; ordem: number; tripulante: Tripulante; }' is not assignable to type 'ManobraSelecionada'. Types of property 'manobra_nome' are incompatible. Type 'string | null' is not assignable to type 'string | undefined'. Type 'null' is not assignable to type 'string | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 535,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'string | null' is not assignable to type 'string | undefined'. Type 'null' is not assignable to type 'string | undefined'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx",
+      "line": 97,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property 'onBack' does not exist on type 'ModelosSessaoPageProps'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/tipos-sessao/index.tsx",
+      "line": 101,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/tipos-sessao/index.tsx",
+      "line": 127,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/cadastros/tipos-sessao/index.tsx",
+      "line": 48,
+      "column": 9,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ 'Cache-Control': string; Authorization: string; } | { 'Cache-Control': string; Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ 'Cache-Control': string; Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ 'Cache-Control': string; Authorization?: undefined; }' is not assignable to type 'undefined'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Type '{ 'Cache-Control': string; Authorization: string; } | { 'Cache-Control': string; Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ 'Cache-Control': string; Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ 'Cache-Control': string; Authorization?: undefined; }' is not assignable to type 'undefined'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/relatorios/index.tsx",
+      "line": 58,
+      "column": 9,
+      "code": "TS2349",
+      "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/relatorios/index.tsx",
+      "line": 59,
+      "column": 9,
+      "code": "TS2349",
+      "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/relatorios/index.tsx",
+      "line": 60,
+      "column": 9,
+      "code": "TS2349",
+      "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx",
+      "line": 8,
+      "column": 31,
+      "code": "TS2307",
+      "message": "Cannot find module '../../components/modelos/ReordenarManobras' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx",
+      "line": 86,
+      "column": 18,
+      "code": "TS18047",
+      "message": "'modelo' is possibly 'null'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx",
+      "line": 86,
+      "column": 45,
+      "code": "TS18047",
+      "message": "'modelo' is possibly 'null'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx",
+      "line": 92,
+      "column": 50,
+      "code": "TS18047",
+      "message": "'modelo' is possibly 'null'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx",
+      "line": 96,
+      "column": 12,
+      "code": "TS18047",
+      "message": "'modelo' is possibly 'null'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx",
+      "line": 99,
+      "column": 50,
+      "code": "TS18047",
+      "message": "'modelo' is possibly 'null'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/sessoes/[id]/executar.tsx",
+      "line": 86,
+      "column": 10,
+      "code": "TS1308",
+      "message": "'await' expressions are only allowed within async functions and at the top levels of modules."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/sessoes/components/FormularioSessao.tsx",
+      "line": 76,
+      "column": 23,
+      "code": "TS18047",
+      "message": "'horaFim' is possibly 'null'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/sessoes/components/FormularioSessao.tsx",
+      "line": 76,
+      "column": 9,
+      "code": "TS18047",
+      "message": "'horaInicio' is possibly 'null'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/tabs/TabGestaoWrapper.tsx",
+      "line": 130,
+      "column": 62,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/tabs/TabGestaoWrapper.tsx",
+      "line": 131,
+      "column": 71,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/tabs/TabGestaoWrapper.tsx",
+      "line": 132,
+      "column": 73,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/tabs/TabGestaoWrapper.tsx",
+      "line": 133,
+      "column": 75,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/tabs/TabGestaoWrapper.tsx",
+      "line": 134,
+      "column": 77,
+      "code": "TS2769",
+      "message": "No overload matches this call. Overload 1 of 2, '(input: string | Request | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'. Overload 2 of 2, '(input: RequestInfo | URL, init?: RequestInit | undefined): Promise<Response>', gave the following error. Argument of type '{ headers: { Authorization: string; } | { Authorization?: undefined; }; cache: RequestCache; }' is not assignable to parameter of type 'RequestInit'. Types of property 'headers' are incompatible. Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'. Property 'Authorization' is incompatible with index signature. Type 'undefined' is not assignable to type 'string'."
+    },
+    {
+      "file": "src/react-app/pages/simuladores/tabs/TabGestaoWrapper.tsx",
+      "line": 273,
+      "column": 63,
+      "code": "TS2322",
+      "message": "Type '{ embedded: true; onBack: () => void; }' is not assignable to type 'IntrinsicAttributes & ModelosSessaoPageProps'. Property 'onBack' does not exist on type 'IntrinsicAttributes & ModelosSessaoPageProps'."
+    },
+    {
+      "file": "src/react-app/pages/TreinamentosPlanejadosPage.tsx",
+      "line": 728,
+      "column": 9,
+      "code": "TS2503",
+      "message": "Cannot find namespace 'JSX'."
+    },
+    {
+      "file": "src/react-app/services/index.ts",
+      "line": 3,
+      "column": 15,
+      "code": "TS2307",
+      "message": "Cannot find module './simuladores.service' or its corresponding type declarations."
+    },
+    {
+      "file": "src/react-app/services/pdf-ficha-client.ts",
+      "line": 865,
+      "column": 12,
+      "code": "TS2339",
+      "message": "Property 'isNotechs' does not exist on type '{ m: { ordem: number; nome?: string | undefined; descricao: string; codigo: string; resultado: string | number | null; observacoes?: string | undefined; tripulante?: \"B\" | \"A\" | \"AB\" | undefined; }; nomeLines: string[]; obsLines: string[]; rowH: number; displayNum: number; }'."
+    },
+    {
+      "file": "src/react-app/styles/DESIGN_SYSTEM_GUIDE.tsx",
+      "line": 94,
+      "column": 37,
+      "code": "TS2304",
+      "message": "Cannot find name 'useState'."
+    },
+    {
+      "file": "src/react-app/utils/e2e-test.ts",
+      "line": 227,
+      "column": 5,
+      "code": "TS2322",
+      "message": "Type '{}' is not assignable to type 'string | number | null'."
+    },
+    {
+      "file": "src/react-app/utils/timezone.ts",
+      "line": 79,
+      "column": 21,
+      "code": "TS2339",
+      "message": "Property 'supportedValuesOf' does not exist on type 'typeof Intl'."
+    },
+    {
+      "file": "src/react-app/utils/timezone.ts",
+      "line": 80,
+      "column": 20,
+      "code": "TS2339",
+      "message": "Property 'supportedValuesOf' does not exist on type 'typeof Intl'."
+    },
+    {
+      "file": "src/shared/types.ts",
+      "line": 2,
+      "column": 48,
+      "code": "TS2307",
+      "message": "Cannot find module '../worker/types/index' or its corresponding type declarations."
+    }
+  ]
+}
