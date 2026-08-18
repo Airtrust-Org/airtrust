@@ -101,6 +101,54 @@ async function marcarG1SemAnteriorComoRenovada(
     .run();
 }
 
+/**
+ * Closes the confirmed gap: this file materialized the predecessor as
+ * RENOVADA (legacy flag) but never linked the canonical SSOT invariant
+ * (successor.renovacao_de = predecessor.id) on the row it just realized.
+ * Reuses the same chronologically-immediate-predecessor correlation
+ * pattern established in qualification-history-atomic.ts /
+ * reconcileQualificationLineageAtomic — not a new algorithm.
+ */
+async function linkG1SemRenovacaoDe(
+  db: D1Database,
+  params: {
+    empresaId: number;
+    funcionarioId: number | string;
+    historicoAtualId: number;
+  },
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE qualificacoes_historico AS qh
+          SET renovacao_de = (
+            SELECT pred.id
+              FROM qualificacoes_historico pred
+             WHERE pred.empresa_id = qh.empresa_id
+               AND pred.funcionario_id = qh.funcionario_id
+               AND UPPER(COALESCE(pred.qualificacao_codigo, '')) = 'G1-SEM'
+               AND pred.id <> qh.id
+               AND pred.deleted_at IS NULL
+               AND UPPER(COALESCE(pred.status, '')) NOT IN ('PLANEJADA', 'PLANEJADO', 'CANCELADA', 'CANCELADO')
+               AND (
+                 date(COALESCE(pred.data_conclusao, '1900-01-01')) < date(qh.data_conclusao)
+                 OR (
+                   date(COALESCE(pred.data_conclusao, '1900-01-01')) = date(qh.data_conclusao)
+                   AND pred.id < qh.id
+                 )
+               )
+             ORDER BY date(COALESCE(pred.data_conclusao, '1900-01-01')) DESC, pred.id DESC
+             LIMIT 1
+          ),
+              updated_at = datetime('now')
+        WHERE qh.id = ?
+          AND qh.empresa_id = ?
+          AND qh.deleted_at IS NULL
+          AND UPPER(COALESCE(qh.status, '')) = 'CONCLUIDA'`,
+    )
+    .bind(params.historicoAtualId, params.empresaId)
+    .run();
+}
+
 export function isG1QualificacaoCode(value?: string | null): boolean {
   return normalizeCodigo(value) === 'G1';
 }
@@ -143,27 +191,33 @@ async function buscarTipoG1Sem(
   funcionarioId?: number | string | null,
 ): Promise<{ id: number; categoria: string | null } | null> {
   const tiposHasEmpresaId = await tableHasColumn(db, 'qualificacoes_tipos', 'empresa_id');
-  const empresaId = tiposHasEmpresaId ? await buscarEmpresaFuncionario(db, funcionarioId) : null;
 
-  if (tiposHasEmpresaId && empresaId != null) {
-    const tipoDaEmpresa = await db
-      .prepare(
-        `SELECT id, categoria
-           FROM qualificacoes_tipos
-          WHERE UPPER(COALESCE(codigo, '')) = 'G1-SEM'
-            AND deleted_at IS NULL
-            AND empresa_id = ?
-          ORDER BY id DESC
-          LIMIT 1`,
-      )
-      .bind(empresaId)
-      .first<{ id: number; categoria: string | null }>();
+  if (tiposHasEmpresaId) {
+    // The tenant column exists in this schema — every lookup path from here
+    // must be tenant-scoped or fail closed. Never fall through to the
+    // unscoped query below once this column is present, whether or not the
+    // funcionario's tenant could be resolved.
+    const empresaId = await buscarEmpresaFuncionario(db, funcionarioId);
+    if (empresaId == null) return null;
 
-    if (tipoDaEmpresa) {
-      return tipoDaEmpresa;
-    }
+    return (
+      (await db
+        .prepare(
+          `SELECT id, categoria
+             FROM qualificacoes_tipos
+            WHERE UPPER(COALESCE(codigo, '')) = 'G1-SEM'
+              AND deleted_at IS NULL
+              AND empresa_id = ?
+            ORDER BY id DESC
+            LIMIT 1`,
+        )
+        .bind(empresaId)
+        .first<{ id: number; categoria: string | null }>()) || null
+    );
   }
 
+  // Only reached when qualificacoes_tipos.empresa_id doesn't exist yet
+  // (pre-migration compatibility) — genuinely no tenant column to filter by.
   return db
     .prepare(
       `SELECT id, categoria
@@ -336,6 +390,11 @@ async function upsertG1SemConcluido(
       historicoAtualId: existente.id,
       dataConclusaoAtual: dataConclusao,
     });
+    await linkG1SemRenovacaoDe(db, {
+      empresaId,
+      funcionarioId: params.funcionarioId,
+      historicoAtualId: existente.id,
+    });
 
     return { id: existente.id, dataVencimento, action: 'reuse' };
   }
@@ -384,6 +443,11 @@ async function upsertG1SemConcluido(
       empresaId,
       historicoAtualId: insertedId,
       dataConclusaoAtual: dataConclusao,
+    });
+    await linkG1SemRenovacaoDe(db, {
+      empresaId,
+      funcionarioId: params.funcionarioId,
+      historicoAtualId: insertedId,
     });
   }
 

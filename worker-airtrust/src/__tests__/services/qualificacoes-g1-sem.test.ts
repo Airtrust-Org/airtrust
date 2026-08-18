@@ -93,6 +93,12 @@ describe('qualificacoes-g1-sem', () => {
           run: () => ({ meta: { changes: 1 } }),
         },
       ],
+      [
+        'SET renovacao_de = (',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
     ]);
 
     const result = await garantirG1SemPlanejado(db, {
@@ -155,6 +161,12 @@ describe('qualificacoes-g1-sem', () => {
       ],
       [
         'SET renovada = 1,',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+      [
+        'SET renovacao_de = (',
         {
           run: () => ({ meta: { changes: 1 } }),
         },
