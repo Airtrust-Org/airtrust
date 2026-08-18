@@ -14,6 +14,7 @@ type ReversalRow = {
   qualificacao_historico_id: number | null;
   qualificacao_status: string | null;
   certificado_arquivo_id: number | null;
+  qualificacao_renovacao_de: number | null;
 };
 
 const REVERSAL_PATH = /^\/api\/lms\/matriculas\/(\d+)\/reverter$/;
@@ -113,7 +114,8 @@ export async function enforceLmsCompletionReversal(
   const existing = await c.env.DB.prepare(
     `SELECT m.id, m.status, m.progresso_pct, m.score_final, m.funcionario_id,
               m.qualificacao_historico_id,
-              qh.status AS qualificacao_status, qh.certificado_arquivo_id
+              qh.status AS qualificacao_status, qh.certificado_arquivo_id,
+              qh.renovacao_de AS qualificacao_renovacao_de
          FROM lms_matriculas m
          LEFT JOIN qualificacoes_historico qh
            ON qh.id = m.qualificacao_historico_id
@@ -199,6 +201,29 @@ export async function enforceLmsCompletionReversal(
         empresaId,
         existing.funcionario_id,
       ),
+    );
+  }
+
+  // Undo the predecessor materialization the original completion performed
+  // (lms-completion.ts marks the immediate predecessor renovada=1/RENOVADA
+  // when it sets this row's renovacao_de). Without this, reversing the
+  // successor leaves the predecessor permanently stuck as RENOVADA even
+  // though the qualification that "renewed" it no longer exists — an
+  // orphaned lineage link. Guarded to only restore a row that is still
+  // RENOVADA and was renovada specifically by this successor.
+  if (existing.qualificacao_historico_id && existing.qualificacao_renovacao_de) {
+    statements.push(
+      c.env.DB.prepare(
+        `UPDATE qualificacoes_historico
+              SET renovada = 0,
+                  status = 'CONCLUIDA',
+                  updated_at = datetime('now')
+            WHERE id = ?
+              AND empresa_id = ?
+              AND funcionario_id = ?
+              AND renovada = 1
+              AND UPPER(COALESCE(status, '')) = 'RENOVADA'`,
+      ).bind(existing.qualificacao_renovacao_de, empresaId, existing.funcionario_id),
     );
   }
 

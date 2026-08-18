@@ -144,7 +144,7 @@ async function validateExistingHistoricoId(
   return row ?? null;
 }
 
-async function readPreBatchState(
+export async function readPreBatchState(
   db: D1Database,
   params: CompleteLmsMatriculaParams,
   qualificacaoCodigo: string,
@@ -188,6 +188,11 @@ async function readPreBatchState(
     existingHistoricoStatus === 'PLANEJADA' ||
     existingHistoricoStatus === 'PLANEJADO';
 
+  // Predecessor must be a real, chronologically-earlier completion — not a
+  // PLANEJADA/CANCELADA row (those aren't completions at all) and not a row
+  // dated on/after this event's own data_conclusao (a later or same-day row
+  // is never the predecessor of an earlier one; see the equivalent guard in
+  // qualification-history-atomic.ts's buildOlderHistoryUpdate).
   const anteriorAtiva = !willRealizeOrCreate
     ? null
     : await db
@@ -198,9 +203,12 @@ async function readPreBatchState(
               AND funcionario_id = ?
               AND qualificacao_codigo = ?
               AND COALESCE(renovada, 0) = 0
-              AND COALESCE(data_conclusao, '') <> ?
+              AND UPPER(COALESCE(status, '')) NOT IN (
+                'PLANEJADA', 'PLANEJADO', 'CANCELADA', 'CANCELADO', 'RENOVADA'
+              )
+              AND date(COALESCE(data_conclusao, '1900-01-01')) < date(?)
               AND deleted_at IS NULL
-            ORDER BY data_vencimento DESC, id DESC
+            ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
             LIMIT 1`,
         )
         .bind(params.empresaId, params.funcionarioId, qualificacaoCodigo, params.dataConclusao)
