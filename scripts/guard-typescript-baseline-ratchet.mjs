@@ -18,7 +18,7 @@
 // application behavior; it has no runtime footprint.
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -69,7 +69,7 @@ export function runTsc({ cwd = REPO_ROOT } = {}) {
   }
 
   const combined = `${stdout}\n${stderr}`;
-  const diagnostics = parseTscOutput(combined);
+  const diagnostics = parseTscOutput(combined, { cwd });
 
   // If tsc produced no parseable diagnostics AND emitted something on
   // stderr (or the process was killed by a signal), treat this as a tooling
@@ -127,7 +127,48 @@ export function runRatchet({ cwd = REPO_ROOT } = {}) {
   };
 }
 
+/**
+ * Regenerates the baseline JSON from a real `tsc` run against the current
+ * checkout. Because diagnostics are canonicalized (file field via
+ * normalizeFilePath, message field via canonicalizeDiagnosticText) before
+ * being written, the generated baseline is checkout-path-independent: two
+ * checkouts of the same commit at different absolute roots produce
+ * byte-identical `diagnostics` content (only `generatedAt` legitimately
+ * differs between runs).
+ */
+export function generateBaseline({ cwd = REPO_ROOT, sourceSha = EXPECTED_SOURCE_SHA } = {}) {
+  const { crashed, diagnostics, rawOutput } = runTsc({ cwd });
+  if (crashed) {
+    throw new Error(`tsc did not produce parseable diagnostic output while generating baseline:\n${rawOutput}`);
+  }
+  const deduped = dedupeDiagnostics(diagnostics);
+  const sorted = [...deduped].sort((a, b) =>
+    `${a.file}:${a.line}:${a.column}:${a.code}:${a.message}`.localeCompare(
+      `${b.file}:${b.line}:${b.column}:${b.code}:${b.message}`,
+    ),
+  );
+  return {
+    sourceSha,
+    generatedAt: new Date().toISOString(),
+    diagnosticCount: sorted.length,
+    diagnostics: sorted,
+  };
+}
+
+function writeBaselineMain() {
+  const baseline = generateBaseline();
+  writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
+  console.log(
+    `Wrote ${BASELINE_PATH}: ${baseline.diagnosticCount} diagnostic(s), sourceSha=${baseline.sourceSha}.`,
+  );
+}
+
 function main() {
+  if (process.argv.includes('--write-baseline')) {
+    writeBaselineMain();
+    return;
+  }
+
   let result;
   try {
     result = runRatchet();

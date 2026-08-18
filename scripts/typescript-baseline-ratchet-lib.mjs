@@ -21,7 +21,8 @@ const DIAGNOSTIC_HEADER_RE = /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.*)$/
  * `path(line,col):` header) — those are folded back into one message so a
  * diagnostic's identity does not fragment across lines.
  */
-export function parseTscOutput(rawText) {
+export function parseTscOutput(rawText, { cwd = process?.cwd?.() ?? '' } = {}) {
+  const opts = { cwd };
   const lines = rawText.split('\n');
   const diagnostics = [];
   let current = null;
@@ -29,7 +30,7 @@ export function parseTscOutput(rawText) {
   for (const line of lines) {
     const match = DIAGNOSTIC_HEADER_RE.exec(line);
     if (match) {
-      if (current) diagnostics.push(finalizeDiagnostic(current));
+      if (current) diagnostics.push(finalizeDiagnostic(current, opts));
       const [, file, lineNo, colNo, code, message] = match;
       current = {
         file,
@@ -47,18 +48,18 @@ export function parseTscOutput(rawText) {
       current.messageLines.push(line.trim());
     }
   }
-  if (current) diagnostics.push(finalizeDiagnostic(current));
+  if (current) diagnostics.push(finalizeDiagnostic(current, opts));
 
   return diagnostics;
 }
 
-function finalizeDiagnostic(current) {
+function finalizeDiagnostic(current, opts) {
   return {
-    file: normalizeFilePath(current.file),
+    file: normalizeFilePath(current.file, opts),
     line: current.line,
     column: current.column,
     code: current.code,
-    message: current.messageLines.join(' ').trim(),
+    message: canonicalizeDiagnosticText(current.messageLines.join(' ').trim(), opts),
   };
 }
 
@@ -82,6 +83,72 @@ export function normalizeFilePath(rawPath, { cwd = process?.cwd?.() ?? '' } = {}
   const markerMatch = /^(?:.*\/)?(src\/.*|worker-airtrust\/.*)$/.exec(p);
   if (markerMatch) p = markerMatch[1];
   return p;
+}
+
+// Matches an absolute path segment: POSIX (`/foo/bar`) or Windows
+// (`C:\foo\bar` / `C:/foo/bar`), greedily up to the next character that
+// cannot appear in a bare filesystem path (tsc wraps these in quotes or
+// parens in every observed diagnostic shape, so `"`, `'`, `)`, whitespace,
+// and backtick are safe stop characters).
+const ABS_PATH_SEGMENT_RE = /(?:[A-Za-z]:[\\/]|\/)[^"'()\s`]+/g;
+
+// Repo-root marker directories present in every real AirTrust checkout,
+// reused by both normalizeFilePath (for the top-level `file` field) and
+// canonicalizeDiagnosticText (for absolute paths embedded inside `message`,
+// e.g. tsc's `import("/abs/path/to/src/foo")` cross-module type references).
+const REPO_ROOT_MARKER_RE = /(src\/.*|worker-airtrust\/.*|node_modules\/.*)$/;
+
+const CANONICAL_PREFIX = '<repo>/';
+
+/**
+ * Rewrites absolute filesystem paths embedded anywhere inside a diagnostic's
+ * message text to a stable, checkout-path-independent canonical form.
+ *
+ * tsc's own diagnostic formatter sometimes renders full absolute paths
+ * inside the message body itself (not just the leading `file(line,col):`
+ * header) — most commonly in cross-module type-mismatch diagnostics shaped
+ * like `import("/abs/path/to/repo/src/foo").SomeType`, but the same
+ * mechanism can in principle appear in any message that mentions a type's
+ * originating module. Since two checkouts of the identical commit differ
+ * only in their absolute root path, a raw string comparison of `message`
+ * would treat this as a brand-new diagnostic on every machine/CI path that
+ * doesn't match wherever the baseline was generated — a false positive.
+ *
+ * Only paths that resolve to *inside* the current repo checkout are
+ * rewritten (to `<repo>/relative/suffix`, POSIX-slashed). A path outside
+ * the repo tree (e.g. a global cache path unrelated to this checkout) is
+ * left untouched, so this never blanket-strips legitimate path text that a
+ * diagnostic might reference. Nothing else about the message — TS code,
+ * type names, property names, line/column — is touched.
+ */
+export function canonicalizeDiagnosticText(text, { cwd = process?.cwd?.() ?? '' } = {}) {
+  const cwdNormalized = cwd.replace(/\\/g, '/');
+
+  return text.replace(ABS_PATH_SEGMENT_RE, (match) => {
+    // Normalize Windows drive-letter + backslash form to forward slashes so
+    // the same repo-root-marker logic works for both platforms' rendering.
+    let normalized = match.replace(/\\/g, '/');
+    // Windows absolute path: `C:/foo/bar` -> strip the `C:` drive prefix
+    // before marker matching (the drive letter carries no repo-relative
+    // meaning once we know the path is inside this checkout).
+    const isWindowsAbs = /^[A-Za-z]:\//.test(normalized);
+    if (isWindowsAbs) normalized = normalized.slice(2);
+
+    let relative = null;
+
+    if (cwdNormalized && normalized.startsWith(`${cwdNormalized}/`)) {
+      relative = normalized.slice(cwdNormalized.length + 1);
+    } else {
+      const markerMatch = REPO_ROOT_MARKER_RE.exec(normalized);
+      if (markerMatch) relative = markerMatch[1];
+    }
+
+    // Not resolvable to inside this checkout (or not an absolute path at
+    // all, e.g. a bare relative path that happened to match) — leave as-is.
+    if (relative === null) return match;
+
+    return `${CANONICAL_PREFIX}${relative}`;
+  });
 }
 
 /** Builds the deterministic identity string used for baseline comparison. */
