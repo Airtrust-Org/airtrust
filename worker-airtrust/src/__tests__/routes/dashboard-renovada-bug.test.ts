@@ -82,7 +82,7 @@ describe('Dashboard Qualificacoes - Corrigir bug da classificacao RENOVADA', () 
       // 4: The category grouping query
       { all: { results: [] } },
       // 5: The type grouping query
-      { all: { results: [] } }
+      { all: { results: [] } },
     ]);
 
     const app = createApp();
@@ -97,7 +97,11 @@ describe('Dashboard Qualificacoes - Corrigir bug da classificacao RENOVADA', () 
 
     expect(response.status).toBe(200);
 
-    const statsQuery = queries.find(q => q.includes('COUNT(*) as total'));
+    // "as validas" is unique to the main stats query — see the same fix in
+    // dashboard-qualificacoes-compliance-rules.test.ts for why "COUNT(*) as total"
+    // stopped being a safe selector once `total` moved to
+    // buildCurrentOperationalQualificationPredicate.
+    const statsQuery = queries.find((q) => q.includes('as validas'));
     expect(statsQuery).toBeDefined();
 
     // The bug: the query used to say "OR qh.renovacao_de IS NOT NULL" which incorrectly excluded records

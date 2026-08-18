@@ -75,9 +75,19 @@ describe('Dashboard Qualificacoes - Compliance Rules & Safeguards', () => {
   it('Scenario 1 & 2: Usa regra canonica de renovacao (EXISTS) e NUNCA exclui o novo registro (qh.renovacao_de IS NOT NULL)', async () => {
     const { env, queries } = createPreparedDb(true); // Com coluna renovacao_de
     const app = createApp();
-    await app.fetch(new Request('http://localhost/dashboard/qualificacoes', { headers: { 'x-empresa-id': '42' } }), env, {} as any);
+    await app.fetch(
+      new Request('http://localhost/dashboard/qualificacoes', {
+        headers: { 'x-empresa-id': '42' },
+      }),
+      env,
+      {} as any,
+    );
 
-    const statsQuery = queries.find(q => q.includes('COUNT(*) as total'));
+    // "as validas" is unique to the main stats query — "COUNT(*) as total" also
+    // appears verbatim in the unrelated categoria-breakdown query below it, and the
+    // main query's own `total` column stopped being a literal COUNT(*) once it moved
+    // to buildCurrentOperationalQualificationPredicate (SUM(CASE WHEN ... THEN 1 ...)).
+    const statsQuery = queries.find((q) => q.includes('as validas'));
     expect(statsQuery).toBeDefined();
 
     // Cenário 1: Deve conter EXISTS garantindo sucessor real para ser renovada
@@ -91,9 +101,19 @@ describe('Dashboard Qualificacoes - Compliance Rules & Safeguards', () => {
   it('Scenario 3: Ignora fallback de status legado quando coluna renovacao_de existe', async () => {
     const { env, queries } = createPreparedDb(true);
     const app = createApp();
-    await app.fetch(new Request('http://localhost/dashboard/qualificacoes', { headers: { 'x-empresa-id': '42' } }), env, {} as any);
+    await app.fetch(
+      new Request('http://localhost/dashboard/qualificacoes', {
+        headers: { 'x-empresa-id': '42' },
+      }),
+      env,
+      {} as any,
+    );
 
-    const statsQuery = queries.find(q => q.includes('COUNT(*) as total'));
+    // "as validas" is unique to the main stats query — "COUNT(*) as total" also
+    // appears verbatim in the unrelated categoria-breakdown query below it, and the
+    // main query's own `total` column stopped being a literal COUNT(*) once it moved
+    // to buildCurrentOperationalQualificationPredicate (SUM(CASE WHEN ... THEN 1 ...)).
+    const statsQuery = queries.find((q) => q.includes('as validas'));
     expect(statsQuery).toBeDefined();
 
     // Quando hasRenovacaoDe = true, o status='RENOVADA' não deve ser usado como critério final
@@ -103,7 +123,8 @@ describe('Dashboard Qualificacoes - Compliance Rules & Safeguards', () => {
     // It is injected in effectiveRenewedPredicate ONLY if hasRenovacaoDe is false.
     // Let's verify by checking the string occurrences. The fallback might be in the query because of planned check, but not for renewed check.
     // effectiveActivePlannedPredicate uses `effectiveRenewedPredicate`. So if it's true, the legacy fallback is completely absent from the renewed check.
-    const occurrencesOfRenovadaFlag = (statsQuery!.match(/COALESCE\(qh.renovada, 0\) = 1/g) || []).length;
+    const occurrencesOfRenovadaFlag = (statsQuery!.match(/COALESCE\(qh.renovada, 0\) = 1/g) || [])
+      .length;
     // It should be 0 because if hasRenovacaoDe is true, renewedQualificationPredicate is completely unused in statsQuery!
     expect(occurrencesOfRenovadaFlag).toBe(0);
   });
@@ -111,15 +132,25 @@ describe('Dashboard Qualificacoes - Compliance Rules & Safeguards', () => {
   it('Scenario 4: Preserva fallback legado em ambientes sem a coluna renovacao_de', async () => {
     const { env, queries } = createPreparedDb(false); // SEM coluna renovacao_de
     const app = createApp();
-    await app.fetch(new Request('http://localhost/dashboard/qualificacoes', { headers: { 'x-empresa-id': '42' } }), env, {} as any);
+    await app.fetch(
+      new Request('http://localhost/dashboard/qualificacoes', {
+        headers: { 'x-empresa-id': '42' },
+      }),
+      env,
+      {} as any,
+    );
 
-    const statsQuery = queries.find(q => q.includes('COUNT(*) as total'));
+    // "as validas" is unique to the main stats query — "COUNT(*) as total" also
+    // appears verbatim in the unrelated categoria-breakdown query below it, and the
+    // main query's own `total` column stopped being a literal COUNT(*) once it moved
+    // to buildCurrentOperationalQualificationPredicate (SUM(CASE WHEN ... THEN 1 ...)).
+    const statsQuery = queries.find((q) => q.includes('as validas'));
     expect(statsQuery).toBeDefined();
 
     // Deve usar o fallback
     expect(statsQuery).toContain('COALESCE(qh.renovada, 0) = 1');
     expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
-    
+
     // NÃO deve conter o EXISTS
     expect(statsQuery).not.toContain('qh_renovadora.renovacao_de = qh.id');
   });
@@ -127,9 +158,19 @@ describe('Dashboard Qualificacoes - Compliance Rules & Safeguards', () => {
   it('Scenario 5: Canceladas/cancelamentos nao contaminam renovadas nem ativas', async () => {
     const { env, queries } = createPreparedDb(true);
     const app = createApp();
-    await app.fetch(new Request('http://localhost/dashboard/qualificacoes', { headers: { 'x-empresa-id': '42' } }), env, {} as any);
+    await app.fetch(
+      new Request('http://localhost/dashboard/qualificacoes', {
+        headers: { 'x-empresa-id': '42' },
+      }),
+      env,
+      {} as any,
+    );
 
-    const statsQuery = queries.find(q => q.includes('COUNT(*) as total'));
+    // "as validas" is unique to the main stats query — "COUNT(*) as total" also
+    // appears verbatim in the unrelated categoria-breakdown query below it, and the
+    // main query's own `total` column stopped being a literal COUNT(*) once it moved
+    // to buildCurrentOperationalQualificationPredicate (SUM(CASE WHEN ... THEN 1 ...)).
+    const statsQuery = queries.find((q) => q.includes('as validas'));
     expect(statsQuery).toBeDefined();
 
     // Certifica que a exclusão de CANCELADA está presente na contagem de renovadas
@@ -141,9 +182,19 @@ describe('Dashboard Qualificacoes - Compliance Rules & Safeguards', () => {
   it('Scenario 6: Filtros de tenant_id isolam as contagens por empresa', async () => {
     const { env, queries } = createPreparedDb(true);
     const app = createApp();
-    await app.fetch(new Request('http://localhost/dashboard/qualificacoes', { headers: { 'x-empresa-id': '42' } }), env, {} as any);
+    await app.fetch(
+      new Request('http://localhost/dashboard/qualificacoes', {
+        headers: { 'x-empresa-id': '42' },
+      }),
+      env,
+      {} as any,
+    );
 
-    const statsQuery = queries.find(q => q.includes('COUNT(*) as total'));
+    // "as validas" is unique to the main stats query — "COUNT(*) as total" also
+    // appears verbatim in the unrelated categoria-breakdown query below it, and the
+    // main query's own `total` column stopped being a literal COUNT(*) once it moved
+    // to buildCurrentOperationalQualificationPredicate (SUM(CASE WHEN ... THEN 1 ...)).
+    const statsQuery = queries.find((q) => q.includes('as validas'));
     expect(statsQuery).toBeDefined();
 
     expect(statsQuery).toContain('f.empresa_id = ?');
@@ -155,10 +206,9 @@ describe('Dashboard Qualificacoes - Compliance Rules & Safeguards', () => {
     // usa '0 = 1' (força false) se a coluna não existir, tratando status=RENOVADA legado apenas como informativo.
     // Esta divergência é legítima pois o Dashboard agrega globalmente e não deve "sumir" com os dados numéricos de
     // ambientes atrasados, enquanto a visualização da ficha 360/histórico prefere omitir vínculos incertos.
-    
+
     // Testamos que o Dashboard aplica o fallback em schemas legados (já testado no Cenário 4),
     // enquanto o Histórico (historico.ts) usaria '0 = 1'.
     expect(true).toBe(true);
   });
 });
-
