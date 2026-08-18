@@ -63,6 +63,7 @@ function makeQualificacaoRow(overrides: Record<string, unknown> = {}) {
     id: HISTORICO_ID,
     funcionario_id: FUNCIONARIO_ID,
     qualificacao_id: 900,
+    status: 'CONCLUIDA',
     data_conclusao: '2026-01-15',
     data_vencimento: null,
     certificado_arquivo_id: null,

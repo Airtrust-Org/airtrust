@@ -161,3 +161,113 @@ describe('generateCertificateForHistorico — tenant scoping (real SQL)', () => 
     }
   });
 });
+
+describe('generateCertificateForHistorico — qualification status eligibility (Fase 7)', () => {
+  it('PLANEJADA: fails closed, never generates a certificate for a realization that has not happened', async () => {
+    const db = new SqliteD1Database();
+    patchSchema(db);
+    try {
+      const historicoId = insertHistory(db.database, {
+        funcionarioId: 1000,
+        qualificationId: 100,
+        empresaId: 1,
+        status: 'PLANEJADA',
+      });
+
+      await expect(
+        generateCertificateForHistorico(makeEnv(db), historicoId, 1),
+      ).rejects.toMatchObject({
+        constructor: CertificateGenerationError,
+        code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('CANCELADA: fails closed', async () => {
+    const db = new SqliteD1Database();
+    patchSchema(db);
+    try {
+      const historicoId = insertHistory(db.database, {
+        funcionarioId: 1000,
+        qualificationId: 100,
+        empresaId: 1,
+        status: 'CANCELADA',
+      });
+
+      await expect(
+        generateCertificateForHistorico(makeEnv(db), historicoId, 1),
+      ).rejects.toMatchObject({
+        constructor: CertificateGenerationError,
+        code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('unknown/unrecognized status: fails closed rather than defaulting to eligible', async () => {
+    const db = new SqliteD1Database();
+    patchSchema(db);
+    try {
+      const historicoId = insertHistory(db.database, {
+        funcionarioId: 1000,
+        qualificationId: 100,
+        empresaId: 1,
+        status: 'ALGUM_STATUS_NOVO_DESCONHECIDO',
+      });
+
+      await expect(
+        generateCertificateForHistorico(makeEnv(db), historicoId, 1),
+      ).rejects.toMatchObject({
+        constructor: CertificateGenerationError,
+        code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('RENOVADA: still eligible for reemission of the historical document (real past realization)', async () => {
+    const db = new SqliteD1Database();
+    patchSchema(db);
+    try {
+      const historicoId = insertHistory(db.database, {
+        funcionarioId: 1000,
+        qualificationId: 100,
+        empresaId: 1,
+        status: 'RENOVADA',
+      });
+
+      // Passes the status gate and reaches past it (template resolution is
+      // unconfigured in this minimal fixture, so a different downstream
+      // error is expected — CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE
+      // must NOT be the rejection reason).
+      await expect(
+        generateCertificateForHistorico(makeEnv(db), historicoId, 1),
+      ).rejects.not.toMatchObject({ code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('CONCLUIDA: still eligible (unaffected by the new gate — no false positive)', async () => {
+    const db = new SqliteD1Database();
+    patchSchema(db);
+    try {
+      const historicoId = insertHistory(db.database, {
+        funcionarioId: 1000,
+        qualificationId: 100,
+        empresaId: 1,
+        status: 'CONCLUIDA',
+      });
+
+      await expect(
+        generateCertificateForHistorico(makeEnv(db), historicoId, 1),
+      ).rejects.not.toMatchObject({ code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE' });
+    } finally {
+      db.close();
+    }
+  });
+});

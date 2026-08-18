@@ -197,6 +197,19 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
             ? calcularDataVencimento(dataConclusao, validadeMesesNumero, vencimentoFimMes)
             : null);
 
+        // Fase 7: document authenticity (this hash matches a real, issued
+        // certificate — `valido` below) is a DIFFERENT fact from whether the
+        // underlying qualification is currently operationally valid. A
+        // legitimately-issued historical certificate remains authentic even
+        // after its qualification has expired or been renewed — surface
+        // that explicitly rather than letting `valido: true` alone imply
+        // "the qualification is current".
+        const situacaoOperacionalAtual: 'VALIDA' | 'VENCIDA' | 'INDETERMINADA' = !dataVencimentoAtual
+          ? 'INDETERMINADA'
+          : dataVencimentoAtual < new Date().toISOString().slice(0, 10)
+            ? 'VENCIDA'
+            : 'VALIDA';
+
         let validadeMeses = 'Indeterminada';
         if (dataVencimentoAtual) {
           const conclusao = new Date(`${dataConclusao}T00:00:00Z`);
@@ -224,7 +237,12 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
         console.log(`[VALIDAÇÃO] Certificado encontrado após ${scanned} registros. ID: ${cert.id}`);
         return c.json({
           success: true,
+          // Documento autêntico e emitido por esta empresa — não confundir
+          // com a situação operacional ATUAL da qualificação, exposta
+          // separadamente abaixo (Fase 7).
           valido: true,
+          documento_autentico: true,
+          situacao_operacional_atual: situacaoOperacionalAtual,
           arquivo_disponivel: arquivoDisponivel,
           alerta: arquivoDisponivel
             ? undefined
