@@ -6,6 +6,10 @@ import { processarNotificacoes } from '../cron/notificacoes';
 import { createLogger, toError } from '../utils/logger';
 import type { Env } from '../types';
 import {
+  appendEmployeeSectorFilter,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
+import {
   listLocalWhatsAppTemplates,
   seedLocalWhatsAppTemplateCatalog,
 } from '../utils/alert-whatsapp-templates-store';
@@ -16,11 +20,17 @@ const GLOBAL_NOTIFICATION_TYPES = ['ALERTA_DADOS', 'ALERTA_SEMANAL_QUALIFICACOES
 const GLOBAL_NOTIFICATION_GROUPS = ['auditoria', 'qualificacoes'] as const;
 
 function isGlobalNotificationAllowed(tipo?: string | null, grupo?: string | null): boolean {
-  const normalizedTipo = String(tipo || '').trim().toUpperCase();
-  const normalizedGrupo = String(grupo || '').trim().toLowerCase();
+  const normalizedTipo = String(tipo || '')
+    .trim()
+    .toUpperCase();
+  const normalizedGrupo = String(grupo || '')
+    .trim()
+    .toLowerCase();
 
   return (
-    GLOBAL_NOTIFICATION_TYPES.includes(normalizedTipo as (typeof GLOBAL_NOTIFICATION_TYPES)[number]) ||
+    GLOBAL_NOTIFICATION_TYPES.includes(
+      normalizedTipo as (typeof GLOBAL_NOTIFICATION_TYPES)[number],
+    ) ||
     GLOBAL_NOTIFICATION_GROUPS.includes(
       normalizedGrupo as (typeof GLOBAL_NOTIFICATION_GROUPS)[number],
     )
@@ -67,9 +77,10 @@ function buildSystemNotificationScope(alias: string, empresaId: number, userId: 
   };
 }
 
-function getNotificationUserId(c: {
-  get: (key: string) => unknown;
-}): { userId: string | null; lidaPor: string | number | null } {
+function getNotificationUserId(c: { get: (key: string) => unknown }): {
+  userId: string | null;
+  lidaPor: string | number | null;
+} {
   const rawUserId = c.get('userId');
   if (rawUserId === null || rawUserId === undefined || String(rawUserId).trim() === '') {
     return { userId: null, lidaPor: null };
@@ -122,14 +133,14 @@ app.post('/processar', auth(), requireRole('admin'), async (c) => {
       data: resumo,
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     const logger = createLogger(c, 'NotificacoesRoutes');
-    logger.error('Erro ao processar notificações manualmente', toError(error));
+    logger.error('Erro ao processar notificações manualmente', toError(error), {
+      route: '/processar',
+    });
     return c.json(
       {
         success: false,
         error: 'Erro ao processar notificações',
-        details: errorMessage,
         code: 'NOTIFICACOES_PROCESS_ERROR',
       },
       500,
@@ -141,9 +152,10 @@ app.post('/processar', auth(), requireRole('admin'), async (c) => {
 // GET /api/notificacoes/whatsapp/overview
 // Resumo operacional do canal WhatsApp
 // =============================================
-app.get('/whatsapp/overview', auth(), async (c) => {
+app.get('/whatsapp/overview', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
     await seedLocalWhatsAppTemplateCatalog(c.env.DB);
 
     const templates = await listLocalWhatsAppTemplates(c.env.DB);
@@ -193,8 +205,12 @@ app.get('/whatsapp/overview', auth(), async (c) => {
         ORDER BY dias_antes ASC`,
     ).all();
 
-    // notificacoes_log é dado da empresa (CPF/nome/corpo de mensagem do funcionário) —
-    // filtrado por empresa_id (migration 0420) para não vazar entre tenants.
+    // O log contém CPF, destinatário, assunto, corpo e erros do provedor. Além do
+    // tenant, gestores só podem enxergar funcionários dos setores que gerenciam.
+    const recentLogConditions: string[] = ["nl.tipo = 'WHATSAPP'", 'nl.empresa_id = ?'];
+    const recentLogBindings: unknown[] = [empresaId];
+    appendEmployeeSectorFilter(recentLogConditions, recentLogBindings, access, 'f');
+
     const recentLogs = await c.env.DB.prepare(
       `SELECT nl.id,
               nl.config_id,
@@ -209,15 +225,23 @@ app.get('/whatsapp/overview', auth(), async (c) => {
               nl.created_at,
               qt.nome AS qualificacao_nome
          FROM notificacoes_log nl
-         LEFT JOIN funcionarios f ON f.cpf = nl.funcionario_cpf
-         LEFT JOIN qualificacoes_historico qh ON qh.id = nl.qualificacao_historico_id
-         LEFT JOIN qualificacoes_tipos qt ON qt.codigo = qh.qualificacao_codigo
-        WHERE nl.tipo = 'WHATSAPP'
-          AND nl.empresa_id = ?
+         LEFT JOIN funcionarios f
+           ON f.cpf = nl.funcionario_cpf
+          AND f.empresa_id = nl.empresa_id
+          AND f.deleted_at IS NULL
+         LEFT JOIN qualificacoes_historico qh
+           ON qh.id = nl.qualificacao_historico_id
+          AND qh.empresa_id = nl.empresa_id
+          AND qh.deleted_at IS NULL
+         LEFT JOIN qualificacoes_tipos qt
+           ON qt.codigo = qh.qualificacao_codigo
+          AND qt.empresa_id = nl.empresa_id
+          AND qt.deleted_at IS NULL
+        WHERE ${recentLogConditions.join(' AND ')}
         ORDER BY COALESCE(nl.enviado_em, nl.created_at) DESC
         LIMIT 15`,
     )
-      .bind(empresaId)
+      .bind(...recentLogBindings)
       .all();
 
     return c.json({
@@ -246,7 +270,7 @@ app.get('/whatsapp/overview', auth(), async (c) => {
 // GET /api/notificacoes/log
 // Listar log de notificações
 // =============================================
-app.get('/log', auth(), async (c) => {
+app.get('/log', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
     const {
       limit = '50',
@@ -258,8 +282,35 @@ app.get('/log', auth(), async (c) => {
     } = c.req.query();
 
     const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const offsetNum = Math.max(parseInt(offset, 10) || 0, 0);
 
-    let query = `
+    const conditions: string[] = ['nl.empresa_id = ?'];
+    const params: unknown[] = [empresaId];
+    appendEmployeeSectorFilter(conditions, params, access, 'f');
+
+    if (status) {
+      conditions.push('nl.status = ?');
+      params.push(status);
+    }
+
+    if (funcionario_cpf) {
+      conditions.push('nl.funcionario_cpf = ?');
+      params.push(funcionario_cpf);
+    }
+
+    if (data_inicio) {
+      conditions.push('DATE(nl.enviado_em) >= ?');
+      params.push(data_inicio);
+    }
+
+    if (data_fim) {
+      conditions.push('DATE(nl.enviado_em) <= ?');
+      params.push(data_fim);
+    }
+
+    const query = `
       SELECT
         nl.id,
         nl.config_id,
@@ -277,55 +328,47 @@ app.get('/log', auth(), async (c) => {
         qt.nome as qualificacao_nome,
         qt.categoria
       FROM notificacoes_log nl
-      LEFT JOIN funcionarios f ON nl.funcionario_cpf = f.cpf
-      LEFT JOIN qualificacoes_historico qh ON nl.qualificacao_historico_id = qh.id
-      LEFT JOIN qualificacoes_tipos qt ON qh.qualificacao_codigo = qt.codigo
-      WHERE nl.empresa_id = ?
+      LEFT JOIN funcionarios f
+        ON nl.funcionario_cpf = f.cpf
+       AND f.empresa_id = nl.empresa_id
+       AND f.deleted_at IS NULL
+      LEFT JOIN qualificacoes_historico qh
+        ON nl.qualificacao_historico_id = qh.id
+       AND qh.empresa_id = nl.empresa_id
+       AND qh.deleted_at IS NULL
+      LEFT JOIN qualificacoes_tipos qt
+        ON qh.qualificacao_codigo = qt.codigo
+       AND qt.empresa_id = nl.empresa_id
+       AND qt.deleted_at IS NULL
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY nl.created_at DESC
+      LIMIT ? OFFSET ?
     `;
 
-    const params: (string | number)[] = [empresaId];
-
-    if (status) {
-      query += ` AND nl.status = ?`;
-      params.push(status);
-    }
-
-    if (funcionario_cpf) {
-      query += ` AND nl.funcionario_cpf = ?`;
-      params.push(funcionario_cpf);
-    }
-
-    if (data_inicio) {
-      query += ` AND DATE(nl.enviado_em) >= ?`;
-      params.push(data_inicio);
-    }
-
-    if (data_fim) {
-      query += ` AND DATE(nl.enviado_em) <= ?`;
-      params.push(data_fim);
-    }
-
-    query += ` ORDER BY nl.created_at DESC`;
-    query += ` LIMIT ? OFFSET ?`;
-    params.push(parseInt(limit), parseInt(offset));
-
     const { results } = await c.env.DB.prepare(query)
-      .bind(...params)
+      .bind(...params, limitNum, offsetNum)
       .all();
 
-    // Estatísticas (mesma empresa do request)
+    // As estatísticas seguem o mesmo escopo de funcionário da listagem, sem aplicar
+    // os filtros opcionais de status/data da página atual.
+    const statsConditions: string[] = ['nl.empresa_id = ?'];
+    const statsBindings: unknown[] = [empresaId];
+    appendEmployeeSectorFilter(statsConditions, statsBindings, access, 'f');
+
     const { results: stats } = await c.env.DB.prepare(
-      `
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'enviada' THEN 1 ELSE 0 END) as enviadas,
-        SUM(CASE WHEN status = 'erro' THEN 1 ELSE 0 END) as erros,
-        SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as pendentes
-      FROM notificacoes_log
-      WHERE empresa_id = ?
-    `,
+      `SELECT
+         COUNT(*) as total,
+         SUM(CASE WHEN nl.status = 'enviada' THEN 1 ELSE 0 END) as enviadas,
+         SUM(CASE WHEN nl.status = 'erro' THEN 1 ELSE 0 END) as erros,
+         SUM(CASE WHEN nl.status = 'pendente' THEN 1 ELSE 0 END) as pendentes
+       FROM notificacoes_log nl
+       LEFT JOIN funcionarios f
+         ON nl.funcionario_cpf = f.cpf
+        AND f.empresa_id = nl.empresa_id
+        AND f.deleted_at IS NULL
+       WHERE ${statsConditions.join(' AND ')}`,
     )
-      .bind(empresaId)
+      .bind(...statsBindings)
       .all();
 
     return c.json({
@@ -333,8 +376,8 @@ app.get('/log', auth(), async (c) => {
       data: results,
       meta: {
         count: results.length,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
+        limit: limitNum,
+        offset: offsetNum,
         stats: stats[0],
       },
     });
@@ -357,7 +400,7 @@ app.get('/log', auth(), async (c) => {
 // notificacoes_config é global (plataforma inteira), não por empresa — ver nota
 // na rota PUT abaixo.
 // =============================================
-app.get('/config', auth(), async (c) => {
+app.get('/config', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
       `
@@ -543,12 +586,13 @@ app.get('/sistema', auth(), async (c) => {
       .bind(...countParams)
       .first<{ total: number }>();
 
-    const sanitizedResults = (results || []).filter((row) =>
-      row.empresa_id === empresaId ||
-      row.user_id === userId ||
-      (row.empresa_id === null &&
-        row.user_id === null &&
-        isGlobalNotificationAllowed(row.tipo, row.grupo)),
+    const sanitizedResults = (results || []).filter(
+      (row) =>
+        row.empresa_id === empresaId ||
+        row.user_id === userId ||
+        (row.empresa_id === null &&
+          row.user_id === null &&
+          isGlobalNotificationAllowed(row.tipo, row.grupo)),
     );
 
     return c.json({

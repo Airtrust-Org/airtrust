@@ -4,25 +4,28 @@ import type { Env } from '../../types';
 import notificacoesRoutes from '../../routes/notificacoes';
 
 vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: any, next: () => Promise<void>) => {
-      if (!c.req.header('Authorization')) {
-        return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
-      }
+  auth: () => async (c: any, next: () => Promise<void>) => {
+    if (!c.req.header('Authorization')) {
+      return c.json({ success: false, error: 'Token de autenticação não fornecido' }, 401);
+    }
 
-      c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
-      c.set('platformAdmin', c.req.header('x-test-platform-admin') === 'true');
-      await next();
-    },
+    c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
+    c.set('platformAdmin', c.req.header('x-test-platform-admin') === 'true');
+    // These routes now resolve getEmployeeSectorAccess for row-level scoping
+    // in addition to the (here pass-through-mocked) role gate. This suite is
+    // about tenant isolation, not sector isolation, so fix the role at admin
+    // ('all' mode / unrestricted within the tenant) rather than leaving
+    // userRole undefined, which would fail closed to an empty sector scope
+    // and make every query return nothing regardless of tenant.
+    c.set('userRole', 'admin');
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
-  requireRole:
-    () =>
-    async (_c: any, next: () => Promise<void>) => {
-      await next();
-    },
+  requireRole: () => async (_c: any, next: () => Promise<void>) => {
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', () => ({
@@ -87,7 +90,16 @@ function createMockEnv() {
   ];
 
   const configs = [
-    { id: 1, tipo: 'WHATSAPP', ativo: 1, dias_antes: 7, urgencia: 'ALTA', destinatarios: '', template: '', deleted_at: null },
+    {
+      id: 1,
+      tipo: 'WHATSAPP',
+      ativo: 1,
+      dias_antes: 7,
+      urgencia: 'ALTA',
+      destinatarios: '',
+      template: '',
+      deleted_at: null,
+    },
   ];
 
   const calls: Array<{ query: string; args: unknown[]; method: 'all' | 'first' | 'run' }> = [];
@@ -170,7 +182,11 @@ async function request(
   headers.set('Authorization', 'Bearer test-token');
   headers.set('x-test-empresa-id', String(empresaId));
   headers.set('x-test-platform-admin', String(platformAdmin));
-  return app.fetch(new Request(`http://localhost${path}`, { ...init, headers }), env, {} as ExecutionContext);
+  return app.fetch(
+    new Request(`http://localhost${path}`, { ...init, headers }),
+    env,
+    {} as ExecutionContext,
+  );
 }
 
 describe('notificacoes /log tenant isolation', () => {
@@ -205,16 +221,16 @@ describe('notificacoes /log tenant isolation', () => {
 
     await request(env, '/api/notificacoes/log', 1);
 
-    const listQuery = calls.find(
-      (call) => call.method === 'all' && call.query.includes('nl.id,'),
-    );
+    const listQuery = calls.find((call) => call.method === 'all' && call.query.includes('nl.id,'));
     expect(listQuery?.query).toContain('nl.empresa_id = ?');
     expect(listQuery?.args[0]).toBe(1);
 
     const statsQuery = calls.find(
       (call) => call.method === 'all' && call.query.includes('COUNT(*) as total'),
     );
-    expect(statsQuery?.query).toContain('WHERE empresa_id = ?');
+    // Stats query now joins funcionarios for sector scoping, so empresa_id is
+    // aliased (nl.empresa_id) rather than bare.
+    expect(statsQuery?.query).toContain('nl.empresa_id = ?');
     expect(statsQuery?.args[0]).toBe(1);
   });
 
