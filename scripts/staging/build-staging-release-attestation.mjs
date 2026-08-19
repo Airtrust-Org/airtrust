@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { STAGING_IDENTITY } from './governed-release-contract.mjs';
 
 const SHA = /^[0-9a-f]{40}$/i;
 const HEX64 = /^[0-9a-f]{64}$/i;
@@ -14,6 +15,12 @@ function requiredString(object, key) {
 }
 function requireSha(value, key) { if (!SHA.test(requiredString({ value }, 'value'))) throw new Error(`ATTESTATION_SHA:${key}`); return value; }
 function requireHash(value, key) { if (!HEX64.test(requiredString({ value }, 'value'))) throw new Error(`ATTESTATION_HASH:${key}`); return value; }
+function requireTimestamp(value) {
+  const timestamp = requiredString({ value }, 'value');
+  const parsed = Date.parse(timestamp);
+  if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(timestamp) || Number.isNaN(parsed) || parsed > Date.now() + 300_000) throw new Error('ATTESTATION_TIMESTAMP');
+  return timestamp;
+}
 
 export function buildStagingReleaseAttestation(input) {
   if (input.environment !== 'staging') throw new Error('ATTESTATION_ENVIRONMENT');
@@ -21,13 +28,14 @@ export function buildStagingReleaseAttestation(input) {
   const sourceTree = requireSha(input.source_tree, 'source_tree');
   if (releaseSha === sourceTree) throw new Error('ATTESTATION_TREE_EQUALS_COMMIT');
   const gates = input.gate_results;
-  if (!Array.isArray(gates) || gates.length === 0 || gates.some((gate) => gate.exit_code !== 0 || gate.dry_run === true)) throw new Error('ATTESTATION_GATES_NOT_PROVEN');
+  if (!Array.isArray(gates) || gates.length === 0 || gates.some((gate) => gate.exit_code !== 0 || gate.dry_run === true || gate.timed_out === true || gate.sha?.toLowerCase() !== releaseSha.toLowerCase())) throw new Error('ATTESTATION_GATES_NOT_PROVEN');
   const migrations = input.migration_results;
   const names = migrations?.map((migration) => migration.name) ?? [];
   if (names.join(',') !== '0461_refresh_tokens_empresa_id.sql,0462_qualificacoes_tipos_codigo_tenant_active_unique.sql') throw new Error('ATTESTATION_MIGRATION_ORDER');
   if (migrations.some((migration) => migration.ledger !== true || migration.postconditions !== true)) throw new Error('ATTESTATION_MIGRATION_EVIDENCE');
   const required = ['gitlab_project', 'pipeline_id', 'actor', 'runner', 'backup', 'recovery_points', 'd1', 'r2', 'worker', 'pages', 'health', 'version', 'qa', 'rollback_target', 'timestamps'];
   for (const key of required) requiredString(input, key);
+  for (const key of ['d1', 'r2', 'worker', 'pages']) if (input[key] !== ({ d1: STAGING_IDENTITY.d1Id, r2: STAGING_IDENTITY.r2, worker: STAGING_IDENTITY.worker, pages: STAGING_IDENTITY.pagesUrl })[key]) throw new Error(`ATTESTATION_IDENTITY:${key}`);
   const bundleHashes = input.bundle_hashes ?? {};
   const configHashes = input.config_hashes ?? {};
   const manifestHashes = input.manifest_hashes ?? {};
@@ -54,7 +62,7 @@ export function buildStagingReleaseAttestation(input) {
     bundle_hashes: bundleHashes, config_hashes: configHashes, manifest_hashes: manifestHashes,
     health: requiredString(input, 'health'), version: requiredString(input, 'version'),
     qa: requiredString(input, 'qa'), rollback_target: requiredString(input, 'rollback_target'),
-    timestamps: requiredString(input, 'timestamps'), signing: input.signing ?? 'ATTESTATION_UNSIGNED_BUT_HASHED',
+    timestamps: requireTimestamp(input.timestamps), signing: input.signing ?? 'ATTESTATION_UNSIGNED_BUT_HASHED',
   };
   const serialized = `${JSON.stringify(attestation, null, 2)}\n`;
   return { attestation, serialized, sha256: createHash('sha256').update(serialized).digest('hex') };

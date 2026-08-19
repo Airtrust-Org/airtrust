@@ -3,6 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
+const SHA = /^[0-9a-f]{40}$/i;
+
 export function validateGateDefinition(gate) {
   if (!/^[a-z0-9-]+$/.test(gate?.id ?? '')) throw new Error('INVALID_GATE_ID');
   if (typeof gate.command !== 'string' || !gate.command) throw new Error(`INVALID_GATE_COMMAND:${gate.id}`);
@@ -11,6 +13,7 @@ export function validateGateDefinition(gate) {
 }
 
 export function runGates({ gates, root, outputDirectory, dryRun = false, sha }) {
+  if (!SHA.test(sha ?? '')) throw new Error('INVALID_RELEASE_SHA');
   const ids = new Set();
   mkdirSync(outputDirectory, { recursive: true, mode: 0o700 });
   const results = [];
@@ -20,16 +23,19 @@ export function runGates({ gates, root, outputDirectory, dryRun = false, sha }) 
     ids.add(gate.id);
     const startedAt = new Date().toISOString();
     const cwd = resolve(root, gate.working_directory);
+    if (cwd !== resolve(root) && !cwd.startsWith(`${resolve(root)}/`)) throw new Error(`INVALID_GATE_CWD:${gate.id}`);
     const logPath = join(outputDirectory, `${gate.id}.log`);
     let exitCode = 0;
+    let timedOut = false;
     let output = 'DRY_RUN: command not executed';
     if (!dryRun) {
       const child = spawnSync('bash', ['-lc', gate.command], { cwd, encoding: 'utf8', timeout: gate.timeout_seconds * 1000 });
       exitCode = child.status ?? 1;
+      timedOut = child.error?.code === 'ETIMEDOUT';
       output = `${child.stdout ?? ''}${child.stderr ?? ''}`;
     }
     writeFileSync(logPath, output, { mode: 0o600 });
-    const result = { id: gate.id, command: gate.command, cwd: gate.working_directory, sha, started_at: startedAt, finished_at: new Date().toISOString(), exit_code: exitCode, log_path: logPath, dry_run: dryRun };
+    const result = { id: gate.id, command: gate.command, cwd: gate.working_directory, sha, started_at: startedAt, finished_at: new Date().toISOString(), exit_code: exitCode, timed_out: timedOut, log_path: logPath, dry_run: dryRun };
     results.push(result);
     if (exitCode !== 0) break;
   }

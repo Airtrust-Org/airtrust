@@ -8,6 +8,9 @@ export const STAGING_IDENTITY = Object.freeze({
   r2: 'airtrust-storage-staging',
   pagesUrl: 'https://staging.airtrust.pages.dev',
   productionD1Id: '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae',
+  productionWorker: 'airtrust-api',
+  productionR2: 'airtrust-storage',
+  productionPagesUrl: 'https://airtrust.pages.dev',
 });
 
 const SHA = /^[0-9a-f]{40}$/i;
@@ -32,7 +35,9 @@ export function validateGovernedReleaseContract(input) {
   for (const key of ['worker', 'd1Name', 'd1Id', 'r2', 'pagesUrl']) {
     if (identity[key] !== STAGING_IDENTITY[key]) fail(`staging identity mismatch: ${key}`);
   }
-  if (identity.d1Id === STAGING_IDENTITY.productionD1Id) fail('production D1 identity is forbidden');
+  for (const [key, productionValue] of Object.entries({ d1Id: STAGING_IDENTITY.productionD1Id, worker: STAGING_IDENTITY.productionWorker, r2: STAGING_IDENTITY.productionR2, pagesUrl: STAGING_IDENTITY.productionPagesUrl })) {
+    if (identity[key] === productionValue) fail(`production identity is forbidden: ${key}`);
+  }
 
   return { releaseSha, environment: 'staging', identity: { ...STAGING_IDENTITY } };
 }
