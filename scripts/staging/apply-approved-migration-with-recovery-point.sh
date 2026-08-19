@@ -15,8 +15,10 @@ CONFIRMATION_PHRASE="AIRTRUST_STAGING_SCHEMA_CHANGE"
 APPROVED_MIGRATIONS=(
   "0453_ead_category_reconciliation_executor.sql"
   "0454_qualificacoes_tipos_dominio_override.sql"
+  "0461_refresh_tokens_empresa_id.sql"
+  "0462_qualificacoes_tipos_codigo_tenant_active_unique.sql"
 )
-RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454"
+RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0461,0462"
 
 apply=false
 migration_arg=""
@@ -95,6 +97,12 @@ validate_postconditions() {
     0454_qualificacoes_tipos_dominio_override.sql)
       bash scripts/staging/validate-0454-postconditions.sh --target="$db_name"
       ;;
+    0461_refresh_tokens_empresa_id.sql)
+      bash scripts/staging/validate-0461-postconditions.sh --target="$db_name"
+      ;;
+    0462_qualificacoes_tipos_codigo_tenant_active_unique.sql)
+      bash scripts/staging/validate-0462-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -125,6 +133,11 @@ if ! node scripts/staging/migration-ledger-preflight.mjs \
   exit 1
 fi
 echo "PREFLIGHT_OK=true"
+
+if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
+  node scripts/staging/preflight-0461-0462.mjs --migration="$migration_basename"
+  echo "SPECIALIZED_PREFLIGHT_OK=true"
+fi
 
 ledger_count="$(read_ledger_count)"
 if [[ "$ledger_count" == "1" ]]; then
