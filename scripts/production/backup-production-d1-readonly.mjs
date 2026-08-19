@@ -3,8 +3,8 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
-import {
 import { fileURLToPath } from 'node:url';
+import {
   PRODUCTION_TARGET,
   assertCleanMain,
   assertPathOutsideRepo,
