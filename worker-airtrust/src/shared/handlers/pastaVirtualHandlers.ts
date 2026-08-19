@@ -14,7 +14,13 @@ registerHandler('pasta_virtual', 'ESCALA_PUBLICADA', async (db, _tipo, payload) 
     .bind(
       crypto.randomUUID(),
       Number(payload.empresa_id),
-      payload.origem_usuario_id ? String(payload.origem_usuario_id) : null,
+      // TEN-EVENT-004 (Tenant Readiness Matrix V3): ESCALA_PUBLICADA is a
+      // corporate/batch job, not tied to a single employee — origem_usuario_id
+      // identifies the USER who published the schedule (a different id space
+      // than funcionarios.id; the same collision class already fixed for FRMS
+      // in resolveFuncionarioId). It must stay only in the domain_events
+      // payload/audit trail, never be written into funcionario_id here.
+      null,
       escalaId,
       nomeArquivo,
     )
