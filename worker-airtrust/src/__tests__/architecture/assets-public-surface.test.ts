@@ -57,4 +57,13 @@ describe('assets public surface architecture guard', () => {
     expect(classifyAssetAccess('qualificacoes/123/documento.pdf').visibility).toBe('blocked');
     expect(classifyAssetAccess('desconhecido/documento.pdf').visibility).toBe('blocked');
   });
+
+  // TEN-R2-002 (Tenant Readiness Matrix V3): path traversal em /api/assets
+  // deve ser bloqueado antes de qualquer leitura do R2.
+  it('bloqueia path traversal (../) em qualquer posição da chave', () => {
+    expect(classifyAssetAccess('fira/1/../../../etc/passwd').visibility).toBe('blocked');
+    expect(classifyAssetAccess('../fira/1/documento.pdf').visibility).toBe('blocked');
+    expect(classifyAssetAccess('fira/1/..').visibility).toBe('blocked');
+    expect(classifyAssetAccess('empresas/1/../2/logo.png').visibility).toBe('blocked');
+  });
 });
