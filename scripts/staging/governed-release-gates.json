@@ -1,0 +1,17 @@
+{
+  "schema": "airtrust.governed-release-gates/v1",
+  "runtime": { "node": "24", "os": "linux", "tools": ["git", "bash", "curl", "openssl", "python3", "sqlite3", "wrangler", "playwright"] },
+  "gates": [
+    { "id": "lint", "command": "npm run lint", "working_directory": ".", "timeout_seconds": 1800, "required": true },
+    { "id": "build-content-gates", "command": "npm run build && npm run check:demo-data", "working_directory": ".", "timeout_seconds": 1800, "required": true },
+    { "id": "frontend-coverage", "command": "npm run test:coverage", "working_directory": ".", "timeout_seconds": 1800, "required": true },
+    { "id": "frontend-typecheck-ratchet", "command": "npm run typecheck", "working_directory": ".", "timeout_seconds": 900, "required": true },
+    { "id": "worker-typecheck", "command": "npx tsc --noEmit", "working_directory": "worker-airtrust", "timeout_seconds": 900, "required": true },
+    { "id": "worker-tests-1", "command": "npx vitest run --shard=1/2", "working_directory": "worker-airtrust", "timeout_seconds": 1800, "required": true },
+    { "id": "worker-tests-2", "command": "npx vitest run --shard=2/2", "working_directory": "worker-airtrust", "timeout_seconds": 1800, "required": true },
+    { "id": "migration-governance", "command": "npx vitest run src/__tests__/ops/governed-migrations-0461-0462.test.ts", "working_directory": "worker-airtrust", "timeout_seconds": 900, "required": true },
+    { "id": "lms-smoke", "command": "npm run smoke:lms:local", "working_directory": ".", "timeout_seconds": 1800, "required": true },
+    { "id": "public-e2e", "command": "CI=true VITE_API_URL=http://127.0.0.1:8787 npx playwright test --config=playwright.ci.config.ts", "working_directory": ".", "timeout_seconds": 1800, "required": true },
+    { "id": "diff-check", "command": "git diff --check", "working_directory": ".", "timeout_seconds": 120, "required": true }
+  ]
+}

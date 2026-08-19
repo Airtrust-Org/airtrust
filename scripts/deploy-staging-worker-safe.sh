@@ -179,6 +179,8 @@ if grep -q 'database_id = "7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"' "$TMP_WRANGLER
   echo "❌ Refusing deploy: staging binding points at production D1" >&2
   exit 1
 fi
+echo "   Target worker: $ALLOWED_STAGING_WORKER_NAME"
+echo "   Target D1: $ALLOWED_STAGING_DB_ID"
 
 PREVIOUS_VERSION="$(curl -fsS "$VERSION_ENDPOINT" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -n1 || true)"
 echo "   Previous staging version: ${PREVIOUS_VERSION:-unknown}"
