@@ -317,8 +317,11 @@ export async function fetchWithAuth(
 
   // ===== TOKEN VALIDATION =====
   if (!isValidToken(token)) {
-    // Try to refresh
-    if (!retry && cachedRefreshToken) {
+    // Try to refresh. getRefreshToken() (not the raw cachedRefreshToken
+    // variable) so a cold start — module state reset, persisted session
+    // still valid in storage — restores the session via refresh instead
+    // of logging the user out on the very first authenticated call.
+    if (!retry && getRefreshToken()) {
       try {
         await refreshAccessToken();
         return fetchWithAuth(url, options, true); // Retry with new token
@@ -347,8 +350,8 @@ export async function fetchWithAuth(
 
   // ===== HANDLE 401 UNAUTHORIZED =====
   if (response.status === 401 && !retry) {
-    // Token expired or invalid, try refresh
-    if (cachedRefreshToken) {
+    // Token expired or invalid, try refresh — same cold-start fix as above.
+    if (getRefreshToken()) {
       try {
         await refreshAccessToken();
         return fetchWithAuth(url, options, true); // Retry with new token
