@@ -19,7 +19,7 @@ vi.mock('../../middleware/auth', () => ({
     const empresaId = Number(c.env?.__mockEmpresaId ?? 77);
 
     c.set('userId', 101);
-    c.set('userRole', 'manager');
+    c.set('userRole', String(c.env?.__mockRole || 'manager'));
     c.set('empresaId', empresaId);
     c.set('tenantContext', {
       empresaId,
@@ -35,6 +35,7 @@ vi.mock('../../middleware/auth', () => ({
 }));
 
 import simuladoresRelatoriosRoutes from '../../routes/simuladores-relatorios';
+import { errorHandler } from '../../middleware/error-handler';
 import simuladoresEquipamentosRoutes from '../../routes/simuladores-equipamentos';
 import simuladoresModelosRoutes from '../../routes/simuladores-modelos';
 
@@ -43,6 +44,8 @@ type RelatoriosUsoResponse = {
     por_simulador: Array<{ codigo: string }>;
   };
 };
+
+simuladoresRelatoriosRoutes.onError(errorHandler);
 
 type EquipamentosResponse = {
   data: Array<{
@@ -270,6 +273,16 @@ describe('simuladores optional auth tenant scoping', () => {
       success: false,
       error: 'AUTH_REQUIRED',
     });
+  });
+
+  it('bloqueia aluno autenticado dos relatórios operacionais globais', async () => {
+    const response = await simuladoresRelatoriosRoutes.fetch(
+      new Request('http://localhost/uso'),
+      { DB: createRelatoriosDb(), __mockRole: 'student' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(403);
   });
 
   it('bloqueia GET /simuladores sem autenticação', async () => {
