@@ -78,6 +78,7 @@ describe('environment entrypoint origin isolation', () => {
   it('rejects disallowed production origins before Hono', async () => {
     const deniedOrigins = [
       'https://staging.airtrust.pages.dev',
+      'https://airtrust-staging.pages.dev',
       'https://main.airtrust.pages.dev',
       'https://feature-123.airtrust.pages.dev',
       'https://airtrust.pages.dev.evil.example',

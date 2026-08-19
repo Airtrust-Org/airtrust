@@ -210,8 +210,8 @@ matrizTreinamento.post('/registros', requireRole('admin', 'manager'), async (c) 
     }
 
     const tipo = await db
-      .prepare(`SELECT id FROM qualificacoes_tipos WHERE id = ? AND deleted_at IS NULL LIMIT 1`)
-      .bind(body.qualificacao_tipo_id)
+      .prepare(`SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`)
+      .bind(body.qualificacao_tipo_id, empresaId)
       .first<{ id: number }>();
 
     if (!tipo) {
@@ -320,8 +320,8 @@ matrizTreinamento.post('/registros/bulk', requireRole('admin', 'manager'), async
 
     for (const tipoId of body.qualificacao_tipo_ids) {
       const tipo = await db
-        .prepare(`SELECT id FROM qualificacoes_tipos WHERE id = ? AND deleted_at IS NULL LIMIT 1`)
-        .bind(tipoId)
+        .prepare(`SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`)
+        .bind(tipoId, empresaId)
         .first<{ id: number }>();
       if (!tipo) {
         skipped.push(tipoId);

@@ -32,14 +32,17 @@ cmaStatus.get('/', auth(), async (c) => {
        FROM qualificacoes_historico qh
        JOIN qualificacoes_tipos qt
          ON COALESCE(qh.qualificacao_codigo, qt.codigo) = qt.codigo
+        AND qt.empresa_id = ?
+        AND qt.deleted_at IS NULL
        JOIN funcionarios f ON f.id = qh.funcionario_id
        WHERE qt.codigo = 'CMA'
          AND f.empresa_id = ?
+         AND qh.empresa_id = ?
          AND qh.funcionario_id IN (${placeholders})
          AND qh.deleted_at IS NULL
        GROUP BY qh.funcionario_id`,
     )
-      .bind(empresaId, ...idList)
+      .bind(empresaId, empresaId, empresaId, ...idList)
       .all<{ funcionario_id: string; data_vencimento: string | null }>();
 
     const data = (rows.results || []).map((r) => {

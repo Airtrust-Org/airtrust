@@ -61,8 +61,9 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
           ) AS dias
        FROM qualificacoes_historico qh
        JOIN funcionarios f ON f.id = qh.funcionario_id
-       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = f.empresa_id AND qt.deleted_at IS NULL
        WHERE f.empresa_id = ?
+         AND qh.empresa_id = ?
          AND f.deleted_at IS NULL
          AND COALESCE(f.ativo, 1) = 1
          AND qh.deleted_at IS NULL
@@ -71,7 +72,7 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
        GROUP BY f.id
        HAVING dias BETWEEN 1 AND 30`,
     )
-    .bind(Number(empresaId))
+    .bind(Number(empresaId), Number(empresaId))
     .all<{ funcionario_id: string; validade_fim: string; dias: number }>();
 
   for (const row of cmaVencendo.results || []) {
@@ -97,8 +98,9 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
           ${getQualificacoesVencimentoExpr()} AS validade_fim
        FROM qualificacoes_historico qh
        JOIN funcionarios f ON f.id = qh.funcionario_id
-       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = f.empresa_id AND qt.deleted_at IS NULL
        WHERE f.empresa_id = ?
+         AND qh.empresa_id = ?
          AND f.deleted_at IS NULL
          AND COALESCE(f.ativo, 1) = 1
          AND qh.deleted_at IS NULL
@@ -106,7 +108,7 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
          AND UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) = 'CMA'
          AND date(${getQualificacoesVencimentoExpr()}) = date('now', '-1 day')`,
     )
-    .bind(Number(empresaId))
+    .bind(Number(empresaId), Number(empresaId))
     .all<{ funcionario_id: string; validade_fim: string }>();
 
   for (const row of cmaVencido.results || []) {

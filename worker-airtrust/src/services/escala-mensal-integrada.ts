@@ -750,10 +750,12 @@ async function loadQualificacaoEvents(db: D1Database, empresaId: number, month: 
       FROM qualificacoes_historico qh
       INNER JOIN funcionarios f ON (f.cpf = qh.funcionario_cpf OR f.id = qh.funcionario_id)
       INNER JOIN qualificacoes_tipos qt ON (qt.codigo = qh.qualificacao_codigo OR qt.id = qh.qualificacao_id)
+        AND qt.empresa_id = f.empresa_id
+        AND qt.deleted_at IS NULL
       WHERE qh.deleted_at IS NULL
+        AND qh.empresa_id = f.empresa_id
         AND f.deleted_at IS NULL
         AND f.empresa_id = ?
-        AND qt.deleted_at IS NULL
         AND ${vencimentoExpr} IS NOT NULL
         AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days')
         AND qh.id IN (

@@ -441,7 +441,7 @@ export async function resolveCanonicalEadQualificacaoTipoId(
   return canonical?.id ?? tipo.id;
 }
 
-async function resolveUniqueQualificacaoTipoCode(
+export async function resolveUniqueQualificacaoTipoCode(
   db: D1Database,
   empresaId: number,
   titulo: string,
@@ -457,9 +457,11 @@ async function resolveUniqueQualificacaoTipoCode(
         `SELECT id
            FROM qualificacoes_tipos
           WHERE UPPER(TRIM(COALESCE(codigo, ''))) = UPPER(TRIM(?))
+            AND empresa_id = ?
+            AND deleted_at IS NULL
           LIMIT 1`,
       )
-      .bind(candidate)
+      .bind(candidate, empresaId)
       .first<{ id: number }>();
 
     if (!existing?.id) {
@@ -939,6 +941,7 @@ async function resolveImportedHistoryCourse(
            FROM lms_cursos c
            LEFT JOIN qualificacoes_tipos qt
              ON qt.id = c.qualificacao_tipo_id
+            AND qt.empresa_id = c.empresa_id
             AND qt.deleted_at IS NULL
           WHERE c.id = ?
             AND c.empresa_id = ?
@@ -1051,6 +1054,7 @@ export async function reconcileImportedEdappHistory(
           AND c.deleted_at IS NULL
          LEFT JOIN qualificacoes_tipos qt
            ON qt.id = c.qualificacao_tipo_id
+          AND qt.empresa_id = lhi.empresa_id
           AND qt.deleted_at IS NULL
         WHERE ${conditions.join(' AND ')}
         ORDER BY lhi.id ASC`,

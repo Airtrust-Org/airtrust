@@ -95,12 +95,14 @@ app.get(
       FROM qualificacoes_historico qh
       INNER JOIN funcionarios f ON qh.funcionario_cpf = f.cpf
       INNER JOIN qualificacoes_tipos qt ON qh.qualificacao_codigo = qt.codigo
+        AND qt.empresa_id = f.empresa_id
+        AND qt.deleted_at IS NULL
       WHERE qh.deleted_at IS NULL
+        AND qh.empresa_id = ?
         AND f.deleted_at IS NULL
         AND f.empresa_id = ?
         AND ${scopeConditions.join(' AND ')}
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-        AND qt.deleted_at IS NULL
         AND ${vencimentoExpr} IS NOT NULL
         AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days')
         AND (
@@ -119,11 +121,12 @@ app.get(
           SELECT MAX(id)
           FROM qualificacoes_historico
           WHERE deleted_at IS NULL
+            AND empresa_id = ?
           GROUP BY funcionario_cpf, qualificacao_codigo
         )
     `;
 
-    const params: unknown[] = [empresaId, ...scopeBindings, hojeSp, diasJanela, filtrarPorMatriz ? 1 : 0];
+    const params: unknown[] = [empresaId, empresaId, ...scopeBindings, hojeSp, diasJanela, filtrarPorMatriz ? 1 : 0, empresaId];
 
     if (funcionario_cpf) {
       query += ` AND qh.funcionario_cpf = ?`;
@@ -224,12 +227,14 @@ app.get(
       FROM qualificacoes_historico qh
       INNER JOIN funcionarios f ON qh.funcionario_cpf = f.cpf
       INNER JOIN qualificacoes_tipos qt ON qh.qualificacao_codigo = qt.codigo
+        AND qt.empresa_id = f.empresa_id
+        AND qt.deleted_at IS NULL
       WHERE qh.deleted_at IS NULL
+        AND qh.empresa_id = ?
         AND f.deleted_at IS NULL
         AND f.empresa_id = ?
         AND ${scopeConditions.join(' AND ')}
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-        AND qt.deleted_at IS NULL
         AND (
           ? = 0
           OR EXISTS (
@@ -247,11 +252,12 @@ app.get(
           SELECT MAX(id)
           FROM qualificacoes_historico
           WHERE deleted_at IS NULL
+            AND empresa_id = ?
           GROUP BY funcionario_cpf, qualificacao_codigo
         )
     `,
     )
-      .bind(empresaId, ...scopeBindings, filtrarPorMatriz ? 1 : 0)
+      .bind(empresaId, empresaId, ...scopeBindings, filtrarPorMatriz ? 1 : 0, empresaId)
       .all();
 
     // Calcular estatísticas

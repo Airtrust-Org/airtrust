@@ -33,10 +33,10 @@ describe('resolveApiBase environment isolation', () => {
     }
   });
 
-  it('routes the official staging host only to staging', () => {
-    const host = 'staging.airtrust.pages.dev';
-    const origin = `https://${host}`;
-
+  it.each([
+    ['staging.airtrust.pages.dev', 'https://staging.airtrust.pages.dev'],
+    ['airtrust-staging.pages.dev', 'https://airtrust-staging.pages.dev'],
+  ])('routes the official staging host %s only to staging', (host, origin) => {
     expectResolution({ host, origin, envUrl: '' }, STAGING_API_BASE_URL);
     expect(() => resolveApiBase({ host, origin, envUrl: PRODUCTION_API_BASE_URL })).toThrow(
       ApiEnvironmentConfigurationError,
