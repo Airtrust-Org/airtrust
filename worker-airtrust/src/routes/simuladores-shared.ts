@@ -740,10 +740,11 @@ export async function criarQualificacoesPlanejadas(
          WHERE funcionario_id = ?
            AND qualificacao_codigo = ?
            AND data_conclusao = ?
+           AND empresa_id = ?
            AND deleted_at IS NULL
          LIMIT 1`,
       )
-      .bind(part.funcionario_id, modelo.qual_codigo, params.data)
+      .bind(part.funcionario_id, modelo.qual_codigo, params.data, params.empresaId)
       .first<{ id: number; status: string; sessao_id: number | null }>();
 
     if (uniqueConflict) {
@@ -757,9 +758,9 @@ export async function criarQualificacoesPlanejadas(
           .prepare(
             `UPDATE qualificacoes_historico
              SET deleted_at = datetime('now'), updated_at = datetime('now')
-             WHERE id = ?`,
+             WHERE id = ? AND empresa_id = ?`,
           )
-          .bind(uniqueConflict.id)
+          .bind(uniqueConflict.id, params.empresaId)
           .run();
       } else {
         conflitosUniques++;
