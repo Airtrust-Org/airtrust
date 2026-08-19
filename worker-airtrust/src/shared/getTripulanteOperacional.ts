@@ -95,8 +95,9 @@ WITH tripulante_operacional AS (
     CASE WHEN EXISTS (
       SELECT 1
       FROM qualificacoes_historico qh
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = f.empresa_id AND qt.deleted_at IS NULL
       WHERE qh.funcionario_id = f.id
+        AND qh.empresa_id = f.empresa_id
         AND qh.deleted_at IS NULL
         AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
         AND UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) = 'CMA'
@@ -107,8 +108,9 @@ WITH tripulante_operacional AS (
       JULIANDAY((
         SELECT MAX(${getQualificacoesVencimentoExpr('qh2', 'qt2')})
         FROM qualificacoes_historico qh2
-        LEFT JOIN qualificacoes_tipos qt2 ON qt2.id = qh2.qualificacao_id AND qt2.deleted_at IS NULL
+        LEFT JOIN qualificacoes_tipos qt2 ON qt2.id = qh2.qualificacao_id AND qt2.empresa_id = f.empresa_id AND qt2.deleted_at IS NULL
         WHERE qh2.funcionario_id = f.id
+          AND qh2.empresa_id = f.empresa_id
           AND qh2.deleted_at IS NULL
           AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh2.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
           AND UPPER(COALESCE(qh2.qualificacao_codigo, qt2.codigo, '')) = 'CMA'
@@ -118,8 +120,9 @@ WITH tripulante_operacional AS (
     (
       SELECT MAX(${getQualificacoesVencimentoExpr('qh3', 'qt3')})
       FROM qualificacoes_historico qh3
-      LEFT JOIN qualificacoes_tipos qt3 ON qt3.id = qh3.qualificacao_id AND qt3.deleted_at IS NULL
+      LEFT JOIN qualificacoes_tipos qt3 ON qt3.id = qh3.qualificacao_id AND qt3.empresa_id = f.empresa_id AND qt3.deleted_at IS NULL
       WHERE qh3.funcionario_id = f.id
+        AND qh3.empresa_id = f.empresa_id
         AND qh3.deleted_at IS NULL
         AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh3.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
         AND UPPER(COALESCE(qh3.qualificacao_codigo, qt3.codigo, '')) = 'CMA'
@@ -203,8 +206,9 @@ WITH tripulante_operacional AS (
       WHEN NOT EXISTS (
         SELECT 1
         FROM qualificacoes_historico qh4
-        LEFT JOIN qualificacoes_tipos qt4 ON qt4.id = qh4.qualificacao_id AND qt4.deleted_at IS NULL
+        LEFT JOIN qualificacoes_tipos qt4 ON qt4.id = qh4.qualificacao_id AND qt4.empresa_id = f.empresa_id AND qt4.deleted_at IS NULL
         WHERE qh4.funcionario_id = f.id
+          AND qh4.empresa_id = f.empresa_id
           AND qh4.deleted_at IS NULL
           AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh4.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
           AND UPPER(COALESCE(qh4.qualificacao_codigo, qt4.codigo, '')) = 'CMA'
@@ -222,8 +226,9 @@ WITH tripulante_operacional AS (
         JULIANDAY((
           SELECT MAX(${getQualificacoesVencimentoExpr('qh5', 'qt5')})
           FROM qualificacoes_historico qh5
-          LEFT JOIN qualificacoes_tipos qt5 ON qt5.id = qh5.qualificacao_id AND qt5.deleted_at IS NULL
+          LEFT JOIN qualificacoes_tipos qt5 ON qt5.id = qh5.qualificacao_id AND qt5.empresa_id = f.empresa_id AND qt5.deleted_at IS NULL
           WHERE qh5.funcionario_id = f.id
+            AND qh5.empresa_id = f.empresa_id
             AND qh5.deleted_at IS NULL
             AND ${sqlStatusNotEqualsAny(
               "UPPER(COALESCE(qh5.status, 'CONCLUIDA'))",

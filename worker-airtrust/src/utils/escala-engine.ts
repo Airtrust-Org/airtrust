@@ -125,6 +125,8 @@ export async function verificarCMAAutomatico(
     SELECT qh.*, qh.${vencCol} as cma_data_vencimento, qt.codigo
     FROM qualificacoes_historico qh
     JOIN qualificacoes_tipos qt ON CAST(qh.${tipoCol} AS TEXT) = CAST(qt.id AS TEXT)
+      AND qt.empresa_id = qh.empresa_id
+      AND qt.deleted_at IS NULL
     WHERE qh.funcionario_id = ?
       AND qt.codigo = 'CMA'
       AND qh.deleted_at IS NULL
@@ -184,9 +186,10 @@ export async function gerarAlertasCMA(
     FROM escala_eventos ee
     JOIN funcionarios f ON ee.funcionario_id = f.id
     LEFT JOIN qualificacoes_historico qh ON qh.funcionario_id = ee.funcionario_id
+      AND qh.empresa_id = f.empresa_id
       AND qh.deleted_at IS NULL
       AND CAST(qh.${tipoCol} AS TEXT) IN (
-        SELECT CAST(id AS TEXT) FROM qualificacoes_tipos WHERE codigo = 'CMA'
+        SELECT CAST(id AS TEXT) FROM qualificacoes_tipos WHERE codigo = 'CMA' AND empresa_id = f.empresa_id AND deleted_at IS NULL
       )
     WHERE ee.escala_id = ?
       AND ee.tipo_evento = 'medico'

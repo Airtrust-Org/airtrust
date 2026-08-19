@@ -3,6 +3,9 @@ stages:
   - test
   - deploy
 
+include:
+  - local: .gitlab/governed-staging-release.yml
+
 # CI/tests moved to CircleCI (see .circleci/config.yml). These jobs stay
 # versioned as reference and remain manually runnable, but no longer fire
 # automatically on push/MR, so no shared-runner compute minutes are
@@ -253,10 +256,12 @@ deploy-staging:
     ALLOWED_STAGING_BUCKET_NAME: "airtrust-storage-staging"
     BLOCKED_PRODUCTION_BUCKET_NAME: "airtrust-storage"
     BLOCKED_PRODUCTION_HOST: "api.airtrust.online"
-    PAGES_PROJECT_NAME: "airtrust"
-    PAGES_STAGING_BRANCH: "staging"
+    PAGES_PROJECT_NAME: "airtrust-staging"
+    BLOCKED_PRODUCTION_PAGES_PROJECT: "airtrust"
+    PAGES_STAGING_BRANCH: "main"
     STAGING_WORKER_API_URL: "https://airtrust-api-staging.airtrust.workers.dev/api"
-    STAGING_PAGES_URL: "https://staging.airtrust.pages.dev"
+    STAGING_PAGES_URL: "https://airtrust-staging.pages.dev"
+    ALLOW_BRIDGE_BASELINE_BOOTSTRAP: "true"
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends python3
     - npm ci
@@ -268,6 +273,10 @@ deploy-staging:
       echo "### 0. Guard: this CI file must never reference production identifiers outside the BLOCKED_* guard variables ###"
       if grep -n "${BLOCKED_PRODUCTION_DB_ID}\|${BLOCKED_PRODUCTION_HOST}" .gitlab-ci.yml | grep -vi "BLOCKED_PRODUCTION"; then
         echo "Production identifiers found in .gitlab-ci.yml outside guard variables." >&2
+        exit 1
+      fi
+      if [ "$PAGES_PROJECT_NAME" = "$BLOCKED_PRODUCTION_PAGES_PROJECT" ]; then
+        echo "PAGES_PROJECT_NAME must never be '${BLOCKED_PRODUCTION_PAGES_PROJECT}' (production Pages project)." >&2
         exit 1
       fi
       echo "OK: no stray production identifiers in .gitlab-ci.yml"
@@ -327,23 +336,39 @@ deploy-staging:
       echo "$PRE_PAGES_SHA" > /tmp/pre_pages_sha.txt
 
       echo "### 2b. Validate the previous release SHA is safe to roll back to ###"
-      if [ "$PRE_WORKER_SHA" = "unavailable" ] || [ -z "$PRE_WORKER_SHA" ]; then
-        echo "Could not determine the currently-active Worker's source SHA. ABORTING before any write." >&2
-        exit 1
+      HAS_PREV_RELEASE=true
+      if [ "$PRE_WORKER_SHA" = "unavailable" ] || [ -z "$PRE_WORKER_SHA" ] || [ "$PRE_PAGES_SHA" = "unavailable" ] || [ -z "$PRE_PAGES_SHA" ]; then
+        HAS_PREV_RELEASE=false
       fi
-      if [ "$PRE_PAGES_SHA" = "unavailable" ] || [ -z "$PRE_PAGES_SHA" ]; then
-        echo "Could not determine the currently-active Pages deployment's source SHA. ABORTING before any write." >&2
-        exit 1
+
+      if [ "$HAS_PREV_RELEASE" = "true" ]; then
+        if [ "$PRE_WORKER_SHA" != "$PRE_PAGES_SHA" ]; then
+          echo "Worker and Pages are on different source SHAs (worker=$PRE_WORKER_SHA, pages=$PRE_PAGES_SHA) — cannot identify a single safe rollback target." >&2
+          if [ "${ALLOW_BRIDGE_BASELINE_BOOTSTRAP:-false}" != "true" ]; then
+            echo "ABORTING before any write." >&2
+            exit 1
+          else
+            echo "ALLOW_BRIDGE_BASELINE_BOOTSTRAP=true is set: establishing initial bridge baseline."
+          fi
+        elif ! git cat-file -e "${PRE_PAGES_SHA}^{commit}" 2>/dev/null; then
+          echo "Previous release SHA $PRE_PAGES_SHA is not a recoverable commit in this checkout." >&2
+          if [ "${ALLOW_BRIDGE_BASELINE_BOOTSTRAP:-false}" != "true" ]; then
+            echo "ABORTING before any write." >&2
+            exit 1
+          else
+            echo "ALLOW_BRIDGE_BASELINE_BOOTSTRAP=true is set: establishing initial bridge baseline."
+          fi
+        else
+          echo "Previous release confirmed and recoverable: $PRE_PAGES_SHA (Worker + Pages agree, commit exists in history)"
+        fi
+      else
+        if [ "${ALLOW_BRIDGE_BASELINE_BOOTSTRAP:-false}" = "true" ]; then
+          echo "BRIDGE_BASELINE_MODE ACTIVE: No prior baseline found on dedicated staging. Establishing initial bridge baseline on current schema."
+        else
+          echo "Could not determine previous release and ALLOW_BRIDGE_BASELINE_BOOTSTRAP is not true. ABORTING before any write." >&2
+          exit 1
+        fi
       fi
-      if [ "$PRE_WORKER_SHA" != "$PRE_PAGES_SHA" ]; then
-        echo "Worker and Pages are already on different source SHAs before this run (worker=$PRE_WORKER_SHA, pages=$PRE_PAGES_SHA) — cannot identify a single safe rollback target. ABORTING before any write." >&2
-        exit 1
-      fi
-      if ! git cat-file -e "${PRE_PAGES_SHA}^{commit}" 2>/dev/null; then
-        echo "Previous release SHA $PRE_PAGES_SHA is not a recoverable commit in this checkout (GIT_DEPTH=0 clone). ABORTING before any write." >&2
-        exit 1
-      fi
-      echo "Previous release confirmed and recoverable: $PRE_PAGES_SHA (Worker + Pages agree, commit exists in history)"
 
       echo "### 3. Stamp staging wrangler config with provenance (scratch copy, never the tracked wrangler.toml) ###"
       cd worker-airtrust
@@ -427,9 +452,13 @@ deploy-staging:
         npm run build
       bash scripts/stamp-build-version.sh dist/client/index.html
 
-      echo "### 9. Assert never deploying to the production Pages branch ###"
-      if [ "$PAGES_STAGING_BRANCH" = "production" ]; then
-        echo "PAGES_STAGING_BRANCH must never be 'production'." >&2
+      echo "### 9. Assert never deploying to the production Pages project or branch ###"
+      if [ "$PAGES_PROJECT_NAME" = "$BLOCKED_PRODUCTION_PAGES_PROJECT" ]; then
+        echo "PAGES_PROJECT_NAME must never be '${BLOCKED_PRODUCTION_PAGES_PROJECT}'." >&2
+        exit 1
+      fi
+      if [ "$PAGES_PROJECT_NAME" = "airtrust" ] && [ "$PAGES_STAGING_BRANCH" = "production" ]; then
+        echo "PAGES_STAGING_BRANCH must never be 'production' on production project." >&2
         exit 1
       fi
 
@@ -462,6 +491,14 @@ deploy-staging:
       echo "new_worker_version_id=$WORKER_VERSION_ID"
       echo "pre_deploy_worker_version_id=$PRE_WORKER_VERSION"
       echo "pre_deploy_pages_deployment_id=$PRE_PAGES_DEPLOYMENT"
+      echo "schema_compatibility=0462"
+
+      if [ "${ALLOW_BRIDGE_BASELINE_BOOTSTRAP:-false}" = "true" ] && [ "$HAS_PREV_RELEASE" != "true" ]; then
+        echo "### BRIDGE_BASELINE_ESTABLISHED ###"
+        echo "{\"status\":\"BRIDGE_BASELINE_ESTABLISHED\",\"release_sha\":\"$SOURCE_SHA\",\"worker_version_id\":\"$WORKER_VERSION_ID\",\"pages_deployment_id\":\"$PAGES_DEPLOYMENT_ID\",\"schema_compatibility\":\"0462\"}" > /tmp/bridge_baseline_manifest.json
+        cat /tmp/bridge_baseline_manifest.json
+      fi
+
       echo "No production action was taken by this job."
   after_script:
     - |
@@ -489,9 +526,13 @@ deploy-staging:
           echo "Worker rolled back to $PRE_WORKER_ID"
         else
           echo "WORKER ROLLBACK FAILED — MANUAL INTERVENTION REQUIRED (target version: $PRE_WORKER_ID)" >&2
+          echo "ROLLBACK_FAILED" >&2
+          exit 1
         fi
       else
         echo "No pre-deploy Worker version was captured — cannot auto-rollback Worker. MANUAL INTERVENTION REQUIRED." >&2
+        echo "ROLLBACK_FAILED" >&2
+        exit 1
       fi
 
       if [ ! -f /tmp/pages_deployed_ok ]; then
@@ -503,20 +544,23 @@ deploy-staging:
       PRE_PAGES_SHA="$(cat /tmp/pre_pages_sha.txt 2>/dev/null || echo unavailable)"
       if [ "$PRE_PAGES_SHA" = "unavailable" ] || [ -z "$PRE_PAGES_SHA" ]; then
         echo "No pre-deploy Pages source SHA was captured — cannot forward-rollback Pages. MANUAL INTERVENTION REQUIRED (Worker was rolled back; Pages was not)." >&2
-        exit 0
+        echo "ROLLBACK_FAILED" >&2
+        exit 1
       fi
 
       ROLLBACK_DIR="$(mktemp -d /tmp/airtrust-pages-rollback-XXXXXX)"
       git worktree add --detach "$ROLLBACK_DIR" "$PRE_PAGES_SHA"
       if [ $? -ne 0 ]; then
         echo "PAGES FORWARD-ROLLBACK FAILED: could not check out $PRE_PAGES_SHA. MANUAL INTERVENTION REQUIRED." >&2
-        exit 0
+        echo "ROLLBACK_FAILED" >&2
+        exit 1
       fi
       ACTUAL_SHA="$(git -C "$ROLLBACK_DIR" rev-parse HEAD)"
       if [ "$ACTUAL_SHA" != "$PRE_PAGES_SHA" ]; then
         echo "PAGES FORWARD-ROLLBACK ABORTED: checkout SHA mismatch (expected $PRE_PAGES_SHA, got $ACTUAL_SHA). MANUAL INTERVENTION REQUIRED." >&2
         git worktree remove --force "$ROLLBACK_DIR" 2>/dev/null
-        exit 0
+        echo "ROLLBACK_FAILED" >&2
+        exit 1
       fi
       echo "Rollback checkout confirmed at exactly $PRE_PAGES_SHA (detached, no commit/branch created)"
 
@@ -541,18 +585,20 @@ deploy-staging:
 
       if [ $ROLLBACK_DEPLOY_STATUS -ne 0 ]; then
         echo "PAGES FORWARD-ROLLBACK FAILED during rebuild/redeploy. MANUAL INTERVENTION REQUIRED (Worker was rolled back to $PRE_WORKER_ID; Pages is still on the failed release)." >&2
-        exit 0
+        echo "ROLLBACK_FAILED" >&2
+        exit 1
       fi
       echo "Pages forward-rolled back: new deployment published for previous source $PRE_PAGES_SHA"
 
       echo "=== Post-rollback verification ==="
       curl -fsS -o /tmp/rollback_version_body.json "$STAGING_WORKER_API_URL/version" 2>/dev/null
       cat /tmp/rollback_version_body.json 2>/dev/null
-      curl -fsS -o /dev/null -w "post-rollback worker /api/health -> %{http_code}\n" "$STAGING_WORKER_API_URL/health" 2>/dev/null
-      curl -fsS -o /dev/null -w "post-rollback pages / -> %{http_code}\n" "$STAGING_PAGES_URL/" 2>/dev/null
+      curl -fsS -o /dev/null -w "post-rollback worker /api/health -> %{http_code}\n" "$STAGING_WORKER_API_URL/health" 2>/dev/null || { echo "ROLLBACK_FAILED: worker health failed" >&2; exit 1; }
+      curl -fsS -o /dev/null -w "post-rollback pages / -> %{http_code}\n" "$STAGING_PAGES_URL/" 2>/dev/null || { echo "ROLLBACK_FAILED: pages health failed" >&2; exit 1; }
       echo "Staging restored to previous release: source_sha=$PRE_PAGES_SHA (Worker version=$PRE_WORKER_ID, Pages redeployed from the same commit). Worker and Pages are aligned again — no mixed release left in place."
   artifacts:
     when: always
     paths:
       - worker-airtrust/wrangler.staging.gitlab.toml
+      - /tmp/bridge_baseline_manifest.json
     expire_in: 30 days

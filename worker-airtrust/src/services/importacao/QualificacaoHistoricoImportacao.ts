@@ -145,6 +145,7 @@ export class QualificacaoHistoricoImportacaoService {
         validCPFs,
         codigosAceitos,
         false,
+        empresaId,
       );
       errors.push(...rowErrors);
     }

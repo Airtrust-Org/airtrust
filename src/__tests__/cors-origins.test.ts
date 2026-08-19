@@ -14,7 +14,7 @@ const PRODUCTION_ORIGINS = [
   'https://production.airtrust.pages.dev',
 ].join(',');
 
-const STAGING_ORIGINS = 'https://staging.airtrust.pages.dev';
+const STAGING_ORIGINS = 'https://staging.airtrust.pages.dev,https://airtrust-staging.pages.dev';
 
 const LOCAL_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:5173'].join(',');
 
@@ -29,8 +29,10 @@ describe('environment-scoped CORS origins', () => {
     expect(resolveAllowedOrigin(origin, STAGING_ORIGINS)).toBe(DENIED_CORS_ORIGIN);
   });
 
-  it('allows the official staging origin in staging only', () => {
-    const origin = 'https://staging.airtrust.pages.dev';
+  it.each([
+    'https://staging.airtrust.pages.dev',
+    'https://airtrust-staging.pages.dev',
+  ])('allows the official staging origin %s in staging only', (origin) => {
     expect(resolveAllowedOrigin(origin, STAGING_ORIGINS)).toBe(origin);
     expect(resolveAllowedOrigin(origin, PRODUCTION_ORIGINS)).toBe(DENIED_CORS_ORIGIN);
   });

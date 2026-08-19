@@ -58,7 +58,7 @@ binding = "CF_VERSION_METADATA"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-CORS_ORIGINS = "https://staging.airtrust.pages.dev"
+CORS_ORIGINS = "https://staging.airtrust.pages.dev,https://airtrust-staging.pages.dev"
 # Placeholder tracked in git. Real APP_VERSION is injected by
 # scripts/deploy-staging-worker-safe.sh and .github/workflows/deploy-staging.yml.
 # Absent/unstamped remote staging must never publish as "dev-local".

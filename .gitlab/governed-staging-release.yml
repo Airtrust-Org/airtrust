@@ -1,0 +1,184 @@
+# Additional governed staging path. Disabled unless explicitly selected; it
+# never replaces the existing GitHub staging workflow or ordinary MR CI.
+.governed_staging_release:
+  tags: [airtrust-staging-release]
+  resource_group: airtrust-staging-release
+  interruptible: false
+  environment:
+    name: staging
+    url: https://staging.airtrust.pages.dev
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $AIRTRUST_GOVERNED_STAGING_RELEASE == "true" && $AIRTRUST_STAGING_RELEASE_CONFIRMATION == "AIRTRUST_STAGING"'
+      when: on_success
+    - when: never
+  variables:
+    GIT_DEPTH: "0"
+    ALLOWED_STAGING_WORKER_NAME: airtrust-api-staging
+    ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+    ALLOWED_STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+    ALLOWED_STAGING_BUCKET_NAME: airtrust-storage-staging
+    BLOCKED_PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+    PAGES_PROJECT_NAME: airtrust
+    PAGES_STAGING_BRANCH: staging
+    STAGING_PAGES_URL: https://staging.airtrust.pages.dev
+    AIRTRUST_RELEASE_ENV: staging
+    AIRTRUST_RELEASE_CONFIRMATION: $AIRTRUST_STAGING_RELEASE_CONFIRMATION
+    AIRTRUST_RELEASE_SHA: $CI_COMMIT_SHA
+  before_script:
+    - npm ci
+    - npm ci --prefix worker-airtrust
+
+staging-release-contract:
+  extends: .governed_staging_release
+  stage: validate
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $AIRTRUST_GOVERNED_STAGING_RELEASE == "true" && $AIRTRUST_STAGING_RELEASE_CONFIRMATION == "AIRTRUST_STAGING"'
+      when: manual
+      allow_failure: false
+    - when: never
+  script:
+    - node scripts/staging/governed-release-contract.mjs | tee governed-release-contract.json
+  artifacts:
+    expire_in: 180 days
+    paths: [governed-release-contract.json]
+
+staging-release-gates:
+  extends: .governed_staging_release
+  stage: test
+  needs: [staging-release-contract]
+  script:
+    - node scripts/staging/run-governed-release.mjs
+  artifacts:
+    expire_in: 180 days
+    when: always
+    paths: [artifacts/governed-release-gates]
+
+staging-release-backup:
+  extends: .governed_staging_release
+  stage: deploy
+  needs: [staging-release-gates]
+  script:
+    - CONFIRM_STAGING_BACKUP=AIRTRUST_STAGING_BACKUP bash scripts/staging/backup-d1-staging.sh --apply --out-dir=artifacts/staging-backups | tee backup-evidence.txt
+  artifacts:
+    expire_in: 180 days
+    paths: [backup-evidence.txt, artifacts/staging-backups]
+
+staging-release-migrate-0461:
+  extends: .governed_staging_release
+  stage: deploy
+  needs: [staging-release-backup]
+  script:
+    - git worktree add --detach release "$CI_COMMIT_SHA"
+    - node scripts/staging/preflight-0461-0462.mjs --migration=0461_refresh_tokens_empresa_id.sql | tee migration-0461-preflight.json
+    - CONFIRM_STAGING_SCHEMA_CHANGE=AIRTRUST_STAGING_SCHEMA_CHANGE bash scripts/staging/apply-approved-migration-with-recovery-point.sh --migration=release/worker-airtrust/migrations/0461_refresh_tokens_empresa_id.sql --apply | tee migration-0461-evidence.txt
+  artifacts:
+    expire_in: 180 days
+    paths: [migration-0461-preflight.json, migration-0461-evidence.txt]
+
+staging-release-auth-smoke:
+  extends: .governed_staging_release
+  stage: deploy
+  needs: [staging-release-migrate-0461]
+  script:
+    - 'npm run smoke:staging:auth'
+
+staging-release-migrate-0462:
+  extends: .governed_staging_release
+  stage: deploy
+  needs: [staging-release-auth-smoke]
+  script:
+    - git worktree add --detach release "$CI_COMMIT_SHA"
+    - node scripts/staging/preflight-0461-0462.mjs --migration=0462_qualificacoes_tipos_codigo_tenant_active_unique.sql | tee migration-0462-preflight.json
+    - CONFIRM_STAGING_SCHEMA_CHANGE=AIRTRUST_STAGING_SCHEMA_CHANGE bash scripts/staging/apply-approved-migration-with-recovery-point.sh --migration=release/worker-airtrust/migrations/0462_qualificacoes_tipos_codigo_tenant_active_unique.sql --apply | tee migration-0462-evidence.txt
+  artifacts:
+    expire_in: 180 days
+    paths: [migration-0462-preflight.json, migration-0462-evidence.txt]
+
+staging-release-qualification-smoke:
+  extends: .governed_staging_release
+  stage: deploy
+  needs: [staging-release-migrate-0462]
+  script: [node scripts/staging/smoke-certificado-auth.mjs]
+
+# Worker/Pages stages intentionally reuse the existing reviewed staging paths.
+# They remain unreachable until the protected manual contract job succeeds.
+staging-release-worker:
+  extends: .governed_staging_release
+  stage: deploy
+  needs: [staging-release-qualification-smoke]
+  script:
+    - git worktree add --detach release "$CI_COMMIT_SHA"
+    - npm --prefix release ci
+    - npm --prefix release/worker-airtrust ci
+    - cd release && AIRTRUST_ALLOW_STAGING_WORKER_DEPLOY=YES AIRTRUST_CONFIRM_STAGING_WORKER_DEPLOY='I understand this deploys the AirTrust staging worker' bash scripts/deploy-staging-worker-safe.sh | tee ../worker-release-evidence.txt
+  artifacts:
+    expire_in: 180 days
+    paths: [worker-release-evidence.txt]
+
+staging-release-pages:
+  extends: .governed_staging_release
+  stage: deploy
+  needs: [staging-release-worker]
+  script:
+    - git worktree add --detach release "$CI_COMMIT_SHA"
+    - npm --prefix release ci
+    - cd release && VITE_API_URL=https://airtrust-api-staging.airtrust.workers.dev/api VITE_DEV_PROXY_TARGET=https://airtrust-api-staging.airtrust.workers.dev npm run build
+    - cd release && bash scripts/stamp-build-version.sh dist/client/index.html
+    - test "$PAGES_STAGING_BRANCH" = staging
+    - cd release && npx wrangler pages deploy dist/client --project-name="$PAGES_PROJECT_NAME" --branch="$PAGES_STAGING_BRANCH" --commit-hash="$AIRTRUST_RELEASE_SHA" | tee ../pages-release-evidence.txt
+    - printf 'PAGES_RELEASE_SHA=%s PAGES_TARGET_BRANCH=%s\n' "$AIRTRUST_RELEASE_SHA" "$PAGES_STAGING_BRANCH" >> pages-release-evidence.txt
+  artifacts:
+    expire_in: 180 days
+    paths: [pages-release-evidence.txt]
+
+staging-release-smoke:
+  extends: .governed_staging_release
+  stage: deploy
+  needs: [staging-release-pages]
+  script:
+    - npm run staging:doctor
+    - npm run smoke:staging:auth
+    - printf 'STAGING_SMOKE_OK release_sha=%s expected_pages=%s\n' "$AIRTRUST_RELEASE_SHA" "$STAGING_PAGES_URL" > staging-smoke-evidence.txt
+  artifacts:
+    expire_in: 180 days
+    paths: [staging-smoke-evidence.txt]
+
+# The builder and verifier are separate jobs so no operator may provide PASS.
+staging-release-attestation:
+  extends: .governed_staging_release
+  stage: deploy
+  needs:
+    - job: staging-release-contract
+      artifacts: true
+    - job: staging-release-gates
+      artifacts: true
+    - job: staging-release-backup
+      artifacts: true
+    - job: staging-release-migrate-0461
+      artifacts: true
+    - job: staging-release-migrate-0462
+      artifacts: true
+    - job: staging-release-worker
+      artifacts: true
+    - job: staging-release-pages
+      artifacts: true
+    - job: staging-release-smoke
+      artifacts: true
+  script:
+    - mkdir -p artifacts/release-attestation-input
+    - cp governed-release-contract.json artifacts/release-attestation-input/
+    - cp artifacts/governed-release-gates/gate-results.json artifacts/release-attestation-input/
+    - cp backup-evidence.txt worker-release-evidence.txt pages-release-evidence.txt staging-smoke-evidence.txt artifacts/release-attestation-input/
+    - cp migration-0461-evidence.txt migration-0462-evidence.txt artifacts/release-attestation-input/
+    - node scripts/staging/assemble-governed-release-attestation.mjs artifacts/release-attestation-input "artifacts/AIRTRUST_STAGING_RELEASE_ATTESTATION_${AIRTRUST_RELEASE_SHA}.json" "$AIRTRUST_RELEASE_SHA"
+  artifacts:
+    expire_in: 180 days
+    when: always
+    paths: [artifacts]
+
+staging-release-verify-attestation:
+  extends: .governed_staging_release
+  stage: deploy
+  needs: [staging-release-attestation]
+  script:
+    - node scripts/staging/verify-staging-release-attestation.mjs "artifacts/AIRTRUST_STAGING_RELEASE_ATTESTATION_${AIRTRUST_RELEASE_SHA}.json" "artifacts/AIRTRUST_STAGING_RELEASE_ATTESTATION_${AIRTRUST_RELEASE_SHA}.json.sha256"

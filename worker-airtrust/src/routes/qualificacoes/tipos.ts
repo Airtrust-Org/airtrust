@@ -177,7 +177,13 @@ function normalizeHistoricoCodigo(value?: string | null): string {
 
 function isTipoCodigoUniqueConstraintError(error: unknown): boolean {
   const message = (error as Error)?.message || String(error || '');
-  return message.includes('UNIQUE constraint failed: qualificacoes_tipos.codigo');
+  return (
+    message.includes('UNIQUE constraint failed: qualificacoes_tipos.codigo') ||
+    message.includes('idx_qualificacoes_tipos_codigo') ||
+    (message.includes('UNIQUE constraint failed') &&
+      message.includes('qualificacoes_tipos') &&
+      message.includes('codigo'))
+  );
 }
 
 async function loadQualificacoesTiposColumnsSupport(db: D1Database): Promise<TiposColumnsSupport> {

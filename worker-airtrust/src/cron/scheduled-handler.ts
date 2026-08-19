@@ -862,8 +862,8 @@ export async function runScheduledJobs(
                   JULIANDAY(${vencExpr}) - JULIANDAY('now') AS INTEGER
                 ) AS dias_restantes
              FROM qualificacoes_historico qh
-             JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1
-             LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+             JOIN funcionarios f ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1
+             LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id AND qt.deleted_at IS NULL
              WHERE qh.deleted_at IS NULL
                AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
                AND CAST(
@@ -872,7 +872,7 @@ export async function runScheduledJobs(
                AND qh.id IN (
                  SELECT MAX(sub.id) FROM qualificacoes_historico sub
                  WHERE sub.deleted_at IS NULL
-                 GROUP BY sub.funcionario_id, COALESCE(sub.qualificacao_codigo, sub.qualificacao_id)
+                 GROUP BY sub.empresa_id, sub.funcionario_id, COALESCE(sub.qualificacao_codigo, sub.qualificacao_id)
                )
              ORDER BY f.empresa_id ASC, dias_restantes ASC`,
         ).all<{

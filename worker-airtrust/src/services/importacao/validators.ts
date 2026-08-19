@@ -248,6 +248,7 @@ export async function validateQualificacaoHistoricoRow(
   validCPFs?: Set<string>,
   validCodigos?: Set<string>,
   skipFKCheck?: boolean,
+  empresaId?: number,
 ): Promise<ValidationError[]> {
   const errors: ValidationError[] = [];
 
@@ -293,9 +294,14 @@ export async function validateQualificacaoHistoricoRow(
         }
       } else {
         // Fallback: query individual
+        const funcionarioQuery = empresaId != null
+          ? 'SELECT cpf FROM funcionarios WHERE cpf = ? AND empresa_id = ? AND deleted_at IS NULL'
+          : 'SELECT cpf FROM funcionarios WHERE cpf = ? AND deleted_at IS NULL';
+        const funcionarioBinds = empresaId != null ? [cpf, empresaId] : [cpf];
+
         const funcionario = await db
-          .prepare('SELECT cpf FROM funcionarios WHERE cpf = ? AND deleted_at IS NULL')
-          .bind(cpf)
+          .prepare(funcionarioQuery)
+          .bind(...funcionarioBinds)
           .first();
 
         if (!funcionario) {
@@ -334,11 +340,14 @@ export async function validateQualificacaoHistoricoRow(
         }
       } else {
         // Fallback: query individual
+        const qualQuery = empresaId != null
+          ? 'SELECT codigo FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?) AND empresa_id = ? AND deleted_at IS NULL'
+          : 'SELECT codigo FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?) AND deleted_at IS NULL';
+        const qualBinds = empresaId != null ? [codigo, empresaId] : [codigo];
+
         const qualificacao = await db
-          .prepare(
-            'SELECT codigo FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?) AND deleted_at IS NULL',
-          )
-          .bind(codigo)
+          .prepare(qualQuery)
+          .bind(...qualBinds)
           .first();
 
         if (!qualificacao) {

@@ -263,16 +263,19 @@ tripulacoes.post('/:id/tripulacoes', auth(), requireRole('admin', 'manager'), as
             `SELECT qh.funcionario_id, qh.observacoes
              FROM qualificacoes_historico qh
              JOIN qualificacoes_tipos qt ON COALESCE(qh.qualificacao_codigo, qt.codigo) = qt.codigo
+               AND qt.empresa_id = ?
+               AND qt.deleted_at IS NULL
              WHERE qt.codigo = 'CMA'
+               AND qh.empresa_id = ?
                AND qh.funcionario_id IN (?, ?)
                AND qh.deleted_at IS NULL
                AND qh.id IN (
                  SELECT MAX(id) FROM qualificacoes_historico
-                 WHERE deleted_at IS NULL AND qualificacao_codigo = 'CMA'
+                 WHERE deleted_at IS NULL AND qualificacao_codigo = 'CMA' AND empresa_id = ?
                  GROUP BY funcionario_id
                )`,
           )
-          .bind(picId, sicId)
+          .bind(empresaId, empresaId, picId, sicId, empresaId)
           .all<{ funcionario_id: number; observacoes: string | null }>();
 
         const cmaPIC = cmaRows.results?.find((r) => String(r.funcionario_id) === picId);

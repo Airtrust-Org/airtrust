@@ -14,7 +14,11 @@ const PRODUCTION_ORIGINS = [
   'https://production.airtrust.pages.dev',
 ];
 
-const STAGING_ORIGINS = ['https://staging.airtrust.pages.dev', 'https://main.airtrust.pages.dev'];
+const STAGING_ORIGINS = [
+  'https://staging.airtrust.pages.dev',
+  'https://airtrust-staging.pages.dev',
+  'https://main.airtrust.pages.dev',
+];
 
 function extractTomlBlock(source, startHeader, nextHeader) {
   const start = source.indexOf(startHeader);

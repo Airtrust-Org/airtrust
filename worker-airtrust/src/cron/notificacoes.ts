@@ -187,7 +187,9 @@ async function carregarQualificacoesParaNotificar(env: Env, empresaId: number): 
         )
       )
     INNER JOIN qualificacoes_tipos qt
-      ON (
+      ON qt.empresa_id = qh.empresa_id
+     AND qt.deleted_at IS NULL
+     AND (
         qh.qualificacao_id = qt.id
         OR (
           qh.qualificacao_id IS NULL
@@ -197,7 +199,6 @@ async function carregarQualificacoesParaNotificar(env: Env, empresaId: number): 
     WHERE qh.deleted_at IS NULL
       AND f.deleted_at IS NULL
       AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-      AND qt.deleted_at IS NULL
       AND qh.data_vencimento IS NOT NULL
       AND COALESCE(qh.status, 'CONCLUIDA') != 'CANCELADA'
       AND qh.empresa_id = ?
@@ -207,10 +208,11 @@ async function carregarQualificacoesParaNotificar(env: Env, empresaId: number): 
         SELECT MAX(id)
         FROM qualificacoes_historico
         WHERE deleted_at IS NULL
+          AND empresa_id = ?
         GROUP BY funcionario_id, qualificacao_id, qualificacao_codigo
       )
   `,
-  ).bind(empresaId, empresaId).all<QualificacaoParaNotificar>();
+  ).bind(empresaId, empresaId, empresaId).all<QualificacaoParaNotificar>();
 
   return results ?? [];
 }

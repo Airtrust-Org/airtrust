@@ -8,7 +8,10 @@ const PRODUCTION_FRONTEND_HOSTS = new Set([
   'production.airtrust.pages.dev',
 ]);
 
-const STAGING_FRONTEND_HOSTS = new Set(['staging.airtrust.pages.dev']);
+const STAGING_FRONTEND_HOSTS = new Set([
+  'staging.airtrust.pages.dev',
+  'airtrust-staging.pages.dev',
+]);
 const BLOCKED_FRONTEND_HOSTS = new Set(['main.airtrust.pages.dev']);
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
 
