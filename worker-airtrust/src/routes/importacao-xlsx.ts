@@ -17,6 +17,7 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import { createLogger } from '../utils/logger';
+import { chainQualificationLineageForFuncionarioGroups } from '../services/importacao/lineageChaining';
 
 const app = new Hono<{ Bindings: Env }>();
 const MAX_IMPORT_ROWS = 500;
@@ -443,6 +444,7 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
 
     const entries: StatementEntry[] = [];
     const seenKeys = new Set<string>();
+    const touchedGroups: Array<{ funcionarioId: number; qualificacaoId: number }> = [];
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index];
       const linha = index + 2;
@@ -475,6 +477,7 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
         continue;
       }
       seenKeys.add(uniqueKey);
+      touchedGroups.push({ funcionarioId: Number(funcionarioId), qualificacaoId: Number(tipoId) });
 
       entries.push({
         linha,
@@ -525,6 +528,11 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
       entries,
       errors,
     });
+
+    if (touchedGroups.length > 0) {
+      await chainQualificationLineageForFuncionarioGroups(db, empresaId, touchedGroups);
+    }
+
     const result: ImportResult = {
       success: errors.length === 0,
       mode,

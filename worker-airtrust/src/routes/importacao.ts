@@ -18,6 +18,7 @@ import { FuncionarioImportacao as FuncionarioImportacaoService } from '../servic
 import { QualificacaoTipoImportacaoService } from '../services/importacao/QualificacaoTipoImportacao';
 import { QualificacaoHistoricoImportacaoService } from '../services/importacao/QualificacaoHistoricoImportacao';
 import { CategoriaImportacaoService } from '../services/importacao/CategoriaImportacao';
+import { chainQualificationLineageForGroups } from '../services/importacao/lineageChaining';
 import { createLogger } from '../utils/logger';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import type { Env } from '../types';
@@ -103,7 +104,7 @@ type TipoQualificacaoRow = {
 
 type ImportacaoJsonRow = Record<string, unknown>;
 
-async function executarImportacaoHistoricoEmLotes(
+export async function executarImportacaoHistoricoEmLotes(
   c: Context,
   rows: HistoricoRow[],
   modo: string,
@@ -135,6 +136,8 @@ async function executarImportacaoHistoricoEmLotes(
 
   let totalInserted = 0;
   let totalFailed = 0;
+  let totalSkipped = 0;
+  const touchedGroups: Array<{ funcionarioCpf: string; qualificacaoCodigo: string }> = [];
   const erros: Array<{ linha: number; cpf: string; codigo: string; erro: string }> = [];
 
   for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
@@ -248,10 +251,68 @@ async function executarImportacaoHistoricoEmLotes(
         continue;
       }
 
-      const placeholders = validRows.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+      // Idempotência: `modo` nunca foi usado para checar duplicatas (dead
+      // code) — reenviar o mesmo lote (retry após timeout, duplo clique)
+      // duplicava cada linha. A unique index real não protege este path
+      // (ele nunca preenche funcionario_id, só funcionario_cpf, e SQLite
+      // trata NULL como distinto em unique index). Verifica explicitamente
+      // por (cpf, código, data) já existentes no tenant e pula essas linhas.
+      const existingKeys = new Set<string>();
+      const dedupConditions = validRows
+        .map(
+          () =>
+            '(funcionario_cpf = ? AND UPPER(qualificacao_codigo) = UPPER(?) AND data_conclusao = ?)',
+        )
+        .join(' OR ');
+      const dedupBindings: unknown[] = [];
+      validRows.forEach((row) => {
+        dedupBindings.push(row.funcionario_cpf, row.qualificacao_codigo, row.data_conclusao);
+      });
+      const existingRows = await db
+        .prepare(
+          `SELECT funcionario_cpf, UPPER(qualificacao_codigo) AS qualificacao_codigo, data_conclusao
+             FROM qualificacoes_historico
+            WHERE (${dedupConditions}) AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(...dedupBindings, empresaId)
+        .all<{ funcionario_cpf: string; qualificacao_codigo: string; data_conclusao: string }>();
+      (existingRows.results || []).forEach((r) => {
+        existingKeys.add(`${r.funcionario_cpf}|${r.qualificacao_codigo}|${r.data_conclusao}`);
+      });
+
+      const newRows = validRows.filter(
+        (row) =>
+          !existingKeys.has(
+            `${row.funcionario_cpf}|${row.qualificacao_codigo.toUpperCase()}|${row.data_conclusao}`,
+          ),
+      );
+      const skippedCount = validRows.length - newRows.length;
+      if (skippedCount > 0) {
+        debugLogs.push(
+          `🔥 Lote ${batchIndex + 1}: ${skippedCount} linha(s) já existentes (cpf+código+data) — puladas, retry idempotente`,
+        );
+      }
+
+      // Todo grupo (cpf+código) tocado neste lote (novo ou já existente)
+      // precisa de uma passada de encadeamento de lineage ao final —
+      // rastreado aqui independentemente de a linha ter sido inserida ou
+      // pulada por já existir.
+      validRows.forEach((row) => {
+        touchedGroups.push({
+          funcionarioCpf: row.funcionario_cpf,
+          qualificacaoCodigo: row.qualificacao_codigo,
+        });
+      });
+
+      if (newRows.length === 0) {
+        totalSkipped += skippedCount;
+        continue;
+      }
+
+      const placeholders = newRows.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
       const values: (string | number)[] = [];
 
-      validRows.forEach((row) => {
+      newRows.forEach((row) => {
         values.push(
           row.funcionario_cpf,
           row.qualificacao_codigo,
@@ -279,10 +340,11 @@ async function executarImportacaoHistoricoEmLotes(
         .bind(...values)
         .run();
 
-      totalInserted += validRows.length;
-      debugLogs.push(`🔥 Lote ${batchIndex + 1}: ✅ ${validRows.length} inseridos com sucesso`);
+      totalInserted += newRows.length;
+      totalSkipped += skippedCount;
+      debugLogs.push(`🔥 Lote ${batchIndex + 1}: ✅ ${newRows.length} inseridos com sucesso`);
       console.log(
-        `[IMPORT HISTORICO BATCH] Lote ${batchIndex + 1}: ✅ ${validRows.length} inseridos`,
+        `[IMPORT HISTORICO BATCH] Lote ${batchIndex + 1}: ✅ ${newRows.length} inseridos`,
       );
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -305,18 +367,23 @@ async function executarImportacaoHistoricoEmLotes(
     }
   }
 
+  if (touchedGroups.length > 0) {
+    await chainQualificationLineageForGroups(db, empresaId, touchedGroups);
+  }
+
   console.log(
-    `[IMPORT HISTORICO BATCH] CONCLUÍDO: ${totalInserted} inseridos, ${totalFailed} falharam`,
+    `[IMPORT HISTORICO BATCH] CONCLUÍDO: ${totalInserted} inseridos, ${totalSkipped} pulados (já existentes), ${totalFailed} falharam`,
   );
 
   debugLogs.push(
-    `🔥 Concluído: ${totalInserted} inseridos, ${totalFailed} falharam, ${erros.length} erros`,
+    `🔥 Concluído: ${totalInserted} inseridos, ${totalSkipped} pulados, ${totalFailed} falharam, ${erros.length} erros`,
   );
 
   return c.json({
     success: erros.length === 0,
     totalRows: rows.length,
     inserted: totalInserted,
+    skipped: totalSkipped,
     failed: totalFailed,
     errors: erros.length > 0 ? erros : undefined,
     debugLogs, // INCLUIR DEBUGLOGS NO RESPONSE
