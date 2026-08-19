@@ -4,6 +4,7 @@
  */
 
 import { D1Database } from '@cloudflare/workers-types';
+import { createQualificationHistoryAtomic } from './qualification-history-atomic';
 
 // IDs das qualificações no banco (serão buscados dinamicamente se possível)
 const DEFAULT_CMA_ID = 1;
@@ -47,16 +48,22 @@ async function getFuncionarioEmpresaId(
   return funcionario?.empresa_id ?? null;
 }
 
-async function getTipoId(
+interface TipoInfo {
+  id: number;
+  codigo: string;
+  categoria: string | null;
+}
+
+async function getTipoInfo(
   db: D1Database,
   codigo: string,
   empresaId: number,
   defaultId: number,
-): Promise<number> {
+): Promise<TipoInfo> {
   try {
     const tipo = await db
       .prepare(
-        `SELECT id
+        `SELECT id, codigo, categoria
            FROM qualificacoes_tipos
           WHERE (UPPER(codigo) = UPPER(?) OR UPPER(nome) = UPPER(?))
             AND empresa_id = ?
@@ -64,12 +71,14 @@ async function getTipoId(
           LIMIT 1`,
       )
       .bind(codigo, codigo, empresaId)
-      .first<{ id: number }>();
-    return tipo?.id || defaultId;
+      .first<TipoInfo>();
+    if (tipo) return tipo;
   } catch (e) {
     console.warn(`[SYNC] Erro ao buscar tipo ${codigo}, usando default ${defaultId}`, e);
-    return defaultId;
   }
+  // Fallback: o default id é fixo por instalação (não configurável por
+  // tenant), então seu código canônico é o próprio parâmetro recebido.
+  return { id: defaultId, codigo, categoria: null };
 }
 
 /**
@@ -95,13 +104,13 @@ export async function syncFuncionarioCertificacoes(
 
   // 1. Sincronizar CMA
   if (data.data_realizacao_cma || data.validade_cma) {
-    const cmaId = await getTipoId(db, 'CMA', empresaId, DEFAULT_CMA_ID);
+    const cma = await getTipoInfo(db, 'CMA', empresaId, DEFAULT_CMA_ID);
     await upsertQualificacao(db, {
       funcionario_id,
       empresa_id: empresaId,
-      qualificacao_tipo_id: cmaId,
-      data_conclusao: data.data_realizacao_cma || '', // Permitir um dos dois
-      data_vencimento: data.validade_cma || '',
+      tipo: cma,
+      data_conclusao: data.data_realizacao_cma || null,
+      data_vencimento: data.validade_cma || null,
       numero_documento: data.cma || null,
       observacoes: 'Atualizado via modal de funcionário (Sync Automático)',
     });
@@ -109,13 +118,13 @@ export async function syncFuncionarioCertificacoes(
 
   // 2. Sincronizar ASO
   if (data.data_realizacao_aso || data.validade_aso) {
-    const asoId = await getTipoId(db, 'ASO', empresaId, DEFAULT_ASO_ID);
+    const aso = await getTipoInfo(db, 'ASO', empresaId, DEFAULT_ASO_ID);
     await upsertQualificacao(db, {
       funcionario_id,
       empresa_id: empresaId,
-      qualificacao_tipo_id: asoId,
-      data_conclusao: data.data_realizacao_aso || '',
-      data_vencimento: data.validade_aso || '',
+      tipo: aso,
+      data_conclusao: data.data_realizacao_aso || null,
+      data_vencimento: data.validade_aso || null,
       numero_documento: data.aso || null,
       observacoes: 'Atualizado via modal de funcionário (Sync Automático)',
     });
@@ -130,112 +139,105 @@ export async function syncFuncionarioCertificacoes(
 interface UpsertQualificacaoParams {
   funcionario_id: number;
   empresa_id: number;
-  qualificacao_tipo_id: number;
-  data_conclusao: string;
-  data_vencimento: string;
+  tipo: TipoInfo;
+  data_conclusao: string | null;
+  data_vencimento: string | null;
   numero_documento: string | null;
   observacoes: string;
 }
 
 /**
- * Cria ou atualiza registro em qualificacoes_historico
+ * Cria/realiza a certificação via o primitivo canônico de settlement quando
+ * há data_conclusao (uma conclusão real), preservando o invariante de
+ * lineage (predecessor imediato + renovacao_de) que todo outro writer de
+ * qualificacoes_historico convergido nesta auditoria já respeita. Quando o
+ * modal só envia data_vencimento (sem data_conclusao), não há um evento de
+ * conclusão para settlement — nesse caso apenas atualiza o vencimento do
+ * registro CONCLUIDA mais recente já existente, sem criar linha nova nem
+ * tocar lineage.
  */
 async function upsertQualificacao(db: D1Database, params: UpsertQualificacaoParams): Promise<void> {
-  const {
-    funcionario_id,
-    empresa_id,
-    qualificacao_tipo_id,
-    data_conclusao,
-    data_vencimento,
-    numero_documento,
-    observacoes,
-  } = params;
+  const { funcionario_id, empresa_id, tipo, data_conclusao, data_vencimento, numero_documento, observacoes } =
+    params;
 
-  // Validação mínima: precisa de pelo menos uma data
   if (!data_conclusao && !data_vencimento) {
     console.warn('[SYNC] Ignorando upsertQualificacao: sem datas', {
       funcionario_id,
-      qualificacao_tipo_id,
+      qualificacao_id: tipo.id,
     });
     return;
   }
 
-  // Verificar se já existe registro ativo (mesmo tipo, mesmo funcionário)
-  // CRITÉRIO DE UNICIDADE: Consideramos o "mais recente" criado pelo sistema ou pelo usuário para este tipo.
-  // Se a data de validade/conclusão for DIFERENTE da mais recente, criamos um NOVO histórico?
-  // OU atualizamos o existente se for recente?
-  // Regra de Negócio: Ao editar no modal, ATUALIZA o registro SE ele parecer ser o "atual".
-  // Se as datas mudaram drasticamente (ex: renovação), deveria ser NOVO.
-  // SIMPLIFICAÇÃO ATUAL: Busca o último registro. Se as datas batem (ou são nulas), atualiza. Se diferente, insere novo (Histórico).
-  // MUDANÇA: O pedido diz "garantir persistência". Se eu editar uma data, devo atualizar o registro correspondente se for o mesmo exame.
-
-  const existing = await db
-    .prepare(
-      `
-      SELECT id, data_conclusao, data_vencimento
-      FROM qualificacoes_historico 
-      WHERE funcionario_id = ? 
-        AND qualificacao_tipo_id = ? 
-        AND empresa_id = ?
-        AND deleted_at IS NULL
-      ORDER BY created_at DESC
-      LIMIT 1
-    `,
-    )
-    .bind(funcionario_id, qualificacao_tipo_id, empresa_id)
-    .first<{ id: number; data_conclusao: string; data_vencimento: string }>();
-
-  if (existing) {
-    // Decisão: Atualizar ou Criar Novo?
-    // Se a data de vencimento nova for > que a atual em X dias?
-    // Para simplificar e garantir persistência da edição: UPDATE no último registro.
-    // Isso garante que "reabrir modal e conferir" mostre o salvo.
-    console.log(`[SYNC] Atualizando qualificação existente ID=${existing.id}`);
-    await db
+  if (!data_conclusao) {
+    // Sem data de conclusão real: apenas atualiza o vencimento do registro
+    // CONCLUIDA mais recente (por data_conclusao, não por created_at), se
+    // existir. Nunca cria linha nem materializa/realoca lineage.
+    const existing = await db
       .prepare(
-        `
-        UPDATE qualificacoes_historico
-        SET data_conclusao = ?,
-            data_vencimento = ?,
-            numero_documento = COALESCE(?, numero_documento),
-            observacoes = ?,
-            updated_at = datetime('now')
-        WHERE id = ?
-          AND empresa_id = ?
-          AND deleted_at IS NULL
-      `,
+        `SELECT id
+           FROM qualificacoes_historico
+          WHERE funcionario_id = ?
+            AND qualificacao_id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+            AND UPPER(COALESCE(status, '')) = 'CONCLUIDA'
+          ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
+          LIMIT 1`,
       )
-      .bind(data_conclusao, data_vencimento, numero_documento, observacoes, existing.id, empresa_id)
-      .run();
-  } else {
-    // Criar novo registro
-    console.log(`[SYNC] Criando nova qualificação para tipo=${qualificacao_tipo_id}`);
-    await db
-      .prepare(
-        `
-        INSERT INTO qualificacoes_historico (
-          funcionario_id,
-          qualificacao_id,
-          data_conclusao,
-          data_vencimento,
-          numero_certificado,
-          observacoes,
-          empresa_id,
-          created_at,
-          updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-      `,
-      )
-      .bind(
+      .bind(funcionario_id, tipo.id, empresa_id)
+      .first<{ id: number }>();
+
+    if (!existing) {
+      console.warn('[SYNC] Sem data_conclusao e nenhum registro CONCLUIDA existente para atualizar vencimento', {
         funcionario_id,
-        qualificacao_tipo_id, // Agora vai para qualificacao_id
-        data_conclusao,
-        data_vencimento,
-        numero_documento,
-        observacoes,
-        empresa_id,
+        qualificacao_id: tipo.id,
+      });
+      return;
+    }
+
+    await db
+      .prepare(
+        `UPDATE qualificacoes_historico
+            SET data_vencimento = ?,
+                numero_certificado = COALESCE(?, numero_certificado),
+                observacoes = ?,
+                updated_at = datetime('now')
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL`,
       )
+      .bind(data_vencimento, numero_documento, observacoes, existing.id, empresa_id)
+      .run();
+    return;
+  }
+
+  const result = await createQualificationHistoryAtomic(db, {
+    empresaId: empresa_id,
+    funcionarioId: funcionario_id,
+    qualificationId: tipo.id,
+    qualificationCode: tipo.codigo,
+    category: tipo.categoria,
+    completionDate: data_conclusao,
+    expiryDate: data_vencimento,
+    validityMonths: null,
+    instructor: null,
+    observations: observacoes,
+    status: 'CONCLUIDA',
+    workload: null,
+    trainingType: 'RECORRENTE',
+  });
+
+  if (numero_documento) {
+    await db
+      .prepare(
+        `UPDATE qualificacoes_historico
+            SET numero_certificado = ?,
+                updated_at = datetime('now')
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL`,
+      )
+      .bind(numero_documento, result.id, empresa_id)
       .run();
   }
 }
@@ -264,7 +266,7 @@ export async function syncQualificacaoToFuncionario(
         qt.codigo as tipo_codigo
       FROM qualificacoes_historico qh
       LEFT JOIN qualificacoes_tipos qt
-        ON qt.id = qh.qualificacao_tipo_id
+        ON qt.id = qh.qualificacao_id
        AND qt.empresa_id = qh.empresa_id
        AND qt.deleted_at IS NULL
       WHERE qh.id = ?
