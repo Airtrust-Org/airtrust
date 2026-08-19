@@ -14,6 +14,7 @@ const DB_NAME = 'airtrust-db-staging-baseline-20260701';
 const DB_ID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
 const BLOCKED_DB_ID = '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae';
 const requested = process.argv.find((arg) => arg.startsWith('--migration='))?.slice('--migration='.length);
+const diagnosticsRequested = process.argv.includes('--diagnostics');
 
 if (![MIGRATION_0461, MIGRATION_0462].includes(requested || '')) {
   throw new Error('Use --migration=0461_refresh_tokens_empresa_id.sql or 0462_qualificacoes_tipos_codigo_tenant_active_unique.sql');
@@ -30,12 +31,22 @@ function query(sql) {
   return JSON.parse(run.stdout)[0]?.results ?? [];
 }
 
+function sqlLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
 const tables = query("SELECT name FROM sqlite_master WHERE type='table'").map((row) => row.name);
 const ledgerNames = query('SELECT name FROM d1_migrations').map((row) => row.name);
 const refreshColumns = query("SELECT name, type, \"notnull\" AS not_null FROM pragma_table_info('refresh_tokens')");
 const refreshIndexes = query("SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='refresh_tokens'");
 const qualificationColumns = query("SELECT name, type, \"notnull\" AS not_null FROM pragma_table_info('qualificacoes_tipos')");
 const qualificationIndexes = query("SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='qualificacoes_tipos'");
+const qualificationIndexList = query("SELECT seq, name, \"unique\" AS is_unique, origin, partial FROM pragma_index_list('qualificacoes_tipos')");
+const qualificationIndexDetails = qualificationIndexList.map((index) => ({
+  name: index.name,
+  indexInfo: query(`SELECT seqno, cid, name FROM pragma_index_info(${sqlLiteral(index.name)}) ORDER BY seqno`),
+  indexXInfo: query(`SELECT seqno, cid, name, desc, coll, key FROM pragma_index_xinfo(${sqlLiteral(index.name)}) ORDER BY seqno`),
+}));
 const duplicateRows = query("SELECT COUNT(*) AS count FROM (SELECT empresa_id, codigo FROM qualificacoes_tipos WHERE deleted_at IS NULL GROUP BY empresa_id, codigo COLLATE NOCASE HAVING COUNT(*) > 1)");
 const status0461 = evaluate0461({ tables, columns: refreshColumns, indexes: refreshIndexes, ledgerNames });
 const status0462 = evaluate0462({ tables, columns: qualificationColumns, indexes: qualificationIndexes, ledgerNames, activeDuplicateCount: Number(duplicateRows[0]?.count) });
@@ -46,5 +57,13 @@ try {
 } catch (error) {
   order = { state: 'BLOCKED', reason: error instanceof Error ? error.message : String(error) };
 }
-console.log(JSON.stringify({ migration: requested, status: selected.state, reason: selected.reason, order, prerequisites: { [MIGRATION_0461]: status0461, [MIGRATION_0462]: status0462 } }, null, 2));
+const diagnostics = diagnosticsRequested ? {
+  qualificationColumns,
+  qualificationIndexes,
+  qualificationIndexList,
+  qualificationIndexDetails,
+  relevantLedger: ledgerNames.filter((name) => /^(0402_|0412_|0461_|0462_)/.test(name)),
+  activeTenantCodigoDuplicateGroups: Number(duplicateRows[0]?.count),
+} : undefined;
+console.log(JSON.stringify({ migration: requested, status: selected.state, reason: selected.reason, order, prerequisites: { [MIGRATION_0461]: status0461, [MIGRATION_0462]: status0462 }, diagnostics }, null, 2));
 if (!['PENDING', 'ALREADY_APPLIED'].includes(selected.state) || order.state !== 'OK') process.exitCode = 1;

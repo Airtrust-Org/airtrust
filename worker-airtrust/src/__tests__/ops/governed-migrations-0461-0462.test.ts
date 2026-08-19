@@ -46,6 +46,32 @@ function setup() {
   return { dir, db };
 }
 
+function setupKnownLegacyBaseline() {
+  const dir = mkdtempSync(join(tmpdir(), 'airtrust-governed-0462-legacy-'));
+  const db = join(dir, 'governance.sqlite');
+  sql(db, `
+    CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL);
+    CREATE TABLE refresh_tokens (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, token TEXT, revoked_at TEXT);
+    CREATE TABLE qualificacoes_tipos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT, codigo TEXT NOT NULL COLLATE NOCASE,
+      nome TEXT NOT NULL, descricao TEXT, categoria TEXT, carga_horaria REAL,
+      carga_horaria_inicial REAL, carga_horaria_recorrente REAL, conteudo_programatico TEXT,
+      validade INTEGER, vencimento_fim_mes INTEGER DEFAULT 0, observacoes TEXT,
+      ativo INTEGER DEFAULT 1, is_check INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      deleted_at DATETIME DEFAULT NULL, empresa_id INTEGER NOT NULL, formato_id INTEGER,
+      categoria_id INTEGER, classe_requisito TEXT, dominio_codigo TEXT
+    );
+    CREATE INDEX idx_qualificacoes_tipos_ativo ON qualificacoes_tipos(ativo) WHERE deleted_at IS NULL;
+    CREATE INDEX idx_qualificacoes_tipos_deleted_at ON qualificacoes_tipos(deleted_at);
+    CREATE INDEX idx_qualificacoes_tipos_empresa ON qualificacoes_tipos(empresa_id);
+    CREATE INDEX idx_qt_formato ON qualificacoes_tipos(formato_id, empresa_id) WHERE deleted_at IS NULL;
+    CREATE INDEX idx_qt_categoria_id ON qualificacoes_tipos(categoria_id, empresa_id) WHERE deleted_at IS NULL;
+    CREATE INDEX idx_qualificacoes_tipos_dominio_codigo ON qualificacoes_tipos(dominio_codigo);
+  `);
+  return { dir, db };
+}
+
 function applyWithLedger(db: string, migration: string, name: string) {
   sql(db, buildLedgerAppliedSql({ migrationSql: migration, migrationName: name }));
 }
@@ -105,6 +131,36 @@ describe('governed staging migrations 0461/0462', () => {
       expect(evaluate0462({ ...metadata(db, 'qualificacoes_tipos'), activeDuplicateCount: 0 }).state).toBe('PARTIALLY_APPLIED');
       sql(db, 'DROP INDEX idx_qualificacoes_tipos_codigo; DROP INDEX idx_qualificacoes_tipos_codigo_empresa_active');
       expect(evaluate0462({ ...metadata(db, 'qualificacoes_tipos'), activeDuplicateCount: 0 }).state).toBe('UNEXPECTED_SCHEMA');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('0462 recognizes only the exact 20260701 schema-only baseline fingerprint and otherwise fails closed', () => {
+    const { dir, db } = setupKnownLegacyBaseline();
+    try {
+      let before = metadata(db, 'qualificacoes_tipos');
+      expect(evaluate0462({ ...before, activeDuplicateCount: 0 }).state).toBe('PENDING');
+      expect(evaluate0462({ ...before, activeDuplicateCount: 0 }).state).toBe('PENDING');
+      expect(() => assertSequentialOrder(MIGRATION_0462, before.ledgerNames, { state: 'PENDING' })).toThrow('MIGRATION_ORDER_VIOLATION');
+      applyWithLedger(db, migration0461, MIGRATION_0461);
+      before = metadata(db, 'qualificacoes_tipos');
+      expect(evaluate0462({ ...before, activeDuplicateCount: 0 }).state).toBe('PENDING');
+      assertSequentialOrder(MIGRATION_0462, before.ledgerNames, evaluate0461(metadata(db, 'refresh_tokens')));
+
+      sql(db, "INSERT INTO qualificacoes_tipos (empresa_id,codigo,nome) VALUES (1,'CMA','CMA'),(1,'cma','CMA duplicate')");
+      expect(evaluate0462({ ...metadata(db, 'qualificacoes_tipos'), activeDuplicateCount: 1 }).state).toBe('MIGRATION_DATA_PRECONDITION_FAILURE');
+      sql(db, 'DELETE FROM qualificacoes_tipos');
+
+      sql(db, 'CREATE INDEX idx_unknown_missing_index_state ON qualificacoes_tipos(nome)');
+      before = metadata(db, 'qualificacoes_tipos');
+      expect(evaluate0462({ ...before, activeDuplicateCount: 0 }).state).toBe('UNEXPECTED_SCHEMA');
+      sql(db, 'DROP INDEX idx_unknown_missing_index_state');
+
+      sql(db, 'DROP INDEX idx_qt_formato; CREATE INDEX idx_qt_formato ON qualificacoes_tipos(empresa_id, formato_id) WHERE deleted_at IS NULL');
+      expect(evaluate0462({ ...metadata(db, 'qualificacoes_tipos'), activeDuplicateCount: 0 }).state).toBe('UNEXPECTED_SCHEMA');
+      sql(db, 'DROP INDEX idx_qt_formato; CREATE INDEX idx_qt_formato ON qualificacoes_tipos(formato_id, empresa_id) WHERE deleted_at IS NULL');
+
+      sql(db, "INSERT INTO d1_migrations(name) VALUES ('0462_qualificacoes_tipos_codigo_tenant_active_unique.sql')");
+      expect(evaluate0462({ ...metadata(db, 'qualificacoes_tipos'), activeDuplicateCount: 0 }).state).toBe('PARTIALLY_APPLIED');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
