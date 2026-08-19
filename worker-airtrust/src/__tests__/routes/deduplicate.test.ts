@@ -295,12 +295,17 @@ describe('deduplicate route guards', () => {
     const recordsQuery = calls.find((call) =>
       call.query.includes('SELECT id, data_conclusao, created_at'),
     );
-    const updateQuery = calls.find((call) => call.query.includes('UPDATE qualificacoes_historico'));
+    const deleteQuery = calls.find(
+      (call) => call.query.includes('UPDATE qualificacoes_historico') && call.query.includes('id IN ('),
+    );
+    const repointQuery = calls.find((call) => call.query.includes('renovacao_de = ?'));
 
     expect(groupQuery?.query).toContain('AND empresa_id = ?');
     expect(recordsQuery?.query).toContain('WHERE empresa_id = ?');
-    expect(updateQuery?.query).toContain('empresa_id = ?');
-    expect(updateQuery?.query).toContain('id IN (');
+    expect(deleteQuery?.query).toContain('empresa_id = ?');
+    expect(deleteQuery?.query).toContain('id IN (');
+    // The renovacao_de repoint (dangling-pointer fix) is also tenant-scoped.
+    expect(repointQuery?.query).toContain('empresa_id = ?');
   });
 
   it('removes duplicates through a single atomic db.batch, not per-row sequential writes', async () => {
@@ -318,9 +323,10 @@ describe('deduplicate route guards', () => {
     );
 
     expect(response.status).toBe(200);
-    // Two candidate ids (102, 103), both under the 200-id-per-statement chunk size:
-    // exactly one db.batch call carrying one UPDATE statement, not two separate writes.
+    // One group (repoint + self-null renovacao_de guard + one delete chunk,
+    // ids 102/103 well under the 200-per-statement limit): three statements,
+    // still exactly one atomic db.batch call — not per-row sequential writes.
     expect(batchSizes).toHaveLength(1);
-    expect(batchSizes[0]).toBe(1);
+    expect(batchSizes[0]).toBe(3);
   });
 });

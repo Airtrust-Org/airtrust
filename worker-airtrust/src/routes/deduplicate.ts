@@ -203,23 +203,80 @@ async function buildDeduplicateCandidates(
 // duplicates removed and half still active.
 const DEDUPLICATE_IDS_PER_STATEMENT = 200;
 
+function buildDeduplicateRenovacaoDeRepointSql(idCount: number): string {
+  const placeholders = Array.from({ length: idCount }, () => '?').join(', ');
+  return `
+      UPDATE qualificacoes_historico
+      SET
+        renovacao_de = ?,
+        updated_at = datetime('now')
+      WHERE empresa_id = ?
+        AND deleted_at IS NULL
+        AND id != ?
+        AND renovacao_de IN (${placeholders})
+    `;
+}
+
+function buildDeduplicateRenovacaoDeSelfNullSql(idCount: number): string {
+  const placeholders = Array.from({ length: idCount }, () => '?').join(', ');
+  return `
+      UPDATE qualificacoes_historico
+      SET
+        renovacao_de = NULL,
+        updated_at = datetime('now')
+      WHERE empresa_id = ?
+        AND deleted_at IS NULL
+        AND id = ?
+        AND renovacao_de IN (${placeholders})
+    `;
+}
+
+/**
+ * Soft-deleta os duplicados de cada grupo, mas primeiro repointa qualquer
+ * renovacao_de que apontava para um dos ids removidos — sem isso,
+ * qualificacoes_historico.deleted_at != NULL ficaria referenciado por uma
+ * linha ativa (um ponteiro semanticamente órfão: leitores canônicos que
+ * ignoram linhas deletadas passariam a tratar o sucessor como se seu
+ * predecessor não existisse). Repointa para manter_id (o sobrevivente do
+ * mesmo grupo de duplicatas — mesmo funcionário+código+vencimento, logo a
+ * mesma conclusão real); se o próprio manter_id apontava para um dos
+ * removidos do seu grupo, zera (não há mais um predecessor real dentro do
+ * grupo de duplicatas para apontar). Tudo no mesmo batch atômico do delete.
+ */
 async function softDeleteManyByEmpresa(
   db: D1Database,
-  ids: number[],
+  groups: DeduplicateCandidateGroup[],
   empresaId: number,
 ): Promise<number> {
-  if (ids.length === 0) return 0;
+  const allIds = groups.flatMap((group) => group.remover_ids);
+  if (allIds.length === 0) return 0;
 
   const statements: D1PreparedStatement[] = [];
-  for (let offset = 0; offset < ids.length; offset += DEDUPLICATE_IDS_PER_STATEMENT) {
-    const chunk = ids.slice(offset, offset + DEDUPLICATE_IDS_PER_STATEMENT);
+
+  for (const group of groups) {
+    if (group.remover_ids.length === 0) continue;
+    statements.push(
+      db
+        .prepare(buildDeduplicateRenovacaoDeRepointSql(group.remover_ids.length))
+        .bind(group.manter_id, empresaId, group.manter_id, ...group.remover_ids),
+    );
+    statements.push(
+      db
+        .prepare(buildDeduplicateRenovacaoDeSelfNullSql(group.remover_ids.length))
+        .bind(empresaId, group.manter_id, ...group.remover_ids),
+    );
+  }
+
+  for (let offset = 0; offset < allIds.length; offset += DEDUPLICATE_IDS_PER_STATEMENT) {
+    const chunk = allIds.slice(offset, offset + DEDUPLICATE_IDS_PER_STATEMENT);
     statements.push(
       db.prepare(buildDeduplicateSoftDeleteSql(chunk.length)).bind(empresaId, ...chunk),
     );
   }
 
   const results = await db.batch(statements);
-  return results.reduce(
+  const deleteResultsStart = results.length - Math.ceil(allIds.length / DEDUPLICATE_IDS_PER_STATEMENT);
+  return results.slice(deleteResultsStart).reduce(
     (sum, result) => sum + Number((result.meta as { changes?: number } | undefined)?.changes || 0),
     0,
   );
@@ -249,7 +306,7 @@ app.post('/', async (c) => {
 
     if (applyRequested) {
       const idsToRemove = candidateGroups.flatMap((group) => group.remover_ids);
-      totalRemoved = await softDeleteManyByEmpresa(db, idsToRemove, empresaId);
+      totalRemoved = await softDeleteManyByEmpresa(db, candidateGroups, empresaId);
 
       if (totalRemoved > 0) {
         const actorUserId = Number((c.get('userId' as never) as unknown) || 0) || null;
