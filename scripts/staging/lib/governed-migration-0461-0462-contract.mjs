@@ -29,6 +29,36 @@ function result(state, reason) {
   return { state, reason };
 }
 
+const KNOWN_LEGACY_0462_COLUMNS = [
+  ['id', 'INTEGER', 0], ['tipo', 'TEXT', 0], ['codigo', 'TEXT', 1], ['nome', 'TEXT', 1],
+  ['descricao', 'TEXT', 0], ['categoria', 'TEXT', 0], ['carga_horaria', 'REAL', 0],
+  ['carga_horaria_inicial', 'REAL', 0], ['carga_horaria_recorrente', 'REAL', 0],
+  ['conteudo_programatico', 'TEXT', 0], ['validade', 'INTEGER', 0], ['vencimento_fim_mes', 'INTEGER', 0],
+  ['observacoes', 'TEXT', 0], ['ativo', 'INTEGER', 0], ['is_check', 'INTEGER', 1],
+  ['created_at', 'DATETIME', 0], ['updated_at', 'DATETIME', 0], ['deleted_at', 'DATETIME', 0],
+  ['empresa_id', 'INTEGER', 1], ['formato_id', 'INTEGER', 0], ['categoria_id', 'INTEGER', 0],
+  ['classe_requisito', 'TEXT', 0], ['dominio_codigo', 'TEXT', 0],
+];
+
+const KNOWN_LEGACY_0462_INDEXES = new Map([
+  ['idx_qualificacoes_tipos_ativo', 'CREATE INDEX idx_qualificacoes_tipos_ativo ON qualificacoes_tipos(ativo) WHERE deleted_at IS NULL'],
+  ['idx_qualificacoes_tipos_deleted_at', 'CREATE INDEX idx_qualificacoes_tipos_deleted_at ON qualificacoes_tipos(deleted_at)'],
+  ['idx_qualificacoes_tipos_empresa', 'CREATE INDEX idx_qualificacoes_tipos_empresa ON qualificacoes_tipos(empresa_id)'],
+  ['idx_qt_formato', 'CREATE INDEX idx_qt_formato ON qualificacoes_tipos(formato_id, empresa_id) WHERE deleted_at IS NULL'],
+  ['idx_qt_categoria_id', 'CREATE INDEX idx_qt_categoria_id ON qualificacoes_tipos(categoria_id, empresa_id) WHERE deleted_at IS NULL'],
+  ['idx_qualificacoes_tipos_dominio_codigo', 'CREATE INDEX idx_qualificacoes_tipos_dominio_codigo ON qualificacoes_tipos(dominio_codigo)'],
+]);
+
+function isKnownLegacyBaselinePre0462(columns, indexes) {
+  if (columns.length !== KNOWN_LEGACY_0462_COLUMNS.length || indexes.length !== KNOWN_LEGACY_0462_INDEXES.size) return false;
+  const columnsMatch = KNOWN_LEGACY_0462_COLUMNS.every(([name, type, notNull]) => {
+    const column = columns.find((item) => String(item.name).toLowerCase() === name);
+    return column && String(column.type || '').toUpperCase() === type && Number(column.notnull ?? column.not_null ?? 0) === notNull;
+  });
+  if (!columnsMatch) return false;
+  return indexes.every((index) => normalizedSql(index.sql) === normalizedSql(KNOWN_LEGACY_0462_INDEXES.get(index.name)));
+}
+
 /**
  * Classifies the exact schema + ledger contract for 0461. Callers must treat
  * every state other than PENDING and ALREADY_APPLIED as a hard stop.
@@ -112,6 +142,9 @@ export function evaluate0462({ tables, columns, indexes, ledgerNames, activeDupl
       : result('PARTIALLY_APPLIED', '0462 index exists but ledger entry is absent');
   }
   if (!newIndex && !oldIndex) {
+    if (!registered && isKnownLegacyBaselinePre0462(columns, indexes)) {
+      return result('PENDING', 'known schema-only staging baseline (20260701 + 0412/0454) is safe for 0462');
+    }
     return registered
       ? result('PARTIALLY_APPLIED', 'ledger records 0462 but neither canonical index exists')
       : result('UNEXPECTED_SCHEMA', 'neither the legacy global nor tenant-active index exists');
