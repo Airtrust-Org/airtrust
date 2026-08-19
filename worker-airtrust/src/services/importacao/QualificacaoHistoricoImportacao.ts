@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { QUALIFICACOES_HISTORICO_COLUMNS, normalizeCode, normalizeCPF } from './columnMappings';
 import { validateQualificacaoHistoricoRow, type ValidationError } from './validators';
 import { calcularDataVencimento } from '../../utils/qualificacoes-expiration';
+import { chainQualificationLineageForGroups } from './lineageChaining';
 
 // ===== SCHEMA SIMPLIFICADO (3 campos APENAS) =====
 
@@ -311,9 +312,18 @@ export class QualificacaoHistoricoImportacaoService {
       }
     }
 
-    // Se modo UPSERT, buscar TODOS os registros existentes de uma vez
+    // Busca TODOS os registros já existentes (mesma cpf+código+data) em
+    // qualquer modo — não só UPSERT. O modo INSERT nunca teve essa checagem,
+    // então reenviar o mesmo lote (ex.: retry após timeout) duplicava cada
+    // linha, já que a unique index real (funcionario_id, qualificacao_codigo,
+    // data_conclusao) não protege este importador: ele nunca preenche
+    // funcionario_id (usa funcionario_cpf), e SQLite trata cada NULL como
+    // distinto em uma unique index, então a constraint não barra duplicatas
+    // aqui. Em modo INSERT, uma linha já existente é pulada (idempotente,
+    // não é um "UPSERT" implícito); em modo UPSERT, é roteada para UPDATE
+    // como antes.
     const existingRecordsMap = new Map<string, number>(); // key: "cpf|codigo|data" -> id
-    if (mode === 'UPSERT') {
+    {
       // Criar lista de todas as combinações para buscar
       const combinations: Array<{ cpf: string; codigo: string; data: string }> = [];
       for (const row of rows) {
@@ -346,7 +356,7 @@ export class QualificacaoHistoricoImportacaoService {
           .prepare(
             `
             SELECT id, funcionario_cpf, UPPER(qualificacao_codigo) as qualificacao_codigo, data_conclusao
-            FROM qualificacoes_historico 
+            FROM qualificacoes_historico
             WHERE (${conditions}) AND empresa_id = ? AND deleted_at IS NULL
           `,
           )
@@ -367,7 +377,7 @@ export class QualificacaoHistoricoImportacaoService {
       }
 
       console.log(
-        `[UPSERT] Encontrados ${existingRecordsMap.size} registros existentes para atualizar`,
+        `[IMPORT] Encontrados ${existingRecordsMap.size} registros já existentes (cpf+código+data)`,
       );
     }
 
@@ -429,7 +439,7 @@ export class QualificacaoHistoricoImportacaoService {
       }
 
       const key = `${cpf}|${codigo.toUpperCase()}|${rows[i].data_conclusao}`;
-      const existingId = mode === 'UPSERT' ? existingRecordsMap.get(key) : undefined;
+      const existingId = existingRecordsMap.get(key);
 
       prepared.push({
         cpf,
@@ -442,8 +452,13 @@ export class QualificacaoHistoricoImportacaoService {
       });
     }
 
+    // UPSERT: linha já existente vira UPDATE. INSERT: linha já existente é
+    // pulada como retry idempotente (não duplicada, não atualizada — o modo
+    // INSERT nunca teve semântica de sobrescrever dados existentes).
     const toUpdate = prepared.filter((p) => mode === 'UPSERT' && p.existingId);
-    const toInsert = prepared.filter((p) => !(mode === 'UPSERT' && p.existingId));
+    const toSkip = prepared.filter((p) => mode === 'INSERT' && p.existingId);
+    const toInsert = prepared.filter((p) => !p.existingId);
+    result.skipped += toSkip.length;
 
     const BATCH_SIZE = 50; // 50 * 5 campos = 250 variáveis (seguro abaixo de 999)
 
@@ -535,6 +550,18 @@ export class QualificacaoHistoricoImportacaoService {
           result.errors.push({ line: r.line, field: 'geral', message: errMsg });
         });
       }
+    }
+
+    // Encadeia renovacao_de para todo grupo (cpf+código) tocado neste
+    // import — cobre tanto linhas recém-inseridas quanto grupos onde uma
+    // linha já existente ganhou um novo vizinho cronológico nesta chamada.
+    // Fail-closed por grupo em caso de datas ambíguas (ver lineageChaining.ts).
+    const touchedGroups = [...toInsert, ...toUpdate].map((p) => ({
+      funcionarioCpf: p.cpf,
+      qualificacaoCodigo: p.codigo,
+    }));
+    if (touchedGroups.length > 0) {
+      await chainQualificationLineageForGroups(this.db, empresaId, touchedGroups);
     }
 
     result.success = result.errors.length === 0;

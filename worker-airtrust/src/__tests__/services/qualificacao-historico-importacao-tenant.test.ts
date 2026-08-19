@@ -95,6 +95,22 @@ function createImportDb(existingCpfs: string[] = []) {
           return { run: async () => ({ success: true }) };
         }
 
+        // Checagem de idempotência (existente por cpf+código+data, agora
+        // rodando em todo modo, não só UPSERT) e a passada de encadeamento
+        // de lineage — sem registros pré-existentes neste teste.
+        if (
+          normalizedQuery.includes('SELECT id, funcionario_cpf') &&
+          normalizedQuery.includes('FROM qualificacoes_historico')
+        ) {
+          return { all: async () => ({ results: [] }) };
+        }
+        if (
+          normalizedQuery.includes('SELECT id, data_conclusao, renovacao_de, renovada, status') &&
+          normalizedQuery.includes('FROM qualificacoes_historico')
+        ) {
+          return { all: async () => ({ results: [] }) };
+        }
+
         throw new Error(`Unhandled query in test: ${normalizedQuery}`);
       },
     }),
