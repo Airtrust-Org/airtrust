@@ -22,6 +22,10 @@ import {
 } from '../../services/employee-sector-access';
 import { z } from 'zod';
 import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../services/operational-domain-access';
+import {
+  createQualificationHistoryAtomic,
+  QualificationAtomicError,
+} from '../../services/qualification-history-atomic';
 
 // POST / (atribuir), POST /renovar, PUT/DELETE /renovacoes/:id all target a
 // qualificacoes_historico row that is either not created yet (atribuir) or
@@ -160,7 +164,7 @@ router.post(
   auth(),
   requireRole('admin', 'manager'),
   safe(async (c) => {
-    const db = c.env.DB;
+    const db: D1Database = c.env.DB;
     const tenantCtx = getTenantContext(c);
     const body = await c.req.json();
 
@@ -198,10 +202,18 @@ router.post(
     // Verificar se tipo existe
     const tipo = await db
       .prepare(
-        'SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+        `SELECT id, codigo, categoria, validade, carga_horaria
+           FROM qualificacoes_tipos
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
       )
       .bind(tipoId, tenantCtx.empresaId)
-      .first();
+      .first<{
+        id: number;
+        codigo: string;
+        categoria: string | null;
+        validade: number | null;
+        carga_horaria: number | null;
+      }>();
     if (!tipo) {
       return c.json({ success: false, error: 'Tipo de qualificação não encontrado' }, 404);
     }
@@ -232,34 +244,42 @@ router.post(
     const conclusaoIso = new Date(`${data.data_realizacao}T00:00:00Z`);
     const statusQualificacao = conclusaoIso > hojeIso ? 'PLANEJADA' : 'CONCLUIDA';
 
-    // Inserir novo registro no histórico (data_realizacao vira data_conclusao no banco)
-    const result = await db
-      .prepare(
-        `INSERT INTO qualificacoes_historico 
-         (funcionario_id, qualificacao_id, data_conclusao, data_vencimento, instrutor, observacoes, status, renovada, empresa_id, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, datetime('now'), datetime('now'), NULL)`,
-      )
-      .bind(
-        data.funcionario_id,
-        tipoId,
-        data.data_realizacao, // data_realizacao da API → data_conclusao no banco
-        data.data_vencimento,
-        data.instrutor || null,
-        observacoes || null,
-        statusQualificacao,
-        tenantCtx.empresaId,
-      )
-      .run();
-
-    if (result.meta.changes === 0) {
-      return c.json({ success: false, error: 'Falha ao atribuir qualificação' }, 500);
+    // Atribuição manual usa o mesmo primitivo canônico de criação que todo
+    // outro writer de qualificacoes_historico: resolve/materializa o
+    // predecessor imediato e seta renovacao_de quando status já nasce
+    // CONCLUIDA, em vez de um INSERT desconectado (data_realizacao vira
+    // data_conclusao no banco).
+    let created;
+    try {
+      created = await createQualificationHistoryAtomic(db, {
+        empresaId: tenantCtx.empresaId,
+        funcionarioId: data.funcionario_id,
+        qualificationId: tipoId,
+        qualificationCode: tipo.codigo,
+        category: tipo.categoria,
+        completionDate: data.data_realizacao,
+        expiryDate: data.data_vencimento,
+        validityMonths: tipo.validade,
+        instructor: data.instrutor || null,
+        observations: observacoes || null,
+        status: statusQualificacao,
+        workload: tipo.carga_horaria,
+        // No tipo_treinamento input on this endpoint's schema — RECORRENTE
+        // matches the same neutral default used by the equivalent
+        // solicitacoes-treinamento.ts writer when the caller doesn't specify one.
+        trainingType: 'RECORRENTE',
+      });
+    } catch (err) {
+      if (err instanceof QualificationAtomicError) {
+        return c.json({ success: false, error: err.message, code: err.code }, err.httpStatus);
+      }
+      throw err;
     }
 
-    const newId = result.meta.last_row_id;
-    await logAuditoria(db, 'qualificacoes_historico', String(newId), 'ATRIBUIR');
+    await logAuditoria(db, 'qualificacoes_historico', String(created.id), 'ATRIBUIR');
 
     return c.json(
-      { success: true, data: { id: newId }, message: 'Qualificação atribuída com sucesso' },
+      { success: true, data: { id: created.id }, message: 'Qualificação atribuída com sucesso' },
       201,
     );
   }),

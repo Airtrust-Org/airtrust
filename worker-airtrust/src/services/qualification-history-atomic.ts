@@ -881,15 +881,22 @@ export async function createQualificationHistoryAtomic(
       ),
   );
 
-  statements.push(
-    buildOlderHistoryUpdate(db, {
-      empresaId: input.empresaId,
-      funcionarioId: input.funcionarioId,
-      qualificationId: input.qualificationId,
-      qualificationCode,
-      completionDate: input.completionDate,
-    }),
-  );
+  // A predecessor may only be materialized RENOVADA alongside a real
+  // successor relation (renovacao_de) — never on its own. Both statements
+  // below are gated on CONCLUIDA together; a PLANEJADA create (a future,
+  // not-yet-realized completion) must leave the currently-active predecessor
+  // untouched until the new row is genuinely realized.
+  if (input.status === 'CONCLUIDA') {
+    statements.push(
+      buildOlderHistoryUpdate(db, {
+        empresaId: input.empresaId,
+        funcionarioId: input.funcionarioId,
+        qualificationId: input.qualificationId,
+        qualificationCode,
+        completionDate: input.completionDate,
+      }),
+    );
+  }
 
   // Closes the historical gap where this plain-create path never linked the
   // new/found CONCLUIDA row into the canonical renewal chain — only PLANEJADA

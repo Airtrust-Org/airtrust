@@ -36,7 +36,11 @@ describe('tenant-aware write paths', () => {
     const g1Sem = compact('services/qualificacoes-g1-sem.ts');
 
     expect(atribuicao).toContain('FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ?');
-    expect(atribuicao).toMatch(/INSERT INTO qualificacoes_historico .* empresa_id/i);
+    // POST / now delegates history creation to the tenant-scoped canonical
+    // primitive instead of a raw INSERT (see qualification-history-atomic.ts,
+    // which is itself covered by its own tenant-write-path assertions below).
+    expect(atribuicao).toContain('createQualificationHistoryAtomic(db, {');
+    expect(atribuicao).toContain('empresaId: tenantCtx.empresaId,');
     expect(g1Sem).toMatch(/INSERT INTO qualificacoes_historico .* empresa_id/i);
     expect(g1Sem).toContain('AND empresa_id = ?');
   });
