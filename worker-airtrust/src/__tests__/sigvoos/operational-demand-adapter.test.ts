@@ -21,3 +21,25 @@ describe('SIGVOOS operational demand adapter', () => {
     expect(result.offshoreShuttleSectorCount).toBe(0);
   });
 });
+
+  it('multiple crew members on the same flight_report_leg do not duplicate sectors', () => {
+    const raw = {
+      flight_report_leg: {
+        departure_location: { icao_code: 'SBME' },
+        arrival_location: { icao_code: 'SBRJ' },
+      },
+    };
+    const leg1 = {
+      data: '2026-04-02', horasVooMin: 40, departureIcao: 'SBME', arrivalIcao: 'SBRJ',
+      takeoffTime: '07:00', landingTime: '07:40', dayLandings: 1, nightLandings: 0,
+      flightReportId: '101', legNumber: 1, raw,
+    };
+    // Duplicate leg for the copilot
+    const leg2 = { ...leg1 };
+
+    const result = assessSigvoosOperationalDemand([leg1, leg2], () => 'AERODROME');
+
+    // Should count as 1 sector and 1 takeoff/landing because they share flightReportId + legNumber
+    expect(result.sectorCount).toBe(1);
+    expect(result.landingCount).toBe(1);
+  });

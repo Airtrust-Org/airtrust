@@ -100,6 +100,8 @@ export interface SigvoosNormalizedLeg {
   tempoNoturnoMin: number;
   tempoIfrMin: number;
   /** Granularidade por etapa preservada para Controle de Voos/FRMS/meteorologia. */
+  staffIdSigvoos: string | null; flightReportId: string | null; legNumber: number | null; departureIcao: string | null; arrivalIcao: string | null;
+  engineStartTime: string | null; takeoffTime: string | null; landingTime: string | null; engineShutoffTime: string | null;
   dayLandings: number | null;
   nightLandings: number | null;
   starts: number | null;
@@ -1227,6 +1229,8 @@ export function normalizeSigvoosRecord(raw: Record<string, unknown>): SigvoosNor
     matriculaAeronave: matriculaAeronave || null,
     tempoNoturnoMin: Math.max(0, tempoNoturnoMin || 0),
     tempoIfrMin: Math.max(0, tempoIfrMin || 0),
+    staffIdSigvoos: legContext.staffIdSigvoos, flightReportId: legContext.flightReportId, legNumber: legContext.legNumber, departureIcao: legContext.departureIcao, arrivalIcao: legContext.arrivalIcao,
+    engineStartTime: legContext.engineStartTime, takeoffTime: legContext.takeoffTime, landingTime: legContext.landingTime, engineShutoffTime: legContext.engineShutoffTime,
     dayLandings: legContext.dayLandings,
     nightLandings: legContext.nightLandings,
     starts: legContext.starts,

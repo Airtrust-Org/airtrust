@@ -24,7 +24,8 @@ CREATE TABLE frms_regulatory_profiles (
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  deleted_at TEXT
+  deleted_at TEXT,
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_frms_reg_profiles_empresa_effective
@@ -45,7 +46,8 @@ CREATE TABLE frms_location_catalog (
   source_reference TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  deleted_at TEXT
+  deleted_at TEXT,
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX idx_frms_location_catalog_empresa_code_active
@@ -69,7 +71,8 @@ CREATE TABLE frms_jornada_avaliacoes (
   calculated_at TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  deleted_at TEXT
+  deleted_at TEXT,
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_frms_jornada_avaliacoes_empresa_jornada

@@ -82,8 +82,15 @@ export function assessSigvoosOperationalDemand(
   verifiedBreaks: VerifiedBreakInput[] = [],
   policy?: OperationalDemandPolicy,
 ): OperationalDemandAssessment {
+  const mapped = legs.map((leg) => mapSigvoosLegToOperationalDemandInput(leg, classifyLocation));
+  const unique = new Map<string, typeof mapped[0]>();
+  for (const item of mapped) {
+    if (!unique.has(item.id)) {
+      unique.set(item.id, item);
+    }
+  }
   return assessOperationalDemand(
-    legs.map((leg) => mapSigvoosLegToOperationalDemandInput(leg, classifyLocation)),
+    Array.from(unique.values()),
     verifiedBreaks,
     policy,
   );
