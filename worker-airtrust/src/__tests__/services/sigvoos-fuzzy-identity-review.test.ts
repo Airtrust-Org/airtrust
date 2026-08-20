@@ -34,7 +34,7 @@ function createReprocessingDbStub({
       if (sql.includes('FROM frms_configuracao_limites')) {
         return { results: [] };
       }
-      if (sql.includes('FROM frms_importacao_fira f') && sql.includes('EXISTS')) {
+      if (sql.includes('FROM frms_importacao_fira') && sql.includes('EXISTS')) {
         return { results: importacoes };
       }
       if (sql.includes('FROM funcionarios')) {
@@ -112,7 +112,7 @@ describe('P1-SIG-003: NOME_FUZZY requires manual review before FRMS confirmation
 
     expect(result.totalResolvidos).toBe(0);
     expect(result.detalhes[0]).toMatchObject({ importacao_id: 'imp-1', resolved: false });
-    expect(result.detalhes[0].error).toMatch(/similaridade de nome/);
+    expect(result.detalhes[0].error).toMatch(/Identidade por nome/);
     expect(wasUpdateCalled()).toBe(false);
     expect(wasPendenciaResolved()).toBe(false);
   });
