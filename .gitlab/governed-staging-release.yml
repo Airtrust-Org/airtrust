@@ -1,12 +1,12 @@
 # Additional governed staging path. Disabled unless explicitly selected; it
 # never replaces the existing GitHub staging workflow or ordinary MR CI.
 .governed_staging_release:
-  tags: [airtrust-staging-release]
   resource_group: airtrust-staging-release
   interruptible: false
+  image: node:24
   environment:
     name: staging
-    url: https://staging.airtrust.pages.dev
+    url: https://airtrust-staging.pages.dev
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $AIRTRUST_GOVERNED_STAGING_RELEASE == "true" && $AIRTRUST_STAGING_RELEASE_CONFIRMATION == "AIRTRUST_STAGING"'
       when: on_success
@@ -18,9 +18,9 @@
     ALLOWED_STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
     ALLOWED_STAGING_BUCKET_NAME: airtrust-storage-staging
     BLOCKED_PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
-    PAGES_PROJECT_NAME: airtrust
-    PAGES_STAGING_BRANCH: staging
-    STAGING_PAGES_URL: https://staging.airtrust.pages.dev
+    PAGES_PROJECT_NAME: airtrust-staging
+    PAGES_STAGING_BRANCH: main
+    STAGING_PAGES_URL: https://airtrust-staging.pages.dev
     AIRTRUST_RELEASE_ENV: staging
     AIRTRUST_RELEASE_CONFIRMATION: $AIRTRUST_STAGING_RELEASE_CONFIRMATION
     AIRTRUST_RELEASE_SHA: $CI_COMMIT_SHA
