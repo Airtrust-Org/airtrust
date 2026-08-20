@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // source_reference: docs/STAGING_ENVIRONMENT_STABILIZATION_20260701.md
-// operational_decision: rotate QA/smoke synthetic credentials safely on D1 staging, revoke all active sessions/refresh tokens, and never expose secrets in logs.
+// operational_decision: rotate QA/smoke synthetic credentials safely on D1 staging, update GitLab Variables securely, revoke all active sessions/refresh tokens, and never expose secrets in logs.
 // dry_run_required: run without --apply first to verify DB targets.
 // rollback_plan_required: reseed with another random hash on the same staging DB.
 
@@ -16,7 +16,6 @@ const require = createRequire(new URL('../../worker-airtrust/package.json', impo
 const bcrypt = require('bcryptjs');
 
 const ALLOWED_D1_NAME = 'airtrust-db-staging-baseline-20260701';
-const ALLOWED_D1_DATABASE_ID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
 
 const TARGET_QA_EMAILS = [
   'smoke.staging.20260701@airtrust.invalid',
@@ -72,6 +71,20 @@ AND revoked_at IS NULL;
     return;
   }
 
+  // Atomically update the secure store first to ensure we fail closed
+  log('SYNCING_SECURE_STORE=STARTED');
+  const glabResult = spawnSync(
+    'glab',
+    ['variable', 'update', 'STAGING_SMOKE_PASSWORD', newPassword, '-R', 'airtrust-group/airtrust'],
+    { encoding: 'utf8' }
+  );
+
+  if (glabResult.status !== 0) {
+    throw new Error('Failed to update GitLab Variable. Aborting D1 write to prevent out-of-sync credentials.');
+  }
+  log('SYNCING_SECURE_STORE=PASS');
+
+  // Then update D1
   const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-rotate-qa-'));
   const sqlFile = join(tempDir, 'rotate.sql');
   writeFileSync(sqlFile, sql, 'utf8');
