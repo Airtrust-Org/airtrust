@@ -80,6 +80,8 @@ rollback_handler() {
   if [ "$PRE_WORKER_ID" != "unavailable" ] && [ -n "$PRE_WORKER_ID" ]; then
     (
       cd worker-airtrust
+      CLOUDFLARE_API_TOKEN="${CLOUDFLARE_WORKER_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" \
+      CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-4dca4e5fddc6a351651dd224f456586f}" \
       npx wrangler rollback "$PRE_WORKER_ID" --env staging --message "auto-rollback: release $SOURCE_SHA failed"
     ) || {
       echo "WORKER ROLLBACK FAILED — target version: $PRE_WORKER_ID" >&2
@@ -126,6 +128,8 @@ rollback_handler() {
       APP_VERSION="$ROLLBACK_APP_VERSION" \
       npm run build
     bash scripts/stamp-build-version.sh dist/client/index.html
+    CLOUDFLARE_API_TOKEN="${CLOUDFLARE_PAGES_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" \
+    CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-4dca4e5fddc6a351651dd224f456586f}" \
     npx wrangler pages deploy dist/client \
       --project-name="$PAGES_PROJECT_NAME" \
       --branch="$PAGES_STAGING_BRANCH" \
@@ -288,6 +292,8 @@ node ../scripts/lib/patch-wrangler-env-vars.mjs \
 echo "### 5. Deploying Worker (Staging) ###"
 REAL_BUNDLE_DIR="$(mktemp -d ./.tmp-worker-bundle-XXXXXX)"
 WORKER_DEPLOY_LOG="/tmp/worker-deploy-staging.log"
+CLOUDFLARE_API_TOKEN="${CLOUDFLARE_WORKER_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" \
+CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-4dca4e5fddc6a351651dd224f456586f}" \
 npx wrangler deploy --env staging --config "$WRANGLER_STAGING_CONFIG" --outdir "$REAL_BUNDLE_DIR" 2>&1 | tee "$WORKER_DEPLOY_LOG"
 REAL_BUNDLE_FILE="$(find "$REAL_BUNDLE_DIR" -maxdepth 1 -name '*.js' | sort | head -n1)"
 if [ -z "$REAL_BUNDLE_FILE" ]; then echo "No bundled Worker module captured from real deploy." >&2; exit 1; fi
@@ -330,6 +336,8 @@ VITE_APP_VERSION="$APP_VERSION" \
 bash scripts/stamp-build-version.sh dist/client/index.html
 
 PAGES_DEPLOY_LOG="/tmp/pages-deploy-staging.log"
+CLOUDFLARE_API_TOKEN="${CLOUDFLARE_PAGES_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" \
+CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-4dca4e5fddc6a351651dd224f456586f}" \
 npx wrangler pages deploy dist/client \
   --project-name="$PAGES_PROJECT_NAME" \
   --branch="$PAGES_STAGING_BRANCH" \
