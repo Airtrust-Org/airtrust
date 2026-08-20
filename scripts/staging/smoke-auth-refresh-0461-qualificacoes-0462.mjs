@@ -79,12 +79,19 @@ async function run() {
   });
   assert(listTiposRes.status === 200, `List tipos failed with ${listTiposRes.status}`);
 
-  const catRes = await fetchJson(`${baseUrl}/api/qualificacoes/categorias`, {
+  const catRes = await fetchJson(`${baseUrl}/api/categorias`, {
     headers: { Authorization: `Bearer ${accessToken2}` },
   });
-  const categoriaId = (Array.isArray(catRes.json?.data) && catRes.json.data.length > 0)
-    ? (catRes.json.data.find(c => Number(c.empresa_id) === userEmpresaId)?.id || catRes.json.data[0].id)
-    : 25;
+    
+  let categoriaId = catRes.json?.data?.[0]?.id;
+  if (!categoriaId) {
+    const newCatRes = await fetchJson(`${baseUrl}/api/categorias`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken2}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: "QA Categoria Smoke" })
+    });
+    categoriaId = newCatRes.json?.data?.id;
+  }
 
   const testCode = `T0462_${Date.now().toString().slice(-6)}`;
   let createdId = null;
@@ -101,7 +108,7 @@ async function run() {
         validade: 12,
       }),
     });
-    assert(createRes.status === 200 || createRes.status === 201, `Create tipo failed: ${createRes.status}`);
+    assert(createRes.status === 200 || createRes.status === 201, `Create tipo failed: ${createRes.status} ${JSON.stringify(createRes.json)}`);
     createdId = createRes.json?.data?.id || createRes.json?.data;
 
     // Step B: Attempt duplicate active code in same tenant -> must fail (400/409)
