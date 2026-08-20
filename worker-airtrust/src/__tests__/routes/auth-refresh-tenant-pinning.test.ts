@@ -283,7 +283,11 @@ function createDb(options?: {
           }
 
           if (sql.includes('INSERT INTO refresh_tokens') && sql.includes('empresa_id')) {
-            const [userIdRaw, tokenRaw, expiresAtRaw, jtiRaw, empresaIdRaw] = statement.params;
+            const userIdRaw = statement.params[0];
+            const tokenRaw = statement.params[1];
+            const expiresAtRaw = statement.params[2];
+            const empresaIdRaw = statement.params.length >= 5 ? statement.params[4] : statement.params[3];
+            const jtiRaw = statement.params.length >= 5 ? statement.params[3] : null;
             refreshTokens.push({
               id: nextRefreshId,
               user_id: Number(userIdRaw),

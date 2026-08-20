@@ -73,15 +73,9 @@ export async function persistRefreshToken(
   if (hasEmpresaIdCol && typeof payload.empresaId === 'number') {
     await db
       .prepare(
-        'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti, empresa_id) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO refresh_tokens (user_id, token, expires_at, empresa_id) VALUES (?, ?, ?, ?)',
       )
-      .bind(
-        payload.userId,
-        payload.refreshToken,
-        payload.expiresAt,
-        payload.accessTokenJti,
-        payload.empresaId,
-      )
+      .bind(payload.userId, payload.refreshToken, payload.expiresAt, payload.empresaId)
       .run()
       .catch(() =>
         db
@@ -94,17 +88,9 @@ export async function persistRefreshToken(
     // limitação em CLAUDE.md — "se migration não autorizada, implementar com
     // schema existente". O refresh cai de volta em resolveUserEmpresaId().
     await db
-      .prepare(
-        'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
-      )
-      .bind(payload.userId, payload.refreshToken, payload.expiresAt, payload.accessTokenJti)
-      .run()
-      .catch(() =>
-        db
-          .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
-          .bind(payload.userId, payload.refreshToken, payload.expiresAt)
-          .run(),
-      );
+      .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
+      .bind(payload.userId, payload.refreshToken, payload.expiresAt)
+      .run();
   }
 
   await enforceRefreshTokenLimit(db, payload.userId);
