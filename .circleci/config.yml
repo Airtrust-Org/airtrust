@@ -198,6 +198,21 @@ jobs:
           path: test-results
           destination: test-results
 
+  deploy-staging-governed:
+    executor: node
+    resource_class: medium+
+    steps:
+      - checkout
+      - install_sqlite3
+      - npm_ci_root
+      - npm_ci_worker
+      - run:
+          name: deploy staging governed
+          command: bash scripts/staging/deploy-governed-staging.sh
+      - store_artifacts:
+          path: /tmp/bridge_baseline_manifest.json
+          destination: bridge_baseline_manifest.json
+
 workflows:
   optimized-pipeline:
     jobs:
@@ -210,3 +225,24 @@ workflows:
       - worker-tests-2
       - lms-smoke
       - public-e2e
+      - hold-staging-deploy:
+          type: approval
+          requires:
+            - lint
+            - build-content-gates
+            - frontend-coverage
+            - frontend-typecheck
+            - worker-typecheck
+            - worker-tests-1
+            - worker-tests-2
+            - lms-smoke
+            - public-e2e
+          filters:
+            branches:
+              only: main
+      - deploy-staging-governed:
+          requires:
+            - hold-staging-deploy
+          filters:
+            branches:
+              only: main
