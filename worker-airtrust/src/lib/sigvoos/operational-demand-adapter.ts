@@ -44,14 +44,30 @@ function resolveLandingCount(leg: SigvoosLegForOperationalDemand): number | null
   return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
 }
 
+/**
+ * Only flightReportId + legNumber are a reliable identity for a physical leg
+ * (multiple crew rows share both). When either is absent we cannot safely
+ * assert two rows are the same leg — collapsing them on time/ICAO alone would
+ * risk merging genuinely distinct legs that happen to share a schedule. In
+ * that case each row is kept distinct (no dedup) by folding its position into
+ * the id.
+ */
+function stableLegId(leg: SigvoosLegForOperationalDemand, index: number): string {
+  if (leg.flightReportId != null && leg.legNumber != null) {
+    return `${leg.flightReportId}:${leg.legNumber}`;
+  }
+  return `unmapped:${index}:${leg.data}:${leg.takeoffTime ?? 'no-tkof'}`;
+}
+
 export function mapSigvoosLegToOperationalDemandInput(
   leg: SigvoosLegForOperationalDemand,
   classifyLocation: SigvoosLocationClassifier,
+  index = 0,
 ): OperationalLegInput {
   const rawLeg = asRecord(leg.raw.flight_report_leg) ?? leg.raw;
   const departure = asRecord(rawLeg.departure_location);
   const arrival = asRecord(rawLeg.arrival_location);
-  const stableId = `${leg.flightReportId ?? 'fr-unknown'}:${leg.legNumber ?? 'leg-unknown'}:${leg.data}:${leg.takeoffTime ?? 'no-tkof'}`;
+  const stableId = stableLegId(leg, index);
 
   return {
     id: stableId,
@@ -82,7 +98,9 @@ export function assessSigvoosOperationalDemand(
   verifiedBreaks: VerifiedBreakInput[] = [],
   policy?: OperationalDemandPolicy,
 ): OperationalDemandAssessment {
-  const mapped = legs.map((leg) => mapSigvoosLegToOperationalDemandInput(leg, classifyLocation));
+  const mapped = legs.map((leg, index) =>
+    mapSigvoosLegToOperationalDemandInput(leg, classifyLocation, index),
+  );
   const unique = new Map<string, typeof mapped[0]>();
   for (const item of mapped) {
     if (!unique.has(item.id)) {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { orchestrateFrmsRisk } from '../../lib/frms/frms-risk-orchestrator';
 
 const operationalBase = {
-  sectorCount: 2, landingCount: 2, offshoreSectorCount: 0, offshoreShuttleSectorCount: 0,
+  sectorCount: 2, landingCount: 2, takeoffCount: 2, offshoreSectorCount: 0, offshoreShuttleSectorCount: 0,
   shortSectorCount: 0, shortOffshoreSectorCount: 0, shortOffshoreShuttleSectorCount: 0,
   averageSectorAirborneMin: 45, medianSectorAirborneMin: 45, maxLandingsRolling60Min: 2,
   maxLandingRatePerHour: 2, continuousShuttleBlockMaxMin: null, verifiedBreakAwayMaxMin: null,

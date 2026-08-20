@@ -52,6 +52,7 @@ export const DEFAULT_OPERATIONAL_DEMAND_POLICY: OperationalDemandPolicy = {
 export interface OperationalDemandAssessment {
   sectorCount: number;
   landingCount: number;
+  takeoffCount: number;
   offshoreSectorCount: number;
   offshoreShuttleSectorCount: number;
   shortSectorCount: number;
@@ -128,6 +129,18 @@ function breakDurationMinutes(value: VerifiedBreakInput): number | null {
   const end = parseLocalDateTime(value.endLocalDateTime);
   if (start == null || end == null || end < start) return null;
   return end - start;
+}
+
+function takeoffEvents(legs: OperationalLegInput[]): { minute: number }[] {
+  const events: { minute: number }[] = [];
+  for (const leg of legs) {
+    // Exactly one physical takeoff per realized leg, regardless of how many
+    // day/night landings were recorded for that leg.
+    const minute = eventMinute(leg.dataOperational, leg.takeoffLocal);
+    if (minute == null) continue;
+    events.push({ minute });
+  }
+  return events.sort((a, b) => a.minute - b.minute);
 }
 
 function landingEvents(legs: OperationalLegInput[]): { minute: number; offshoreShuttle: boolean }[] {
@@ -264,6 +277,7 @@ export function assessOperationalDemand(
   ).length;
 
   const events = landingEvents(realized);
+  const takeoffs = takeoffEvents(realized);
   const maxLandingsRolling60Min = maxRollingLandings(events, 60);
   const maxLandingRatePerHour = maxLandingRate(events);
 
@@ -330,6 +344,7 @@ export function assessOperationalDemand(
   return {
     sectorCount: realized.length,
     landingCount: events.length,
+    takeoffCount: takeoffs.length,
     offshoreSectorCount,
     offshoreShuttleSectorCount,
     shortSectorCount,
