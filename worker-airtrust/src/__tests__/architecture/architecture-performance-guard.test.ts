@@ -11,7 +11,7 @@ const LARGE_FILE_LINE_CAPS = {
   // domain-event masking — see fix/bug011-stage3-safe-typeguards-20260708).
   'routes/frms.ts': 3913,
   // Cap raised 2026-06-30: counted 2884 (pre-existing growth).
-  'services/sigvoos-frms.ts': 2950,
+  'services/sigvoos-frms.ts': 2884,
   // Upload/storage logic was extracted into testable modules. The compatibility
   // router retains the prior CRUD implementation and is frozen at the old cap.
   'routes/lms-cursos-legacy.ts': 3000,

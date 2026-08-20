@@ -1,3 +1,13 @@
+-- ============================================================
+-- MIGRATION 0463: Create new tables for FRMS IOGP schema V2
+--
+-- source_reference: FRMS IOGP schema design (2026-08-20)
+-- operational_decision: create tables frms_regulatory_profiles, frms_location_catalog,
+--   and frms_jornada_avaliacoes to support IOGP compliance tracking.
+-- dry_run_required: no, standard CREATE TABLE statements.
+-- rollback_plan_required: yes; run DROP TABLE for the three new tables.
+-- ============================================================
+
 -- only after verifying origin/main, current numbering, baseline/ledger and repo conventions.
 
 CREATE TABLE frms_regulatory_profiles (
