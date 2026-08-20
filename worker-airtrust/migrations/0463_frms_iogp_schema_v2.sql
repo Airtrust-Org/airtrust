@@ -6,6 +6,23 @@
 --   and frms_jornada_avaliacoes to support IOGP compliance tracking.
 -- dry_run_required: no, standard CREATE TABLE statements.
 -- rollback_plan_required: yes; run DROP TABLE for the three new tables.
+--
+-- GOVERNANCE NOTE (item 11 audit, 2026-08-20):
+--   These are audit/regulatory-trail tables. The established FRMS convention
+--   (see 0212_frms_module.sql / 0351_frms_jornada_origem_sigvoos.sql) does NOT
+--   attach a hard-delete cascade to tenant data of this kind — frms_jornada
+--   itself carries no empresa_id column or FK at all; tenant scoping is
+--   enforced at the service layer via a join through tripulante_id ->
+--   funcionarios.empresa_id. Deleting an empresa should not silently destroy
+--   regulatory/compliance evidence. `ON DELETE CASCADE` was therefore removed
+--   below in favor of the SQLite/D1 default (RESTRICT-like NO ACTION),
+--   matching the "no auto-delete on tenant removal" posture used elsewhere in
+--   FRMS. Cross-tenant integrity for frms_jornada_avaliacoes.jornada_id vs.
+--   frms_jornada (which has no empresa_id column) must be enforced in the
+--   service layer: look up tripulante_id -> funcionarios.empresa_id and
+--   compare against frms_jornada_avaliacoes.empresa_id on every write/read,
+--   the same pattern already used for frms_jornada itself. A composite FK is
+--   not possible here because frms_jornada has no empresa_id to reference.
 -- ============================================================
 
 -- only after verifying origin/main, current numbering, baseline/ledger and repo conventions.
@@ -25,7 +42,7 @@ CREATE TABLE frms_regulatory_profiles (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   deleted_at TEXT,
-  FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id)
 );
 
 CREATE INDEX idx_frms_reg_profiles_empresa_effective
@@ -47,7 +64,7 @@ CREATE TABLE frms_location_catalog (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   deleted_at TEXT,
-  FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id)
 );
 
 CREATE UNIQUE INDEX idx_frms_location_catalog_empresa_code_active
@@ -72,7 +89,7 @@ CREATE TABLE frms_jornada_avaliacoes (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   deleted_at TEXT,
-  FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id)
 );
 
 CREATE INDEX idx_frms_jornada_avaliacoes_empresa_jornada
