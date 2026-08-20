@@ -22,8 +22,8 @@
 // POST /api/simuladores/fichas/:id/pdf against the live OpenAPI/zod
 // validators, and update this script if any field name has drifted.
 
-import {
 import { pathToFileURL } from 'node:url';
+import {
   assert,
   assertAllowedStagingBaseUrl,
   extractAccessToken,
