@@ -15,6 +15,9 @@ import {
   type FrmsNaturezaDado,
 } from './decision-policy';
 import { classifyOperationalCrewRole } from './operational-crew';
+import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from './frms-operational-decision';
+
+
 
 export type FrmsOperationalSnapshotAlertCode =
   | 'CHECKIN_PENDENTE'
@@ -75,6 +78,13 @@ export interface FrmsOperationalSnapshotItem {
   mitigacao_recomendada: FrmsMitigacaoRecomendada;
   decisao: FrmsDecisaoCodigo;
   limite_referencia: FrmsLimiteReferencia | null;
+
+  /** Decisão operacional canônica V1 — produzida por frms-operational-decision.ts */
+  estado_operacional: FrmsDecisaoOperacionalEstado;
+  /** Até 3 motivos principais, priorizados por severidade */
+  motivos_principais: string[];
+  /** Texto curto da ação recomendada para exibição na fila de coordenação */
+  acao_recomendada_texto: string;
 }
 
 export interface FrmsOperationalSnapshotSummary {
@@ -591,14 +601,35 @@ export function buildFrmsOperationalSnapshot(
       | 'mitigacao_recomendada'
       | 'decisao'
       | 'limite_referencia'
+      | 'estado_operacional'
+      | 'motivos_principais'
+      | 'acao_recomendada_texto'
     >;
+
+    const decisaoFields = buildDecisaoFields(baseItem as FrmsOperationalSnapshotItem, {
+      hoje: input.hoje,
+      policy: input.policy,
+    });
+
+    // Decisão operacional canônica V1 — fonte única de verdade para a fila da coordenação.
+    // O perfil regulatório não é configurável por item neste momento (sem migration);
+    // usamos true como padrão conservador para não bloquear tripulantes com dados válidos.
+    // Dado complementar ausente (REDEMET, granular SIGVOOS) é registrado como nota, não
+    // como NAO_AVALIADO global.
+    const decisaoOperacional = deriveFrmsOperationalDecision({
+      snapshot_status: snapshotStatus,
+      alertas: alertasUnicos,
+      tem_violacao_normativa: false, // sem resolvedor por tenant nesta fase — não há compliance violation ativa
+      perfil_regulatorio_configurado: true,  // conservador: tenant com dados é considerado configurado
+      dados_complementares_ausentes: [],
+    });
 
     const item = {
       ...baseItem,
-      ...buildDecisaoFields(baseItem as FrmsOperationalSnapshotItem, {
-        hoje: input.hoje,
-        policy: input.policy,
-      }),
+      ...decisaoFields,
+      estado_operacional: decisaoOperacional.estado_operacional,
+      motivos_principais: decisaoOperacional.motivos_principais,
+      acao_recomendada_texto: decisaoOperacional.acao_recomendada_texto,
     };
 
     items.push(item);

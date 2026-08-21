@@ -122,6 +122,10 @@ export interface FrmsOperationalSnapshotItem {
   fortnight_indicator: FrmsFortnightIndicator | null;
 
   alertas: FrmsOperationalSnapshotAlertCode[];
+
+  estado_operacional: 'NORMAL' | 'ATENCAO' | 'MITIGACAO_NECESSARIA' | 'CRITICO_VIOLACAO' | 'NAO_AVALIADO';
+  motivos_principais: string[];
+  acao_recomendada_texto: string;
 }
 
 export interface FrmsOperationalSnapshotSummary {
