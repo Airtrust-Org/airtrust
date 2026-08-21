@@ -59,7 +59,6 @@ export function validateTenantTarget(tenantId, tenantCodigo) {
 export function buildSeedSql() {
   const e = sqlString;
   const tId = ALLOWED_TENANT_ID;
-  const tCod = ALLOWED_TENANT_CODIGO;
   const origem = FIXTURE_ORIGEM;
   const matricula = FIXTURE_TRIPULANTE_MATRICULA;
   const nome = FIXTURE_TRIPULANTE_NOME;
@@ -68,16 +67,16 @@ export function buildSeedSql() {
   return `
 -- 1. TRIPULANTE SINTÉTICO QA
 INSERT INTO funcionarios (
-  nome, nome_guerra, matricula, cargo, setor, status, is_tripulante, is_instrutor, ativo, empresa_id, created_at, updated_at, deleted_at
+  nome, guerra, matricula, cargo, setor, setor_id, status, is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at
 )
 SELECT
-  ${e(nome)}, ${e(guerra)}, ${e(matricula)}, 'Comandante Offshore QA', 'Operações QA', 'ATIVO', 1, 0, 1, ${tId}, datetime('now'), datetime('now'), NULL
+  ${e(nome)}, ${e(guerra)}, ${e(matricula)}, 'Comandante Offshore QA', 'Setor QA Examinador', 1, 'ATIVO', 0, 0, 1, ${tId}, datetime('now'), datetime('now'), NULL
 WHERE NOT EXISTS (
   SELECT 1 FROM funcionarios WHERE matricula = ${e(matricula)} AND empresa_id = ${tId} AND deleted_at IS NULL
 );
 
 UPDATE funcionarios
-SET nome = ${e(nome)}, nome_guerra = ${e(guerra)}, cargo = 'Comandante Offshore QA', setor = 'Operações QA', status = 'ATIVO', is_tripulante = 1, ativo = 1, updated_at = datetime('now'), deleted_at = NULL
+SET nome = ${e(nome)}, guerra = ${e(guerra)}, cargo = 'Comandante Offshore QA', setor = 'Setor QA Examinador', setor_id = 1, status = 'ATIVO', is_instrutor = 0, is_examinador = 0, ativo = 1, updated_at = datetime('now'), deleted_at = NULL
 WHERE matricula = ${e(matricula)} AND empresa_id = ${tId};
 
 -- 2. JORNADAS SINTÉTICAS AGOSTO/2026 (Demonstração IOGP 690-2)
@@ -85,107 +84,107 @@ WHERE matricula = ${e(matricula)} AND empresa_id = ${tId};
 INSERT OR REPLACE INTO frms_jornada (
   id, tripulante_id, data, status, hora_apresentacao, hora_termino, duracao_jornada_minutos, horas_voo_minutos,
   hora_primeiro_acionamento, hora_primeira_decolagem, hora_ultimo_pouso, hora_corte_motor,
-  hora_acordou, hora_dormiu, sono_efetivo_min, fonte_sono, registrado_por, origem, observacao, created_at, updated_at, deleted_at
+  hora_acordou, hora_dormiu, sono_efetivo_min, fonte_sono, registrado_por, origem, observacao, empresa_id, created_at, updated_at, deleted_at
 )
 SELECT
   'qa-frms-demo-20260818-01', f.id, '2026-08-18', 'ES', '07:00:00', '16:00:00', 540, 330,
   '07:30:00', '07:45:00', '15:15:00', '15:30:00',
-  '05:30:00', '22:00:00', 450, 'INFORMADO', ${e(origem)}, 'MANUAL', 'DEMO_QA_IOGP_690_2', datetime('now'), datetime('now'), NULL
+  '05:30:00', '22:00:00', 450, 'INFORMADO', ${e(origem)}, 'MANUAL', 'DEMO_QA_IOGP_690_2', ${tId}, datetime('now'), datetime('now'), NULL
 FROM funcionarios f WHERE f.matricula = ${e(matricula)} AND f.empresa_id = ${tId} AND f.deleted_at IS NULL;
 
 -- Dia 2: 2026-08-19 (6h15 voo, 10h15 FDP, 8 setores, 8 pousos)
 INSERT OR REPLACE INTO frms_jornada (
   id, tripulante_id, data, status, hora_apresentacao, hora_termino, duracao_jornada_minutos, horas_voo_minutos,
   hora_primeiro_acionamento, hora_primeira_decolagem, hora_ultimo_pouso, hora_corte_motor,
-  hora_acordou, hora_dormiu, sono_efetivo_min, fonte_sono, registrado_por, origem, observacao, created_at, updated_at, deleted_at
+  hora_acordou, hora_dormiu, sono_efetivo_min, fonte_sono, registrado_por, origem, observacao, empresa_id, created_at, updated_at, deleted_at
 )
 SELECT
   'qa-frms-demo-20260819-01', f.id, '2026-08-19', 'ES', '06:45:00', '17:00:00', 615, 375,
   '07:15:00', '07:30:00', '16:15:00', '16:30:00',
-  '05:15:00', '22:30:00', 435, 'INFORMADO', ${e(origem)}, 'MANUAL', 'DEMO_QA_IOGP_690_2', datetime('now'), datetime('now'), NULL
+  '05:15:00', '22:30:00', 435, 'INFORMADO', ${e(origem)}, 'MANUAL', 'DEMO_QA_IOGP_690_2', ${tId}, datetime('now'), datetime('now'), NULL
 FROM funcionarios f WHERE f.matricula = ${e(matricula)} AND f.empresa_id = ${tId} AND f.deleted_at IS NULL;
 
 -- Dia 3: 2026-08-20 (7h00 voo, 11h00 FDP, 8 setores, 8 pousos, 2 shuttles offshore)
 INSERT OR REPLACE INTO frms_jornada (
   id, tripulante_id, data, status, hora_apresentacao, hora_termino, duracao_jornada_minutos, horas_voo_minutos,
   hora_primeiro_acionamento, hora_primeira_decolagem, hora_ultimo_pouso, hora_corte_motor,
-  hora_acordou, hora_dormiu, sono_efetivo_min, fonte_sono, registrado_por, origem, observacao, created_at, updated_at, deleted_at
+  hora_acordou, hora_dormiu, sono_efetivo_min, fonte_sono, registrado_por, origem, observacao, empresa_id, created_at, updated_at, deleted_at
 )
 SELECT
   'qa-frms-demo-20260820-01', f.id, '2026-08-20', 'ES', '06:30:00', '17:30:00', 660, 420,
   '07:00:00', '07:15:00', '16:45:00', '17:00:00',
-  '05:00:00', '22:15:00', 420, 'INFORMADO', ${e(origem)}, 'MANUAL', 'DEMO_QA_IOGP_690_2', datetime('now'), datetime('now'), NULL
+  '05:00:00', '22:15:00', 420, 'INFORMADO', ${e(origem)}, 'MANUAL', 'DEMO_QA_IOGP_690_2', ${tId}, datetime('now'), datetime('now'), NULL
 FROM funcionarios f WHERE f.matricula = ${e(matricula)} AND f.empresa_id = ${tId} AND f.deleted_at IS NULL;
 
 -- Dia 4: 2026-08-21 (5h45 voo, 9h30 FDP, 6 setores, 6 pousos)
 INSERT OR REPLACE INTO frms_jornada (
   id, tripulante_id, data, status, hora_apresentacao, hora_termino, duracao_jornada_minutos, horas_voo_minutos,
   hora_primeiro_acionamento, hora_primeira_decolagem, hora_ultimo_pouso, hora_corte_motor,
-  hora_acordou, hora_dormiu, sono_efetivo_min, fonte_sono, registrado_por, origem, observacao, created_at, updated_at, deleted_at
+  hora_acordou, hora_dormiu, sono_efetivo_min, fonte_sono, registrado_por, origem, observacao, empresa_id, created_at, updated_at, deleted_at
 )
 SELECT
   'qa-frms-demo-20260821-01', f.id, '2026-08-21', 'ES', '07:00:00', '16:30:00', 570, 345,
   '07:30:00', '07:45:00', '15:45:00', '16:00:00',
-  '05:30:00', '22:00:00', 450, 'INFORMADO', ${e(origem)}, 'MANUAL', 'DEMO_QA_IOGP_690_2', datetime('now'), datetime('now'), NULL
+  '05:30:00', '22:00:00', 450, 'INFORMADO', ${e(origem)}, 'MANUAL', 'DEMO_QA_IOGP_690_2', ${tId}, datetime('now'), datetime('now'), NULL
 FROM funcionarios f WHERE f.matricula = ${e(matricula)} AND f.empresa_id = ${tId} AND f.deleted_at IS NULL;
 
 -- 3. FATORIZAÇÃO BIO-MATEMÁTICA / EFFECTIVENESS
 INSERT OR REPLACE INTO frms_fatorizacao_jornada (
-  id, jornada_id, effectiveness_pct, effectiveness_nivel, total_fatorizado_jornada, duracao_sono_efetiva_min, created_at, updated_at, deleted_at
+  id, jornada_id, effectiveness_pct, effectiveness_nivel, total_fatorizado_jornada, duracao_sono_efetiva_min, processado_com_bug, created_at, updated_at, deleted_at
 )
 VALUES
-  ('qa-frms-fator-20260818-01', 'qa-frms-demo-20260818-01', 91.5, 'PLENA', 540, 450, datetime('now'), datetime('now'), NULL),
-  ('qa-frms-fator-20260819-01', 'qa-frms-demo-20260819-01', 87.0, 'ATENÇÃO', 615, 435, datetime('now'), datetime('now'), NULL),
-  ('qa-frms-fator-20260820-01', 'qa-frms-demo-20260820-01', 84.5, 'ATENÇÃO', 660, 420, datetime('now'), datetime('now'), NULL),
-  ('qa-frms-fator-20260821-01', 'qa-frms-demo-20260821-01', 89.0, 'ATENÇÃO', 570, 450, datetime('now'), datetime('now'), NULL);
+  ('qa-frms-fator-20260818-01', 'qa-frms-demo-20260818-01', 91.5, 'PLENA', 540, 450, 0, datetime('now'), datetime('now'), NULL),
+  ('qa-frms-fator-20260819-01', 'qa-frms-demo-20260819-01', 87.0, 'ATENÇÃO', 615, 435, 0, datetime('now'), datetime('now'), NULL),
+  ('qa-frms-fator-20260820-01', 'qa-frms-demo-20260820-01', 84.5, 'ATENÇÃO', 660, 420, 0, datetime('now'), datetime('now'), NULL),
+  ('qa-frms-fator-20260821-01', 'qa-frms-demo-20260821-01', 89.0, 'ATENÇÃO', 570, 450, 0, datetime('now'), datetime('now'), NULL);
 
 -- 4. ACÚMULO ROLLING CONSOLIDADO (Para cálculo rápido dos cards 1d/7d/28d/365d)
 INSERT OR REPLACE INTO frms_acumulo_rolling (
-  tripulante_id, data, hv_dia_min, hv_7_dias_min, hv_28_dias_min, hv_mes_calendario_min, hv_365_dias_min,
+  id, tripulante_id, data_referencia, hv_dia_min, hv_7_dias_min, hv_28_dias_min, hv_mes_calendario_min, hv_365_dias_min,
   pct_limite_dia, pct_limite_7d, pct_limite_28d, pct_limite_mes_calendario, pct_limite_365d,
   repouso_anterior_min, repouso_suficiente, updated_at
 )
 SELECT
-  f.id, '2026-08-21', 345, 1470, 3600, 3600, 27000,
+  'qa-rolling-20260821-01', f.id, '2026-08-21', 345, 1470, 3600, 3600, 27000,
   57.5, 54.4, 50.0, 50.0, 45.0,
   870, 1, datetime('now')
 FROM funcionarios f WHERE f.matricula = ${e(matricula)} AND f.empresa_id = ${tId} AND f.deleted_at IS NULL;
 
 -- 5. LANÇAMENTOS DE HORAS DE VOO / DEMANDA OPERACIONAL (Setores, Pousos, Shuttles)
 INSERT OR REPLACE INTO horas_voo_lancamentos (
-  id, funcionario_id, empresa_id, data_voo, minutos_diurnos, minutos_noturnos, minutos_ifr, minutos_total,
-  pousos_dia, pousos_noite, pousos_total, observacoes, origem_registro, created_at, updated_at, deleted_at
+  funcionario_id, empresa_id, data_voo, duracao_total_min, duracao_pic_min, duracao_instrumento_min,
+  pousos_dia, pousos_noite, funcao, observacoes, origem_registro, created_at, updated_at, deleted_at
 )
 SELECT
-  'qa-hv-demo-20260818-01', f.id, ${tId}, '2026-08-18', 330, 0, 60, 330,
-  6, 0, 6, 'DEMO_QA_IOGP_690_2 - 6 setores / 6 pousos', ${e(origem)}, datetime('now'), datetime('now'), NULL
+  f.id, ${tId}, '2026-08-18', 330, 330, 60,
+  6, 0, 'PIC', 'DEMO_QA_IOGP_690_2 - 6 setores / 6 pousos', ${e(origem)}, datetime('now'), datetime('now'), NULL
 FROM funcionarios f WHERE f.matricula = ${e(matricula)} AND f.empresa_id = ${tId} AND f.deleted_at IS NULL;
 
 INSERT OR REPLACE INTO horas_voo_lancamentos (
-  id, funcionario_id, empresa_id, data_voo, minutos_diurnos, minutos_noturnos, minutos_ifr, minutos_total,
-  pousos_dia, pousos_noite, pousos_total, observacoes, origem_registro, created_at, updated_at, deleted_at
+  funcionario_id, empresa_id, data_voo, duracao_total_min, duracao_pic_min, duracao_instrumento_min,
+  pousos_dia, pousos_noite, funcao, observacoes, origem_registro, created_at, updated_at, deleted_at
 )
 SELECT
-  'qa-hv-demo-20260819-01', f.id, ${tId}, '2026-08-19', 375, 0, 90, 375,
-  8, 0, 8, 'DEMO_QA_IOGP_690_2 - 8 setores / 8 pousos', ${e(origem)}, datetime('now'), datetime('now'), NULL
+  f.id, ${tId}, '2026-08-19', 375, 375, 90,
+  8, 0, 'PIC', 'DEMO_QA_IOGP_690_2 - 8 setores / 8 pousos', ${e(origem)}, datetime('now'), datetime('now'), NULL
 FROM funcionarios f WHERE f.matricula = ${e(matricula)} AND f.empresa_id = ${tId} AND f.deleted_at IS NULL;
 
 INSERT OR REPLACE INTO horas_voo_lancamentos (
-  id, funcionario_id, empresa_id, data_voo, minutos_diurnos, minutos_noturnos, minutos_ifr, minutos_total,
-  pousos_dia, pousos_noite, pousos_total, observacoes, origem_registro, created_at, updated_at, deleted_at
+  funcionario_id, empresa_id, data_voo, duracao_total_min, duracao_pic_min, duracao_instrumento_min,
+  pousos_dia, pousos_noite, funcao, observacoes, origem_registro, created_at, updated_at, deleted_at
 )
 SELECT
-  'qa-hv-demo-20260820-01', f.id, ${tId}, '2026-08-20', 420, 0, 120, 420,
-  8, 0, 8, 'DEMO_QA_IOGP_690_2 - 8 setores / 8 pousos (2 shuttles offshore)', ${e(origem)}, datetime('now'), datetime('now'), NULL
+  f.id, ${tId}, '2026-08-20', 420, 420, 120,
+  8, 0, 'PIC', 'DEMO_QA_IOGP_690_2 - 8 setores / 8 pousos (2 shuttles offshore)', ${e(origem)}, datetime('now'), datetime('now'), NULL
 FROM funcionarios f WHERE f.matricula = ${e(matricula)} AND f.empresa_id = ${tId} AND f.deleted_at IS NULL;
 
 INSERT OR REPLACE INTO horas_voo_lancamentos (
-  id, funcionario_id, empresa_id, data_voo, minutos_diurnos, minutos_noturnos, minutos_ifr, minutos_total,
-  pousos_dia, pousos_noite, pousos_total, observacoes, origem_registro, created_at, updated_at, deleted_at
+  funcionario_id, empresa_id, data_voo, duracao_total_min, duracao_pic_min, duracao_instrumento_min,
+  pousos_dia, pousos_noite, funcao, observacoes, origem_registro, created_at, updated_at, deleted_at
 )
 SELECT
-  'qa-hv-demo-20260821-01', f.id, ${tId}, '2026-08-21', 345, 0, 60, 345,
-  6, 0, 6, 'DEMO_QA_IOGP_690_2 - 6 setores / 6 pousos', ${e(origem)}, datetime('now'), datetime('now'), NULL
+  f.id, ${tId}, '2026-08-21', 345, 345, 60,
+  6, 0, 'PIC', 'DEMO_QA_IOGP_690_2 - 6 setores / 6 pousos', ${e(origem)}, datetime('now'), datetime('now'), NULL
 FROM funcionarios f WHERE f.matricula = ${e(matricula)} AND f.empresa_id = ${tId} AND f.deleted_at IS NULL;
 `;
 }
