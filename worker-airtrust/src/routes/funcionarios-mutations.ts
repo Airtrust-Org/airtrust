@@ -37,6 +37,7 @@ import {
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
+import { vincularUsuarioAoFuncionarioPorEmail } from '../services/vinculo-usuario-funcionario';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -309,6 +310,20 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     ...auditoriaInfo,
   });
 
+  // Vínculo automático por e-mail: se já existe um usuário (ex.: gestor) com o
+  // mesmo e-mail nesta empresa, ele passa a ser a mesma pessoa (funcionario_id).
+  let vinculoUsuario: { usuario_id: number; funcionario_id: number } | null = null;
+  try {
+    vinculoUsuario = await vincularUsuarioAoFuncionarioPorEmail(
+      db,
+      empresaId,
+      novoId,
+      body.email,
+    );
+  } catch (vinculoError) {
+    console.error('[Funcionarios] Erro ao vincular usuário por e-mail:', vinculoError);
+  }
+
   const syncStatus = await sincronizarCertificacoesComStatus(db, {
     funcionario_id: novoId,
     nivel_icao: body.nivel_icao,
@@ -328,6 +343,8 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
       data: {
         id: novoId,
         certificacoes_sincronizadas: syncStatus.sincronizadas,
+        usuario_vinculado: Boolean(vinculoUsuario),
+        usuario_id: vinculoUsuario?.usuario_id ?? null,
       },
       message: syncStatus.aviso || 'Funcionário criado com sucesso',
       ...(syncStatus.aviso ? { warning: syncStatus.aviso } : {}),

@@ -29,6 +29,7 @@ import {
   buildManagerSetorInsertStatements,
   SetorGestorValidationError,
 } from '../services/setores-gestores';
+import { vincularFuncionarioAoUsuarioPorEmail } from '../services/vinculo-usuario-funcionario';
 import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 // crypto.randomBytes está disponível via Node.js compat ou podemos usar crypto.getRandomValues
 
@@ -539,6 +540,23 @@ adminUsuariosRoutes.post('/', async (c) => {
       .run();
   }
 
+  // Vínculo automático por e-mail: se já existe um funcionário com o mesmo
+  // e-mail nesta empresa (e o operador não vinculou explicitamente via
+  // funcionario_id), o usuário passa a ser a mesma pessoa.
+  let vinculoFuncionario: { usuario_id: number; funcionario_id: number } | null = null;
+  if (!funcionarioId) {
+    try {
+      vinculoFuncionario = await vincularFuncionarioAoUsuarioPorEmail(
+        db,
+        targetEmpresaId,
+        novoUsuarioId,
+        email,
+      );
+    } catch (vinculoError) {
+      logger.warn(`Falha ao vincular funcionário por e-mail: ${String(vinculoError)}`);
+    }
+  }
+
   // Gerar token de convite (48h)
   const inviteToken = generateInviteToken();
   const expiresAt = inviteExpiresAt();
@@ -569,6 +587,7 @@ adminUsuariosRoutes.post('/', async (c) => {
         email,
         nome,
         perfil,
+        funcionario_id: vinculoFuncionario?.funcionario_id ?? funcionarioId ?? null,
         inviteToken,
         inviteLink,
         inviteExpiresAt: expiresAt,
