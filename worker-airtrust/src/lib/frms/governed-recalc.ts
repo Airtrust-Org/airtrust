@@ -1,6 +1,6 @@
 /** Governed, resumable FRMS recalculation executor (migration 0464). */
 import type { D1Database } from '@cloudflare/workers-types';
-import type { FrmsJornada, LimitesMap } from './types';
+import { LIMITES_DEFAULT, type FrmsJornada, type LimitesMap } from './types';
 import { recalcularPipeline } from './db-service-jornadas';
 import {
   asGovernedLimites,
@@ -9,13 +9,7 @@ import {
   type FrmsRecalcRun,
 } from './parameter-governance';
 
-const CALCULATION_LIMIT_KEYS: readonly (keyof LimitesMap)[] = [
-  'FDP_MAXIMO_HORAS', 'REPOUSO_MINIMO_HORAS', 'HV_7_DIAS_HORAS', 'HV_28_DIAS_HORAS',
-  'HV_MES_HORAS', 'HV_365_DIAS_HORAS', 'HV_DIARIA_HORAS', 'ALERTA_AVISO_PCT',
-  'ALERTA_ATENCAO_PCT', 'ALERTA_CRITICO_PCT', 'ALERTA_VIOLACAO_PCT',
-  'EFFECTIV_VERDE_MIN', 'EFFECTIV_AMARELO_MAX', 'EFFECTIV_VERMELHO_MAX',
-  'MINUTOS_ANTES_APRESENTACAO', 'HORAS_SONO_PADRAO',
-];
+const CALCULATION_LIMIT_KEYS = Object.keys(LIMITES_DEFAULT) as (keyof LimitesMap)[];
 
 function nowSql(): string {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);

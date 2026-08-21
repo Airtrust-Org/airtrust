@@ -136,7 +136,23 @@ export function asGovernedLimites(
       );
     }
   }
-  return Object.freeze({ ...parameterSet.values }) as unknown as LimitesMap;
+  const candidate: unknown = { ...parameterSet.values };
+  if (!isGovernedLimitesMap(candidate, requiredKeys)) {
+    throw new FrmsParameterResolutionError(
+      'FRMS_PARAMETER_REQUIRED_MISSING',
+      `Revision ${parameterSet.revision.id} does not satisfy the calculation contract.`,
+    );
+  }
+  return Object.freeze(candidate);
+}
+
+function isGovernedLimitesMap(
+  value: unknown,
+  requiredKeys: readonly (keyof LimitesMap)[],
+): value is LimitesMap {
+  if (!value || typeof value !== 'object') return false;
+  const values = value as Record<string, unknown>;
+  return requiredKeys.every((key) => Number.isFinite(values[key]));
 }
 
 export interface FrmsRecalcRun {
