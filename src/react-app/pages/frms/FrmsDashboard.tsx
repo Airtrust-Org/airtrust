@@ -494,6 +494,63 @@ function DashboardContent() {
     };
   }, [complianceByDayStats, effectivenessByDayStats, filteredFrota.length]);
 
+  const iogpRealMetrics = useMemo(() => {
+    if (!filteredFrota || filteredFrota.length === 0) {
+      return {
+        maxHvDiaMin: null,
+        maxHv7dMin: null,
+        maxHv28dMin: null,
+        maxHv365dMin: null,
+        avgEffectivenessPct: null,
+        effectivenessNivel: null,
+      };
+    }
+
+    let maxDia: number | null = null;
+    let max7d: number | null = null;
+    let max28d: number | null = null;
+    let max365d: number | null = null;
+    let sumEff = 0;
+    let countEff = 0;
+
+    for (const item of filteredFrota) {
+      if (item.hv_dia_min != null && Number.isFinite(item.hv_dia_min) && item.hv_dia_min > 0) {
+        maxDia = maxDia == null ? item.hv_dia_min : Math.max(maxDia, item.hv_dia_min);
+      }
+      if (item.hv_7d_min != null && Number.isFinite(item.hv_7d_min) && item.hv_7d_min > 0) {
+        max7d = max7d == null ? item.hv_7d_min : Math.max(max7d, item.hv_7d_min);
+      }
+      if (item.hv_mes_min != null && Number.isFinite(item.hv_mes_min) && item.hv_mes_min > 0) {
+        max28d = max28d == null ? item.hv_mes_min : Math.max(max28d, item.hv_mes_min);
+      }
+      if (item.hv_365d_min != null && Number.isFinite(item.hv_365d_min) && item.hv_365d_min > 0) {
+        max365d = max365d == null ? item.hv_365d_min : Math.max(max365d, item.hv_365d_min);
+      }
+      if (item.effectiveness_pct != null && Number.isFinite(item.effectiveness_pct)) {
+        sumEff += item.effectiveness_pct;
+        countEff++;
+      }
+    }
+
+    const avgEff = countEff > 0 ? sumEff / countEff : null;
+    let effNivel: string | null = null;
+    if (avgEff != null) {
+      if (avgEff >= 90) effNivel = 'PLENA';
+      else if (avgEff >= 77.5) effNivel = 'ATENÇÃO';
+      else if (avgEff >= 70) effNivel = 'DEGRADADA';
+      else effNivel = 'SEVERA';
+    }
+
+    return {
+      maxHvDiaMin: maxDia,
+      maxHv7dMin: max7d,
+      maxHv28dMin: max28d,
+      maxHv365dMin: max365d,
+      avgEffectivenessPct: avgEff,
+      effectivenessNivel: effNivel,
+    };
+  }, [filteredFrota]);
+
   const handlePickTripulante = useCallback((id: string, nome: string) => {
     setShowPicker(false);
     setJornadaTripulante({ id, nome });
@@ -758,6 +815,12 @@ function DashboardContent() {
               hasOperationalData={filteredFrota.length > 0}
               totalTripulantes={filteredFrota.length}
               totalJornadas={stats.compliance.ok + stats.compliance.atencao + stats.compliance.critico + stats.compliance.violacao}
+              maxHvDiaMin={iogpRealMetrics.maxHvDiaMin}
+              maxHv7dMin={iogpRealMetrics.maxHv7dMin}
+              maxHv28dMin={iogpRealMetrics.maxHv28dMin}
+              maxHv365dMin={iogpRealMetrics.maxHv365dMin}
+              avgEffectivenessPct={iogpRealMetrics.avgEffectivenessPct}
+              effectivenessNivel={iogpRealMetrics.effectivenessNivel}
             />
 
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" id="frms-action-list" aria-label="Painel de ação operacional">
