@@ -49,6 +49,7 @@ import FrmsJornadaEffectivenessCard from './components/FrmsJornadaEffectivenessC
 import FrmsDayExplanationPanel from './components/FrmsDayExplanationPanel';
 import FrmsSourcePolicyBanner from './components/FrmsSourcePolicyBanner';
 import FrmsOperationalActionList from './components/FrmsOperationalActionList';
+import FrmsIogpAuditPanel from './components/FrmsIogpAuditPanel';
 import {
   getMonthRange,
   getMonthDays,
@@ -752,6 +753,12 @@ function DashboardContent() {
           <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-4 sm:p-6">
             <FrmsFilterChips />
             <FrmsSourcePolicyBanner />
+
+            <FrmsIogpAuditPanel
+              hasOperationalData={filteredFrota.length > 0}
+              totalTripulantes={filteredFrota.length}
+              totalJornadas={stats.compliance.ok + stats.compliance.atencao + stats.compliance.critico + stats.compliance.violacao}
+            />
 
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" id="frms-action-list" aria-label="Painel de ação operacional">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
