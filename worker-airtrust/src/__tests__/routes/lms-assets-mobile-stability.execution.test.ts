@@ -18,6 +18,8 @@ function extractWrapperScript(html: string): string {
 }
 
 function setupDom() {
+  delete (g.window as Record<string, unknown>).API;
+  delete (g.window as Record<string, unknown>).API_1484_11;
   g.document.body.innerHTML = `
     <div id="status-bar"><span id="status-dot"></span><span id="status-text"></span></div>
     <div id="completion-overlay"><h2></h2><p></p></div>
@@ -374,5 +376,146 @@ describe('Wrapper SCORM real (execução em jsdom) — keepalive só no unload/h
     expect(fetchMock).toHaveBeenCalled();
     const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
     expect(lastCall[1].keepalive).toBe(true);
+  });
+});
+
+describe('Wrapper SCORM real (execução em jsdom) — tratamento de erros non-2xx e sanitização', () => {
+  beforeEach(() => {
+    setupDom();
+    g.localStorage?.clear();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('409 com LMS_QUALIFICATION_COMPLETION_FAILED: não faz retry, exibe mensagem sanitizada e despacha código', async () => {
+    const errorJson = {
+      success: false,
+      code: 'LMS_QUALIFICATION_COMPLETION_FAILED',
+      error:
+        'Não foi possível confirmar a qualificação exigida por este curso. A matrícula não foi concluída — tente novamente.',
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      clone() {
+        return { json: async () => errorJson };
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const postMessages: unknown[] = [];
+    g.window.parent = {
+      postMessage: (msg: unknown) => {
+        postMessages.push(msg);
+      },
+    };
+
+    const html = buildLaunchPage({
+      matriculaId: 390,
+      titulo: 'PT6C-67C - Manutenção',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/34/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '108/108',
+        'cmi.core.score.raw': '100',
+      }),
+      hasResumeState: false,
+    });
+
+    new Function(extractWrapperScript(html))();
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSFinish();
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    // 409 é erro funcional definitivo: exatamente 1 chamada, sem retry
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const statusText = g.document.getElementById('status-text')?.textContent;
+    expect(statusText).toBe(errorJson.error);
+
+    const saveError = postMessages.find(
+      (m: any) => m && m.type === 'lms:save-error' && m.code === 'LMS_QUALIFICATION_COMPLETION_FAILED',
+    );
+    expect(saveError).toBeDefined();
+
+    const completionError = postMessages.find(
+      (m: any) =>
+        m && m.type === 'lms:completion-error' && m.code === 'LMS_QUALIFICATION_COMPLETION_FAILED',
+    );
+    expect(completionError).toBeDefined();
+    expect((completionError as any).message).toBe(errorJson.error);
+  });
+
+  it('500 com erro do servidor: realiza retries e faz fallback seguro', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      clone() {
+        return { json: async () => ({ error: 'Internal Server Error' }) };
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 42,
+      titulo: 'Curso teste',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/scorm/commit/42',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: '{}',
+      hasResumeState: false,
+    });
+
+    new Function(extractWrapperScript(html))();
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSSetValue('cmi.core.lesson_location', '5/103');
+
+    // Inicial + 2 retries (com delay de 1200ms cada)
+    await new Promise((r) => setTimeout(r, 4000));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('resposta non-2xx com corpo inválido/HTML: faz fallback seguro sem quebrar', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      clone() {
+        return {
+          json: async () => {
+            throw new Error('Unexpected token < in JSON at position 0');
+          },
+        };
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 42,
+      titulo: 'Curso teste',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/scorm/commit/42',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: '{}',
+      hasResumeState: false,
+    });
+
+    new Function(extractWrapperScript(html))();
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSSetValue('cmi.core.lesson_location', '5/103');
+    await new Promise((r) => setTimeout(r, 4000));
+
+    const statusText = g.document.getElementById('status-text')?.textContent;
+    expect(statusText).toBe('Não foi possível salvar o progresso.');
   });
 });

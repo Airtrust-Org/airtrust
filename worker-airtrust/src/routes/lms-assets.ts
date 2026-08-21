@@ -1519,15 +1519,16 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
     });
   }
 
-  function notifyCompletionError(code, reason) {
+  function notifyCompletionError(code, reason, customMessage) {
     if (!completionPending) return;
-    var message = 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
+    var message = customMessage || 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
     setStatus(message, true, true);
     postToParent({
       type: 'lms:save-error',
       matriculaId: MATRICULA_ID,
       reason: reason || 'completion-unconfirmed',
       code: code || null,
+      message: message,
     });
     postToParent({
       type: 'lms:completion-error',
@@ -1536,6 +1537,33 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       message: message,
       reason: reason || null,
     });
+  }
+
+  function extractSanitizedError(json, status) {
+    var fallbackCode = status >= 500 || status === 429 ? 'SCORM_FINAL_COMMIT_MISSING' : 'SCORM_COMMIT_REJECTED';
+    var fallbackReason = 'http-' + String(status);
+    var fallbackMsg = 'Não foi possível salvar o progresso.';
+
+    if (!json || typeof json !== 'object') {
+      return { code: fallbackCode, reason: fallbackReason, message: fallbackMsg };
+    }
+
+    var rawCode = typeof json.code === 'string' ? json.code.trim() : null;
+    var rawMsg = (typeof json.error === 'string' && json.error.trim())
+      ? json.error.trim()
+      : (typeof json.message === 'string' && json.message.trim())
+        ? json.message.trim()
+        : null;
+
+    if (rawMsg && (rawMsg.indexOf('<') !== -1 || rawMsg.indexOf('SQLITE_') !== -1 || rawMsg.indexOf('stack:') !== -1 || rawMsg.indexOf('at ') === 0)) {
+      rawMsg = null;
+    }
+
+    return {
+      code: rawCode || fallbackCode,
+      reason: rawCode || fallbackReason,
+      message: rawMsg || fallbackMsg,
+    };
   }
 
 
@@ -2026,18 +2054,30 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         });
       }
 
-      setStatus('Não foi possível salvar o progresso.', true, true);
-      postToParent({
-        type: 'lms:save-error',
-        matriculaId: MATRICULA_ID,
-        reason: 'http-' + String(status),
-        attempt: currentAttempt,
-      });
-      if (completionPending) {
-        notifyCompletionError(
-          status >= 500 || status === 429 ? 'SCORM_FINAL_COMMIT_MISSING' : 'SCORM_COMMIT_REJECTED',
-          'http-' + String(status),
-        );
+      var handleNonOkResponse = function(errJson) {
+        var err = extractSanitizedError(errJson, status);
+        setStatus(err.message, true, true);
+        postToParent({
+          type: 'lms:save-error',
+          matriculaId: MATRICULA_ID,
+          reason: err.reason,
+          code: err.code,
+          message: err.message,
+          attempt: currentAttempt,
+        });
+        if (completionPending) {
+          notifyCompletionError(err.code, err.reason, err.message);
+        }
+      };
+
+      try {
+        response.clone().json().then(function(json) {
+          handleNonOkResponse(json);
+        }).catch(function() {
+          handleNonOkResponse(null);
+        });
+      } catch (_jsonErr) {
+        handleNonOkResponse(null);
       }
       return response;
     }).catch(function(e) {
