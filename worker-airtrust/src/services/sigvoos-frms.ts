@@ -12,6 +12,7 @@ import {
   decryptSigvoosPassword,
   type SigvoosConfig as ClientSigvoosConfig,
 } from '../lib/sigvoos/client';
+import { extractSigvoosLegOperationalContext } from '../lib/sigvoos/leg-context';
 
 const SIGVOOS_PAGE_SIZE = 200;
 
@@ -98,6 +99,12 @@ export interface SigvoosNormalizedLeg {
   matriculaAeronave: string | null;
   tempoNoturnoMin: number;
   tempoIfrMin: number;
+  /** Granularidade por etapa preservada para Controle de Voos/FRMS/meteorologia. */
+  staffIdSigvoos: string | null; flightReportId: string | null; legNumber: number | null; departureIcao: string | null; arrivalIcao: string | null;
+  engineStartTime: string | null; takeoffTime: string | null; landingTime: string | null; engineShutoffTime: string | null;
+  dayLandings: number | null;
+  nightLandings: number | null;
+  starts: number | null;
   raw: Record<string, unknown>;
 }
 
@@ -601,22 +608,11 @@ async function resolveSigvoosEmpresaId(
   empresaId?: number | null,
 ): Promise<number | null> {
   const preferredEmpresaId = normalizeEmpresaId(empresaId);
+  // Um tenant explicitamente informado é uma boundary de segurança, não uma
+  // preferência. Nunca cair para a configuração de outra empresa quando a
+  // empresa solicitante ainda não tiver credenciais SIGVOOS.
   if (preferredEmpresaId !== null) {
-    const preferred = await db
-      .prepare(
-        `SELECT COUNT(*) AS total
-           FROM integracoes_sigvoos_config
-          WHERE deleted_at IS NULL
-            AND empresa_id = ?
-              AND chave IN ('username', 'password', 'password_encrypted')
-            AND COALESCE(NULLIF(TRIM(valor), ''), NULL) IS NOT NULL`,
-      )
-      .bind(preferredEmpresaId)
-      .first<{ total: number }>();
-
-    if (Number(preferred?.total || 0) > 0) {
-      return preferredEmpresaId;
-    }
+    return preferredEmpresaId;
   }
 
   const configured = await db
@@ -639,7 +635,7 @@ async function resolveSigvoosEmpresaId(
     return empresasConfiguradas[0] ?? null;
   }
 
-  return preferredEmpresaId;
+  return null;
 }
 
 async function reconcileStaleSigvoosEventos(
@@ -813,6 +809,8 @@ async function loadSigvoosManualMappings(
   empresaId: number | null | undefined,
 ): Promise<SigvoosManualMappingRow[]> {
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
+  if (resolvedEmpresaId === null) return [];
+
   const rows = await db
     .prepare(
       `SELECT m.id,
@@ -824,9 +822,7 @@ async function loadSigvoosManualMappings(
               m.created_at,
               m.updated_at
          FROM sigvoos_mapeamento_manual m
-         JOIN funcionarios f
-           ON f.id = m.funcionario_id
-          AND (m.empresa_id IS NULL OR f.empresa_id = m.empresa_id)
+         JOIN funcionarios f ON f.id = m.funcionario_id AND f.empresa_id = m.empresa_id
         WHERE m.deleted_at IS NULL
           AND f.deleted_at IS NULL
           AND (m.empresa_id = ? OR (m.empresa_id IS NULL AND ? IS NULL))
@@ -840,9 +836,7 @@ async function loadSigvoosManualMappings(
               m.created_at,
               m.updated_at
          FROM integracoes_sigvoos_mapeamentos m
-         JOIN funcionarios f
-           ON f.id = m.funcionario_id
-          AND (m.empresa_id IS NULL OR f.empresa_id = m.empresa_id)
+         JOIN funcionarios f ON f.id = m.funcionario_id AND f.empresa_id = m.empresa_id
         WHERE m.deleted_at IS NULL
           AND f.deleted_at IS NULL
           AND (m.empresa_id = ? OR (m.empresa_id IS NULL AND ? IS NULL))
@@ -922,8 +916,11 @@ export async function upsertSigvoosManualMapping(
   if (!nomeSigvoos || !Number.isFinite(funcionarioId)) {
     throw new Error('SIGVOOS_MANUAL_MAPPING_INVALID');
   }
+  if (resolvedEmpresaId === null) {
+    throw new Error('SIGVOOS_TENANT_REQUIRED');
+  }
 
-  const funcionarioInScope = await db
+  const targetFuncionario = await db
     .prepare(
       `SELECT id
          FROM funcionarios
@@ -932,10 +929,10 @@ export async function upsertSigvoosManualMapping(
           AND deleted_at IS NULL
         LIMIT 1`,
     )
-    .bind(funcionarioId, resolvedEmpresaId ?? null)
+    .bind(funcionarioId, resolvedEmpresaId)
     .first<{ id: number }>();
 
-  if (!funcionarioInScope) {
+  if (!targetFuncionario) {
     throw new Error('SIGVOOS_MAPPING_TARGET_OUT_OF_SCOPE');
   }
 
@@ -957,9 +954,18 @@ export async function upsertSigvoosManualMapping(
                 funcionario_id = ?,
                 updated_at = ?,
                 deleted_at = NULL
-          WHERE id = ?`,
+          WHERE id = ?
+            AND empresa_id = ?`,
       )
-      .bind(nomeSigvoos, inscricaoSigvoos, canacSigvoos, funcionarioId, timestamp, existing.id)
+      .bind(
+        nomeSigvoos,
+        inscricaoSigvoos,
+        canacSigvoos,
+        funcionarioId,
+        timestamp,
+        existing.id,
+        resolvedEmpresaId,
+      )
       .run();
   } else {
     await db
@@ -1058,6 +1064,7 @@ export function normalizeSigvoosRecord(raw: Record<string, unknown>): SigvoosNor
   const flightReport = asRecord(raw.flight_report);
   const flightReportLeg = asRecord(raw.flight_report_leg);
   const departureLocation = asRecord(flightReportLeg?.departure_location);
+  const legContext = extractSigvoosLegOperationalContext(raw);
   const identificadorSigvoos =
     normalizeSigvoosIdentifier(staff?.inscription) ||
     normalizeSigvoosIdentifier(
@@ -1184,6 +1191,7 @@ export function normalizeSigvoosRecord(raw: Record<string, unknown>): SigvoosNor
 
   const horasVooMin = vooMinNumerico != null ? Math.round(vooMinNumerico) : vooMinTexto;
   const localBase =
+    legContext.departureIcao ||
     normalizeLookupValue(departureLocation?.icao_code) ||
     pickFirstString(raw, [
       'origem',
@@ -1221,6 +1229,11 @@ export function normalizeSigvoosRecord(raw: Record<string, unknown>): SigvoosNor
     matriculaAeronave: matriculaAeronave || null,
     tempoNoturnoMin: Math.max(0, tempoNoturnoMin || 0),
     tempoIfrMin: Math.max(0, tempoIfrMin || 0),
+    staffIdSigvoos: legContext.staffIdSigvoos, flightReportId: legContext.flightReportId, legNumber: legContext.legNumber, departureIcao: legContext.departureIcao, arrivalIcao: legContext.arrivalIcao,
+    engineStartTime: legContext.engineStartTime, takeoffTime: legContext.takeoffTime, landingTime: legContext.landingTime, engineShutoffTime: legContext.engineShutoffTime,
+    dayLandings: legContext.dayLandings,
+    nightLandings: legContext.nightLandings,
+    starts: legContext.starts,
     raw,
   };
 }
@@ -2033,9 +2046,9 @@ async function upsertSigvoosJornadaPendente(
 
 async function resolveSigvoosPendenciaByImportacao(
   db: D1Database,
+  empresaId: number,
   importacaoId: string,
   funcionarioId: string | null,
-  empresaId?: number | null,
 ): Promise<void> {
   await db
     .prepare(
@@ -2048,7 +2061,7 @@ async function resolveSigvoosPendenciaByImportacao(
           AND empresa_id = ?
           AND deleted_at IS NULL`,
     )
-    .bind(funcionarioId ? Number(funcionarioId) : null, now(), importacaoId, empresaId ?? null)
+    .bind(funcionarioId ? Number(funcionarioId) : null, now(), importacaoId, empresaId)
     .run();
 }
 
@@ -2362,9 +2375,12 @@ export async function syncSigvoosForFrms(
   await reconcileStaleSigvoosEventos(db, resolvedEmpresaId);
   const parsedInput = SyncSchema.parse(rawInput);
   const clearExistingRequested = shouldClearExistingSigvoosData(parsedInput.clearExisting);
-  const clearExistingEmpresaId = clearExistingRequested
-    ? requireClearExistingEmpresaId(empresaId)
-    : null;
+  if (clearExistingRequested) {
+    // The legacy reset is tenant-wide and cannot be rolled back together with the
+    // multi-step import. Fail before any remote/domain write rather than risk
+    // deleting valid FRMS/flight-hour data and leaving a partial replacement.
+    throw new Error('SIGVOOS_CLEAR_EXISTING_UNSAFE_DISABLED');
+  }
   const existingConfig = await getSigvoosConfig(db, resolvedEmpresaId, undefined, runtimeEnv);
   const { from, to } = resolveSyncRange(existingConfig, parsedInput);
   const input = {
@@ -2436,13 +2452,6 @@ export async function syncSigvoosForFrms(
 
     const groupedByDay = groupSigvoosRecordsByDay(normalized);
 
-    if (clearExistingRequested) {
-      await clearExistingFiraDataForEmpresa(db, clearExistingEmpresaId!);
-      console.info('[sigvoos] clearExisting executado com escopo de tenant', {
-        empresaId: clearExistingEmpresaId,
-      });
-    }
-
     const tripulanteGroups = new Map<string, SigvoosGroupedDay[]>();
     for (const day of groupedByDay) {
       const key = `${day.canac || normalizeSigvoosNameForMatching(day.tripulanteNome) || 'SEM_TRIP'}::${day.tripulanteNome || ''}`;
@@ -2459,10 +2468,6 @@ export async function syncSigvoosForFrms(
         identificadorSigvoos: first.identificadorSigvoos,
         name: first.tripulanteNome,
       });
-      // P1-SIG-003: NOME_FUZZY is a name-similarity heuristic, not a proven
-      // identity. It must not auto-confirm into official FRMS jornadas —
-      // require a manual mapping (which then resolves as MANUAL on the
-      // next sync) before it can feed hours/jornada/rolling/alerts.
       const matchedOperational =
         matched?.elegivelFrms && matched.fonteResolucao !== 'NOME_FUZZY' ? matched : null;
       const byMonth = groupDaysByMonth(days);
@@ -2487,9 +2492,7 @@ export async function syncSigvoosForFrms(
               : [
                   matched?.motivoInelegibilidade === 'NAO_TRIPULANTE_OPERACIONAL'
                     ? 'Funcionario resolvido no cadastro, mas sem funcao/cargo elegivel para FRMS operacional.'
-                    : matched?.elegivelFrms && matched.fonteResolucao === 'NOME_FUZZY'
-                      ? 'Identidade resolvida apenas por similaridade de nome; requer confirmacao manual antes de alimentar FRMS.'
-                      : 'Tripulante nao localizado automaticamente no AirTrust.',
+                    : 'Tripulante nao localizado automaticamente no AirTrust.',
                 ],
           }),
         );
@@ -2519,13 +2522,12 @@ export async function syncSigvoosForFrms(
           canacSigvoos: monthly.canac,
           competencia: `${monthly.ano}-${String(monthly.mes).padStart(2, '0')}`,
           jornadas: monthly.preview.total_dias,
-          motivo: monthly.preview.avisos?.some((aviso) =>
-            aviso.includes('sem funcao/cargo elegivel'),
-          )
-            ? 'NAO_TRIPULANTE_OPERACIONAL'
-            : monthly.preview.avisos?.some((aviso) => aviso.includes('requer confirmacao manual'))
+          motivo:
+            monthly.fonteResolucao === 'NOME_FUZZY'
               ? 'IDENTIDADE_REQUER_CONFIRMACAO'
-              : 'NAO_ENCONTRADO',
+              : monthly.preview.avisos?.some((aviso) => aviso.includes('sem funcao/cargo elegivel'))
+                ? 'NAO_TRIPULANTE_OPERACIONAL'
+                : 'NAO_ENCONTRADO',
           payload: {
             fonte_resolucao: monthly.fonteResolucao,
           },
@@ -2557,11 +2559,14 @@ export async function syncSigvoosForFrms(
           syncStartedAt,
         );
         await enrichImportedSigvoosJornadas(db, monthly);
+        if (resolvedEmpresaId === null) {
+          throw new Error('SIGVOOS_TENANT_REQUIRED');
+        }
         await resolveSigvoosPendenciaByImportacao(
           db,
+          resolvedEmpresaId,
           monthly.preview.importacao_id,
           monthly.tripulanteId,
-          resolvedEmpresaId,
         );
         importados = result.importados;
         substituidos = result.substituidos;
@@ -2645,26 +2650,31 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
   empresaId: number | null | undefined,
   importadorId: string,
 ): Promise<ReprocessarPreviewsResult> {
+  const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
+  if (resolvedEmpresaId === null) {
+    throw new Error('SIGVOOS_TENANT_REQUIRED');
+  }
+
   const limites = await carregarLimites(db);
 
   const rows = await db
     .prepare(
-      `SELECT f.id, f.canac, f.nome_fira, f.ano, f.mes, f.preview_json
-       FROM frms_importacao_fira f
-       WHERE f.tripulante_id IS NULL
-         AND f.deleted_at IS NULL
-         AND f.arquivo_nome LIKE 'SIGVOOS_%'
+      `SELECT id, canac, nome_fira, ano, mes, preview_json
+       FROM frms_importacao_fira
+       WHERE tripulante_id IS NULL
+         AND deleted_at IS NULL
+         AND arquivo_nome LIKE 'SIGVOOS_%'
          AND EXISTS (
            SELECT 1
              FROM frms_jornada_pendente jp
-            WHERE jp.importacao_id = f.id
+            WHERE jp.importacao_id = frms_importacao_fira.id
               AND jp.empresa_id = ?
               AND jp.deleted_at IS NULL
               AND jp.status = 'PENDENTE'
          )
-       ORDER BY f.ano DESC, f.mes DESC, f.created_at DESC`,
+       ORDER BY ano DESC, mes DESC, created_at DESC`,
     )
-    .bind(empresaId ?? null)
+    .bind(resolvedEmpresaId)
     .all<{
       id: string;
       canac: string | null;
@@ -2706,7 +2716,7 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
     const canacSigvoos = row.canac || null;
 
     // Try to resolve tripulante with current mappings
-    const matched = await findTripulanteByCanacOrName(db, empresaId, {
+    const matched = await findTripulanteByCanacOrName(db, resolvedEmpresaId, {
       canac: canacSigvoos,
       name: nomeSigvoos,
     });
@@ -2723,6 +2733,18 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       continue;
     }
 
+    if (matched.fonteResolucao === 'NOME_FUZZY') {
+      result.detalhes.push({
+        importacao_id: row.id,
+        tripulante_nome: nomeSigvoos,
+        ano: row.ano,
+        mes: row.mes,
+        resolved: false,
+        error: 'Identidade por nome requer mapeamento manual',
+      });
+      continue;
+    }
+
     if (!matched.elegivelFrms) {
       result.detalhes.push({
         importacao_id: row.id,
@@ -2735,32 +2757,15 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       continue;
     }
 
-    // P1-SIG-003: a NOME_FUZZY match is a similarity heuristic, not proven
-    // identity — reprocessing must not silently confirm it. Keep the
-    // pendencia open and require an explicit manual mapping first.
-    if (matched.fonteResolucao === 'NOME_FUZZY') {
-      result.detalhes.push({
-        importacao_id: row.id,
-        tripulante_nome: nomeSigvoos,
-        ano: row.ano,
-        mes: row.mes,
-        resolved: false,
-        error: 'Identidade resolvida apenas por similaridade de nome; requer mapeamento manual',
-      });
-      continue;
-    }
-
-    // Update frms_importacao_fira with the resolved tripulante_id.
-    // Ownership is re-proven here (not just in the SELECT above) so the
-    // UPDATE stays fail-closed even if this function is ever called with
-    // a stale row id from another source.
+    // Update frms_importacao_fira with the resolved tripulante_id
     const timestamp = now();
-    await db
+    const updateResult = await db
       .prepare(
         `UPDATE frms_importacao_fira
             SET tripulante_id = ?, updated_at = ?
           WHERE id = ?
             AND tripulante_id IS NULL
+            AND deleted_at IS NULL
             AND EXISTS (
               SELECT 1
                 FROM frms_jornada_pendente jp
@@ -2770,8 +2775,21 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
                  AND jp.status = 'PENDENTE'
             )`,
       )
-      .bind(matched.id, timestamp, row.id, empresaId ?? null)
+      .bind(matched.id, timestamp, row.id, resolvedEmpresaId)
       .run();
+
+    if (Number(updateResult.meta?.changes || 0) !== 1) {
+      result.totalErros++;
+      result.detalhes.push({
+        importacao_id: row.id,
+        tripulante_nome: nomeSigvoos,
+        ano: row.ano,
+        mes: row.mes,
+        resolved: false,
+        error: 'Preview fora do escopo do tenant ou já processado',
+      });
+      continue;
+    }
 
     // Update preview_json with the resolved tripulante_id
     const updatedPreview: FiraImportacaoPreview = { ...preview, tripulante_id: matched.id };
@@ -2781,7 +2799,7 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       const { selectedDays, relabelDates } = await buildSelectedDaysForSigvoosImport(
         db,
         updatedPreview.linhas,
-        empresaId ?? null,
+        resolvedEmpresaId,
       );
 
       const confirmResult = await confirmarImportacaoFira(
@@ -2790,13 +2808,18 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
         { dias_selecionados: selectedDays },
         importadorId,
         limites,
-        empresaId ?? undefined,
+        resolvedEmpresaId,
       );
 
       if (relabelDates.length > 0) {
         await relabelImportedJornadasAsSigvoos(db, matched.id, relabelDates, timestamp);
       }
-      await resolveSigvoosPendenciaByImportacao(db, row.id, matched.id, empresaId);
+      await resolveSigvoosPendenciaByImportacao(
+        db,
+        resolvedEmpresaId,
+        row.id,
+        matched.id,
+      );
 
       result.totalResolvidos++;
       result.totalImportados += confirmResult.importados;

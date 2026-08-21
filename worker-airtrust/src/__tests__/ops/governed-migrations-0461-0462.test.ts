@@ -20,7 +20,7 @@ const migration0461 = readFileSync(join(ROOT, 'worker-airtrust/migrations', MIGR
 const migration0462 = readFileSync(join(ROOT, 'worker-airtrust/migrations', MIGRATION_0462), 'utf8');
 
 function sql(db: string, statement: string) {
-  const result = spawnSync('sqlite3', ['--', db, statement], { encoding: 'utf8' });
+  const result = spawnSync('sqlite3', [db], { input: statement, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
   return result.stdout;
 }

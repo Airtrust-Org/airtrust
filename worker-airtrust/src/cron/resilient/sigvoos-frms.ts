@@ -535,7 +535,12 @@ async function validateTripulanteTenant(
   return Boolean(row?.id);
 }
 
-async function runFrmsQueueScope(db: D1Database, scopeKey: string, logger: CronJobLogger) {
+async function runFrmsQueueScope(
+  db: D1Database,
+  env: Env,
+  scopeKey: string,
+  logger: CronJobLogger,
+) {
   const empresaId = scopeToEmpresaId(scopeKey);
   if (empresaId === undefined) return;
 
@@ -592,7 +597,10 @@ async function runFrmsQueueScope(db: D1Database, scopeKey: string, logger: CronJ
             payload.empresa_id,
           );
           if (!tenantValid) throw new Error('FRMS_TRIPULANTE_TENANT_MISMATCH');
-          await reprocessarTripulanteCompleto(db, payload.tripulante_id, limites!);
+          await reprocessarTripulanteCompleto(db, payload.tripulante_id, limites!, {
+            env,
+            empresaId: payload.empresa_id,
+          });
           await markCronJobItemSucceeded(db, {
             jobName: FRMS_JOB,
             scopeKey,
@@ -641,7 +649,7 @@ async function runFrmsQueueScope(db: D1Database, scopeKey: string, logger: CronJ
   });
 }
 
-async function dispatchFrmsQueues(db: D1Database, logger: CronJobLogger): Promise<void> {
+async function dispatchFrmsQueues(db: D1Database, env: Env, logger: CronJobLogger): Promise<void> {
   const scopes = await db
     .prepare(
       `SELECT DISTINCT scope_key
@@ -655,7 +663,7 @@ async function dispatchFrmsQueues(db: D1Database, logger: CronJobLogger): Promis
     .all<{ scope_key: string }>();
 
   for (const row of scopes.results || []) {
-    await runFrmsQueueScope(db, row.scope_key, logger);
+    await runFrmsQueueScope(db, env, row.scope_key, logger);
   }
 }
 
@@ -666,7 +674,7 @@ export async function runSigvoosFrmsJobs(
   now = new Date(),
 ): Promise<void> {
   await dispatchSigvoosTenants(db, env, logger, now);
-  await dispatchFrmsQueues(db, logger);
+  await dispatchFrmsQueues(db, env, logger);
 }
 
 export async function countPendingFrmsItems(db: D1Database, scopeKey: string): Promise<number> {

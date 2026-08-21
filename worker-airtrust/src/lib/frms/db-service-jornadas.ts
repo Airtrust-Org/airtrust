@@ -21,7 +21,10 @@ import { despacharNotificacoes } from './db-service-notificacoes';
 import { carregarLimites } from './db-service-config';
 import { resolveFrmsSourceStatus, shouldUseForOperationalFrms } from './frms-source-policy';
 import { resolveFuncionarioActiveFortnightForDate } from '../escalas/active-fortnight';
-
+import {
+  runFrmsIogpShadowForJornada,
+  type FrmsIogpShadowCallerEnv,
+} from './frms-iogp-shadow-caller';
 // ────────────────────────────────────────────────────────
 // Período embarcado
 // ────────────────────────────────────────────────────────
@@ -111,6 +114,9 @@ export interface SalvarJornadaResult {
 }
 
 interface FatorizacaoRow extends FrmsFatorizacao {
+  /** Canonical effectiveness result, adapted by the IOGP observer only. */
+  effectiveness_nivel?: string | null;
+  effectiveness_pct?: number | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -369,6 +375,8 @@ export async function recalcularPipeline(
     fator_apresentacao_pct: effectResult.fator_apresentacao_calibrado_pct,
     fator_repouso_pct: effectResult.fator_repouso_calibrado_pct,
     total_fatorizado_jornada: effectResult.total_fatorizado_calibrado_jornada,
+    effectiveness_nivel: effectResult.nivel,
+    effectiveness_pct: effectResult.effectiveness_pct,
     created_at: timestamp,
     updated_at: timestamp,
     deleted_at: null,
@@ -1348,6 +1356,7 @@ export async function reprocessarTripulanteCompleto(
   db: D1Database,
   tripulanteId: number,
   limites: LimitesMap,
+  shadowOptions?: { env: FrmsIogpShadowCallerEnv; empresaId: number | null },
 ): Promise<number> {
   const jornadas = await db
     .prepare(
@@ -1361,7 +1370,19 @@ export async function reprocessarTripulanteCompleto(
     .all<FrmsJornada>();
   const lista = jornadas.results ?? [];
   for (const j of lista) {
-    await recalcularPipeline(db, j, limites);
+    const result = await recalcularPipeline(db, j, limites);
+    if (shadowOptions?.empresaId && shadowOptions.env) {
+      // Must not block or affect the canonical pipeline
+      await runFrmsIogpShadowForJornada(
+        db,
+        j,
+        result,
+        shadowOptions.env,
+        shadowOptions.empresaId,
+      ).catch((err) => {
+        console.warn(`[FRMS] Shadow pipeline failed for jornada ${j.id}:`, err);
+      });
+    }
   }
   return lista.length;
 }
