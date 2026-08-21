@@ -74,7 +74,10 @@ import {
   LmsPageShell,
   LmsStatPill,
 } from './lmsUi';
-import { getAdminCoursePreviewPath, supportsAdminCoursePreview as supportsContentPreview } from './lmsAdminPreview';
+import {
+  getAdminCoursePreviewPath,
+  supportsAdminCoursePreview as supportsContentPreview,
+} from './lmsAdminPreview';
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
@@ -703,7 +706,10 @@ function CourseDrawer({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px] animate-fade-in" onClick={safeClose}>
+    <div
+      className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px] animate-fade-in"
+      onClick={safeClose}
+    >
       <div className="flex min-h-full w-full overflow-y-auto overscroll-y-contain p-3 sm:p-6">
         <div
           className="relative mx-auto flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:my-auto sm:max-h-[calc(100dvh-3rem)] animate-scale-in"
@@ -1071,7 +1077,7 @@ function CourseDrawer({
                             Atual: {storedContentLabel ?? 'conteúdo já publicado'}
                           </p>
                           <p className="mt-1 text-amber-800">Novo envio: {contentFile?.name}</p>
-                          {(form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p') ? (
+                          {form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p' ? (
                             <label className="mt-3 flex cursor-pointer items-center gap-2 text-amber-900">
                               <input
                                 type="checkbox"
@@ -1080,7 +1086,8 @@ function CourseDrawer({
                                 className="rounded"
                               />
                               <span className="text-xs">
-                                Preservar arquivos existentes no storage (modo merge — use para upload incremental de arquivos grandes)
+                                Preservar arquivos existentes no storage (modo merge — use para
+                                upload incremental de arquivos grandes)
                               </span>
                             </label>
                           ) : null}
@@ -1349,13 +1356,16 @@ function CourseCard({
   const complianceCourse = impactsCompliance(curso);
   const isConcluido = !canManage && matricula?.status === 'CONCLUIDO';
   const isEmAndamento = !canManage && matricula?.status === 'EM_ANDAMENTO';
-  const isNaoIniciado = !canManage && (!matricula || matricula.status === 'NAO_INICIADO' || matricula.status === 'CANCELADO');
+  const isNaoIniciado =
+    !canManage &&
+    (!matricula || matricula.status === 'NAO_INICIADO' || matricula.status === 'CANCELADO');
 
-  const gridBorderCls = isNaoIniciado || isEmAndamento || isConcluido
-    ? getLmsGridCardBorderClasses(matricula?.status ?? 'NAO_INICIADO')
-    : complianceCourse
-      ? 'border-amber-200'
-      : 'border-slate-200';
+  const gridBorderCls =
+    isNaoIniciado || isEmAndamento || isConcluido
+      ? getLmsGridCardBorderClasses(matricula?.status ?? 'NAO_INICIADO')
+      : complianceCourse
+        ? 'border-amber-200'
+        : 'border-slate-200';
 
   return (
     <article
@@ -1365,7 +1375,9 @@ function CourseCard({
         <div className="relative">
           <LmsCourseArtwork
             curso={curso}
-            progress={!canManage ? (matricula ? getEnrollmentProgress(matricula) : undefined) : undefined}
+            progress={
+              !canManage ? (matricula ? getEnrollmentProgress(matricula) : undefined) : undefined
+            }
           />
           <div className="pointer-events-none absolute top-2 right-2 z-10">
             <LmsStatPill status={statusMeta} />
@@ -1374,35 +1386,35 @@ function CourseCard({
       </div>
       <div className="flex flex-1 flex-col p-4 pt-3">
         <div className="min-w-0">
-            <h3 className="line-clamp-2 text-sm font-semibold tracking-tight text-slate-950 dark:text-slate-100">
-              {curso.titulo}
-            </h3>
-            <div className="mt-2 flex min-h-[1.5rem] flex-wrap gap-1.5">
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeMeta.chipClass}`}
-              >
-                {typeMeta.icon}
-                {typeMeta.label}
-              </span>
-              {curso.categoria ? (
-                <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  {curso.categoria}
-                </span>
-              ) : null}
-              {curso.setores && curso.setores.length > 0
-                ? curso.setores.map((s) => (
-                    <span
-                      key={s.id}
-                      className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
-                    >
-                      {s.nome}
-                    </span>
-                  ))
-                : null}
+          <h3 className="line-clamp-2 text-sm font-semibold tracking-tight text-slate-950 dark:text-slate-100">
+            {curso.titulo}
+          </h3>
+          <div className="mt-2 flex min-h-[1.5rem] flex-wrap gap-1.5">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeMeta.chipClass}`}
+            >
+              {typeMeta.icon}
+              {typeMeta.label}
+            </span>
+            {curso.categoria ? (
               <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                {formatMinutes(curso.carga_horaria_minutos)}
+                {curso.categoria}
               </span>
-            </div>
+            ) : null}
+            {curso.setores && curso.setores.length > 0
+              ? curso.setores.map((s) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
+                  >
+                    {s.nome}
+                  </span>
+                ))
+              : null}
+            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              {formatMinutes(curso.carga_horaria_minutos)}
+            </span>
+          </div>
         </div>
         <div className="flex-1">
           {complianceCourse && curso.qualificacao_tipo_nome ? (
@@ -1489,11 +1501,7 @@ function CourseCard({
                   onClick={() => onAction(curso)}
                   className={`flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${getLmsActionButtonClasses(matricula?.status ?? 'NAO_INICIADO')}`}
                 >
-                  {isConcluido ? (
-                    <Eye className="h-4 w-4" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
+                  {isConcluido ? <Eye className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                   {getLmsActionLabel(matricula?.status ?? 'NAO_INICIADO')}
                 </button>
               )}
@@ -1629,9 +1637,7 @@ export default function LmsCatalogo() {
   const myMatriculas = matriculas ?? [];
   const matriculasByCurso = new Map(myMatriculas.map((m) => [m.curso_id, m]));
   const enrolledIds = new Set(
-    myMatriculas
-      .filter((m) => m.status !== 'CANCELADO')
-      .map((m) => m.curso_id),
+    myMatriculas.filter((m) => m.status !== 'CANCELADO').map((m) => m.curso_id),
   );
   const categories = useMemo(
     () => [...new Set(courses.map((c) => c.categoria).filter(Boolean))],
@@ -1725,8 +1731,7 @@ export default function LmsCatalogo() {
                 : `/lms/player/${mat.id}`;
         navigate(`${base}?review=1`);
         return;
-      }
-      else navPlayer(curso, mat.id);
+      } else navPlayer(curso, mat.id);
       return;
     }
     if (!funcionarioId) {
@@ -1876,11 +1881,12 @@ export default function LmsCatalogo() {
     }
   }
 
-  const statsBar = canManage && !studentMode
-    ? `${courses.length} cursos · ${courses.filter((c) => c.publicado === 1).length} publicados · ${courses.filter((c) => supportsContentPreview(c)).length} com conteúdo`
-    : studentMode
-      ? `${enrolledIds.size} curso${enrolledIds.size === 1 ? '' : 's'} matriculado${enrolledIds.size === 1 ? '' : 's'}`
-      : `${courses.length} curso${courses.length === 1 ? '' : 's'} disponível${courses.length === 1 ? '' : 'eis'} no catálogo`;
+  const statsBar =
+    canManage && !studentMode
+      ? `${courses.length} cursos · ${courses.filter((c) => c.publicado === 1).length} publicados · ${courses.filter((c) => supportsContentPreview(c)).length} com conteúdo`
+      : studentMode
+        ? `${enrolledIds.size} curso${enrolledIds.size === 1 ? '' : 's'} matriculado${enrolledIds.size === 1 ? '' : 's'}`
+        : `${courses.length} curso${courses.length === 1 ? '' : 's'} disponível${courses.length === 1 ? '' : 'eis'} no catálogo`;
 
   const managementActions = (
     <>
@@ -1940,17 +1946,41 @@ export default function LmsCatalogo() {
     </div>
   );
 
+  const gestorModeToggle = (
+    <div className="flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:shadow-none">
+      {(
+        [
+          { id: 'catalogo', label: 'Gestão' },
+          { id: 'meus', label: 'Aluno' },
+        ] as Array<{ id: TabId; label: string }>
+      ).map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => setTab(item.id)}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium ${
+            tab === item.id
+              ? 'bg-primary/10 text-primary'
+              : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <AppLayout>
       <LmsPageShell>
         <PageHeader
           className="mb-6"
-          title={studentMode && canManage ? 'Meus cursos' : roleView.title}
+          title={studentMode && canManage ? 'Meus treinamentos' : roleView.title}
           subtitle={statsBar}
           actions={
             isGestor ? (
               <div className="flex flex-wrap items-center gap-2">
-                {tabToggle}
+                {gestorModeToggle}
                 {tab === 'catalogo' ? managementActions : null}
               </div>
             ) : !canManage ? (
@@ -1961,9 +1991,9 @@ export default function LmsCatalogo() {
           }
         />
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:shadow-none">
-          <LmsModuleTabs canManage={canManage} />
+          <LmsModuleTabs canManage={canManage && !studentMode} />
 
-          {showAdministrativeFilters ? (
+          {showAdministrativeFilters && !studentMode ? (
             <div className="border-b border-slate-100 bg-slate-50/40 px-5 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-950/60">
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr]">
                 <label className="relative block">

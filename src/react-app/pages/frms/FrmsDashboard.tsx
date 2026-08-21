@@ -541,6 +541,12 @@ function DashboardContent() {
       else effNivel = 'SEVERA';
     }
 
+    const isDemo = filteredFrota.some(
+      (item) =>
+        item.nome?.startsWith('QA') ||
+        item.nome_guerra?.startsWith('QA')
+    );
+
     return {
       maxHvDiaMin: maxDia,
       maxHv7dMin: max7d,
@@ -548,6 +554,7 @@ function DashboardContent() {
       maxHv365dMin: max365d,
       avgEffectivenessPct: avgEff,
       effectivenessNivel: effNivel,
+      isDemo,
     };
   }, [filteredFrota]);
 
@@ -821,6 +828,7 @@ function DashboardContent() {
               maxHv365dMin={iogpRealMetrics.maxHv365dMin}
               avgEffectivenessPct={iogpRealMetrics.avgEffectivenessPct}
               effectivenessNivel={iogpRealMetrics.effectivenessNivel}
+              isDemo={iogpRealMetrics.isDemo}
             />
 
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" id="frms-action-list" aria-label="Painel de ação operacional">
