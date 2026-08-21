@@ -35,7 +35,6 @@ import { buildIogpComplianceEvaluations } from './frms-iogp-compliance-builder';
 import { mapEffectivenessNivelToBiologicalLevel } from './frms-iogp-biological-adapter';
 import {
   persistFrmsJornadaAvaliacao,
-  type FrmsAvaliacaoDb,
 } from './frms-jornada-avaliacoes-repository';
 import { RedemetClient } from './redemet-weather';
 import type { FrmsLocationCatalogEntry } from './location-catalog';
@@ -329,7 +328,7 @@ export async function runFrmsIogpShadowForJornada(
 
   // ── Persist shadow snapshot ───────────────────────────────────────────────
   await persistFrmsJornadaAvaliacao(
-    db as unknown as FrmsAvaliacaoDb,
+    db,
     empresaId,
     result.snapshot,
   );

@@ -26,7 +26,6 @@ export interface FrmsAvaliacaoDb {
   prepare(query: string): {
     bind(...values: unknown[]): {
       run(): Promise<unknown>;
-      first<T = unknown>(): Promise<T | null>;
     };
   };
 }
