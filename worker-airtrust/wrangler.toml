@@ -117,7 +117,7 @@ binding = "CF_VERSION_METADATA"
 
 [env.production.vars]
 ENVIRONMENT = "production"
-CORS_ORIGINS = "https://airtrust.online,https://www.airtrust.online,https://airtrust.pages.dev,https://production.airtrust.pages.dev"
+CORS_ORIGINS = "https://airtrust.online,https://www.airtrust.online,https://airtrust.pages.dev,https://production.airtrust.pages.dev,https://api.airtrust.online"
 # Placeholder tracked in git. The real APP_VERSION is injected by scripts/deploy-worker-only.sh
 APP_VERSION = "managed-by-script"
 # Placeholder tracked in git. The real APP_BUILD_TIME is injected by scripts/deploy-worker-only.sh

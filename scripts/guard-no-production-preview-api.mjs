@@ -12,6 +12,7 @@ const PRODUCTION_ORIGINS = [
   'https://www.airtrust.online',
   'https://airtrust.pages.dev',
   'https://production.airtrust.pages.dev',
+  'https://api.airtrust.online',
 ];
 
 const STAGING_ORIGINS = [
