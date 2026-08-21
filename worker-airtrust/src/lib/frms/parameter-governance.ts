@@ -80,13 +80,26 @@ export function resolveEffectiveRevision(
       isEffective(revision, operationalDate),
   );
   const tenant = candidates.filter((revision) => revision.empresa_id === empresaId);
-  const chosen = (tenant.length ? tenant : candidates).sort(
+  const scoped = tenant.length ? tenant : candidates;
+  const ordered = [...scoped].sort(
     (a, b) => b.revision_number - a.revision_number || b.effective_from.localeCompare(a.effective_from),
-  )[0];
+  );
+  const chosen = ordered[0];
   if (!chosen) {
     throw new FrmsParameterResolutionError(
       'FRMS_PARAMETER_PROFILE_NOT_CONFIGURED',
       `No active FRMS parameter revision for empresa=${empresaId}, profile=${profileCode}, date=${operationalDate}.`,
+    );
+  }
+  const equallyPreferred = ordered.filter(
+    (revision) =>
+      revision.revision_number === chosen.revision_number &&
+      revision.effective_from === chosen.effective_from,
+  );
+  if (equallyPreferred.length !== 1) {
+    throw new FrmsParameterResolutionError(
+      'FRMS_PARAMETER_REVISION_AMBIGUOUS',
+      `More than one equally preferred FRMS parameter revision matches empresa=${empresaId}, profile=${profileCode}, date=${operationalDate}.`,
     );
   }
   return chosen;
@@ -99,7 +112,18 @@ export function buildResolvedParameterSet(
 ): ResolvedFrmsParameterSet {
   const values: Record<string, number> = {};
   for (const parameter of parameters) {
-    if (parameter.revision_id !== revision.id || parameter.numeric_value == null) continue;
+    if (parameter.revision_id !== revision.id) continue;
+    if (parameter.json_value != null) {
+      try {
+        JSON.parse(parameter.json_value);
+      } catch {
+        throw new FrmsParameterResolutionError(
+          'FRMS_PARAMETER_INVALID_JSON',
+          `Parameter ${parameter.parameter_key} contains invalid JSON.`,
+        );
+      }
+    }
+    if (parameter.numeric_value == null) continue;
     if (!Number.isFinite(Number(parameter.numeric_value))) {
       throw new FrmsParameterResolutionError(
         'FRMS_PARAMETER_INVALID_VALUE',

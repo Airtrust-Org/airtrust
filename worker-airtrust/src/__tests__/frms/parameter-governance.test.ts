@@ -16,6 +16,7 @@ import {
   calcularScoreFadiga,
   resolveFadigaBusinessPolicy,
 } from '../../lib/frms/fadiga-score';
+import { resolveFortnightPolicy } from '../../lib/frms/fortnight-indicator';
 
 const revision = (overrides: Partial<FrmsConfigRevision> = {}): FrmsConfigRevision => ({
   id: 'rev-1', empresa_id: 1, profile_code: 'HELICOPTER_OFFSHORE', revision_number: 1,
@@ -53,6 +54,13 @@ describe('FRMS parameter governance V2', () => {
     expect(chosen.id).toBe('new');
   });
 
+  it('fails closed when equally preferred revisions overlap', () => {
+    expect(() => resolveEffectiveRevision([
+      revision({ id: 'first' }),
+      revision({ id: 'second' }),
+    ], 1, FRMS_OFFSHORE_PROFILE, '2026-08-21')).toThrow(/equally preferred/);
+  });
+
   it('keeps the previous revision available for historical operational dates', () => {
     const historical = resolveEffectiveRevision([
       revision({ id: 'before', effective_from: '2026-01-01', effective_to: '2026-06-30', revision_number: 1 }),
@@ -65,6 +73,12 @@ describe('FRMS parameter governance V2', () => {
     expect(() => buildResolvedParameterSet(revision(), [parameter('FDP_MAXIMO_HORAS')], [
       'FDP_MAXIMO_HORAS', 'REPOUSO_MINIMO_HORAS',
     ])).toThrow(FrmsParameterResolutionError);
+  });
+
+  it('fails closed when a revision parameter contains invalid JSON', () => {
+    expect(() => buildResolvedParameterSet(revision(), [
+      { ...parameter('FDP_MAXIMO_HORAS'), json_value: '{invalid' },
+    ], ['FDP_MAXIMO_HORAS'])).toThrow(/invalid JSON/);
   });
 
   it('returns an immutable parameter set tagged with its revision', () => {
@@ -107,6 +121,11 @@ describe('FRMS parameter governance V2', () => {
     const policy = resolveFadigaBusinessPolicy({
       FATIGUE_MEDICATION_BONUS: 8, FATIGUE_ALCOHOL_BONUS: 15,
       WOCL_START_MINUTE: 120, WOCL_END_MINUTE: 360, WOCL_CENTER_PENALTY: 0.3, WOCL_EDGE_PENALTY: 0.15,
+      KSS_NORM_LE_2: 0, KSS_NORM_LE_4: 0.15, KSS_NORM_LE_6: 0.4, KSS_NORM_EQ_7: 0.7, KSS_NORM_EQ_8: 0.85, KSS_NORM_GE_9: 1,
+      SLEEP_DURATION_MISSING_NORM: 0.6, SLEEP_DURATION_GE_8_NORM: 0, SLEEP_DURATION_GE_7_NORM: 0.15,
+      SLEEP_DURATION_GE_6_NORM: 0.35, SLEEP_DURATION_GE_5_NORM: 0.6, SLEEP_DURATION_GE_4_NORM: 0.8, SLEEP_DURATION_LT_4_NORM: 1,
+      SLEEP_QUALITY_MISSING_NORM: 0.4, SLEEP_QUALITY_GE_5_NORM: 0, SLEEP_QUALITY_EQ_4_NORM: 0.2,
+      SLEEP_QUALITY_EQ_3_NORM: 0.45, SLEEP_QUALITY_EQ_2_NORM: 0.7, SLEEP_QUALITY_LT_2_NORM: 1,
     });
     expect(calcularPenalidadeWOCL(240, policy)).toBe(calcularPenalidadeWOCL(240));
     const input = { kss_score: 6, horas_sono: 5, qualidade_sono: 3, sintomas_json: null, apto: 1, meds_ult_12h: 1, alcool_ult_12h: 1 } as const;
@@ -114,5 +133,11 @@ describe('FRMS parameter governance V2', () => {
     expect(calcularScoreFadiga(input, config, policy)).toEqual(
       calcularScoreFadiga(input, config, LEGACY_FADIGA_BUSINESS_POLICY),
     );
+  });
+
+  it('fails closed for incomplete fortnight policy revisions', () => {
+    expect(() => resolveFortnightPolicy({
+      FORTNIGHT_CONSECUTIVE_DAYS_ATTENTION: 4,
+    })).toThrow('FRMS_PARAMETER_REQUIRED_MISSING');
   });
 });
