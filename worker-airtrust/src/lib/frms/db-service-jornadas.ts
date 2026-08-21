@@ -169,6 +169,7 @@ export async function recalcularPipeline(
   db: D1Database,
   jornada: FrmsJornada,
   limites: LimitesMap,
+  provenance?: { configRevisionId: string; modelVersion: string },
 ): Promise<{
   fatorizacao: FatorizacaoRow;
   acumulo: AcumuloRollingResult;
@@ -331,8 +332,9 @@ export async function recalcularPipeline(
         hora_despertar_estimada, hora_inicio_sono_estimado, duracao_sono_efetiva_min,
         tempo_abaixo_limiar_min,
         dia_periodo_embarcado, total_dias_periodo,
+        config_revision_id, model_version, recalc_state,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       fatId,
@@ -362,6 +364,9 @@ export async function recalcularPipeline(
       effectResult.tempo_abaixo_limiar_pct,
       effectResult.dia_periodo_embarcado ?? null,
       effectResult.total_dias_periodo ?? null,
+      provenance?.configRevisionId ?? null,
+      provenance?.modelVersion ?? null,
+      provenance ? 'CURRENT' : 'CURRENT',
       timestamp,
       timestamp,
     )

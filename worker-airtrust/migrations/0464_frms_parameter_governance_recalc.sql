@@ -1,0 +1,121 @@
+-- ============================================================
+-- 0464: FRMS parameter governance and auditable recalculation
+--
+-- Local schema only. This migration is not an authorization to apply D1.
+-- ============================================================
+
+CREATE TABLE frms_config_revisions (
+  id TEXT PRIMARY KEY,
+  empresa_id INTEGER,
+  profile_code TEXT NOT NULL,
+  revision_number INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('DRAFT', 'ACTIVE', 'SUPERSEDED', 'RETIRED')),
+  source_type TEXT NOT NULL,
+  source_reference TEXT,
+  regulatory_profile_id TEXT,
+  policy_version TEXT NOT NULL,
+  effective_from TEXT NOT NULL,
+  effective_to TEXT,
+  actor_user_id TEXT,
+  reason TEXT NOT NULL,
+  supersedes_revision_id TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+  FOREIGN KEY (regulatory_profile_id) REFERENCES frms_regulatory_profiles(id),
+  FOREIGN KEY (supersedes_revision_id) REFERENCES frms_config_revisions(id),
+  UNIQUE (empresa_id, profile_code, revision_number)
+);
+
+CREATE INDEX idx_frms_config_revision_resolution
+  ON frms_config_revisions (empresa_id, profile_code, status, effective_from, effective_to);
+
+CREATE TABLE frms_config_parameters (
+  id TEXT PRIMARY KEY,
+  revision_id TEXT NOT NULL,
+  parameter_key TEXT NOT NULL,
+  numeric_value REAL,
+  json_value TEXT,
+  unit TEXT NOT NULL,
+  metric TEXT,
+  window_kind TEXT,
+  direction TEXT,
+  required INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (revision_id) REFERENCES frms_config_revisions(id),
+  CHECK (numeric_value IS NOT NULL OR json_value IS NOT NULL),
+  UNIQUE (revision_id, parameter_key)
+);
+
+CREATE INDEX idx_frms_config_parameter_revision
+  ON frms_config_parameters (revision_id, parameter_key);
+
+-- Explicit bootstrap of the existing model. These values retain their legacy
+-- provenance and are not asserted to be ANAC/IOGP scientific limits.
+INSERT INTO frms_config_revisions (
+  id, empresa_id, profile_code, revision_number, status, source_type,
+  source_reference, regulatory_profile_id, policy_version, effective_from, effective_to,
+  actor_user_id, reason, supersedes_revision_id, created_at
+) VALUES (
+  'frms-legacy-global-v2', NULL, 'LEGACY_GENERAL', 1, 'ACTIVE', 'INTERNAL_POLICY',
+  'Migration 0464 legacy bootstrap', NULL, 'LEGACY_MODEL_V2', '1970-01-01', NULL,
+  NULL, 'Preserve pre-0464 numeric behavior under an immutable governed revision.', NULL, datetime('now')
+);
+
+INSERT INTO frms_config_parameters (
+  id, revision_id, parameter_key, numeric_value, unit, metric, required, created_at
+)
+SELECT
+  'frms-legacy-limit-' || nome, 'frms-legacy-global-v2', nome, valor_numerico,
+  unidade, 'LEGACY_LIMIT', 1, datetime('now')
+FROM frms_configuracao_limites
+WHERE ativo = 1 AND deleted_at IS NULL;
+
+-- Values formerly embedded in the biological/check-in and fortnight paths.
+INSERT INTO frms_config_parameters (id, revision_id, parameter_key, numeric_value, unit, metric, required, created_at) VALUES
+  ('frms-legacy-wocl-start', 'frms-legacy-global-v2', 'WOCL_START_MINUTE', 120, 'minute', 'BIOLOGICAL', 1, datetime('now')),
+  ('frms-legacy-wocl-end', 'frms-legacy-global-v2', 'WOCL_END_MINUTE', 360, 'minute', 'BIOLOGICAL', 1, datetime('now')),
+  ('frms-legacy-wocl-center', 'frms-legacy-global-v2', 'WOCL_CENTER_PENALTY', 0.30, 'fraction', 'BIOLOGICAL', 1, datetime('now')),
+  ('frms-legacy-wocl-edge', 'frms-legacy-global-v2', 'WOCL_EDGE_PENALTY', 0.15, 'fraction', 'BIOLOGICAL', 1, datetime('now')),
+  ('frms-legacy-meds', 'frms-legacy-global-v2', 'FATIGUE_MEDICATION_BONUS', 8, 'score', 'CHECKIN', 1, datetime('now')),
+  ('frms-legacy-alcohol', 'frms-legacy-global-v2', 'FATIGUE_ALCOHOL_BONUS', 15, 'score', 'CHECKIN', 1, datetime('now')),
+  ('frms-legacy-kss-high', 'frms-legacy-global-v2', 'KSS_HIGH_THRESHOLD', 7, 'kss', 'CHECKIN', 1, datetime('now')),
+  ('frms-legacy-fortnight-4d', 'frms-legacy-global-v2', 'FORTNIGHT_CONSECUTIVE_DAYS_ATTENTION', 4, 'day', 'PREVENTIVE', 1, datetime('now')),
+  ('frms-legacy-fortnight-5d', 'frms-legacy-global-v2', 'FORTNIGHT_CONSECUTIVE_DAYS_CRITICAL', 5, 'day', 'PREVENTIVE', 1, datetime('now')),
+  ('frms-legacy-fortnight-low-sleep', 'frms-legacy-global-v2', 'FORTNIGHT_LOW_SLEEP_HOURS', 6, 'hour', 'PREVENTIVE', 1, datetime('now')),
+  ('frms-legacy-fortnight-low-effectiveness', 'frms-legacy-global-v2', 'FORTNIGHT_LOW_EFFECTIVENESS_PCT', 70, 'percent', 'PREVENTIVE', 1, datetime('now'));
+
+CREATE TABLE frms_recalc_runs (
+  id TEXT PRIMARY KEY,
+  empresa_id INTEGER,
+  profile_code TEXT NOT NULL,
+  previous_revision_id TEXT,
+  target_revision_id TEXT NOT NULL,
+  effective_from TEXT NOT NULL,
+  effective_to TEXT,
+  changed_parameter_keys_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('PENDING', 'RUNNING', 'COMPLETE', 'FAILED', 'SUPERSEDED')),
+  processed_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  cursor_json TEXT,
+  error_summary TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+  FOREIGN KEY (previous_revision_id) REFERENCES frms_config_revisions(id),
+  FOREIGN KEY (target_revision_id) REFERENCES frms_config_revisions(id)
+);
+
+CREATE INDEX idx_frms_recalc_run_scope
+  ON frms_recalc_runs (empresa_id, profile_code, status, effective_from, effective_to);
+
+-- Derived rows must always disclose which immutable configuration produced them.
+ALTER TABLE frms_fatorizacao_jornada ADD COLUMN config_revision_id TEXT;
+ALTER TABLE frms_fatorizacao_jornada ADD COLUMN model_version TEXT;
+ALTER TABLE frms_fatorizacao_jornada ADD COLUMN recalc_state TEXT NOT NULL DEFAULT 'CURRENT'
+  CHECK(recalc_state IN ('CURRENT', 'STALE', 'RECALC_PENDING', 'RECALCULATING', 'FAILED'));
+
+CREATE INDEX idx_frms_fatorizacao_revision_state
+  ON frms_fatorizacao_jornada (config_revision_id, recalc_state)
+  WHERE deleted_at IS NULL;

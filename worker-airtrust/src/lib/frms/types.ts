@@ -123,6 +123,10 @@ export interface FrmsFatorizacao {
   // Campos avançados (migration 0216)
   fator_base_away_pct: number;
   fator_aclimatacao_pct: number;
+  /** Immutable configuration provenance added by migration 0464. */
+  config_revision_id?: string | null;
+  model_version?: string | null;
+  recalc_state?: 'CURRENT' | 'STALE' | 'RECALC_PENDING' | 'RECALCULATING' | 'FAILED';
 }
 
 export interface FrmsAcumuloRolling {

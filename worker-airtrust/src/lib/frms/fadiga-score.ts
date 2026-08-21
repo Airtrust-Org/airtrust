@@ -17,6 +17,46 @@ export interface FadigaScoreConfig {
   peso_sintomas: number;
 }
 
+/** Values are bootstrap compatibility only; governed callers must supply a revision-backed policy. */
+export interface FadigaBusinessPolicy {
+  medicationBonus: number;
+  alcoholBonus: number;
+  woclStartMinute: number;
+  woclEndMinute: number;
+  woclCenterPenalty: number;
+  woclEdgePenalty: number;
+}
+
+export const LEGACY_FADIGA_BUSINESS_POLICY: Readonly<FadigaBusinessPolicy> = Object.freeze({
+  medicationBonus: 8,
+  alcoholBonus: 15,
+  woclStartMinute: 120,
+  woclEndMinute: 360,
+  woclCenterPenalty: 0.3,
+  woclEdgePenalty: 0.15,
+});
+
+export function resolveFadigaBusinessPolicy(values: Readonly<Record<string, number>>): FadigaBusinessPolicy {
+  const required = [
+    'FATIGUE_MEDICATION_BONUS', 'FATIGUE_ALCOHOL_BONUS', 'WOCL_START_MINUTE',
+    'WOCL_END_MINUTE', 'WOCL_CENTER_PENALTY', 'WOCL_EDGE_PENALTY',
+  ];
+  for (const key of required) {
+    if (!Number.isFinite(values[key])) throw new Error(`FRMS_PARAMETER_REQUIRED_MISSING:${key}`);
+  }
+  if (values.WOCL_END_MINUTE <= values.WOCL_START_MINUTE) {
+    throw new Error('FRMS_PARAMETER_INVALID_VALUE:WOCL window');
+  }
+  return {
+    medicationBonus: values.FATIGUE_MEDICATION_BONUS,
+    alcoholBonus: values.FATIGUE_ALCOHOL_BONUS,
+    woclStartMinute: values.WOCL_START_MINUTE,
+    woclEndMinute: values.WOCL_END_MINUTE,
+    woclCenterPenalty: values.WOCL_CENTER_PENALTY,
+    woclEdgePenalty: values.WOCL_EDGE_PENALTY,
+  };
+}
+
 export interface FadigaScoreResult {
   score_fadiga: number;
   nivel_fadiga: 'VERDE' | 'AMARELO' | 'LARANJA' | 'VERMELHO';
@@ -105,6 +145,7 @@ function normalizeSintomas(sintomasJson: Record<string, number> | null): number 
 export function calcularScoreFadiga(
   input: FadigaScoreInput,
   config: FadigaScoreConfig,
+  policy: FadigaBusinessPolicy = LEGACY_FADIGA_BUSINESS_POLICY,
 ): FadigaScoreResult {
   const kssNorm = normalizeKss(input.kss_score);
   const sonoNorm = normalizeSonoDuracao(input.horas_sono);
@@ -120,8 +161,8 @@ export function calcularScoreFadiga(
 
   // Penalidades empresariais provisórias de triagem, ainda não calibradas como
   // modelo biomatemático ou fórmula regulatória.
-  const bonusMeds = input.meds_ult_12h === true || input.meds_ult_12h === 1 ? 8 : 0;
-  const bonusAlcool = input.alcool_ult_12h === true || input.alcool_ult_12h === 1 ? 15 : 0;
+  const bonusMeds = input.meds_ult_12h === true || input.meds_ult_12h === 1 ? policy.medicationBonus : 0;
+  const bonusAlcool = input.alcool_ult_12h === true || input.alcool_ult_12h === 1 ? policy.alcoholBonus : 0;
   let score = base + bonusMeds + bonusAlcool;
 
   if (input.apto === 0) score = Math.max(score, config.threshold_vermelho);
@@ -202,20 +243,28 @@ function normalizeMinuteOfDay(value: number): number {
   return ((value % 1440) + 1440) % 1440;
 }
 
-export function isWithinWOCL(minutoDoDia: number): boolean {
+export function isWithinWOCL(
+  minutoDoDia: number,
+  policy: Pick<FadigaBusinessPolicy, 'woclStartMinute' | 'woclEndMinute'> = LEGACY_FADIGA_BUSINESS_POLICY,
+): boolean {
   const m = normalizeMinuteOfDay(minutoDoDia);
-  return m >= 120 && m < 360;
+  return m >= policy.woclStartMinute && m < policy.woclEndMinute;
 }
 
 /**
  * Penalidade empresarial contínua dentro da WOCL fisiológica de 02:00–06:00.
  * A janela é apoiada pela IS 117-001C; a função numérica não é definida pela norma.
  */
-export function calcularPenalidadeWOCL(tAcordouMin: number): number {
+export function calcularPenalidadeWOCL(
+  tAcordouMin: number,
+  policy: Pick<FadigaBusinessPolicy, 'woclStartMinute' | 'woclEndMinute' | 'woclCenterPenalty' | 'woclEdgePenalty'> = LEGACY_FADIGA_BUSINESS_POLICY,
+): number {
   const m = normalizeMinuteOfDay(tAcordouMin);
-  if (m < 120 || m >= 360) return 0;
-  const distanciaCentro = Math.abs(m - 240) / 120;
-  return -(0.3 - Math.min(1, distanciaCentro) * 0.15);
+  if (m < policy.woclStartMinute || m >= policy.woclEndMinute) return 0;
+  const halfWindow = (policy.woclEndMinute - policy.woclStartMinute) / 2;
+  const center = policy.woclStartMinute + halfWindow;
+  const distanciaCentro = Math.abs(m - center) / halfWindow;
+  return -(policy.woclCenterPenalty - Math.min(1, distanciaCentro) * policy.woclEdgePenalty);
 }
 
 /**
