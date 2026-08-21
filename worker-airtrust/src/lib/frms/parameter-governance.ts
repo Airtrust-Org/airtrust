@@ -294,7 +294,12 @@ export async function createRevisionAndRecalcRun(
 
   if (previous) {
     statements.push(
-      db.prepare("UPDATE frms_config_revisions SET status = 'SUPERSEDED' WHERE id = ?").bind(previous.id),
+      db.prepare(
+        `UPDATE frms_config_revisions
+         SET effective_to = date(?, '-1 day')
+         WHERE id = ? AND effective_from < ?
+           AND (effective_to IS NULL OR effective_to >= ?)`,
+      ).bind(input.effectiveFrom, previous.id, input.effectiveFrom, input.effectiveFrom),
     );
   }
   statements.push(
