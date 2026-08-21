@@ -70,6 +70,9 @@ function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperati
     mitigacao_recomendada: 'REDUZIR_JORNADA',
     decisao: 'EXIGE_OVERRIDE',
     limite_referencia: null,
+    estado_operacional: 'MITIGACAO_NECESSARIA',
+    motivos_principais: ['Indice de efetividade abaixo de 70%'],
+    acao_recomendada_texto: 'Avaliar mitigação.',
     ...overrides,
   };
 }

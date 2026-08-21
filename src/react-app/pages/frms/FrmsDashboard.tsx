@@ -49,6 +49,7 @@ import FrmsJornadaEffectivenessCard from './components/FrmsJornadaEffectivenessC
 import FrmsDayExplanationPanel from './components/FrmsDayExplanationPanel';
 import FrmsSourcePolicyBanner from './components/FrmsSourcePolicyBanner';
 import FrmsOperationalActionList from './components/FrmsOperationalActionList';
+import { FrmsCoordQueuePanel } from './components/FrmsCoordQueuePanel';
 import FrmsIogpAuditPanel from './components/FrmsIogpAuditPanel';
 import {
   getMonthRange,
@@ -832,6 +833,12 @@ function DashboardContent() {
           <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-4 sm:p-6">
             <FrmsFilterChips />
             <FrmsSourcePolicyBanner />
+
+            <FrmsCoordQueuePanel
+              items={visibleOperationalSnapshot}
+              loading={loadingOperationalSnapshot}
+              onSelectCrew={(id) => setSelectedTripulanteId(String(id))}
+            />
 
             <FrmsIogpAuditPanel
               hasOperationalData={filteredFrota.length > 0}
