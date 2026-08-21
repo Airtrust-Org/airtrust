@@ -35,7 +35,8 @@ if [[ ! "$migration_name" =~ $CANONICAL_NAME_RE ]]; then
   exit 1
 fi
 
-case "${migration_name,,}" in
+migration_name_lower="$(printf '%s' "$migration_name" | tr '[:upper:]' '[:lower:]')"
+case "$migration_name_lower" in
   *rollback*|*purge*|*preflight*|*manual*|*diagnostic*|*diagnostico*)
     echo "ERROR: operational/destructive SQL is not eligible for the production migration wrapper: $migration_name" >&2
     exit 1
