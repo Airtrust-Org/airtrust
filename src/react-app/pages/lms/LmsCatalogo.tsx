@@ -1559,13 +1559,18 @@ export default function LmsCatalogo() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { isAdmin, isGestor, isAluno, isInstrutor } = usePermissions();
+  const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
   const canManage = isAdmin || isGestor;
   const restrictToEnrolledCourses = isAluno || isInstrutor;
   const roleView = resolveLmsCatalogRoleView({ canManage, restrictToEnrolledCourses });
   const showAdministrativeFilters = roleView.showAdministrativeFilters;
-  const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
 
   const [tab, setTab] = useState<TabId>(restrictToEnrolledCourses ? 'meus' : 'catalogo');
+
+  // Gestores também podem atuar como alunos: na aba "Meus cursos" têm acesso ao
+  // fluxo de aluno (iniciar/continuar/concluir), mantendo a gestão na aba "Catálogo".
+  const gestorStudentMode = isGestor && tab === 'meus';
+  const studentMode = restrictToEnrolledCourses || gestorStudentMode;
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | TipoConteudo>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | MatriculaStatus>('all');
@@ -1703,7 +1708,7 @@ export default function LmsCatalogo() {
   }
 
   async function handleCardAction(curso: LmsCurso) {
-    if (canManage) {
+    if (canManage && !studentMode) {
       navigate(`/lms/cursos/${curso.id}`);
       return;
     }
@@ -1871,74 +1876,87 @@ export default function LmsCatalogo() {
     }
   }
 
-  const statsBar = canManage
+  const statsBar = canManage && !studentMode
     ? `${courses.length} cursos · ${courses.filter((c) => c.publicado === 1).length} publicados · ${courses.filter((c) => supportsContentPreview(c)).length} com conteúdo`
-    : restrictToEnrolledCourses
+    : studentMode
       ? `${enrolledIds.size} curso${enrolledIds.size === 1 ? '' : 's'} matriculado${enrolledIds.size === 1 ? '' : 's'}`
       : `${courses.length} curso${courses.length === 1 ? '' : 's'} disponível${courses.length === 1 ? '' : 'eis'} no catálogo`;
+
+  const managementActions = (
+    <>
+      <Button
+        variant="secondary"
+        onClick={() =>
+          void syncEad
+            .mutateAsync()
+            .then((r: { created: number; updated: number }) =>
+              toast.success(`${r.created} criado(s), ${r.updated} atualizado(s)`),
+            )
+            .catch((e: unknown) =>
+              toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar'),
+            )
+        }
+        loading={syncEad.isPending}
+      >
+        <BadgeCheck className="h-4 w-4" />
+        Sincronizar EAD
+      </Button>
+      <Button
+        variant="primary"
+        onClick={() => {
+          setEditingCourse(undefined);
+          setDrawerOpen(true);
+        }}
+      >
+        <Plus className="h-4 w-4" />
+        Novo curso
+      </Button>
+    </>
+  );
+
+  const tabToggle = (
+    <div className="flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:shadow-none">
+      {(
+        (restrictToEnrolledCourses
+          ? [{ id: 'meus', label: 'Meus cursos' }]
+          : [
+              { id: 'catalogo', label: 'Catálogo' },
+              { id: 'meus', label: 'Meus cursos' },
+            ]) as Array<{ id: TabId; label: string }>
+      ).map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => setTab(item.id)}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium ${
+            tab === item.id
+              ? 'bg-primary/10 text-primary'
+              : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <AppLayout>
       <LmsPageShell>
         <PageHeader
           className="mb-6"
-          title={roleView.title}
+          title={studentMode && canManage ? 'Meus cursos' : roleView.title}
           subtitle={statsBar}
           actions={
-            !canManage ? (
-              <div className="flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:shadow-none">
-                {(
-                  (restrictToEnrolledCourses
-                    ? [{ id: 'meus', label: 'Meus cursos' }]
-                    : [
-                        { id: 'catalogo', label: 'Catálogo' },
-                        { id: 'meus', label: 'Meus cursos' },
-                      ]) as Array<{ id: TabId; label: string }>
-                ).map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setTab(item.id)}
-                    className={`rounded-md px-4 py-1.5 text-sm font-medium ${
-                      tab === item.id
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+            isGestor ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {tabToggle}
+                {tab === 'catalogo' ? managementActions : null}
               </div>
+            ) : !canManage ? (
+              tabToggle
             ) : (
-              <>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    void syncEad
-                      .mutateAsync()
-                      .then((r: { created: number; updated: number }) =>
-                        toast.success(`${r.created} criado(s), ${r.updated} atualizado(s)`),
-                      )
-                      .catch((e: unknown) =>
-                        toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar'),
-                      )
-                  }
-                  loading={syncEad.isPending}
-                >
-                  <BadgeCheck className="h-4 w-4" />
-                  Sincronizar EAD
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    setEditingCourse(undefined);
-                    setDrawerOpen(true);
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                  Novo curso
-                </Button>
-              </>
+              managementActions
             )
           }
         />
@@ -2059,12 +2077,12 @@ export default function LmsCatalogo() {
                     : 'Nenhum curso disponível nesta visão'
                 }
                 description={
-                  canManage
+                  canManage && !studentMode
                     ? 'Crie um novo curso ou ajuste os filtros.'
                     : 'Aguarde a publicação de novos treinamentos.'
                 }
                 action={
-                  canManage ? (
+                  canManage && !studentMode ? (
                     <Button
                       variant="primary"
                       onClick={() => {
@@ -2089,7 +2107,7 @@ export default function LmsCatalogo() {
                       key={curso.id}
                       curso={curso}
                       matricula={matriculasByCurso.get(curso.id)}
-                      canManage={canManage}
+                      canManage={canManage && !studentMode}
                       pendingDeleteId={pendingDeleteId}
                       deleteLoading={deleteCurso.isPending}
                       onAction={handleCardAction}

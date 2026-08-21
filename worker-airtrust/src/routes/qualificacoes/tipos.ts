@@ -232,7 +232,9 @@ const createTipoSchema = z
     carga_horaria_inicial: z.number().nullable().optional(),
     carga_horaria_recorrente: z.number().nullable().optional(),
     validade: z.number().positive('Validade deve ser maior que zero').nullable().optional(),
-    vencimento_fim_mes: z.number().optional().default(1),
+    // Regra de negócio (migration 0122): tipos operacionais vencem no dia exato (0);
+    // somente tipos médicos (CMA/ASO/Médico/Saúde) vencem no fim do mês (1).
+    vencimento_fim_mes: z.number().optional().default(0),
     observacoes: z.string().nullable().optional(),
     ativo: z.union([z.boolean(), z.number()]).optional().default(true),
     is_check: z.union([z.boolean(), z.number()]).optional().default(false),
