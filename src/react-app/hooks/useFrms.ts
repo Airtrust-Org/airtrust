@@ -121,7 +121,8 @@ export interface FrmsFrotaRow {
   pct_365d: number;
   hv_dia_min: number;
   pct_dia: number;
-  nivel_max: string;
+  total_setores?: number;
+  total_pousos?: number;
   // Effectiveness (proxy local não validado)
   effectiveness_pct?: number;
   effectiveness_nivel?: string;

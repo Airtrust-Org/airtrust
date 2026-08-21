@@ -93,10 +93,10 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
   vento = null,
   isDemo = false,
 }) => {
-  const status1d = resolveLimitStatus(maxHvDiaMin, 10);
+  const status1d = resolveLimitStatus(maxHvDiaMin, 8);
   const status7d = resolveLimitStatus(maxHv7dMin, 45);
-  const status28d = resolveLimitStatus(maxHv28dMin, 120);
-  const status365d = resolveLimitStatus(maxHv365dMin, 1200);
+  const status28d = resolveLimitStatus(maxHv28dMin, 90);
+  const status365d = resolveLimitStatus(maxHv365dMin, 930);
 
   const hasAnyHv = maxHvDiaMin != null || maxHv7dMin != null || maxHv28dMin != null || maxHv365dMin != null;
 
@@ -148,7 +148,7 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
             {isDemo
               ? 'Conjunto sanitizado de testes QA para exibição de compliance, alerta biológico e demanda operacional.'
               : hasOperationalData
-              ? 'Métricas monitoradas em conformidade com as regras mais restritivas entre ANAC RBAC 117 e IOGP 690-2.'
+              ? 'Métricas monitoradas em conformidade com as regras mais restritivas entre Lei 13.475, ANAC RBAC 117 e IOGP 690-2.'
               : 'Aguardando dados operacionais do SIGVOOS e telemetria DECEA / REDEMET para cálculo e avaliação automática de conformidade.'}
           </p>
         </div>
@@ -156,14 +156,14 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
 
       {/* Grid 2x2 dos 4 Cards Obrigatórios */}
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* CARD 1: COMPLIANCE / LIMITES IOGP */}
+        {/* CARD 1: COMPLIANCE / LIMITES IOGP / LEI 13.475 */}
         <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/40">
           <div>
             <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5 dark:border-slate-700/60">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  1. Compliance / Limites (IOGP 690-2)
+                  1. Compliance (IOGP) / Lei 13.475
                 </h3>
               </div>
               <span className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
@@ -180,10 +180,10 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
               </p>
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
-                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">1 dia (24h)</span>
-                  <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">10 h</span>
+                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">1 dia</span>
+                  <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">8 h</span>
                   <span className="block text-[10px] text-slate-500 dark:text-slate-400">
-                    {maxHvDiaMin != null ? `Real: ${formatHours(maxHvDiaMin)}` : 'Máx. IOGP'}
+                    {maxHvDiaMin != null ? `Real: ${formatHours(maxHvDiaMin)}` : 'Lei 13.475'}
                   </span>
                   <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status1d.color}`}>
                     {status1d.label}
@@ -193,17 +193,17 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                   <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">7 dias</span>
                   <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">45 h</span>
                   <span className="block text-[10px] text-slate-500 dark:text-slate-400">
-                    {maxHv7dMin != null ? `Real: ${formatHours(maxHv7dMin)}` : 'Máx. IOGP'}
+                    {maxHv7dMin != null ? `Real: ${formatHours(maxHv7dMin)}` : 'Lei 13.475'}
                   </span>
                   <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status7d.color}`}>
                     {status7d.label}
                   </span>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
-                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">28 dias</span>
-                  <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">120 h</span>
+                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">Mês</span>
+                  <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">90 h</span>
                   <span className="block text-[10px] text-slate-500 dark:text-slate-400">
-                    {maxHv28dMin != null ? `Real: ${formatHours(maxHv28dMin)}` : 'Máx. IOGP'}
+                    {maxHv28dMin != null ? `Real: ${formatHours(maxHv28dMin)}` : 'Lei 13.475'}
                   </span>
                   <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status28d.color}`}>
                     {status28d.label}
@@ -211,9 +211,9 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
                   <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">365 dias</span>
-                  <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">1.200 h</span>
+                  <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">930 h</span>
                   <span className="block text-[10px] text-slate-500 dark:text-slate-400">
-                    {maxHv365dMin != null ? `Real: ${formatHours(maxHv365dMin)}` : 'Máx. IOGP'}
+                    {maxHv365dMin != null ? `Real: ${formatHours(maxHv365dMin)}` : 'Lei 13.475'}
                   </span>
                   <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status365d.color}`}>
                     {status365d.label}
@@ -239,18 +239,18 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                 <div>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">Repouso Mínimo:</span>
                   <span className="ml-1 text-slate-600 dark:text-slate-400">
-                    {minRepousoHoras != null ? `Real mín: ${minRepousoHoras.toFixed(1)} h (Mín IOGP 10 h)` : 'Mínimo 10 h ou FDP anterior'}
+                    {minRepousoHoras != null ? `Real mín: ${minRepousoHoras.toFixed(1)} h (Mín. 10 h)` : 'Mínimo 10 h ou FDP anterior'}
                   </span>
                 </div>
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                  {minRepousoHoras != null ? (minRepousoHoras >= 10 ? 'CONFORME' : 'ATENÇÃO') : 'Não avaliado'}
+                  {minRepousoHoras != null ? (minRepousoHoras >= 10 ? 'CONFORME' : 'VIOLAÇÃO') : 'Não avaliado'}
                 </span>
               </div>
             </div>
           </div>
 
-          <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
-            * Aplica-se sempre a regra mais restritiva entre RBAC 117 ANAC e IOGP Report 690-2.
+          <p className="mt-3 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+            * Aplica-se sempre a regra mais restritiva entre Lei 13.475, RBAC 117 ANAC e IOGP Report 690-2.
           </p>
         </div>
 
@@ -317,9 +317,17 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                 </h3>
               </div>
               <span className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
-                totalSetores != null ? 'border-indigo-300 bg-indigo-50 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200' : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                totalSetores != null
+                  ? isDemo
+                    ? 'border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-200'
+                    : 'border-indigo-300 bg-indigo-50 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200'
+                  : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'
               }`}>
-                {totalSetores != null ? 'TELEMETRIA SIGVOOS' : 'AGUARDANDO DADOS SIGVOOS'}
+                {totalSetores != null
+                  ? isDemo
+                    ? 'DEMONSTRAÇÃO QA'
+                    : 'TELEMETRIA SIGVOOS'
+                  : 'AGUARDANDO DADOS SIGVOOS'}
               </span>
             </div>
 

@@ -27,11 +27,11 @@ describe('FrmsIogpAuditPanel (IOGP Report 690-2)', () => {
     expect(screen.getByText(/Aguardando dados operacionais SIGVOOS/i)).toBeInTheDocument();
 
     // CARD 1: Compliance / Limites
-    expect(screen.getByText(/1\. Compliance \/ Limites \(IOGP 690-2\)/i)).toBeInTheDocument();
-    expect(screen.getByText('10 h')).toBeInTheDocument();
+    expect(screen.getByText(/1\. Compliance \(IOGP\) \/ Lei 13\.475/i)).toBeInTheDocument();
+    expect(screen.getByText('8 h')).toBeInTheDocument();
     expect(screen.getByText('45 h')).toBeInTheDocument();
-    expect(screen.getByText('120 h')).toBeInTheDocument();
-    expect(screen.getByText('1.200 h')).toBeInTheDocument();
+    expect(screen.getByText('90 h')).toBeInTheDocument();
+    expect(screen.getByText('930 h')).toBeInTheDocument();
     expect(screen.getByText(/Teto IOGP de 14 h/i)).toBeInTheDocument();
     expect(screen.getByText(/Mínimo 10 h ou FDP anterior/i)).toBeInTheDocument();
 
@@ -91,10 +91,10 @@ describe('FrmsIogpAuditPanel (IOGP Report 690-2)', () => {
         hasOperationalData={true}
         totalTripulantes={5}
         totalJornadas={12}
-        maxHvDiaMin={360} // 6.0 h (under 10h -> CONFORME)
+        maxHvDiaMin={360} // 6.0 h (under 8h -> CONFORME)
         maxHv7dMin={2400} // 40.0 h (>= 38.25h -> ATENÇÃO)
-        maxHv28dMin={6000} // 100.0 h (under 120h -> CONFORME)
-        maxHv365dMin={54000} // 900.0 h (under 1200h -> CONFORME)
+        maxHv28dMin={4800} // 80.0 h (under 90h -> CONFORME)
+        maxHv365dMin={48000} // 800.0 h (under 930h -> CONFORME)
         avgEffectivenessPct={88.5}
         effectivenessNivel="ATENÇÃO"
         totalSetores={8}
@@ -106,17 +106,17 @@ describe('FrmsIogpAuditPanel (IOGP Report 690-2)', () => {
     );
 
     // Limits remain visible
-    expect(screen.getByText('10 h')).toBeInTheDocument();
+    expect(screen.getByText('8 h')).toBeInTheDocument();
     expect(screen.getByText('45 h')).toBeInTheDocument();
-    expect(screen.getByText('120 h')).toBeInTheDocument();
-    expect(screen.getByText('1.200 h')).toBeInTheDocument();
+    expect(screen.getByText('90 h')).toBeInTheDocument();
+    expect(screen.getByText('930 h')).toBeInTheDocument();
 
     // Real values appear
     expect(screen.getByText('5 tripulantes · 12 jornadas')).toBeInTheDocument();
     expect(screen.getByText('Real: 6.0 h')).toBeInTheDocument();
     expect(screen.getByText('Real: 40.0 h')).toBeInTheDocument();
-    expect(screen.getByText('Real: 100.0 h')).toBeInTheDocument();
-    expect(screen.getByText('Real: 900.0 h')).toBeInTheDocument();
+    expect(screen.getByText('Real: 80.0 h')).toBeInTheDocument();
+    expect(screen.getByText('Real: 800.0 h')).toBeInTheDocument();
     expect(screen.getByText('88.5%')).toBeInTheDocument();
     expect(screen.getByText('26°C')).toBeInTheDocument();
     expect(screen.getByText('74%')).toBeInTheDocument();

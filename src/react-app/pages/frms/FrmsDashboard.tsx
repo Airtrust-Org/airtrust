@@ -503,6 +503,8 @@ function DashboardContent() {
         maxHv365dMin: null,
         avgEffectivenessPct: null,
         effectivenessNivel: null,
+        totalSetores: null,
+        totalPousos: null,
       };
     }
 
@@ -512,6 +514,9 @@ function DashboardContent() {
     let max365d: number | null = null;
     let sumEff = 0;
     let countEff = 0;
+    let sumSetores = 0;
+    let sumPousos = 0;
+    let hasDemand = false;
 
     for (const item of filteredFrota) {
       if (item.hv_dia_min != null && Number.isFinite(item.hv_dia_min) && item.hv_dia_min > 0) {
@@ -529,6 +534,14 @@ function DashboardContent() {
       if (item.effectiveness_pct != null && Number.isFinite(item.effectiveness_pct)) {
         sumEff += item.effectiveness_pct;
         countEff++;
+      }
+      if (item.total_setores != null && Number.isFinite(item.total_setores) && item.total_setores > 0) {
+        sumSetores += item.total_setores;
+        hasDemand = true;
+      }
+      if (item.total_pousos != null && Number.isFinite(item.total_pousos) && item.total_pousos > 0) {
+        sumPousos += item.total_pousos;
+        hasDemand = true;
       }
     }
 
@@ -554,6 +567,8 @@ function DashboardContent() {
       maxHv365dMin: max365d,
       avgEffectivenessPct: avgEff,
       effectivenessNivel: effNivel,
+      totalSetores: hasDemand ? sumSetores : null,
+      totalPousos: hasDemand ? sumPousos : null,
       isDemo,
     };
   }, [filteredFrota]);
@@ -828,6 +843,8 @@ function DashboardContent() {
               maxHv365dMin={iogpRealMetrics.maxHv365dMin}
               avgEffectivenessPct={iogpRealMetrics.avgEffectivenessPct}
               effectivenessNivel={iogpRealMetrics.effectivenessNivel}
+              totalSetores={iogpRealMetrics.totalSetores}
+              totalPousos={iogpRealMetrics.totalPousos}
               isDemo={iogpRealMetrics.isDemo}
             />
 

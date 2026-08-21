@@ -480,6 +480,66 @@ async function enrichWithFuncionarioContext<
   });
 }
 
+async function enrichWithFlightDemand<
+  T extends {
+    tripulante_id: string;
+  },
+>(
+  db: D1Database,
+  rows: T[],
+  range: { startDate: string; endDate: string },
+): Promise<
+  Array<
+    T & {
+      total_setores?: number;
+      total_pousos?: number;
+    }
+  >
+> {
+  if (rows.length === 0) return rows;
+
+  const ids = Array.from(new Set(rows.map((row) => String(row.tripulante_id)).filter(Boolean)));
+  if (ids.length === 0) return rows;
+
+  const placeholders = ids.map(() => '?').join(',');
+  try {
+    const demandRows = await db
+      .prepare(
+        `SELECT
+           CAST(funcionario_id AS TEXT) AS tripulante_id,
+           SUM(COALESCE(pousos_dia, 0) + COALESCE(pousos_noite, 0)) AS total_pousos,
+           MAX(COUNT(*), SUM(COALESCE(pousos_dia, 0) + COALESCE(pousos_noite, 0))) AS total_setores
+         FROM horas_voo_lancamentos
+         WHERE deleted_at IS NULL
+           AND CAST(funcionario_id AS TEXT) IN (${placeholders})
+           AND (data_voo >= ? AND data_voo <= ?)
+         GROUP BY funcionario_id`,
+      )
+      .bind(...ids, range.startDate, range.endDate)
+      .all<{
+        tripulante_id: string;
+        total_pousos: number;
+        total_setores: number;
+      }>();
+
+    const demandMap = new Map(
+      (demandRows.results || []).map((row) => [String(row.tripulante_id), row]),
+    );
+
+    return rows.map((row) => {
+      const demand = demandMap.get(String(row.tripulante_id));
+      if (!demand) return row;
+      return {
+        ...row,
+        total_setores: demand.total_setores,
+        total_pousos: demand.total_pousos,
+      };
+    });
+  } catch {
+    return rows;
+  }
+}
+
 export async function buscarAcumuloFrota(
   db: D1Database,
   mesReferencia?: string,
@@ -624,8 +684,12 @@ export async function buscarAcumuloFrota(
       startDate: periodoInicio,
       endDate: periodoFim,
     });
-    return enrichWithFuncionarioContext(db, comContextoOperacional, {
+    const comFuncionario = await enrichWithFuncionarioContext(db, comContextoOperacional, {
       preferFuncionarioContext: true,
+    });
+    return enrichWithFlightDemand(db, comFuncionario, {
+      startDate: periodoInicio,
+      endDate: periodoFim,
     });
   }
 
@@ -734,7 +798,8 @@ export async function buscarAcumuloFrota(
     comEffectiveness,
     rollingRange,
   );
-  return enrichWithFuncionarioContext(db, comContextoOperacional, {
+  const comFuncionario = await enrichWithFuncionarioContext(db, comContextoOperacional, {
     preferFuncionarioContext: false,
   });
+  return enrichWithFlightDemand(db, comFuncionario, rollingRange);
 }
