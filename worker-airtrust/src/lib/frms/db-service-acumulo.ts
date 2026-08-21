@@ -414,8 +414,8 @@ async function enrichWithFuncionarioContext<
     .prepare(
       `SELECT
          CAST(f.id AS TEXT) AS tripulante_id,
-         NULLIF(TRIM(COALESCE(f.funcao, ''), '')) as funcao,
-         NULLIF(TRIM(COALESCE(f.cargo, ''), '')) as cargo,
+         NULLIF(TRIM(COALESCE(f.funcao, '')), '') as funcao,
+         NULLIF(TRIM(COALESCE(f.cargo, '')), '') as cargo,
          CASE
            WHEN UPPER(TRIM(COALESCE(f.aeronave, ''))) IN ('S76', 'SK76') THEN 'SK76'
            WHEN NULLIF(TRIM(COALESCE(f.aeronave, '')), '') IS NOT NULL THEN TRIM(f.aeronave)
