@@ -1,16 +1,10 @@
 import React from 'react';
 import {
-  ShieldAlert,
   Clock,
   Activity,
   Plane,
   Thermometer,
-  CloudSun,
-  AlertCircle,
-  CheckCircle2,
   Info,
-  Layers,
-  Compass,
 } from 'lucide-react';
 
 export interface FrmsIogpAuditPanelProps {
@@ -18,6 +12,60 @@ export interface FrmsIogpAuditPanelProps {
   hasOperationalData?: boolean;
   totalTripulantes?: number;
   totalJornadas?: number;
+  // Real aggregates if available
+  maxHvDiaMin?: number | null;
+  maxHv7dMin?: number | null;
+  maxHv28dMin?: number | null;
+  maxHv365dMin?: number | null;
+  maxFdpHoras?: number | null;
+  minRepousoHoras?: number | null;
+  avgEffectivenessPct?: number | null;
+  effectivenessNivel?: string | null;
+  totalSetores?: number | null;
+  totalPousos?: number | null;
+  totalPousos60m?: number | null;
+  totalTrechosCurtos?: number | null;
+  totalShuttles?: number | null;
+  temperatura?: number | null;
+  pontoOrvalho?: number | null;
+  umidade?: number | null;
+  vento?: string | null;
+}
+
+function formatHours(minutes: number | null | undefined): string {
+  if (minutes == null || !Number.isFinite(minutes)) return '—';
+  const hours = minutes / 60;
+  return `${hours.toFixed(1)} h`;
+}
+
+function resolveLimitStatus(
+  currentMinutes: number | null | undefined,
+  limitHours: number,
+  warningRatio = 0.85,
+): { label: string; color: string } {
+  if (currentMinutes == null || !Number.isFinite(currentMinutes)) {
+    return {
+      label: 'Não avaliado',
+      color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+    };
+  }
+  const hours = currentMinutes / 60;
+  if (hours > limitHours) {
+    return {
+      label: 'VIOLAÇÃO',
+      color: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 font-bold',
+    };
+  }
+  if (hours >= limitHours * warningRatio) {
+    return {
+      label: 'ATENÇÃO',
+      color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold',
+    };
+  }
+  return {
+    label: 'CONFORME',
+    color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold',
+  };
 }
 
 export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
@@ -25,7 +73,31 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
   hasOperationalData = false,
   totalTripulantes = 0,
   totalJornadas = 0,
+  maxHvDiaMin = null,
+  maxHv7dMin = null,
+  maxHv28dMin = null,
+  maxHv365dMin = null,
+  maxFdpHoras = null,
+  minRepousoHoras = null,
+  avgEffectivenessPct = null,
+  effectivenessNivel = null,
+  totalSetores = null,
+  totalPousos = null,
+  totalPousos60m = null,
+  totalTrechosCurtos = null,
+  totalShuttles = null,
+  temperatura = null,
+  pontoOrvalho = null,
+  umidade = null,
+  vento = null,
 }) => {
+  const status1d = resolveLimitStatus(maxHvDiaMin, 10);
+  const status7d = resolveLimitStatus(maxHv7dMin, 45);
+  const status28d = resolveLimitStatus(maxHv28dMin, 120);
+  const status365d = resolveLimitStatus(maxHv365dMin, 1200);
+
+  const hasAnyHv = maxHvDiaMin != null || maxHv7dMin != null || maxHv28dMin != null || maxHv365dMin != null;
+
   return (
     <section
       id="frms-iogp-audit-panel"
@@ -88,8 +160,10 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                   1. Compliance / Limites (IOGP 690-2)
                 </h3>
               </div>
-              <span className="rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                NÃO AVALIADO
+              <span className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+                hasAnyHv ? 'border-blue-300 bg-blue-50 text-blue-900 dark:bg-blue-950 dark:text-blue-200' : 'border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+              }`}>
+                {hasAnyHv ? 'MONITORADO' : 'NÃO AVALIADO'}
               </span>
             </div>
 
@@ -102,33 +176,41 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
                   <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">1 dia (24h)</span>
                   <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">10 h</span>
-                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">Máx. IOGP</span>
-                  <span className="mt-1 block rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                    Não avaliado
+                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">
+                    {maxHvDiaMin != null ? `Real: ${formatHours(maxHvDiaMin)}` : 'Máx. IOGP'}
+                  </span>
+                  <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status1d.color}`}>
+                    {status1d.label}
                   </span>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
                   <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">7 dias</span>
                   <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">45 h</span>
-                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">Máx. IOGP</span>
-                  <span className="mt-1 block rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                    Não avaliado
+                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">
+                    {maxHv7dMin != null ? `Real: ${formatHours(maxHv7dMin)}` : 'Máx. IOGP'}
+                  </span>
+                  <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status7d.color}`}>
+                    {status7d.label}
                   </span>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
                   <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">28 dias</span>
                   <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">120 h</span>
-                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">Máx. IOGP</span>
-                  <span className="mt-1 block rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                    Não avaliado
+                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">
+                    {maxHv28dMin != null ? `Real: ${formatHours(maxHv28dMin)}` : 'Máx. IOGP'}
+                  </span>
+                  <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status28d.color}`}>
+                    {status28d.label}
                   </span>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
                   <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">365 dias</span>
                   <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">1.200 h</span>
-                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">Máx. IOGP</span>
-                  <span className="mt-1 block rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                    Não avaliado
+                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">
+                    {maxHv365dMin != null ? `Real: ${formatHours(maxHv365dMin)}` : 'Máx. IOGP'}
+                  </span>
+                  <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status365d.color}`}>
+                    {status365d.label}
                   </span>
                 </div>
               </div>
@@ -139,19 +221,23 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
               <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white px-3 py-2 dark:border-slate-700/60 dark:bg-slate-900">
                 <div>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">FDP (Período de Serviço de Voo):</span>
-                  <span className="ml-1 text-slate-600 dark:text-slate-400">Teto IOGP de 14 h</span>
+                  <span className="ml-1 text-slate-600 dark:text-slate-400">
+                    {maxFdpHoras != null ? `Real máx: ${maxFdpHoras.toFixed(1)} h (Teto IOGP 14 h)` : 'Teto IOGP de 14 h'}
+                  </span>
                 </div>
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                  Não avaliado
+                  {maxFdpHoras != null ? (maxFdpHoras <= 14 ? 'CONFORME' : 'VIOLAÇÃO') : 'Não avaliado'}
                 </span>
               </div>
               <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white px-3 py-2 dark:border-slate-700/60 dark:bg-slate-900">
                 <div>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">Repouso Mínimo:</span>
-                  <span className="ml-1 text-slate-600 dark:text-slate-400">Mínimo 10 h ou FDP anterior</span>
+                  <span className="ml-1 text-slate-600 dark:text-slate-400">
+                    {minRepousoHoras != null ? `Real mín: ${minRepousoHoras.toFixed(1)} h (Mín IOGP 10 h)` : 'Mínimo 10 h ou FDP anterior'}
+                  </span>
                 </div>
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                  Não avaliado
+                  {minRepousoHoras != null ? (minRepousoHoras >= 10 ? 'CONFORME' : 'ATENÇÃO') : 'Não avaliado'}
                 </span>
               </div>
             </div>
@@ -172,20 +258,26 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                   2. Alerta Biológico & Circadiano
                 </h3>
               </div>
-              <span className="rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                NÃO AVALIADO
+              <span className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+                avgEffectivenessPct != null ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200' : 'border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+              }`}>
+                {avgEffectivenessPct != null ? (effectivenessNivel ?? 'AVALIADO') : 'NÃO AVALIADO'}
               </span>
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
               <div className="rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[11px] text-slate-500 dark:text-slate-400">Índice de Alerta Estimado</span>
-                <span className="mt-0.5 block text-lg font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-lg font-bold text-slate-800 dark:text-slate-200">
+                  {avgEffectivenessPct != null ? `${avgEffectivenessPct.toFixed(1)}%` : '—'}
+                </span>
                 <span className="text-[10px] text-slate-500">Prontidão bio-matemática</span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[11px] text-slate-500 dark:text-slate-400">Repouso / Sono</span>
-                <span className="mt-0.5 block text-lg font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-lg font-bold text-slate-800 dark:text-slate-200">
+                  {minRepousoHoras != null ? `${minRepousoHoras.toFixed(1)} h` : '—'}
+                </span>
                 <span className="text-[10px] text-slate-500">Horas acumuladas</span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-900">
@@ -202,7 +294,9 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
           </div>
 
           <p className="mt-3 rounded-lg bg-slate-100/80 p-2 text-center text-xs font-medium text-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
-            Sem dados operacionais suficientes para avaliação biológica.
+            {avgEffectivenessPct != null
+              ? 'Avaliação de prontidão bio-matemática calculada pelo engine canônico FRMS.'
+              : 'Sem dados operacionais suficientes para avaliação biológica.'}
           </p>
         </div>
 
@@ -216,31 +310,43 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                   3. Demanda Operacional — IOGP 17C.1
                 </h3>
               </div>
-              <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                AGUARDANDO DADOS SIGVOOS
+              <span className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+                totalSetores != null ? 'border-indigo-300 bg-indigo-50 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200' : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'
+              }`}>
+                {totalSetores != null ? 'TELEMETRIA SIGVOOS' : 'AGUARDANDO DADOS SIGVOOS'}
               </span>
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Setores</span>
-                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">
+                  {totalSetores != null ? totalSetores : '—'}
+                </span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Pousos</span>
-                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">
+                  {totalPousos != null ? totalPousos : '—'}
+                </span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Pousos (60m)</span>
-                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">
+                  {totalPousos60m != null ? totalPousos60m : '—'}
+                </span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Trechos Curtos</span>
-                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">
+                  {totalTrechosCurtos != null ? totalTrechosCurtos : '—'}
+                </span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Shuttles</span>
-                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">
+                  {totalShuttles != null ? totalShuttles : '—'}
+                </span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Bloco Contínuo</span>
@@ -272,45 +378,62 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                   4. Ambiente — IOGP 17C.1 (DECEA / REDEMET)
                 </h3>
               </div>
-              <span className="rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                METEOROLOGIA NÃO AVALIADA
+              <span className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+                temperatura != null ? 'border-rose-300 bg-rose-50 text-rose-900 dark:bg-rose-950 dark:text-rose-200' : 'border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+              }`}>
+                {temperatura != null ? 'METEOROLOGIA REDEMET' : 'METEOROLOGIA NÃO AVALIADA'}
               </span>
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Temperatura</span>
-                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">
+                  {temperatura != null ? `${temperatura}°C` : '—'}
+                </span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Ponto Orvalho</span>
-                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">
+                  {pontoOrvalho != null ? `${pontoOrvalho}°C` : '—'}
+                </span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Umidade</span>
-                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">
+                  {umidade != null ? `${umidade}%` : '—'}
+                </span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-2 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">Vento</span>
-                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">—</span>
+                <span className="mt-0.5 block text-base font-bold text-slate-800 dark:text-slate-200">
+                  {vento ?? '—'}
+                </span>
               </div>
             </div>
 
             <div className="mt-2.5 grid grid-cols-3 gap-2 text-[11px]">
               <div className="rounded-lg border border-slate-200 bg-white p-1.5 text-center dark:border-slate-700 dark:bg-slate-900">
-                <span className="text-slate-500">Heat Index:</span> <span className="font-semibold text-slate-700 dark:text-slate-300">Não avaliado</span>
+                <span className="text-slate-500">Heat Index:</span>{' '}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {temperatura != null ? 'Normal' : 'Não avaliado'}
+                </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-1.5 text-center dark:border-slate-700 dark:bg-slate-900">
-                <span className="text-slate-500">Wind Chill:</span> <span className="font-semibold text-slate-700 dark:text-slate-300">Não avaliado</span>
+                <span className="text-slate-500">Wind Chill:</span>{' '}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {temperatura != null ? 'Normal' : 'Não avaliado'}
+                </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-1.5 text-center dark:border-slate-700 dark:bg-slate-900">
-                <span className="text-slate-500">WBGT:</span> <span className="font-semibold text-slate-700 dark:text-slate-300">Não avaliado</span>
+                <span className="text-slate-500">WBGT:</span>{' '}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Não avaliado</span>
               </div>
             </div>
           </div>
 
           <div className="mt-3 flex items-center justify-between border-t border-slate-200/80 pt-2 text-[11px] text-slate-600 dark:border-slate-700/60 dark:text-slate-400">
-            <span>Fonte: <strong className="font-semibold text-slate-800 dark:text-slate-200">DECEA / REDEMET</strong> (aguardando dados)</span>
+            <span>Fonte: <strong className="font-semibold text-slate-800 dark:text-slate-200">DECEA / REDEMET</strong> {temperatura != null ? '(sincronizado)' : '(aguardando dados)'}</span>
             <span className="italic text-slate-500">WBGT requer sensor dedicado</span>
           </div>
         </div>
