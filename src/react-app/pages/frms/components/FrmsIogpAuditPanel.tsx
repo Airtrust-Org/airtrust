@@ -30,6 +30,7 @@ export interface FrmsIogpAuditPanelProps {
   pontoOrvalho?: number | null;
   umidade?: number | null;
   vento?: string | null;
+  isDemo?: boolean;
 }
 
 function formatHours(minutes: number | null | undefined): string {
@@ -90,6 +91,7 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
   pontoOrvalho = null,
   umidade = null,
   vento = null,
+  isDemo = false,
 }) => {
   const status1d = resolveLimitStatus(maxHvDiaMin, 10);
   const status7d = resolveLimitStatus(maxHv7dMin, 45);
@@ -138,10 +140,14 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
         <div className="leading-relaxed">
           <p className="font-semibold">
-            Matriz de Avaliação Contínua de Fadiga e Riscos Operacionais IOGP 690-2.
+            {isDemo
+              ? 'Ambiente de demonstração — dados operacionais simulados para validação da implementação IOGP 690-2.'
+              : 'Matriz de Avaliação Contínua de Fadiga e Riscos Operacionais IOGP 690-2.'}
           </p>
           <p className="mt-0.5 text-blue-800 dark:text-blue-300">
-            {hasOperationalData
+            {isDemo
+              ? 'Conjunto sanitizado de testes QA para exibição de compliance, alerta biológico e demanda operacional.'
+              : hasOperationalData
               ? 'Métricas monitoradas em conformidade com as regras mais restritivas entre ANAC RBAC 117 e IOGP 690-2.'
               : 'Aguardando dados operacionais do SIGVOOS e telemetria DECEA / REDEMET para cálculo e avaliação automática de conformidade.'}
           </p>
