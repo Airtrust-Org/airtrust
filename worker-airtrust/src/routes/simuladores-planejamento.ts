@@ -9,6 +9,8 @@ import {
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import { syncTreinamentoPlanejadoIntegration } from '../services/treinamentos-planejados-integration';
+import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
+import { matchCaeAvailabilityBatch, type CaeBatchPlanningNeed } from '../services/cae-planning-batch';
 import {
   buildPlanningKey,
   estimateSessionCount,
@@ -669,6 +671,40 @@ async function listPlanningItems(params: {
   }));
 }
 
+
+type CandidateCurriculumSnapshot = {
+  models?: Array<{
+    duracao_estimada?: unknown;
+  }>;
+};
+
+function sessionDurationsFromCandidate(candidate: SimulatorPlanningCandidate): number[] {
+  const snapshot = candidate.snapshot as CandidateCurriculumSnapshot | null;
+  const models = Array.isArray(snapshot?.models) ? snapshot?.models || [] : [];
+  if (models.length === 0) return [];
+  return models.map((model) => Number(model.duracao_estimada));
+}
+
+function proposalNeedId(candidates: SimulatorPlanningCandidate[]): string {
+  const first = candidates[0];
+  const participantIds = candidates.map((candidate) => candidate.funcionarioId).sort((a, b) => a - b);
+  return [
+    first.qualificacaoTipoId,
+    first.modeloAeronave,
+    participantIds.join('-'),
+    candidates.map((candidate) => candidate.vencimento).sort()[0],
+  ].join(':');
+}
+
+function dateRangesOverlap(
+  leftStart: string,
+  leftEnd: string,
+  rightStart: string,
+  rightEnd: string,
+): boolean {
+  return leftStart <= rightEnd && leftEnd >= rightStart;
+}
+
 app.get('/', async (c) => {
   const empresaId = getEmpresaId(c);
   if (!(await planningSchemaReady(c.env.DB))) {
@@ -698,6 +734,32 @@ app.get('/', async (c) => {
   });
 });
 
+app.post('/disponibilidade-cae/validar', requireRole('admin', 'manager'), async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const result = validateAndNormalizeCaeAvailability(body);
+  if (!result.ok) {
+    return c.json(
+      {
+        success: false,
+        error: 'Disponibilidade CAE inválida',
+        code: 'CAE_AVAILABILITY_INVALID',
+        details: result.errors,
+        warnings: result.warnings,
+      },
+      400,
+    );
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      document: result.data,
+      warnings: result.warnings,
+      mode: 'PREVIEW_ONLY',
+    },
+  });
+});
+
 app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
   const empresaId = getEmpresaId(c);
   const db = c.env.DB;
@@ -712,6 +774,9 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
     vencimento_fim?: unknown;
     margem_dias?: unknown;
     politica_janela?: unknown;
+    dry_run?: unknown;
+    cae_availability?: unknown;
+    data_referencia?: unknown;
   } | null;
   const inicio = String(body?.vencimento_inicio || '');
   const fim = String(body?.vencimento_fim || '');
@@ -730,6 +795,12 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
   }
 
   const politicaJanela = String(body?.politica_janela || 'FOLGA') as SimulatorPlanningWindowPolicy;
+  const dryRun = body?.dry_run === true || String(body?.dry_run || '').toLowerCase() === 'true';
+  const dataReferenciaRaw = String(body?.data_referencia || '').trim();
+  const dataReferencia = dataReferenciaRaw || new Date().toISOString().slice(0, 10);
+  if (!isIsoDate(dataReferencia)) {
+    return c.json({ success: false, error: 'data_referencia inválida' }, 400);
+  }
   if (!SIMULATOR_PLANNING_WINDOW_POLICIES.includes(politicaJanela)) {
     return c.json({ success: false, error: 'politica_janela inválida' }, 400);
   }
@@ -829,6 +900,188 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
   }
 
   const { pairs, unmatched } = pairSimulatorPlanningCandidates(candidates);
+
+  if (dryRun) {
+    const previewProposal = (
+      proposalCandidates: SimulatorPlanningCandidate[],
+      status: SimulatorPlanningStatus,
+    ) => {
+      const first = proposalCandidates[0];
+      return {
+        need_id: proposalNeedId(proposalCandidates),
+        status,
+        qualificacao_tipo_id: first.qualificacaoTipoId,
+        qualificacao_codigo: first.qualificacaoCodigo,
+        qualificacao_nome: first.qualificacaoNome,
+        modelo_aeronave: first.modeloAeronave,
+        vencimento_referencia: proposalCandidates
+          .map((candidate) => candidate.vencimento)
+          .sort()[0],
+        janela_tipo: first.janelaTipo,
+        janela_inicio: first.janelaInicio,
+        janela_fim: first.janelaFim,
+        carga_horaria_prevista: first.cargaHoras,
+        curriculo: first.snapshot,
+        participantes: proposalCandidates.map((candidate) => ({
+          funcionario_id: candidate.funcionarioId,
+          funcionario_nome: candidate.funcionarioNome,
+          funcionario_funcao: candidate.funcao,
+          funcionario_quinzena: candidate.quinzenaNumero,
+          vencimento: candidate.vencimento,
+        })),
+      };
+    };
+
+    const proposalGroups: Array<{
+      candidates: SimulatorPlanningCandidate[];
+      status: SimulatorPlanningStatus;
+    }> = [
+      ...pairs.map((pair) => ({ candidates: [pair.left, pair.right], status: 'PROPOSTO' as const })),
+      ...unmatched.map((candidate) => ({
+        candidates: [candidate],
+        status: 'AGUARDANDO_DISPONIBILIDADE' as const,
+      })),
+    ];
+    const proposals = proposalGroups.map(({ candidates: proposalCandidates, status }) =>
+      previewProposal(proposalCandidates, status),
+    );
+
+    let caeComparison: unknown = null;
+    if (body?.cae_availability !== undefined && body?.cae_availability !== null) {
+      const validation = validateAndNormalizeCaeAvailability(body.cae_availability);
+      if (!validation.ok) {
+        return c.json(
+          {
+            success: false,
+            error: 'Disponibilidade CAE inválida',
+            code: 'CAE_AVAILABILITY_INVALID',
+            details: validation.errors,
+            warnings: validation.warnings,
+          },
+          400,
+        );
+      }
+
+      const metadataByNeedId = new Map<
+        string,
+        { candidates: SimulatorPlanningCandidate[]; proposal: ReturnType<typeof previewProposal> }
+      >();
+      const needs: CaeBatchPlanningNeed[] = [];
+      for (const group of proposalGroups) {
+        const first = group.candidates[0];
+        const needId = proposalNeedId(group.candidates);
+        const proposal = previewProposal(group.candidates, group.status);
+        metadataByNeedId.set(needId, { candidates: group.candidates, proposal });
+        needs.push({
+          id: needId,
+          equipment: first.modeloAeronave,
+          expiry_date: group.candidates.map((candidate) => candidate.vencimento).sort()[0],
+          planning_start_date: dataReferencia,
+          preferred_window_start: first.janelaInicio,
+          preferred_window_end: first.janelaFim,
+          session_durations_minutes:
+            first.modeloAeronave === 'AW139' || first.modeloAeronave === 'SK76'
+              ? sessionDurationsFromCandidate(first)
+              : [],
+        });
+      }
+
+      const batch = matchCaeAvailabilityBatch(needs, validation.data.slots);
+      const recommendations = await Promise.all(
+        batch.matches.map(async (match) => {
+          const metadata = metadataByNeedId.get(String(match.need_id));
+          if (!metadata) {
+            return {
+              need_id: match.need_id,
+              status: 'INVALID_NEED',
+              reasons: ['Metadados internos do planejamento não encontrados.'],
+              outside_preferred_window: false,
+              selected_slots: [],
+              assignments: [],
+              conflicts: [],
+            };
+          }
+
+          let conflicts: Array<Record<string, unknown>> = [];
+          if (match.status === 'MATCHED' && match.selected_slots.length > 0) {
+            const starts = match.selected_slots.map((slot) => slot.date).sort();
+            const ends = match.selected_slots.map((slot) => slot.end_date).sort();
+            const broadConflicts = await loadPublishedRosterConflicts({
+              db,
+              empresaId,
+              funcionarioIds: metadata.candidates.map((candidate) => candidate.funcionarioId),
+              inicio: starts[0] || null,
+              fim: ends.at(-1) || null,
+            });
+            conflicts = broadConflicts.filter((conflict) => {
+              const conflictStart = String(conflict.data_inicio || '').slice(0, 10);
+              const conflictEnd = String(conflict.data_fim || conflict.data_inicio || '').slice(0, 10);
+              return match.selected_slots.some((slot) =>
+                dateRangesOverlap(slot.date, slot.end_date, conflictStart, conflictEnd),
+              );
+            });
+          }
+
+          return {
+            ...metadata.proposal,
+            status: match.status,
+            selected_slots: match.selected_slots,
+            assignments: match.assignments,
+            outside_preferred_window: match.outside_preferred_window,
+            total_required_minutes: match.total_required_minutes,
+            total_reserved_minutes: match.total_reserved_minutes,
+            unused_reserved_minutes: match.unused_reserved_minutes,
+            latest_training_date: match.latest_training_date,
+            days_before_expiry: match.days_before_expiry,
+            reasons: match.reasons,
+            conflicts,
+            requires_human_review:
+              match.outside_preferred_window ||
+              conflicts.length > 0 ||
+              validation.warnings.length > 0 ||
+              match.status !== 'MATCHED',
+          };
+        }),
+      );
+
+      caeComparison = {
+        mode: 'PREVIEW_ONLY',
+        data_referencia: dataReferencia,
+        availability_warnings: validation.warnings,
+        recommendations,
+        remaining_slots: batch.remaining_slots,
+        summary: {
+          total_needs: recommendations.length,
+          matched: recommendations.filter((item) => item.status === 'MATCHED').length,
+          insufficient: recommendations.filter(
+            (item) => item.status === 'INSUFFICIENT_AVAILABILITY',
+          ).length,
+          invalid_needs: recommendations.filter((item) => item.status === 'INVALID_NEED').length,
+          with_conflicts: recommendations.filter((item) => item.conflicts.length > 0).length,
+          outside_preferred_window: recommendations.filter(
+            (item) => item.outside_preferred_window,
+          ).length,
+        },
+      };
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        dry_run: true,
+        candidatos: candidates.length,
+        pares: pairs.length,
+        pendencias: unmatched.length,
+        preservados: preservedQualificationKeys.size,
+        registros_criados: 0,
+        margem_dias: margemDias,
+        politica_janela: politicaJanela,
+        propostas: proposals,
+        cae_comparison: caeComparison,
+      },
+    });
+  }
+
   const runMarker = new Date().toISOString();
   const autoStatuses = ['PROPOSTO', 'AGUARDANDO_DISPONIBILIDADE', 'REPLANEJAR'];
   const statusPlaceholders = autoStatuses.map(() => '?').join(', ');
