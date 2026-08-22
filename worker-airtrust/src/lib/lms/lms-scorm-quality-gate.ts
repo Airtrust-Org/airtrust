@@ -131,7 +131,9 @@ function manifestIsWellFormed(pkg: ValidatedLmsPackage): boolean {
     }
     if (!token.endsWith('/')) stack.push(token.split(/\s/, 1)[0]!);
   }
-  return stack.length === 0 && /<manifest\b/i.test(xml);
+  // The root element may carry an XML namespace prefix (e.g. <ns0:manifest>)
+  // — a valid SCORM 1.2 authoring pattern; see scorm-manifest-parser.ts.
+  return stack.length === 0 && /<(?:[A-Za-z][\w.-]*:)?manifest\b/i.test(xml);
 }
 
 /**
