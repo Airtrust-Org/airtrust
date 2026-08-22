@@ -1,4 +1,4 @@
-import puppeteer from '@cloudflare/puppeteer';
+import puppeteer, { type Browser, type BrowserWorker, type HTTPRequest } from '@cloudflare/puppeteer';
 
 import type { ScormRuntimeConformance } from './lms-scorm-quality-gate';
 
@@ -8,6 +8,7 @@ const CANDIDATE_ORIGIN = 'https://scorm-candidate.invalid/';
 
 type CandidateAsset = { path: string; data: Uint8Array };
 type TraceItem = { method: string; key?: string; value?: string };
+type ObservedTrace = { trace: TraceItem[]; values: Record<string, string>; initialized: boolean; finished: boolean; lastError: string };
 
 function escapeScript(value: string) {
   return value.replace(/<\/script/gi, '<\\/script');
@@ -65,12 +66,12 @@ export async function runScormBrowserConformance(params: {
   const assets = new Map(params.assets.map((asset) => [asset.path, asset.data]));
   const launch = assets.get(params.launchFile);
   if (!launch) throw new Error('Launch file do candidato não encontrado');
-  let browser: any;
+  let browser: Browser | undefined;
   try {
-    browser = await (puppeteer as any).launch(params.browserBinding);
+    browser = await puppeteer.launch(params.browserBinding as BrowserWorker);
     const page = await browser.newPage();
     await page.setRequestInterception(true);
-    page.on('request', async (request: any) => {
+    page.on('request', async (request: HTTPRequest) => {
       const url = new URL(request.url());
       if (url.origin !== new URL(CANDIDATE_ORIGIN).origin) return request.abort('blockedbyclient');
       const path = decodeURIComponent(url.pathname.replace(/^\//, ''));
@@ -79,7 +80,7 @@ export async function runScormBrowserConformance(params: {
       return request.respond({ status: 200, body: asset, headers: { 'Content-Type': path.endsWith('.js') ? 'application/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.html') ? 'text/html' : 'application/octet-stream' } });
     });
     await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'networkidle0', timeout: TIMEOUT_MS });
-    const observed = await page.evaluate('window.__AIRTRUST_SCORM_TRACE()');
+    const observed = await page.evaluate('window.__AIRTRUST_SCORM_TRACE()') as ObservedTrace;
     return analyzeTrace(params.candidateSha256, startedAt, observed.trace, observed.values, observed.initialized, observed.finished, observed.lastError);
   } catch (error) {
     const timedOut = error instanceof Error && /timeout/i.test(error.message);
