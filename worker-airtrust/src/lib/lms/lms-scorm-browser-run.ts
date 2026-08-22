@@ -45,7 +45,14 @@ function analyzeTrace(candidateSha256: string, startedAt: string, trace: TraceIt
   const errors: string[] = [];
   if (!initialized) errors.push('LMSInitialize não observado');
   if (!hasCommit) errors.push('LMSCommit não observado');
-  if (!finished) errors.push('LMSFinish não observado');
+  // Trace is captured after the runner dispatches a controlled session
+  // termination (beforeunload/pagehide/unload) — the package had a real
+  // opportunity to call LMSFinish from its own unload handler before this
+  // is evaluated. A still-missing LMSFinish at this point means the
+  // package's session was genuinely never terminated per the SCORM 1.2
+  // communication protocol; it is not evidence of incomplete coursework
+  // (lesson_status/completionReached are tracked and reported separately).
+  if (!finished) errors.push('SCORM_SESSION_NOT_TERMINATED: LMSFinish não observado mesmo após encerramento controlado da sessão (beforeunload/pagehide/unload)');
   if (callsAfterFinish) errors.push('Chamada SCORM após LMSFinish');
   if (lastError !== '0') errors.push(`API SCORM retornou erro ${lastError}`);
   const lessonStatus = values['cmi.core.lesson_status'] ?? null;
@@ -80,6 +87,24 @@ export async function runScormBrowserConformance(params: {
       return request.respond({ status: 200, body: asset, headers: { 'Content-Type': path.endsWith('.js') ? 'application/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.html') ? 'text/html' : 'application/octet-stream' } });
     });
     await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'networkidle0', timeout: TIMEOUT_MS });
+    // Phase A (implicit): the page load above already lets the package run
+    // its normal startup — LMSInitialize/GetValue/SetValue/Commit. LMSFinish
+    // is deliberately not required yet; SCORM 1.2 packages commonly gate it
+    // behind an explicit close/exit action rather than initial load.
+    //
+    // Phase B: give the package's own unload lifecycle a real opportunity to
+    // run before evaluating LMSFinish. These are dispatched as ordinary DOM
+    // events (not a real navigation-triggered teardown), so the page stays
+    // alive and __AIRTRUST_SCORM_TRACE can still be read afterward — but any
+    // beforeunload/pagehide/unload listener the package registered runs its
+    // real code, synchronously, exactly as it would on an actual tab close.
+    // The harness never calls window.API.LMSFinish itself; only the
+    // package's own handler can do that.
+    await page.evaluate(
+      "window.dispatchEvent(new Event('beforeunload'));" +
+        "window.dispatchEvent(new Event('pagehide'));" +
+        "window.dispatchEvent(new Event('unload'));",
+    );
     const observed = await page.evaluate('window.__AIRTRUST_SCORM_TRACE()') as ObservedTrace;
     return analyzeTrace(params.candidateSha256, startedAt, observed.trace, observed.values, observed.initialized, observed.finished, observed.lastError);
   } catch (error) {
