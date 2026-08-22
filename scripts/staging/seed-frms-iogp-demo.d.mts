@@ -1,0 +1,14 @@
+export declare const ALLOWED_D1_NAME: string;
+export declare const ALLOWED_D1_ID: string;
+export declare const BLOCKED_D1_NAMES: string[];
+export declare const ALLOWED_TENANT_ID: number;
+export declare const ALLOWED_TENANT_CODIGO: string;
+export declare const FIXTURE_ORIGEM: string;
+export declare const FIXTURE_TRIPULANTE_MATRICULA: string;
+export declare const FIXTURE_TRIPULANTE_NOME: string;
+export declare const FIXTURE_TRIPULANTE_GUERRA: string;
+export declare const CONFIRMATION_PHRASE: string;
+export declare function sqlString(value: string): string;
+export declare function validateD1Target(name: string, isLocal?: boolean): void;
+export declare function validateTenantTarget(tenantId: number, tenantCodigo: string): void;
+export declare function buildSeedSql(): string;
