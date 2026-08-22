@@ -1,6 +1,7 @@
 import { strFromU8, unzipSync } from 'fflate';
 
 import { ApiError } from '../../middleware/error-handler';
+import { resolveScormLaunchFileHref, resolveScormVersion } from './scorm-manifest-parser';
 
 export type LmsStructuredContentType = 'scorm' | 'h5p';
 
@@ -257,41 +258,6 @@ export function inspectZipCentralDirectory(bytes: Uint8Array): ZipEntryMetadata[
   return entries;
 }
 
-function parseQuotedAttribute(tag: string, attribute: string): string | null {
-  const escapedAttribute = attribute.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(
-    `\\b${escapedAttribute}\\s*=\\s*(?:"([^"]+)"|'([^']+)')`,
-    'i',
-  ).exec(tag);
-  return match?.[1] ?? match?.[2] ?? null;
-}
-
-function parseLaunchFile(manifestXml: string): string | null {
-  for (const resource of manifestXml.matchAll(/<resource\b[^>]*>/gi)) {
-    const href = parseQuotedAttribute(resource[0], 'href');
-    if (href) return href;
-  }
-
-  const item = /<item\b[^>]*>/i.exec(manifestXml)?.[0];
-  if (!item) return null;
-  const identifierRef = parseQuotedAttribute(item, 'identifierref');
-  if (!identifierRef) return null;
-
-  for (const resource of manifestXml.matchAll(/<resource\b[^>]*>/gi)) {
-    if (parseQuotedAttribute(resource[0], 'identifier') !== identifierRef) continue;
-    const href = parseQuotedAttribute(resource[0], 'href');
-    if (href) return href;
-  }
-  return null;
-}
-
-function parseScormVersion(manifestXml: string): '1.2' | '2004' {
-  if (/adlcp:schemaversion[^>]*>\s*2004/i.test(manifestXml) || /SCORM\s*2004/i.test(manifestXml)) {
-    return '2004';
-  }
-  return '1.2';
-}
-
 function resolveRelativePackagePath(basePath: string, relativePath: string): string {
   const withoutQuery = relativePath.split(/[?#]/, 1)[0] ?? '';
   if (!withoutQuery) invalidPackage('O manifest informa launch file vazio');
@@ -325,7 +291,7 @@ function validateScormEntries(
 ): Pick<ValidatedLmsPackage, 'launchFile' | 'scormVersao' | 'tipoH5p'> {
   const manifest = findSingleMetadataEntry(entries, 'imsmanifest.xml');
   const manifestXml = strFromU8(manifest.data);
-  const rawLaunchFile = parseLaunchFile(manifestXml);
+  const rawLaunchFile = resolveScormLaunchFileHref(manifestXml);
   if (!rawLaunchFile) {
     invalidPackage('Não foi possível identificar o launch file do pacote SCORM');
   }
@@ -338,7 +304,7 @@ function validateScormEntries(
 
   return {
     launchFile,
-    scormVersao: parseScormVersion(manifestXml),
+    scormVersao: resolveScormVersion(manifestXml),
     tipoH5p: null,
   };
 }
@@ -509,7 +475,7 @@ export function validateStructuredScormMetadata(params: {
   const manifestPath = normalizeLmsArchivePath(params.manifestPath);
   if (!manifestPath) invalidPackage('Caminho de manifest inválido');
   const manifestXml = strFromU8(params.manifestBytes);
-  const rawLaunch = parseLaunchFile(manifestXml);
+  const rawLaunch = resolveScormLaunchFileHref(manifestXml);
   if (!rawLaunch) {
     invalidPackage('Não foi possível identificar o launch file do pacote SCORM');
   }
@@ -518,7 +484,7 @@ export function validateStructuredScormMetadata(params: {
   if (!paths.has(collisionKey(launchFile))) {
     invalidPackage(`O launch file ${launchFile} não existe no upload confirmado`);
   }
-  return { launchFile, scormVersao: parseScormVersion(manifestXml) };
+  return { launchFile, scormVersao: resolveScormVersion(manifestXml) };
 }
 
 export function validateStructuredH5pMetadata(params: {

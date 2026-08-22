@@ -9,6 +9,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
+import { resolveScormLaunchFileHref, resolveScormVersion } from '../lib/lms/scorm-manifest-parser';
 import { requireOperacoesCurso, applyLmsCursosDomainReadFilter, assertLmsCursoDetailDomainAccess, resolveAndValidateCursoDominioCodigo } from './lms-cursos-rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 import {
@@ -1027,28 +1028,6 @@ async function getCursoSetorIds(
   return setores.map((setor) => Number(setor.id)).filter((setorId) => setorId > 0);
 }
 
-/** Extrai launch file do imsmanifest.xml (SCORM 1.2 e 2004) */
-function parseLaunchFile(manifestXml: string): string | null {
-  // SCORM 1.2: <item ... href="..."> dentro de <resources>
-  // SCORM 2004: <resource ... href="...">
-  const resourceMatch = manifestXml.match(/<resource[^>]+href="([^"]+)"/i);
-  if (resourceMatch) return resourceMatch[1] ?? null;
-  const itemMatch = manifestXml.match(/<item[^>]+identifierref="([^"]+)"/i);
-  if (itemMatch) {
-    const resId = itemMatch[1];
-    const refMatch = new RegExp(`identifier="${resId}"[^>]*href="([^"]+)"`, 'i').exec(manifestXml);
-    if (refMatch) return refMatch[1] ?? null;
-  }
-  return null;
-}
-
-/** Deterimna versão SCORM pelo imsmanifest.xml */
-function parseScormVersion(manifestXml: string): '1.2' | '2004' {
-  if (manifestXml.includes('adlcp:schemaversion') && manifestXml.includes('2004')) return '2004';
-  if (manifestXml.includes('1.2')) return '1.2';
-  return '1.2';
-}
-
 function getStructuredUploadPrefix(
   tipoConteudo: 'scorm' | 'h5p',
   empresaId: number,
@@ -1302,8 +1281,8 @@ async function processScormUpload(
   if (!manifestData) throw new ApiError('imsmanifest.xml não encontrado no pacote', 400);
 
   const manifestXml = strFromU8(manifestData);
-  const launchFile = parseLaunchFile(manifestXml);
-  const scormVersao = parseScormVersion(manifestXml);
+  const launchFile = resolveScormLaunchFileHref(manifestXml);
+  const scormVersao = resolveScormVersion(manifestXml);
   const baseDir = manifestKey.includes('/')
     ? manifestKey.slice(0, manifestKey.lastIndexOf('/') + 1)
     : '';
