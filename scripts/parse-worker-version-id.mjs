@@ -1,14 +1,52 @@
 #!/usr/bin/env node
 
 /**
- * Extracts the Worker Version ID from Wrangler deploy output.
- * 
- * Supports both known output formats:
- * - Wrangler 3.50+: "Worker Version ID: <uuid>"
- * - Wrangler 3.80+: "Version ID: <uuid>"
+ * Extracts the Worker Version ID from Wrangler output.
+ *
+ * Supports three known output formats:
+ * - Wrangler 3.50+ `deploy`: "Worker Version ID: <uuid>" (single deployment;
+ *   more than one distinct ID in the output is treated as ambiguous/suspicious).
+ * - Wrangler 3.80+ `deploy`: "Version ID: <uuid>" (same, single deployment).
+ * - `deployments list`: "Version(s):  (100%) <uuid>", one per historical
+ *   deployment entry, oldest first. Multiple distinct IDs here are expected
+ *   (it's a history, not a single deploy) — the most recent (last) one is
+ *   the current deployment and is what callers want.
  */
 
 import { readFileSync } from 'fs';
+
+const uuidRegex = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
+function extract(content) {
+  const workerVersionMatch = content.match(new RegExp(`Worker Version ID:?\\s*${uuidRegex.source}`, 'i'));
+  const versionMatch = content.match(new RegExp(`Version ID:?\\s*${uuidRegex.source}`, 'i'));
+
+  const allWorkerVersionMatches = [...content.matchAll(new RegExp(`Worker Version ID:?\\s*${uuidRegex.source}`, 'gi'))];
+  const allVersionMatches = [...content.matchAll(new RegExp(`(?<!\\()Version ID:?\\s*${uuidRegex.source}`, 'gi'))];
+  const allVersionsListMatches = [...content.matchAll(new RegExp(`Version\\(s\\):\\s*(?:\\(\\d+%\\)\\s*)?${uuidRegex.source}`, 'gi'))];
+
+  if (allVersionsListMatches.length > 0) {
+    // `deployments list` history: take the most recent (last) entry.
+    return allVersionsListMatches[allVersionsListMatches.length - 1][1];
+  }
+
+  const totalSingleDeployMatches = allWorkerVersionMatches.length + allVersionMatches.length;
+  if (totalSingleDeployMatches === 0) {
+    return null;
+  }
+
+  if (totalSingleDeployMatches > 1) {
+    const allIds = new Set([
+      ...allWorkerVersionMatches.map((m) => m[1].toLowerCase()),
+      ...allVersionMatches.map((m) => m[1].toLowerCase()),
+    ]);
+    if (allIds.size > 1) {
+      throw new Error('Ambiguous output: multiple different Worker Version IDs found');
+    }
+  }
+
+  return workerVersionMatch ? workerVersionMatch[1] : versionMatch[1];
+}
 
 function main() {
   const logFile = process.argv[2];
@@ -25,38 +63,19 @@ function main() {
     process.exit(1);
   }
 
-  // Look for both "Worker Version ID: <uuid>" and "Version ID: <uuid>"
-  // We use a strict UUID regex to avoid matching random other IDs.
-  const uuidRegex = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-  
-  const workerVersionMatch = content.match(new RegExp(`Worker Version ID:?\\s*${uuidRegex.source}`, 'i'));
-  const versionMatch = content.match(new RegExp(`Version ID:?\\s*${uuidRegex.source}`, 'i'));
+  let id;
+  try {
+    id = extract(content);
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
 
-  // Get all matches to check for ambiguity
-  const allWorkerVersionMatches = [...content.matchAll(new RegExp(`Worker Version ID:?\\s*${uuidRegex.source}`, 'gi'))];
-  const allVersionMatches = [...content.matchAll(new RegExp(`Version ID:?\\s*${uuidRegex.source}`, 'gi'))];
-
-  const totalMatches = allWorkerVersionMatches.length + allVersionMatches.length;
-
-  if (totalMatches === 0) {
+  if (!id) {
     console.error('No Worker Version ID found in deploy output.');
     process.exit(1);
   }
 
-  if (totalMatches > 1) {
-    // If the same exact ID appears multiple times, it might just be Wrangler repeating itself in verbose logs
-    const allIds = new Set([
-      ...allWorkerVersionMatches.map(m => m[1].toLowerCase()),
-      ...allVersionMatches.map(m => m[1].toLowerCase())
-    ]);
-    
-    if (allIds.size > 1) {
-      console.error('Ambiguous output: multiple different Worker Version IDs found.');
-      process.exit(1);
-    }
-  }
-
-  const id = workerVersionMatch ? workerVersionMatch[1] : versionMatch[1];
   console.log(id);
 }
 
@@ -65,27 +84,9 @@ if (import.meta.url === new URL(`file://${process.argv[1]}`).href) {
 }
 
 export function parseWorkerVersionId(content) {
-  const uuidRegex = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-  const workerVersionMatch = content.match(new RegExp(`Worker Version ID:?\\s*${uuidRegex.source}`, 'i'));
-  const versionMatch = content.match(new RegExp(`Version ID:?\\s*${uuidRegex.source}`, 'i'));
-
-  const allWorkerVersionMatches = [...content.matchAll(new RegExp(`Worker Version ID:?\\s*${uuidRegex.source}`, 'gi'))];
-  const allVersionMatches = [...content.matchAll(new RegExp(`Version ID:?\\s*${uuidRegex.source}`, 'gi'))];
-
-  const totalMatches = allWorkerVersionMatches.length + allVersionMatches.length;
-
-  if (totalMatches === 0) {
+  const id = extract(content);
+  if (!id) {
     throw new Error('No Worker Version ID found');
   }
-
-  const allIds = new Set([
-    ...allWorkerVersionMatches.map(m => m[1].toLowerCase()),
-    ...allVersionMatches.map(m => m[1].toLowerCase())
-  ]);
-
-  if (allIds.size > 1) {
-    throw new Error('Ambiguous output: multiple different Worker Version IDs found');
-  }
-
-  return workerVersionMatch ? workerVersionMatch[1] : versionMatch[1];
+  return id;
 }
