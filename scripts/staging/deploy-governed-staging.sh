@@ -188,7 +188,7 @@ rm -f "$DEPLOYMENTS_LOG"
 if [ "$PRE_WORKER_VERSION" != "unavailable" ] && [ -n "$PRE_WORKER_VERSION" ]; then
   VERSION_BODY="$(mktemp)"
   if curl -fsS "$STAGING_WORKER_API_URL/version" > "$VERSION_BODY" 2>/dev/null; then
-    PRE_WORKER_SHA="$(node -e 'try { console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sourceSha || "unavailable"); } catch { console.log("unavailable"); }' "$VERSION_BODY")"
+    PRE_WORKER_SHA="$(node -e 'try { const p = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log((p.data && p.data.sourceSha) || p.sourceSha || "unavailable"); } catch { console.log("unavailable"); }' "$VERSION_BODY")"
   fi
   rm -f "$VERSION_BODY"
 fi
