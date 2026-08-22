@@ -309,6 +309,94 @@ function validateScormEntries(
   };
 }
 
+const SCORM_STATIC_GATE_METADATA_FILENAMES = new Set([
+  'imsmanifest.xml',
+  'airtrust-completion-manifest.json',
+  'airtrust-completion-diagnostics.json',
+]);
+
+/**
+ * Runs only the checks the SCORM static gate actually needs (manifest,
+ * launch-file resolution + existence, AirTrust completion/diagnostics
+ * manifests) without decompressing every entry in the archive. Central
+ * directory inspection (inspectZipCentralDirectory) already gives every
+ * entry's path and size with zero decompression; unzipSync's filter then
+ * decompresses only the handful of small metadata files this needs.
+ * Existence of the launch file is checked against that central-directory
+ * listing, not against decompressed bytes — its content is never read here.
+ *
+ * This exists to avoid paying full-package decompression CPU for a
+ * candidate that the static gate will reject anyway. A package that passes
+ * this check still needs the full extractAndValidateLmsPackage pass before
+ * storage, since every byte must land in R2 for Browser Run/playback to
+ * work — this function only lets a REJECTED verdict be reached cheaply.
+ */
+export function extractScormStaticGateMetadata(bytes: Uint8Array): ValidatedLmsPackage {
+  const centralDirectory = inspectZipCentralDirectory(bytes);
+  const centralDirectoryPaths = new Set(
+    centralDirectory
+      .filter((item): item is ZipEntryMetadata & { path: string } => Boolean(item.path && !item.directory))
+      .map((item) => collisionKey(item.path)),
+  );
+  const totalUncompressedBytes = centralDirectory.reduce((sum, item) => sum + item.uncompressedSize, 0);
+
+  let archive: ReturnType<typeof unzipSync>;
+  try {
+    archive = unzipSync(bytes, {
+      filter(file) {
+        const path = normalizeLmsArchivePath(file.name);
+        if (!path) return false;
+        const filename = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
+        return SCORM_STATIC_GATE_METADATA_FILENAMES.has(filename);
+      },
+    });
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    invalidPackage('Arquivo ZIP inválido ou corrompido');
+  }
+
+  const seen = new Map<string, string>();
+  const entries: ValidatedPackageEntry[] = [];
+  for (const [rawPath, data] of Object.entries(archive)) {
+    const path = normalizeLmsArchivePath(rawPath);
+    if (!path) continue;
+    assertNoPathCollision(path, seen);
+    entries.push({ path, data });
+  }
+
+  let launchFile: string | null = null;
+  let scormVersao: '1.2' | '2004' | null = null;
+  const manifestMatches = entries.filter(
+    (entry) => entry.path.toLowerCase() === 'imsmanifest.xml' || entry.path.toLowerCase().endsWith('/imsmanifest.xml'),
+  );
+  if (manifestMatches.length === 1) {
+    const manifest = manifestMatches[0]!;
+    const manifestXml = strFromU8(manifest.data);
+    const rawLaunchFile = resolveScormLaunchFileHref(manifestXml);
+    if (rawLaunchFile) {
+      try {
+        const candidateLaunchFile = resolveRelativePackagePath(manifest.path, rawLaunchFile);
+        if (centralDirectoryPaths.has(collisionKey(candidateLaunchFile))) {
+          launchFile = candidateLaunchFile;
+          scormVersao = resolveScormVersion(manifestXml);
+        }
+      } catch {
+        // Leave launchFile null — the static gate reports this as a
+        // structural failure rather than crashing extraction.
+      }
+    }
+  }
+
+  return {
+    tipoConteudo: 'scorm',
+    entries,
+    totalUncompressedBytes,
+    launchFile,
+    scormVersao,
+    tipoH5p: null,
+  };
+}
+
 function parseH5pMainLibrary(metadata: Uint8Array): string {
   let parsed: Record<string, unknown>;
   try {

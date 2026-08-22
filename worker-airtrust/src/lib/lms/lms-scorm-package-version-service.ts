@@ -1,5 +1,5 @@
 import { ApiError } from '../../middleware/error-handler';
-import { extractAndValidateLmsPackage } from './lms-package-validator';
+import { extractAndValidateLmsPackage, extractScormStaticGateMetadata } from './lms-package-validator';
 import { validateScormPackageQuality, type ScormQualityGateResult } from './lms-scorm-quality-gate';
 import { applyRuntimeConformance } from './lms-scorm-quality-gate';
 import { runScormBrowserConformance } from './lms-scorm-browser-run';
@@ -31,7 +31,19 @@ export async function createScormPackageCandidate(params: {
   db: D1Database; bucket: R2Bucket; empresaId: number; cursoId: number; userId: number | null;
   bytes: Uint8Array; arquivoNome: string | null;
 }) {
-  const pkg = extractAndValidateLmsPackage(params.bytes, 'scorm');
+  // Cheap first pass: central-directory inspection + decompression of only
+  // the small metadata files the static gate reads (imsmanifest.xml,
+  // airtrust-completion-manifest.json, airtrust-completion-diagnostics.json)
+  // — never the media/HTML/JS payload. Lets a REJECTED verdict be reached
+  // without paying full-archive decompression CPU for packages that were
+  // never going to be stored anyway.
+  const staticPkg = extractScormStaticGateMetadata(params.bytes);
+  if (!staticPkg.launchFile) {
+    throw new ApiError('Não foi possível identificar o launch file do pacote SCORM', 400);
+  }
+  const staticQuality = validateScormPackageQuality(staticPkg);
+  const staticRejected = staticQuality.structural.status === 'FAIL' || staticQuality.completionManifest.status === 'FAIL' || staticQuality.diagnostics.status === 'FAIL';
+
   const packageSha256 = await sha256(params.bytes);
   const existing = await params.db.prepare(
     `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
@@ -44,14 +56,21 @@ export async function createScormPackageCandidate(params: {
   ).bind(params.cursoId, params.empresaId).first<{ id: number }>();
   if (!course) throw new ApiError('Curso não encontrado', 404);
 
-  const id = crypto.randomUUID();
-  const prefix = `lms/scorm/${params.empresaId}/${params.cursoId}/_candidates/${id}/`;
-  const quality = validateScormPackageQuality(pkg);
+  // A candidate the static gate already rejects will never be stored/played,
+  // so the expensive full extraction (every entry decompressed, including
+  // media) only runs for candidates that still have a chance of activation.
+  const pkg = staticRejected ? staticPkg : extractAndValidateLmsPackage(params.bytes, 'scorm');
+  const quality = staticRejected ? staticQuality : validateScormPackageQuality(pkg);
   const rejected = quality.structural.status === 'FAIL' || quality.completionManifest.status === 'FAIL' || quality.diagnostics.status === 'FAIL';
   const status = rejected ? 'REJECTED' : 'VALIDATED';
+
+  const id = crypto.randomUUID();
+  const prefix = `lms/scorm/${params.empresaId}/${params.cursoId}/_candidates/${id}/`;
   try {
-    for (const item of pkg.entries) {
-      await params.bucket.put(`${prefix}${item.path}`, item.data, { httpMetadata: { contentType: mimeType(item.path), cacheControl: 'public, max-age=86400' } });
+    if (!rejected) {
+      for (const item of pkg.entries) {
+        await params.bucket.put(`${prefix}${item.path}`, item.data, { httpMetadata: { contentType: mimeType(item.path), cacheControl: 'public, max-age=86400' } });
+      }
     }
     await params.db.prepare(
       `INSERT INTO lms_scorm_package_versions (
