@@ -11,7 +11,7 @@ import {
   type FadigaScoreConfig,
   type FadigaScoreInput,
 } from '../lib/frms/fadiga-score';
-import { carregarLimites } from '../lib/frms/db-service-config';
+import { FrmsParameterResolutionError, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
 import { sincronizarCheckinComFrms } from '../lib/frms/fadiga-frms-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
 import { canSeeFrmsTeamScope } from '../lib/frms/access';
@@ -410,6 +410,7 @@ export function resolveContextoPilotoLimites(
 async function computeContextoPiloto(
   db: D1Database,
   funcionarioId: number,
+  governedLimites: Readonly<Record<string, number>>,
 ): Promise<{
   acumulo_7d_horas: number;
   acumulo_28d_horas: number;
@@ -464,8 +465,7 @@ async function computeContextoPiloto(
     .bind(String(funcionarioId))
     .first<{ total: number }>();
 
-  const limitesConfigurados = await carregarLimites(db);
-  const limitesContexto = resolveContextoPilotoLimites(limitesConfigurados);
+  const limitesContexto = resolveContextoPilotoLimites(governedLimites);
 
   return {
     acumulo_7d_horas: Number(((rolling?.hv_7_dias_min ?? 0) / 60).toFixed(1)),
@@ -1087,7 +1087,20 @@ router.post('/fadiga-checkin', async (c) => {
       peso_sintomas: config.peso_sintomas,
     };
 
-    const scoreBase = calcularScoreFadiga(buildScoreInput(input), scoreConfig);
+    let operationalContext;
+    try {
+      operationalContext = await resolveFrmsOperationalContext(c.env.DB, {
+        empresaId,
+        referenceAt: dataCheckin,
+        funcionarioId,
+      });
+    } catch (error) {
+      if (error instanceof FrmsParameterResolutionError) {
+        return c.json({ success: false, error: error.code, message: error.message }, 422);
+      }
+      throw error;
+    }
+    const scoreBase = calcularScoreFadiga(buildScoreInput(input), scoreConfig, operationalContext.fadigaPolicy);
     const dailyRiskLevel = evaluateDailyRisk(input);
     const finalNivel =
       dailyRiskLevel === 'unfit_for_duty' || dailyRiskLevel === 'critical'
@@ -1161,6 +1174,7 @@ router.post('/fadiga-checkin', async (c) => {
                computed_risk_level = ?,
                requires_operational_review = ?,
                report_source = 'CREW_REPORTED',
+               regulatory_profile_id = ?, profile_code = ?, config_revision_id = ?, model_version = ?,
                submitted_at = ?,
                origem_registro = 'TRIPULANTE',
                updated_at = ?
@@ -1193,6 +1207,10 @@ router.post('/fadiga-checkin', async (c) => {
           input.apto,
           dailyRiskLevel,
           requiresOperationalReview,
+          operationalContext.regulatoryProfileId,
+          operationalContext.profileCode,
+          operationalContext.configRevisionId,
+          operationalContext.modelVersion,
           now,
           now,
           checkinId,
@@ -1209,9 +1227,10 @@ router.post('/fadiga-checkin', async (c) => {
              jornada_inicio_prevista, jornada_fim_prevista, horas_acordado,
              meds_ult_12h, alcool_ult_12h, risco_autoavaliado,
              horas_sono_48h, wake_time, subjective_fatigue_level, sleepiness_level,
-             fit_for_duty, computed_risk_level, requires_operational_review, report_source, submitted_at,
+             fit_for_duty, computed_risk_level, requires_operational_review, report_source,
+             regulatory_profile_id, profile_code, config_revision_id, model_version, submitted_at,
              origem_registro, created_by, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
         .bind(
           checkinId,
@@ -1246,6 +1265,10 @@ router.post('/fadiga-checkin', async (c) => {
           dailyRiskLevel,
           requiresOperationalReview,
           'CREW_REPORTED',
+          operationalContext.regulatoryProfileId,
+          operationalContext.profileCode,
+          operationalContext.configRevisionId,
+          operationalContext.modelVersion,
           now,
           'TRIPULANTE',
           userId || null,
@@ -1372,7 +1395,11 @@ router.post('/fadiga-checkin', async (c) => {
       userAgent: c.req.header('user-agent') || undefined,
     });
 
-    const contextoPiloto = await computeContextoPiloto(c.env.DB, funcionarioId);
+    const contextoPiloto = await computeContextoPiloto(
+      c.env.DB,
+      funcionarioId,
+      operationalContext.parameters,
+    );
 
     return c.json({
       success: true,

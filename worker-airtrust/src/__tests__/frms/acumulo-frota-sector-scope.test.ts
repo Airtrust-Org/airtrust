@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buscarAcumuloFrota } from '../../lib/frms/db-service-acumulo';
 import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../services/employee-sector-access';
+import * as parameterGovernanceModule from '../../lib/frms/parameter-governance';
+import { LIMITES_DEFAULT } from '../../lib/frms/types';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /**
  * P1-FRMS-003 — GET /api/frms/acumulo-frota previously filtered only by
@@ -14,17 +20,25 @@ const EMPRESA_ID = 5;
 function createDb() {
   const calls: Array<{ sql: string; bindings: unknown[] }> = [];
 
+  vi.spyOn(parameterGovernanceModule, 'resolveFrmsOperationalContext').mockResolvedValue({
+    empresaId: EMPRESA_ID,
+    profileCode: 'LEGACY_GENERAL',
+    regulatoryProfileId: 'profile-1',
+    configRevisionId: 'rev-1',
+    modelVersion: 'FRMS_CONFIG_V1_TEST',
+    effectiveFrom: '2000-01-01',
+    effectiveTo: null,
+    parameters: LIMITES_DEFAULT,
+    fadigaPolicy: {} as never,
+    fortnightPolicy: {} as never,
+  } as never);
+
   const db = {
     prepare: (sql: string) => ({
       bind: (...bindings: unknown[]) => {
         calls.push({ sql, bindings });
         return {
-          all: async () => {
-            if (sql.includes('FROM frms_configuracao_limites')) {
-              return { results: [] };
-            }
-            return { results: [] };
-          },
+          all: async () => ({ results: [] }),
           first: async () => null,
         };
       },

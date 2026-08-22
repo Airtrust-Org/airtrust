@@ -28,6 +28,9 @@ import {
   atualizarConfiguracao,
   restaurarConfiguracoesPadrao,
   reprocessarTodosTripulantes,
+  createRevisionAndRecalcRun,
+  loadFrmsRecalcRun,
+  runGovernedRecalc,
   buscarNotificacoes,
   marcarNotificacaoLida,
   marcarTodasNotificacoesLidas,
@@ -86,6 +89,9 @@ frmsRelatoriosConfig.get(
   '/relatorios/mapa-fadiga',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json({ success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' }, 403);
+    }
     c.header('Cache-Control', 'private, max-age=3600');
     c.header('Vary', 'Authorization');
     const result = await relatorioMapaFadiga(c.env.DB, empresaId);
@@ -179,6 +185,50 @@ frmsRelatoriosConfig.put(
     c.executionCtx.waitUntil(reprocessarTodosTripulantes(c.env.DB));
 
     return c.json({ success: true, data: limites });
+  }),
+);
+
+/**
+ * Governed backend for the existing configuration UI. It does not create a
+ * second panel: callers submit the same parameter values with mandatory scope,
+ * provenance and effectivity; the revision and ledger are created before work.
+ */
+frmsRelatoriosConfig.put(
+  '/configuracoes/governadas',
+  safe(async (c) => {
+    const denied = await requirePlatformAdmin(c);
+    if (denied) return denied;
+    const schema = z.object({
+      profile_code: z.string().min(1),
+      source_type: z.string().min(1),
+      source_reference: z.string().min(1).nullable().optional(),
+      regulatory_profile_id: z.string().min(1).nullable().optional(),
+      policy_version: z.string().min(1),
+      effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      reason: z.string().min(3),
+      parameters: z.array(z.object({
+        key: z.string().min(1), value: z.number().finite(), unit: z.string().min(1),
+        metric: z.string().nullable().optional(), window_kind: z.string().nullable().optional(),
+        direction: z.string().nullable().optional(),
+      })).min(1),
+    });
+    const parsed = schema.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({ success: false, error: 'Empresa não identificada' }, 401);
+    const created = await createRevisionAndRecalcRun(c.env.DB, {
+      empresaId, profileCode: parsed.data.profile_code, sourceType: parsed.data.source_type,
+      sourceReference: parsed.data.source_reference ?? null,
+      regulatoryProfileId: parsed.data.regulatory_profile_id ?? null,
+      policyVersion: parsed.data.policy_version,
+      effectiveFrom: parsed.data.effective_from, effectiveTo: parsed.data.effective_to ?? null,
+      actorUserId: c.get('userId') == null ? null : String(c.get('userId')),
+      reason: parsed.data.reason, parameters: parsed.data.parameters,
+    });
+    const run = await loadFrmsRecalcRun(c.env.DB, created.runId);
+    c.executionCtx.waitUntil(runGovernedRecalc(c.env.DB, run));
+    return c.json({ success: true, data: { revision_id: created.revisionId, run_id: created.runId, status: 'PENDING' } });
   }),
 );
 

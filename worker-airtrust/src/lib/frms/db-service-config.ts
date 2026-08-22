@@ -5,6 +5,17 @@
 import type { LimitesMap, FrmsConfigLimite } from './types';
 import { LIMITES_DEFAULT } from './types';
 import { generateId, now, logAuditoria } from './db-service-shared';
+export {
+  createRevisionAndRecalcRun,
+  loadFrmsRecalcRun,
+  loadResolvedFrmsParameters,
+  type CreateFrmsRevisionInput,
+  type FrmsConfigParameter,
+  type FrmsConfigRevision,
+  type FrmsRecalcRun,
+  type ResolvedFrmsParameterSet,
+} from './parameter-governance';
+export { runGovernedRecalc } from './governed-recalc';
 
 export async function carregarLimites(db: D1Database): Promise<LimitesMap> {
   try {

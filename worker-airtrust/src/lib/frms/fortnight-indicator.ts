@@ -109,6 +109,55 @@ export interface BuildFrmsFortnightIndicatorInput {
   windowStart: string;
   windowEnd: string;
   today?: string;
+  policy?: FrmsFortnightPolicy;
+}
+
+/** Immutable compatibility policy; production callers must supply a resolved revision. */
+export interface FrmsFortnightPolicy {
+  consecutiveAttentionDays: number; consecutiveCriticalDays: number;
+  lowSleepHours: number; highKss: number; lowEffectivenessPct: number;
+  daysWithoutDuty: number; longRestMinutes: number; shortAverageDutyMinutes: number;
+  shortRestMinutes: number; earlyPresentation0600Minutes: number; earlyPresentation0700Minutes: number;
+  recurringEarlyPresentations: number; rollingDutyPct: number;
+  scoreAttention: number; scoreCritical: number; scoreLimitWeight: number;
+  trendIncreasingImpact: number; trendReducingImpact: number;
+  impactDaysWithoutDuty: number; impactLongRest: number; impactShortAverageDuty: number;
+  impactNoEarlyPresentation: number; impactCompleteData: number; impactConsecutiveAttention: number;
+  impactConsecutiveCritical: number; impactCheckinPending: number; impactEstimatedData: number;
+  impactEarly0600: number; impactRecurringEarly: number; impactShortRest: number;
+  impactLowSleep: number; impactHighKss: number; impactLowEffectiveness: number;
+  impactRollingDuty: number; impactDailyCritical: number; impactDailyAttention: number;
+}
+
+export const LEGACY_FORTNIGHT_POLICY: Readonly<FrmsFortnightPolicy> = Object.freeze({
+  consecutiveAttentionDays: 4, consecutiveCriticalDays: 5, lowSleepHours: 6, highKss: 7, lowEffectivenessPct: 70,
+  daysWithoutDuty: 2, longRestMinutes: 13 * 60, shortAverageDutyMinutes: 6 * 60, shortRestMinutes: 10 * 60,
+  earlyPresentation0600Minutes: 6 * 60, earlyPresentation0700Minutes: 7 * 60, recurringEarlyPresentations: 2,
+  rollingDutyPct: 0.8, scoreAttention: 45, scoreCritical: 75, scoreLimitWeight: 0.65,
+  trendIncreasingImpact: 6, trendReducingImpact: -4,
+  impactDaysWithoutDuty: -8, impactLongRest: -6, impactShortAverageDuty: -5, impactNoEarlyPresentation: -3,
+  impactCompleteData: -4, impactConsecutiveAttention: 8, impactConsecutiveCritical: 14, impactCheckinPending: 10,
+  impactEstimatedData: 7, impactEarly0600: 8, impactRecurringEarly: 5, impactShortRest: 16,
+  impactLowSleep: 12, impactHighKss: 12, impactLowEffectiveness: 14, impactRollingDuty: 10,
+  impactDailyCritical: 18, impactDailyAttention: 7,
+});
+
+const FORTNIGHT_POLICY_PARAMETER_KEYS: Readonly<Record<keyof FrmsFortnightPolicy, string>> = {
+  consecutiveAttentionDays: 'FORTNIGHT_CONSECUTIVE_DAYS_ATTENTION', consecutiveCriticalDays: 'FORTNIGHT_CONSECUTIVE_DAYS_CRITICAL', lowSleepHours: 'FORTNIGHT_LOW_SLEEP_HOURS', highKss: 'KSS_HIGH_THRESHOLD', lowEffectivenessPct: 'FORTNIGHT_LOW_EFFECTIVENESS_PCT',
+  daysWithoutDuty: 'FORTNIGHT_DAYS_WITHOUT_DUTY', longRestMinutes: 'FORTNIGHT_LONG_REST_MINUTES', shortAverageDutyMinutes: 'FORTNIGHT_SHORT_AVG_DUTY_MINUTES', shortRestMinutes: 'FORTNIGHT_SHORT_REST_MINUTES', earlyPresentation0600Minutes: 'FORTNIGHT_EARLY_0600_MINUTES', earlyPresentation0700Minutes: 'FORTNIGHT_EARLY_0700_MINUTES', recurringEarlyPresentations: 'FORTNIGHT_RECURRING_EARLY_PRESENTATIONS', rollingDutyPct: 'FORTNIGHT_ROLLING_DUTY_PCT', scoreAttention: 'FORTNIGHT_SCORE_ATTENTION', scoreCritical: 'FORTNIGHT_SCORE_CRITICAL', scoreLimitWeight: 'FORTNIGHT_SCORE_LIMIT_WEIGHT', trendIncreasingImpact: 'FORTNIGHT_TREND_INCREASING_IMPACT', trendReducingImpact: 'FORTNIGHT_TREND_REDUCING_IMPACT', impactDaysWithoutDuty: 'FORTNIGHT_IMPACT_DAYS_WITHOUT_DUTY', impactLongRest: 'FORTNIGHT_IMPACT_LONG_REST', impactShortAverageDuty: 'FORTNIGHT_IMPACT_SHORT_AVG_DUTY', impactNoEarlyPresentation: 'FORTNIGHT_IMPACT_NO_EARLY_PRESENTATION', impactCompleteData: 'FORTNIGHT_IMPACT_COMPLETE_DATA', impactConsecutiveAttention: 'FORTNIGHT_IMPACT_CONSECUTIVE_ATTENTION', impactConsecutiveCritical: 'FORTNIGHT_IMPACT_CONSECUTIVE_CRITICAL', impactCheckinPending: 'FORTNIGHT_IMPACT_CHECKIN_PENDING', impactEstimatedData: 'FORTNIGHT_IMPACT_ESTIMATED_DATA', impactEarly0600: 'FORTNIGHT_IMPACT_EARLY_0600', impactRecurringEarly: 'FORTNIGHT_IMPACT_RECURRING_EARLY', impactShortRest: 'FORTNIGHT_IMPACT_SHORT_REST', impactLowSleep: 'FORTNIGHT_IMPACT_LOW_SLEEP', impactHighKss: 'FORTNIGHT_IMPACT_HIGH_KSS', impactLowEffectiveness: 'FORTNIGHT_IMPACT_LOW_EFFECTIVENESS', impactRollingDuty: 'FORTNIGHT_IMPACT_ROLLING_DUTY', impactDailyCritical: 'FORTNIGHT_IMPACT_DAILY_CRITICAL', impactDailyAttention: 'FORTNIGHT_IMPACT_DAILY_ATTENTION',
+};
+
+/** Rejects incomplete/invalid revision data instead of silently using a generic policy. */
+export function resolveFortnightPolicy(values: Readonly<Record<string, number>>): FrmsFortnightPolicy {
+  const result = {} as FrmsFortnightPolicy;
+  for (const [field, key] of Object.entries(FORTNIGHT_POLICY_PARAMETER_KEYS) as Array<[keyof FrmsFortnightPolicy, string]>) {
+    if (!Number.isFinite(values[key])) throw new Error(`FRMS_PARAMETER_REQUIRED_MISSING:${key}`);
+    result[field] = values[key];
+  }
+  if (result.consecutiveCriticalDays < result.consecutiveAttentionDays || result.scoreCritical < result.scoreAttention) {
+    throw new Error('FRMS_PARAMETER_INVALID_VALUE:FORTNIGHT policy');
+  }
+  return Object.freeze(result);
 }
 
 interface PeriodAnchor {
@@ -268,6 +317,7 @@ function resolveTendencia(
   scoped: FrmsFortnightIndicatorItemSeed[],
   currentDate: string,
   diasConsecutivosComJornada: number,
+  policy: FrmsFortnightPolicy,
 ): FrmsFortnightTendencia {
   const sorted = [...scoped].sort((a, b) =>
     a.data_operacional < b.data_operacional ? -1 : a.data_operacional > b.data_operacional ? 1 : 0,
@@ -279,7 +329,7 @@ function resolveTendencia(
   const previousJornadas = sorted.slice(0, currentIndex).filter((entry) => entry.teve_jornada);
   const previous = previousJornadas.length > 0 ? previousJornadas[previousJornadas.length - 1] : null;
   if (!current.teve_jornada && previous) return 'REDUZINDO';
-  if (diasConsecutivosComJornada >= 4) return 'CRESCENTE';
+  if (diasConsecutivosComJornada >= policy.consecutiveAttentionDays) return 'CRESCENTE';
   if (!previous) return current.teve_jornada ? 'ESTAVEL' : 'INDETERMINADA';
 
   const currentDuty = current.teve_jornada ? Math.max(0, current.duracao_jornada_minutos || 0) : 0;
@@ -323,6 +373,7 @@ function buildModifiers(input: {
   rolling168h: { dutyMin: number; vooMin: number };
   periodHasCritical: boolean;
   periodHasAttention: boolean;
+  policy: FrmsFortnightPolicy;
 }): { atenuadores: FrmsFortnightModifier[]; agravantes: FrmsFortnightModifier[] } {
   const atenuadores: FrmsFortnightModifier[] = [];
   const agravantes: FrmsFortnightModifier[] = [];
@@ -330,137 +381,137 @@ function buildModifiers(input: {
   const avgDuty =
     input.jornadasPeriodo > 0 ? input.dutyTimePeriodoMin / input.jornadasPeriodo : 0;
   const lowSleepDays = input.scoped.filter(
-    (entry) => entry.horas_sono != null && entry.horas_sono > 0 && entry.horas_sono < 6,
+    (entry) => entry.horas_sono != null && entry.horas_sono > 0 && entry.horas_sono < input.policy.lowSleepHours,
   ).length;
   const highKssDays = input.scoped.filter(
-    (entry) => entry.kss_score != null && entry.kss_score >= 7,
+    (entry) => entry.kss_score != null && entry.kss_score >= input.policy.highKss,
   ).length;
   const lowEffectivenessDays = input.scoped.filter(
-    (entry) => entry.effectiveness_pct != null && entry.effectiveness_pct < 70,
+    (entry) => entry.effectiveness_pct != null && entry.effectiveness_pct < input.policy.lowEffectivenessPct,
   ).length;
 
-  if (diasSemJornada >= 2) {
+  if (diasSemJornada >= input.policy.daysWithoutDuty) {
     atenuadores.push({
       codigo: 'DIAS_SEM_JORNADA_NO_PERIODO',
       descricao: `${diasSemJornada} dia(s) sem jornada registrada na quinzena.`,
-      impacto_score: -8,
+      impacto_score: input.policy.impactDaysWithoutDuty,
     });
   }
-  if (input.menorDescansoEntreJornadasMin != null && input.menorDescansoEntreJornadasMin >= 13 * 60) {
+  if (input.menorDescansoEntreJornadasMin != null && input.menorDescansoEntreJornadasMin >= input.policy.longRestMinutes) {
     atenuadores.push({
       codigo: 'REPOUSO_ENTRE_JORNADAS_MAIOR_13H',
       descricao: 'Menor descanso entre jornadas igual ou superior a 13h.',
-      impacto_score: -6,
+      impacto_score: input.policy.impactLongRest,
     });
   }
-  if (input.jornadasPeriodo > 0 && avgDuty <= 6 * 60) {
+  if (input.jornadasPeriodo > 0 && avgDuty <= input.policy.shortAverageDutyMinutes) {
     atenuadores.push({
       codigo: 'JORNADA_MEDIA_CURTA',
       descricao: 'Duty time medio da quinzena em ate 6h por jornada.',
-      impacto_score: -5,
+      impacto_score: input.policy.impactShortAverageDuty,
     });
   }
   if (input.apresentacoesAntes0700 === 0 && input.jornadasPeriodo > 0) {
     atenuadores.push({
       codigo: 'SEM_APRESENTACAO_CEDO',
       descricao: 'Sem apresentacoes antes de 07:00 no periodo analisado.',
-      impacto_score: -3,
+      impacto_score: input.policy.impactNoEarlyPresentation,
     });
   }
   if (input.diasComCheckinPendente === 0 && input.diasComDadoEstimado === 0) {
     atenuadores.push({
       codigo: 'DADOS_COMPLETOS_DO_PERIODO',
       descricao: 'Periodo sem check-in pendente e sem dado estimado no acumulado visivel.',
-      impacto_score: -4,
+      impacto_score: input.policy.impactCompleteData,
     });
   }
 
-  if (input.diasConsecutivosComJornada >= 5) {
+  if (input.diasConsecutivosComJornada >= input.policy.consecutiveCriticalDays) {
     agravantes.push({
       codigo: 'SEQUENCIA_5_DIAS_OU_MAIS',
       descricao: `${input.diasConsecutivosComJornada} dia(s) consecutivos com jornada.`,
-      impacto_score: 14,
+      impacto_score: input.policy.impactConsecutiveCritical,
     });
-  } else if (input.diasConsecutivosComJornada >= 4) {
+  } else if (input.diasConsecutivosComJornada >= input.policy.consecutiveAttentionDays) {
     agravantes.push({
       codigo: 'SEQUENCIA_4_DIAS',
       descricao: 'Quatro dias consecutivos com jornada.',
-      impacto_score: 8,
+      impacto_score: input.policy.impactConsecutiveAttention,
     });
   }
   if (input.diasComCheckinPendente > 0) {
     agravantes.push({
       codigo: 'CHECKIN_PENDENTE_NO_PERIODO',
       descricao: `${input.diasComCheckinPendente} dia(s) com check-in pendente ou ausente.`,
-      impacto_score: 10,
+      impacto_score: input.policy.impactCheckinPending,
     });
   }
   if (input.diasComDadoEstimado > 0) {
     agravantes.push({
       codigo: 'DADO_ESTIMADO_NO_PERIODO',
       descricao: `${input.diasComDadoEstimado} dia(s) com sono, despertar ou jornada estimada/inconsistente.`,
-      impacto_score: 7,
+      impacto_score: input.policy.impactEstimatedData,
     });
   }
   if (input.apresentacoesAntes0600 > 0) {
     agravantes.push({
       codigo: 'APRESENTACAO_ANTES_0600',
       descricao: `${input.apresentacoesAntes0600} apresentacao(oes) antes de 06:00.`,
-      impacto_score: 8,
+      impacto_score: input.policy.impactEarly0600,
     });
-  } else if (input.apresentacoesAntes0700 >= 2) {
+  } else if (input.apresentacoesAntes0700 >= input.policy.recurringEarlyPresentations) {
     agravantes.push({
       codigo: 'APRESENTACOES_CEDO_RECORRENTES',
       descricao: `${input.apresentacoesAntes0700} apresentacao(oes) antes de 07:00.`,
-      impacto_score: 5,
+      impacto_score: input.policy.impactRecurringEarly,
     });
   }
-  if (input.menorDescansoEntreJornadasMin != null && input.menorDescansoEntreJornadasMin < 10 * 60) {
+  if (input.menorDescansoEntreJornadasMin != null && input.menorDescansoEntreJornadasMin < input.policy.shortRestMinutes) {
     agravantes.push({
       codigo: 'REPOUSO_ENTRE_JORNADAS_MENOR_10H',
       descricao: 'Menor descanso entre jornadas abaixo de 10h.',
-      impacto_score: 16,
+      impacto_score: input.policy.impactShortRest,
     });
   }
   if (lowSleepDays > 0) {
     agravantes.push({
       codigo: 'SONO_INSUFICIENTE_NO_PERIODO',
       descricao: `${lowSleepDays} dia(s) com sono informado abaixo de 6h.`,
-      impacto_score: 12,
+      impacto_score: input.policy.impactLowSleep,
     });
   }
   if (highKssDays > 0) {
     agravantes.push({
       codigo: 'KSS_ALTO_NO_PERIODO',
       descricao: `${highKssDays} dia(s) com KSS maior ou igual a 7.`,
-      impacto_score: 12,
+      impacto_score: input.policy.impactHighKss,
     });
   }
   if (lowEffectivenessDays > 0) {
     agravantes.push({
       codigo: 'EFETIVIDADE_BAIXA_NO_PERIODO',
       descricao: `${lowEffectivenessDays} dia(s) com efetividade calculada abaixo de 70%.`,
-      impacto_score: 14,
+      impacto_score: input.policy.impactLowEffectiveness,
     });
   }
-  if (input.rolling168h.dutyMin >= TECHNICAL_DEFAULT_168H_DUTY_LIMIT_MINUTES * 0.8) {
+  if (input.rolling168h.dutyMin >= TECHNICAL_DEFAULT_168H_DUTY_LIMIT_MINUTES * input.policy.rollingDutyPct) {
     agravantes.push({
       codigo: 'DUTY_168H_ELEVADO',
       descricao: 'Duty time acumulado em 168h acima de 80% da referencia tecnica.',
-      impacto_score: 10,
+      impacto_score: input.policy.impactRollingDuty,
     });
   }
   if (input.periodHasCritical) {
     agravantes.push({
       codigo: 'RISCO_DIARIO_CRITICO_NO_PERIODO',
       descricao: 'Ao menos um dia da quinzena foi classificado como critico.',
-      impacto_score: 18,
+      impacto_score: input.policy.impactDailyCritical,
     });
   } else if (input.periodHasAttention) {
     agravantes.push({
       codigo: 'RISCO_DIARIO_ATENCAO_NO_PERIODO',
       descricao: 'Ao menos um dia da quinzena demanda atencao ou esta incompleto.',
-      impacto_score: 7,
+      impacto_score: input.policy.impactDailyAttention,
     });
   }
 
@@ -474,14 +525,15 @@ function resolveStatusFromScore(input: {
   periodHasAttention: boolean;
   diasComCheckinPendente: number;
   diasComDadoEstimado: number;
+  policy: FrmsFortnightPolicy;
 }): FrmsFortnightStatus {
   if (input.fontePeriodo === 'INCOMPLETO') return 'INCOMPLETO';
-  if (input.periodHasCritical || input.score >= 75) return 'CRITICO';
+  if (input.periodHasCritical || input.score >= input.policy.scoreCritical) return 'CRITICO';
   if (
     input.periodHasAttention ||
     input.diasComCheckinPendente > 0 ||
     input.diasComDadoEstimado > 0 ||
-    input.score >= 45
+    input.score >= input.policy.scoreAttention
   ) {
     return 'ATENCAO';
   }
@@ -602,6 +654,7 @@ export function buildFrmsFortnightIndicatorMap(
   const result = new Map<string, FrmsFortnightIndicator>();
   const employeeMap = new Map<number, FrmsFortnightIndicatorItemSeed[]>();
   const today = input.today ?? todayIso();
+  const policy = input.policy ?? LEGACY_FORTNIGHT_POLICY;
 
   for (const item of input.items) {
     if (!employeeMap.has(item.funcionario_id)) {
@@ -677,8 +730,8 @@ export function buildFrmsFortnightIndicatorMap(
         entry.jornada_data_source === 'ESTIMADO' ||
         entry.jornada_data_source === 'INCONSISTENTE',
     ).length;
-    const apresentacoesAntes0600 = scoped.filter((entry) => isTimeBefore(entry.hora_apresentacao, '06:00')).length;
-    const apresentacoesAntes0700 = scoped.filter((entry) => isTimeBefore(entry.hora_apresentacao, '07:00')).length;
+    const apresentacoesAntes0600 = scoped.filter((entry) => parseTimeToMinutes(entry.hora_apresentacao) != null && parseTimeToMinutes(entry.hora_apresentacao)! < policy.earlyPresentation0600Minutes).length;
+    const apresentacoesAntes0700 = scoped.filter((entry) => parseTimeToMinutes(entry.hora_apresentacao) != null && parseTimeToMinutes(entry.hora_apresentacao)! < policy.earlyPresentation0700Minutes).length;
     const diasConsecutivosComJornada = countMaxConsecutiveDays(scoped);
     const menorDescansoEntreJornadasMin = resolveMinRestBetweenJornadas(scoped);
 
@@ -704,7 +757,7 @@ export function buildFrmsFortnightIndicatorMap(
       totalDiasPeriodo: anchor.total_dias_periodo,
       rolling168h,
     });
-    const tendencia = resolveTendencia(scoped, item.data_operacional, diasConsecutivosComJornada);
+    const tendencia = resolveTendencia(scoped, item.data_operacional, diasConsecutivosComJornada, policy);
     const { atenuadores, agravantes } = buildModifiers({
       scoped,
       totalDiasPeriodo: anchor.total_dias_periodo,
@@ -719,13 +772,14 @@ export function buildFrmsFortnightIndicatorMap(
       rolling168h,
       periodHasCritical,
       periodHasAttention,
+      policy,
     });
     const modifierImpact =
       agravantes.reduce((sum, modifier) => sum + modifier.impacto_score, 0) +
       atenuadores.reduce((sum, modifier) => sum + modifier.impacto_score, 0);
-    const tendencyImpact = tendencia === 'CRESCENTE' ? 6 : tendencia === 'REDUZINDO' ? -4 : 0;
+    const tendencyImpact = tendencia === 'CRESCENTE' ? policy.trendIncreasingImpact : tendencia === 'REDUZINDO' ? policy.trendReducingImpact : 0;
     const scoreAcumulado = round1(
-      clamp(limitReference.pct_atingido * 0.65 + modifierImpact + tendencyImpact, 0, 100),
+      clamp(limitReference.pct_atingido * policy.scoreLimitWeight + modifierImpact + tendencyImpact, 0, 100),
     );
 
     const limitationNotes: string[] = [
@@ -753,6 +807,7 @@ export function buildFrmsFortnightIndicatorMap(
       periodHasAttention,
       diasComCheckinPendente,
       diasComDadoEstimado,
+      policy,
     });
     const naturezaDado = resolveNaturezaDado(item, periodFullyCoveredByQuery, today);
     const decisao = resolveDecisaoFromStatus(statusQuinzena, naturezaDado);
@@ -769,8 +824,8 @@ export function buildFrmsFortnightIndicatorMap(
           ? 'ESTIMADO'
           : 'COMPLETO';
 
-    if (scoreAcumulado >= 75) alertasQuinzena.push('SCORE_QUINZENAL_CRITICO');
-    else if (scoreAcumulado >= 45) alertasQuinzena.push('SCORE_QUINZENAL_ATENCAO');
+    if (scoreAcumulado >= policy.scoreCritical) alertasQuinzena.push('SCORE_QUINZENAL_CRITICO');
+    else if (scoreAcumulado >= policy.scoreAttention) alertasQuinzena.push('SCORE_QUINZENAL_ATENCAO');
     for (const modifier of agravantes) {
       if (!alertasQuinzena.includes(modifier.codigo)) alertasQuinzena.push(modifier.codigo);
     }

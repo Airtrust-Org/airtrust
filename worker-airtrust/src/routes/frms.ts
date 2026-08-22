@@ -28,7 +28,7 @@ import {
 import { enviarEmailAlert } from '../cron/notificacoes';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { getFrmsOperationalState } from '../shared/getTripulanteOperacional';
-import { FRMS_STATUS, NIVEIS_ALERTA, type FrmsJornada, type LimitesMap } from '../lib/frms/types';
+import { FRMS_STATUS, NIVEIS_ALERTA, LIMITES_DEFAULT, type FrmsJornada, type LimitesMap } from '../lib/frms/types';
 import {
   validarEscalaFutura,
   calcDuracaoJornada,
@@ -68,6 +68,7 @@ import {
   reprocessarTripulanteCompleto,
   listarTripulantesAtivos,
 } from '../lib/frms/db-service';
+import { resolveFrmsOperationalContext, asOperationalLimitesMap } from '../lib/frms/parameter-governance';
 import { getFrmsFortnightCoverage, FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS } from '../lib/frms/fortnight-coverage';
 import {
   applyFortnightBaseMaterialization,
@@ -387,7 +388,7 @@ function parseEffectivenessComponents(raw: string | null | undefined): Record<st
       Object.entries(parsed).filter(
         ([, value]) => typeof value === 'number' && Number.isFinite(value),
       ),
-    ) as unknown as Record<string, number>;
+    ) as Record<string, number>;
   } catch {
     return {};
   }
@@ -1750,13 +1751,18 @@ frmsRoutes.post(
     const denied = await assertTripulanteEmpresa(c, String(parsed.data.tripulante_id));
     if (denied) return denied;
 
-    const limites = await carregarLimites(c.env.DB);
     const userId = await resolveFuncionarioId(c);
     const empresaId = getEmpresaIdSafe(c);
 
+    // salvarJornada resolves empresaId (via the tripulante's own record when
+    // absent from context) and the governed operational context internally.
     let result;
     try {
-      result = await salvarJornada(c.env.DB, { ...parsed.data, registrado_por: userId }, limites);
+      result = await salvarJornada(
+        c.env.DB,
+        { ...parsed.data, registrado_por: userId },
+        LIMITES_DEFAULT,
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('UNIQUE') || msg.includes('unique')) {
@@ -1887,8 +1893,8 @@ frmsRoutes.put(
       if (deniedTrip) return deniedTrip;
     }
 
-    const limites = await carregarLimites(c.env.DB);
-    const result = await atualizarJornada(c.env.DB, id, parsed.data, limites);
+    // atualizarJornada's limites parameter is inert (it self-resolves governed context internally).
+    const result = await atualizarJornada(c.env.DB, id, parsed.data, LIMITES_DEFAULT);
 
     try {
       const jornada = await c.env.DB.prepare(
@@ -2001,13 +2007,13 @@ frmsRoutes.patch(
       .bind(parsed.data.horaDormiu, jornadaId)
       .run();
 
-    const limites = await carregarLimites(c.env.DB);
+    // recalcularPipeline's limites parameter is inert (self-resolves governed context).
     const jornadaAtualizada = {
       ...(jornada as Record<string, unknown>),
       hora_dormiu: parsed.data.horaDormiu,
     };
 
-    const result = await recalcularPipeline(c.env.DB, jornadaAtualizada as never, limites);
+    const result = await recalcularPipeline(c.env.DB, jornadaAtualizada as never, LIMITES_DEFAULT);
 
     const fatorizacao = await c.env.DB.prepare(
       `SELECT ${FRMS_FATORIZACAO_SELECT_COLUMNS}
@@ -2083,9 +2089,9 @@ frmsRoutes.delete(
       return c.json({ success: true, deleted: 0, message: 'Nenhuma jornada encontrada no mês' });
     }
 
-    const limites = await carregarLimites(c.env.DB);
+    // deletarJornada's limites parameter is inert (recalcularPipeline self-resolves governed context per jornada).
     for (const row of rows.results) {
-      await deletarJornada(c.env.DB, String(row.id), limites);
+      await deletarJornada(c.env.DB, String(row.id), LIMITES_DEFAULT);
     }
 
     return c.json({ success: true, deleted: rows.results.length });
@@ -2103,9 +2109,9 @@ frmsRoutes.delete(
     const denied = await assertJornadaEmpresa(c, id);
     if (denied) return denied;
 
-    const limites = await carregarLimites(c.env.DB);
+    // deletarJornada's limites parameter is inert (recalcularPipeline self-resolves governed context per jornada).
     const empresaId = getEmpresaIdSafe(c);
-    await deletarJornada(c.env.DB, id, limites);
+    await deletarJornada(c.env.DB, id, LIMITES_DEFAULT);
     if (empresaId) {
       await syncHorasVooFromFrmsJornada(c.env.DB, Number(id), empresaId);
     }
@@ -2167,9 +2173,16 @@ frmsRoutes.get(
     const tripulanteId = c.req.param('tripulante_id') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
 
     const mes = c.req.query('mes') ?? undefined;
-    const acumulo = await buscarAcumuloTripulante(c.env.DB, tripulanteId, mes);
+    const acumulo = await buscarAcumuloTripulante(c.env.DB, tripulanteId, empresaId, mes);
     return c.json({ success: true, data: acumulo });
   }),
 );
@@ -2291,8 +2304,8 @@ frmsRoutes.post(
 
     const operationId = crypto.randomUUID();
     const startedAt = Date.now();
-    const limites = await carregarLimites(c.env.DB);
-    const count = await reprocessarTripulanteCompleto(c.env.DB, tripulanteId, limites);
+    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
+    const count = await reprocessarTripulanteCompleto(c.env.DB, tripulanteId, LIMITES_DEFAULT);
     await recordMaintenanceAudit(c, {
       action: 'FRMS_REPROCESS_TRIPULANTE',
       module: 'frms',
@@ -2607,13 +2620,24 @@ frmsRoutes.get(
       traceLimitations.push('Registro marcado como legado pré-C2; considerar reprocessamento histórico em fase separada.');
     }
 
-    const limites = await carregarLimites(c.env.DB);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
+    const operationalContext = await resolveFrmsOperationalContext(c.env.DB, {
+      empresaId,
+      referenceAt: data,
+      funcionarioId: Number(tripulanteId),
+    });
+    const limites = operationalContext.parameters;
     const diasCriticosConsecutivos = await countDiasCriticosConsecutivos(
       c.env,
       tripulanteId,
       empresaId,
       data,
-      limites as unknown as Record<string, number>,
+      limites,
     );
     const explanation = await buildFrmsDayExplanation(
       c.env,
@@ -2621,7 +2645,7 @@ frmsRoutes.get(
         ...row,
         dias_criticos_consecutivos: diasCriticosConsecutivos,
       },
-      limites as unknown as Record<string, number>,
+      limites,
       {
         dataSource: sourceByCheckin.dataSource,
         confidence: sourceByCheckin.confidence,
@@ -2708,7 +2732,18 @@ frmsRoutes.get(
     }
 
     const empresaId = getEmpresaIdSafe(c);
-    const limites = (await carregarLimites(c.env.DB)) as unknown as Record<string, number>;
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
+    const operationalContext = await resolveFrmsOperationalContext(c.env.DB, {
+      empresaId,
+      referenceAt: dataB > dataA ? dataB : dataA,
+      funcionarioId: Number(tripulanteId),
+    });
+    const limites = operationalContext.parameters;
 
     const fetchDay = async (data: string) => {
       const row = await c.env.DB.prepare(
@@ -3089,7 +3124,18 @@ frmsRoutes.post(
       );
     }
 
-    const limites = (await carregarLimites(c.env.DB)) as unknown as Record<string, number>;
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
+    const operationalContext = await resolveFrmsOperationalContext(c.env.DB, {
+      empresaId,
+      referenceAt: data,
+      funcionarioId: Number(tripulanteId),
+    });
+    const limites = operationalContext.parameters;
     const diasCriticosConsecutivos = await countDiasCriticosConsecutivos(
       c.env,
       tripulanteId,
@@ -3266,6 +3312,12 @@ frmsRoutes.get(
     const periodo = Math.min(Math.max(Number(c.req.query('periodo') ?? '30'), 7), 365);
     const quinzenaParam = c.req.query('quinzena') ?? undefined;
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
     if (mes && !/^\d{4}-\d{2}$/.test(mes)) {
       return c.json(
         {
@@ -3656,9 +3708,9 @@ frmsRoutes.post(
     }
     await auditFrms(c, 'frms_escala', 'INSERT', escala?.id || 0, { depois: parsed.data });
     const tripId = String(parsed.data.tripulante_id);
-    const limitesEscalaPost = await carregarLimites(c.env.DB);
+    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
     c.executionCtx.waitUntil(
-      reprocessarTripulanteCompleto(c.env.DB, Number(tripId), limitesEscalaPost),
+      reprocessarTripulanteCompleto(c.env.DB, Number(tripId), LIMITES_DEFAULT),
     );
     return c.json({ success: true, data: escala }, 201);
   }),
@@ -3706,9 +3758,9 @@ frmsRoutes.put(
 
     const escala = await atualizarEscala(c.env.DB, id, parsed.data);
     await auditFrms(c, 'frms_escala', 'UPDATE', id, { depois: parsed.data });
-    const limitesEscalaPut = await carregarLimites(c.env.DB);
+    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
     c.executionCtx.waitUntil(
-      reprocessarTripulanteCompleto(c.env.DB, Number(escala.tripulante_id), limitesEscalaPut),
+      reprocessarTripulanteCompleto(c.env.DB, Number(escala.tripulante_id), LIMITES_DEFAULT),
     );
     return c.json({ success: true, data: escala });
   }),
@@ -3738,9 +3790,9 @@ frmsRoutes.delete(
 
     await deletarEscala(c.env.DB, id);
     await auditFrms(c, 'frms_escala', 'DELETE', id);
-    const limitesEscalaDel = await carregarLimites(c.env.DB);
+    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
     c.executionCtx.waitUntil(
-      reprocessarTripulanteCompleto(c.env.DB, Number(escalaDel.tripulante_id), limitesEscalaDel),
+      reprocessarTripulanteCompleto(c.env.DB, Number(escalaDel.tripulante_id), LIMITES_DEFAULT),
     );
     return c.json({ success: true });
   }),
@@ -3772,14 +3824,14 @@ frmsRoutes.post(
       if (denied) return denied;
     }
 
-    const limites = await carregarLimites(c.env.DB);
+    // importarApus resolves governed context per row internally; this param is inert.
     const userId = await resolveFuncionarioId(c);
     const items = parsed.data.map((j) => ({
       ...j,
       registrado_por: userId,
       origem: 'APUS' as const,
     }));
-    const result = await importarApus(c.env.DB, items, limites);
+    const result = await importarApus(c.env.DB, items, LIMITES_DEFAULT);
     return c.json({ success: true, data: result });
   }),
 );
@@ -3807,9 +3859,9 @@ frmsRoutes.post(
     const denied = await assertTripulanteEmpresa(c, String(parsed.data.tripulante_id));
     if (denied) return denied;
 
-    const limites = await carregarLimites(c.env.DB);
+    // importarSimulador -> salvarJornada self-resolves governed context; this param is inert.
     const userId = await resolveFuncionarioId(c);
-    const result = await importarSimulador(c.env.DB, parsed.data, limites, userId);
+    const result = await importarSimulador(c.env.DB, parsed.data, LIMITES_DEFAULT, userId);
     return c.json({ success: true, data: result }, 201);
   }),
 );
@@ -3855,7 +3907,19 @@ frmsRoutes.post(
     const denied = await assertTripulanteEmpresa(c, String(parsed.data.tripulante_id));
     if (denied) return denied;
 
-    const limites = await carregarLimites(c.env.DB);
+    const empresaIdEscala = getEmpresaIdSafe(c);
+    if (!empresaIdEscala) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
+    const operationalContextEscala = await resolveFrmsOperationalContext(c.env.DB, {
+      empresaId: empresaIdEscala,
+      referenceAt: new Date().toISOString().slice(0, 10),
+      funcionarioId: Number(parsed.data.tripulante_id),
+    });
+    const limites = asOperationalLimitesMap(operationalContextEscala.parameters);
 
     // Buscar histórico existente do tripulante (365 dias)
     const dataInicio = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);

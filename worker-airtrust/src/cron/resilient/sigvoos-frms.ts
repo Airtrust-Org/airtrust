@@ -1,6 +1,6 @@
 import type { Env } from '../../types';
 import { enviarEmailAlert } from '../notificacoes';
-import { carregarLimites } from '../../lib/frms/db-service-config';
+import { LIMITES_DEFAULT } from '../../lib/frms/types';
 import { reprocessarTripulanteCompleto } from '../../lib/frms/db-service';
 import { fetchControleVoosOperationalRecords } from '../../lib/frms/controle-voos-source';
 import {
@@ -562,7 +562,7 @@ async function runFrmsQueueScope(
         scopeKey,
         limit: FRMS_REPROCESS_BATCH,
       });
-      const limites = items.length > 0 ? await carregarLimites(db) : null;
+      // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
       let processed = 0;
       let failed = 0;
 
@@ -597,7 +597,7 @@ async function runFrmsQueueScope(
             payload.empresa_id,
           );
           if (!tenantValid) throw new Error('FRMS_TRIPULANTE_TENANT_MISMATCH');
-          await reprocessarTripulanteCompleto(db, payload.tripulante_id, limites!, {
+          await reprocessarTripulanteCompleto(db, payload.tripulante_id, LIMITES_DEFAULT, {
             env,
             empresaId: payload.empresa_id,
           });

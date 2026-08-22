@@ -38,3 +38,10 @@ if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
 fi
 
 git status --short --untracked-files=all
+
+echo ""
+echo "=== FRMS governance readiness gate ==="
+# Always runs. Whether the check is required is decided by the SHA's own
+# migration set (see scripts/lib/frms-governance-preflight-contract.mjs), not
+# by an opt-in env var — a governed release can never silently skip this.
+node scripts/frms-governance-preflight.mjs --remote

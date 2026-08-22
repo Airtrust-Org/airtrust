@@ -97,7 +97,7 @@ export async function relatorioCompliance(
 
 export async function relatorioMapaFadiga(
   db: D1Database,
-  empresaId?: number,
+  empresaId: number,
 ): Promise<
   Array<{
     tripulante_id: string;

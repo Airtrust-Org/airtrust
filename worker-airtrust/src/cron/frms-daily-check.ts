@@ -13,11 +13,12 @@
 
 import type { Env } from '../types';
 import {
-  carregarLimites,
   listarTripulantesAtivos,
   recalcularAcumuloRolling,
   despacharNotificacoes,
 } from '../lib/frms/db-service';
+import { resolveFrmsOperationalContext, asOperationalLimitesMap } from '../lib/frms/parameter-governance';
+import type { LimitesMap } from '../lib/frms/types';
 import { processarAlertas } from '../lib/frms/alertas';
 import type { AlertaGerado } from '../lib/frms/alertas';
 import { FRMS_STATUS, type FrmsStatus } from '../lib/frms/types';
@@ -185,7 +186,6 @@ export async function frmsDailyCheck(env: Env): Promise<{
   erros: string[];
 }> {
   const db = env.DB;
-  const limites = await carregarLimites(db);
   const hoje = new Date().toISOString().slice(0, 10);
   const horaSaoPaulo = getSaoPauloHour();
 
@@ -197,6 +197,15 @@ export async function frmsDailyCheck(env: Env): Promise<{
     try {
       // empresa_id vem de funcionarios.empresa_id — fonte autoritativa de tenant
       const tripEmpresaId = trip.empresa_id ?? null;
+      if (!tripEmpresaId) {
+        throw new Error('FRMS_CONTEXT_UNAVAILABLE: tripulante sem empresa_id.');
+      }
+      const operationalContext = await resolveFrmsOperationalContext(db, {
+        empresaId: tripEmpresaId,
+        referenceAt: hoje,
+        funcionarioId: trip.id,
+      });
+      const limites = asOperationalLimitesMap(operationalContext.parameters);
 
       // 1. Recalcular acúmulo rolling
       const acumulo = await recalcularAcumuloRolling(db, trip.id, hoje, limites);

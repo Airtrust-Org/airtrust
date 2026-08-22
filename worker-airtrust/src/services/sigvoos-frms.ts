@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { carregarLimites } from '../lib/frms/db-service-config';
+import { LIMITES_DEFAULT } from '../lib/frms/types';
 import { confirmarImportacaoFira, enrichFiraPreviewLineIntegridade, type FiraImportacaoPreview, type FiraLinhPreview } from '../lib/frms/fira-service';
 import { classifyOperationalCrewRole } from '../lib/frms/operational-crew';
 import {
@@ -2499,7 +2499,8 @@ export async function syncSigvoosForFrms(
       }
     }
 
-    const limites = await carregarLimites(db);
+    // confirmarImportacaoFira -> salvarJornada/atualizarJornada self-resolve governed context; this param is inert.
+    const limites = LIMITES_DEFAULT;
     const importacoes: SigvoosSyncSummary['importacoes'] = [];
     let totalImportados = 0;
     let totalSubstituidos = 0;
@@ -2655,7 +2656,8 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
     throw new Error('SIGVOOS_TENANT_REQUIRED');
   }
 
-  const limites = await carregarLimites(db);
+  // confirmarImportacaoFira -> salvarJornada/atualizarJornada self-resolve governed context; this param is inert.
+  const limites = LIMITES_DEFAULT;
 
   const rows = await db
     .prepare(

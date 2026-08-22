@@ -5,9 +5,11 @@ import {
   type FrmsOperationalSnapshotItem,
   listFrmsOperationalSnapshot,
 } from '../../lib/frms/operational-snapshot';
-import * as configModule from '../../lib/frms/db-service-config';
 import * as frmsConfigModule from '../../lib/frms/frms-config';
 import * as jornadasModule from '../../lib/frms/db-service-jornadas';
+import * as parameterGovernanceModule from '../../lib/frms/parameter-governance';
+import { LEGACY_FORTNIGHT_POLICY } from '../../lib/frms/fortnight-indicator';
+import { LIMITES_DEFAULT } from '../../lib/frms/types';
 
 function createBaseInput(): BuildOperationalSnapshotInput {
   return {
@@ -287,7 +289,18 @@ describe('frms operational snapshot builder', () => {
   });
 
   it('8) snapshot operacional usa fallback de quinzena base quando falta fatorizacao do dia', async () => {
-    vi.spyOn(configModule, 'carregarLimites').mockResolvedValue({} as never);
+    vi.spyOn(parameterGovernanceModule, 'resolveFrmsOperationalContext').mockResolvedValue({
+      empresaId: 77,
+      profileCode: 'LEGACY_GENERAL',
+      regulatoryProfileId: 'profile-1',
+      configRevisionId: 'rev-1',
+      modelVersion: 'FRMS_CONFIG_V1_TEST',
+      effectiveFrom: '2000-01-01',
+      effectiveTo: null,
+      parameters: LIMITES_DEFAULT,
+      fadigaPolicy: {} as never,
+      fortnightPolicy: LEGACY_FORTNIGHT_POLICY,
+    } as never);
     vi.spyOn(frmsConfigModule, 'resolverFrmsConfig').mockReturnValue({
       minutosAntesApresentacao: 90,
     } as never);
@@ -418,5 +431,23 @@ describe('frms operational snapshot builder', () => {
     const result = buildFrmsOperationalSnapshot(input);
 
     expect(getByKey(result.items, '2026-06-01', 13)).toBeUndefined();
+  });
+
+  it('11) fail-closed: sem perfil FRMS vigente para a empresa, listFrmsOperationalSnapshot propaga erro em vez de LIMITES_DEFAULT/LEGACY_FORTNIGHT_POLICY', async () => {
+    vi.spyOn(parameterGovernanceModule, 'resolveFrmsOperationalContext').mockRejectedValue(
+      Object.assign(new Error('Expected exactly one effective FRMS profile assignment for empresa=77.'), {
+        code: 'FRMS_CONTEXT_UNAVAILABLE',
+      }),
+    );
+
+    const db = { prepare: () => ({ bind: () => ({ all: async () => ({ results: [] }) }) }) } as never;
+
+    await expect(
+      listFrmsOperationalSnapshot(db, {
+        empresaId: 77,
+        dataInicio: '2026-06-19',
+        dataFim: '2026-06-19',
+      }),
+    ).rejects.toMatchObject({ code: 'FRMS_CONTEXT_UNAVAILABLE' });
   });
 });

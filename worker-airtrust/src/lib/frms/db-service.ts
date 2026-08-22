@@ -10,6 +10,16 @@ export {
   buscarConfiguracoes,
   atualizarConfiguracao,
   restaurarConfiguracoesPadrao,
+  createRevisionAndRecalcRun,
+  loadFrmsRecalcRun,
+  runGovernedRecalc,
+} from './db-service-config';
+export type {
+  CreateFrmsRevisionInput,
+  FrmsConfigParameter,
+  FrmsConfigRevision,
+  FrmsRecalcRun,
+  ResolvedFrmsParameterSet,
 } from './db-service-config';
 export type { NotificacaoDestinatario } from './db-service-notificacoes';
 export {

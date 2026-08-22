@@ -99,6 +99,10 @@ describe('migration governance', () => {
     const regularPrefixes = files
       .map((file) => /^([0-9]{4})_/.exec(file)?.[1] ?? null)
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
+    // Ratchet raised 2026-08-22: 0464_frms_parameter_governance_recalc.sql
+    // (fix/frms-parameter-governance-recalc-20260821) merged alongside
+    // 0465_lms_scorm_package_quality_gate_v1.sql (already on main) — both
+    // migrations coexist, so the chain's highest regular prefix is 465.
     const expectedLatest = 465;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 

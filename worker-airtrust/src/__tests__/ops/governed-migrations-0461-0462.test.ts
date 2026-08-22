@@ -11,8 +11,6 @@ import {
   assertSequentialOrder,
   evaluate0461,
   evaluate0462,
-// @ts-expect-error The staging governance module is executable ESM shared by
-// shell preflight; its public contract is covered here through real SQLite.
 } from '../../../../scripts/staging/lib/governed-migration-0461-0462-contract.mjs';
 
 const ROOT = join(__dirname, '../../../..');

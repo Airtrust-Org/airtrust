@@ -17,6 +17,84 @@ export interface FadigaScoreConfig {
   peso_sintomas: number;
 }
 
+/** Values are bootstrap compatibility only; governed callers must supply a revision-backed policy. */
+export interface FadigaBusinessPolicy {
+  medicationBonus: number;
+  alcoholBonus: number;
+  woclStartMinute: number;
+  woclEndMinute: number;
+  woclCenterPenalty: number;
+  woclEdgePenalty: number;
+  kssNormLe2: number;
+  kssNormLe4: number;
+  kssNormLe6: number;
+  kssNormEq7: number;
+  kssNormEq8: number;
+  kssNormGe9: number;
+  sleepDurationMissingNorm: number;
+  sleepDurationGe8Norm: number;
+  sleepDurationGe7Norm: number;
+  sleepDurationGe6Norm: number;
+  sleepDurationGe5Norm: number;
+  sleepDurationGe4Norm: number;
+  sleepDurationLt4Norm: number;
+  sleepQualityMissingNorm: number;
+  sleepQualityGe5Norm: number;
+  sleepQualityEq4Norm: number;
+  sleepQualityEq3Norm: number;
+  sleepQualityEq2Norm: number;
+  sleepQualityLt2Norm: number;
+}
+
+export const LEGACY_FADIGA_BUSINESS_POLICY: Readonly<FadigaBusinessPolicy> = Object.freeze({
+  medicationBonus: 8,
+  alcoholBonus: 15,
+  woclStartMinute: 120,
+  woclEndMinute: 360,
+  woclCenterPenalty: 0.3,
+  woclEdgePenalty: 0.15,
+  kssNormLe2: 0, kssNormLe4: 0.15, kssNormLe6: 0.4, kssNormEq7: 0.7, kssNormEq8: 0.85, kssNormGe9: 1,
+  sleepDurationMissingNorm: 0.6, sleepDurationGe8Norm: 0, sleepDurationGe7Norm: 0.15,
+  sleepDurationGe6Norm: 0.35, sleepDurationGe5Norm: 0.6, sleepDurationGe4Norm: 0.8, sleepDurationLt4Norm: 1,
+  sleepQualityMissingNorm: 0.4, sleepQualityGe5Norm: 0, sleepQualityEq4Norm: 0.2,
+  sleepQualityEq3Norm: 0.45, sleepQualityEq2Norm: 0.7, sleepQualityLt2Norm: 1,
+});
+
+export function resolveFadigaBusinessPolicy(values: Readonly<Record<string, number>>): FadigaBusinessPolicy {
+  const required = [
+    'FATIGUE_MEDICATION_BONUS', 'FATIGUE_ALCOHOL_BONUS', 'WOCL_START_MINUTE',
+    'WOCL_END_MINUTE', 'WOCL_CENTER_PENALTY', 'WOCL_EDGE_PENALTY',
+    'KSS_NORM_LE_2', 'KSS_NORM_LE_4', 'KSS_NORM_LE_6', 'KSS_NORM_EQ_7', 'KSS_NORM_EQ_8', 'KSS_NORM_GE_9',
+    'SLEEP_DURATION_MISSING_NORM', 'SLEEP_DURATION_GE_8_NORM', 'SLEEP_DURATION_GE_7_NORM',
+    'SLEEP_DURATION_GE_6_NORM', 'SLEEP_DURATION_GE_5_NORM', 'SLEEP_DURATION_GE_4_NORM', 'SLEEP_DURATION_LT_4_NORM',
+    'SLEEP_QUALITY_MISSING_NORM', 'SLEEP_QUALITY_GE_5_NORM', 'SLEEP_QUALITY_EQ_4_NORM',
+    'SLEEP_QUALITY_EQ_3_NORM', 'SLEEP_QUALITY_EQ_2_NORM', 'SLEEP_QUALITY_LT_2_NORM',
+  ];
+  for (const key of required) {
+    if (!Number.isFinite(values[key])) throw new Error(`FRMS_PARAMETER_REQUIRED_MISSING:${key}`);
+  }
+  if (values.WOCL_END_MINUTE <= values.WOCL_START_MINUTE) {
+    throw new Error('FRMS_PARAMETER_INVALID_VALUE:WOCL window');
+  }
+  return {
+    medicationBonus: values.FATIGUE_MEDICATION_BONUS,
+    alcoholBonus: values.FATIGUE_ALCOHOL_BONUS,
+    woclStartMinute: values.WOCL_START_MINUTE,
+    woclEndMinute: values.WOCL_END_MINUTE,
+    woclCenterPenalty: values.WOCL_CENTER_PENALTY,
+    woclEdgePenalty: values.WOCL_EDGE_PENALTY,
+    kssNormLe2: values.KSS_NORM_LE_2, kssNormLe4: values.KSS_NORM_LE_4, kssNormLe6: values.KSS_NORM_LE_6,
+    kssNormEq7: values.KSS_NORM_EQ_7, kssNormEq8: values.KSS_NORM_EQ_8, kssNormGe9: values.KSS_NORM_GE_9,
+    sleepDurationMissingNorm: values.SLEEP_DURATION_MISSING_NORM, sleepDurationGe8Norm: values.SLEEP_DURATION_GE_8_NORM,
+    sleepDurationGe7Norm: values.SLEEP_DURATION_GE_7_NORM, sleepDurationGe6Norm: values.SLEEP_DURATION_GE_6_NORM,
+    sleepDurationGe5Norm: values.SLEEP_DURATION_GE_5_NORM, sleepDurationGe4Norm: values.SLEEP_DURATION_GE_4_NORM,
+    sleepDurationLt4Norm: values.SLEEP_DURATION_LT_4_NORM,
+    sleepQualityMissingNorm: values.SLEEP_QUALITY_MISSING_NORM, sleepQualityGe5Norm: values.SLEEP_QUALITY_GE_5_NORM,
+    sleepQualityEq4Norm: values.SLEEP_QUALITY_EQ_4_NORM, sleepQualityEq3Norm: values.SLEEP_QUALITY_EQ_3_NORM,
+    sleepQualityEq2Norm: values.SLEEP_QUALITY_EQ_2_NORM, sleepQualityLt2Norm: values.SLEEP_QUALITY_LT_2_NORM,
+  };
+}
+
 export interface FadigaScoreResult {
   score_fadiga: number;
   nivel_fadiga: 'VERDE' | 'AMARELO' | 'LARANJA' | 'VERMELHO';
@@ -61,37 +139,37 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function normalizeKss(kssScore: number): number {
-  if (kssScore <= 2) return 0;
-  if (kssScore <= 4) return 0.15;
-  if (kssScore <= 6) return 0.4;
-  if (kssScore === 7) return 0.7;
-  if (kssScore === 8) return 0.85;
-  return 1;
+function normalizeKss(kssScore: number, policy: FadigaBusinessPolicy): number {
+  if (kssScore <= 2) return policy.kssNormLe2;
+  if (kssScore <= 4) return policy.kssNormLe4;
+  if (kssScore <= 6) return policy.kssNormLe6;
+  if (kssScore === 7) return policy.kssNormEq7;
+  if (kssScore === 8) return policy.kssNormEq8;
+  return policy.kssNormGe9;
 }
 
 /**
  * Ausência de dado não equivale a sono adequado. O valor conservador de 0,6 é
  * uma regra empresarial de triagem, não um requisito numérico do RBAC 117.
  */
-function normalizeSonoDuracao(horasSono: number | null): number {
-  if (horasSono === null || Number.isNaN(horasSono)) return 0.6;
-  if (horasSono >= 8) return 0;
-  if (horasSono >= 7) return 0.15;
-  if (horasSono >= 6) return 0.35;
-  if (horasSono >= 5) return 0.6;
-  if (horasSono >= 4) return 0.8;
-  return 1;
+function normalizeSonoDuracao(horasSono: number | null, policy: FadigaBusinessPolicy): number {
+  if (horasSono === null || Number.isNaN(horasSono)) return policy.sleepDurationMissingNorm;
+  if (horasSono >= 8) return policy.sleepDurationGe8Norm;
+  if (horasSono >= 7) return policy.sleepDurationGe7Norm;
+  if (horasSono >= 6) return policy.sleepDurationGe6Norm;
+  if (horasSono >= 5) return policy.sleepDurationGe5Norm;
+  if (horasSono >= 4) return policy.sleepDurationGe4Norm;
+  return policy.sleepDurationLt4Norm;
 }
 
 /** Dado de qualidade ausente também é tratado como desconhecido, não como ótimo. */
-function normalizeQualidadeSono(qualidadeSono: number | null): number {
-  if (qualidadeSono === null || Number.isNaN(qualidadeSono)) return 0.4;
-  if (qualidadeSono >= 5) return 0;
-  if (qualidadeSono === 4) return 0.2;
-  if (qualidadeSono === 3) return 0.45;
-  if (qualidadeSono === 2) return 0.7;
-  return 1;
+function normalizeQualidadeSono(qualidadeSono: number | null, policy: FadigaBusinessPolicy): number {
+  if (qualidadeSono === null || Number.isNaN(qualidadeSono)) return policy.sleepQualityMissingNorm;
+  if (qualidadeSono >= 5) return policy.sleepQualityGe5Norm;
+  if (qualidadeSono === 4) return policy.sleepQualityEq4Norm;
+  if (qualidadeSono === 3) return policy.sleepQualityEq3Norm;
+  if (qualidadeSono === 2) return policy.sleepQualityEq2Norm;
+  return policy.sleepQualityLt2Norm;
 }
 
 function normalizeSintomas(sintomasJson: Record<string, number> | null): number {
@@ -105,10 +183,11 @@ function normalizeSintomas(sintomasJson: Record<string, number> | null): number 
 export function calcularScoreFadiga(
   input: FadigaScoreInput,
   config: FadigaScoreConfig,
+  policy: FadigaBusinessPolicy = LEGACY_FADIGA_BUSINESS_POLICY,
 ): FadigaScoreResult {
-  const kssNorm = normalizeKss(input.kss_score);
-  const sonoNorm = normalizeSonoDuracao(input.horas_sono);
-  const qualidadeNorm = normalizeQualidadeSono(input.qualidade_sono);
+  const kssNorm = normalizeKss(input.kss_score, policy);
+  const sonoNorm = normalizeSonoDuracao(input.horas_sono, policy);
+  const qualidadeNorm = normalizeQualidadeSono(input.qualidade_sono, policy);
   const sintomasNorm = normalizeSintomas(input.sintomas_json);
 
   const base =
@@ -120,8 +199,8 @@ export function calcularScoreFadiga(
 
   // Penalidades empresariais provisórias de triagem, ainda não calibradas como
   // modelo biomatemático ou fórmula regulatória.
-  const bonusMeds = input.meds_ult_12h === true || input.meds_ult_12h === 1 ? 8 : 0;
-  const bonusAlcool = input.alcool_ult_12h === true || input.alcool_ult_12h === 1 ? 15 : 0;
+  const bonusMeds = input.meds_ult_12h === true || input.meds_ult_12h === 1 ? policy.medicationBonus : 0;
+  const bonusAlcool = input.alcool_ult_12h === true || input.alcool_ult_12h === 1 ? policy.alcoholBonus : 0;
   let score = base + bonusMeds + bonusAlcool;
 
   if (input.apto === 0) score = Math.max(score, config.threshold_vermelho);
@@ -202,20 +281,28 @@ function normalizeMinuteOfDay(value: number): number {
   return ((value % 1440) + 1440) % 1440;
 }
 
-export function isWithinWOCL(minutoDoDia: number): boolean {
+export function isWithinWOCL(
+  minutoDoDia: number,
+  policy: Pick<FadigaBusinessPolicy, 'woclStartMinute' | 'woclEndMinute'> = LEGACY_FADIGA_BUSINESS_POLICY,
+): boolean {
   const m = normalizeMinuteOfDay(minutoDoDia);
-  return m >= 120 && m < 360;
+  return m >= policy.woclStartMinute && m < policy.woclEndMinute;
 }
 
 /**
  * Penalidade empresarial contínua dentro da WOCL fisiológica de 02:00–06:00.
  * A janela é apoiada pela IS 117-001C; a função numérica não é definida pela norma.
  */
-export function calcularPenalidadeWOCL(tAcordouMin: number): number {
+export function calcularPenalidadeWOCL(
+  tAcordouMin: number,
+  policy: Pick<FadigaBusinessPolicy, 'woclStartMinute' | 'woclEndMinute' | 'woclCenterPenalty' | 'woclEdgePenalty'> = LEGACY_FADIGA_BUSINESS_POLICY,
+): number {
   const m = normalizeMinuteOfDay(tAcordouMin);
-  if (m < 120 || m >= 360) return 0;
-  const distanciaCentro = Math.abs(m - 240) / 120;
-  return -(0.3 - Math.min(1, distanciaCentro) * 0.15);
+  if (m < policy.woclStartMinute || m >= policy.woclEndMinute) return 0;
+  const halfWindow = (policy.woclEndMinute - policy.woclStartMinute) / 2;
+  const center = policy.woclStartMinute + halfWindow;
+  const distanciaCentro = Math.abs(m - center) / halfWindow;
+  return -(policy.woclCenterPenalty - Math.min(1, distanciaCentro) * policy.woclEdgePenalty);
 }
 
 /**

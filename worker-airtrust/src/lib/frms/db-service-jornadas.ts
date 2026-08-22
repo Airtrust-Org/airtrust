@@ -2,7 +2,7 @@
  * FRMS — CRUD de jornadas, pipeline de cálculo e reprocessamento (D1)
  */
 
-import type { FrmsJornada, LimitesMap, FrmsFatorizacao } from './types';
+import { LIMITES_DEFAULT, type FrmsJornada, type LimitesMap, type FrmsFatorizacao } from './types';
 import {
   calcFatorizacao,
   calcEffectiveness,
@@ -18,7 +18,7 @@ import type { AlertaGerado } from './alertas';
 import { calcularLinhaFadigaAcumulada } from './fadiga-acumulada-legal';
 import { generateId, now, logAuditoria, buscarHistoricoJornadas } from './db-service-shared';
 import { despacharNotificacoes } from './db-service-notificacoes';
-import { carregarLimites } from './db-service-config';
+import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import { resolveFrmsSourceStatus, shouldUseForOperationalFrms } from './frms-source-policy';
 import { resolveFuncionarioActiveFortnightForDate } from '../escalas/active-fortnight';
 import {
@@ -169,6 +169,7 @@ export async function recalcularPipeline(
   db: D1Database,
   jornada: FrmsJornada,
   limites: LimitesMap,
+  provenance?: { configRevisionId: string; modelVersion: string },
 ): Promise<{
   fatorizacao: FatorizacaoRow;
   acumulo: AcumuloRollingResult;
@@ -216,6 +217,17 @@ export async function recalcularPipeline(
     };
     return { fatorizacao, acumulo: acumuloVazio, alertas: [], bloqueado: false };
   }
+
+  const operationalContext = await resolveFrmsOperationalContext(db, {
+    empresaId: await resolveTripulanteEmpresaId(db, jornada.tripulante_id),
+    referenceAt: jornada.data,
+    jornadaId: jornada.id,
+  });
+  limites = asOperationalLimitesMap(operationalContext.parameters);
+  provenance = {
+    configRevisionId: operationalContext.configRevisionId,
+    modelVersion: operationalContext.modelVersion,
+  };
 
   // Garantir consistência pós-regra de almoço: duração sempre recalculada pelos horários
   const duracaoRecalculada = calcDuracaoJornada(jornada);
@@ -331,8 +343,9 @@ export async function recalcularPipeline(
         hora_despertar_estimada, hora_inicio_sono_estimado, duracao_sono_efetiva_min,
         tempo_abaixo_limiar_min,
         dia_periodo_embarcado, total_dias_periodo,
+        config_revision_id, model_version, recalc_state,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       fatId,
@@ -362,6 +375,9 @@ export async function recalcularPipeline(
       effectResult.tempo_abaixo_limiar_pct,
       effectResult.dia_periodo_embarcado ?? null,
       effectResult.total_dias_periodo ?? null,
+      provenance?.configRevisionId ?? null,
+      provenance?.modelVersion ?? null,
+      provenance ? 'CURRENT' : 'CURRENT',
       timestamp,
       timestamp,
     )
@@ -650,11 +666,22 @@ export async function persistirAlerta(db: D1Database, alerta: AlertaGerado): Pro
 export async function salvarJornada(
   db: D1Database,
   input: SalvarJornadaInput,
-  limites: LimitesMap,
+  legacyLimites: LimitesMap,
 ): Promise<SalvarJornadaResult> {
   const id = generateId();
   const timestamp = now();
   const empresaId = await resolveTripulanteEmpresaId(db, input.tripulante_id, input.empresa_id);
+
+  // `legacyLimites` is accepted for call-site compatibility but never used:
+  // pre-pipeline validation (validarRepousoPlataforma) and recalcularPipeline
+  // both require the governed context, resolved fresh here per tenant/date.
+  const operationalContext = await resolveFrmsOperationalContext(db, {
+    empresaId,
+    referenceAt: input.data,
+    funcionarioId: Number(input.tripulante_id),
+  });
+  const limites = asOperationalLimitesMap(operationalContext.parameters);
+  void legacyLimites;
 
   // Calcular duração da jornada
   const duracaoMinutos =
@@ -773,8 +800,9 @@ export async function atualizarJornada(
   db: D1Database,
   id: string,
   input: Partial<SalvarJornadaInput>,
-  limites: LimitesMap,
+  legacyLimites: LimitesMap,
 ): Promise<SalvarJornadaResult> {
+  void legacyLimites;
   const existing = await db
     .prepare(
       `SELECT fj.* FROM frms_jornada fj
@@ -807,6 +835,14 @@ export async function atualizarJornada(
   if (merged.hora_apresentacao && merged.hora_termino) {
     merged.duracao_jornada_minutos = calcDuracaoJornada(merged as FrmsJornada);
   }
+
+  const operationalContext = await resolveFrmsOperationalContext(db, {
+    empresaId,
+    referenceAt: merged.data ?? existing.data,
+    funcionarioId: Number(merged.tripulante_id ?? existing.tripulante_id),
+    jornadaId: id,
+  });
+  const limites = asOperationalLimitesMap(operationalContext.parameters);
 
   // Revalidar repouso plataforma
   merged.repouso_plataforma_valido = validarRepousoPlataforma(
@@ -1151,8 +1187,9 @@ export async function buscarJornadas(
 export async function importarApus(
   db: D1Database,
   jornadas: SalvarJornadaInput[],
-  limites: LimitesMap,
+  legacyLimites: LimitesMap,
 ): Promise<{ importadas: number; alertas: AlertaGerado[]; erros: string[] }> {
+  void legacyLimites;
   const alertasAll: AlertaGerado[] = [];
   const erros: string[] = [];
 
@@ -1171,6 +1208,14 @@ export async function importarApus(
         input.hora_apresentacao && input.hora_termino
           ? calcDuracaoMinutos(input.hora_apresentacao, input.hora_termino)
           : 0;
+      // Each row can belong to a different tripulante/tenant/date — resolve the
+      // governed context per row rather than sharing one snapshot across the batch.
+      const operationalContext = await resolveFrmsOperationalContext(db, {
+        empresaId,
+        referenceAt: input.data,
+        funcionarioId: Number(input.tripulante_id),
+      });
+      const limites = asOperationalLimitesMap(operationalContext.parameters);
       const repousoValido = validarRepousoPlataforma(
         input.repouso_plataforma_inicio ?? null,
         input.repouso_plataforma_fim ?? null,
@@ -1274,7 +1319,7 @@ export async function importarApus(
     const sorted = tripJornadas.sort((a, b) => a.data.localeCompare(b.data));
     for (const jornada of sorted) {
       try {
-        const result = await recalcularPipeline(db, jornada, limites);
+        const result = await recalcularPipeline(db, jornada, legacyLimites);
         alertasAll.push(...result.alertas);
         importadas++;
       } catch (e) {
@@ -1400,13 +1445,13 @@ export async function reprocessarTodosTripulantes(
   jornadas: number;
   erros: number;
 }> {
-  const limites = await carregarLimites(db);
+  // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
   const tripulantes = await listarTripulantesAtivos(db, empresaId);
   let totalJornadas = 0;
   let erros = 0;
   for (const trip of tripulantes) {
     try {
-      const count = await reprocessarTripulanteCompleto(db, trip.id, limites);
+      const count = await reprocessarTripulanteCompleto(db, trip.id, LIMITES_DEFAULT);
       totalJornadas += count;
     } catch (e) {
       console.error(`[FRMS] Erro ao reprocessar tripulante ${trip.id}:`, (e as Error).message);
