@@ -783,7 +783,15 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
   if (!isIsoDate(inicio) || !isIsoDate(fim) || inicio > fim) {
     return c.json({ success: false, error: 'Intervalo de vencimento inválido' }, 400);
   }
-  let margemDias: number | null = null;
+  const empresaConfig = await c.env.DB
+    .prepare('SELECT planejamento_simulador_antecedencia_dias FROM empresas_config WHERE empresa_id = ?')
+    .bind(empresaId)
+    .first<{ planejamento_simulador_antecedencia_dias: number | null }>()
+    .catch(() => null);
+  
+  const defaultMargem = empresaConfig?.planejamento_simulador_antecedencia_dias ?? 90;
+
+  let margemDias: number | null = defaultMargem;
   if (body?.margem_dias !== undefined && body?.margem_dias !== null && body?.margem_dias !== '') {
     margemDias = Number(body.margem_dias);
     if (!Number.isInteger(margemDias) || margemDias < 0 || margemDias > 365) {
@@ -1480,6 +1488,61 @@ app.patch('/:id', requireRole('admin', 'manager'), async (c) => {
   });
 
   return c.json({ success: true, data: after, conflitos: conflicts });
+});
+
+
+app.post('/:id/aprovar', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const id = Number(c.req.param('id'));
+  const userId = contextUserId(c);
+
+  const result = await executeSimulatorPlanningApproval({
+    db,
+    empresaId,
+    planningId: id,
+    action: 'APPROVE',
+    userId,
+    userName: String(c.get('userName' as never)) || String(userId),
+  });
+
+  return c.json(result, result.success ? 200 : 400);
+});
+
+app.post('/:id/devolver', requireRole('admin', 'manager'), zValidator('json', z.object({ observacoes: z.string().min(1) })), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const id = Number(c.req.param('id'));
+  const userId = contextUserId(c);
+  const body = c.req.valid('json');
+
+  const result = await executeSimulatorPlanningApproval({
+    db,
+    empresaId,
+    planningId: id,
+    action: 'RETURN',
+    userId,
+    userName: String(c.get('userName' as never)) || String(userId),
+    observations: body.observacoes,
+  });
+
+  return c.json(result, result.success ? 200 : 400);
+});
+
+app.post('/:id/materializar', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const id = Number(c.req.param('id'));
+  const userId = contextUserId(c);
+
+  const result = await materializeSimulatorPlanning({
+    db,
+    empresaId,
+    planningId: id,
+    userId,
+  });
+
+  return c.json(result, result.success ? 200 : 400);
 });
 
 app.get('/:id/auditoria', async (c) => {
