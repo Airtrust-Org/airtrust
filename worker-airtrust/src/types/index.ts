@@ -101,6 +101,9 @@ export interface Env {
   // Cloudflare Browser Rendering API (para conversão HTML→PDF)
   CF_ACCOUNT_ID?: string;
   CF_BROWSER_API_TOKEN?: string;
+  // Browser Run binding. It is intentionally separate from the PDF API token:
+  // SCORM conformance launches a clean Chromium with no AirTrust credentials.
+  SCORM_BROWSER?: unknown;
 
   // Maintenance routes secret (wrangler secret put MAINTENANCE_SECRET)
   MAINTENANCE_SECRET?: string;

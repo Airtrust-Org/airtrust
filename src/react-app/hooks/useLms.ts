@@ -939,6 +939,50 @@ export function useUploadScorm(cursoId: number, skipPurge = false) {
   });
 }
 
+export type ScormPackageVersionRow = {
+  packageId: string;
+  status: string;
+  packageSha256?: string;
+  publishable?: boolean;
+  structural?: { status?: string };
+  runtime?: { status?: string; errors?: string[] };
+  conformance?: { status?: string };
+  completionManifest?: { errors?: string[] };
+};
+
+/** Candidate versions are intentionally separate from the active course. */
+export function useScormPackageVersions(cursoId: number, enabled = true) {
+  return useQuery({
+    queryKey: ['lms', 'cursos', cursoId, 'scorm-package-versions'],
+    queryFn: () => lmsRequest<{ data: ScormPackageVersionRow[] }>(`/cursos/${cursoId}/scorm-package-versions`),
+    enabled: enabled && cursoId > 0,
+  });
+}
+
+export function useActivateScormPackageVersion(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (packageId: string) => lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${packageId}/activate`, { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });
+      qc.invalidateQueries({ queryKey: ['lms', 'cursos', cursoId, 'scorm-package-versions'] });
+    },
+  });
+}
+
+export function useRunScormPackageConformance(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (packageId: string) =>
+      lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${packageId}/conformance`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lms', 'cursos', cursoId, 'scorm-package-versions'] });
+    },
+  });
+}
+
 // ── Stats para admin (calculadas client-side a partir das queries) ─────────────
 
 export function useLmsAdminStats() {

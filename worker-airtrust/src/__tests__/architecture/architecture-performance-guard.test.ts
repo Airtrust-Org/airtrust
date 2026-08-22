@@ -68,10 +68,11 @@ const LARGE_FILE_LINE_CAPS = {
   // routine commit exhausted that shared quota during long sessions,
   // permanently breaking all further saves with "Failed to fetch" (observed
   // live on curso PT6C-67C, matricula 390).
-  // Cap raised 2026-08-22: counted 2677. Pre-existing drift unrelated to
-  // fix/frms-parameter-governance-recalc — this file is untouched by that
-  // branch; the cap was already stale before this MR, just masked because
-  // this test throws at the first offender in iteration order.
+  // Cap raised 2026-08-22: counted 2677 — SCORM Package Quality Gate V1 added
+  // candidate-version listing, activation and Browser Run conformance routes.
+  // (Independently also the value fix/frms-parameter-governance-recalc found
+  // as pre-existing drift on this file, which that branch never touches —
+  // both branches agree on 2677, this is the same number for two reasons.)
   'routes/lms-assets.ts': 2677,
   // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
   // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,

@@ -19,6 +19,12 @@ import { requireRole } from '../middleware/rbac';
 import type { Env } from '../types';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { requireOperacoesCurso } from './lms-cursos-rbac';
+import {
+  activateScormPackageVersion,
+  createScormPackageCandidate,
+  listScormPackageVersions,
+  runScormPackageConformance,
+} from '../lib/lms/lms-scorm-package-version-service';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -157,6 +163,18 @@ async function handleDirectPackageUpload(
   }
 
   const { bytes, arquivoNome } = await readPackageRequest(c, tipoConteudo);
+  if (tipoConteudo === 'scorm') {
+    const result = await createScormPackageCandidate({
+      db: c.env.DB,
+      bucket: c.env.BUCKET,
+      empresaId,
+      cursoId,
+      userId: Number((c.get as (key: string) => unknown)('userId')) || null,
+      bytes,
+      arquivoNome,
+    });
+    return c.json({ success: true, data: result }, 202);
+  }
   const result = await uploadLmsZipPackage({
     db: c.env.DB,
     bucket: c.env.BUCKET,
@@ -194,6 +212,15 @@ app.post(
     if (!parsed.success) {
       throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
     }
+    if (parsed.data.tipo_conteudo === 'scorm') {
+      // A file-by-file protocol cannot certify the SHA-256 of the submitted ZIP.
+      // Keep it out of the activation path rather than creating an unverifiable
+      // package version; clients must use the candidate ZIP endpoint.
+      throw new ApiError(
+        'Upload SCORM estruturado foi desativado: envie o ZIP para o Quality Gate',
+        409,
+      );
+    }
 
     const marker = await beginLmsContentUpload({
       db: c.env.DB,
@@ -222,6 +249,31 @@ app.post(
     });
   },
 );
+
+app.get('/:id/scorm-package-versions', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+  const cursoId = Number(c.req.param('id'));
+  if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
+  return c.json({ success: true, data: await listScormPackageVersions(c.env.DB, getEmpresaIdSafe(c), cursoId) });
+});
+
+app.post('/:id/scorm-package-versions/:packageId/activate', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+  const cursoId = Number(c.req.param('id'));
+  if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
+  const data = await activateScormPackageVersion({
+    db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId, packageId: c.req.param('packageId'), userId: Number((c.get as (key: string) => unknown)('userId')) || null,
+  });
+  return c.json({ success: true, data });
+});
+
+app.post('/:id/scorm-package-versions/:packageId/conformance', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+  const cursoId = Number(c.req.param('id'));
+  if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
+  const data = await runScormPackageConformance({
+    db: c.env.DB, bucket: c.env.BUCKET, browserBinding: c.env.SCORM_BROWSER, empresaId: getEmpresaIdSafe(c), cursoId,
+    packageId: c.req.param('packageId'), userId: Number((c.get as (key: string) => unknown)('userId')) || null,
+  });
+  return c.json({ success: true, data });
+});
 
 app.post(
   '/:id/content-upload/file',

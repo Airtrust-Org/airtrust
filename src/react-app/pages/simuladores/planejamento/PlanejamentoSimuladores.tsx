@@ -9,6 +9,7 @@ import {
   Loader2,
   RefreshCw,
   Save,
+  Upload,
   Users,
 } from 'lucide-react';
 import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
@@ -75,6 +76,93 @@ type DraftRow = {
   janelaFim: string;
 };
 
+type PreviewProposal = {
+  need_id?: string;
+  status: PlanningStatus;
+  qualificacao_tipo_id: number;
+  qualificacao_codigo: string | null;
+  qualificacao_nome: string | null;
+  modelo_aeronave: string;
+  vencimento_referencia: string;
+  janela_tipo: WindowType | null;
+  janela_inicio: string | null;
+  janela_fim: string | null;
+  carga_horaria_prevista: number | null;
+  curriculo: {
+    estimated_session_count?: number | null;
+    typical_session_minutes?: number | null;
+  } | null;
+  participantes: Array<{
+    funcionario_id: number;
+    funcionario_nome: string;
+    funcionario_funcao: string | null;
+    funcionario_quinzena: number | null;
+    vencimento: string;
+  }>;
+};
+
+type CaeAvailabilitySlot = {
+  external_ref?: string | null;
+  equipment: 'AW139' | 'SK76';
+  date: string;
+  start_time: string;
+  end_date: string;
+  end_time: string;
+  duration_minutes: number;
+  state: 'OFFERED' | 'CONFIRMED' | 'HELD' | 'UNKNOWN';
+  company?: string | null;
+  confidence: number;
+  source_ref?: { page?: number | null; section?: string | null } | null;
+};
+
+type CaeAvailabilityValidation = {
+  document: {
+    schema_version: 'airtrust.cae_availability.v1';
+    provider: 'CAE';
+    slots: CaeAvailabilitySlot[];
+    warnings: string[];
+  };
+  warnings: Array<{ path: string; code: string; message: string }>;
+  mode: 'PREVIEW_ONLY';
+};
+
+
+type CaePlanningRecommendation = PreviewProposal & {
+  need_id: string;
+  match_status: 'MATCHED' | 'INSUFFICIENT_AVAILABILITY' | 'INVALID_NEED';
+  selected_slots: CaeAvailabilitySlot[];
+  assignments: Array<{
+    session_index: number;
+    session_duration_minutes: number;
+    slot_key: string;
+  }>;
+  outside_preferred_window: boolean;
+  total_required_minutes: number;
+  total_reserved_minutes: number;
+  unused_reserved_minutes: number;
+  latest_training_date: string | null;
+  days_before_expiry: number | null;
+  reasons: string[];
+  conflicts: Array<Record<string, unknown>>;
+  requires_human_review: boolean;
+};
+
+type CaePlanningComparison = {
+  mode: 'PREVIEW_ONLY';
+  data_referencia: string;
+  availability_warnings: Array<{ path: string; code: string; message: string }>;
+  recommendations: CaePlanningRecommendation[];
+  remaining_slots: CaeAvailabilitySlot[];
+  summary: {
+    total_needs: number;
+    matched: number;
+    insufficient: number;
+    invalid_needs: number;
+    with_conflicts: number;
+    outside_preferred_window: number;
+  };
+};
+
 const STATUS_OPTIONS: Array<{ value: PlanningStatus; label: string }> = [
   { value: 'PROPOSTO', label: 'Proposto' },
   { value: 'PLANEJADO', label: 'Planejado' },
@@ -93,6 +181,10 @@ function addDaysIso(value: Date, days: number) {
   const date = new Date(value);
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function endOfYearIso(value: Date) {
+  return `${value.getFullYear()}-12-31`;
 }
 
 function formatDate(value?: string | null) {
@@ -136,7 +228,7 @@ function participantNames(item: PlanningItem) {
 export default function PlanejamentoSimuladores() {
   const now = useMemo(() => new Date(), []);
   const [inicio, setInicio] = useState(() => addDaysIso(now, 0));
-  const [fim, setFim] = useState(() => addDaysIso(now, 365));
+  const [fim, setFim] = useState(() => endOfYearIso(now));
   const [margem, setMargem] = useState('');
   const [windowPolicy, setWindowPolicy] = useState<WindowPolicy>('FOLGA');
   const [statusFilter, setStatusFilter] = useState('');
@@ -144,8 +236,15 @@ export default function PlanejamentoSimuladores() {
   const [drafts, setDrafts] = useState<Record<number, DraftRow>>({});
   const [loading, setLoading] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [preview, setPreview] = useState<PreviewProposal[]>([]);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
+  const [caeJson, setCaeJson] = useState('');
+  const [caeValidating, setCaeValidating] = useState(false);
+  const [caeComparing, setCaeComparing] = useState(false);
+  const [caeValidation, setCaeValidation] = useState<CaeAvailabilityValidation | null>(null);
+  const [caeComparison, setCaeComparison] = useState<CaePlanningComparison | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -180,16 +279,54 @@ export default function PlanejamentoSimuladores() {
     void load();
   }, [load]);
 
-  const recalculate = async () => {
+  const planningInput = () => {
     if (!inicio || !fim || inicio > fim) {
       showToast.error('Informe um intervalo de vencimento válido.');
-      return;
+      return null;
     }
     const marginNumber = margem.trim() === '' ? null : Number(margem);
     if (marginNumber !== null && (!Number.isInteger(marginNumber) || marginNumber < 0)) {
       showToast.error('A margem deve ser um número inteiro não negativo ou ficar em branco.');
-      return;
+      return null;
     }
+    return {
+      vencimento_inicio: inicio,
+      vencimento_fim: fim,
+      margem_dias: marginNumber,
+      politica_janela: windowPolicy,
+    };
+  };
+
+  const previewPlanning = async () => {
+    const input = planningInput();
+    if (!input) return;
+    try {
+      setPreviewing(true);
+      const result = await apiJson<{
+        candidatos: number;
+        pares: number;
+        pendencias: number;
+        preservados: number;
+        propostas: PreviewProposal[];
+      }>('/api/simuladores/planejamento/recalcular', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...input, dry_run: true }),
+      });
+      setPreview(Array.isArray(result.propostas) ? result.propostas : []);
+      showToast.success(
+        `Prévia: ${result.candidatos} tripulante(s), ${result.pares} dupla(s) e ${result.pendencias} pendência(s). Nenhum dado foi alterado.`,
+      );
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const recalculate = async () => {
+    const input = planningInput();
+    if (!input) return;
     try {
       setRecalculating(true);
       const result = await apiJson<{
@@ -200,21 +337,107 @@ export default function PlanejamentoSimuladores() {
       }>('/api/simuladores/planejamento/recalcular', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vencimento_inicio: inicio,
-          vencimento_fim: fim,
-          margem_dias: marginNumber,
-          politica_janela: windowPolicy,
-        }),
+        body: JSON.stringify(input),
       });
       showToast.success(
         `Planejamento recalculado: ${result.pares} dupla(s), ${result.pendencias} pendência(s), ${result.preservados} edição(ões) preservada(s).`,
       );
+      setPreview([]);
       await load();
     } catch (error) {
       showToast.error(frontendErrorMessage(error));
     } finally {
       setRecalculating(false);
+    }
+  };
+
+  const loadCaeJsonFile = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setCaeJson(text);
+      setCaeValidation(null);
+      setCaeComparison(null);
+    } catch {
+      showToast.error('Não foi possível ler o arquivo JSON.');
+    }
+  };
+
+  const validateCaeAvailability = async () => {
+    if (!caeJson.trim()) {
+      showToast.error('Cole o JSON da disponibilidade CAE ou selecione um arquivo .json.');
+      return;
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(caeJson);
+    } catch {
+      showToast.error('O conteúdo informado não é um JSON válido.');
+      return;
+    }
+    try {
+      setCaeValidating(true);
+      const result = await apiJson<CaeAvailabilityValidation>(
+        '/api/simuladores/planejamento/disponibilidade-cae/validar',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
+      setCaeValidation(result);
+      setCaeComparison(null);
+      showToast.success(
+        `Disponibilidade CAE validada: ${result.document.slots.length} slot(s). Nenhum planejamento foi alterado.`,
+      );
+    } catch (error) {
+      setCaeValidation(null);
+      setCaeComparison(null);
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setCaeValidating(false);
+    }
+  };
+
+
+  const compareCaeWithNeeds = async () => {
+    const input = planningInput();
+    if (!input) return;
+    if (!caeValidation) {
+      showToast.error('Valide primeiro a disponibilidade CAE.');
+      return;
+    }
+    try {
+      setCaeComparing(true);
+      const result = await apiJson<{
+        candidatos: number;
+        pares: number;
+        pendencias: number;
+        propostas: PreviewProposal[];
+        cae_comparison: CaePlanningComparison | null;
+      }>('/api/simuladores/planejamento/recalcular', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...input,
+          dry_run: true,
+          data_referencia: new Date().toISOString().slice(0, 10),
+          cae_availability: caeValidation.document,
+        }),
+      });
+      setPreview(Array.isArray(result.propostas) ? result.propostas : []);
+      setCaeComparison(result.cae_comparison);
+      const summary = result.cae_comparison?.summary;
+      if (summary) {
+        showToast.success(
+          `Comparação CAE: ${summary.matched}/${summary.total_needs} necessidade(s) atendida(s), ${summary.with_conflicts} com conflito(s). Nenhum dado foi alterado.`,
+        );
+      }
+    } catch (error) {
+      setCaeComparison(null);
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setCaeComparing(false);
     }
   };
 
@@ -531,7 +754,7 @@ export default function PlanejamentoSimuladores() {
               className={`${inputClass} mt-1 w-full`}
               value={margem}
               onChange={(event) => setMargem(event.target.value)}
-              placeholder="Sem margem fixa"
+              placeholder="Ex.: 30 (opcional)"
             />
           </label>
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -561,28 +784,44 @@ export default function PlanejamentoSimuladores() {
               ))}
             </select>
           </label>
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2 xl:col-span-1">
             <button
               type="button"
               onClick={() => void load()}
               disabled={loading}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white p-2 text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              title="Atualizar planejamentos salvos"
+              aria-label="Atualizar planejamentos salvos"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Atualizar
+            </button>
+            <button
+              type="button"
+              onClick={() => void previewPlanning()}
+              disabled={previewing || recalculating}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+              title="Calcula necessidades e duplas sem alterar o planejamento salvo"
+            >
+              {previewing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Users className="h-4 w-4" />
+              )}
+              Pré-visualizar
             </button>
             <button
               type="button"
               onClick={() => void recalculate()}
-              disabled={recalculating}
+              disabled={recalculating || previewing}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
+              title="Grava as propostas do planejamento no AirTrust"
             >
               {recalculating ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <CalendarRange className="h-4 w-4" />
               )}
-              Recalcular
+              Gerar
             </button>
           </div>
         </div>
@@ -592,6 +831,283 @@ export default function PlanejamentoSimuladores() {
           escolhe a alternativa válida mais próxima. Nenhum valor de 30 dias é assumido
           automaticamente.
         </p>
+      </div>
+
+      {preview.length > 0 ? (
+        <div className="overflow-hidden rounded-xl border border-primary/20 bg-white dark:border-primary/30 dark:bg-slate-900">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100">Prévia das necessidades</h3>
+              <p className="text-xs text-slate-500">Somente leitura — ainda não cria nem altera planejamentos.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPreview([])}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            >
+              Fechar prévia
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-[1000px] w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
+                <tr>
+                  <th className="px-3 py-3">Vencimento</th>
+                  <th className="px-3 py-3">Qualificação</th>
+                  <th className="px-3 py-3">Aeronave</th>
+                  <th className="px-3 py-3">Tripulante(s)</th>
+                  <th className="px-3 py-3">Janela sugerida</th>
+                  <th className="px-3 py-3">Carga / sessões</th>
+                  <th className="px-3 py-3">Situação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {preview.map((proposal, index) => (
+                  <tr key={`${proposal.qualificacao_tipo_id}-${proposal.vencimento_referencia}-${index}`}>
+                    <td className="px-3 py-3 font-medium">{formatDate(proposal.vencimento_referencia)}</td>
+                    <td className="px-3 py-3">
+                      <div className="font-medium">{proposal.qualificacao_nome || proposal.qualificacao_codigo || '—'}</div>
+                      <div className="text-xs text-slate-400">{proposal.qualificacao_codigo}</div>
+                    </td>
+                    <td className="px-3 py-3 font-medium">{proposal.modelo_aeronave || '—'}</td>
+                    <td className="px-3 py-3">
+                      {proposal.participantes.map((participant) => (
+                        <div key={participant.funcionario_id}>
+                          {participant.funcionario_nome}
+                          {participant.funcionario_funcao ? (
+                            <span className="ml-1 text-xs text-slate-400">{participant.funcionario_funcao}</span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </td>
+                    <td className="px-3 py-3">
+                      {proposal.janela_inicio && proposal.janela_fim
+                        ? `${formatDate(proposal.janela_inicio)} a ${formatDate(proposal.janela_fim)}`
+                        : 'A definir'}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div>{proposal.carga_horaria_prevista == null ? '—' : `${proposal.carga_horaria_prevista} h`}</div>
+                      <div className="text-xs text-slate-500">
+                        {proposal.curriculo?.estimated_session_count
+                          ? `${proposal.curriculo.estimated_session_count} sessão(ões)`
+                          : 'Conforme currículo'}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      {proposal.status === 'AGUARDANDO_DISPONIBILIDADE' ? (
+                        <span className="text-amber-700">Aguardando dupla/janela</span>
+                      ) : (
+                        <span className="text-emerald-700">Dupla compatível</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Upload className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100">Disponibilidade CAE</h3>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">
+              Cole ou carregue o JSON <code>airtrust.cae_availability.v1</code> gerado a partir do e-mail, PDF, imagem ou planilha da CAE. Esta etapa apenas valida e normaliza os slots; não grava planejamento.
+            </p>
+          </div>
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+            <Upload className="h-4 w-4" />
+            Carregar JSON
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={(event) => void loadCaeJsonFile(event.target.files?.[0] || null)}
+            />
+          </label>
+        </div>
+        <textarea
+          className={`${inputClass} mt-3 min-h-36 w-full font-mono text-xs`}
+          value={caeJson}
+          onChange={(event) => {
+            setCaeJson(event.target.value);
+            setCaeValidation(null);
+            setCaeComparison(null);
+          }}
+          placeholder='{"schema_version":"airtrust.cae_availability.v1","provider":"CAE",...}'
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void validateCaeAvailability()}
+            disabled={caeValidating || !caeJson.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
+          >
+            {caeValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+            Validar disponibilidade
+          </button>
+          <button
+            type="button"
+            onClick={() => void compareCaeWithNeeds()}
+            disabled={caeComparing || !caeValidation}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
+          >
+            {caeComparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+            Comparar com necessidades
+          </button>
+          <span className="text-xs text-slate-500">Preview only · sem D1 write</span>
+        </div>
+
+        {caeValidation ? (
+          <div className="mt-4 overflow-hidden rounded-lg border border-emerald-200 dark:border-emerald-900">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-emerald-50 px-3 py-2 text-sm dark:bg-emerald-950/30">
+              <span className="font-semibold text-emerald-800 dark:text-emerald-300">
+                {caeValidation.document.slots.length} slot(s) CAE validados
+              </span>
+              <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                {caeValidation.warnings.length} aviso(s) de revisão
+              </span>
+            </div>
+            <div className="max-h-80 overflow-auto">
+              <table className="min-w-[850px] w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
+                  <tr>
+                    <th className="px-3 py-2">Aeronave</th>
+                    <th className="px-3 py-2">Data</th>
+                    <th className="px-3 py-2">Horário</th>
+                    <th className="px-3 py-2">Duração</th>
+                    <th className="px-3 py-2">Estado</th>
+                    <th className="px-3 py-2">Confiança</th>
+                    <th className="px-3 py-2">Fonte</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {caeValidation.document.slots.map((slot) => (
+                    <tr key={slot.external_ref || `${slot.equipment}-${slot.date}-${slot.start_time}`}>
+                      <td className="px-3 py-2 font-semibold">{slot.equipment}</td>
+                      <td className="px-3 py-2">{formatDate(slot.date)}</td>
+                      <td className="px-3 py-2">{slot.start_time}–{slot.end_time}</td>
+                      <td className="px-3 py-2">{slot.duration_minutes} min</td>
+                      <td className="px-3 py-2">{slot.state}</td>
+                      <td className="px-3 py-2">{Math.round(slot.confidence * 100)}%</td>
+                      <td className="px-3 py-2 text-xs text-slate-500">
+                        {slot.source_ref?.page ? `p. ${slot.source_ref.page}` : '—'}
+                        {slot.source_ref?.section ? ` · ${slot.source_ref.section}` : ''}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+
+        {caeComparison ? (
+          <div className="mt-4 overflow-hidden rounded-lg border border-primary/20 dark:border-primary/30">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-primary/5 px-3 py-3">
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-slate-100">Comparação CAE × necessidades reais</p>
+                <p className="text-xs text-slate-500">
+                  {caeComparison.summary.matched}/{caeComparison.summary.total_needs} necessidade(s) atendida(s) · {caeComparison.summary.insufficient} sem capacidade · {caeComparison.summary.with_conflicts} com conflito de escala
+                </p>
+              </div>
+              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-primary shadow-sm dark:bg-slate-950">
+                somente leitura
+              </span>
+            </div>
+            <div className="max-h-[34rem] overflow-auto">
+              <table className="min-w-[1100px] w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
+                  <tr>
+                    <th className="px-3 py-2">Tripulação</th>
+                    <th className="px-3 py-2">Aeronave</th>
+                    <th className="px-3 py-2">Vencimento</th>
+                    <th className="px-3 py-2">Currículo</th>
+                    <th className="px-3 py-2">Slots recomendados</th>
+                    <th className="px-3 py-2">Margem</th>
+                    <th className="px-3 py-2">Conflitos</th>
+                    <th className="px-3 py-2">Resultado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {caeComparison.recommendations.map((recommendation) => (
+                    <tr key={recommendation.need_id}>
+                      <td className="px-3 py-3 font-semibold">
+                        {recommendation.participantes.map((participant) => participant.funcionario_nome).join(' + ') || 'Aguardando dupla'}
+                      </td>
+                      <td className="px-3 py-3">{recommendation.modelo_aeronave}</td>
+                      <td className="px-3 py-3">{formatDate(recommendation.vencimento_referencia)}</td>
+                      <td className="px-3 py-3">
+                        {recommendation.total_required_minutes > 0
+                          ? `${recommendation.assignments.length} sessão(ões) · ${recommendation.total_required_minutes / 60} h`
+                          : 'Currículo incompleto'}
+                      </td>
+                      <td className="px-3 py-3 text-xs">
+                        {recommendation.selected_slots.length > 0 ? (
+                          <div className="space-y-1">
+                            {recommendation.selected_slots.map((slot) => (
+                              <div key={slot.external_ref || `${slot.equipment}-${slot.date}-${slot.start_time}`}>
+                                {formatDate(slot.date)} · {slot.start_time}–{slot.end_time} ({slot.duration_minutes} min)
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-amber-700">Nenhum slot compatível</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {recommendation.days_before_expiry == null
+                          ? '—'
+                          : `${recommendation.days_before_expiry} dia(s)`}
+                        {recommendation.outside_preferred_window ? (
+                          <div className="mt-1 text-xs text-amber-700">fora da janela preferida</div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-3">
+                        {recommendation.conflicts.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-amber-700">
+                            <AlertTriangle className="h-4 w-4" />
+                            {recommendation.conflicts.length}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                            recommendation.match_status === 'MATCHED' && !recommendation.requires_human_review
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              : recommendation.match_status === 'MATCHED'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300'
+                          }`}
+                        >
+                          {recommendation.match_status === 'MATCHED'
+                            ? recommendation.requires_human_review
+                              ? 'Atende · revisar'
+                              : 'Atende'
+                            : recommendation.match_status === 'INVALID_NEED'
+                              ? 'Currículo incompleto'
+                              : 'Sem disponibilidade'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {caeComparison.remaining_slots.length > 0 ? (
+              <p className="border-t border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-800">
+                Sobra após a alocação prioritária: {caeComparison.remaining_slots.length} bloco(s) CAE ainda disponível(is). A mesma capacidade não é reutilizada para tripulações diferentes.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
