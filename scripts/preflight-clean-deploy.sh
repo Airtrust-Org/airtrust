@@ -39,11 +39,9 @@ fi
 
 git status --short --untracked-files=all
 
-if [[ -n "${FRMS_GOVERNANCE_D1_NAME:-}" ]]; then
-  echo ""
-  echo "=== FRMS governance readiness gate ==="
-  node scripts/frms-governance-preflight.mjs --remote
-else
-  echo ""
-  echo "SKIPPED: FRMS governance readiness gate (FRMS_GOVERNANCE_D1_NAME not set)."
-fi
+echo ""
+echo "=== FRMS governance readiness gate ==="
+# Always runs. Whether the check is required is decided by the SHA's own
+# migration set (see scripts/lib/frms-governance-preflight-contract.mjs), not
+# by an opt-in env var — a governed release can never silently skip this.
+node scripts/frms-governance-preflight.mjs --remote
