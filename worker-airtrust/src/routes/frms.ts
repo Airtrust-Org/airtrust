@@ -1753,22 +1753,16 @@ frmsRoutes.post(
 
     const userId = await resolveFuncionarioId(c);
     const empresaId = getEmpresaIdSafe(c);
-    if (!empresaId) {
-      return c.json(
-        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
-        403,
-      );
-    }
-    const operationalContext = await resolveFrmsOperationalContext(c.env.DB, {
-      empresaId,
-      referenceAt: parsed.data.data,
-      funcionarioId: Number(parsed.data.tripulante_id),
-    });
-    const limites = asOperationalLimitesMap(operationalContext.parameters);
 
+    // salvarJornada resolves empresaId (via the tripulante's own record when
+    // absent from context) and the governed operational context internally.
     let result;
     try {
-      result = await salvarJornada(c.env.DB, { ...parsed.data, registrado_por: userId }, limites);
+      result = await salvarJornada(
+        c.env.DB,
+        { ...parsed.data, registrado_por: userId },
+        LIMITES_DEFAULT,
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('UNIQUE') || msg.includes('unique')) {

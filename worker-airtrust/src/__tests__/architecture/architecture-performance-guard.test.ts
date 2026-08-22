@@ -9,7 +9,11 @@ const LARGE_FILE_LINE_CAPS = {
   // Cap raised 2026-07-08: counted 3913 (pre-existing drift to 3887 unrelated to
   // this change, plus explicit empresaId guards added to close BUG-011 Stage 3
   // domain-event masking — see fix/bug011-stage3-safe-typeguards-20260708).
-  'routes/frms.ts': 3913,
+  // Cap raised 2026-08-22: counted 3957 (fix/frms-parameter-governance-recalc
+  // — wired jornada create/update, batch APUS import, explicação-do-dia,
+  // comparar-dias, and escala-futura validation to governed operational
+  // context, replacing legacy carregarLimites fallbacks).
+  'routes/frms.ts': 3957,
   // Cap raised 2026-06-30: counted 2884 (pre-existing growth).
   'services/sigvoos-frms.ts': 2884,
   // Upload/storage logic was extracted into testable modules. The compatibility
@@ -41,7 +45,10 @@ const LARGE_FILE_LINE_CAPS = {
   // longer leak another tenant's data or feed a completion write).
   'routes/lms-matriculas.ts': 3565,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
-  'routes/frms-fadiga-checkin.ts': 2021,
+  // Cap raised 2026-08-22: counted 2048 (fix/frms-parameter-governance-recalc
+  // — governed operational context wired into the check-in contexto-piloto
+  // block, replacing the legacy carregarLimites fallback).
+  'routes/frms-fadiga-checkin.ts': 2048,
   // Cap raised 2026-07-31: counted 2548 after scoped short-lived asset sessions,
   // request-aware cookie policy and CSP hardening in PR #565. Extraction remains
   // a follow-up and is not mixed into this security hotfix.
@@ -61,7 +68,11 @@ const LARGE_FILE_LINE_CAPS = {
   // routine commit exhausted that shared quota during long sessions,
   // permanently breaking all further saves with "Failed to fetch" (observed
   // live on curso PT6C-67C, matricula 390).
-  'routes/lms-assets.ts': 2637,
+  // Cap raised 2026-08-22: counted 2677. Pre-existing drift unrelated to
+  // fix/frms-parameter-governance-recalc — this file is untouched by that
+  // branch; the cap was already stale before this MR, just masked because
+  // this test throws at the first offender in iteration order.
+  'routes/lms-assets.ts': 2677,
   // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
   // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,
   // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.

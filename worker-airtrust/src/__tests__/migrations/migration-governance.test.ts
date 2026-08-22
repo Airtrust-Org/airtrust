@@ -99,7 +99,9 @@ describe('migration governance', () => {
     const regularPrefixes = files
       .map((file) => /^([0-9]{4})_/.exec(file)?.[1] ?? null)
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
-    const expectedLatest = 463;
+    // Ratchet raised 2026-08-22: 0464_frms_parameter_governance_recalc.sql
+    // (fix/frms-parameter-governance-recalc-20260821).
+    const expectedLatest = 464;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
