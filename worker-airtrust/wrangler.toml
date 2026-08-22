@@ -56,6 +56,9 @@ binding = "AI"
 [env.staging]
 name = "airtrust-api-staging"
 
+[env.staging.browser]
+binding = "SCORM_BROWSER"
+
 [env.staging.version_metadata]
 binding = "CF_VERSION_METADATA"
 
