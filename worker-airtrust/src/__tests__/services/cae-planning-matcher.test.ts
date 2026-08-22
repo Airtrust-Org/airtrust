@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { matchCaeAvailabilityToNeed } from '../../services/cae-planning-matcher';
+import { matchCaeAvailabilityToNeed, type CaePlanningNeed } from '../../services/cae-planning-matcher';
+import { SIMULATOR_PLANNING_FALLBACKS } from '../../services/cae-planning-policy';
 import type { CaeAvailabilitySlotV1 } from '../../services/cae-availability';
 
 function slot(
@@ -138,7 +139,38 @@ describe('CAE deterministic planning matcher', () => {
     expect(result.outside_preferred_window).toBe(true);
     expect(result.days_before_expiry).toBe(28);
   });
+
+  it('PREFERÊNCIA (90 DIAS): deve preferir a solução que conclui mais perto do vencimento, se ambas forem válidas', () => {
+    // vencimento 2026-11-30, antecedência 90 (planning_horizon_days=90)
+    // duas disponibilidades: 2026-09-15 e 2026-11-20
+    // -> 2026-11-20 deve vencer, pois 2026-11-20 está mais perto do vencimento.
+    
+    const config = {
+      ...SIMULATOR_PLANNING_FALLBACKS,
+      planning_horizon_days: 90,
+      source: 'TEST',
+      warnings: []
+    };
+
+    const need: CaePlanningNeed = {
+      id: 90,
+      equipment: 'AW139',
+      expiry_date: '2026-11-30',
+      session_durations_minutes: [120],
+      config,
+    };
+
+    const slots = [
+      slot('AW139', '2026-09-15', '08:00', '10:00', 120),
+      slot('AW139', '2026-11-20', '08:00', '10:00', 120),
+    ];
+
+    const result = matchCaeAvailabilityToNeed(need, slots);
+    expect(result.status).toBe('MATCHED');
+    expect(result.selected_slots[0].date).toBe('2026-11-20');
+  });
 });
+
 
   it('PREFERÊNCIA: deve vencer disponibilidade perfeita com 2 sessões/dia e ordem consecutiva', () => {
     // 4 sessões de 2h

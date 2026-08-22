@@ -1,4 +1,11 @@
 import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
+import { materializeSimulatorPlanning } from '../services/cae-planning-materialization';
+import { executeSimulatorPlanningApproval } from '../services/cae-planning-approval';
+import { resolveSimulatorPlanningConfig, isInsidePlanningHorizon, type SimulatorPlanningConfigRow } from '../services/cae-planning-policy';
+import { prepareCaeAvailabilityImport } from '../services/cae-availability-import';
+
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
@@ -588,6 +595,9 @@ async function listPlanningItems(params: {
                       t.planejamento_conflitos_json,
                       t.planejamento_snapshot_json,
                       t.planejamento_recalculado_em,
+                      t.planejamento_aprovacao_status,
+                      t.planejamento_aprovacao_observacoes,
+                      t.planejamento_aprovado_em,
                       t.updated_at
                  FROM treinamentos_planejados t
                  LEFT JOIN qualificacoes_tipos qt
@@ -705,6 +715,27 @@ function dateRangesOverlap(
   return leftStart <= rightEnd && leftEnd >= rightStart;
 }
 
+
+app.post('/cae-disponibilidade/importar', requireRole('admin', 'manager'), async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body) {
+    return c.json({ success: false, error: 'Corpo inválido' }, 400);
+  }
+
+  // Recebemos o JSON do front-end que hipoteticamente já foi extraído de um PDF 
+  // por um LLM client-side, ou por upload manual do extrator CAE.
+  const rawCandidate = body.raw_candidate || body.cae_availability || body;
+  const fileName = body.source_file_name || 'manual_upload.json';
+
+  const result = prepareCaeAvailabilityImport({
+    source_file_name: fileName,
+    source_kind: 'UNKNOWN',
+    raw_candidate: rawCandidate,
+  });
+
+  return c.json({ success: result.status !== 'REJEITADO', data: result }, result.status === 'REJEITADO' ? 400 : 200);
+});
+
 app.get('/', async (c) => {
   const empresaId = getEmpresaId(c);
   if (!(await planningSchemaReady(c.env.DB))) {
@@ -783,15 +814,15 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
   if (!isIsoDate(inicio) || !isIsoDate(fim) || inicio > fim) {
     return c.json({ success: false, error: 'Intervalo de vencimento inválido' }, 400);
   }
-  const empresaConfig = await c.env.DB
-    .prepare('SELECT planejamento_simulador_antecedencia_dias FROM empresas_config WHERE empresa_id = ?')
+  const empresaConfigRow = await c.env.DB
+    .prepare('SELECT * FROM empresas_config WHERE empresa_id = ?')
     .bind(empresaId)
-    .first<{ planejamento_simulador_antecedencia_dias: number | null }>()
-    .catch(() => null);
+    .first<SimulatorPlanningConfigRow>()
+    .catch(() => undefined);
   
-  const defaultMargem = empresaConfig?.planejamento_simulador_antecedencia_dias ?? 90;
+  const config = resolveSimulatorPlanningConfig(empresaConfigRow);
 
-  let margemDias: number | null = defaultMargem;
+  let margemDias: number | null = null;
   if (body?.margem_dias !== undefined && body?.margem_dias !== null && body?.margem_dias !== '') {
     margemDias = Number(body.margem_dias);
     if (!Number.isInteger(margemDias) || margemDias < 0 || margemDias > 365) {
@@ -857,6 +888,7 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
     const groups = modelsByQualification.get(Number(qualification.qualificacao_tipo_id));
     if (!groups) continue;
     const modelGroup = chooseModelGroup(qualification, groups);
+    if (!isInsidePlanningHorizon({ reference_date: dataReferencia, expiry_date: String(qualification.data_vencimento).slice(0, 10), config })) continue;
     const quinzenaNumero = resolveQuinzenaNumero(qualification.funcionario_quinzena);
     const selectedWindow = modelGroup.ambiguous
       ? null
@@ -982,6 +1014,7 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
         metadataByNeedId.set(needId, { candidates: group.candidates, proposal });
         needs.push({
           id: needId,
+          config,
           equipment: first.modeloAeronave,
           expiry_date: group.candidates.map((candidate) => candidate.vencimento).sort()[0],
           planning_start_date: dataReferencia,

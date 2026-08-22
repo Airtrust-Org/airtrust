@@ -49,6 +49,9 @@ type PlanningItem = {
   carga_horaria_prevista: number | null;
   planejamento_status: PlanningStatus;
   planejamento_editado_manualmente: number;
+  planejamento_aprovacao_status?: 'RASCUNHO' | 'PENDENTE' | 'APROVADO' | 'DEVOLVIDO' | 'NAO_EXIGIDO';
+  planejamento_aprovacao_observacoes?: string | null;
+  planejamento_aprovado_em?: string | null;
   planejamento_vencimento_referencia: string | null;
   planejamento_margem_dias: number | null;
   planejamento_quinzena_numero: number | null;
@@ -239,6 +242,8 @@ export default function PlanejamentoSimuladores() {
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<PreviewProposal[]>([]);
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [devolverObs, setDevolverObs] = useState<Record<number, string>>({});
+  const [actioningId, setActioningId] = useState<number | null>(null);
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
   const [caeJson, setCaeJson] = useState('');
   const [caeValidating, setCaeValidating] = useState(false);
@@ -438,6 +443,41 @@ export default function PlanejamentoSimuladores() {
       showToast.error(frontendErrorMessage(error));
     } finally {
       setCaeComparing(false);
+    }
+  };
+
+  
+  const handleAprovar = async (id: number) => {
+    if (!window.confirm('Confirma a aprovação desta proposta CAE? O status será alterado para APROVADO.')) return;
+    setActioningId(id);
+    try {
+      await apiJson(`/api/simuladores/planejamento/${id}/aprovar`, { method: 'POST' });
+      await load();
+    } catch (error: any) {
+      alert('Erro ao aprovar proposta: ' + frontendErrorMessage(error));
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleDevolver = async (id: number) => {
+    const obs = devolverObs[id] || '';
+    if (!obs) {
+      alert('Informe o motivo da devolução antes de continuar.');
+      return;
+    }
+    setActioningId(id);
+    try {
+      await apiJson(`/api/simuladores/planejamento/${id}/devolver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ observacoes: obs }),
+      });
+      await load();
+    } catch (error: any) {
+      alert('Erro ao devolver proposta: ' + frontendErrorMessage(error));
+    } finally {
+      setActioningId(null);
     }
   };
 
@@ -1154,6 +1194,7 @@ export default function PlanejamentoSimuladores() {
                   <th className="px-3 py-3">Data prevista</th>
                   <th className="px-3 py-3">Carga / sessões</th>
                   <th className="px-3 py-3">Escala publicada</th>
+                  <th className="px-3 py-3">Aprovação</th>
                   <th className="px-3 py-3">Ação</th>
                 </tr>
               </thead>
@@ -1163,6 +1204,51 @@ export default function PlanejamentoSimuladores() {
                   const conflictTotal = conflictsCount(item.planejamento_conflitos);
                   return (
                     <tr key={item.id} className="align-top">
+<td className="px-3 py-3">
+                        {item.planejamento_aprovacao_status === 'PENDENTE' && (
+                          <div className="flex flex-col gap-2">
+                            <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
+                              Aguardando Aprovação
+                            </span>
+                            <button
+                              onClick={() => handleAprovar(item.id)}
+                              disabled={actioningId === item.id}
+                              className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-500 disabled:opacity-50"
+                            >
+                              Aprovar
+                            </button>
+                            <div className="flex flex-col gap-1">
+                              <input
+                                type="text"
+                                placeholder="Motivo devolução"
+                                className="w-full rounded-md border-0 py-1.5 px-2 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700 text-xs"
+                                value={devolverObs[item.id] || ''}
+                                onChange={(e) => setDevolverObs({ ...devolverObs, [item.id]: e.target.value })}
+                              />
+                              <button
+                                onClick={() => handleDevolver(item.id)}
+                                disabled={actioningId === item.id || !devolverObs[item.id]}
+                                className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-500 disabled:opacity-50"
+                              >
+                                Devolver
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {item.planejamento_aprovacao_status === 'APROVADO' && (
+                          <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                            Aprovado
+                          </span>
+                        )}
+                        {item.planejamento_aprovacao_status === 'DEVOLVIDO' && (
+                          <div className="flex flex-col gap-1">
+                            <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">
+                              Devolvido
+                            </span>
+                            <span className="text-[10px] text-slate-500">{item.planejamento_aprovacao_observacoes}</span>
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-3">
                         <select
                           className={`${inputClass} w-48`}
