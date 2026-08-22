@@ -61,7 +61,9 @@ const LARGE_FILE_LINE_CAPS = {
   // routine commit exhausted that shared quota during long sessions,
   // permanently breaking all further saves with "Failed to fetch" (observed
   // live on curso PT6C-67C, matricula 390).
-  'routes/lms-assets.ts': 2637,
+  // Cap raised 2026-08-22: counted 2677 — SCORM Package Quality Gate V1 added
+  // candidate-version listing, activation and Browser Run conformance routes.
+  'routes/lms-assets.ts': 2677,
   // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
   // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,
   // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.

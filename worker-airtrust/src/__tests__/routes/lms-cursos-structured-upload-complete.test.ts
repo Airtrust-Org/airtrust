@@ -127,7 +127,7 @@ class Bucket {
 }
 
 describe('lms cursos structured upload complete', () => {
-  it('encaminha arquivos com Content-Length diretamente ao R2 como stream', async () => {
+  it('recusa o protocolo de upload estruturado por arquivo para SCORM e direciona ao Quality Gate', async () => {
     const bucket = new Bucket();
     const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;
     const init = await app().request(
@@ -139,138 +139,12 @@ describe('lms cursos structured upload complete', () => {
       },
       env,
     );
-    const initJson = (await init.json()) as { data: { upload_id: string } };
-    const body = new TextEncoder().encode('<manifest />');
-    const response = await app().request(
-      `/cursos/12/content-upload/file?tipo_conteudo=scorm&upload_id=${initJson.data.upload_id}&path=imsmanifest.xml`,
-      {
-        method: 'POST',
-        headers: { 'Content-Length': String(body.byteLength) },
-        body,
-      },
-      env,
-    );
 
-    expect(response.status).toBe(200);
-    expect(bucket.putValues.at(-1)).toBeInstanceOf(ReadableStream);
-  });
-
-  it('encaminha arquivos sem Content-Length diretamente ao R2 sem bufferizar o body', async () => {
-    const bucket = new Bucket();
-    const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;
-    const init = await app().request(
-      '/cursos/12/content-upload/init',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo_conteudo: 'scorm' }),
-      },
-      env,
-    );
-    const initJson = (await init.json()) as { data: { upload_id: string } };
-    const body = new TextEncoder().encode('media-heavy-payload');
-    const response = await app().request(
-      `/cursos/12/content-upload/file?tipo_conteudo=scorm&upload_id=${initJson.data.upload_id}&path=media/pcm_sensors.webp`,
-      {
-        method: 'POST',
-        body,
-      },
-      env,
-    );
-
-    expect(response.status).toBe(200);
-    expect(bucket.putValues.at(-1)).toBeInstanceOf(ReadableStream);
-    await expect(response.json()).resolves.toMatchObject({
-      success: true,
-      data: { bytes: body.byteLength },
-    });
-  });
-
-  it('retorna os arquivos já presentes quando a mesma operação idempotente é retomada', async () => {
-    const bucket = new Bucket();
-    const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;
-    const idempotencyKey = 'scorm:resume-test';
-    const firstInit = await app().request(
-      '/cursos/12/content-upload/init',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-        body: JSON.stringify({ tipo_conteudo: 'scorm', idempotency_key: idempotencyKey }),
-      },
-      env,
-    );
-    const firstJson = (await firstInit.json()) as { data: { upload_id: string } };
-    const body = new TextEncoder().encode('already-stored');
-    const stored = await app().request(
-      `/cursos/12/content-upload/file?tipo_conteudo=scorm&upload_id=${firstJson.data.upload_id}&path=media/cap08/pcm_connectors.webp`,
-      { method: 'POST', body },
-      env,
-    );
-    expect(stored.status).toBe(200);
-
-    const resumedInit = await app().request(
-      '/cursos/12/content-upload/init',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-        body: JSON.stringify({ tipo_conteudo: 'scorm', idempotency_key: idempotencyKey }),
-      },
-      env,
-    );
-
-    expect(resumedInit.status).toBe(200);
-    await expect(resumedInit.json()).resolves.toMatchObject({
-      success: true,
-      data: {
-        upload_id: firstJson.data.upload_id,
-        status: 'uploading',
-        uploaded_files: [{ path: 'media/cap08/pcm_connectors.webp', size: body.byteLength }],
-      },
-    });
-  });
-
-  it('não aceita arquivo legado fora da versão para mascarar launch ausente', async () => {
-    const bucket = new Bucket();
-    const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;
-    const init = await app().request(
-      '/cursos/12/content-upload/init',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo_conteudo: 'scorm' }),
-      },
-      env,
-    );
-    const initJson = (await init.json()) as { data: { upload_id: string } };
-    const uploadId = initJson.data.upload_id;
-
-    await app().request(
-      `/cursos/12/content-upload/file?tipo_conteudo=scorm&upload_id=${uploadId}&path=imsmanifest.xml`,
-      {
-        method: 'POST',
-        body: '<manifest><resources><resource href="index.html" /></resources></manifest>',
-      },
-      env,
-    );
-
-    const response = await app().request(
-      '/cursos/12/content-upload/complete',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tipo_conteudo: 'scorm',
-          upload_id: uploadId,
-          arquivo_nome: 'novo.zip',
-        }),
-      },
-      env,
-    );
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
+    expect(init.status).toBe(409);
+    await expect(init.json()).resolves.toMatchObject({
       success: false,
-      error: expect.stringMatching(/launch file .* não existe/i),
+      error: expect.stringMatching(/Quality Gate/i),
     });
-    expect(bucket.objects.has('lms/scorm/77/12/index.html')).toBe(true);
+    expect(bucket.putValues).toHaveLength(0);
   });
 });
