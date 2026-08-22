@@ -1,7 +1,7 @@
 import type { Origem, LimitesMap } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
 import { resolverFrmsConfig } from './frms-config';
-import { resolveFrmsOperationalContext } from './parameter-governance';
+import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import {
   buildFrmsFortnightIndicatorMap,
   type FrmsFortnightIndicator,
@@ -706,7 +706,7 @@ export async function listFrmsOperationalSnapshot(
     empresaId: params.empresaId,
     referenceAt: params.hoje ?? params.dataFim,
   });
-  const limites = operationalContext.parameters as unknown as LimitesMap;
+  const limites = asOperationalLimitesMap(operationalContext.parameters);
   const frmsConfig = resolverFrmsConfig(limites);
 
   const [escalasResult, jornadasResult, checkinsResult, effectivenessResult] = await Promise.all([

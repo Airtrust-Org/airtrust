@@ -9,6 +9,7 @@ import * as frmsConfigModule from '../../lib/frms/frms-config';
 import * as jornadasModule from '../../lib/frms/db-service-jornadas';
 import * as parameterGovernanceModule from '../../lib/frms/parameter-governance';
 import { LEGACY_FORTNIGHT_POLICY } from '../../lib/frms/fortnight-indicator';
+import { LIMITES_DEFAULT } from '../../lib/frms/types';
 
 function createBaseInput(): BuildOperationalSnapshotInput {
   return {
@@ -296,7 +297,7 @@ describe('frms operational snapshot builder', () => {
       modelVersion: 'FRMS_CONFIG_V1_TEST',
       effectiveFrom: '2000-01-01',
       effectiveTo: null,
-      parameters: {} as never,
+      parameters: LIMITES_DEFAULT,
       fadigaPolicy: {} as never,
       fortnightPolicy: LEGACY_FORTNIGHT_POLICY,
     } as never);

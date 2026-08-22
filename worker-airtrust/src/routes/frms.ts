@@ -68,7 +68,7 @@ import {
   reprocessarTripulanteCompleto,
   listarTripulantesAtivos,
 } from '../lib/frms/db-service';
-import { resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
+import { resolveFrmsOperationalContext, asOperationalLimitesMap } from '../lib/frms/parameter-governance';
 import { getFrmsFortnightCoverage, FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS } from '../lib/frms/fortnight-coverage';
 import {
   applyFortnightBaseMaterialization,
@@ -388,7 +388,7 @@ function parseEffectivenessComponents(raw: string | null | undefined): Record<st
       Object.entries(parsed).filter(
         ([, value]) => typeof value === 'number' && Number.isFinite(value),
       ),
-    ) as unknown as Record<string, number>;
+    ) as Record<string, number>;
   } catch {
     return {};
   }
@@ -1764,7 +1764,7 @@ frmsRoutes.post(
       referenceAt: parsed.data.data,
       funcionarioId: Number(parsed.data.tripulante_id),
     });
-    const limites = operationalContext.parameters as unknown as LimitesMap;
+    const limites = asOperationalLimitesMap(operationalContext.parameters);
 
     let result;
     try {
@@ -2643,7 +2643,7 @@ frmsRoutes.get(
       tripulanteId,
       empresaId,
       data,
-      limites as unknown as Record<string, number>,
+      limites,
     );
     const explanation = await buildFrmsDayExplanation(
       c.env,
@@ -2651,7 +2651,7 @@ frmsRoutes.get(
         ...row,
         dias_criticos_consecutivos: diasCriticosConsecutivos,
       },
-      limites as unknown as Record<string, number>,
+      limites,
       {
         dataSource: sourceByCheckin.dataSource,
         confidence: sourceByCheckin.confidence,
@@ -2749,7 +2749,7 @@ frmsRoutes.get(
       referenceAt: dataB > dataA ? dataB : dataA,
       funcionarioId: Number(tripulanteId),
     });
-    const limites = operationalContext.parameters as unknown as Record<string, number>;
+    const limites = operationalContext.parameters;
 
     const fetchDay = async (data: string) => {
       const row = await c.env.DB.prepare(
@@ -3141,7 +3141,7 @@ frmsRoutes.post(
       referenceAt: data,
       funcionarioId: Number(tripulanteId),
     });
-    const limites = operationalContext.parameters as unknown as Record<string, number>;
+    const limites = operationalContext.parameters;
     const diasCriticosConsecutivos = await countDiasCriticosConsecutivos(
       c.env,
       tripulanteId,
@@ -3925,7 +3925,7 @@ frmsRoutes.post(
       referenceAt: new Date().toISOString().slice(0, 10),
       funcionarioId: Number(parsed.data.tripulante_id),
     });
-    const limites = operationalContextEscala.parameters as unknown as LimitesMap;
+    const limites = asOperationalLimitesMap(operationalContextEscala.parameters);
 
     // Buscar histórico existente do tripulante (365 dias)
     const dataInicio = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);

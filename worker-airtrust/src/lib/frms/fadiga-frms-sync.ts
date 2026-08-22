@@ -1,7 +1,7 @@
 import { horasSonoParaMinutos } from './fadiga-score';
 import { resolverFrmsConfig } from './frms-config';
 import { calcEffectiveness, hhmmToMinutes, minutesToHhmm } from './calculos';
-import { resolveFrmsOperationalContext } from './parameter-governance';
+import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import type { LimitesMap } from './types';
 
 export interface SyncResult {
@@ -160,7 +160,7 @@ export async function sincronizarCheckinComFrms(
     jornadaId: jornada.id,
     checkinId,
   });
-  const limites = operationalContext.parameters as unknown as LimitesMap;
+  const limites = asOperationalLimitesMap(operationalContext.parameters);
   const cfgSono = resolverFrmsConfig(limites);
   const duracaoSonoMin = horasSonoParaMinutos(horasSono);
   const apresentacaoMin = hhmmToMinutes(jornada.hora_apresentacao);

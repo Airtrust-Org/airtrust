@@ -6,7 +6,7 @@ import type { FrmsJornada, LimitesMap, FrmsAcumuloRolling } from './types';
 import { diasNoMes, calcAcumuloMensal } from './calculos';
 import { dateOffset } from './db-service-shared';
 import { buildCanonicalOperationalSourceSql } from './frms-source-policy';
-import { resolveFrmsOperationalContext } from './parameter-governance';
+import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 
 const CANONICAL_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('origem');
 const CANONICAL_JOINED_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('j.origem');
@@ -43,7 +43,7 @@ export async function buscarAcumuloTripulante(
     referenceAt: mes ? `${mes}-01` : hoje,
     funcionarioId: Number(tripulanteId),
   });
-  const limites = operationalContext.parameters as unknown as LimitesMap;
+  const limites = asOperationalLimitesMap(operationalContext.parameters);
 
   // Nome do tripulante
   const funcRow = await db
@@ -582,7 +582,7 @@ export async function buscarAcumuloFrota(
     ? `${mesReferencia}-${String(diasNoMes(...(mesReferencia.split('-').map(Number) as [number, number]))).padStart(2, '0')}`
     : new Date().toISOString().slice(0, 10);
   const limitesPromise = resolveFrmsOperationalContext(db, { empresaId, referenceAt }).then(
-    (ctx) => ctx.parameters as unknown as LimitesMap,
+    (ctx) => asOperationalLimitesMap(ctx.parameters),
   );
 
   if (mesReferencia) {

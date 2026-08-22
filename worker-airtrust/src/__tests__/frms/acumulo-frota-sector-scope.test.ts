@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buscarAcumuloFrota } from '../../lib/frms/db-service-acumulo';
 import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../services/employee-sector-access';
 import * as parameterGovernanceModule from '../../lib/frms/parameter-governance';
+import { LIMITES_DEFAULT } from '../../lib/frms/types';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -27,7 +28,7 @@ function createDb() {
     modelVersion: 'FRMS_CONFIG_V1_TEST',
     effectiveFrom: '2000-01-01',
     effectiveTo: null,
-    parameters: {} as never,
+    parameters: LIMITES_DEFAULT,
     fadigaPolicy: {} as never,
     fortnightPolicy: {} as never,
   } as never);

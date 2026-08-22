@@ -18,7 +18,7 @@ import type { AlertaGerado } from './alertas';
 import { calcularLinhaFadigaAcumulada } from './fadiga-acumulada-legal';
 import { generateId, now, logAuditoria, buscarHistoricoJornadas } from './db-service-shared';
 import { despacharNotificacoes } from './db-service-notificacoes';
-import { resolveFrmsOperationalContext } from './parameter-governance';
+import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import { resolveFrmsSourceStatus, shouldUseForOperationalFrms } from './frms-source-policy';
 import { resolveFuncionarioActiveFortnightForDate } from '../escalas/active-fortnight';
 import {
@@ -223,7 +223,7 @@ export async function recalcularPipeline(
     referenceAt: jornada.data,
     jornadaId: jornada.id,
   });
-  limites = operationalContext.parameters as unknown as LimitesMap;
+  limites = asOperationalLimitesMap(operationalContext.parameters);
   provenance = {
     configRevisionId: operationalContext.configRevisionId,
     modelVersion: operationalContext.modelVersion,
@@ -680,7 +680,7 @@ export async function salvarJornada(
     referenceAt: input.data,
     funcionarioId: Number(input.tripulante_id),
   });
-  const limites = operationalContext.parameters as unknown as LimitesMap;
+  const limites = asOperationalLimitesMap(operationalContext.parameters);
   void legacyLimites;
 
   // Calcular duração da jornada
@@ -842,7 +842,7 @@ export async function atualizarJornada(
     funcionarioId: Number(merged.tripulante_id ?? existing.tripulante_id),
     jornadaId: id,
   });
-  const limites = operationalContext.parameters as unknown as LimitesMap;
+  const limites = asOperationalLimitesMap(operationalContext.parameters);
 
   // Revalidar repouso plataforma
   merged.repouso_plataforma_valido = validarRepousoPlataforma(
@@ -1215,7 +1215,7 @@ export async function importarApus(
         referenceAt: input.data,
         funcionarioId: Number(input.tripulante_id),
       });
-      const limites = operationalContext.parameters as unknown as LimitesMap;
+      const limites = asOperationalLimitesMap(operationalContext.parameters);
       const repousoValido = validarRepousoPlataforma(
         input.repouso_plataforma_inicio ?? null,
         input.repouso_plataforma_fim ?? null,

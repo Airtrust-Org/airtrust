@@ -231,6 +231,23 @@ function isGovernedLimitesMap(
   return requiredKeys.every((key) => Number.isFinite(values[key]));
 }
 
+/**
+ * Narrows an already-resolved governed parameter set into the historical
+ * calculation contract via a real type guard (never a double cast). Safe to
+ * call on `FrmsOperationalContext.parameters`, since `resolveFrmsOperationalContext`
+ * already guarantees every `LIMITES_DEFAULT` key is present and numeric.
+ */
+export function asOperationalLimitesMap(parameters: Readonly<Record<string, number>>): LimitesMap {
+  const requiredKeys = Object.keys(LIMITES_DEFAULT) as (keyof LimitesMap)[];
+  if (!isGovernedLimitesMap(parameters, requiredKeys)) {
+    throw new FrmsParameterResolutionError(
+      'FRMS_PARAMETER_REQUIRED_MISSING',
+      'Governed operational context does not satisfy the calculation contract.',
+    );
+  }
+  return parameters;
+}
+
 export interface FrmsRecalcRun {
   id: string;
   empresa_id: number | null;

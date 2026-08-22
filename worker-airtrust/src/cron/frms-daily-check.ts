@@ -17,7 +17,7 @@ import {
   recalcularAcumuloRolling,
   despacharNotificacoes,
 } from '../lib/frms/db-service';
-import { resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
+import { resolveFrmsOperationalContext, asOperationalLimitesMap } from '../lib/frms/parameter-governance';
 import type { LimitesMap } from '../lib/frms/types';
 import { processarAlertas } from '../lib/frms/alertas';
 import type { AlertaGerado } from '../lib/frms/alertas';
@@ -205,7 +205,7 @@ export async function frmsDailyCheck(env: Env): Promise<{
         referenceAt: hoje,
         funcionarioId: trip.id,
       });
-      const limites = operationalContext.parameters as unknown as LimitesMap;
+      const limites = asOperationalLimitesMap(operationalContext.parameters);
 
       // 1. Recalcular acúmulo rolling
       const acumulo = await recalcularAcumuloRolling(db, trip.id, hoje, limites);

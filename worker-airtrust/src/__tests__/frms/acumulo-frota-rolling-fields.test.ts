@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buscarAcumuloFrota } from '../../lib/frms/db-service-acumulo';
 import * as parameterGovernanceModule from '../../lib/frms/parameter-governance';
+import { LIMITES_DEFAULT } from '../../lib/frms/types';
 
 function mockGovernedLimites(limites: Record<string, unknown>) {
   vi.spyOn(parameterGovernanceModule, 'resolveFrmsOperationalContext').mockResolvedValue({
@@ -11,7 +12,7 @@ function mockGovernedLimites(limites: Record<string, unknown>) {
     modelVersion: 'FRMS_CONFIG_V1_TEST',
     effectiveFrom: '2000-01-01',
     effectiveTo: null,
-    parameters: limites as never,
+    parameters: { ...LIMITES_DEFAULT, ...limites } as never,
     fadigaPolicy: {} as never,
     fortnightPolicy: {} as never,
   } as never);
