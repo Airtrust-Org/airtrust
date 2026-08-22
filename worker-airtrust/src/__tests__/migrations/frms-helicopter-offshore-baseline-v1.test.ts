@@ -71,36 +71,19 @@ describe('FRMS_HELICOPTER_OFFSHORE_BASELINE_V1 seed', () => {
     expect(assignments.stdout.trim()).toBe('0');
   });
 
-  it('every parameter value is copied byte-for-byte from the LEGACY_GENERAL bootstrap — no value changed', () => {
+  it('is self-contained: independent of LEGACY_GENERAL/frms_configuracao_limites entirely, with the full 128-parameter set', () => {
     const path = createBaselineWithGovernance();
     sqlite(path, seed);
 
-    const mismatches = sqlite(
+    // Deliberately NOT compared against 'frms-legacy-global-v2' — that
+    // revision's completeness depends on frms_configuracao_limites, which is
+    // empty in real staging (see frms-helicopter-offshore-empty-legacy-
+    // staging-repro.test.ts). HELICOPTER_OFFSHORE V1 must not depend on it.
+    const countResult = sqlite(
       path,
-      `SELECT count(*) FROM (
-         SELECT legacy.parameter_key
-           FROM frms_config_parameters legacy
-           JOIN frms_config_parameters offshore
-             ON offshore.parameter_key = legacy.parameter_key
-            AND offshore.revision_id = 'frms-helicopter-offshore-baseline-v1'
-          WHERE legacy.revision_id = 'frms-legacy-global-v2'
-            AND (
-              IFNULL(legacy.numeric_value, '') != IFNULL(offshore.numeric_value, '')
-              OR IFNULL(legacy.json_value, '') != IFNULL(offshore.json_value, '')
-            )
-       );`,
+      `SELECT count(*) FROM frms_config_parameters WHERE revision_id = 'frms-helicopter-offshore-baseline-v1';`,
     );
-    expect(mismatches.stdout.trim()).toBe('0');
-
-    const countMatch = sqlite(
-      path,
-      `SELECT
-         (SELECT count(*) FROM frms_config_parameters WHERE revision_id = 'frms-legacy-global-v2'),
-         (SELECT count(*) FROM frms_config_parameters WHERE revision_id = 'frms-helicopter-offshore-baseline-v1');`,
-    );
-    const [legacyCount, offshoreCount] = countMatch.stdout.trim().split('|');
-    expect(Number(offshoreCount)).toBe(Number(legacyCount));
-    expect(Number(offshoreCount)).toBeGreaterThan(60); // sanity: not an empty/partial copy
+    expect(Number(countResult.stdout.trim())).toBe(128);
   });
 
   it('fails closed on a second application instead of silently double-seeding (UNIQUE constraint)', () => {
