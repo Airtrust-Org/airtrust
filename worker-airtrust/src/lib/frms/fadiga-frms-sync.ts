@@ -1,7 +1,8 @@
 import { horasSonoParaMinutos } from './fadiga-score';
-import { carregarLimites } from './db-service-config';
 import { resolverFrmsConfig } from './frms-config';
 import { calcEffectiveness, hhmmToMinutes, minutesToHhmm } from './calculos';
+import { resolveFrmsOperationalContext } from './parameter-governance';
+import type { LimitesMap } from './types';
 
 export interface SyncResult {
   sincronizado: boolean;
@@ -152,7 +153,14 @@ export async function sincronizarCheckinComFrms(
     return { sincronizado: false, jornada_id: jornada.id };
   }
 
-  const limites = await carregarLimites(db);
+  const operationalContext = await resolveFrmsOperationalContext(db, {
+    empresaId,
+    referenceAt: dataCheckin,
+    funcionarioId,
+    jornadaId: jornada.id,
+    checkinId,
+  });
+  const limites = operationalContext.parameters as unknown as LimitesMap;
   const cfgSono = resolverFrmsConfig(limites);
   const duracaoSonoMin = horasSonoParaMinutos(horasSono);
   const apresentacaoMin = hhmmToMinutes(jornada.hora_apresentacao);
@@ -202,6 +210,9 @@ export async function sincronizarCheckinComFrms(
            effectiveness_nivel       = ?,
            effectiveness_componentes_json = ?,
            processado_com_bug        = 0,
+           config_revision_id        = ?,
+           model_version             = ?,
+           recalc_state              = 'CURRENT',
            updated_at                = datetime('now')
        WHERE id = ?`,
     )
@@ -213,6 +224,8 @@ export async function sincronizarCheckinComFrms(
       effectResult.effectiveness_pct,
       effectResult.nivel,
       JSON.stringify(effectResult.componentes),
+      operationalContext.configRevisionId,
+      operationalContext.modelVersion,
       fatorizacao.id,
     )
     .run();
@@ -268,6 +281,8 @@ export async function sincronizarCheckinComFrms(
     acordou_na_wocl: effectResult.acordou_na_wocl,
     nivel: effectResult.nivel,
     componentes: effectResult.componentes,
+    config_revision_id: operationalContext.configRevisionId,
+    model_version: operationalContext.modelVersion,
   };
 
   const existingSyncEvent = await db

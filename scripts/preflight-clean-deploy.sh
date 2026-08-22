@@ -38,3 +38,12 @@ if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
 fi
 
 git status --short --untracked-files=all
+
+if [[ -n "${FRMS_GOVERNANCE_D1_NAME:-}" ]]; then
+  echo ""
+  echo "=== FRMS governance readiness gate ==="
+  node scripts/frms-governance-preflight.mjs --remote
+else
+  echo ""
+  echo "SKIPPED: FRMS governance readiness gate (FRMS_GOVERNANCE_D1_NAME not set)."
+fi

@@ -1,7 +1,7 @@
-import type { Origem } from './types';
-import { carregarLimites } from './db-service-config';
+import type { Origem, LimitesMap } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
 import { resolverFrmsConfig } from './frms-config';
+import { resolveFrmsOperationalContext } from './parameter-governance';
 import {
   buildFrmsFortnightIndicatorMap,
   type FrmsFortnightIndicator,
@@ -702,7 +702,11 @@ export async function listFrmsOperationalSnapshot(
   db: D1Database,
   params: ListFrmsOperationalSnapshotParams,
 ): Promise<FrmsOperationalSnapshotResult> {
-  const limites = await carregarLimites(db);
+  const operationalContext = await resolveFrmsOperationalContext(db, {
+    empresaId: params.empresaId,
+    referenceAt: params.hoje ?? params.dataFim,
+  });
+  const limites = operationalContext.parameters as unknown as LimitesMap;
   const frmsConfig = resolverFrmsConfig(limites);
 
   const [escalasResult, jornadasResult, checkinsResult, effectivenessResult] = await Promise.all([
@@ -1001,6 +1005,7 @@ export async function listFrmsOperationalSnapshot(
     windowStart: params.dataInicio,
     windowEnd: params.dataFim,
     today: params.hoje,
+    policy: operationalContext.fortnightPolicy,
   });
 
   const itemsWithFortnight = snapshot.items.map((item) => {

@@ -29,6 +29,29 @@ CREATE TABLE frms_config_revisions (
 CREATE INDEX idx_frms_config_revision_resolution
   ON frms_config_revisions (empresa_id, profile_code, status, effective_from, effective_to);
 
+-- Explicit tenant-to-regulatory-profile assignment. Profile selection is never inferred.
+CREATE TABLE frms_profile_assignments (
+  id TEXT PRIMARY KEY,
+  empresa_id INTEGER NOT NULL,
+  regulatory_profile_id TEXT NOT NULL,
+  profile_code TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('ACTIVE', 'SUPERSEDED', 'RETIRED')),
+  effective_from TEXT NOT NULL,
+  effective_to TEXT,
+  created_by INTEGER,
+  approved_at TEXT,
+  approved_by INTEGER,
+  reason TEXT NOT NULL,
+  source TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+  FOREIGN KEY (regulatory_profile_id) REFERENCES frms_regulatory_profiles(id),
+  UNIQUE (empresa_id, regulatory_profile_id, effective_from)
+);
+
+CREATE INDEX idx_frms_profile_assignment_resolution
+  ON frms_profile_assignments (empresa_id, status, effective_from, effective_to);
+
 CREATE TABLE frms_config_parameters (
   id TEXT PRIMARY KEY,
   revision_id TEXT NOT NULL,
@@ -168,4 +191,13 @@ ALTER TABLE frms_fatorizacao_jornada ADD COLUMN recalc_state TEXT NOT NULL DEFAU
 
 CREATE INDEX idx_frms_fatorizacao_revision_state
   ON frms_fatorizacao_jornada (config_revision_id, recalc_state)
+  WHERE deleted_at IS NULL;
+
+-- Check-in is a scored result, not only raw input; retain the exact governed context.
+ALTER TABLE frms_fadiga_checkin ADD COLUMN regulatory_profile_id TEXT;
+ALTER TABLE frms_fadiga_checkin ADD COLUMN profile_code TEXT;
+ALTER TABLE frms_fadiga_checkin ADD COLUMN config_revision_id TEXT;
+ALTER TABLE frms_fadiga_checkin ADD COLUMN model_version TEXT;
+CREATE INDEX idx_frms_checkin_governed_context
+  ON frms_fadiga_checkin (empresa_id, config_revision_id, data_checkin)
   WHERE deleted_at IS NULL;

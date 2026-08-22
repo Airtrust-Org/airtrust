@@ -5,7 +5,9 @@
  * table remains available only to bootstrap a reviewed legacy revision; it is
  * deliberately not a runtime fallback for an operational tenant/profile.
  */
-import type { LimitesMap } from './types';
+import { LIMITES_DEFAULT, type LimitesMap } from './types';
+import { resolveFadigaBusinessPolicy, type FadigaBusinessPolicy } from './fadiga-score';
+import { resolveFortnightPolicy, type FrmsFortnightPolicy } from './fortnight-indicator';
 
 export const FRMS_OFFSHORE_PROFILE = 'HELICOPTER_OFFSHORE' as const;
 export const FRMS_LEGACY_MODEL_VERSION = 'LEGACY_MODEL_V2' as const;
@@ -56,6 +58,56 @@ export class FrmsParameterResolutionError extends Error {
     super(message);
     this.name = 'FrmsParameterResolutionError';
   }
+}
+
+export interface FrmsOperationalContext {
+  empresaId: number;
+  profileCode: string;
+  regulatoryProfileId: string;
+  configRevisionId: string;
+  modelVersion: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  parameters: Readonly<Record<string, number>>;
+  fadigaPolicy: FadigaBusinessPolicy;
+  fortnightPolicy: FrmsFortnightPolicy;
+}
+
+export async function resolveFrmsOperationalContext(
+  db: FrmsGovernanceDb,
+  input: { empresaId: number; referenceAt: string; funcionarioId?: number; jornadaId?: string; checkinId?: string },
+): Promise<FrmsOperationalContext> {
+  const assignments = await db.prepare(
+    `SELECT a.regulatory_profile_id, a.profile_code
+       FROM frms_profile_assignments a
+       JOIN frms_regulatory_profiles p ON p.id = a.regulatory_profile_id
+      WHERE a.empresa_id = ? AND a.status = 'ACTIVE'
+        AND a.effective_from <= ? AND (a.effective_to IS NULL OR a.effective_to >= ?)
+        AND p.empresa_id = ? AND p.active = 1 AND p.deleted_at IS NULL
+        AND p.profile_code = a.profile_code
+        AND p.effective_from <= ? AND (p.effective_to IS NULL OR p.effective_to >= ?)`
+  ).bind(input.empresaId, input.referenceAt, input.referenceAt, input.empresaId, input.referenceAt, input.referenceAt)
+    .all<{ regulatory_profile_id: string; profile_code: string }>();
+  const matches = assignments.results ?? [];
+  if (matches.length !== 1) {
+    throw new FrmsParameterResolutionError(
+      matches.length === 0 ? 'FRMS_CONTEXT_UNAVAILABLE' : 'CONFIGURATION_ERROR',
+      `Expected exactly one effective FRMS profile assignment for empresa=${input.empresaId}, date=${input.referenceAt}.`,
+    );
+  }
+  const assignment = matches[0];
+  const parameterSet = await loadResolvedFrmsParameters(
+    db, input.empresaId, assignment.profile_code, input.referenceAt, Object.keys(LIMITES_DEFAULT),
+  );
+  return Object.freeze({
+    empresaId: input.empresaId, profileCode: assignment.profile_code,
+    regulatoryProfileId: assignment.regulatory_profile_id,
+    configRevisionId: parameterSet.revision.id, modelVersion: parameterSet.modelVersion,
+    effectiveFrom: parameterSet.revision.effective_from, effectiveTo: parameterSet.revision.effective_to,
+    parameters: parameterSet.values,
+    fadigaPolicy: resolveFadigaBusinessPolicy(parameterSet.values),
+    fortnightPolicy: resolveFortnightPolicy(parameterSet.values),
+  });
 }
 
 function isEffective(revision: FrmsConfigRevision, operationalDate: string): boolean {

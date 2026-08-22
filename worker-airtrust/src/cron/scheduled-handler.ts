@@ -16,7 +16,7 @@ import {
   syncSigvoosForFrms,
   upsertSigvoosConfig,
 } from '../services/sigvoos-frms';
-import { carregarLimites } from '../lib/frms/db-service-config';
+import { LIMITES_DEFAULT } from '../lib/frms/types';
 import { reprocessarTripulanteCompleto } from '../lib/frms/db-service';
 import { fetchControleVoosOperationalRecords } from '../lib/frms/controle-voos-source';
 import {
@@ -1165,10 +1165,10 @@ async function runSigvoosFrmsDailySync(
       const tripulanteIds = (tripulantesResult.results ?? []).map((r) => r.tripulante_id);
 
       if (tripulanteIds.length > 0) {
-        const limites = await carregarLimites(db);
+        // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
         for (const tripId of tripulanteIds) {
           try {
-            await reprocessarTripulanteCompleto(db, tripId, limites);
+            await reprocessarTripulanteCompleto(db, tripId, LIMITES_DEFAULT);
           } catch (e) {
             console.warn(
               `[SIGVOOS_CRON] Falha ao reprocessar tripulante ${tripId}:`,

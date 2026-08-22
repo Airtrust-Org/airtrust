@@ -9,7 +9,8 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { rateLimiter } from '../middleware/rate-limit';
-import { carregarLimites, reprocessarTripulanteCompleto } from '../lib/frms/db-service';
+import { reprocessarTripulanteCompleto } from '../lib/frms/db-service';
+import { LIMITES_DEFAULT } from '../lib/frms/types';
 import {
   processarUploadFira,
   processarUploadFirasPorPagina,
@@ -375,13 +376,13 @@ firaRoutes.post(
       );
     }
 
-    const limites = await carregarLimites(c.env.DB);
+    // confirmarImportacaoFira -> salvarJornada/atualizarJornada self-resolve governed context; this param is inert.
     const resultado = await confirmarImportacaoFira(
       c.env.DB,
       importacaoId,
       parsed.data,
       operadorId,
-      limites,
+      LIMITES_DEFAULT,
       empresaId,
     );
 
@@ -775,8 +776,8 @@ firaRoutes.post(
     }
 
     // 3) Reprocessa para refletir cálculo/alertas com a fonte ativa escolhida.
-    const limites = await carregarLimites(c.env.DB);
-    const jornadasReprocessadas = await reprocessarTripulanteCompleto(c.env.DB, tripIdNum, limites);
+    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
+    const jornadasReprocessadas = await reprocessarTripulanteCompleto(c.env.DB, tripIdNum, LIMITES_DEFAULT);
 
     return c.json({
       success: true,

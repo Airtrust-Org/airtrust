@@ -5,8 +5,8 @@
 import type { FrmsJornada, LimitesMap, FrmsAcumuloRolling } from './types';
 import { diasNoMes, calcAcumuloMensal } from './calculos';
 import { dateOffset } from './db-service-shared';
-import { carregarLimites } from './db-service-config';
 import { buildCanonicalOperationalSourceSql } from './frms-source-policy';
+import { resolveFrmsOperationalContext } from './parameter-governance';
 
 const CANONICAL_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('origem');
 const CANONICAL_JOINED_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('j.origem');
@@ -14,6 +14,7 @@ const CANONICAL_JOINED_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('
 export async function buscarAcumuloTripulante(
   db: D1Database,
   tripulanteId: string,
+  empresaId: number,
   mes?: string,
 ): Promise<{
   nome: string;
@@ -37,7 +38,12 @@ export async function buscarAcumuloTripulante(
   const hoje = new Date().toISOString().slice(0, 10);
 
   // Limites vigentes — enviados ao frontend para exibição dinâmica
-  const limites = await carregarLimites(db);
+  const operationalContext = await resolveFrmsOperationalContext(db, {
+    empresaId,
+    referenceAt: mes ? `${mes}-01` : hoje,
+    funcionarioId: Number(tripulanteId),
+  });
+  const limites = operationalContext.parameters as unknown as LimitesMap;
 
   // Nome do tripulante
   const funcRow = await db
@@ -542,8 +548,8 @@ async function enrichWithFlightDemand<
 
 export async function buscarAcumuloFrota(
   db: D1Database,
-  mesReferencia?: string,
-  empresaId?: number,
+  mesReferencia: string | undefined,
+  empresaId: number,
   periodoDias = 30,
   quinzenaReferencia?: 'Q1' | 'Q2',
   sectorScope?: { clause: string; bindings: number[] },
@@ -572,7 +578,12 @@ export async function buscarAcumuloFrota(
   }>
 > {
   // Start limites query in parallel with the main data query (below)
-  const limitesPromise = carregarLimites(db);
+  const referenceAt = mesReferencia
+    ? `${mesReferencia}-${String(diasNoMes(...(mesReferencia.split('-').map(Number) as [number, number]))).padStart(2, '0')}`
+    : new Date().toISOString().slice(0, 10);
+  const limitesPromise = resolveFrmsOperationalContext(db, { empresaId, referenceAt }).then(
+    (ctx) => ctx.parameters as unknown as LimitesMap,
+  );
 
   if (mesReferencia) {
     const limites = await limitesPromise;

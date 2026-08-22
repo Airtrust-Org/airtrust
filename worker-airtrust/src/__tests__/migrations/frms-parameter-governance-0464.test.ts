@@ -24,6 +24,7 @@ function createBaseline(): string {
     CREATE TABLE frms_configuracao_limites (nome TEXT, valor_numerico REAL, unidade TEXT, ativo INTEGER, deleted_at TEXT);
     INSERT INTO frms_configuracao_limites VALUES ('FDP_MAXIMO_HORAS', 11, 'hora', 1, NULL);
     CREATE TABLE frms_fatorizacao_jornada (id TEXT, jornada_id TEXT, deleted_at TEXT, updated_at TEXT);
+    CREATE TABLE frms_fadiga_checkin (id TEXT, empresa_id INTEGER, data_checkin TEXT, deleted_at TEXT);
   `);
   expect(result.status, result.stderr).toBe(0);
   return path;

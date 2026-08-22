@@ -89,6 +89,9 @@ frmsRelatoriosConfig.get(
   '/relatorios/mapa-fadiga',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json({ success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' }, 403);
+    }
     c.header('Cache-Control', 'private, max-age=3600');
     c.header('Vary', 'Authorization');
     const result = await relatorioMapaFadiga(c.env.DB, empresaId);

@@ -1,5 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buscarAcumuloFrota } from '../../lib/frms/db-service-acumulo';
+import * as parameterGovernanceModule from '../../lib/frms/parameter-governance';
+
+function mockGovernedLimites(limites: Record<string, unknown>) {
+  vi.spyOn(parameterGovernanceModule, 'resolveFrmsOperationalContext').mockResolvedValue({
+    empresaId: 1,
+    profileCode: 'LEGACY_GENERAL',
+    regulatoryProfileId: 'profile-1',
+    configRevisionId: 'rev-1',
+    modelVersion: 'FRMS_CONFIG_V1_TEST',
+    effectiveFrom: '2000-01-01',
+    effectiveTo: null,
+    parameters: limites as never,
+    fadigaPolicy: {} as never,
+    fortnightPolicy: {} as never,
+  } as never);
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /**
  * Verifica que o modo mensal (mesReferencia) do buscarAcumuloFrota
@@ -34,6 +54,14 @@ function createDb(overrides?: {
           hv_dia_min: 200,
           pct_limite_dia: 25.0,
         };
+
+  mockGovernedLimites({
+    HV_MES_HORAS: overrides?.limitesOverrides?.HV_MES_HORAS ?? 112.5,
+    HV_7_DIAS_HORAS: overrides?.limitesOverrides?.HV_7_DIAS_HORAS ?? 27,
+    ALERTA_AVISO_PCT: overrides?.limitesOverrides?.ALERTA_AVISO_PCT ?? 80,
+    ALERTA_ATENCAO_PCT: overrides?.limitesOverrides?.ALERTA_ATENCAO_PCT ?? 90,
+    ALERTA_CRITICO_PCT: overrides?.limitesOverrides?.ALERTA_CRITICO_PCT ?? 95,
+  });
 
   let lastBindArgs: unknown[] = [];
 
@@ -236,20 +264,16 @@ describe('buscarAcumuloFrota — month mode (mesReferencia)', () => {
 
     // Mock precisa retornar apenas tripulantes com HAVING > 0
     // Vamos criar um db específico para este caso
+    mockGovernedLimites({
+      HV_MES_HORAS: 112.5,
+      HV_7_DIAS_HORAS: 27,
+      ALERTA_AVISO_PCT: 80,
+      ALERTA_ATENCAO_PCT: 90,
+      ALERTA_CRITICO_PCT: 95,
+    });
     const db2 = {
       prepare: (query: string) => ({
         all: async () => {
-          if (query.includes('FROM frms_configuracao_limites')) {
-            return {
-              results: [
-                { nome: 'HV_MES_HORAS', valor_numerico: 112.5 },
-                { nome: 'HV_7_DIAS_HORAS', valor_numerico: 27 },
-                { nome: 'ALERTA_AVISO_PCT', valor_numerico: 80 },
-                { nome: 'ALERTA_ATENCAO_PCT', valor_numerico: 90 },
-                { nome: 'ALERTA_CRITICO_PCT', valor_numerico: 95 },
-              ],
-            };
-          }
           return {
             results: [
               {
