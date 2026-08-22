@@ -1,5 +1,17 @@
 # FRMS Parameter Baseline Audit
 
+**Identificação**
+- Perfil: `HELICOPTER_OFFSHORE`
+- Revisão: `V1` (`FRMS_HELICOPTER_OFFSHORE_BASELINE_V1`)
+- Modelo: `LEGACY_MODEL_V2`
+- Escopo: AirTrust FRMS é destinado a **operação offshore de helicópteros**
+  (rotação embarcada, plataforma, base de apoio). Não é um motor de aviação
+  geral nem fixed-wing — os parâmetros de ciclo embarcado
+  (`CICLO_EMBARCADO_*`), repouso em plataforma (`REPOUSO_PLATAFORMA_*`) e
+  degradação progressiva do período embarcado (`FRMS_EMBARQUE_PROGRESSO_MAX`)
+  só fazem sentido operacional nesse contexto; nenhum parâmetro do modelo
+  atual pressupõe operação de asa fixa ou aviação comercial genérica.
+
 Read-only inventory of every parameter the FRMS engine consumes today, as a
 precondition for governing `HELICOPTER_OFFSHORE` under
 `FRMS_HELICOPTER_OFFSHORE_BASELINE_V1`. No values are changed by this
@@ -27,12 +39,12 @@ document.
 
 | Parâmetro | Valor atual | Arquivo origem | Tipo |
 |---|---|---|---|
-| FDP_MAXIMO_HORAS | 11 | types.ts | REGULATORY (RBAC 117) |
-| REPOUSO_MINIMO_HORAS | 12 | types.ts | REGULATORY (RBAC 117) |
+| FDP_MAXIMO_HORAS | 11 | types.ts | REGULATORY (RBAC 117) — **⚠ citação incompleta**: código não referencia o item/tabela específica; RBAC 117 define FDP máximo por tabela variável (nº de pousos, horário de apresentação, período de repouso anterior), não um valor único fixo — 11h aparenta ser um teto conservador único, não a tabela completa. Precisa de revisão normativa específica antes de tratar como citação regulatória completa. |
+| REPOUSO_MINIMO_HORAS | 12 | types.ts | REGULATORY (RBAC 117) — **⚠ citação incompleta**: sem item/artigo específico |
 | HV_7_DIAS_HORAS | 45 | types.ts | OPERATIONAL_POLICY (política interna conservadora; RBAC 117 não define HV/7d) |
 | HV_28_DIAS_HORAS | 93 | types.ts | REGULATORY (RBAC 117 Apêndice C) |
 | HV_MES_HORAS | 90 | types.ts | REGULATORY (Lei 13.475/2017, mês calendário) |
-| HV_365_DIAS_HORAS | 930 | types.ts | REGULATORY (RBAC 117, mais restritivo que Lei) |
+| HV_365_DIAS_HORAS | 930 | types.ts | REGULATORY + OPERATIONAL_POLICY (misto) — Lei 13.475 estabelece 960h/ano; 930h é uma margem interna mais restritiva sobreposta à lei. A norma em si é REGULATORY, mas o valor efetivo (930 vs. 960) reflete uma escolha de política operacional, não a norma pura. |
 | HV_DIARIA_HORAS | 8 | types.ts | REGULATORY |
 | ALERTA_AVISO_PCT | 80 | types.ts | OPERATIONAL_POLICY |
 | ALERTA_ATENCAO_PCT | 90 | types.ts | OPERATIONAL_POLICY |
@@ -40,10 +52,10 @@ document.
 | ALERTA_VIOLACAO_PCT | 101 | types.ts | OPERATIONAL_POLICY |
 | FDP_ALERTA_RESTANTE_HORAS | 3 | types.ts | OPERATIONAL_POLICY |
 | HV_DIA_ALERTA_RESTANTE_HORAS | 2 | types.ts | OPERATIONAL_POLICY |
-| REPOUSO_PLATAFORMA_MINIMO_HORAS | 3 | types.ts | OFFSHORE_BENCHMARK (repouso em plataforma) |
-| REPOUSO_PLATAFORMA_MAXIMO_HORAS | 6 | types.ts | OFFSHORE_BENCHMARK |
-| CICLO_EMBARCADO_DIA_INICIO | 1 | types.ts | OFFSHORE_BENCHMARK (ciclo embarcado) |
-| CICLO_EMBARCADO_DIA_MAX | 15 | types.ts | OFFSHORE_BENCHMARK |
+| REPOUSO_PLATAFORMA_MINIMO_HORAS | 3 | types.ts | OFFSHORE_BENCHMARK (repouso em plataforma) — **⚠ sem documento-fonte citado** (IOGP 690-2 / contrato Petrobras / outro?); só o rótulo "OFFSHORE_BENCHMARK" está no código, sem referência ao documento normativo específico |
+| REPOUSO_PLATAFORMA_MAXIMO_HORAS | 6 | types.ts | OFFSHORE_BENCHMARK — **⚠ sem documento-fonte citado**, idem |
+| CICLO_EMBARCADO_DIA_INICIO | 1 | types.ts | OFFSHORE_BENCHMARK (ciclo embarcado) — **⚠ sem documento-fonte citado** |
+| CICLO_EMBARCADO_DIA_MAX | 15 | types.ts | OFFSHORE_BENCHMARK — 15 dias é consistente com o padrão comum de rotação offshore 14/14 ou 15/15, mas **nenhuma fonte contratual/documental é citada no código** confirmando qual rotação real está em vigor |
 | CICLO_EMBARCADO_PCT_MIN | 0 | types.ts | OFFSHORE_BENCHMARK |
 | CICLO_EMBARCADO_PCT_MAX | -0.15 | types.ts | OFFSHORE_BENCHMARK |
 | CICLO_EMBARCADO_ATIVO | 1 | types.ts | OFFSHORE_BENCHMARK (flag) |
@@ -81,17 +93,17 @@ document.
 | FATOR_BASE_AWAY_PCT | -0.1 | types.ts | OFFSHORE_BENCHMARK (operação fora da base) |
 | FATOR_ACLIMATADO_NAO_PCT | -0.1 | types.ts | BIOLOGICAL_MODEL |
 | FATOR_TRIPULACAO_AUM_HORAS | 2.0 | types.ts | OPERATIONAL_POLICY (tripulação aumentada) |
-| VISUAL_AVISO_PCT | 40 | types.ts | OPERATIONAL_POLICY (early warning dashboard) |
-| VISUAL_ATENCAO_PCT | 85 | types.ts | OPERATIONAL_POLICY |
-| VISUAL_CRITICO_PCT | 95 | types.ts | OPERATIONAL_POLICY |
+| VISUAL_AVISO_PCT | 40 | types.ts | OPERATIONAL_POLICY (early warning dashboard) — **⚠ código morto**: não referenciado em nenhum arquivo além de `types.ts` (nem cálculo, nem rota, nem UI) |
+| VISUAL_ATENCAO_PCT | 85 | types.ts | OPERATIONAL_POLICY — **⚠ código morto**: idem |
+| VISUAL_CRITICO_PCT | 95 | types.ts | OPERATIONAL_POLICY — **⚠ código morto**: idem |
 | EFFECTIV_VERDE_MIN | 90 | types.ts | BIOLOGICAL_MODEL (proxy de effectiveness) |
 | EFFECTIV_AMARELO_MAX | 77 | types.ts | BIOLOGICAL_MODEL |
 | EFFECTIV_VERMELHO_MAX | 65 | types.ts | BIOLOGICAL_MODEL |
 | EFFECTIV_PERIODO_PCT | 30 | types.ts | BIOLOGICAL_MODEL |
-| REPOUSO_MIN_PRE_APRESENTACAO | 90 | types.ts | OFFSHORE_BENCHMARK (modelo de sono offshore) |
-| REPOUSO_MIN_POS_LIBERACAO | 60 | types.ts | OFFSHORE_BENCHMARK |
-| REPOUSO_QUALIDADE_HOTEL | 92 | types.ts | OFFSHORE_BENCHMARK |
-| FRMS_EMBARQUE_PROGRESSO_MAX | 8 | types.ts | OFFSHORE_BENCHMARK (degradação progressiva do período embarcado) |
+| REPOUSO_MIN_PRE_APRESENTACAO | 90 | types.ts | OFFSHORE_BENCHMARK (modelo de sono offshore) — **⚠ não consumido por nenhum cálculo**; apenas exibido/editável em `FrmsConfiguracoes.tsx` |
+| REPOUSO_MIN_POS_LIBERACAO | 60 | types.ts | OFFSHORE_BENCHMARK — **⚠ não consumido por nenhum cálculo**; apenas exibido/editável em `FrmsConfiguracoes.tsx` |
+| REPOUSO_QUALIDADE_HOTEL | 92 | types.ts | OFFSHORE_BENCHMARK — **⚠ não consumido por nenhum cálculo**; apenas exibido/editável em `FrmsConfiguracoes.tsx`; origem do valor "92" e sua escala (percentual? score?) não documentada em nenhum lugar do código |
+| FRMS_EMBARQUE_PROGRESSO_MAX | 8 | types.ts | OFFSHORE_BENCHMARK (unidade: **percentual**, não dias — penalidade cumulativa máxima de 8% ao final do período embarcado; ver `calculos.ts:419`, `/100`) |
 | MINUTOS_ANTES_APRESENTACAO | 90 | types.ts | BIOLOGICAL_MODEL (premissa operacional de sono) |
 | HORAS_SONO_PADRAO | 8 | types.ts | BIOLOGICAL_MODEL |
 
