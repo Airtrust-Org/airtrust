@@ -165,6 +165,100 @@ describe('confirmarImportacaoFira duplicate merge', () => {
     expect(result.erros).toBe(0);
   });
 
+  it('re-syncing SIGVOOS over an already-populated SIGVOOS journey updates it in place instead of duplicating it (regression: staging duplicate bug)', async () => {
+    const preview = {
+      importacao_id: 'imp-resync',
+      tripulante_encontrado: true,
+      tripulante_id: '1',
+      tripulante_nome_fira: 'QA',
+      tripulante_nome_sistema: 'QA',
+      canac: '999006',
+      ano: 2026,
+      mes: 8,
+      mes_nome: 'agosto',
+      total_dias: 1,
+      totais_fira: { jornada: '05:30', voo: '03:15' },
+      totais_calculados: { jornada_min: 330, voo_min: 195 },
+      divergencia_totais: false,
+      avisos: [],
+      erros: [],
+      linhas: [
+        {
+          dia: 6,
+          data: '2026-08-06',
+          status_fira: 'SIGVOOS',
+          status_frms: 'ES',
+          hora_apresentacao: '02:30',
+          hora_termino: '08:00',
+          duracao_jornada_min: 330,
+          horas_voo_min: 195,
+          local_base: 'SBQA',
+          // Already-existing SIGVOOS journey from a prior sync — NOT empty,
+          // it already carries real operational data. A routine periodic
+          // re-sync of the same period must refresh it, not duplicate it.
+          situacao: 'DUPLICATA',
+          jornada_existente_id: 'jornada-sigvoos-existente',
+          marcado: true,
+        },
+      ],
+    };
+
+    const db = createDbStub({
+      importacao: {
+        id: 'imp-resync',
+        tripulante_id: '1',
+        canac: '999006',
+        ano: 2026,
+        mes: 8,
+        preview_json: JSON.stringify(preview),
+        status: 'REVISAO',
+        total_dias_importados: 0,
+      },
+      rowsById: [
+        {
+          id: 'jornada-sigvoos-existente',
+          data: '2026-08-06',
+          origem: 'SIGVOOS',
+          empresa_id: 999006,
+          hora_apresentacao: '02:30',
+          hora_termino: '08:00',
+          horas_voo_minutos: 195,
+          duracao_jornada_minutos: 330,
+        },
+      ],
+      rowsByDate: [
+        {
+          id: 'jornada-sigvoos-existente',
+          data: '2026-08-06',
+          origem: 'SIGVOOS',
+          empresa_id: 999006,
+          hora_apresentacao: '02:30',
+          hora_termino: '08:00',
+          horas_voo_minutos: 195,
+          duracao_jornada_minutos: 330,
+        },
+      ],
+    });
+
+    const result = await confirmarImportacaoFira(
+      db,
+      'imp-resync',
+      { dias_selecionados: [{ dia: 6, forcar_substituicao: true }] },
+      '30',
+      {} as any,
+      999006,
+    );
+
+    expect(atualizarJornada).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(atualizarJornada).mock.calls[0]?.[1]).toBe('jornada-sigvoos-existente');
+    // Never falls through to a fresh insert — that would be the duplicate.
+    expect(salvarJornada).not.toHaveBeenCalled();
+    expect(result.substituidos).toBe(1);
+    expect(result.importados).toBe(0);
+    expect(result.ignorados).toBe(0);
+    expect(result.erros).toBe(0);
+  });
+
   it('persists new SIGVOOS journeys with canonical operational origin', async () => {
     const preview = {
       importacao_id: 'imp-3',

@@ -165,11 +165,6 @@ function shouldMergeIntoExistingManualJornada(params: {
 
   if (!linhaTemDadosOperacionais(linha)) return false;
 
-  const origem = String(jornada.origem || '').trim().toUpperCase();
-  if (origem && origem !== 'MANUAL') return false;
-
-  if (!jornadaExistenteOperacionalmenteVazia(jornada)) return false;
-
   if (
     empresaId !== undefined &&
     empresaId !== null &&
@@ -178,6 +173,23 @@ function shouldMergeIntoExistingManualJornada(params: {
   ) {
     return false;
   }
+
+  const origem = String(jornada.origem || '').trim().toUpperCase();
+
+  // Canonical re-sync (FIRA/SIGVOOS refreshing its own prior canonical
+  // record): buildSelectedDaysForSigvoosImport/processarUploadFira already
+  // decided this exact row is safe to overwrite (jornada_existente_id +
+  // origem FIRA/SIGVOOS is exactly how they flag it) — always merge in
+  // place regardless of whether the existing row already has operational
+  // data, otherwise a routine periodic SIGVOOS re-sync over an already
+  // -synced period silently duplicates every overlapping day instead of
+  // refreshing it.
+  if (origem === 'FIRA' || origem === 'SIGVOOS') return true;
+
+  // Manual placeholder merge (unchanged): only safe when the existing
+  // MANUAL row has no operational data of its own yet.
+  if (origem && origem !== 'MANUAL') return false;
+  if (!jornadaExistenteOperacionalmenteVazia(jornada)) return false;
 
   return true;
 }
