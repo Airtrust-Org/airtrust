@@ -482,7 +482,7 @@ export default function Qualificacoes() {
   // Cache de atualizações otimistas de tipos — garante que a tabela mostre
   // o valor salvo IMEDIATAMENTE, antes mesmo do refetch completar.
   // Chave: String(id do tipo), Valor: campos atualizados.
-  const [tipoUpdates, setTipoUpdates] = useState<Record<string, Partial<QualificacaoTipoDTO>>>({});
+  const [tipoUpdates, setTipoUpdates] = useState<Record<string, Partial<TipoQualificacao>>>({});
 
   const modelosPrefsHydratedRef = useRef(false);
 
@@ -1249,6 +1249,13 @@ export default function Qualificacoes() {
     return `${year}-${month}-${day}`;
   };
 
+  const formatDateLabel = (value?: string | null): string => {
+    if (!value) return 'Data a definir';
+    const parsed = parseDateLocal(value);
+    if (!parsed) return value;
+    return parsed.toLocaleDateString('pt-BR');
+  };
+
   const getDataMinimaPlanejada = (): string => {
     const amanha = new Date();
     amanha.setHours(0, 0, 0, 0);
@@ -1309,9 +1316,17 @@ export default function Qualificacoes() {
     handleConfirmDeleteMutation,
   } = useQualificacoesMutations({
     API_BASE_URL,
-    fetchWithAuth,
+    fetchWithAuth: async (input, init) => {
+      const response = await fetchWithAuth(String(input), init);
+      return {
+        ok: response.ok,
+        json: () => response.json(),
+      };
+    },
     showToast,
-    emitirEventoModulo,
+    emitirEventoModulo: (payload) => {
+      emitirEventoModulo(payload as unknown as Parameters<typeof emitirEventoModulo>[0]);
+    },
     recarregarHistoricoEStats,
   });
 
@@ -4583,7 +4598,7 @@ export default function Qualificacoes() {
                   // antes mesmo do refetch concluir. Isso corrige o bug de "validade antiga
                   // na tabela e no modal ao reabrir".
                   const tipoIdStr = String(editingTipo.id);
-                  const optimisticUpdate: Partial<QualificacaoTipoDTO> = {};
+                  const optimisticUpdate: Partial<TipoQualificacao> = {};
                   // Sempre propagar validade, incluindo null (limpar vencimento).
                   optimisticUpdate.validade = editingTipo.validade ?? null;
                   // Outros campos que podem ter mudado e afetam a visualização da tabela
@@ -4931,7 +4946,9 @@ export default function Qualificacoes() {
       <ConfirmDeleteModal
         isOpen={!!showConfirmDelete}
         onClose={() => setShowConfirmDelete(null)}
-        onConfirm={handleConfirmDelete}
+        onConfirm={async () => {
+          await handleConfirmDelete();
+        }}
         message="Tem certeza que deseja deletar esta qualificação?"
         itemName={showConfirmDelete?.nome || ''}
         loading={deletandoId !== null}

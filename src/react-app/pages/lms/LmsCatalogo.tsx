@@ -1770,7 +1770,7 @@ export default function LmsCatalogo() {
 
   async function handleSave(
     form: CreateCursoDTO,
-    assets: { contentFile: File | null; thumbnailFile: File | null },
+    assets: { contentFile: File | null; thumbnailFile: File | null; skipPurge: boolean },
   ) {
     setUploadProgress(0);
     setUploadStatus('');
@@ -1820,7 +1820,7 @@ export default function LmsCatalogo() {
 
           nextCourseSnapshot = {
             ...nextCourseSnapshot,
-            tipo_conteudo: form.tipo_conteudo,
+            tipo_conteudo: form.tipo_conteudo ?? nextCourseSnapshot.tipo_conteudo,
             conteudo_arquivo_nome: assets.contentFile.name,
             pdf_r2_key:
               form.tipo_conteudo === 'pdf'
@@ -1847,7 +1847,7 @@ export default function LmsCatalogo() {
 
           nextCourseSnapshot = {
             ...nextCourseSnapshot,
-            tipo_conteudo: form.tipo_conteudo,
+            tipo_conteudo: form.tipo_conteudo ?? nextCourseSnapshot.tipo_conteudo,
             conteudo_arquivo_nome: assets.contentFile.name,
             scorm_package_r2_prefix:
               upload.prefix ?? nextCourseSnapshot.scorm_package_r2_prefix ?? null,
@@ -2050,8 +2050,8 @@ export default function LmsCatalogo() {
                   >
                     <option value="all">Todas as categorias</option>
                     {categories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
+                      <option key={c ?? 'SEM_CATEGORIA'} value={c ?? ''}>
+                        {c || 'Sem categoria'}
                       </option>
                     ))}
                   </select>
