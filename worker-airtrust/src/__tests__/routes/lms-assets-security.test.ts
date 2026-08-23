@@ -13,6 +13,15 @@ describe('LMS asset security contract', () => {
     expect(policy).not.toContain('frame-ancestors *');
   });
 
+  it('allows the actual staging Pages host, not just the non-matching wildcard', () => {
+    // "*.airtrust.pages.dev" is a subdomain wildcard — it does not match
+    // Cloudflare Pages' project-name.pages.dev naming (airtrust-staging.pages.dev
+    // is a sibling of airtrust.pages.dev, not a child of it). Without the exact
+    // host listed too, the SCORM player iframe is blocked by frame-ancestors
+    // in staging.
+    expect(LMS_FRAME_ANCESTORS.split(' ')).toContain('https://airtrust-staging.pages.dev');
+  });
+
   it('stores only a short-lived HttpOnly asset token in the LMS cookie', () => {
     const source = readFileSync(join(process.cwd(), 'src', 'routes', 'lms-assets.ts'), 'utf8');
     expect(source).toContain("token_type: 'lms_asset'");
