@@ -101,21 +101,32 @@ function bindSql(sql, args) {
  * field is missing.
  */
 export function makeD1(dbName) {
+  function makeStatement(resolvedSql) {
+    return {
+      async all() { return { results: queryD1(dbName, resolvedSql) }; },
+      async first() { const rows = queryD1(dbName, resolvedSql); return rows[0] ?? null; },
+      async run() { const full = queryD1Full(dbName, resolvedSql); return { success: true, meta: full.meta ?? {} }; },
+    };
+  }
   return {
     prepare(sql) {
       return {
-        bind(...args) {
-          const bound = bindSql(sql, args);
-          return {
-            async all() { return { results: queryD1(dbName, bound) }; },
-            async first() { const rows = queryD1(dbName, bound); return rows[0] ?? null; },
-            async run() { const full = queryD1Full(dbName, bound); return { success: true, meta: full.meta ?? {} }; },
-          };
-        },
-        async all() { return { results: queryD1(dbName, sql) }; },
-        async first() { const rows = queryD1(dbName, sql); return rows[0] ?? null; },
-        async run() { const full = queryD1Full(dbName, sql); return { success: true, meta: full.meta ?? {} }; },
+        bind(...args) { return makeStatement(bindSql(sql, args)); },
+        ...makeStatement(sql),
       };
+    },
+    // Real D1's db.batch(statements) runs an array of already-prepared/bound
+    // statements as one transaction and returns one result per statement.
+    // wrangler CLI gives us no real multi-statement transaction primitive
+    // here, so this runs them sequentially in the given order — sufficient
+    // for this synthetic staging runner, which never depends on atomic
+    // all-or-nothing rollback across the batch.
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) {
+        results.push(await statement.run());
+      }
+      return results;
     },
   };
 }
