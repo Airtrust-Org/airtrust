@@ -68,12 +68,16 @@ export function assertGuards(args) {
   return { environment, dbName, dbId, empresaId };
 }
 
-function queryD1(dbName, sql) {
+function queryD1Full(dbName, sql) {
   const run = spawnSync('npx', ['wrangler', 'd1', 'execute', dbName, '--remote', '--json', '--command', sql], {
     cwd: WORKER_DIR, encoding: 'utf8', maxBuffer: 1024 * 1024 * 50,
   });
   if (run.status !== 0) throw new Error(`D1 query failed: ${run.stderr || run.stdout}`);
-  return JSON.parse(run.stdout)[0]?.results ?? [];
+  return JSON.parse(run.stdout)[0] ?? { results: [], meta: {} };
+}
+
+function queryD1(dbName, sql) {
+  return queryD1Full(dbName, sql).results ?? [];
 }
 
 function bindSql(sql, args) {
@@ -86,7 +90,17 @@ function bindSql(sql, args) {
   });
 }
 
-function makeD1(dbName) {
+/**
+ * Minimal D1Database-shaped wrapper over `wrangler d1 execute`, for calling
+ * real production service functions (which expect a D1Database binding)
+ * from a plain Node script. `.run()` must return the same `{ success, meta:
+ * { changes, ... } }` shape the real Cloudflare D1 binding returns — code
+ * such as upsertSigvoosConfigRaw (worker-airtrust/src/services/sigvoos-frms.ts)
+ * reads `.meta.changes` to decide whether to UPDATE or INSERT, and crashes
+ * with "Cannot read properties of undefined (reading 'changes')" if that
+ * field is missing.
+ */
+export function makeD1(dbName) {
   return {
     prepare(sql) {
       return {
@@ -95,12 +109,12 @@ function makeD1(dbName) {
           return {
             async all() { return { results: queryD1(dbName, bound) }; },
             async first() { const rows = queryD1(dbName, bound); return rows[0] ?? null; },
-            async run() { queryD1(dbName, bound); return { success: true }; },
+            async run() { const full = queryD1Full(dbName, bound); return { success: true, meta: full.meta ?? {} }; },
           };
         },
         async all() { return { results: queryD1(dbName, sql) }; },
         async first() { const rows = queryD1(dbName, sql); return rows[0] ?? null; },
-        async run() { queryD1(dbName, sql); return { success: true }; },
+        async run() { const full = queryD1Full(dbName, sql); return { success: true, meta: full.meta ?? {} }; },
       };
     },
   };
