@@ -261,10 +261,22 @@ export async function materializeSimulatorPlanning(params: {
   }
 
   const participants = snapshotParticipants.map((participant, index) => ({
+    // Persist the original training/session references whenever they are valid
+    // scalar identifiers; otherwise fallback to the planning id and fail-closed
+    // later if no usable session model id exists.
     employee_id: Number(participant.employee_id ?? participant.funcionario_id),
-    planned_training_id:
-      participant.training_id ?? participant.planned_training_id ?? participant.qualificacao_tipo_id ?? planningId,
-    session_model_id: firstSessionModelId(participant.session_model_ids) ?? participant.modelo_sessao_id,
+    planned_training_id: (() => {
+      const raw =
+        participant.training_id ??
+        participant.planned_training_id ??
+        participant.qualificacao_tipo_id ??
+        planningId;
+      return typeof raw === 'number' || typeof raw === 'string' ? raw : planningId;
+    })(),
+    session_model_id: (() => {
+      const raw = firstSessionModelId(participant.session_model_ids) ?? participant.modelo_sessao_id;
+      return typeof raw === 'number' || typeof raw === 'string' ? raw : '';
+    })(),
     session_order: index + 1,
     generate_ficha: true,
   }));
