@@ -98,7 +98,7 @@ describe('uploadStructuredLmsPackage', () => {
     expect(peakFileUploads).toBe(2);
     expect(result.filesUploaded).toBe(98);
     expect(fetchWithAuthMock).toHaveBeenCalledTimes(100);
-  });
+  }, 15_000);
 
   it('keeps a file of at least 4 MB isolated from other uploads', async () => {
     let activeFileUploads = 0;

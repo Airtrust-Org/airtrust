@@ -7,10 +7,24 @@
 .worktrees
 .worktrees/**
 
+.git/worktrees
+.git/worktrees/**
+release
+release/**
+
+node_modules.nosync
+node_modules.nosync/**
+**/node_modules.nosync
+**/node_modules.nosync/**
+
 node_modules
 node_modules/**
+**/node_modules
+**/node_modules/**
 worker-airtrust/node_modules
 worker-airtrust/node_modules/**
+
+**/.DS_Store
 
 /*.patch
 /worker-airtrust/*.patch
