@@ -662,6 +662,97 @@ sigvoosRouter.post(
   }
 });
 
+const ShadowSyncSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  pageSize: z.number().int().min(1).max(200).optional(),
+  maxPages: z.number().int().min(1).max(10).optional(),
+});
+
+/**
+ * Fase 0 governed shadow endpoint (SIGVOOS real shadow/parallel — path B).
+ *
+ * Reuses the exact same admin-only maintenance capability as the real
+ * operational sync route above. Calls runSigvoosShadowIngestion directly
+ * (worker-airtrust/src/services/sigvoos-shadow-service.ts, MR !92) — never
+ * touches syncSigvoosForFrms, frms_jornada, alerts, or rolling. Not wired
+ * into any cron/schedule; manual/governed invocation only.
+ */
+sigvoosRouter.post(
+  '/shadow/sincronizar',
+  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-shadow-sync' }),
+  requireMaintenanceCapability(
+    MAINTENANCE_CAPABILITIES.sigvoosExecutar,
+    'Sincronização shadow SIGVOOS restrita a administradores autorizados.',
+  ),
+  async (c) => {
+    const empresaId = resolveAuthenticatedEmpresaId(c);
+    if (!empresaId) {
+      return c.json({ success: false, error: 'Contexto de empresa ausente', code: 'TENANT_CONTEXT_REQUIRED' }, 403);
+    }
+    const impersonationDenied = await assertNoImpersonation(c, 'SIGVOOS_SHADOW_IMPERSONATION_BLOCKED');
+    if (impersonationDenied) return impersonationDenied;
+
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = ShadowSyncSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: 'Dados invalidos', code: 'VALIDATION_ERROR', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    const operationId = crypto.randomUUID();
+    const startedAt = Date.now();
+    try {
+      const { runSigvoosShadowIngestion } = await import('../services/sigvoos-shadow-service');
+      const summary = await runSigvoosShadowIngestion(
+        c.env.DB,
+        empresaId,
+        {
+          from: parsed.data.from,
+          to: parsed.data.to,
+          pageSize: parsed.data.pageSize,
+          maxPages: parsed.data.maxPages,
+        },
+        c.env,
+      );
+
+      await recordMaintenanceAudit(c, {
+        action: 'SIGVOOS_SHADOW_SYNC',
+        module: 'integracoes_sigvoos',
+        entityType: 'sigvoos_shadow_run',
+        capability: MAINTENANCE_CAPABILITIES.sigvoosExecutar,
+        entityId: summary.runId,
+        success: true,
+        riskLevel: 'critical',
+        result: 'success',
+        count: summary.processed,
+        durationMs: Date.now() - startedAt,
+        operationId,
+      }).catch(() => {});
+
+      return c.json({ success: true, operation_id: operationId, data: summary });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro desconhecido';
+      await recordMaintenanceAudit(c, {
+        action: 'SIGVOOS_SHADOW_SYNC',
+        module: 'integracoes_sigvoos',
+        entityType: 'sigvoos_shadow_run',
+        capability: MAINTENANCE_CAPABILITIES.sigvoosExecutar,
+        entityId: 'shadow-sync-error',
+        success: false,
+        riskLevel: 'critical',
+        result: 'error',
+        failureReasonCode: message,
+      }).catch(() => {});
+      console.error('[sigvoos-shadow] sync error:', { empresaId, error: message });
+      const status = message === 'SIGVOOS_SHADOW_CONCURRENT_RUN' ? 409 : 500;
+      return c.json({ success: false, error: message, code: message }, status);
+    }
+  },
+);
+
 sigvoosRouter.post(
   '/maintenance/sincronizar-frms',
   rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-maintenance-dry-run' }),
