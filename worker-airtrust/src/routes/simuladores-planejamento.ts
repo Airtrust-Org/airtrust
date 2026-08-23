@@ -878,7 +878,20 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
     return c.json({ success: false, error: 'Intervalo de vencimento inválido' }, 400);
   }
   const empresaConfigRow = await c.env.DB
-    .prepare('SELECT * FROM empresas_config WHERE empresa_id = ?')
+    .prepare(
+      `SELECT
+         planejamento_simulador_antecedencia_dias,
+         planejamento_simulador_regra_quinzena,
+         planejamento_simulador_preferencia_sessoes_por_dia,
+         planejamento_simulador_preferencia_minutos_por_dia,
+         planejamento_simulador_permitir_quebra_preferencia,
+         planejamento_simulador_permitir_sessao_compartilhada,
+         planejamento_simulador_preferir_mesmo_treinamento,
+         planejamento_simulador_preferir_mesma_sessao,
+         planejamento_simulador_aprovacao_obrigatoria
+       FROM empresas_config
+      WHERE empresa_id = ?`,
+    )
     .bind(empresaId)
     .first<SimulatorPlanningConfigRow>()
     .catch(() => undefined);

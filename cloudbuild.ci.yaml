@@ -45,7 +45,7 @@ steps:
 
   - name: node:24
     id: frontend-coverage
-    waitFor: ["bootstrap"]
+    waitFor: ["lint", "build-content-gates"]
     entrypoint: bash
     args:
       - -ceu
@@ -57,7 +57,7 @@ steps:
 
   - name: node:24
     id: worker-typecheck
-    waitFor: ["bootstrap"]
+    waitFor: ["lint", "build-content-gates"]
     entrypoint: bash
     args:
       - -ceu
@@ -67,7 +67,7 @@ steps:
 
   - name: node:24
     id: worker-tests-1
-    waitFor: ["bootstrap"]
+    waitFor: ["worker-typecheck"]
     entrypoint: bash
     args:
       - -ceu
@@ -80,7 +80,7 @@ steps:
 
   - name: node:24
     id: worker-tests-2
-    waitFor: ["bootstrap"]
+    waitFor: ["worker-tests-1"]
     entrypoint: bash
     args:
       - -ceu
@@ -93,7 +93,7 @@ steps:
 
   - name: node:24
     id: lms-smoke
-    waitFor: ["bootstrap"]
+    waitFor: ["lint", "build-content-gates"]
     entrypoint: bash
     args:
       - -ceu
@@ -123,7 +123,7 @@ steps:
 
   - name: node:24
     id: public-e2e
-    waitFor: ["bootstrap"]
+    waitFor: ["lint", "build-content-gates"]
     entrypoint: bash
     args:
       - -ceu
