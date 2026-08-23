@@ -101,8 +101,8 @@ steps:
         apt-get update
         apt-get install -y --no-install-recommends sqlite3
         sqlite3 --version
-        JWT_SECRET="$$(openssl rand -hex 32)"
-        printf 'JWT_SECRET=%s\n' "$$JWT_SECRET" > worker-airtrust/.dev.vars
+        RUNTIME_JWT_SECRET="$$(openssl rand -hex 32)"
+        printf '%s=%s\n' "JWT_SECRET" "$$RUNTIME_JWT_SECRET" > worker-airtrust/.dev.vars
         npm run setup:lms:local:reset
         npm run integrity:ci
         npm run dev:worker:local > airtrust-worker.log 2>&1 &
