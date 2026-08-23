@@ -4,6 +4,9 @@
 .worktrees
 .worktrees/**
 
+.worktrees
+.worktrees/**
+
 node_modules
 node_modules/**
 worker-airtrust/node_modules
