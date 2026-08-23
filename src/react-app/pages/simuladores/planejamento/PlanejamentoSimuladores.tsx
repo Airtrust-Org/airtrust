@@ -37,6 +37,7 @@ type Participant = {
 
 type PlanningItem = {
   id: number;
+  empresa_id?: number;
   qualificacao_tipo_id: number;
   qualificacao_codigo: string | null;
   qualificacao_nome: string | null;
@@ -49,6 +50,10 @@ type PlanningItem = {
   carga_horaria_prevista: number | null;
   planejamento_status: PlanningStatus;
   planejamento_editado_manualmente: number;
+  planejamento_aprovacao_status?: 'RASCUNHO' | 'PENDENTE' | 'APROVADO' | 'DEVOLVIDO' | 'NAO_EXIGIDO';
+  planejamento_aprovacao_observacoes?: string | null;
+  planejamento_aprovado_por?: number | null;
+  planejamento_aprovado_em?: string | null;
   planejamento_vencimento_referencia: string | null;
   planejamento_margem_dias: number | null;
   planejamento_quinzena_numero: number | null;
@@ -66,6 +71,8 @@ type PlanningItem = {
     };
     participants?: Array<{ funcionario_id?: number; vencimento?: string }>;
   } | null;
+  updated_at?: string | null;
+  planejamento_recalculado_em?: string | null;
   participantes: Participant[];
 };
 
@@ -163,6 +170,15 @@ type CaePlanningComparison = {
   };
 };
 
+type CaeAvailabilityImportPayload = {
+  status: 'RECEBIDO' | 'EXTRAIDO' | 'AGUARDANDO_REVISAO' | 'VALIDADO' | 'REJEITADO';
+  document: CaeAvailabilityValidation['document'] | null;
+  warnings: Array<{ path: string; code: string; message: string }>;
+  errors: Array<{ path: string; code: string; message: string }>;
+  requires_human_review: boolean;
+  source_file_name: string;
+};
+
 const STATUS_OPTIONS: Array<{ value: PlanningStatus; label: string }> = [
   { value: 'PROPOSTO', label: 'Proposto' },
   { value: 'PLANEJADO', label: 'Planejado' },
@@ -239,8 +255,10 @@ export default function PlanejamentoSimuladores() {
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<PreviewProposal[]>([]);
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [devolverObs, setDevolverObs] = useState<Record<number, string>>({});
+  const [actioningId, setActioningId] = useState<number | null>(null);
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
-  const [caeJson, setCaeJson] = useState('');
+  const [caeUploadName, setCaeUploadName] = useState<string | null>(null);
   const [caeValidating, setCaeValidating] = useState(false);
   const [caeComparing, setCaeComparing] = useState(false);
   const [caeValidation, setCaeValidation] = useState<CaeAvailabilityValidation | null>(null);
@@ -351,46 +369,40 @@ export default function PlanejamentoSimuladores() {
     }
   };
 
-  const loadCaeJsonFile = async (file: File | null) => {
+  const uploadCaePdf = async (file: File | null) => {
     if (!file) return;
-    try {
-      const text = await file.text();
-      setCaeJson(text);
-      setCaeValidation(null);
-      setCaeComparison(null);
-    } catch {
-      showToast.error('Não foi possível ler o arquivo JSON.');
+    if (!file.type.toLowerCase().includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+      showToast.error('Selecione o PDF recebido da CAE.');
+      return;
     }
-  };
 
-  const validateCaeAvailability = async () => {
-    if (!caeJson.trim()) {
-      showToast.error('Cole o JSON da disponibilidade CAE ou selecione um arquivo .json.');
-      return;
-    }
-    let payload: unknown;
-    try {
-      payload = JSON.parse(caeJson);
-    } catch {
-      showToast.error('O conteúdo informado não é um JSON válido.');
-      return;
-    }
+    const form = new FormData();
+    form.append('file', file);
+
     try {
       setCaeValidating(true);
-      const result = await apiJson<CaeAvailabilityValidation>(
-        '/api/simuladores/planejamento/disponibilidade-cae/validar',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
+      setCaeUploadName(file.name);
+      const imported = await apiJson<CaeAvailabilityImportPayload>(
+        '/api/simuladores/planejamento/cae-disponibilidade/importar',
+        { method: 'POST', body: form },
       );
-      setCaeValidation(result);
+      if (!imported.document) {
+        setCaeValidation(null);
+        setCaeComparison(null);
+        showToast.warning('PDF recebido, mas sem documento validado para comparação.');
+        return;
+      }
+      setCaeValidation({
+        document: imported.document,
+        warnings: imported.warnings,
+        mode: 'PREVIEW_ONLY',
+      });
       setCaeComparison(null);
       showToast.success(
-        `Disponibilidade CAE validada: ${result.document.slots.length} slot(s). Nenhum planejamento foi alterado.`,
+        `PDF processado: ${imported.document.slots.length} slot(s) CAE normalizados.`,
       );
     } catch (error) {
+      setCaeUploadName(file.name);
       setCaeValidation(null);
       setCaeComparison(null);
       showToast.error(frontendErrorMessage(error));
@@ -438,6 +450,54 @@ export default function PlanejamentoSimuladores() {
       showToast.error(frontendErrorMessage(error));
     } finally {
       setCaeComparing(false);
+    }
+  };
+
+  
+  const handleSubmeter = async (id: number) => {
+    if (!window.confirm('Enviar proposta para aprovação?')) return;
+    setActioningId(id);
+    try {
+      await apiJson(`/api/simuladores/planejamento/${id}/submeter`, { method: 'POST' });
+      await load();
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleAprovar = async (id: number) => {
+    if (!window.confirm('Confirma a aprovação desta proposta CAE? O status será alterado para APROVADO.')) return;
+    setActioningId(id);
+    try {
+      await apiJson(`/api/simuladores/planejamento/${id}/aprovar`, { method: 'POST' });
+      await load();
+    } catch (error: unknown) {
+      alert('Erro ao aprovar proposta: ' + frontendErrorMessage(error));
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleDevolver = async (id: number) => {
+    const obs = devolverObs[id] || '';
+    if (!obs) {
+      alert('Informe o motivo da devolução antes de continuar.');
+      return;
+    }
+    setActioningId(id);
+    try {
+      await apiJson(`/api/simuladores/planejamento/${id}/devolver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ observacoes: obs }),
+      });
+      await load();
+    } catch (error: unknown) {
+      alert('Erro ao devolver proposta: ' + frontendErrorMessage(error));
+    } finally {
+      setActioningId(null);
     }
   };
 
@@ -584,17 +644,18 @@ export default function PlanejamentoSimuladores() {
         24,
       );
 
-      const widths = [30, 26, 44, 20, 55, 34, 23, 18, 18];
+      const widths = [12, 22, 22, 40, 45, 20, 25, 20, 20, 44];
       const headers = [
+        'ID',
         'Status',
-        'Vencimento',
+        'Aprovação',
         'Qualificação',
-        'Aeronave',
-        'Tripulação',
-        'Janela',
-        'Carga',
+        'Tripulação (Escala)',
         'Sessões',
-        'Avisos',
+        'Equipamento',
+        'CAE Datas',
+        'Vencimento',
+        'Notas',
       ];
       const drawHeader = (startY: number) => {
         let x = margin;
@@ -607,7 +668,7 @@ export default function PlanejamentoSimuladores() {
           'F',
         );
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
+        doc.setFontSize(7);
         headers.forEach((header, index) => {
           doc.text(header, x + 1, startY + 4.7);
           x += widths[index];
@@ -617,22 +678,77 @@ export default function PlanejamentoSimuladores() {
 
       let y = drawHeader(30);
       doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
       for (const item of items) {
+        const snap = (item.planejamento_snapshot || {}) as {
+          mode?: 'NORMAL' | 'COMPARTILHADA';
+          generated_at?: string;
+          participants?: Array<{
+            employee_id?: number;
+            funcionario_id?: number;
+            qualification_expiry_date?: string;
+            vencimento?: string;
+            training_id?: string | number;
+            session_model_ids?: Array<string | number>;
+            roster_by_date?: Record<string, string>;
+          }>;
+          cae_slots?: Array<{ date?: string; start_time?: string; end_time?: string }>;
+          config?: { warnings?: string[]; roster_policy?: string };
+        };
+        const isShared =
+          snap.mode === 'COMPARTILHADA' ||
+          (Array.isArray(snap.participants) && snap.participants.length > 1);
+
+        let caeDates = 'A definir';
+        const snapshotSlots = snap.cae_slots || [];
+        if (snapshotSlots.length > 0) {
+          caeDates = snapshotSlots
+            .map((slot) => `${slot.date || '—'} ${slot.start_time || '--:--'}-${slot.end_time || '--:--'}`)
+            .join('\n');
+        } else if (item.data_prevista) {
+          caeDates = formatDate(item.data_prevista) || 'A definir';
+        }
+
+        const participantDetails = (snap.participants || []).map((participant) => {
+          const participantId = Number(participant.employee_id ?? participant.funcionario_id ?? 0);
+          const label =
+            item.participantes.find((entry) => Number(entry.funcionario_id) === participantId)
+              ?.funcionario_nome || `ID ${participantId || '—'}`;
+          const expiry = participant.qualification_expiry_date || participant.vencimento || '—';
+          const training = participant.training_id == null ? '—' : String(participant.training_id);
+          const sessionModels = (participant.session_model_ids || []).map(String).join('/') || '—';
+          const rosterStates = Object.entries(participant.roster_by_date || {})
+            .map(([date, state]) => `${date}:${state}`)
+            .join(', ');
+          return `${label} | venc ${expiry} | tre ${training} | sessões ${sessionModels}${rosterStates ? ` | escala ${rosterStates}` : ''}`;
+        });
+
+        const notes: string[] = [];
+        notes.push(`Empresa: ${item.empresa_id ?? '—'}`);
+        notes.push(`Proposta: #${item.id}`);
+        notes.push(`Revisão: ${item.updated_at || item.planejamento_recalculado_em || snap.generated_at || '—'}`);
+        notes.push(`Tipo: ${isShared ? 'COMPARTILHADA' : 'NORMAL'}`);
+        if (participantDetails.length > 0) notes.push(...participantDetails);
+        if (snap.config?.roster_policy) notes.push(`Regra escala: ${snap.config.roster_policy}`);
+        if (Array.isArray(snap.config?.warnings) && snap.config?.warnings.length > 0) {
+          notes.push(`Warnings: ${snap.config.warnings.join(' | ')}`);
+        }
+        if (item.planejamento_aprovacao_observacoes) notes.push(`Obs: ${item.planejamento_aprovacao_observacoes}`);
+        if (item.planejamento_aprovado_por) notes.push(`Aprovador ID: ${item.planejamento_aprovado_por}`);
+        if (item.planejamento_aprovado_em) notes.push(`Data Apr: ${formatDate(item.planejamento_aprovado_em)}`);
+        if (conflictsCount(item.planejamento_conflitos) > 0) notes.push(`${conflictsCount(item.planejamento_conflitos)} conflitos`);
+
         const cells = [
-          STATUS_OPTIONS.find((option) => option.value === item.planejamento_status)?.label ||
-            item.planejamento_status,
-          formatDate(item.planejamento_vencimento_referencia),
+          String(item.id),
+          STATUS_OPTIONS.find((option) => option.value === item.planejamento_status)?.label || item.planejamento_status,
+          item.planejamento_aprovacao_status || 'RASCUNHO',
           item.qualificacao_nome || item.qualificacao_codigo || '-',
-          item.planejamento_modelo_aeronave || '-',
           participantNames(item) || 'Aguardando dupla',
-          item.planejamento_janela_inicio && item.planejamento_janela_fim
-            ? `${formatDate(item.planejamento_janela_inicio)} – ${formatDate(item.planejamento_janela_fim)}`
-            : 'A definir',
-          item.carga_horaria_prevista == null ? '-' : `${item.carga_horaria_prevista} h`,
-          sessionDescription(item),
-          conflictsCount(item.planejamento_conflitos) > 0
-            ? `${conflictsCount(item.planejamento_conflitos)} conflito(s)`
-            : '—',
+          isShared ? 'Compartilhada\n' + sessionDescription(item) : 'Normal\n' + sessionDescription(item),
+          item.planejamento_modelo_aeronave || '-',
+          caeDates,
+          formatDate(item.planejamento_vencimento_referencia),
+          notes.join('\n') || '—',
         ];
         const wrapped = cells.map((cell, index) =>
           doc.splitTextToSize(String(cell), widths[index] - 2),
@@ -916,40 +1032,25 @@ export default function PlanejamentoSimuladores() {
               <h3 className="font-semibold text-slate-900 dark:text-slate-100">Disponibilidade CAE</h3>
             </div>
             <p className="mt-1 max-w-3xl text-sm text-slate-500">
-              Cole ou carregue o JSON <code>airtrust.cae_availability.v1</code> gerado a partir do e-mail, PDF, imagem ou planilha da CAE. Esta etapa apenas valida e normaliza os slots; não grava planejamento.
+              Faça upload do PDF recebido da CAE. O backend persiste o arquivo e tenta extrair os slots server-side; quando o extrator não estiver disponível, a tela informa e não aceita JSON manual como substituto.
             </p>
           </div>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
             <Upload className="h-4 w-4" />
-            Carregar JSON
+            Enviar PDF CAE
             <input
               type="file"
-              accept="application/json,.json"
+              accept="application/pdf,.pdf"
               className="sr-only"
-              onChange={(event) => void loadCaeJsonFile(event.target.files?.[0] || null)}
+              onChange={(event) => void uploadCaePdf(event.target.files?.[0] || null)}
             />
           </label>
         </div>
-        <textarea
-          className={`${inputClass} mt-3 min-h-36 w-full font-mono text-xs`}
-          value={caeJson}
-          onChange={(event) => {
-            setCaeJson(event.target.value);
-            setCaeValidation(null);
-            setCaeComparison(null);
-          }}
-          placeholder='{"schema_version":"airtrust.cae_availability.v1","provider":"CAE",...}'
-        />
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void validateCaeAvailability()}
-            disabled={caeValidating || !caeJson.trim()}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
-          >
-            {caeValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-            Validar disponibilidade
-          </button>
+          {caeValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          <span className="text-xs text-slate-500">
+            {caeUploadName ? `Arquivo: ${caeUploadName}` : 'Nenhum PDF enviado ainda'}
+          </span>
           <button
             type="button"
             onClick={() => void compareCaeWithNeeds()}
@@ -1145,6 +1246,7 @@ export default function PlanejamentoSimuladores() {
             <table className="min-w-[1500px] w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                 <tr>
+                  <th className="px-3 py-3">Aprovação</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Vencimento</th>
                   <th className="px-3 py-3">Qualificação</th>
@@ -1163,6 +1265,77 @@ export default function PlanejamentoSimuladores() {
                   const conflictTotal = conflictsCount(item.planejamento_conflitos);
                   return (
                     <tr key={item.id} className="align-top">
+<td className="px-3 py-3">
+                        {item.planejamento_aprovacao_status === 'RASCUNHO' && (
+                          <div className="flex flex-col gap-2">
+                            <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-300/60">
+                              Rascunho
+                            </span>
+                            <button
+                              onClick={() => handleSubmeter(item.id)}
+                              disabled={actioningId === item.id}
+                              className="rounded bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-600 disabled:opacity-50"
+                            >
+                              Submeter
+                            </button>
+                          </div>
+                        )}
+                        {item.planejamento_aprovacao_status === 'PENDENTE' && (
+                          <div className="flex flex-col gap-2">
+                            <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
+                              Aguardando Aprovação
+                            </span>
+                            <button
+                              onClick={() => handleAprovar(item.id)}
+                              disabled={actioningId === item.id}
+                              className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-500 disabled:opacity-50"
+                            >
+                              Aprovar
+                            </button>
+                            <div className="flex flex-col gap-1">
+                              <input
+                                type="text"
+                                placeholder="Motivo devolução"
+                                className="w-full rounded-md border-0 py-1.5 px-2 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700 text-xs"
+                                value={devolverObs[item.id] || ''}
+                                onChange={(e) => setDevolverObs({ ...devolverObs, [item.id]: e.target.value })}
+                              />
+                              <button
+                                onClick={() => handleDevolver(item.id)}
+                                disabled={actioningId === item.id || !devolverObs[item.id]}
+                                className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-500 disabled:opacity-50"
+                              >
+                                Devolver
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {item.planejamento_aprovacao_status === 'APROVADO' && (
+                          <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                            Aprovado
+                          </span>
+                        )}
+                        {item.planejamento_aprovacao_status === 'DEVOLVIDO' && (
+                          <div className="flex flex-col gap-1">
+                            <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">
+                              Devolvido
+                            </span>
+                            <span className="text-[10px] text-slate-500">{item.planejamento_aprovacao_observacoes}</span>
+                            <button
+                              onClick={() => handleSubmeter(item.id)}
+                              disabled={actioningId === item.id}
+                              className="rounded bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-600 disabled:opacity-50"
+                            >
+                              Submeter novamente
+                            </button>
+                          </div>
+                        )}
+                        {item.planejamento_aprovacao_status === 'NAO_EXIGIDO' && (
+                          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                            Aprovação não exigida
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-3">
                         <select
                           className={`${inputClass} w-48`}

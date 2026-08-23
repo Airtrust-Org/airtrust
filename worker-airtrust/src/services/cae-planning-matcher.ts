@@ -1,4 +1,6 @@
 import type { CaeAvailabilitySlotV1 } from './cae-availability';
+import { calculateCaeAllocationScore, type AllocationScoreInput, type ScoredAssignment } from './cae-planning-score';
+import { isInsidePlanningHorizon, type SimulatorPlanningConfig } from './cae-planning-policy';
 
 export type CaePlanningNeed = {
   id: string | number;
@@ -8,6 +10,7 @@ export type CaePlanningNeed = {
   preferred_window_start?: string | null;
   preferred_window_end?: string | null;
   session_durations_minutes: number[];
+  config?: SimulatorPlanningConfig;
 };
 
 export type CaeSessionAssignment = {
@@ -64,26 +67,44 @@ function inPreferredWindow(slotDate: string, need: CaePlanningNeed): boolean {
   return slotDate >= need.preferred_window_start && slotDate <= need.preferred_window_end;
 }
 
-function compareAllocation(left: AllocationCandidate, right: AllocationCandidate): number {
-  const usedLeft = left.slots.filter((slot) => slot.used > 0);
-  const usedRight = right.slots.filter((slot) => slot.used > 0);
-  const outsideLeft = usedLeft.filter((slot) => slot.outsidePreferred).length;
-  const outsideRight = usedRight.filter((slot) => slot.outsidePreferred).length;
-  if (outsideLeft !== outsideRight) return outsideLeft - outsideRight;
+function compareAllocation(left: AllocationCandidate, right: AllocationCandidate, expiryDate: string, config: SimulatorPlanningConfig): number {
+  const parseKey = (key: string) => {
+    const parts = key.split('|');
+    return { date: parts[1], start_time: parts[2] };
+  };
 
-  const latestLeft = usedLeft.map((item) => item.slot.date).sort().at(-1) || '9999-12-31';
-  const latestRight = usedRight.map((item) => item.slot.date).sort().at(-1) || '9999-12-31';
-  const latestCompare = latestLeft.localeCompare(latestRight);
-  if (latestCompare !== 0) return latestCompare;
+  const toScoreInput = (c: AllocationCandidate): AllocationScoreInput => {
+    const assignments: ScoredAssignment[] = c.assignments.map(a => {
+      const parsed = parseKey(a.slot_key);
+      const slot = c.slots.find(s => s.key === a.slot_key);
+      return {
+        session_index: a.session_index,
+        duration_minutes: a.session_duration_minutes,
+        date: parsed.date,
+        start_time: parsed.start_time,
+        outside_preferred_window: slot?.outsidePreferred ?? false,
+      };
+    });
+    const waste = c.slots.filter(s => s.used > 0).reduce((sum, slot) => sum + slot.remaining, 0);
+    return { assignments, expiry_date: expiryDate, config, unused_reserved_minutes: waste };
+  };
 
-  if (usedLeft.length !== usedRight.length) return usedLeft.length - usedRight.length;
+  const penaltyLeft = calculateCaeAllocationScore(toScoreInput(left)).total;
+  const penaltyRight = calculateCaeAllocationScore(toScoreInput(right)).total;
+  if (penaltyLeft !== penaltyRight) {
+    return penaltyLeft - penaltyRight;
+  }
 
-  const wasteLeft = usedLeft.reduce((sum, slot) => sum + slot.remaining, 0);
-  const wasteRight = usedRight.reduce((sum, slot) => sum + slot.remaining, 0);
-  if (wasteLeft !== wasteRight) return wasteLeft - wasteRight;
-
-  const sequenceLeft = usedLeft.map((item) => item.key).sort().join('||');
-  const sequenceRight = usedRight.map((item) => item.key).sort().join('||');
+  const sequenceLeft = left.slots
+    .filter((s) => s.used > 0)
+    .map((item) => item.key)
+    .sort()
+    .join('||');
+  const sequenceRight = right.slots
+    .filter((s) => s.used > 0)
+    .map((item) => item.key)
+    .sort()
+    .join('||');
   return sequenceLeft.localeCompare(sequenceRight);
 }
 
@@ -91,11 +112,18 @@ function cloneSlots(slots: WorkingSlot[]): WorkingSlot[] {
   return slots.map((item) => ({ ...item }));
 }
 
+import { SIMULATOR_PLANNING_FALLBACKS } from './cae-planning-policy';
+
 export function matchCaeAvailabilityToNeed(
   need: CaePlanningNeed,
   allSlots: CaeAvailabilitySlotV1[],
 ): CaePlanningMatch {
   const required = need.session_durations_minutes.map(Number);
+  const fallbackConfig: SimulatorPlanningConfig = {
+    ...SIMULATOR_PLANNING_FALLBACKS,
+    source: 'FALLBACK',
+    warnings: []
+  };
   const invalidNeed =
     !['AW139', 'SK76'].includes(need.equipment) ||
     !isIsoDate(need.expiry_date) ||
@@ -222,7 +250,7 @@ export function matchCaeAvailabilityToNeed(
     };
   }
 
-  candidates.sort(compareAllocation);
+  candidates.sort((a, b) => compareAllocation(a, b, need.expiry_date, need.config || fallbackConfig));
   const best = candidates[0];
   const used = best.slots.filter((slot) => slot.used > 0);
   const selectedSlots = used.map((slot) => slot.slot);
@@ -248,5 +276,40 @@ export function matchCaeAvailabilityToNeed(
     latest_training_date: latestDate,
     days_before_expiry: latestDate ? daysBetween(latestDate, need.expiry_date) : null,
     reasons,
+  };
+}
+
+export function evaluatePlanningNeedWithCae(params: {
+  reference_date: string;
+  expiry_date: string;
+  config: SimulatorPlanningConfig;
+  equipment: CaePlanningNeed['equipment'];
+  session_durations_minutes: number[];
+  preferred_window_start?: string | null;
+  preferred_window_end?: string | null;
+  slots: CaeAvailabilitySlotV1[];
+}): { eligible: boolean; match: CaePlanningMatch | null } {
+  const eligible = isInsidePlanningHorizon({
+    reference_date: params.reference_date,
+    expiry_date: params.expiry_date,
+    config: params.config,
+  });
+  if (!eligible) {
+    return { eligible: false, match: null };
+  }
+  return {
+    eligible: true,
+    match: matchCaeAvailabilityToNeed(
+      {
+        id: 'need',
+        equipment: params.equipment,
+        expiry_date: params.expiry_date,
+        preferred_window_start: params.preferred_window_start ?? null,
+        preferred_window_end: params.preferred_window_end ?? null,
+        session_durations_minutes: params.session_durations_minutes,
+        config: params.config,
+      },
+      params.slots,
+    ),
   };
 }

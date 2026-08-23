@@ -389,6 +389,7 @@ export default function Qualificacoes() {
     is_transversal?: boolean;
     setor_ids?: number[];
   };
+  type QualificacaoTipoDTO = TipoQualificacao;
 
   type Categoria = {
     id?: number;
@@ -477,7 +478,7 @@ export default function Qualificacoes() {
     useFuncionariosAtivos();
   // Remover estados locais desnecessários
   const [showTipoModal, setShowTipoModal] = useState(false);
-  const [editingTipo, setEditingTipo] = useState<TipoQualificacao | null>(null);
+  const [editingTipo, setEditingTipo] = useState<QualificacaoTipoDTO | null>(null);
 
   // Cache de atualizações otimistas de tipos — garante que a tabela mostre
   // o valor salvo IMEDIATAMENTE, antes mesmo do refetch completar.
@@ -913,10 +914,10 @@ export default function Qualificacoes() {
           ? {
               ...prev,
               tem_certificado: temCertificados ? 1 : 0,
-              certificado_url: temCertificados ? prev.certificado_url || 'ativo' : null,
+              certificado_url: temCertificados ? prev.certificado_url || 'ativo' : undefined,
               certificado_arquivo_id: temCertificados
                 ? (prev.certificado_arquivo_id ?? prev.id)
-                : null,
+                : undefined,
             }
           : prev,
       );
@@ -1247,6 +1248,13 @@ export default function Qualificacoes() {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  const formatDateLabel = (value?: string | null): string => {
+    if (!value) return 'Data a definir';
+    const parsed = parseDateLocal(value);
+    if (!parsed) return value;
+    return parsed.toLocaleDateString('pt-BR');
   };
 
   const getDataMinimaPlanejada = (): string => {
@@ -4583,7 +4591,7 @@ export default function Qualificacoes() {
                   // antes mesmo do refetch concluir. Isso corrige o bug de "validade antiga
                   // na tabela e no modal ao reabrir".
                   const tipoIdStr = String(editingTipo.id);
-                  const optimisticUpdate: Partial<QualificacaoTipoDTO> = {};
+                  const optimisticUpdate: Partial<TipoQualificacao> = {};
                   // Sempre propagar validade, incluindo null (limpar vencimento).
                   optimisticUpdate.validade = editingTipo.validade ?? null;
                   // Outros campos que podem ter mudado e afetam a visualização da tabela
@@ -4931,7 +4939,9 @@ export default function Qualificacoes() {
       <ConfirmDeleteModal
         isOpen={!!showConfirmDelete}
         onClose={() => setShowConfirmDelete(null)}
-        onConfirm={handleConfirmDelete}
+        onConfirm={async () => {
+          await handleConfirmDelete();
+        }}
         message="Tem certeza que deseja deletar esta qualificação?"
         itemName={showConfirmDelete?.nome || ''}
         loading={deletandoId !== null}

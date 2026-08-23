@@ -954,7 +954,7 @@ export default function LmsMatriculas() {
                   </strong>
                 </p>
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  Status atual: {cancelTarget.status.replaceAll('_', ' ')}
+                  Status atual: {cancelTarget.status.replace(/_/g, ' ')}
                 </p>
               </div>
 

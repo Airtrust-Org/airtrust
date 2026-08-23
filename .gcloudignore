@@ -1,0 +1,17 @@
+# Keep git metadata available in Cloud Build (lint/type guards rely on git refs)
+# and exclude only local heavy artifacts/worktrees.
+
+.worktrees
+.worktrees/**
+
+node_modules
+node_modules/**
+worker-airtrust/node_modules
+worker-airtrust/node_modules/**
+
+/*.patch
+/worker-airtrust/*.patch
+/worker-airtrust/src/routes/*.patch
+
+/*.cjs
+/worker-airtrust/*.cjs

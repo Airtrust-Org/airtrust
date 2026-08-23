@@ -1,4 +1,11 @@
 import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
+import { materializeSimulatorPlanning } from '../services/cae-planning-materialization';
+import { executeSimulatorPlanningApproval } from '../services/cae-planning-approval';
+import { resolveSimulatorPlanningConfig, isInsidePlanningHorizon, type SimulatorPlanningConfigRow } from '../services/cae-planning-policy';
+import { importCaeAvailabilityFromUpload } from '../services/cae-availability-import';
+
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
@@ -61,6 +68,7 @@ type QualificationRow = {
 
 type PlanningListRow = {
   id: number;
+  empresa_id: number;
   qualificacao_tipo_id: number;
   qualificacao_codigo: string | null;
   qualificacao_nome: string | null;
@@ -84,6 +92,10 @@ type PlanningListRow = {
   planejamento_conflitos_json: string | null;
   planejamento_snapshot_json: string | null;
   planejamento_recalculado_em: string | null;
+  planejamento_aprovacao_status: string | null;
+  planejamento_aprovacao_observacoes: string | null;
+  planejamento_aprovado_por: number | null;
+  planejamento_aprovado_em: string | null;
   updated_at: string | null;
 };
 
@@ -447,6 +459,7 @@ async function insertProposal(params: {
   candidates: SimulatorPlanningCandidate[];
   status: SimulatorPlanningStatus;
   margemDias: number | null;
+  config: ReturnType<typeof resolveSimulatorPlanningConfig>;
 }): Promise<number> {
   const first = params.candidates[0];
   const participantIds = params.candidates.map((candidate) => candidate.funcionarioId);
@@ -460,15 +473,42 @@ async function insertProposal(params: {
     inicio: janelaInicio,
     fim: janelaFim,
   });
+  const candidateModelIds = (candidate: SimulatorPlanningCandidate): number[] => {
+    const snapshot = candidate.snapshot as { models?: Array<{ id?: unknown }> } | null;
+    const models = Array.isArray(snapshot?.models) ? snapshot.models : [];
+    return models.map((model) => Number(model.id)).filter((id): id is number => Number.isInteger(id) && id > 0);
+  };
+  const trainingIds = new Set(params.candidates.map((candidate) => String(candidate.qualificacaoTipoId)));
+  const modelIds = params.candidates.map((candidate) => candidateModelIds(candidate)[0] || 0);
+  const sameTraining = trainingIds.size === 1;
+  const sameModel = modelIds[0] > 0 && modelIds.every((id) => id === modelIds[0]);
+  const mode = params.candidates.length > 1 && !(sameTraining && sameModel) ? 'COMPARTILHADA' : 'NORMAL';
+  const sessionFingerprint = params.candidates
+    .map((candidate) => `${candidate.funcionarioId}:${candidateModelIds(candidate).join(',')}`)
+    .sort()
+    .join('|');
   const snapshot = {
     generated_at: params.runMarker,
+    config: params.config,
+    mode,
     participants: params.candidates.map((candidate) => ({
       funcionario_id: candidate.funcionarioId,
       funcionario_nome: candidate.funcionarioNome,
       funcao: candidate.funcao,
       vencimento: candidate.vencimento,
       quinzena_numero: candidate.quinzenaNumero,
+      employee_id: candidate.funcionarioId,
+      employee_active: true,
+      equipment: first.modeloAeronave,
+      qualification_history_id: null,
+      qualification_expiry_date: candidate.vencimento,
+      training_id: candidate.qualificacaoTipoId,
+      session_model_ids: candidateModelIds(candidate),
+      roster_by_date: {},
     })),
+    cae_slots: [],
+    canonical_session_fingerprint: `sessions:${sessionFingerprint}`,
+    pairing_fingerprint: `pairing:${mode}:${sessionFingerprint}`,
     curriculum: first.snapshot,
     window_policy: first.politicaJanela,
     selected_window_type: first.janelaTipo,
@@ -565,6 +605,7 @@ async function listPlanningItems(params: {
   status?: string | null;
 }) {
   let query = `SELECT t.id,
+                      t.empresa_id,
                       t.qualificacao_tipo_id,
                       qt.codigo AS qualificacao_codigo,
                       qt.nome AS qualificacao_nome,
@@ -588,6 +629,10 @@ async function listPlanningItems(params: {
                       t.planejamento_conflitos_json,
                       t.planejamento_snapshot_json,
                       t.planejamento_recalculado_em,
+                      t.planejamento_aprovacao_status,
+                      t.planejamento_aprovacao_observacoes,
+                      t.planejamento_aprovado_por,
+                      t.planejamento_aprovado_em,
                       t.updated_at
                  FROM treinamentos_planejados t
                  LEFT JOIN qualificacoes_tipos qt
@@ -705,6 +750,55 @@ function dateRangesOverlap(
   return leftStart <= rightEnd && leftEnd >= rightStart;
 }
 
+
+app.post('/cae-disponibilidade/importar', requireRole('admin', 'manager'), async (c) => {
+  const formData = await c.req.formData().catch(() => null);
+  if (!formData) {
+    return c.json({ success: false, error: 'Upload inválido' }, 400);
+  }
+
+  const file = formData.get('file') as File | null;
+  if (!file) {
+    return c.json({ success: false, error: 'Nenhum arquivo enviado' }, 400);
+  }
+
+  const mimeType = String(file.type || '').toLowerCase();
+  const fileName = String(file.name || 'cae.pdf');
+  if (!mimeType.includes('pdf') && !fileName.toLowerCase().endsWith('.pdf')) {
+    return c.json({ success: false, error: 'Envie o PDF recebido da CAE. JSON manual não substitui o upload.' }, 400);
+  }
+  if (!c.env.BUCKET) {
+    return c.json({ success: false, error: 'Armazenamento de arquivos indisponível' }, 503);
+  }
+
+  const empresaId = getEmpresaId(c);
+  const fileKey = `cae-availability/${empresaId}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+  await c.env.BUCKET.put(fileKey, await file.arrayBuffer(), { httpMetadata: { contentType: file.type || 'application/pdf' } });
+
+  const imported = await importCaeAvailabilityFromUpload({
+    empresaId,
+    fileName,
+    mimeType: file.type || 'application/pdf',
+    objectKey: fileKey,
+  });
+
+  if (imported.status === 'EXTRACTION_UNAVAILABLE') {
+    return c.json({
+      success: false,
+      error: imported.error,
+      requires_human_review: true,
+      extraction_available: false,
+      file_key: imported.object_key,
+    }, 422);
+  }
+
+  return c.json({
+    success: imported.import.status !== 'REJEITADO',
+    data: imported.import,
+    file_key: imported.object_key,
+  }, imported.import.status === 'REJEITADO' ? 400 : 200);
+});
+
 app.get('/', async (c) => {
   const empresaId = getEmpresaId(c);
   if (!(await planningSchemaReady(c.env.DB))) {
@@ -783,6 +877,27 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
   if (!isIsoDate(inicio) || !isIsoDate(fim) || inicio > fim) {
     return c.json({ success: false, error: 'Intervalo de vencimento inválido' }, 400);
   }
+  const empresaConfigRow = await c.env.DB
+    .prepare(
+      `SELECT
+         planejamento_simulador_antecedencia_dias,
+         planejamento_simulador_regra_quinzena,
+         planejamento_simulador_preferencia_sessoes_por_dia,
+         planejamento_simulador_preferencia_minutos_por_dia,
+         planejamento_simulador_permitir_quebra_preferencia,
+         planejamento_simulador_permitir_sessao_compartilhada,
+         planejamento_simulador_preferir_mesmo_treinamento,
+         planejamento_simulador_preferir_mesma_sessao,
+         planejamento_simulador_aprovacao_obrigatoria
+       FROM empresas_config
+      WHERE empresa_id = ?`,
+    )
+    .bind(empresaId)
+    .first<SimulatorPlanningConfigRow>()
+    .catch(() => undefined);
+  
+  const config = resolveSimulatorPlanningConfig(empresaConfigRow);
+
   let margemDias: number | null = null;
   if (body?.margem_dias !== undefined && body?.margem_dias !== null && body?.margem_dias !== '') {
     margemDias = Number(body.margem_dias);
@@ -849,6 +964,7 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
     const groups = modelsByQualification.get(Number(qualification.qualificacao_tipo_id));
     if (!groups) continue;
     const modelGroup = chooseModelGroup(qualification, groups);
+    if (!isInsidePlanningHorizon({ reference_date: dataReferencia, expiry_date: String(qualification.data_vencimento).slice(0, 10), config })) continue;
     const quinzenaNumero = resolveQuinzenaNumero(qualification.funcionario_quinzena);
     const selectedWindow = modelGroup.ambiguous
       ? null
@@ -974,6 +1090,7 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
         metadataByNeedId.set(needId, { candidates: group.candidates, proposal });
         needs.push({
           id: needId,
+          config,
           equipment: first.modeloAeronave,
           expiry_date: group.candidates.map((candidate) => candidate.vencimento).sort()[0],
           planning_start_date: dataReferencia,
@@ -1111,6 +1228,7 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
         candidates: [pair.left, pair.right],
         status: 'PROPOSTO',
         margemDias,
+        config,
       });
       created += 1;
     }
@@ -1123,6 +1241,7 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
         candidates: [candidate],
         status: 'AGUARDANDO_DISPONIBILIDADE',
         margemDias,
+        config,
       });
       created += 1;
     }
@@ -1480,6 +1599,88 @@ app.patch('/:id', requireRole('admin', 'manager'), async (c) => {
   });
 
   return c.json({ success: true, data: after, conflitos: conflicts });
+});
+
+
+
+app.post('/:id/submeter', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const id = Number(c.req.param('id'));
+  const userId = contextUserId(c);
+  if (!userId) return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
+
+  const result = await executeSimulatorPlanningApproval({
+    db,
+    empresaId,
+    planningId: id,
+    action: 'SUBMIT',
+    userId,
+    userName: String(c.get('userName' as never)) || String(userId),
+  });
+
+  return c.json(result, result.success ? 200 : 400);
+});
+
+app.post('/:id/aprovar', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const id = Number(c.req.param('id'));
+  const userId = contextUserId(c);
+  if (!userId) return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
+
+  const result = await executeSimulatorPlanningApproval({
+    db,
+    empresaId,
+    planningId: id,
+    action: 'APPROVE',
+    userId,
+    userName: String(c.get('userName' as never)) || String(userId),
+  });
+
+  return c.json(result, result.success ? 200 : 400);
+});
+
+app.post('/:id/devolver', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const id = Number(c.req.param('id'));
+  const userId = contextUserId(c);
+  if (!userId) return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
+  const body = (await c.req.json().catch(() => null)) as { observacoes?: unknown } | null;
+  const observacoes = typeof body?.observacoes === 'string' ? body.observacoes.trim() : '';
+  if (!observacoes) {
+    return c.json({ success: false, error: 'Informe observações para devolução' }, 400);
+  }
+
+  const result = await executeSimulatorPlanningApproval({
+    db,
+    empresaId,
+    planningId: id,
+    action: 'RETURN',
+    userId,
+    userName: String(c.get('userName' as never)) || String(userId),
+    observations: observacoes,
+  });
+
+  return c.json(result, result.success ? 200 : 400);
+});
+
+app.post('/:id/materializar', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const id = Number(c.req.param('id'));
+  const userId = contextUserId(c);
+  if (!userId) return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
+
+  const result = await materializeSimulatorPlanning({
+    db,
+    empresaId,
+    planningId: id,
+    userId,
+  });
+
+  return c.json(result, result.success ? 200 : 400);
 });
 
 app.get('/:id/auditoria', async (c) => {

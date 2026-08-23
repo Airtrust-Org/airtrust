@@ -1,3 +1,5 @@
+import type { ModuloEvento } from '@/react-app/lib/moduloBus';
+
 interface HistoricoMutationItem {
   id: number;
   funcionario_id?: number;
@@ -10,22 +12,12 @@ interface ConfirmDeleteMutationItem {
 
 interface QualificacoesMutationsDeps {
   API_BASE_URL: string;
-  fetchWithAuth: (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ) => Promise<{
-    ok: boolean;
-    json: () => Promise<any>;
-  }>;
+  fetchWithAuth: (url: string, options?: RequestInit, retry?: boolean) => Promise<Response>;
   showToast: {
     success: (message: string) => void;
     error: (message: string) => void;
   };
-  emitirEventoModulo: (payload: {
-    modulo: string;
-    tipo: string;
-    funcionarioIds?: number[];
-  }) => void;
+  emitirEventoModulo: (payload: ModuloEvento) => void;
   recarregarHistoricoEStats: () => Promise<void>;
 }
 

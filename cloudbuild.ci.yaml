@@ -1,0 +1,132 @@
+timeout: "10800s"
+
+options:
+  machineType: E2_HIGHCPU_8
+
+substitutions:
+  _AIRTRUST_SHA: "unknown"
+
+steps:
+  - name: node:24
+    id: bootstrap
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        echo "AIRTRUST_SHA=${_AIRTRUST_SHA}"
+        node --version
+        npm ci --cache .npm --prefer-offline
+        npm ci --prefix worker-airtrust --cache .npm --prefer-offline
+
+  - name: node:24
+    id: lint
+    waitFor: ["bootstrap"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        export VITE_API_URL="http://127.0.0.1:8787"
+        npm run lint
+
+  - name: node:24
+    id: build-content-gates
+    waitFor: ["bootstrap"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        apt-get update
+        apt-get install -y --no-install-recommends ripgrep
+        chmod +x ./scripts/ci-demo-data-check.sh ./scripts/ci-internal-docs-check.sh ./scripts/production-audit-check.sh
+        ./scripts/ci-internal-docs-check.sh --test
+        ./scripts/ci-internal-docs-check.sh
+        VITE_API_URL=http://127.0.0.1:8787 npm run build
+        npm run check:demo-data
+
+  - name: node:24
+    id: frontend-coverage
+    waitFor: ["lint", "build-content-gates"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        apt-get update
+        apt-get install -y --no-install-recommends sqlite3
+        sqlite3 --version
+        npm run test:coverage
+
+  - name: node:24
+    id: worker-typecheck
+    waitFor: ["lint", "build-content-gates"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        cd worker-airtrust
+        npx tsc --noEmit
+
+  - name: node:24
+    id: worker-tests-1
+    waitFor: ["worker-typecheck"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        apt-get update
+        apt-get install -y --no-install-recommends sqlite3
+        sqlite3 --version
+        cd worker-airtrust
+        npx vitest run --shard=1/2
+
+  - name: node:24
+    id: worker-tests-2
+    waitFor: ["worker-tests-1"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        apt-get update
+        apt-get install -y --no-install-recommends sqlite3
+        sqlite3 --version
+        cd worker-airtrust
+        npx vitest run --shard=2/2
+
+  - name: node:24
+    id: lms-smoke
+    waitFor: ["lint", "build-content-gates"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        apt-get update
+        apt-get install -y --no-install-recommends sqlite3
+        sqlite3 --version
+        RUNTIME_JWT_SECRET="$$(openssl rand -hex 32)"
+        printf '%s=%s\n' "JWT_SECRET" "$$RUNTIME_JWT_SECRET" > worker-airtrust/.dev.vars
+        npm run setup:lms:local:reset
+        npm run integrity:ci
+        npm run dev:worker:local > airtrust-worker.log 2>&1 &
+        worker_pid=$$!
+        trap 'kill "$$worker_pid" || true; rm -f worker-airtrust/.dev.vars' EXIT
+        for i in $$(seq 1 60); do
+          if curl -fsS http://localhost:8787/api/health >/dev/null; then
+            echo "Local worker ready"
+            break
+          fi
+          if [ "$$i" -eq 60 ]; then
+            cat airtrust-worker.log
+            exit 1
+          fi
+          sleep 2
+        done
+        npm run smoke:lms:local
+
+  - name: node:24
+    id: public-e2e
+    waitFor: ["lint", "build-content-gates"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        npx playwright install --with-deps chromium
+        CI=true VITE_API_URL=http://127.0.0.1:8787 npx playwright test --config=playwright.ci.config.ts

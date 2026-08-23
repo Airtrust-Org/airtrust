@@ -9,7 +9,7 @@ import {
   crossTenantSafeResponseStatusAndMessage,
 } from './simuladores-shared';
 import { validateAndNormalizeSharedSessionRequest } from './simuladores-shared-session-logic';
-import { assertSharedFeature } from './simuladores-shared-session-helpers';
+import { assertSharedFeature, executeSharedSessionCreation } from './simuladores-shared-session-helpers';
 import { assertEntityOwnership, assertNoExternalConflicts } from './simuladores-shared-session-validation';
 import { loadSharedDetail, type LoadedSharedDetail } from './simuladores-shared-session-detail';
 import {
@@ -172,81 +172,10 @@ app.post('/sessoes/compartilhada', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const payload = validateAndNormalizeSharedSessionRequest(await c.req.json());
-    const modelosMap = await assertEntityOwnership(c.env.DB, empresaId, payload);
-    await assertNoExternalConflicts(c.env.DB, empresaId, payload);
-
-    const created = await createSharedSessionStructureTransactional(c.env.DB, empresaId, payload, modelosMap);
-
-    // Phase 2: qualification creation (after core batch).
-    // Compensation: if any qualification fails, rollback the entire shared session.
-    try {
-      for (const atribuicao of payload.atribuicoes_planejadas) {
-        const modelo = atribuicao.modelo_sessao_id
-          ? modelosMap.get(Number(atribuicao.modelo_sessao_id))
-          : null;
-        if (atribuicao.modelo_sessao_id && modelo?.gera_qualificacao) {
-          await criarQualificacoesPlanejadas(c.env.DB, {
-            sessaoId: created.sessaoId,
-            modeloId: Number(atribuicao.modelo_sessao_id),
-            tipoSessao: modelo?.tipo_sessao_codigo || modelo?.codigo || 'SHARED',
-            data: payload.data,
-            participantes: [{ funcionario_id: atribuicao.funcionario_id }],
-            empresaId,
-          });
-        }
-      }
-    } catch (qualError: unknown) {
-      const qualErrorMessage = getErrorMessage(qualError, 'erro desconhecido');
-      await cleanupFailedSharedCreate(c.env.DB, created.sessaoId).catch(() => {});
-      return c.json(
-        { success: false, error: 'Falha ao criar qualificacoes planejadas: ' + qualErrorMessage + '. Sessao revertida.' },
-        500,
-      );
-    }
-
-    await audit(c.env.DB, {
-      tabela: 'simulador_agendamentos',
-      acao: 'INSERT_SHARED',
-      registro_id: created.sessaoId,
-      dados_novos: payload,
-    }).catch(() => undefined);
-
-    // Phase 3: Gerar fichas (idempotente, pós-batch, por atribuição).
-    // O gerador é fail-closed: cada atribuição elegível (gera_ficha=1) só é
-    // contada em created/skipped depois de sua ficha (com os itens do
-    // modelo) existir de fato — se qualquer atribuição obrigatória falhar,
-    // a chamada lança e nada abaixo é alcançado. Por isso a resposta NUNCA
-    // declara sucesso pleno quando a geração falha: a sessão já foi
-    // persistida (fase 1/2), mas fica registrada como pendente de reparo.
-    let fichasGeradas = 0;
-    let fichasExistentes = 0;
-    try {
-      const fichasResult = await generateFichasForSharedSession(c.env.DB, empresaId, created.sessaoId);
-      fichasGeradas = fichasResult.created;
-      fichasExistentes = fichasResult.skipped;
-    } catch (fichaError: unknown) {
-      const fichaErrorMessage = getErrorMessage(fichaError, 'erro desconhecido');
-      await audit(c.env.DB, {
-        tabela: 'fichas_sessao',
-        acao: 'GERACAO_FICHAS_SHARED_FALHOU',
-        registro_id: created.sessaoId,
-        dados_novos: { empresaId, sessaoId: created.sessaoId, error: fichaErrorMessage },
-      }).catch(() => undefined);
-
-      return c.json(
-        {
-          success: false,
-          error:
-            'Sessão compartilhada criada (id ' +
-            created.sessaoId +
-            '), mas a geração de fichas falhou e ficou pendente de reparo: ' +
-            fichaErrorMessage,
-        },
-        502,
-      );
-    }
-
-    const detail = await loadSharedDetail(c.env.DB, empresaId, created.sessaoId);
+    const result = await executeSharedSessionCreation(c.env.DB, empresaId, payload);
+    const { detail, created, fichasResult } = result;
+    const fichasGeradas = fichasResult.created;
+    const fichasExistentes = fichasResult.skipped;
     scheduleSharedSessionNotification(c, created.sessaoId, empresaId, 'created');
     return c.json(
       {
