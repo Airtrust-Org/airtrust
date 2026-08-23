@@ -56,6 +56,17 @@ binding = "AI"
 [env.staging]
 name = "airtrust-api-staging"
 
+# Workers Paid plan active on this account since 2026-08-23. The Free plan's
+# 10ms CPU-per-invocation hard limit repeatedly caused error 1102 on
+# CPU-heavy operations (bcrypt login, SCORM Quality Gate Browser Run). This
+# raises the staging Worker's CPU budget accordingly. Confirmed accepted by
+# a live (non-dry-run) wrangler deploy — previously this exact config was
+# rejected outright under Free ("CPU limits are not supported for the Free
+# plan"). Staging only; production is intentionally left unchanged pending
+# its own explicit authorization.
+[env.staging.limits]
+cpu_ms = 30000
+
 [env.staging.browser]
 binding = "SCORM_BROWSER"
 
