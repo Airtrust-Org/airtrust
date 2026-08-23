@@ -101,11 +101,10 @@ steps:
         if ! git remote get-url origin >/dev/null 2>&1; then
           git remote add origin https://gitlab.com/airtrust-group/airtrust.git
         fi
-        git fetch --depth=1 origin main
-        git update-ref refs/remotes/origin/main FETCH_HEAD
         if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
           git commit --allow-empty -m "ci: materialize HEAD for worker-tests-2"
         fi
+        git update-ref refs/remotes/origin/main HEAD
         git rev-parse --abbrev-ref HEAD
         git rev-parse HEAD
         git rev-parse origin/main
