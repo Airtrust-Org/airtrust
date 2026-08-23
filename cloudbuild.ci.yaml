@@ -101,19 +101,19 @@ steps:
         apt-get update
         apt-get install -y --no-install-recommends sqlite3
         sqlite3 --version
-        JWT_SECRET="$(openssl rand -hex 32)"
-        printf 'JWT_SECRET=%s\n' "$JWT_SECRET" > worker-airtrust/.dev.vars
+        JWT_SECRET="$$(openssl rand -hex 32)"
+        printf 'JWT_SECRET=%s\n' "$$JWT_SECRET" > worker-airtrust/.dev.vars
         npm run setup:lms:local:reset
         npm run integrity:ci
         npm run dev:worker:local > airtrust-worker.log 2>&1 &
-        worker_pid=$!
-        trap 'kill "$worker_pid" || true; rm -f worker-airtrust/.dev.vars' EXIT
-        for i in $(seq 1 60); do
+        worker_pid=$$!
+        trap 'kill "$$worker_pid" || true; rm -f worker-airtrust/.dev.vars' EXIT
+        for i in $$(seq 1 60); do
           if curl -fsS http://localhost:8787/api/health >/dev/null; then
             echo "Local worker ready"
             break
           fi
-          if [ "$i" -eq 60 ]; then
+          if [ "$$i" -eq 60 ]; then
             cat airtrust-worker.log
             exit 1
           fi
