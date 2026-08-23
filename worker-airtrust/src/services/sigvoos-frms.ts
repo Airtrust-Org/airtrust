@@ -85,6 +85,9 @@ export interface SigvoosSyncInput {
   password?: string;
   system?: string;
   baseUrl?: string;
+  executionMode?: 'SYNTHETIC_STAGING';
+  externalContact?: false;
+  fixtureId?: string;
 }
 
 export interface SigvoosNormalizedLeg {
@@ -274,6 +277,15 @@ const SyncSchema = z.object({
   password: z.string().min(1).optional(),
   system: z.string().min(1).optional(),
   baseUrl: z.string().url().optional(),
+  // Additive, optional audit fields — absent in every real production call.
+  // When present (only ever set by a staging QA runner injecting a
+  // SigvoosSyncDeps.createClient), they are persisted verbatim into
+  // integracoes_sigvoos_eventos.payload_json (the existing audit trail for
+  // every sync run) so a synthetic run is provably distinguishable from a
+  // real one after the fact, without any new table/migration.
+  executionMode: z.literal('SYNTHETIC_STAGING').optional(),
+  externalContact: z.literal(false).optional(),
+  fixtureId: z.string().min(1).optional(),
 });
 
 function now(): string {
@@ -2364,12 +2376,32 @@ async function persistSyncMetadata(
   );
 }
 
+/**
+ * The external-client boundary `syncSigvoosForFrms` talks to. Real production
+ * traffic always uses `SigvoosApiClient` (see the default below); this
+ * interface exists solely so a non-production caller can inject an
+ * alternate implementation at the exact point real HTTP would otherwise
+ * happen — never later in the pipeline (normalization, matching, import,
+ * relabel-as-canonical all stay byte-identical to production either way).
+ */
+export interface SigvoosSyncClient {
+  authenticate(force?: boolean): Promise<string>;
+  postSearch(endpoint: string, payload: Record<string, unknown>): Promise<Record<string, unknown>>;
+}
+
+export interface SigvoosSyncDeps {
+  /** Defaults to `(config) => new SigvoosApiClient(config)` — real production
+   * behavior is unchanged unless a caller explicitly passes this. */
+  createClient?: (config: ClientSigvoosConfig) => SigvoosSyncClient;
+}
+
 export async function syncSigvoosForFrms(
   db: D1Database,
   empresaId: number | null | undefined,
   operadorId: string,
   rawInput: SigvoosSyncInput,
   runtimeEnv?: SigvoosRuntimeEnv,
+  deps?: SigvoosSyncDeps,
 ): Promise<SigvoosSyncSummary> {
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
   await reconcileStaleSigvoosEventos(db, resolvedEmpresaId);
@@ -2414,7 +2446,9 @@ export async function syncSigvoosForFrms(
       system: input.system || SIGVOOS_DEFAULT_SYSTEM,
       },
       runtimeEnv,);
-       const client = new SigvoosApiClient(config as ClientSigvoosConfig);
+       const client: SigvoosSyncClient = deps?.createClient
+         ? deps.createClient(config as ClientSigvoosConfig)
+         : new SigvoosApiClient(config as ClientSigvoosConfig);
     const token = await client.authenticate();
     const pageSize = input.pageSize || SIGVOOS_PAGE_SIZE;
     const maxPages = input.maxPages || 2;
