@@ -139,6 +139,23 @@ require_sqlite_column() {
     || error "Contrato do schema local inválido: coluna ausente $table_name.$column_name. Execute npm run setup:local:reset."
 }
 
+ensure_sqlite_column() {
+  local table_name="$1"
+  local column_name="$2"
+  local column_definition="$3"
+
+  require_sqlite_table "$table_name"
+  if ! sqlite3 "$SQLITE_FILE" "PRAGMA table_info($table_name);" | awk -F'|' '{ print $2 }' | grep -qx "$column_name"; then
+    sqlite3 "$SQLITE_FILE" "ALTER TABLE $table_name ADD COLUMN $column_name $column_definition;"
+  fi
+}
+
+ensure_0340_qualificacoes_tipos_compat() {
+  ensure_sqlite_column "qualificacoes_tipos" "conteudo_programatico" "TEXT DEFAULT NULL"
+  ensure_sqlite_column "qualificacoes_tipos" "carga_horaria_inicial" "REAL CHECK(carga_horaria_inicial IS NULL OR carga_horaria_inicial > 0)"
+  ensure_sqlite_column "qualificacoes_tipos" "carga_horaria_recorrente" "REAL CHECK(carga_horaria_recorrente IS NULL OR carga_horaria_recorrente > 0)"
+}
+
 migration_recorded() {
   local migration_name="$1"
   [[ "$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM d1_migrations WHERE name='$migration_name';")" == "1" ]]
@@ -164,6 +181,11 @@ apply_local_migration() {
   if migration_recorded "$migration_name"; then
     info "Migration já registrada: $migration_name"
     return 0
+  fi
+
+  if [[ "$migration_name" == "0340_lms_cursos_ead_metadata.sql" ]]; then
+    info "Garantindo compatibilidade local de qualificacoes_tipos antes da 0340 LMS..."
+    ensure_0340_qualificacoes_tipos_compat
   fi
 
   if ! npx wrangler d1 execute "$DB_NAME" \
