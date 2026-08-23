@@ -1,5 +1,13 @@
 # FRMS_HELICOPTER_OFFSHORE_BASELINE_V1 — Quality Review
 
+> **Correção de inventário (2026-08-22):** todas as referências a "120
+> parâmetros" neste documento foram um erro de contagem manual da revisão
+> original, corrigido para o valor real e verificado programaticamente: 128
+> (67 LimitesMap + 25 FadigaBusinessPolicy + 36 FrmsFortnightPolicy). Nenhum
+> achado, classificação ou valor descrito abaixo foi alterado por essa
+> correção — apenas o número total. Ver `FRMS_PARAMETER_BASELINE_AUDIT.md` e
+> [MR !79](https://gitlab.com/airtrust-group/airtrust/-/merge_requests/79).
+
 Independent review before opening the MR. No formula, parameter value, or
 model was changed by this review. `FRMS_PARAMETER_BASELINE_AUDIT.md` received
 minimal, additive documentation corrections (unit clarification, dead-code
@@ -10,7 +18,7 @@ flags, citation-completeness flags) — no numeric value was touched.
 The baseline is mathematically sound and safe to merge as a *governance*
 change (equivalence is proven — see below). It is **not yet** a fully
 defensible audit artifact in its original form: several parameters carried
-generic or missing source citations, and six of the 120 parameters turned out
+generic or missing source citations, and six of the 128 parameters turned out
 to be dead code. All of that has been corrected in-place in the audit
 document as part of this review; nothing here blocks the MR from a
 correctness standpoint, but the corrected document should be what ships,
@@ -36,11 +44,11 @@ Estava quase completo; um caso estava misturado e foi corrigido nesta
 revisão: `HV_365_DIAS_HORAS` (930h) apresentava-se como puramente
 `REGULATORY`, mas 930h é uma margem interna mais restritiva sobre o teto
 legal de 960h (Lei 13.475) — reclassificado como REGULATORY + OPERATIONAL_POLICY
-(misto) no documento corrigido. Os demais 119 parâmetros já estavam
+(misto) no documento corrigido. Os demais 127 parâmetros já estavam
 corretamente separados nas quatro categorias.
 
 **3. Existe algum parâmetro que não deveria estar nessa primeira revisão?**
-Não no sentido de "não deveria existir" — mas **6 dos 120 parâmetros são
+Não no sentido de "não deveria existir" — mas **6 dos 128 parâmetros são
 código morto**, nunca lidos por nenhum cálculo, alerta ou decisão:
 `VISUAL_AVISO_PCT`, `VISUAL_ATENCAO_PCT`, `VISUAL_CRITICO_PCT` (não
 referenciados em lugar nenhum além da definição), e `REPOUSO_MIN_PRE_APRESENTACAO`,
@@ -53,7 +61,7 @@ revisão V2 futura, não a esta.
 **4. O documento produzido serve como evidência para auditoria?**
 Depois desta revisão, sim, com uma ressalva: ele documenta corretamente
 *o que o sistema faz hoje e por quê* (rastreável a arquivo/linha de código
-para 100% dos 120 parâmetros), mas para alguns REGULATORY/OFFSHORE_BENCHMARK
+para 100% dos 128 parâmetros), mas para alguns REGULATORY/OFFSHORE_BENCHMARK
 não consegue apontar o documento normativo original (artigo, item, contrato) —
 apenas a categoria. Isso é suficiente para provar *consistência interna e
 imutabilidade* (a pergunta de auditoria mais provável — "o que estava
@@ -100,7 +108,7 @@ LEGACY_MODEL_V2 equivalence: PASS
 ```
 
 Reconfirmado nesta revisão (não apenas herdado da tarefa anterior): reexecutei
-`frms-helicopter-offshore-baseline-v1-equivalence.test.ts`, que lê os 120
+`frms-helicopter-offshore-baseline-v1-equivalence.test.ts`, que lê os 128
 parâmetros de uma execução real do seed SQL (não uma cópia manual) e compara
 `calcFatorizacao`, `calcEffectiveness`, `calcularScoreFadiga`,
 `calcularPenalidadeWOCL`, `buildFrmsFortnightIndicatorMap` e
