@@ -14,8 +14,12 @@ const LARGE_FILE_LINE_CAPS = {
   // comparar-dias, and escala-futura validation to governed operational
   // context, replacing legacy carregarLimites fallbacks).
   'routes/frms.ts': 3957,
-  // Cap raised 2026-06-30: counted 2884 (pre-existing growth).
-  'services/sigvoos-frms.ts': 2884,
+  // Cap raised 2026-08-23: counted 2912 (test/frms-synthetic-sigvoos-sync —
+  // added SigvoosSyncClient/SigvoosSyncDeps interfaces and the minimal
+  // dependency-injection point in syncSigvoosForFrms so a staging-only QA
+  // runner can inject a synthetic client at the exact external-client
+  // boundary; production behavior is unchanged when deps is omitted).
+  'services/sigvoos-frms.ts': 2912,
   // Upload/storage logic was extracted into testable modules. The compatibility
   // router retains the prior CRUD implementation and is frozen at the old cap.
   'routes/lms-cursos-legacy.ts': 3000,
