@@ -128,5 +128,50 @@ steps:
     args:
       - -ceu
       - |
+        set -euo pipefail
+        apt-get update
+        apt-get install -y --no-install-recommends curl
         npx playwright install --with-deps chromium
-        CI=true VITE_API_URL=http://127.0.0.1:8787 npx playwright test --config=playwright.ci.config.ts
+
+        RUNTIME_JWT_SECRET="$$(openssl rand -hex 32)"
+        printf '%s=%s\n' "JWT_SECRET" "$$RUNTIME_JWT_SECRET" > worker-airtrust/.dev.vars
+
+        npm run dev:worker:local > /tmp/worker.log 2>&1 &
+        WORKER_PID=$$!
+
+        VITE_API_URL=http://127.0.0.1:8787 npm run dev > /tmp/frontend.log 2>&1 &
+        FRONTEND_PID=$$!
+
+        cleanup() {
+          kill "$$WORKER_PID" "$$FRONTEND_PID" 2>/dev/null || true
+          rm -f worker-airtrust/.dev.vars
+        }
+        trap cleanup EXIT
+
+        for i in $$(seq 1 60); do
+          curl -fsS http://127.0.0.1:8787/api/health >/dev/null 2>&1 && break
+          sleep 1
+        done
+
+        for i in $$(seq 1 60); do
+          curl -fsS http://127.0.0.1:3000/login >/dev/null 2>&1 && break
+          sleep 1
+        done
+
+        curl -f http://127.0.0.1:8787/api/health || {
+          echo "===== worker.log ====="
+          cat /tmp/worker.log
+          exit 1
+        }
+
+        curl -f http://127.0.0.1:3000/login || {
+          echo "===== frontend.log ====="
+          cat /tmp/frontend.log
+          exit 1
+        }
+
+        CI=true \
+        VITE_API_URL=http://127.0.0.1:8787 \
+        npx playwright test \
+          --config=playwright.ci.config.ts \
+          e2e/ci/login-public-smoke.spec.ts
