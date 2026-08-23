@@ -86,8 +86,29 @@ steps:
       - -ceu
       - |
         apt-get update
-        apt-get install -y --no-install-recommends sqlite3
+        apt-get install -y --no-install-recommends sqlite3 git
         sqlite3 --version
+        unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
+        if [ -f .git ]; then
+          echo "Replacing gitdir pointer with a real repository at the workspace root"
+          rm -f .git
+        fi
+        if [ ! -d .git ]; then
+          git init
+        fi
+        git config user.email "ci@airtrust.local"
+        git config user.name "AirTrust CI"
+        if ! git remote get-url origin >/dev/null 2>&1; then
+          git remote add origin https://gitlab.com/airtrust-group/airtrust.git
+        fi
+        git fetch --depth=1 origin main
+        git update-ref refs/remotes/origin/main FETCH_HEAD
+        if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
+          git commit --allow-empty -m "ci: materialize HEAD for worker-tests-2"
+        fi
+        git rev-parse --abbrev-ref HEAD
+        git rev-parse HEAD
+        git rev-parse origin/main
         cd worker-airtrust
         npx vitest run --shard=2/2
 
@@ -130,7 +151,7 @@ steps:
       - |
         set -euo pipefail
         apt-get update
-        apt-get install -y --no-install-recommends curl
+        apt-get install -y --no-install-recommends curl procps iproute2
         npx playwright install --with-deps chromium
 
         RUNTIME_JWT_SECRET="$$(openssl rand -hex 32)"
@@ -139,39 +160,40 @@ steps:
         npm run dev:worker:local > /tmp/worker.log 2>&1 &
         WORKER_PID=$$!
 
-        VITE_API_URL=http://127.0.0.1:8787 npm run dev > /tmp/frontend.log 2>&1 &
-        FRONTEND_PID=$$!
-
         cleanup() {
-          kill "$$WORKER_PID" "$$FRONTEND_PID" 2>/dev/null || true
+          kill "$$WORKER_PID" 2>/dev/null || true
           rm -f worker-airtrust/.dev.vars
         }
         trap cleanup EXIT
 
         for i in $$(seq 1 60); do
-          curl -fsS http://127.0.0.1:8787/api/health >/dev/null 2>&1 && break
+          if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then
+            echo "Local worker ready"
+            break
+          fi
           sleep 1
         done
 
-        for i in $$(seq 1 60); do
-          curl -fsS http://127.0.0.1:3000/login >/dev/null 2>&1 && break
-          sleep 1
-        done
-
-        curl -f http://127.0.0.1:8787/api/health || {
+        curl -fsS http://127.0.0.1:8787/api/health || {
           echo "===== worker.log ====="
           cat /tmp/worker.log
           exit 1
         }
 
-        curl -f http://127.0.0.1:3000/login || {
-          echo "===== frontend.log ====="
-          cat /tmp/frontend.log
-          exit 1
-        }
-
+        set +e
         CI=true \
         VITE_API_URL=http://127.0.0.1:8787 \
         npx playwright test \
           --config=playwright.ci.config.ts \
           e2e/ci/login-public-smoke.spec.ts
+        pw_status=$$?
+        set -e
+        if [ "$$pw_status" -ne 0 ]; then
+          echo "===== worker.log ====="
+          cat /tmp/worker.log || true
+          echo "===== processes ====="
+          ps aux || true
+          echo "===== listen :3000 ====="
+          ss -ltnp | grep 3000 || true
+          exit "$$pw_status"
+        fi
