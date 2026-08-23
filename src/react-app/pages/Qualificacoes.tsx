@@ -1316,17 +1316,9 @@ export default function Qualificacoes() {
     handleConfirmDeleteMutation,
   } = useQualificacoesMutations({
     API_BASE_URL,
-    fetchWithAuth: async (input, init) => {
-      const response = await fetchWithAuth(String(input), init);
-      return {
-        ok: response.ok,
-        json: () => response.json(),
-      };
-    },
+    fetchWithAuth,
     showToast,
-    emitirEventoModulo: (payload) => {
-      emitirEventoModulo(payload as unknown as Parameters<typeof emitirEventoModulo>[0]);
-    },
+    emitirEventoModulo,
     recarregarHistoricoEStats,
   });
 

@@ -100,7 +100,12 @@ export async function executeSharedSessionCreation(
       registro_id: created.sessaoId,
       dados_novos: { empresaId, sessaoId: created.sessaoId, error: fichaErrorMessage },
     }).catch(() => undefined);
-    throw new Error('Sessão compartilhada criada (id ' + created.sessaoId + '), mas a geração de fichas falhou: ' + fichaErrorMessage);
+    throw new Error(
+      'Sessão compartilhada criada (id ' +
+        created.sessaoId +
+        '), mas a geração canônica de fichas falhou e ficou pendente de reparo: ' +
+        fichaErrorMessage,
+    );
   }
 
   const detail = await loadSharedDetail(db, empresaId, created.sessaoId);

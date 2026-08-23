@@ -172,13 +172,7 @@ app.post('/sessoes/compartilhada', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const payload = validateAndNormalizeSharedSessionRequest(await c.req.json());
-    let result;
-    try {
-      result = await executeSharedSessionCreation(c.env.DB, empresaId, payload);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Falha ao criar sessão compartilhada';
-      return c.json({ success: false, error: message }, 500);
-    }
+    const result = await executeSharedSessionCreation(c.env.DB, empresaId, payload);
     const { detail, created, fichasResult } = result;
     const fichasGeradas = fichasResult.created;
     const fichasExistentes = fichasResult.skipped;
