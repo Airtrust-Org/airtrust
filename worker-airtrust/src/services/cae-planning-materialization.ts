@@ -224,10 +224,22 @@ export async function materializeSimulatorPlanning(params: {
     return { success: true, sessao_id: Number(snapshot.materialized_session_id), reused: true };
   }
 
+  const snapshotParticipants = (snapshot.participants || []) as Array<{
+    employee_id?: unknown;
+    funcionario_id?: unknown;
+    training_id?: unknown;
+    planned_training_id?: unknown;
+    qualificacao_tipo_id?: unknown;
+    session_model_ids?: unknown;
+    modelo_sessao_id?: unknown;
+  }>;
+  const firstSessionModelId = (value: unknown) =>
+    Array.isArray(value) && value.length > 0 ? value[0] : undefined;
+
   const inferredMode = (() => {
-    const rows = (snapshot.participants || []).map((participant: any) => ({
+    const rows = snapshotParticipants.map((participant) => ({
       training_id: participant.training_id,
-      session_model_id: participant.session_model_ids?.[0],
+      session_model_id: firstSessionModelId(participant.session_model_ids),
     }));
     if (rows.length <= 1) return 'NORMAL' as const;
     const sameTraining = rows.every(
@@ -248,11 +260,11 @@ export async function materializeSimulatorPlanning(params: {
     return { success: false, error: 'Snapshot sem slot CAE para materializar', code: 'SNAPSHOT_SLOT_MISSING' };
   }
 
-  const participants = (snapshot.participants || []).map((participant: any, index) => ({
+  const participants = snapshotParticipants.map((participant, index) => ({
     employee_id: Number(participant.employee_id ?? participant.funcionario_id),
     planned_training_id:
       participant.training_id ?? participant.planned_training_id ?? participant.qualificacao_tipo_id ?? planningId,
-    session_model_id: participant.session_model_ids?.[0] ?? participant.modelo_sessao_id,
+    session_model_id: firstSessionModelId(participant.session_model_ids) ?? participant.modelo_sessao_id,
     session_order: index + 1,
     generate_ficha: true,
   }));
