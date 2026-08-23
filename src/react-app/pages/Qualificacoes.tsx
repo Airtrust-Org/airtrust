@@ -389,6 +389,7 @@ export default function Qualificacoes() {
     is_transversal?: boolean;
     setor_ids?: number[];
   };
+  type QualificacaoTipoDTO = TipoQualificacao;
 
   type Categoria = {
     id?: number;
@@ -477,12 +478,12 @@ export default function Qualificacoes() {
     useFuncionariosAtivos();
   // Remover estados locais desnecessários
   const [showTipoModal, setShowTipoModal] = useState(false);
-  const [editingTipo, setEditingTipo] = useState<TipoQualificacao | null>(null);
+  const [editingTipo, setEditingTipo] = useState<QualificacaoTipoDTO | null>(null);
 
   // Cache de atualizações otimistas de tipos — garante que a tabela mostre
   // o valor salvo IMEDIATAMENTE, antes mesmo do refetch completar.
   // Chave: String(id do tipo), Valor: campos atualizados.
-  const [tipoUpdates, setTipoUpdates] = useState<Record<string, Partial<TipoQualificacao>>>({});
+  const [tipoUpdates, setTipoUpdates] = useState<Record<string, Partial<QualificacaoTipoDTO>>>({});
 
   const modelosPrefsHydratedRef = useRef(false);
 
@@ -913,10 +914,10 @@ export default function Qualificacoes() {
           ? {
               ...prev,
               tem_certificado: temCertificados ? 1 : 0,
-              certificado_url: temCertificados ? prev.certificado_url || 'ativo' : null,
+              certificado_url: temCertificados ? prev.certificado_url || 'ativo' : undefined,
               certificado_arquivo_id: temCertificados
                 ? (prev.certificado_arquivo_id ?? prev.id)
-                : null,
+                : undefined,
             }
           : prev,
       );
