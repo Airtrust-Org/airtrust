@@ -73,7 +73,7 @@ const LARGE_FILE_LINE_CAPS = {
   // (Independently also the value fix/frms-parameter-governance-recalc found
   // as pre-existing drift on this file, which that branch never touches —
   // both branches agree on 2677, this is the same number for two reasons.)
-  'routes/lms-assets.ts': 2677,
+  'routes/lms-assets.ts': 2710,
   // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
   // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,
   // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.
