@@ -391,10 +391,12 @@ export async function runSigvoosShadowIngestion(
         } else {
           sourceChanged = true;
           const before = JSON.parse(existing.normalized_json) as SigvoosNormalizedLeg;
+          const beforeFields = fingerprintFields(before);
+          const afterFields = fingerprintFields(leg);
           const diffs: Record<string, { before: unknown; after: unknown }> = {};
-          for (const key of Object.keys(fingerprintFields(leg))) {
-            const beforeVal = (before as unknown as Record<string, unknown>)[key] ?? null;
-            const afterVal = (leg as unknown as Record<string, unknown>)[key] ?? null;
+          for (const key of Object.keys(afterFields)) {
+            const beforeVal = beforeFields[key] ?? null;
+            const afterVal = afterFields[key] ?? null;
             if (beforeVal !== afterVal) diffs[key] = { before: beforeVal, after: afterVal };
           }
           await db
