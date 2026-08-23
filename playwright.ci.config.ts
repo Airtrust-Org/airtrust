@@ -21,10 +21,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 3000 --strictPort',
+    command:
+      'VITE_API_URL=http://127.0.0.1:8787 npm run build && npx vite preview --host 127.0.0.1 --port 3000 --strictPort',
     url: 'http://127.0.0.1:3000/login',
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: 180_000,
     stdout: 'pipe',
     stderr: 'pipe',
   },

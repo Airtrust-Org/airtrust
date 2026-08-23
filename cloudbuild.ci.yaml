@@ -93,6 +93,11 @@ steps:
           echo "Replacing gitdir pointer with a real repository at the workspace root"
           rm -f .git
         fi
+        if [ -f release/.git ]; then
+          echo "Detaching uploaded git worktree pointer at release/.git"
+          cat release/.git
+          rm -f release/.git
+        fi
         if [ ! -d .git ]; then
           git init
         fi
