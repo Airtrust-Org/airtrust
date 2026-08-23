@@ -310,10 +310,18 @@ export async function executeSimulatorPlanningApproval(params: {
       .bind(empresaId)
       .first<SimulatorPlanningConfigRow>();
     const config = resolveSimulatorPlanningConfig(configRow || {});
-    const submitted = submitSimulatorProposalForApproval({
-      planning_status: row.planejamento_status,
-      approval_required: config.approval_required,
-    });
+    let submitted: { planning_status: SimulatorProposalStatus; approval_status: SimulatorApprovalStatus };
+    try {
+      submitted = submitSimulatorProposalForApproval({
+        planning_status: row.planejamento_status,
+        approval_required: config.approval_required,
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Estado inválido para submissão',
+      };
+    }
 
     await db
       .prepare(
