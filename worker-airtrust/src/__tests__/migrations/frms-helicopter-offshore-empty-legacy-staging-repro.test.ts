@@ -60,12 +60,12 @@ describe('real staging condition — empty frms_configuracao_limites', () => {
     const total = Number(count.stdout.trim());
     // This documents the real, pre-existing gap in 0464's own bootstrap — not
     // something this fix is responsible for repairing (see LEGACY_GENERAL
-    // note in the audit). It is < 120 because the LimitesMap portion never
+    // note in the audit). It is < 128 because the LimitesMap portion never
     // populates against an empty legacy table.
     expect(total).toBeLessThan(128);
   });
 
-  it('HELICOPTER_OFFSHORE V1 does NOT inherit that incompleteness — 120/120 parameters present regardless of frms_configuracao_limites content', () => {
+  it('HELICOPTER_OFFSHORE V1 does NOT inherit that incompleteness — 128/128 parameters present regardless of frms_configuracao_limites content', () => {
     const path = createRealStagingLikeBaseline();
     const applied = sqlite(path, seed);
     expect(applied.status, applied.stderr).toBe(0);

@@ -19,19 +19,29 @@ document or by this phase.
 
 ## Sources inspected
 
-- `worker-airtrust/src/lib/frms/types.ts` — `LimitesMap` / `LIMITES_DEFAULT` (63 keys)
-- `worker-airtrust/src/lib/frms/fadiga-score.ts` — `FadigaBusinessPolicy` / `LEGACY_FADIGA_BUSINESS_POLICY` (24 keys)
-- `worker-airtrust/src/lib/frms/fortnight-indicator.ts` — `FrmsFortnightPolicy` / `LEGACY_FORTNIGHT_POLICY` (33 keys)
+- `worker-airtrust/src/lib/frms/types.ts` — `LimitesMap` / `LIMITES_DEFAULT` (67 keys)
+- `worker-airtrust/src/lib/frms/fadiga-score.ts` — `FadigaBusinessPolicy` / `LEGACY_FADIGA_BUSINESS_POLICY` (25 keys)
+- `worker-airtrust/src/lib/frms/fortnight-indicator.ts` — `FrmsFortnightPolicy` / `LEGACY_FORTNIGHT_POLICY` (36 keys)
 - Consumers checked: `calculos.ts`, `fadiga-score.ts`, `compliance-policy.ts`, `alertas.ts`,
   `fortnight-indicator.ts`, `operational-snapshot.ts`, `decision-policy.ts`,
   `frms-governance-readiness.ts`, `parameter-governance.ts`
 
-**Total governed parameters: 120** (63 + 24 + 33). These are exactly the keys
+**Total governed parameters: 128** (67 + 25 + 36). These are exactly the keys
 `resolveFrmsOperationalContext` already requires present in a governed
-revision (`Object.keys(LIMITES_DEFAULT)` for the first 63; the fadiga/fortnight
+revision (`Object.keys(LIMITES_DEFAULT)` for the first 67; the fadiga/fortnight
 sets are validated separately by `resolveFadigaBusinessPolicy` /
 `resolveFortnightPolicy`). No new parameter surface is introduced by this
 document.
+
+> **Correção de inventário (2026-08-22):** a contagem original desta seção
+> (120 = 63 + 24 + 33) era um erro de contagem manual, não uma alteração de
+> escopo. A contagem real, verificada programaticamente a partir do código-fonte
+> (`Object.keys(LIMITES_DEFAULT).length`, `Object.keys(LEGACY_FADIGA_BUSINESS_POLICY).length`,
+> `Object.keys(LEGACY_FORTNIGHT_POLICY).length`), é 128 (67 + 25 + 36). Nenhum
+> valor de parâmetro, fórmula, threshold ou classificação foi alterado; a
+> baseline sempre representou os valores atuais do runtime — apenas o número
+> total relatado nesta seção estava incorreto. Ver [MR !79](https://gitlab.com/airtrust-group/airtrust/-/merge_requests/79)
+> e `FRMS_HELICOPTER_OFFSHORE_STAGING_PROVISIONING_PLAN.md`.
 
 ---
 
