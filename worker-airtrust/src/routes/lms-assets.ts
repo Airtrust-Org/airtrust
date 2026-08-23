@@ -206,6 +206,7 @@ async function resolveScormObject(
   empresaId: string | number,
   cursoId: string | number,
   wildcard: string,
+  options: { activePrefix?: string | null } = {},
 ) {
   const normalizedWildcard = normalizeR2Path(wildcard);
   const prefix = `lms/scorm/${empresaId}/${cursoId}/`;
@@ -220,6 +221,26 @@ async function resolveScormObject(
     return { object, resolvedKey: directKey };
   }
 
+  // The course has a pinned/active versioned package prefix (lms_cursos
+  // .scorm_package_r2_prefix, e.g. ".../_candidates/<uuid>/"). Resolve
+  // strictly within that prefix and fail closed — never fall back to an
+  // unordered bucket listing across every candidate the course has ever
+  // had. R2 list() returns keys in lexicographic order, not by activation
+  // recency, so without this a stale/superseded candidate could sort
+  // before the active one and be served silently instead.
+  if (options.activePrefix) {
+    const normalizedActivePrefix = options.activePrefix.endsWith('/')
+      ? options.activePrefix
+      : `${options.activePrefix}/`;
+    const scopedKey = `${normalizedActivePrefix}${normalizedWildcard}`;
+    const scopedObject = await bucket.get(scopedKey);
+    return { object: scopedObject, resolvedKey: scopedKey };
+  }
+
+  // Legacy path: no versioned candidate system in use for this course
+  // (scorm_package_r2_prefix unset). Historically only a single package
+  // ever lived at this flat prefix, so a listing-based lookup remains
+  // safe here for backward compatibility with pre-Quality-Gate content.
   const listed = await bucket.list({ prefix });
   const normalizedKey = directKey.toLowerCase();
   const fallback = listed.objects.find((entry) => {
@@ -246,9 +267,10 @@ async function resolveScormLaunchFile(
   empresaId: string | number,
   cursoId: string | number,
   launchFile: string,
+  options: { activePrefix?: string | null } = {},
 ): Promise<string | null> {
-  const { resolvedKey } = await resolveScormObject(bucket, empresaId, cursoId, launchFile);
-  if (!resolvedKey || resolvedKey.endsWith('/')) {
+  const { object, resolvedKey } = await resolveScormObject(bucket, empresaId, cursoId, launchFile, options);
+  if (!object || !resolvedKey || resolvedKey.endsWith('/')) {
     return null;
   }
 
@@ -588,12 +610,12 @@ async function ensureCourseAssetAccess(
 
   const curso = await db
     .prepare(
-      `SELECT id, ativo, publicado
+      `SELECT id, ativo, publicado, scorm_package_r2_prefix
          FROM lms_cursos
         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
     .bind(cursoId, empresaId)
-    .first<{ id: number; ativo: number; publicado: number }>();
+    .first<{ id: number; ativo: number; publicado: number; scorm_package_r2_prefix: string | null }>();
   if (!curso) {
     throw new ApiError('Curso não encontrado', 404);
   }
@@ -726,7 +748,7 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
   const cursoId = c.req.param('curso_id');
   assertCourseAssetToken(payload, Number(cursoId));
   const cacheBuster = new URL(c.req.url).searchParams.get('airtrust_scorm')?.trim() || null;
-  await ensureCourseAssetAccess(c.env.DB, payload, Number(empresaId), Number(cursoId));
+  const cursoAccess = await ensureCourseAssetAccess(c.env.DB, payload, Number(empresaId), Number(cursoId));
   const wildcard = extractAssetPathFromRequest(
     new URL(c.req.url).pathname,
     `/api/lms/scorm/assets/${empresaId}/${cursoId}`,
@@ -738,6 +760,7 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
     empresaId,
     cursoId,
     wildcard,
+    { activePrefix: cursoAccess.scorm_package_r2_prefix },
   );
   if (!object) {
     return c.text('Not found', 404);
@@ -791,9 +814,9 @@ app.get('/scorm/assets-by-curso/:cursoId/*', async (c) => {
   );
 
   const curso = await db
-    .prepare('SELECT id, empresa_id FROM lms_cursos WHERE id = ? AND deleted_at IS NULL')
+    .prepare('SELECT id, empresa_id, scorm_package_r2_prefix FROM lms_cursos WHERE id = ? AND deleted_at IS NULL')
     .bind(Number(cursoIdParam))
-    .first<{ id: number; empresa_id: number }>();
+    .first<{ id: number; empresa_id: number; scorm_package_r2_prefix: string | null }>();
   if (!curso) return c.text('Not found', 404);
   assertCourseAssetToken(payload, curso.id);
   await ensureCourseAssetAccess(db, payload, curso.empresa_id, curso.id);
@@ -803,6 +826,7 @@ app.get('/scorm/assets-by-curso/:cursoId/*', async (c) => {
     curso.empresa_id,
     curso.id,
     wildcard,
+    { activePrefix: curso.scorm_package_r2_prefix },
   );
   const rangeHeader = c.req.header('range');
 
@@ -972,6 +996,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     matricula.empresa_id,
     matricula.curso_id,
     matricula.scorm_launch_file,
+    { activePrefix: matricula.scorm_package_r2_prefix },
   );
   if (!resolvedLaunchFile) {
     throw new ApiError('Arquivo inicial do pacote SCORM não foi encontrado no storage', 404);
@@ -1051,7 +1076,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
   const curso = await db
     .prepare(
       `
-      SELECT id, empresa_id, titulo, scorm_versao, scorm_launch_file
+      SELECT id, empresa_id, titulo, scorm_versao, scorm_launch_file, scorm_package_r2_prefix
       FROM lms_cursos
       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
     `,
@@ -1063,6 +1088,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
       titulo: string;
       scorm_versao: string | null;
       scorm_launch_file: string | null;
+      scorm_package_r2_prefix: string | null;
     }>();
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
@@ -1075,6 +1101,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
     curso.empresa_id,
     curso.id,
     curso.scorm_launch_file,
+    { activePrefix: curso.scorm_package_r2_prefix },
   );
   if (!resolvedLaunchFile) {
     throw new ApiError('Arquivo inicial do pacote SCORM não foi encontrado no storage', 404);
