@@ -148,8 +148,8 @@ describe('CAE deterministic planning matcher', () => {
     const config = {
       ...SIMULATOR_PLANNING_FALLBACKS,
       planning_horizon_days: 90,
-      source: 'TEST',
-      warnings: []
+      source: 'FALLBACK' as const,
+      warnings: [] as string[]
     };
 
     const need: CaePlanningNeed = {
@@ -169,8 +169,6 @@ describe('CAE deterministic planning matcher', () => {
     expect(result.status).toBe('MATCHED');
     expect(result.selected_slots[0].date).toBe('2026-11-20');
   });
-});
-
 
   it('PREFERÊNCIA: deve vencer disponibilidade perfeita com 2 sessões/dia e ordem consecutiva', () => {
     // 4 sessões de 2h
@@ -259,3 +257,4 @@ describe('CAE deterministic planning matcher', () => {
     expect(result.status).toBe('MATCHED');
     expect(result.assignments).toHaveLength(2);
   });
+});

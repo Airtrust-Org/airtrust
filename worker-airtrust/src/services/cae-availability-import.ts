@@ -75,3 +75,55 @@ export interface CaeAvailabilityExtractionProvider {
     bytesOrObjectRef: unknown;
   }): Promise<unknown>;
 }
+
+export class CaeExtractionUnavailableError extends Error {
+  constructor(message = 'A extração automática de PDF via IA ainda não está disponível.') {
+    super(message);
+    this.name = 'CaeExtractionUnavailableError';
+  }
+}
+
+export const unavailableCaeAvailabilityExtractor: CaeAvailabilityExtractionProvider = {
+  async extract() {
+    throw new CaeExtractionUnavailableError();
+  },
+};
+
+export async function importCaeAvailabilityFromUpload(params: {
+  empresaId: number;
+  fileName: string;
+  mimeType: string;
+  objectKey: string;
+  extractor?: CaeAvailabilityExtractionProvider | null;
+}): Promise<
+  | { status: 'EXTRACTED'; import: CaeAvailabilityImportResult; object_key: string }
+  | { status: 'EXTRACTION_UNAVAILABLE'; object_key: string; error: string }
+> {
+  const extractor = params.extractor || unavailableCaeAvailabilityExtractor;
+  try {
+    const rawCandidate = await extractor.extract({
+      empresaId: params.empresaId,
+      fileName: params.fileName,
+      mimeType: params.mimeType,
+      bytesOrObjectRef: params.objectKey,
+    });
+    return {
+      status: 'EXTRACTED',
+      object_key: params.objectKey,
+      import: prepareCaeAvailabilityImport({
+        source_file_name: params.fileName,
+        source_kind: 'PDF',
+        raw_candidate: rawCandidate,
+      }),
+    };
+  } catch (error) {
+    if (error instanceof CaeExtractionUnavailableError) {
+      return {
+        status: 'EXTRACTION_UNAVAILABLE',
+        object_key: params.objectKey,
+        error: error.message,
+      };
+    }
+    throw error;
+  }
+}

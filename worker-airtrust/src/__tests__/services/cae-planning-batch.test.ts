@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { matchCaeAvailabilityBatch } from '../../services/cae-planning-batch';
 import type { CaeAvailabilitySlotV1 } from '../../services/cae-availability';
+import { SIMULATOR_PLANNING_FALLBACKS } from '../../services/cae-planning-policy';
 
 function slot(
   equipment: 'AW139' | 'SK76',
@@ -98,3 +99,32 @@ describe('CAE global batch allocator', () => {
     expect(result.matches[1].status).toBe('INSUFFICIENT_AVAILABILITY');
   });
 });
+
+  it('PREFERÊNCIA (90 DIAS) - fluxo de planejamento: respeita o horizonte e prefere conclusão mais próxima', () => {
+    // reference_date = 2026-09-01, expiry = 2026-11-30, horizon = 90
+    // => necessidade entra no planejamento (isInsidePlanningHorizon seria true, testado separadamente,
+    // mas aqui garantimos que a escolha das disponibilidades reflete a preferência e não a janela de planejamento inicial)
+    const result = matchCaeAvailabilityBatch(
+      [
+        {
+          id: 'necessidade-dentro-do-horizonte',
+          equipment: 'AW139',
+          expiry_date: '2026-11-30',
+          session_durations_minutes: [120],
+          config: {
+            ...SIMULATOR_PLANNING_FALLBACKS,
+            planning_horizon_days: 90,
+            source: 'FALLBACK',
+            warnings: [],
+          },
+        },
+      ],
+      [
+        slot('AW139', '2026-09-15', '06:00', '08:00', 120),
+        slot('AW139', '2026-11-20', '06:00', '08:00', 120), // Should prefer this one!
+      ],
+    );
+
+    expect(result.matches[0].status).toBe('MATCHED');
+    expect(result.matches[0].selected_slots[0].date).toBe('2026-11-20');
+  });

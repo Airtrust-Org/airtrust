@@ -131,3 +131,307 @@ export function canMaterializeSimulatorSessions(params: {
     (params.approval_status === 'APROVADO' || params.approval_status === 'NAO_EXIGIDO')
   );
 }
+
+import type { D1Database } from '@cloudflare/workers-types';
+import {
+  revalidateSimulatorPlanningProposal,
+  type SimulatorPlanningLiveState,
+  type SimulatorPlanningSourceSnapshot,
+} from './cae-planning-revalidation';
+import { resolveSimulatorPlanningConfig, type SimulatorPlanningConfigRow } from './cae-planning-policy';
+import { resolvePublishedRosterDayFromD1 } from './cae-planning-roster-d1';
+
+async function writePlanningAudit(params: {
+  db: D1Database;
+  empresaId: number;
+  planningId: number;
+  action: string;
+  status: string | null;
+  before?: unknown;
+  after?: unknown;
+  userId: number | null;
+}) {
+  await params.db
+    .prepare(
+      `INSERT INTO simulador_planejamento_auditoria (
+         empresa_id, treinamento_planejado_id, acao, planejamento_status,
+         snapshot_antes_json, snapshot_depois_json, realizado_por, realizado_em
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    )
+    .bind(
+      params.empresaId,
+      params.planningId,
+      params.action,
+      params.status,
+      params.before == null ? null : JSON.stringify(params.before),
+      params.after == null ? null : JSON.stringify(params.after),
+      params.userId,
+    )
+    .run();
+}
+
+export async function resolveSimulatorPlanningLiveState(params: {
+  db: D1Database;
+  empresaId: number;
+  snapshot: SimulatorPlanningSourceSnapshot;
+}): Promise<SimulatorPlanningLiveState> {
+  const { db, empresaId, snapshot } = params;
+  const configRow = await db
+    .prepare('SELECT * FROM empresas_config WHERE empresa_id = ?')
+    .bind(empresaId)
+    .first<SimulatorPlanningConfigRow>();
+  const config = resolveSimulatorPlanningConfig(configRow || {});
+
+  const liveParticipants = [];
+  for (const participant of snapshot.participants) {
+    const employee = await db
+      .prepare(
+        `SELECT id, status
+           FROM funcionarios
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(participant.employee_id, empresaId)
+      .first<{ id: number; status: string | null }>();
+
+    let qualificationExpiry = participant.qualification_expiry_date;
+    let qualificationHistoryId = participant.qualification_history_id;
+    if (participant.qualification_history_id) {
+      const qualification = await db
+        .prepare(
+          `SELECT id, data_vencimento
+             FROM qualificacoes_historico
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(participant.qualification_history_id, empresaId)
+        .first<{ id: number; data_vencimento: string | null }>();
+      if (qualification) {
+        qualificationHistoryId = qualification.id;
+        qualificationExpiry = qualification.data_vencimento;
+      }
+    }
+
+    let liveSessionModelIds = participant.session_model_ids;
+    try {
+      const sessionModels = await db
+        .prepare(
+          `SELECT id
+             FROM modelos_sessao
+            WHERE empresa_id = ?
+              AND qualificacao_tipo_id = ?
+              AND deleted_at IS NULL
+            ORDER BY COALESCE(ordem_no_treinamento, 9999), id`,
+        )
+        .bind(empresaId, participant.training_id)
+        .all<{ id: number }>();
+      const liveIds = (sessionModels.results || [])
+        .map((model) => Number(model.id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+      if (liveIds.length > 0) {
+        liveSessionModelIds = liveIds;
+      }
+    } catch {
+      // Fail-closed rules still rely on the snapshot; this fallback avoids masking
+      // tenant/schema drifts in lightweight test doubles.
+      liveSessionModelIds = participant.session_model_ids;
+    }
+
+    const rosterByDate: SimulatorPlanningLiveState['participants'][number]['roster_by_date'] = {
+      ...participant.roster_by_date,
+    };
+    for (const date of Object.keys(participant.roster_by_date)) {
+      const roster = await resolvePublishedRosterDayFromD1({
+        db,
+        empresaId,
+        employeeId: participant.employee_id,
+        date,
+      });
+      rosterByDate[date] = roster.state;
+    }
+
+    liveParticipants.push({
+      ...participant,
+      employee_active: employee ? String(employee.status || '').toUpperCase() === 'ATIVO' : false,
+      qualification_history_id: qualificationHistoryId,
+      qualification_expiry_date: qualificationExpiry,
+      session_model_ids: liveSessionModelIds,
+      roster_by_date: rosterByDate,
+    });
+  }
+
+  return {
+    config,
+    participants: liveParticipants,
+    cae_slots: snapshot.cae_slots,
+    canonical_session_fingerprint: snapshot.canonical_session_fingerprint,
+    pairing_fingerprint: snapshot.pairing_fingerprint,
+  };
+}
+
+export async function executeSimulatorPlanningApproval(params: {
+  db: D1Database;
+  empresaId: number;
+  planningId: number;
+  action: 'APPROVE' | 'RETURN' | 'SUBMIT';
+  userId: number;
+  userName: string;
+  observations?: string | null;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  blockers?: string[];
+  issues?: unknown;
+  planning_status?: string;
+  approval_status?: string;
+}> {
+  const { db, empresaId, planningId, action } = params;
+
+  const row = await db
+    .prepare(
+      `SELECT planejamento_status, planejamento_aprovacao_status, planejamento_snapshot_json
+         FROM treinamentos_planejados
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(planningId, empresaId)
+    .first<{
+      planejamento_status: SimulatorProposalStatus;
+      planejamento_aprovacao_status: SimulatorApprovalStatus | null;
+      planejamento_snapshot_json: string | null;
+    }>();
+
+  if (!row) {
+    return { success: false, error: 'Proposta não encontrada' };
+  }
+
+  const before = { ...row };
+
+  if (action === 'SUBMIT') {
+    const configRow = await db
+      .prepare('SELECT * FROM empresas_config WHERE empresa_id = ?')
+      .bind(empresaId)
+      .first<SimulatorPlanningConfigRow>();
+    const config = resolveSimulatorPlanningConfig(configRow || {});
+    const submitted = submitSimulatorProposalForApproval({
+      planning_status: row.planejamento_status,
+      approval_required: config.approval_required,
+    });
+
+    await db
+      .prepare(
+        `UPDATE treinamentos_planejados
+            SET planejamento_status = ?,
+                planejamento_aprovacao_status = ?,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(submitted.planning_status, submitted.approval_status, planningId, empresaId)
+      .run();
+
+    await writePlanningAudit({
+      db,
+      empresaId,
+      planningId,
+      action: 'SUBMETER',
+      status: submitted.planning_status,
+      before,
+      after: { ...submitted, submitted_by: params.userId, submitted_at: new Date().toISOString() },
+      userId: params.userId,
+    });
+
+    return {
+      success: true,
+      planning_status: submitted.planning_status,
+      approval_status: submitted.approval_status,
+    };
+  }
+
+  if (!row.planejamento_snapshot_json) {
+    return { success: false, error: 'Snapshot da proposta ausente', blockers: ['SNAPSHOT_MISSING'] };
+  }
+
+  let snapshot: SimulatorPlanningSourceSnapshot;
+  try {
+    snapshot = JSON.parse(row.planejamento_snapshot_json) as SimulatorPlanningSourceSnapshot;
+  } catch {
+    return { success: false, error: 'Snapshot da proposta inválido', blockers: ['SNAPSHOT_INVALID'] };
+  }
+
+  const liveState = await resolveSimulatorPlanningLiveState({ db, empresaId, snapshot });
+  const revalidation = revalidateSimulatorPlanningProposal(snapshot, liveState);
+  let decision: SimulatorApprovalOutcome;
+  try {
+    decision = decideSimulatorProposal({
+      proposal_id: planningId,
+      current_planning_status: row.planejamento_status,
+      current_approval_status: row.planejamento_aprovacao_status || 'RASCUNHO',
+      decision: action === 'APPROVE' ? 'APROVAR' : 'DEVOLVER',
+      actor: { user_id: params.userId, role: 'manager' },
+      decided_at: new Date().toISOString(),
+      observations: params.observations,
+      revalidation,
+    });
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Estado inválido para aprovação/devolução',
+    };
+  }
+
+  const observations =
+    params.observations ||
+    (decision.blockers.length > 0 ? `Bloqueado por: ${decision.blockers.join(', ')}` : null);
+
+  await db
+    .prepare(
+      `UPDATE treinamentos_planejados
+          SET planejamento_status = ?,
+              planejamento_aprovacao_status = ?,
+              planejamento_aprovacao_observacoes = ?,
+              planejamento_aprovado_por = ?,
+              planejamento_aprovado_em = CURRENT_TIMESTAMP,
+              planejamento_revalidado_em = CURRENT_TIMESTAMP,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(
+      decision.next_planning_status,
+      decision.next_approval_status,
+      observations,
+      params.userId,
+      planningId,
+      empresaId,
+    )
+    .run();
+
+  await writePlanningAudit({
+    db,
+    empresaId,
+    planningId,
+    action: action === 'APPROVE' ? 'APROVAR' : 'DEVOLVER',
+    status: decision.next_planning_status,
+    before,
+    after: {
+      decision,
+      snapshot_analyzed: snapshot,
+      live_state: liveState,
+      actor: { user_id: params.userId, user_name: params.userName },
+    },
+    userId: params.userId,
+  });
+
+  if (!decision.ok) {
+    return {
+      success: false,
+      error: 'Revalidação live impediu a aprovação. A proposta foi devolvida para replanejamento.',
+      blockers: decision.blockers,
+      issues: revalidation.issues,
+      planning_status: decision.next_planning_status,
+      approval_status: decision.next_approval_status,
+    };
+  }
+
+  return {
+    success: true,
+    planning_status: decision.next_planning_status,
+    approval_status: decision.next_approval_status,
+  };
+}

@@ -1,6 +1,6 @@
 import type { CaeAvailabilitySlotV1 } from './cae-availability';
 import { calculateCaeAllocationScore, type AllocationScoreInput, type ScoredAssignment } from './cae-planning-score';
-import type { SimulatorPlanningConfig } from './cae-planning-policy';
+import { isInsidePlanningHorizon, type SimulatorPlanningConfig } from './cae-planning-policy';
 
 export type CaePlanningNeed = {
   id: string | number;
@@ -276,5 +276,40 @@ export function matchCaeAvailabilityToNeed(
     latest_training_date: latestDate,
     days_before_expiry: latestDate ? daysBetween(latestDate, need.expiry_date) : null,
     reasons,
+  };
+}
+
+export function evaluatePlanningNeedWithCae(params: {
+  reference_date: string;
+  expiry_date: string;
+  config: SimulatorPlanningConfig;
+  equipment: CaePlanningNeed['equipment'];
+  session_durations_minutes: number[];
+  preferred_window_start?: string | null;
+  preferred_window_end?: string | null;
+  slots: CaeAvailabilitySlotV1[];
+}): { eligible: boolean; match: CaePlanningMatch | null } {
+  const eligible = isInsidePlanningHorizon({
+    reference_date: params.reference_date,
+    expiry_date: params.expiry_date,
+    config: params.config,
+  });
+  if (!eligible) {
+    return { eligible: false, match: null };
+  }
+  return {
+    eligible: true,
+    match: matchCaeAvailabilityToNeed(
+      {
+        id: 'need',
+        equipment: params.equipment,
+        expiry_date: params.expiry_date,
+        preferred_window_start: params.preferred_window_start ?? null,
+        preferred_window_end: params.preferred_window_end ?? null,
+        session_durations_minutes: params.session_durations_minutes,
+        config: params.config,
+      },
+      params.slots,
+    ),
   };
 }
