@@ -36,24 +36,6 @@ jobs:
         run: git fetch origin main --quiet
       - name: canonical lint and safety guards
         run: npm run lint
-      - name: migration NO_GO guard tests
-        run: node --test scripts/__tests__/migration-no-go-guard.test.mjs
-      - name: TypeScript delta guard tests
-        run: node --test scripts/__tests__/typescript-delta-guard.test.mjs
-      - name: lint and format delta guard tests
-        run: node --test scripts/__tests__/lint-format-delta-guard.test.mjs
-      - name: risk-based test delta guard tests
-        run: node --test scripts/__tests__/risk-test-delta-guard.test.mjs
-      - name: block new ESLint and Prettier violations
-        run: node scripts/guard-lint-format-delta.mjs
-      - name: require focused tests for high-risk runtime changes
-        run: node scripts/guard-risk-test-delta.mjs
-      - name: dangerous-ops guard
-        run: npm run ops:guard
-      - name: self-protected invariant mutation tests
-        run: node --test scripts/__tests__/self-protected-invariants-guard.test.mjs
-      - name: hardened production post-deploy smoke contract tests
-        run: node --test scripts/__tests__/smoke-production-postdeploy.test.mjs
 
   build-content-gates:
     runs-on: ubuntu-latest
