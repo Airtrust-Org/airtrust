@@ -41,6 +41,10 @@ steps:
     args:
       - -ceu
       - |
+        # Each Cloud Build step has its own container/global Git config. The
+        # lint guard resolves a merge-base, so it must establish the same
+        # safe-directory trust as bootstrap before invoking Git.
+        git config --global --add safe.directory /workspace
         export VITE_API_URL="http://127.0.0.1:8787"
         npm run lint
 
