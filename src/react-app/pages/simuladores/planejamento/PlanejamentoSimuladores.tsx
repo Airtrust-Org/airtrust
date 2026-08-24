@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react';
 import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
+import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
 
 type PlanningStatus =
@@ -387,6 +388,7 @@ export default function PlanejamentoSimuladores() {
   const [resourceCandidates, setResourceCandidates] = useState<Record<number, ResourceCandidates>>({});
   const [resourceLoadingId, setResourceLoadingId] = useState<number | null>(null);
   const [resourceSavingId, setResourceSavingId] = useState<number | null>(null);
+  const [proposalPdfId, setProposalPdfId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -636,6 +638,23 @@ export default function PlanejamentoSimuladores() {
       showToast.error(frontendErrorMessage(error));
     } finally {
       setResourceSavingId(null);
+    }
+  };
+
+  const handleProposalPdf = async (id: number) => {
+    setProposalPdfId(id);
+    try {
+      const response = await fetchWithAuth(`/api/simuladores/planejamento/${id}/pdf`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || `Falha ao gerar PDF (status ${response.status})`);
+      }
+      const blob = await response.blob();
+      downloadBlob(blob, `proposta-cae-${id}.pdf`);
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setProposalPdfId(null);
     }
   };
 
@@ -1656,6 +1675,20 @@ export default function PlanejamentoSimuladores() {
                             <Save className="h-4 w-4" />
                           )}
                           Salvar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleProposalPdf(item.id)}
+                          disabled={proposalPdfId === item.id}
+                          title="Gerar PDF da proposta (estado atual do snapshot)"
+                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                        >
+                          {proposalPdfId === item.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4" />
+                          )}
+                          Gerar PDF
                         </button>
                         {['CONFIRMADO', 'AGENDADO'].includes(
                           draft?.status || item.planejamento_status,

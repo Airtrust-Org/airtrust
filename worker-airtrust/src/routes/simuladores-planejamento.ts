@@ -1970,6 +1970,182 @@ app.get('/:id/recursos/candidatos', requireRole('admin', 'manager'), async (c) =
   });
 });
 
+app.get('/:id/pdf', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const treinamentoId = Number(c.req.param('id'));
+  if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
+    return c.json({ success: false, error: 'ID inválido' }, 400);
+  }
+
+  // Tenant isolation por WHERE, não por ID previsível: um id de outra
+  // empresa simplesmente não é encontrado aqui, independente de existir.
+  const row = await db
+    .prepare(
+      `SELECT t.id, t.planejamento_status, t.planejamento_aprovacao_status,
+              t.planejamento_snapshot_json, t.planejamento_aprovacao_observacoes,
+              t.planejamento_aprovado_em, t.planejamento_aprovado_por,
+              e.nome AS empresa_nome
+         FROM treinamentos_planejados t
+         LEFT JOIN empresas e ON e.id = t.empresa_id
+        WHERE t.id = ? AND t.empresa_id = ? AND t.deleted_at IS NULL`,
+    )
+    .bind(treinamentoId, empresaId)
+    .first<{
+      id: number;
+      planejamento_status: string | null;
+      planejamento_aprovacao_status: string | null;
+      planejamento_snapshot_json: string | null;
+      planejamento_aprovacao_observacoes: string | null;
+      planejamento_aprovado_em: string | null;
+      planejamento_aprovado_por: number | null;
+      empresa_nome: string | null;
+    }>();
+  if (!row) return c.json({ success: false, error: 'Planejamento não encontrado' }, 404);
+
+  let snapshot: Record<string, unknown> = {};
+  try {
+    snapshot = row.planejamento_snapshot_json ? JSON.parse(row.planejamento_snapshot_json) : {};
+  } catch {
+    snapshot = {};
+  }
+
+  let aprovadorNome: string | null = null;
+  if (row.planejamento_aprovado_por) {
+    const aprovador = await db
+      .prepare('SELECT nome FROM usuarios WHERE id = ? AND deleted_at IS NULL')
+      .bind(row.planejamento_aprovado_por)
+      .first<{ nome: string }>();
+    aprovadorNome = aprovador?.nome || null;
+  }
+
+  const snapshotParticipants = (snapshot.participants as Array<{
+    employee_id?: unknown;
+    funcionario_id?: unknown;
+    qualification_expiry_date?: unknown;
+    session_model_ids?: unknown;
+    roster_by_date?: Record<string, string>;
+  }> | undefined) || [];
+
+  const modelIds = [
+    ...new Set(
+      snapshotParticipants
+        .map((p) => (Array.isArray(p.session_model_ids) ? Number(p.session_model_ids[0]) : null))
+        .filter((id): id is number => Number.isInteger(id) && Number(id) > 0),
+    ),
+  ];
+  const modelRows = modelIds.length
+    ? await db
+        .prepare(
+          `SELECT id, codigo, nome, qualificacao_tipo_id FROM modelos_sessao WHERE id IN (${modelIds
+            .map(() => '?')
+            .join(',')}) AND empresa_id = ?`,
+        )
+        .bind(...modelIds, empresaId)
+        .all<{ id: number; codigo: string; nome: string; qualificacao_tipo_id: number }>()
+    : { results: [] };
+  const modelById = new Map((modelRows.results || []).map((m) => [Number(m.id), m]));
+
+  const employeeIds = snapshotParticipants
+    .map((p) => Number(p.employee_id ?? p.funcionario_id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  const employeeRows = employeeIds.length
+    ? await db
+        .prepare(
+          `SELECT id, nome FROM funcionarios WHERE id IN (${employeeIds
+            .map(() => '?')
+            .join(',')}) AND empresa_id = ?`,
+        )
+        .bind(...employeeIds, empresaId)
+        .all<{ id: number; nome: string }>()
+    : { results: [] };
+  const employeeById = new Map((employeeRows.results || []).map((e) => [Number(e.id), e]));
+
+  const qualificacaoTipoIds = [
+    ...new Set(
+      [...modelById.values()].map((m) => Number(m.qualificacao_tipo_id)).filter((id) => Number.isInteger(id)),
+    ),
+  ];
+  const qualificacaoRows = qualificacaoTipoIds.length
+    ? await db
+        .prepare(
+          `SELECT id, nome FROM qualificacoes_tipos WHERE id IN (${qualificacaoTipoIds
+            .map(() => '?')
+            .join(',')}) AND empresa_id = ?`,
+        )
+        .bind(...qualificacaoTipoIds, empresaId)
+        .all<{ id: number; nome: string }>()
+    : { results: [] };
+  const qualificacaoNomeById = new Map((qualificacaoRows.results || []).map((q) => [Number(q.id), q.nome]));
+
+  const participants = snapshotParticipants.map((p) => {
+    const employeeId = Number(p.employee_id ?? p.funcionario_id);
+    const modelId = Array.isArray(p.session_model_ids) ? Number(p.session_model_ids[0]) : null;
+    const model = modelId ? modelById.get(modelId) : undefined;
+    return {
+      funcionario_id: employeeId,
+      funcionario_nome: employeeById.get(employeeId)?.nome || `#${employeeId}`,
+      qualificacao_nome: model ? qualificacaoNomeById.get(Number(model.qualificacao_tipo_id)) || null : null,
+      qualificacao_vencimento: p.qualification_expiry_date ? String(p.qualification_expiry_date) : null,
+      modelo_codigo: model?.codigo || null,
+      modelo_nome: model?.nome || null,
+    };
+  });
+
+  const escalaLinhas = snapshotParticipants
+    .flatMap((p) => {
+      const employeeId = Number(p.employee_id ?? p.funcionario_id);
+      const nome = employeeById.get(employeeId)?.nome || `#${employeeId}`;
+      return Object.entries(p.roster_by_date || {}).map(([date, state]) => `${nome}: ${date} = ${state}`);
+    })
+    .join(' | ');
+
+  const caeSlots = (snapshot.cae_slots as Array<{
+    equipment?: string;
+    date?: string;
+    start_time?: string;
+    end_time?: string;
+  }> | undefined) || [];
+
+  const { gerarCaePlanningPropostaPdf } = await import('../services/cae-planning-proposal-pdf');
+  const pdfBytes = await gerarCaePlanningPropostaPdf({
+    proposal_id: treinamentoId,
+    empresa_nome: row.empresa_nome || 'AirTrust',
+    status: row.planejamento_status || '—',
+    approval_status: row.planejamento_aprovacao_status || '—',
+    mode: (snapshot.mode as 'NORMAL' | 'COMPARTILHADA') || 'NORMAL',
+    generated_at: new Date().toISOString(),
+    cae_slot: caeSlots[0]
+      ? {
+          equipment: caeSlots[0].equipment || '—',
+          date: caeSlots[0].date || '—',
+          start_time: caeSlots[0].start_time || '—',
+          end_time: caeSlots[0].end_time || '—',
+        }
+      : null,
+    simulator_id: Number.isInteger(snapshot.simulator_id) ? Number(snapshot.simulator_id) : null,
+    instructor_id: Number.isInteger(snapshot.instructor_id) ? Number(snapshot.instructor_id) : null,
+    escala_considerada: escalaLinhas || null,
+    participants,
+    warnings: Array.isArray((snapshot as { warnings?: unknown }).warnings)
+      ? ((snapshot as { warnings?: string[] }).warnings as string[])
+      : [],
+    aprovador_nome: aprovadorNome,
+    aprovado_em: row.planejamento_aprovado_em,
+    observacoes: row.planejamento_aprovacao_observacoes,
+  });
+
+  return new Response(pdfBytes, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="proposta-cae-${treinamentoId}.pdf"`,
+      'Content-Length': String(pdfBytes.length),
+      'Cache-Control': 'no-cache',
+    },
+  });
+});
+
 app.get('/:id/auditoria', async (c) => {
   const empresaId = getEmpresaId(c);
   const treinamentoId = Number(c.req.param('id'));

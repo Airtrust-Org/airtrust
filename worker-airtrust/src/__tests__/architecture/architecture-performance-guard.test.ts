@@ -89,11 +89,12 @@ const LARGE_FILE_LINE_CAPS = {
   // Shared-session compensation and notification reliability crossed the explicit baseline.
   // Extraction remains a follow-up and is not mixed into this incident closure.
   'routes/simuladores-sessoes.ts': 2500,
-  // Cap raised 2026-08-24: counted 2010 (feat/cae-planner-shared-participant-needs
-  // — CAE Planning V3 resource-assignment endpoints (Fase E/I) plus the
-  // per-participant curriculum resolver wiring in /recalcular replacing the
-  // group[0]-for-everyone bug). Extraction remains a follow-up.
-  'routes/simuladores-planejamento.ts': 2010,
+  // Cap raised 2026-08-24: counted 2186 (feat/cae-planning-proposal-pdf
+  // — CAE Planning V3 resource-assignment endpoints (Fase E/I), the
+  // per-participant curriculum resolver wiring in /recalcular (Fase F), and
+  // the GET /:id/pdf proposal report endpoint (Fase G). Extraction remains
+  // a follow-up.
+  'routes/simuladores-planejamento.ts': 2186,
 } as const;
 
 const SQL_PREPARE_CAPS = {
