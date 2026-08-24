@@ -1,0 +1,8 @@
+{
+  "changeId": "sigvoos-shadow-leg-crew-0468",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0468_sigvoos_shadow_leg_crew_v1.sql",
+  "fileHash": "0dfa5264de1c155a1aa8bbc4217e145b16ba93ccd97bc249102314828ed264e2",
+  "planPath": "worker-airtrust/schema-v2/plans/production-sigvoos-shadow-leg-crew-0468.md",
+  "planHash": "26a66c05765711bfde8a7ad36b9967718e64532c51327995bcf59cdef7050c6e"
+}
