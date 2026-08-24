@@ -188,7 +188,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CI: "true"
+      CI: 'true'
       VITE_API_URL: http://127.0.0.1:8787
     steps:
       - uses: actions/checkout@v4
