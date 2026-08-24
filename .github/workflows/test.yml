@@ -64,7 +64,7 @@ jobs:
           fi
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         if: ${{ always() && steps.coverage_artifact.outputs.present == 'true' }}
         with:
           files: ./coverage/coverage-final.json
