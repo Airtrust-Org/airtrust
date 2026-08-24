@@ -128,6 +128,10 @@ export interface Env {
   SIGVOOS_REAL_API_USERNAME?: string;
   SIGVOOS_REAL_API_PASSWORD?: string;
   SIGVOOS_REAL_API_SYSTEM?: string;
+  /** In-memory-only credential override for SIGVOOS shadow ingestion (Fase 1 staging validation).
+   * JSON: {"username":"...","password":"...","base_url"?:"...","system"?:"..."}. Staging-only —
+   * never read when ENVIRONMENT is production (see sigvoos-shadow-service.ts). Never persisted. */
+  SIGVOOS_SHADOW_CREDENTIAL_JSON?: string;
 }
 
 // ===== API RESPONSE TYPES =====

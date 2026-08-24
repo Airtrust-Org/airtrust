@@ -86,6 +86,45 @@ export interface SigvoosShadowDeps {
 interface SigvoosRuntimeEnv {
   SIGVOOS_CONFIG_ENCRYPTION_KEY?: string;
   JWT_SECRET?: string;
+  ENVIRONMENT?: string;
+  /**
+   * Optional in-memory-only credential override for shadow ingestion,
+   * JSON-encoded: {"username":"...","password":"...","base_url"?:"...","system"?:"..."}.
+   * Staging-only, fail-closed elsewhere: never read/used when
+   * runtimeEnv.ENVIRONMENT === 'production', regardless of whether the
+   * binding happens to be present. Never persisted to D1, never logged —
+   * consumed once, in-memory, to build the SigvoosConfig passed to the
+   * real client for this single run only. The persisted D1 config path
+   * (getSigvoosConfig) is untouched and still used for base_url/system
+   * fallback and any non-secret fields.
+   */
+  SIGVOOS_SHADOW_CREDENTIAL_JSON?: string;
+}
+
+interface ShadowCredentialOverride {
+  username: string;
+  password: string;
+  base_url?: string;
+  system?: string;
+}
+
+export function resolveShadowCredentialOverride(
+  runtimeEnv?: SigvoosRuntimeEnv,
+): ShadowCredentialOverride | null {
+  if (!runtimeEnv?.SIGVOOS_SHADOW_CREDENTIAL_JSON) return null;
+  if (runtimeEnv.ENVIRONMENT === 'production') return null;
+  try {
+    const parsed = JSON.parse(runtimeEnv.SIGVOOS_SHADOW_CREDENTIAL_JSON) as Partial<ShadowCredentialOverride>;
+    if (!parsed.username || !parsed.password) return null;
+    return {
+      username: parsed.username,
+      password: parsed.password,
+      base_url: parsed.base_url,
+      system: parsed.system,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export interface SigvoosShadowRunSummary {
@@ -277,12 +316,16 @@ export async function runSigvoosShadowIngestion(
   let fatalError: string | null = null;
 
   try {
+    const credentialOverride = resolveShadowCredentialOverride(runtimeEnv);
     const config = await getSigvoosConfig(
       db,
       tenantId,
       {
-        base_url: SIGVOOS_DEFAULT_BASE_URL,
-        system: SIGVOOS_DEFAULT_SYSTEM,
+        base_url: credentialOverride?.base_url || SIGVOOS_DEFAULT_BASE_URL,
+        system: credentialOverride?.system || SIGVOOS_DEFAULT_SYSTEM,
+        ...(credentialOverride
+          ? { username: credentialOverride.username, password: credentialOverride.password }
+          : {}),
       },
       runtimeEnv,
     );
