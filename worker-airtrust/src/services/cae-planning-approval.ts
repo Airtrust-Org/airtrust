@@ -1,4 +1,5 @@
 import type { RevalidationResult } from './cae-planning-revalidation';
+import { resolveIndividualNextModel } from './cae-planning-participant-model-resolver';
 
 export type SimulatorProposalStatus =
   | 'PROPOSTO'
@@ -196,26 +197,32 @@ export async function resolveSimulatorPlanningLiveState(params: {
 
     let qualificationExpiry = participant.qualification_expiry_date;
     let qualificationHistoryId = participant.qualification_history_id;
+    let cycleStartDate: string | null = null;
     if (participant.qualification_history_id) {
       const qualification = await db
         .prepare(
-          `SELECT id, data_vencimento
+          `SELECT id, data_vencimento, data_conclusao
              FROM qualificacoes_historico
             WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
         )
         .bind(participant.qualification_history_id, empresaId)
-        .first<{ id: number; data_vencimento: string | null }>();
+        .first<{ id: number; data_vencimento: string | null; data_conclusao: string | null }>();
       if (qualification) {
         qualificationHistoryId = qualification.id;
         qualificationExpiry = qualification.data_vencimento;
+        cycleStartDate = qualification.data_conclusao;
       }
     }
 
+    // Recalcula a mesma resolução individual usada em /recalcular (nunca o
+    // grupo inteiro de modelos) para que a revalidação compare o currículo
+    // individual atual do tripulante contra o que foi aprovado, e não um
+    // falso positivo por causa de outros modelos existirem na qualificação.
     let liveSessionModelIds = participant.session_model_ids;
     try {
       const sessionModels = await db
         .prepare(
-          `SELECT id
+          `SELECT id, ordem_no_treinamento
              FROM modelos_sessao
             WHERE empresa_id = ?
               AND qualificacao_tipo_id = ?
@@ -223,12 +230,19 @@ export async function resolveSimulatorPlanningLiveState(params: {
             ORDER BY COALESCE(ordem_no_treinamento, 9999), id`,
         )
         .bind(empresaId, participant.training_id)
-        .all<{ id: number }>();
-      const liveIds = (sessionModels.results || [])
-        .map((model) => Number(model.id))
-        .filter((id) => Number.isInteger(id) && id > 0);
-      if (liveIds.length > 0) {
-        liveSessionModelIds = liveIds;
+        .all<{ id: number; ordem_no_treinamento: number | null }>();
+      const liveModels = (sessionModels.results || [])
+        .map((model) => ({ id: Number(model.id), ordem_no_treinamento: model.ordem_no_treinamento }))
+        .filter((model) => Number.isInteger(model.id) && model.id > 0);
+      const resolved = await resolveIndividualNextModel({
+        db,
+        empresaId,
+        employeeId: participant.employee_id,
+        cycleStartDate,
+        models: liveModels,
+      });
+      if (resolved) {
+        liveSessionModelIds = [resolved.modelId];
       }
     } catch {
       // Fail-closed rules still rely on the snapshot; this fallback avoids masking
