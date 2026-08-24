@@ -70,10 +70,28 @@ type PlanningItem = {
       models?: Array<{ codigo?: string; nome?: string; duracao_estimada?: number | null }>;
     };
     participants?: Array<{ funcionario_id?: number; vencimento?: string }>;
+    simulator_id?: number | null;
+    instructor_id?: number | null;
+    resource_assignment?: { pending: string[]; complete: boolean } | null;
   } | null;
   updated_at?: string | null;
   planejamento_recalculado_em?: string | null;
   participantes: Participant[];
+};
+
+type SimulatorResolution =
+  | { status: 'RESOLVED'; simulator_id: number }
+  | { status: 'NEEDS_ASSIGNMENT'; candidates: [] }
+  | { status: 'AMBIGUOUS'; candidates: Array<{ id: number; nome: string }> };
+
+type ResourceCandidates = {
+  simulator_resolution: SimulatorResolution;
+  eligible_instructors: Array<{ id: number; nome: string }>;
+  current: {
+    simulator_id: number | null;
+    instructor_id: number | null;
+    resource_assignment: { pending: string[]; complete: boolean } | null;
+  };
 };
 
 type DraftRow = {
@@ -241,6 +259,109 @@ function participantNames(item: PlanningItem) {
   return item.participantes.map((participant) => participant.funcionario_nome).join(' + ');
 }
 
+function ResourceAssignmentCell({
+  item,
+  candidates,
+  loading,
+  saving,
+  onLoad,
+  onAssign,
+}: {
+  item: PlanningItem;
+  candidates: ResourceCandidates | undefined;
+  loading: boolean;
+  saving: boolean;
+  onLoad: () => void;
+  onAssign: (field: 'simulator_id' | 'instructor_id', value: number) => void;
+}) {
+  if (!candidates) {
+    const complete = item.planejamento_snapshot?.resource_assignment?.complete;
+    return (
+      <button
+        onClick={onLoad}
+        disabled={loading}
+        className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200"
+      >
+        {loading
+          ? 'Carregando…'
+          : complete
+            ? 'Ver recursos atribuídos'
+            : 'Configurar recursos'}
+      </button>
+    );
+  }
+
+  const { simulator_resolution: simRes, eligible_instructors: instructors, current } = candidates;
+
+  return (
+    <div className="flex flex-col gap-2 text-xs">
+      <div>
+        <span className="block font-medium text-slate-600 dark:text-slate-300">Simulador</span>
+        {simRes.status === 'RESOLVED' && (
+          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+            Resolvido automaticamente
+          </span>
+        )}
+        {simRes.status === 'NEEDS_ASSIGNMENT' && (
+          <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-red-700 ring-1 ring-inset ring-red-600/10">
+            Nenhum simulador compatível no catálogo
+          </span>
+        )}
+        {simRes.status === 'AMBIGUOUS' && (
+          <select
+            className={`${inputClass} w-full`}
+            value={current.simulator_id ?? ''}
+            disabled={saving}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (value > 0) onAssign('simulator_id', value);
+            }}
+          >
+            <option value="">Selecione o simulador…</option>
+            {simRes.candidates.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.nome}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div>
+        <span className="block font-medium text-slate-600 dark:text-slate-300">
+          Instrutor / Examinador
+        </span>
+        {instructors.length === 0 ? (
+          <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-red-700 ring-1 ring-inset ring-red-600/10">
+            Nenhum instrutor elegível neste tenant
+          </span>
+        ) : (
+          <select
+            className={`${inputClass} w-full`}
+            value={current.instructor_id ?? ''}
+            disabled={saving}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (value > 0) onAssign('instructor_id', value);
+            }}
+          >
+            <option value="">Selecione o instrutor/examinador…</option>
+            {instructors.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.nome}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      {current.resource_assignment && !current.resource_assignment.complete && (
+        <span className="text-[10px] font-medium text-amber-700">
+          Pendente: {current.resource_assignment.pending.join(', ')}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function PlanejamentoSimuladores() {
   const now = useMemo(() => new Date(), []);
   const [inicio, setInicio] = useState(() => addDaysIso(now, 0));
@@ -263,6 +384,9 @@ export default function PlanejamentoSimuladores() {
   const [caeComparing, setCaeComparing] = useState(false);
   const [caeValidation, setCaeValidation] = useState<CaeAvailabilityValidation | null>(null);
   const [caeComparison, setCaeComparison] = useState<CaePlanningComparison | null>(null);
+  const [resourceCandidates, setResourceCandidates] = useState<Record<number, ResourceCandidates>>({});
+  const [resourceLoadingId, setResourceLoadingId] = useState<number | null>(null);
+  const [resourceSavingId, setResourceSavingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -477,6 +601,41 @@ export default function PlanejamentoSimuladores() {
       alert('Erro ao aprovar proposta: ' + frontendErrorMessage(error));
     } finally {
       setActioningId(null);
+    }
+  };
+
+  const loadResourceCandidates = useCallback(async (id: number) => {
+    setResourceLoadingId(id);
+    try {
+      const result = (await apiJson(`/api/simuladores/planejamento/${id}/recursos/candidatos`)) as {
+        data: ResourceCandidates;
+      };
+      setResourceCandidates((prev) => ({ ...prev, [id]: result.data }));
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setResourceLoadingId(null);
+    }
+  }, []);
+
+  const handleAssignResource = async (
+    id: number,
+    field: 'simulator_id' | 'instructor_id',
+    value: number,
+  ) => {
+    setResourceSavingId(id);
+    try {
+      await apiJson(`/api/simuladores/planejamento/${id}/recursos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      });
+      await loadResourceCandidates(id);
+      await load();
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setResourceSavingId(null);
     }
   };
 
@@ -1247,6 +1406,7 @@ export default function PlanejamentoSimuladores() {
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                 <tr>
                   <th className="px-3 py-3">Aprovação</th>
+                  <th className="px-3 py-3">Recursos</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Vencimento</th>
                   <th className="px-3 py-3">Qualificação</th>
@@ -1285,9 +1445,27 @@ export default function PlanejamentoSimuladores() {
                             <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
                               Aguardando Aprovação
                             </span>
+                            {item.planejamento_snapshot?.resource_assignment &&
+                              !item.planejamento_snapshot.resource_assignment.complete && (
+                                <span className="text-[10px] font-medium text-amber-700">
+                                  Defina o simulador e o instrutor/examinador antes da aprovação.
+                                </span>
+                              )}
                             <button
                               onClick={() => handleAprovar(item.id)}
-                              disabled={actioningId === item.id}
+                              disabled={
+                                actioningId === item.id ||
+                                Boolean(
+                                  item.planejamento_snapshot?.resource_assignment &&
+                                    !item.planejamento_snapshot.resource_assignment.complete,
+                                )
+                              }
+                              title={
+                                item.planejamento_snapshot?.resource_assignment &&
+                                !item.planejamento_snapshot.resource_assignment.complete
+                                  ? 'Defina o simulador e o instrutor/examinador antes da aprovação.'
+                                  : undefined
+                              }
                               className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-500 disabled:opacity-50"
                             >
                               Aprovar
@@ -1334,6 +1512,29 @@ export default function PlanejamentoSimuladores() {
                           <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
                             Aprovação não exigida
                           </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {(item.planejamento_aprovacao_status === 'RASCUNHO' ||
+                          item.planejamento_aprovacao_status === 'PENDENTE') && (
+                          <ResourceAssignmentCell
+                            item={item}
+                            candidates={resourceCandidates[item.id]}
+                            loading={resourceLoadingId === item.id}
+                            saving={resourceSavingId === item.id}
+                            onLoad={() => loadResourceCandidates(item.id)}
+                            onAssign={(field, value) => handleAssignResource(item.id, field, value)}
+                          />
+                        )}
+                        {item.planejamento_aprovacao_status === 'APROVADO' && (
+                          <span className="text-xs text-slate-500">
+                            Simulador #{item.planejamento_snapshot?.simulator_id ?? '—'} · Instrutor #
+                            {item.planejamento_snapshot?.instructor_id ?? '—'}
+                          </span>
+                        )}
+                        {(item.planejamento_aprovacao_status === 'DEVOLVIDO' ||
+                          item.planejamento_aprovacao_status === 'NAO_EXIGIDO') && (
+                          <span className="text-xs text-slate-400">—</span>
                         )}
                       </td>
                       <td className="px-3 py-3">

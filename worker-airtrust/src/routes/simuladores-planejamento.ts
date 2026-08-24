@@ -1893,6 +1893,61 @@ app.post('/:id/materializar', requireRole('admin', 'manager'), async (c) => {
   return c.json(result, result.success ? 200 : 400);
 });
 
+app.get('/:id/recursos/candidatos', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const treinamentoId = Number(c.req.param('id'));
+  if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
+    return c.json({ success: false, error: 'ID inválido' }, 400);
+  }
+  const row = await db
+    .prepare(
+      `SELECT planejamento_snapshot_json
+         FROM treinamentos_planejados
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(treinamentoId, empresaId)
+    .first<{ planejamento_snapshot_json: string | null }>();
+  if (!row) return c.json({ success: false, error: 'Planejamento não encontrado' }, 404);
+
+  let snapshot: Record<string, unknown> = {};
+  try {
+    snapshot = row.planejamento_snapshot_json ? JSON.parse(row.planejamento_snapshot_json) : {};
+  } catch {
+    snapshot = {};
+  }
+  const equipment = String((snapshot.participants as Array<{ equipment?: unknown }> | undefined)?.[0]?.equipment || '');
+  const simulatorResolution = await resolveGlobalSimulatorForEquipment(db, equipment);
+
+  const columns = await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>();
+  const hasIsInstrutor = (columns.results || []).some((r) => r.name === 'is_instrutor');
+  const instructors = await db
+    .prepare(
+      `SELECT id, nome
+         FROM funcionarios
+        WHERE empresa_id = ?
+          AND deleted_at IS NULL
+          AND COALESCE(ativo, 1) = 1
+          ${hasIsInstrutor ? 'AND is_instrutor = 1' : ''}
+        ORDER BY nome`,
+    )
+    .bind(empresaId)
+    .all<{ id: number; nome: string }>();
+
+  return c.json({
+    success: true,
+    data: {
+      simulator_resolution: simulatorResolution,
+      eligible_instructors: instructors.results || [],
+      current: {
+        simulator_id: snapshot.simulator_id ?? null,
+        instructor_id: snapshot.instructor_id ?? null,
+        resource_assignment: snapshot.resource_assignment ?? null,
+      },
+    },
+  });
+});
+
 app.get('/:id/auditoria', async (c) => {
   const empresaId = getEmpresaId(c);
   const treinamentoId = Number(c.req.param('id'));
