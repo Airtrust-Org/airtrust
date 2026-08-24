@@ -15,6 +15,5 @@ data, tenant, branch-protection, migration, or technical blocker.
 [sandbox_workspace_write]
 network_access = true
 writable_roots = [
-  "/Users/filipedaumas/SAAS/Airtrust-Drive-Cloud",
   "/tmp",
 ]
