@@ -630,7 +630,7 @@ jobs:
           trap 'rm -rf "$bundle_dir" "$manifest_file"' EXIT
           cat > "$manifest_file" <<JSON
           {
-            "repository": "airtrustsystem-alt/airtrust",
+            "repository": "Airtrust-Org/airtrust",
             "sourceSha": "$source_sha",
             "sourceTree": "$source_tree",
             "environment": "staging",
