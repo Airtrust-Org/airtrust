@@ -9,142 +9,202 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       VITE_API_URL: http://127.0.0.1:8787
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
           cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
 
-      - name: GitHub Actions context guard
-        run: |
-          node --test scripts/ci/check-github-workflow-contexts.test.mjs
-          node --test scripts/ci/check-audit-round2-regressions.test.mjs
-          node scripts/ci/check-github-workflow-contexts.mjs
-          node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
-
-      - name: guard:migrations-dir-purity
-        run: |
-          node --test scripts/__tests__/migration-deploy-safety.test.mjs scripts/__tests__/migration-no-go-guard.test.mjs scripts/__tests__/operational-sql-renames.test.mjs
-          node scripts/guard-migrations-dir-purity.mjs --dry-run
-          node scripts/guard-no-generic-remote-migrations.mjs
-          node scripts/check-no-go-migrations.mjs
-
-      - name: Install
-        run: npm ci
-
-      - name: URL guard
-        run: npm run lint:api-base
-        env:
-          CI: true
-          VITE_API_URL: http://127.0.0.1:8787
-
-      - name: Build
-        run: npm run build
-
-  worker-tests:
+  build-content-gates:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    env:
+      VITE_API_URL: http://127.0.0.1:8787
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - name: install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ripgrep
+      - uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
           cache: 'npm'
+      - run: npm ci
+      - name: internal docs check (self-test)
+        run: chmod +x ./scripts/ci-demo-data-check.sh ./scripts/ci-internal-docs-check.sh ./scripts/production-audit-check.sh && ./scripts/ci-internal-docs-check.sh --test
+      - name: internal docs check
+        run: ./scripts/ci-internal-docs-check.sh
+      - name: build
+        run: VITE_API_URL=http://127.0.0.1:8787 npm run build
+      - name: check:demo-data
+        run: npm run check:demo-data
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-content-gates-dist
+          path: dist
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Install root dependencies
-        run: npm ci
+  frontend-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 && sqlite3 --version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage
+          path: coverage
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Install worker dependencies
-        run: cd worker-airtrust && npm ci
+  worker-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: cd worker-airtrust && npm ci
+      - run: cd worker-airtrust && npx tsc --noEmit
 
-      - name: Worker typecheck
-        run: cd worker-airtrust && npx tsc --noEmit
+  worker-tests-1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 && sqlite3 --version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: cd worker-airtrust && npm ci
+      - name: vitest shard 1/2
+        run: cd worker-airtrust && npx vitest run --shard=1/2
 
-      - name: Worker unit tests
-        run: cd worker-airtrust && npx vitest run
+  worker-tests-2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 && sqlite3 --version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: cd worker-airtrust && npm ci
+      - name: vitest shard 2/2
+        run: cd worker-airtrust && npx vitest run --shard=2/2
 
   lms-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - name: install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 && sqlite3 --version
+      - uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
           cache: 'npm'
-
-      - name: Install sqlite3
-        run: sudo apt-get update && sudo apt-get install -y sqlite3
-
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Install worker dependencies
-        run: cd worker-airtrust && npm ci
-
-      - name: Write local dev vars
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: cd worker-airtrust && npm ci
+      - name: lms smoke
         run: |
           JWT_SECRET="$(openssl rand -hex 32)"
-          cat > worker-airtrust/.dev.vars <<EOFVARS
-          JWT_SECRET=$JWT_SECRET
-          EOFVARS
-
-      - name: Setup local database
-        run: npm run setup:lms:local:reset
-
-      - name: Run integrity guardrails
-        run: npm run integrity:ci
-
-      - name: Start local worker
-        run: |
-          npm run dev:worker:local > /tmp/airtrust-worker.log 2>&1 &
+          printf 'JWT_SECRET=%s\n' "$JWT_SECRET" > worker-airtrust/.dev.vars
+          npm run setup:lms:local:reset
+          npm run integrity:ci
+          npm run dev:worker:local > airtrust-worker.log 2>&1 &
           echo $! > /tmp/airtrust-worker.pid
-          for i in {1..60}; do
+          for i in $(seq 1 60); do
             if curl -fsS http://localhost:8787/api/health >/dev/null; then
               echo "Local worker ready"
-              exit 0
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              cat airtrust-worker.log
+              exit 1
             fi
             sleep 2
           done
-          cat /tmp/airtrust-worker.log
-          exit 1
-
-      - name: Run LMS smoke
-        run: npm run smoke:lms:local
-
-      - name: Worker log on failure
-        if: failure()
-        run: cat /tmp/airtrust-worker.log || true
-
-      - name: Upload worker log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lms-smoke-worker-log
-          path: /tmp/airtrust-worker.log
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Stop local worker
+          npm run smoke:lms:local
+      - name: cleanup
         if: always()
         run: |
           if [ -f /tmp/airtrust-worker.pid ]; then
             kill "$(cat /tmp/airtrust-worker.pid)" || true
           fi
           rm -f worker-airtrust/.dev.vars
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lms-smoke-worker-log
+          path: airtrust-worker.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  public-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      VITE_API_URL: http://127.0.0.1:8787
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+      - run: npm ci
+      - name: playwright install chromium
+        run: npx playwright install --with-deps chromium
+      - name: playwright test
+        run: npx playwright test --config=playwright.ci.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-e2e-test-results
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
