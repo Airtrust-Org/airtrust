@@ -153,6 +153,51 @@ describe('CAE materialization integration', () => {
     expect(executeSharedSessionCreation).toHaveBeenCalledTimes(1);
   });
 
+  it('retry idempotente funciona mesmo apos planejamento_status avancar para AGENDADO (pos-materializacao real)', async () => {
+    // Reproduz o estado real pos-materializacao: a UPDATE final do fluxo de
+    // sucesso avanca planejamento_status para 'AGENDADO', que nao satisfaz
+    // canMaterializeSimulatorSessions (exige 'CONFIRMADO'). Uma segunda
+    // chamada (retry de rede, duplo clique) precisa ainda assim retornar o
+    // resultado idempotente, nao NOT_APPROVED.
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind(..._binds: unknown[]) {
+            return {
+              async first() {
+                if (sql.includes('FROM treinamentos_planejados')) {
+                  return {
+                    planejamento_status: 'AGENDADO',
+                    planejamento_aprovacao_status: 'APROVADO',
+                    planejamento_snapshot_json: JSON.stringify(snapshot({ materialized_session_id: 9001 })),
+                  };
+                }
+                if (sql.includes('FROM simulador_agendamentos')) {
+                  return { id: 9001 };
+                }
+                return null;
+              },
+              async run() {
+                return { meta: { last_row_id: 0 } };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const result = await materializeSimulatorPlanning({
+      db,
+      empresaId: 7,
+      planningId: 44,
+      userId: 3,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.sessao_id).toBe(9001);
+    expect(result.reused).toBe(true);
+  });
+
   it('nao retorna SNAPSHOT_SLOT_MISSING quando o snapshot ja traz o slot selecionado pelo matcher', async () => {
     const db = createDb({ snapshot: snapshot() });
     const result = await materializeSimulatorPlanning({
