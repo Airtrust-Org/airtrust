@@ -203,7 +203,7 @@ jobs:
 
           manifest_file="../airtrust-production-release-manifest.json"
           FIELDS="$(node -e 'console.log(JSON.stringify({
-            repository: "airtrustsystem-alt/airtrust",
+            repository: "Airtrust-Org/airtrust",
             environment: "production",
             appVersion: process.argv[1],
             sourceSha: process.argv[2],
@@ -358,7 +358,7 @@ jobs:
               ? process.env.WORKER_VERSION_ID
               : null;
             console.log(JSON.stringify({
-              repository: "airtrustsystem-alt/airtrust",
+              repository: "Airtrust-Org/airtrust",
               environment: "production",
               appVersion: process.env.APP_VERSION,
               sourceSha: process.env.SOURCE_SHA,
