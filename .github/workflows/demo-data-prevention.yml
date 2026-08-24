@@ -53,7 +53,7 @@ jobs:
 
       - name: Comment PR if a protected-content check fails
         if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         continue-on-error: true
         with:
           script: |
