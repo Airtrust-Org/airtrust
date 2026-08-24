@@ -1,0 +1,32 @@
+steps:
+  - name: node:24
+    id: bootstrap
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        test -f .ci-source-sha
+        test -f .ci-origin-main-sha
+        test -f .ci-merge-base-sha
+        source_sha="$$(cat .ci-source-sha)"
+        origin_main="$$(cat .ci-origin-main-sha)"
+        merge_base="$$(cat .ci-merge-base-sha)"
+        git_head="$$(git rev-parse HEAD)"
+        test "$$source_sha" = "${_AIRTRUST_SHA}"
+        test "$$git_head" = "$$source_sha"
+        test "$$(git rev-parse origin/main)" = "$$origin_main"
+        test "$$(git merge-base origin/main HEAD)" = "$$merge_base"
+        echo "SOURCE_SHA=$$source_sha"
+        echo "GIT_HEAD=$$git_head"
+        echo "GIT_ORIGIN_MAIN=$$origin_main"
+        echo "GIT_MERGE_BASE=$$merge_base"
+        npm ci --cache .npm --prefer-offline
+  - name: node:24
+    id: lint
+    waitFor: ["bootstrap"]
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        export VITE_API_URL="http://127.0.0.1:8787"
+        npm run lint

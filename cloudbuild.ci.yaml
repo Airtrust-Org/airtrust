@@ -14,30 +14,21 @@ steps:
       - -ceu
       - |
         echo "AIRTRUST_SHA=${_AIRTRUST_SHA}"
-        # Cloud Build receives an uploaded source tree, not its .git metadata.
-        # Materialize a local commit with origin/main as parent so repository
-        # guards can compute the submitted delta without substituting another
-        # CI system or changing the source files under test.
-        unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
-        if [ -f .git ]; then
-          rm -f .git
-        elif [ -d .git ]; then
-          rm -rf .git
-        fi
-        git init
-        git config user.email "ci@airtrust.local"
-        git config user.name "AirTrust CI"
-        git remote add origin https://gitlab.com/airtrust-group/airtrust.git
-        git fetch --depth=50 origin main
-        git add -A
-        tree="$$(git write-tree)"
-        parent="$$(git rev-parse FETCH_HEAD)"
-        commit="$$(printf '%s\n' 'ci: materialize submitted source' | git commit-tree "$$tree" -p "$$parent")"
-        git update-ref refs/heads/ci-gate "$$commit"
-        git symbolic-ref HEAD refs/heads/ci-gate
-        git update-ref refs/remotes/origin/main "$$parent"
-        git rev-parse HEAD
-        git rev-parse origin/main
+        test -f .ci-source-sha
+        test -f .ci-origin-main-sha
+        test -f .ci-merge-base-sha
+        source_sha="$$(cat .ci-source-sha)"
+        origin_main="$$(cat .ci-origin-main-sha)"
+        merge_base="$$(cat .ci-merge-base-sha)"
+        git_head="$$(git rev-parse HEAD)"
+        test "$$source_sha" = "${_AIRTRUST_SHA}"
+        test "$$git_head" = "$$source_sha"
+        test "$$(git rev-parse origin/main)" = "$$origin_main"
+        test "$$(git merge-base origin/main HEAD)" = "$$merge_base"
+        echo "SOURCE_SHA=$$source_sha"
+        echo "GIT_HEAD=$$git_head"
+        echo "GIT_ORIGIN_MAIN=$$origin_main"
+        echo "GIT_MERGE_BASE=$$merge_base"
         node --version
         npm ci --cache .npm --prefer-offline
         npm ci --prefix worker-airtrust --cache .npm --prefer-offline
