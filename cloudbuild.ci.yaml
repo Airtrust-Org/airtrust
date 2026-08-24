@@ -14,28 +14,6 @@ steps:
       - -ceu
       - |
         echo "AIRTRUST_SHA=${_AIRTRUST_SHA}"
-        # `gcloud builds submit` stages source without its local .git directory.
-        # Reconstruct only the minimal provenance needed by repository guards;
-        # the submitted tree remains the build subject and no deployment occurs.
-        if [ -f .git ]; then
-          rm -f .git
-        fi
-        if [ ! -d .git ]; then
-          git init
-          git config user.email "ci@airtrust.local"
-          git config user.name "AirTrust CI"
-          git remote add origin https://gitlab.com/airtrust-group/airtrust.git
-          git fetch --depth=50 origin main
-          git add -A
-          tree="$(git write-tree)"
-          parent="$(git rev-parse FETCH_HEAD)"
-          commit="$(printf '%s\n' "ci: materialize submitted source" | git commit-tree "$tree" -p "$parent")"
-          git update-ref refs/heads/ci-gate "$commit"
-          git symbolic-ref HEAD refs/heads/ci-gate
-          git update-ref refs/remotes/origin/main "$parent"
-        fi
-        git rev-parse HEAD
-        git rev-parse origin/main
         node --version
         npm ci --cache .npm --prefer-offline
         npm ci --prefix worker-airtrust --cache .npm --prefer-offline
