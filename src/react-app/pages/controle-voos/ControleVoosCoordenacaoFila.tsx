@@ -4,6 +4,7 @@ import { ClipboardList, FileSearch } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
+import ControleOperacionalFrmsPanel from './components/ControleOperacionalFrmsPanel';
 import { useRdvFila, type CvRdvWorkflowStatus } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatDateTime } from './data/controleVoosUtils';
 
@@ -64,6 +65,8 @@ export default function ControleVoosCoordenacaoFila() {
             title="Fila da Coordenação"
             description="Relatórios de Voo enviados pelos pilotos — filtre por devolvido, reaberto, enviado, em revisão, aprovado, finalizado ou cancelado"
           />
+
+          <ControleOperacionalFrmsPanel />
 
           <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
             <label className="space-y-1 text-xs">

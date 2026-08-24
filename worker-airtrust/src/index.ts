@@ -97,6 +97,9 @@ import controleVoosRoutes from './routes/controle-voos';
 import controleVoosRdvWorkflowRoutes from './routes/controle-voos-rdv-workflow';
 import controleVoosRdvEtapasRoutes from './routes/controle-voos-rdv-etapas';
 import controleVoosFrmsContractRoutes from './routes/controle-voos-frms-contract';
+import controleVoosFrmsDispatchGateRoutes, {
+  controleVoosDispatchGateGuard,
+} from './routes/controle-voos-frms-dispatch-gate';
 // Multi-Tenant (Empresas)
 import { empresasRoutes } from './routes/empresas';
 // Assets (R2)
@@ -696,10 +699,16 @@ app.all('/api/integracoes/edapp/*', (c) => {
 app.route('/api/integracoes/sigvoos', sigvoosRouter);
 
 // Controle de Voos N1 - endpoints operacionais internos
+// Guard do gate de despacho FRMS: precisa rodar ANTES do handler real de
+// POST /voos/:id/status (montado dentro de controleVoosRoutes) para poder
+// bloquear a transicao planejado -> liberado_operacionalmente com 409
+// quando houver pendencia. Registrado por path exato, nao por prefixo.
+app.use('/api/controle-voos/voos/:id/status', controleVoosDispatchGateGuard());
 app.route('/api/controle-voos', controleVoosRoutes);
 app.route('/api/controle-voos', controleVoosRdvWorkflowRoutes);
 app.route('/api/controle-voos', controleVoosRdvEtapasRoutes);
 app.route('/api/controle-voos', controleVoosFrmsContractRoutes);
+app.route('/api/controle-voos', controleVoosFrmsDispatchGateRoutes);
 
 /**
  * Rotas de Backup & Restore
