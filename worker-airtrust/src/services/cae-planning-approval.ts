@@ -140,6 +140,7 @@ import {
 } from './cae-planning-revalidation';
 import { resolveSimulatorPlanningConfig, type SimulatorPlanningConfigRow } from './cae-planning-policy';
 import { resolvePublishedRosterDayFromD1 } from './cae-planning-roster-d1';
+import { validateInstructorAssignment } from './cae-planning-resource-assignment';
 
 async function writePlanningAudit(params: {
   db: D1Database;
@@ -356,11 +357,62 @@ export async function executeSimulatorPlanningApproval(params: {
     return { success: false, error: 'Snapshot da proposta ausente', blockers: ['SNAPSHOT_MISSING'] };
   }
 
-  let snapshot: SimulatorPlanningSourceSnapshot;
+  let snapshot: SimulatorPlanningSourceSnapshot & {
+    simulator_id?: unknown;
+    instructor_id?: unknown;
+  };
   try {
-    snapshot = JSON.parse(row.planejamento_snapshot_json) as SimulatorPlanningSourceSnapshot;
+    snapshot = JSON.parse(row.planejamento_snapshot_json);
   } catch {
     return { success: false, error: 'Snapshot da proposta inválido', blockers: ['SNAPSHOT_INVALID'] };
+  }
+
+  // Uma proposta APROVADA precisa ser, por definição, materializável: exige
+  // simulador e instrutor/examinador já atribuídos (via POST /:id/recursos)
+  // antes de permitir a aprovação. DEVOLVER nunca é bloqueado por isso —
+  // devolver uma proposta incompleta é sempre válido.
+  if (action === 'APPROVE') {
+    const pending: string[] = [];
+    if (!Number.isInteger(snapshot.simulator_id) || Number(snapshot.simulator_id) <= 0) {
+      pending.push('simulator_id');
+    }
+    if (!Number.isInteger(snapshot.instructor_id) || Number(snapshot.instructor_id) <= 0) {
+      pending.push('instructor_id');
+    }
+    if (pending.length > 0) {
+      return {
+        success: false,
+        error: 'RESOURCE_ASSIGNMENT_INCOMPLETE',
+        blockers: pending.map((resource) => `RESOURCE_ASSIGNMENT_INCOMPLETE:${resource}`),
+      };
+    }
+
+    // Revalidação live dos recursos: o instrutor pode ter sido desativado ou
+    // removido do tenant, e o simulador pode ter sido desativado, entre a
+    // atribuição e a aprovação.
+    const instructorEligibility = await validateInstructorAssignment(
+      db,
+      empresaId,
+      Number(snapshot.instructor_id),
+    );
+    if (!instructorEligibility.eligible) {
+      return {
+        success: false,
+        error: 'RESOURCE_ASSIGNMENT_STALE',
+        blockers: [`INSTRUCTOR_NO_LONGER_ELIGIBLE:${instructorEligibility.reason}`],
+      };
+    }
+    const simulatorRow = await db
+      .prepare("SELECT status FROM simuladores WHERE id = ? AND deleted_at IS NULL")
+      .bind(Number(snapshot.simulator_id))
+      .first<{ status: string | null }>();
+    if (!simulatorRow || String(simulatorRow.status || '').toUpperCase() !== 'ATIVO') {
+      return {
+        success: false,
+        error: 'RESOURCE_ASSIGNMENT_STALE',
+        blockers: ['SIMULATOR_NO_LONGER_ACTIVE'],
+      };
+    }
   }
 
   const liveState = await resolveSimulatorPlanningLiveState({ db, empresaId, snapshot });
