@@ -96,11 +96,23 @@ function renderPlayer() {
   return { ...view, qc };
 }
 
+/**
+ * O LmsPlayer só aceita mensagens vindas do contentWindow do próprio iframe
+ * do curso (defesa contra forja de sinais de conclusão). Os testes precisam,
+ * portanto, despachar a partir dessa janela.
+ */
+async function frameWindow(): Promise<Window | undefined> {
+  await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
+  return document.querySelector('iframe')?.contentWindow ?? undefined;
+}
+
 async function dispatchPlayerMessage(data: Record<string, unknown>) {
+  const source = await frameWindow();
   await act(async () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'http://localhost:8787',
+        source,
         data,
       }),
     );
