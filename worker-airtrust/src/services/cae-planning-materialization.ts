@@ -369,17 +369,42 @@ export async function materializeSimulatorPlanning(params: {
       materialized_session_id: sessaoId,
     };
 
-    await db
-      .prepare(
-        `UPDATE treinamentos_planejados
-            SET planejamento_status = 'AGENDADO',
-                status = 'AGENDADO',
-                planejamento_snapshot_json = ?,
-                updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-      )
-      .bind(JSON.stringify(nextSnapshot), planningId, empresaId)
-      .run();
+    try {
+      await db
+        .prepare(
+          `UPDATE treinamentos_planejados
+              SET planejamento_status = 'AGENDADO',
+                  status = 'CONFIRMADO',
+                  planejamento_snapshot_json = ?,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(JSON.stringify(nextSnapshot), planningId, empresaId)
+        .run();
+    } catch (error) {
+      // A sessão física (e vínculos/qualificações planejadas dependentes) já foi
+      // commitada nos passos anteriores — D1 não oferece transação multi-statement
+      // com resultado intermediário utilizável aqui (o id da sessão só existe após
+      // o INSERT). Falha nesta etapa final não pode deixar a sessão órfã: compensa
+      // explicitamente removendo apenas o que este materializeSimulatorPlanning
+      // acabou de criar, nunca dados preexistentes.
+      await db
+        .prepare('DELETE FROM qualificacoes_historico WHERE sessao_id = ? AND empresa_id = ?')
+        .bind(sessaoId, empresaId)
+        .run()
+        .catch(() => undefined);
+      await db
+        .prepare('DELETE FROM sessoes_participantes WHERE sessao_id = ?')
+        .bind(sessaoId)
+        .run()
+        .catch(() => undefined);
+      await db
+        .prepare('DELETE FROM simulador_agendamentos WHERE id = ? AND empresa_id = ?')
+        .bind(sessaoId, empresaId)
+        .run()
+        .catch(() => undefined);
+      throw error;
+    }
 
     return { success: true, sessao_id: sessaoId, reused: false };
   } catch (error) {

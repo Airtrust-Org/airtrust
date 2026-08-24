@@ -179,6 +179,73 @@ describe('CAE materialization integration', () => {
     expect(executeNormalSessionCreation).not.toHaveBeenCalled();
   });
 
+  it('nao deixa simulador_agendamentos orfao quando a etapa final de materializacao falha (atomicidade)', async () => {
+    executeNormalSessionCreation.mockResolvedValue({ sessaoId: 9101 });
+    const executed: string[] = [];
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind(..._binds: unknown[]) {
+            return {
+              async first() {
+                if (sql.includes('FROM treinamentos_planejados')) {
+                  return {
+                    planejamento_status: 'CONFIRMADO',
+                    planejamento_aprovacao_status: 'APROVADO',
+                    planejamento_snapshot_json: JSON.stringify(
+                      snapshot({
+                        mode: 'NORMAL',
+                        participants: [
+                          {
+                            employee_id: 101,
+                            employee_active: true,
+                            equipment: 'AW139',
+                            qualification_history_id: 1,
+                            qualification_expiry_date: '2026-11-30',
+                            training_id: 11,
+                            session_model_ids: [501],
+                            roster_by_date: { '2026-11-20': 'FOLGA' },
+                          },
+                        ],
+                      }),
+                    ),
+                  };
+                }
+                if (sql.includes('FROM simulador_agendamentos')) {
+                  return null;
+                }
+                return null;
+              },
+              async run() {
+                executed.push(sql.replace(/\s+/g, ' ').trim());
+                if (sql.includes('UPDATE treinamentos_planejados') && sql.includes('planejamento_status')) {
+                  throw new Error('CHECK constraint failed: status IN (...)');
+                }
+                return { meta: { last_row_id: 0 } };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const result = await materializeSimulatorPlanning({
+      db,
+      empresaId: 7,
+      planningId: 44,
+      userId: 3,
+    });
+
+    expect(result.success).toBe(false);
+    expect(executed.some((s) => s.startsWith('DELETE FROM simulador_agendamentos') )).toBe(true);
+    expect(executed.some((s) => s.startsWith('DELETE FROM sessoes_participantes'))).toBe(true);
+    expect(executed.some((s) => s.startsWith('DELETE FROM qualificacoes_historico'))).toBe(true);
+    // A ordem importa: a sessao/orfa precisa ser removida DEPOIS de criada e ANTES do retorno de erro.
+    const finalUpdateIndex = executed.findIndex((s) => s.startsWith('UPDATE treinamentos_planejados'));
+    const cleanupIndex = executed.findIndex((s) => s.startsWith('DELETE FROM simulador_agendamentos'));
+    expect(cleanupIndex).toBeGreaterThan(finalUpdateIndex);
+  });
+
   it('falha fechado se o payload compartilhado estiver inconsistente', async () => {
     const db = createDb({
       snapshot: snapshot({
