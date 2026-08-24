@@ -139,7 +139,46 @@ if [[ "$head_sha" != "$origin_sha" ]]; then
 fi
 
 timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-command=(npx wrangler d1 execute "$db_name" --env "$db_env" --remote --file "$migration_file")
+ledger_output="$(mktemp)"
+combined_sql="$(mktemp)"
+cleanup() { rm -f "$ledger_output" "$combined_sql"; }
+trap cleanup EXIT
+
+read_ledger_count() {
+  (
+    cd worker-airtrust
+    npx wrangler d1 execute "$db_name" --env "$db_env" --remote --json \
+      --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$migration_name';" > "$ledger_output"
+  )
+  node - "$ledger_output" <<'NODE'
+const fs = require('node:fs');
+const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const count = Number(parsed?.[0]?.results?.[0]?.count);
+if (!Number.isInteger(count) || count < 0) throw new Error('LEDGER_COUNT_INVALID');
+process.stdout.write(String(count));
+NODE
+}
+
+ledger_count="$(read_ledger_count)"
+if [[ "$ledger_count" == "1" ]]; then
+  echo "MIGRATION_ALREADY_APPLIED=$migration_name"
+  exit 0
+fi
+if [[ "$ledger_count" != "0" ]]; then
+  echo "ERROR: ledger contém $ledger_count entradas para $migration_name; esperado 0 ou 1." >&2
+  exit 1
+fi
+
+node --input-type=module - "$migration_file" "$migration_name" "$combined_sql" <<'NODE'
+import { readFileSync, writeFileSync } from 'node:fs';
+import { buildLedgerAppliedSql } from './worker-airtrust/scripts/lib/migration-remote-apply.mjs';
+const [migrationPath, migrationName, outputPath] = process.argv.slice(2);
+writeFileSync(outputPath, buildLedgerAppliedSql({
+  migrationSql: readFileSync(migrationPath, 'utf8'), migrationName,
+}), { encoding: 'utf8', mode: 0o600 });
+NODE
+test -s "$combined_sql"
+command=(npx wrangler d1 execute "$db_name" --env "$db_env" --remote --file "$combined_sql")
 
 echo "⚠️  PRODUCTION MIGRATION APPLY"
 echo "Timestamp (UTC): $timestamp"
@@ -155,3 +194,9 @@ printf '\n'
 echo "Proceeding with production migration execution..."
 
 "${command[@]}"
+ledger_count="$(read_ledger_count)"
+if [[ "$ledger_count" != "1" ]]; then
+  echo "MIGRATION_APPLIED_LEDGER_FAILED=$migration_name (ledger_count=$ledger_count)" >&2
+  exit 1
+fi
+echo "LEDGER_ENTRY_CONFIRMED=$migration_name"
