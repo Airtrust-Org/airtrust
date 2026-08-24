@@ -5,6 +5,7 @@ steps:
     args:
       - -ceu
       - |
+        git config --global --add safe.directory /workspace
         test -f .ci-source-sha
         test -f .ci-origin-main-sha
         test -f .ci-merge-base-sha
