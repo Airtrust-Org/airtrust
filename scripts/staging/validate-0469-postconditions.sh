@@ -58,7 +58,7 @@ assert_json \
 
 assert_json \
   "unique index covers empresa/matricula/curso/tentativa in order" \
-  "SELECT GROUP_CONCAT(name, ',') AS cols FROM pragma_index_info('idx_lms_completion_diag_unique') ORDER BY seqno" \
+  "SELECT GROUP_CONCAT(name, ',') AS cols FROM (SELECT name FROM pragma_index_info('idx_lms_completion_diag_unique') ORDER BY seqno)" \
   'if (JSON.parse(process.env.RESULT)[0]?.cols !== "empresa_id,matricula_id,curso_id,tentativa") process.exit(1)' || fail=1
 
 assert_json \
