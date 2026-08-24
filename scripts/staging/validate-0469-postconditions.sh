@@ -53,12 +53,17 @@ assert_json \
 
 assert_json \
   "unique tenant/matricula/curso/tentativa index exists" \
-  "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='index' AND name='idx_lms_completion_diag_unique' AND sql LIKE '%empresa_id%matricula_id%curso_id%tentativa%'" \
+  "SELECT COUNT(*) AS n FROM pragma_index_list('lms_completion_diagnostics_snapshots') WHERE name='idx_lms_completion_diag_unique' AND \"unique\"=1" \
   'if (JSON.parse(process.env.RESULT)[0]?.n !== 1) process.exit(1)' || fail=1
 
 assert_json \
+  "unique index covers empresa/matricula/curso/tentativa in order" \
+  "SELECT GROUP_CONCAT(name, ',') AS cols FROM pragma_index_info('idx_lms_completion_diag_unique') ORDER BY seqno" \
+  'if (JSON.parse(process.env.RESULT)[0]?.cols !== "empresa_id,matricula_id,curso_id,tentativa") process.exit(1)' || fail=1
+
+assert_json \
   "tenant/matricula lookup index exists" \
-  "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='index' AND name='idx_lms_completion_diag_matricula' AND sql LIKE '%empresa_id%matricula_id%'" \
+  "SELECT COUNT(*) AS n FROM pragma_index_list('lms_completion_diagnostics_snapshots') WHERE name='idx_lms_completion_diag_matricula'" \
   'if (JSON.parse(process.env.RESULT)[0]?.n !== 1) process.exit(1)' || fail=1
 
 if [[ "$fail" -ne 0 ]]; then
