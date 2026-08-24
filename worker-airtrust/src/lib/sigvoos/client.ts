@@ -248,15 +248,32 @@ export class SigvoosApiClient {
       body: JSON.stringify(payload),
     });
 
-    const token = response.accessToken || response.access_token || response.token;
+    // SIGVOOS wraps its payload under a `data` envelope for at least some
+    // deployments (observed real shape: {status, message, data: {...}}).
+    // Accept the token at the top level OR nested one level under `data`,
+    // without assuming which shape a given SIGVOOS environment uses.
+    const nested =
+      response.data && typeof response.data === 'object'
+        ? (response.data as Record<string, unknown>)
+        : null;
+    const token =
+      response.accessToken ||
+      response.access_token ||
+      response.token ||
+      nested?.accessToken ||
+      nested?.access_token ||
+      nested?.token;
     if (typeof token !== 'string') {
       // Never include response values (they could echo credentials/PII) —
-      // only the top-level key names, so this is safely diagnosable from
-      // sanitized error_summary fields without exposing any secret content.
+      // only key names (top-level, and one level under `data` if present),
+      // so this is safely diagnosable from sanitized error_summary fields
+      // without exposing any secret content.
       const presentKeys = response && typeof response === 'object' ? Object.keys(response) : [];
+      const nestedKeys = nested ? Object.keys(nested) : null;
       throw new SigvoosClientError(
         'SIGVOOS_AUTH_FAILED',
-        `Token não retornado ou inválido. [responseKeys=${presentKeys.join(',') || 'none'}]`,
+        `Token não retornado ou inválido. [responseKeys=${presentKeys.join(',') || 'none'}]` +
+          (nestedKeys ? ` [dataKeys=${nestedKeys.join(',') || 'none'}]` : ''),
         401,
       );
     }

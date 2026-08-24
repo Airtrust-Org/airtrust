@@ -84,3 +84,52 @@ describe('SigvoosApiClient authenticate() safe diagnosis when token is missing',
     }
   });
 });
+
+describe('SigvoosApiClient authenticate() accepts a token nested under `data`', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('resolves the token from response.data.accessToken when top-level fields are absent', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ status: 'ok', message: 'login ok', data: { accessToken: 'nested-tok-456' } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )) as unknown as typeof fetch;
+    try {
+      const client = new SigvoosApiClient({
+        base_url: 'https://api.sigvoos.com.br/api',
+        username: 'user',
+        password: 'pass',
+        system: 'sigtrip',
+      });
+      const token = await client.authenticate();
+      expect(token).toBe('nested-tok-456');
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it('includes both top-level and nested data key names when neither shape has a token', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ status: 'error', message: 'bad login', data: { reason: 'invalid' } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )) as unknown as typeof fetch;
+    try {
+      const client = new SigvoosApiClient({
+        base_url: 'https://api.sigvoos.com.br/api',
+        username: 'user',
+        password: 'pass',
+        system: 'sigtrip',
+      });
+      await expect(client.authenticate()).rejects.toThrow(
+        /\[responseKeys=status,message,data\] \[dataKeys=reason\]/,
+      );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
