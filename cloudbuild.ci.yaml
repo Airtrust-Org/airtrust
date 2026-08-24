@@ -134,7 +134,10 @@ steps:
 
   - name: node:24
     id: lms-smoke
-    waitFor: ["lint", "build-content-gates"]
+    # Worker tests and LMS smoke both use the same local Wrangler/D1 state
+    # directory in the uploaded workspace. Serialize them to prevent SQLite
+    # lock contention while preserving every official gate.
+    waitFor: ["worker-tests-2"]
     entrypoint: bash
     args:
       - -ceu
@@ -164,7 +167,7 @@ steps:
 
   - name: node:24
     id: public-e2e
-    waitFor: ["lint", "build-content-gates"]
+    waitFor: ["lms-smoke"]
     entrypoint: bash
     args:
       - -ceu
