@@ -140,6 +140,17 @@ describe('CAE materialization integration', () => {
     expect(
       payload.atribuicoes_planejadas.map((item: { modelo_sessao_id: number }) => item.modelo_sessao_id).sort(),
     ).toEqual([501, 777]);
+    // Regressão: treinamento_planejado_id precisa ser o planningId (a própria
+    // linha treinamentos_planejados que está sendo materializada), nunca o
+    // snapshot's participant.training_id (que guarda qualificacao_tipo_id —
+    // 11 e 22 neste fixture — e nunca foi um treinamento_planejado_id real).
+    // Usar esse valor como FK fazia a materialização SHARED falhar ao vivo
+    // com "Treinamento planejado fora do tenant".
+    expect(
+      payload.atribuicoes_planejadas.map(
+        (item: { treinamento_planejado_id: number }) => item.treinamento_planejado_id,
+      ),
+    ).toEqual([44, 44]);
 
     const retry = await materializeSimulatorPlanning({
       db: createDb({ snapshot: snapshot({ materialized_session_id: 9001 }), existingSessionId: 9001 }),

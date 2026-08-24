@@ -265,18 +265,17 @@ export async function materializeSimulatorPlanning(params: {
   }
 
   const participants = snapshotParticipants.map((participant, index) => ({
-    // Persist the original training/session references whenever they are valid
-    // scalar identifiers; otherwise fallback to the planning id and fail-closed
-    // later if no usable session model id exists.
     employee_id: Number(participant.employee_id ?? participant.funcionario_id),
-    planned_training_id: (() => {
-      const raw =
-        participant.training_id ??
-        participant.planned_training_id ??
-        participant.qualificacao_tipo_id ??
-        planningId;
-      return typeof raw === 'number' || typeof raw === 'string' ? raw : planningId;
-    })(),
+    // A materialização do CAE Planning V3 sempre corresponde a EXATAMENTE uma
+    // linha treinamentos_planejados (planningId) — não existe "treinamento
+    // planejado" diferente por participante aqui. participant.training_id
+    // guarda a qualificacao_tipo_id (usada para outros fins: revalidação de
+    // TRAINING_CHANGED, criarQualificacoesPlanejadas), nunca um
+    // treinamento_planejado_id de verdade; usá-lo como FK fazia a
+    // materialização SHARED falhar com "Treinamento planejado fora do
+    // tenant" sempre que o valor coincidia acidentalmente com um id de outra
+    // linha (ou não existia).
+    planned_training_id: planningId,
     session_model_id: (() => {
       const raw = firstSessionModelId(participant.session_model_ids) ?? participant.modelo_sessao_id;
       return typeof raw === 'number' || typeof raw === 'string' ? raw : '';
