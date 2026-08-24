@@ -12,7 +12,7 @@ const HEX64 = 'a'.repeat(64);
 const CONFIG64 = 'b'.repeat(64);
 
 const base = () => ({
-  repository: 'airtrustsystem-alt/airtrust',
+  repository: 'Airtrust-Org/airtrust',
   environment: 'production',
   appVersion: `2026-07-18T00:00:00Z-${HEX40.slice(0, 7)}`,
   sourceSha: HEX40,
