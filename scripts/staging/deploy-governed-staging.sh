@@ -2,7 +2,7 @@
 # ==============================================================================
 # deploy-governed-staging.sh — Canonical Governed Staging Release Script
 #
-# Runs in official CI (CircleCI node:24 docker executor) or authorized local run.
+# Runs after the official Google Cloud Build gates or as an authorized local run.
 # Deploys Worker (airtrust-api-staging) and Pages (airtrust-staging) with:
 # - Target identity guards (strictly refuses production DB/R2/Worker/Pages)
 # - Provenance stamping (APP_VERSION, source SHA, bundle hash)
@@ -37,7 +37,7 @@ export STAGING_PAGES_URL="${STAGING_PAGES_URL:-https://airtrust-staging.pages.de
 export STAGING_WORKER_API_URL="${STAGING_WORKER_API_URL:-https://airtrust-api-staging.airtrust.workers.dev/api}"
 
 # Context Resolution
-SOURCE_SHA="${AIRTRUST_RELEASE_SHA:-${CIRCLE_SHA1:-${CI_COMMIT_SHA:-$(git rev-parse HEAD)}}}"
+SOURCE_SHA="${AIRTRUST_RELEASE_SHA:-${CI_COMMIT_SHA:-$(git rev-parse HEAD)}}"
 SOURCE_TREE="$(git rev-parse "${SOURCE_SHA}^{tree}" 2>/dev/null || git rev-parse HEAD^{tree})"
 BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 APP_VERSION="staging-${BUILD_TIME}-${SOURCE_SHA:0:7}"

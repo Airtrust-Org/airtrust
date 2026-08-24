@@ -1,0 +1,23 @@
+# AirTrust repository defaults. Supported by codex-cli 0.148.0-alpha.15.
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+sandbox_mode = "workspace-write"
+
+developer_instructions = """
+For AirTrust tasks, continue through all safe and authorized in-scope
+executable steps until operational completion. Intermediate checkpoints are
+not stopping points. Resolve recoverable browser, staging QA, CLI and tool
+issues using sanctioned mechanisms. If one independent front is blocked,
+continue the others. Return early only for a genuine safety, authorization,
+data, tenant, branch-protection, migration, or technical blocker. Google
+Cloud Build is the official AirTrust CI. CircleCI is retired/legacy. Never use
+CircleCI as a fallback for current gates or releases. For CI-dependent work,
+resolve the current GCB project and configuration from origin/main before
+execution.
+"""
+
+[sandbox_workspace_write]
+network_access = true
+writable_roots = [
+  "/tmp",
+]

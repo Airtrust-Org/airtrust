@@ -1,3 +1,12 @@
+workflow:
+  rules:
+    # Merge-request validation is exclusively reported by the exact-SHA GCB
+    # external status. Do not instantiate legacy shared-runner jobs that can
+    # become a second, blocking CI authority.
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+    - when: never
+
 stages:
   - validate
   - test
@@ -6,7 +15,7 @@ stages:
 include:
   - local: .gitlab/governed-staging-release.yml
 
-# CI/tests moved to CircleCI (see .circleci/config.yml). These jobs stay
+# CI/tests run in Google Cloud Build (see cloudbuild.ci.yaml). These jobs stay
 # versioned as reference and remain manually runnable, but no longer fire
 # automatically on push/MR, so no shared-runner compute minutes are
 # consumed by this file. Each job below carries its own `rules: [when:
@@ -239,9 +248,9 @@ deploy-staging:
   # otherwise still blocks this deploy stage job behind the validate/test
   # stages until those jobs reach a terminal state, even though this job
   # has no explicit job-level dependency on them. Same fix pattern as
-  # the 8 test/build jobs above (moved to CircleCI, manual-only here;
-  # the operator is responsible for confirming CircleCI 8/8 PASS for
-  # this exact SHA before clicking run; see .circleci/config.yml).
+  # the 8 test/build jobs above (run by Google Cloud Build; manual-only here).
+  # The operator must confirm the GCB 8/8 PASS for this exact SHA before
+  # clicking run; see cloudbuild.ci.yaml.
   needs: []
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'

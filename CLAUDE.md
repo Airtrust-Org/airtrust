@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AirTrust is a multi-tenant SaaS platform for aviation crew management (qualifications, scheduling, FRMS, LMS, SGSO). Production system with real data — never deploy, push, or run migrations without explicit authorization.
 
+## Delivery Authority
+
+- GitLab `origin/main` is the code authority.
+- Google Cloud Build is the official CI and runs the eight required gates:
+  `lint`, `build-content-gates`, `frontend-coverage`, `worker-typecheck`,
+  `worker-tests-1`, `worker-tests-2`, `lms-smoke`, and `public-e2e`.
+- Cloudflare hosts staging and production.
+- CircleCI is retired/legacy. Do not use it as a current merge, release, or
+  deployment gate, and do not fall back to it if GCB fails. Inspect
+  `origin/main:cloudbuild.ci.yaml` before CI-dependent work.
+
 ## Architecture
 
 Two distinct runtimes sharing the same repository:
