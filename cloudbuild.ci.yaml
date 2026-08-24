@@ -120,7 +120,10 @@ steps:
         git config user.email "ci@airtrust.local"
         git config user.name "AirTrust CI"
         if ! git remote get-url origin >/dev/null 2>&1; then
-          git remote add origin https://gitlab.com/airtrust-group/airtrust.git
+          # The uploaded provenance archive intentionally strips remotes. This
+          # fallback identifies the current canonical Git authority only; the
+          # build does not fetch or push it.
+          git remote add origin https://github.com/Airtrust-Org/airtrust.git
         fi
         if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
           git commit --allow-empty -m "ci: materialize HEAD for worker-tests-2"

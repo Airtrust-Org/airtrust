@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Publish the authoritative GCB result to the exact GitLab commit.
+# Historical GitLab status publisher, retained only for legacy records created
+# before the 2026-08-24 GitHub cutover. New development must publish and review
+# through GitHub; this script must not be used for new canonical branches.
 # Authentication is delegated to the local glab keyring; this script neither
 # reads nor writes credentials, and must never run inside Cloud Build.
 set -euo pipefail
