@@ -1,0 +1,64 @@
+name: Temporary Cutover Provenance Fix
+
+on:
+  push:
+    branches:
+      - infra/github-cutover-provenance-20260824
+
+permissions:
+  contents: write
+
+jobs:
+  replace-repository-slug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: infra/github-cutover-provenance-20260824
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Replace legacy repository slug in operational provenance paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            .github/workflows/deploy-airtrust.yml
+            .github/workflows/deploy-staging.yml
+            scripts/lib/worker-provenance.sh
+            scripts/deploy-staging-worker-safe.sh
+            scripts/__tests__/build-release-manifest.test.mjs
+            scripts/__tests__/build-release-attestation.test.mjs
+            scripts/__tests__/exact-final-config-harness.test.mjs
+          )
+
+          for file in "${files[@]}"; do
+            test -f "$file"
+            grep -q 'airtrustsystem-alt/airtrust' "$file"
+            sed -i 's#airtrustsystem-alt/airtrust#Airtrust-Org/airtrust#g' "$file"
+          done
+
+          if grep -n 'airtrustsystem-alt/airtrust' "${files[@]}"; then
+            echo 'Legacy repository slug remains in a cutover-critical file.' >&2
+            exit 1
+          fi
+
+          git diff --check
+          git diff --stat
+
+      - name: Commit minimal cutover delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            .github/workflows/deploy-airtrust.yml \
+            .github/workflows/deploy-staging.yml \
+            scripts/lib/worker-provenance.sh \
+            scripts/deploy-staging-worker-safe.sh \
+            scripts/__tests__/build-release-manifest.test.mjs \
+            scripts/__tests__/build-release-attestation.test.mjs \
+            scripts/__tests__/exact-final-config-harness.test.mjs
+          git commit -m 'chore: align release provenance repository'
+          git push origin HEAD:infra/github-cutover-provenance-20260824
