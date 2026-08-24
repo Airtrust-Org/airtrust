@@ -204,6 +204,23 @@ describe('SCORM asset resolution — active/pinned candidate prefix (BUG 1 regre
     expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${ACTIVE_PREFIX}app.js`);
   });
 
+  it('ignores a stale legacy flat-path file when an active prefix is pinned, serving the active candidate instead', async () => {
+    // Regression: a course migrated from the pre-versioning flat layout to
+    // the candidate/Quality-Gate system keeps its old lms/scorm/{empresa}/
+    // {curso}/index.html object in R2 forever. Before this fix, the direct-
+    // key check ran before the activePrefix check, so that leftover file
+    // silently outranked the actually-active candidate — confirmed live on
+    // 9 production courses right after their first activation.
+    const bucket = createMultiCandidateBucket({ legacyFlatCopy: true });
+    const env = makeEnv(bucket, ACTIVE_PREFIX);
+
+    const res = await getAsset(`/api/lms/scorm/assets/${EMPRESA_ID}/${CURSO_ID}/index.html`, env);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${ACTIVE_PREFIX}index.html`);
+    expect(res.headers.get('X-LMS-Asset-Key')).not.toBe(`lms/scorm/${EMPRESA_ID}/${CURSO_ID}/index.html`);
+  });
+
   it('preserves legacy listing-fallback behavior for courses with no versioned candidate prefix set', async () => {
     const bucket = createMultiCandidateBucket({ legacyFlatCopy: true });
     const env = makeEnv(bucket, null);

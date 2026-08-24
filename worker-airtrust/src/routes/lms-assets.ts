@@ -216,25 +216,37 @@ async function resolveScormObject(
     return { object: null, resolvedKey: directKey };
   }
 
-  let object = await bucket.get(directKey);
-  if (object && !directKey.endsWith('/')) {
-    return { object, resolvedKey: directKey };
-  }
-
   // The course has a pinned/active versioned package prefix (lms_cursos
-  // .scorm_package_r2_prefix, e.g. ".../_candidates/<uuid>/"). Resolve
-  // strictly within that prefix and fail closed — never fall back to an
-  // unordered bucket listing across every candidate the course has ever
-  // had. R2 list() returns keys in lexicographic order, not by activation
-  // recency, so without this a stale/superseded candidate could sort
-  // before the active one and be served silently instead.
+  // .scorm_package_r2_prefix, e.g. ".../_candidates/<uuid>/"). Resolution
+  // must stay strictly within it and fail closed — it must never fall
+  // through to a stale flat-path file the course had before it adopted the
+  // versioned candidate system (courses migrated from the legacy layout
+  // keep that old object in R2 indefinitely), and never to an unordered
+  // bucket listing across every candidate the course has ever had. R2
+  // list() returns keys in lexicographic order, not by activation recency,
+  // so either fallback could silently outrank the actually-active
+  // candidate with an older one.
   if (options.activePrefix) {
     const normalizedActivePrefix = options.activePrefix.endsWith('/')
       ? options.activePrefix
       : `${options.activePrefix}/`;
+    // A direct hit is only honored here if the wildcard already resolves
+    // to a key inside the active prefix — e.g. a relative asset link the
+    // launch HTML itself emitted, like "_candidates/<uuid>/app.js".
+    if (directKey.startsWith(normalizedActivePrefix)) {
+      const scopedDirectObject = await bucket.get(directKey);
+      if (scopedDirectObject && !directKey.endsWith('/')) {
+        return { object: scopedDirectObject, resolvedKey: directKey };
+      }
+    }
     const scopedKey = `${normalizedActivePrefix}${normalizedWildcard}`;
     const scopedObject = await bucket.get(scopedKey);
     return { object: scopedObject, resolvedKey: scopedKey };
+  }
+
+  let object = await bucket.get(directKey);
+  if (object && !directKey.endsWith('/')) {
+    return { object, resolvedKey: directKey };
   }
 
   // Legacy path: no versioned candidate system in use for this course
