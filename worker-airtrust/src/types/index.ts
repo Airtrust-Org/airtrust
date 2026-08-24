@@ -132,6 +132,11 @@ export interface Env {
    * JSON: {"username":"...","password":"...","base_url"?:"...","system"?:"..."}. Staging-only —
    * never read when ENVIRONMENT is production (see sigvoos-shadow-service.ts). Never persisted. */
   SIGVOOS_SHADOW_CREDENTIAL_JSON?: string;
+  /** Companion username for the password-only fallback: used only when
+   * SIGVOOS_SHADOW_CREDENTIAL_JSON is present but is not valid JSON (i.e.
+   * the whole secret value is treated as the password). Staging-only,
+   * fail-closed elsewhere (see sigvoos-shadow-service.ts). */
+  SIGVOOS_SHADOW_USERNAME?: string;
 }
 
 // ===== API RESPONSE TYPES =====

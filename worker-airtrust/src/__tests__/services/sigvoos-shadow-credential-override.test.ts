@@ -10,10 +10,28 @@ describe('resolveShadowCredentialOverride (SIGVOOS_SHADOW_CREDENTIAL_JSON — Fa
     expect(resolveShadowCredentialOverride({})).toBeNull();
   });
 
-  it('retorna null quando o secret é JSON inválido', () => {
+  it('FAIL-CLOSED: secret não-JSON sem SIGVOOS_SHADOW_USERNAME nunca resolve (não inventa username)', () => {
     expect(
-      resolveShadowCredentialOverride({ SIGVOOS_SHADOW_CREDENTIAL_JSON: 'not-json{' }),
+      resolveShadowCredentialOverride({ SIGVOOS_SHADOW_CREDENTIAL_JSON: 'bare-password-string' }),
     ).toBeNull();
+  });
+
+  it('password-only: secret não-JSON + SIGVOOS_SHADOW_USERNAME resolve com o conteúdo inteiro como password', () => {
+    const result = resolveShadowCredentialOverride({
+      ENVIRONMENT: 'staging',
+      SIGVOOS_SHADOW_CREDENTIAL_JSON: 'bare-password-string',
+      SIGVOOS_SHADOW_USERNAME: 'someone@example.com',
+    });
+    expect(result).toEqual({ username: 'someone@example.com', password: 'bare-password-string' });
+  });
+
+  it('password-only FAIL-CLOSED em production, mesmo com username configurado', () => {
+    const result = resolveShadowCredentialOverride({
+      ENVIRONMENT: 'production',
+      SIGVOOS_SHADOW_CREDENTIAL_JSON: 'bare-password-string',
+      SIGVOOS_SHADOW_USERNAME: 'someone@example.com',
+    });
+    expect(result).toBeNull();
   });
 
   it('retorna null quando faltam username ou password', () => {
@@ -98,10 +116,19 @@ describe('diagnoseShadowCredentialEnv (secret-free diagnosis, never leaks values
     ).toEqual({ diagnosis: 'PRODUCTION_BLOCKED' });
   });
 
-  it('INVALID_JSON quando o secret não é JSON parseável', () => {
+  it('PASSWORD_ONLY_MISSING_USERNAME quando o secret não é JSON e falta SIGVOOS_SHADOW_USERNAME', () => {
     expect(
-      diagnoseShadowCredentialEnv({ SIGVOOS_SHADOW_CREDENTIAL_JSON: 'not-json{' }),
-    ).toEqual({ diagnosis: 'INVALID_JSON' });
+      diagnoseShadowCredentialEnv({ SIGVOOS_SHADOW_CREDENTIAL_JSON: 'bare-password-string' }),
+    ).toEqual({ diagnosis: 'PASSWORD_ONLY_MISSING_USERNAME' });
+  });
+
+  it('OK_PASSWORD_ONLY quando o secret não é JSON e SIGVOOS_SHADOW_USERNAME está presente (nunca revela o valor)', () => {
+    const result = diagnoseShadowCredentialEnv({
+      SIGVOOS_SHADOW_CREDENTIAL_JSON: 'bare-password-string',
+      SIGVOOS_SHADOW_USERNAME: 'someone@example.com',
+    });
+    expect(result).toEqual({ diagnosis: 'OK_PASSWORD_ONLY' });
+    expect(JSON.stringify(result)).not.toMatch(/bare-password-string|someone@example\.com/);
   });
 
   it('MISSING_USERNAME_OR_PASSWORD reporta apenas nomes de chaves presentes, nunca valores', () => {
@@ -119,5 +146,24 @@ describe('diagnoseShadowCredentialEnv (secret-free diagnosis, never leaks values
     });
     expect(result.diagnosis).toBe('OK');
     expect(result.presentKeys).toEqual(['username', 'password']);
+  });
+});
+
+describe('secret vazio e sanitização adicional', () => {
+  it('secret vazio (string vazia) é tratado como ausente', () => {
+    expect(resolveShadowCredentialOverride({ SIGVOOS_SHADOW_CREDENTIAL_JSON: '' })).toBeNull();
+    expect(diagnoseShadowCredentialEnv({ SIGVOOS_SHADOW_CREDENTIAL_JSON: '' })).toEqual({
+      diagnosis: 'ENV_SECRET_ABSENT',
+    });
+  });
+
+  it('nenhum caminho de diagnóstico ou resolução aceita username vazio no modo password-only', () => {
+    expect(
+      resolveShadowCredentialOverride({
+        ENVIRONMENT: 'staging',
+        SIGVOOS_SHADOW_CREDENTIAL_JSON: 'bare-password-string',
+        SIGVOOS_SHADOW_USERNAME: '',
+      }),
+    ).toBeNull();
   });
 });
