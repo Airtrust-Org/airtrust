@@ -99,6 +99,14 @@ interface SigvoosRuntimeEnv {
    * fallback and any non-secret fields.
    */
   SIGVOOS_SHADOW_CREDENTIAL_JSON?: string;
+  /**
+   * Companion username for the password-only fallback below. Only consumed
+   * when SIGVOOS_SHADOW_CREDENTIAL_JSON is present but is NOT valid JSON
+   * (i.e. was provisioned as a bare password string rather than a JSON
+   * object). Never used, never required, when the JSON form is used.
+   * Staging-only, fail-closed elsewhere — same rules as the JSON path.
+   */
+  SIGVOOS_SHADOW_USERNAME?: string;
 }
 
 interface ShadowCredentialOverride {
@@ -111,15 +119,18 @@ interface ShadowCredentialOverride {
 export type ShadowCredentialDiagnosis =
   | 'ENV_SECRET_ABSENT'
   | 'PRODUCTION_BLOCKED'
-  | 'INVALID_JSON'
   | 'MISSING_USERNAME_OR_PASSWORD'
-  | 'OK';
+  | 'PASSWORD_ONLY_MISSING_USERNAME'
+  | 'OK'
+  | 'OK_PASSWORD_ONLY';
 
 /**
  * Safe, secret-free diagnosis of why resolveShadowCredentialOverride did or
  * didn't resolve an override. Never inspects/returns username, password, or
- * any other field value — only which top-level keys are present, so this
- * can be surfaced in error_summary/logs without leaking secret content.
+ * any other field value — only which top-level keys are present (JSON mode)
+ * or whether the password-only fallback's companion username is present —
+ * so this can be surfaced in error_summary/logs without leaking secret
+ * content.
  */
 export function diagnoseShadowCredentialEnv(runtimeEnv?: SigvoosRuntimeEnv): {
   diagnosis: ShadowCredentialDiagnosis;
@@ -131,15 +142,22 @@ export function diagnoseShadowCredentialEnv(runtimeEnv?: SigvoosRuntimeEnv): {
   try {
     parsed = JSON.parse(runtimeEnv.SIGVOOS_SHADOW_CREDENTIAL_JSON);
   } catch {
-    return { diagnosis: 'INVALID_JSON' };
+    parsed = undefined;
   }
-  const presentKeys =
-    parsed && typeof parsed === 'object' ? Object.keys(parsed as Record<string, unknown>) : [];
-  const record = parsed as Partial<ShadowCredentialOverride> | null;
-  if (!record?.username || !record?.password) {
-    return { diagnosis: 'MISSING_USERNAME_OR_PASSWORD', presentKeys };
+  if (parsed !== undefined && parsed !== null && typeof parsed === 'object') {
+    const presentKeys = Object.keys(parsed as Record<string, unknown>);
+    const record = parsed as Partial<ShadowCredentialOverride>;
+    if (!record.username || !record.password) {
+      return { diagnosis: 'MISSING_USERNAME_OR_PASSWORD', presentKeys };
+    }
+    return { diagnosis: 'OK', presentKeys };
   }
-  return { diagnosis: 'OK', presentKeys };
+  // Not a JSON object: treat the whole secret content as a bare password,
+  // per the fallback contract. Requires the companion username env/secret.
+  if (!runtimeEnv.SIGVOOS_SHADOW_USERNAME) {
+    return { diagnosis: 'PASSWORD_ONLY_MISSING_USERNAME' };
+  }
+  return { diagnosis: 'OK_PASSWORD_ONLY' };
 }
 
 export function resolveShadowCredentialOverride(
@@ -147,18 +165,33 @@ export function resolveShadowCredentialOverride(
 ): ShadowCredentialOverride | null {
   if (!runtimeEnv?.SIGVOOS_SHADOW_CREDENTIAL_JSON) return null;
   if (runtimeEnv.ENVIRONMENT === 'production') return null;
+
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(runtimeEnv.SIGVOOS_SHADOW_CREDENTIAL_JSON) as Partial<ShadowCredentialOverride>;
-    if (!parsed.username || !parsed.password) return null;
-    return {
-      username: parsed.username,
-      password: parsed.password,
-      base_url: parsed.base_url,
-      system: parsed.system,
-    };
+    parsed = JSON.parse(runtimeEnv.SIGVOOS_SHADOW_CREDENTIAL_JSON);
   } catch {
-    return null;
+    parsed = undefined;
   }
+
+  if (parsed !== undefined && parsed !== null && typeof parsed === 'object') {
+    const record = parsed as Partial<ShadowCredentialOverride>;
+    if (!record.username || !record.password) return null;
+    return {
+      username: record.username,
+      password: record.password,
+      base_url: record.base_url,
+      system: record.system,
+    };
+  }
+
+  // Password-only fallback: the entire secret value IS the password.
+  // Fail closed if the companion username isn't configured — never invent
+  // or default a username for a bare-password secret.
+  if (!runtimeEnv.SIGVOOS_SHADOW_USERNAME) return null;
+  return {
+    username: runtimeEnv.SIGVOOS_SHADOW_USERNAME,
+    password: runtimeEnv.SIGVOOS_SHADOW_CREDENTIAL_JSON,
+  };
 }
 
 export interface SigvoosShadowRunSummary {
