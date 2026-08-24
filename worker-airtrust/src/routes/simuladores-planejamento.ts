@@ -19,6 +19,7 @@ import { syncTreinamentoPlanejadoIntegration } from '../services/treinamentos-pl
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
 import { matchCaeAvailabilityBatch, type CaeBatchPlanningNeed } from '../services/cae-planning-batch';
 import { resolvePublishedRosterDayFromD1 } from '../services/cae-planning-roster-d1';
+import { resolveIndividualNextModel } from '../services/cae-planning-participant-model-resolver';
 import {
   resolveGlobalSimulatorForEquipment,
   validateInstructorAssignment,
@@ -69,6 +70,7 @@ type QualificationRow = {
   qualificacao_nome: string;
   data_vencimento: string;
   carga_horaria_recorrente: number | null;
+  cycle_start_date: string | null;
 };
 
 type PlanningListRow = {
@@ -292,6 +294,7 @@ async function loadCandidateQualifications(params: {
               qt.codigo AS qualificacao_codigo,
               qt.nome AS qualificacao_nome,
               qh.data_vencimento,
+              qh.data_conclusao AS cycle_start_date,
               COALESCE(qt.carga_horaria_recorrente, qt.carga_horaria) AS carga_horaria_recorrente
          FROM qualificacoes_historico qh
          INNER JOIN funcionarios f
@@ -1029,11 +1032,29 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
           margemDias,
           politicaJanela,
         );
+    // Necessidade curricular é individual: cada participante resolve sua
+    // própria próxima sessão a partir do histórico aprovado (NORMAL via
+    // simulador_agendamentos.template_id, SHARED via
+    // simulador_atribuicoes_curriculares.modelo_sessao_id), nunca o primeiro
+    // modelo do grupo aplicado a todo mundo.
+    const resolvedModel = await resolveIndividualNextModel({
+      db,
+      empresaId,
+      employeeId: Number(qualification.funcionario_id),
+      cycleStartDate: qualification.cycle_start_date,
+      models: modelGroup.models.map((model) => ({
+        id: Number(model.id),
+        ordem_no_treinamento: model.ordem_no_treinamento,
+      })),
+    });
+    const individualModels = resolvedModel
+      ? modelGroup.models.filter((model) => Number(model.id) === resolvedModel.modelId)
+      : modelGroup.models;
     const estimate = estimateSessionCount(
       qualification.carga_horaria_recorrente == null
         ? null
         : Number(qualification.carga_horaria_recorrente),
-      modelGroup.models.map((model) => Number(model.duracao_estimada || 0)),
+      individualModels.map((model) => Number(model.duracao_estimada || 0)),
     );
     candidates.push({
       funcionarioId: Number(qualification.funcionario_id),
@@ -1056,7 +1077,8 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
         source_recurring_hours: qualification.carga_horaria_recorrente,
         estimated_session_count: estimate.sessionCount,
         typical_session_minutes: estimate.typicalSessionMinutes,
-        models: modelGroup.models.map((model) => ({
+        individual_model_source: resolvedModel?.source ?? null,
+        models: individualModels.map((model) => ({
           id: Number(model.id),
           codigo: model.codigo,
           nome: model.nome,
