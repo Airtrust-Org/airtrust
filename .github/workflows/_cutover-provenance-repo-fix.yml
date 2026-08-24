@@ -62,3 +62,5 @@ jobs:
             scripts/__tests__/exact-final-config-harness.test.mjs
           git commit -m 'chore: align release provenance repository'
           git push origin HEAD:infra/github-cutover-provenance-20260824
+
+# trigger: second push after workflow exists on branch
