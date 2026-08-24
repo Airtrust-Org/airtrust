@@ -19,7 +19,11 @@ steps:
         # guards can compute the submitted delta without substituting another
         # CI system or changing the source files under test.
         unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
-        rm -f .git
+        if [ -f .git ]; then
+          rm -f .git
+        elif [ -d .git ]; then
+          rm -rf .git
+        fi
         git init
         git config user.email "ci@airtrust.local"
         git config user.name "AirTrust CI"
