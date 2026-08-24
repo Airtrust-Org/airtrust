@@ -18,6 +18,7 @@ import {
 import { syncTreinamentoPlanejadoIntegration } from '../services/treinamentos-planejados-integration';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
 import { matchCaeAvailabilityBatch, type CaeBatchPlanningNeed } from '../services/cae-planning-batch';
+import { resolvePublishedRosterDayFromD1 } from '../services/cae-planning-roster-d1';
 import {
   buildPlanningKey,
   estimateSessionCount,
@@ -451,6 +452,15 @@ async function insertPlanningAudit(params: {
     .run();
 }
 
+type InsertProposalCaeSlot = {
+  slot_key: string;
+  state: string;
+  equipment: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+};
+
 async function insertProposal(params: {
   db: D1Database;
   empresaId: number;
@@ -460,6 +470,7 @@ async function insertProposal(params: {
   status: SimulatorPlanningStatus;
   margemDias: number | null;
   config: ReturnType<typeof resolveSimulatorPlanningConfig>;
+  caeSlot?: InsertProposalCaeSlot | null;
 }): Promise<number> {
   const first = params.candidates[0];
   const participantIds = params.candidates.map((candidate) => candidate.funcionarioId);
@@ -487,6 +498,22 @@ async function insertProposal(params: {
     .map((candidate) => `${candidate.funcionarioId}:${candidateModelIds(candidate).join(',')}`)
     .sort()
     .join('|');
+  // O estado de escala é resolvido apenas para a data do slot CAE selecionado
+  // (a data candidata real da sessão). Sem slot, não há data candidata ainda
+  // e roster_by_date fica vazio — a revalidação live não terá nada a comparar
+  // até que um slot seja confirmado.
+  const rosterByDateByParticipant = new Map<number, Record<string, string>>();
+  if (params.caeSlot) {
+    for (const candidate of params.candidates) {
+      const resolved = await resolvePublishedRosterDayFromD1({
+        db: params.db,
+        empresaId: params.empresaId,
+        employeeId: candidate.funcionarioId,
+        date: params.caeSlot.date,
+      });
+      rosterByDateByParticipant.set(candidate.funcionarioId, { [params.caeSlot.date]: resolved.state });
+    }
+  }
   const snapshot = {
     generated_at: params.runMarker,
     config: params.config,
@@ -504,9 +531,9 @@ async function insertProposal(params: {
       qualification_expiry_date: candidate.vencimento,
       training_id: candidate.qualificacaoTipoId,
       session_model_ids: candidateModelIds(candidate),
-      roster_by_date: {},
+      roster_by_date: rosterByDateByParticipant.get(candidate.funcionarioId) || {},
     })),
-    cae_slots: [],
+    cae_slots: params.caeSlot ? [params.caeSlot] : [],
     canonical_session_fingerprint: `sessions:${sessionFingerprint}`,
     pairing_fingerprint: `pairing:${mode}:${sessionFingerprint}`,
     curriculum: first.snapshot,
@@ -1203,6 +1230,62 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
   const autoStatuses = ['PROPOSTO', 'AGUARDANDO_DISPONIBILIDADE', 'REPLANEJAR'];
   const statusPlaceholders = autoStatuses.map(() => '?').join(', ');
 
+  // O matcher já escolheu o melhor slot CAE (mais próximo do vencimento, nunca
+  // após o vencimento) quando cae_availability é fornecido — persistimos
+  // exatamente esse slot no snapshot em vez de deixar a proposta sem slot.
+  const caeSlotByGroupKey = new Map<string, InsertProposalCaeSlot>();
+  if (body?.cae_availability !== undefined && body?.cae_availability !== null) {
+    const validation = validateAndNormalizeCaeAvailability(body.cae_availability);
+    if (!validation.ok) {
+      return c.json(
+        {
+          success: false,
+          error: 'Disponibilidade CAE inválida',
+          code: 'CAE_AVAILABILITY_INVALID',
+          details: validation.errors,
+          warnings: validation.warnings,
+        },
+        400,
+      );
+    }
+    const persistGroups: Array<{ candidates: SimulatorPlanningCandidate[] }> = [
+      ...pairs.map((pair) => ({ candidates: [pair.left, pair.right] })),
+      ...unmatched.map((candidate) => ({ candidates: [candidate] })),
+    ];
+    const groupByNeedId = new Map<string, SimulatorPlanningCandidate[]>();
+    const needs: CaeBatchPlanningNeed[] = persistGroups.map((group) => {
+      const first = group.candidates[0];
+      const needId = proposalNeedId(group.candidates);
+      groupByNeedId.set(needId, group.candidates);
+      return {
+        id: needId,
+        config,
+        equipment: first.modeloAeronave,
+        expiry_date: group.candidates.map((candidate) => candidate.vencimento).sort()[0],
+        planning_start_date: dataReferencia,
+        preferred_window_start: first.janelaInicio,
+        preferred_window_end: first.janelaFim,
+        session_durations_minutes:
+          first.modeloAeronave === 'AW139' || first.modeloAeronave === 'SK76'
+            ? sessionDurationsFromCandidate(first)
+            : [],
+      };
+    });
+    const batch = matchCaeAvailabilityBatch(needs, validation.data.slots);
+    for (const match of batch.matches) {
+      if (match.status !== 'MATCHED' || match.selected_slots.length === 0) continue;
+      const slot = match.selected_slots[0];
+      caeSlotByGroupKey.set(String(match.need_id), {
+        slot_key: [slot.equipment, slot.date, slot.start_time, slot.end_date, slot.end_time].join('|'),
+        state: slot.state,
+        equipment: slot.equipment,
+        date: slot.date,
+        start_time: slot.start_time,
+        end_time: slot.end_time,
+      });
+    }
+  }
+
   try {
     await db
       .prepare(
@@ -1229,6 +1312,7 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
         status: 'PROPOSTO',
         margemDias,
         config,
+        caeSlot: caeSlotByGroupKey.get(proposalNeedId([pair.left, pair.right])) || null,
       });
       created += 1;
     }
@@ -1242,6 +1326,7 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
         status: 'AGUARDANDO_DISPONIBILIDADE',
         margemDias,
         config,
+        caeSlot: caeSlotByGroupKey.get(proposalNeedId([candidate])) || null,
       });
       created += 1;
     }
