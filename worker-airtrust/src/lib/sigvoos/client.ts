@@ -155,7 +155,18 @@ export class SigvoosApiClient {
     private config: SigvoosConfig,
     options?: { fetchImpl?: typeof fetch },
   ) {
-    this.fetchImpl = options?.fetchImpl || fetch;
+    // Do NOT assign the bare global `fetch` reference here (`options?.fetchImpl || fetch`).
+    // The real Cloudflare Workers runtime requires `fetch` be invoked with `this ===
+    // globalThis`; calling it later as `this.fetchImpl(...)` invokes it with `this` bound
+    // to the SigvoosApiClient instance instead, which Workers rejects with "Illegal
+    // invocation: function called with incorrect `this` reference." (An arrow-function
+    // wrapper calling bare `fetch(...)` does NOT fix this either — under ES module strict
+    // mode, an unbound call yields `this === undefined`, not globalThis, and Workers still
+    // rejects it.) `.bind(globalThis)` is required. This never reproduces under vitest's
+    // Node-based fetch, only in a real deployment — see
+    // src/__tests__/lib/sigvoos-client-fetch-binding.test.ts for a regression test that
+    // simulates the real runtime's receiver check.
+    this.fetchImpl = options?.fetchImpl || fetch.bind(globalThis);
   }
 
   public async fetchJson(
