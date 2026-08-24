@@ -18,9 +18,11 @@ APPROVED_MIGRATIONS=(
   "0461_refresh_tokens_empresa_id.sql"
   "0462_qualificacoes_tipos_codigo_tenant_active_unique.sql"
   "0466_cae_planning_v3.sql"
+  "0467_sigvoos_shadow_parallel_v1.sql"
+  "0468_sigvoos_shadow_leg_crew_v1.sql"
   "0469_lms_completion_pendencias_snapshots.sql"
 )
-RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0461,0462,0466,0469"
+RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0461,0462,0466,0467,0468,0469"
 
 apply=false
 migration_arg=""
@@ -107,6 +109,12 @@ validate_postconditions() {
       ;;
     0466_cae_planning_v3.sql)
       bash scripts/staging/validate-0466-postconditions.sh --target="$db_name"
+      ;;
+    0467_sigvoos_shadow_parallel_v1.sql)
+      bash scripts/staging/validate-0467-postconditions.sh --target="$db_name"
+      ;;
+    0468_sigvoos_shadow_leg_crew_v1.sql)
+      bash scripts/staging/validate-0468-postconditions.sh --target="$db_name"
       ;;
     0469_lms_completion_pendencias_snapshots.sql)
       bash scripts/staging/validate-0469-postconditions.sh --target="$db_name"
