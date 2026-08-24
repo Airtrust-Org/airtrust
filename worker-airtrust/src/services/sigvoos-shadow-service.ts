@@ -108,6 +108,40 @@ interface ShadowCredentialOverride {
   system?: string;
 }
 
+export type ShadowCredentialDiagnosis =
+  | 'ENV_SECRET_ABSENT'
+  | 'PRODUCTION_BLOCKED'
+  | 'INVALID_JSON'
+  | 'MISSING_USERNAME_OR_PASSWORD'
+  | 'OK';
+
+/**
+ * Safe, secret-free diagnosis of why resolveShadowCredentialOverride did or
+ * didn't resolve an override. Never inspects/returns username, password, or
+ * any other field value — only which top-level keys are present, so this
+ * can be surfaced in error_summary/logs without leaking secret content.
+ */
+export function diagnoseShadowCredentialEnv(runtimeEnv?: SigvoosRuntimeEnv): {
+  diagnosis: ShadowCredentialDiagnosis;
+  presentKeys?: string[];
+} {
+  if (!runtimeEnv?.SIGVOOS_SHADOW_CREDENTIAL_JSON) return { diagnosis: 'ENV_SECRET_ABSENT' };
+  if (runtimeEnv.ENVIRONMENT === 'production') return { diagnosis: 'PRODUCTION_BLOCKED' };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(runtimeEnv.SIGVOOS_SHADOW_CREDENTIAL_JSON);
+  } catch {
+    return { diagnosis: 'INVALID_JSON' };
+  }
+  const presentKeys =
+    parsed && typeof parsed === 'object' ? Object.keys(parsed as Record<string, unknown>) : [];
+  const record = parsed as Partial<ShadowCredentialOverride> | null;
+  if (!record?.username || !record?.password) {
+    return { diagnosis: 'MISSING_USERNAME_OR_PASSWORD', presentKeys };
+  }
+  return { diagnosis: 'OK', presentKeys };
+}
+
 export function resolveShadowCredentialOverride(
   runtimeEnv?: SigvoosRuntimeEnv,
 ): ShadowCredentialOverride | null {
@@ -568,6 +602,12 @@ export async function runSigvoosShadowIngestion(
     await reconcileMissingLegs(db, tenantId, runId, input.from, input.to, seenIdentityKeys);
   } catch (error) {
     fatalError = error instanceof Error ? error.message : String(error);
+    if (error instanceof Error && error.message === 'Credenciais não configuradas.') {
+      const diag = diagnoseShadowCredentialEnv(runtimeEnv);
+      fatalError = `${fatalError} [credential_diagnosis=${diag.diagnosis}${
+        diag.presentKeys ? ` presentKeys=${diag.presentKeys.join(',')}` : ''
+      }]`;
+    }
   }
 
   const finalStatus: SigvoosShadowRunStatus = fatalError

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveShadowCredentialOverride } from '../../services/sigvoos-shadow-service';
+import {
+  resolveShadowCredentialOverride,
+  diagnoseShadowCredentialEnv,
+} from '../../services/sigvoos-shadow-service';
 
 describe('resolveShadowCredentialOverride (SIGVOOS_SHADOW_CREDENTIAL_JSON — Fase 1 staging)', () => {
   it('retorna null quando o secret está ausente', () => {
@@ -78,5 +81,43 @@ describe('resolveShadowCredentialOverride (SIGVOOS_SHADOW_CREDENTIAL_JSON — Fa
       }),
     });
     expect(Object.keys(result || {}).sort()).toEqual(['base_url', 'password', 'system', 'username']);
+  });
+});
+
+describe('diagnoseShadowCredentialEnv (secret-free diagnosis, never leaks values)', () => {
+  it('ENV_SECRET_ABSENT quando não há secret', () => {
+    expect(diagnoseShadowCredentialEnv(undefined)).toEqual({ diagnosis: 'ENV_SECRET_ABSENT' });
+  });
+
+  it('PRODUCTION_BLOCKED quando ENVIRONMENT=production, mesmo com secret presente', () => {
+    expect(
+      diagnoseShadowCredentialEnv({
+        ENVIRONMENT: 'production',
+        SIGVOOS_SHADOW_CREDENTIAL_JSON: JSON.stringify({ username: 'u', password: 'p' }),
+      }),
+    ).toEqual({ diagnosis: 'PRODUCTION_BLOCKED' });
+  });
+
+  it('INVALID_JSON quando o secret não é JSON parseável', () => {
+    expect(
+      diagnoseShadowCredentialEnv({ SIGVOOS_SHADOW_CREDENTIAL_JSON: 'not-json{' }),
+    ).toEqual({ diagnosis: 'INVALID_JSON' });
+  });
+
+  it('MISSING_USERNAME_OR_PASSWORD reporta apenas nomes de chaves presentes, nunca valores', () => {
+    const result = diagnoseShadowCredentialEnv({
+      SIGVOOS_SHADOW_CREDENTIAL_JSON: JSON.stringify({ SIGVOOS_USERNAME: 'u', SIGVOOS_PASSWORD: 'p' }),
+    });
+    expect(result.diagnosis).toBe('MISSING_USERNAME_OR_PASSWORD');
+    expect(result.presentKeys).toEqual(['SIGVOOS_USERNAME', 'SIGVOOS_PASSWORD']);
+    expect(JSON.stringify(result)).not.toMatch(/\bu\b|\bp\b/);
+  });
+
+  it('OK quando username/password estão presentes', () => {
+    const result = diagnoseShadowCredentialEnv({
+      SIGVOOS_SHADOW_CREDENTIAL_JSON: JSON.stringify({ username: 'u', password: 'p' }),
+    });
+    expect(result.diagnosis).toBe('OK');
+    expect(result.presentKeys).toEqual(['username', 'password']);
   });
 });
