@@ -18,11 +18,11 @@ function stripComments(source: string): string {
 describe('staging migration release 0457/0459', () => {
   const runner = read('scripts/staging/apply-approved-migrations.sh');
 
-  it('allowlists only the canonical 0457 and 0459 forward files for this release extension', () => {
+  it('keeps the canonical preflight scope aligned with the approved migration allowlist', () => {
     expect(runner).toContain('0457_qualification_category_lms_contract.sql');
     expect(runner).toContain('0459_sk76_periodic_code_denominator.sql');
     expect(runner).toContain(
-      'RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459"',
+      'RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459,0467,0468,0469"',
     );
     expect(stripComments(runner)).not.toMatch(/wrangler\s+d1\s+migrations\s+apply/);
   });
