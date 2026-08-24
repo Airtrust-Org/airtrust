@@ -121,9 +121,13 @@ async function waitForIframe(container: HTMLElement): Promise<HTMLIFrameElement>
   return el!;
 }
 function fireProgress(container: HTMLElement, overrides?: Record<string, unknown>) {
+  // O LmsPlayer só aceita mensagens vindas do contentWindow do próprio iframe
+  // do curso (defesa contra forja de sinais de conclusão).
+  const source = getIframe(container)?.contentWindow ?? undefined;
   act(() => {
     window.dispatchEvent(new MessageEvent('message', {
       origin: 'http://localhost:8787',
+      source,
       data: { type: 'lms:progress', matriculaId: matriculaData?.id ?? 42, progresso_pct: 33, location: '1/3', ...overrides },
     }));
   });
@@ -319,6 +323,7 @@ describe('LmsPlayer — session stability audit (PR #506)', () => {
       act(() => {
         window.dispatchEvent(new MessageEvent('message', {
           origin: 'http://localhost:8787',
+          source: el?.contentWindow ?? undefined,
           data: { type: 'lms:completed', matriculaId: 42, status: 'passed' },
         }));
       });

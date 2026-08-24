@@ -70,6 +70,17 @@ function renderPlayer() {
   );
 }
 
+/**
+ * Conta apenas as chamadas de renovação da sessão de assets. O player também
+ * busca o snapshot de diagnóstico granular (`completion-diagnostics`), que é
+ * irrelevante para a estabilidade do iframe e não deve entrar na contagem.
+ */
+function assetSessionCalls(): number {
+  return fetchWithAuthMock.mock.calls.filter(
+    ([url]) => !String(url).includes('completion-diagnostics'),
+  ).length;
+}
+
 describe('LmsPlayer — estabilidade do src do iframe frente a rotação de token', () => {
   beforeEach(() => {
     ensureValidAccessTokenMock.mockReset().mockResolvedValue('token-initial');
@@ -149,7 +160,7 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
     await waitFor(() => {
       initialIframe = container.querySelector('iframe');
       expect(initialIframe).not.toBeNull();
-      expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+      expect(assetSessionCalls()).toBe(1);
     });
 
     const initialSrc = initialIframe!.getAttribute('src');
@@ -166,7 +177,7 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
     });
 
     await waitFor(() => {
-      expect(fetchWithAuthMock).toHaveBeenCalledTimes(2);
+      expect(assetSessionCalls()).toBe(2);
     });
 
     const iframeAfter = container.querySelector('iframe');

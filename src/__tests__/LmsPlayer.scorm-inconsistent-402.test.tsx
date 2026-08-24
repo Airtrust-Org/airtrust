@@ -112,11 +112,23 @@ function renderPlayer() {
   return { ...view, qc };
 }
 
+/**
+ * O LmsPlayer só aceita mensagens vindas do contentWindow do próprio iframe
+ * do curso (defesa contra forja de sinais de conclusão). Os testes precisam,
+ * portanto, despachar a partir dessa janela.
+ */
+async function frameWindow(): Promise<Window | undefined> {
+  await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
+  return document.querySelector('iframe')?.contentWindow ?? undefined;
+}
+
 async function dispatchPlayerMessage(data: Record<string, unknown>) {
+  const source = await frameWindow();
   await act(async () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'http://localhost:8787',
+        source,
         data,
       }),
     );
@@ -220,6 +232,11 @@ describe('LmsPlayer — matrícula 402 (SCORM_STATUS_INCONSISTENT)', () => {
   it('vira CONCLUIDO normalmente quando o diagnóstico passa a accepted (fluxo saudável não regride)', async () => {
     renderPlayer();
 
+    // Resolve o iframe ANTES de mudar o mock: o player só aceita mensagens
+    // vindas do contentWindow dele, e após o mock virar CONCLUIDO o modo de
+    // revisão passaria a descartar sinais de conclusão.
+    const source = await frameWindow();
+
     matriculaMock = {
       ...matriculaMock,
       status: 'CONCLUIDO',
@@ -227,7 +244,15 @@ describe('LmsPlayer — matrícula 402 (SCORM_STATUS_INCONSISTENT)', () => {
       completion_diagnostic: { ...SCORM_STATUS_INCONSISTENT_DIAGNOSTIC, status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED' },
     };
 
-    await dispatchPlayerMessage({ type: 'lms:completed', matriculaId: 402 });
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: 'http://localhost:8787',
+          source,
+          data: { type: 'lms:completed', matriculaId: 402 },
+        }),
+      );
+    });
 
     await waitFor(() => {
       expect(toastSuccessMock).toHaveBeenCalledWith(

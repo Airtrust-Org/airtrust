@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -25,6 +25,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
 import { formatMinutes } from './lmsUi';
+import {
+  parseGranularDiagnostic,
+  resolveCompletionExplanation,
+  type LmsGranularDiagnostic,
+} from '@/react-app/utils/lmsDiagnosticContract';
+import { LmsPendingPanel } from './LmsPendingPanel';
 
 function inferProgressFromLocation(location: string | null | undefined): number | null {
   if (!location) return null;
@@ -126,9 +132,63 @@ export default function LmsPlayer() {
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
   >('idle');
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
+  // Snapshot granular AIRTRUST_COMPLETION_DIAGNOSTICS_V1 (informativo).
+  const [granularDiagnostic, setGranularDiagnostic] = useState<LmsGranularDiagnostic | null>(null);
+  const [pendingPanelOpen, setPendingPanelOpen] = useState(false);
 
   const qc = useQueryClient();
   const id = Number(matriculaId);
+
+  /**
+   * Persiste o último snapshot granular. Best-effort: falhas são silenciosas,
+   * pois o diagnóstico é informativo e jamais deve quebrar o curso.
+   */
+  const persistGranularDiagnostic = useCallback(
+    async (snapshot: LmsGranularDiagnostic) => {
+      if (!Number.isFinite(id) || id <= 0) return;
+      try {
+        await fetchWithAuth(`${API_BASE_URL}/lms/matriculas/${id}/completion-diagnostics`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ diagnostics: snapshot }),
+        });
+      } catch {
+        // Silencioso por design.
+      }
+    },
+    [id],
+  );
+  // Recupera o último snapshot granular persistido, para que o painel de
+  // pendências sobreviva a um reload da página.
+  useEffect(() => {
+    if (!Number.isFinite(id) || id <= 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchWithAuth(
+          `${API_BASE_URL}/lms/matriculas/${id}/completion-diagnostics`,
+        );
+        if (!res.ok) return;
+        const body = (await res.json()) as { success?: boolean; data?: { diagnostics?: unknown } };
+        const parsed = parseGranularDiagnostic(body?.data?.diagnostics);
+        if (parsed && !cancelled) setGranularDiagnostic((prev) => prev ?? parsed);
+      } catch {
+        // Silencioso: ausência de snapshot é normal (pacotes legados).
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Abre automaticamente o painel quando uma tentativa de conclusão é
+  // rejeitada ou fica inconclusiva.
+  useEffect(() => {
+    if (completionState === 'error' || completionState === 'unresolved') {
+      setPendingPanelOpen(true);
+    }
+  }, [completionState]);
+
   const completionToastIdRef = useRef(`lms-scorm-completion-${id}`);
   const candidateStreakRef = useRef(0);
   const unresolvedRef = useRef(false);
@@ -155,6 +215,10 @@ export default function LmsPlayer() {
     inferredPersistedLocationProgress ?? 0,
   );
   const completionDiagnostic = matricula?.completion_diagnostic ?? null;
+  const completionExplanation = resolveCompletionExplanation({
+    canonical: completionDiagnostic,
+    granular: granularDiagnostic,
+  });
   const hasCompletionDate = Boolean(matricula?.data_conclusao);
   const isCompletedState = completed || matricula?.status === 'CONCLUIDO' || hasCompletionDate;
   const displayProgress = resolveLmsDisplayProgress({
@@ -470,6 +534,27 @@ export default function LmsPlayer() {
 
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== launchOrigin) return;
+      // Só aceita mensagens do próprio iframe do curso. Sem esta checagem, qualquer
+      // janela/popup na mesma origem poderia forjar sinais de conclusão.
+      const expectedSource = iframeRef.current?.contentWindow ?? null;
+      if (!expectedSource || event.source !== expectedSource) return;
+
+      // Diagnóstico granular: informativo, nunca altera estado canônico.
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:completion-diagnostics'
+      ) {
+        // IDs afirmados pelo payload são ignorados: o contexto é sempre o
+        // autenticado (`id`, empresa do token).
+        const parsed = parseGranularDiagnostic(event.data.diagnostics);
+        if (parsed) {
+          setGranularDiagnostic(parsed);
+          if (!effectiveReviewMode) void persistGranularDiagnostic(parsed);
+        }
+        return;
+      }
+
       if (
         effectiveReviewMode &&
         event.data &&
@@ -592,7 +677,7 @@ export default function LmsPlayer() {
       window.clearInterval(intervalId);
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, iframeLoaded, launchOrigin, refetchMatricula]);
+  }, [effectiveReviewMode, id, iframeLoaded, launchOrigin, refetchMatricula, persistGranularDiagnostic]);
 
   async function handleFullscreen() {
     const el = iframeRef.current;
@@ -926,6 +1011,14 @@ export default function LmsPlayer() {
                     : 'Confirmar conclusao'}
               </button>
             ) : null}
+
+            {!effectiveReviewMode && !isCompletedState && (
+              <LmsPendingPanel
+                explanation={completionExplanation}
+                open={pendingPanelOpen}
+                onToggle={() => setPendingPanelOpen((v) => !v)}
+              />
+            )}
           </aside>
         </div>
       </main>
