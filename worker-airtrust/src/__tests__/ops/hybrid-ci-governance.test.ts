@@ -45,7 +45,8 @@ describe('hybrid CI governance', () => {
       expect(gcbCi).not.toContain(`id: ${gate}`);
     }
     expect(gcbCi).toContain('id: frontend-coverage\n    waitFor: ["bootstrap"]');
-    expect(gcbCi).toContain('id: worker-tests-1\n    waitFor: ["bootstrap"]');
+    expect(gcbCi).toContain('id: worker-tests-1');
+    expect(gcbCi).toContain('waitFor: ["frontend-coverage"]');
   });
 
   it('still covers all eight required gates with no duplication', () => {
