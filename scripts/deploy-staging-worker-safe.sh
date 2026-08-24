@@ -134,7 +134,7 @@ WRANGLER_CONFIG_SHA256="$(shasum -a 256 "$TMP_WRANGLER" | awk '{print $1}')"
 
 cat > "$MANIFEST_FILE" <<JSON
 {
-  "repository": "airtrustsystem-alt/airtrust",
+  "repository": "Airtrust-Org/airtrust",
   "sourceSha": "$HEAD_SHA",
   "sourceTree": "$SOURCE_TREE",
   "environment": "staging",
