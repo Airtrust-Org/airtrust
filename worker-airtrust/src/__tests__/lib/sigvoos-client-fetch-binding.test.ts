@@ -56,3 +56,31 @@ describe('SigvoosApiClient fetch binding (Cloudflare Workers "Illegal invocation
     }
   });
 });
+
+describe('SigvoosApiClient authenticate() safe diagnosis when token is missing', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('includes only response key names (never values) when the token field is absent', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: 'invalid_credentials', message: 'bad login' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as unknown as typeof fetch;
+    try {
+      const client = new SigvoosApiClient({
+        base_url: 'https://api.sigvoos.com.br/api',
+        username: 'user',
+        password: 'pass',
+        system: 'sigtrip',
+      });
+      await expect(client.authenticate()).rejects.toThrow(
+        /Token não retornado ou inválido\. \[responseKeys=error,message\]/,
+      );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
