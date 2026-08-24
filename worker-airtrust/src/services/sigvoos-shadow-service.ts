@@ -30,7 +30,6 @@ import {
   findTripulanteByCanacOrName,
   getSigvoosConfig,
   normalizeSigvoosRecord,
-  shouldStopSigvoosPaging,
   type SigvoosNormalizedLeg,
   type SigvoosResolutionSource,
   type SigvoosSyncClient,
@@ -40,9 +39,8 @@ import {
   type ShadowComparableLeg,
   type SigvoosShadowClassification,
 } from '../lib/sigvoos/sigvoos-shadow-compare';
+import { buildSigvoosEtapasSearchRequest } from '../lib/sigvoos/contract-guards';
 
-const SHADOW_PAGE_SIZE = 200;
-const SHADOW_MAX_PAGES_DEFAULT = 2;
 
 export class SigvoosShadowTenantRequiredError extends Error {
   constructor() {
@@ -235,9 +233,8 @@ function requireEmpresaId(empresaId: number | null | undefined): number {
  * without the underlying flight content changing (e.g. no timestamps). */
 function fingerprintFields(leg: SigvoosNormalizedLeg): Record<string, unknown> {
   return {
-    canac: leg.canac,
-    identificadorSigvoos: leg.identificadorSigvoos,
-    staffIdSigvoos: leg.staffIdSigvoos,
+    // Search rows are crew x physical-leg. Crew belongs in the association
+    // table and must not turn another crew row into SOURCE_CHANGED.
     flightReportId: leg.flightReportId,
     legNumber: leg.legNumber,
     data: leg.data,
@@ -254,6 +251,20 @@ function fingerprintFields(leg: SigvoosNormalizedLeg): Record<string, unknown> {
     tempoNoturnoMin: leg.tempoNoturnoMin,
     tempoIfrMin: leg.tempoIfrMin,
   };
+}
+
+async function buildCrewIdentityKey(
+  leg: SigvoosNormalizedLeg,
+  crew: { funcionarioId: string | null },
+): Promise<string> {
+  if (leg.staffIdSigvoos) return `STAFF::${leg.staffIdSigvoos}`;
+  if (crew.funcionarioId) return `FUNCIONARIO::${crew.funcionarioId}`;
+  if (leg.identificadorSigvoos) return `INSCRIPTION::${leg.identificadorSigvoos}`;
+  return `UNRESOLVED::${await sha256Hex(stableStringify({
+    canac: leg.canac,
+    nome: leg.tripulanteNome,
+    rawStaff: leg.raw.staff ?? null,
+  }))}`;
 }
 
 function stableStringify(value: Record<string, unknown>): string {
@@ -315,6 +326,57 @@ async function findExistingActiveLeg(
     .bind(empresaId, identityKey)
     .first<{ id: string; source_fingerprint: string; normalized_json: string; source_state: string }>();
   return row ?? null;
+}
+
+async function upsertShadowLegCrew(
+  db: D1Database,
+  input: {
+    empresaId: number;
+    legId: string;
+    runId: string;
+    crewIdentityKey: string;
+    leg: SigvoosNormalizedLeg;
+    crew: { method: SigvoosResolutionSource; funcionarioId: string | null };
+    timestamp: string;
+  },
+): Promise<void> {
+  const existing = await db
+    .prepare(
+      `SELECT id FROM sigvoos_shadow_leg_crews
+       WHERE empresa_id = ? AND leg_id = ? AND crew_identity_key = ? AND active = 1 LIMIT 1`,
+    )
+    .bind(input.empresaId, input.legId, input.crewIdentityKey)
+    .first<{ id: string }>();
+
+  if (existing) {
+    await db
+      .prepare(
+        `UPDATE sigvoos_shadow_leg_crews
+         SET run_id = ?, staff_id_sigvoos = ?, staff_inscription = ?, crew_resolution_method = ?,
+             crew_funcionario_id = ?, last_seen_at = ?, updated_at = ?
+         WHERE id = ? AND empresa_id = ?`,
+      )
+      .bind(
+        input.runId, input.leg.staffIdSigvoos, input.leg.identificadorSigvoos, input.crew.method,
+        input.crew.funcionarioId, input.timestamp, input.timestamp, existing.id, input.empresaId,
+      )
+      .run();
+    return;
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO sigvoos_shadow_leg_crews
+        (id, empresa_id, leg_id, run_id, crew_identity_key, staff_id_sigvoos, staff_inscription,
+         crew_resolution_method, crew_funcionario_id, first_seen_at, last_seen_at, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+    )
+    .bind(
+      generateId(), input.empresaId, input.legId, input.runId, input.crewIdentityKey,
+      input.leg.staffIdSigvoos, input.leg.identificadorSigvoos, input.crew.method,
+      input.crew.funcionarioId, input.timestamp, input.timestamp, input.timestamp, input.timestamp,
+    )
+    .run();
 }
 
 async function acquireRunLease(
@@ -403,23 +465,17 @@ export async function runSigvoosShadowIngestion(
 
     await client.authenticate();
 
-    const pageSize = input.pageSize || SHADOW_PAGE_SIZE;
-    const maxPages = input.maxPages || SHADOW_MAX_PAGES_DEFAULT;
     const rawRecords: Record<string, unknown>[] = [];
 
     for (const window of buildSigvoosMonthlyWindows(input.from, input.to)) {
-      for (let page = 1; page <= maxPages; page++) {
-        const payload = await client.postSearch('/relatorios/voos/tripulantes/etapas/pesquisa', {
-          date_start: window.from,
-          date_finish: window.to,
-          page,
-          page_size: pageSize,
-          limit: pageSize,
-        });
-        const pageItems = getArrayPayload(payload.data ?? payload);
-        rawRecords.push(...pageItems);
-        if (shouldStopSigvoosPaging(page, pageItems.length, pageSize)) break;
-      }
+      // The vendor documents no page/page_size/limit contract here. One
+      // request per bounded window prevents a duplicate second ingestion when
+      // its live API returns the complete window regardless of those fields.
+      const payload = await client.postSearch(
+        '/relatorios/voos/tripulantes/etapas/pesquisa',
+        buildSigvoosEtapasSearchRequest({ from: window.from, to: window.to }),
+      );
+      rawRecords.push(...getArrayPayload(payload.data ?? payload));
     }
 
     const normalized = rawRecords
@@ -446,6 +502,7 @@ export async function runSigvoosShadowIngestion(
           : 'TIMEZONE_UNRESOLVED';
 
         const existing = await findExistingActiveLeg(db, tenantId, identity.identityKey);
+        const shadowLegId = existing?.id ?? generateId();
         let sourceChanged = false;
         const seenAt = now();
 
@@ -460,7 +517,7 @@ export async function runSigvoosShadowIngestion(
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'ACTIVE', ?, ?, ?, ?, ?, 1, NULL, ?, ?)`,
             )
             .bind(
-              generateId(),
+              shadowLegId,
               tenantId,
               runId,
               leg.flightReportId,
@@ -549,6 +606,16 @@ export async function runSigvoosShadowIngestion(
             )
             .run();
         }
+
+        await upsertShadowLegCrew(db, {
+          empresaId: tenantId,
+          legId: shadowLegId,
+          runId,
+          crewIdentityKey: await buildCrewIdentityKey(leg, crew),
+          leg,
+          crew,
+          timestamp: seenAt,
+        });
 
         const manualConflict = input.detectManualConflict
           ? await input.detectManualConflict(tenantId, identity.identityKey)

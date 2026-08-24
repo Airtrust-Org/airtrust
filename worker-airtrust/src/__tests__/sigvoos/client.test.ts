@@ -49,6 +49,34 @@ describe('SigvoosApiClient', () => {
       assert.equal(callCount, 1);
     });
 
+    it('unwraps the documented JSON token nested in data.token', async () => {
+      const client = new SigvoosApiClient(config, {
+        fetchImpl: async () => new Response(JSON.stringify({ data: { token: '{"access_token":"nested-bearer"}' } }), { status: 200 }),
+      });
+      assert.equal(await client.authenticate(), 'nested-bearer');
+    });
+
+    it('fails closed for application errors and 503 on the etapas search', async () => {
+      const applicationClient = new SigvoosApiClient(config, {
+        fetchImpl: async (input) => input.toString().endsWith('/get/token')
+          ? new Response(JSON.stringify({ token: 't' }), { status: 200 })
+          : new Response(JSON.stringify({ status: 'error', data: '' }), { status: 200 }),
+      });
+      await assert.rejects(
+        applicationClient.postSearch('/relatorios/voos/tripulantes/etapas/pesquisa', {}),
+        (error: unknown) => error instanceof SigvoosClientError && error.code === 'SIGVOOS_APPLICATION_ERROR',
+      );
+      const unavailableClient = new SigvoosApiClient(config, {
+        fetchImpl: async (input) => input.toString().endsWith('/get/token')
+          ? new Response(JSON.stringify({ token: 't' }), { status: 200 })
+          : new Response('{}', { status: 503 }),
+      });
+      await assert.rejects(
+        unavailableClient.postSearch('/relatorios/voos/tripulantes/etapas/pesquisa', {}),
+        (error: unknown) => error instanceof SigvoosClientError && error.code === 'SIGVOOS_UPSTREAM_UNAVAILABLE',
+      );
+    });
+
     it('retries auth on 401 during postSearch', async () => {
       let calls = 0;
       const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {

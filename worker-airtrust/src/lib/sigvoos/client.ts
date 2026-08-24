@@ -1,9 +1,14 @@
+import {
+  classifySigvoosHttpStatus,
+  detectSigvoosApplicationError,
+  SIGVOOS_OPERATIONAL_SEARCH_ENDPOINT,
+} from './contract-guards';
+
 export const SIGVOOS_DEFAULT_BASE_URL = 'https://api.sigvoos.com.br/api';
 export const SIGVOOS_DEFAULT_SYSTEM = 'sigtrip';
 export const SIGVOOS_PASSWORD_MARKER = '__WORKER_ENCRYPTED__';
 export const SIGVOOS_PASSWORD_ENCRYPTED_PREFIX = 'enc:v1';
 
-const SIGVOOS_OPERATIONAL_SEARCH_ENDPOINT = '/relatorios/voos/tripulantes/etapas/pesquisa';
 const SIGVOOS_MAX_CLIENT_BATCH = 1000;
 
 export class SigvoosClientError extends Error {
@@ -194,13 +199,14 @@ export class SigvoosApiClient {
       }
 
       if (!response.ok) {
-        if (response.status === 401) {
+        const code = classifySigvoosHttpStatus(response.status);
+        if (code === 'SIGVOOS_UNAUTHORIZED') {
           this.token = null;
           throw new SigvoosClientError('SIGVOOS_UNAUTHORIZED', 'Unauthorized', 401);
         }
-        if (response.status >= 500) {
+        if (code === 'SIGVOOS_UPSTREAM_UNAVAILABLE' || code === 'SIGVOOS_SERVER_ERROR') {
           throw new SigvoosClientError(
-            'SIGVOOS_SERVER_ERROR',
+            code,
             `Server Error: ${response.status}`,
             response.status,
           );
@@ -256,13 +262,25 @@ export class SigvoosApiClient {
       response.data && typeof response.data === 'object'
         ? (response.data as Record<string, unknown>)
         : null;
-    const token =
+    const rawToken =
       response.accessToken ||
       response.access_token ||
       response.token ||
       nested?.accessToken ||
       nested?.access_token ||
       nested?.token;
+    // The documented auth shape serializes the token object inside data.token.
+    // Keep direct bearer shapes for compatibility, but unwrap this real shape
+    // before it reaches the Authorization header.
+    let token = rawToken;
+    if (typeof rawToken === 'string') {
+      try {
+        const parsed = JSON.parse(rawToken) as Record<string, unknown>;
+        token = parsed.access_token || parsed.accessToken || parsed.token || rawToken;
+      } catch {
+        // A normal bearer is not JSON and remains valid as-is.
+      }
+    }
     if (typeof token !== 'string') {
       // Never include response values (they could echo credentials/PII) —
       // only key names (top-level, and one level under `data` if present),
@@ -300,6 +318,10 @@ export class SigvoosApiClient {
           body: JSON.stringify(payload),
         },
       );
+      if (endpoint === SIGVOOS_OPERATIONAL_SEARCH_ENDPOINT) {
+        const applicationError = detectSigvoosApplicationError(response);
+        if (applicationError) throw new SigvoosClientError(applicationError.code, applicationError.message);
+      }
       return applyOperationalSearchCap(endpoint, payload, response);
     } catch (error) {
       if (error instanceof SigvoosClientError && error.code === 'SIGVOOS_UNAUTHORIZED') {
@@ -316,6 +338,10 @@ export class SigvoosApiClient {
             body: JSON.stringify(payload),
           },
         );
+        if (endpoint === SIGVOOS_OPERATIONAL_SEARCH_ENDPOINT) {
+          const applicationError = detectSigvoosApplicationError(response);
+          if (applicationError) throw new SigvoosClientError(applicationError.code, applicationError.message);
+        }
         return applyOperationalSearchCap(endpoint, payload, response);
       }
       throw error;
