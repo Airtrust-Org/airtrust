@@ -99,10 +99,10 @@ describe('migration governance', () => {
     const regularPrefixes = files
       .map((file) => /^([0-9]{4})_/.exec(file)?.[1] ?? null)
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
-    // Ratchet raised 2026-08-24: 0468_sigvoos_shadow_leg_crew_v1.sql extends
-    // the regular chain after 0467, while 9999 stays reserved
+    // Ratchet raised 2026-08-24: 0469_lms_completion_pendencias_snapshots.sql
+    // extends the regular chain after 0468, while 9999 stays reserved
     // as the only high sentinel.
-    const expectedLatest = 468;
+    const expectedLatest = 469;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

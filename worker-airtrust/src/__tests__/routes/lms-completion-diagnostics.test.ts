@@ -56,7 +56,7 @@ vi.mock('../../services/employee-sector-access', () => ({
 vi.mock('../../utils/db', () => ({ logAudit: vi.fn() }));
 vi.mock('../../lib/email', () => ({ sendEmail: vi.fn() }));
 
-import lmsMatriculasRoutes from '../../routes/lms-matriculas';
+import lmsCompletionDiagnosticsRoutes from '../../routes/lms-matriculas-completion-diagnostics';
 import { errorHandler } from '../../middleware/error-handler';
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ function createMockDb(opts: {
 
 function makeApp() {
   const app = new Hono<{ Bindings: Env }>();
-  app.route('/', lmsMatriculasRoutes);
+  app.route('/', lmsCompletionDiagnosticsRoutes);
   app.onError(errorHandler);
   return app;
 }
