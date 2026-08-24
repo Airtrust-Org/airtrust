@@ -153,6 +153,32 @@ describe('CAE materialization integration', () => {
     expect(executeSharedSessionCreation).toHaveBeenCalledTimes(1);
   });
 
+  it('nao retorna SNAPSHOT_SLOT_MISSING quando o snapshot ja traz o slot selecionado pelo matcher', async () => {
+    const db = createDb({ snapshot: snapshot() });
+    const result = await materializeSimulatorPlanning({
+      db,
+      empresaId: 7,
+      planningId: 44,
+      userId: 3,
+    });
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('falha fechado com SNAPSHOT_SLOT_MISSING quando cae_slots esta vazio (regressao do bug de persistencia)', async () => {
+    const db = createDb({ snapshot: snapshot({ cae_slots: [] }) });
+    const result = await materializeSimulatorPlanning({
+      db,
+      empresaId: 7,
+      planningId: 44,
+      userId: 3,
+    });
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('SNAPSHOT_SLOT_MISSING');
+    expect(executeSharedSessionCreation).not.toHaveBeenCalled();
+    expect(executeNormalSessionCreation).not.toHaveBeenCalled();
+  });
+
   it('falha fechado se o payload compartilhado estiver inconsistente', async () => {
     const db = createDb({
       snapshot: snapshot({
