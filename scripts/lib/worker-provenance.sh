@@ -89,7 +89,7 @@ airtrust_generate_worker_provenance() {
   # 4. Build the deterministic manifest + its SHA-256 via the shared node module.
   local fields_json manifest_sha_line
   fields_json="$(node -e 'console.log(JSON.stringify({
-      repository: "airtrustsystem-alt/airtrust",
+      repository: "Airtrust-Org/airtrust",
       environment: process.argv[1],
       appVersion: process.argv[2],
       sourceSha: process.argv[3],
