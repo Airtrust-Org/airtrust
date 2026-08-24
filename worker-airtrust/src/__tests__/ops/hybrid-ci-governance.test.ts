@@ -23,7 +23,7 @@ const RETIRED_DUPLICATE_WORKFLOWS = [
 ] as const;
 
 describe('hybrid CI governance', () => {
-  it('keeps exactly the three fast gates in GitHub Actions', () => {
+  it('keeps exactly the three canonical fast gates in GitHub Actions', () => {
     for (const gate of FAST_GATES) {
       expect(githubCi).toContain(`  ${gate}:`);
     }
@@ -33,18 +33,8 @@ describe('hybrid CI governance', () => {
     expect(githubCi).toContain('cancel-in-progress: true');
     expect(githubCi).toContain('push:\n    branches: [main]');
     expect(githubCi).toContain('pull_request:\n    branches: [main]');
-  });
-
-  it('keeps fast safety checks consolidated instead of duplicated', () => {
-    expect(githubCi).toContain('npm run lint');
-    expect(githubCi).toContain('node scripts/guard-lint-format-delta.mjs');
-    expect(githubCi).toContain('node scripts/guard-risk-test-delta.mjs');
-    expect(githubCi).toContain('npm run ops:guard');
-    expect(githubCi).toContain('./scripts/ci-internal-docs-check.sh');
-    expect(githubCi).toContain('npm run check:demo-data');
-    for (const path of RETIRED_DUPLICATE_WORKFLOWS) {
-      expect(existsSync(join(ROOT, path))).toBe(false);
-    }
+    expect(githubCi).toContain('run: npm run lint');
+    expect(githubCi).not.toContain('guard-lint-format-delta.mjs');
   });
 
   it('keeps exactly the five heavy gates in Google Cloud Build', () => {
@@ -60,5 +50,11 @@ describe('hybrid CI governance', () => {
 
   it('still covers all eight required gates with no duplication', () => {
     expect(new Set([...FAST_GATES, ...HEAVY_GATES]).size).toBe(8);
+  });
+
+  it('removes legacy workflows that duplicated the hybrid gates', () => {
+    for (const workflow of RETIRED_DUPLICATE_WORKFLOWS) {
+      expect(existsSync(join(ROOT, workflow))).toBe(false);
+    }
   });
 });
