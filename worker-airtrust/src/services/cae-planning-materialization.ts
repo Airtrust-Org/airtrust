@@ -191,6 +191,15 @@ export async function materializeSimulatorPlanning(params: {
     return { success: false, error: 'Proposta não encontrada', code: 'NOT_FOUND' };
   }
 
+  // A materialização bem-sucedida avança planejamento_status para 'AGENDADO',
+  // então o retry idempotente precisa ser checado ANTES do gate de aprovação —
+  // caso contrário toda segunda chamada (retry de rede, duplo clique) reporta
+  // falsamente NOT_APPROVED em vez de confirmar o resultado já materializado.
+  const existing = await findExistingMaterializedSession(db, empresaId, planningId);
+  if (existing) {
+    return { success: true, sessao_id: existing, reused: true };
+  }
+
   if (
     !canMaterializeSimulatorSessions({
       planning_status: row.planejamento_status as 'CONFIRMADO',
@@ -202,11 +211,6 @@ export async function materializeSimulatorPlanning(params: {
       error: 'Proposta não está confirmada/aprovada para materializar',
       code: 'NOT_APPROVED',
     };
-  }
-
-  const existing = await findExistingMaterializedSession(db, empresaId, planningId);
-  if (existing) {
-    return { success: true, sessao_id: existing, reused: true };
   }
 
   let snapshot: PlanningMaterializationSnapshot;
