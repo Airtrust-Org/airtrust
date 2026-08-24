@@ -12,9 +12,14 @@ import {
 } from '../../services/sigvoos-shadow-service';
 import { classifyShadowComparison } from '../../lib/sigvoos/sigvoos-shadow-compare';
 import type { SigvoosSyncClient } from '../../services/sigvoos-frms';
+import { SigvoosClientError } from '../../lib/sigvoos/client';
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const migration0467Sql = readFileSync(join(testDir, '../../../migrations/0467_sigvoos_shadow_parallel_v1.sql'), 'utf8');
+const migration0468Sql = readFileSync(join(testDir, '../../../migrations/0468_sigvoos_shadow_leg_crew_v1.sql'), 'utf8');
+const offlineFixtures = JSON.parse(readFileSync(join(testDir, '../fixtures/sigvoos/sigvoos-offline-contract-fixtures.v1.json'), 'utf8')) as {
+  search_success_two_crew_same_leg: { data: { main: Record<string, unknown>[] } };
+};
 const tempDirs: string[] = [];
 
 afterAll(() => {
@@ -52,6 +57,7 @@ function createSqliteD1(): D1Database {
 
   runSql(databasePath, 'PRAGMA foreign_keys = ON;');
   runSql(databasePath, migration0467Sql);
+  runSql(databasePath, migration0468Sql);
   runSql(
     databasePath,
     `
@@ -111,6 +117,10 @@ function createSqliteD1(): D1Database {
         empresa_id INTEGER NOT NULL,
         deleted_at TEXT
       );
+
+      CREATE TABLE frms_fatorizacao_jornada (id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER NOT NULL);
+      CREATE TABLE frms_acumulo_rolling (id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER NOT NULL);
+      CREATE TABLE frms_decisao_operacional (id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER NOT NULL);
 
       INSERT INTO funcionarios (id, nome, matricula, codigo_anac, funcao, cargo, empresa_id)
       VALUES (501, 'Piloto Um', 'MAT-1', 'CANAC-1', 'COMANDANTE', 'PILOTO', 10);
@@ -216,6 +226,23 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
     expect(created.results?.length).toBe(1);
   });
 
+  it('2b. preserves two crew rows for one physical leg without overwrite or duplicate on rerun', async () => {
+    const db = createSqliteD1();
+    await db.prepare("INSERT INTO funcionarios (id, nome, matricula, codigo_anac, funcao, cargo, empresa_id) VALUES (502, 'Tripulante Bravo', '00252', NULL, 'COPILOTO', 'PILOTO', 10)").run();
+    const records = offlineFixtures.search_success_two_crew_same_leg.data.main;
+    const deps: SigvoosShadowDeps = { createClient: () => makeClient([records]) };
+    const first = await runSigvoosShadowIngestion(db, 10, { from: '2026-08-22', to: '2026-08-22' }, {}, deps);
+    const second = await runSigvoosShadowIngestion(db, 10, { from: '2026-08-22', to: '2026-08-22' }, {}, { createClient: () => makeClient([records]) });
+    expect(first.status).toBe('COMPLETE');
+    expect(second.status).toBe('COMPLETE');
+    const legs = await db.prepare('SELECT id FROM sigvoos_shadow_legs WHERE empresa_id = 10').all<{ id: string }>();
+    const crews = await db.prepare('SELECT staff_id_sigvoos FROM sigvoos_shadow_leg_crews WHERE empresa_id = 10 AND active = 1 ORDER BY staff_id_sigvoos').all<{ staff_id_sigvoos: string }>();
+    const comparisons = await db.prepare('SELECT funcionario_id, competencia_data FROM sigvoos_shadow_comparisons WHERE empresa_id = 10 AND run_id = ?').bind(first.runId).all<{ funcionario_id: string; competencia_data: string }>();
+    expect(legs.results).toHaveLength(1);
+    expect(crews.results?.map((crew) => crew.staff_id_sigvoos)).toEqual(['73', '91']);
+    expect(comparisons.results).toHaveLength(2);
+  });
+
   it('3. missing flightReportId classifies UNSTABLE_IDENTITY and is not the STABLE identity path', async () => {
     const db = createSqliteD1();
     const deps: SigvoosShadowDeps = {
@@ -313,12 +340,12 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
     const flakyDeps: SigvoosShadowDeps = {
       createClient: () => ({
         authenticate: async () => 'TOKEN',
-        postSearch: async (_endpoint: string, payload: Record<string, unknown>) => {
-          if (firstCall && Number(payload.page) === 1) {
+        postSearch: async () => {
+          if (firstCall) {
             firstCall = false;
             throw new Error('TRANSIENT_NETWORK_ERROR');
           }
-          return Number(payload.page) === 1 ? { data: [rawLeg()] } : { data: [] };
+          return { data: [rawLeg()] };
         },
       }),
     };
@@ -347,6 +374,19 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
     const comparisonCount = (await db.prepare('SELECT COUNT(*) as c FROM sigvoos_shadow_comparisons WHERE empresa_id = 10').first<{ c: number }>())!.c;
     expect(legCount).toBe(1);
     expect(comparisonCount).toBe(1);
+  });
+
+  it('10b. application/upstream failures leave the run FAILED with no checkpoint', async () => {
+    const db = createSqliteD1();
+    for (const code of ['SIGVOOS_APPLICATION_ERROR', 'SIGVOOS_PERMISSION_DENIED', 'SIGVOOS_UPSTREAM_UNAVAILABLE']) {
+      const summary = await runSigvoosShadowIngestion(
+        db, 10, { from: '2026-08-01', to: '2026-08-01' }, {},
+        { createClient: () => ({ authenticate: async () => 'TOKEN', postSearch: async () => { throw new SigvoosClientError(code, code); } }) },
+      );
+      expect(summary.status).toBe('FAILED');
+      const run = await db.prepare('SELECT cursor_json FROM sigvoos_shadow_runs WHERE id = ?').bind(summary.runId).first<{ cursor_json: string | null }>();
+      expect(run?.cursor_json).toBeNull();
+    }
   });
 
   it('11. a partial run (one leg fails to persist) is never marked COMPLETE', async () => {
@@ -425,8 +465,14 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
 
     const jornadas = await db.prepare('SELECT COUNT(*) as c FROM frms_jornada').first<{ c: number }>();
     const alertas = await db.prepare('SELECT COUNT(*) as c FROM frms_alerta').first<{ c: number }>();
+    const fatorizacoes = await db.prepare('SELECT COUNT(*) as c FROM frms_fatorizacao_jornada').first<{ c: number }>();
+    const rolling = await db.prepare('SELECT COUNT(*) as c FROM frms_acumulo_rolling').first<{ c: number }>();
+    const decisoes = await db.prepare('SELECT COUNT(*) as c FROM frms_decisao_operacional').first<{ c: number }>();
     expect(jornadas!.c).toBe(0);
     expect(alertas!.c).toBe(0);
+    expect(fatorizacoes!.c).toBe(0);
+    expect(rolling!.c).toBe(0);
+    expect(decisoes!.c).toBe(0);
   });
 
   it('15. comparator classifies MATCH and each relevant divergence class deterministically', () => {
@@ -468,6 +514,13 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
         shadow: { ...base, dayLandings: 2 },
       }).classification,
     ).toBe('DIFF_CRITICAL');
+
+    expect(
+      classifyShadowComparison({
+        identityQuality: 'STABLE', timezoneStatus: 'RESOLVED', crewResolutionMethod: 'CANAC', sourceChanged: false, manualConflict: false,
+        direct: base, shadow: { ...base, matriculaAeronave: 'PT-OTHER' },
+      }).classification,
+    ).toBe('DIFF_NONCRITICAL');
 
     expect(
       classifyShadowComparison({
@@ -516,6 +569,10 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
         shadow: base,
       }).classification,
     ).toBe('UNMAPPED_CREW');
+
+    expect(classifyShadowComparison({ identityQuality: 'STABLE', timezoneStatus: 'TIMEZONE_UNRESOLVED', crewResolutionMethod: 'CANAC', sourceChanged: false, manualConflict: false, direct: base, shadow: base }).classification).toBe('TIMEZONE_UNRESOLVED');
+    expect(classifyShadowComparison({ identityQuality: 'STABLE', timezoneStatus: 'RESOLVED', crewResolutionMethod: 'CANAC', sourceChanged: true, manualConflict: false, direct: base, shadow: base }).classification).toBe('SOURCE_CHANGED');
+    expect(classifyShadowComparison({ identityQuality: 'STABLE', timezoneStatus: 'RESOLVED', crewResolutionMethod: 'CANAC', sourceChanged: false, manualConflict: true, direct: base, shadow: base }).classification).toBe('MANUAL_CONFLICT');
   });
 
   it('16. zero real HTTP contact to SIGVOOS anywhere — the real client/fetch is never invoked', async () => {

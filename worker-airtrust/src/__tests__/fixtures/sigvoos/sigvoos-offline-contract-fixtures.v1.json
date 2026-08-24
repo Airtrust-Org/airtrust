@@ -1,0 +1,16 @@
+{
+  "auth_success_nested": { "data": { "token": "{\"token_type\":\"Bearer\",\"access_token\":\"fixture-access-token\"}" }, "status": "success" },
+  "search_success_two_crew_same_leg": {
+    "data": { "main": [
+      { "staff": { "id": 73, "name": "TRIPULANTE ALFA", "inscription": "12345" }, "date": "2026-08-22", "flight_report": { "id": 12043, "aircraft": { "registration": "PR-ZZZ" } }, "flight_report_leg": { "number": 1, "departure_location": { "icao_code": "SBJR" }, "arrival_location": { "icao_code": "PMXL" }, "engine_start_time_str": "08:34", "takeoff_time_str": "08:41", "landing_time_str": "09:30", "engine_shutoff_time_str": "09:37", "day_landings": 1, "night_landings": 0, "starts": 1 } },
+      { "staff": { "id": 91, "name": "TRIPULANTE BRAVO", "inscription": 252 }, "date": "2026-08-22", "flight_report": { "id": 12043, "aircraft": { "registration": "PR-ZZZ" } }, "flight_report_leg": { "number": 1, "departure_location": { "icao_code": "SBJR" }, "arrival_location": { "icao_code": "PMXL" }, "engine_start_time_str": "08:34", "takeoff_time_str": "08:41", "landing_time_str": "09:30", "engine_shutoff_time_str": "09:37", "day_landings": 1, "night_landings": 0, "starts": 1 } }
+    ] }, "status": "success" },
+  "search_source_changed": { "data": { "main": [
+    { "staff": { "id": 73, "name": "TRIPULANTE ALFA", "inscription": "12345" }, "date": "2026-08-22", "flight_report": { "id": 12043 }, "flight_report_leg": { "number": 1, "departure_location": { "icao_code": "SBJR" }, "arrival_location": { "icao_code": "PMXL" }, "engine_start_time_str": "08:34", "landing_time_str": "09:32", "engine_shutoff_time_str": "09:39", "day_landings": 1, "night_landings": 0, "starts": 1 } }
+  ] }, "status": "success" },
+  "search_unstable_identity": { "data": { "main": [
+    { "staff": { "id": 73, "name": "TRIPULANTE ALFA", "inscription": "12345" }, "date": "2026-08-22", "flight_report_leg": { "departure_location": { "icao_code": "SBJR" }, "arrival_location": { "icao_code": "PMXL" }, "engine_start_time_str": "08:34", "landing_time_str": "09:30", "engine_shutoff_time_str": null } }
+  ] }, "status": "success" },
+  "search_application_error": { "data": "", "status": "error", "message": "O período informado não pode ser maior que 90 dias." },
+  "search_permission_denied": { "permission_denied": 1 }
+}
