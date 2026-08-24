@@ -144,6 +144,70 @@ export interface CvRdvFilaItem {
   data_programacao: string;
 }
 
+// ---- Controle Operacional FRMS / Gate de Despacho ----
+
+export type FrmsDispatchReadinessStatus = 'LIBERAVEL' | 'ATENCAO_COORDENACAO' | 'NAO_LIBERADO';
+
+export type FrmsDispatchFadigaNivel = 'NORMAL' | 'ATENCAO' | 'CRITICO' | 'INDISPONIVEL';
+
+export type FrmsDispatchCheckinStatus =
+  | 'RECEBIDO'
+  | 'PENDENTE'
+  | 'AUSENTE'
+  | 'NAO_APLICAVEL'
+  | 'INDISPONIVEL';
+
+export type FrmsDispatchGateReasonCode =
+  | 'CHECKIN_DIARIO_PENDENTE'
+  | 'CHECKIN_INCONSISTENTE'
+  | 'DECISAO_FRMS_CRITICA'
+  | 'DECISAO_FRMS_MITIGACAO_NECESSARIA'
+  | 'DECISAO_FRMS_NAO_AVALIADO'
+  | 'FADIGA_ACUMULADA_CRITICA'
+  | 'SNAPSHOT_FRMS_AUSENTE'
+  | 'SNAPSHOT_FRMS_INCONSISTENTE'
+  | 'DECISAO_FRMS_ATENCAO'
+  | 'FADIGA_ACUMULADA_ATENCAO'
+  | 'DADO_ESTIMADO';
+
+export interface CvFrmsCrewDispatchAssessment {
+  funcionario_id: number;
+  nome: string | null;
+  funcao: string | null;
+  frms_status: FrmsDispatchReadinessStatus;
+  checkin_status: FrmsDispatchCheckinStatus;
+  fadiga_diaria: FrmsDispatchFadigaNivel;
+  fadiga_acumulada: FrmsDispatchFadigaNivel;
+  reasons: FrmsDispatchGateReasonCode[];
+  primary_reason: FrmsDispatchGateReasonCode | null;
+  natureza_dado: string | null;
+}
+
+export interface CvFrmsFlightDispatchItem {
+  voo_id: number;
+  prefixo: string;
+  status: CvFlightStatus;
+  horario_previsto_partida: string;
+  aeronave_id: number | null;
+  frms_status: FrmsDispatchReadinessStatus;
+  frms_primary_reason: FrmsDispatchGateReasonCode | null;
+  last_evaluated_at: string;
+  tripulacao: CvFrmsCrewDispatchAssessment[];
+}
+
+export interface CvFrmsOperacionalResumo {
+  voos_nao_liberados: number;
+  tripulantes_checkin_pendente: number;
+  voos_requerem_revisao: number;
+  voos_liberaveis: number;
+}
+
+export interface CvFrmsOperacionalPainel {
+  data: string;
+  resumo: CvFrmsOperacionalResumo;
+  voos: CvFrmsFlightDispatchItem[];
+}
+
 export interface CvTripulante {
   id: number;
   voo_id: number;
@@ -582,6 +646,39 @@ export function useRdvFila(filtros?: {
       const response = await apiClient.get<unknown>(`${API}/rdv/fila${qs ? `?${qs}` : ''}`);
       return extractPayload<CvRdvFilaItem[]>(response, []);
     },
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+const EMPTY_FRMS_OPERACIONAL_PAINEL: CvFrmsOperacionalPainel = {
+  data: '',
+  resumo: {
+    voos_nao_liberados: 0,
+    tripulantes_checkin_pendente: 0,
+    voos_requerem_revisao: 0,
+    voos_liberaveis: 0,
+  },
+  voos: [],
+};
+
+/**
+ * Painel operacional compacto (Controle Operacional FRMS / Gate de
+ * Despacho V1): traduz o snapshot FRMS em LIBERAVEL/ATENCAO_COORDENACAO/
+ * NAO_LIBERADO por voo/tripulante para a data informada. Mesma capability
+ * canonica de Coordenacao do restante do RDV (backend valida; aqui so
+ * refletimos 403 como erro de query).
+ */
+export function useFrmsOperacionalPainel(data: string) {
+  return useQuery({
+    queryKey: ['cv-frms-operacional-painel', data],
+    queryFn: async () => {
+      const response = await apiClient.get<unknown>(
+        `${API}/operacional?data=${encodeURIComponent(data)}`,
+      );
+      return extractPayload<CvFrmsOperacionalPainel>(response, EMPTY_FRMS_OPERACIONAL_PAINEL);
+    },
+    enabled: Boolean(data),
     staleTime: 15_000,
     retry: 1,
   });
