@@ -1,0 +1,8 @@
+{
+  "changeId": "sigvoos-shadow-parallel-0467",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0467_sigvoos_shadow_parallel_v1.sql",
+  "fileHash": "3fa117707d1d868df160682d07ab055af3906d84c6c85c9587639f688a640602",
+  "planPath": "worker-airtrust/schema-v2/plans/production-sigvoos-shadow-0467.md",
+  "planHash": "eb736d03f152bf5a56c95450c1283164b5b4a722be823222223a4284f29ea36e"
+}

@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-completion-diagnostics-0469",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0469_lms_completion_pendencias_snapshots.sql",
+  "fileHash": "37e9bdd45048ca5e84f3e955324996d8e49a81a7a0893d10e05f8be792a35ebf",
+  "planPath": "worker-airtrust/schema-v2/plans/production-lms-completion-diagnostics-0469.md",
+  "planHash": "f74cb49f1136a31d786c0a5dfea487b61bb45f951a6ebbf0177226d09b27c8e8"
+}
