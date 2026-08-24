@@ -195,6 +195,41 @@ describe('CAE approval live revalidation', () => {
     expect(result.blockers).toEqual(expect.arrayContaining(['QUALIFICATION_STATE_CHANGED']));
   });
 
+  it('NÃO bloqueia por currículo quando a qualificação simplesmente tem vários modelos e o snapshot já traz o modelo individual resolvido (regressão do bug surfacido pela Fase F)', async () => {
+    // Antes da Fase F, resolveSimulatorPlanningLiveState comparava o
+    // session_model_ids do snapshot (agora corretamente estreitado a UM
+    // modelo por /recalcular) contra a lista CRUA e completa de modelos da
+    // qualificação (aqui [1,2,3] via liveSessionModelIds default) — gerando
+    // um falso PARTICIPANT_CURRICULUM_CHANGED sempre que havia mais de um
+    // modelo na qualificação. Com o fix, a revalidação também usa
+    // resolveIndividualNextModel, então sem histórico ambos resolvem para o
+    // primeiro modelo da sequência (ordem_no_treinamento mínimo) e batem.
+    const snapshot = baseSnapshot({
+      participants: [
+        {
+          employee_id: 10,
+          employee_active: true,
+          equipment: 'AW139',
+          qualification_history_id: 100,
+          qualification_expiry_date: '2026-11-30',
+          training_id: 200,
+          session_model_ids: [1],
+          roster_by_date: { '2026-11-20': 'FOLGA' },
+        },
+      ],
+    });
+    const db = createDb({ snapshot, liveSessionModelIds: [1, 2, 3] });
+    const result = await executeSimulatorPlanningApproval({
+      db,
+      empresaId: 1,
+      planningId: 44,
+      action: 'APPROVE',
+      userId: 8,
+      userName: 'manager',
+    });
+    expect(result.blockers || []).not.toContain('PARTICIPANT_CURRICULUM_CHANGED');
+  });
+
   it('bloqueia currículo alterado', async () => {
     const db = createDb({ snapshot: baseSnapshot(), liveSessionModelIds: [9001] });
     const result = await executeSimulatorPlanningApproval({
