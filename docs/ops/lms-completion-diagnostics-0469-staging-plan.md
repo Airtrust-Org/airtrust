@@ -1,14 +1,36 @@
-# Staging plan — 0469 LMS Completion Diagnostics snapshots
+# Staging plan — pending migrations 0467-0469 (SIGVOOS shadow + LMS Completion Diagnostics)
 
 ## Scope
 
-Apply `worker-airtrust/migrations/0469_lms_completion_pendencias_snapshots.sql` only to the official staging D1 through `.github/workflows/deploy-staging.yml` and `scripts/staging/apply-approved-migrations.sh`.
+Apply only the still-unapplied migrations among:
+
+- `0467_sigvoos_shadow_parallel_v1.sql`;
+- `0468_sigvoos_shadow_leg_crew_v1.sql`;
+- `0469_lms_completion_pendencias_snapshots.sql`.
+
+Use the official staging D1 through `.github/workflows/deploy-staging.yml`. The remote `d1_migrations` ledger decides idempotently which entries are already present; do not assume historical application state and do not replay the generic migration chain.
 
 This plan does not authorize production.
 
-## Change
+## Changes
 
-The migration is additive DDL only. It creates:
+All three migrations are additive DDL only.
+
+### 0467 — SIGVOOS shadow/parallel V1
+Creates the non-operational shadow tables used for read-only comparison with SIGVOOS:
+
+- `sigvoos_shadow_runs`;
+- `sigvoos_shadow_legs`;
+- `sigvoos_shadow_leg_history`;
+- `sigvoos_shadow_comparisons`.
+
+These tables do not become FRMS operational authority.
+
+### 0468 — SIGVOOS shadow leg crew V1
+Creates `sigvoos_shadow_leg_crews` and tenant-scoped indexes to associate crew members with physical shadow legs. It does not read or write FRMS operational tables.
+
+### 0469 — LMS Completion Diagnostics snapshots
+Creates:
 
 - `lms_completion_diagnostics_snapshots`;
 - unique index `idx_lms_completion_diag_unique` on `(empresa_id, matricula_id, curso_id, tentativa)`;
@@ -22,46 +44,47 @@ The stored JSON is informational and does not become an authority for SCORM comp
 2. GCB canonical gates are green for that exact SHA.
 3. Target is exactly `airtrust-db-staging-baseline-20260701` / `bf9963f4-eb12-439b-a830-20bbf577ac22`.
 4. Production DB ID `7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae` remains blocked.
-5. Ledger preflight includes `0469` and reports no ambiguous or registered-but-missing state.
-6. A fresh verified staging D1 backup/recovery point is created by the governed workflow before the write.
-7. The exact migration filename is explicitly passed in `approved_migrations`.
+5. Ledger preflight includes `0467,0468,0469` and reports no ambiguous or registered-but-missing state.
+6. A fresh verified staging D1 backup is created by the governed workflow before writes.
+7. Each migration is executed one at a time through `apply-approved-migration-with-recovery-point.sh`, which captures a D1 Time Travel recovery point and atomically records the `d1_migrations` ledger entry.
+8. Exact migration filenames are explicitly passed in `approved_migrations` in chain order (`0467` before `0468`; `0469` is independent).
 
 ## Apply
 
-Apply exactly one migration:
+First query the remote ledger. For each of `0467`, `0468`, `0469`:
 
-`0469_lms_completion_pendencias_snapshots.sql`
+- ledger count `1`: validate postconditions and do not rewrite;
+- ledger count `0`: apply exactly that migration once;
+- any other/ambiguous state: stop fail-closed.
+
+If both `0467` and `0468` are missing, apply `0467` before `0468`.
 
 No generic migration-chain replay is allowed.
 
 ## Postconditions
 
-Run `scripts/staging/validate-0469-postconditions.sh` read-only and require `POSTCONDITIONS_OK`.
+Require the specialized read-only validators to return `POSTCONDITIONS_OK`:
 
-It proves:
+- `scripts/staging/validate-0467-postconditions.sh`;
+- `scripts/staging/validate-0468-postconditions.sh`;
+- `scripts/staging/validate-0469-postconditions.sh`.
 
-- the table exists;
-- required tenant-scoped columns exist with expected types and `NOT NULL` constraints;
-- the unique index exists and is actually unique;
-- the unique index covers `empresa_id,matricula_id,curso_id,tentativa` in order;
-- the tenant/matricula lookup index exists.
-
-After schema validation, deploy the Worker and frontend from the same release SHA and run staging smoke.
+After schema validation, deploy Worker and frontend from the same release SHA and run staging smoke plus focused SIGVOOS shadow/FRMS gate and LMS Diagnostics V1 validation.
 
 ## Compensation / rollback
 
-The preferred application rollback is **not** an ad-hoc `DROP TABLE`.
+The preferred application rollback is **not** ad-hoc destructive DDL.
 
-Because the change is additive and older application code does not depend on the table, the safe first response to an application regression is:
+Because the changes are additive, the safe first response to an application regression is:
 
 1. roll Worker/frontend back to the previous coherent staging release;
-2. leave the additive table inert;
-3. confirm the previous release health.
+2. leave additive tables inert;
+3. confirm previous release health.
 
-If the schema application itself is partial or corrupted, use the verified staging backup / D1 recovery mechanism produced by the governed workflow to restore the database to the pre-0469 point. Do not improvise manual DDL on the remote database.
+If schema application itself is partial/corrupted, use the verified staging backup / D1 Time Travel recovery point produced by the governed workflow. Do not improvise manual remote DDL.
 
-Any destructive cleanup of stored diagnostic snapshots is a separate governed database action.
+Any destructive cleanup of shadow/diagnostic data is a separate governed database action.
 
 ## Production
 
-Production requires a separate Schema V2 bundle, exact production release SHA, fresh backup and explicit production authorization. Successful staging application does not authorize production.
+Production requires reviewed Schema V2 bundles, the exact final production SHA, a fresh production backup, individual application/postconditions and explicit authorization for that exact SHA. Successful staging application does not itself authorize production.
