@@ -186,5 +186,7 @@ describe('frontend typecheck ratchet', () => {
       .filter(([file, count]) => count > BASELINE_ERROR_COUNTS[file])
       .sort(([a], [b]) => a.localeCompare(b));
     expect(regressions, 'files whose error count grew past the baseline').toEqual([]);
-  }, 120_000);
+  // The ratchet invokes the full compiler.  The shared GCB worker can take
+  // longer than two minutes while the other official gates run in parallel.
+  }, 300_000);
 });
