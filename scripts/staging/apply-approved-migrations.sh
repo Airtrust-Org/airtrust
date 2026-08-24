@@ -25,10 +25,10 @@ trap 'rm -f "$PREFLIGHT_OUTPUT"' EXIT
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_MIGRATION_APPLY"
-APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql" "0453_ead_category_reconciliation_executor.sql" "0454_qualificacoes_tipos_dominio_override.sql" "0457_qualification_category_lms_contract.sql" "0459_sk76_periodic_code_denominator.sql")
+APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql" "0453_ead_category_reconciliation_executor.sql" "0454_qualificacoes_tipos_dominio_override.sql" "0457_qualification_category_lms_contract.sql" "0459_sk76_periodic_code_denominator.sql" "0469_lms_completion_pendencias_snapshots.sql")
 # Compatibility marker for the previously validated release scope:
 # RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454"
-RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459"
+RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459,0469"
 
 apply=false
 backup_file=""
@@ -98,6 +98,15 @@ if [[ -z "$backup_file" || ! -s "$backup_file" ]]; then
   exit 1
 fi
 echo "BACKUP_VERIFIED=$backup_file"
+
+# 0469 uses the newer schema-change runner so the DDL and d1_migrations ledger
+# entry are applied atomically and a D1 Time Travel recovery point is captured.
+# The official workflow still creates/verifies the full staging backup above.
+if [[ "$migration_basename" == "0469_lms_completion_pendencias_snapshots.sql" ]]; then
+  args=(--migration="$migration_path")
+  $apply && args+=(--apply)
+  exec bash "$ROOT/scripts/staging/apply-approved-migration-with-recovery-point.sh" "${args[@]}"
+fi
 
 echo "Rodando preflight de ledger (read-only)..."
 if ! node scripts/staging/migration-ledger-preflight.mjs --scope="$RELEASE_PREFLIGHT_SCOPE" > "$PREFLIGHT_OUTPUT"; then
