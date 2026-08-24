@@ -51,7 +51,10 @@ steps:
 
   - name: node:24
     id: worker-tests-1
-    waitFor: ["bootstrap"]
+    # Frontend coverage and the worker shard are both memory-heavy. Run the
+    # worker shard after coverage so E2_HIGHCPU_8 does not contend/OOM while
+    # preserving all five required heavy gates.
+    waitFor: ["frontend-coverage"]
     entrypoint: bash
     args:
       - -ceu
