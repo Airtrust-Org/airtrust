@@ -1,3 +1,7 @@
+# LEGACY / RETIRED — NOT CURRENT CI
+# This historical CircleCI configuration is retained as migration evidence.
+# AirTrust current CI is Google Cloud Build (`cloudbuild.ci.yaml`); do not use
+# this file for merge, release, or deployment gates.
 version: 2.1
 
 executors:

@@ -9,7 +9,11 @@ executable steps until operational completion. Intermediate checkpoints are
 not stopping points. Resolve recoverable browser, staging QA, CLI and tool
 issues using sanctioned mechanisms. If one independent front is blocked,
 continue the others. Return early only for a genuine safety, authorization,
-data, tenant, branch-protection, migration, or technical blocker.
+data, tenant, branch-protection, migration, or technical blocker. Google
+Cloud Build is the official AirTrust CI. CircleCI is retired/legacy. Never use
+CircleCI as a fallback for current gates or releases. For CI-dependent work,
+resolve the current GCB project and configuration from origin/main before
+execution.
 """
 
 [sandbox_workspace_write]

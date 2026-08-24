@@ -1,11 +1,18 @@
 # Governed staging release
 
-This is the governed staging release path. It executes via official CircleCI (`.circleci/config.yml`) calling `scripts/staging/deploy-governed-staging.sh`.
+This is the governed staging release path. Google Cloud Build is the official
+CI; its current validation entrypoint is `cloudbuild.ci.yaml`. Cloudflare is
+the staging/production platform. The legacy CircleCI configuration is not a
+release gate.
 
 ## Preconditions
 
-- GitLab is the source of truth and the release is the exact `CI_COMMIT_SHA` / `CIRCLE_SHA1` on `main`.
-- All 8 official validation gates (`lint`, `build-content-gates`, `frontend-coverage`, `frontend-typecheck`, `worker-typecheck`, `worker-tests-1`, `worker-tests-2`, `lms-smoke`, `public-e2e`) must pass prior to release execution.
+- GitLab `origin/main` is the source of truth and the release uses its exact
+  commit SHA.
+- All 8 official GCB validation gates (`lint`, `build-content-gates`,
+  `frontend-coverage`, `worker-typecheck`, `worker-tests-1`, `worker-tests-2`, `lms-smoke`, `public-e2e`) must pass prior to release execution.
+- `frontend-typecheck` is not a standalone official gate unless it is added
+  to the current `cloudbuild.ci.yaml`.
 - Required Cloudflare values are protected, masked, environment-scoped variables. They are never placed in artifacts.
 
 ## Sequence

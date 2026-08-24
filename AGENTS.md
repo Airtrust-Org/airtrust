@@ -11,8 +11,13 @@ unrelated worktree changes intact; never reset, clean, stash or `git add .`.
 
 - GitLab `origin/main` is the code authority; this repository is the Git
   authority, not Google Drive caches.
-- Determine the current official CI/deploy path from repository runbooks. Do
-  not bypass branch protection, required gates, tenant isolation, RBAC,
+- Google Cloud Build (GCB) is the official CI. CircleCI is retired/legacy and
+  must not be used for current merge, release or deployment gates.
+- Cloudflare is the staging and production platform.
+- Before CI-dependent work, inspect the current GCB configuration in
+  `origin/main` and use its current official Cloud Build entrypoint. Do not
+  fall back to CircleCI when GCB fails; diagnose the GCB configuration.
+- Do not bypass branch protection, required gates, tenant isolation, RBAC,
   migration governance or production authorization.
 
 ### Default autonomy
