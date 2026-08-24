@@ -8,11 +8,18 @@ AirTrust is a multi-tenant SaaS platform for aviation crew management (qualifica
 
 ## Delivery Authority
 
-- GitLab `origin/main` is the code authority.
+- GitHub `Airtrust-Org/airtrust` is the code authority for source, branches,
+  pull requests, and merges. Its `main` branch is the canonical integration
+  branch.
 - Google Cloud Build is the official CI and runs the eight required gates:
   `lint`, `build-content-gates`, `frontend-coverage`, `worker-typecheck`,
   `worker-tests-1`, `worker-tests-2`, `lms-smoke`, and `public-e2e`.
+- GitHub Actions is optional parity/check automation only. It is not the
+  canonical release gate while GCB remains authoritative.
 - Cloudflare hosts staging and production.
+- GitLab is historical/legacy only after the 2026-08-24 repository cutover;
+  do not open new development branches, merge requests, or release gates
+  there. Do not use it as a fallback when GitHub or GCB has a problem.
 - CircleCI is retired/legacy. Do not use it as a current merge, release, or
   deployment gate, and do not fall back to it if GCB fails. Inspect
   `origin/main:cloudbuild.ci.yaml` before CI-dependent work.

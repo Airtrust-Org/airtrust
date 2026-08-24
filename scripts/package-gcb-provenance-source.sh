@@ -24,8 +24,8 @@ trap cleanup EXIT
 git clone --quiet --no-local --no-checkout "$repo_root" "$stage_dir"
 git -C "$stage_dir" checkout --quiet --detach "$head_sha"
 # The local clone's default fetch can omit an origin/main commit that advanced
-# independently of the MR branch. Copy that already-verified local object into
-# the staged graph; this never contacts GitLab.
+# independently of the PR branch. Copy that already-verified local object into
+# the staged graph; this never contacts GitHub.
 git -C "$stage_dir" fetch --quiet "$repo_root" "$origin_main"
 git -C "$stage_dir" update-ref refs/remotes/origin/main "$origin_main"
 git -C "$stage_dir" config --remove-section remote.origin || true

@@ -1,4 +1,6 @@
-name: CI
+# Optional GitHub Actions parity checks. Google Cloud Build remains the
+# authoritative AirTrust CI and release gate; see cloudbuild.ci.yaml.
+name: CI (parity)
 
 on:
   push:
