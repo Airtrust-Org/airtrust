@@ -54,6 +54,54 @@ describe('CAE approval gate', () => {
     expect(result.error).toBe('INVALID_APPROVAL_SUBMISSION_STATE:AGUARDANDO_DISPONIBILIDADE');
   });
 
+  it('bloqueia APROVAR quando simulator_id/instructor_id ainda não foram atribuídos', async () => {
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind() {
+            return {
+              async first() {
+                if (sql.includes('FROM treinamentos_planejados')) {
+                  return {
+                    planejamento_status: 'PROPOSTO',
+                    planejamento_aprovacao_status: 'PENDENTE',
+                    planejamento_snapshot_json: JSON.stringify({
+                      participants: [],
+                      cae_slots: [],
+                      // simulator_id/instructor_id ausentes de propósito
+                    }),
+                  };
+                }
+                return null;
+              },
+              async run() {
+                return { success: true };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const result = await executeSimulatorPlanningApproval({
+      db,
+      empresaId: 999050,
+      planningId: 5,
+      action: 'APPROVE',
+      userId: 8,
+      userName: 'manager',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('RESOURCE_ASSIGNMENT_INCOMPLETE');
+    expect(result.blockers).toEqual(
+      expect.arrayContaining([
+        'RESOURCE_ASSIGNMENT_INCOMPLETE:simulator_id',
+        'RESOURCE_ASSIGNMENT_INCOMPLETE:instructor_id',
+      ]),
+    );
+  });
+
   it('aprova somente quando revalidação live está verde', () => {
     const result = decideSimulatorProposal({
       proposal_id: 1,

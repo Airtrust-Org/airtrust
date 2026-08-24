@@ -20,6 +20,10 @@ import { validateAndNormalizeCaeAvailability } from '../services/cae-availabilit
 import { matchCaeAvailabilityBatch, type CaeBatchPlanningNeed } from '../services/cae-planning-batch';
 import { resolvePublishedRosterDayFromD1 } from '../services/cae-planning-roster-d1';
 import {
+  resolveGlobalSimulatorForEquipment,
+  validateInstructorAssignment,
+} from '../services/cae-planning-resource-assignment';
+import {
   buildPlanningKey,
   estimateSessionCount,
   hasCompleteSimulatorSessionSchedule,
@@ -514,10 +518,33 @@ async function insertProposal(params: {
       rosterByDateByParticipant.set(candidate.funcionarioId, { [params.caeSlot.date]: resolved.state });
     }
   }
+  // simuladores é um catálogo GLOBAL (sem empresa_id, por decisão de produto
+  // já confirmada — mesma convenção documentada em GET /simuladores-equipamentos).
+  // Só resolve quando já há um slot (equipamento confirmado) e só auto-atribui
+  // quando exatamente um simulador ativo compatível existe; nunca escolhe
+  // arbitrariamente entre vários, nunca inventa quando não há nenhum.
+  let simulatorId: number | null = null;
+  const pendingResources: string[] = ['instructor_id'];
+  if (params.caeSlot) {
+    const resolution = await resolveGlobalSimulatorForEquipment(params.db, first.modeloAeronave);
+    if (resolution.status === 'RESOLVED') {
+      simulatorId = resolution.simulator_id;
+    } else {
+      pendingResources.unshift('simulator_id');
+    }
+  } else {
+    pendingResources.unshift('simulator_id');
+  }
   const snapshot = {
     generated_at: params.runMarker,
     config: params.config,
     mode,
+    simulator_id: simulatorId,
+    instructor_id: null,
+    resource_assignment: {
+      pending: pendingResources,
+      complete: pendingResources.length === 0,
+    },
     participants: params.candidates.map((candidate) => ({
       funcionario_id: candidate.funcionarioId,
       funcionario_nome: candidate.funcionarioNome,
@@ -1687,6 +1714,104 @@ app.patch('/:id', requireRole('admin', 'manager'), async (c) => {
 });
 
 
+
+app.post('/:id/recursos', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const treinamentoId = Number(c.req.param('id'));
+  if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
+    return c.json({ success: false, error: 'ID inválido' }, 400);
+  }
+  const body = (await c.req.json().catch(() => null)) as {
+    simulator_id?: unknown;
+    instructor_id?: unknown;
+  } | null;
+  if (!body) return c.json({ success: false, error: 'Dados inválidos' }, 400);
+
+  const row = await db
+    .prepare(
+      `SELECT planejamento_snapshot_json
+         FROM treinamentos_planejados
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(treinamentoId, empresaId)
+    .first<{ planejamento_snapshot_json: string | null }>();
+  if (!row) return c.json({ success: false, error: 'Planejamento não encontrado' }, 404);
+  if (!row.planejamento_snapshot_json) {
+    return c.json({ success: false, error: 'Snapshot ausente' }, 400);
+  }
+
+  let snapshot: Record<string, unknown>;
+  try {
+    snapshot = JSON.parse(row.planejamento_snapshot_json);
+  } catch {
+    return c.json({ success: false, error: 'Snapshot inválido' }, 400);
+  }
+
+  if (body.simulator_id !== undefined) {
+    const simulatorId = Number(body.simulator_id);
+    if (!Number.isInteger(simulatorId) || simulatorId <= 0) {
+      return c.json({ success: false, error: 'simulator_id inválido' }, 400);
+    }
+    const equipment = String((snapshot.participants as Array<{ equipment?: unknown }> | undefined)?.[0]?.equipment || '');
+    const resolution = await resolveGlobalSimulatorForEquipment(db, equipment);
+    const validIds = new Set(
+      resolution.status === 'AMBIGUOUS' ? resolution.candidates.map((item) => item.id) : [],
+    );
+    if (resolution.status === 'RESOLVED' && resolution.simulator_id !== simulatorId) {
+      return c.json(
+        { success: false, error: 'simulator_id não corresponde ao catálogo compatível com este planejamento' },
+        400,
+      );
+    }
+    if (resolution.status === 'AMBIGUOUS' && !validIds.has(simulatorId)) {
+      return c.json(
+        { success: false, error: 'simulator_id não está entre os simuladores compatíveis com este planejamento' },
+        400,
+      );
+    }
+    if (resolution.status === 'NEEDS_ASSIGNMENT') {
+      return c.json(
+        { success: false, error: 'Nenhum simulador compatível encontrado no catálogo' },
+        400,
+      );
+    }
+    snapshot.simulator_id = simulatorId;
+  }
+
+  if (body.instructor_id !== undefined) {
+    const instructorId = Number(body.instructor_id);
+    const eligibility = await validateInstructorAssignment(db, empresaId, instructorId);
+    if (!eligibility.eligible) {
+      return c.json({ success: false, error: eligibility.reason, code: 'INSTRUCTOR_NOT_ELIGIBLE' }, 400);
+    }
+    snapshot.instructor_id = instructorId;
+  }
+
+  const isPositiveInt = (value: unknown): boolean => Number.isInteger(value) && Number(value) > 0;
+  const pending: string[] = [];
+  if (!isPositiveInt(snapshot.simulator_id)) pending.push('simulator_id');
+  if (!isPositiveInt(snapshot.instructor_id)) pending.push('instructor_id');
+  snapshot.resource_assignment = { pending, complete: pending.length === 0 };
+
+  await db
+    .prepare(
+      `UPDATE treinamentos_planejados
+          SET planejamento_snapshot_json = ?, updated_at = datetime('now')
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(JSON.stringify(snapshot), treinamentoId, empresaId)
+    .run();
+
+  return c.json({
+    success: true,
+    data: {
+      simulator_id: snapshot.simulator_id ?? null,
+      instructor_id: snapshot.instructor_id ?? null,
+      resource_assignment: snapshot.resource_assignment,
+    },
+  });
+});
 
 app.post('/:id/submeter', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
