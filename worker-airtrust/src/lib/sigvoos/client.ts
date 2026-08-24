@@ -250,7 +250,15 @@ export class SigvoosApiClient {
 
     const token = response.accessToken || response.access_token || response.token;
     if (typeof token !== 'string') {
-      throw new SigvoosClientError('SIGVOOS_AUTH_FAILED', 'Token não retornado ou inválido.', 401);
+      // Never include response values (they could echo credentials/PII) —
+      // only the top-level key names, so this is safely diagnosable from
+      // sanitized error_summary fields without exposing any secret content.
+      const presentKeys = response && typeof response === 'object' ? Object.keys(response) : [];
+      throw new SigvoosClientError(
+        'SIGVOOS_AUTH_FAILED',
+        `Token não retornado ou inválido. [responseKeys=${presentKeys.join(',') || 'none'}]`,
+        401,
+      );
     }
 
     this.token = token;
