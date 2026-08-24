@@ -3,9 +3,9 @@ workflow:
     # Merge-request validation is exclusively reported by the exact-SHA GCB
     # external status. Do not instantiate legacy shared-runner jobs that can
     # become a second, blocking CI authority.
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: never
-    - when: always
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+    - when: never
 
 stages:
   - validate
