@@ -1,13 +1,9 @@
-/**
- * FRMS Filter Context — estado global de filtros para o dashboard
- * Persistência via sessionStorage.
- */
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { getMonthRange, toMonthKey, getQuinzenasDoMes, getQuinzenaDateRange, type QuinzenaRange } from '../frmsUtils';
 
 export interface FrmsFiltersState {
   modoPainel: 'OPERACIONAL' | 'PLANEJADO';
-  periodo: 7 | 30 | 90 | 'month' | 'custom';
+  periodo: 7 | 30 | 60 | 90 | 180 | 365 | 'month' | 'custom';
   periodoInicio?: string;
   periodoFim?: string;
   mesReferencia: string;
