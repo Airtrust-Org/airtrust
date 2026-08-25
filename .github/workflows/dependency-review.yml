@@ -30,7 +30,7 @@ jobs:
           cache: npm
       - name: Test dependency delta guard
         run: node --test scripts/__tests__/audit-critical-delta.test.mjs
-      - name: Reject newly introduced critical vulnerabilities
+      - name: Reject newly introduced high or critical vulnerabilities
         run: node scripts/ci/audit-critical-delta.mjs "$BASE_SHA" "$HEAD_SHA"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
