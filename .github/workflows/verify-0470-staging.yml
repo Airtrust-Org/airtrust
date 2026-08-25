@@ -19,8 +19,8 @@ env:
   NODE_VERSION: '24'
 
 jobs:
-  verify:
-    name: Verify 0470 Staging (read-only)
+  staging-d1-postconditions:
+    name: Verify 0470 Staging D1 Postconditions (read-only)
     runs-on: ubuntu-latest
     environment: staging
     steps:
