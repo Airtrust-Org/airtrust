@@ -5,16 +5,20 @@ cd "$(dirname "$0")/.."
 
 # `git grep -I` already ignores binary payloads. Keep the exclusion surface
 # intentionally small so Markdown, SQL, CSV, archived docs and configuration
-# are scanned too — those are common places for credentials to leak.
+# are scanned too — those are common places for credentials to leak. The
+# disabled devcontainer tree is inert legacy scaffolding with explicit local
+# fixtures and is excluded path-specifically rather than excluding docs broadly.
 GG_EXCLUDE=(
   ":(exclude)scripts/check-tracked-secrets.sh"
   ":(exclude)package-lock.json"
   ":(exclude)worker-airtrust/package-lock.json"
+  ":(exclude).devcontainer.disabled/**"
 )
 
 DEV_ONLY_WRANGLER_DEV_BYPASS_FIXTURE='^worker-airtrust/wrangler\.dev\.toml:[0-9]+:ENABLE_DEV_AUTH_BYPASS[[:space:]]*=[[:space:]]*"true"$'
 DEV_ONLY_WRANGLER_DEV_JWT_FIXTURE='^worker-airtrust/wrangler\.dev\.toml:[0-9]+:JWT_SECRET[[:space:]]*=[[:space:]]*"airtrust-dev-secret-2025"$'
-DYNAMIC_OR_PLACEHOLDER='\$\{|=[[:space:]]*\$[A-Z_][A-Z0-9_]*$|=[[:space:]]*"?\$\(|=[[:space:]]*$|=[[:space:]]*"?(your-|example|placeholder|changeme|dummy|test-only|<)[^[:space:]]*'
+DOC_ONLY_WORKER_JWT_FIXTURE='^worker-airtrust/README\.md:[0-9]+:JWT_SECRET[[:space:]]*=[[:space:]]*"airtrust-dev-secret-2025"$'
+DYNAMIC_OR_PLACEHOLDER='\$\{|=[[:space:]]*\$[A-Z_][A-Z0-9_]*$|=[[:space:]]*"?\$\(|=[[:space:]]*npx[[:space:]]|=[[:space:]]*$|=[[:space:]]*"?(your-|example|placeholder|changeme|dummy|test-only|generate_a_strong_secret_here|<)[^[:space:]]*'
 
 check_pattern() {
   local label="$1"
@@ -41,7 +45,7 @@ failed=0
 
 check_pattern "senha default rastreada" '^(VITE_DEFAULT_LOGIN_PASSWORD|TEST_PASSWORD)=[^[:space:]]+' '=[[:space:]]*$' || failed=1
 check_pattern "bypass de auth ativo" '^[[:space:]]*ENABLE_DEV_AUTH_BYPASS[[:space:]]*=[[:space:]]*"?true"?' "$DEV_ONLY_WRANGLER_DEV_BYPASS_FIXTURE" || failed=1
-check_pattern "jwt secret rastreado" '^[[:space:]]*JWT_SECRET[[:space:]]*=' "$DEV_ONLY_WRANGLER_DEV_JWT_FIXTURE|$DYNAMIC_OR_PLACEHOLDER" || failed=1
+check_pattern "jwt secret rastreado" '^[[:space:]]*JWT_SECRET[[:space:]]*=' "$DEV_ONLY_WRANGLER_DEV_JWT_FIXTURE|$DOC_ONLY_WORKER_JWT_FIXTURE|$DYNAMIC_OR_PLACEHOLDER" || failed=1
 check_pattern "token cloudflare rastreado" '^[[:space:]]*(CLOUDFLARE_API_TOKEN|CLOUDFLARE_TOKEN)[[:space:]]*=' "$DYNAMIC_OR_PLACEHOLDER" || failed=1
 check_pattern "secret EdApp rastreado" '^[[:space:]]*(EDAPP_API_TOKEN|EDAPP_WEBHOOK_SECRET)[[:space:]]*=' "$DYNAMIC_OR_PLACEHOLDER" || failed=1
 check_pattern "account id Cloudflare rastreado" '^[[:space:]]*(CF_ACCOUNT_ID|CLOUDFLARE_ACCOUNT_ID)[[:space:]]*=' "$DYNAMIC_OR_PLACEHOLDER" || failed=1
