@@ -157,7 +157,7 @@ export function buildReleaseAttestation(fields) {
   return { attestation, attestationSha256, attestationObject: ordered };
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { writeFileSync } = await import('node:fs');
   const inputArg = process.argv[2];
   if (!inputArg) throw new Error('usage: build-release-attestation.mjs <fields-json|-> [outputPath]');
