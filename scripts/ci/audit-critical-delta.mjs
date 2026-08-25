@@ -8,17 +8,10 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+const BLOCKED_SEVERITIES = new Set(['high', 'critical']);
 const WORKSPACES = [
-  {
-    name: 'root',
-    packagePath: 'package.json',
-    lockPath: 'package-lock.json',
-  },
-  {
-    name: 'worker',
-    packagePath: 'worker-airtrust/package.json',
-    lockPath: 'worker-airtrust/package-lock.json',
-  },
+  { name: 'root', packagePath: 'package.json', lockPath: 'package-lock.json' },
+  { name: 'worker', packagePath: 'worker-airtrust/package.json', lockPath: 'worker-airtrust/package-lock.json' },
 ];
 
 function run(command, args, options = {}) {
@@ -27,7 +20,6 @@ function run(command, args, options = {}) {
     maxBuffer: 64 * 1024 * 1024,
     ...options,
   });
-
   if (result.error) throw result.error;
   return result;
 }
@@ -41,9 +33,7 @@ function assertCommitSha(value, label) {
 function readAtRef(repoRoot, ref, filePath) {
   const result = run('git', ['show', `${ref}:${filePath}`], { cwd: repoRoot });
   if (result.status !== 0) {
-    throw new Error(
-      `Unable to read ${filePath} at ${ref}: ${result.stderr.trim() || 'git show failed'}`,
-    );
+    throw new Error(`Unable to read ${filePath} at ${ref}: ${result.stderr.trim() || 'git show failed'}`);
   }
   return result.stdout;
 }
@@ -61,82 +51,73 @@ function materializeWorkspace(root, packageJson, packageLock) {
 function runNpmAudit(workspaceDir) {
   const result = run('npm', ['audit', '--json', '--package-lock-only', '--ignore-scripts'], {
     cwd: workspaceDir,
-    env: {
-      ...process.env,
-      npm_config_fund: 'false',
-      npm_config_update_notifier: 'false',
-    },
+    env: { ...process.env, npm_config_fund: 'false', npm_config_update_notifier: 'false' },
   });
 
   let report;
   try {
     report = JSON.parse(result.stdout || '{}');
   } catch (error) {
-    throw new Error(
-      `npm audit returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new Error(`npm audit returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
-
   if (report.error) {
     const summary = report.error.summary || report.error.message || JSON.stringify(report.error);
     throw new Error(`npm audit failed: ${summary}`);
   }
-
   if (report.auditReportVersion !== 2 || typeof report.vulnerabilities !== 'object') {
     throw new Error('npm audit returned an unsupported report format');
   }
-
   return report;
 }
 
-export function collectCriticalSignatures(report, workspaceName) {
+export function collectBlockedSignatures(report, workspaceName) {
   const signatures = new Set();
   const vulnerabilities = report?.vulnerabilities ?? {};
 
   for (const [packageName, vulnerability] of Object.entries(vulnerabilities)) {
-    const criticalAdvisories = Array.isArray(vulnerability?.via)
+    const blockedAdvisories = Array.isArray(vulnerability?.via)
       ? vulnerability.via.filter(
           (item) =>
             typeof item === 'object' &&
             item !== null &&
-            String(item.severity).toLowerCase() === 'critical',
+            BLOCKED_SEVERITIES.has(String(item.severity).toLowerCase()),
         )
       : [];
 
-    for (const advisory of criticalAdvisories) {
-      const advisoryIdentity =
-        advisory.source ?? advisory.url ?? advisory.title ?? advisory.name ?? 'unknown-advisory';
-      signatures.add(
-        [
-          workspaceName,
-          packageName,
-          advisoryIdentity,
-          advisory.range ?? vulnerability.range ?? 'unknown-range',
-        ].join('|'),
-      );
+    for (const advisory of blockedAdvisories) {
+      const severity = String(advisory.severity).toLowerCase();
+      const advisoryIdentity = advisory.source ?? advisory.url ?? advisory.title ?? advisory.name ?? 'unknown-advisory';
+      signatures.add([
+        workspaceName,
+        severity,
+        packageName,
+        advisoryIdentity,
+        advisory.range ?? vulnerability.range ?? 'unknown-range',
+      ].join('|'));
     }
 
-    if (
-      String(vulnerability?.severity).toLowerCase() === 'critical' &&
-      criticalAdvisories.length === 0
-    ) {
-      signatures.add(
-        [
-          workspaceName,
-          packageName,
-          'aggregate-critical',
-          vulnerability.range ?? 'unknown-range',
-        ].join('|'),
-      );
+    const aggregateSeverity = String(vulnerability?.severity).toLowerCase();
+    if (BLOCKED_SEVERITIES.has(aggregateSeverity) && blockedAdvisories.length === 0) {
+      signatures.add([
+        workspaceName,
+        aggregateSeverity,
+        packageName,
+        `aggregate-${aggregateSeverity}`,
+        vulnerability.range ?? 'unknown-range',
+      ].join('|'));
     }
   }
 
   return signatures;
 }
 
-export function findNewCriticalSignatures(baseSignatures, headSignatures) {
+export function findNewBlockedSignatures(baseSignatures, headSignatures) {
   return [...headSignatures].filter((signature) => !baseSignatures.has(signature)).sort();
 }
+
+// Backward-compatible exports for any historical local tooling importing the old names.
+export const collectCriticalSignatures = collectBlockedSignatures;
+export const findNewCriticalSignatures = findNewBlockedSignatures;
 
 function auditWorkspaceDelta({ repoRoot, baseSha, headSha, workspace }) {
   const basePackage = readAtRef(repoRoot, baseSha, workspace.packagePath);
@@ -144,14 +125,8 @@ function auditWorkspaceDelta({ repoRoot, baseSha, headSha, workspace }) {
   const headPackage = readAtRef(repoRoot, headSha, workspace.packagePath);
   const headLock = readAtRef(repoRoot, headSha, workspace.lockPath);
 
-  if (
-    dependencySnapshotHash(basePackage, baseLock) === dependencySnapshotHash(headPackage, headLock)
-  ) {
-    return {
-      workspace: workspace.name,
-      changed: false,
-      newCritical: [],
-    };
+  if (dependencySnapshotHash(basePackage, baseLock) === dependencySnapshotHash(headPackage, headLock)) {
+    return { workspace: workspace.name, changed: false, newBlocked: [] };
   }
 
   const tempRoot = mkdtempSync(path.join(tmpdir(), `airtrust-audit-${workspace.name}-`));
@@ -161,15 +136,14 @@ function auditWorkspaceDelta({ repoRoot, baseSha, headSha, workspace }) {
     materializeWorkspace(baseDir, basePackage, baseLock);
     materializeWorkspace(headDir, headPackage, headLock);
 
-    const baseSignatures = collectCriticalSignatures(runNpmAudit(baseDir), workspace.name);
-    const headSignatures = collectCriticalSignatures(runNpmAudit(headDir), workspace.name);
-
+    const baseSignatures = collectBlockedSignatures(runNpmAudit(baseDir), workspace.name);
+    const headSignatures = collectBlockedSignatures(runNpmAudit(headDir), workspace.name);
     return {
       workspace: workspace.name,
       changed: true,
-      baseCritical: baseSignatures.size,
-      headCritical: headSignatures.size,
-      newCritical: findNewCriticalSignatures(baseSignatures, headSignatures),
+      baseBlocked: baseSignatures.size,
+      headBlocked: headSignatures.size,
+      newBlocked: findNewBlockedSignatures(baseSignatures, headSignatures),
     };
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
@@ -179,10 +153,7 @@ function auditWorkspaceDelta({ repoRoot, baseSha, headSha, workspace }) {
 export function runCriticalDeltaAudit({ repoRoot, baseSha, headSha, workspaces = WORKSPACES }) {
   assertCommitSha(baseSha, 'baseSha');
   assertCommitSha(headSha, 'headSha');
-
-  return workspaces.map((workspace) =>
-    auditWorkspaceDelta({ repoRoot, baseSha, headSha, workspace }),
-  );
+  return workspaces.map((workspace) => auditWorkspaceDelta({ repoRoot, baseSha, headSha, workspace }));
 }
 
 function main() {
@@ -190,25 +161,23 @@ function main() {
   const baseSha = process.argv[2] || process.env.GITHUB_BASE_SHA;
   const headSha = process.argv[3] || process.env.GITHUB_HEAD_SHA;
   const results = runCriticalDeltaAudit({ repoRoot, baseSha, headSha });
-  const newlyIntroduced = results.flatMap((result) => result.newCritical);
+  const newlyIntroduced = results.flatMap((result) => result.newBlocked ?? []);
 
   for (const result of results) {
     if (!result.changed) {
       console.log(`${result.workspace}: dependency snapshot unchanged`);
       continue;
     }
-    console.log(
-      `${result.workspace}: critical baseline ${result.baseCritical}; head ${result.headCritical}; new ${result.newCritical.length}`,
-    );
+    console.log(`${result.workspace}: high/critical baseline ${result.baseBlocked}; head ${result.headBlocked}; new ${result.newBlocked.length}`);
   }
 
   if (newlyIntroduced.length > 0) {
-    console.error('New critical dependency vulnerabilities introduced:');
+    console.error('New high/critical dependency vulnerabilities introduced:');
     for (const signature of newlyIntroduced) console.error(`- ${signature}`);
     process.exit(1);
   }
 
-  console.log('OK: no new critical dependency vulnerabilities introduced by this delta');
+  console.log('OK: no new high/critical dependency vulnerabilities introduced by this delta');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
