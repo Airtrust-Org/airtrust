@@ -1,0 +1,73 @@
+name: Diagnose 0470 Incomplete Certificates (Read Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact current main SHA to diagnose against'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  diagnose-staging-d1:
+    name: Diagnose staging D1 0470 incomplete rows
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout trusted current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Guard exact current main SHA
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: release_sha deve ser um SHA de 40 caracteres hex." >&2
+            exit 1
+          fi
+          CURRENT_MAIN="$(git rev-parse HEAD)"
+          if [[ "$CURRENT_MAIN" != "$RELEASE_SHA" ]]; then
+            echo "ERROR: release_sha não corresponde à main atual; diagnóstico recusado." >&2
+            exit 1
+          fi
+
+      - name: Checkout exact release code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 1
+          path: release
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install exact Worker dependencies
+        run: npm --prefix release/worker-airtrust ci
+
+      - name: Run read-only staging D1 diagnosis
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+            echo "ERROR: credenciais D1 de staging indisponíveis." >&2
+            exit 1
+          fi
+          node release/worker-airtrust/scripts/diagnose-certificado-validacao-hash-incomplete-remote.mjs \
+            --release-sha="$RELEASE_SHA"
