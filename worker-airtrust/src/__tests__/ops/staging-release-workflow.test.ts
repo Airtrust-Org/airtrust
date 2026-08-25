@@ -941,15 +941,25 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
   });
 
   it('8c. full smoke reseeds only the synthetic examiner fixture from canonical credentials', () => {
+    const reseedJob = workflow.slice(
+      workflow.indexOf('\n  reseed-qa-examiner-fixture:'),
+      workflow.indexOf('\n  smoke:'),
+    );
+    expect(reseedJob).toContain('name: Reseed Synthetic QA Examiner Fixture (staging D1)');
+    expect(reseedJob).toContain('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+    expect(reseedJob).toContain('QA_EXAMINER_ADMIN_EMAIL: qa-examiner-admin@staging.airtrust.invalid');
+    expect(reseedJob).toContain('QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}');
+    expect(reseedJob).toContain('CONFIRM_STAGING_QA_SEED: AIRTRUST_STAGING_QA_SEED');
+    expect(reseedJob).toContain('node scripts/staging/seed-qa-examiner-training.mjs --apply');
+
     const smokeJob = workflow.slice(
       workflow.indexOf('\n  smoke:'),
       workflow.indexOf('\n  summary:'),
     );
     expect(smokeJob).toContain('QA_EXAMINER_ADMIN_EMAIL: qa-examiner-admin@staging.airtrust.invalid');
     expect(smokeJob).toContain('QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}');
-    expect(smokeJob).toContain('CONFIRM_STAGING_QA_SEED: AIRTRUST_STAGING_QA_SEED');
-    expect(smokeJob).toContain('node scripts/staging/seed-qa-examiner-training.mjs --apply');
     expect(smokeJob).toContain('node scripts/staging/smoke-examiner-training.mjs');
+    expect(smokeJob).toContain("needs.reseed-qa-examiner-fixture.result == 'success'");
   });
 
   it('9/10. postconditions intera sobre APPROVED_MIGRATIONS e usa script flexível', () => {
@@ -971,7 +981,7 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
       workflow.indexOf('\n  summary:'),
     );
     expect(smokeJob).toContain(
-      'needs: [guard, production-target-guard, release-write-gate, deploy-worker, deploy-frontend]',
+      'needs: [guard, production-target-guard, release-write-gate, deploy-worker, deploy-frontend, reseed-qa-examiner-fixture]',
     );
     expect(smokeJob).toContain(
       "(inputs.deploy_worker == false || needs.deploy-worker.result == 'success')",
