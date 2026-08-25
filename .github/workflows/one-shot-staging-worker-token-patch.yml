@@ -1,0 +1,80 @@
+name: One-shot staging Worker token patch
+
+on:
+  push:
+    branches:
+      - fix/staging-reuse-worker-token-20260824
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/staging-reuse-worker-token-20260824
+          fetch-depth: 0
+
+      - name: Apply exact credential-contract patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const workflowPath = '.github/workflows/deploy-staging.yml';
+          let workflow = fs.readFileSync(workflowPath, 'utf8');
+
+          const backupName = 'CLOUDFLARE_D1_BACKUP_API_TOKEN';
+          const migrationName = 'CLOUDFLARE_D1_MIGRATION_API_TOKEN';
+          const workerName = 'CLOUDFLARE_WORKER_API_TOKEN';
+
+          const backupRefs = workflow.split(backupName).length - 1;
+          const migrationRefs = workflow.split(migrationName).length - 1;
+          if (backupRefs !== 2 || migrationRefs !== 4) {
+            throw new Error(`unexpected D1 secret reference counts: backup=${backupRefs}, migration=${migrationRefs}`);
+          }
+
+          workflow = workflow.replaceAll(backupName, workerName).replaceAll(migrationName, workerName);
+          if (workflow.includes(backupName) || workflow.includes(migrationName)) {
+            throw new Error('D1-specific secret references remain after patch');
+          }
+          fs.writeFileSync(workflowPath, workflow);
+
+          const testPath = 'worker-airtrust/src/__tests__/ops/staging-worker-token-contract.test.ts';
+          fs.writeFileSync(testPath, `import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const ROOT = join(__dirname, '../../../..');
+const workflow = readFileSync(join(ROOT, '.github/workflows/deploy-staging.yml'), 'utf8');
+
+describe('staging Cloudflare credential contract', () => {
+  it('reuses the staging Worker token for backup and migration operations', () => {
+    expect(workflow).not.toContain('CLOUDFLARE_D1_BACKUP_API_TOKEN');
+    expect(workflow).not.toContain('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+
+    for (const job of ['check-d1-backup-token:', 'check-d1-migration-token:', 'backup:', 'preflight:', 'apply-migrations:', 'postconditions:']) {
+      const start = workflow.indexOf('\\n  ' + job);
+      expect(start, job + ' must exist').toBeGreaterThan(-1);
+      const next = workflow.indexOf('\\n  ', start + 4);
+      const block = workflow.slice(start, next === -1 ? workflow.length : next);
+      expect(block, job + ' must use the Worker token').toContain('CLOUDFLARE_WORKER_API_TOKEN');
+    }
+  });
+});
+`);
+          NODE
+
+      - name: Commit final delta and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'airtrust-ci'
+          git config user.email 'airtrust-ci@users.noreply.github.com'
+          git rm .github/workflows/one-shot-staging-worker-token-patch.yml
+          git add .github/workflows/deploy-staging.yml worker-airtrust/src/__tests__/ops/staging-worker-token-contract.test.ts
+          git diff --cached --check
+          git commit -m 'fix(staging): reuse Worker token for D1 release steps'
+          git push origin HEAD:fix/staging-reuse-worker-token-20260824
