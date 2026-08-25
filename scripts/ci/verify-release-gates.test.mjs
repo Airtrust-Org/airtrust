@@ -6,60 +6,68 @@ const greenChecks = [
   { name: 'lint', status: 'completed', conclusion: 'success' },
   { name: 'build-content-gates', status: 'completed', conclusion: 'success' },
   { name: 'worker-typecheck', status: 'completed', conclusion: 'success' },
+  { name: 'frontend-coverage', status: 'completed', conclusion: 'success' },
+  { name: 'worker-tests-1', status: 'completed', conclusion: 'success' },
+  { name: 'worker-tests-2', status: 'completed', conclusion: 'success' },
+  { name: 'lms-smoke', status: 'completed', conclusion: 'success' },
+  { name: 'public-e2e', status: 'completed', conclusion: 'success' },
 ];
-const greenStatuses = [{ context: 'airtrust-gcb', state: 'success' }];
 
-test('accepts the official GHA checks plus the GCB aggregate and ignores optional noise', () => {
+test('accepts the eight official GitHub Actions gates and ignores optional noise', () => {
   assert.deepEqual(
     verifyReleaseGatePayloads({
       checkRuns: [
         ...greenChecks,
+        { name: 'airtrust-gcb', status: 'completed', conclusion: 'failure' },
         { name: 'optional-experiment', status: 'completed', conclusion: 'failure' },
       ],
-      statuses: [...greenStatuses, { context: 'optional-status', state: 'failure' }],
     }),
     {
-      githubActions: ['lint', 'build-content-gates', 'worker-typecheck'],
-      googleCloudBuild: 'airtrust-gcb',
+      githubActions: [
+        'lint',
+        'build-content-gates',
+        'worker-typecheck',
+        'frontend-coverage',
+        'worker-tests-1',
+        'worker-tests-2',
+        'lms-smoke',
+        'public-e2e',
+      ],
     },
   );
 });
 
-test('fails when an official GHA gate is missing', () => {
+test('fails when any official gate is missing', () => {
   assert.throws(
     () =>
       verifyReleaseGatePayloads({
-        checkRuns: greenChecks.filter((check) => check.name !== 'worker-typecheck'),
-        statuses: greenStatuses,
+        checkRuns: greenChecks.filter((check) => check.name !== 'worker-tests-2'),
       }),
-    /worker-typecheck:missing/,
+    /worker-tests-2:missing/,
   );
 });
 
-test('fails when an official GHA gate is not green', () => {
+test('fails when an official gate is not green', () => {
   assert.throws(
     () =>
       verifyReleaseGatePayloads({
         checkRuns: greenChecks.map((check) =>
-          check.name === 'lint' ? { ...check, conclusion: 'failure' } : check,
+          check.name === 'public-e2e' ? { ...check, conclusion: 'failure' } : check,
         ),
-        statuses: greenStatuses,
       }),
-    /lint:not-success/,
+    /public-e2e:not-success/,
   );
 });
 
-test('fails when the GCB aggregate gate is missing or red', () => {
-  assert.throws(
-    () => verifyReleaseGatePayloads({ checkRuns: greenChecks, statuses: [] }),
-    /airtrust-gcb:missing/,
-  );
+test('legacy aggregate cannot substitute for a missing heavy gate', () => {
   assert.throws(
     () =>
       verifyReleaseGatePayloads({
-        checkRuns: greenChecks,
-        statuses: [{ context: 'airtrust-gcb', state: 'failure' }],
+        checkRuns: [
+          ...greenChecks.filter((check) => check.name !== 'frontend-coverage'),
+          { name: 'airtrust-gcb', status: 'completed', conclusion: 'success' },
+        ],
       }),
-    /airtrust-gcb:not-success/,
+    /frontend-coverage:missing/,
   );
 });

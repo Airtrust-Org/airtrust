@@ -1,6 +1,6 @@
-# Required fast CI gates. The AirTrust release gate is hybrid:
-# GitHub Actions owns the three fast gates below, while Google Cloud Build owns
-# the five heavy gates declared in cloudbuild.ci.yaml.
+# Required fast CI gates. The AirTrust release gate uses eight direct GitHub
+# Actions checks: the three fast gates in this workflow plus the five heavy
+# gates in heavy-ci.yml. Heavy jobs are independent so they can run in parallel.
 name: CI (fast gates)
 
 on:

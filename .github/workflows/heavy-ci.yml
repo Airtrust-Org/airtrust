@@ -1,0 +1,242 @@
+# Required heavy CI gates. Since the repository is public, the five heavy
+# gates run as independent GitHub-hosted jobs so they can execute in parallel.
+# The legacy `airtrust-gcb` aggregate check is retained temporarily only for
+# branch-protection compatibility while protection is migrated to the 8 direct
+# gate names. It does not replace any individual gate.
+name: CI (heavy gates)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: heavy-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+  VITE_API_URL: http://127.0.0.1:8787
+
+jobs:
+  frontend-coverage:
+    name: frontend-coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact source SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git fetch origin main --quiet
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: npm --prefix worker-airtrust ci
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
+      - run: npm run test:coverage
+
+  worker-tests-1:
+    name: worker-tests-1
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact source SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git fetch origin main --quiet
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: npm --prefix worker-airtrust ci
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
+      - run: cd worker-airtrust && npx vitest run --shard=1/2
+
+  worker-tests-2:
+    name: worker-tests-2
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact source SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git fetch origin main --quiet
+          git rev-parse origin/main
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: npm --prefix worker-airtrust ci
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 git
+      - run: cd worker-airtrust && npx vitest run --shard=2/2
+
+  lms-smoke:
+    name: lms-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact source SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git fetch origin main --quiet
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: npm --prefix worker-airtrust ci
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
+      - name: Run LMS smoke against isolated local D1
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNTIME_JWT_SECRET="$(openssl rand -hex 32)"
+          printf '%s=%s\n' "JWT_SECRET" "$RUNTIME_JWT_SECRET" > worker-airtrust/.dev.vars
+          cleanup() {
+            kill "${WORKER_PID:-}" 2>/dev/null || true
+            rm -f worker-airtrust/.dev.vars
+          }
+          trap cleanup EXIT
+          npm run setup:lms:local:reset
+          npm run integrity:ci
+          npm run dev:worker:local > airtrust-worker.log 2>&1 &
+          WORKER_PID=$!
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then
+              break
+            fi
+            if [[ "$i" -eq 60 ]]; then
+              cat airtrust-worker.log
+              exit 1
+            fi
+            sleep 2
+          done
+          npm run smoke:lms:local
+
+  public-e2e:
+    name: public-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact source SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git fetch origin main --quiet
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: npm --prefix worker-airtrust ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run public auth-boundary E2E with dev bypass disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNTIME_JWT_SECRET="$(openssl rand -hex 32)"
+          {
+            printf '%s=%s\n' "JWT_SECRET" "$RUNTIME_JWT_SECRET"
+            printf '%s=%s\n' "ENABLE_DEV_AUTH_BYPASS" "false"
+          } > worker-airtrust/.dev.vars
+          cleanup() {
+            kill "${WORKER_PID:-}" 2>/dev/null || true
+            rm -f worker-airtrust/.dev.vars
+          }
+          trap cleanup EXIT
+          npm run dev:worker:local > /tmp/worker.log 2>&1 &
+          WORKER_PID=$!
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then
+              break
+            fi
+            if [[ "$i" -eq 60 ]]; then
+              cat /tmp/worker.log
+              exit 1
+            fi
+            sleep 1
+          done
+          CI=true VITE_API_URL=http://127.0.0.1:8787 \
+            npx playwright test \
+              --config=playwright.ci.config.ts \
+              e2e/ci/login-public-smoke.spec.ts
+
+  airtrust-gcb:
+    name: airtrust-gcb
+    if: always()
+    needs:
+      - frontend-coverage
+      - worker-tests-1
+      - worker-tests-2
+      - lms-smoke
+      - public-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Assert all five heavy gates passed
+        env:
+          FRONTEND_COVERAGE: ${{ needs.frontend-coverage.result }}
+          WORKER_TESTS_1: ${{ needs.worker-tests-1.result }}
+          WORKER_TESTS_2: ${{ needs.worker-tests-2.result }}
+          LMS_SMOKE: ${{ needs.lms-smoke.result }}
+          PUBLIC_E2E: ${{ needs.public-e2e.result }}
+        run: |
+          set -euo pipefail
+          test "$FRONTEND_COVERAGE" = success
+          test "$WORKER_TESTS_1" = success
+          test "$WORKER_TESTS_2" = success
+          test "$LMS_SMOKE" = success
+          test "$PUBLIC_E2E" = success
+          echo "All five heavy gates passed on GitHub Actions."
