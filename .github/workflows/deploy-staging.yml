@@ -449,7 +449,7 @@ jobs:
           # Limit the read-only ledger decision to the migrations explicitly
           # requested for this release. Historical ledger drift outside this
           # scope must not block an otherwise governed release.
-          node scripts/staging/migration-ledger-preflight.mjs --scope=0467,0468,0469
+          node scripts/staging/migration-ledger-preflight.mjs --scope=0467,0468,0469,0470
           echo "preflight_ok=true" >> "$GITHUB_OUTPUT"
 
   apply-migrations:
