@@ -15,8 +15,8 @@ env:
   NODE_VERSION: '24'
 
 jobs:
-  diagnose-staging:
-    name: Diagnose staging 0470 incomplete rows
+  diagnose-staging-d1:
+    name: Diagnose staging D1 0470 incomplete rows
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -57,7 +57,7 @@ jobs:
       - name: Install exact Worker dependencies
         run: npm --prefix release/worker-airtrust ci
 
-      - name: Run read-only staging diagnosis
+      - name: Run read-only staging D1 diagnosis
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
