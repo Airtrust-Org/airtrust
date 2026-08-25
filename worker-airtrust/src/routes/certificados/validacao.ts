@@ -6,6 +6,8 @@ import { generateCertificateValidationHash } from '../../utils/certificate-valid
 import { tableHasColumn } from '../qualificacoes-certificados-helpers';
 
 const validacao = new Hono<{ Bindings: Env }>();
+const CERTIFICATE_SCAN_BATCH_SIZE = 250;
+
 interface CertificateValidationRow {
   id: number | string;
   r2_key: string | null;
@@ -82,10 +84,111 @@ function resolveCargaHorariaCertificado(params: {
   return cargaPadrao || cargaRecorrente || cargaInicial || cargaHistorico;
 }
 
+async function buildValidationPayload(
+  env: Env,
+  cert: CertificateValidationRow,
+  expectedHash: string,
+) {
+  const funcionarioCpf = String(cert.funcionario_cpf || '');
+  const qualificacaoCodigo = String(cert.qualificacao_codigo || '');
+  const dataConclusao = String(cert.data_conclusao || '').trim();
+  const numeroCertificado = String(cert.numero_certificado || '');
+  if (!funcionarioCpf || !qualificacaoCodigo || !dataConclusao || !numeroCertificado) return null;
+
+  const certHash = await generateCertificateValidationHash({
+    funcionarioCpf,
+    qualificacaoCodigo,
+    dataConclusao,
+    numeroCertificado,
+  });
+  if (certHash !== expectedHash) return null;
+
+  const validadeMesesNumero = Number(cert.validade_meses || cert.qualificacao_validade || 0);
+  const vencimentoFimMes = Number(cert.vencimento_fim_mes || 0) === 1 ? 1 : 0;
+  const cargaHorariaAtual = resolveCargaHorariaCertificado({
+    tipoTreinamento: cert.tipo_treinamento,
+    cargaHistorico: cert.carga_horaria,
+    cargaInicial: cert.qualificacao_carga_inicial,
+    cargaRecorrente: cert.qualificacao_carga_recorrente,
+    cargaPadrao: cert.qualificacao_carga_padrao,
+  });
+  const dataVencimentoPersistido = String(cert.data_vencimento || '')
+    .trim()
+    .split('T')[0];
+  const dataVencimentoAtual =
+    dataVencimentoPersistido ||
+    (validadeMesesNumero > 0
+      ? calcularDataVencimento(dataConclusao, validadeMesesNumero, vencimentoFimMes)
+      : null);
+
+  const situacaoOperacionalAtual: 'VALIDA' | 'VENCIDA' | 'INDETERMINADA' = !dataVencimentoAtual
+    ? 'INDETERMINADA'
+    : dataVencimentoAtual < new Date().toISOString().slice(0, 10)
+      ? 'VENCIDA'
+      : 'VALIDA';
+
+  let validadeMeses = 'Indeterminada';
+  if (dataVencimentoAtual) {
+    const conclusao = new Date(`${dataConclusao}T00:00:00Z`);
+    const vencimento = new Date(`${dataVencimentoAtual}T00:00:00Z`);
+    let meses = (vencimento.getFullYear() - conclusao.getFullYear()) * 12;
+    meses += vencimento.getMonth() - conclusao.getMonth();
+    if (meses === 1) validadeMeses = '1 mês';
+    else if (meses > 1) validadeMeses = `${meses} meses`;
+  }
+
+  let arquivoDisponivel = false;
+  const r2Key = String(cert.r2_key || '').trim();
+  if (r2Key) {
+    try {
+      arquivoDisponivel = Boolean(await env.BUCKET.head(r2Key));
+    } catch (storageError) {
+      console.error('[VALIDAÇÃO] Falha ao verificar artefato R2:', storageError);
+    }
+  }
+
+  const qualificacaoNome =
+    String(cert.qualificacao_nome || qualificacaoCodigo).trim() || 'Qualificação';
+  const qualificacaoCategoria = String(cert.qualificacao_categoria || '').trim() || 'N/A';
+
+  return {
+    success: true,
+    valido: true,
+    documento_autentico: true,
+    situacao_operacional_atual: situacaoOperacionalAtual,
+    arquivo_disponivel: arquivoDisponivel,
+    alerta: arquivoDisponivel
+      ? undefined
+      : 'Certificado registrado, mas o arquivo digital está indisponível. Contate a empresa emissora.',
+    certificado: {
+      numero: numeroCertificado,
+      funcionario_nome: cert.funcionario_nome,
+      funcionario_cpf: mascarCPF(funcionarioCpf),
+      codigo_anac: cert.codigo_anac || 'N/A',
+      instrutor_nome: cert.instrutor || 'N/A',
+      instrutor_codigo_anac: 'N/A',
+      qualificacao_tipo: qualificacaoCategoria,
+      qualificacao_nome: qualificacaoNome,
+      qualificacao_codigo: qualificacaoCodigo,
+      categoria: qualificacaoCategoria,
+      carga_horaria: cargaHorariaAtual ? `${cargaHorariaAtual} horas` : 'N/A',
+      data_emissao: dataConclusao || cert.created_at,
+      data_conclusao: dataConclusao,
+      data_validade: dataVencimentoAtual,
+      data_vencimento: dataVencimentoAtual ? formatarData(dataVencimentoAtual) : 'Indeterminada',
+      validade: validadeMeses,
+      empresa_nome: cert.empresa_nome,
+      hash: certHash,
+      tipo_treinamento: cert.tipo_treinamento || 'RECORRENTE',
+    },
+  };
+}
+
 /**
  * GET /api/certificados/validar/:hash
- * Endpoint PÚBLICO (sem autenticação) para validar certificados
- * Retorna JSON com dados do certificado validado
+ * Endpoint PÚBLICO (sem autenticação) para validar certificados.
+ * Durante o rollout da migration 0470, usa o índice quando disponível e
+ * preserva o scan legado até o backfill histórico estar comprovadamente completo.
  */
 validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), async (c) => {
   const { hash } = c.req.param();
@@ -105,19 +208,85 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
 
     const expectedHash = hash.toUpperCase();
     const hasIndexedHash = await tableHasColumn(db, 'qualificacoes_historico', 'validacao_hash');
-    if (!hasIndexedHash) {
-      return c.json(
-        {
-          success: false,
-          valido: false,
-          mensagem: 'Índice de validação de certificados indisponível.',
-        },
-        503,
-      );
+
+    if (hasIndexedHash) {
+      const page: D1Result<CertificateValidationRow> = await db
+        .prepare(
+          `SELECT
+             d.id,
+             d.r2_key,
+             d.created_at,
+             qh.numero_certificado,
+             qh.data_conclusao,
+             qh.data_vencimento,
+             qh.validade_meses,
+             qh.carga_horaria,
+             qh.instrutor,
+             qh.tipo_treinamento,
+             f.nome AS funcionario_nome,
+             f.cpf AS funcionario_cpf,
+             f.codigo_anac,
+             qt.nome AS qualificacao_nome,
+             qh.qualificacao_codigo,
+             qt.categoria AS qualificacao_categoria,
+             qt.carga_horaria AS qualificacao_carga_padrao,
+             qt.carga_horaria_inicial AS qualificacao_carga_inicial,
+             qt.carga_horaria_recorrente AS qualificacao_carga_recorrente,
+             qt.validade AS qualificacao_validade,
+             COALESCE(qt.vencimento_fim_mes, 0) AS vencimento_fim_mes,
+             e.nome AS empresa_nome
+           FROM qualificacoes_historico qh
+           INNER JOIN documentos d ON d.id = qh.certificado_arquivo_id
+           INNER JOIN funcionarios f ON f.id = qh.funcionario_id
+           LEFT JOIN qualificacoes_tipos qt
+             ON qt.id = qh.qualificacao_id
+            AND qt.deleted_at IS NULL
+           INNER JOIN empresas e ON e.id = qh.empresa_id
+           WHERE qh.deleted_at IS NULL
+             AND d.deleted_at IS NULL
+             AND f.deleted_at IS NULL
+             AND qh.certificado_arquivo_id IS NOT NULL
+             AND qh.numero_certificado IS NOT NULL
+             AND qh.validacao_hash = ?
+           ORDER BY d.created_at DESC, d.id DESC
+           LIMIT 2`,
+        )
+        .bind(expectedHash)
+        .all<CertificateValidationRow>();
+      const indexedResults: CertificateValidationRow[] = page.results || [];
+      if (indexedResults.length > 1) {
+        return c.json(
+          {
+            success: false,
+            valido: false,
+            mensagem: 'Certificado não pôde ser determinado de forma única.',
+          },
+          409,
+        );
+      }
+
+      const indexedCert = indexedResults[0];
+      if (indexedCert) {
+        const payload = await buildValidationPayload(c.env, indexedCert, expectedHash);
+        if (payload) {
+          console.log(`[VALIDAÇÃO] Certificado encontrado via índice. ID: ${indexedCert.id}`);
+          return c.json(payload);
+        }
+      }
     }
 
-    const page: D1Result<CertificateValidationRow> = await db
-      .prepare(
+    // Transitional compatibility path required by the 0470 Schema V2 plan:
+    // do not remove until historical backfill verification reports zero
+    // eligible rows without validacao_hash and no ambiguous collisions.
+    let cursorCreatedAt: string | null = null;
+    let cursorId: number | null = null;
+    let scanned = 0;
+
+    while (true) {
+      const cursorPredicate = cursorCreatedAt
+        ? 'AND (d.created_at < ? OR (d.created_at = ? AND d.id < ?))'
+        : '';
+      const statement = db.prepare(
         `SELECT
            d.id,
            d.r2_key,
@@ -153,142 +322,33 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
            AND f.deleted_at IS NULL
            AND qh.certificado_arquivo_id IS NOT NULL
            AND qh.numero_certificado IS NOT NULL
-           AND qh.validacao_hash = ?
+           ${cursorPredicate}
          ORDER BY d.created_at DESC, d.id DESC
-         LIMIT 2`,
-      )
-      .bind(expectedHash)
-      .all<CertificateValidationRow>();
-    const results: CertificateValidationRow[] = page.results || [];
-    if (results.length > 1) {
-      return c.json(
-        {
-          success: false,
-          valido: false,
-          mensagem: 'Certificado não pôde ser determinado de forma única.',
-        },
-        409,
+         LIMIT ?`,
       );
+      const page: D1Result<CertificateValidationRow> = cursorCreatedAt
+        ? await statement
+            .bind(cursorCreatedAt, cursorCreatedAt, cursorId, CERTIFICATE_SCAN_BATCH_SIZE)
+            .all<CertificateValidationRow>()
+        : await statement.bind(CERTIFICATE_SCAN_BATCH_SIZE).all<CertificateValidationRow>();
+      const results: CertificateValidationRow[] = page.results || [];
+      scanned += results.length;
+
+      for (const cert of results) {
+        const payload = await buildValidationPayload(c.env, cert, expectedHash);
+        if (!payload) continue;
+        console.log(`[VALIDAÇÃO] Certificado encontrado via fallback após ${scanned} registros. ID: ${cert.id}`);
+        return c.json(payload);
+      }
+
+      if (results.length < CERTIFICATE_SCAN_BATCH_SIZE) break;
+      const last: CertificateValidationRow = results[results.length - 1];
+      cursorCreatedAt = String(last.created_at || '');
+      cursorId = Number(last.id);
+      if (!cursorCreatedAt || !Number.isFinite(cursorId)) break;
     }
 
-    const cert = results[0];
-    if (cert) {
-        const funcionarioCpf = String(cert.funcionario_cpf || '');
-        const qualificacaoCodigo = String(cert.qualificacao_codigo || '');
-        const dataConclusao = String(cert.data_conclusao || '').trim();
-        const numeroCertificado = String(cert.numero_certificado || '');
-        const certHash = await generateCertificateValidationHash({
-          funcionarioCpf,
-          qualificacaoCodigo,
-          dataConclusao,
-          numeroCertificado,
-        });
-        if (certHash !== expectedHash) {
-          return c.json(
-            {
-              success: false,
-              valido: false,
-              mensagem: 'Certificado não encontrado. Verifique se o código foi digitado corretamente.',
-            },
-            404,
-          );
-        }
-
-        const validadeMesesNumero = Number(cert.validade_meses || cert.qualificacao_validade || 0);
-        const vencimentoFimMes = Number(cert.vencimento_fim_mes || 0) === 1 ? 1 : 0;
-        const cargaHorariaAtual = resolveCargaHorariaCertificado({
-          tipoTreinamento: cert.tipo_treinamento,
-          cargaHistorico: cert.carga_horaria,
-          cargaInicial: cert.qualificacao_carga_inicial,
-          cargaRecorrente: cert.qualificacao_carga_recorrente,
-          cargaPadrao: cert.qualificacao_carga_padrao,
-        });
-        const dataVencimentoPersistido = String(cert.data_vencimento || '')
-          .trim()
-          .split('T')[0];
-        const dataVencimentoAtual =
-          dataVencimentoPersistido ||
-          (validadeMesesNumero > 0
-            ? calcularDataVencimento(dataConclusao, validadeMesesNumero, vencimentoFimMes)
-            : null);
-
-        // Fase 7: document authenticity (this hash matches a real, issued
-        // certificate — `valido` below) is a DIFFERENT fact from whether the
-        // underlying qualification is currently operationally valid. A
-        // legitimately-issued historical certificate remains authentic even
-        // after its qualification has expired or been renewed — surface
-        // that explicitly rather than letting `valido: true` alone imply
-        // "the qualification is current".
-        const situacaoOperacionalAtual: 'VALIDA' | 'VENCIDA' | 'INDETERMINADA' = !dataVencimentoAtual
-          ? 'INDETERMINADA'
-          : dataVencimentoAtual < new Date().toISOString().slice(0, 10)
-            ? 'VENCIDA'
-            : 'VALIDA';
-
-        let validadeMeses = 'Indeterminada';
-        if (dataVencimentoAtual) {
-          const conclusao = new Date(`${dataConclusao}T00:00:00Z`);
-          const vencimento = new Date(`${dataVencimentoAtual}T00:00:00Z`);
-          let meses = (vencimento.getFullYear() - conclusao.getFullYear()) * 12;
-          meses += vencimento.getMonth() - conclusao.getMonth();
-          if (meses === 1) validadeMeses = '1 mês';
-          else if (meses > 1) validadeMeses = `${meses} meses`;
-        }
-
-        let arquivoDisponivel = false;
-        const r2Key = String(cert.r2_key || '').trim();
-        if (r2Key) {
-          try {
-            arquivoDisponivel = Boolean(await c.env.BUCKET.head(r2Key));
-          } catch (storageError) {
-            console.error('[VALIDAÇÃO] Falha ao verificar artefato R2:', storageError);
-          }
-        }
-
-        const qualificacaoNome =
-          String(cert.qualificacao_nome || qualificacaoCodigo).trim() || 'Qualificação';
-        const qualificacaoCategoria = String(cert.qualificacao_categoria || '').trim() || 'N/A';
-
-        console.log(`[VALIDAÇÃO] Certificado encontrado via índice. ID: ${cert.id}`);
-        return c.json({
-          success: true,
-          // Documento autêntico e emitido por esta empresa — não confundir
-          // com a situação operacional ATUAL da qualificação, exposta
-          // separadamente abaixo (Fase 7).
-          valido: true,
-          documento_autentico: true,
-          situacao_operacional_atual: situacaoOperacionalAtual,
-          arquivo_disponivel: arquivoDisponivel,
-          alerta: arquivoDisponivel
-            ? undefined
-            : 'Certificado registrado, mas o arquivo digital está indisponível. Contate a empresa emissora.',
-          certificado: {
-            numero: numeroCertificado,
-            funcionario_nome: cert.funcionario_nome,
-            funcionario_cpf: mascarCPF(funcionarioCpf),
-            codigo_anac: cert.codigo_anac || 'N/A',
-            instrutor_nome: cert.instrutor || 'N/A',
-            instrutor_codigo_anac: 'N/A',
-            qualificacao_tipo: qualificacaoCategoria,
-            qualificacao_nome: qualificacaoNome,
-            qualificacao_codigo: qualificacaoCodigo,
-            categoria: qualificacaoCategoria,
-            carga_horaria: cargaHorariaAtual ? `${cargaHorariaAtual} horas` : 'N/A',
-            data_emissao: dataConclusao || cert.created_at,
-            data_conclusao: dataConclusao,
-            data_validade: dataVencimentoAtual,
-            data_vencimento: dataVencimentoAtual
-              ? formatarData(dataVencimentoAtual)
-              : 'Indeterminada',
-            validade: validadeMeses,
-            empresa_nome: cert.empresa_nome,
-            hash: certHash,
-            tipo_treinamento: cert.tipo_treinamento || 'RECORRENTE',
-          },
-        });
-    }
-
-    console.log(`[VALIDAÇÃO] Hash não encontrado no índice: ${hash}`);
+    console.log(`[VALIDAÇÃO] Hash não encontrado após ${scanned} registros: ${hash}`);
     return c.json(
       {
         success: false,
