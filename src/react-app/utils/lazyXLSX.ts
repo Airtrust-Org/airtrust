@@ -44,7 +44,7 @@ function safeWorksheetName(value: string, fallback: string): string {
 
 async function downloadWorkbook(workbook: Workbook, fileName: string) {
   const buffer = await workbook.xlsx.writeBuffer();
-  const bytes = Uint8Array.from(buffer as ArrayLike<number>);
+  const bytes = Uint8Array.from(buffer as unknown as ArrayLike<number>);
   downloadBlob(
     new Blob([bytes], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
