@@ -6,10 +6,14 @@ const ROOT = join(__dirname, '../../../..');
 const workflow = readFileSync(join(ROOT, '.github/workflows/deploy-staging.yml'), 'utf8');
 
 function jobBlock(jobId: string): string {
-  const start = workflow.indexOf(`\n  ${jobId}:`);
+  const lines = workflow.split('\n');
+  const start = lines.findIndex((line) => line === `  ${jobId}:`);
   expect(start, `job ${jobId} must exist`).toBeGreaterThan(-1);
-  const next = workflow.indexOf('\n  ', start + 4);
-  return workflow.slice(start, next === -1 ? workflow.length : next);
+
+  const next = lines.findIndex(
+    (line, index) => index > start && /^  [A-Za-z0-9_-]+:$/.test(line),
+  );
+  return lines.slice(start, next === -1 ? lines.length : next).join('\n');
 }
 
 describe('staging Cloudflare credential contract', () => {
