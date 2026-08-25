@@ -919,6 +919,29 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
     );
   });
 
+  it('8b. smoke credentials gate before any migration or deploy', () => {
+    const smokeSecretsJob = workflow.slice(
+      workflow.indexOf('\n  check-smoke-secrets:'),
+      workflow.indexOf('\n  cloudflare-secret-readiness-gate:'),
+    );
+    expect(smokeSecretsJob).toContain('if: ${{ inputs.run_smoke }}');
+    expect(smokeSecretsJob).toContain('QA_EXAMINER_ADMIN_EMAIL');
+    expect(smokeSecretsJob).toContain('QA_EXAMINER_ADMIN_PASSWORD');
+    expect(smokeSecretsJob).toContain('if [[ "$RUN_FULL_SMOKE" == "true" ]]');
+    expect(smokeSecretsJob).toContain('STAGING_SMOKE_EMAIL');
+    expect(smokeSecretsJob).toContain('STAGING_SMOKE_PASSWORD');
+
+    const readinessGate = workflow.slice(
+      workflow.indexOf('\n  cloudflare-secret-readiness-gate:'),
+      workflow.indexOf('\n  backup:'),
+    );
+    expect(readinessGate).toContain('check-smoke-secrets');
+    expect(readinessGate).toContain('SMOKE_SECRETS_RESULT: ${{ needs.check-smoke-secrets.result }}');
+    expect(readinessGate).toContain(
+      'if [[ "$RUN_SMOKE" == "true" && "$SMOKE_SECRETS_RESULT" != "success" ]]',
+    );
+  });
+
   it('9/10. postconditions intera sobre APPROVED_MIGRATIONS e usa script flexível', () => {
     const postconditionsJob = workflow.slice(
       workflow.indexOf('\n  postconditions:'),
