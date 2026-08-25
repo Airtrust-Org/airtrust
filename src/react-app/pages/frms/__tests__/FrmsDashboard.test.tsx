@@ -270,16 +270,19 @@ describe('FrmsDashboard', () => {
     vi.useRealTimers();
   });
 
-  it('renderiza a quinzena e a lista de acao no topo e direciona ao controle operacional', () => {
+  it('renderiza os KPIs e o ranking da frota primeiro, e direciona ao controle operacional', () => {
     renderDashboard();
 
-    expect(screen.getByText(/Q1:/)).toBeInTheDocument();
-    expect(screen.getByText(/Q2:/)).toBeInTheDocument();
-    expect(screen.getByText('Check-ins pendentes')).toBeInTheDocument();
+    // Gestão FRMS first-read: fleet KPIs + ranking come before technical detail.
+    expect(screen.getByText('Monitorados')).toBeInTheDocument();
+    expect(screen.getByText('Críticos / violações')).toBeInTheDocument();
+    expect(screen.getByText('Atenção')).toBeInTheDocument();
+    expect(screen.getByText('Efetividade degradada')).toBeInTheDocument();
+    expect(screen.getByText('Dados incompletos')).toBeInTheDocument();
     expect(screen.getByText('Ana')).toBeInTheDocument();
     expect(screen.queryByText(/Central de Alertas/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Controle operacional' }));
-    expect(navigateMock).toHaveBeenCalledWith('/frms/controle-operacional?data=2026-06-23');
+    fireEvent.click(screen.getByRole('button', { name: 'Controle Operacional' }));
+    expect(navigateMock).toHaveBeenCalledWith('/frms/controle-operacional');
   });
 });
