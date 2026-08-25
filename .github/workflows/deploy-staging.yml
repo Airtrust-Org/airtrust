@@ -387,7 +387,21 @@ jobs:
   backup:
     name: Backup Staging D1 (verified, required before any migration)
     needs: [guard, production-target-guard, cloudflare-secret-readiness-gate]
-    if: ${{ inputs.apply_migrations && needs.cloudflare-secret-readiness-gate.outputs.secret_gate_ok == 'true' }}
+    # Every upstream result is checked explicitly with always(), rather than
+    # relying on the implicit success() GitHub Actions ANDs onto a job's `if`
+    # by default — that implicit check treats a *skipped* direct need the
+    # same as a failed one and silently skips this job too, even when every
+    # condition that actually matters (apply_migrations=true, secret gate
+    # green) is satisfied. See 2026-08-25 staging run 32891294444.
+    if: >-
+      ${{
+        always() &&
+        inputs.apply_migrations &&
+        needs.guard.result == 'success' &&
+        needs.production-target-guard.result == 'success' &&
+        needs.cloudflare-secret-readiness-gate.result == 'success' &&
+        needs.cloudflare-secret-readiness-gate.outputs.secret_gate_ok == 'true'
+      }}
     runs-on: ubuntu-latest
     environment: staging
     outputs:
@@ -420,7 +434,15 @@ jobs:
   preflight:
     name: Ledger Preflight (read-only, required before any migration)
     needs: [guard, production-target-guard, backup]
-    if: ${{ inputs.apply_migrations }}
+    if: >-
+      ${{
+        always() &&
+        inputs.apply_migrations &&
+        needs.guard.result == 'success' &&
+        needs.production-target-guard.result == 'success' &&
+        needs.backup.result == 'success' &&
+        needs.backup.outputs.backup_ok == 'true'
+      }}
     runs-on: ubuntu-latest
     environment: staging
     outputs:
@@ -455,7 +477,17 @@ jobs:
   apply-migrations:
     name: Apply Approved Migrations (one at a time, allowlisted)
     needs: [guard, production-target-guard, backup, preflight]
-    if: ${{ inputs.apply_migrations && needs.backup.outputs.backup_ok == 'true' && needs.preflight.outputs.preflight_ok == 'true' }}
+    if: >-
+      ${{
+        always() &&
+        inputs.apply_migrations &&
+        needs.guard.result == 'success' &&
+        needs.production-target-guard.result == 'success' &&
+        needs.backup.result == 'success' &&
+        needs.backup.outputs.backup_ok == 'true' &&
+        needs.preflight.result == 'success' &&
+        needs.preflight.outputs.preflight_ok == 'true'
+      }}
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -499,7 +531,14 @@ jobs:
   postconditions:
     name: Validate Migration Postconditions
     needs: [guard, production-target-guard, apply-migrations]
-    if: ${{ inputs.apply_migrations && needs.apply-migrations.result == 'success' }}
+    if: >-
+      ${{
+        always() &&
+        inputs.apply_migrations &&
+        needs.guard.result == 'success' &&
+        needs.production-target-guard.result == 'success' &&
+        needs.apply-migrations.result == 'success'
+      }}
     runs-on: ubuntu-latest
     environment: staging
     steps:
