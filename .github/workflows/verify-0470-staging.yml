@@ -1,0 +1,56 @@
+name: Verify 0470 Staging Completion
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact main SHA to validate
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-0470-staging
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  verify:
+    name: Verify 0470 Staging (read-only)
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Guard exact main SHA
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          EVENT_SHA: ${{ github.sha }}
+          EVENT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_REF" == "refs/heads/main" ]] || { echo "MAIN_ONLY" >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "INVALID_RELEASE_SHA" >&2; exit 1; }
+          [[ "$RELEASE_SHA" == "$EVENT_SHA" ]] || { echo "RELEASE_SHA_MISMATCH" >&2; exit 1; }
+
+      - name: Checkout exact main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Run standalone read-only postconditions and public lookup verification
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/staging/verify-0470-completion.sh
