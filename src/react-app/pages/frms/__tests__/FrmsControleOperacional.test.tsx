@@ -252,9 +252,10 @@ describe('FrmsControleOperacional', () => {
 
     expect(screen.getByText('Controle operacional de fadiga')).toBeInTheDocument();
     expect(screen.getByText('Quem exige atenção agora')).toBeInTheDocument();
-    expect(screen.getAllByText('Exigem ação agora').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Check-ins pendentes').length).toBeGreaterThan(0);
-    expect(screen.getByText('Fonte incompleta/estimada')).toBeInTheDocument();
+    expect(screen.getByText('Ação agora')).toBeInTheDocument();
+    expect(screen.getAllByText('Atenção').length).toBeGreaterThan(0);
+    expect(screen.getByText('Fadiga diária pendente')).toBeInTheDocument();
+    expect(screen.getByText('Sem ação imediata')).toBeInTheDocument();
     expect(screen.getByText('Limitação de fonte operacional')).toBeInTheDocument();
     expect(screen.getByText('Acúmulo operacional da quinzena')).toBeInTheDocument();
   });
