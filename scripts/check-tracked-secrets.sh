@@ -14,7 +14,7 @@ GG_EXCLUDE=(
 
 DEV_ONLY_WRANGLER_DEV_BYPASS_FIXTURE='^worker-airtrust/wrangler\.dev\.toml:[0-9]+:ENABLE_DEV_AUTH_BYPASS[[:space:]]*=[[:space:]]*"true"$'
 DEV_ONLY_WRANGLER_DEV_JWT_FIXTURE='^worker-airtrust/wrangler\.dev\.toml:[0-9]+:JWT_SECRET[[:space:]]*=[[:space:]]*"airtrust-dev-secret-2025"$'
-DYNAMIC_OR_PLACEHOLDER='\$\{|=[[:space:]]*\$[A-Z_][A-Z0-9_]*$|=[[:space:]]*"?\$\(|=[[:space:]]*$|=[[:space:]]*["'"']?(your-|example|placeholder|changeme|dummy|test-only|<)[^[:space:]]*'
+DYNAMIC_OR_PLACEHOLDER='\$\{|=[[:space:]]*\$[A-Z_][A-Z0-9_]*$|=[[:space:]]*"?\$\(|=[[:space:]]*$|=[[:space:]]*"?(your-|example|placeholder|changeme|dummy|test-only|<)[^[:space:]]*'
 
 check_pattern() {
   local label="$1"
@@ -57,7 +57,7 @@ check_pattern "chave privada rastreada" '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRI
 
 # Catch long literal assignments for common secret-bearing variable names. The
 # narrow variable-name set avoids flagging arbitrary hashes and public IDs.
-check_pattern "literal sensível rastreado" '^[[:space:]]*(SENTRY_AUTH_TOKEN|GITHUB_TOKEN|GITLAB_TOKEN|DATABASE_URL|API_SECRET|CLIENT_SECRET|PRIVATE_KEY|PRODUCTION_PASSWORD)[[:space:]]*[:=][[:space:]]*["'"']?[A-Za-z0-9_./+@:=\-]{20,}' "$DYNAMIC_OR_PLACEHOLDER" || failed=1
+check_pattern "literal sensível rastreado" '^[[:space:]]*(SENTRY_AUTH_TOKEN|GITHUB_TOKEN|GITLAB_TOKEN|DATABASE_URL|API_SECRET|CLIENT_SECRET|PRIVATE_KEY|PRODUCTION_PASSWORD)[[:space:]]*[:=][[:space:]]*"?[A-Za-z0-9_./+@:=\-]{20,}' "$DYNAMIC_OR_PLACEHOLDER" || failed=1
 
 if [[ "$failed" -ne 0 ]]; then
   echo "[tracked-secrets] Falhou: remova/rotacione segredos rastreados antes do commit."
