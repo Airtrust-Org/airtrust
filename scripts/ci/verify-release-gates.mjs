@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 const REQUIRED_GITHUB_CHECKS = Object.freeze([
   'lint',
@@ -93,7 +95,7 @@ async function main() {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   main().catch((error) => {
     console.error(`[release-gates] FAIL: ${error.message}`);
     process.exit(1);

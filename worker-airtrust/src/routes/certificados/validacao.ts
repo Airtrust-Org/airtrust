@@ -2,10 +2,10 @@ import { Hono } from 'hono';
 import { rateLimiter, rateLimitPresets } from '../../middleware/rate-limit';
 import type { Env } from '../../types';
 import { calcularDataVencimento } from '../../utils/qualificacoes-expiration';
+import { generateCertificateValidationHash } from '../../utils/certificate-validation-hash';
+import { tableHasColumn } from '../qualificacoes-certificados-helpers';
 
 const validacao = new Hono<{ Bindings: Env }>();
-const CERTIFICATE_SCAN_BATCH_SIZE = 250;
-
 interface CertificateValidationRow {
   id: number | string;
   r2_key: string | null;
@@ -104,17 +104,20 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
     }
 
     const expectedHash = hash.toUpperCase();
-    let cursorCreatedAt: string | null = null;
-    let cursorId: number | null = null;
-    let scanned = 0;
+    const hasIndexedHash = await tableHasColumn(db, 'qualificacoes_historico', 'validacao_hash');
+    if (!hasIndexedHash) {
+      return c.json(
+        {
+          success: false,
+          valido: false,
+          mensagem: 'Índice de validação de certificados indisponível.',
+        },
+        503,
+      );
+    }
 
-    // O endpoint é público e não conhece o tenant. A paginação por chave garante que
-    // certificados antigos permaneçam verificáveis sem carregar toda a plataforma.
-    while (true) {
-      const cursorPredicate = cursorCreatedAt
-        ? 'AND (d.created_at < ? OR (d.created_at = ? AND d.id < ?))'
-        : '';
-      const statement = db.prepare(
+    const page: D1Result<CertificateValidationRow> = await db
+      .prepare(
         `SELECT
            d.id,
            d.r2_key,
@@ -150,34 +153,46 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
            AND f.deleted_at IS NULL
            AND qh.certificado_arquivo_id IS NOT NULL
            AND qh.numero_certificado IS NOT NULL
-           ${cursorPredicate}
+           AND qh.validacao_hash = ?
          ORDER BY d.created_at DESC, d.id DESC
-         LIMIT ?`,
+         LIMIT 2`,
+      )
+      .bind(expectedHash)
+      .all<CertificateValidationRow>();
+    const results: CertificateValidationRow[] = page.results || [];
+    if (results.length > 1) {
+      return c.json(
+        {
+          success: false,
+          valido: false,
+          mensagem: 'Certificado não pôde ser determinado de forma única.',
+        },
+        409,
       );
-      const page: D1Result<CertificateValidationRow> = cursorCreatedAt
-        ? await statement
-            .bind(cursorCreatedAt, cursorCreatedAt, cursorId, CERTIFICATE_SCAN_BATCH_SIZE)
-            .all<CertificateValidationRow>()
-        : await statement.bind(CERTIFICATE_SCAN_BATCH_SIZE).all<CertificateValidationRow>();
-      const results: CertificateValidationRow[] = page.results || [];
-      scanned += results.length;
+    }
 
-      for (const cert of results) {
+    const cert = results[0];
+    if (cert) {
         const funcionarioCpf = String(cert.funcionario_cpf || '');
         const qualificacaoCodigo = String(cert.qualificacao_codigo || '');
         const dataConclusao = String(cert.data_conclusao || '').trim();
         const numeroCertificado = String(cert.numero_certificado || '');
-        if (!funcionarioCpf || !qualificacaoCodigo || !dataConclusao || !numeroCertificado) {
-          continue;
-        }
-
-        const certHash = await gerarHashCertificado({
-          funcionario_cpf: funcionarioCpf,
-          qualificacao_codigo: qualificacaoCodigo,
-          data_conclusao: dataConclusao,
-          numero_certificado: numeroCertificado,
+        const certHash = await generateCertificateValidationHash({
+          funcionarioCpf,
+          qualificacaoCodigo,
+          dataConclusao,
+          numeroCertificado,
         });
-        if (certHash !== expectedHash) continue;
+        if (certHash !== expectedHash) {
+          return c.json(
+            {
+              success: false,
+              valido: false,
+              mensagem: 'Certificado não encontrado. Verifique se o código foi digitado corretamente.',
+            },
+            404,
+          );
+        }
 
         const validadeMesesNumero = Number(cert.validade_meses || cert.qualificacao_validade || 0);
         const vencimentoFimMes = Number(cert.vencimento_fim_mes || 0) === 1 ? 1 : 0;
@@ -234,7 +249,7 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
           String(cert.qualificacao_nome || qualificacaoCodigo).trim() || 'Qualificação';
         const qualificacaoCategoria = String(cert.qualificacao_categoria || '').trim() || 'N/A';
 
-        console.log(`[VALIDAÇÃO] Certificado encontrado após ${scanned} registros. ID: ${cert.id}`);
+        console.log(`[VALIDAÇÃO] Certificado encontrado via índice. ID: ${cert.id}`);
         return c.json({
           success: true,
           // Documento autêntico e emitido por esta empresa — não confundir
@@ -271,16 +286,9 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
             tipo_treinamento: cert.tipo_treinamento || 'RECORRENTE',
           },
         });
-      }
-
-      if (results.length < CERTIFICATE_SCAN_BATCH_SIZE) break;
-      const last: CertificateValidationRow = results[results.length - 1];
-      cursorCreatedAt = String(last.created_at || '');
-      cursorId = Number(last.id);
-      if (!cursorCreatedAt || !Number.isFinite(cursorId)) break;
     }
 
-    console.log(`[VALIDAÇÃO] Hash não encontrado após ${scanned} registros: ${hash}`);
+    console.log(`[VALIDAÇÃO] Hash não encontrado no índice: ${hash}`);
     return c.json(
       {
         success: false,
@@ -325,39 +333,6 @@ function formatarData(iso: string): string {
     });
   } catch {
     return 'Data inválida';
-  }
-}
-
-/**
- * Gera hash SHA-256 (mesma função do pdf-generator)
- */
-async function gerarHashCertificado(data: {
-  funcionario_cpf: string;
-  qualificacao_codigo: string;
-  data_conclusao: string;
-  numero_certificado: string;
-}): Promise<string> {
-  try {
-    // Limpar CPF (remover formatação)
-    const cpfLimpo = data.funcionario_cpf.replace(/[.\-\s]/g, '');
-    const str = `${cpfLimpo}${data.qualificacao_codigo}${data.data_conclusao}${data.numero_certificado}`;
-
-    const encoder = new TextEncoder();
-    const dataBytes = encoder.encode(str);
-
-    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBytes);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-
-    const hashHex = hashArray
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
-      .substring(0, 16)
-      .toUpperCase();
-
-    return hashHex;
-  } catch (error) {
-    console.error('Erro ao gerar hash:', error);
-    return 'ERROR000000000';
   }
 }
 

@@ -9,9 +9,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import XLSX from 'xlsx';
-import {
 import { fileURLToPath } from 'node:url';
+import { worksheetRows, csvRows } from './lib/exceljs-sheet-rows.mjs';
+import {
   createDeterministicPlan,
   sha256,
   sealPlan,
@@ -59,13 +59,9 @@ function headerIndex(rows) {
   if (index < 0) fail('cabeçalho Matriz Completa não encontrado');
   return index;
 }
-function worksheetRows(file, sheet) {
-  const workbook = XLSX.readFile(file, { cellDates: false });
-  if (!workbook.Sheets[sheet]) fail(`aba ${sheet} ausente em ${path.basename(file)}`);
-  return XLSX.utils.sheet_to_json(workbook.Sheets[sheet], { header: 1, defval: '' });
-}
-function readMatrix(file, aircraft) {
-  const rows = worksheetRows(file, 'Matriz Completa');
+async function readMatrix(file, aircraft) {
+  const rows = await worksheetRows(file, 'Matriz Completa');
+  if (!rows) fail(`aba Matriz Completa ausente em ${path.basename(file)}`);
   const headerRow = headerIndex(rows);
   const headers = rows[headerRow].map(text);
   const records = rows
@@ -195,11 +191,9 @@ function htmlSourceHashes(directory, aircraft) {
     .sort()
     .map((file) => [`${aircraft}/html/${file}`, sha256(fs.readFileSync(path.join(htmlDir, file)))]);
 }
-function compareS76Csv(csvFile, matrix) {
-  const rows = XLSX.utils.sheet_to_json(XLSX.readFile(csvFile).Sheets.Sheet1, {
-    header: 1,
-    defval: '',
-  });
+async function compareS76Csv(csvFile, matrix) {
+  const rows = await csvRows(csvFile);
+  if (!rows) fail(`CSV S-76 ausente: ${csvFile}`);
   const header = headerIndex(rows);
   const keys = rows[header].map(key);
   const csv = rows
@@ -214,6 +208,7 @@ function compareS76Csv(csvFile, matrix) {
     fail(`S-76 XLSX/CSV divergem: XLSX-only=${onlyWorkbook.length}; CSV-only=${onlyCsv.length}`);
 }
 
+async function main() {
 const aw139 = arg('--aw139');
 const sk76 = arg('--sk76');
 const empresaId = Number(arg('--empresa-id'));
@@ -236,11 +231,11 @@ assertRealTenantFingerprintState({
 });
 const awRequired = requireCanonicalSources(aw139, 'AW139', 30);
 const s76Required = requireCanonicalSources(sk76, 'SK76', 21);
-const aw = readMatrix(path.join(aw139, 'Matriz_AW139_CORRIGIDA_LOFT.xlsx'), 'AW139');
-const s76 = readMatrix(path.join(sk76, 'Matriz_S76_Novo_Padrao.xlsx'), 'SK76');
+const aw = await readMatrix(path.join(aw139, 'Matriz_AW139_CORRIGIDA_LOFT.xlsx'), 'AW139');
+const s76 = await readMatrix(path.join(sk76, 'Matriz_S76_Novo_Padrao.xlsx'), 'SK76');
 validateMatrix(aw, 'AW139');
 validateMatrix(s76, 'SK76');
-compareS76Csv(path.join(sk76, 'Matriz_S76_Novo_Padrao.csv'), s76);
+await compareS76Csv(path.join(sk76, 'Matriz_S76_Novo_Padrao.csv'), s76);
 const loftAw = validateLoft(aw139, 'AW139', aw);
 const loftS76 = validateLoft(sk76, 'SK76', s76);
 fs.mkdirSync(out, { recursive: true });
@@ -338,3 +333,9 @@ console.log(
     2,
   ),
 );
+}
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exit(1);
+});

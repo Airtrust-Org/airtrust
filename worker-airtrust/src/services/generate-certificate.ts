@@ -27,6 +27,7 @@ import {
   resolveInstrutorCertificadoData,
   resolveFuncionarioInstrutorNaEmpresa,
 } from '../routes/qualificacoes-certificados-helpers';
+import { generateCertificateValidationHash } from '../utils/certificate-validation-hash';
 
 // ── Erros tipados ──────────────────────────────────────────────────────────────
 
@@ -712,29 +713,65 @@ export async function generateCertificateForHistorico(
     )
     .bind(...pastaVirtualBindings);
 
-  const updateHistoricoStmt = db
-    .prepare(
-      `UPDATE qualificacoes_historico
-          SET certificado_arquivo_id = (SELECT id FROM documentos WHERE r2_key = ?),
-              arquivo_url = '/api/pasta-virtual/stream/' || (SELECT id FROM documentos WHERE r2_key = ?),
-              numero_certificado = ?,
-              updated_at = datetime('now')
-        WHERE id = ?
-          AND empresa_id = ?
-          AND (
-            (? IS NULL AND certificado_arquivo_id IS NULL)
-            OR certificado_arquivo_id = ?
-          )`,
-    )
-    .bind(
-      r2Key,
-      r2Key,
-      numeroCertificado,
-      historicoId,
-      qualificacaoEmpresaId,
-      expectedCertificadoArquivoId,
-      expectedCertificadoArquivoId,
-    );
+  const persistValidationHash = await tableHasColumn(db, 'qualificacoes_historico', 'validacao_hash');
+  const validationHash = persistValidationHash
+    ? await generateCertificateValidationHash({
+        funcionarioCpf: String(certificadoData.funcionario_cpf || ''),
+        qualificacaoCodigo: String(certificadoData.qualificacao_codigo || ''),
+        dataConclusao: String(certificadoData.data_conclusao || ''),
+        numeroCertificado: numeroCertificado,
+      })
+    : null;
+
+  const updateHistoricoStmt = persistValidationHash
+    ? db
+        .prepare(
+          `UPDATE qualificacoes_historico
+              SET certificado_arquivo_id = (SELECT id FROM documentos WHERE r2_key = ?),
+                  arquivo_url = '/api/pasta-virtual/stream/' || (SELECT id FROM documentos WHERE r2_key = ?),
+                  numero_certificado = ?,
+                  validacao_hash = ?,
+                  updated_at = datetime('now')
+            WHERE id = ?
+              AND empresa_id = ?
+              AND (
+                (? IS NULL AND certificado_arquivo_id IS NULL)
+                OR certificado_arquivo_id = ?
+              )`,
+        )
+        .bind(
+          r2Key,
+          r2Key,
+          numeroCertificado,
+          validationHash,
+          historicoId,
+          qualificacaoEmpresaId,
+          expectedCertificadoArquivoId,
+          expectedCertificadoArquivoId,
+        )
+    : db
+        .prepare(
+          `UPDATE qualificacoes_historico
+              SET certificado_arquivo_id = (SELECT id FROM documentos WHERE r2_key = ?),
+                  arquivo_url = '/api/pasta-virtual/stream/' || (SELECT id FROM documentos WHERE r2_key = ?),
+                  numero_certificado = ?,
+                  updated_at = datetime('now')
+            WHERE id = ?
+              AND empresa_id = ?
+              AND (
+                (? IS NULL AND certificado_arquivo_id IS NULL)
+                OR certificado_arquivo_id = ?
+              )`,
+        )
+        .bind(
+          r2Key,
+          r2Key,
+          numeroCertificado,
+          historicoId,
+          qualificacaoEmpresaId,
+          expectedCertificadoArquivoId,
+          expectedCertificadoArquivoId,
+        );
 
   let batchResults: Awaited<ReturnType<typeof db.batch>>;
   try {

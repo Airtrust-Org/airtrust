@@ -5,6 +5,7 @@
 
 import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont } from 'pdf-lib';
 import qrcode from 'qrcode-generator';
+import { generateCertificateValidationHash } from '../utils/certificate-validation-hash';
 
 export interface CertificadoData {
   funcionario_nome: string;
@@ -752,31 +753,12 @@ function formatarData(isoDate: string): string {
  * Gera hash SHA-256 de verificação do certificado (sem zeros no início)
  */
 async function gerarHashCertificado(data: CertificadoData): Promise<string> {
-  try {
-    // Limpar CPF (remover formatação)
-    const cpfLimpo = data.funcionario_cpf.replace(/[.\-\s]/g, '');
-    const str = `${cpfLimpo}${data.qualificacao_codigo}${data.data_conclusao}${data.numero_certificado}`;
-
-    // Converter string para bytes
-    const encoder = new TextEncoder();
-    const dataBytes = encoder.encode(str);
-
-    // Gerar SHA-256
-    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBytes);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-
-    // Converter para hex (primeiros 16 caracteres)
-    const hashHex = hashArray
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
-      .substring(0, 16)
-      .toUpperCase();
-
-    return hashHex;
-  } catch (error) {
-    console.error('Erro ao gerar hash:', error);
-    return 'ERROR000000000';
-  }
+  return generateCertificateValidationHash({
+    funcionarioCpf: data.funcionario_cpf,
+    qualificacaoCodigo: data.qualificacao_codigo,
+    dataConclusao: data.data_conclusao,
+    numeroCertificado: data.numero_certificado,
+  });
 }
 
 /**

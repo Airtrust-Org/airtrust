@@ -17,7 +17,7 @@ const MANUAL_CHUNK_GROUPS: readonly ManualChunkGroup[] = [
   { name: 'charts', packages: ['recharts'] },
   { name: 'pdf', packages: ['jspdf'] },
   { name: 'capture', packages: ['html2canvas'] },
-  { name: 'excel', packages: ['xlsx'] },
+  { name: 'excel', packages: ['exceljs'] },
   { name: 'forms', packages: ['react-hook-form', 'zod'] },
   {
     name: 'dnd',

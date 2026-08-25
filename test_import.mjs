@@ -1,23 +1,26 @@
-import * as XLSX from 'xlsx';
-import fs from 'fs';
+import ExcelJS from 'exceljs';
 
-// Criar uma workbook com dados de teste
-const data = [
-  {
-    tipo: 'teste',
-    codigo: 'TESTE001',
-    nome: 'Teste Básico',
-    descricao: 'Tipo de qualificação para testes',
-    categoria: 'Geral',
-    carga_horaria: '8',
-    validade: '180',
-    observacoes: 'Arquivo de teste'
-  }
+const workbook = new ExcelJS.Workbook();
+const sheet = workbook.addWorksheet('Qualificações');
+sheet.columns = [
+  { header: 'tipo', key: 'tipo' },
+  { header: 'codigo', key: 'codigo' },
+  { header: 'nome', key: 'nome' },
+  { header: 'descricao', key: 'descricao' },
+  { header: 'categoria', key: 'categoria' },
+  { header: 'carga_horaria', key: 'carga_horaria' },
+  { header: 'validade', key: 'validade' },
+  { header: 'observacoes', key: 'observacoes' },
 ];
-
-const ws = XLSX.utils.json_to_sheet(data);
-const wb = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(wb, ws, 'Qualificações');
-XLSX.writeFile(wb, '/tmp/qualificacoes_tipos_teste.xlsx');
-
+sheet.addRow({
+  tipo: 'teste',
+  codigo: 'TESTE001',
+  nome: 'Teste Básico',
+  descricao: 'Tipo de qualificação para testes',
+  categoria: 'Geral',
+  carga_horaria: '8',
+  validade: '180',
+  observacoes: 'Arquivo de teste',
+});
+await workbook.xlsx.writeFile('/tmp/qualificacoes_tipos_teste.xlsx');
 console.log('✅ Arquivo XLSX criado: /tmp/qualificacoes_tipos_teste.xlsx');
