@@ -81,18 +81,31 @@ describe('deploy-staging.yml — static guards', () => {
     for (const token of [
       '/collaborators/${actor}/permission',
       "['write', 'push', 'maintain', 'admin']",
-      '/check-runs?per_page=100',
-      "check.status !== 'completed' || check.conclusion !== 'success'",
-      '/status',
-      // Per-status state check — applied only when statuses exist (empty statuses allowed)
-      "status.state !== 'success'",
+      'verify-release-gates.mjs',
     ]) {
       expect(workflow).toContain(token);
     }
+  });
+
+  it('release-gate verifier requires the official check-runs and airtrust-gcb status to be green', () => {
+    const verifier = readFileSync(
+      join(ROOT, 'scripts/ci/verify-release-gates.mjs'),
+      'utf8',
+    );
+    for (const token of [
+      '/check-runs?per_page=100',
+      "check.status === 'completed' && check.conclusion === 'success'",
+      '/status',
+      "REQUIRED_GCB_STATUS = 'airtrust-gcb'",
+      // Per-status state check — applied only when statuses exist (empty statuses allowed)
+      "status.state === 'success'",
+    ]) {
+      expect(verifier).toContain(token);
+    }
     // Empty statuses must not block when check-runs are green
-    expect(workflow).toContain('statuses.statuses.length > 0');
+    expect(verifier).toContain('gcbCandidates.length === 0');
     // The old aggregate statuses.state check must NOT be present — it incorrectly blocks repos with no classic statuses
-    expect(workflow).not.toContain("statuses.state !== 'success'");
+    expect(verifier).not.toContain("statuses.state !== 'success'");
   });
 
   it('checks out the trusted release SHA into release/ and the pipeline itself from main', () => {
