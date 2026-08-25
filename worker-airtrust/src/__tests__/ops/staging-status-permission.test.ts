@@ -23,4 +23,14 @@ describe('staging release GitHub token permissions', () => {
       'node scripts/staging/migration-ledger-preflight.mjs --scope=0467,0468,0469',
     );
   });
+
+  it('supplies the explicit backup confirmation for each governed migration backup', () => {
+    const workflow = readFileSync(join(ROOT, '.github/workflows/deploy-staging.yml'), 'utf8');
+    const applyMigrations = workflow.slice(
+      workflow.indexOf('  apply-migrations:'),
+      workflow.indexOf('  postconditions:'),
+    );
+
+    expect(applyMigrations).toContain('CONFIRM_STAGING_BACKUP: AIRTRUST_STAGING_BACKUP');
+  });
 });
