@@ -22,7 +22,6 @@ APPROVED_MIGRATIONS=(
   "0468_sigvoos_shadow_leg_crew_v1.sql"
   "0469_lms_completion_pendencias_snapshots.sql"
 )
-RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0461,0462,0466,0467,0468,0469"
 
 apply=false
 migration_arg=""
@@ -49,6 +48,11 @@ if ! $is_approved; then
   echo "ERROR: migration fora da allowlist: $migration_basename" >&2
   exit 1
 fi
+
+# The outer release preflight has already limited its decision to the explicit
+# release list.  This per-migration recovery runner must not reintroduce a
+# historical-ledger dependency while applying an individual approved file.
+RELEASE_PREFLIGHT_SCOPE="${migration_basename%%_*}"
 
 migration_path="$migration_arg"
 expected_path="release/worker-airtrust/migrations/$migration_basename"

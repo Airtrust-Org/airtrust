@@ -19,7 +19,7 @@ describe('staging migrations 0467-0469 governance', () => {
     'scripts/staging/apply-approved-migration-with-recovery-point.sh',
   );
 
-  it('allowlists 0467-0469 in both staging runners and preflight scopes', () => {
+  it('allowlists 0467-0469 and keeps recovery preflight scoped to its migration', () => {
     for (const migrationName of migrations) {
       expect(legacyApplyScript).toContain(`"${migrationName}"`);
       expect(recoveryApplyScript).toContain(`"${migrationName}"`);
@@ -28,7 +28,7 @@ describe('staging migrations 0467-0469 governance', () => {
       'RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459,0467,0468,0469"',
     );
     expect(recoveryApplyScript).toContain(
-      'RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0461,0462,0466,0467,0468,0469"',
+      'RELEASE_PREFLIGHT_SCOPE="${migration_basename%%_*}"',
     );
   });
 
@@ -79,6 +79,14 @@ describe('staging migrations 0467-0469 governance', () => {
     expect(migration).toContain('empresa_id INTEGER NOT NULL');
     expect(migration).toContain('crew_identity_key TEXT NOT NULL');
     expect(migration).not.toMatch(/\b(DROP|DELETE|UPDATE|ALTER)\b/i);
+  });
+
+  it('does not treat SQLite TEXT PRIMARY KEY as pragma notnull=1', () => {
+    const validator = read('scripts/staging/validate-0468-postconditions.sh');
+    expect(validator).toContain('shadow crew id is the declared primary key');
+    expect(validator).toContain("WHERE name='id'");
+    expect(validator).toContain('r?.pk!==1');
+    expect(validator).not.toContain("'id','empresa_id','leg_id','run_id'");
   });
 
   it('proves 0469 is additive and tenant-scoped', () => {
