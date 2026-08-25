@@ -2,11 +2,11 @@
 node_modules/
 *.npm
 *.yarn
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
 *.pnp
 .pnp.js
+
+# Lockfiles are intentionally versioned. CI uses npm ci and dependency review
+# relies on the committed dependency graph for reproducible builds.
 
 # ========== BUILD OUTPUT ==========
 dist/
@@ -49,8 +49,6 @@ backups/
 *.key
 
 # ========== PLAYWRIGHT AUTH STORAGE (NEVER COMMIT) ==========
-# Playwright auth state files contain live session tokens and refresh credentials.
-# These must never be committed under any circumstances.
 e2e/.auth/
 e2e/.auth/**
 **/playwright/.auth/
@@ -92,7 +90,6 @@ pids/
 *.seed
 *.pid.lock
 
-# Local visual previews (fictional RDV PDF renders — never commit)
 artifacts/rdv-pdf-preview/
 
 # ========== OS ==========
@@ -157,8 +154,6 @@ merge_msg.txt
 # ========== PROJECT SPECIFIC ==========
 _arquivos_nao_usados/
 
-
-# Remove files gerados durante desenvolvimento
 audit_*.txt
 audit_*.md
 apply_*.py
@@ -169,14 +164,11 @@ atualizar_*.sh
 ACAO_*.md
 ANALISE_*.md
 
-# Upload transitório (não versionar)
 *.terabox.uploading.cfg
 node_modules
 
-# Claude Code local worktrees
 .claude/worktrees/
 
-# AirTrust local/generated heavy artifacts
 lms/
 *.zip
 *.bundle
@@ -186,7 +178,6 @@ lms/
 *.7z
 *.rar
 
-# Browser/network capture artifacts (never commit)
 *-captura/
 *.har
 *.mhtml
@@ -202,7 +193,6 @@ build/
 /debug-*.png
 /*.traineddata
 
-# Root-only local debug/API artifacts (never commit)
 /list.json
 /list2.json
 /criar-token.html
@@ -212,13 +202,11 @@ build/
 /force-refresh.html
 /test-login.json
 
-# Local AI/agent tooling
 .agents/
 .claude/skills/
 .windsurf/skills/
 skills-lock.json
 
-# Local legacy SQL staging copy (classified version lives in scripts/validation)
 scripts/validar_sk76_inicial_12x22.sql
 scripts/seed-12-sessoes-aw139-COMPLETO.sql
 scripts/seed-data-complete.sql
@@ -227,7 +215,6 @@ scripts/seed-local.sql
 scripts/seed-sgso-demo-full.sql
 scripts/validation/audit-endpoint-matrix.mjs
 
-# AirTrust employee exports generated from local/production data
 scripts/export_funcionarios_airtrust*.csv
 scripts/export_funcionarios_airtrust*.json
 scripts/export_funcionarios_airtrust*_report.md
@@ -239,7 +226,6 @@ scripts/export_funcionarios.py
 scripts/export_producao.py
 
 # ========== SENSITIVE SQL DUMPS / BACKUPS ==========
-# Scoped to avoid hiding official migrations in worker-airtrust/migrations/
 .local-dumps/
 artifacts/apply-plans/
 artifacts/db-backups/
@@ -251,7 +237,6 @@ scripts/**/*backup*.sql
 scripts/**/*prod*.sql
 scripts/legacy/*.sql
 
-# AirTrust pilot CV N1 temporary containment artifacts
 worker-airtrust/wrangler.pilot-cv-n1.toml
 docs/snapshots/
 pilot-cv-n1-*.sql
