@@ -32,11 +32,12 @@ async function readPermissionOverride(
   userId: number | string,
   capability: string,
 ): Promise<'GRANT' | 'DENY' | null> {
+  // Authorization reads must fail closed. Swallowing a D1/schema error here would
+  // erase an explicit DENY and incorrectly fall back to the user's role grants.
   const rows = await db
     .prepare(`SELECT tipo FROM usuario_permissoes WHERE usuario_id = ? AND permissao = ?`)
     .bind(userId, capability)
-    .all<{ tipo: string }>()
-    .catch(() => ({ results: [] as Array<{ tipo: string }> }));
+    .all<{ tipo: string }>();
 
   const results = rows.results || [];
   if (results.some((row) => String(row.tipo).toUpperCase() === 'DENY')) return 'DENY';
@@ -81,7 +82,15 @@ export async function hasMaintenanceCapability(
   const empresaId = Number(c.get('empresaId') || 0);
   if (!userId || !empresaId) return false;
 
-  const override = await readPermissionOverride(c.env.DB, userId, capability);
+  let override: 'GRANT' | 'DENY' | null;
+  try {
+    override = await readPermissionOverride(c.env.DB, userId, capability);
+  } catch {
+    // A permissions-store failure is an authorization failure, never absence of
+    // an override. This prevents a transient D1/schema error from bypassing DENY.
+    return false;
+  }
+
   if (override === 'DENY') return false;
   if (override === 'GRANT') return true;
 
