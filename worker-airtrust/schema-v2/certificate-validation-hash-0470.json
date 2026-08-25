@@ -1,0 +1,8 @@
+{
+  "changeId": "certificate-validation-hash-0470",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0470_certificado_validacao_hash_index.sql",
+  "fileHash": "efc80eadb66bf30a241cf595529ccc9452f894d6f6d60cab25288cc514efbf02",
+  "planPath": "worker-airtrust/schema-v2/plans/production-certificate-validation-hash-0470.md",
+  "planHash": "a83f5c294d52cb4fd2e139d8dc4f55a088b4787717ab5ce826838b1135f33acb"
+}
