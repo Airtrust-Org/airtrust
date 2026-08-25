@@ -11,8 +11,13 @@ describe('staging release GitHub token permissions', () => {
       workflow.indexOf('\npermissions:'),
       workflow.indexOf('\nenv:'),
     );
+    const releaseGateVerifier = readFileSync(
+      join(ROOT, 'scripts/ci/verify-release-gates.mjs'),
+      'utf8',
+    );
 
-    expect(workflow).toContain('/commits/${releaseSha}/status');
+    expect(workflow).toContain('verify-release-gates.mjs');
+    expect(releaseGateVerifier).toContain('/commits/${encodedSha}/status');
     expect(permissions).toContain('statuses: read');
   });
 
