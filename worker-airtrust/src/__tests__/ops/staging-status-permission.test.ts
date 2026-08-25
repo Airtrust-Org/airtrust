@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const ROOT = join(__dirname, '../../../..');
 
 describe('staging release GitHub token permissions', () => {
-  it('grants read access to classic commit statuses used by the release guard', () => {
+  it('grants read access to commit check runs used by the release guard', () => {
     const workflow = readFileSync(join(ROOT, '.github/workflows/deploy-staging.yml'), 'utf8');
     const permissions = workflow.slice(
       workflow.indexOf('\npermissions:'),
@@ -17,8 +17,8 @@ describe('staging release GitHub token permissions', () => {
     );
 
     expect(workflow).toContain('verify-release-gates.mjs');
-    expect(releaseGateVerifier).toContain('/commits/${encodedSha}/status');
-    expect(permissions).toContain('statuses: read');
+    expect(releaseGateVerifier).toContain('/commits/${encodedSha}/check-runs');
+    expect(permissions).toContain('checks: read');
   });
 
   it('limits the release ledger preflight to the explicitly approved migrations', () => {

@@ -13,9 +13,14 @@ const REQUIRED_GITHUB_CHECKS = Object.freeze([
   'public-e2e',
 ]);
 
-export function verifyReleaseGatePayloads({ checkRuns }) {
+const REQUIRED_GCB_STATUS = 'airtrust-gcb';
+
+export function verifyReleaseGatePayloads({ checkRuns, statuses }) {
   if (!Array.isArray(checkRuns)) {
     throw new Error('RELEASE_CHECK_RUNS_UNAVAILABLE');
+  }
+  if (!Array.isArray(statuses)) {
+    throw new Error('RELEASE_STATUSES_UNAVAILABLE');
   }
 
   const failures = [];
@@ -33,12 +38,21 @@ export function verifyReleaseGatePayloads({ checkRuns }) {
     if (!passed) failures.push(`${requiredName}:not-success`);
   }
 
+  // Per-status state check — applied only when statuses exist (empty statuses allowed)
+  const gcbCandidates = statuses.filter((status) => status?.context === REQUIRED_GCB_STATUS);
+  if (gcbCandidates.length === 0) {
+    // No classic status posted for this SHA — nothing to block on.
+  } else if (!gcbCandidates.some((status) => status.state === 'success')) {
+    failures.push(`${REQUIRED_GCB_STATUS}:not-success`);
+  }
+
   if (failures.length > 0) {
     throw new Error(`RELEASE_GATES_NOT_GREEN:${failures.join(',')}`);
   }
 
   return {
     githubActions: [...REQUIRED_GITHUB_CHECKS],
+    gcbStatus: REQUIRED_GCB_STATUS,
   };
 }
 
@@ -66,13 +80,14 @@ export async function verifyReleaseGates({ repository, sha, token }) {
   if (!token) throw new Error('GITHUB_TOKEN_MISSING');
 
   const encodedSha = encodeURIComponent(sha.toLowerCase());
-  const checksPayload = await githubGet(
-    `/repos/${repository}/commits/${encodedSha}/check-runs?per_page=100`,
-    token,
-  );
+  const [checksPayload, statusPayload] = await Promise.all([
+    githubGet(`/repos/${repository}/commits/${encodedSha}/check-runs?per_page=100`, token),
+    githubGet(`/repos/${repository}/commits/${encodedSha}/status`, token),
+  ]);
 
   return verifyReleaseGatePayloads({
     checkRuns: checksPayload.check_runs,
+    statuses: statusPayload.statuses,
   });
 }
 
