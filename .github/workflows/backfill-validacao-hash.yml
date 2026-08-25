@@ -104,7 +104,7 @@ jobs:
           bash scripts/staging/backfill-validacao-hash-with-recovery-point.sh "${args[@]}"
 
   production-backfill:
-    name: Production Backfill (dry-run by default)
+    name: Production D1 Backfill (dry-run by default)
     needs: guard
     if: ${{ inputs.target == 'production' }}
     runs-on: ubuntu-latest
