@@ -104,41 +104,15 @@ jobs:
           bash scripts/staging/backfill-validacao-hash-with-recovery-point.sh "${args[@]}"
 
   production-backfill:
-    name: Production D1 Backfill (dry-run by default)
+    name: Production Backfill (NOT executed by this workflow revision)
     needs: guard
-    if: ${{ inputs.target == 'production' }}
+    # Deliberately unreachable. Production backfill may only be enabled in a
+    # separate reviewed PR followed by fresh authorization for that exact SHA.
+    if: ${{ false && inputs.target == 'production' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Checkout exact main
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Install worker dependencies
-        run: npm --prefix worker-airtrust ci
-      - name: Verify production 0470 schema postconditions before backfill
-        shell: bash
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bash scripts/schema-v2/validate-0470-production-postconditions.sh
-      - name: Run governed production backfill
-        shell: bash
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          RELEASE_SHA: ${{ needs.guard.outputs.release_sha }}
-          APPLY: ${{ inputs.apply }}
-          CONFIRM: ${{ inputs.confirm }}
-          EMPRESA_ID: ${{ inputs.empresa_id }}
+      - name: Refused
         run: |
-          set -euo pipefail
-          args=(--release-sha="$RELEASE_SHA")
-          [[ -n "$EMPRESA_ID" ]] && args+=(--empresa-id="$EMPRESA_ID")
-          if [[ "$APPLY" == "true" ]]; then
-            args+=(--apply --confirm="$CONFIRM")
-          fi
-          bash scripts/production/backfill-validacao-hash-with-recovery-point.sh "${args[@]}"
+          echo "Production 0470 backfill is hard-blocked in this revision." >&2
+          exit 1
