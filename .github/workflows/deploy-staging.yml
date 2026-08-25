@@ -287,7 +287,7 @@ jobs:
     steps:
       - name: Verify token presence
         run: |
-          if [[ -z "${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}" ]]; then
+          if [[ -z "${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}" ]]; then
             exit 1
           fi
 
@@ -300,7 +300,7 @@ jobs:
     steps:
       - name: Verify token presence
         run: |
-          if [[ -z "${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}" ]]; then
+          if [[ -z "${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}" ]]; then
             exit 1
           fi
 
@@ -380,7 +380,7 @@ jobs:
         id: backup
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CONFIRM_STAGING_BACKUP: AIRTRUST_STAGING_BACKUP
         run: |
@@ -413,7 +413,7 @@ jobs:
         id: preflight
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -442,7 +442,7 @@ jobs:
       - name: Apply allowlisted migration(s)
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CONFIRM_STAGING_MIGRATION: AIRTRUST_STAGING_MIGRATION_APPLY
           CONFIRM_STAGING_SCHEMA_CHANGE: AIRTRUST_STAGING_SCHEMA_CHANGE
@@ -485,7 +485,7 @@ jobs:
       - name: Run postconditions validator
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           APPROVED_MIGRATIONS: ${{ inputs.approved_migrations }}
         run: |
