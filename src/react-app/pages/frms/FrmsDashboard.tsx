@@ -48,9 +48,8 @@ import FrmsTripulantesTable from './components/FrmsTripulantesTable';
 import FrmsJornadaEffectivenessCard from './components/FrmsJornadaEffectivenessCard';
 import FrmsDayExplanationPanel from './components/FrmsDayExplanationPanel';
 import FrmsSourcePolicyBanner from './components/FrmsSourcePolicyBanner';
-import FrmsOperationalActionList from './components/FrmsOperationalActionList';
-import { FrmsCoordQueuePanel } from './components/FrmsCoordQueuePanel';
 import FrmsIogpAuditPanel from './components/FrmsIogpAuditPanel';
+import FrmsFleetOverview, { FrmsCriticalRanking } from './components/FrmsFleetOverview';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
 import {
   getMonthRange,
@@ -63,9 +62,6 @@ import {
   toDateKeyLocal,
 } from './frmsUtils';
 import { applyFrmsFrotaFilters, extractModelTokens } from './frmsFilterUtils';
-import {
-  formatFortnightPeriodShort,
-} from './fortnightOperationalLabels';
 import { buildFortnightOperationalSummary } from './fortnightOperationalSummary';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
@@ -244,6 +240,7 @@ function DashboardContent() {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mapLens, setMapLens] = useState<'compliance' | 'fatigue' | 'effectiveness'>('compliance');
+  const [detailOpen, setDetailOpen] = useState(analysisView);
   const timelineRef = useRef<HTMLDivElement>(null);
 
   // Scroll to timeline when tripulante is selected
@@ -354,21 +351,6 @@ function DashboardContent() {
     [operationalSnapshotDate, visibleOperationalSnapshot],
   );
 
-  const actionRequiredCount = useMemo(
-    () =>
-      fortnightSummary.attentionItems.filter(
-        (item) =>
-          item.actionGroup === 'critical' ||
-          item.actionGroup === 'attention' ||
-          item.actionGroup === 'checkin',
-      ).length,
-    [fortnightSummary.attentionItems],
-  );
-
-  const fortnightLabel = useMemo(
-    () => formatFortnightPeriodShort(fortnightSummary.periodStart, fortnightSummary.periodEnd),
-    [fortnightSummary.periodEnd, fortnightSummary.periodStart],
-  );
 
   const heatmapDates = useMemo(() => {
     if (isMonthMode) return getMonthDays(filters.mesReferencia);
@@ -737,7 +719,7 @@ function DashboardContent() {
 
       {/* ZONA 2 + 3: Main content */}
       <main className="flex-1 flex min-w-0 flex-col overflow-hidden" id="main-content">
-        <a href="#frms-action-list" className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white">
+        <a href="#frms-dashboard-content" className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white">
           Pular para conteúdo principal
         </a>
         {/* Header fixo — botões SEMPRE visíveis */}
@@ -902,95 +884,53 @@ function DashboardContent() {
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-4 sm:p-6">
+          <div id="frms-dashboard-content" className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-4 sm:p-6">
             <FrmsFilterChips />
-            <FrmsSourcePolicyBanner />
+            <FrmsSourcePolicyBanner compact />
 
-            <FrmsCoordQueuePanel
-              items={visibleOperationalSnapshot}
-              loading={loadingOperationalSnapshot}
-              onSelectCrew={(id) => setSelectedTripulanteId(String(id))}
-            />
+            {!analysisView && (
+              <FrmsFleetOverview
+                loading={loadingFrota || loadingOperationalSnapshot}
+                total={stats.total}
+                critical={stats.compliance.critico + stats.compliance.violacao}
+                attention={stats.compliance.atencao}
+                degraded={stats.effectiveness.degradada + stats.effectiveness.severa}
+                incomplete={fortnightSummary.estimatedOrIncompleteCount}
+                totalSetores={iogpRealMetrics.totalSetores}
+                totalPousos={iogpRealMetrics.totalPousos}
+                avgEffectivenessPct={iogpRealMetrics.avgEffectivenessPct}
+                ranking={rankingCritico}
+                selectedTripulanteId={selectedTripulanteId}
+                onSelectTripulante={setSelectedTripulanteId}
+              />
+            )}
 
-            <FrmsIogpAuditPanel
-              hasOperationalData={filteredFrota.length > 0}
-              totalTripulantes={filteredFrota.length}
-              totalJornadas={stats.compliance.ok + stats.compliance.atencao + stats.compliance.critico + stats.compliance.violacao}
-              maxHvDiaMin={iogpRealMetrics.maxHvDiaMin}
-              maxHv7dMin={iogpRealMetrics.maxHv7dMin}
-              maxHv28dMin={iogpRealMetrics.maxHv28dMin}
-              maxHvMesMin={iogpRealMetrics.maxHvMesMin}
-              maxHv365dMin={iogpRealMetrics.maxHv365dMin}
-              avgEffectivenessPct={iogpRealMetrics.avgEffectivenessPct}
-              effectivenessNivel={iogpRealMetrics.effectivenessNivel}
-              totalSetores={iogpRealMetrics.totalSetores}
-              totalPousos={iogpRealMetrics.totalPousos}
-              isDemo={iogpRealMetrics.isDemo}
-            />
+            {analysisView && (
+              <FrmsCriticalRanking
+                items={rankingCritico}
+                selectedTripulanteId={selectedTripulanteId}
+                onSelectTripulante={setSelectedTripulanteId}
+                limit={8}
+                title="Casos priorizados para análise"
+                subtitle="Pior caso selecionado automaticamente; evidência técnica abaixo."
+              />
+            )}
 
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" id="frms-action-list" aria-label="Painel de ação operacional">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {isMonthMode
-                      ? `Quinzena operacional · ${monthLabel(filters.mesReferencia)}`
-                      : 'Recorte operacional'}
-                  </p>
-                  <p className="mt-1 text-xl font-semibold text-slate-950">
-                    {filters.quinzena
-                      ? quinzenaAtiva?.label ?? `Quinzena: ${fortnightLabel}`
-                      : `Q1 ${quinzenasDoMes?.q1?.label ?? '1–15'}  ·  Q2 ${quinzenasDoMes?.q2?.label ?? '16–31'}`}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-600">
-                    {loadingOperationalSnapshot
-                      ? 'Carregando recorte operacional...'
-                      : actionRequiredCount > 0
-                        ? `${actionRequiredCount} tripulante(s) exigem ação ou confirmação`
-                        : 'Nenhuma ação imediata — confira fontes e check-ins abaixo'}
-                  </p>
-                </div>
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate(`/frms/controle-operacional?data=${operationalSnapshotDate}`)}
-                >
-                  <Activity className="mr-2 h-4 w-4" />
-                  Controle operacional
-                </Button>
-              </div>
+            {operationalSnapshotError && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Não foi possível carregar o recorte operacional do dia — indicadores de dados incompletos podem estar desatualizados.
+              </p>
+            )}
 
-              {!loadingOperationalSnapshot && !operationalSnapshotError && (
-                <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                  {fortnightSummary.criticalCount > 0 && (
-                    <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 font-medium text-red-800">
-                      {fortnightSummary.criticalCount} crítico(s)
-                    </span>
-                  )}
-                  {fortnightSummary.criticalCheckinsCount + fortnightSummary.estimatedOrIncompleteCount >
-                    0 && (
-                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-medium text-amber-800">
-                      {fortnightSummary.criticalCheckinsCount} check-in ·{' '}
-                      {fortnightSummary.estimatedOrIncompleteCount} fonte incompleta
-                    </span>
-                  )}
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600">
-                    Tendência geral: {fortnightSummary.generalTrendLabel}
-                  </span>
-                </div>
-              )}
-
-              <div className="mt-4">
-                <FrmsOperationalActionList
-                  summary={fortnightSummary}
-                  loading={loadingOperationalSnapshot}
-                  maxItemsPerGroup={8}
-                  hideHeader
-                />
-              </div>
-            </section>
-
-            <details className="rounded-2xl border border-slate-200 bg-white">
-              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-2xl" aria-expanded="false">
-                Detalhes técnicos — compliance, fadiga, efetividade e mapa
+            <details
+              className="rounded-2xl border border-slate-200 bg-white"
+              open={detailOpen}
+              onToggle={(e) => setDetailOpen((e.target as HTMLDetailsElement).open)}
+            >
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-2xl">
+                {analysisView
+                  ? 'Evidência técnica — compliance, fadiga, efetividade e mapa'
+                  : 'Detalhes técnicos — compliance, fadiga, efetividade e mapa'}
               </summary>
               <div className="space-y-4 border-t border-slate-100 p-4">
             <section className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
@@ -1037,37 +977,6 @@ function DashboardContent() {
                 </p>
               )}
             </section>
-
-            {rankingCritico.length > 0 && (
-              <section
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-                aria-label="Ranking automático dos tripulantes mais críticos"
-              >
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  Ranking automático — casos mais críticos
-                </h2>
-                <ol className="mt-3 space-y-2">
-                  {rankingCritico.slice(0, 8).map((item, index) => (
-                    <li key={item.tripulante_id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTripulanteId(String(item.tripulante_id))}
-                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm ${
-                          selectedTripulanteId === String(item.tripulante_id)
-                            ? 'border-teal-300 bg-teal-50 text-teal-900'
-                            : 'border-slate-200 bg-slate-50 hover:bg-white'
-                        }`}
-                      >
-                        <span>
-                          {index + 1}. {item.nome_guerra || item.nome}
-                        </span>
-                        <span className="text-xs text-slate-500">{item.base || item.aeronave_modelo || '—'}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
 
             {(mapLens === 'compliance' || mapLens === 'effectiveness') && (
             <FrmsMetricCards
@@ -1207,6 +1116,29 @@ function DashboardContent() {
               alertNivelByTripulante={alertNivelByTripulante}
               config={frmsConfig}
             />
+              </div>
+            </details>
+
+            <details className="rounded-2xl border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-2xl">
+                Conformidade técnica — limites IOGP / Lei 13.475 / RBAC 117
+              </summary>
+              <div className="border-t border-slate-100 p-4">
+                <FrmsIogpAuditPanel
+                  hasOperationalData={filteredFrota.length > 0}
+                  totalTripulantes={filteredFrota.length}
+                  totalJornadas={stats.compliance.ok + stats.compliance.atencao + stats.compliance.critico + stats.compliance.violacao}
+                  maxHvDiaMin={iogpRealMetrics.maxHvDiaMin}
+                  maxHv7dMin={iogpRealMetrics.maxHv7dMin}
+                  maxHv28dMin={iogpRealMetrics.maxHv28dMin}
+                  maxHvMesMin={iogpRealMetrics.maxHvMesMin}
+                  maxHv365dMin={iogpRealMetrics.maxHv365dMin}
+                  avgEffectivenessPct={iogpRealMetrics.avgEffectivenessPct}
+                  effectivenessNivel={iogpRealMetrics.effectivenessNivel}
+                  totalSetores={iogpRealMetrics.totalSetores}
+                  totalPousos={iogpRealMetrics.totalPousos}
+                  isDemo={iogpRealMetrics.isDemo}
+                />
               </div>
             </details>
           </div>

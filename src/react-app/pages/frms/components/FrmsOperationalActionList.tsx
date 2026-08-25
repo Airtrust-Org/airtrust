@@ -215,13 +215,10 @@ export default function FrmsOperationalActionList({
         sections.map((section) => {
           const visible = section.items.slice(0, perGroupLimit);
           const hidden = section.items.length - visible.length;
-          return (
-            <div key={section.key}>
-              <GroupHeader
-                label={section.label}
-                count={section.items.length}
-                toneClass={section.toneClass}
-              />
+          const collapsedByDefault = section.key === 'source' || section.key === 'observation';
+
+          const body = (
+            <>
               {visible.map((item) => (
                 <ActionCard key={`${section.key}-${item.funcionarioId}`} item={item} onSelectCrew={onSelectCrew} />
               ))}
@@ -230,6 +227,32 @@ export default function FrmsOperationalActionList({
                   +{hidden} oculto(s) nesta seção — refine filtros ou abra o controle operacional completo.
                 </p>
               )}
+            </>
+          );
+
+          if (collapsedByDefault) {
+            return (
+              <details key={section.key} className="group">
+                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <GroupHeader
+                    label={section.label}
+                    count={section.items.length}
+                    toneClass={section.toneClass}
+                  />
+                </summary>
+                {body}
+              </details>
+            );
+          }
+
+          return (
+            <div key={section.key}>
+              <GroupHeader
+                label={section.label}
+                count={section.items.length}
+                toneClass={section.toneClass}
+              />
+              {body}
             </div>
           );
         })

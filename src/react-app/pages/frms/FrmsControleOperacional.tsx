@@ -641,33 +641,34 @@ export default function FrmsControleOperacional() {
           </p>
         </section>
 
-        {/* ── Bloco 1: Lista de ação (prioridade) ───────────── */}
-        <FrmsOperationalActionList
-          summary={fortnightSummary}
-          loading={loading}
-          onSelectCrew={handleSelectCrew}
-          maxItemsPerGroup={10}
-        />
-
-        {/* ── Resumo compacto ───────────────────────────────── */}
-        <section className="grid gap-3 sm:grid-cols-3">
+        {/* ── Resumo decisório — 4 KPIs no topo ─────────────── */}
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiTile
-            label="Exigem ação agora"
+            label="Ação agora"
             value={
-              fortnightSummary.attentionItems.filter(
-                (item) => item.actionGroup === 'critical' || item.actionGroup === 'attention',
-              ).length
+              fortnightSummary.attentionItems.filter((item) => item.actionGroup === 'critical')
+                .length
             }
             tone={
-              fortnightSummary.attentionItems.some(
-                (item) => item.actionGroup === 'critical' || item.actionGroup === 'attention',
-              )
+              fortnightSummary.attentionItems.some((item) => item.actionGroup === 'critical')
                 ? 'danger'
                 : 'neutral'
             }
           />
           <KpiTile
-            label="Check-ins pendentes"
+            label="Atenção"
+            value={
+              fortnightSummary.attentionItems.filter((item) => item.actionGroup === 'attention')
+                .length
+            }
+            tone={
+              fortnightSummary.attentionItems.some((item) => item.actionGroup === 'attention')
+                ? 'warning'
+                : 'neutral'
+            }
+          />
+          <KpiTile
+            label="Fadiga diária pendente"
             value={
               fortnightSummary.attentionItems.filter((item) => item.actionGroup === 'checkin').length
             }
@@ -678,17 +679,22 @@ export default function FrmsControleOperacional() {
             }
           />
           <KpiTile
-            label="Fonte incompleta/estimada"
-            value={
-              fortnightSummary.attentionItems.filter((item) => item.actionGroup === 'source').length
-            }
-            tone={
-              fortnightSummary.attentionItems.some((item) => item.actionGroup === 'source')
-                ? 'warning'
-                : 'neutral'
-            }
+            label="Sem ação imediata"
+            value={Math.max(
+              fortnightSummary.monitoredCount - fortnightSummary.attentionItems.length,
+              0,
+            )}
+            tone="neutral"
           />
         </section>
+
+        {/* ── Bloco 1: Lista de ação (prioridade) ───────────── */}
+        <FrmsOperationalActionList
+          summary={fortnightSummary}
+          loading={loading}
+          onSelectCrew={handleSelectCrew}
+          maxItemsPerGroup={10}
+        />
 
         {/* ── Barra de período + filtros avançados ──────────── */}
         <section className="rounded-lg border border-slate-200 bg-white p-3">
