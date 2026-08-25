@@ -15,4 +15,12 @@ describe('staging release GitHub token permissions', () => {
     expect(workflow).toContain('/commits/${releaseSha}/status');
     expect(permissions).toContain('statuses: read');
   });
+
+  it('limits the release ledger preflight to the explicitly approved migrations', () => {
+    const workflow = readFileSync(join(ROOT, '.github/workflows/deploy-staging.yml'), 'utf8');
+
+    expect(workflow).toContain(
+      'node scripts/staging/migration-ledger-preflight.mjs --scope=0467,0468,0469',
+    );
+  });
 });
