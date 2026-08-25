@@ -1,25 +1,26 @@
 /**
- * 🚀 LAZY XLSX - Helper para lazy loading de exportação Excel
+ * Spreadsheet export helper.
  *
- * Usa XLSX no frontend com lazy loading para manter o bundle inicial enxuto.
- * Carrega sob demanda, reduzindo o bundle inicial.
+ * Uses the same ExcelJS browser implementation as the import parser so the
+ * frontend does not need the legacy `xlsx` dependency. The module remains lazy
+ * to keep spreadsheet generation out of the initial bundle.
  */
 
 import { importWithRetry } from '@/react-app/utils/lazyWithRetry';
 
-let excelModule: typeof import('xlsx') | null = null;
+let excelModule: typeof import('exceljs/dist/es5/exceljs.browser.js') | null = null;
 
-async function loadXLSX() {
+async function loadExcelJS() {
   if (!excelModule) {
-    excelModule = await importWithRetry(() => import('xlsx'), 'xlsx-module', {
-      reloadOnChunkError: false,
-      maxAttempts: 2,
-    });
+    excelModule = await importWithRetry(
+      () => import('exceljs/dist/es5/exceljs.browser.js'),
+      'exceljs-module',
+      { reloadOnChunkError: false, maxAttempts: 2 },
+    );
   }
-  return excelModule;
+  return excelModule.default;
 }
 
-/** Cria download de blob no browser */
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -32,91 +33,95 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-/**
- * Exporta dados para arquivo Excel (.xlsx)
- *
- * @param data - Array de objetos a serem exportados
- * @param fileName - Nome do arquivo (sem extensão)
- * @param sheetName - Nome da planilha (default: "Dados")
- *
- * @example
- * await exportToExcel(funcionarios, "funcionarios-2025", "Lista");
- */
+function safeWorksheetName(value: string, fallback: string): string {
+  const normalized = String(value || fallback)
+    .replace(/[\\/?*\[\]:]/g, '-')
+    .trim()
+    .slice(0, 31);
+  return normalized || fallback;
+}
+
+async function downloadWorkbook(
+  workbook: InstanceType<(typeof import('exceljs/dist/es5/exceljs.browser.js'))['default']['Workbook']>,
+  fileName: string,
+) {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const bytes = Uint8Array.from(buffer as ArrayLike<number>);
+  downloadBlob(
+    new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+    `${fileName}.xlsx`,
+  );
+}
+
+function appendObjectRows<T extends Record<string, unknown>>(
+  worksheet: ReturnType<
+    InstanceType<
+      (typeof import('exceljs/dist/es5/exceljs.browser.js'))['default']['Workbook']
+    >['addWorksheet']
+  >,
+  data: T[],
+) {
+  const headers = Object.keys(data[0]);
+  worksheet.addRow(headers);
+  for (const row of data) {
+    worksheet.addRow(headers.map((header) => row[header] as never));
+  }
+}
+
 export async function exportToExcel<T extends Record<string, unknown>>(
   data: T[],
   fileName: string,
   sheetName: string = 'Dados',
 ): Promise<void> {
-  if (!data || data.length === 0) {
-    throw new Error('Nenhum dado para exportar');
-  }
+  if (!data || data.length === 0) throw new Error('Nenhum dado para exportar');
 
   try {
-    const XLSX = await loadXLSX();
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-    XLSX.writeFile(workbook, `${fileName}.xlsx`);
+    const ExcelJS = await loadExcelJS();
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(safeWorksheetName(sheetName, 'Dados'));
+    appendObjectRows(worksheet, data);
+    await downloadWorkbook(workbook, fileName);
   } catch (err) {
     console.error('❌ Erro ao exportar Excel:', err);
     throw new Error('Falha ao exportar arquivo Excel');
   }
 }
 
-/**
- * Exporta múltiplas planilhas em um único arquivo Excel
- *
- * @param sheets - Array de objetos { name, data }
- * @param fileName - Nome do arquivo (sem extensão)
- *
- * @example
- * await exportMultipleSheets([
- *   { name: "Funcionários", data: funcionarios },
- *   { name: "Habilitações", data: habilitacoes }
- * ], "relatorio-completo");
- */
 export async function exportMultipleSheets<T extends Record<string, unknown>>(
   sheets: Array<{ name: string; data: T[] }>,
   fileName: string,
 ): Promise<void> {
-  if (!sheets || sheets.length === 0) {
-    throw new Error('Nenhuma planilha para exportar');
-  }
+  if (!sheets || sheets.length === 0) throw new Error('Nenhuma planilha para exportar');
 
   try {
-    const XLSX = await loadXLSX();
-    const workbook = XLSX.utils.book_new();
+    const ExcelJS = await loadExcelJS();
+    const workbook = new ExcelJS.Workbook();
+    let appended = 0;
 
     for (const sheet of sheets) {
-      if (sheet.data && sheet.data.length > 0) {
-        const worksheet = XLSX.utils.json_to_sheet(sheet.data);
-        XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
-      }
+      if (!sheet.data || sheet.data.length === 0) continue;
+      const worksheet = workbook.addWorksheet(
+        safeWorksheetName(sheet.name, `Dados-${appended + 1}`),
+      );
+      appendObjectRows(worksheet, sheet.data);
+      appended += 1;
     }
 
-    XLSX.writeFile(workbook, `${fileName}.xlsx`);
+    if (appended === 0) throw new Error('Nenhuma planilha com dados para exportar');
+    await downloadWorkbook(workbook, fileName);
   } catch (err) {
     console.error('❌ Erro ao exportar múltiplas planilhas:', err);
     throw new Error('Falha ao exportar arquivo Excel');
   }
 }
 
-/**
- * Converte dados para CSV (mais leve que XLSX)
- *
- * @param data - Array de objetos a serem exportados
- * @param fileName - Nome do arquivo (sem extensão)
- *
- * @example
- * await exportToCSV(funcionarios, "funcionarios-2025");
- */
 export async function exportToCSV<T extends Record<string, unknown>>(
   data: T[],
   fileName: string,
 ): Promise<void> {
-  if (!data || data.length === 0) {
-    throw new Error('Nenhum dado para exportar');
-  }
+  if (!data || data.length === 0) throw new Error('Nenhum dado para exportar');
 
   try {
     const headers = Object.keys(data[0]);
@@ -129,26 +134,13 @@ export async function exportToCSV<T extends Record<string, unknown>>(
     };
     const lines = [headers.map(escape).join(',')];
     data.forEach((row) => lines.push(headers.map((h) => escape(row[h])).join(',')));
-    const csv = lines.join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    downloadBlob(blob, `${fileName}.csv`);
+    downloadBlob(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' }), `${fileName}.csv`);
   } catch (err) {
     console.error('❌ Erro ao exportar CSV:', err);
     throw new Error('Falha ao exportar arquivo CSV');
   }
 }
 
-/**
- * Formata dados antes da exportação (opcional)
- * Remove campos desnecessários, formata datas, etc.
- *
- * @example
- * const formatted = formatForExport(funcionarios, {
- *   exclude: ['id', 'deleted_at'],
- *   dateFields: ['created_at', 'updated_at']
- * });
- */
 export function formatForExport<T extends Record<string, unknown>>(
   data: T[],
   options?: {
@@ -162,22 +154,18 @@ export function formatForExport<T extends Record<string, unknown>>(
 
     Object.entries(row).forEach(([key, value]) => {
       if (options?.exclude?.includes(key)) return;
-
-      if (options?.formatters && options.formatters[key]) {
+      if (options?.formatters?.[key]) {
         formatted[key] = options.formatters[key](value);
         return;
       }
-
       if (options?.dateFields?.includes(key) && value) {
         try {
-          const date = new Date(value as string);
-          formatted[key] = date.toLocaleDateString('pt-BR');
+          formatted[key] = new Date(value as string).toLocaleDateString('pt-BR');
         } catch {
           formatted[key] = value;
         }
         return;
       }
-
       formatted[key] = value;
     });
 
