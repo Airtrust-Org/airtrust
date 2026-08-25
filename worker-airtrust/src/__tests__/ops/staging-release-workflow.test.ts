@@ -919,17 +919,15 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
     );
   });
 
-  it('8b. smoke credentials gate before any migration or deploy', () => {
+  it('8b. only canonical smoke credentials gate before any migration or deploy', () => {
     const smokeSecretsJob = workflow.slice(
       workflow.indexOf('\n  check-smoke-secrets:'),
       workflow.indexOf('\n  cloudflare-secret-readiness-gate:'),
     );
     expect(smokeSecretsJob).toContain('if: ${{ inputs.run_smoke }}');
-    expect(smokeSecretsJob).toContain('QA_EXAMINER_ADMIN_EMAIL');
-    expect(smokeSecretsJob).toContain('QA_EXAMINER_ADMIN_PASSWORD');
-    expect(smokeSecretsJob).toContain('if [[ "$RUN_FULL_SMOKE" == "true" ]]');
     expect(smokeSecretsJob).toContain('STAGING_SMOKE_EMAIL');
     expect(smokeSecretsJob).toContain('STAGING_SMOKE_PASSWORD');
+    expect(smokeSecretsJob).not.toContain('secrets.QA_EXAMINER_');
 
     const readinessGate = workflow.slice(
       workflow.indexOf('\n  cloudflare-secret-readiness-gate:'),
@@ -940,6 +938,18 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
     expect(readinessGate).toContain(
       'if [[ "$RUN_SMOKE" == "true" && "$SMOKE_SECRETS_RESULT" != "success" ]]',
     );
+  });
+
+  it('8c. full smoke reseeds only the synthetic examiner fixture from canonical credentials', () => {
+    const smokeJob = workflow.slice(
+      workflow.indexOf('\n  smoke:'),
+      workflow.indexOf('\n  summary:'),
+    );
+    expect(smokeJob).toContain('QA_EXAMINER_ADMIN_EMAIL: qa-examiner-admin@staging.airtrust.invalid');
+    expect(smokeJob).toContain('QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}');
+    expect(smokeJob).toContain('CONFIRM_STAGING_QA_SEED: AIRTRUST_STAGING_QA_SEED');
+    expect(smokeJob).toContain('node scripts/staging/seed-qa-examiner-training.mjs --apply');
+    expect(smokeJob).toContain('node scripts/staging/smoke-examiner-training.mjs');
   });
 
   it('9/10. postconditions intera sobre APPROVED_MIGRATIONS e usa script flexível', () => {
