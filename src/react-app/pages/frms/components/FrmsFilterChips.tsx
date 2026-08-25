@@ -12,6 +12,11 @@ const STATUS_LABELS: Record<string, string> = {
   VIOLACAO: 'Violação',
 };
 
+const QUINZENA_LABELS: Record<'Q1' | 'Q2', string> = {
+  Q1: '1ª',
+  Q2: '2ª',
+};
+
 export default function FrmsFilterChips() {
   const { filters, removeFilter, setFilter } = useFrmsFilters();
   const chips: { key: string; label: string; onRemove: () => void }[] = [];
@@ -19,7 +24,7 @@ export default function FrmsFilterChips() {
   if (filters.modoPainel === 'PLANEJADO') {
     chips.push({
       key: 'modoPainel',
-      label: `Mensal: ${monthLabel(filters.mesReferencia)}`,
+      label: `Este mês: ${monthLabel(filters.mesReferencia)}`,
       onRemove: () => setFilter('modoPainel', 'OPERACIONAL'),
     });
   } else if (filters.periodo !== 30) {
@@ -33,7 +38,7 @@ export default function FrmsFilterChips() {
   if (filters.quinzena) {
     chips.push({
       key: 'quinzena',
-      label: `Quinzena: ${filters.quinzena}`,
+      label: `Quinzena: ${QUINZENA_LABELS[filters.quinzena]}`,
       onRemove: () => removeFilter('quinzena'),
     });
   }
@@ -41,7 +46,7 @@ export default function FrmsFilterChips() {
   if (filters.modeloAeronave) {
     chips.push({
       key: 'modeloAeronave',
-      label: `Equipamento: ${filters.modeloAeronave}`,
+      label: `Aeronave: ${filters.modeloAeronave}`,
       onRemove: () => removeFilter('modeloAeronave'),
     });
   }
