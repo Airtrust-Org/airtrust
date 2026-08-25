@@ -44,7 +44,11 @@ function safeWorksheetName(value: string, fallback: string): string {
 
 async function downloadWorkbook(workbook: Workbook, fileName: string) {
   const buffer = await workbook.xlsx.writeBuffer();
-  const bytes = Uint8Array.from(buffer as unknown as ArrayLike<number>);
+  // The browser ExcelJS build returns an ArrayBuffer at runtime even though its
+  // ambient .d.ts (shared with the Node build) types it as `Buffer`; narrow at
+  // runtime instead of casting so both shapes copy correctly into bytes.
+  const bytes =
+    buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : Uint8Array.from(buffer);
   downloadBlob(
     new Blob([bytes], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
