@@ -99,7 +99,6 @@ function QueueCard({
             </span>
           </div>
 
-          {/* Motivos */}
           {item.motivos_principais?.length > 0 && (
             <ul className="list-disc pl-4 text-sm font-medium text-slate-700">
               {item.motivos_principais.map((motivo, idx) => (
@@ -108,7 +107,6 @@ function QueueCard({
             </ul>
           )}
 
-          {/* Ação e Missão */}
           <div className="text-xs space-y-1">
             <p className="text-slate-600">
               <span className="font-semibold text-slate-800">Próxima missão:</span> {proximaMissao}
@@ -119,22 +117,8 @@ function QueueCard({
           </div>
         </div>
       </div>
-      
-      {/* Botões de Ação */}
+
       <div className="flex flex-shrink-0 flex-col sm:flex-row items-center gap-2 pt-2 lg:pt-0">
-        <button
-          type="button"
-          aria-label={`Registrar ciência para ${item.nome}`}
-          className="w-full sm:w-auto inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/40 shadow-sm"
-          onClick={() => {
-            // Futuro: chamar endpoint de ACK
-            alert('Ciência registrada (Simulação)');
-          }}
-        >
-          <CheckCircle2 className="h-4 w-4 text-slate-400" />
-          <span>Ciência</span>
-        </button>
-        
         {onSelectCrew ? (
           <button
             type="button"
@@ -159,7 +143,6 @@ function QueueCard({
 }
 
 export function FrmsCoordQueuePanel({ items, loading, onSelectCrew }: Props) {
-  // Por padrão, expande a fila se houver algum item que não seja NORMAL
   const hasActionableItems = items.some((i) => i.estado_operacional !== 'NORMAL');
   const [expanded, setExpanded] = useState(hasActionableItems);
 
@@ -172,25 +155,23 @@ export function FrmsCoordQueuePanel({ items, loading, onSelectCrew }: Props) {
     );
   }
 
-  // Ordena por severidade (0 é mais crítico)
   const sortedItems = [...items].sort((a, b) => {
     const orderA = SEVERITY_ORDER[a.estado_operacional] ?? 99;
     const orderB = SEVERITY_ORDER[b.estado_operacional] ?? 99;
     if (orderA !== orderB) return orderA - orderB;
-    // Desempate por nome
     const nomeA = a.nome || '';
     const nomeB = b.nome || '';
     return nomeA.localeCompare(nomeB);
   });
 
-  const criticalCount = sortedItems.filter((i) => 
-    i.estado_operacional === 'CRITICO_VIOLACAO' || 
+  const criticalCount = sortedItems.filter((i) =>
+    i.estado_operacional === 'CRITICO_VIOLACAO' ||
     i.estado_operacional === 'MITIGACAO_NECESSARIA'
   ).length;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">
-      <button 
+      <button
         type="button"
         className="w-full flex items-center justify-between bg-slate-50 border-b border-slate-200 px-5 py-4 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/40"
         onClick={() => setExpanded(!expanded)}
@@ -202,8 +183,8 @@ export function FrmsCoordQueuePanel({ items, loading, onSelectCrew }: Props) {
               Atenção da Coordenação
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              {criticalCount > 0 
-                ? `${criticalCount} tripulante(s) requerem avaliação iminente.` 
+              {criticalCount > 0
+                ? `${criticalCount} tripulante(s) requerem avaliação iminente.`
                 : 'Nenhum tripulante em estado crítico ou de mitigação no momento.'}
             </p>
           </div>
@@ -228,10 +209,10 @@ export function FrmsCoordQueuePanel({ items, loading, onSelectCrew }: Props) {
             </div>
           ) : (
             sortedItems.map((item) => (
-              <QueueCard 
-                key={`${item.funcionario_id}-${item.data_operacional}`} 
-                item={item} 
-                onSelectCrew={onSelectCrew} 
+              <QueueCard
+                key={`${item.funcionario_id}-${item.data_operacional}`}
+                item={item}
+                onSelectCrew={onSelectCrew}
               />
             ))
           )}
