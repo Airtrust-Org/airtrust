@@ -111,8 +111,11 @@ export interface FrmsFrotaRow {
   aeronave_id?: string | null;
   aeronave_prefixo?: string | null;
   aeronave_modelo?: string | null;
+  base?: string | null;
   quinzena_numero?: number | null;
   quinzena_tipo?: 'Q1' | 'Q2' | 'PERSONALIZADA' | null;
+  hv_28d_min?: number;
+  pct_28d?: number;
   hv_mes_min: number;
   pct_mes: number;
   hv_7d_min: number;

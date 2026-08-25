@@ -12,6 +12,8 @@ describe('FrmsConfiguracoes parametros decorativos', () => {
       'REPOUSO_MIN_PRE_APRESENTACAO',
       'REPOUSO_MIN_POS_LIBERACAO',
       'REPOUSO_QUALIDADE_HOTEL',
+      'DURACAO_CURTA_MINUTOS',
+      'DURACAO_CURTA_FATOR',
     ];
 
     expected.forEach((key) => {

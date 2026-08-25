@@ -16,7 +16,12 @@ export interface FrmsIogpAuditPanelProps {
   maxHvDiaMin?: number | null;
   maxHv7dMin?: number | null;
   maxHv28dMin?: number | null;
+  maxHvMesMin?: number | null;
   maxHv365dMin?: number | null;
+  heatIndexLabel?: string | null;
+  windChillStatus?: string | null;
+  wbgtKind?: 'MEASURED' | 'ESTIMATED' | 'UNAVAILABLE' | null;
+  wbgtValue?: number | null;
   maxFdpHoras?: number | null;
   minRepousoHoras?: number | null;
   avgEffectivenessPct?: number | null;
@@ -77,7 +82,12 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
   maxHvDiaMin = null,
   maxHv7dMin = null,
   maxHv28dMin = null,
+  maxHvMesMin = null,
   maxHv365dMin = null,
+  heatIndexLabel = null,
+  windChillStatus = null,
+  wbgtKind = null,
+  wbgtValue = null,
   maxFdpHoras = null,
   minRepousoHoras = null,
   avgEffectivenessPct = null,
@@ -95,10 +105,24 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
 }) => {
   const status1d = resolveLimitStatus(maxHvDiaMin, 8);
   const status7d = resolveLimitStatus(maxHv7dMin, 45);
-  const status28d = resolveLimitStatus(maxHv28dMin, 90);
+  const status28d = resolveLimitStatus(maxHv28dMin, 93);
+  const statusMes = resolveLimitStatus(maxHvMesMin, 90);
   const status365d = resolveLimitStatus(maxHv365dMin, 930);
+  const heatIndexDisplay = heatIndexLabel?.trim() || 'Não avaliado';
+  const windChillDisplay = windChillStatus?.trim() || 'Não avaliado';
+  const wbgtDisplay =
+    wbgtKind === 'MEASURED' && wbgtValue != null
+      ? `${wbgtValue.toFixed(1)} °C (medido)`
+      : wbgtKind === 'ESTIMATED' && wbgtValue != null
+        ? `${wbgtValue.toFixed(1)} °C (estimado)`
+        : 'Indisponível';
 
-  const hasAnyHv = maxHvDiaMin != null || maxHv7dMin != null || maxHv28dMin != null || maxHv365dMin != null;
+  const hasAnyHv =
+    maxHvDiaMin != null ||
+    maxHv7dMin != null ||
+    maxHv28dMin != null ||
+    maxHvMesMin != null ||
+    maxHv365dMin != null;
 
   return (
     <section
@@ -178,12 +202,12 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Horas de Voo Cumulativas
               </p>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
                   <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">1 dia</span>
                   <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">8 h</span>
                   <span className="block text-[10px] text-slate-500 dark:text-slate-400">
-                    {maxHvDiaMin != null ? `Real: ${formatHours(maxHvDiaMin)}` : 'Lei 13.475'}
+                    {maxHvDiaMin != null ? `Real: ${formatHours(maxHvDiaMin)}` : 'Helicóptero 8 h'}
                   </span>
                   <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status1d.color}`}>
                     {status1d.label}
@@ -193,20 +217,30 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
                   <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">7 dias</span>
                   <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">45 h</span>
                   <span className="block text-[10px] text-slate-500 dark:text-slate-400">
-                    {maxHv7dMin != null ? `Real: ${formatHours(maxHv7dMin)}` : 'Lei 13.475'}
+                    {maxHv7dMin != null ? `Real: ${formatHours(maxHv7dMin)}` : 'IOGP/contratual'}
                   </span>
                   <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status7d.color}`}>
                     {status7d.label}
                   </span>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
-                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">Mês</span>
-                  <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">90 h</span>
+                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">28 dias</span>
+                  <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">93 h</span>
                   <span className="block text-[10px] text-slate-500 dark:text-slate-400">
-                    {maxHv28dMin != null ? `Real: ${formatHours(maxHv28dMin)}` : 'Lei 13.475'}
+                    {maxHv28dMin != null ? `Real: ${formatHours(maxHv28dMin)}` : 'RBAC 117'}
                   </span>
                   <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${status28d.color}`}>
                     {status28d.label}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
+                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">Mês calendário</span>
+                  <span className="mt-0.5 block text-base font-extrabold text-slate-900 dark:text-slate-100">90 h</span>
+                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">
+                    {maxHvMesMin != null ? `Real: ${formatHours(maxHvMesMin)}` : 'Lei 13.475'}
+                  </span>
+                  <span className={`mt-1 block rounded px-1 py-0.5 text-[10px] ${statusMes.color}`}>
+                    {statusMes.label}
                   </span>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-900">
@@ -430,18 +464,18 @@ export const FrmsIogpAuditPanel: React.FC<FrmsIogpAuditPanelProps> = ({
               <div className="rounded-lg border border-slate-200 bg-white p-1.5 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="text-slate-500">Heat Index:</span>{' '}
                 <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {temperatura != null ? 'Normal' : 'Não avaliado'}
+                  {heatIndexDisplay}
                 </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-1.5 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="text-slate-500">Wind Chill:</span>{' '}
                 <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {temperatura != null ? 'Normal' : 'Não avaliado'}
+                  {windChillDisplay}
                 </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-1.5 text-center dark:border-slate-700 dark:bg-slate-900">
                 <span className="text-slate-500">WBGT:</span>{' '}
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Não avaliado</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{wbgtDisplay}</span>
               </div>
             </div>
           </div>

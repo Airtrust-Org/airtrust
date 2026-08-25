@@ -35,9 +35,15 @@ const QUINZENA_OPTIONS: Array<{ value: FrmsFiltersState['quinzena']; label: stri
 
 interface FrmsFiltersProps {
   modelosDisponiveis?: string[];
+  basesDisponiveis?: string[];
+  tripulantesDisponiveis?: Array<{ id: string; nome: string }>;
 }
 
-export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProps) {
+export default function FrmsFilters({
+  modelosDisponiveis = [],
+  basesDisponiveis = [],
+  tripulantesDisponiveis = [],
+}: FrmsFiltersProps) {
   const { filters, setFilter, resetFilters } = useFrmsFilters();
   const modelosLista = useMemo(
     () =>
@@ -49,6 +55,17 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
         ),
       ).sort((left, right) => left.localeCompare(right)),
     [modelosDisponiveis],
+  );
+  const basesLista = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          basesDisponiveis
+            .map((base) => base?.trim())
+            .filter((base): base is string => Boolean(base)),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [basesDisponiveis],
   );
 
   const toggleStatus = (status: string) => {
@@ -119,12 +136,18 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
             <input
               data-testid="frms-filtro-nome"
               type="text"
+              list="frms-tripulantes-escala"
               value={filters.busca}
               onChange={(e) => setFilter('busca', e.target.value)}
               placeholder="Digite o nome..."
               className="w-full rounded-md border border-slate-200 bg-white pl-8 pr-8 py-2 text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
             />
+            <datalist id="frms-tripulantes-escala">
+              {tripulantesDisponiveis.map((tripulante) => (
+                <option key={tripulante.id} value={tripulante.nome} />
+              ))}
+            </datalist>
             {filters.busca && (
               <button
                 type="button"
@@ -212,6 +235,29 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            Base
+          </label>
+          <select
+            data-testid="frms-filtro-base"
+            value={filters.base}
+            onChange={(e) => setFilter('base', e.target.value)}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
+          >
+            <option value="">Todas</option>
+            {basesLista.map((base) => (
+              <option key={base} value={base}>
+                {base}
+              </option>
+            ))}
+          </select>
+          {basesLista.length === 0 && (
+            <p className="mt-2 text-xs text-slate-400">Nenhuma base encontrada na escala do período.</p>
+          )}
         </section>
 
         {/* Equipamento */}

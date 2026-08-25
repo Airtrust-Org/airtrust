@@ -66,6 +66,10 @@ export function applyFrmsFrotaFilters(
       }
     }
 
+    if (filters.base && normalizeText(row.base) !== normalizeText(filters.base)) {
+      return false;
+    }
+
     if (
       filters.modeloAeronave &&
       !extractModelTokens(row.aeronave_modelo).includes(normalizeModel(filters.modeloAeronave))
