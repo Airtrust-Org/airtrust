@@ -17,18 +17,28 @@ test('standalone staging verification is read-only, staging-only and masks the r
   assert.doesNotMatch(script, /\bUPDATE\b|\bINSERT\b|\bDELETE\b/i);
 });
 
-test('production 0470 backfill remains hard-blocked and executors fail closed', () => {
+test('production backfill is reachable only through production environment and exact confirmation', () => {
   const workflow = read('.github/workflows/backfill-validacao-hash.yml');
   const wrapper = read('scripts/production/backfill-validacao-hash-with-recovery-point.sh');
   const adapter = read('worker-airtrust/scripts/backfill-certificado-validacao-hash-production-remote.mjs');
-  const validator = read('scripts/schema-v2/validate-0470-production-postconditions.sh');
+  assert.match(workflow, /if: \$\{\{ inputs\.target == 'production' \}\}/);
+  assert.match(workflow, /environment: production/);
+  assert.match(workflow, /CONFIRM_PRODUCTION_BACKFILL_VALIDACAO_HASH/);
+  assert.match(workflow, /RELEASE_SHA_MISMATCH|release_sha não corresponde/);
+  assert.match(workflow, /validate-0470-production-postconditions\.sh/);
+  assert.match(wrapper, /RECOVERY_POINT_CAPTURED=true/);
+  assert.match(wrapper, /BLOCKED_STAGING_DB_ID/);
+  assert.match(wrapper, /--env production/);
+  assert.match(adapter, /targetName: 'production'/);
+  assert.match(adapter, /'--env', 'production'/);
+  assert.doesNotMatch(adapter, /targetName: 'staging'/);
+});
 
-  assert.match(workflow, /if: \$\{\{ false && inputs\.target == 'production' \}\}/);
-  assert.match(workflow, /Production Backfill \(NOT executed by this workflow revision\)/);
-  assert.doesNotMatch(workflow, /scripts\/production\/backfill-validacao-hash-with-recovery-point\.sh/);
-
-  for (const source of [wrapper, adapter, validator]) {
-    assert.match(source, /PRODUCTION_0470_.*DISABLED/);
-    assert.doesNotMatch(source, /wrangler|CLOUDFLARE|--env production|\bUPDATE\b|\bINSERT\b|\bDELETE\b/i);
-  }
+test('production 0470 validator is read-only and refuses the staging database id', () => {
+  const script = read('scripts/schema-v2/validate-0470-production-postconditions.sh');
+  assert.match(script, /airtrust-db/);
+  assert.match(script, /BLOCKED_STAGING_DB_ID/);
+  assert.match(script, /--env production/);
+  assert.match(script, /PRODUCTION_0470_POSTCONDITIONS_OK/);
+  assert.doesNotMatch(script, /\bUPDATE\b|\bINSERT\b|\bDELETE\b/i);
 });
