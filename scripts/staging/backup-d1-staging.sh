@@ -84,7 +84,10 @@ out_file="$out_dir/staging-backup-${timestamp_utc}-${random_suffix}.sql"
 checksum_file="${out_file}.sha256"
 
 echo "Exportando $db_name (remote) para $out_file ..."
-( cd worker-airtrust && npx wrangler d1 export "$db_name" --remote --output "../$out_file" )
+# Pass the absolute output path through unchanged. Prefixing it with ../ while
+# running Wrangler from worker-airtrust turns /tmp/... into ..//tmp/... and
+# makes Wrangler fail after successfully creating the remote D1 export.
+( cd worker-airtrust && npx wrangler d1 export "$db_name" --remote --output "$out_file" )
 
 if [[ ! -s "$out_file" ]]; then
   echo "ERROR: backup vazio ou não gerado ($out_file). Abortando — não confiar neste backup." >&2
