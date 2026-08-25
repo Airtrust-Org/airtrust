@@ -47,8 +47,16 @@ assert_json \
 
 assert_json \
   "required tenant/leg/crew columns exist" \
-  "SELECT name, type, \"notnull\" AS nn FROM pragma_table_info('sigvoos_shadow_leg_crews') WHERE name IN ('id','empresa_id','leg_id','run_id','crew_identity_key','crew_resolution_method','active','created_at','updated_at') ORDER BY name" \
-  'const rows=JSON.parse(process.env.RESULT); const expected=["active","created_at","crew_identity_key","crew_resolution_method","empresa_id","id","leg_id","run_id","updated_at"]; if(JSON.stringify(rows.map(r=>r.name))!==JSON.stringify(expected))process.exit(1); for(const r of rows){if(r.nn!==1)process.exit(1)}' || fail=1
+  "SELECT name, type, \"notnull\" AS nn FROM pragma_table_info('sigvoos_shadow_leg_crews') WHERE name IN ('empresa_id','leg_id','run_id','crew_identity_key','crew_resolution_method','active','created_at','updated_at') ORDER BY name" \
+  'const rows=JSON.parse(process.env.RESULT); const expected=["active","created_at","crew_identity_key","crew_resolution_method","empresa_id","leg_id","run_id","updated_at"]; if(JSON.stringify(rows.map(r=>r.name))!==JSON.stringify(expected))process.exit(1); for(const r of rows){if(r.nn!==1)process.exit(1)}' || fail=1
+
+# SQLite reports a TEXT PRIMARY KEY as notnull=0 in pragma_table_info even
+# though the column is the declared primary key. Verify the actual key role
+# explicitly instead of rejecting the immutable 0468 DDL on that quirk.
+assert_json \
+  "shadow crew id is the declared primary key" \
+  "SELECT name, pk FROM pragma_table_info('sigvoos_shadow_leg_crews') WHERE name='id'" \
+  'const r=JSON.parse(process.env.RESULT)[0]; if(r?.name!=="id" || r?.pk!==1)process.exit(1)' || fail=1
 
 assert_json \
   "active tenant/leg/crew identity index is unique" \
