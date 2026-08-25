@@ -173,6 +173,7 @@ interface UseFrmsOperationalSnapshotResult {
   loading: boolean;
   error: string | null;
   unauthorized: boolean;
+  lastUpdatedAt: string | null;
   refetch: () => Promise<void>;
 }
 
@@ -220,6 +221,7 @@ export function useFrmsOperationalSnapshot(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const enabled = options.enabled ?? true;
 
   const fetchSnapshot = useCallback(async () => {
@@ -230,6 +232,7 @@ export function useFrmsOperationalSnapshot(
       setLoading(false);
       setError(null);
       setUnauthorized(false);
+      setLastUpdatedAt(null);
       return;
     }
 
@@ -240,6 +243,7 @@ export function useFrmsOperationalSnapshot(
     try {
       const response = await fetchWithAuth(buildSnapshotUrl(filters), {
         method: 'GET',
+        cache: 'no-store',
       });
 
       const payload = (await response.json()) as SnapshotApiResponse;
@@ -258,6 +262,7 @@ export function useFrmsOperationalSnapshot(
         ...(payload.summary || {}),
       });
       setMeta(payload.meta || null);
+      setLastUpdatedAt(new Date().toISOString());
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar snapshot operacional';
       if (
@@ -266,9 +271,8 @@ export function useFrmsOperationalSnapshot(
       ) {
         setUnauthorized(true);
       }
-      setData([]);
-      setSummary(EMPTY_SUMMARY);
-      setMeta(null);
+      // Preserve the last valid snapshot. Operational users must never see a
+      // previous valid state disappear merely because the refresh request failed.
       setError(message);
     } finally {
       setLoading(false);
@@ -295,6 +299,7 @@ export function useFrmsOperationalSnapshot(
     loading,
     error,
     unauthorized,
+    lastUpdatedAt,
     refetch: fetchSnapshot,
   };
 }

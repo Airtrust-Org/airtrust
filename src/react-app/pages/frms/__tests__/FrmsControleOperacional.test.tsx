@@ -49,6 +49,7 @@ function baseHookState() {
     loading: false,
     error: null as string | null,
     unauthorized: false,
+    lastUpdatedAt: null as string | null,
     refetch: vi.fn(),
   };
 }
@@ -839,6 +840,22 @@ describe('FrmsControleOperacional', () => {
       renderControle();
       expect(screen.getByText('Escalado sem jornada FRMS')).toBeInTheDocument();
     });
+  });
+
+  it('mostra NÃO LIBERAR para escalado hoje sem fadiga diária e expõe Atualizar agora', () => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    mockSnapshotData([
+      buildSnapshotItem({
+        escalado: true,
+        data_operacional: today,
+        checkin_status: 'PENDENTE',
+        alertas: ['CHECKIN_PENDENTE'],
+      }),
+    ]);
+    renderControle();
+    expect(screen.getByText(/NÃO LIBERAR — Fadiga diária não preenchida/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Atualizar painel operacional agora/i })).toBeInTheDocument();
   });
 
   describe('Fontes com rotulos individuais por coluna', () => {

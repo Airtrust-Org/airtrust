@@ -137,4 +137,46 @@ describe('useFrmsOperationalSnapshot', () => {
 
     expect(fetchWithAuthMock).toHaveBeenCalledTimes(2);
   });
+
+  it('preserves the last valid snapshot and lastUpdatedAt when refresh fails', async () => {
+    fetchWithAuthMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: [{ funcionario_id: 10, nome: 'Max', escalado: true, checkin_status: 'PENDENTE', alertas: [] }],
+          summary: { total_tripulantes: 1, total_escalados: 1, checkins_recebidos: 0, checkins_pendentes: 1 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ success: false, error: 'timeout' }),
+      });
+
+    const { result } = renderHook(() =>
+      useFrmsOperationalSnapshot({
+        data_inicio: '2026-05-25',
+        data_fim: '2026-05-26',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.data).toHaveLength(1);
+      expect(result.current.lastUpdatedAt).toBeTruthy();
+    });
+
+    const previousData = result.current.data;
+    const previousStamp = result.current.lastUpdatedAt;
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    expect(result.current.data).toBe(previousData);
+    expect(result.current.lastUpdatedAt).toBe(previousStamp);
+    expect(result.current.error).toBeTruthy();
+  });
 });

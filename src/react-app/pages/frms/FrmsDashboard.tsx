@@ -7,7 +7,7 @@
  *   3. Conteúdo scrollável: cards + heatmap + timeline + tabela
  */
 import { useState, useMemo, useCallback, useRef, useEffect, Suspense, lazy } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Activity,
   Bell,
@@ -51,6 +51,7 @@ import FrmsSourcePolicyBanner from './components/FrmsSourcePolicyBanner';
 import FrmsOperationalActionList from './components/FrmsOperationalActionList';
 import { FrmsCoordQueuePanel } from './components/FrmsCoordQueuePanel';
 import FrmsIogpAuditPanel from './components/FrmsIogpAuditPanel';
+import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
 import {
   getMonthRange,
   getMonthDays,
@@ -223,6 +224,8 @@ function TripulantePickerModal({
 
 function DashboardContent() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const analysisView = searchParams.get('vista') === 'analise';
   const { filters, setFilter, periodoNumDias, isMonthMode, quinzenasDoMes, quinzenaAtiva } = useFrmsFilters();
   const operationalSnapshotDate = useMemo(() => getTodayLocalIsoDate(), []);
   const [showPicker, setShowPicker] = useState(false);
@@ -245,7 +248,7 @@ function DashboardContent() {
 
   // Scroll to timeline when tripulante is selected
   useEffect(() => {
-    if (selectedTripulanteId && timelineRef.current) {
+    if (selectedTripulanteId && typeof timelineRef.current?.scrollIntoView === 'function') {
       timelineRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [selectedTripulanteId]);
@@ -474,6 +477,58 @@ function DashboardContent() {
       ).sort((left, right) => left.localeCompare(right)),
     [frota],
   );
+  const basesDisponiveis = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          frota
+            .map((item) => item.base?.trim())
+            .filter((base): base is string => Boolean(base)),
+        ),
+      ).sort((left, right) => left.localeCompare(right, 'pt-BR')),
+    [frota],
+  );
+  const tripulantesDisponiveis = useMemo(
+    () =>
+      frota
+        .map((item) => ({
+          id: String(item.tripulante_id),
+          nome: item.nome_guerra || item.nome,
+        }))
+        .filter((item) => item.nome)
+        .sort((left, right) => left.nome.localeCompare(right.nome, 'pt-BR')),
+    [frota],
+  );
+  const rankingCritico = useMemo(
+    () =>
+      [...filteredFrota].sort((left, right) => {
+        const leftWeight = getFrmsNivelWeight(
+          resolveFrmsDashboardNivelCompleto({
+            effectivenessPct: left.effectiveness_pct ?? null,
+            maxCompliancePct: Math.max(left.pct_mes, left.pct_7d, left.pct_dia, left.pct_365d),
+            alertNivel: alertNivelByTripulante[left.tripulante_id],
+            config: frmsConfig,
+          }),
+        );
+        const rightWeight = getFrmsNivelWeight(
+          resolveFrmsDashboardNivelCompleto({
+            effectivenessPct: right.effectiveness_pct ?? null,
+            maxCompliancePct: Math.max(right.pct_mes, right.pct_7d, right.pct_dia, right.pct_365d),
+            alertNivel: alertNivelByTripulante[right.tripulante_id],
+            config: frmsConfig,
+          }),
+        );
+        return rightWeight - leftWeight;
+      }),
+    [alertNivelByTripulante, filteredFrota, frmsConfig],
+  );
+
+  useEffect(() => {
+    if (selectedTripulanteId) return;
+    const worst = rankingCritico[0];
+    if (!worst) return;
+    setSelectedTripulanteId(String(worst.tripulante_id));
+  }, [rankingCritico, selectedTripulanteId]);
 
   // Stats
   const stats = useMemo(() => {
@@ -501,6 +556,7 @@ function DashboardContent() {
         maxHvDiaMin: null,
         maxHv7dMin: null,
         maxHv28dMin: null,
+        maxHvMesMin: null,
         maxHv365dMin: null,
         avgEffectivenessPct: null,
         effectivenessNivel: null,
@@ -512,6 +568,7 @@ function DashboardContent() {
     let maxDia: number | null = null;
     let max7d: number | null = null;
     let max28d: number | null = null;
+    let maxMes: number | null = null;
     let max365d: number | null = null;
     let sumEff = 0;
     let countEff = 0;
@@ -526,8 +583,11 @@ function DashboardContent() {
       if (item.hv_7d_min != null && Number.isFinite(item.hv_7d_min) && item.hv_7d_min > 0) {
         max7d = max7d == null ? item.hv_7d_min : Math.max(max7d, item.hv_7d_min);
       }
+      if (item.hv_28d_min != null && Number.isFinite(item.hv_28d_min) && item.hv_28d_min > 0) {
+        max28d = max28d == null ? item.hv_28d_min : Math.max(max28d, item.hv_28d_min);
+      }
       if (item.hv_mes_min != null && Number.isFinite(item.hv_mes_min) && item.hv_mes_min > 0) {
-        max28d = max28d == null ? item.hv_mes_min : Math.max(max28d, item.hv_mes_min);
+        maxMes = maxMes == null ? item.hv_mes_min : Math.max(maxMes, item.hv_mes_min);
       }
       if (item.hv_365d_min != null && Number.isFinite(item.hv_365d_min) && item.hv_365d_min > 0) {
         max365d = max365d == null ? item.hv_365d_min : Math.max(max365d, item.hv_365d_min);
@@ -565,6 +625,7 @@ function DashboardContent() {
       maxHvDiaMin: maxDia,
       maxHv7dMin: max7d,
       maxHv28dMin: max28d,
+      maxHvMesMin: maxMes,
       maxHv365dMin: max365d,
       avgEffectivenessPct: avgEff,
       effectivenessNivel: effNivel,
@@ -647,7 +708,11 @@ function DashboardContent() {
     >
       {/* ZONA 1: Sidebar — desktop fixo, mobile drawer */}
       <aside className="hidden w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:flex">
-        <FrmsFilters modelosDisponiveis={modelosDisponiveis} />
+        <FrmsFilters
+          modelosDisponiveis={modelosDisponiveis}
+          basesDisponiveis={basesDisponiveis}
+          tripulantesDisponiveis={tripulantesDisponiveis}
+        />
       </aside>
 
       {/* Mobile drawer overlay */}
@@ -661,7 +726,11 @@ function DashboardContent() {
                 <X className="h-5 w-5 text-slate-500 dark:text-slate-400" />
               </button>
             </div>
-            <FrmsFilters modelosDisponiveis={modelosDisponiveis} />
+            <FrmsFilters
+          modelosDisponiveis={modelosDisponiveis}
+          basesDisponiveis={basesDisponiveis}
+          tripulantesDisponiveis={tripulantesDisponiveis}
+        />
           </aside>
         </div>
       )}
@@ -685,8 +754,11 @@ function DashboardContent() {
 
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">
-                  FRMS
+                  {analysisView ? 'Análise & Evidência' : 'Gestão FRMS'}
                 </h1>
+                <div className="mt-2">
+                  <FrmsWorkspaceNav />
+                </div>
                 <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">
                   Painel de decisão operacional — quem exige ação, por quê e onde ver evidência
                 </p>
@@ -847,6 +919,7 @@ function DashboardContent() {
               maxHvDiaMin={iogpRealMetrics.maxHvDiaMin}
               maxHv7dMin={iogpRealMetrics.maxHv7dMin}
               maxHv28dMin={iogpRealMetrics.maxHv28dMin}
+              maxHvMesMin={iogpRealMetrics.maxHvMesMin}
               maxHv365dMin={iogpRealMetrics.maxHv365dMin}
               avgEffectivenessPct={iogpRealMetrics.avgEffectivenessPct}
               effectivenessNivel={iogpRealMetrics.effectivenessNivel}
@@ -964,6 +1037,37 @@ function DashboardContent() {
                 </p>
               )}
             </section>
+
+            {rankingCritico.length > 0 && (
+              <section
+                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                aria-label="Ranking automático dos tripulantes mais críticos"
+              >
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Ranking automático — casos mais críticos
+                </h2>
+                <ol className="mt-3 space-y-2">
+                  {rankingCritico.slice(0, 8).map((item, index) => (
+                    <li key={item.tripulante_id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTripulanteId(String(item.tripulante_id))}
+                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm ${
+                          selectedTripulanteId === String(item.tripulante_id)
+                            ? 'border-teal-300 bg-teal-50 text-teal-900'
+                            : 'border-slate-200 bg-slate-50 hover:bg-white'
+                        }`}
+                      >
+                        <span>
+                          {index + 1}. {item.nome_guerra || item.nome}
+                        </span>
+                        <span className="text-xs text-slate-500">{item.base || item.aeronave_modelo || '—'}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
 
             {(mapLens === 'compliance' || mapLens === 'effectiveness') && (
             <FrmsMetricCards

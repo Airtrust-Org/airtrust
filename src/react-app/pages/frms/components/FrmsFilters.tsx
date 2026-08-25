@@ -9,12 +9,15 @@ import { monthLabel, shiftMonthKey } from '../frmsUtils';
 const PERIODO_OPTIONS: { label: string; value: FrmsFiltersState['periodo'] }[] = [
   { label: '7 dias', value: 7 },
   { label: '30 dias', value: 30 },
+  { label: '60 dias', value: 60 },
   { label: '90 dias', value: 90 },
+  { label: '180 dias', value: 180 },
+  { label: '365 dias', value: 365 },
 ];
 
 const MODO_OPTIONS: Array<{ value: FrmsFiltersState['modoPainel']; label: string }> = [
-  { value: 'OPERACIONAL', label: 'Ultimos dias' },
-  { value: 'PLANEJADO', label: 'Mensal' },
+  { value: 'OPERACIONAL', label: 'Período móvel' },
+  { value: 'PLANEJADO', label: 'Este mês' },
 ];
 
 const STATUS_OPTIONS = [
@@ -25,16 +28,22 @@ const STATUS_OPTIONS = [
 ];
 
 const QUINZENA_OPTIONS: Array<{ value: FrmsFiltersState['quinzena']; label: string }> = [
-  { value: '', label: 'Todas' },
-  { value: 'Q1', label: 'Q1' },
-  { value: 'Q2', label: 'Q2' },
+  { value: '', label: '1ª e 2ª' },
+  { value: 'Q1', label: '1ª' },
+  { value: 'Q2', label: '2ª' },
 ];
 
 interface FrmsFiltersProps {
   modelosDisponiveis?: string[];
+  basesDisponiveis?: string[];
+  tripulantesDisponiveis?: Array<{ id: string; nome: string }>;
 }
 
-export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProps) {
+export default function FrmsFilters({
+  modelosDisponiveis = [],
+  basesDisponiveis = [],
+  tripulantesDisponiveis = [],
+}: FrmsFiltersProps) {
   const { filters, setFilter, resetFilters } = useFrmsFilters();
   const modelosLista = useMemo(
     () =>
@@ -46,6 +55,17 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
         ),
       ).sort((left, right) => left.localeCompare(right)),
     [modelosDisponiveis],
+  );
+  const basesLista = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          basesDisponiveis
+            .map((base) => base?.trim())
+            .filter((base): base is string => Boolean(base)),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [basesDisponiveis],
   );
 
   const toggleStatus = (status: string) => {
@@ -79,14 +99,14 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
           <span className="text-sm font-semibold text-slate-700">Filtros</span>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          Refine o painel por visao, periodo, tripulante, quinzena, equipamento e nivel de risco.
+          Refine o painel por período, tripulante, quinzena, equipamento e nível de risco.
         </p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
         <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
           <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
-            Visao
+            Visão
           </label>
           <div className="grid grid-cols-2 gap-1">
             {MODO_OPTIONS.map((option) => (
@@ -116,12 +136,18 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
             <input
               data-testid="frms-filtro-nome"
               type="text"
+              list="frms-tripulantes-escala"
               value={filters.busca}
               onChange={(e) => setFilter('busca', e.target.value)}
-              placeholder="Nome..."
+              placeholder="Digite o nome..."
               className="w-full rounded-md border border-slate-200 bg-white pl-8 pr-8 py-2 text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
             />
+            <datalist id="frms-tripulantes-escala">
+              {tripulantesDisponiveis.map((tripulante) => (
+                <option key={tripulante.id} value={tripulante.nome} />
+              ))}
+            </datalist>
             {filters.busca && (
               <button
                 type="button"
@@ -144,7 +170,7 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
             className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block"
             data-testid="frms-filtro-periodo"
           >
-            {filters.modoPainel === 'PLANEJADO' ? 'Mes de referencia' : 'Periodo'}
+            {filters.modoPainel === 'PLANEJADO' ? 'Mês de referência' : 'Período'}
           </label>
           {filters.modoPainel === 'PLANEJADO' ? (
             <div className="mt-2 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
@@ -211,10 +237,33 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
           </div>
         </section>
 
+        <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            Base
+          </label>
+          <select
+            data-testid="frms-filtro-base"
+            value={filters.base}
+            onChange={(e) => setFilter('base', e.target.value)}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
+          >
+            <option value="">Todas</option>
+            {basesLista.map((base) => (
+              <option key={base} value={base}>
+                {base}
+              </option>
+            ))}
+          </select>
+          {basesLista.length === 0 && (
+            <p className="mt-2 text-xs text-slate-400">Nenhuma base encontrada na escala do período.</p>
+          )}
+        </section>
+
         {/* Equipamento */}
         <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
           <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
-            Equipamento
+            Tipo de aeronave
           </label>
           <select
             data-testid="frms-filtro-modelo"
@@ -223,7 +272,7 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
             className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm
                        focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
           >
-            <option value="">Todos</option>
+            <option value="">Todas</option>
             {modelosLista.map((modelo) => (
               <option key={modelo} value={modelo}>
                 {modelo}
@@ -232,7 +281,7 @@ export default function FrmsFilters({ modelosDisponiveis = [] }: FrmsFiltersProp
           </select>
           {modelosLista.length === 0 && (
             <p className="mt-2 text-xs text-slate-400">
-              Nenhum equipamento encontrado no período atual.
+              Nenhuma aeronave encontrada no período atual.
             </p>
           )}
         </section>

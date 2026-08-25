@@ -127,4 +127,28 @@ describe('FrmsIogpAuditPanel (IOGP Report 690-2)', () => {
     const atencaoElements = screen.getAllByText(/^ATENÇÃO$/i);
     expect(atencaoElements.length).toBeGreaterThan(0);
   });
+
+  it('separates 28 consecutive days (93 h) from calendar month (90 h)', () => {
+    render(
+      <FrmsIogpAuditPanel
+        hasOperationalData={true}
+        maxHv28dMin={4800}
+        maxHvMesMin={5400}
+      />,
+    );
+
+    expect(screen.getByText('93 h')).toBeInTheDocument();
+    expect(screen.getByText('90 h')).toBeInTheDocument();
+    expect(screen.getByText('28 dias')).toBeInTheDocument();
+    expect(screen.getByText('Mês calendário')).toBeInTheDocument();
+  });
+
+  it('does not label Heat Index as Normal just because temperature exists', () => {
+    render(
+      <FrmsIogpAuditPanel hasOperationalData={true} temperatura={32} />,
+    );
+
+    expect(screen.queryByText('Normal')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Não avaliado|Indisponível/).length).toBeGreaterThan(0);
+  });
 });

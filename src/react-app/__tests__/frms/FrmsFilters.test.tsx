@@ -15,6 +15,7 @@ function FilterReader() {
       <span data-testid="periodo">{filters.periodo}</span>
       <span data-testid="periodoNumDias">{periodoNumDias}</span>
       <span data-testid="busca">{filters.busca}</span>
+      <span data-testid="base">{filters.base}</span>
       <span data-testid="status">{JSON.stringify(filters.status)}</span>
     </div>
   );
@@ -129,5 +130,18 @@ describe('FrmsFilters', () => {
 
     fireEvent.click(clearButton);
     expect(input.value).toBe('');
+  });
+
+  it('lists bases from the operational scale and applies the base filter', () => {
+    render(
+      <FrmsFilterProvider>
+        <FrmsFilters basesDisponiveis={['SBSP', 'SBRJ']} />
+        <FilterReader />
+      </FrmsFilterProvider>,
+    );
+
+    const select = screen.getByTestId('frms-filtro-base') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'SBRJ' } });
+    expect(screen.getByTestId('base').textContent).toBe('SBRJ');
   });
 });

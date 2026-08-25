@@ -13,6 +13,9 @@ import {
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
+import FrmsManualRefreshControl from './components/FrmsManualRefreshControl';
+import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
+import { isNaoLiberarHoje, NAO_LIBERAR_LABEL } from './frmsReleaseGate';
 import {
   useFrmsReadAckEvents,
   type FrmsReadAckEvent,
@@ -460,7 +463,7 @@ export default function FrmsControleOperacional() {
     ],
   );
 
-  const { data, meta, loading, error, unauthorized, refetch } =
+  const { data, meta, loading, error, unauthorized, lastUpdatedAt, refetch } =
     useFrmsOperationalSnapshot(snapshotFilters);
   const readAck = useFrmsReadAckEvents(appliedFilters, {
     status: readAckStatus,
@@ -554,7 +557,7 @@ export default function FrmsControleOperacional() {
   };
 
   const handleClearFilters = () => {
-    const nextFilters = {
+    const nextFilters: ControlFilters = {
       ...initialFilters,
       funcionario_id: '',
       tripulante_query: '',
@@ -603,16 +606,16 @@ export default function FrmsControleOperacional() {
                 Quem exige atenção, por quê, qual ação tomar e que evidência mostrar ao auditor.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => void refetch()}
-                disabled={loading}
-                aria-label="Atualizar snapshot"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button onClick={handleApplyFilters}>Atualizar</Button>
+            <div className="flex flex-col items-end gap-2">
+              <FrmsWorkspaceNav />
+              <div className="flex items-center gap-2">
+                <FrmsManualRefreshControl
+                  loading={loading}
+                  error={error}
+                  lastUpdatedAt={lastUpdatedAt}
+                  onRefresh={refetch}
+                />
+              </div>
             </div>
           </div>
         </header>
@@ -628,12 +631,12 @@ export default function FrmsControleOperacional() {
               || `${formatDisplayDate(appliedFilters.data_inicio)} → ${formatDisplayDate(appliedFilters.data_fim)}`}
           </p>
           <p className="mt-1 text-xs text-slate-600">
-            {fortnightSummary.totalMonitored > 0
-              ? `${fortnightSummary.totalMonitored} tripulantes operacionais · `
+            {fortnightSummary.monitoredCount > 0
+              ? `${fortnightSummary.monitoredCount} tripulantes operacionais · `
               : ''}
             {fortnightSummary.periodStatusLabel}
-            {fortnightSummary.pendingCheckins > 0
-              ? ` · ${fortnightSummary.pendingCheckins} check-ins pendentes`
+            {operationalSummary.pendingCheckins > 0
+              ? ` · ${operationalSummary.pendingCheckins} check-ins pendentes`
               : ''}
           </p>
         </section>
@@ -1090,6 +1093,11 @@ export default function FrmsControleOperacional() {
                             {item.checkin_horario && (
                               <div className="mt-1 text-xs text-slate-500">
                                 Horario {item.checkin_horario}
+                              </div>
+                            )}
+                            {isNaoLiberarHoje(item, today) && (
+                              <div className="mt-2 inline-flex rounded-md border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-red-800">
+                                {NAO_LIBERAR_LABEL}
                               </div>
                             )}
                             <div className="mt-1 text-xs text-slate-500">

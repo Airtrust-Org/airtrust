@@ -55,6 +55,7 @@ const GRUPOS_REGULATORIOS: ConfigGroup[] = [
       'HV_DIARIA_HORAS',
       'HV_DIA_ALERTA_RESTANTE_HORAS',
       'HV_7_DIAS_HORAS',
+      'HV_28_DIAS_HORAS',
       'HV_MES_HORAS',
       'HV_365_DIAS_HORAS',
     ],
@@ -117,8 +118,6 @@ const GRUPOS_FATORIZACAO: ConfigGroup[] = [
     keys: [
       'DURACAO_LONGA_MINUTOS',
       'DURACAO_LONGA_FATOR',
-      'DURACAO_CURTA_MINUTOS',
-      'DURACAO_CURTA_FATOR',
       'DURACAO_NORMAL_FATOR',
     ],
   },
@@ -193,14 +192,15 @@ const GRUPOS_OPERACIONAIS: ConfigGroup[] = [
 // ── Labels legíveis ──────────────────────────────────
 
 const LABELS: Record<string, string> = {
-  FDP_MAXIMO_HORAS: 'FDP Máximo (horas)',
+  FDP_MAXIMO_HORAS: 'FDP baseline (11 h, profile-dependent)',
   FDP_ALERTA_RESTANTE_HORAS: 'Alerta FDP restante (horas)',
-  HV_DIARIA_HORAS: 'HV Diária máx (horas)',
+  HV_DIARIA_HORAS: 'HV diária helicóptero (8 h) — Lei 13.475 / RBAC 117',
   HV_DIA_ALERTA_RESTANTE_HORAS: 'Alerta HV dia restante (horas)',
-  HV_7_DIAS_HORAS: 'HV 7 Dias máx (horas)',
-  HV_MES_HORAS: 'HV Mês máx (horas)',
-  HV_365_DIAS_HORAS: 'HV 365 Dias máx (horas)',
-  REPOUSO_MINIMO_HORAS: 'Repouso Mínimo (horas)',
+  HV_7_DIAS_HORAS: 'HV 7 dias (45 h) — IOGP/contratual',
+  HV_28_DIAS_HORAS: 'HV 28 dias consecutivos (93 h) — RBAC 117 Apêndice C',
+  HV_MES_HORAS: 'HV mês calendário (90 h) — Lei 13.475 art. 30 IV',
+  HV_365_DIAS_HORAS: 'HV 365 dias (930 h) — RBAC 117',
+  REPOUSO_MINIMO_HORAS: 'Repouso baseline (12 h, profile-dependent)',
   REPOUSO_PLATAFORMA_MINIMO_HORAS: 'Repouso Plataforma mín (horas)',
   REPOUSO_PLATAFORMA_MAXIMO_HORAS: 'Repouso Plataforma máx (horas)',
   ALERTA_AVISO_PCT: 'Aviso (%)',
@@ -210,8 +210,8 @@ const LABELS: Record<string, string> = {
   CICLO_EMBARCADO_ATIVO: 'Habilitado (0/1)',
   CICLO_EMBARCADO_DIA_INICIO: 'Dia início do fator',
   CICLO_EMBARCADO_DIA_MAX: 'Dia fator máximo',
-  CICLO_EMBARCADO_PCT_MIN: 'Fator mínimo (dia 1)',
-  CICLO_EMBARCADO_PCT_MAX: 'Fator máximo (dia N)',
+  CICLO_EMBARCADO_PCT_MIN: 'Fator mínimo (fração, dia 1)',
+  CICLO_EMBARCADO_PCT_MAX: 'Fator máximo (fração, dia N)',
   APRESENTACAO_MADRUGADA_H_MIN: 'Madrugada início (hora)',
   APRESENTACAO_MADRUGADA_H_MAX: 'Madrugada fim (hora)',
   APRESENTACAO_MADRUGADA_FATOR: 'Fator madrugada',
@@ -265,6 +265,17 @@ const FIELD_HELPERS: Record<string, string> = {
     'Tempo entre o tripulante acordar e se apresentar para o voo (padrão ICAO: 90 min).',
   HORAS_SONO_PADRAO:
     'Usado quando o tripulante não informa a hora que foi dormir. Quando informar, este valor é substituído automaticamente.',
+  CICLO_EMBARCADO_PCT_MAX:
+    'Fator fracionário do modelo (não é percentual). Default do modelo: -0.15. O valor exibido é o da revisão ativa; não mutar V1 in-place.',
+  CICLO_EMBARCADO_PCT_MIN:
+    'Fator fracionário do modelo (não é percentual).',
+  HV_7_DIAS_HORAS: 'Fonte IOGP/contratual. Não rotular como Lei 13.475.',
+  HV_28_DIAS_HORAS: '28 dias consecutivos, distinto do mês calendário.',
+  HV_MES_HORAS: 'Mês calendário. Distinto de 28 dias consecutivos.',
+  ALERTA_AVISO_PCT: 'Política interna de alerta, não limite legal.',
+  ALERTA_ATENCAO_PCT: 'Política interna de alerta, não limite legal.',
+  ALERTA_CRITICO_PCT: 'Política interna de alerta, não limite legal.',
+  ALERTA_VIOLACAO_PCT: 'Política interna de alerta, não limite legal.',
   NOTURNO_INICIO_HORA:
     'Inicio da janela noturna operacional (decolagens/pousos). A WOCL fisiologica de despertar e tratada separadamente no modelo biomatematico (02:00-06:00).',
   NOTURNO_FIM_HORA:
@@ -283,11 +294,13 @@ export const PARAMETROS_DECORATIVOS = new Set([
   'REPOUSO_MIN_PRE_APRESENTACAO',
   'REPOUSO_MIN_POS_LIBERACAO',
   'REPOUSO_QUALIDADE_HOTEL',
+  'DURACAO_CURTA_MINUTOS',
+  'DURACAO_CURTA_FATOR',
 ]);
 
 // ── Component ────────────────────────────────────────
 
-type Tab = 'regulatorios' | 'fatorizacao' | 'notificacoes';
+type Tab = 'regulatorios' | 'fatorizacao' | 'offshore' | 'notificacoes';
 
 export default function FrmsConfiguracoes() {
   const navigate = useNavigate();
@@ -415,6 +428,7 @@ export default function FrmsConfiguracoes() {
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'regulatorios', label: 'Limites Regulatórios', icon: <Shield className="w-4 h-4" /> },
     { id: 'fatorizacao', label: 'Fatorização Metodológica', icon: <Brain className="w-4 h-4" /> },
+    { id: 'offshore', label: 'Operação Offshore & Ambiente', icon: <Brain className="w-4 h-4" /> },
     { id: 'notificacoes', label: 'Notificações', icon: <Bell className="w-4 h-4" /> },
   ];
 
@@ -443,6 +457,8 @@ export default function FrmsConfiguracoes() {
               max={FIELD_BOUNDS[key]?.max}
               value={values[key] ?? ''}
               onChange={(e) => handleChange(key, e.target.value)}
+              disabled={PARAMETROS_DECORATIVOS.has(key)}
+              readOnly={PARAMETROS_DECORATIVOS.has(key)}
               className={`w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary/40 focus:border-transparent bg-white ${
                 PARAMETROS_DECORATIVOS.has(key) ? 'border-amber-200' : 'border-gray-200'
               }`}
@@ -574,11 +590,37 @@ export default function FrmsConfiguracoes() {
                     </span>
                   </div>
                   {GRUPOS_FATORIZACAO.map(renderGroup)}
+                </div>
+              )}
+
+              {activeTab === 'offshore' && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
+                    <Info className="w-4 h-4 text-primary" />
+                    <span className="text-xs text-gray-500">
+                      Operação offshore e ambiente: parâmetros de política interna e modelo. Demanda
+                      operacional e REDEMET continuam no motor existente, sem recálculo no frontend.
+                    </span>
+                  </div>
+                  {GRUPOS_OPERACIONAIS.map(renderGroup)}
                   <div className="mt-6 pt-4 border-t border-gray-100">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                      Fatores Operacionais (migration 0216)
+                      Reservado / compatibilidade
                     </p>
-                    {GRUPOS_OPERACIONAIS.map(renderGroup)}
+                    {renderGroup({
+                      label: 'Parâmetros sem efeito no cálculo atual',
+                      icon: <Info className="w-4 h-4" />,
+                      description:
+                        'Mantidos para compatibilidade. Não alteram o motor nesta revisão.',
+                      keys: [
+                        'DURACAO_CURTA_MINUTOS',
+                        'DURACAO_CURTA_FATOR',
+                        'EFFECTIV_PERIODO_PCT',
+                        'REPOUSO_MIN_PRE_APRESENTACAO',
+                        'REPOUSO_MIN_POS_LIBERACAO',
+                        'REPOUSO_QUALIDADE_HOTEL',
+                      ],
+                    })}
                   </div>
                 </div>
               )}

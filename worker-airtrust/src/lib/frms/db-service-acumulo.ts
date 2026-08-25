@@ -252,13 +252,14 @@ async function enrichWithOperationalContext<
 >(
   db: D1Database,
   rows: T[],
-  range: { startDate: string; endDate: string },
+  range: { startDate: string; endDate: string; empresaId?: number },
 ): Promise<
   Array<
     T & {
       aeronave_id?: string | null;
       aeronave_prefixo?: string | null;
       aeronave_modelo?: string | null;
+      base?: string | null;
       quinzena_numero?: number | null;
       quinzena_tipo?: 'Q1' | 'Q2' | 'PERSONALIZADA' | null;
     }
@@ -270,6 +271,7 @@ async function enrichWithOperationalContext<
   if (ids.length === 0) return rows;
 
   const placeholders = ids.map(() => '?').join(',');
+  const empresaId = range.empresaId ?? null;
   const contextoRows = await db
     .prepare(
       `WITH contexto AS (
@@ -278,6 +280,7 @@ async function enrichWithOperationalContext<
            CAST(ea.aeronave_id AS TEXT) AS aeronave_id,
            a.prefixo AS aeronave_prefixo,
            a.modelo AS aeronave_modelo,
+           NULLIF(TRIM(ea.base), '') AS base,
            CASE
              WHEN eq.numero IN (1, 2) THEN eq.numero
              WHEN CAST(strftime('%d', ea.data_inicio) AS INTEGER) <= 15 THEN 1
@@ -294,6 +297,7 @@ async function enrichWithOperationalContext<
            ROW_NUMBER() OVER (
              PARTITION BY ea.funcionario_id
              ORDER BY
+               CASE WHEN NULLIF(TRIM(ea.base), '') IS NOT NULL THEN 0 ELSE 1 END,
                CASE WHEN ea.aeronave_id IS NOT NULL THEN 0 ELSE 1 END,
                CASE WHEN eq.numero IS NOT NULL THEN 0 ELSE 1 END,
                ea.data_inicio DESC,
@@ -306,28 +310,38 @@ async function enrichWithOperationalContext<
          LEFT JOIN escalas_quinzenas eq
            ON eq.id = ea.quinzena_id
           AND eq.deleted_at IS NULL
+         LEFT JOIN escalas_mensais em
+           ON em.id = ea.escala_id
+          AND em.deleted_at IS NULL
          WHERE CAST(ea.funcionario_id AS TEXT) IN (${placeholders})
            AND ea.deleted_at IS NULL
            AND ea.status != 'cancelado'
-           AND (ea.aeronave_id IS NOT NULL OR ea.quinzena_id IS NOT NULL)
+           AND (
+             ea.aeronave_id IS NOT NULL
+             OR ea.quinzena_id IS NOT NULL
+             OR NULLIF(TRIM(ea.base), '') IS NOT NULL
+           )
            AND NOT (ea.data_fim < ? OR ea.data_inicio > ?)
+           AND (? IS NULL OR em.empresa_id = ?)
        )
        SELECT
          tripulante_id,
          aeronave_id,
          aeronave_prefixo,
          aeronave_modelo,
+         base,
          quinzena_numero,
          quinzena_tipo
        FROM contexto
        WHERE rn = 1`,
     )
-    .bind(...ids, range.startDate, range.endDate)
+    .bind(...ids, range.startDate, range.endDate, empresaId, empresaId)
     .all<{
       tripulante_id: string;
       aeronave_id: string | null;
       aeronave_prefixo: string | null;
       aeronave_modelo: string | null;
+      base: string | null;
       quinzena_numero: number | null;
       quinzena_tipo: 'Q1' | 'Q2' | 'PERSONALIZADA' | null;
     }>();
@@ -344,6 +358,7 @@ async function enrichWithOperationalContext<
       aeronave_id: contexto.aeronave_id,
       aeronave_prefixo: contexto.aeronave_prefixo,
       aeronave_modelo: contexto.aeronave_modelo,
+      base: contexto.base,
       quinzena_numero: contexto.quinzena_numero,
       quinzena_tipo: contexto.quinzena_tipo,
     };
@@ -609,6 +624,8 @@ export async function buscarAcumuloFrota(
                 COALESCE(p.nome, 'Tripulante #' || t.tripulante_id) as nome,
                 NULLIF(p.guerra, '') as nome_guerra,
                 COALESCE(SUM(CASE WHEN j.data >= ? AND j.data <= ? THEN j.horas_voo_minutos ELSE 0 END), 0) as hv_mes_min,
+                ar.hv_28_dias_min as hv_28d_min,
+                ar.pct_limite_28d as pct_28d,
                 ar.hv_365_dias_min as hv_365d_min,
                 ar.pct_limite_365d as pct_365d,
                 ar.hv_7_dias_min as hv_7d_min,
@@ -656,6 +673,8 @@ export async function buscarAcumuloFrota(
 
     const resultadosMes = (rowsMes.results || []).map((row: Record<string, unknown>) => {
       const hvMesMin = (row.hv_mes_min as number) || 0;
+      const hv28dMin = (row.hv_28d_min as number) || 0;
+      const pct28d = (row.pct_28d as number) || 0;
       const hv7dMin = (row.hv_7d_min as number) || 0;
       const pct7d = (row.pct_7d as number) || 0;
       const hv365dMin = (row.hv_365d_min as number) || 0;
@@ -663,7 +682,7 @@ export async function buscarAcumuloFrota(
       const hvDiaMin = (row.hv_dia_min as number) || 0;
       const pctDia = (row.pct_dia as number) || 0;
       const pctMes = (hvMesMin / limiteMesMin) * 100;
-      const pctMax = Math.max(pctMes, pct7d, pct365d, pctDia);
+      const pctMax = Math.max(pctMes, pct28d, pct7d, pct365d, pctDia);
 
       let nivelMax = 'OK';
       if (pctMax >= limiteCriticoPct) nivelMax = 'CRITICO';
@@ -676,6 +695,8 @@ export async function buscarAcumuloFrota(
         nome_guerra: (row.nome_guerra as string | null) ?? undefined,
         hv_mes_min: hvMesMin,
         pct_mes: pctMes,
+        hv_28d_min: hv28dMin,
+        pct_28d: pct28d,
         hv_7d_min: hv7dMin,
         pct_7d: pct7d,
         hv_365d_min: hv365dMin,
@@ -694,6 +715,7 @@ export async function buscarAcumuloFrota(
     const comContextoOperacional = await enrichWithOperationalContext(db, comEffectiveness, {
       startDate: periodoInicio,
       endDate: periodoFim,
+      empresaId,
     });
     const comFuncionario = await enrichWithFuncionarioContext(db, comContextoOperacional, {
       preferFuncionarioContext: true,
@@ -713,8 +735,10 @@ export async function buscarAcumuloFrota(
          SELECT ar.tripulante_id,
                 COALESCE(p.nome, 'Tripulante #' || ar.tripulante_id) as nome,
                 NULLIF(p.guerra, '') as nome_guerra,
-                ar.hv_28_dias_min as hv_mes_min,
-                COALESCE(ar.pct_limite_28d, ar.pct_limite_mes_calendario) as pct_mes,
+                ar.hv_mes_calendario_min as hv_mes_min,
+                ar.pct_limite_mes_calendario as pct_mes,
+                ar.hv_28_dias_min as hv_28d_min,
+                ar.pct_limite_28d as pct_28d,
                 ar.hv_7_dias_min as hv_7d_min,
                 ar.pct_limite_7d as pct_7d,
                 ar.hv_365_dias_min as hv_365d_min,
@@ -753,6 +777,8 @@ export async function buscarAcumuloFrota(
               nome_guerra,
               hv_mes_min,
               pct_mes,
+              hv_28d_min,
+              pct_28d,
               hv_7d_min,
               pct_7d,
               hv_365d_min,
@@ -773,6 +799,7 @@ export async function buscarAcumuloFrota(
   const resultados = (rows.results || []).map((row: Record<string, unknown>) => {
     const pctMax = Math.max(
       (row.pct_mes as number) || 0,
+      (row.pct_28d as number) || 0,
       (row.pct_7d as number) || 0,
       (row.pct_365d as number) || 0,
       (row.pct_dia as number) || 0,
@@ -788,6 +815,8 @@ export async function buscarAcumuloFrota(
       nome_guerra: (row.nome_guerra as string | null) ?? undefined,
       hv_mes_min: (row.hv_mes_min as number) || 0,
       pct_mes: (row.pct_mes as number) || 0,
+      hv_28d_min: (row.hv_28d_min as number) || 0,
+      pct_28d: (row.pct_28d as number) || 0,
       hv_7d_min: (row.hv_7d_min as number) || 0,
       pct_7d: (row.pct_7d as number) || 0,
       hv_365d_min: (row.hv_365d_min as number) || 0,
@@ -802,6 +831,7 @@ export async function buscarAcumuloFrota(
   const rollingRange = {
     startDate: dateOffset(new Date().toISOString().slice(0, 10), -periodoDias),
     endDate: new Date().toISOString().slice(0, 10),
+    empresaId,
   };
   const comEffectiveness = await enrichWithEffectiveness(db, resultados, rollingRange);
   const comContextoOperacional = await enrichWithOperationalContext(
