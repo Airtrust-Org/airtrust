@@ -1,0 +1,121 @@
+name: Backfill Certificado Validacao Hash (Governed)
+
+# Governed executor for the qualificacoes_historico.validacao_hash backfill
+# (0470). Modeled on deploy-staging.yml's input/guard conventions: defaults
+# to dry-run, requires an explicit release SHA and a target-specific
+# confirmation string to actually write, and captures a D1 Time Travel
+# recovery point immediately before any staging write via
+# scripts/staging/backfill-validacao-hash-with-recovery-point.sh.
+#
+# Production is wired through (`target: production`) but this workflow's
+# production path is intentionally left "prepared, not executed": the
+# production-apply job requires a second, distinct confirmation string and,
+# unlike staging, is not exercised by this change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact 40-character commit SHA this backfill run is authorized against'
+        required: true
+        type: string
+      target:
+        description: 'D1 target (production requires a separate, distinct confirmation and is not run by this workflow revision)'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+      apply:
+        description: 'Actually write hashes (default: dry-run only)'
+        required: true
+        type: boolean
+        default: false
+      confirm:
+        description: 'Target-specific confirmation string, required only when apply=true'
+        required: false
+        type: string
+      empresa_id:
+        description: 'Optional: scope the backfill to a single empresa_id'
+        required: false
+        type: string
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  guard:
+    name: Guard
+    runs-on: ubuntu-latest
+    outputs:
+      release_sha: ${{ steps.guard.outputs.release_sha }}
+    steps:
+      - id: guard
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: release_sha deve ser um SHA de 40 caracteres hex." >&2
+            exit 1
+          fi
+          if [[ "${{ inputs.apply }}" == "true" && -z "${{ inputs.confirm }}" ]]; then
+            echo "ERROR: apply=true requer confirm explícito." >&2
+            exit 1
+          fi
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+  staging-backfill-d1:
+    name: Staging Backfill (dry-run by default)
+    needs: guard
+    if: ${{ inputs.target == 'staging' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout trusted pipeline (main)
+        uses: actions/checkout@v4
+      - name: Checkout release code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Run governed staging backfill
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_SHA: ${{ needs.guard.outputs.release_sha }}
+          APPLY: ${{ inputs.apply }}
+          CONFIRM: ${{ inputs.confirm }}
+          EMPRESA_ID: ${{ inputs.empresa_id }}
+        run: |
+          set -euo pipefail
+          npm --prefix worker-airtrust ci
+          args=(--release-sha="$RELEASE_SHA")
+          [[ -n "$EMPRESA_ID" ]] && args+=(--empresa-id="$EMPRESA_ID")
+          if [[ "$APPLY" == "true" ]]; then
+            args+=(--apply --confirm="$CONFIRM")
+          fi
+          bash scripts/staging/backfill-validacao-hash-with-recovery-point.sh "${args[@]}"
+
+  production-backfill:
+    name: Production Backfill (NOT executed by this workflow revision)
+    needs: guard
+    # Deliberately unreachable in this change: production stays "prepared,
+    # not executed". The distinct production confirmation string and target
+    # allowlist mapping are exercised only by unit tests
+    # (worker-airtrust/scripts/__tests__/backfill-certificado-validacao-hash-remote.test.mjs),
+    # never by a live run from this workflow.
+    if: ${{ false && inputs.target == 'production' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Refused
+        run: |
+          echo "Production backfill is prepared but not wired for execution in this PR." >&2
+          exit 1
