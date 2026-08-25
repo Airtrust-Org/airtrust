@@ -6,6 +6,7 @@
  * to keep spreadsheet generation out of the initial bundle.
  */
 
+import type { Workbook, Worksheet } from 'exceljs';
 import { importWithRetry } from '@/react-app/utils/lazyWithRetry';
 
 let excelModule: typeof import('exceljs/dist/es5/exceljs.browser.js') | null = null;
@@ -41,10 +42,7 @@ function safeWorksheetName(value: string, fallback: string): string {
   return normalized || fallback;
 }
 
-async function downloadWorkbook(
-  workbook: InstanceType<(typeof import('exceljs/dist/es5/exceljs.browser.js'))['default']['Workbook']>,
-  fileName: string,
-) {
+async function downloadWorkbook(workbook: Workbook, fileName: string) {
   const buffer = await workbook.xlsx.writeBuffer();
   const bytes = Uint8Array.from(buffer as ArrayLike<number>);
   downloadBlob(
@@ -55,14 +53,7 @@ async function downloadWorkbook(
   );
 }
 
-function appendObjectRows<T extends Record<string, unknown>>(
-  worksheet: ReturnType<
-    InstanceType<
-      (typeof import('exceljs/dist/es5/exceljs.browser.js'))['default']['Workbook']
-    >['addWorksheet']
-  >,
-  data: T[],
-) {
+function appendObjectRows<T extends Record<string, unknown>>(worksheet: Worksheet, data: T[]) {
   const headers = Object.keys(data[0]);
   worksheet.addRow(headers);
   for (const row of data) {
