@@ -62,3 +62,10 @@ test('backfill-validacao-hash.yml workflow does not execute the production path'
   assert.match(workflow, /production-backfill:/);
   assert.match(workflow, /if: \$\{\{ false && inputs\.target == 'production' \}\}/);
 });
+
+test('backfill-validacao-hash.yml uses a Node version supported by Wrangler 4', () => {
+  const workflow = read('.github/workflows/backfill-validacao-hash.yml');
+  const match = workflow.match(/NODE_VERSION:\s*'(\d+)'/);
+  assert.ok(match, 'NODE_VERSION must be declared in the backfill workflow');
+  assert.ok(Number(match[1]) >= 22, `Wrangler 4 requires Node >=22, found Node ${match[1]}`);
+});
