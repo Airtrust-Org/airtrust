@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Wraps worker-airtrust/scripts/backfill-certificado-validacao-hash-remote.mjs
+# Wraps worker-airtrust/scripts/backfill-certificado-validacao-hash-staging-remote.mjs
 # with the same D1 Time Travel recovery-point capture used by
 # scripts/staging/apply-approved-migration-with-recovery-point.sh, so an
 # --apply backfill run is never executed without a fresh, verified recovery
 # point immediately before the write.
 #
 # Staging-only in this script: production is intentionally not wireable here
-# (see .github/workflows/backfill-staging-validacao-hash.yml for why the
-# production path is "prepared, not executed").
+# (see .github/workflows/backfill-validacao-hash.yml for why the production
+# path is "prepared, not executed").
 set -euo pipefail
 umask 077
 
@@ -47,8 +47,8 @@ if [[ "$db_name" != "$ALLOWED_DB_NAME" || "$db_id" != "$ALLOWED_DB_ID" || "$db_i
   exit 1
 fi
 
-node_args=(worker-airtrust/scripts/backfill-certificado-validacao-hash-remote.mjs \
-  --target=staging --release-sha="$release_sha")
+node_args=(worker-airtrust/scripts/backfill-certificado-validacao-hash-staging-remote.mjs \
+  --release-sha="$release_sha")
 [[ -n "$empresa_id" ]] && node_args+=(--empresa-id="$empresa_id")
 [[ -n "$batch_size" ]] && node_args+=(--batch-size="$batch_size")
 
