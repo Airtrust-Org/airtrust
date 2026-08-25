@@ -229,15 +229,15 @@ HAVING COUNT(*) > 1;
 -- severity: P1
 -- title: Inventario de tabelas temporarias, backup ou views suspeitas
 -- required_tables: sqlite_master
+SELECT
+  name AS object_name,
+  type AS object_type
+FROM sqlite_master
 -- The `_v` suffix is a legitimate view-naming convention in this schema
 -- (e.g. qualificacoes_historico_v, qualificacoes_historico_risco_v); it only
 -- indicates a leftover scratch object on TABLES, where a real view would
 -- never share a table's storage. Views are checked for _new/_temp/_backup_
 -- only, so an intentional `foo_v` view is never flagged as suspicious.
-SELECT
-  name AS object_name,
-  type AS object_type
-FROM sqlite_master
 WHERE (
     type = 'table'
     AND (
