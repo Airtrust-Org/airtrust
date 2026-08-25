@@ -1,49 +1,65 @@
 # Governed staging release
 
-This is the governed staging release path. Google Cloud Build is the official
-CI; its current validation entrypoint is `cloudbuild.ci.yaml`. Cloudflare is
-the staging/production platform. The legacy CircleCI configuration is not a
-release gate.
+> Historical filename retained for compatibility. GitLab is legacy; GitHub is the current code authority.
+
+This is the governed staging release path. GitHub `Airtrust-Org/airtrust` is the source/merge authority. AirTrust CI has eight required gates split between GitHub Actions and Google Cloud Build (GCB). Cloudflare is the staging/production platform. GitLab and CircleCI are legacy and are not release gates.
 
 ## Preconditions
 
-- GitLab `origin/main` is the source of truth and the release uses its exact
-  commit SHA.
-- All 8 official GCB validation gates (`lint`, `build-content-gates`,
-  `frontend-coverage`, `worker-typecheck`, `worker-tests-1`, `worker-tests-2`, `lms-smoke`, `public-e2e`) must pass prior to release execution.
-- `frontend-typecheck` is not a standalone official gate unless it is added
-  to the current `cloudbuild.ci.yaml`.
-- Required Cloudflare values are protected, masked, environment-scoped variables. They are never placed in artifacts.
+- GitHub `main` is the source of truth and the release uses its exact commit SHA.
+- The three fast GitHub Actions gates must pass for the exact SHA: `lint`, `build-content-gates`, `worker-typecheck`.
+- The five heavy GCB gates must pass for the exact SHA: `frontend-coverage`, `worker-tests-1`, `worker-tests-2`, `lms-smoke`, `public-e2e`.
+- GCB publishes its result on the exact GitHub SHA as commit status context `airtrust-gcb`.
+- `frontend-typecheck` standalone is not a required gate while the historical debt policy remains active; regression protection is provided by the ratchet within `frontend-coverage`.
+- Required Cloudflare values are protected environment-scoped secrets/variables and are never placed in artifacts.
+- Production requires separate explicit authorization for the exact production SHA.
 
 ## Sequence
 
-`gates -> target assertions -> pre-deploy rollback capture -> dry-run bundle hash -> worker deploy -> provenance verify -> frontend build -> pages deploy -> smoke verify`.
+`3 fast GitHub gates + 5 heavy GCB gates -> target assertions -> pre-deploy rollback capture -> governed migrations when approved -> worker deploy -> provenance verify -> frontend build -> Pages deploy -> smoke verify`.
 
-## Execute the eight gates for an MR SHA
+## Execute the five heavy GCB gates for an exact SHA
 
-Run this only from a clean checkout whose `HEAD` is the exact MR SHA. The
-packaging script creates an isolated source archive with the Git provenance
-required by the GCB bootstrap; submit that archive to the current GCB
-entrypoint. Do not substitute CircleCI or a local-only result for this build.
+Run only from a clean GitHub checkout whose `HEAD` is the exact PR head or merged `main` SHA being validated. The packaging script creates an isolated source archive with the Git provenance required by the GCB bootstrap. Do not substitute CircleCI, GitLab CI, or a local-only result for this build.
 
 ```bash
-MR_SHA="<exact-MR-SHA>"
-ARCHIVE="/tmp/airtrust-gcb-${MR_SHA}.tgz"
+SHA="<exact-40-character-SHA>"
+ARCHIVE="/tmp/airtrust-gcb-${SHA}.tgz"
 
-bash scripts/package-gcb-provenance-source.sh "$MR_SHA" "$ARCHIVE"
+bash scripts/package-gcb-provenance-source.sh "$SHA" "$ARCHIVE"
 gcloud builds submit "$ARCHIVE" \
   --project=airtrust-ci-poc-tclrzo \
   --config=cloudbuild.ci.yaml \
-  --substitutions="_AIRTRUST_SHA=${MR_SHA}" \
+  --substitutions="_AIRTRUST_SHA=${SHA}" \
   --async --format='value(id)'
 ```
 
-Record the resulting build ID, its exact `_AIRTRUST_SHA`, and all eight gate
-statuses in the MR evidence. `cloudbuild.full-8-gates.yaml` is not a current
-entrypoint; resolve the config from the current `origin/main` before running.
+Publish the build state to the exact GitHub SHA with:
+
+```bash
+bash scripts/publish-gcb-github-status.sh pending "$SHA" "<gcb-build-url>"
+# after the build reaches a terminal state:
+bash scripts/publish-gcb-github-status.sh success "$SHA" "<gcb-build-url>"
+# or:
+bash scripts/publish-gcb-github-status.sh failed "$SHA" "<gcb-build-url>"
+```
+
+Record the resulting build ID, exact `_AIRTRUST_SHA`, and the five heavy gate statuses. Resolve the active configuration from the current GitHub `main`; historical `cloudbuild.full-8-gates.yaml`, GitLab CI, and CircleCI definitions are not current entrypoints.
+
+## Staging dispatch
+
+Use `.github/workflows/deploy-staging.yml` from `main` with the exact reviewed release SHA. When migrations are required, pass only the explicitly approved/allowlisted filenames; the remote ledger decides idempotently whether each migration is already applied. Never replay the generic migration chain.
+
+For the pending SIGVOOS shadow/LMS diagnostics release, the governed order is:
+
+1. `0467_sigvoos_shadow_parallel_v1.sql`
+2. `0468_sigvoos_shadow_leg_crew_v1.sql`
+3. `0469_lms_completion_pendencias_snapshots.sql`
+
+`0467` must precede `0468` when both are absent; `0469` is independent. The workflow must create its backup/recovery point and validate postconditions before the release is considered complete.
 
 ## Evidence and rollback
 
-The release generates and stores gate logs, backup metadata, release manifest, Worker/Pages metadata, and smoke evidence.
+The release stores gate/build evidence, backup/recovery metadata, release manifest, Worker/Pages provenance, and smoke evidence.
 
-Before deploy, a coherent Worker/Pages rollback target is captured. A later Worker/Pages failure rolls both surfaces back automatically via fail-closed trap in `scripts/staging/deploy-governed-staging.sh`.
+Before deploy, a coherent Worker/Pages rollback target is captured. A later Worker/Pages failure rolls both surfaces back through the governed fail-closed release path. Do not improvise remote D1 DDL or use historical deployment paths.

@@ -3,9 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const requiredWorkflows = [
   '.github/workflows/ci.yml',
-  '.github/workflows/lint.yml',
   '.github/workflows/pr-check.yml',
-  '.github/workflows/test.yml',
 ] as const;
 
 describe('required CI Node baseline', () => {
@@ -23,7 +21,7 @@ describe('required CI Node baseline', () => {
   }
 
   it('keeps default workflow permissions read-only where changed', () => {
-    for (const workflow of requiredWorkflows.slice(0, 3)) {
+    for (const workflow of requiredWorkflows) {
       const source = readFileSync(workflow, 'utf8');
       expect(source).toMatch(/permissions:\s*\n\s+contents:\s+read/);
     }

@@ -1,6 +1,7 @@
-# Optional GitHub Actions parity checks. Google Cloud Build remains the
-# authoritative AirTrust CI and release gate; see cloudbuild.ci.yaml.
-name: CI (parity)
+# Required fast CI gates. The AirTrust release gate is hybrid:
+# GitHub Actions owns the three fast gates below, while Google Cloud Build owns
+# the five heavy gates declared in cloudbuild.ci.yaml.
+name: CI (fast gates)
 
 on:
   push:
@@ -12,27 +13,33 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: fast-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
+      CI: 'true'
       VITE_API_URL: http://127.0.0.1:8787
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint
+      - name: ensure main is available for delta guards
+        run: git fetch origin main --quiet
+      - name: canonical lint and safety guards
+        run: npm run lint
 
   build-content-gates:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       VITE_API_URL: http://127.0.0.1:8787
     steps:
@@ -52,38 +59,10 @@ jobs:
         run: VITE_API_URL=http://127.0.0.1:8787 npm run build
       - name: check:demo-data
         run: npm run check:demo-data
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build-content-gates-dist
-          path: dist
-          if-no-files-found: ignore
-          retention-days: 7
-
-  frontend-coverage:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: install sqlite3
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 && sqlite3 --version
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.node-version'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run test:coverage
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: frontend-coverage
-          path: coverage
-          if-no-files-found: ignore
-          retention-days: 7
 
   worker-typecheck:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -94,119 +73,5 @@ jobs:
             package-lock.json
             worker-airtrust/package-lock.json
       - run: npm ci
-      - run: cd worker-airtrust && npm ci
-      - run: cd worker-airtrust && npx tsc --noEmit
-
-  worker-tests-1:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: install sqlite3
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 && sqlite3 --version
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.node-version'
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            worker-airtrust/package-lock.json
-      - run: npm ci
-      - run: cd worker-airtrust && npm ci
-      - name: vitest shard 1/2
-        run: cd worker-airtrust && npx vitest run --shard=1/2
-
-  worker-tests-2:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: install sqlite3
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 && sqlite3 --version
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.node-version'
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            worker-airtrust/package-lock.json
-      - run: npm ci
-      - run: cd worker-airtrust && npm ci
-      - name: vitest shard 2/2
-        run: cd worker-airtrust && npx vitest run --shard=2/2
-
-  lms-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: install sqlite3
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 && sqlite3 --version
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.node-version'
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            worker-airtrust/package-lock.json
-      - run: npm ci
-      - run: cd worker-airtrust && npm ci
-      - name: lms smoke
-        run: |
-          JWT_SECRET="$(openssl rand -hex 32)"
-          printf 'JWT_SECRET=%s\n' "$JWT_SECRET" > worker-airtrust/.dev.vars
-          npm run setup:lms:local:reset
-          npm run integrity:ci
-          npm run dev:worker:local > airtrust-worker.log 2>&1 &
-          echo $! > /tmp/airtrust-worker.pid
-          for i in $(seq 1 60); do
-            if curl -fsS http://localhost:8787/api/health >/dev/null; then
-              echo "Local worker ready"
-              break
-            fi
-            if [ "$i" -eq 60 ]; then
-              cat airtrust-worker.log
-              exit 1
-            fi
-            sleep 2
-          done
-          npm run smoke:lms:local
-      - name: cleanup
-        if: always()
-        run: |
-          if [ -f /tmp/airtrust-worker.pid ]; then
-            kill "$(cat /tmp/airtrust-worker.pid)" || true
-          fi
-          rm -f worker-airtrust/.dev.vars
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: lms-smoke-worker-log
-          path: airtrust-worker.log
-          if-no-files-found: ignore
-          retention-days: 7
-
-  public-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      CI: 'true'
-      VITE_API_URL: http://127.0.0.1:8787
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.node-version'
-          cache: 'npm'
-      - run: npm ci
-      - name: playwright install chromium
-        run: npx playwright install --with-deps chromium
-      - name: playwright test
-        run: npx playwright test --config=playwright.ci.config.ts
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: public-e2e-test-results
-          path: test-results
-          if-no-files-found: ignore
-          retention-days: 7
+      - run: npm --prefix worker-airtrust ci
+      - run: npm --prefix worker-airtrust exec tsc -- --noEmit

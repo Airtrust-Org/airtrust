@@ -11,18 +11,21 @@ AirTrust is a multi-tenant SaaS platform for aviation crew management (qualifica
 - GitHub `Airtrust-Org/airtrust` is the code authority for source, branches,
   pull requests, and merges. Its `main` branch is the canonical integration
   branch.
-- Google Cloud Build is the official CI and runs the eight required gates:
-  `lint`, `build-content-gates`, `frontend-coverage`, `worker-typecheck`,
-  `worker-tests-1`, `worker-tests-2`, `lms-smoke`, and `public-e2e`.
-- GitHub Actions is optional parity/check automation only. It is not the
-  canonical release gate while GCB remains authoritative.
+- AirTrust CI uses eight required gates split across two executors:
+  - GitHub Actions owns the three fast gates: `lint`, `build-content-gates`,
+    and `worker-typecheck`.
+  - Google Cloud Build owns the five heavy gates: `frontend-coverage`,
+    `worker-tests-1`, `worker-tests-2`, `lms-smoke`, and `public-e2e`.
+  All eight must be green for the exact release SHA; GCB publishes the
+  `airtrust-gcb` status for its five-gate portion.
 - Cloudflare hosts staging and production.
 - GitLab is historical/legacy only after the 2026-08-24 repository cutover;
   do not open new development branches, merge requests, or release gates
   there. Do not use it as a fallback when GitHub or GCB has a problem.
 - CircleCI is retired/legacy. Do not use it as a current merge, release, or
   deployment gate, and do not fall back to it if GCB fails. Inspect
-  `origin/main:cloudbuild.ci.yaml` before CI-dependent work.
+  `origin/main:.github/workflows/ci.yml` and `origin/main:cloudbuild.ci.yaml`
+  before CI-dependent work.
 
 ## Architecture
 
@@ -35,7 +38,7 @@ Two distinct runtimes sharing the same repository:
 
 **Path alias**: `@` resolves to `./src` (configured in `vite.config.ts` and `tsconfig.json`).
 
-**Database**: Cloudflare D1 (SQLite). No ORM — raw SQL via `c.env.DB.prepare()`. 356 sequential migrations in `worker-airtrust/migrations/`.
+**Database**: Cloudflare D1 (SQLite). No ORM — raw SQL via `c.env.DB.prepare()`. Migrations are sequential under `worker-airtrust/migrations/`; determine the current highest migration from the repository instead of relying on a hard-coded historical number.
 
 **Storage**: Cloudflare R2 via `c.env.BUCKET`.
 
@@ -128,7 +131,7 @@ Domain events are processed after each request via `domainEventProcessorMiddlewa
 
 ## Database Migrations
 
-Migrations are numbered sequentially (`0001_...sql` through `038x_...sql`). The current highest is around 0383.
+Migrations are numbered sequentially under `worker-airtrust/migrations/`. Always inspect the repository for the current highest number before creating or applying a migration; historical documentation may be stale.
 
 **Never run migrations automatically.** Apply them manually:
 ```bash
@@ -164,12 +167,7 @@ If a schema change is needed but migration hasn't been authorized, implement the
 
 ## Linting Guards
 
-`npm run lint` runs three checks:
-1. `lint:api-base` — ensures API calls use consistent base URL patterns.
-2. `guard:tracked-secrets` — ensures no secrets are committed.
-3. `guard:auth-boundaries` — ensures protected routes cannot be reached without auth.
-
-These must pass before any PR.
+`npm run lint` runs the current canonical lint/safety guard chain declared in `package.json`. Inspect that script rather than relying on a stale enumerated list. It must pass before any PR is integrated.
 
 ## Environment Environments
 

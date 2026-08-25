@@ -1,3 +1,6 @@
+# Required heavy CI gates. The AirTrust release gate is hybrid:
+# GitHub Actions owns lint, build-content-gates and worker-typecheck;
+# Google Cloud Build owns the five heavy gates below.
 timeout: "10800s"
 
 options:
@@ -35,37 +38,8 @@ steps:
         npm ci --prefix worker-airtrust --cache .npm --prefer-offline
 
   - name: node:24
-    id: lint
-    waitFor: ["bootstrap"]
-    entrypoint: bash
-    args:
-      - -ceu
-      - |
-        # Each Cloud Build step has its own container/global Git config. The
-        # lint guard resolves a merge-base, so it must establish the same
-        # safe-directory trust as bootstrap before invoking Git.
-        git config --global --add safe.directory /workspace
-        export VITE_API_URL="http://127.0.0.1:8787"
-        npm run lint
-
-  - name: node:24
-    id: build-content-gates
-    waitFor: ["bootstrap"]
-    entrypoint: bash
-    args:
-      - -ceu
-      - |
-        apt-get update
-        apt-get install -y --no-install-recommends ripgrep
-        chmod +x ./scripts/ci-demo-data-check.sh ./scripts/ci-internal-docs-check.sh ./scripts/production-audit-check.sh
-        ./scripts/ci-internal-docs-check.sh --test
-        ./scripts/ci-internal-docs-check.sh
-        VITE_API_URL=http://127.0.0.1:8787 npm run build
-        npm run check:demo-data
-
-  - name: node:24
     id: frontend-coverage
-    waitFor: ["lint", "build-content-gates"]
+    waitFor: ["bootstrap"]
     entrypoint: bash
     args:
       - -ceu
@@ -76,18 +50,11 @@ steps:
         npm run test:coverage
 
   - name: node:24
-    id: worker-typecheck
-    waitFor: ["lint", "build-content-gates"]
-    entrypoint: bash
-    args:
-      - -ceu
-      - |
-        cd worker-airtrust
-        npx tsc --noEmit
-
-  - name: node:24
     id: worker-tests-1
-    waitFor: ["worker-typecheck"]
+    # Frontend coverage and the worker shard are both memory-heavy. Run the
+    # worker shard after coverage so E2_HIGHCPU_8 does not contend/OOM while
+    # preserving all five required heavy gates.
+    waitFor: ["frontend-coverage"]
     entrypoint: bash
     args:
       - -ceu
@@ -143,7 +110,7 @@ steps:
     id: lms-smoke
     # Worker tests and LMS smoke both use the same local Wrangler/D1 state
     # directory in the uploaded workspace. Serialize them to prevent SQLite
-    # lock contention while preserving every official gate.
+    # lock contention while preserving every heavy gate.
     waitFor: ["worker-tests-2"]
     entrypoint: bash
     args:
