@@ -21,14 +21,14 @@ test('FRMS update persists identity fields and local schema exposes current colu
   assert.match(setup, /require_sqlite_column "frms_jornada" "\$column_name"/);
 });
 
-test('certificate validation scans all pages and reports R2 availability', () => {
+test('certificate validation uses indexed hash lookup and reports R2 availability', () => {
   const value = source('worker-airtrust/src/routes/certificados/validacao.ts');
-  assert.match(value, /CERTIFICATE_SCAN_BATCH_SIZE/);
-  assert.match(value, /while \(true\)/);
-  assert.match(value, /d\.created_at < \?/);
+  assert.match(value, /qh\.validacao_hash = \?/);
+  assert.match(value, /generateCertificateValidationHash/);
   assert.match(value, /LEFT JOIN qualificacoes_tipos/);
   assert.match(value, /BUCKET\.head\(r2Key\)/);
-  assert.doesNotMatch(value, /ORDER BY d\.created_at DESC\s+LIMIT 1000/);
+  assert.doesNotMatch(value, /CERTIFICATE_SCAN_BATCH_SIZE/);
+  assert.doesNotMatch(value, /while \(true\)/);
 });
 
 test('notification routes resolve employee identity and UI waits for server success', () => {

@@ -26,6 +26,12 @@ jobs:
         run: |
           node --test scripts/ci/check-github-workflow-contexts.test.mjs
           node --test scripts/ci/check-audit-round2-regressions.test.mjs
+          node --test scripts/ci/verify-release-gates.test.mjs
+          node --test scripts/__tests__/deploy-release-gates-wiring.test.mjs
+          node --test scripts/__tests__/guard-route-ownership.test.mjs
+          node --test scripts/__tests__/schema-v2-0470-certificate-validation-hash.test.mjs
+          node --test worker-airtrust/scripts/__tests__/exceljs-sheet-rows.test.mjs
+          node --test worker-airtrust/scripts/__tests__/backfill-certificado-validacao-hash.test.mjs
           node scripts/ci/check-github-workflow-contexts.mjs
           node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
 

@@ -152,7 +152,14 @@ steps:
         npx playwright install --with-deps chromium
 
         RUNTIME_JWT_SECRET="$$(openssl rand -hex 32)"
-        printf '%s=%s\n' "JWT_SECRET" "$$RUNTIME_JWT_SECRET" > worker-airtrust/.dev.vars
+        {
+          printf '%s=%s\n' "JWT_SECRET" "$$RUNTIME_JWT_SECRET"
+          # wrangler.dev.toml bakes ENABLE_DEV_AUTH_BYPASS=true in for local dev
+          # convenience. This job's e2e suite asserts the auth boundary that
+          # unauthenticated requests see in production, so it must run with the
+          # bypass off (a .dev.vars key overrides the same key in wrangler.toml).
+          printf '%s=%s\n' "ENABLE_DEV_AUTH_BYPASS" "false"
+        } > worker-airtrust/.dev.vars
 
         npm run dev:worker:local > /tmp/worker.log 2>&1 &
         WORKER_PID=$$!

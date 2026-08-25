@@ -233,11 +233,34 @@ SELECT
   name AS object_name,
   type AS object_type
 FROM sqlite_master
-WHERE type IN ('table', 'view')
-  AND (
-    name GLOB '*_new'
-    OR name GLOB '*_temp'
-    OR name GLOB '*_backup_*'
-    OR name GLOB '*_v'
+-- The `_v` suffix is a legitimate view-naming convention in this schema
+-- (e.g. qualificacoes_historico_v, qualificacoes_historico_risco_v); it only
+-- indicates a leftover scratch object on TABLES, where a real view would
+-- never share a table's storage. Views are checked for _new/_temp/_backup_
+-- only, so an intentional `foo_v` view is never flagged as suspicious.
+WHERE (
+    type = 'table'
+    AND (
+      name GLOB '*_new'
+      OR name GLOB '*_temp'
+      OR name GLOB '*_backup_*'
+      OR name GLOB '*_v'
+    )
+    AND name NOT IN (
+      -- Known pre-existing debt (2026-08-25, ratchet raised when this check
+      -- was first wired to fail CI at P1 severity): tracked separately for
+      -- cleanup via a dedicated migration. Do not add names without review.
+      '_backup_qh_tmp',
+      'qualificacoes_tipos_backup_0063',
+      'qualificacoes_tipos_backup_20251128'
+    )
+  )
+  OR (
+    type = 'view'
+    AND (
+      name GLOB '*_new'
+      OR name GLOB '*_temp'
+      OR name GLOB '*_backup_*'
+    )
   )
 ORDER BY type, name;

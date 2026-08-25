@@ -6,8 +6,14 @@ describe('Staging Pipeline Trust Boundary', () => {
   const workflowPath = path.resolve(__dirname, '../../.github/workflows/deploy-staging.yml');
   const applyMigrationPath = path.resolve(__dirname, '../../scripts/staging/apply-approved-migrations.sh');
 
+  const releaseGateVerifierPath = path.resolve(
+    __dirname,
+    '../../scripts/ci/verify-release-gates.mjs',
+  );
+
   const workflowContent = fs.readFileSync(workflowPath, 'utf8');
   const scriptContent = fs.readFileSync(applyMigrationPath, 'utf8');
+  const releaseGateVerifierContent = fs.readFileSync(releaseGateVerifierPath, 'utf8');
 
   it('1. workflow confiável vem de main (ou github.sha) na raiz', () => {
     // The trusted checkout does not have a "path" defined, so it falls to root.
@@ -62,17 +68,20 @@ describe('Staging Pipeline Trust Boundary', () => {
     expect(scriptContent).toMatch(/\[\[ "\$migration_basename" == "\$approved" \]\] && is_approved=true/);
   });
 
-  it('11. statuses vazios + check-runs verdes são aceitos', () => {
-    // Logic changed to if (statuses.statuses.length > 0 && ...)
-    expect(workflowContent).toMatch(/if \(statuses\.statuses\.length > 0 && statuses\.statuses\.some/);
+  it('11. release-gate verifier is wired into the guard instead of inline status logic', () => {
+    expect(workflowContent).toMatch(/verify-release-gates\.mjs/);
   });
 
-  it('12. status clássico failure bloqueia', () => {
-    expect(workflowContent).toMatch(/statuses\.statuses\.some\(\(status\) => status\.state !== 'success'\)/);
+  it('12. status clássico failure bloqueia (release-gate verifier)', () => {
+    expect(releaseGateVerifierContent).toMatch(
+      /gcbCandidates\.some\(\(status\) => status\.state === 'success'\)/,
+    );
   });
 
-  it('13. check-run pending/failure bloqueia', () => {
-    expect(workflowContent).toMatch(/const badCheck = relevantChecks\.find\(\(check\) => check\.status !== 'completed' \|\| check\.conclusion !== 'success'\);/);
+  it('13. check-run pending/failure bloqueia (release-gate verifier)', () => {
+    expect(releaseGateVerifierContent).toMatch(
+      /check\.status === 'completed' && check\.conclusion === 'success'/,
+    );
   });
 
   it('14. provenance separa workflow_sha e release_sha', () => {

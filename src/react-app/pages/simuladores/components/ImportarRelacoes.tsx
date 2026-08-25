@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { getAccessToken } from '@/react-app/config/api';
 import { Upload, CheckCircle, XCircle, AlertCircle, FileSpreadsheet, Download } from 'lucide-react';
-import { importWithRetry } from '@/react-app/utils/lazyWithRetry';
 import { parseSpreadsheetFile } from '@/react-app/utils/parseSpreadsheetFile';
-// 🚀 LAZY LOADING: XLSX carregado dinamicamente apenas quando necessário
+import { exportToExcel } from '@/react-app/utils/lazyXLSX';
+// 🚀 LAZY LOADING: ExcelJS carregado dinamicamente apenas quando necessário
 
 interface ResultadoImportacao {
   sucesso: boolean;
@@ -52,12 +52,6 @@ export default function ImportarRelacoesInteligente({
   };
 
   const baixarTemplate = async () => {
-    // 🚀 LAZY LOADING: Carrega XLSX apenas quando baixar template
-    const XLSX = await importWithRetry(() => import('xlsx'), 'ImportarRelacoes_xlsx_template', {
-      reloadOnChunkError: false,
-      maxAttempts: 2,
-    });
-
     const template = [
       {
         modelo_codigo: 'SESS-001',
@@ -86,11 +80,7 @@ export default function ImportarRelacoesInteligente({
         tempo_estimado_min: 10,
       },
     ];
-
-    const ws = XLSX.utils.json_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Relações');
-    XLSX.writeFile(wb, 'template_relacoes_completas.xlsx');
+    await exportToExcel(template, 'template_relacoes_completas', 'Relações');
   };
 
   const processarImportacao = async () => {

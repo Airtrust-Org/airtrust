@@ -81,18 +81,31 @@ describe('deploy-staging.yml — static guards', () => {
     for (const token of [
       '/collaborators/${actor}/permission',
       "['write', 'push', 'maintain', 'admin']",
-      '/check-runs?per_page=100',
-      "check.status !== 'completed' || check.conclusion !== 'success'",
-      '/status',
-      // Per-status state check — applied only when statuses exist (empty statuses allowed)
-      "status.state !== 'success'",
+      'verify-release-gates.mjs',
     ]) {
       expect(workflow).toContain(token);
     }
+  });
+
+  it('release-gate verifier requires the official check-runs and airtrust-gcb status to be green', () => {
+    const verifier = readFileSync(
+      join(ROOT, 'scripts/ci/verify-release-gates.mjs'),
+      'utf8',
+    );
+    for (const token of [
+      '/check-runs?per_page=100',
+      "check.status === 'completed' && check.conclusion === 'success'",
+      '/status',
+      "REQUIRED_GCB_STATUS = 'airtrust-gcb'",
+      // Per-status state check — applied only when statuses exist (empty statuses allowed)
+      "status.state === 'success'",
+    ]) {
+      expect(verifier).toContain(token);
+    }
     // Empty statuses must not block when check-runs are green
-    expect(workflow).toContain('statuses.statuses.length > 0');
+    expect(verifier).toContain('gcbCandidates.length === 0');
     // The old aggregate statuses.state check must NOT be present — it incorrectly blocks repos with no classic statuses
-    expect(workflow).not.toContain("statuses.state !== 'success'");
+    expect(verifier).not.toContain("statuses.state !== 'success'");
   });
 
   it('checks out the trusted release SHA into release/ and the pipeline itself from main', () => {
@@ -919,6 +932,49 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
     );
   });
 
+  it('8b. only canonical smoke credentials gate before any migration or deploy', () => {
+    const smokeSecretsJob = workflow.slice(
+      workflow.indexOf('\n  check-smoke-secrets:'),
+      workflow.indexOf('\n  cloudflare-secret-readiness-gate:'),
+    );
+    expect(smokeSecretsJob).toContain('if: ${{ inputs.run_smoke }}');
+    expect(smokeSecretsJob).toContain('STAGING_SMOKE_EMAIL');
+    expect(smokeSecretsJob).toContain('STAGING_SMOKE_PASSWORD');
+    expect(smokeSecretsJob).not.toContain('secrets.QA_EXAMINER_');
+
+    const readinessGate = workflow.slice(
+      workflow.indexOf('\n  cloudflare-secret-readiness-gate:'),
+      workflow.indexOf('\n  backup:'),
+    );
+    expect(readinessGate).toContain('check-smoke-secrets');
+    expect(readinessGate).toContain('SMOKE_SECRETS_RESULT: ${{ needs.check-smoke-secrets.result }}');
+    expect(readinessGate).toContain(
+      'if [[ "$RUN_SMOKE" == "true" && "$SMOKE_SECRETS_RESULT" != "success" ]]',
+    );
+  });
+
+  it('8c. full smoke reseeds only the synthetic examiner fixture from canonical credentials', () => {
+    const reseedJob = workflow.slice(
+      workflow.indexOf('\n  reseed-qa-examiner-fixture:'),
+      workflow.indexOf('\n  smoke:'),
+    );
+    expect(reseedJob).toContain('name: Reseed Synthetic QA Examiner Fixture (staging D1)');
+    expect(reseedJob).toContain('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
+    expect(reseedJob).toContain('QA_EXAMINER_ADMIN_EMAIL: qa-examiner-admin@staging.airtrust.invalid');
+    expect(reseedJob).toContain('QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}');
+    expect(reseedJob).toContain('CONFIRM_STAGING_QA_SEED: AIRTRUST_STAGING_QA_SEED');
+    expect(reseedJob).toContain('node scripts/staging/seed-qa-examiner-training.mjs --apply');
+
+    const smokeJob = workflow.slice(
+      workflow.indexOf('\n  smoke:'),
+      workflow.indexOf('\n  summary:'),
+    );
+    expect(smokeJob).toContain('QA_EXAMINER_ADMIN_EMAIL: qa-examiner-admin@staging.airtrust.invalid');
+    expect(smokeJob).toContain('QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}');
+    expect(smokeJob).toContain('node scripts/staging/smoke-examiner-training.mjs');
+    expect(smokeJob).toContain("needs.reseed-qa-examiner-fixture.result == 'success'");
+  });
+
   it('9/10. postconditions intera sobre APPROVED_MIGRATIONS e usa script flexível', () => {
     const postconditionsJob = workflow.slice(
       workflow.indexOf('\n  postconditions:'),
@@ -938,7 +994,7 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
       workflow.indexOf('\n  summary:'),
     );
     expect(smokeJob).toContain(
-      'needs: [guard, production-target-guard, release-write-gate, deploy-worker, deploy-frontend]',
+      'needs: [guard, production-target-guard, release-write-gate, deploy-worker, deploy-frontend, reseed-qa-examiner-fixture]',
     );
     expect(smokeJob).toContain(
       "(inputs.deploy_worker == false || needs.deploy-worker.result == 'success')",

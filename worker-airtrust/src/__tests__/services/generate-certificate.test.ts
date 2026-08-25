@@ -129,6 +129,7 @@ interface HistoricoLinkState {
   certificado_arquivo_id: number | null;
   arquivo_url: string | null;
   numero_certificado: string | null;
+  validacao_hash: string | null;
 }
 
 function makeFakeD1(options: {
@@ -149,6 +150,7 @@ function makeFakeD1(options: {
       (qualificacao?.certificado_arquivo_id as number | null | undefined) ?? null,
     arquivo_url: null,
     numero_certificado: null,
+    validacao_hash: null,
   };
   let nextDocumentoId = 9000;
   let nextPastaVirtualId = 9500;
@@ -215,15 +217,11 @@ function makeFakeD1(options: {
       if (!historicoUpdateMatches) {
         return { meta: { changes: 0, last_row_id: 0 } };
       }
-      const [r2KeyForDocLookup, , numeroCertificado, , , expectedCurrentId] = args as [
-        string,
-        string,
-        string,
-        number,
-        number,
-        number | null,
-        number | null,
-      ];
+      const hasHash = sql.includes('validacao_hash = ?');
+      const r2KeyForDocLookup = args[0] as string;
+      const numeroCertificado = args[2] as string;
+      const validationHash = hasHash ? String(args[3]) : null;
+      const expectedCurrentId = (hasHash ? args[6] : args[5]) as number | null;
       const matchesExpectedCurrentId =
         expectedCurrentId == null
           ? historico.certificado_arquivo_id == null
@@ -235,6 +233,7 @@ function makeFakeD1(options: {
       historico.certificado_arquivo_id = documento?.id ?? null;
       historico.arquivo_url = documento ? `/api/pasta-virtual/stream/${documento.id}` : null;
       historico.numero_certificado = numeroCertificado;
+      if (validationHash) historico.validacao_hash = validationHash;
       return { meta: { changes: 1, last_row_id: 0 } };
     }
 
@@ -264,7 +263,12 @@ function makeFakeD1(options: {
       _sql: sql,
       _args: args,
       bind: (...newArgs: unknown[]) => makeBoundStatement(sql, newArgs),
-      all: vi.fn(async () => ({ results: [] })), // PRAGMA table_info(...) — no extra columns
+      all: vi.fn(async () => {
+        if (sql.includes('PRAGMA table_info')) {
+          return { results: [{ name: 'validacao_hash' }, { name: 'certificado_arquivo_id' }] };
+        }
+        return { results: [] };
+      }),
       first: vi.fn(async () => {
         if (
           sql.includes('FROM qualificacoes_historico qh') &&
@@ -377,6 +381,7 @@ describe('generateCertificateForHistorico', () => {
     // histórico vinculado
     expect(historico.certificado_arquivo_id).toBe(result.documentoId);
     expect(historico.numero_certificado).toBe(result.numeroCertificado);
+    expect(historico.validacao_hash).toMatch(/^[A-F0-9]{16}$/);
 
     expect(bucket.delete).not.toHaveBeenCalled();
   });

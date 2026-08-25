@@ -3,7 +3,8 @@ import { toast } from 'sonner';
 
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { parseSpreadsheetFile } from '@/react-app/utils/parseSpreadsheetFile';
-// 🚀 LAZY LOADING: XLSX carregado dinamicamente apenas quando necessário (importar/preview/export)
+// 🚀 LAZY LOADING: ExcelJS carregado dinamicamente apenas quando necessário (importar/preview/export)
+import { exportToExcel } from '@/react-app/utils/lazyXLSX';
 import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
 import type { SpreadsheetRow } from '@/react-app/utils/parseSpreadsheetFile';
@@ -368,11 +369,12 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
       ],
     ];
 
-    const XLSX = await import('xlsx');
-    const ws = XLSX.utils.aoa_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Qualificações');
-    XLSX.writeFile(wb, 'template_qualificacoes_airtrust.xlsx');
+    const headers = template[0] as string[];
+    const rows = template.slice(1);
+    const templateData = rows.map((row) =>
+      Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])),
+    );
+    await exportToExcel(templateData, 'template_qualificacoes_airtrust', 'Qualificações');
   };
 
   return (

@@ -45,7 +45,6 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tesseract.js": "^6.0.1",
-    "xlsx": "^0.18.5",
     "zod": "^3.25.76",
     "zustand": "^5.0.11"
   },
@@ -125,7 +124,7 @@
     "validate:data-quality-sql": "bash scripts/validation/validate-data-quality-sql.sh",
     "data-quality:local": "bash scripts/validation/run-data-quality-local.sh",
     "integrity:local": "bash -lc 'db=\"${AIRTRUST_INTEGRITY_DB:-}\"; if [[ -z \"$db\" ]]; then for dir in worker-airtrust/.wrangler/state/v3/d1/miniflare-D1DatabaseObject .wrangler/state/v3/d1/miniflare-D1DatabaseObject; do [[ -d \"$dir\" ]] || continue; cand=$(find \"$dir\" -maxdepth 1 -type f -name \"*.sqlite\" ! -name \"metadata.sqlite\" | head -n1); if [[ -n \"$cand\" ]]; then db=\"$cand\"; break; fi; done; fi; if [[ -z \"$db\" ]]; then echo \"No local D1 sqlite snapshot found. Run npm run setup:lms:local:reset or set AIRTRUST_INTEGRITY_DB.\" >&2; exit 1; fi; args=(node scripts/integrity/run-integrity.mjs --db \"$db\" --fail-on-severity \"${AIRTRUST_INTEGRITY_FAIL_ON_SEVERITY:-P0}\"); if [[ -n \"${AIRTRUST_INTEGRITY_BASELINE:-}\" ]]; then args+=(--baseline \"$AIRTRUST_INTEGRITY_BASELINE\"); fi; \"${args[@]}\"'",
-    "integrity:ci": "AIRTRUST_INTEGRITY_FAIL_ON_SEVERITY=P0 npm run integrity:local",
+    "integrity:ci": "AIRTRUST_INTEGRITY_FAIL_ON_SEVERITY=P1 npm run integrity:local",
     "test": "vitest",
     "test:run": "vitest run",
     "test:guard:sw-cache": "vitest run src/__tests__/service-worker-cache.test.ts",
@@ -173,8 +172,9 @@
     "guard:cloudflare-secret-contract": "node scripts/ci/guard-cloudflare-secret-contract.mjs",
     "guard:sanitization": "node scripts/guard-sanitization.mjs",
     "guard:package-references": "node scripts/guard-package-references.mjs",
+    "guard:route-ownership": "node scripts/guard-route-ownership.mjs",
     "typecheck:ratchet": "node scripts/guard-typescript-baseline-ratchet.mjs",
-    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta && npm run guard:frms-no-direct-sigvoos && npm run guard:staging-version-stamp && npm run guard:local-maintenance-runtime && npm run guard:worker-bundle-provenance && npm run guard:cloudflare-secret-contract && npm run guard:sanitization && npm run guard:no-raw-fetch && npm run guard:package-references",
+    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta && npm run guard:frms-no-direct-sigvoos && npm run guard:staging-version-stamp && npm run guard:local-maintenance-runtime && npm run guard:worker-bundle-provenance && npm run guard:cloudflare-secret-contract && npm run guard:sanitization && npm run guard:no-raw-fetch && npm run guard:package-references && npm run guard:route-ownership",
     "guard:no-raw-fetch": "node scripts/guard-no-raw-fetch.mjs"
   }
 }

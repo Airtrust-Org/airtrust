@@ -144,15 +144,15 @@ describe('Staging Release Guard Logic', () => {
     })).rejects.toThrow('PR_FROM_FORK_REJECTED');
   });
 
-  it('checks ausentes: negado', async () => {
-    await expect(runGuard({
-      checks: []
-    })).rejects.toThrow('RELEASE_CHECKS_NOT_GREEN');
-  });
-
-  it('checks pendentes ou falhos: negado', async () => {
-    await expect(runGuard({
-      checks: [{ name: 'test', status: 'completed', conclusion: 'failure' }]
-    })).rejects.toThrow('RELEASE_CHECKS_NOT_GREEN');
+  // Check-runs/status gate verification moved out of this inline PR/actor
+  // guard script into scripts/ci/verify-release-gates.mjs, which is invoked
+  // as its own workflow step and has its own dedicated behavioral coverage
+  // in scripts/ci/verify-release-gates.test.mjs ("fails when an official GHA
+  // gate is missing/not green" and "fails when the GCB aggregate gate is
+  // missing or red"). This guard script no longer contains that logic, so it
+  // can't be exercised through this harness.
+  it('delegates check-runs/status gate verification to verify-release-gates.mjs', () => {
+    const workflow = readWorkflow();
+    expect(workflow).toContain('node scripts/ci/verify-release-gates.mjs');
   });
 });

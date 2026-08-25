@@ -1,0 +1,73 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { verifyReleaseGatePayloads } from './verify-release-gates.mjs';
+
+const greenChecks = [
+  { name: 'lint', status: 'completed', conclusion: 'success' },
+  { name: 'build-content-gates', status: 'completed', conclusion: 'success' },
+  { name: 'worker-typecheck', status: 'completed', conclusion: 'success' },
+  { name: 'frontend-coverage', status: 'completed', conclusion: 'success' },
+  { name: 'worker-tests-1', status: 'completed', conclusion: 'success' },
+  { name: 'worker-tests-2', status: 'completed', conclusion: 'success' },
+  { name: 'lms-smoke', status: 'completed', conclusion: 'success' },
+  { name: 'public-e2e', status: 'completed', conclusion: 'success' },
+];
+
+test('accepts the eight official GitHub Actions gates and ignores optional noise', () => {
+  assert.deepEqual(
+    verifyReleaseGatePayloads({
+      checkRuns: [
+        ...greenChecks,
+        { name: 'airtrust-gcb', status: 'completed', conclusion: 'failure' },
+        { name: 'optional-experiment', status: 'completed', conclusion: 'failure' },
+      ],
+    }),
+    {
+      githubActions: [
+        'lint',
+        'build-content-gates',
+        'worker-typecheck',
+        'frontend-coverage',
+        'worker-tests-1',
+        'worker-tests-2',
+        'lms-smoke',
+        'public-e2e',
+      ],
+    },
+  );
+});
+
+test('fails when any official gate is missing', () => {
+  assert.throws(
+    () =>
+      verifyReleaseGatePayloads({
+        checkRuns: greenChecks.filter((check) => check.name !== 'worker-tests-2'),
+      }),
+    /worker-tests-2:missing/,
+  );
+});
+
+test('fails when an official gate is not green', () => {
+  assert.throws(
+    () =>
+      verifyReleaseGatePayloads({
+        checkRuns: greenChecks.map((check) =>
+          check.name === 'public-e2e' ? { ...check, conclusion: 'failure' } : check,
+        ),
+      }),
+    /public-e2e:not-success/,
+  );
+});
+
+test('legacy aggregate cannot substitute for a missing heavy gate', () => {
+  assert.throws(
+    () =>
+      verifyReleaseGatePayloads({
+        checkRuns: [
+          ...greenChecks.filter((check) => check.name !== 'frontend-coverage'),
+          { name: 'airtrust-gcb', status: 'completed', conclusion: 'success' },
+        ],
+      }),
+    /frontend-coverage:missing/,
+  );
+});

@@ -1,3 +1,0 @@
-auto_approve=true
-trusted=true
-commands=npm,wrangler,git,du,rm,mkdir,cd,ls,grep,find

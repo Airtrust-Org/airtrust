@@ -4,8 +4,9 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { Plus, Search, FileText, SearchX } from 'lucide-react';
 import { EmptyState } from '@/react-app/components/UI/EmptyState';
-// 🚀 LAZY LOADING: XLSX carregado dinamicamente apenas quando necessário (exportarParaExcel)
+// 🚀 LAZY LOADING: ExcelJS carregado dinamicamente apenas quando necessário (exportarParaExcel)
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { exportToExcel } from '@/react-app/utils/lazyXLSX';
 import { BaseModal as Modal } from '../../components/modals/BaseModal';
 import FormularioQualificacao from './FormularioQualificacao';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
@@ -94,8 +95,6 @@ const Treinamentos = () => {
   };
 
   const exportarParaExcel = async () => {
-    const XLSX = await import('xlsx');
-
     const dadosExportacao = filtrados.map((t) => ({
       Funcionário: t.funcionario_nome || '-',
       Categoria: t.categoria || '-',
@@ -104,12 +103,8 @@ const Treinamentos = () => {
       Status: t.status_calculado || 'VALIDO',
     }));
 
-    const ws = XLSX.utils.json_to_sheet(dadosExportacao);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Treinamentos');
-
     const hoje = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wb, `treinamentos_${hoje}.xlsx`);
+    await exportToExcel(dadosExportacao, `treinamentos_${hoje}`, 'Treinamentos');
   };
 
   if (loading) return <div className="text-center py-10">Carregando...</div>;

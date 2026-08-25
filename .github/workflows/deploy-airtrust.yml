@@ -37,6 +37,8 @@ on:
 
 permissions:
   contents: read
+  checks: read
+  statuses: read
 
 concurrency:
   group: deploy-airtrust-production
@@ -79,6 +81,13 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/ci/validate-production-deploy-dispatch.mjs
+
+      - name: Verify official release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
 
       - name: Compute release version
         id: version

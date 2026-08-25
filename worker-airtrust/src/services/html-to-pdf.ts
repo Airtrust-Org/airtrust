@@ -4,6 +4,7 @@
  */
 
 import qrcode from 'qrcode-generator';
+import { generateCertificateValidationHash } from '../utils/certificate-validation-hash';
 
 const RETRYABLE_STATUS_CODES = new Set([429]);
 const RETRY_BACKOFF_MS = [5000, 15000, 30000] as const;
@@ -240,20 +241,12 @@ export async function processTemplateWithQR(
     data.data_conclusao
   ) {
     try {
-      // Limpar CPF
-      const cpfLimpo = String(data.funcionario_cpf).replace(/[.\-\s]/g, '');
-      const hashString = `${cpfLimpo}${data.qualificacao_codigo}${data.data_conclusao}${data.numero_certificado}`;
-
-      // Gerar hash SHA-256
-      const encoder = new TextEncoder();
-      const dataBytes = encoder.encode(hashString);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', dataBytes);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      hash = hashArray
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('')
-        .substring(0, 16)
-        .toUpperCase();
+      hash = await generateCertificateValidationHash({
+        funcionarioCpf: String(data.funcionario_cpf),
+        qualificacaoCodigo: String(data.qualificacao_codigo),
+        dataConclusao: String(data.data_conclusao),
+        numeroCertificado: String(data.numero_certificado),
+      });
 
       // QR code com URL de validação
       const validationPageBase = (

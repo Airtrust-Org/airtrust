@@ -3,7 +3,8 @@ import { toast } from 'sonner';
 
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
 import { parseSpreadsheetFile } from '@/react-app/utils/parseSpreadsheetFile';
-// 🚀 LAZY LOADING: XLSX carregado apenas quando necessário
+import { exportToExcel } from '@/react-app/utils/lazyXLSX';
+// 🚀 LAZY LOADING: ExcelJS carregado apenas quando necessário
 import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 import type { SpreadsheetRow } from '@/react-app/utils/parseSpreadsheetFile';
@@ -232,12 +233,7 @@ export default function ImportacaoPadrao({
     }
 
     const templateData = [exemploColunas];
-
-    const XLSX = await import('xlsx');
-    const ws = XLSX.utils.json_to_sheet(templateData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Template');
-    XLSX.writeFile(wb, `template_${titulo.toLowerCase().replace(/\s+/g, '_')}.xlsx`);
+    await exportToExcel(templateData, `template_${titulo.toLowerCase().replace(/\s+/g, '_')}`, 'Template');
   };
 
   return (
