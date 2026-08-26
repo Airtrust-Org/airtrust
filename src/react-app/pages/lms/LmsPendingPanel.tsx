@@ -51,16 +51,34 @@ export function LmsPendingPanel({
 
           {items.length > 0 && (
             <ul className="mt-3 space-y-1.5" data-testid="lms-pending-items">
-              {items.map((item, i) => (
-                <li
-                  key={`${item.category}-${item.ref?.id ?? i}`}
-                  data-testid="lms-pending-item"
-                  className="flex items-start gap-2 text-sm text-amber-900 dark:text-amber-100"
-                >
-                  <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-                  <span>{item.label}</span>
-                </li>
-              ))}
+              {items.map((item, i) => {
+                const isScoreFailure = item.category === 'SCORE';
+                return (
+                  <li
+                    key={`${item.category}-${item.ref?.id ?? i}`}
+                    data-testid="lms-pending-item"
+                    data-severity={isScoreFailure ? 'error' : 'warning'}
+                    className={
+                      isScoreFailure
+                        ? 'flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100'
+                        : 'flex items-start gap-2 text-sm text-amber-900 dark:text-amber-100'
+                    }
+                  >
+                    {isScoreFailure ? (
+                      <AlertTriangle
+                        aria-label="Avaliação abaixo da nota mínima"
+                        className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+                      />
+                    )}
+                    <span>{item.label}</span>
+                  </li>
+                );
+              })}
             </ul>
           )}
 
