@@ -1,0 +1,22 @@
+import { describe, expect, it } from 'vitest';
+import { isSyntheticFrmsFixture, shouldExposeFrmsPerson } from '../frmsProductionVisibility';
+
+describe('frmsProductionVisibility', () => {
+  it('identifica fixtures QA e fictícias sem depender de acentos', () => {
+    expect(isSyntheticFrmsFixture({ nome: 'QA Governada — QA Fictício' })).toBe(true);
+    expect(isSyntheticFrmsFixture({ nome: 'Tripulante FICTICIO' })).toBe(true);
+    expect(isSyntheticFrmsFixture({ nome: 'Synthetic Pilot' })).toBe(true);
+  });
+
+  it('não classifica tripulante operacional real como fixture', () => {
+    expect(
+      isSyntheticFrmsFixture({ nome: 'João da Silva', funcao: 'COMANDANTE', cargo: 'Comandante' }),
+    ).toBe(false);
+  });
+
+  it('oculta fixture somente em produção', () => {
+    const fixture = { nome: 'QA Governada', funcao: 'PILOTO' };
+    expect(shouldExposeFrmsPerson(fixture, true)).toBe(false);
+    expect(shouldExposeFrmsPerson(fixture, false)).toBe(true);
+  });
+});
