@@ -11,11 +11,10 @@ interface VersionData {
   builtAt: string | null;
 }
 
-type RuntimeEnvironment = 'production' | 'staging' | 'development';
+export type RuntimeEnvironment = 'production' | 'staging' | 'development';
 
-function inferRuntimeEnvironment(): RuntimeEnvironment {
-  if (typeof window === 'undefined') return 'development';
-  const host = window.location.hostname.toLowerCase();
+export function inferRuntimeEnvironmentFromHostname(hostname: string): RuntimeEnvironment {
+  const host = hostname.trim().toLowerCase();
   if (host === 'airtrust.online' || host === 'www.airtrust.online') return 'production';
   if (
     host.includes('airtrust-staging') ||
@@ -27,7 +26,12 @@ function inferRuntimeEnvironment(): RuntimeEnvironment {
   return 'development';
 }
 
-function normalizeEnvironment(value: string | undefined): RuntimeEnvironment | null {
+function inferRuntimeEnvironment(): RuntimeEnvironment {
+  if (typeof window === 'undefined') return 'development';
+  return inferRuntimeEnvironmentFromHostname(window.location.hostname);
+}
+
+export function normalizeRuntimeEnvironment(value: string | undefined): RuntimeEnvironment | null {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'production' || normalized === 'staging' || normalized === 'development') {
     return normalized;
@@ -60,7 +64,7 @@ export function VersionBadge() {
   // Nunca rotular airtrust.online como development enquanto /api/version ainda carrega.
   // O hostname é a fonte de fallback fail-safe; a API só refina o valor quando coerente.
   const runtimeEnvironment = inferRuntimeEnvironment();
-  const apiEnvironment = normalizeEnvironment(apiData?.data?.environment);
+  const apiEnvironment = normalizeRuntimeEnvironment(apiData?.data?.environment);
   const environment =
     runtimeEnvironment === 'production'
       ? 'production'
