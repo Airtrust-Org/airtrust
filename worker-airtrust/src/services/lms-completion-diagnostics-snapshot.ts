@@ -23,6 +23,17 @@ export interface SnapshotSlideRef {
   title: string | null;
 }
 
+export interface SnapshotModuleResult {
+  module: SnapshotSlideRef;
+  assessment: {
+    required: boolean;
+    completed: boolean;
+    scoreRaw: number | null;
+    masteryScore: number | null;
+    passed: boolean | null;
+  };
+}
+
 export interface CompletionDiagnosticsSnapshot {
   version: 1;
   courseId: string | null;
@@ -41,6 +52,8 @@ export interface CompletionDiagnosticsSnapshot {
     unanswered: SnapshotSlideRef[];
     incomplete: SnapshotSlideRef[];
   };
+  /** Ausente em pacotes V1 antigos; normalizado para [] no read/write model. */
+  moduleResults: SnapshotModuleResult[];
   packageStatus: {
     lessonStatus: string | null;
     finishRequested: boolean;
@@ -78,6 +91,37 @@ function sanitizeSlideRefList(value: unknown): SnapshotSlideRef[] {
     const ref = sanitizeSlideRef(entry);
     if (ref) out.push(ref);
   }
+  return out;
+}
+
+function sanitizeModuleResultList(value: unknown): SnapshotModuleResult[] {
+  if (!Array.isArray(value)) return [];
+  const out: SnapshotModuleResult[] = [];
+
+  for (const entry of value.slice(0, MAX_ITEMS_PER_COLLECTION)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const raw = entry as Record<string, unknown>;
+    const module = sanitizeSlideRef(raw.module);
+    if (!module) continue;
+
+    const assessmentRaw =
+      raw.assessment && typeof raw.assessment === 'object' && !Array.isArray(raw.assessment)
+        ? (raw.assessment as Record<string, unknown>)
+        : {};
+    const passedRaw = assessmentRaw.passed;
+
+    out.push({
+      module,
+      assessment: {
+        required: assessmentRaw.required === true,
+        completed: assessmentRaw.completed === true,
+        scoreRaw: sanitizeFiniteNumber(assessmentRaw.scoreRaw),
+        masteryScore: sanitizeFiniteNumber(assessmentRaw.masteryScore),
+        passed: typeof passedRaw === 'boolean' ? passedRaw : null,
+      },
+    });
+  }
+
   return out;
 }
 
@@ -127,6 +171,7 @@ export function parseCompletionDiagnosticsSnapshot(
       unanswered: sanitizeSlideRefList(assessmentRaw.unanswered),
       incomplete: sanitizeSlideRefList(assessmentRaw.incomplete),
     },
+    moduleResults: sanitizeModuleResultList(data.moduleResults),
     packageStatus: {
       lessonStatus: sanitizeText(statusRaw.lessonStatus, 60),
       finishRequested: statusRaw.finishRequested === true,
