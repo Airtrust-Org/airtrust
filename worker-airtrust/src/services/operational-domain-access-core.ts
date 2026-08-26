@@ -408,22 +408,55 @@ export async function resolveResourceDomain(
         ? 'COALESCE(qc_hist.dominio_codigo, qt.dominio_codigo, qc_tipo.dominio_codigo)'
         : 'COALESCE(qc_hist.dominio_codigo, qc_tipo.dominio_codigo)';
 
+      // Multi-setor: a tipo linked to MORE THAN ONE active setor is a
+      // company-wide/cross-domain training (e.g. SGSO shared by Tripulação
+      // and Manutenção). Its single dominio_codigo can no longer represent
+      // the certificate's effective domain for every funcionário — resolve
+      // the domain from the owning FUNCIONÁRIO's setor instead, so a
+      // Manutenção employee's SGSO certificate authorizes against
+      // MANUTENCAO and a Tripulação employee's against OPERACOES. A tipo
+      // with zero/one setor link keeps the existing single-domain
+      // precedence untouched. Feature-detected: the join table may not
+      // exist yet in every environment.
+      const hasTiposSetores = await tableHasColumn(db, 'qualificacoes_tipos_setores', 'tipo_id');
+      const tipoSetorLinkCountSql = hasTiposSetores
+        ? `(SELECT COUNT(DISTINCT qts.setor_id)
+             FROM qualificacoes_tipos_setores qts
+            WHERE qts.tipo_id = qh.qualificacao_id
+              AND qts.empresa_id = qh.empresa_id
+              AND qts.deleted_at IS NULL
+              AND qts.setor_id IS NOT NULL)`
+        : '0';
+
       const row = await db
         .prepare(
           `SELECT ${dominioSelect} AS dominio_codigo,
-                  f.setor_id AS setor_id
+                  f.setor_id AS setor_id,
+                  s.dominio_codigo AS setor_dominio_codigo,
+                  ${tipoSetorLinkCountSql} AS tipo_setor_link_count
              FROM qualificacoes_historico qh
              LEFT JOIN qualificacoes_categorias qc_hist ON qc_hist.id = qh.categoria_id
              LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
              LEFT JOIN qualificacoes_categorias qc_tipo ON qc_tipo.id = qt.categoria_id
              LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id
+             LEFT JOIN setores s ON s.id = f.setor_id AND s.empresa_id = qh.empresa_id
             WHERE qh.id = ? AND qh.empresa_id = ? AND qh.deleted_at IS NULL
             LIMIT 1`,
         )
         .bind(resourceId, empresaId)
-        .first<{ dominio_codigo: string | null; setor_id: number | null }>();
+        .first<{
+          dominio_codigo: string | null;
+          setor_id: number | null;
+          setor_dominio_codigo: string | null;
+          tipo_setor_link_count: number | null;
+        }>();
+
+      const isMultiSetor = Number(row?.tipo_setor_link_count ?? 0) > 1;
+      const domain = isMultiSetor
+        ? ((row?.setor_dominio_codigo as OperationalDomain | null) ?? null)
+        : ((row?.dominio_codigo as OperationalDomain) ?? null);
       return {
-        domain: (row?.dominio_codigo as OperationalDomain) ?? null,
+        domain,
         setorId: row?.setor_id ?? null,
       };
     }
@@ -907,7 +940,9 @@ const UNRESTRICTED_READ_SCOPE: OperationalReadScope = {
 };
 
 export type ManagedSectorDomainReason =
-  'MANAGED_SECTOR_DOMAIN' | 'QUALIFICATION_SECTOR_LINK' | 'AMBIGUOUS_UNCLASSIFIED';
+  | 'MANAGED_SECTOR_DOMAIN'
+  | 'QUALIFICATION_SECTOR_LINK'
+  | 'AMBIGUOUS_UNCLASSIFIED';
 
 export interface ManagedSectorDomainResolution {
   setorId: number;

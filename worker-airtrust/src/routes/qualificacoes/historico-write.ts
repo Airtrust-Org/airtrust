@@ -181,11 +181,12 @@ writeRouter.post(
     // Buscar qualificação original COM dados do tipo para calcular validade
     const originalResult = await db
       .prepare(
-        `SELECT qh.id, qh.funcionario_id, qh.qualificacao_id, qh.qualificacao_codigo, 
-                qh.data_conclusao, qh.data_vencimento, qh.observacoes, qh.renovada, 
+        `SELECT qh.id, qh.funcionario_id, qh.qualificacao_id, qh.qualificacao_codigo,
+                qh.data_conclusao, qh.data_vencimento, qh.observacoes, qh.renovada,
                 qh.validade_meses as hist_validade_meses, qh.tipo_codigo, qh.codigo,
-                  qh.categoria, qh.numero_certificado, qh.instrutor, qh.carga_horaria,
+                  qh.categoria, qh.categoria_id, qh.numero_certificado, qh.instrutor, qh.carga_horaria,
                 qt.validade as tipo_validade, qt.nome as tipo_nome, qt.categoria as tipo_categoria,
+                  qt.categoria_id as tipo_categoria_id,
                   qt.carga_horaria as tipo_carga_horaria,
                   qt.carga_horaria_inicial as tipo_carga_horaria_inicial,
                   qt.carga_horaria_recorrente as tipo_carga_horaria_recorrente
@@ -216,12 +217,14 @@ writeRouter.post(
       tipo_codigo: string | null;
       codigo: string | null;
       categoria: string | null;
+      categoria_id: number | null;
       numero_certificado: string | null;
       instrutor: string | null;
       carga_horaria: number | null;
       tipo_validade: number | null;
       tipo_nome: string | null;
       tipo_categoria: string | null;
+      tipo_categoria_id: number | null;
       tipo_carga_horaria: number | null;
       tipo_carga_horaria_inicial: number | null;
       tipo_carga_horaria_recorrente: number | null;
@@ -372,6 +375,14 @@ writeRouter.post(
       const codigoQualificacao =
         original.qualificacao_codigo || original.codigo || original.tipo_codigo;
       const categoriaQualificacao = original.categoria || original.tipo_categoria;
+      // Snapshot categoria_id too — RESOURCE_DOMAIN_UNCLASSIFIED incident
+      // (2026-08-26): this INSERT used to copy only the denormalized
+      // `categoria` text, never the FK. assertOperationalAccess treats a
+      // NULL categoria_id row as fully unclassified unless the qt fallback
+      // still resolves, so a stale/renamed qualificacoes_tipos row (or a
+      // tipo whose own categoria_id later changes) silently fail-closes an
+      // otherwise valid renewal. Persist it explicitly.
+      const categoriaIdQualificacao = original.categoria_id ?? original.tipo_categoria_id ?? null;
 
       const novaObservacao = observacao
         ? `Renovação de #${id}. ${observacao}`
@@ -396,19 +407,20 @@ writeRouter.post(
 
       const insertResult = await db
         .prepare(
-          `INSERT INTO qualificacoes_historico 
-           (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, 
-            data_conclusao, data_vencimento, validade_meses, observacoes, 
+          `INSERT INTO qualificacoes_historico
+           (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, categoria_id,
+            data_conclusao, data_vencimento, validade_meses, observacoes,
             renovada, numero_certificado, instrutor, carga_horaria, tipo_treinamento, status,
             empresa_id,
             created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
         )
         .bind(
           original.funcionario_id,
           original.qualificacao_id,
           codigoQualificacao,
           categoriaQualificacao,
+          categoriaIdQualificacao,
           novaDataRealizacao,
           novaDataVencimento,
           validadeMeses,
@@ -601,7 +613,7 @@ writeRouter.post(
     // Buscar qualificacao_id pelo código
     const tipo = await db
       .prepare(
-        `SELECT id, categoria, validade, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente
+        `SELECT id, categoria, categoria_id, validade, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente
            FROM qualificacoes_tipos
           WHERE codigo = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
@@ -609,6 +621,7 @@ writeRouter.post(
       .first<{
         id: number;
         categoria: string;
+        categoria_id: number | null;
         validade: number | null;
         carga_horaria: number | null;
         carga_horaria_inicial: number | null;
@@ -627,6 +640,9 @@ writeRouter.post(
 
     const qualificacao_id = tipo.id;
     const categoria = tipo.categoria;
+    // See categoriaIdQualificacao comment above (RESOURCE_DOMAIN_UNCLASSIFIED
+    // incident, 2026-08-26) — snapshot the FK, not just the label.
+    const categoria_id = tipo.categoria_id ?? null;
     const validade_meses = tipo.validade === 0 ? null : tipo.validade;
     const tipoTreinamento =
       tipo.validade === 6 ? 'SEMESTRAL' : normalizeTipoTreinamento(tipo_treinamento) || 'INICIAL';
@@ -753,17 +769,18 @@ writeRouter.post(
     try {
       result = await db
         .prepare(
-          `INSERT INTO qualificacoes_historico 
-           (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, 
-            data_conclusao, data_vencimento, validade_meses, instrutor, observacoes, 
+          `INSERT INTO qualificacoes_historico
+           (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, categoria_id,
+            data_conclusao, data_vencimento, validade_meses, instrutor, observacoes,
             status, renovada, carga_horaria, tipo_treinamento, empresa_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, datetime('now'), datetime('now'))`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, datetime('now'), datetime('now'))`,
         )
         .bind(
           funcionario_id,
           qualificacao_id,
           qualificacao_codigo,
           categoria,
+          categoria_id,
           data_conclusao,
           isG1SemQualificacaoCode(qualificacao_codigo)
             ? data_vencimento || null
