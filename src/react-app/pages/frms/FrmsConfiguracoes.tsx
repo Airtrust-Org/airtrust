@@ -1,10 +1,8 @@
 /**
  * FRMS — Configuração Metodológica (/frms/configuracoes)
  *
- * 3 Tabs:
- *   1. Limites Regulatórios (FDP, HV, Repouso, Alertas)
- *   2. Fatorização Metodológica (Apresentação, Duração, Repouso, Noturno, Ciclo Embarcado, HV)
- *   3. Notificações por Cargo
+ * Parâmetros que não têm efeito no motor atual permanecem no contrato técnico,
+ * mas não são exibidos como configurações operacionais editáveis.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +18,7 @@ import {
   ArrowLeft,
   ChevronDown,
   RefreshCw,
+  Settings2,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import {
@@ -31,8 +30,6 @@ import {
 import { clearApiCacheByPattern } from '@/react-app/hooks/useApi';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
-// ── Grupos de configuração ────────────────────────────
-
 interface ConfigGroup {
   label: string;
   icon: React.ReactNode;
@@ -43,13 +40,13 @@ interface ConfigGroup {
 const GRUPOS_REGULATORIOS: ConfigGroup[] = [
   {
     label: 'Limites de Jornada (FDP)',
-    icon: <Shield className="w-4 h-4" />,
+    icon: <Shield className="h-4 w-4" />,
     description: 'Flight Duty Period — RBAC 117',
     keys: ['FDP_MAXIMO_HORAS', 'FDP_ALERTA_RESTANTE_HORAS'],
   },
   {
     label: 'Horas de Voo (HV)',
-    icon: <Shield className="w-4 h-4" />,
+    icon: <Shield className="h-4 w-4" />,
     description: 'Limites regulatórios RBAC 117 / IS 117-001',
     keys: [
       'HV_DIARIA_HORAS',
@@ -62,7 +59,7 @@ const GRUPOS_REGULATORIOS: ConfigGroup[] = [
   },
   {
     label: 'Repouso',
-    icon: <Shield className="w-4 h-4" />,
+    icon: <Shield className="h-4 w-4" />,
     description: 'Período mínimo de repouso entre jornadas',
     keys: [
       'REPOUSO_MINIMO_HORAS',
@@ -72,7 +69,7 @@ const GRUPOS_REGULATORIOS: ConfigGroup[] = [
   },
   {
     label: 'Limiares de Alerta',
-    icon: <AlertTriangle className="w-4 h-4" />,
+    icon: <AlertTriangle className="h-4 w-4" />,
     description: 'Percentuais de disparo de alertas',
     keys: ['ALERTA_AVISO_PCT', 'ALERTA_ATENCAO_PCT', 'ALERTA_CRITICO_PCT', 'ALERTA_VIOLACAO_PCT'],
   },
@@ -81,7 +78,7 @@ const GRUPOS_REGULATORIOS: ConfigGroup[] = [
 const GRUPOS_FATORIZACAO: ConfigGroup[] = [
   {
     label: 'Ciclo Embarcado (Process S — Borbély)',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description: 'Acúmulo homeostático de fadiga durante ciclo offshore',
     keys: [
       'CICLO_EMBARCADO_ATIVO',
@@ -93,7 +90,7 @@ const GRUPOS_FATORIZACAO: ConfigGroup[] = [
   },
   {
     label: 'Fator Apresentação (Process C — Circadiano)',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description: 'Faixas horárias conforme variação circadiana',
     keys: [
       'APRESENTACAO_MADRUGADA_H_MIN',
@@ -113,17 +110,13 @@ const GRUPOS_FATORIZACAO: ConfigGroup[] = [
   },
   {
     label: 'Fator Duração',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description: 'Penalidade por jornada curta ou longa',
-    keys: [
-      'DURACAO_LONGA_MINUTOS',
-      'DURACAO_LONGA_FATOR',
-      'DURACAO_NORMAL_FATOR',
-    ],
+    keys: ['DURACAO_LONGA_MINUTOS', 'DURACAO_LONGA_FATOR', 'DURACAO_NORMAL_FATOR'],
   },
   {
     label: 'Fator Repouso',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description: 'Classificação do repouso inter-jornada',
     keys: [
       'REPOUSO_ADEQUADO_MINUTOS',
@@ -135,14 +128,14 @@ const GRUPOS_FATORIZACAO: ConfigGroup[] = [
   },
   {
     label: 'Janela Noturna Operacional (decolagens/pousos)',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description:
       'Faixa operacional para penalidade em decolagens e pousos noturnos. Nao e a WOCL fisiologica de despertar.',
     keys: ['NOTURNO_INICIO_HORA', 'NOTURNO_FIM_HORA', 'NOTURNO_FATOR'],
   },
   {
     label: 'Fator Horas de Voo (Quantidade)',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description: 'Classificação por volume de HV no dia',
     keys: [
       'HV_MUITAS_MINUTOS',
@@ -157,20 +150,20 @@ const GRUPOS_FATORIZACAO: ConfigGroup[] = [
 const GRUPOS_OPERACIONAIS: ConfigGroup[] = [
   {
     label: 'Parâmetros Operacionais',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description: 'Premissa de sono provisória configurável por empresa.',
     keys: ['MINUTOS_ANTES_APRESENTACAO', 'HORAS_SONO_PADRAO'],
   },
   {
     label: 'Fatores Operacionais',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description:
       'Penalidades por base AWAY, não-aclimatado e extensão FDP para tripulação aumentada',
     keys: ['FATOR_BASE_AWAY_PCT', 'FATOR_ACLIMATADO_NAO_PCT', 'FATOR_TRIPULACAO_AUM_HORAS'],
   },
   {
     label: 'Limiares configuráveis do índice estimado de efetividade',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description:
       'Limiares configuráveis do índice estimado de efetividade. Proxy local inspirado em modelos biomatemáticos; não representa validação formal SAFTE-FAST.',
     keys: [
@@ -182,14 +175,12 @@ const GRUPOS_OPERACIONAIS: ConfigGroup[] = [
   },
   {
     label: 'Modelo de Sono Offshore',
-    icon: <Brain className="w-4 h-4" />,
+    icon: <Brain className="h-4 w-4" />,
     description:
       'Parâmetros do modelo de sono/despertar para tripulantes embarcados em plataformas offshore.',
     keys: ['REPOUSO_MIN_PRE_APRESENTACAO', 'REPOUSO_MIN_POS_LIBERACAO', 'REPOUSO_QUALIDADE_HOTEL'],
   },
 ];
-
-// ── Labels legíveis ──────────────────────────────────
 
 const LABELS: Record<string, string> = {
   FDP_MAXIMO_HORAS: 'FDP baseline (11 h, profile-dependent)',
@@ -243,16 +234,13 @@ const LABELS: Record<string, string> = {
   HV_POUCAS_MINUTOS: 'HV poucas (min)',
   HV_POUCAS_FATOR: 'Fator poucas HV',
   HV_NORMAL_FATOR: 'Fator HV normal',
-  // Fatores Operacionais
   FATOR_BASE_AWAY_PCT: 'Penalidade AWAY (%)',
   FATOR_ACLIMATADO_NAO_PCT: 'Penalidade não-aclimatado (%)',
   FATOR_TRIPULACAO_AUM_HORAS: 'Extensão FDP trip. aumentada (h)',
-  // Thresholds de Efetividade
   EFFECTIV_VERDE_MIN: 'Verde — mínimo (%)',
   EFFECTIV_AMARELO_MAX: 'Amarelo — máx (%)',
   EFFECTIV_VERMELHO_MAX: 'Vermelho — máx (%)',
   EFFECTIV_PERIODO_PCT: 'Período abaixo limiar (%)',
-  // Modelo de Sono Offshore
   REPOUSO_MIN_PRE_APRESENTACAO: 'Repouso mín. pré-apresentação (min)',
   REPOUSO_MIN_POS_LIBERACAO: 'Repouso mín. pós-liberação (min)',
   REPOUSO_QUALIDADE_HOTEL: 'Qualidade sono hotel (%)',
@@ -267,8 +255,7 @@ const FIELD_HELPERS: Record<string, string> = {
     'Usado quando o tripulante não informa a hora que foi dormir. Quando informar, este valor é substituído automaticamente.',
   CICLO_EMBARCADO_PCT_MAX:
     'Fator fracionário do modelo (não é percentual). Default do modelo: -0.15. O valor exibido é o da revisão ativa; não mutar V1 in-place.',
-  CICLO_EMBARCADO_PCT_MIN:
-    'Fator fracionário do modelo (não é percentual).',
+  CICLO_EMBARCADO_PCT_MIN: 'Fator fracionário do modelo (não é percentual).',
   HV_7_DIAS_HORAS: 'Fonte IOGP/contratual. Não rotular como Lei 13.475.',
   HV_28_DIAS_HORAS: '28 dias consecutivos, distinto do mês calendário.',
   HV_MES_HORAS: 'Mês calendário. Distinto de 28 dias consecutivos.',
@@ -278,8 +265,7 @@ const FIELD_HELPERS: Record<string, string> = {
   ALERTA_VIOLACAO_PCT: 'Política interna de alerta, não limite legal.',
   NOTURNO_INICIO_HORA:
     'Inicio da janela noturna operacional (decolagens/pousos). A WOCL fisiologica de despertar e tratada separadamente no modelo biomatematico (02:00-06:00).',
-  NOTURNO_FIM_HORA:
-    'Fim da janela noturna operacional (decolagens/pousos).',
+  NOTURNO_FIM_HORA: 'Fim da janela noturna operacional (decolagens/pousos).',
   NOTURNO_FATOR:
     'Penalidade aplicada a operacoes dentro da janela noturna operacional. Diferente da penalidade por acordar na WOCL fisiologica.',
 };
@@ -297,8 +283,6 @@ export const PARAMETROS_DECORATIVOS = new Set([
   'DURACAO_CURTA_MINUTOS',
   'DURACAO_CURTA_FATOR',
 ]);
-
-// ── Component ────────────────────────────────────────
 
 type Tab = 'regulatorios' | 'fatorizacao' | 'offshore' | 'notificacoes';
 
@@ -319,16 +303,13 @@ export default function FrmsConfiguracoes() {
   } | null>(null);
   const [restoring, setRestoring] = useState(false);
 
-  // Sync values from API
   useEffect(() => {
-    if (data?.limites) {
-      setValues({ ...data.limites });
-    }
+    if (data?.limites) setValues({ ...data.limites });
   }, [data]);
 
   const handleChange = useCallback((key: string, val: string) => {
     const num = parseFloat(val);
-    if (!isNaN(num)) {
+    if (!Number.isNaN(num)) {
       setValues((prev) => ({ ...prev, [key]: num }));
       setSaved(false);
     }
@@ -338,22 +319,14 @@ export default function FrmsConfiguracoes() {
     setSaving(true);
     setSaveError(null);
     try {
-      const configs = Object.entries(values).map(([nome, valor_numerico]) => ({
-        nome,
-        valor_numerico,
-      }));
-      // O PUT retorna os limites atualizados — usamos diretamente para evitar
-      // que o cache stale (staleTime=15min) reverta os valores na tela.
+      const configs = Object.entries(values).map(([nome, valor_numerico]) => ({ nome, valor_numerico }));
       const savedLimites = (await mutate('/api/frms/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ configs }),
       })) as Record<string, number>;
 
-      if (savedLimites && typeof savedLimites === 'object') {
-        setValues({ ...savedLimites });
-      }
-      // Invalida caches FRMS do dashboard para que os dados sejam recarregados
+      if (savedLimites && typeof savedLimites === 'object') setValues({ ...savedLimites });
       clearApiCacheByPattern('/frms');
       setSaved(true);
       setTimeout(() => setSaved(false), 4000);
@@ -389,8 +362,6 @@ export default function FrmsConfiguracoes() {
     setReprocessProgress(null);
     setSaveError(null);
     try {
-      // 1. Buscar lista de tripulantes com jornadas registradas
-      // mutate() already unwraps result.data from the API response
       const tripulantes =
         ((await mutate('/api/frms/tripulantes-ativos', {
           method: 'GET',
@@ -401,7 +372,6 @@ export default function FrmsConfiguracoes() {
         return;
       }
 
-      // 2. Reprocessar sequencialmente — evita timeout do waitUntil
       for (let i = 0; i < tripulantes.length; i++) {
         const t = tripulantes[i];
         setReprocessProgress({ current: i + 1, total: tripulantes.length, name: t.nome });
@@ -412,7 +382,6 @@ export default function FrmsConfiguracoes() {
         });
       }
 
-      // 3. Invalidar caches e navegar ao dashboard
       clearApiCacheByPattern('/frms');
       navigate('/frms');
     } catch (e) {
@@ -426,118 +395,84 @@ export default function FrmsConfiguracoes() {
   }, [mutate, navigate]);
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'regulatorios', label: 'Limites Regulatórios', icon: <Shield className="w-4 h-4" /> },
-    { id: 'fatorizacao', label: 'Fatorização Metodológica', icon: <Brain className="w-4 h-4" /> },
-    { id: 'offshore', label: 'Operação Offshore & Ambiente', icon: <Brain className="w-4 h-4" /> },
-    { id: 'notificacoes', label: 'Notificações', icon: <Bell className="w-4 h-4" /> },
+    { id: 'regulatorios', label: 'Limites Regulatórios', icon: <Shield className="h-4 w-4" /> },
+    { id: 'fatorizacao', label: 'Fatorização Metodológica', icon: <Brain className="h-4 w-4" /> },
+    { id: 'offshore', label: 'Operação Offshore & Ambiente', icon: <Brain className="h-4 w-4" /> },
+    { id: 'notificacoes', label: 'Notificações', icon: <Bell className="h-4 w-4" /> },
   ];
 
-  const renderGroup = (group: ConfigGroup) => (
-    <div key={group.label} className="mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        {group.icon}
-        <h3 className="font-semibold text-gray-900">{group.label}</h3>
-      </div>
-      <p className="text-xs text-gray-500 mb-3">{group.description}</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {group.keys.map((key) => (
-          <div key={key} className="space-y-1">
-            <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
-              <span>{LABELS[key] || key}</span>
-              {PARAMETROS_DECORATIVOS.has(key) ? (
-                <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                  Reservado
-                </span>
+  const renderGroup = (group: ConfigGroup) => {
+    const visibleKeys = group.keys.filter((key) => !PARAMETROS_DECORATIVOS.has(key));
+    if (visibleKeys.length === 0) return null;
+
+    return (
+      <div key={group.label} className="mb-6">
+        <div className="mb-3 flex items-center gap-2">
+          {group.icon}
+          <h3 className="font-semibold text-gray-900">{group.label}</h3>
+        </div>
+        <p className="mb-3 text-xs text-gray-500">{group.description}</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {visibleKeys.map((key) => (
+            <div key={key} className="space-y-1">
+              <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+                <span>{LABELS[key] || key}</span>
+              </label>
+              <input
+                type="number"
+                step={FIELD_BOUNDS[key]?.step ?? 'any'}
+                min={FIELD_BOUNDS[key]?.min}
+                max={FIELD_BOUNDS[key]?.max}
+                value={values[key] ?? ''}
+                onChange={(e) => handleChange(key, e.target.value)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-transparent focus:ring-2 focus:ring-primary/40"
+              />
+              {FIELD_HELPERS[key] ? (
+                <p className="text-[11px] leading-relaxed text-gray-500">{FIELD_HELPERS[key]}</p>
               ) : null}
-            </label>
-            <input
-              type="number"
-              step={FIELD_BOUNDS[key]?.step ?? 'any'}
-              min={FIELD_BOUNDS[key]?.min}
-              max={FIELD_BOUNDS[key]?.max}
-              value={values[key] ?? ''}
-              onChange={(e) => handleChange(key, e.target.value)}
-              disabled={PARAMETROS_DECORATIVOS.has(key)}
-              readOnly={PARAMETROS_DECORATIVOS.has(key)}
-              className={`w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary/40 focus:border-transparent bg-white ${
-                PARAMETROS_DECORATIVOS.has(key) ? 'border-amber-200' : 'border-gray-200'
-              }`}
-            />
-            {FIELD_HELPERS[key] ? (
-              <p className="text-[11px] leading-relaxed text-gray-500">{FIELD_HELPERS[key]}</p>
-            ) : null}
-            {PARAMETROS_DECORATIVOS.has(key) ? (
-              <p className="text-[11px] leading-relaxed text-amber-700">
-                Sem efeito nesta versão: parâmetro mantido para compatibilidade e evolução futura.
-              </p>
-            ) : null}
-          </div>
-        ))}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <AppLayout>
       <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <button
             onClick={() => navigate('/frms')}
-            className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
           >
-            <ArrowLeft className="h-4 w-4" /> FRMS
+            <ArrowLeft className="h-4 w-4" /> Administração FRMS
           </button>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-gray-900">Configuração FRMS</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-bold text-gray-900">Configurações e políticas FRMS</h1>
             <p className="text-sm text-gray-500">
-              Parâmetros metodológicos de fatorização e limites regulatórios
+              Parâmetros ativos do motor, limites e notificações. Campos sem efeito não são exibidos como controles.
             </p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleReprocessar}
-              disabled={reprocessing}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-              title="Recalcula jornadas, fatorizações e alertas com os novos parâmetros para cada tripulante."
-            >
-              <RefreshCw className={`w-4 h-4 ${reprocessing ? 'animate-spin' : ''}`} />
-              {reprocessProgress
-                ? `Reprocessando ${reprocessProgress.current}/${reprocessProgress.total} — ${reprocessProgress.name}`
-                : reprocessing
-                  ? 'Iniciando...'
-                  : 'Reprocessar Dados'}
-            </button>
-            <button
-              onClick={handleRestore}
-              disabled={restoring}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RotateCcw className={`w-4 h-4 ${restoring ? 'animate-spin' : ''}`} />
-              Restaurar Padrão
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-primary to-emerald-600 rounded-lg hover:from-primary/90 hover:to-emerald-600/90 disabled:opacity-50 shadow-md"
-            >
-              {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-              {saved ? 'Salvo — recalculando...' : saving ? 'Salvando...' : 'Salvar'}
-            </button>
-          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary to-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-md hover:from-primary/90 hover:to-emerald-600/90 disabled:opacity-50"
+          >
+            {saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+            {saved ? 'Salvo' : saving ? 'Salvando...' : 'Salvar alterações'}
+          </button>
         </div>
 
-        <div className="max-w-6xl mx-auto px-4 py-6">
-          {/* Tabs */}
-          <div className="flex gap-2 mb-6">
+        <div className="mx-auto max-w-6xl px-4 py-6">
+          <div className="mb-6 flex flex-wrap gap-2">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
                   activeTab === tab.id
                     ? 'bg-primary text-white shadow-md'
-                    : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                 }`}
               >
                 {tab.icon}
@@ -546,31 +481,63 @@ export default function FrmsConfiguracoes() {
             ))}
           </div>
 
+          <details className="mb-6 rounded-xl border border-amber-200 bg-amber-50/50">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-amber-900 [&::-webkit-details-marker]:hidden">
+              <Settings2 className="h-4 w-4" />
+              Governança avançada
+              <span className="ml-auto text-xs font-normal text-amber-700">reprocessamento e restauração</span>
+            </summary>
+            <div className="border-t border-amber-200 px-4 py-4">
+              <p className="mb-3 text-xs text-amber-800">
+                Estas ações afetam dados derivados do FRMS e ficam separadas da edição normal de parâmetros.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleReprocessar}
+                  disabled={reprocessing}
+                  className="flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-50 disabled:opacity-50"
+                  title="Recalcula jornadas, fatorizações e alertas com os parâmetros ativos para cada tripulante."
+                >
+                  <RefreshCw className={`h-4 w-4 ${reprocessing ? 'animate-spin' : ''}`} />
+                  {reprocessProgress
+                    ? `Reprocessando ${reprocessProgress.current}/${reprocessProgress.total} — ${reprocessProgress.name}`
+                    : reprocessing
+                      ? 'Iniciando...'
+                      : 'Reprocessar dados derivados'}
+                </button>
+                <button
+                  onClick={handleRestore}
+                  disabled={restoring}
+                  className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  <RotateCcw className={`h-4 w-4 ${restoring ? 'animate-spin' : ''}`} />
+                  Restaurar valores padrão
+                </button>
+              </div>
+            </div>
+          </details>
+
           {saveError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>{saveError}</span>
-              <button
-                onClick={() => setSaveError(null)}
-                className="ml-auto text-red-400 hover:text-red-600"
-              >
+              <button onClick={() => setSaveError(null)} className="ml-auto text-red-400 hover:text-red-600">
                 ×
               </button>
             </div>
           )}
 
           {isLoading ? (
-            <div className="text-center py-20">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
-              <p className="text-gray-500 mt-3 text-sm">Carregando configurações...</p>
+            <div className="py-20 text-center">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+              <p className="mt-3 text-sm text-gray-500">Carregando configurações...</p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-              {/* Tab: Limites Regulatórios */}
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
               {activeTab === 'regulatorios' && (
                 <div>
-                  <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
-                    <Info className="w-4 h-4 text-primary" />
+                  <div className="mb-4 flex items-center gap-2 border-b border-gray-100 pb-4">
+                    <Info className="h-4 w-4 text-primary" />
                     <span className="text-xs text-gray-500">
                       Limites regulatórios RBAC 117 / IS 117-001. Alterações auditadas.
                     </span>
@@ -579,14 +546,12 @@ export default function FrmsConfiguracoes() {
                 </div>
               )}
 
-              {/* Tab: Fatorização Metodológica */}
               {activeTab === 'fatorizacao' && (
                 <div>
-                  <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
-                    <Info className="w-4 h-4 text-primary" />
+                  <div className="mb-4 flex items-center gap-2 border-b border-gray-100 pb-4">
+                    <Info className="h-4 w-4 text-primary" />
                     <span className="text-xs text-gray-500">
-                      Modelo Borbély Two-Process + ICAO Doc 9966. Zero hardcode — todos os
-                      parâmetros configuráveis.
+                      Modelo Borbély Two-Process + ICAO Doc 9966. Apenas parâmetros com efeito no motor atual são editáveis aqui.
                     </span>
                   </div>
                   {GRUPOS_FATORIZACAO.map(renderGroup)}
@@ -595,37 +560,16 @@ export default function FrmsConfiguracoes() {
 
               {activeTab === 'offshore' && (
                 <div>
-                  <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
-                    <Info className="w-4 h-4 text-primary" />
+                  <div className="mb-4 flex items-center gap-2 border-b border-gray-100 pb-4">
+                    <Info className="h-4 w-4 text-primary" />
                     <span className="text-xs text-gray-500">
-                      Operação offshore e ambiente: parâmetros de política interna e modelo. Demanda
-                      operacional e REDEMET continuam no motor existente, sem recálculo no frontend.
+                      Operação offshore e ambiente: parâmetros ativos de política interna e modelo. Parâmetros reservados sem efeito nesta versão foram ocultados desta interface operacional.
                     </span>
                   </div>
                   {GRUPOS_OPERACIONAIS.map(renderGroup)}
-                  <div className="mt-6 pt-4 border-t border-gray-100">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                      Reservado / compatibilidade
-                    </p>
-                    {renderGroup({
-                      label: 'Parâmetros sem efeito no cálculo atual',
-                      icon: <Info className="w-4 h-4" />,
-                      description:
-                        'Mantidos para compatibilidade. Não alteram o motor nesta revisão.',
-                      keys: [
-                        'DURACAO_CURTA_MINUTOS',
-                        'DURACAO_CURTA_FATOR',
-                        'EFFECTIV_PERIODO_PCT',
-                        'REPOUSO_MIN_PRE_APRESENTACAO',
-                        'REPOUSO_MIN_POS_LIBERACAO',
-                        'REPOUSO_QUALIDADE_HOTEL',
-                      ],
-                    })}
-                  </div>
                 </div>
               )}
 
-              {/* Tab: Notificações */}
               {activeTab === 'notificacoes' && <NotificacoesTab />}
             </div>
           )}
@@ -634,8 +578,6 @@ export default function FrmsConfiguracoes() {
     </AppLayout>
   );
 }
-
-// ── Sub-componente: Tab Notificações ─────────────────
 
 const NIVEIS_NOTIF = ['AVISO', 'ATENCAO', 'CRITICO', 'VIOLACAO'] as const;
 
@@ -658,9 +600,7 @@ function NotificacoesTab() {
       const rows =
         (apiData as { data?: FrmsNotificacaoConfigRow[] } & FrmsNotificacaoConfigRow[]).data ??
         (apiData as FrmsNotificacaoConfigRow[]);
-      if (Array.isArray(rows) && rows.length > 0) {
-        setLocalConfigs(rows);
-      }
+      if (Array.isArray(rows) && rows.length > 0) setLocalConfigs(rows);
     }
   }, [apiData]);
 
@@ -703,7 +643,7 @@ function NotificacoesTab() {
   if (loadingData) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+        <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-primary" />
         <span className="ml-3 text-sm text-gray-500">Carregando configurações...</span>
       </div>
     );
@@ -711,9 +651,9 @@ function NotificacoesTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100">
+      <div className="mb-4 flex items-center justify-between border-b border-gray-100 pb-4">
         <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-primary" />
+          <Info className="h-4 w-4 text-primary" />
           <span className="text-xs text-gray-500">
             Defina quais cargos recebem notificação de alerta e o nível mínimo para cada cargo.
           </span>
@@ -721,32 +661,28 @@ function NotificacoesTab() {
         <button
           onClick={handleSave}
           disabled={saving || localConfigs.length === 0}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-primary to-emerald-600 rounded-lg hover:from-primary/90 hover:to-emerald-600/90 disabled:opacity-50 shadow-md"
+          className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary to-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-md hover:from-primary/90 hover:to-emerald-600/90 disabled:opacity-50"
         >
-          {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          {saved ? 'Salvo!' : saving ? 'Salvando...' : 'Salvar'}
+          {saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+          {saved ? 'Salvo!' : saving ? 'Salvando...' : 'Salvar notificações'}
         </button>
       </div>
 
       {saveError && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {saveError}
         </div>
       )}
 
       {localConfigs.length === 0 ? (
-        <div className="py-8 text-center text-sm text-gray-400">
-          Nenhuma configuração encontrada.
-        </div>
+        <div className="py-8 text-center text-sm text-gray-400">Nenhuma configuração encontrada.</div>
       ) : (
         <div className="space-y-4">
           {localConfigs.map((cfg, idx) => (
-            <div key={cfg.cargo} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+            <div key={cfg.cargo} className="flex items-center gap-4 rounded-lg bg-gray-50 p-4">
               <div className="flex-1">
-                <span className="font-medium text-gray-900">
-                  {CARGO_LABELS[cfg.cargo] || cfg.cargo}
-                </span>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <span className="font-medium text-gray-900">{CARGO_LABELS[cfg.cargo] || cfg.cargo}</span>
+                <p className="mt-0.5 text-xs text-gray-500">
                   Recebe alertas a partir de: <strong>{cfg.nivel_minimo}</strong>
                 </p>
               </div>
@@ -754,15 +690,13 @@ function NotificacoesTab() {
                 <select
                   value={cfg.nivel_minimo}
                   onChange={(e) => handleChange(idx, 'nivel_minimo', e.target.value)}
-                  className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg bg-white cursor-pointer"
+                  className="appearance-none rounded-lg border border-gray-200 bg-white py-1.5 pl-3 pr-8 text-sm cursor-pointer"
                 >
                   {NIVEIS_NOTIF.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
+                    <option key={n} value={n}>{n}</option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-600">
                 <input
@@ -778,16 +712,13 @@ function NotificacoesTab() {
         </div>
       )}
 
-      <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-primary">
-        <h4 className="text-sm font-semibold text-blue-800 mb-2">Como funciona</h4>
-        <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+      <div className="mt-6 rounded-lg border border-primary bg-blue-50 p-4">
+        <h4 className="mb-2 text-sm font-semibold text-blue-800">Como funciona</h4>
+        <ul className="list-inside list-disc space-y-1 text-xs text-blue-700">
           <li>Quando um alerta é gerado, o sistema verifica quais cargos devem ser notificados</li>
-          <li>
-            Se o nível do alerta &gt;= nível mínimo configurado, todos os funcionários daquele cargo
-            recebem a notificação
-          </li>
-          <li>Piloto: também recebe notificação referente a si próprio independente do cargo</li>
-          <li>Histórico de notificações disponível no painel de alertas</li>
+          <li>Se o nível do alerta for igual ou superior ao mínimo configurado, os destinatários daquele cargo recebem a notificação</li>
+          <li>Piloto também recebe notificação referente a si próprio conforme a regra ativa</li>
+          <li>O histórico permanece separado da fila operacional de decisão</li>
         </ul>
       </div>
     </div>
