@@ -331,6 +331,7 @@ describe('qualificacoes historico write router', () => {
       19,
       'PBN',
       'OPS',
+      null,
       '2099-12-15',
       '2026-07-15',
       null,
