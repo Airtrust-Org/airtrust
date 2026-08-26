@@ -193,6 +193,9 @@ export default function FrmsEffectivenessTimeline({
       })),
     [jornadas],
   );
+  const hasValidEffectiveness = chartData.some(
+    (point) => point.effectiveness_pct != null && Number.isFinite(point.effectiveness_pct),
+  );
 
   // Estado vazio — sem tripulante selecionado
   if (!tripulanteId) {
@@ -256,15 +259,20 @@ export default function FrmsEffectivenessTimeline({
         </div>
       )}
 
-      {!loading && chartData.length === 0 && (
-        <div className="h-40 flex items-center justify-center text-slate-400 text-sm">
-          {usarPeriodoMapa
-            ? `Nenhuma jornada no período do mapa${mapPeriodoLabel ? ` (${mapPeriodoLabel})` : ''}`
-            : `Nenhuma jornada nos últimos ${dias} dias`}
+      {!loading && !hasValidEffectiveness && (
+        <div className="flex min-h-40 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-6 text-center">
+          <div>
+            <p className="text-sm font-semibold text-slate-700">
+              Efetividade indisponível — sem base válida no período selecionado
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              O sistema não reutiliza um valor histórico de outro período para preencher esta visão.
+            </p>
+          </div>
         </div>
       )}
 
-      {!loading && chartData.length > 0 && (
+      {!loading && hasValidEffectiveness && (
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={chartData} margin={{ top: 10, right: 90, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
