@@ -9,6 +9,19 @@ HEAD_SHA="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 ORIGIN_MAIN_SHA="$(git -C "$ROOT_DIR" rev-parse origin/main)"
 STATUS_OUTPUT="$(git -C "$ROOT_DIR" status --porcelain)"
 
+if [[ "${AIRTRUST_LOCAL_EMERGENCY_WRAPPER:-}" != "YES" ]]; then
+  echo "LOCAL_PRODUCTION_DEPLOY_DISABLED_USE_GITHUB_ACTIONS" >&2
+  echo "❌ Direct local production Worker deploy is disabled." >&2
+  echo "   Use .github/workflows/deploy-airtrust.yml for routine releases." >&2
+  echo "   The only local exception is scripts/release-worker-local-emergency.sh in an explicitly approved incident window." >&2
+  exit 1
+fi
+
+if [[ "${AIRTRUST_ALLOW_LOCAL_EMERGENCY_DEPLOY:-}" != "YES" || "${AIRTRUST_CONFIRM_LOCAL_EMERGENCY_DEPLOY:-}" != "AIRTRUST_LOCAL_EMERGENCY_DEPLOY" ]]; then
+  echo "❌ Local emergency Worker deploy requires the reviewed emergency wrapper and its explicit confirmation." >&2
+  exit 1
+fi
+
 if [[ -n "$CURRENT_BRANCH" && "$CURRENT_BRANCH" != "main" ]]; then
   echo "❌ Safe deploy requires branch 'main' or detached HEAD at origin/main." >&2
   echo "   Current branch: $CURRENT_BRANCH" >&2
