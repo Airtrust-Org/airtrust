@@ -48,7 +48,8 @@ export {
   atualizarJornadaConfiavel as atualizarJornada,
   deletarJornadaConfiavel as deletarJornada,
 } from './db-service-jornadas-safe';
-export { buscarAcumuloTripulante, buscarAcumuloFrota } from './db-service-acumulo';
+export { buscarAcumuloTripulante } from './db-service-acumulo-period-guard';
+export { buscarAcumuloFrota } from './db-service-acumulo';
 export type { BuscarAlertasFiltro } from './db-service-alertas';
 export {
   buscarAlertas,
