@@ -31,6 +31,19 @@ export interface LmsDiagnosticSlideRef {
   title: string | null;
 }
 
+export type LmsDiagnosticModuleRef = LmsDiagnosticSlideRef;
+
+export interface LmsDiagnosticModuleResult {
+  module: LmsDiagnosticModuleRef;
+  assessment: {
+    required: boolean;
+    completed: boolean;
+    scoreRaw: number | null;
+    masteryScore: number | null;
+    passed: boolean | null;
+  };
+}
+
 export interface LmsGranularDiagnostic {
   version: 1;
   courseId: string | null;
@@ -49,6 +62,12 @@ export interface LmsGranularDiagnostic {
     unanswered: LmsDiagnosticSlideRef[];
     incomplete: LmsDiagnosticSlideRef[];
   };
+  /**
+   * Resultados por módulo. Campo opcional no payload bruto para preservar
+   * compatibilidade com pacotes Diagnostics V1 já publicados; o parser sempre
+   * normaliza a ausência para [].
+   */
+  moduleResults: LmsDiagnosticModuleResult[];
   packageStatus: {
     lessonStatus: string | null;
     finishRequested: boolean;
@@ -60,7 +79,7 @@ export interface LmsPendingItem {
   category: LmsPendingCategory;
   /** Texto pronto para exibição ao aluno. Nunca contém respostas corretas. */
   label: string;
-  /** Referência opcional ao slide/questão, quando o pacote informou. */
+  /** Referência opcional ao slide/questão/módulo, quando o pacote informou. */
   ref: LmsDiagnosticSlideRef | null;
   /** true quando o item é responsabilidade do administrador, não do aluno. */
   adminActionable: boolean;
@@ -119,6 +138,37 @@ function sanitizeSlideRefList(value: unknown): LmsDiagnosticSlideRef[] {
     const ref = sanitizeSlideRef(entry);
     if (ref) out.push(ref);
   }
+  return out;
+}
+
+function sanitizeModuleResultList(value: unknown): LmsDiagnosticModuleResult[] {
+  if (!Array.isArray(value)) return [];
+  const out: LmsDiagnosticModuleResult[] = [];
+
+  for (const entry of value.slice(0, MAX_ITEMS_PER_COLLECTION)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const raw = entry as Record<string, unknown>;
+    const module = sanitizeSlideRef(raw.module);
+    if (!module) continue;
+
+    const assessmentRaw =
+      raw.assessment && typeof raw.assessment === 'object' && !Array.isArray(raw.assessment)
+        ? (raw.assessment as Record<string, unknown>)
+        : {};
+    const passedRaw = assessmentRaw.passed;
+
+    out.push({
+      module,
+      assessment: {
+        required: sanitizeBoolean(assessmentRaw.required),
+        completed: sanitizeBoolean(assessmentRaw.completed),
+        scoreRaw: sanitizeFiniteNumber(assessmentRaw.scoreRaw),
+        masteryScore: sanitizeFiniteNumber(assessmentRaw.masteryScore),
+        passed: typeof passedRaw === 'boolean' ? passedRaw : null,
+      },
+    });
+  }
+
   return out;
 }
 
@@ -183,6 +233,7 @@ export function parseGranularDiagnostic(raw: unknown): LmsGranularDiagnostic | n
       unanswered: sanitizeSlideRefList(assessmentRaw.unanswered),
       incomplete: sanitizeSlideRefList(assessmentRaw.incomplete),
     },
+    moduleResults: sanitizeModuleResultList(data.moduleResults),
     packageStatus: {
       lessonStatus: sanitizeText(statusRaw.lessonStatus, 60),
       finishRequested: sanitizeBoolean(statusRaw.finishRequested),
@@ -210,6 +261,12 @@ export function formatPendingItemDisplay(
   return ref.title ? `${position} — ${ref.title}` : position;
 }
 
+export function formatPendingModuleDisplay(ref: LmsDiagnosticModuleRef): string {
+  const position =
+    ref.index !== null ? `Módulo ${ref.index}` : ref.id ? `Módulo ${ref.id}` : 'Módulo';
+  return ref.title ? `${position} — ${ref.title}` : position;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Motor de explicação                                                         */
 /* -------------------------------------------------------------------------- */
@@ -226,6 +283,22 @@ export interface CanonicalCompletionDiagnosticLike {
 
 function adminItem(label: string): LmsPendingItem {
   return { category: 'ADMIN', label, ref: null, adminActionable: true };
+}
+
+function moduleAssessmentFailed(result: LmsDiagnosticModuleResult): boolean {
+  if (!result.assessment.required) return false;
+  if (result.assessment.passed === false) return true;
+  const { scoreRaw, masteryScore } = result.assessment;
+  return scoreRaw !== null && masteryScore !== null && scoreRaw < masteryScore;
+}
+
+function formatModuleFailure(result: LmsDiagnosticModuleResult): string {
+  const moduleLabel = formatPendingModuleDisplay(result.module);
+  const { scoreRaw, masteryScore } = result.assessment;
+  if (scoreRaw !== null && masteryScore !== null) {
+    return `${moduleLabel} — Nota obtida ${formatScore(scoreRaw)} — mínimo exigido ${formatScore(masteryScore)}.`;
+  }
+  return `${moduleLabel} — avaliação abaixo da nota mínima.`;
 }
 
 /**
@@ -284,7 +357,28 @@ export function resolveCompletionExplanation(params: {
     };
   }
 
-  // --- Prioridade 2: reprovação / nota abaixo da mínima ---------------------
+  // --- Prioridade 2A: avaliações reprovadas com módulo identificado ---------
+  const failedModules = (granular?.moduleResults ?? []).filter(moduleAssessmentFailed);
+  if (failedModules.length > 0) {
+    return {
+      canComplete: false,
+      category: 'SCORE',
+      summary:
+        failedModules.length === 1
+          ? 'Há 1 módulo com avaliação abaixo do mínimo exigido.'
+          : `Há ${failedModules.length} módulos com avaliação abaixo do mínimo exigido.`,
+      items: failedModules.map((result) => ({
+        category: 'SCORE' as const,
+        label: formatModuleFailure(result),
+        ref: result.module,
+        adminActionable: false,
+      })),
+      adminItems,
+      diagnosticsAvailable,
+    };
+  }
+
+  // --- Prioridade 2B: reprovação / nota global abaixo da mínima -------------
   const scorePct = canonical?.score_pct ?? null;
   const masteryCanonical = canonical?.mastery_score ?? null;
   const granularScore = granular?.assessment.scoreRaw ?? null;
