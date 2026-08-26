@@ -1,47 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-branch="$(git branch --show-current)"
-if [[ "$branch" != "main" ]]; then
-  echo "ERROR: deploy only from main (current: $branch)"
-  exit 1
-fi
-
-if ! git diff --quiet; then
-  echo "ERROR: unstaged tracked changes detected"
-  exit 1
-fi
-
-if ! git diff --cached --quiet; then
-  echo "ERROR: staged tracked changes detected"
-  exit 1
-fi
-
-git fetch origin main >/dev/null 2>&1 || true
-
-head_sha="$(git rev-parse HEAD)"
-origin_sha="$(git rev-parse origin/main)"
-
-echo "Branch: $branch"
-echo "HEAD: $head_sha"
-echo "origin/main: $origin_sha"
-
-if [[ "$head_sha" != "$origin_sha" ]]; then
-  echo "ERROR: HEAD != origin/main"
-  exit 1
-fi
-
-echo "OK: clean deploy preflight passed"
-
-if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
-  echo "WARN: untracked files detected (not blocking):"
-fi
-
-git status --short --untracked-files=all
-
-echo ""
-echo "=== FRMS governance readiness gate ==="
-# Always runs. Whether the check is required is decided by the SHA's own
-# migration set (see scripts/lib/frms-governance-preflight-contract.mjs), not
-# by an opt-in env var — a governed release can never silently skip this.
-node scripts/frms-governance-preflight.mjs --remote
+echo "LOCAL_PRODUCTION_DEPLOY_DISABLED_USE_GITHUB_ACTIONS" >&2
+echo "❌ Local production deploy is disabled." >&2
+echo "   Use the governed GitHub Actions workflow: .github/workflows/deploy-airtrust.yml" >&2
+exit 1
