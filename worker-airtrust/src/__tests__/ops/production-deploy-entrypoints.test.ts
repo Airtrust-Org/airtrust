@@ -1,3 +1,4 @@
+// Regression for the 2026-08-26 out-of-band production redeploy incident.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
