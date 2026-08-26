@@ -163,6 +163,27 @@ async function handleDirectPackageUpload(
   }
 
   const { bytes, arquivoNome } = await readPackageRequest(c, tipoConteudo);
+  const uploadMode = (c.req.header('x-airtrust-upload-mode') ?? '').trim().toLowerCase();
+
+  if (tipoConteudo === 'scorm' && uploadMode === 'replace-content') {
+    // The course edit modal is an operational replacement flow. It submits the
+    // exact ZIP in one request, so server-side package validation and the
+    // versioned/atomic R2+D1 promotion remain intact without forcing the
+    // separate candidate Quality Gate workflow.
+    const result = await uploadLmsZipPackage({
+      db: c.env.DB,
+      bucket: c.env.BUCKET,
+      empresaId,
+      cursoId,
+      tipoConteudo: 'scorm',
+      bytes,
+      arquivoNome,
+      hasH5pConteudoIdColumn: hasH5pBindingColumn(c),
+      idempotencyKey: c.req.header('idempotency-key') ?? null,
+    });
+    return c.json({ success: true, data: result });
+  }
+
   if (tipoConteudo === 'scorm') {
     const result = await createScormPackageCandidate({
       db: c.env.DB,
@@ -215,9 +236,10 @@ app.post(
     if (parsed.data.tipo_conteudo === 'scorm') {
       // A file-by-file protocol cannot certify the SHA-256 of the submitted ZIP.
       // Keep it out of the activation path rather than creating an unverifiable
-      // package version; clients must use the candidate ZIP endpoint.
+      // package version. Normal course replacement uses the exact-ZIP direct
+      // endpoint; the candidate Quality Gate remains a separate workflow.
       throw new ApiError(
-        'Upload SCORM estruturado foi desativado: envie o ZIP para o Quality Gate',
+        'Upload SCORM arquivo-a-arquivo não é suportado; envie o ZIP completo',
         409,
       );
     }

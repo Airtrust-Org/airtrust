@@ -41,13 +41,18 @@ function shouldIgnoreArchivePath(path: string): boolean {
 }
 
 function parseLaunchFile(manifestXml: string): string | null {
-  const resourceMatch = manifestXml.match(/<resource\b[^>]*\bhref\s*=\s*["']([^"']+)["']/i);
+  const elementPrefix = '(?:[A-Za-z][\\w.-]*:)?';
+  const resourceMatch = manifestXml.match(
+    new RegExp(`<${elementPrefix}resource\\b[^>]*\\bhref\\s*=\\s*["']([^"']+)["']`, 'i'),
+  );
   if (resourceMatch?.[1]) return resourceMatch[1];
-  const itemMatch = manifestXml.match(/<item\b[^>]*\bidentifierref\s*=\s*["']([^"']+)["']/i);
+  const itemMatch = manifestXml.match(
+    new RegExp(`<${elementPrefix}item\\b[^>]*\\bidentifierref\\s*=\\s*["']([^"']+)["']`, 'i'),
+  );
   if (!itemMatch?.[1]) return null;
   const escaped = itemMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(
-    `<resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
+    `<${elementPrefix}resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
     'i',
   ).exec(manifestXml)?.[1] ?? null;
 }
@@ -185,6 +190,36 @@ export async function uploadStructuredLmsPackage(params: {
   onProgress?.(10);
   const prepared = await preparePackageUpload(file, tipoConteudo);
   const idempotencyKey = buildIdempotencyKey(tipoConteudo, prepared.packageHash);
+
+  // Normal course editing is an operational content replacement, not a
+  // Quality Gate publication workflow. Send the exact ZIP in one request so
+  // the Worker can validate the archive server-side and atomically promote a
+  // versioned R2 prefix without losing the submitted ZIP identity. The
+  // candidate/Quality-Gate endpoints remain available as a separate workflow.
+  if (tipoConteudo === 'scorm') {
+    onStatus?.('Enviando e validando pacote SCORM...');
+    onProgress?.(25);
+    const response = await fetchWithAuth(`/api/lms/cursos/${cursoId}/scorm-upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/zip',
+        'Idempotency-Key': idempotencyKey,
+        'X-AirTrust-Upload-Mode': 'replace-content',
+      },
+      body: file,
+    });
+    onProgress?.(90);
+    const data = await parseApiResponse<Record<string, unknown>>(response);
+    onProgress?.(100);
+    onStatus?.('Conteúdo SCORM substituído com sucesso.');
+    return {
+      filesUploaded: Number(data.files_uploaded ?? prepared.files.length),
+      prefix: typeof data.prefix === 'string' ? data.prefix : null,
+      launchFile: typeof data.launch_file === 'string' ? data.launch_file : prepared.launchFile,
+      scormVersao: (typeof data.scorm_versao === 'string' ? data.scorm_versao : prepared.scormVersao) as ScormVersao,
+      tipoH5p: null,
+    };
+  }
 
   onStatus?.('Preparando uma nova versão do conteúdo...');
   const initResponse = await fetchWithAuth(`/api/lms/cursos/${cursoId}/content-upload/init`, {
