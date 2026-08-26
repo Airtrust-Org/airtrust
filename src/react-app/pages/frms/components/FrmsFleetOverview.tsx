@@ -48,6 +48,7 @@ export function FrmsCriticalRanking({
                 <button
                   type="button"
                   onClick={() => onSelectTripulante(String(item.tripulante_id))}
+                  aria-label={`Selecionar caso de ${displayName(item)}`}
                   className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/40 ${
                     selected ? 'bg-teal-50' : 'hover:bg-slate-50'
                   }`}
@@ -63,7 +64,7 @@ export function FrmsCriticalRanking({
                       {secondaryLabel(item)}
                     </span>
                   </span>
-                  <span className="text-xs font-medium text-primary">Ver evidência</span>
+                  <span className="text-xs font-medium text-primary">Selecionar caso</span>
                 </button>
               </li>
             );
@@ -136,7 +137,7 @@ export default function FrmsFleetOverview({
 
   return (
     <>
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Resumo gerencial FRMS">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Resumo de monitoramento FRMS">
         <Metric
           label="Monitorados"
           value={loading && total === 0 ? '…' : total}
@@ -162,9 +163,9 @@ export default function FrmsFleetOverview({
           tone={degraded > 0 ? 'warning' : 'neutral'}
         />
         <Metric
-          label="Dados incompletos"
+          label="Dados a confirmar"
           value={incomplete}
-          helper="Nunca tratados como zero"
+          helper="Ausência nunca vira normalidade"
           tone={incomplete > 0 ? 'warning' : 'neutral'}
         />
       </section>
@@ -175,13 +176,15 @@ export default function FrmsFleetOverview({
           selectedTripulanteId={selectedTripulanteId}
           onSelectTripulante={onSelectTripulante}
           limit={8}
+          title="Casos para monitoramento"
+          subtitle="Selecione um caso; a investigação aprofundada fica em Análise & Evidências."
         />
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="border-b border-slate-100 pb-3">
             <h2 className="text-sm font-semibold text-slate-900">Operação no recorte</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Síntese gerencial; detalhe técnico fica em Análise & Evidência.
+              Síntese de monitoramento; decisão imediata fica em Operação agora.
             </p>
           </div>
           <dl className="mt-3 divide-y divide-slate-100 text-sm">
@@ -206,7 +209,7 @@ export default function FrmsFleetOverview({
             <div className="flex items-center justify-between py-2.5">
               <dt className="text-slate-600">Qualidade das fontes</dt>
               <dd className={`font-semibold ${incomplete > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                {incomplete > 0 ? `${incomplete} incompleto(s)` : 'Sem pendência visível'}
+                {incomplete > 0 ? `${incomplete} a confirmar` : 'Sem pendência visível'}
               </dd>
             </div>
           </dl>
