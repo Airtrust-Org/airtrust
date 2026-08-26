@@ -8,10 +8,11 @@ describe('frmsProductionVisibility', () => {
     expect(isSyntheticFrmsFixture({ nome: 'Synthetic Pilot' })).toBe(true);
   });
 
-  it('não classifica tripulante operacional real como fixture', () => {
+  it('não classifica tripulante operacional real nem substring QA como fixture', () => {
     expect(
       isSyntheticFrmsFixture({ nome: 'João da Silva', funcao: 'COMANDANTE', cargo: 'Comandante' }),
     ).toBe(false);
+    expect(isSyntheticFrmsFixture({ nome: 'Aqua Serviços Aéreos', funcao: 'PILOTO' })).toBe(false);
   });
 
   it('oculta fixture somente em produção', () => {
