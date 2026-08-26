@@ -27,6 +27,7 @@ let submitPending = false;
 vi.mock('react-router-dom', () => ({
   Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
   useNavigate: () => navigateMock,
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
 
 vi.mock('@/react-app/components/AppLayout', () => ({
@@ -156,12 +157,12 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(isValidWakeTime('6')).toBe(false);
   });
 
-  it('resolve home correta apos salvar fadiga por perfil', () => {
-    expect(resolveFadigaPostSavePath('INSTRUTOR')).toBe('/home');
-    expect(resolveFadigaPostSavePath('ALUNO')).toBe('/home');
-    expect(resolveFadigaPostSavePath('TRIPULANTE')).toBe('/home');
-    expect(resolveFadigaPostSavePath('GESTOR')).toBe('/');
-    expect(resolveFadigaPostSavePath('ADMINISTRADOR')).toBe('/');
+  it('resolve destino correto apos salvar fadiga por perfil, mantendo navegacao dentro do FRMS', () => {
+    expect(resolveFadigaPostSavePath('INSTRUTOR')).toBe('/frms/checkin?tab=historico');
+    expect(resolveFadigaPostSavePath('ALUNO')).toBe('/frms/checkin?tab=historico');
+    expect(resolveFadigaPostSavePath('TRIPULANTE')).toBe('/frms/checkin?tab=historico');
+    expect(resolveFadigaPostSavePath('GESTOR')).toBe('/frms/controle-operacional');
+    expect(resolveFadigaPostSavePath('ADMINISTRADOR')).toBe('/frms/controle-operacional');
   });
 });
 
@@ -484,7 +485,7 @@ describe('FrmsCheckinFadiga UI', () => {
     preencherFormularioValido();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/home', { replace: true }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/frms/checkin?tab=historico', { replace: true }));
   });
 
   it('sucesso de aluno/tripulante volta para home correta', async () => {
@@ -494,7 +495,7 @@ describe('FrmsCheckinFadiga UI', () => {
     preencherFormularioValido();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/home', { replace: true }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/frms/checkin?tab=historico', { replace: true }));
   });
 
   it('erro de envio permanece no formulario sem redirecionar', async () => {

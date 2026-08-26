@@ -278,7 +278,7 @@ function DashboardContent() {
   );
 
   const frota: FrmsFrotaRow[] = useMemo(
-    () => ((frotaRaw as FrmsFrotaRow[] | null) ?? []).filter(shouldExposeFrmsPerson),
+    () => ((frotaRaw as FrmsFrotaRow[] | null) ?? []).filter((item) => shouldExposeFrmsPerson(item)),
     [frotaRaw],
   );
   const visibleFrotaIds = useMemo(

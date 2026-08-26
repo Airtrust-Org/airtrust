@@ -245,19 +245,19 @@ describe('FrmsControleOperacional', () => {
     useFrmsReadAckEventsMock.mockReturnValue(buildReadAckHookState());
   });
 
-  it('renderiza os seis KPIs operacionais e remove cards redundantes de quinzena', () => {
+  it('renderiza o gate de decisao operacional com os quatro KPIs de despacho', () => {
     mockSnapshotData();
 
     renderControle();
 
-    expect(screen.getByText('Controle operacional de fadiga')).toBeInTheDocument();
-    expect(screen.getByText('Quem exige atenção agora')).toBeInTheDocument();
-    expect(screen.getByText('Ação agora')).toBeInTheDocument();
-    expect(screen.getAllByText('Atenção').length).toBeGreaterThan(0);
-    expect(screen.getByText('Fadiga diária pendente')).toBeInTheDocument();
-    expect(screen.getByText('Sem ação imediata')).toBeInTheDocument();
-    expect(screen.getByText('Limitação de fonte operacional')).toBeInTheDocument();
-    expect(screen.getByText('Acúmulo operacional da quinzena')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Operação agora' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Quem bloqueia despacho, quem exige decisão e quais dados precisam ser confirmados.'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Bloqueia despacho').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Exige decisão').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Confirmar dados').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Monitorar').length).toBeGreaterThan(0);
   });
 
   it('mostra tabela hierarquizada com escala, excecoes, fontes e labels descritivos', () => {
