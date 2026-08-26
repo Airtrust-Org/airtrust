@@ -41,19 +41,20 @@ function shouldIgnoreArchivePath(path: string): boolean {
 }
 
 function parseLaunchFile(manifestXml: string): string | null {
-  const resourceMatch = manifestXml.match(/<resource\b[^>]*\bhref\s*=\s*["']([^"']+)["']/i);
+  const xmlPrefix = '(?:[A-Za-z_][\\w.-]*:)?';
+  const resourceMatch = new RegExp(`<${xmlPrefix}resource\\b[^>]*\\bhref\\s*=\\s*["']([^"']+)["']`, 'i').exec(manifestXml);
   if (resourceMatch?.[1]) return resourceMatch[1];
-  const itemMatch = manifestXml.match(/<item\b[^>]*\bidentifierref\s*=\s*["']([^"']+)["']/i);
+  const itemMatch = new RegExp(`<${xmlPrefix}item\\b[^>]*\\bidentifierref\\s*=\\s*["']([^"']+)["']`, 'i').exec(manifestXml);
   if (!itemMatch?.[1]) return null;
   const escaped = itemMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(
-    `<resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
+    `<${xmlPrefix}resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
     'i',
   ).exec(manifestXml)?.[1] ?? null;
 }
 
 function parseScormVersion(manifestXml: string): ScormVersao {
-  return /adlcp:schemaversion[^>]*>\s*2004/i.test(manifestXml) || /SCORM\s*2004/i.test(manifestXml)
+  return /<(?:[A-Za-z_][\w.-]*:)?schemaversion\b[^>]*>\s*2004/i.test(manifestXml) || /SCORM\s*2004/i.test(manifestXml)
     ? '2004'
     : '1.2';
 }
