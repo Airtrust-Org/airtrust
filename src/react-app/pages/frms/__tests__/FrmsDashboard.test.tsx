@@ -278,7 +278,7 @@ describe('FrmsDashboard', () => {
     expect(screen.getByText('Críticos / violações')).toBeInTheDocument();
     expect(screen.getByText('Atenção')).toBeInTheDocument();
     expect(screen.getByText('Efetividade degradada')).toBeInTheDocument();
-    expect(screen.getByText('Dados incompletos')).toBeInTheDocument();
+    expect(screen.getByText('Dados a confirmar')).toBeInTheDocument();
     expect(screen.getByText('Ana')).toBeInTheDocument();
     expect(screen.queryByText(/Central de Alertas/i)).not.toBeInTheDocument();
 

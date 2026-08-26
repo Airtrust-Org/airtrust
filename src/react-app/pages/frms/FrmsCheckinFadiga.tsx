@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
   History,
@@ -215,7 +215,7 @@ export function isFadigaCheckinSubmitReady(input: {
   );
 }
 
-function HistoricoTab() {
+function HistoricoTab({ collective }: { collective: boolean }) {
   const hoje = getTodayLocalKey();
   const inicio = `${hoje.slice(0, 8)}01`;
   const { data, isLoading } = useFadigaHistorico({ data_inicio: inicio, data_fim: hoje, limit: 30 });
@@ -223,7 +223,16 @@ function HistoricoTab() {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="mb-3 text-sm font-semibold text-slate-700">Meus check-ins do mês atual</p>
+      <div className="mb-3">
+        <p className="text-sm font-semibold text-slate-700">
+          {collective ? 'Check-ins recebidos no mês atual' : 'Meus check-ins do mês atual'}
+        </p>
+        {collective && (
+          <p className="mt-0.5 text-xs text-slate-500">
+            Visão coletiva para coordenação; cada registro identifica explicitamente o tripulante.
+          </p>
+        )}
+      </div>
       {isLoading ? (
         <p className="text-sm text-slate-400">Carregando...</p>
       ) : rows.length === 0 ? (
@@ -234,6 +243,9 @@ function HistoricoTab() {
             <thead>
               <tr className="border-b border-slate-100">
                 <th className="py-2 text-left font-medium text-slate-500">Data</th>
+                {collective && (
+                  <th className="py-2 text-left font-medium text-slate-500">Tripulante</th>
+                )}
                 <th className="py-2 text-left font-medium text-slate-500">KSS</th>
                 <th className="py-2 text-left font-medium text-slate-500">Sono (h)</th>
                 <th className="py-2 text-left font-medium text-slate-500">Score</th>
@@ -242,16 +254,40 @@ function HistoricoTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="py-2 text-slate-700">{r.data_checkin}</td>
-                  <td className="py-2 text-slate-700">{r.kss_score}</td>
-                  <td className="py-2 text-slate-700">{Number(r.horas_sono ?? 0).toFixed(1)}</td>
-                  <td className="py-2 font-semibold text-slate-800">{Math.round(Number(r.score_fadiga ?? 0))}</td>
-                  <td className="py-2">{badgeNivel(r.nivel_fadiga)}</td>
-                  <td className="py-2 text-slate-600">{statusOperacionalLabel(r.status_operacional)}</td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                const row = r as typeof r & {
+                  funcionario_id?: string | number | null;
+                  funcionario_nome?: string | null;
+                };
+                return (
+                  <tr key={r.id}>
+                    <td className="py-2 text-slate-700">{r.data_checkin}</td>
+                    {collective && (
+                      <td className="py-2 pr-3 font-medium text-slate-800">
+                        {row.funcionario_id ? (
+                          <Link
+                            to={`/frms/tripulante/${encodeURIComponent(String(row.funcionario_id))}`}
+                            className="hover:text-blue-700 hover:underline"
+                          >
+                            {row.funcionario_nome || `#${row.funcionario_id}`}
+                          </Link>
+                        ) : (
+                          row.funcionario_nome || 'Não identificado'
+                        )}
+                      </td>
+                    )}
+                    <td className="py-2 text-slate-700">{r.kss_score}</td>
+                    <td className="py-2 text-slate-700">{Number(r.horas_sono ?? 0).toFixed(1)}</td>
+                    <td className="py-2 font-semibold text-slate-800">
+                      {Math.round(Number(r.score_fadiga ?? 0))}
+                    </td>
+                    <td className="py-2">{badgeNivel(r.nivel_fadiga)}</td>
+                    <td className="py-2 text-slate-600">
+                      {statusOperacionalLabel(r.status_operacional)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -295,7 +331,9 @@ function PainelGestorTab() {
             </div>
           </div>
         ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-400">Nenhum check-in registrado para esta data.</div>
+          <div className="py-10 text-center text-sm text-slate-400">
+            Nenhum check-in registrado para esta data.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -320,7 +358,9 @@ function PainelGestorTab() {
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-slate-700">{String(r.kss_score ?? '-')}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-900">{Math.round(Number(r.score_fadiga ?? 0))}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {Math.round(Number(r.score_fadiga ?? 0))}
+                    </td>
                     <td className="px-4 py-3">{badgeNivel(String(r.nivel_fadiga ?? ''))}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {statusOperacionalLabel(r.status_operacional)}
@@ -425,12 +465,28 @@ function TriStateButtons({
 
 export default function FrmsCheckinFadiga() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const today = getTodayLocalKey();
   const { isAdmin, isGestor, role } = usePermissions();
   const canViewTeam = isAdmin || isGestor;
 
   type TabType = 'form' | 'historico' | 'gestor';
-  const [activeTab, setActiveTab] = useState<TabType>('form');
+  const requestedTab = searchParams.get('tab');
+  const initialTab: TabType =
+    requestedTab === 'historico'
+      ? 'historico'
+      : (requestedTab === 'gestor' || requestedTab === 'equipe') && canViewTeam
+        ? 'gestor'
+        : 'form';
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  const selectTab = (tab: TabType) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'form') next.delete('tab');
+    else next.set('tab', tab === 'gestor' ? 'equipe' : tab);
+    setSearchParams(next, { replace: true });
+  };
 
   const [sonoOpcao, setSonoOpcao] = useState<SonoOpcao | null>(null);
   const [wakeTime, setWakeTime] = useState('');
@@ -463,7 +519,8 @@ export default function FrmsCheckinFadiga() {
   const wakeTimeHasValue = wakeTime.trim().length > 0;
   const wakeTimeNormalized = normalizeWakeTimeInput(wakeTime);
   const wakeTimeValid = wakeTimeNormalized !== null;
-  const wakeTimeShowInvalid = (wakeTimeTouched || submitAttempted) && wakeTimeHasValue && !wakeTimeValid;
+  const wakeTimeShowInvalid =
+    (wakeTimeTouched || submitAttempted) && wakeTimeHasValue && !wakeTimeValid;
 
   const missingItems: string[] = [];
   if (sonoOpcao === null) missingItems.push('Horas de sono nas últimas 24h');
@@ -474,7 +531,8 @@ export default function FrmsCheckinFadiga() {
   if (qualidadeSono === null) missingItems.push('Qualidade do sono');
   if (kssScore === null) missingItems.push('Nível de sonolência (KSS)');
   if (fitForDutyChoice === null) missingItems.push('Condição para iniciar a jornada');
-  if (isNeedsCoordinatorReview && !observacao.trim()) missingItems.push('Observação obrigatória para revisão');
+  if (isNeedsCoordinatorReview && !observacao.trim())
+    missingItems.push('Observação obrigatória para revisão');
   if (!aceiteTermos) missingItems.push('Declaração de veracidade');
   if (!aceitePrivacidade) missingItems.push('Aceite da política de privacidade');
 
@@ -487,8 +545,8 @@ export default function FrmsCheckinFadiga() {
         !wakeTimeValid && wakeTimeHasValue
           ? 'Informe um horário válido, ex.: 06:30.'
           : isNeedsCoordinatorReview && !observacao.trim()
-          ? 'Informe uma observação para revisão da coordenação'
-          : 'Preencha os campos obrigatórios',
+            ? 'Informe uma observação para revisão da coordenação'
+            : 'Preencha os campos obrigatórios',
       );
       return;
     }
@@ -515,7 +573,8 @@ export default function FrmsCheckinFadiga() {
         sleepiness_level: subjectiveFatigueLevel,
         fit_for_duty: fitForDuty!,
         motivo_inaptidao: isNeedsCoordinatorReview ? observacao.trim() : undefined,
-        free_text_notes: !isNeedsCoordinatorReview && observacao.trim() ? observacao.trim() : undefined,
+        free_text_notes:
+          !isNeedsCoordinatorReview && observacao.trim() ? observacao.trim() : undefined,
         meds_ult_12h: optionalBinaryResponseToPayload(medsUlt12h),
         alcool_ult_12h: optionalBinaryResponseToPayload(alcoolUlt12h),
         aceite_termos: true,
@@ -551,19 +610,27 @@ export default function FrmsCheckinFadiga() {
             <div>
               <PageHeader
                 title="Fadiga Diária"
-                subtitle="Prévia estimada antes do envio para apoiar o gerenciamento de risco de fadiga."
+                subtitle="Triagem antes da jornada para apoiar o gerenciamento de risco de fadiga."
               />
-              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
                 <Clock className="h-3 w-3" />
-                Leva menos de 1 minuto
+                Check-in guiado
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={() => navigate('/frms')} className="text-xs sm:text-sm">
+              <Button
+                variant="secondary"
+                onClick={() => navigate(canViewTeam ? '/frms/controle-operacional' : '/frms')}
+                className="text-xs sm:text-sm"
+              >
                 Voltar ao FRMS
               </Button>
-              <Button variant="secondary" onClick={() => navigate('/sgso/frat')} className="text-xs sm:text-sm">
-                Abrir FRAT
+              <Button
+                variant="secondary"
+                onClick={() => navigate(`/sgso/frat?source=frms-checkin&data=${today}`)}
+                className="text-xs sm:text-sm"
+              >
+                Abrir FRAT deste check-in
               </Button>
             </div>
           </div>
@@ -573,7 +640,7 @@ export default function FrmsCheckinFadiga() {
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setActiveTab(t.key)}
+                onClick={() => selectTab(t.key)}
                 className={`flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors sm:flex-none sm:px-4 sm:text-sm ${
                   activeTab === t.key
                     ? 'border-blue-600 text-blue-600'
@@ -587,7 +654,7 @@ export default function FrmsCheckinFadiga() {
           </div>
         </div>
 
-        {activeTab === 'historico' && <HistoricoTab />}
+        {activeTab === 'historico' && <HistoricoTab collective={canViewTeam} />}
         {activeTab === 'gestor' && <PainelGestorTab />}
 
         {activeTab === 'form' && (
@@ -612,7 +679,8 @@ export default function FrmsCheckinFadiga() {
                 aria-label={`${missingItems.length} ${missingItems.length === 1 ? 'resposta pendente' : 'respostas pendentes'}`}
               >
                 <p className="text-sm font-semibold text-amber-800">
-                  {missingItems.length} {missingItems.length === 1 ? 'resposta pendente' : 'respostas pendentes'}
+                  {missingItems.length}{' '}
+                  {missingItems.length === 1 ? 'resposta pendente' : 'respostas pendentes'}
                 </p>
                 <ul className="mt-1 space-y-0.5 text-xs text-amber-700">
                   {missingItems.slice(0, 3).map((item, i) => (
@@ -623,7 +691,9 @@ export default function FrmsCheckinFadiga() {
                   ))}
                 </ul>
                 {missingItems.length > 3 && (
-                  <p className="mt-1 text-xs text-amber-600">...e mais {missingItems.length - 3} itens.</p>
+                  <p className="mt-1 text-xs text-amber-600">
+                    ...e mais {missingItems.length - 3} itens.
+                  </p>
                 )}
               </div>
             )}
@@ -664,7 +734,10 @@ export default function FrmsCheckinFadiga() {
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <label htmlFor="wake-time" className="mb-2 block text-sm font-medium text-slate-700">
+                      <label
+                        htmlFor="wake-time"
+                        className="mb-2 block text-sm font-medium text-slate-700"
+                      >
                         Hora em que acordou
                       </label>
                       <TimeInput
@@ -773,7 +846,9 @@ export default function FrmsCheckinFadiga() {
                             className={HIDDEN_RADIO_INPUT_CLASS}
                             aria-label={`KSS ${op.value}: ${op.hint}`}
                           />
-                          <span className={`block text-sm font-semibold ${selected ? '' : 'text-slate-800'}`}>
+                          <span
+                            className={`block text-sm font-semibold ${selected ? '' : 'text-slate-800'}`}
+                          >
                             {op.value} - {op.hint}
                           </span>
                         </label>
@@ -853,7 +928,10 @@ export default function FrmsCheckinFadiga() {
                 )}
 
                 <div className="mt-4">
-                  <label htmlFor="observacao" className="mb-2 block text-sm font-medium text-slate-700">
+                  <label
+                    htmlFor="observacao"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
                     {isNeedsCoordinatorReview
                       ? 'Explique o motivo para revisão pela coordenação'
                       : 'Há algo que a coordenação precisa saber? (opcional)'}
@@ -883,21 +961,34 @@ export default function FrmsCheckinFadiga() {
                     <legend className="mb-2 text-sm font-medium text-slate-700">
                       Medicação que pode causar sonolência
                     </legend>
-                    <TriStateButtons value={medsUlt12h} onChange={setMedsUlt12h} baseId="meds-ult-12h" />
+                    <TriStateButtons
+                      value={medsUlt12h}
+                      onChange={setMedsUlt12h}
+                      baseId="meds-ult-12h"
+                    />
                   </fieldset>
 
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
                       Álcool nas últimas 12h
                     </legend>
-                    <TriStateButtons value={alcoolUlt12h} onChange={setAlcoolUlt12h} baseId="alcool-ult-12h" />
+                    <TriStateButtons
+                      value={alcoolUlt12h}
+                      onChange={setAlcoolUlt12h}
+                      baseId="alcool-ult-12h"
+                    />
                   </fieldset>
                 </div>
               </FormCard>
 
               <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Declaração</p>
-                <label className="flex cursor-pointer items-start gap-3 py-2" htmlFor="aceite-termos">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Declaração
+                </p>
+                <label
+                  className="flex cursor-pointer items-start gap-3 py-2"
+                  htmlFor="aceite-termos"
+                >
                   <input
                     id="aceite-termos"
                     type="checkbox"
@@ -909,7 +1000,10 @@ export default function FrmsCheckinFadiga() {
                     As informações fornecidas são verídicas e refletem meu estado atual.
                   </span>
                 </label>
-                <label className="flex cursor-pointer items-start gap-3 py-2" htmlFor="aceite-privacidade">
+                <label
+                  className="flex cursor-pointer items-start gap-3 py-2"
+                  htmlFor="aceite-privacidade"
+                >
                   <input
                     id="aceite-privacidade"
                     type="checkbox"
@@ -951,8 +1045,7 @@ export default function FrmsCheckinFadiga() {
             )}
 
             <div className="hidden rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-500 lg:block">
-              Este formulário foi simplificado para check-in mobile-first e coleta apenas campos com uso
-              operacional claro no backend FRMS.
+              Este formulário coleta apenas campos com uso operacional claro no backend FRMS.
             </div>
           </>
         )}
