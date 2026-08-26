@@ -528,6 +528,43 @@ describe('resolveResourceDomain', () => {
     expect(opDomain.domain).toBe('OPERACOES');
   });
 
+  it('qualificacao_certificado multi-setor resolve o domínio pelo setor do funcionário (não pelo tipo)', async () => {
+    // Um tipo vinculado a MAIS DE UM setor (ex.: SGSO compartilhado por
+    // Tripulação e Manutenção) não pode ter um único dominio_codigo que
+    // represente todos os funcionários. O domínio efetivo passa a ser o do
+    // SETOR do funcionário dono do histórico — não o dominio_codigo do tipo.
+    const stubDb = {
+      prepare: (sql: string) => ({
+        bind: (..._args: unknown[]) => ({
+          first: async () => {
+            if (sql.includes('FROM qualificacoes_historico qh')) {
+              return {
+                dominio_codigo: 'SGSO',
+                setor_id: 11,
+                setor_dominio_codigo: 'MANUTENCAO',
+                tipo_setor_link_count: 2,
+              };
+            }
+            return null;
+          },
+        }),
+        all: async () => {
+          if (sql.includes('PRAGMA table_info(qualificacoes_tipos)')) {
+            return { results: [{ name: 'id' }, { name: 'dominio_codigo' }] };
+          }
+          if (sql.includes('PRAGMA table_info(qualificacoes_tipos_setores)')) {
+            return { results: [{ name: 'tipo_id' }, { name: 'setor_id' }] };
+          }
+          return { results: [] };
+        },
+      }),
+    } as unknown as D1Database;
+
+    const result = await resolveResourceDomain(stubDb, 6, 'qualificacao_certificado', 2010);
+    expect(result.domain).toBe('MANUTENCAO');
+    expect(result.setorId).toBe(11);
+  });
+
   it('lms_curso usa a coluna explícita, não herda de qualificação', async () => {
     const db = makeDb();
     const independente = await resolveResourceDomain(
