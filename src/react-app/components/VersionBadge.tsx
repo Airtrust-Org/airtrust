@@ -11,8 +11,32 @@ interface VersionData {
   builtAt: string | null;
 }
 
+type RuntimeEnvironment = 'production' | 'staging' | 'development';
+
+function inferRuntimeEnvironment(): RuntimeEnvironment {
+  if (typeof window === 'undefined') return 'development';
+  const host = window.location.hostname.toLowerCase();
+  if (host === 'airtrust.online' || host === 'www.airtrust.online') return 'production';
+  if (
+    host.includes('airtrust-staging') ||
+    host.includes('staging.airtrust') ||
+    host.includes('airtrust-api-staging')
+  ) {
+    return 'staging';
+  }
+  return 'development';
+}
+
+function normalizeEnvironment(value: string | undefined): RuntimeEnvironment | null {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'production' || normalized === 'staging' || normalized === 'development') {
+    return normalized;
+  }
+  return null;
+}
+
 export function VersionBadge() {
-  // Busca versão da API (backend) - usada apenas para buildTime e cores
+  // Busca versão da API (backend) - usada apenas para buildTime e confirmação de ambiente.
   const { data: apiData } = useQuery<{ success: boolean; data: VersionData }>({
     queryKey: ['version'],
     queryFn: async () => {
@@ -33,7 +57,16 @@ export function VersionBadge() {
     metaVersion ||
     (DEPLOYMENT_VERSION && DEPLOYMENT_VERSION !== '0.0.0-dev' ? DEPLOYMENT_VERSION : 'unknown');
 
-  const environment = apiData?.data?.environment || 'development';
+  // Nunca rotular airtrust.online como development enquanto /api/version ainda carrega.
+  // O hostname é a fonte de fallback fail-safe; a API só refina o valor quando coerente.
+  const runtimeEnvironment = inferRuntimeEnvironment();
+  const apiEnvironment = normalizeEnvironment(apiData?.data?.environment);
+  const environment =
+    runtimeEnvironment === 'production'
+      ? 'production'
+      : runtimeEnvironment === 'staging'
+        ? 'staging'
+        : apiEnvironment || runtimeEnvironment;
   const builtAt = apiData?.data?.builtAt ?? null;
 
   // Cores por ambiente
