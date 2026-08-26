@@ -1,0 +1,215 @@
+name: SIGVOOS Production Read-Only Health
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sigvoos-production-readonly-health
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Read-only SIGVOOS / FRMS production health
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout trusted diagnostic
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Run aggregate SELECT-only diagnostics
+        id: queries
+        shell: bash
+        working-directory: worker-airtrust
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/sigvoos-production-health"
+          mkdir -p "$out"
+
+          run_select() {
+            name="$1"
+            sql="$2"
+            normalized="$(printf '%s' "$sql" | sed -E 's/^[[:space:]]+//' | tr '[:lower:]' '[:upper:]')"
+            case "$normalized" in
+              SELECT*) ;;
+              *)
+                echo "Refusing non-SELECT diagnostic: $name" >&2
+                return 2
+                ;;
+            esac
+
+            if npx --no-install wrangler d1 execute airtrust-db \
+              --env production \
+              --remote \
+              --json \
+              --command "$sql" > "$out/$name.json" 2> "$out/$name.err"; then
+              if jq -e 'type == "array" and length > 0 and .[0].success == true' "$out/$name.json" >/dev/null 2>&1; then
+                : > "$out/$name.ok"
+                rm -f "$out/$name.err"
+                return 0
+              fi
+            fi
+
+            # Never publish raw provider errors, which may contain operational context.
+            printf '[{"success":false,"results":[]}]\n' > "$out/$name.json"
+            rm -f "$out/$name.err"
+            return 1
+          }
+
+          config_sql="SELECT
+            COALESCE(CAST(empresa_id AS TEXT), 'GLOBAL') AS scope,
+            MAX(CASE WHEN chave = 'last_sync_at' THEN valor END) AS last_sync_at,
+            MAX(CASE WHEN chave = 'last_sync_from' THEN valor END) AS last_sync_from,
+            MAX(CASE WHEN chave = 'last_sync_to' THEN valor END) AS last_sync_to,
+            MAX(CASE WHEN chave = 'last_sync_total_raw' THEN valor END) AS last_sync_total_raw,
+            MAX(CASE WHEN chave = 'last_sync_total_importacoes' THEN valor END) AS last_sync_total_importacoes,
+            MAX(CASE WHEN chave = 'auto_sync_enabled' THEN valor END) AS auto_sync_enabled,
+            MAX(CASE WHEN chave = 'auto_sync_hora_utc' THEN valor END) AS auto_sync_hora_utc,
+            MAX(CASE WHEN chave = 'username' AND LENGTH(TRIM(COALESCE(valor, ''))) > 0 THEN 1 ELSE 0 END) AS username_configured,
+            MAX(CASE WHEN chave IN ('password', 'password_encrypted') AND LENGTH(TRIM(COALESCE(valor, ''))) > 0 THEN 1 ELSE 0 END) AS password_configured
+          FROM integracoes_sigvoos_config
+          WHERE deleted_at IS NULL
+          GROUP BY empresa_id
+          ORDER BY empresa_id"
+
+          jornada_sql="SELECT
+            COALESCE(CAST(empresa_id AS TEXT), 'GLOBAL') AS scope,
+            COUNT(*) AS sigvoos_rows,
+            MIN(data) AS first_sigvoos_date,
+            MAX(data) AS latest_sigvoos_date,
+            SUM(CASE WHEN data >= date('now', '-7 days') THEN 1 ELSE 0 END) AS sigvoos_rows_last_7d
+          FROM frms_jornada
+          WHERE UPPER(COALESCE(origem, '')) = 'SIGVOOS'
+            AND deleted_at IS NULL
+          GROUP BY empresa_id
+          ORDER BY empresa_id"
+
+          cron_sql="SELECT
+            job_name,
+            scope_key,
+            watermark_from,
+            watermark_to,
+            last_started_at,
+            last_success_at,
+            last_error_at,
+            last_error_code,
+            consecutive_failures,
+            processed_total,
+            failed_total,
+            updated_at
+          FROM cron_job_state
+          WHERE job_name IN ('sigvoos-dispatch', 'sigvoos-ingest', 'frms-reprocess')
+          ORDER BY job_name, scope_key"
+
+          event_sql="SELECT
+            COALESCE(CAST(empresa_id AS TEXT), 'GLOBAL') AS scope,
+            tipo_evento,
+            status,
+            COUNT(*) AS event_count,
+            MAX(created_at) AS latest_event_at
+          FROM integracoes_sigvoos_eventos
+          WHERE deleted_at IS NULL
+            AND created_at >= datetime('now', '-7 days')
+          GROUP BY empresa_id, tipo_evento, status
+          ORDER BY latest_event_at DESC"
+
+          failures=0
+          run_select config "$config_sql" || failures=$((failures + 1))
+          run_select jornadas "$jornada_sql" || failures=$((failures + 1))
+          run_select cron "$cron_sql" || failures=$((failures + 1))
+          run_select events "$event_sql" || failures=$((failures + 1))
+
+          echo "out_dir=$out" >> "$GITHUB_OUTPUT"
+          echo "query_failures=$failures" >> "$GITHUB_OUTPUT"
+
+      - name: Publish sanitized diagnostic summary
+        if: always()
+        shell: bash
+        env:
+          OUT_DIR: ${{ steps.queries.outputs.out_dir }}
+          QUERY_FAILURES: ${{ steps.queries.outputs.query_failures }}
+        run: |
+          set -euo pipefail
+          out="${OUT_DIR:-$RUNNER_TEMP/sigvoos-production-health}"
+          failures="${QUERY_FAILURES:-4}"
+          {
+            echo "## SIGVOOS → FRMS — production read-only health"
+            echo
+            echo "- source SHA: \`$GITHUB_SHA\`"
+            echo "- mode: **SELECT-only / aggregate / no PII**"
+            echo "- query failures: \`$failures\`"
+            echo
+
+            echo "### Configuration / sync watermark"
+            if [[ -f "$out/config.ok" ]]; then
+              echo '| scope | last_sync_at | last_sync_from | last_sync_to | raw | imports | auto | hour UTC | user cfg | password cfg |'
+              echo '|---|---|---|---|---:|---:|---|---:|---:|---:|'
+              jq -r '.[0].results[] | "| \(.scope) | \(.last_sync_at // "—") | \(.last_sync_from // "—") | \(.last_sync_to // "—") | \(.last_sync_total_raw // "—") | \(.last_sync_total_importacoes // "—") | \(.auto_sync_enabled // "—") | \(.auto_sync_hora_utc // "—") | \(.username_configured // 0) | \(.password_configured // 0) |"' "$out/config.json"
+            else
+              echo 'CONFIG_QUERY_FAILED'
+            fi
+            echo
+
+            echo "### Canonical SIGVOOS rows in FRMS"
+            if [[ -f "$out/jornadas.ok" ]]; then
+              echo '| scope | rows | first date | latest date | rows last 7d |'
+              echo '|---|---:|---|---|---:|'
+              jq -r '.[0].results[] | "| \(.scope) | \(.sigvoos_rows) | \(.first_sigvoos_date // "—") | \(.latest_sigvoos_date // "—") | \(.sigvoos_rows_last_7d // 0) |"' "$out/jornadas.json"
+            else
+              echo 'JORNADAS_QUERY_FAILED'
+            fi
+            echo
+
+            echo "### Durable cron state"
+            if [[ -f "$out/cron.ok" ]]; then
+              echo '| job | scope | watermark to | last success | last error | error code | consecutive failures | processed | failed |'
+              echo '|---|---|---|---|---|---|---:|---:|---:|'
+              jq -r '.[0].results[] | "| \(.job_name) | \(.scope_key) | \(.watermark_to // "—") | \(.last_success_at // "—") | \(.last_error_at // "—") | \(.last_error_code // "—") | \(.consecutive_failures // 0) | \(.processed_total // 0) | \(.failed_total // 0) |"' "$out/cron.json"
+            else
+              echo 'CRON_QUERY_FAILED'
+            fi
+            echo
+
+            echo "### SIGVOOS event aggregates — last 7 days"
+            if [[ -f "$out/events.ok" ]]; then
+              echo '| scope | event type | status | count | latest |'
+              echo '|---|---|---|---:|---|'
+              jq -r '.[0].results[] | "| \(.scope) | \(.tipo_evento) | \(.status) | \(.event_count) | \(.latest_event_at // "—") |"' "$out/events.json"
+            else
+              echo 'EVENT_QUERY_FAILED'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$failures" != "0" ]]; then
+            echo "One or more read-only diagnostics could not be executed." >&2
+            exit 1
+          fi
+
+      - name: Upload sanitized aggregate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sigvoos-production-readonly-health
+          path: |
+            ${{ steps.queries.outputs.out_dir }}/config.json
+            ${{ steps.queries.outputs.out_dir }}/jornadas.json
+            ${{ steps.queries.outputs.out_dir }}/cron.json
+            ${{ steps.queries.outputs.out_dir }}/events.json
+          retention-days: 7
+          if-no-files-found: warn
