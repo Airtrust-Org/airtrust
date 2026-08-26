@@ -173,10 +173,14 @@ export default function SgsoFratPage() {
   }, [loadEvaluationDetail]);
 
   useEffect(() => {
-    const shouldPrefill = searchParams.get('prefill') === 'fadiga';
+    const shouldPrefill =
+      searchParams.get('prefill') === 'fadiga' || searchParams.get('source') === 'frms-checkin';
     if (!shouldPrefill) return;
 
-    const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    const date =
+      searchParams.get('date') ||
+      searchParams.get('data') ||
+      new Date().toISOString().slice(0, 10);
     const funcionarioId = searchParams.get('funcionario_id');
     const query = new URLSearchParams({ date });
     if (funcionarioId) query.set('funcionario_id', funcionarioId);

@@ -315,7 +315,6 @@ function filterItems(
   const funcionarioId = filters.funcionario_id?.trim();
 
   return items.filter((item) => {
-    // Only show operational crew — exclude maintenance/administrative staff
     if (!isTripulanteOperacional(item.funcao)) return false;
     if (funcionarioId && String(item.funcionario_id) !== funcionarioId) return false;
     if (base && normalizeSearch(item.base) !== base) return false;
@@ -420,7 +419,6 @@ export default function FrmsControleOperacional() {
   const today = useMemo(() => getTodayLocalIsoDate(), []);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const initialFilters: ControlFilters = useMemo(() => {
     function resolveQsDate(key: string): string {
       const v = searchParams.get(key) || '';
@@ -439,7 +437,7 @@ export default function FrmsControleOperacional() {
       status: '',
       include_inconsistencies: true,
     };
-  }, [today]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, today]);
 
   const [draft, setDraft] = useState<ControlFilters>(initialFilters);
   const [appliedFilters, setAppliedFilters] = useState<ControlFilters>(initialFilters);
@@ -516,6 +514,24 @@ export default function FrmsControleOperacional() {
     [snapshotFilters.data_fim, visibleItems],
   );
 
+  const decisionCounts = useMemo(
+    () => ({
+      dispatchBlock: fortnightSummary.attentionItems.filter(
+        (item) => item.actionGroup === 'critical',
+      ).length,
+      decision: fortnightSummary.attentionItems.filter(
+        (item) => item.actionGroup === 'attention' || item.actionGroup === 'checkin',
+      ).length,
+      confirmData: fortnightSummary.attentionItems.filter(
+        (item) => item.actionGroup === 'source',
+      ).length,
+      monitor: fortnightSummary.attentionItems.filter(
+        (item) => item.actionGroup === 'observation',
+      ).length,
+    }),
+    [fortnightSummary.attentionItems],
+  );
+
   const groupedRows = useMemo(
     () => ({
       escalados: visibleItems.filter((item) => operationalBucket(item) === 'escalado'),
@@ -539,21 +555,26 @@ export default function FrmsControleOperacional() {
     const crewItems = visibleItems.filter((item) => item.funcionario_id === selectedCrewId);
     if (!crewItems.length) return null;
     const primary = crewItems[0];
-    const withFortnight = crewItems.find(
-      (item) => item.fortnight_indicator?.periodo_inicio && item.fortnight_indicator?.periodo_fim,
-    );
-    const indicator = withFortnight?.fortnight_indicator;
     return {
       funcionarioId: selectedCrewId,
       displayName: primary.nome_guerra || primary.nome || `ID ${selectedCrewId}`,
-      periodStart: indicator?.periodo_inicio || appliedFilters.data_inicio,
-      periodEnd: indicator?.periodo_fim || appliedFilters.data_fim,
+      periodStart: appliedFilters.data_inicio,
+      periodEnd: appliedFilters.data_fim,
     };
   }, [selectedCrewId, visibleItems, appliedFilters.data_inicio, appliedFilters.data_fim]);
 
   const handleApplyFilters = () => {
-    setAppliedFilters({ ...draft });
+    const next = { ...draft };
+    setAppliedFilters(next);
     setSelectedCrewId(null);
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set('data_inicio', next.data_inicio || '');
+    nextSearchParams.set('data_fim', next.data_fim || '');
+    nextSearchParams.delete('data');
+    if (next.funcionario_id) nextSearchParams.set('funcionario_id', next.funcionario_id);
+    else nextSearchParams.delete('funcionario_id');
+    setSearchParams(nextSearchParams, { replace: true });
   };
 
   const handleClearFilters = () => {
@@ -571,7 +592,9 @@ export default function FrmsControleOperacional() {
 
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.delete('funcionario_id');
-    setSearchParams(nextSearchParams);
+    nextSearchParams.set('data_inicio', nextFilters.data_inicio || '');
+    nextSearchParams.set('data_fim', nextFilters.data_fim || '');
+    setSearchParams(nextSearchParams, { replace: true });
   };
 
   const handleClearTechnicalFilter = () => {
@@ -582,7 +605,7 @@ export default function FrmsControleOperacional() {
 
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.delete('funcionario_id');
-    setSearchParams(nextSearchParams);
+    setSearchParams(nextSearchParams, { replace: true });
   };
 
   const handleSelectCrew = (id: number) => {
@@ -592,18 +615,15 @@ export default function FrmsControleOperacional() {
   return (
     <AppLayout>
       <main className="space-y-4">
-        {/* ── Header ─────────────────────────────────────────── */}
         <header className="border-b border-slate-200 pb-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 FRMS operacional
               </p>
-              <h1 className="mt-1 text-2xl font-semibold text-slate-950">
-                Controle operacional de fadiga
-              </h1>
+              <h1 className="mt-1 text-2xl font-semibold text-slate-950">Operação agora</h1>
               <p className="mt-1 max-w-2xl text-sm text-slate-600">
-                Quem exige atenção, por quê, qual ação tomar e que evidência mostrar ao auditor.
+                Quem bloqueia despacho, quem exige decisão e quais dados precisam ser confirmados.
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">
@@ -624,71 +644,42 @@ export default function FrmsControleOperacional() {
 
         <section className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Quinzena operacional
+            Período operacional
           </p>
           <p className="mt-1 text-lg font-semibold text-slate-950">
-            {formatFortnightPeriodShort(fortnightSummary.periodStart, fortnightSummary.periodEnd)
-              || `${formatDisplayDate(appliedFilters.data_inicio)} → ${formatDisplayDate(appliedFilters.data_fim)}`}
+            {formatFortnightPeriodShort(fortnightSummary.periodStart, fortnightSummary.periodEnd) ||
+              `${formatDisplayDate(appliedFilters.data_inicio)} → ${formatDisplayDate(appliedFilters.data_fim)}`}
           </p>
           <p className="mt-1 text-xs text-slate-600">
             {fortnightSummary.monitoredCount > 0
               ? `${fortnightSummary.monitoredCount} tripulantes operacionais · `
               : ''}
             {fortnightSummary.periodStatusLabel}
-            {operationalSummary.pendingCheckins > 0
-              ? ` · ${operationalSummary.pendingCheckins} check-ins pendentes`
+            {decisionCounts.confirmData > 0
+              ? ` · ${decisionCounts.confirmData} confirmação(ões) de dados pendente(s)`
               : ''}
           </p>
         </section>
 
-        {/* ── Resumo decisório — 4 KPIs no topo ─────────────── */}
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Gate de decisão operacional">
           <KpiTile
-            label="Ação agora"
-            value={
-              fortnightSummary.attentionItems.filter((item) => item.actionGroup === 'critical')
-                .length
-            }
-            tone={
-              fortnightSummary.attentionItems.some((item) => item.actionGroup === 'critical')
-                ? 'danger'
-                : 'neutral'
-            }
+            label="Bloqueia despacho"
+            value={decisionCounts.dispatchBlock}
+            tone={decisionCounts.dispatchBlock > 0 ? 'danger' : 'neutral'}
           />
           <KpiTile
-            label="Atenção"
-            value={
-              fortnightSummary.attentionItems.filter((item) => item.actionGroup === 'attention')
-                .length
-            }
-            tone={
-              fortnightSummary.attentionItems.some((item) => item.actionGroup === 'attention')
-                ? 'warning'
-                : 'neutral'
-            }
+            label="Exige decisão"
+            value={decisionCounts.decision}
+            tone={decisionCounts.decision > 0 ? 'warning' : 'neutral'}
           />
           <KpiTile
-            label="Fadiga diária pendente"
-            value={
-              fortnightSummary.attentionItems.filter((item) => item.actionGroup === 'checkin').length
-            }
-            tone={
-              fortnightSummary.attentionItems.some((item) => item.actionGroup === 'checkin')
-                ? 'warning'
-                : 'neutral'
-            }
+            label="Confirmar dados"
+            value={decisionCounts.confirmData}
+            tone={decisionCounts.confirmData > 0 ? 'info' : 'neutral'}
           />
-          <KpiTile
-            label="Sem ação imediata"
-            value={Math.max(
-              fortnightSummary.monitoredCount - fortnightSummary.attentionItems.length,
-              0,
-            )}
-            tone="neutral"
-          />
+          <KpiTile label="Monitorar" value={decisionCounts.monitor} tone="neutral" />
         </section>
 
-        {/* ── Bloco 1: Lista de ação (prioridade) ───────────── */}
         <FrmsOperationalActionList
           summary={fortnightSummary}
           loading={loading}
@@ -696,7 +687,6 @@ export default function FrmsControleOperacional() {
           maxItemsPerGroup={10}
         />
 
-        {/* ── Barra de período + filtros avançados ──────────── */}
         <section className="rounded-lg border border-slate-200 bg-white p-3">
           {hasTechnicalFilter && (
             <div className="mb-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 md:flex-row md:items-center md:justify-between">
@@ -706,8 +696,8 @@ export default function FrmsControleOperacional() {
                   {backendScopedFuncionarioId
                     ? `Escopo aplicado pelo perfil da sessão (funcionario_id=${backendScopedFuncionarioId}).`
                     : technicalFilterSource
-                    ? `Origem: query string (funcionario_id=${technicalFilterSource}).`
-                    : `Funcionario ID ativo: ${technicalFilterValue}.`}
+                      ? `Origem: query string (funcionario_id=${technicalFilterSource}).`
+                      : `Funcionario ID ativo: ${technicalFilterValue}.`}
                 </p>
               </div>
               {!backendScopedFuncionarioId && (
@@ -872,7 +862,6 @@ export default function FrmsControleOperacional() {
           </div>
         </section>
 
-        {/* ── Erros / avisos ─────────────────────────────────── */}
         {unauthorized && (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             Sem autorizacao para visualizar este snapshot.
@@ -894,7 +883,6 @@ export default function FrmsControleOperacional() {
           </div>
         )}
 
-        {/* ── Bloco 2: Jornada do tripulante selecionado ───── */}
         {selectedCrewInfo && (
           <FrmsCrewCumulativeChart
             funcionarioId={selectedCrewInfo.funcionarioId}
@@ -905,12 +893,11 @@ export default function FrmsControleOperacional() {
           />
         )}
 
-        {/* ── Bloco 3: Mapa operacional (recolhido) ─────────── */}
         <details className="rounded-lg border border-slate-200 bg-white">
           <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-            <span>Mapa técnico da quinzena — apoio à evidência</span>
+            <span>Mapa técnico — apoio à evidência</span>
             <span className="text-xs font-normal text-slate-500">
-              Confirmar dados antes de decidir · até 20 tripulantes · recolhido por padrão
+              {formatDisplayDate(appliedFilters.data_inicio)} → {formatDisplayDate(appliedFilters.data_fim)} · até 20 tripulantes · recolhido por padrão
             </span>
           </summary>
           <div className="border-t border-slate-200 p-2">
@@ -926,17 +913,15 @@ export default function FrmsControleOperacional() {
           </div>
         </details>
 
-        {/* ── Detalhes e evidência (recolhido por padrão) ───── */}
         <details className="group rounded-lg border border-slate-200 bg-white">
           <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-            <span>Tabela completa, acúmulo da quinzena e registros de ciência</span>
+            <span>Tabela completa, acúmulo e registros de ciência</span>
             <span className="text-xs font-normal text-slate-500">
               Detalhes técnicos e evidência para auditoria
             </span>
           </summary>
 
           <div className="space-y-4 border-t border-slate-200 p-4">
-            {/* Acúmulo quinzenal */}
             <div>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -944,8 +929,7 @@ export default function FrmsControleOperacional() {
                     Acúmulo operacional da quinzena
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    O filtro mostra o recorte selecionado, mas o acúmulo considera a quinzena operacional
-                    disponível quando localizada.
+                    O filtro mostra o recorte selecionado; qualquer quinzena derivada é exibida como contexto, sem substituir o período escolhido.
                   </p>
                 </div>
               </div>
@@ -988,7 +972,7 @@ export default function FrmsControleOperacional() {
                   </p>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-medium text-slate-500">Dados incompletos/estimados</p>
+                  <p className="text-xs font-medium text-slate-500">Dados a confirmar</p>
                   <p className="mt-1 text-2xl font-semibold text-slate-950">
                     {fortnightSummary.estimatedOrIncompleteCount}
                   </p>
@@ -999,19 +983,12 @@ export default function FrmsControleOperacional() {
               </div>
             </div>
 
-            {/* Tabela densa */}
-            <div
-              id="frms-controle-operacional-tabela"
-              className="rounded-lg border border-slate-200"
-            >
+            <div id="frms-controle-operacional-tabela" className="rounded-lg border border-slate-200">
               <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-slate-950">
-                    Escala, fadiga e fontes
-                  </h2>
+                  <h2 className="text-base font-semibold text-slate-950">Escala, fadiga e fontes</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Linhas escaladas aparecem primeiro; check-ins ou jornadas sem escala ficam como
-                    excecoes operacionais.
+                    Evidência técnica; a decisão operacional deve começar pela fila priorizada acima.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
@@ -1027,13 +1004,9 @@ export default function FrmsControleOperacional() {
               </div>
 
               {loading ? (
-                <div className="p-10 text-center text-sm text-slate-500">
-                  Carregando snapshot operacional...
-                </div>
+                <div className="p-10 text-center text-sm text-slate-500">Carregando snapshot operacional...</div>
               ) : visibleItems.length === 0 ? (
-                <div className="p-10 text-center text-sm text-slate-500">
-                  Nenhum dado para os filtros informados.
-                </div>
+                <div className="p-10 text-center text-sm text-slate-500">Nenhum dado para os filtros informados.</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse text-sm">
@@ -1053,37 +1026,24 @@ export default function FrmsControleOperacional() {
                     </thead>
                     <tbody>
                       {visibleItems.map((item) => (
-                        <tr
-                          key={`${item.data_operacional}-${item.funcionario_id}`}
-                          className="border-t border-slate-200 align-top"
-                        >
+                        <tr key={`${item.data_operacional}-${item.funcionario_id}`} className="border-t border-slate-200 align-top">
                           <td className="px-3 py-3">
                             <div className="flex items-start gap-2">
                               <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                               <div>
-                                <div className="font-semibold text-slate-950">
-                                  {formatTripulante(item)}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {item.nome || `ID ${item.funcionario_id}`}
-                                </div>
+                                <div className="font-semibold text-slate-950">{formatTripulante(item)}</div>
+                                <div className="text-xs text-slate-500">{item.nome || `ID ${item.funcionario_id}`}</div>
                               </div>
                             </div>
                           </td>
                           <td className="px-3 py-3 text-slate-700">{item.funcao || '-'}</td>
                           <td className="px-3 py-3">
                             <div className="font-medium text-slate-800">{item.aeronave || '-'}</div>
-                            <div className="text-xs text-slate-500">
-                              {item.base || 'Base nao informada'}
-                            </div>
+                            <div className="text-xs text-slate-500">{item.base || 'Base nao informada'}</div>
                           </td>
                           <td className="px-3 py-3">
-                            <div className="font-medium text-slate-800">
-                              {operationalBucketLabel(item, escalaAvailable)}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              {formatDisplayDate(item.data_operacional)}
-                            </div>
+                            <div className="font-medium text-slate-800">{operationalBucketLabel(item, escalaAvailable)}</div>
+                            <div className="text-xs text-slate-500">{formatDisplayDate(item.data_operacional)}</div>
                             <div className="text-xs text-slate-500">
                               {item.teve_jornada
                                 ? `${item.hora_apresentacao || '--:--'} - ${item.hora_termino || '--:--'}`
@@ -1091,70 +1051,40 @@ export default function FrmsControleOperacional() {
                             </div>
                           </td>
                           <td className="px-3 py-3">
-                            <span
-                              className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${toneByCheckinStatus(item.checkin_status)}`}
-                            >
+                            <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${toneByCheckinStatus(item.checkin_status)}`}>
                               {item.checkin_status}
                             </span>
                             {item.checkin_horario && (
-                              <div className="mt-1 text-xs text-slate-500">
-                                Horario {item.checkin_horario}
-                              </div>
+                              <div className="mt-1 text-xs text-slate-500">Horario {item.checkin_horario}</div>
                             )}
                             {isNaoLiberarHoje(item, today) && (
                               <div className="mt-2 inline-flex rounded-md border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-red-800">
                                 {NAO_LIBERAR_LABEL}
                               </div>
                             )}
-                            <div className="mt-1 text-xs text-slate-500">
-                              Score de triagem subjetiva {formatNumber(item.fadiga_score)}
-                            </div>
+                            <div className="mt-1 text-xs text-slate-500">Score de triagem subjetiva {formatNumber(item.fadiga_score)}</div>
                             <div className="text-xs text-slate-400">Quanto maior, pior.</div>
                           </td>
                           <td className="px-3 py-3">
-                            <div className="font-medium text-slate-800">
-                              Sono {formatSleep(item.horas_sono)}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              KSS {formatNumber(item.kss_score)}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              Qualidade {formatNumber(item.qualidade_sono)}
-                            </div>
+                            <div className="font-medium text-slate-800">Sono {formatSleep(item.horas_sono)}</div>
+                            <div className="text-xs text-slate-500">KSS {formatNumber(item.kss_score)}</div>
+                            <div className="text-xs text-slate-500">Qualidade {formatNumber(item.qualidade_sono)}</div>
                           </td>
                           <td className="px-3 py-3">
-                            <div className="font-medium text-slate-800">
-                              Efetividade estimada {formatPercentage(item.effectiveness_pct)}
-                            </div>
+                            <div className="font-medium text-slate-800">Efetividade estimada {formatPercentage(item.effectiveness_pct)}</div>
                             <div className="text-xs text-slate-400">Quanto maior, melhor.</div>
-                            <div className="mt-2 text-xs font-medium text-slate-700">
-                              Indicador operacional da quinzena
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              {formatFortnightLabel(item.fortnight_indicator)}
-                            </div>
+                            <div className="mt-2 text-xs font-medium text-slate-700">Indicador operacional da quinzena</div>
+                            <div className="text-xs text-slate-500">{formatFortnightLabel(item.fortnight_indicator)}</div>
                             {item.fortnight_indicator && (
                               <div className="mt-1 text-xs text-slate-500">
-                                Jornada acumulada{' '}
-                                {formatFortnightMinutes(
-                                  item.fortnight_indicator.duty_time_periodo_min,
-                                )}{' '}
-                                · HV acumulada{' '}
-                                {formatFortnightMinutes(
-                                  item.fortnight_indicator.horas_voo_periodo_min,
-                                )}
+                                Jornada acumulada {formatFortnightMinutes(item.fortnight_indicator.duty_time_periodo_min)} · HV acumulada {formatFortnightMinutes(item.fortnight_indicator.horas_voo_periodo_min)}
                               </div>
                             )}
                             {FRMS_FORTNIGHT_DETAIL_ENABLED && (
-                              <FortnightDetailPanel
-                                indicator={item.fortnight_indicator}
-                                item={item}
-                              />
+                              <FortnightDetailPanel indicator={item.fortnight_indicator} item={item} />
                             )}
                             {item.fatorizacao_status === 'AUSENTE' && item.teve_jornada && (
-                              <div className="text-xs text-rose-700">
-                                Jornada sem fatorizacao
-                              </div>
+                              <div className="text-xs text-rose-700">Jornada sem fatorizacao</div>
                             )}
                           </td>
                           <td className="px-3 py-3">
@@ -1215,16 +1145,12 @@ export default function FrmsControleOperacional() {
               )}
             </div>
 
-            {/* Ciência operacional */}
             <div className="rounded-lg border border-slate-200">
               <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-slate-950">
-                    Ciencia operacional FRMS
-                  </h2>
+                  <h2 className="text-base font-semibold text-slate-950">Ciencia operacional FRMS</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Registro de leitura operacional. Nao representa mitigacao, decisao automatica ou
-                    mudanca de escala.
+                    Registro de leitura operacional. Nao representa mitigacao, decisao automatica ou mudanca de escala.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1232,27 +1158,12 @@ export default function FrmsControleOperacional() {
                     Pendentes {operationalSummary.pendingAck}
                   </span>
                   <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-                    Cientes{' '}
-                    {
-                      visibleReadAckEvents.filter(
-                        (event) =>
-                          event.lifecycle_status === 'ACKED' || event.status === 'ACKED',
-                      ).length
-                    }
+                    Cientes {visibleReadAckEvents.filter((event) => event.lifecycle_status === 'ACKED' || event.status === 'ACKED').length}
                   </span>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void readAck.refetch()}
-                    disabled={readAck.loading}
-                  >
+                  <Button size="sm" variant="secondary" onClick={() => void readAck.refetch()} disabled={readAck.loading}>
                     <RefreshCw className="h-4 w-4" />
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => void readAck.generateEvents()}
-                    loading={readAck.mutating}
-                  >
+                  <Button size="sm" onClick={() => void readAck.generateEvents()} loading={readAck.mutating}>
                     Gerar eventos
                   </Button>
                 </div>
@@ -1261,86 +1172,54 @@ export default function FrmsControleOperacional() {
               <div className="grid gap-3 border-b border-slate-200 p-4 md:grid-cols-3">
                 <label className="text-sm font-medium text-slate-700">
                   Status de ciencia
-                  <select
-                    value={readAckStatus}
-                    onChange={(e) => setReadAckStatus(e.target.value as FrmsReadAckQueryStatus)}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
-                  >
+                  <select value={readAckStatus} onChange={(e) => setReadAckStatus(e.target.value as FrmsReadAckQueryStatus)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm">
                     {READ_ACK_STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
+                      <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
                 <label className="text-sm font-medium text-slate-700">
                   Tipo de evento
-                  <select
-                    value={readAckEventType}
-                    onChange={(e) => setReadAckEventType(e.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
-                  >
+                  <select value={readAckEventType} onChange={(e) => setReadAckEventType(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm">
                     {READ_ACK_EVENT_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value || 'all'} value={option.value}>
-                        {option.label}
-                      </option>
+                      <option key={option.value || 'all'} value={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
                 <label className="text-sm font-medium text-slate-700">
                   Severidade
-                  <select
-                    value={readAckSeverity}
-                    onChange={(e) => setReadAckSeverity(e.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
-                  >
+                  <select value={readAckSeverity} onChange={(e) => setReadAckSeverity(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm">
                     {READ_ACK_SEVERITY_OPTIONS.map((option) => (
-                      <option key={option.value || 'all'} value={option.value}>
-                        {option.label}
-                      </option>
+                      <option key={option.value || 'all'} value={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
               </div>
 
               {readAck.error && (
-                <div className="m-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  {readAck.error}
-                </div>
+                <div className="m-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{readAck.error}</div>
               )}
 
               <div className="divide-y divide-slate-100">
                 {readAck.loading ? (
                   <div className="p-4 text-sm text-slate-500">Carregando eventos...</div>
                 ) : visibleReadAckEvents.length === 0 ? (
-                  <div className="p-4 text-sm text-slate-500">
-                    Nenhum evento de ciencia para os filtros atuais.
-                  </div>
+                  <div className="p-4 text-sm text-slate-500">Nenhum evento de ciencia para os filtros atuais.</div>
                 ) : (
                   visibleReadAckEvents.map((event) => (
-                    <div
-                      key={event.id}
-                      className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between"
-                    >
+                    <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${toneByReadAckSeverity(event.severity)}`}
-                          >
+                          <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${toneByReadAckSeverity(event.severity)}`}>
                             {event.severity}
                           </span>
-                          <span className="font-semibold text-slate-900">
-                            {formatReadAckEventLabel(event)}
-                          </span>
+                          <span className="font-semibold text-slate-900">{formatReadAckEventLabel(event)}</span>
                           <span className="text-xs text-slate-500">
-                            {formatDisplayDate(event.data_operacional)} ·{' '}
-                            {event.funcionario_nome || `ID ${event.funcionario_id}`}
+                            {formatDisplayDate(event.data_operacional)} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
-                          Fontes: {sourceLabel(event.sleep_data_source)} /{' '}
-                          {sourceLabel(event.wake_data_source)} /{' '}
-                          {sourceLabel(event.jornada_data_source)}.
+                          Fontes: {sourceLabel(event.sleep_data_source)} / {sourceLabel(event.wake_data_source)} / {sourceLabel(event.jornada_data_source)}.
                         </p>
                       </div>
                       {event.status === 'ACKED' || event.lifecycle_status === 'ACKED' ? (
@@ -1349,12 +1228,7 @@ export default function FrmsControleOperacional() {
                           Ciente
                         </span>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => void readAck.acknowledgeEvent(event.id)}
-                          loading={readAck.mutating}
-                        >
+                        <Button size="sm" variant="secondary" onClick={() => void readAck.acknowledgeEvent(event.id)} loading={readAck.mutating}>
                           <ClipboardCheck className="mr-1 h-4 w-4" />
                           Registrar ciencia
                         </Button>

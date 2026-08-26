@@ -1,7 +1,7 @@
 /**
  * FRMS — Relatórios (/frms/relatorios)
  *
- * Seletor de tipo de relatório + preview + export stub (PDF/Excel)
+ * Cada relatório expõe apenas os filtros que seu endpoint realmente consome.
  */
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -30,29 +30,22 @@ const TIPOS: { key: TipoRelatorio; label: string; desc: string; icon: typeof Bar
   {
     key: 'compliance',
     label: 'Compliance',
-    desc: 'Visão geral de conformidade de todos tripulantes com limites RBAC 135',
+    desc: 'Conformidade da equipe no mês de referência consumido pelo relatório.',
     icon: Shield,
   },
   {
     key: 'mapa-fadiga',
-    label: 'Mapa FRMS',
-    desc: 'Mapa de calor da fadiga dos últimos 90 dias para toda a frota',
+    label: 'Resumo de consumo de limites',
+    desc: 'Tabela consolidada das janelas de HV e repouso; não é um mapa de calor.',
     icon: BarChart3,
   },
   {
     key: 'alertas-historico',
     label: 'Histórico de Alertas',
-    desc: 'Todos os alertas gerados com filtros por período e nível',
+    desc: 'Alertas gerados no intervalo informado, separados da fila operacional atual.',
     icon: AlertTriangle,
   },
 ];
-
-function formatMin(min: number | null | undefined): string {
-  if (!min) return '0h00';
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${h}h${String(m).padStart(2, '0')}`;
-}
 
 const TIPO_LIMITE_LABEL: Record<string, string> = {
   FDP_DIARIO: 'FDP Diário',
@@ -62,6 +55,15 @@ const TIPO_LIMITE_LABEL: Record<string, string> = {
   HV_365D: 'HV 365 Dias',
   REPOUSO: 'Repouso Mínimo',
 };
+
+function formatMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split('-').map(Number);
+  if (!year || !month) return monthKey;
+  return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
 
 export default function FrmsRelatorios() {
   const navigate = useNavigate();
@@ -73,20 +75,26 @@ export default function FrmsRelatorios() {
   });
   const [periodoFim, setPeriodoFim] = useState(() => toDateKeyLocal(new Date()));
 
+  const mesReferencia = periodoInicio.slice(0, 7);
+
   const endpoint = useMemo(() => {
     if (tipo === 'compliance') {
-      // Backend espera ?mes=YYYY-MM
-      const mes = periodoInicio.slice(0, 7);
-      return `/api/frms/relatorios/compliance?mes=${mes}`;
+      return `/api/frms/relatorios/compliance?mes=${mesReferencia}`;
     }
     if (tipo === 'mapa-fadiga') {
       return `/api/frms/relatorios/mapa-fadiga`;
     }
-    // alertas-historico — backend espera ?data_inicio= &data_fim=
     return `/api/frms/relatorios/alertas-historico?data_inicio=${periodoInicio}&data_fim=${periodoFim}`;
-  }, [tipo, periodoInicio, periodoFim]);
+  }, [mesReferencia, periodoFim, periodoInicio, tipo]);
 
   const { data, loading } = useApi<any>(endpoint, { requireAuth: true });
+
+  const reportPeriodLabel =
+    tipo === 'compliance'
+      ? `Mês de referência: ${formatMonthLabel(mesReferencia)}`
+      : tipo === 'mapa-fadiga'
+        ? 'Recorte: janelas consolidadas disponíveis no relatório'
+        : `Período: ${periodoInicio} a ${periodoFim}`;
 
   const handleExportPDF = () => {
     if (!data || (Array.isArray(data) && data.length === 0)) return;
@@ -100,7 +108,7 @@ export default function FrmsRelatorios() {
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>FRMS — ${tipoLabel} — ${periodoInicio} a ${periodoFim}</title>
+  <title>FRMS — ${tipoLabel}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; color: #111; padding: 32px; }
@@ -111,16 +119,11 @@ export default function FrmsRelatorios() {
     th { padding: 8px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
     td { padding: 7px 12px; border-bottom: 1px solid #f3f4f6; }
     tr:last-child td { border-bottom: none; }
-    .badge { display: inline-block; border-radius: 9999px; padding: 2px 8px; font-size: 10px; font-weight: 700; }
-    .red { background: #fee2e2; color: #991b1b; }
-    .amber { background: #fef3c7; color: #92400e; }
-    .green { background: #d1fae5; color: #065f46; }
-    .gray { background: #f3f4f6; color: #6b7280; }
   </style>
 </head>
 <body>
   <h1>FRMS — Relatório ${tipoLabel}</h1>
-  <p class="subtitle">Período: ${periodoInicio} a ${periodoFim} — Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+  <p class="subtitle">${reportPeriodLabel} — Gerado em ${new Date().toLocaleString('pt-BR')}</p>
   ${reportEl.innerHTML}
 </body>
 </html>`);
@@ -159,7 +162,8 @@ export default function FrmsRelatorios() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `frms-${tipo}-${periodoInicio}-${periodoFim}.csv`;
+    const suffix = tipo === 'compliance' ? mesReferencia : `${periodoInicio}-${periodoFim}`;
+    a.download = `frms-${tipo}-${suffix}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -167,17 +171,18 @@ export default function FrmsRelatorios() {
   return (
     <AppLayout>
       <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <button
-            onClick={() => navigate('/frms')}
+            onClick={() => navigate('/frms?vista=analise')}
             className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            <ArrowLeft className="h-4 w-4" /> Voltar
+            <ArrowLeft className="h-4 w-4" /> Análise & Evidências
           </button>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold text-gray-900">Relatórios FRMS</h1>
-            <p className="text-sm text-gray-500">Análises de compliance e fadiga operacional</p>
+            <p className="text-sm text-gray-500">
+              Evidências e exportações; cada visão mostra apenas os filtros realmente aplicados.
+            </p>
           </div>
           <button
             onClick={handleExportCSV}
@@ -195,8 +200,7 @@ export default function FrmsRelatorios() {
           </button>
         </div>
 
-        {/* Type selector */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {TIPOS.map((t) => {
             const Icon = t.icon;
             const selected = tipo === t.key;
@@ -210,11 +214,9 @@ export default function FrmsRelatorios() {
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}
               >
-                <div className="flex items-center gap-3 mb-2">
+                <div className="mb-2 flex items-center gap-3">
                   <Icon className={`h-5 w-5 ${selected ? 'text-blue-600' : 'text-gray-400'}`} />
-                  <span
-                    className={`font-semibold text-sm ${selected ? 'text-blue-800' : 'text-gray-700'}`}
-                  >
+                  <span className={`text-sm font-semibold ${selected ? 'text-blue-800' : 'text-gray-700'}`}>
                     {t.label}
                   </span>
                 </div>
@@ -224,35 +226,55 @@ export default function FrmsRelatorios() {
           })}
         </div>
 
-        {/* Period filter */}
-        <div className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-4">
-          <span className="text-xs font-medium text-gray-500">Período:</span>
-          <input
-            type="date"
-            value={periodoInicio}
-            onChange={(e) => setPeriodoInicio(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          <span className="text-gray-400">até</span>
-          <input
-            type="date"
-            value={periodoFim}
-            onChange={(e) => setPeriodoFim(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          {tipo === 'compliance' ? (
+            <label className="inline-flex items-center gap-3 text-sm text-slate-700">
+              <span className="text-xs font-medium text-gray-500">Mês de referência:</span>
+              <input
+                type="month"
+                value={mesReferencia}
+                onChange={(e) => {
+                  if (e.target.value) setPeriodoInicio(`${e.target.value}-01`);
+                }}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </label>
+          ) : tipo === 'alertas-historico' ? (
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="text-xs font-medium text-gray-500">Período:</span>
+              <input
+                type="date"
+                value={periodoInicio}
+                onChange={(e) => setPeriodoInicio(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <span className="text-gray-400">até</span>
+              <input
+                type="date"
+                value={periodoFim}
+                onChange={(e) => setPeriodoFim(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm font-medium text-slate-700">Sem filtro de período nesta visão.</p>
+              <p className="mt-1 text-xs text-slate-500">
+                O endpoint atual entrega o consolidado de consumo de limites. A interface não simula um intervalo que o backend não aplica.
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Report view */}
-        <div
-          id="frms-report-content"
-          className="rounded-xl border border-gray-200 bg-white overflow-hidden"
-        >
+        <p className="text-xs text-slate-500">{reportPeriodLabel}</p>
+
+        <div id="frms-report-content" className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           {loading ? (
             <div className="p-12 text-center text-gray-400">Carregando relatório...</div>
           ) : !data || (Array.isArray(data) && data.length === 0) ? (
-            <div className="p-12 text-center text-gray-400 flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-2 p-12 text-center text-gray-400">
               <FileText className="h-8 w-8" />
-              Nenhum dado encontrado para o período selecionado
+              Nenhum dado encontrado para o recorte deste relatório
             </div>
           ) : tipo === 'compliance' ? (
             <ComplianceTable data={data} />
@@ -267,73 +289,39 @@ export default function FrmsRelatorios() {
   );
 }
 
-/* ── Sub-tables ── */
-
 function ComplianceTable({ data }: { data: any[] }) {
   return (
     <table className="w-full text-left text-sm">
       <thead>
         <tr className="border-b border-gray-100 bg-gray-50/50">
           <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-center">
-            Violações
-          </th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-center">
-            Críticos
-          </th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-center">
-            Atenção
-          </th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-center">
-            Avisos
-          </th>
+          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Violações</th>
+          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Críticos</th>
+          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Atenção</th>
+          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Avisos</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-50">
         {data.map((r: any, i: number) => (
           <tr key={i} className="hover:bg-gray-50/50">
-            <td className="px-4 py-2.5 font-medium text-gray-700">
-              {r.nome || `#${r.tripulante_id}`}
-            </td>
+            <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
             <td className="px-4 py-2.5 text-center">
-              <span
-                className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
-                  (r.violacoes ?? 0) > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
-                }`}
-              >
+              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.violacoes ?? 0) > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
                 {r.violacoes ?? 0}
               </span>
             </td>
             <td className="px-4 py-2.5 text-center">
-              <span
-                className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
-                  (r.alertas_criticos ?? 0) > 0
-                    ? 'bg-red-50 text-red-600'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
+              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.alertas_criticos ?? 0) > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
                 {r.alertas_criticos ?? 0}
               </span>
             </td>
             <td className="px-4 py-2.5 text-center">
-              <span
-                className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
-                  (r.alertas_atencao ?? 0) > 0
-                    ? 'bg-amber-50 text-amber-700'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
+              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.alertas_atencao ?? 0) > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
                 {r.alertas_atencao ?? 0}
               </span>
             </td>
             <td className="px-4 py-2.5 text-center">
-              <span
-                className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
-                  (r.alertas_aviso ?? 0) > 0
-                    ? 'bg-yellow-50 text-yellow-700'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
+              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.alertas_aviso ?? 0) > 0 ? 'bg-yellow-50 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
                 {r.alertas_aviso ?? 0}
               </span>
             </td>
@@ -350,21 +338,11 @@ function MapaFadigaTable({ data }: { data: any[] }) {
       <thead>
         <tr className="border-b border-gray-100 bg-gray-50/50">
           <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-right">
-            HV 7d%
-          </th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-right">
-            HV Mês%
-          </th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-right">
-            HV 365d%
-          </th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-center">
-            Nível
-          </th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-center">
-            Repouso
-          </th>
+          <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">HV 7d%</th>
+          <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">HV Mês%</th>
+          <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">HV 365d%</th>
+          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Nível</th>
+          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Repouso</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-50">
@@ -381,30 +359,20 @@ function MapaFadigaTable({ data }: { data: any[] }) {
                     : 'bg-green-100 text-green-800';
           return (
             <tr key={i} className="hover:bg-gray-50/50">
-              <td className="px-4 py-2.5 font-medium text-gray-700">
-                {r.nome || `#${r.tripulante_id}`}
-              </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">
-                {r.pct_7d?.toFixed(1) ?? '—'}%
-              </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">
-                {r.pct_mes?.toFixed(1) ?? '—'}%
-              </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">
-                {r.pct_365d?.toFixed(1) ?? '—'}%
-              </td>
+              <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_7d?.toFixed(1) ?? '—'}%</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_mes?.toFixed(1) ?? '—'}%</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_365d?.toFixed(1) ?? '—'}%</td>
               <td className="px-4 py-2.5 text-center">
-                <span
-                  className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${nivelColor}`}
-                >
+                <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${nivelColor}`}>
                   {r.nivel_max || 'OK'}
                 </span>
               </td>
               <td className="px-4 py-2.5 text-center">
                 {r.repouso_suficiente ? (
-                  <span className="text-emerald-500 text-xs font-bold">✓</span>
+                  <span className="text-xs font-bold text-emerald-500">✓</span>
                 ) : (
-                  <span className="text-red-500 text-xs font-bold">✗</span>
+                  <span className="text-xs font-bold text-red-500">✗</span>
                 )}
               </td>
             </tr>
@@ -425,44 +393,26 @@ function AlertasHistoricoTable({ data }: { data: any[] }) {
           <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Nível</th>
           <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tipo Limite</th>
           <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Mensagem</th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500 text-center">
-            Resolvido
-          </th>
+          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Resolvido</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-50">
         {data.map((r: any, i: number) => (
           <tr key={i} className="hover:bg-gray-50/50">
-            <td className="px-4 py-2.5 text-gray-600 tabular-nums">
-              {r.created_at ? r.created_at.slice(0, 10) : '—'}
-            </td>
-            <td className="px-4 py-2.5 text-gray-700">
-              {r.nome_tripulante ?? `#${r.tripulante_id}`}
-            </td>
+            <td className="px-4 py-2.5 tabular-nums text-gray-600">{r.created_at ? r.created_at.slice(0, 10) : '—'}</td>
+            <td className="px-4 py-2.5 text-gray-700">{r.nome_tripulante ?? `#${r.tripulante_id}`}</td>
             <td className="px-4 py-2.5">
-              <span
-                className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  r.nivel === 'VIOLACAO'
-                    ? 'bg-red-200 text-red-900'
-                    : r.nivel === 'CRITICO'
-                      ? 'bg-red-100 text-red-800'
-                      : r.nivel === 'ATENCAO'
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                }`}
-              >
+              <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${r.nivel === 'VIOLACAO' ? 'bg-red-200 text-red-900' : r.nivel === 'CRITICO' ? 'bg-red-100 text-red-800' : r.nivel === 'ATENCAO' ? 'bg-amber-100 text-amber-800' : 'bg-yellow-100 text-yellow-800'}`}>
                 {r.nivel}
               </span>
             </td>
-            <td className="px-4 py-2.5 text-gray-500 text-xs">
-              {TIPO_LIMITE_LABEL[r.tipo_limite] ?? r.tipo_limite}
-            </td>
-            <td className="px-4 py-2.5 text-gray-700 truncate max-w-xs">{r.mensagem}</td>
+            <td className="px-4 py-2.5 text-xs text-gray-500">{TIPO_LIMITE_LABEL[r.tipo_limite] ?? r.tipo_limite}</td>
+            <td className="max-w-xs truncate px-4 py-2.5 text-gray-700">{r.mensagem}</td>
             <td className="px-4 py-2.5 text-center">
               {r.resolvido_em ? (
-                <span className="text-emerald-500 text-xs font-bold">Sim</span>
+                <span className="text-xs font-bold text-emerald-500">Sim</span>
               ) : (
-                <span className="text-gray-400 text-xs">Não</span>
+                <span className="text-xs text-gray-400">Não</span>
               )}
             </td>
           </tr>
