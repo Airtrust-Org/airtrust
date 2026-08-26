@@ -1,15 +1,36 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   FIXTURE_ROOT,
+  STAGING_DB_ID,
+  STAGING_DB_NAME,
   STAGING_TARGET,
   SYNTHETIC_TENANT_A,
   SYNTHETIC_TENANT_B,
+  WORKER_ROOT,
   buildValidationScenarioPlan,
   parseRemoteValidationCliArgs,
   resolveApprovedFixturePath,
 } from '../../services/controle-voos/sigvoos-staging-remote-validation';
 
 describe('sigvoos staging remote validation guards', () => {
+  it('keeps STAGING_DB_NAME/STAGING_DB_ID in sync with wrangler.toml env.staging binding', () => {
+    const wranglerToml = readFileSync(resolve(WORKER_ROOT, 'wrangler.toml'), 'utf8');
+    const stagingEnvMatch = wranglerToml.match(
+      /\[env\.staging\][\s\S]*?(?=\n\[env\.(?!staging)|$)/,
+    );
+    if (!stagingEnvMatch) {
+      throw new Error('WRANGLER_TOML_ENV_STAGING_SECTION_NOT_FOUND');
+    }
+    const stagingEnvBlock = stagingEnvMatch[0];
+    const nameMatch = stagingEnvBlock.match(/database_name\s*=\s*"([^"]+)"/);
+    const idMatch = stagingEnvBlock.match(/database_id\s*=\s*"([^"]+)"/);
+
+    expect(nameMatch?.[1]).toBe(STAGING_DB_NAME);
+    expect(idMatch?.[1]).toBe(STAGING_DB_ID);
+  });
+
   it('requires an explicit staging target and blocks production', () => {
     expect(parseRemoteValidationCliArgs(['--target', STAGING_TARGET])).toEqual({
       mode: 'preview',

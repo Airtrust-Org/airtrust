@@ -10,8 +10,12 @@ import {
 } from './sigvoos-importer-runner';
 
 export const STAGING_TARGET = 'staging';
-export const STAGING_DB_NAME: string = 'airtrust-db-staging';
-export const STAGING_DB_ID: string = 'b7f50907-c110-45f5-ad17-e97ea47f2826';
+// Must match [[env.staging.d1_databases]] in worker-airtrust/wrangler.toml — the D1 actually
+// bound to the deployed staging Worker. See the regression test in
+// __tests__/services/controle-voos-sigvoos-staging-remote-validation.test.ts that fails if these
+// drift from wrangler.toml.
+export const STAGING_DB_NAME: string = 'airtrust-db-staging-baseline-20260701';
+export const STAGING_DB_ID: string = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
 export const PRODUCTION_DB_NAME: string = 'airtrust-db';
 export const PRODUCTION_DB_ID: string = '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae';
 export const SYNTHETIC_TENANT_A = 906;
