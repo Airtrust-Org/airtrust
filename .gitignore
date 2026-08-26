@@ -237,6 +237,16 @@ scripts/**/*backup*.sql
 scripts/**/*prod*.sql
 scripts/legacy/*.sql
 
+# Costa do Sol cadastral load (2026-08-26): real employee PII (nome, CPF,
+# RG, nascimento, telefone, e-mail) must never enter git history, even in a
+# private repo. Only the schema/tooling/seed files (tracked explicitly)
+# belong here — the actual 97-record cadastral SQL and login candidates
+# live outside the repo and are applied via the governed data-load flow.
+scripts/data/*cadastral-update*.sql
+scripts/data/*-candidates-*.json
+scripts/data/*student-candidates*.json
+scripts/data/*FINAL*
+
 worker-airtrust/wrangler.pilot-cv-n1.toml
 docs/snapshots/
 pilot-cv-n1-*.sql

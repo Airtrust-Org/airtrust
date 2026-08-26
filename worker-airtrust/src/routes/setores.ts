@@ -18,7 +18,7 @@ setores.get('/', auth(), async (c) => {
 
   try {
     let sql = `
-      SELECT id, codigo, nome, descricao, responsavel, ativo, created_at, updated_at
+      SELECT id, codigo, nome, descricao, responsavel, ativo, centro_custo, created_at, updated_at
       FROM setores
       WHERE deleted_at IS NULL
         AND empresa_id = ?
@@ -60,7 +60,7 @@ setores.get('/:id', auth(), async (c) => {
 
   try {
     let sql = `
-      SELECT id, codigo, nome, descricao, responsavel, ativo, created_at, updated_at
+      SELECT id, codigo, nome, descricao, responsavel, ativo, centro_custo, created_at, updated_at
       FROM setores
       WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
     `;
@@ -102,6 +102,7 @@ setores.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     nome: string;
     descricao?: string;
     responsavel?: string;
+    centro_custo?: string;
   };
 
   if (!body.codigo || body.codigo.trim().length === 0) {
@@ -115,8 +116,8 @@ setores.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     const result = await db
       .prepare(
         `
-        INSERT INTO setores (codigo, nome, descricao, responsavel, ativo, empresa_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1, ?, datetime('now'), datetime('now'))
+        INSERT INTO setores (codigo, nome, descricao, responsavel, centro_custo, ativo, empresa_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, datetime('now'), datetime('now'))
         `,
       )
       .bind(
@@ -124,6 +125,7 @@ setores.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
         body.nome.trim(),
         body.descricao || null,
         body.responsavel || null,
+        body.centro_custo || null,
         getEmpresaId(c),
       )
       .run();
@@ -148,6 +150,7 @@ setores.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
           nome: body.nome.trim(),
           descricao: body.descricao || null,
           responsavel: body.responsavel || null,
+          centro_custo: body.centro_custo || null,
           ativo: 1,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -175,6 +178,7 @@ setores.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     descricao?: string;
     responsavel?: string;
     ativo?: number;
+    centro_custo?: string;
   };
 
   if (Object.keys(body).length === 0) {
@@ -217,6 +221,10 @@ setores.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     if (body.ativo !== undefined) {
       fields.push('ativo = ?');
       values.push(body.ativo);
+    }
+    if (body.centro_custo !== undefined) {
+      fields.push('centro_custo = ?');
+      values.push(body.centro_custo || null);
     }
 
     fields.push('updated_at = datetime("now")');
