@@ -23,15 +23,16 @@ describe('service worker cache guard', () => {
     const versionMatch = serviceWorkerSource.match(/const CACHE_VERSION = 'airtrust-v(\d+)'/);
 
     expect(versionMatch).not.toBeNull();
-    expect(Number(versionMatch?.[1] || 0)).toBeGreaterThanOrEqual(13);
+    expect(Number(versionMatch?.[1] || 0)).toBeGreaterThanOrEqual(14);
     expect(serviceWorkerSource).toContain('await self.registration.unregister();');
     expect(serviceWorkerSource).toContain('Promise.resolve(self.skipWaiting())');
   });
 
-  it('limpa caches legados e recarrega clientes criticos sem cachear runtime novo', () => {
+  it('limpa caches legados e recarrega clientes criticos, incluindo FRMS, sem cachear runtime novo', () => {
     expect(serviceWorkerSource).toContain('async function purgeLegacyAirTrustCaches()');
     expect(serviceWorkerSource).toContain('cacheName.startsWith(CACHE_PREFIX)');
     expect(serviceWorkerSource).toContain('async function forceRefreshCriticalClients()');
+    expect(serviceWorkerSource).toContain('/^\\/frms(?:\\/|$)/');
     expect(serviceWorkerSource).toContain("clientUrl.searchParams.set(LOGIN_SW_RESET_PARAM, CACHE_VERSION);");
     expect(serviceWorkerSource).toContain('await client.navigate(clientUrl.toString());');
     expect(serviceWorkerSource).not.toContain('caches.open(');
