@@ -6,10 +6,16 @@
  * que ainda consigam atualizar para uma versao mais nova do /sw.js.
  */
 
-const CACHE_VERSION = 'airtrust-v13';
+const CACHE_VERSION = 'airtrust-v14';
 const CACHE_PREFIX = 'airtrust-';
 const LOGIN_SW_RESET_PARAM = 'airtrust_sw_reset';
-const CRITICAL_PATH_PATTERNS = [/^\/$/, /^\/login$/, /^\/dashboard(?:\/|$)/, /^\/mro(?:\/|$)/];
+const CRITICAL_PATH_PATTERNS = [
+  /^\/$/,
+  /^\/login$/,
+  /^\/dashboard(?:\/|$)/,
+  /^\/mro(?:\/|$)/,
+  /^\/frms(?:\/|$)/,
+];
 
 function matchesAnyPath(pathname, patterns) {
   return patterns.some((pattern) => pattern.test(pathname));
