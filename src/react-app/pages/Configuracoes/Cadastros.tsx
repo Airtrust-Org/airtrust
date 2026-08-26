@@ -467,6 +467,9 @@ export function Cadastros() {
                     <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                       Responsável
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                      Centro de Custo
+                    </th>
                     <th className="px-6 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
                       Status
                     </th>
@@ -505,6 +508,9 @@ export function Cadastros() {
                       </td>
                       <td className="px-6 py-3 text-slate-600 dark:text-slate-400 text-sm">
                         {setor.responsavel}
+                      </td>
+                      <td className="px-6 py-3 text-slate-600 dark:text-slate-400 text-sm">
+                        {setor.centro_custo}
                       </td>
                       <td className="px-6 py-3 text-center">
                         <span
@@ -743,6 +749,7 @@ export function Cadastros() {
                 { name: 'nome', label: 'Nome', type: 'text', required: true },
                 { name: 'descricao', label: 'Descrição', type: 'text' },
                 { name: 'responsavel', label: 'Responsável', type: 'text' },
+                { name: 'centro_custo', label: 'Centro de Custo', type: 'text' },
                 { name: 'ativo', label: 'Ativo', type: 'checkbox' },
               ]}
             />
