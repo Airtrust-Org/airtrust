@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 
@@ -28,6 +29,19 @@ function isAdministrationPath(pathname: string): boolean {
   return ADMIN_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
+function openAnalysisEvidenceIfNeeded(pathname: string, search: string) {
+  if (pathname !== '/frms' || new URLSearchParams(search).get('vista') !== 'analise') return;
+
+  queueMicrotask(() => {
+    const details = Array.from(document.querySelectorAll<HTMLDetailsElement>('details'));
+    const evidence = details.find((item) => {
+      const label = item.querySelector('summary')?.textContent || '';
+      return label.includes('Evidência técnica') || label.includes('Detalhes técnicos');
+    });
+    if (evidence && !evidence.open) evidence.open = true;
+  });
+}
+
 const itemClass = (active: boolean) =>
   `rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 ${
     active
@@ -38,6 +52,10 @@ const itemClass = (active: boolean) =>
 export default function FrmsWorkspaceNav() {
   const location = useLocation();
   const adminActive = isAdministrationPath(location.pathname);
+
+  useEffect(() => {
+    openAnalysisEvidenceIfNeeded(location.pathname, location.search);
+  }, [location.pathname, location.search]);
 
   return (
     <nav
