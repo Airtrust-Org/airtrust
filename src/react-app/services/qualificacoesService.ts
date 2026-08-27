@@ -22,8 +22,8 @@ export async function listarFuncionariosAtivos(limit = 1000) {
   return response.data;
 }
 
-export async function listarTiposQualificacao(limit = 1000) {
-  const response = await qualificacoesService.lookups.tiposQualificacao(limit);
+export async function listarTiposQualificacao(limit = 1000, categoriaId?: number | null) {
+  const response = await qualificacoesService.lookups.tiposQualificacao(limit, categoriaId);
   if (!response.success) throw new Error(response.error);
   return response.data;
 }

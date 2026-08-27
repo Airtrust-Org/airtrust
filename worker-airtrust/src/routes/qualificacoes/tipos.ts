@@ -465,6 +465,23 @@ function buildSetoresAggregationJoin(hasQualificacoesTiposSetores: boolean): str
   `;
 }
 
+// Contagem de registros no histórico por tipo. Antes era uma subconsulta
+// correlacionada executada por linha (O(N) COUNTs), o que forçou o teto de
+// listagem para 75 linhas em d6415b53 para evitar CPU timeout no Worker.
+// Uma única agregação GROUP BY (mesmo padrão de buildSetoresAggregationJoin)
+// remove esse custo e permite um teto uniforme de 500.
+function buildHistoricoCountJoin(): string {
+  return `
+    LEFT JOIN (
+      SELECT qh.qualificacao_id AS tipo_id, COUNT(*) AS total_no_historico
+      FROM qualificacoes_historico qh
+      WHERE qh.deleted_at IS NULL
+      GROUP BY qh.qualificacao_id
+    ) qhc
+      ON qhc.tipo_id = qt.id
+  `;
+}
+
 function buildCategoriaJoin(hasCategoriaId: boolean): string {
   return `LEFT JOIN qualificacoes_categorias qc
     ON ${hasCategoriaId ? 'qc.id = qt.categoria_id' : 'qc.nome = qt.categoria'}
@@ -660,11 +677,16 @@ router.get(
     const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
     const limitRaw = c.req.query('limit');
     const limitParsed = parseInt(limitRaw || '200', 10);
-    const limitFinal = Math.min(Math.max(limitParsed, 1), 75);
     const categoria = String(c.req.query('categoria') || '').trim();
     const categoriaIdRaw = parseInt(c.req.query('categoria_id') || '', 10);
     const categoriaId = Number.isFinite(categoriaIdRaw) && categoriaIdRaw > 0 ? categoriaIdRaw : 0;
     const search = String(c.req.query('search') || '').trim();
+    // Teto uniforme de 500: a contagem de histórico agora é uma agregação
+    // GROUP BY única (buildHistoricoCountJoin), não mais uma subconsulta por
+    // linha, então o motivo do teto de 75 (CPU timeout, d6415b53) não se
+    // aplica mais. 500 cobre listagens sem filtro (todas as categorias,
+    // matriz de treinamento, reclassificação) sem truncar modelos válidos.
+    const limitFinal = Math.min(Math.max(limitParsed, 1), 500);
     const requestedSetorIds = await validateRequestedSetorScope(
       access,
       parseRequestedSetorIds(c.req.query('setor_id'), c.req.query('setor_ids')),
@@ -743,11 +765,12 @@ router.get(
         }, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
           hasIsCheck ? 'is_check' : '0 as is_check'
         }, qt.created_at, qt.updated_at,
-        (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.qualificacao_id = qt.id AND qh.deleted_at IS NULL) AS total_no_historico,
+        COALESCE(qhc.total_no_historico, 0) AS total_no_historico,
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
         ${buildCategoriaJoin(columnsSupport.hasCategoriaId)}
         ${buildFormatoJoin(columnsSupport.hasFormatoId)}
+        ${buildHistoricoCountJoin()}
         ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE ${conditions.join(' AND ')}
         ORDER BY qt.categoria, qt.nome
