@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
-const persistReadinessAssessmentMock = vi.fn();
-const countReadinessBaselineSessionsMock = vi.fn();
+const { persistReadinessAssessmentMock, countReadinessBaselineSessionsMock } = vi.hoisted(() => ({
+  persistReadinessAssessmentMock: vi.fn(),
+  countReadinessBaselineSessionsMock: vi.fn(),
+}));
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
