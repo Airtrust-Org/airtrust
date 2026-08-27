@@ -136,5 +136,18 @@ export function buildResumeStorageScript(cfg: ResumeStorageScriptConfig): string
       // Ignorar quota exceeded ou outras falhas de IO.
     }
   }
+
+  // Expor os IDs no escopo global do frame pai para que os pacotes SCORM
+  // (que rodam em iframe same-origin) possam compor namespaces de
+  // localStorage isolados por matrícula/ciclo, eliminando o compartilhamento
+  // de estado entre alunos que usam o mesmo navegador.
+  try {
+    window.MATRICULA_ID = MATRICULA_ID;
+    window.CICLO_ID = CICLO_ID;
+    window.NUMERO_CICLO = NUMERO_CICLO;
+  } catch (_error) {
+    // Acesso cross-origin indisponível: o pacote deve cair no namespace
+    // standalone (sem identidade de matrícula).
+  }
   `;
 }
