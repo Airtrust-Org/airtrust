@@ -121,7 +121,7 @@ export default function FrmsAlertasPainel() {
     try {
       await mutate(`/api/frms/alertas/${resolveTarget.id}/resolver`, {
         method: 'PUT',
-        body: JSON.stringify({ notas: note }),
+        body: JSON.stringify({ notas_resolucao: note }),
       });
       toast.success('Caso resolvido com registro da decisão.');
       setResolveTarget(null);
