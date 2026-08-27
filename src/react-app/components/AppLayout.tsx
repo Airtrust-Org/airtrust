@@ -736,14 +736,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   </Link>
                   {isActivePath('/frms') && (
                     <div className="ml-7 flex flex-col gap-0.5">
-                      <Link to="/frms/controle-operacional" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
-                        <ShieldAlert className="h-3.5 w-3.5 shrink-0" /> Controle operacional
+                      <Link to="/frms" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <ShieldAlert className="h-3.5 w-3.5 shrink-0" /> Operação
                       </Link>
                       <Link to="/frms/alertas" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
-                        <Bell className="h-3.5 w-3.5 shrink-0" /> Alertas
+                        <Bell className="h-3.5 w-3.5 shrink-0" /> Casos
                       </Link>
-                      <Link to="/frms/fadiga-painel" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
-                        <MoonStar className="h-3.5 w-3.5 shrink-0" /> Fadiga acumulada
+                      <Link to="/frms/configuracoes" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <Settings className="h-3.5 w-3.5 shrink-0" /> Administração
                       </Link>
                     </div>
                   )}
