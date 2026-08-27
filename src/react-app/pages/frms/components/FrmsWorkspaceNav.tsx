@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
+import FrmsSourcePolicyBanner from './FrmsSourcePolicyBanner';
 
 const ADMIN_PATHS = [
   '/frms/configuracoes',
@@ -74,6 +75,8 @@ export default function FrmsWorkspaceNav() {
           Administração
         </NavLink>
       </nav>
+
+      {adminActive ? <FrmsSourcePolicyBanner compact /> : null}
 
       {adminActive ? (
         <nav
