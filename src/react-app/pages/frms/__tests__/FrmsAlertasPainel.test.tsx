@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,7 @@ const mutateMock = vi.fn();
 const refetchMock = vi.fn();
 
 vi.mock('@/react-app/components/AppLayout', () => ({
-  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock('@/react-app/hooks/useFrms', async () => {
@@ -103,7 +104,7 @@ describe('FrmsAlertasPainel', () => {
       expect(mutateMock).toHaveBeenCalledWith('/api/frms/alertas/case-1/resolver', {
         method: 'PUT',
         body: JSON.stringify({
-          notas: 'Tripulante substituído e jornada reconfirmada pela coordenação.',
+          notas_resolucao: 'Tripulante substituído e jornada reconfirmada pela coordenação.',
         }),
       });
     });
