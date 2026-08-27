@@ -1,0 +1,8 @@
+{
+  "changeId": "cron-resilience-state-0451",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0451_cron_job_resilience_state_v2.sql",
+  "fileHash": "3746540210b488cdc1f21ce9f85a17ac27da17c4f231147e0901e8ac57d7a3ca",
+  "planPath": "worker-airtrust/schema-v2/plans/production-cron-resilience-state-0451.md",
+  "planHash": "4d10e2e42dfad53c3e364da364fadebbdbbed6ea5adc068dc921c226e68f29e1"
+}
