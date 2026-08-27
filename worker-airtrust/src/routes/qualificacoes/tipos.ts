@@ -660,11 +660,16 @@ router.get(
     const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
     const limitRaw = c.req.query('limit');
     const limitParsed = parseInt(limitRaw || '200', 10);
-    const limitFinal = Math.min(Math.max(limitParsed, 1), 75);
     const categoria = String(c.req.query('categoria') || '').trim();
     const categoriaIdRaw = parseInt(c.req.query('categoria_id') || '', 10);
     const categoriaId = Number.isFinite(categoriaIdRaw) && categoriaIdRaw > 0 ? categoriaIdRaw : 0;
     const search = String(c.req.query('search') || '').trim();
+    // Unfiltered listagens são limitadas a 75 para evitar CPU timeout no Worker.
+    // Quando há filtro de categoria/busca o conjunto é pequeno, então permitimos
+    // um teto maior para não truncar modelos válidos (ex.: seletor "Nova Qualificação").
+    const isNarrowedQuery = categoriaId > 0 || Boolean(categoria) || Boolean(search);
+    const maxLimit = isNarrowedQuery ? 500 : 75;
+    const limitFinal = Math.min(Math.max(limitParsed, 1), maxLimit);
     const requestedSetorIds = await validateRequestedSetorScope(
       access,
       parseRequestedSetorIds(c.req.query('setor_id'), c.req.query('setor_ids')),

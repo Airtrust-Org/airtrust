@@ -110,7 +110,9 @@ export function ModalAtribuirQualificacao({
     isLoading: loadingFuncionarios,
     error: errorFuncionarios,
   } = useFuncionariosAtivos();
-  const { data: tiposData = [], isLoading: loadingTipos } = useTiposQualificacao();
+  const { data: tiposData = [], isLoading: loadingTipos } = useTiposQualificacao(
+    Number(form.categoria) || undefined,
+  );
   const {
     data: categoriasData = [],
     isLoading: loadingCategorias,
