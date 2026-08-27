@@ -1,0 +1,8 @@
+{
+  "changeId": "frms-operational-readiness-0471",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0471_frms_operational_readiness.sql",
+  "fileHash": "1d0c6d53af9ba179b899c762b5c49fb181566b481005707acd74b5940726c657",
+  "planPath": "worker-airtrust/schema-v2/plans/frms-operational-readiness-0471.md",
+  "planHash": "8bcd1da43d65daeb408e1dce1d35f9f99c44d7b4a0adbdfa1980fb3d4be69c39"
+}
