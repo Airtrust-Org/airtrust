@@ -103,43 +103,18 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
         },
         {
           id: 'frms',
-          label: 'FRMS',
+          label: 'FRMS — Operação',
           path: '/frms',
         },
         {
           id: 'frms-alertas',
-          label: 'Alertas FRMS',
+          label: 'FRMS — Casos',
           path: '/frms/alertas',
         },
         {
-          id: 'frms-relatorios',
-          label: 'Relatórios FRMS',
-          path: '/frms/relatorios',
-        },
-        {
           id: 'frms-configuracoes',
-          label: 'Configurações FRMS',
+          label: 'FRMS — Administração',
           path: '/frms/configuracoes',
-        },
-        {
-          id: 'frms-fadiga-acumulada',
-          label: 'Fadiga Acumulada',
-          path: '/frms/fadiga-acumulada',
-        },
-        {
-          id: 'frms-checkin-fadiga',
-          label: 'Fadiga Diária',
-          path: '/frms/checkin',
-        },
-        {
-          id: 'frms-painel-fadiga',
-          label: 'Painel de Fadiga',
-          path: '/frms/fadiga-painel',
-        },
-        {
-          id: 'frms-historico-fadiga',
-          label: 'Histórico Fadiga',
-          path: '/frms/fadiga-historico',
         },
       ],
     },
