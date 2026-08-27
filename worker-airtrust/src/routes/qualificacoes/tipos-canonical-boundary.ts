@@ -41,7 +41,16 @@ async function categoryHasColumn(db: D1Database, column: string): Promise<boolea
   return (info.results || []).some((row) => row.name === column);
 }
 
-async function loadCanonicalCategoryRows(
+// D1 impõe um teto de variáveis ligadas por consulta (SQLITE_MAX_VARIABLE_NUMBER).
+// O filtro `qt.id IN (...)` usa um placeholder por tipo (+1 do empresa_id). Com o
+// teto de listagem elevado de 75 para 500 (c35b6f25), uma única consulta passou a
+// estourar esse limite quando a listagem tinha 100+ linhas, retornando 500
+// ("D1_ERROR: too many SQL variables"). Dividimos os IDs em lotes de até 99
+// (99 ids + 1 empresa_id = 100 variáveis) e consolidamos em um único Map.
+const MAX_D1_BIND_VARIABLES = 100;
+const CATEGORY_ROWS_CHUNK_SIZE = MAX_D1_BIND_VARIABLES - 1;
+
+export async function loadCanonicalCategoryRows(
   db: D1Database,
   empresaId: number,
   tipoIds: Array<string | number>,
@@ -51,34 +60,40 @@ async function loadCanonicalCategoryRows(
 
   const hasDomain = await categoryHasColumn(db, 'dominio_codigo');
   const hasLmsFlag = await categoryHasColumn(db, 'lms_integrada');
-  const placeholders = uniqueIds.map(() => '?').join(', ');
-  const result = await db
-    .prepare(
-      `SELECT qt.id AS tipo_id,
-              qt.categoria_id,
-              qt.categoria AS categoria_snapshot,
-              qc.nome AS categoria_nome,
-              qc.codigo AS categoria_codigo,
-              qc.ativo AS categoria_ativo,
-              ${hasDomain ? 'qc.dominio_codigo' : 'NULL'} AS categoria_dominio_codigo,
-              ${
-                hasLmsFlag
-                  ? 'COALESCE(qc.lms_integrada, 0)'
-                  : "CASE WHEN UPPER(TRIM(COALESCE(qc.codigo, ''))) = 'EAD' THEN 1 ELSE 0 END"
-              } AS categoria_lms_integrada
-         FROM qualificacoes_tipos qt
-         LEFT JOIN qualificacoes_categorias qc
-           ON qc.id = qt.categoria_id
-          AND qc.empresa_id = qt.empresa_id
-          AND qc.deleted_at IS NULL
-        WHERE qt.empresa_id = ?
-          AND qt.deleted_at IS NULL
-          AND qt.id IN (${placeholders})`,
-    )
-    .bind(empresaId, ...uniqueIds)
-    .all<CanonicalTypeCategoryRow>();
 
-  return new Map((result.results || []).map((row) => [String(row.tipo_id), row]));
+  const buildSql = (chunkSize: number) =>
+    `SELECT qt.id AS tipo_id,
+            qt.categoria_id,
+            qt.categoria AS categoria_snapshot,
+            qc.nome AS categoria_nome,
+            qc.codigo AS categoria_codigo,
+            qc.ativo AS categoria_ativo,
+            ${hasDomain ? 'qc.dominio_codigo' : 'NULL'} AS categoria_dominio_codigo,
+            ${
+              hasLmsFlag
+                ? 'COALESCE(qc.lms_integrada, 0)'
+                : "CASE WHEN UPPER(TRIM(COALESCE(qc.codigo, ''))) = 'EAD' THEN 1 ELSE 0 END"
+            } AS categoria_lms_integrada
+       FROM qualificacoes_tipos qt
+       LEFT JOIN qualificacoes_categorias qc
+         ON qc.id = qt.categoria_id
+        AND qc.empresa_id = qt.empresa_id
+        AND qc.deleted_at IS NULL
+      WHERE qt.empresa_id = ?
+        AND qt.deleted_at IS NULL
+        AND qt.id IN (${Array.from({ length: chunkSize }, () => '?').join(', ')})`;
+
+  const rows: CanonicalTypeCategoryRow[] = [];
+  for (let index = 0; index < uniqueIds.length; index += CATEGORY_ROWS_CHUNK_SIZE) {
+    const chunk = uniqueIds.slice(index, index + CATEGORY_ROWS_CHUNK_SIZE);
+    const result = await db
+      .prepare(buildSql(chunk.length))
+      .bind(empresaId, ...chunk)
+      .all<CanonicalTypeCategoryRow>();
+    rows.push(...(result.results || []));
+  }
+
+  return new Map(rows.map((row) => [String(row.tipo_id), row]));
 }
 
 function stripLegacyFormat(row: JsonObject): JsonObject {
