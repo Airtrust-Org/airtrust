@@ -22,6 +22,10 @@ import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { toast } from 'sonner';
 import { resolveFadigaPostSavePath } from './frmsPostSaveNavigation';
+import OperationalVigilanceTest, {
+  type OperationalVigilanceResult,
+} from './OperationalVigilanceTest';
+import { useSubmitReadiness } from '@/react-app/hooks/useOperationalReadiness';
 
 /* eslint-disable react-refresh/only-export-components */
 
@@ -500,9 +504,11 @@ export default function FrmsCheckinFadiga() {
   const [aceiteTermos, setAceiteTermos] = useState(false);
   const [aceitePrivacidade, setAceitePrivacidade] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(null);
 
   const { data: existente, refetch } = useCheckinHoje();
   const submitMutation = useSubmitCheckin();
+  const readinessMutation = useSubmitReadiness();
 
   const canSubmit = isFadigaCheckinSubmitReady({
     sonoOpcao,
@@ -515,6 +521,7 @@ export default function FrmsCheckinFadiga() {
     observacao,
   });
 
+  const canSubmitWithReadiness = canSubmit && vigilanceResult !== null;
   const isNeedsCoordinatorReview = fitForDutyChoice === 'nao' || fitForDutyChoice === 'coord';
   const wakeTimeHasValue = wakeTime.trim().length > 0;
   const wakeTimeNormalized = normalizeWakeTimeInput(wakeTime);
@@ -530,6 +537,7 @@ export default function FrmsCheckinFadiga() {
   }
   if (qualidadeSono === null) missingItems.push('Qualidade do sono');
   if (kssScore === null) missingItems.push('Nível de sonolência (KSS)');
+  if (vigilanceResult === null) missingItems.push('Teste breve de atenção e tempo de reação');
   if (fitForDutyChoice === null) missingItems.push('Condição para iniciar a jornada');
   if (isNeedsCoordinatorReview && !observacao.trim())
     missingItems.push('Observação obrigatória para revisão');
@@ -540,7 +548,7 @@ export default function FrmsCheckinFadiga() {
     if (submitMutation.isPending) return;
 
     setSubmitAttempted(true);
-    if (!canSubmit) {
+    if (!canSubmitWithReadiness) {
       toast.error(
         !wakeTimeValid && wakeTimeHasValue
           ? 'Informe um horário válido, ex.: 06:30.'
@@ -560,6 +568,11 @@ export default function FrmsCheckinFadiga() {
       const kss = kssScore!;
       const subjectiveFatigueLevel = mapKssToSubjectiveFatigue(kss);
       const fitForDuty = fitChoiceToPayload(fitForDutyChoice);
+
+      if (!vigilanceResult) {
+        toast.error('Conclua o teste breve de atenção antes de enviar.');
+        return;
+      }
 
       const result = await submitMutation.mutateAsync({
         reference_date: today,
@@ -581,7 +594,13 @@ export default function FrmsCheckinFadiga() {
         aceite_privacidade: true,
       });
 
-      toast.success('Check-in de fadiga registrado com sucesso');
+      await readinessMutation.mutateAsync({
+        reference_date: today,
+        duration_ms: vigilanceResult.summary.durationMs,
+        trials: vigilanceResult.trials,
+      });
+
+      toast.success('Check-in de fadiga e teste de atenção registrados com sucesso');
       await refetch();
 
       if ((result as { data?: { requires_frat_review?: number } })?.data?.requires_frat_review) {
@@ -671,7 +690,7 @@ export default function FrmsCheckinFadiga() {
               </div>
             )}
 
-            {!canSubmit && (
+            {!canSubmitWithReadiness && (
               <div
                 className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3"
                 role="status"
@@ -858,7 +877,30 @@ export default function FrmsCheckinFadiga() {
                 </fieldset>
               </FormCard>
 
-              <FormCard label="Bloco 3 - Condição para jornada">
+              <FormCard
+                label="Bloco 3 - Atenção e tempo de reação"
+                hint="Teste breve objetivo para complementar sono, KSS e sua autoavaliação. O resultado não determina aptidão isoladamente."
+              >
+                {vigilanceResult ? (
+                  <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-900">Teste concluído</p>
+                      <p className="mt-1 text-xs text-emerald-800">
+                        Mediana de resposta: {vigilanceResult.summary.medianRtMs == null ? '-' : `${Math.round(vigilanceResult.summary.medianRtMs)} ms`} ·
+                        Lapsos: {vigilanceResult.summary.lapseCount} ·
+                        Antecipações: {vigilanceResult.summary.falseStartCount}
+                      </p>
+                    </div>
+                    <Button variant="secondary" onClick={() => setVigilanceResult(null)}>
+                      Refazer teste
+                    </Button>
+                  </div>
+                ) : (
+                  <OperationalVigilanceTest onComplete={setVigilanceResult} />
+                )}
+              </FormCard>
+
+              <FormCard label="Bloco 4 - Condição para jornada">
                 <fieldset>
                   <legend className="mb-3 text-sm text-slate-700">
                     Você se sente em condição segura para iniciar a jornada?
@@ -955,7 +997,7 @@ export default function FrmsCheckinFadiga() {
                 </div>
               </FormCard>
 
-              <FormCard label="Bloco 4 - Fatores relevantes" hint="Esses itens são opcionais.">
+              <FormCard label="Bloco 5 - Fatores relevantes" hint="Esses itens são opcionais.">
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
@@ -1020,14 +1062,14 @@ export default function FrmsCheckinFadiga() {
               <Button
                 id="submit-checkin-fadiga"
                 onClick={submit}
-                loading={submitMutation.isPending}
-                disabled={!canSubmit || submitMutation.isPending}
+                loading={submitMutation.isPending || readinessMutation.isPending}
+                disabled={!canSubmitWithReadiness || submitMutation.isPending || readinessMutation.isPending}
                 className="min-h-12 w-full text-base"
               >
                 Confirmar Check-in Diário
               </Button>
 
-              {!canSubmit && (
+              {!canSubmitWithReadiness && (
                 <p className="flex items-start gap-2 text-xs text-slate-500" role="alert">
                   <MessageCircleWarning className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   Confira os itens destacados acima para liberar o envio.

@@ -9,9 +9,14 @@ import {
 
 type Phase = 'instructions' | 'waiting' | 'stimulus' | 'complete';
 
+export type OperationalVigilanceResult = {
+  summary: VigilanceSummary;
+  trials: VigilanceTrial[];
+};
+
 type OperationalVigilanceTestProps = {
   durationMs?: number;
-  onComplete: (summary: VigilanceSummary) => void;
+  onComplete: (result: OperationalVigilanceResult) => void;
   onCancel?: () => void;
 };
 
@@ -51,7 +56,7 @@ export default function OperationalVigilanceTest({
     const actualDuration = startedAtRef.current == null ? durationMs : performance.now() - startedAtRef.current;
     const summary = summarizeVigilanceTrials(trialsRef.current, Math.round(actualDuration));
     setPhase('complete');
-    onComplete(summary);
+    onComplete({ summary, trials: trialsRef.current.map((trial) => ({ ...trial })) });
   }, [cleanupTimers, durationMs, onComplete]);
 
   const scheduleNext = useCallback(() => {
