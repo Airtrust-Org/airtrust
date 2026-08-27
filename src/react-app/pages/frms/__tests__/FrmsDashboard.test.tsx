@@ -1,288 +1,197 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import FrmsDashboard from '../FrmsDashboard';
 
-const navigateMock = vi.fn();
-const useApiMock = vi.fn();
-const useFrmsFrotaMock = vi.fn();
-const useFrmsAlertasMock = vi.fn();
-const useFrmsAlertasCountMock = vi.fn();
-const useFrmsConfiguracoesMock = vi.fn();
-const useFrmsJornadasEffectivenessMock = vi.fn();
 const useFrmsOperationalSnapshotMock = vi.fn();
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => navigateMock,
-  };
-});
-
 vi.mock('@/react-app/components/AppLayout', () => ({
-  default: ({ children }: { children: any }) => <div>{children}</div>,
-}));
-
-vi.mock('@/react-app/hooks/useApi', () => ({
-  useApi: (...args: unknown[]) => useApiMock(...args),
-}));
-
-vi.mock('@/react-app/hooks/useFrms', () => ({
-  useFrmsFrota: (...args: unknown[]) => useFrmsFrotaMock(...args),
-  useFrmsAlertas: (...args: unknown[]) => useFrmsAlertasMock(...args),
-  useFrmsAlertasCount: (...args: unknown[]) => useFrmsAlertasCountMock(...args),
-  useFrmsConfiguracoes: (...args: unknown[]) => useFrmsConfiguracoesMock(...args),
-  useFrmsJornadasEffectiveness: (...args: unknown[]) => useFrmsJornadasEffectivenessMock(...args),
+  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock('@/react-app/hooks/useFrmsOperationalSnapshot', () => ({
   useFrmsOperationalSnapshot: (...args: unknown[]) => useFrmsOperationalSnapshotMock(...args),
 }));
 
-vi.mock('../components/FrmsFilterContext', () => ({
-  FrmsFilterProvider: ({ children }: { children: any }) => <>{children}</>,
-  useFrmsFilters: () => ({
-    filters: {
-      modoPainel: 'OPERACIONAL',
-      periodo: 14,
-      mesReferencia: '2026-06',
-      base: '',
-      quinzena: '',
-      modeloAeronave: '',
-      status: ['OK', 'ATENCAO', 'CRITICO', 'VIOLACAO'],
-      busca: '',
-    },
-    setFilter: vi.fn(),
-    periodoNumDias: 14,
-    isMonthMode: false,
-    quinzenasDoMes: {
-      q1: { start: '2026-06-01', end: '2026-06-15', label: 'Q1: 01/06–15/06' },
-      q2: { start: '2026-06-16', end: '2026-06-30', label: 'Q2: 16/06–30/06' },
-    },
-    quinzenaAtiva: null,
-  }),
-}));
-
-vi.mock('../components/FrmsFilters', () => ({
-  default: () => <div>filtros-frms</div>,
-}));
-
-vi.mock('../components/FrmsFilterChips', () => ({
-  default: () => <div>chips-frms</div>,
-}));
-
-vi.mock('../components/FrmsMetricCards', () => ({
-  default: () => <div>metric-cards-frms</div>,
-}));
-
-vi.mock('../components/FrmsHeatmap', () => ({
-  default: () => <div>heatmap-frms</div>,
-}));
-
-vi.mock('../components/FrmsTripulantesTable', () => ({
-  default: () => <div>tripulantes-table-frms</div>,
-}));
-
-vi.mock('../components/FrmsJornadaEffectivenessCard', () => ({
-  default: () => <div>jornada-effectiveness-card</div>,
-}));
-
-vi.mock('../components/FrmsDayExplanationPanel', () => ({
-  default: () => <div>day-explanation-panel</div>,
-}));
-
-vi.mock('../FrmsFormJornada', () => ({
-  default: () => <div>frms-form-jornada</div>,
-}));
-
-function renderDashboard() {
-  return render(
-    <MemoryRouter>
-      <FrmsDashboard />
-    </MemoryRouter>,
-  );
-}
-
-function baseSnapshotItem(overrides: Record<string, unknown> = {}) {
+function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperationalSnapshotItem {
   return {
     empresa_id: 1,
-    data_operacional: '2026-06-23',
+    data_operacional: '2026-08-27',
     funcionario_id: 10,
     tripulante_id: 10,
     nome: 'Max Monteiro',
     nome_guerra: 'Max',
     funcao: 'PIC',
-    base: 'SBSP',
+    base: 'SBJR',
     aeronave: 'AW139',
     escalado: true,
-    escala_source: 'EVD',
+    escala_source: 'SIGVOOS',
     hora_apresentacao: '08:00',
-    hora_termino: '16:00',
+    hora_termino: '17:00',
     horas_voo_minutos: 180,
-    duracao_jornada_minutos: 480,
+    duracao_jornada_minutos: 540,
     teve_jornada: true,
     checkin_status: 'RECEBIDO',
     checkin_horario: '06:30',
     kss_score: 3,
-    horas_sono: 7,
+    horas_sono: 7.5,
     qualidade_sono: 4,
-    hora_acordar: '05:10',
-    fadiga_score: 18,
-    status_operacional_checkin: 'OK',
-    effectiveness_pct: 91,
-    nivel_fadiga_calculado: 'VERDE',
+    hora_acordar: '05:30',
+    fadiga_score: 20,
+    status_operacional_checkin: 'APTO',
+    effectiveness_pct: 92,
+    nivel_fadiga_calculado: 'BAIXO',
     fatorizacao_status: 'CALCULADA',
     sleep_data_source: 'REAL',
     wake_data_source: 'REAL',
     jornada_data_source: 'REAL',
     jornada_origem: 'SIGVOOS',
     snapshot_status: 'OK',
-    fortnight_indicator: {
-      periodo_inicio: '2026-06-16',
-      periodo_fim: '2026-06-30',
-      dia_periodo: 8,
-      total_dias_periodo: 15,
-      dias_consecutivos_com_jornada: 3,
-      dias_com_checkin_pendente: 0,
-      dias_com_dado_estimado: 0,
-      duty_time_periodo_min: 1800,
-      duty_time_168h_min: 900,
-      horas_voo_periodo_min: 600,
-      horas_voo_168h_min: 260,
-      jornadas_periodo: 3,
-      apresentacoes_antes_0600: 0,
-      apresentacoes_antes_0700: 1,
-      menor_descanso_entre_jornadas_min: 720,
-      setores_periodo: null,
-      sit_periods_estimados: null,
-      fonte_periodo: 'REAL',
-      freshness_dado: 'COMPLETO',
-      status_quinzena: 'OK',
-      score_acumulado: 42,
-      tendencia: 'ESTAVEL',
-      atenuadores_aplicados: [],
-      agravantes_aplicados: [],
-      natureza_dado: 'PROJECAO',
-      explicacao_operacional: null,
-      mitigacao_recomendada: 'SEM_ACAO',
-      decisao: 'INFORMA',
-      limite_referencia: null,
-      alertas_quinzena: [],
-      limitation_notes: [],
-    },
+    fortnight_indicator: null,
     alertas: [],
+    estado_operacional: 'NORMAL',
+    motivos_principais: [],
+    acao_recomendada_texto: 'Nenhuma ação imediata.',
     ...overrides,
   };
 }
 
-describe('FrmsDashboard', () => {
+function state(overrides: Record<string, unknown> = {}) {
+  return {
+    data: [item()],
+    summary: {
+      total_tripulantes: 1,
+      total_escalados: 1,
+      checkins_recebidos: 1,
+      checkins_pendentes: 0,
+      alertas_criticos: 0,
+      alertas_atencao: 0,
+      dados_estimados: 0,
+      inconsistencias: 0,
+      sem_fatorizacao: 0,
+      quinzena_incompleta: 0,
+      quinzena_atencao: 0,
+      quinzena_critica: 0,
+    },
+    meta: { scope: 'team' },
+    loading: false,
+    error: null,
+    unauthorized: false,
+    lastUpdatedAt: '2026-08-27T03:00:00.000Z',
+    refetch: vi.fn(),
+    ...overrides,
+  };
+}
+
+function renderDashboard() {
+  return render(
+    <MemoryRouter initialEntries={['/frms']}>
+      <FrmsDashboard />
+    </MemoryRouter>,
+  );
+}
+
+describe('FrmsDashboard simplificado', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-06-23T12:00:00Z'));
-    navigateMock.mockReset();
-    useApiMock.mockReset();
-    useFrmsFrotaMock.mockReset();
-    useFrmsAlertasMock.mockReset();
-    useFrmsAlertasCountMock.mockReset();
-    useFrmsConfiguracoesMock.mockReset();
-    useFrmsJornadasEffectivenessMock.mockReset();
     useFrmsOperationalSnapshotMock.mockReset();
-
-    useApiMock.mockReturnValue({ data: [], loading: false, error: null });
-    useFrmsFrotaMock.mockReturnValue({
-      data: [
-        {
-          tripulante_id: '10',
-          nome: 'Max Monteiro',
-          nome_guerra: 'Max',
-          aeronave_modelo: 'AW139',
-          hv_mes_min: 420,
-          pct_mes: 50,
-          hv_7d_min: 180,
-          pct_7d: 40,
-          hv_365d_min: 1800,
-          pct_365d: 10,
-          hv_dia_min: 60,
-          pct_dia: 20,
-          nivel_max: 'OK',
-        },
-        {
-          tripulante_id: '20',
-          nome: 'Ana Paula Souza',
-          nome_guerra: 'Ana',
-          aeronave_modelo: 'SK76',
-          hv_mes_min: 390,
-          pct_mes: 45,
-          hv_7d_min: 160,
-          pct_7d: 38,
-          hv_365d_min: 1700,
-          pct_365d: 9,
-          hv_dia_min: 45,
-          pct_dia: 15,
-          nivel_max: 'ATENCAO',
-        },
-      ],
-      loading: false,
-      refetch: vi.fn(),
-    });
-    useFrmsAlertasMock.mockReturnValue({ data: [], refetch: vi.fn() });
-    useFrmsAlertasCountMock.mockReturnValue({ data: { count: 0 }, refetch: vi.fn() });
-    useFrmsConfiguracoesMock.mockReturnValue({ data: { limites: {} } });
-    useFrmsJornadasEffectivenessMock.mockReturnValue({ data: [], loading: false });
-    useFrmsOperationalSnapshotMock.mockReturnValue({
-      data: [
-        baseSnapshotItem(),
-        baseSnapshotItem({
-          funcionario_id: 20,
-          tripulante_id: 20,
-          nome: 'Ana Paula Souza',
-          nome_guerra: 'Ana',
-          funcao: 'SIC',
-          aeronave: 'SK76',
-          checkin_status: 'PENDENTE',
-          sleep_data_source: 'ESTIMADO',
-          wake_data_source: 'ESTIMADO',
-          jornada_data_source: 'AUSENTE',
-          snapshot_status: 'ATENCAO',
-          effectiveness_pct: 74.5,
-          alertas: ['CHECKIN_PENDENTE'],
-          fortnight_indicator: {
-            ...baseSnapshotItem().fortnight_indicator,
-            duty_time_periodo_min: 2100,
-            horas_voo_periodo_min: 690,
-            status_quinzena: 'ATENCAO',
-            tendencia: 'CRESCENTE',
-            mitigacao_recomendada: 'REVISAR_CHECKIN',
-          },
-        }),
-      ],
-      summary: {},
-      meta: null,
-      loading: false,
-      error: null,
-      unauthorized: false,
-      refetch: vi.fn(),
-    });
+    useFrmsOperationalSnapshotMock.mockReturnValue(state());
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('renderiza os KPIs e o ranking da frota primeiro, e direciona ao controle operacional', () => {
+  it('expõe apenas as três áreas primárias e remove a navegação antiga', () => {
     renderDashboard();
 
-    // Gestão FRMS first-read: fleet KPIs + ranking come before technical detail.
-    expect(screen.getByText('Monitorados')).toBeInTheDocument();
-    expect(screen.getByText('Críticos / violações')).toBeInTheDocument();
-    expect(screen.getByText('Atenção')).toBeInTheDocument();
-    expect(screen.getByText('Efetividade degradada')).toBeInTheDocument();
-    expect(screen.getByText('Dados a confirmar')).toBeInTheDocument();
-    expect(screen.getByText('Ana')).toBeInTheDocument();
-    expect(screen.queryByText(/Central de Alertas/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Operação' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Casos' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Administração' })).toBeInTheDocument();
+    expect(screen.queryByText('Monitoramento')).not.toBeInTheDocument();
+    expect(screen.queryByText('Análise & Evidências')).not.toBeInTheDocument();
+    expect(screen.queryByText('Operação agora')).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Controle Operacional' }));
-    expect(navigateMock).toHaveBeenCalledWith('/frms/controle-operacional');
+  it('não mostra zero operacional durante a primeira carga', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [],
+        loading: true,
+        lastUpdatedAt: null,
+      }),
+    );
+
+    renderDashboard();
+
+    expect(screen.getByLabelText('Carregando situação operacional')).toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('trata dado incompleto como confirmação e esconde efetividade não confiável', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [
+          item({
+            snapshot_status: 'INCOMPLETO',
+            estado_operacional: 'NAO_AVALIADO',
+            fatorizacao_status: 'AUSENTE',
+            jornada_data_source: 'AUSENTE',
+            effectiveness_pct: 0,
+            alertas: ['JORNADA_SEM_FATORIZACAO'],
+            motivos_principais: ['Jornada ainda não consolidada.'],
+            acao_recomendada_texto: 'Confirmar a jornada antes do despacho.',
+          }),
+        ],
+      }),
+    );
+
+    renderDashboard();
+
+    expect(screen.getAllByText('Confirmar').length).toBeGreaterThan(0);
+    expect(screen.getByText('Jornada ainda não consolidada.')).toBeInTheDocument();
+    expect(screen.getByText('Efetividade não calculada')).toBeInTheDocument();
+  });
+
+  it('prioriza bloqueio e abre o detalhe no mesmo contexto', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [
+          item({ funcionario_id: 20, tripulante_id: 20, nome: 'Pessoa Normal', nome_guerra: null }),
+          item({
+            funcionario_id: 30,
+            tripulante_id: 30,
+            nome: 'Pessoa Crítica',
+            nome_guerra: null,
+            hora_apresentacao: '07:00',
+            snapshot_status: 'CRITICO',
+            estado_operacional: 'CRITICO_VIOLACAO',
+            motivos_principais: ['Limite operacional excedido.'],
+            acao_recomendada_texto: 'Não despachar até mitigação.',
+          }),
+        ],
+      }),
+    );
+
+    renderDashboard();
+
+    const criticalButton = screen.getByRole('button', { name: /Pessoa Crítica/i });
+    fireEvent.click(criticalButton);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Por que exige atenção')).toBeInTheDocument();
+    expect(screen.getAllByText('Limite operacional excedido.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Não despachar até mitigação.').length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Abrir FRAT' })).toHaveAttribute(
+      'href',
+      '/frms/frat?tripulante_id=30&data=2026-08-27',
+    );
+  });
+
+  it('mantém o último estado válido visível quando a atualização falha', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({ error: 'falha de rede', loading: false }),
+    );
+
+    renderDashboard();
+
+    expect(screen.getByText(/mantendo o último estado válido/i)).toBeInTheDocument();
+    expect(screen.getByText('Max')).toBeInTheDocument();
   });
 });
