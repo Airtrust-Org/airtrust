@@ -167,6 +167,32 @@ export function normalizeFadigaPainelPayload(
     }));
 }
 
+export function mergeFadigaPainelHistory(
+  items: FadigaPainelEquipeItem[],
+  history: FadigaCheckinItem[],
+): FadigaPainelEquipeItem[] {
+  const canonical = new Map<string, FadigaCheckinItem>();
+  for (const row of history) {
+    canonical.set(`${row.funcionario_id}:${row.data_checkin}`, row);
+  }
+
+  return items.map((item) => {
+    if (item.kss_score != null) return item;
+    const row = canonical.get(`${item.funcionario_id}:${item.data}`);
+    if (!row || row.kss_score == null || !Number.isFinite(Number(row.kss_score))) return item;
+
+    return {
+      ...item,
+      kss_score: Number(row.kss_score),
+      score_fadiga: item.score_fadiga ?? Number(row.score_fadiga),
+      nivel_fadiga: item.nivel_fadiga ?? row.nivel_fadiga,
+      status_operacional: item.status_operacional ?? row.status_operacional,
+      hora_checkin: item.hora_checkin ?? row.hora_checkin,
+      horas_sono: item.horas_sono ?? Number(row.horas_sono),
+    };
+  });
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken();
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
@@ -213,7 +239,19 @@ export function useFadigaPainel(data?: string) {
     queryKey: ['fadiga-painel', 'team', normalizedDate],
     queryFn: async () => {
       const payload = await fetchJson<DailyFatigueTeamPayload>(buildFadigaPainelRequestPath(normalizedDate));
-      return normalizeFadigaPainelPayload(payload, normalizedDate);
+      const normalized = normalizeFadigaPainelPayload(payload, normalizedDate);
+
+      // O endpoint daily-fatigue historicamente omitiu KSS no SELECT da visão de equipe.
+      // Enquanto clientes antigos ainda coexistem, reconciliamos o mesmo check-in pela fonte
+      // canônica de histórico para nunca mostrar "—" quando o valor realmente existe.
+      try {
+        const history = await fetchJson<FadigaHistoricoResponse>(
+          `/frms/fadiga-checkin/historico?data_inicio=${encodeURIComponent(normalizedDate)}&data_fim=${encodeURIComponent(normalizedDate)}&page=1&limit=500`,
+        );
+        return mergeFadigaPainelHistory(normalized, Array.isArray(history.data) ? history.data : []);
+      } catch {
+        return normalized;
+      }
     },
     staleTime: 5 * 60 * 1000,
     refetchInterval: 30 * 60 * 1000,
