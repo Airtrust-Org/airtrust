@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, Eye, RefreshCw } from 'lucide-react';
+import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, Eye, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
 import { EmptyState } from '@/react-app/components/UI/EmptyState';
@@ -19,11 +19,15 @@ const NIVEL_STYLE: Record<string, string> = {
     'border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200',
 };
 
+const NIVEL_LABEL: Record<string, string> = {
+  AVISO: 'Acompanhar',
+  ATENCAO: 'Confirmar',
+  CRITICO: 'Decidir',
+  VIOLACAO: 'Bloqueio',
+};
+
 function nivelLabel(nivel: string): string {
-  if (nivel === 'ATENCAO') return 'ATENÇÃO';
-  if (nivel === 'CRITICO') return 'CRÍTICO';
-  if (nivel === 'VIOLACAO') return 'VIOLAÇÃO';
-  return nivel;
+  return NIVEL_LABEL[nivel] || nivel;
 }
 
 function factDate(alert: FrmsAlertaRow): string {
@@ -35,6 +39,14 @@ function factDate(alert: FrmsAlertaRow): string {
   return parsed.toLocaleDateString('pt-BR');
 }
 
+function resolvedAt(value: string | null): string | null {
+  if (!value) return null;
+  const iso = value.includes(' ') ? value.replace(' ', 'T') : value;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
 export default function FrmsAlertasPainel() {
   const [searchParams] = useSearchParams();
   const nivelParam = searchParams.get('nivel') || '';
@@ -43,6 +55,9 @@ export default function FrmsAlertasPainel() {
     NIVEIS.includes(nivelParam as (typeof NIVEIS)[number]) ? nivelParam : '',
   );
   const [status, setStatus] = useState<'ativos' | 'resolvidos' | 'todos'>('ativos');
+  const [resolveTarget, setResolveTarget] = useState<FrmsAlertaRow | null>(null);
+  const [resolutionNote, setResolutionNote] = useState('');
+  const [resolving, setResolving] = useState(false);
   const { mutate } = useFrmsMutation();
 
   useEffect(() => {
@@ -64,8 +79,9 @@ export default function FrmsAlertasPainel() {
   const counts = useMemo(
     () => ({
       total: cases.length,
-      criticos: cases.filter((item) => item.nivel === 'CRITICO' || item.nivel === 'VIOLACAO').length,
-      atencao: cases.filter((item) => item.nivel === 'ATENCAO').length,
+      bloqueio: cases.filter((item) => item.nivel === 'VIOLACAO').length,
+      decidir: cases.filter((item) => item.nivel === 'CRITICO').length,
+      confirmar: cases.filter((item) => item.nivel === 'ATENCAO').length,
     }),
     [cases],
   );
@@ -82,21 +98,41 @@ export default function FrmsAlertasPainel() {
     [mutate, refetch],
   );
 
-  const resolveCase = useCallback(
-    async (id: string) => {
-      try {
-        await mutate(`/api/frms/alertas/${id}/resolver`, {
-          method: 'PUT',
-          body: JSON.stringify({ notas: '' }),
-        });
-        toast.success('Caso resolvido.');
-        await refetch();
-      } catch {
-        toast.error('Não foi possível resolver o caso.');
-      }
-    },
-    [mutate, refetch],
-  );
+  const openResolution = useCallback((item: FrmsAlertaRow) => {
+    setResolveTarget(item);
+    setResolutionNote('');
+  }, []);
+
+  const closeResolution = useCallback(() => {
+    if (resolving) return;
+    setResolveTarget(null);
+    setResolutionNote('');
+  }, [resolving]);
+
+  const resolveCase = useCallback(async () => {
+    if (!resolveTarget) return;
+    const note = resolutionNote.trim();
+    if (!note) {
+      toast.error('Informe o motivo ou a ação tomada antes de resolver o caso.');
+      return;
+    }
+
+    setResolving(true);
+    try {
+      await mutate(`/api/frms/alertas/${resolveTarget.id}/resolver`, {
+        method: 'PUT',
+        body: JSON.stringify({ notas_resolucao: note }),
+      });
+      toast.success('Caso resolvido com registro da decisão.');
+      setResolveTarget(null);
+      setResolutionNote('');
+      await refetch();
+    } catch {
+      toast.error('Não foi possível resolver o caso.');
+    } finally {
+      setResolving(false);
+    }
+  }, [mutate, refetch, resolutionNote, resolveTarget]);
 
   return (
     <AppLayout>
@@ -108,7 +144,7 @@ export default function FrmsAlertasPainel() {
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">FRMS</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">Casos</h1>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              Pendências operacionais que precisam ser acompanhadas até o fechamento.
+              Backlog acumulado de pendências FRMS. A prioridade visual usa a mesma linguagem da Operação.
             </p>
           </div>
           <button
@@ -122,30 +158,34 @@ export default function FrmsAlertasPainel() {
           </button>
         </header>
 
-        <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo de casos">
+        <section className="grid gap-3 sm:grid-cols-4" aria-label="Resumo de casos">
           <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">No filtro</p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{loading && !data ? '—' : counts.total}</p>
           </div>
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Crítico / violação</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-red-800 dark:text-red-200">{loading && !data ? '—' : counts.criticos}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Bloqueio</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-red-800 dark:text-red-200">{loading && !data ? '—' : counts.bloqueio}</p>
+          </div>
+          <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/60 dark:bg-orange-950/30">
+            <p className="text-xs font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">Decidir</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-orange-800 dark:text-orange-200">{loading && !data ? '—' : counts.decidir}</p>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Atenção</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-amber-800 dark:text-amber-200">{loading && !data ? '—' : counts.atencao}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Confirmar</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-amber-800 dark:text-amber-200">{loading && !data ? '—' : counts.confirmar}</p>
           </div>
         </section>
 
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
           <label className="relative">
-            <span className="sr-only">Filtrar por nível</span>
+            <span className="sr-only">Filtrar por prioridade</span>
             <select
               value={nivel}
               onChange={(event) => setNivel(event.target.value)}
               className="appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-9 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             >
-              <option value="">Todos os níveis</option>
+              <option value="">Todas as prioridades</option>
               {NIVEIS.map((item) => <option key={item} value={item}>{nivelLabel(item)}</option>)}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -199,6 +239,7 @@ export default function FrmsAlertasPainel() {
               {cases.map((item) => {
                 const name = item.nome_tripulante || `Tripulante #${item.tripulante_id}`;
                 const levelClass = NIVEL_STYLE[item.nivel] || NIVEL_STYLE.AVISO;
+                const resolutionDate = resolvedAt(item.resolvido_em);
                 return (
                   <article key={item.id} className="p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
@@ -212,6 +253,18 @@ export default function FrmsAlertasPainel() {
                         <h2 className="mt-2 font-bold text-slate-950 dark:text-white">{name}</h2>
                         <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{item.mensagem}</p>
                         <p className="mt-2 text-xs text-slate-500">Tipo: {item.tipo_limite || 'não informado'}</p>
+                        {item.resolvido ? (
+                          <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                            <p className="font-semibold text-slate-700 dark:text-slate-200">
+                              {`Resolvido${item.resolvido_por ? ` por ${item.resolvido_por}` : ''}${
+                                resolutionDate ? ` em ${resolutionDate}` : ''
+                              }.`}
+                            </p>
+                            {item.notas_resolucao ? (
+                              <p className="mt-1">Registro: {item.notas_resolucao}</p>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="flex flex-wrap gap-2 lg:w-64 lg:justify-end">
@@ -235,7 +288,7 @@ export default function FrmsAlertasPainel() {
                         {!item.resolvido ? (
                           <button
                             type="button"
-                            onClick={() => void resolveCase(item.id)}
+                            onClick={() => openResolution(item)}
                             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" /> Resolver
@@ -250,6 +303,55 @@ export default function FrmsAlertasPainel() {
           )}
         </section>
       </div>
+
+      {resolveTarget ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="resolve-case-title">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Confirmar resolução</p>
+                <h2 id="resolve-case-title" className="mt-1 text-lg font-bold text-slate-950 dark:text-white">
+                  Registrar decisão antes de fechar o caso
+                </h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  {resolveTarget.nome_tripulante || `Tripulante #${resolveTarget.tripulante_id}`} · {nivelLabel(resolveTarget.nivel)}
+                </p>
+              </div>
+              <button type="button" onClick={closeResolution} disabled={resolving} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800" aria-label="Cancelar resolução">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <label className="mt-5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Motivo ou ação tomada
+              <textarea
+                autoFocus
+                value={resolutionNote}
+                onChange={(event) => setResolutionNote(event.target.value)}
+                rows={4}
+                maxLength={1000}
+                placeholder="Ex.: jornada confirmada com a coordenação; tripulante substituído; limite reavaliado com dado corrigido."
+                className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            </label>
+            <p className="mt-1 text-xs text-slate-500">Este registro fica associado ao fechamento do caso.</p>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={closeResolution} disabled={resolving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void resolveCase()}
+                disabled={resolving || !resolutionNote.trim()}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"
+              >
+                {resolving ? 'Resolvendo…' : 'Confirmar e resolver'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AppLayout>
   );
 }
