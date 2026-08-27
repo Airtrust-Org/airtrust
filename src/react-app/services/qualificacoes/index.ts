@@ -283,8 +283,15 @@ export const qualificacoesService = {
       );
     },
 
-    async tiposQualificacao(limit = 1000): Promise<ApiResponse<TipoQualificacaoResumo[]>> {
-      return httpClient.get<TipoQualificacaoResumo[]>(`/qualificacoes/tipos?limit=${limit}`);
+    async tiposQualificacao(
+      limit = 1000,
+      categoriaId?: number | null,
+    ): Promise<ApiResponse<TipoQualificacaoResumo[]>> {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (categoriaId && Number.isFinite(categoriaId) && categoriaId > 0) {
+        params.set('categoria_id', String(categoriaId));
+      }
+      return httpClient.get<TipoQualificacaoResumo[]>(`/qualificacoes/tipos?${params.toString()}`);
     },
   },
 };
