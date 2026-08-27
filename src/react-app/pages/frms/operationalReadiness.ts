@@ -99,10 +99,9 @@ export type ReadinessAssessment = {
 };
 
 /**
- * V1 deliberately does NOT turn vigilance performance into an automatic fit/unfit decision.
- * Thresholds below are conservative workflow signals only and must be validated prospectively
- * before being used as an operational release criterion. Individual-baseline comparison will
- * supersede these population-style guards when enough observations exist.
+ * UI-side preview only. The Worker recomputes the authoritative readiness result from
+ * raw trials plus the tenant-scoped daily check-in. This helper mirrors those V1 rules
+ * so the browser never suggests a weaker state than the server would persist.
  */
 export function deriveReadinessAssessment(input: {
   kssScore: number | null;
@@ -125,27 +124,34 @@ export function deriveReadinessAssessment(input: {
   }
 
   if (input.vigilance) {
-    if (input.vigilance.falseStarts >= 3) {
+    if (input.vigilance.falseStarts > 2) {
       signals.push({ code: 'VIGILANCE_FALSE_STARTS', severity: 'attention', message: 'Múltiplas respostas antecipadas no teste de vigilância.' });
     }
-    if (input.vigilance.lapses >= 3 || input.vigilance.missed >= 2) {
-      signals.push({ code: 'VIGILANCE_LAPSES', severity: 'attention', message: 'Ocorreram lapsos relevantes no teste de vigilância.' });
+    const validTrials = input.vigilance.validResponses + input.vigilance.missed;
+    const lapseRate = validTrials > 0 ? input.vigilance.lapses / validTrials : 0;
+    if (lapseRate >= 0.2) {
+      signals.push({ code: 'VIGILANCE_LAPSES', severity: 'attention', message: 'A proporção de lapsos no teste de vigilância requer atenção.' });
     }
   }
 
-  if (input.baselineSessions < 5) {
+  const baselineReady = input.baselineSessions >= 5;
+  if (!baselineReady) {
     signals.push({
       code: 'BASELINE_BUILDING',
       severity: 'info',
       message: `Baseline individual em formação (${input.baselineSessions}/5 sessões mínimas).`,
     });
-    return { classification: 'baseline_building', signals };
   }
 
   if (signals.some((signal) => signal.severity === 'review')) {
     return { classification: 'operational_review', signals };
   }
-  if (signals.some((signal) => signal.severity === 'attention')) {
+
+  const attentionSignals = signals.filter((signal) => signal.severity === 'attention').length;
+  if (!baselineReady) {
+    return { classification: 'baseline_building', signals };
+  }
+  if (attentionSignals >= 2) {
     return { classification: 'attention', signals };
   }
   return { classification: 'preserved', signals };
