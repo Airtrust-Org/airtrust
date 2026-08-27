@@ -789,6 +789,7 @@ router.get('/daily-fatigue', async (c) => {
             fj.hora_apresentacao,
             ch.id AS checkin_id,
             ch.hora_checkin,
+            ch.kss_score,
             ch.horas_sono,
             ch.horas_sono_48h,
             ch.wake_time,
@@ -854,6 +855,7 @@ router.get('/daily-fatigue', async (c) => {
         ...row,
         date,
         status,
+        kss_score: hasCheckin && row.kss_score != null ? Number(row.kss_score) : null,
         data_source: source,
         sleep_hours_24h: hasCheckin ? Number(row.horas_sono || 0) : defaults.horasSonoPadrao,
         sleep_hours_48h: hasCheckin

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   mergeFadigaPainelHistory,
+  normalizeFadigaPainelPayload,
   type FadigaCheckinItem,
   type FadigaPainelEquipeItem,
 } from '@/react-app/hooks/useFadigaCheckin';
@@ -60,6 +61,28 @@ describe('mergeFadigaPainelHistory', () => {
   it('não sobrescreve KSS já informado pela visão diária', () => {
     const [result] = mergeFadigaPainelHistory([panel({ kss_score: 5 })], [history({ kss_score: 1 })]);
     expect(result.kss_score).toBe(5);
+  });
+
+  it('usa o kss_score que o endpoint daily-fatigue agora retorna diretamente', () => {
+    const [result] = normalizeFadigaPainelPayload({
+      date: '2026-08-27',
+      items: [
+        {
+          funcionario_id: 15,
+          funcionario_nome: 'Tripulante Teste',
+          checkin_id: 'checkin-1',
+          date: '2026-08-27',
+          status: 'normal',
+          data_source: 'crew_reported',
+          kss_score: 3,
+        },
+      ],
+    } as never);
+
+    expect(result.kss_score).toBe(3);
+    // Reconciliação vira no-op quando a fonte primária já trouxe o valor.
+    const [merged] = mergeFadigaPainelHistory([result], [history({ kss_score: 9 })]);
+    expect(merged.kss_score).toBe(3);
   });
 
   it('não mistura check-ins de outra pessoa ou outra data', () => {
