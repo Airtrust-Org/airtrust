@@ -1,0 +1,135 @@
+name: FRMS readiness branch integrator
+
+on:
+  push:
+    branches:
+      - feat/frms-operational-readiness-pvt-20260827
+    paths:
+      - .github/workflows/frms-readiness-integrator.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/frms-operational-readiness-pvt-20260827
+          fetch-depth: 0
+
+      - name: Apply deterministic readiness integration patch
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'anchor not found in {path}: {old[:120]!r}')
+              if text.count(old) != 1:
+                  raise SystemExit(f'anchor not unique in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Worker route registration.
+          replace_once(
+              'worker-airtrust/src/index.ts',
+              "import frmsFadigaCheckinRoutes from './routes/frms-fadiga-checkin';\n",
+              "import frmsFadigaCheckinRoutes from './routes/frms-fadiga-checkin';\nimport frmsReadinessRoutes from './routes/frms-readiness';\n",
+          )
+          replace_once(
+              'worker-airtrust/src/index.ts',
+              "// FRMS — Check-in diário de fadiga + bridge FRAT\napp.route('/api/frms', frmsFadigaCheckinRoutes);\n",
+              "// FRMS — Check-in diário de fadiga + bridge FRAT\napp.route('/api/frms', frmsFadigaCheckinRoutes);\n// FRMS — Avaliação objetiva de prontidão / vigilância breve\napp.route('/api/frms/readiness', frmsReadinessRoutes);\n",
+          )
+
+          # Make the vigilance component return the raw trials together with the summary.
+          replace_once(
+              'src/react-app/pages/frms/OperationalVigilanceTest.tsx',
+              "type OperationalVigilanceTestProps = {\n  durationMs?: number;\n  onComplete: (summary: VigilanceSummary) => void;\n  onCancel?: () => void;\n};\n",
+              "export type OperationalVigilanceResult = {\n  summary: VigilanceSummary;\n  trials: VigilanceTrial[];\n};\n\ntype OperationalVigilanceTestProps = {\n  durationMs?: number;\n  onComplete: (result: OperationalVigilanceResult) => void;\n  onCancel?: () => void;\n};\n",
+          )
+          replace_once(
+              'src/react-app/pages/frms/OperationalVigilanceTest.tsx',
+              "    onComplete(summary);\n",
+              "    onComplete({ summary, trials: trialsRef.current.map((trial) => ({ ...trial })) });\n",
+          )
+
+          # Check-in imports.
+          replace_once(
+              'src/react-app/pages/frms/FrmsCheckinFadiga.tsx',
+              "import { resolveFadigaPostSavePath } from './frmsPostSaveNavigation';\n",
+              "import { resolveFadigaPostSavePath } from './frmsPostSaveNavigation';\nimport OperationalVigilanceTest, {\n  type OperationalVigilanceResult,\n} from './OperationalVigilanceTest';\nimport { useSubmitReadiness } from '@/react-app/hooks/useOperationalReadiness';\n",
+          )
+
+          replace_once(
+              'src/react-app/pages/frms/FrmsCheckinFadiga.tsx',
+              "  const [submitAttempted, setSubmitAttempted] = useState(false);\n\n  const { data: existente, refetch } = useCheckinHoje();\n  const submitMutation = useSubmitCheckin();\n",
+              "  const [submitAttempted, setSubmitAttempted] = useState(false);\n  const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(null);\n\n  const { data: existente, refetch } = useCheckinHoje();\n  const submitMutation = useSubmitCheckin();\n  const readinessMutation = useSubmitReadiness();\n",
+          )
+
+          replace_once(
+              'src/react-app/pages/frms/FrmsCheckinFadiga.tsx',
+              "  const isNeedsCoordinatorReview = fitForDutyChoice === 'nao' || fitForDutyChoice === 'coord';\n",
+              "  const canSubmitWithReadiness = canSubmit && vigilanceResult !== null;\n  const isNeedsCoordinatorReview = fitForDutyChoice === 'nao' || fitForDutyChoice === 'coord';\n",
+          )
+
+          replace_once(
+              'src/react-app/pages/frms/FrmsCheckinFadiga.tsx',
+              "  if (kssScore === null) missingItems.push('Nível de sonolência (KSS)');\n",
+              "  if (kssScore === null) missingItems.push('Nível de sonolência (KSS)');\n  if (vigilanceResult === null) missingItems.push('Teste breve de atenção e tempo de reação');\n",
+          )
+
+          p = Path('src/react-app/pages/frms/FrmsCheckinFadiga.tsx')
+          text = p.read_text().replace('!canSubmit', '!canSubmitWithReadiness')
+          p.write_text(text)
+
+          replace_once(
+              'src/react-app/pages/frms/FrmsCheckinFadiga.tsx',
+              "      const result = await submitMutation.mutateAsync({\n",
+              "      if (!vigilanceResult) {\n        toast.error('Conclua o teste breve de atenção antes de enviar.');\n        return;\n      }\n\n      const result = await submitMutation.mutateAsync({\n",
+          )
+
+          replace_once(
+              'src/react-app/pages/frms/FrmsCheckinFadiga.tsx',
+              "      toast.success('Check-in de fadiga registrado com sucesso');\n",
+              "      await readinessMutation.mutateAsync({\n        reference_date: today,\n        duration_ms: vigilanceResult.summary.durationMs,\n        trials: vigilanceResult.trials,\n      });\n\n      toast.success('Check-in de fadiga e teste de atenção registrados com sucesso');\n",
+          )
+
+          anchor = '''              </FormCard>\n\n              <FormCard label="Bloco 3 - Condição para jornada">'''
+          replacement = '''              </FormCard>\n\n              <FormCard\n                label="Bloco 3 - Atenção e tempo de reação"\n                hint="Teste breve objetivo para complementar sono, KSS e sua autoavaliação. O resultado não determina aptidão isoladamente."\n              >\n                {vigilanceResult ? (\n                  <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">\n                    <div>\n                      <p className="text-sm font-semibold text-emerald-900">Teste concluído</p>\n                      <p className="mt-1 text-xs text-emerald-800">\n                        Mediana de resposta: {vigilanceResult.summary.medianRtMs == null ? '-' : `${Math.round(vigilanceResult.summary.medianRtMs)} ms`} ·\n                        Lapsos: {vigilanceResult.summary.lapseCount} ·\n                        Antecipações: {vigilanceResult.summary.falseStartCount}\n                      </p>\n                    </div>\n                    <Button variant="secondary" onClick={() => setVigilanceResult(null)}>\n                      Refazer teste\n                    </Button>\n                  </div>\n                ) : (\n                  <OperationalVigilanceTest onComplete={setVigilanceResult} />\n                )}\n              </FormCard>\n\n              <FormCard label="Bloco 4 - Condição para jornada">'''
+          replace_once('src/react-app/pages/frms/FrmsCheckinFadiga.tsx', anchor, replacement)
+
+          replace_once(
+              'src/react-app/pages/frms/FrmsCheckinFadiga.tsx',
+              '<FormCard label="Bloco 4 - Fatores relevantes" hint="Esses itens são opcionais.">',
+              '<FormCard label="Bloco 5 - Fatores relevantes" hint="Esses itens são opcionais.">',
+          )
+
+          replace_once(
+              'src/react-app/pages/frms/FrmsCheckinFadiga.tsx',
+              "loading={submitMutation.isPending}\n                disabled={!canSubmitWithReadiness || submitMutation.isPending}",
+              "loading={submitMutation.isPending || readinessMutation.isPending}\n                disabled={!canSubmitWithReadiness || submitMutation.isPending || readinessMutation.isPending}",
+          )
+          PY
+
+      - name: Verify patch anchors and TypeScript surface
+        run: |
+          grep -q "frmsReadinessRoutes" worker-airtrust/src/index.ts
+          grep -q "OperationalVigilanceTest" src/react-app/pages/frms/FrmsCheckinFadiga.tsx
+          grep -q "readinessMutation.mutateAsync" src/react-app/pages/frms/FrmsCheckinFadiga.tsx
+          grep -q "OperationalVigilanceResult" src/react-app/pages/frms/OperationalVigilanceTest.tsx
+
+      - name: Commit integration patch
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "airtrust-readiness-integrator"
+          git config user.email "actions@users.noreply.github.com"
+          git add worker-airtrust/src/index.ts src/react-app/pages/frms/OperationalVigilanceTest.tsx src/react-app/pages/frms/FrmsCheckinFadiga.tsx
+          git commit -m "feat(frms): integrate cognitive readiness into daily check-in"
+          git push origin HEAD:feat/frms-operational-readiness-pvt-20260827
