@@ -15,6 +15,13 @@ import { describe, expect, it } from 'vitest';
 import { finiteNumberOrNull, resolveProbedScormLocation } from '../../routes/lms-assets';
 
 const SOURCE = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
+// Pure/cohesive wrapper runtime blocks live in a sibling module to keep
+// lms-assets.ts under the architecture god-file cap; the wrapper interpolates them.
+const RUNTIME = readFileSync(
+  resolve(process.cwd(), 'src/services/lms-scorm-wrapper-runtime.ts'),
+  'utf8',
+);
+const WRAPPER = SOURCE + '\n' + RUNTIME;
 
 describe('resolveProbedScormLocation — DOM never overrides explicit SCORM location', () => {
   it('keeps an explicit 47/47 even when the DOM also shows a bigger 121/135', () => {
@@ -120,22 +127,24 @@ describe('wrapper wiring', () => {
 
   it('exposes an idempotent governed session-close handshake with a bounded timeout', () => {
     expect(SOURCE).toContain("event.data.type === 'lms:session-close'");
-    expect(SOURCE).toContain('function performGovernedSessionClose(reason)');
-    expect(SOURCE).toContain('if (sessionCloseHandled) {');
-    expect(SOURCE).toContain("type: 'lms:session-close:ack'");
-    expect(SOURCE).toContain('SESSION_CLOSE_TIMEOUT_MS');
+    expect(SOURCE).toContain('${buildScormSessionCloseRuntimeScript()}');
+    expect(WRAPPER).toContain('function performGovernedSessionClose(reason)');
+    expect(WRAPPER).toContain('if (sessionCloseHandled) {');
+    expect(WRAPPER).toContain("type: 'lms:session-close:ack'");
+    expect(WRAPPER).toContain('SESSION_CLOSE_TIMEOUT_MS');
     // never fabricates completion: it commits SCORM_FINISH and mirrors the API
     // terminate, but sets no lesson_status / score itself.
-    expect(SOURCE).toContain("commit(buildPayload(), 0, 'SCORM_FINISH')");
-    expect(SOURCE).toContain('if (apiInitialized) {');
+    expect(WRAPPER).toContain("commit(buildPayload(), 0, 'SCORM_FINISH')");
+    expect(WRAPPER).toContain('if (apiInitialized) {');
   });
 
   it('relays inner-frame AIRTRUST_COMPLETION_DIAGNOSTICS_V1 only from the scorm-frame window', () => {
-    expect(SOURCE).toContain('function relayPackageDiagnostics(event)');
-    expect(SOURCE).toContain("event.source !== frame.contentWindow");
-    expect(SOURCE).toContain("data.type !== 'AIRTRUST_COMPLETION_DIAGNOSTICS_V1'");
-    expect(SOURCE).toContain('MAX_RELAYED_DIAGNOSTICS_CHARS');
-    expect(SOURCE).toContain("type: 'lms:completion-diagnostics'");
+    expect(SOURCE).toContain('if (relayPackageDiagnostics(event)) return;');
+    expect(WRAPPER).toContain('function relayPackageDiagnostics(event)');
+    expect(WRAPPER).toContain('event.source !== frame.contentWindow');
+    expect(WRAPPER).toContain("data.type !== 'AIRTRUST_COMPLETION_DIAGNOSTICS_V1'");
+    expect(WRAPPER).toContain('MAX_RELAYED_DIAGNOSTICS_CHARS');
+    expect(WRAPPER).toContain("type: 'lms:completion-diagnostics'");
   });
 
   it('keeps the suspend_data regression guard intact (fix 9 — no global bypass)', () => {
