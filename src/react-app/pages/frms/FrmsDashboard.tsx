@@ -226,18 +226,12 @@ function DetailDrawer({
             ) : null}
           </section>
 
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2">
             <Link
               to={`/frms/tripulante/${item.tripulante_id}?origem=operacao&data=${encodeURIComponent(date)}`}
               className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
             >
               Histórico
-            </Link>
-            <Link
-              to={`/frms/frat?tripulante_id=${item.tripulante_id}&data=${encodeURIComponent(date)}`}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
-            >
-              Abrir FRAT
             </Link>
             <Link
               to={`/frms/alertas?tripulante_id=${item.tripulante_id}`}
