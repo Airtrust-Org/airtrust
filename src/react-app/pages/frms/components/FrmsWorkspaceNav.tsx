@@ -10,14 +10,27 @@ const ADMIN_PATHS = [
   '/frms/relatorios',
 ] as const;
 
-const ADMIN_LINKS = [
-  { label: 'Parâmetros', to: '/frms/configuracoes' },
-  { label: 'SIGVOOS', to: '/frms/sigvoos' },
-  { label: 'Check-in diário', to: '/frms/checkin' },
-  { label: 'Importar FIRA', to: '/frms/importacao/fira' },
-  { label: 'Histórico FIRA', to: '/frms/importacao/fira/historico' },
-  { label: 'Escalas', to: '/frms/escalas' },
-  { label: 'Relatórios', to: '/frms/relatorios' },
+const ADMIN_GROUPS = [
+  {
+    label: 'Configuração',
+    links: [
+      { label: 'Parâmetros', to: '/frms/configuracoes' },
+      { label: 'SIGVOOS', to: '/frms/sigvoos' },
+    ],
+  },
+  {
+    label: 'Dados de entrada',
+    links: [
+      { label: 'Check-in diário', to: '/frms/checkin' },
+      { label: 'Importar FIRA', to: '/frms/importacao/fira' },
+      { label: 'Histórico FIRA', to: '/frms/importacao/fira/historico' },
+      { label: 'Escalas', to: '/frms/escalas' },
+    ],
+  },
+  {
+    label: 'Consulta',
+    links: [{ label: 'Relatórios', to: '/frms/relatorios' }],
+  },
 ] as const;
 
 function isAdminPath(pathname: string): boolean {
@@ -65,18 +78,25 @@ export default function FrmsWorkspaceNav() {
       {adminActive ? (
         <nav
           aria-label="Administração FRMS"
-          className="flex flex-wrap gap-1 rounded-lg border border-slate-200/80 bg-slate-50 p-1.5 dark:border-slate-800 dark:bg-slate-900/60"
+          className="grid gap-2 rounded-lg border border-slate-200/80 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-900/60 lg:grid-cols-[auto_1fr_auto]"
         >
-          {ADMIN_LINKS.map((link) => (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              className={secondaryClass(
-                location.pathname === link.to || location.pathname.startsWith(`${link.to}/`),
-              )}
-            >
-              {link.label}
-            </NavLink>
+          {ADMIN_GROUPS.map((group) => (
+            <div key={group.label} className="flex flex-wrap items-center gap-1">
+              <span className="px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                {group.label}
+              </span>
+              {group.links.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  className={secondaryClass(
+                    location.pathname === link.to || location.pathname.startsWith(`${link.to}/`),
+                  )}
+                >
+                  {link.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
       ) : null}
