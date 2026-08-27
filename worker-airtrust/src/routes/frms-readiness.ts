@@ -86,7 +86,16 @@ router.get('/baseline', async (c) => {
     return c.json({ success: false, error: 'Funcionario nao encontrado para o usuario atual' }, 404);
   }
 
-  const sessions = await countReadinessBaselineSessions(c.env.DB, empresaId, funcionarioId);
+  const excludeDate = c.req.query('date');
+  if (excludeDate && !/^\d{4}-\d{2}-\d{2}$/.test(excludeDate)) {
+    return c.json({ success: false, error: 'invalid_reference_date' }, 400);
+  }
+  const sessions = await countReadinessBaselineSessions(
+    c.env.DB,
+    empresaId,
+    funcionarioId,
+    excludeDate || undefined,
+  );
   return c.json({
     success: true,
     data: {

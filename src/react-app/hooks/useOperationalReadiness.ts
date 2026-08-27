@@ -56,10 +56,15 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return json.data as T;
 }
 
-export function useReadinessBaseline() {
+export function useReadinessBaseline(referenceDate?: string) {
   return useQuery({
-    queryKey: ['frms-readiness-baseline'],
-    queryFn: () => fetchJson<ReadinessBaseline>('/frms/readiness/baseline'),
+    queryKey: ['frms-readiness-baseline', referenceDate || null],
+    queryFn: () =>
+      fetchJson<ReadinessBaseline>(
+        referenceDate
+          ? `/frms/readiness/baseline?date=${encodeURIComponent(referenceDate)}`
+          : '/frms/readiness/baseline',
+      ),
     staleTime: 5 * 60 * 1000,
   });
 }

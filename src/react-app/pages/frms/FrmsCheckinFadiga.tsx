@@ -509,7 +509,7 @@ export default function FrmsCheckinFadiga() {
   const { data: existente, refetch } = useCheckinHoje();
   const submitMutation = useSubmitCheckin();
   const readinessMutation = useSubmitReadiness();
-  const { data: readinessBaseline } = useReadinessBaseline();
+  const { data: readinessBaseline } = useReadinessBaseline(today);
   const { data: readinessToday } = useReadinessToday(today);
 
   const canSubmit = isFadigaCheckinSubmitReady({
@@ -894,9 +894,9 @@ export default function FrmsCheckinFadiga() {
                     <div>
                       <p className="text-sm font-semibold text-emerald-900">Teste concluído</p>
                       <p className="mt-1 text-xs text-emerald-800">
-                        Mediana de resposta: {vigilanceResult.summary.medianRtMs == null ? '-' : `${Math.round(vigilanceResult.summary.medianRtMs)} ms`} ·
-                        Lapsos: {vigilanceResult.summary.lapseCount} ·
-                        Antecipações: {vigilanceResult.summary.falseStartCount}
+                        Mediana de resposta: {vigilanceResult.summary.medianReactionTimeMs == null ? '-' : `${Math.round(vigilanceResult.summary.medianReactionTimeMs)} ms`} ·
+                        Lapsos: {vigilanceResult.summary.lapses} ·
+                        Antecipações: {vigilanceResult.summary.falseStarts}
                       </p>
                     </div>
                     <Button variant="secondary" onClick={() => setVigilanceResult(null)}>
