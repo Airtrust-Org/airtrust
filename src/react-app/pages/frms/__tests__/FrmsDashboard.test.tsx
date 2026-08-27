@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
@@ -167,18 +167,18 @@ describe('FrmsDashboard simplificado', () => {
     renderDashboard();
     fireEvent.click(screen.getByRole('button', { name: /Pessoa Crítica/i }));
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    const drawer = within(screen.getByRole('dialog'));
     expect(screen.getAllByText('Limite operacional excedido.').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Não despachar até mitigação.').length).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: 'Histórico' })).toHaveAttribute(
+    expect(drawer.getByRole('link', { name: 'Histórico' })).toHaveAttribute(
       'href',
       '/frms/tripulante/30?origem=operacao&data=2026-08-27',
     );
-    expect(screen.getByRole('link', { name: 'Casos' })).toHaveAttribute(
+    expect(drawer.getByRole('link', { name: 'Casos' })).toHaveAttribute(
       'href',
       '/frms/alertas?tripulante_id=30',
     );
-    expect(screen.queryByRole('link', { name: 'Abrir FRAT' })).not.toBeInTheDocument();
+    expect(drawer.queryByRole('link', { name: 'Abrir FRAT' })).not.toBeInTheDocument();
   });
 
   it('mantém o último estado válido visível quando a atualização falha', () => {
