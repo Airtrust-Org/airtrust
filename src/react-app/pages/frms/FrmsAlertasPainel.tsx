@@ -1,149 +1,98 @@
-/**
- * FRMS — Painel de Alertas (/frms/alertas)
- *
- * Lista paginada e filtrada de alertas FRMS.
- * Ações: visualizar, resolver, filtrar por nível/tipo/tripulante.
- */
-import { useState, useCallback, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  AlertTriangle,
-  Eye,
-  CheckCircle2,
-  Filter,
-  Bell,
-  BellOff,
-  ChevronDown,
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, Eye, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
 import { EmptyState } from '@/react-app/components/UI/EmptyState';
-import { useFrmsAlertas, useFrmsMutation } from '@/react-app/hooks/useFrms';
-import type { FrmsAlertaRow } from '@/react-app/hooks/useFrms';
-import { toast } from 'sonner';
+import { useFrmsAlertas, useFrmsMutation, type FrmsAlertaRow } from '@/react-app/hooks/useFrms';
+import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
 
 const NIVEIS = ['AVISO', 'ATENCAO', 'CRITICO', 'VIOLACAO'] as const;
 
-const NIVEL_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
-  AVISO: {
-    bg: 'bg-slate-50 border-slate-200',
-    text: 'text-slate-700',
-    icon: 'text-slate-500',
-  },
-  ATENCAO: {
-    bg: 'bg-yellow-50 border-yellow-200',
-    text: 'text-yellow-800',
-    icon: 'text-yellow-500',
-  },
-  CRITICO: {
-    bg: 'bg-orange-50 border-orange-200',
-    text: 'text-orange-800',
-    icon: 'text-orange-500',
-  },
-  VIOLACAO: { bg: 'bg-red-50 border-red-200', text: 'text-red-800', icon: 'text-red-500' },
+const NIVEL_STYLE: Record<string, string> = {
+  AVISO: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200',
+  ATENCAO:
+    'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
+  CRITICO:
+    'border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-200',
+  VIOLACAO:
+    'border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200',
 };
 
-function nivelBadge(nivel: string) {
-  const displayNivel = nivel;
-  const s = NIVEL_STYLES[displayNivel] || {
-    bg: 'bg-gray-50 border-gray-200',
-    text: 'text-gray-700',
-    icon: '',
-  };
-  const label =
-    displayNivel === 'AVISO'
-      ? 'AVISO'
-      : displayNivel === 'ATENCAO'
-        ? 'ATENÇÃO'
-        : displayNivel === 'CRITICO'
-          ? 'CRÍTICO'
-          : displayNivel === 'VIOLACAO'
-            ? 'VIOLAÇÃO'
-            : displayNivel;
-  return (
-    <span
-      className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold ${s.bg} ${s.text} border`}
-    >
-      {label}
-    </span>
-  );
+function nivelLabel(nivel: string): string {
+  if (nivel === 'ATENCAO') return 'ATENÇÃO';
+  if (nivel === 'CRITICO') return 'CRÍTICO';
+  if (nivel === 'VIOLACAO') return 'VIOLAÇÃO';
+  return nivel;
 }
 
-function formatAlertaData(createdAt: string): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(createdAt)) {
-    const [ano, mes, dia] = createdAt.split('-').map(Number);
-    const dataLocal = new Date(ano, mes - 1, dia);
-    return dataLocal.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  }
-
-  const data = new Date(createdAt.replace(' ', 'T'));
-  if (Number.isNaN(data.getTime())) return 'dia do fato não informado';
-
-  return data.toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
+function factDate(alert: FrmsAlertaRow): string {
+  const raw = alert.data_fato || alert.data_jornada || alert.created_at;
+  if (!raw) return 'data não informada';
+  const iso = raw.includes(' ') ? raw.replace(' ', 'T') : raw;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return raw.slice(0, 10);
+  return parsed.toLocaleDateString('pt-BR');
 }
 
 export default function FrmsAlertasPainel() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const nivelParam = searchParams.get('nivel');
+  const nivelParam = searchParams.get('nivel') || '';
+  const tripulanteParam = searchParams.get('tripulante_id') || '';
+  const [nivel, setNivel] = useState(
+    NIVEIS.includes(nivelParam as (typeof NIVEIS)[number]) ? nivelParam : '',
+  );
+  const [status, setStatus] = useState<'ativos' | 'resolvidos' | 'todos'>('ativos');
   const { mutate } = useFrmsMutation();
 
-  const [filtroNivel, setFiltroNivel] = useState<string>(
-    nivelParam && NIVEIS.includes(nivelParam as (typeof NIVEIS)[number]) ? nivelParam : '',
-  );
-  const [filtroResolvido, setFiltroResolvido] = useState('false');
-  const [page, setPage] = useState(1);
-  const limit = 25;
-
   useEffect(() => {
-    if (nivelParam && NIVEIS.includes(nivelParam as (typeof NIVEIS)[number])) {
-      setFiltroNivel(nivelParam);
-      setPage(1);
-    }
+    if (NIVEIS.includes(nivelParam as (typeof NIVEIS)[number])) setNivel(nivelParam);
   }, [nivelParam]);
 
-  const filtros: Record<string, string> = {
-    resolvido: filtroResolvido,
-    limit: String(limit),
-    page: String(page),
-  };
-  if (filtroNivel) filtros.nivel = filtroNivel;
+  const filtros = useMemo(() => {
+    const next: Record<string, string> = { limit: '100', page: '1' };
+    if (nivel) next.nivel = nivel;
+    if (status === 'ativos') next.resolvido = 'false';
+    if (status === 'resolvidos') next.resolvido = 'true';
+    if (tripulanteParam) next.tripulante_id = tripulanteParam;
+    return next;
+  }, [nivel, status, tripulanteParam]);
 
-  const { data: alertasData, loading, refetch } = useFrmsAlertas(filtros);
-  const alertas: FrmsAlertaRow[] = Array.isArray(alertasData) ? alertasData : [];
+  const { data, loading, error, refetch } = useFrmsAlertas(filtros);
+  const cases: FrmsAlertaRow[] = Array.isArray(data) ? data : [];
 
-  const handleVisualizar = useCallback(
+  const counts = useMemo(
+    () => ({
+      total: cases.length,
+      criticos: cases.filter((item) => item.nivel === 'CRITICO' || item.nivel === 'VIOLACAO').length,
+      atencao: cases.filter((item) => item.nivel === 'ATENCAO').length,
+    }),
+    [cases],
+  );
+
+  const markViewed = useCallback(
     async (id: string) => {
       try {
         await mutate(`/api/frms/alertas/${id}/visualizar`, { method: 'PUT' });
-        toast.success('Alerta marcado como visualizado');
-        refetch();
+        await refetch();
       } catch {
-        toast.error('Erro ao marcar como visualizado');
+        toast.error('Não foi possível registrar a visualização do caso.');
       }
     },
     [mutate, refetch],
   );
 
-  const handleResolver = useCallback(
+  const resolveCase = useCallback(
     async (id: string) => {
       try {
         await mutate(`/api/frms/alertas/${id}/resolver`, {
           method: 'PUT',
           body: JSON.stringify({ notas: '' }),
         });
-        toast.success('Alerta resolvido');
-        refetch();
+        toast.success('Caso resolvido.');
+        await refetch();
       } catch {
-        toast.error('Erro ao resolver alerta');
+        toast.error('Não foi possível resolver o caso.');
       }
     },
     [mutate, refetch],
@@ -151,184 +100,155 @@ export default function FrmsAlertasPainel() {
 
   return (
     <AppLayout>
-      <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/frms')}
-            className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" /> Voltar
-          </button>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-gray-900">Alertas FRMS</h1>
-            <p className="text-sm text-gray-500">
-              Gestão de alertas de fadiga e limites operacionais
+      <div className="space-y-5">
+        <FrmsWorkspaceNav />
+
+        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">FRMS</p>
+            <h1 className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">Casos</h1>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              Pendências operacionais que precisam ser acompanhadas até o fechamento.
             </p>
           </div>
-        </div>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            disabled={loading}
+            className="inline-flex h-10 items-center gap-2 self-start rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </button>
+        </header>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white p-4">
-          <Filter className="h-4 w-4 text-gray-400" />
+        <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo de casos">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">No filtro</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{loading && !data ? '—' : counts.total}</p>
+          </div>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
+            <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Crítico / violação</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-red-800 dark:text-red-200">{loading && !data ? '—' : counts.criticos}</p>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Atenção</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-amber-800 dark:text-amber-200">{loading && !data ? '—' : counts.atencao}</p>
+          </div>
+        </section>
 
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
+          <label className="relative">
+            <span className="sr-only">Filtrar por nível</span>
             <select
-              value={filtroNivel}
-              onChange={(e) => {
-                setFiltroNivel(e.target.value);
-                setPage(1);
-              }}
-              className="appearance-none rounded-lg border border-gray-200 pl-3 pr-8 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
+              value={nivel}
+              onChange={(event) => setNivel(event.target.value)}
+              className="appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-9 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             >
-              <option value="">Todos os Níveis</option>
-              {NIVEIS.map((n) => (
-                <option key={n} value={n}>
-                  {n === 'AVISO'
-                    ? 'Aviso'
-                    : n === 'ATENCAO'
-                      ? 'Atenção'
-                      : n === 'CRITICO'
-                        ? 'Crítico'
-                        : n === 'VIOLACAO'
-                          ? 'Violação'
-                          : n}
-                </option>
-              ))}
+              <option value="">Todos os níveis</option>
+              {NIVEIS.map((item) => <option key={item} value={item}>{nivelLabel(item)}</option>)}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </label>
+
+          <div className="inline-flex rounded-lg border border-slate-200 p-1 dark:border-slate-700">
+            {(['ativos', 'resolvidos', 'todos'] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setStatus(item)}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                  status === item
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                    : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                {item === 'ativos' ? 'Ativos' : item === 'resolvidos' ? 'Resolvidos' : 'Todos'}
+              </button>
+            ))}
           </div>
 
-          <div className="relative">
-            <select
-              value={filtroResolvido}
-              onChange={(e) => {
-                setFiltroResolvido(e.target.value);
-                setPage(1);
-              }}
-              className="appearance-none rounded-lg border border-gray-200 pl-3 pr-8 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
-            >
-              <option value="false">Apenas Ativos</option>
-              <option value="true">Apenas Resolvidos</option>
-              <option value="">Todos</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          </div>
-
-          <span className="ml-auto text-xs text-gray-400">
-            {alertas.length} resultado(s) — Página {page}
-          </span>
+          {tripulanteParam ? (
+            <Link to="/frms/alertas" className="text-xs font-semibold text-primary hover:underline">
+              Remover filtro de tripulante
+            </Link>
+          ) : null}
         </div>
 
-        {/* List */}
-        <div className="space-y-3">
-          {loading ? (
-            <div className="rounded-xl border border-gray-200 bg-white p-12 text-center text-gray-400">
-              Carregando alertas...
+        {error ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+            Não foi possível atualizar os casos. Tente novamente antes de tomar uma decisão operacional.
+          </div>
+        ) : null}
+
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+          {loading && !data ? (
+            <div className="space-y-3 p-4" aria-label="Carregando casos">
+              {[0, 1, 2].map((item) => <div key={item} className="h-24 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-900" />)}
             </div>
-          ) : alertas.length === 0 ? (
-            <div className="py-12 bg-white rounded-xl border border-gray-200">
+          ) : cases.length === 0 ? (
+            <div className="py-12">
               <EmptyState
-                icon={<BellOff size={48} className="text-slate-300" />}
-                title="Sem alertas"
-                description="Nenhum alerta encontrado para os filtros aplicados."
+                icon={<BellOff size={44} className="text-slate-300" />}
+                title="Nenhum caso neste filtro"
+                description="Não há pendências FRMS correspondentes aos filtros selecionados."
               />
             </div>
           ) : (
-            alertas.map((a) => {
-              const styles = NIVEL_STYLES[a.nivel] || NIVEL_STYLES.AVISO;
-              const nome = a.nome_tripulante ?? `Tripulante #${a.tripulante_id}`;
-              const fichaUrl = a.tripulante_id ? `/frms/tripulante/${a.tripulante_id}` : null;
-              const mensagemBase = a.mensagem
-                .replace(/Tripulante #\d+/g, nome)
-                .replace(/^[^:]+:\s*/, '');
-              const dataFato = a.data_fato || a.data_jornada;
-              const dataFatoLabel = dataFato
-                ? formatAlertaData(dataFato)
-                : 'dia do fato não informado';
-              const mensagemCompleta = `${nome}: ${mensagemBase} no dia ${dataFatoLabel}`;
-              return (
-                <div key={a.id} className={`rounded-xl border p-4 ${styles.bg} transition-colors`}>
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className={`h-5 w-5 mt-0.5 flex-shrink-0 ${styles.icon}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        {nivelBadge(a.nivel)}
-                        <span className="text-xs text-gray-400 ml-auto tabular-nums">
-                          {dataFatoLabel}
-                        </span>
+            <div className="divide-y divide-slate-100 dark:divide-slate-900">
+              {cases.map((item) => {
+                const name = item.nome_tripulante || `Tripulante #${item.tripulante_id}`;
+                const levelClass = NIVEL_STYLE[item.nivel] || NIVEL_STYLE.AVISO;
+                return (
+                  <article key={item.id} className="p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+                      <AlertTriangle className="mt-1 h-5 w-5 flex-none text-amber-500" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${levelClass}`}>{nivelLabel(item.nivel)}</span>
+                          <span className="text-xs text-slate-500">{factDate(item)}</span>
+                          {item.visualizado ? <span className="text-xs text-slate-400">visualizado</span> : null}
+                        </div>
+                        <h2 className="mt-2 font-bold text-slate-950 dark:text-white">{name}</h2>
+                        <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{item.mensagem}</p>
+                        <p className="mt-2 text-xs text-slate-500">Tipo: {item.tipo_limite || 'não informado'}</p>
                       </div>
-                      {fichaUrl && (
-                        <Link
-                          to={fichaUrl}
-                          className="inline-flex text-xs font-semibold text-blue-700 hover:text-blue-800 hover:underline"
-                        >
-                          {nome}
-                        </Link>
-                      )}
-                      <p className={`text-sm font-medium ${styles.text}`}>{mensagemCompleta}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {nome}
-                        {a.valor_atual_min != null && (
-                          <>
-                            {' '}
-                            — Valor: <span className="font-semibold">
-                              {a.valor_atual_min}
-                            </span> / {a.valor_limite_min}
-                          </>
-                        )}
-                      </p>
-                      {a.notas_resolucao && (
-                        <p className="text-xs text-gray-500 mt-1 italic">
-                          Resolução: {a.notas_resolucao}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {!a.visualizado_em && a.visualizado === 0 && (
-                        <button
-                          onClick={() => handleVisualizar(a.id)}
-                          title="Marcar como visualizado"
-                          className="rounded-lg p-1.5 hover:bg-white/50 transition-colors"
-                        >
-                          <Eye className="h-4 w-4 text-gray-500" />
-                        </button>
-                      )}
-                      {!a.resolvido_em && a.resolvido === 0 && (
-                        <button
-                          onClick={() => handleResolver(a.id)}
-                          title="Resolver"
-                          className="rounded-lg p-1.5 hover:bg-white/50 transition-colors"
-                        >
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
 
-        {/* Pagination */}
-        {alertas.length === limit && (
-          <div className="flex justify-center gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-            >
-              Anterior
-            </button>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              Próxima
-            </button>
-          </div>
-        )}
+                      <div className="flex flex-wrap gap-2 lg:w-64 lg:justify-end">
+                        {item.tripulante_id ? (
+                          <Link
+                            to={`/frms/tripulante/${item.tripulante_id}?origem=casos`}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"
+                          >
+                            Ver pessoa
+                          </Link>
+                        ) : null}
+                        {!item.visualizado ? (
+                          <button
+                            type="button"
+                            onClick={() => void markViewed(item.id)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"
+                          >
+                            <Eye className="h-3.5 w-3.5" /> Marcar visto
+                          </button>
+                        ) : null}
+                        {!item.resolvido ? (
+                          <button
+                            type="button"
+                            onClick={() => void resolveCase(item.id)}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Resolver
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </AppLayout>
   );

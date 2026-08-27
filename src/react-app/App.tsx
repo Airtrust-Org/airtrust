@@ -924,6 +924,14 @@ export default function App() {
                         </ProtectedRoute>
                       }
                     />
+                    {/* SIGVOOS já é integração ativa e canônica em Configurações.
+                        O atalho FRMS aponta para o destino real. */}
+                    <Route
+                      path="/frms/sigvoos"
+                      element={<Navigate to="/configuracoes/integracoes/sigvoos" replace />}
+                    />
+                    {/* Qualquer rota FRMS legada/obsoleta cai de forma segura na tela operacional. */}
+                    <Route path="/frms/*" element={<Navigate to="/frms" replace />} />
 
                     {/* SGSO — Sistema de Gerenciamento de Segurança Operacional */}
                     <Route
