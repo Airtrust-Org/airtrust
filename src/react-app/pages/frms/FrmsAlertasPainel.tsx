@@ -255,10 +255,14 @@ export default function FrmsAlertasPainel() {
                         <p className="mt-2 text-xs text-slate-500">Tipo: {item.tipo_limite || 'não informado'}</p>
                         {item.resolvido ? (
                           <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                            <span className="font-semibold">Resolvido</span>
-                            {item.resolvido_por ? ` por ${item.resolvido_por}` : ''}
-                            {resolutionDate ? ` em ${resolutionDate}` : ''}.
-                            {item.notas_resolucao ? <span className="block mt-1">Registro: {item.notas_resolucao}</span> : null}
+                            <p className="font-semibold text-slate-700 dark:text-slate-200">
+                              {`Resolvido${item.resolvido_por ? ` por ${item.resolvido_por}` : ''}${
+                                resolutionDate ? ` em ${resolutionDate}` : ''
+                              }.`}
+                            </p>
+                            {item.notas_resolucao ? (
+                              <p className="mt-1">Registro: {item.notas_resolucao}</p>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
