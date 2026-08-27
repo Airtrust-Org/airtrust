@@ -357,8 +357,20 @@ export function resolveCompletionExplanation(params: {
     };
   }
 
+  // Autoridade canônica: score/mastery/decisão canônicos, quando presentes,
+  // vencem o snapshot granular (que é apenas explicativo e pode estar stale).
+  const scorePct = canonical?.score_pct ?? null;
+  const masteryCanonical = canonical?.mastery_score ?? null;
+  const canonicalScoreEvidence = scorePct !== null && masteryCanonical !== null;
+  const canonicalIndicatesPass = canonicalScoreEvidence && (scorePct as number) >= (masteryCanonical as number);
+  // "decisão canônica atual que não indique reprovação"
+  const canonicalNonFailure = canonical?.explicit_failure === false || canonicalIndicatesPass;
+
   // --- Prioridade 2A: avaliações reprovadas com módulo identificado ---------
-  const failedModules = (granular?.moduleResults ?? []).filter(moduleAssessmentFailed);
+  // moduleResults stale não pode contradizer uma decisão canônica atual de não-reprovação.
+  const failedModules = canonicalNonFailure
+    ? []
+    : (granular?.moduleResults ?? []).filter(moduleAssessmentFailed);
   if (failedModules.length > 0) {
     return {
       canComplete: false,
@@ -379,15 +391,18 @@ export function resolveCompletionExplanation(params: {
   }
 
   // --- Prioridade 2B: reprovação / nota global abaixo da mínima -------------
-  const scorePct = canonical?.score_pct ?? null;
-  const masteryCanonical = canonical?.mastery_score ?? null;
   const granularScore = granular?.assessment.scoreRaw ?? null;
   const granularMastery = granular?.assessment.masteryScore ?? null;
-  const obtained = granularScore ?? scorePct;
-  const minimum = granularMastery ?? masteryCanonical;
+  // Canônico ganha sempre que presente; granular é só fallback quando ausente.
+  const obtained = scorePct ?? granularScore;
+  const minimum = masteryCanonical ?? granularMastery;
 
-  const failedByFlag = canonical?.explicit_failure === true || granular?.assessment.passed === false;
-  const failedByScore = obtained !== null && minimum !== null && obtained < minimum;
+  // O flag de reprovação granular (passed === false) só é considerado quando o
+  // canônico não apresenta evidência atual de aprovação/não-reprovação.
+  const trustGranularFailFlag = !canonicalNonFailure && granular?.assessment.passed === false;
+  const failedByFlag = canonical?.explicit_failure === true || trustGranularFailFlag;
+  const failedByScore =
+    !canonicalIndicatesPass && obtained !== null && minimum !== null && obtained < minimum;
 
   if (failedByFlag || failedByScore) {
     const label =
