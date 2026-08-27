@@ -1,7 +1,11 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import FrmsWorkspaceNav from '../components/FrmsWorkspaceNav';
+
+vi.mock('../components/FrmsSourcePolicyBanner', () => ({
+  default: () => <div data-testid="sigvoos-health">Saúde SIGVOOS</div>,
+}));
 
 function renderNav(path: string) {
   return render(
@@ -22,11 +26,13 @@ describe('FrmsWorkspaceNav', () => {
       'Administração',
     ]);
     expect(screen.queryByRole('navigation', { name: 'Administração FRMS' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sigvoos-health')).not.toBeInTheDocument();
   });
 
-  it('agrupa Administração em configuração, dados de entrada e consulta', () => {
+  it('agrupa Administração e exibe a saúde SIGVOOS dentro do módulo', () => {
     renderNav('/frms/configuracoes');
 
+    expect(screen.getByTestId('sigvoos-health')).toBeInTheDocument();
     const admin = screen.getByRole('navigation', { name: 'Administração FRMS' });
     expect(within(admin).getByText('Configuração')).toBeInTheDocument();
     expect(within(admin).getByText('Dados de entrada')).toBeInTheDocument();

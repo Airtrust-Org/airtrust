@@ -84,9 +84,9 @@ function state(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderDashboard() {
+function renderDashboard(initialEntry = '/frms') {
   return render(
-    <MemoryRouter initialEntries={['/frms']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <FrmsDashboard />
     </MemoryRouter>,
   );
@@ -109,6 +109,17 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.queryByText('Operação agora')).not.toBeInTheDocument();
   });
 
+  it('usa o dia operacional da URL no snapshot', () => {
+    renderDashboard('/frms?data=2026-08-20');
+
+    expect(useFrmsOperationalSnapshotMock).toHaveBeenCalledWith({
+      data_inicio: '2026-08-20',
+      data_fim: '2026-08-20',
+      include_inconsistencies: true,
+    });
+    expect(screen.getByLabelText('Dia operacional')).toHaveValue('2026-08-20');
+  });
+
   it('não mostra zero operacional durante a primeira carga', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
       state({ data: [], loading: true, lastUpdatedAt: null }),
@@ -120,7 +131,18 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
   });
 
-  it('trata dado incompleto como confirmação e esconde efetividade não confiável', () => {
+  it('rebaixa sem pendência e mantém o resumo superior só com métricas de ação', () => {
+    renderDashboard();
+
+    const summary = within(screen.getByLabelText('Resumo operacional'));
+    expect(summary.getByText('Bloqueia')).toBeInTheDocument();
+    expect(summary.getByText('Decidir')).toBeInTheDocument();
+    expect(summary.getByText('Confirmar')).toBeInTheDocument();
+    expect(summary.queryByText('Sem pendência')).not.toBeInTheDocument();
+    expect(screen.getByText(/pessoa\(s\) sem pendência no recorte atual/i)).toBeInTheDocument();
+  });
+
+  it('trata dado incompleto como confirmação, esconde efetividade não confiável e explica o que falta', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
       state({
         data: [
@@ -143,9 +165,14 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.getAllByText('Confirmar').length).toBeGreaterThan(0);
     expect(screen.getByText('Jornada ainda não consolidada.')).toBeInTheDocument();
     expect(screen.getByText('Efetividade não calculada')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Max/i }));
+    const drawer = within(screen.getByRole('dialog'));
+    expect(drawer.getByText(/Falta: sem jornada/i)).toBeInTheDocument();
+    expect(drawer.getByText('Jornada: ausente')).toBeInTheDocument();
   });
 
-  it('abre o detalhe no mesmo contexto e só oferece destinos FRMS válidos', () => {
+  it('abre o detalhe no mesmo contexto e marca consultas externas como secundárias', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
       state({
         data: [
@@ -164,17 +191,18 @@ describe('FrmsDashboard simplificado', () => {
       }),
     );
 
-    renderDashboard();
+    renderDashboard('/frms?data=2026-08-27');
     fireEvent.click(screen.getByRole('button', { name: /Pessoa Crítica/i }));
 
     const drawer = within(screen.getByRole('dialog'));
     expect(screen.getAllByText('Limite operacional excedido.').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Não despachar até mitigação.').length).toBeGreaterThan(0);
-    expect(drawer.getByRole('link', { name: 'Histórico' })).toHaveAttribute(
+    expect(drawer.getByText(/Consultas secundárias — abrem outra tela/i)).toBeInTheDocument();
+    expect(drawer.getByRole('link', { name: 'Abrir histórico (outra tela)' })).toHaveAttribute(
       'href',
       '/frms/tripulante/30?origem=operacao&data=2026-08-27',
     );
-    expect(drawer.getByRole('link', { name: 'Casos' })).toHaveAttribute(
+    expect(drawer.getByRole('link', { name: 'Abrir casos (outra tela)' })).toHaveAttribute(
       'href',
       '/frms/alertas?tripulante_id=30',
     );

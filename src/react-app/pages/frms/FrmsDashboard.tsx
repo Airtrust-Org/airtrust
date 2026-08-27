@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -66,6 +66,10 @@ function localTodayIso(): string {
   return local.toISOString().slice(0, 10);
 }
 
+function isOperationalDate(value: string | null): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
 function formatUpdated(value: string | null): string {
   if (!value) return 'ainda não atualizado';
   const date = new Date(value);
@@ -77,15 +81,17 @@ function displayName(item: FrmsOperationalSnapshotItem): string {
   return item.nome_guerra?.trim() || item.nome?.trim() || `Tripulante #${item.tripulante_id}`;
 }
 
-function sourceLabel(item: FrmsOperationalSnapshotItem): string {
-  const parts = [
-    item.escala_source !== 'AUSENTE' ? `escala ${item.escala_source}` : 'escala ausente',
-    item.jornada_data_source !== 'AUSENTE'
-      ? `jornada ${item.jornada_data_source}`
-      : 'jornada ausente',
-    item.sleep_data_source !== 'AUSENTE' ? `sono ${item.sleep_data_source}` : 'sono ausente',
-  ];
-  return parts.join(' · ');
+function confidenceGaps(item: FrmsOperationalSnapshotItem): string[] {
+  const gaps: string[] = [];
+
+  if (item.escala_source === 'AUSENTE') gaps.push('sem escala canônica');
+  if (item.jornada_data_source === 'AUSENTE') gaps.push('sem jornada');
+  else if (/ESTIM/i.test(String(item.jornada_data_source))) gaps.push('jornada estimada');
+  if (item.checkin_status !== 'RECEBIDO') gaps.push('sem check-in confirmado');
+  if (item.sleep_data_source === 'AUSENTE') gaps.push('sem dado de sono');
+  else if (/ESTIM/i.test(String(item.sleep_data_source))) gaps.push('sono estimado');
+
+  return gaps;
 }
 
 function MetricCard({
@@ -131,7 +137,28 @@ function DetailDrawer({
   const confidence = operationalConfidence(item);
   const effectiveness = trustedEffectiveness(item);
   const reasons = item.motivos_principais?.filter(Boolean) || [];
+  const gaps = confidenceGaps(item);
   const date = item.data_operacional;
+  const sourceFacts = [
+    {
+      label: 'Escala',
+      value: item.escala_source,
+      missing: item.escala_source === 'AUSENTE',
+      missingLabel: 'ausente',
+    },
+    {
+      label: 'Jornada',
+      value: item.jornada_data_source,
+      missing: item.jornada_data_source === 'AUSENTE',
+      missingLabel: 'ausente',
+    },
+    {
+      label: 'Sono',
+      value: item.sleep_data_source,
+      missing: item.sleep_data_source === 'AUSENTE',
+      missingLabel: 'ausente',
+    },
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35" role="dialog" aria-modal="true">
@@ -214,31 +241,66 @@ function DetailDrawer({
           </section>
 
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
                 <Database className="h-4 w-4" /> Fonte e confiança
               </h3>
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Confiança {confidence.toLowerCase()}</span>
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                  confidence === 'ALTA'
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200'
+                    : confidence === 'MEDIA'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200'
+                      : 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200'
+                }`}
+              >
+                Confiança {confidence.toLowerCase()}
+              </span>
             </div>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{sourceLabel(item)}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {sourceFacts.map((fact) => (
+                <span
+                  key={fact.label}
+                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                    fact.missing
+                      ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                  }`}
+                >
+                  {fact.label}: {fact.missing ? fact.missingLabel : fact.value}
+                </span>
+              ))}
+            </div>
+            {gaps.length > 0 ? (
+              <p className="mt-3 text-sm font-medium text-amber-800 dark:text-amber-200">
+                Falta: {gaps.join(' · ')}
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Dados essenciais disponíveis para a decisão.</p>
+            )}
             {item.jornada_origem ? (
               <p className="mt-1 text-xs text-slate-500">Origem da jornada: {item.jornada_origem}</p>
             ) : null}
           </section>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Link
-              to={`/frms/tripulante/${item.tripulante_id}?origem=operacao&data=${encodeURIComponent(date)}`}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
-            >
-              Histórico
-            </Link>
-            <Link
-              to={`/frms/alertas?tripulante_id=${item.tripulante_id}`}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
-            >
-              Casos
-            </Link>
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Consultas secundárias — abrem outra tela
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Link
+                to={`/frms/tripulante/${item.tripulante_id}?origem=operacao&data=${encodeURIComponent(date)}`}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
+              >
+                Abrir histórico (outra tela)
+              </Link>
+              <Link
+                to={`/frms/alertas?tripulante_id=${item.tripulante_id}`}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
+              >
+                Abrir casos (outra tela)
+              </Link>
+            </div>
           </div>
         </div>
       </aside>
@@ -247,8 +309,18 @@ function DetailDrawer({
 }
 
 export default function FrmsDashboard() {
-  const [date, setDate] = useState(localTodayIso);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedDate = searchParams.get('data');
+  const date = isOperationalDate(requestedDate) ? requestedDate : localTodayIso();
   const [selected, setSelected] = useState<FrmsOperationalSnapshotItem | null>(null);
+
+  useEffect(() => {
+    if (requestedDate === date) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('data', date);
+    setSearchParams(next, { replace: true });
+  }, [date, requestedDate, searchParams, setSearchParams]);
+
   const snapshot = useFrmsOperationalSnapshot({
     data_inicio: date,
     data_fim: date,
@@ -300,7 +372,11 @@ export default function FrmsDashboard() {
               <input
                 type="date"
                 value={date}
-                onChange={(event) => setDate(event.target.value)}
+                onChange={(event) => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set('data', event.target.value);
+                  setSearchParams(next);
+                }}
                 className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               />
             </label>
@@ -323,12 +399,15 @@ export default function FrmsDashboard() {
           {snapshot.error ? <span className="font-semibold text-amber-700 dark:text-amber-300">Falha na última atualização — mantendo o último estado válido</span> : null}
         </div>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumo operacional">
+        <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo operacional">
           <MetricCard label="Bloqueia" value={counts.BLOQUEIO} helper="impede decisão operacional sem tratamento" loading={firstLoad} />
           <MetricCard label="Decidir" value={counts.DECISAO} helper="casos que precisam de ação operacional" loading={firstLoad} />
           <MetricCard label="Confirmar" value={counts.CONFIRMAR} helper="dados ausentes, estimados ou pendentes" loading={firstLoad} />
-          <MetricCard label="Sem pendência" value={counts.NORMAL} helper="somente pessoas relevantes para o dia" loading={firstLoad} />
         </section>
+        <p className="text-sm text-slate-500">
+          <span className="font-semibold text-slate-700 dark:text-slate-200">{firstLoad ? '—' : counts.NORMAL}</span>{' '}
+          pessoa(s) sem pendência no recorte atual.
+        </p>
 
         {snapshot.unauthorized ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">

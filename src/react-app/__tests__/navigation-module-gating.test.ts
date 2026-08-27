@@ -10,6 +10,19 @@ describe('navigation module gating', () => {
     expect(visible.map((item) => item.id)).toContain('hospedagem');
   });
 
+  it('mantem o FRMS global reduzido a Operação, Casos e Administração', () => {
+    const escalas = NAVIGATION_CONFIG.main_menu.find((item) => item.id === 'escalas');
+    const frmsItems = escalas?.children?.filter((item) => item.path.startsWith('/frms')) ?? [];
+
+    expect(frmsItems).toEqual([
+      { id: 'frms', label: 'FRMS — Operação', path: '/frms' },
+      { id: 'frms-alertas', label: 'FRMS — Casos', path: '/frms/alertas' },
+      { id: 'frms-configuracoes', label: 'FRMS — Administração', path: '/frms/configuracoes' },
+    ]);
+    expect(frmsItems.map((item) => item.path)).not.toContain('/frms/controle-operacional');
+    expect(frmsItems.map((item) => item.path)).not.toContain('/frms/fadiga-painel');
+  });
+
   it('mostra modulo piloto quando explicitamente ativo', () => {
     const visible = getVisibleNavigationItems(NAVIGATION_CONFIG.main_menu, [
       'dashboard',
