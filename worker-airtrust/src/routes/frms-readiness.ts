@@ -8,6 +8,7 @@ import {
   countReadinessBaselineSessions,
   persistReadinessAssessment,
 } from '../lib/frms/readiness-persistence';
+import { READINESS_PROTOCOL } from '../lib/frms/readiness';
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 router.use('*', auth());
@@ -90,8 +91,8 @@ router.get('/baseline', async (c) => {
     success: true,
     data: {
       sessions,
-      minimum_sessions: 5,
-      ready: sessions >= 5,
+      minimum_sessions: READINESS_PROTOCOL.minimumBaselineSessions,
+      ready: sessions >= READINESS_PROTOCOL.minimumBaselineSessions,
     },
   });
 });
@@ -188,9 +189,6 @@ router.post('/', async (c) => {
     return c.json({ success: true, data: result }, 201);
   } catch (error) {
     const code = error instanceof Error ? error.message : 'readiness_persistence_failed';
-    if (code === 'readiness_already_submitted') {
-      return c.json({ success: false, error: code }, 409);
-    }
     console.error('[frms-readiness] persistence failed', {
       empresaId,
       funcionarioId,

@@ -25,7 +25,7 @@ import { resolveFadigaPostSavePath } from './frmsPostSaveNavigation';
 import OperationalVigilanceTest, {
   type OperationalVigilanceResult,
 } from './OperationalVigilanceTest';
-import { useSubmitReadiness } from '@/react-app/hooks/useOperationalReadiness';
+import { useReadinessBaseline, useReadinessToday, useSubmitReadiness } from '@/react-app/hooks/useOperationalReadiness';
 
 /* eslint-disable react-refresh/only-export-components */
 
@@ -509,6 +509,8 @@ export default function FrmsCheckinFadiga() {
   const { data: existente, refetch } = useCheckinHoje();
   const submitMutation = useSubmitCheckin();
   const readinessMutation = useSubmitReadiness();
+  const { data: readinessBaseline } = useReadinessBaseline();
+  const { data: readinessToday } = useReadinessToday(today);
 
   const canSubmit = isFadigaCheckinSubmitReady({
     sonoOpcao,
@@ -545,7 +547,7 @@ export default function FrmsCheckinFadiga() {
   if (!aceitePrivacidade) missingItems.push('Aceite da política de privacidade');
 
   const submit = async () => {
-    if (submitMutation.isPending) return;
+    if (submitMutation.isPending || readinessMutation.isPending) return;
 
     setSubmitAttempted(true);
     if (!canSubmitWithReadiness) {
@@ -881,6 +883,12 @@ export default function FrmsCheckinFadiga() {
                 label="Bloco 3 - Atenção e tempo de reação"
                 hint="Teste breve objetivo para complementar sono, KSS e sua autoavaliação. O resultado não determina aptidão isoladamente."
               >
+                <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  {readinessBaseline?.ready
+                    ? `Baseline individual disponível (${readinessBaseline.sessions} sessões anteriores).`
+                    : `Baseline individual em formação (${readinessBaseline?.sessions ?? 0}/${readinessBaseline?.minimum_sessions ?? 5} sessões anteriores).`}
+                  {readinessToday ? ' Já existe uma avaliação salva hoje; um novo teste substituirá a avaliação ativa de hoje sem contar duas vezes no baseline.' : ''}
+                </div>
                 {vigilanceResult ? (
                   <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                     <div>

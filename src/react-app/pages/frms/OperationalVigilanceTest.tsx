@@ -7,7 +7,7 @@ import {
   VIGILANCE_PROTOCOL,
 } from './operationalReadiness';
 
-type Phase = 'instructions' | 'waiting' | 'stimulus' | 'complete';
+type Phase = 'instructions' | 'waiting' | 'stimulus' | 'invalidated' | 'complete';
 
 export type OperationalVigilanceResult = {
   summary: VigilanceSummary;
@@ -31,6 +31,7 @@ export default function OperationalVigilanceTest({
 }: OperationalVigilanceTestProps) {
   const [phase, setPhase] = useState<Phase>('instructions');
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [invalidReason, setInvalidReason] = useState<string | null>(null);
   const trialsRef = useRef<VigilanceTrial[]>([]);
   const startedAtRef = useRef<number | null>(null);
   const scheduledAtRef = useRef<number | null>(null);
@@ -101,10 +102,38 @@ export default function OperationalVigilanceTest({
     cleanupTimers();
     trialsRef.current = [];
     finishedRef.current = false;
+    setInvalidReason(null);
     startedAtRef.current = performance.now();
     setElapsedMs(0);
     scheduleNext();
   }, [cleanupTimers, scheduleNext]);
+
+  const invalidate = useCallback((reason: string) => {
+    if (startedAtRef.current == null || finishedRef.current) return;
+    finishedRef.current = true;
+    cleanupTimers();
+    trialsRef.current = [];
+    startedAtRef.current = null;
+    stimulusAtRef.current = null;
+    scheduledAtRef.current = null;
+    setInvalidReason(reason);
+    setPhase('invalidated');
+  }, [cleanupTimers]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        invalidate('A tela foi ocultada ou outro aplicativo foi aberto durante o teste.');
+      }
+    };
+    const onBlur = () => invalidate('A janela perdeu o foco durante o teste.');
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [invalidate]);
 
   const respond = useCallback(() => {
     if (finishedRef.current || startedAtRef.current == null) return;
@@ -190,11 +219,24 @@ export default function OperationalVigilanceTest({
     );
   }
 
+  if (phase === 'invalidated') {
+    return (
+      <section className="space-y-4 rounded-2xl border border-amber-300 bg-amber-50 p-5" role="alert">
+        <div>
+          <p className="font-semibold text-amber-900">Teste interrompido</p>
+          <p className="mt-1 text-sm text-amber-800">{invalidReason || 'O teste perdeu as condições necessárias de medição.'}</p>
+          <p className="mt-2 text-xs text-amber-700">Nenhum resultado parcial será usado. Reinicie quando puder manter esta tela ativa até o final.</p>
+        </div>
+        <Button onClick={start}>Reiniciar teste</Button>
+      </section>
+    );
+  }
+
   if (phase === 'complete') {
     return (
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
         <p className="font-semibold text-emerald-900">Teste concluído</p>
-        <p className="mt-1 text-sm text-emerald-800">Os dados foram adicionados à avaliação de prontidão desta jornada.</p>
+        <p className="mt-1 text-sm text-emerald-800">O resultado está pronto para ser enviado junto com o check-in desta jornada.</p>
       </section>
     );
   }

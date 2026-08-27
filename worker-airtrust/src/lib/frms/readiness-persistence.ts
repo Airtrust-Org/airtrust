@@ -30,6 +30,7 @@ export async function countReadinessBaselineSessions(
   db: D1Database,
   empresaId: number,
   funcionarioId: number,
+  excludeReferenceDate?: string,
 ): Promise<number> {
   const row = await db
     .prepare(
@@ -37,9 +38,10 @@ export async function countReadinessBaselineSessions(
          FROM frms_readiness_assessment
         WHERE empresa_id = ?
           AND funcionario_id = ?
-          AND deleted_at IS NULL`,
+          AND deleted_at IS NULL
+          AND (? IS NULL OR reference_date <> ?)`,
     )
-    .bind(empresaId, funcionarioId)
+    .bind(empresaId, funcionarioId, excludeReferenceDate || null, excludeReferenceDate || null)
     .first<{ total: number }>();
 
   return Number(row?.total || 0);
@@ -70,9 +72,12 @@ export async function persistReadinessAssessment(
     .bind(input.empresaId, input.funcionarioId, input.referenceDate)
     .first<{ id: string }>();
 
-  if (existing?.id) throw new Error('readiness_already_submitted');
-
-  const baselineSessions = await countReadinessBaselineSessions(db, input.empresaId, input.funcionarioId);
+  const baselineSessions = await countReadinessBaselineSessions(
+    db,
+    input.empresaId,
+    input.funcionarioId,
+    input.referenceDate,
+  );
   const summary = summarizeReadinessTrials(input.trials, input.durationMs);
   const assessment = deriveReadinessAssessment({
     kssScore: input.kssScore,
@@ -83,7 +88,21 @@ export async function persistReadinessAssessment(
   const assessmentId = crypto.randomUUID();
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-  const statements: D1PreparedStatement[] = [
+  const statements: D1PreparedStatement[] = [];
+
+  if (existing?.id) {
+    statements.push(
+      db
+        .prepare(
+          `UPDATE frms_readiness_assessment
+              SET deleted_at = ?, updated_at = ?
+            WHERE id = ? AND empresa_id = ? AND funcionario_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(now, now, existing.id, input.empresaId, input.funcionarioId),
+    );
+  }
+
+  statements.push(
     db
       .prepare(
         `INSERT INTO frms_readiness_assessment (
@@ -127,7 +146,7 @@ export async function persistReadinessAssessment(
         now,
         now,
       ),
-  ];
+  );
 
   for (const trial of input.trials) {
     statements.push(

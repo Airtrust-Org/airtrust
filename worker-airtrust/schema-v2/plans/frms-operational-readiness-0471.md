@@ -8,7 +8,7 @@ Persist the brief objective vigilance assessment used by FRMS operational readin
 
 Additive only:
 
-- `frms_readiness_assessment`: one tenant-scoped readiness assessment per employee/reference day, optionally linked to `frms_fadiga_checkin`;
+- `frms_readiness_assessment`: one active tenant-scoped readiness assessment per employee/reference day, optionally linked to `frms_fadiga_checkin`; same-day re-evaluations soft-delete the previous assessment so the baseline is never double-counted;
 - `frms_readiness_vigilance_trial`: raw per-stimulus outcomes for auditability and later scoring recalculation;
 - indexes scoped by `empresa_id`.
 
