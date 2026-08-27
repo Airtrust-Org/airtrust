@@ -621,7 +621,7 @@ function CourseDrawer({
   uploadStatus: string;
   availableSetores: { id: number; nome: string }[];
 }) {
-  const { tipos: qualTipos } = useQualificacaoTipos();
+  const { tipos: qualTipos } = useQualificacaoTipos(true, 500);
   const { data: latestCourse } = useLmsCurso(initial?.id ?? 0);
   const courseSnapshot = latestCourse ?? initial;
   const storedThumbPreview = useLmsCourseThumbnailUrl(courseSnapshot);

@@ -465,7 +465,7 @@ export default function Qualificacoes() {
     loading: loadingTipos,
     refetch: refetchTipos,
     error: tiposError,
-  } = useQualificacaoTipos(activeTab === 'tipos' || showTurmaPlanejadaModal, 200, {
+  } = useQualificacaoTipos(activeTab === 'tipos' || showTurmaPlanejadaModal, 500, {
     categoriaId:
       activeTab === 'tipos' && categoriaFilter
         ? parseInt(categoriaFilter, 10) || undefined
