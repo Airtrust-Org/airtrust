@@ -32,6 +32,17 @@ import {
 } from '@/react-app/utils/lmsDiagnosticContract';
 import { LmsPendingPanel } from './LmsPendingPanel';
 
+/**
+ * Sanitiza um código/razão de diagnóstico vindo de lms:completion-error.
+ * Mantém apenas um token curto e seguro (A-Z, 0-9, _.-); nunca expõe SQL/stack.
+ */
+export function sanitizeDiagnosticCode(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const cleaned = value.trim().toUpperCase().replace(/[^A-Z0-9_.-]/g, '');
+  if (!cleaned) return null;
+  return cleaned.length > 64 ? cleaned.slice(0, 64) : cleaned;
+}
+
 function inferProgressFromLocation(location: string | null | undefined): number | null {
   if (!location) return null;
   const slash = location.match(/(\d+)\s*\/\s*(\d+)/);
@@ -132,6 +143,13 @@ export default function LmsPlayer() {
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
   >('idle');
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
+  // Código/razão sanitizados do último lms:completion-error. Preservados para
+  // diagnóstico — a UI mostra mensagem útil sem colapsar tudo em texto genérico.
+  const [completionErrorInfo, setCompletionErrorInfo] = useState<{
+    code: string | null;
+    reason: string | null;
+    message: string;
+  } | null>(null);
   // Snapshot granular AIRTRUST_COMPLETION_DIAGNOSTICS_V1 (informativo).
   const [granularDiagnostic, setGranularDiagnostic] = useState<LmsGranularDiagnostic | null>(null);
   const [pendingPanelOpen, setPendingPanelOpen] = useState(false);
@@ -192,6 +210,8 @@ export default function LmsPlayer() {
   const completionToastIdRef = useRef(`lms-scorm-completion-${id}`);
   const candidateStreakRef = useRef(0);
   const unresolvedRef = useRef(false);
+  // Torna o "Sair do curso" idempotente: um handshake em andamento não dispara outro.
+  const leavingRef = useRef(false);
   const {
     data: matricula,
     isLoading: matriculaLoading,
@@ -299,6 +319,7 @@ export default function LmsPlayer() {
       toast.success(detail, { id: toastId });
       setCompletionState('idle');
       setCompletionMessage(null);
+      setCompletionErrorInfo(null);
       return;
     }
 
@@ -605,12 +626,15 @@ export default function LmsPlayer() {
         event.data.type === 'lms:completion-error' &&
         event.data.matriculaId === id
       ) {
-        showCompletionToast(
-          'error',
+        const code = sanitizeDiagnosticCode(event.data.code);
+        const reason = sanitizeDiagnosticCode(event.data.reason);
+        const baseMessage =
           typeof event.data.message === 'string' && event.data.message.trim()
-            ? event.data.message
-            : 'Conclusão recebida, mas ainda não confirmada pelo servidor.',
-        );
+            ? event.data.message.trim()
+            : 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
+        const displayMessage = code ? `${baseMessage} (código: ${code})` : baseMessage;
+        setCompletionErrorInfo({ code, reason, message: baseMessage });
+        showCompletionToast('error', displayMessage);
         void refetchMatricula();
         return;
       }
@@ -766,7 +790,43 @@ export default function LmsPlayer() {
       );
       if (!confirmed) return;
     }
-    navigate('/lms/cursos');
+
+    const frameWindow = iframeRef.current?.contentWindow ?? null;
+    // Sem iframe SCORM vivo não há sessão a encerrar: sai direto.
+    if (!isScormContent || !iframeLoaded || !frameWindow || !launchOrigin || leavingRef.current) {
+      if (leavingRef.current) return;
+      leavingRef.current = true;
+      navigate('/lms/cursos');
+      return;
+    }
+
+    // Encerramento governado: pede ao wrapper para dar flush + commit final +
+    // término SCORM e só navega após o ACK ou um timeout curto. Nunca fabrica
+    // conclusão; timeout/rede lenta não prende o aluno.
+    leavingRef.current = true;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('message', onAck);
+      window.clearTimeout(timer);
+      navigate('/lms/cursos');
+    };
+    const onAck = (event: MessageEvent) => {
+      if (event.origin !== launchOrigin) return;
+      if (event.source !== frameWindow) return;
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:session-close:ack' &&
+        event.data.matriculaId === id
+      ) {
+        finish();
+      }
+    };
+    window.addEventListener('message', onAck);
+    const timer = window.setTimeout(finish, 4500);
+    frameWindow.postMessage({ type: 'lms:session-close', reason: 'user-exit' }, launchOrigin);
   }
 
   async function handleFinalizeAndGenerateQualification() {
@@ -1032,6 +1092,14 @@ export default function LmsPlayer() {
             <div className="mb-2 text-xs text-emerald-200/90">
               {completionMessage || 'Conclusão recebida, mas ainda não confirmada pelo servidor.'}
             </div>
+            {completionState === 'error' && completionErrorInfo?.code ? (
+              <div className="mb-2 font-mono text-[10px] uppercase tracking-wide text-amber-200/80">
+                Código de diagnóstico: {completionErrorInfo.code}
+                {completionErrorInfo.reason && completionErrorInfo.reason !== completionErrorInfo.code
+                  ? ` · ${completionErrorInfo.reason}`
+                  : ''}
+              </div>
+            ) : null}
             {completionState === 'unresolved' ? (
               <div className="flex flex-col gap-2">
                 <button
