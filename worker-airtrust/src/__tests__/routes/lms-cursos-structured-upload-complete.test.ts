@@ -127,7 +127,7 @@ class Bucket {
 }
 
 describe('lms cursos structured upload complete', () => {
-  it('recusa o protocolo de upload estruturado por arquivo para SCORM e direciona ao Quality Gate', async () => {
+  it('recusa o protocolo de upload estruturado por arquivo para SCORM e orienta o ZIP completo', async () => {
     const bucket = new Bucket();
     const env = { DB: db(), BUCKET: bucket as unknown as R2Bucket } as Env;
     const init = await app().request(
@@ -143,7 +143,7 @@ describe('lms cursos structured upload complete', () => {
     expect(init.status).toBe(409);
     await expect(init.json()).resolves.toMatchObject({
       success: false,
-      error: expect.stringMatching(/Quality Gate/i),
+      error: expect.stringMatching(/SCORM arquivo-a-arquivo.*ZIP completo/i),
     });
     expect(bucket.putValues).toHaveLength(0);
   });
