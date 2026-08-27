@@ -92,6 +92,9 @@ pids/
 
 artifacts/rdv-pdf-preview/
 
+# ========== SCORM PACKAGE WORKING ARTIFACTS (downloads from R2) ==========
+ops/scorm-storage-fix/
+
 # ========== OS ==========
 .DS_Store
 .DS_Store?

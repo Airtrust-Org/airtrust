@@ -165,4 +165,32 @@ describe('LMS SCORM Local Resume fail-closed behavior', () => {
     expect(localStorage.getItem('airtrust:scorm:resume:123:456')).toBeNull();
     expect(localStorage.getItem('airtrust:scorm:resume:123')).toBe('LEGADA');
   });
+
+  it('expõe MATRICULA_ID/CICLO_ID/NUMERO_CICLO no window para os pacotes isolarem o storage', () => {
+    const script = buildResumeStorageScript({
+      matriculaId: 123,
+      cicloId: 456,
+      numeroCiclo: 2
+    });
+
+    const runFn = new Function(script);
+    runFn();
+
+    expect((globalThis as unknown as Record<string, unknown>).MATRICULA_ID).toBe(123);
+    expect((globalThis as unknown as Record<string, unknown>).CICLO_ID).toBe(456);
+    expect((globalThis as unknown as Record<string, unknown>).NUMERO_CICLO).toBe(2);
+  });
+
+  it('expõe MATRICULA_ID null no window quando não há matrícula (preview)', () => {
+    const script = buildResumeStorageScript({
+      matriculaId: null,
+      cicloId: 0,
+      numeroCiclo: 1
+    });
+
+    const runFn = new Function(script);
+    runFn();
+
+    expect((globalThis as unknown as Record<string, unknown>).MATRICULA_ID).toBeNull();
+  });
 });
