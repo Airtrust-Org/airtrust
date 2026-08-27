@@ -109,6 +109,55 @@ export function resolveScormResumeTargetSlide(
   return saved.current;
 }
 
+/**
+ * Parse a value to a finite number, preserving `0`. Returns null only when the
+ * value is absent, non-numeric or non-finite. Replaces the `parseFloat(x) || null`
+ * idiom in buildPayload(), which silently maps a legitimate `0` (score_raw,
+ * score_min, score_scaled, …) to null and loses SCORM state on round-trip.
+ */
+export function finiteNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * DOM-progress authority rule for the SCORM wrapper's probeFrameProgress().
+ *
+ * When the package has authored an explicit, valid SCORM location, a generic
+ * `x/y` fraction scraped from the frame DOM must NOT replace it — not even when
+ * the DOM fraction carries a larger denominator (e.g. package `47/47` vs a
+ * "121/135" string elsewhere on the page). The DOM probe is a fallback only for
+ * packages that never author a location.
+ */
+export function resolveProbedScormLocation(params: {
+  authored: boolean;
+  explicitLocation: unknown;
+  domLocation: unknown;
+}): { location: string | null; persist: boolean; reason: string } {
+  const explicitMarker = parseScormLocationMarker(params.explicitLocation);
+  if (params.authored && explicitMarker && explicitMarker.current >= 1) {
+    return {
+      location: String(params.explicitLocation),
+      persist: false,
+      reason: 'explicit-package-location',
+    };
+  }
+  const domMarker = parseScormLocationMarker(params.domLocation);
+  if (!domMarker) {
+    return {
+      location: explicitMarker ? String(params.explicitLocation) : null,
+      persist: false,
+      reason: 'no-dom-progress',
+    };
+  }
+  const domLocation =
+    domMarker.total == null
+      ? String(domMarker.current)
+      : String(domMarker.current) + '/' + String(domMarker.total);
+  return { location: domLocation, persist: true, reason: 'dom-fallback' };
+}
+
 // ── Helpers MIME ──────────────────────────────────────────────────────────────
 
 function guessMime(filename: string): string {
@@ -1328,6 +1377,29 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   }
   return saved.current;
 }
+function finiteNumberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  var n = typeof value === 'number' ? value : parseFloat(String(value));
+  return isFinite(n) ? n : null;
+}
+function resolveProbedScormLocation(authored, explicitLocation, domLocation) {
+  var explicitMarker = parseScormLocationMarker(explicitLocation);
+  if (authored && explicitMarker && explicitMarker.current >= 1) {
+    return { location: String(explicitLocation), persist: false, reason: 'explicit-package-location' };
+  }
+  var domMarker = parseScormLocationMarker(domLocation);
+  if (!domMarker) {
+    return {
+      location: explicitMarker ? String(explicitLocation) : null,
+      persist: false,
+      reason: 'no-dom-progress',
+    };
+  }
+  var domLoc = domMarker.total == null
+    ? String(domMarker.current)
+    : String(domMarker.current) + '/' + String(domMarker.total);
+  return { location: domLoc, persist: true, reason: 'dom-fallback' };
+}
 
 (function() {
   'use strict';
@@ -1370,6 +1442,20 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   var autosaveReady = false;
   var resumeAppliedThisLoad = false;
   var userNavigatedManually = false;
+  // True once the package (LMSSetValue) or server resume state has authored an
+  // explicit SCORM location. While true, probeFrameProgress() must never let a
+  // generic DOM fraction overwrite cmi.location / cmi.core.lesson_location.
+  var explicitLocationAuthored = (function() {
+    if (${hasResumeState ? 'true' : 'false'}) return true;
+    var initial = cmi['cmi.location'] || cmi['cmi.core.lesson_location'] || null;
+    var marker = parseScormLocationMarker(initial);
+    return !!(marker && marker.current >= 1);
+  })();
+  // Set once the content calls LMSInitialize/Initialize. Governed close only
+  // mirrors an explicit SCORM termination when the API was actually initialized.
+  var apiInitialized = false;
+  // Guards the governed "Sair do curso" handshake against double execution.
+  var sessionCloseHandled = false;
 
   ${buildResumeStorageScript({
     matriculaId,
@@ -1919,10 +2005,41 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       var existingLocation = getScormLocation();
       var previousLocation = existingLocation;
       var existingParsed = parseLocationMarker(existingLocation);
+      var domLocationRaw = parsed.total > 0
+        ? String(parsed.current) + '/' + String(parsed.total)
+        : String(parsed.current);
+
+      // Autoridade: se o pacote (ou o resume state do servidor) já informou uma
+      // posição SCORM explícita, uma fração genérica lida do DOM NÃO pode
+      // substituí-la — nem quando o denominador do DOM é maior. Nesse caso o
+      // probe apenas espelha a posição canônica para a barra de progresso.
+      var probeDecision = resolveProbedScormLocation(
+        explicitLocationAuthored,
+        existingLocation,
+        domLocationRaw
+      );
+
+      if (!probeDecision.persist) {
+        diag(' PROBE_LOCATION_KEPT reason=' + probeDecision.reason + ' loc=' + (existingLocation || 'null'));
+        if (existingParsed) {
+          var keptTotal = existingParsed.total != null ? existingParsed.total : parsed.total;
+          emitProgress({
+            progresso_pct: keptTotal
+              ? Math.round((existingParsed.current / keptTotal) * 100)
+              : undefined,
+            location: existingLocation,
+            slide_current: existingParsed.current,
+            slide_total: existingParsed.total != null ? existingParsed.total : undefined,
+            reached_end: existingParsed.total != null && existingParsed.current >= existingParsed.total,
+          });
+        }
+        return;
+      }
+
       var effectiveCurrent = parsed.current;
       var effectiveTotal = parsed.total;
 
-      // Nunca deixe a leitura inicial do DOM regredir um marcador já salvo.
+      // Nunca deixe a leitura do DOM regredir um marcador já salvo (fallback).
       if (
         existingParsed &&
         parsed.total > 0 &&
@@ -2176,10 +2293,10 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       return {
         completion_status: cmi['cmi.completion_status'] || null,
         success_status: cmi['cmi.success_status'] || null,
-        score_raw: parseFloat(cmi['cmi.score.raw']) || null,
-        score_max: parseFloat(cmi['cmi.score.max']) || null,
-        score_min: parseFloat(cmi['cmi.score.min']) || null,
-        score_scaled: parseFloat(cmi['cmi.score.scaled']) || null,
+        score_raw: finiteNumberOrNull(cmi['cmi.score.raw']),
+        score_max: finiteNumberOrNull(cmi['cmi.score.max']),
+        score_min: finiteNumberOrNull(cmi['cmi.score.min']),
+        score_scaled: finiteNumberOrNull(cmi['cmi.score.scaled']),
         session_time: cmi['cmi.session_time'] || null,
         total_time: cmi['cmi.total_time'] || null,
         suspend_data: cmi['cmi.suspend_data'] || null,
@@ -2189,9 +2306,9 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
     }
     return {
       lesson_status: cmi['cmi.core.lesson_status'] || null,
-      score_raw: parseFloat(cmi['cmi.core.score.raw']) || null,
-      score_max: parseFloat(cmi['cmi.core.score.max']) || null,
-      score_min: parseFloat(cmi['cmi.core.score.min']) || null,
+      score_raw: finiteNumberOrNull(cmi['cmi.core.score.raw']),
+      score_max: finiteNumberOrNull(cmi['cmi.core.score.max']),
+      score_min: finiteNumberOrNull(cmi['cmi.core.score.min']),
       session_time: cmi['cmi.core.session_time'] || null,
       total_time: cmi['cmi.core.total_time'] || null,
       suspend_data: cmi['cmi.suspend_data'] || null,
@@ -2387,9 +2504,102 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
     }
   }
 
+  // Governed "Sair do curso": React asks the wrapper to close the session
+  // cleanly (flush + final commit + SCORM termination) and only navigates away
+  // after the ACK or a bounded timeout. Idempotent; never fabricates
+  // completion/status/score — the package remains the authority.
+  var SESSION_CLOSE_TIMEOUT_MS = 4000;
+  function performGovernedSessionClose(reason) {
+    if (sessionCloseHandled) {
+      postToParent({
+        type: 'lms:session-close:ack',
+        matriculaId: MATRICULA_ID,
+        status: 'already-closed',
+        reason: reason || null,
+        location: getScormLocation(),
+      });
+      return;
+    }
+    sessionCloseHandled = true;
+
+    if (autosaveTimer) { window.clearTimeout(autosaveTimer); autosaveTimer = null; }
+    if (interactionProbeTimer) { window.clearTimeout(interactionProbeTimer); interactionProbeTimer = null; }
+
+    try { probeFrameProgress(); } catch (_probeError) { /* frame DOM may be locked */ }
+
+    var settled = false;
+    var finish = function(status) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      try {
+        if (apiInitialized) {
+          if (IS_2004 && window.API_1484_11 && typeof window.API_1484_11.Terminate === 'function') {
+            window.API_1484_11.Terminate('');
+          } else if (!IS_2004 && window.API && typeof window.API.LMSFinish === 'function') {
+            window.API.LMSFinish('');
+          }
+        }
+      } catch (_terminateError) { /* termination best-effort */ }
+      setStatus('Sessão encerrada', false);
+      postToParent({
+        type: 'lms:session-close:ack',
+        matriculaId: MATRICULA_ID,
+        status: status || 'closed',
+        reason: reason || null,
+        location: getScormLocation(),
+      });
+    };
+
+    var timer = window.setTimeout(function() { finish('timeout'); }, SESSION_CLOSE_TIMEOUT_MS);
+
+    try {
+      Promise.resolve(commit(buildPayload(), 0, 'SCORM_FINISH')).then(
+        function() { finish('closed'); },
+        function() { finish('closed'); }
+      );
+    } catch (_commitError) {
+      finish('closed');
+    }
+  }
+
+  // Relay the inner SCORM package's raw completion diagnostics
+  // (AIRTRUST_COMPLETION_DIAGNOSTICS_V1) up to React as lms:completion-diagnostics.
+  // Trust ONLY the exact scorm-frame window as the source; ignore any IDs the
+  // payload asserts — they are never used for auth/tenant/routing.
+  var MAX_RELAYED_DIAGNOSTICS_CHARS = 64000;
+  function relayPackageDiagnostics(event) {
+    var frame = document.getElementById('scorm-frame');
+    if (!frame || !frame.contentWindow || event.source !== frame.contentWindow) return false;
+    var data = event.data;
+    if (!data || typeof data !== 'object' || data.type !== 'AIRTRUST_COMPLETION_DIAGNOSTICS_V1') return false;
+    var payload = data.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+    var serialized;
+    try {
+      serialized = JSON.stringify(payload);
+    } catch (_serializeError) {
+      return false;
+    }
+    if (typeof serialized !== 'string' || serialized.length > MAX_RELAYED_DIAGNOSTICS_CHARS) return false;
+    postToParent({
+      type: 'lms:completion-diagnostics',
+      matriculaId: MATRICULA_ID,
+      diagnostics: JSON.parse(serialized),
+    });
+    return true;
+  }
+
   window.addEventListener('message', function(event) {
     if (!event.data || typeof event.data !== 'object') return;
+    // Inner-frame diagnostics arrive on the worker origin (not PARENT_ORIGIN),
+    // so they must be matched by source identity before the parent-origin gate.
+    if (relayPackageDiagnostics(event)) return;
     if (PARENT_ORIGIN !== '*' && event.origin !== PARENT_ORIGIN) return;
+    if (event.data.type === 'lms:session-close') {
+      performGovernedSessionClose(typeof event.data.reason === 'string' ? event.data.reason : null);
+      return;
+    }
     if (event.data.type === 'lms:auth-token' && (event.data.previewMode === PREVIEW_MODE)) {
       updateToken(event.data.token || '');
       return;
@@ -2417,6 +2627,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   // ── SCORM 1.2 API ───────────────────────────────────────────────────────────
   var SCORM12 = {
     LMSInitialize: function() {
+      apiInitialized = true;
       diag(' LMSInitialize_CALLED loc=' + (getScormLocation() || 'null'));
       setStatus('SCORM inicializado', true);
       emitTelemetry('SCORM_INIT', {
@@ -2461,6 +2672,9 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         if (element === 'cmi.core.lesson_location') {
           setScormLocation(String(nextValue || ''));
           updateMaxVisitedFromLocation(cmi['cmi.location']);
+          if (decision !== 'blocked' && parseScormLocationMarker(String(nextValue || ''))) {
+            explicitLocationAuthored = true;
+          }
         }
         writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
@@ -2490,6 +2704,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   // ── SCORM 2004 API ──────────────────────────────────────────────────────────
   var SCORM2004 = {
     Initialize: function() {
+      apiInitialized = true;
       diag(' LMSInitialize_CALLED_2004 loc=' + (getScormLocation() || 'null'));
       setStatus('SCORM 2004 inicializado', true);
       emitTelemetry('SCORM_INIT', {
@@ -2534,6 +2749,9 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         if (element === 'cmi.location') {
           setScormLocation(String(nextValue || ''));
           updateMaxVisitedFromLocation(cmi['cmi.location']);
+          if (decision !== 'blocked' && parseScormLocationMarker(String(nextValue || ''))) {
+            explicitLocationAuthored = true;
+          }
         }
         writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
