@@ -133,6 +133,25 @@ export async function resolveAvailableSessionRoles(
   const roles = new Set<SessionRole>();
   roles.add(normalizeSessionRole(row.empresa_role || row.perfil || fallbackRole));
 
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT perfil 
+           FROM usuarios_empresas_perfis 
+          WHERE usuario_id = ? 
+            AND empresa_id = ? 
+            AND ativo = 1`
+      )
+      .bind(userId, empresaId)
+      .all<{ perfil: string }>();
+
+    for (const p of results || []) {
+      if (p.perfil) roles.add(normalizeSessionRole(p.perfil));
+    }
+  } catch (e) {
+    // Ignore error if table does not exist yet
+  }
+
   const funcionarioId = Number(row.funcionario_id || 0);
   const funcionarioEmpresaId = Number(row.funcionario_empresa_id || 0);
   const funcionarioNoTenant =
