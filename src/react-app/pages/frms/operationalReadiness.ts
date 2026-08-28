@@ -33,10 +33,14 @@ export const VIGILANCE_PROTOCOL = {
   responseWindowMs: 2_000,
 };
 
-function percentile(sorted: number[], p: number): number | null {
+function quantile(sorted: number[], p: number): number | null {
   if (sorted.length === 0) return null;
-  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1));
-  return sorted[index] ?? null;
+  const index = (sorted.length - 1) * p;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return sorted[lower];
+  const weight = index - lower;
+  return sorted[lower] * (1 - weight) + sorted[upper] * weight;
 }
 
 function round(value: number, digits = 1): number {
@@ -51,38 +55,28 @@ export function summarizeVigilanceTrials(
   const valid = trials
     .filter((trial) => trial.outcome === 'response' || trial.outcome === 'lapse')
     .map((trial) => trial.reactionTimeMs)
-    .filter((value): value is number => value != null && Number.isFinite(value));
+    .filter((value): value is number => value != null && Number.isFinite(value) && value >= 0);
   const sorted = [...valid].sort((a, b) => a - b);
   const mean = valid.length > 0 ? valid.reduce((sum, value) => sum + value, 0) / valid.length : null;
   const variance =
     mean == null || valid.length === 0
       ? null
       : valid.reduce((sum, value) => sum + (value - mean) ** 2, 0) / valid.length;
-  const median =
-    sorted.length === 0
-      ? null
-      : sorted.length % 2 === 1
-        ? sorted[(sorted.length - 1) / 2]
-        : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
-  const speedValues = valid.filter((value) => value > 0).map((value) => 1000 / value);
-  const meanSpeed =
-    speedValues.length > 0
-      ? speedValues.reduce((sum, value) => sum + value, 0) / speedValues.length
-      : null;
+  const median = quantile(sorted, 0.5);
 
   return {
     protocolVersion: VIGILANCE_PROTOCOL.version,
-    durationMs,
+    durationMs: Math.max(0, Math.round(durationMs)),
     completedTrials: trials.length,
     validResponses: valid.length,
     medianReactionTimeMs: median == null ? null : round(median),
     meanReactionTimeMs: mean == null ? null : round(mean),
-    p90ReactionTimeMs: percentile(sorted, 0.9),
+    p90ReactionTimeMs: quantile(sorted, 0.9),
     reactionTimeStdDevMs: variance == null ? null : round(Math.sqrt(variance)),
     lapses: trials.filter((trial) => trial.outcome === 'lapse').length,
     falseStarts: trials.filter((trial) => trial.outcome === 'false_start').length,
     missed: trials.filter((trial) => trial.outcome === 'missed').length,
-    responseSpeedPerSecond: meanSpeed == null ? null : round(meanSpeed, 3),
+    responseSpeedPerSecond: mean != null && mean > 0 ? round(1000 / mean, 3) : null,
     trials,
   };
 }
