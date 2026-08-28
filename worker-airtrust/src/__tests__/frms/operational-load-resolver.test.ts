@@ -156,7 +156,7 @@ describe('resolveOperationalLoadForJornada', () => {
     expect(result.data_quality).toBe('INCOMPLETE');
   });
 
-  it('keeps data INCOMPLETE when SIGVOOS is unavailable even if METAR is observed', async () => {
+  it('persists SIGVOOS_UNAVAILABLE even if METAR is observed', async () => {
     const db = makeDb((sql) => {
       if (sql.includes('cv_voo_tripulantes')) throw new Error('SIGVOOS schema unavailable');
       if (sql.includes('frms_jornada_avaliacoes')) {
@@ -179,7 +179,7 @@ describe('resolveOperationalLoadForJornada', () => {
     expect(result.operational_load_landings_delta).toBe(0);
     expect(result.temperature_max_c).toBe(32);
     expect(result.operational_load_temperature_delta).toBe(-1);
-    expect(result.data_quality).toBe('INCOMPLETE');
+    expect(result.data_quality).toBe('SIGVOOS_UNAVAILABLE');
   });
 
   it('does not apply flight temperature exposure when SIGVOOS confirms no flight', async () => {
