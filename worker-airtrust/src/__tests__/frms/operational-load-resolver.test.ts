@@ -34,39 +34,41 @@ describe('resolveJornadaLandings', () => {
     });
 
     const result = await resolveJornadaLandings(db, 6, 42, '2026-08-20');
-    expect(result).toEqual({ landingsCount: 5, source: 'SIGVOOS' });
+    expect(result).toEqual({ landingsCount: 5, source: 'SIGVOOS_OBSERVED' });
   });
 
-  it('returns NONE_FOUND when the crew member has no legs that day', async () => {
+  it('distinguishes a valid zero-leg result from source failure', async () => {
     const db = makeDb(() => ({ landings: 0, legs: 0 }));
     expect(await resolveJornadaLandings(db, 6, 42, '2026-08-20')).toEqual({
       landingsCount: 0,
-      source: 'NONE_FOUND',
+      source: 'SIGVOOS_CONFIRMED_ZERO',
     });
   });
 
-  it('fails closed to NONE_FOUND if the cv_voo_* tables are absent', async () => {
+  it('marks SIGVOOS unavailable if the cv_voo_* tables/query are unavailable', async () => {
     const db = makeDb(() => {
       throw new Error('no such table: cv_voo_tripulantes');
     });
     expect(await resolveJornadaLandings(db, 6, 42, '2026-08-20')).toEqual({
       landingsCount: 0,
-      source: 'NONE_FOUND',
+      source: 'SIGVOOS_UNAVAILABLE',
     });
   });
 
-  it('rejects malformed inputs without touching the database', async () => {
-    const db = makeDb(() => {
+  it('marks malformed inputs unavailable without touching the database', async () => {
+    const handler = vi.fn(() => {
       throw new Error('should not be called');
     });
+    const db = makeDb(handler);
     expect(await resolveJornadaLandings(db, 0, 42, '2026-08-20')).toEqual({
       landingsCount: 0,
-      source: 'NONE_FOUND',
+      source: 'SIGVOOS_UNAVAILABLE',
     });
     expect(await resolveJornadaLandings(db, 6, 42, 'not-a-date')).toEqual({
       landingsCount: 0,
-      source: 'NONE_FOUND',
+      source: 'SIGVOOS_UNAVAILABLE',
     });
+    expect(handler).not.toHaveBeenCalled();
   });
 });
 
@@ -127,13 +129,14 @@ describe('resolveOperationalLoadForJornada', () => {
     });
 
     expect(result.landings_count).toBe(4);
+    expect(result.landings_evidence_quality).toBe('OBSERVED');
     expect(result.temperature_max_c).toBe(32);
     expect(result.operational_load_total_delta).toBe(-3);
-    expect(result.landings_source).toBe('SIGVOOS');
+    expect(result.landings_source).toBe('SIGVOOS_OBSERVED');
     expect(result.data_quality).toBe('COMPLETE');
   });
 
-  it('stays INCOMPLETE (temp = 0 contribution) when no observed weather exists', async () => {
+  it('stays INCOMPLETE (temp = 0 contribution) when flight exists but no observed weather exists', async () => {
     const db = makeDb((sql) => {
       if (sql.includes('cv_voo_tripulantes')) return { landings: 6, legs: 6 };
       return null;
@@ -150,5 +153,63 @@ describe('resolveOperationalLoadForJornada', () => {
     expect(result.operational_load_temperature_delta).toBe(0);
     expect(result.operational_load_total_delta).toBe(-4);
     expect(result.weather_evidence_quality).toBe('INCOMPLETE');
+    expect(result.data_quality).toBe('INCOMPLETE');
+  });
+
+  it('keeps data INCOMPLETE when SIGVOOS is unavailable even if METAR is observed', async () => {
+    const db = makeDb((sql) => {
+      if (sql.includes('cv_voo_tripulantes')) throw new Error('SIGVOOS schema unavailable');
+      if (sql.includes('frms_jornada_avaliacoes')) {
+        return {
+          environmental_json: JSON.stringify({ maxAmbientTempC: 32, weatherSource: 'DECEA_REDEMET' }),
+        };
+      }
+      return null;
+    });
+
+    const result = await resolveOperationalLoadForJornada(db, {
+      empresaId: 6,
+      funcionarioId: 42,
+      dataYmd: '2026-08-20',
+      jornadaId: 'jornada-1',
+    });
+
+    expect(result.landings_source).toBe('SIGVOOS_UNAVAILABLE');
+    expect(result.landings_evidence_quality).toBe('INCOMPLETE');
+    expect(result.operational_load_landings_delta).toBe(0);
+    expect(result.temperature_max_c).toBe(32);
+    expect(result.operational_load_temperature_delta).toBe(-1);
+    expect(result.data_quality).toBe('INCOMPLETE');
+  });
+
+  it('does not apply flight temperature exposure when SIGVOOS confirms no flight', async () => {
+    let weatherReads = 0;
+    const db = makeDb((sql) => {
+      if (sql.includes('cv_voo_tripulantes')) return { landings: 0, legs: 0 };
+      if (sql.includes('frms_jornada_avaliacoes')) {
+        weatherReads += 1;
+        return {
+          environmental_json: JSON.stringify({ maxAmbientTempC: 40, weatherSource: 'DECEA_REDEMET' }),
+        };
+      }
+      return null;
+    });
+
+    const result = await resolveOperationalLoadForJornada(db, {
+      empresaId: 6,
+      funcionarioId: 42,
+      dataYmd: '2026-08-20',
+      jornadaId: 'jornada-1',
+    });
+
+    expect(result.landings_source).toBe('SIGVOOS_CONFIRMED_ZERO');
+    expect(result.landings_evidence_quality).toBe('CONFIRMED_ZERO');
+    expect(result.landings_count).toBe(0);
+    expect(result.temperature_max_c).toBeNull();
+    expect(result.operational_load_temperature_delta).toBe(0);
+    expect(result.weather_evidence_quality).toBe('NOT_APPLICABLE');
+    expect(result.operational_load_total_delta).toBe(0);
+    expect(result.data_quality).toBe('COMPLETE');
+    expect(weatherReads).toBe(0);
   });
 });
