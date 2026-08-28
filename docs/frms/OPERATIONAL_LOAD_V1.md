@@ -54,10 +54,12 @@ The resolver preserves source quality instead of collapsing all zeroes together:
 - `SIGVOOS_UNAVAILABLE` — source/schema/query was unavailable or the input was not
   valid enough for a trustworthy lookup.
 
-Those states map to `landings_evidence_quality = OBSERVED | CONFIRMED_ZERO |
-INCOMPLETE`. A source failure therefore never masquerades as a confirmed no-flight
-day. When SIGVOOS is unavailable, the landing delta is 0 because no burden is
-invented, but `data_quality` stays `INCOMPLETE`.
+Those states map in memory to `landings_evidence_quality = OBSERVED |
+CONFIRMED_ZERO | INCOMPLETE`. A source failure therefore never masquerades as a
+confirmed no-flight day. When SIGVOOS is unavailable, the landing delta is 0
+because no burden is invented and the persisted operational breakdown carries
+`data_quality = 'SIGVOOS_UNAVAILABLE'`. This state survives
+`calcEffectiveness` and the 0476 `operational_load_data_quality` column.
 
 ### Temperature — source: observed METAR / SPECI (REDEMET)
 
@@ -82,7 +84,8 @@ never used as observed weather for a retrospective analysis.
 When SIGVOOS **confirms zero flight**, flight thermal exposure is not inferred
 from an unrelated weather snapshot. Temperature is not applied,
 `weather_evidence_quality = 'NOT_APPLICABLE'`, and the operational-load delta is
-0 for the no-flight day.
+0 for the no-flight day. The persisted combination `landings_count = 0` plus
+`weather_evidence_quality = NOT_APPLICABLE` preserves this confirmed-zero state.
 
 ### Combined
 
@@ -128,13 +131,17 @@ preserved; unavailable evidence is reported as incomplete rather than fabricated
 
 The final breakdown is persisted:
 
-- inside `effectiveness_componentes_json` (`operational_load` object), including
-  source/evidence quality; and
+- inside `effectiveness_componentes_json` (`operational_load` object), with
+  `weather_evidence_quality` and the source-aware `data_quality`; and
 - in dedicated `frms_fatorizacao_jornada` columns (migration **0476**):
   `operational_load_policy_version`, `operational_load_landings_count`,
   `operational_load_temperature_max_c`, `operational_load_weather_quality`,
   `operational_load_data_quality`, `operational_load_landings_delta`,
   `operational_load_temperature_delta`, `operational_load_total_delta`.
+
+The UI can therefore distinguish all safety-relevant cases after persistence:
+observed flight data, confirmed no-flight, missing weather and unavailable
+SIGVOOS. No unavailable source is rendered as a measured zero.
 
 ## Explainability
 
