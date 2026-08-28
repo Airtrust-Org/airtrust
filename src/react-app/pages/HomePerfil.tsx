@@ -74,6 +74,8 @@ export function buildHomeAccessCards(params: {
   const isMaintenanceHome = homeProfile === 'STUDENT_MANUTENCAO';
   const isFlightCrewHome = homeProfile === 'STUDENT_TRIPULACAO';
   const isRestrictedOperationalRole = ['ALUNO', 'INSTRUTOR', 'USUARIO'].includes(role);
+  const isLearnerRole = role === 'ALUNO' || role === 'USUARIO';
+  const isInstructorRole = role === 'INSTRUTOR';
 
   // Fadiga Diária — somente para perfis com jornada operacional aérea
   if (isRestrictedOperationalRole && !isMaintenanceHome) {
@@ -134,7 +136,7 @@ export function buildHomeAccessCards(params: {
   // Guias do Instrutor — biblioteca de material de preparação de sessão.
   // Gate visual apenas; a autorização real é validada no backend por
   // simuladores.guias_instrutor.read (vínculo ativo instrutor↔empresa).
-  if (role === 'INSTRUTOR') {
+  if (isInstructorRole) {
     cards.push({
       icon: <BookOpen className="w-7 h-7" />,
       title: 'Guias do Instrutor',
@@ -145,10 +147,10 @@ export function buildHomeAccessCards(params: {
     });
   }
 
-  // Minhas fichas (assinatura como participante/aluno) — identidade por
-  // ficha é resolvida no backend (GET /fichas/minhas); esse card só
-  // controla a visibilidade da entrada, não o conteúdo da lista.
-  if (can('self.ficha')) {
+  // Fichas próprias são uma responsabilidade do perfil ALUNO. Mesmo que
+  // a mesma pessoa também seja instrutor, elas só aparecem quando o perfil
+  // ativo é ALUNO (USUARIO permanece como compatibilidade do perfil legado).
+  if (isLearnerRole && can('self.ficha')) {
     cards.push({
       icon: <ClipboardList className="w-7 h-7" />,
       title: 'Minhas Fichas de Treinamento de Voo',
@@ -159,9 +161,10 @@ export function buildHomeAccessCards(params: {
     });
   }
 
-  // Avaliar / assinar fichas dos participantes sob instrução — nunca
-  // mostrado a um aluno puro (gate por permissão simuladores.evaluate).
-  if (can('simuladores.evaluate')) {
+  // Avaliar / assinar fichas é responsabilidade do perfil INSTRUTOR. A
+  // capability continua sendo exigida, mas não mistura a experiência do
+  // aluno mesmo quando a mesma conta possui os dois papéis.
+  if (isInstructorRole && can('simuladores.evaluate')) {
     cards.push({
       icon: <PenLine className="w-7 h-7" />,
       title: 'Fichas de Treinamento de Voo para Avaliar',

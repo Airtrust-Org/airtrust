@@ -59,7 +59,25 @@ describe('HomePerfil quick access cards', () => {
     expect(cards.map((card) => card.title)).not.toContain('Minha Pasta 360');
   });
 
-  it('mostra "Minhas Fichas de Treinamento de Voo" e "Fichas de Treinamento de Voo para Avaliar" como duas entradas distintas', () => {
+  it('mantem fichas próprias somente no perfil ALUNO, mesmo com permissions amplas', () => {
+    const cards = buildHomeAccessCards({
+      role: 'ALUNO',
+      can: canAll,
+      funcionarioId: 10,
+    });
+
+    const minhas = cards.find((card) => card.title === 'Minhas Fichas de Treinamento de Voo');
+    const paraAvaliar = cards.find(
+      (card) => card.title === 'Fichas de Treinamento de Voo para Avaliar',
+    );
+
+    expect(minhas).toBeDefined();
+    expect(minhas?.route).toBe('/simuladores/fichas/minhas');
+    expect(minhas?.description).toBe('Consulte e assine suas próprias fichas como participante.');
+    expect(paraAvaliar).toBeUndefined();
+  });
+
+  it('mantem avaliação de fichas somente no perfil INSTRUTOR, sem misturar fichas próprias', () => {
     const cards = buildHomeAccessCards({
       role: 'INSTRUTOR',
       can: canAll,
@@ -71,13 +89,9 @@ describe('HomePerfil quick access cards', () => {
       (card) => card.title === 'Fichas de Treinamento de Voo para Avaliar',
     );
 
-    expect(minhas).toBeDefined();
+    expect(minhas).toBeUndefined();
     expect(paraAvaliar).toBeDefined();
-    expect(minhas?.route).toBe('/simuladores/fichas/minhas');
     expect(paraAvaliar?.route).toBe('/simuladores/fichas/para-avaliar');
-
-    // Copy exata exigida pela especificação
-    expect(minhas?.description).toBe('Consulte e assine suas próprias fichas como participante.');
     expect(paraAvaliar?.description).toBe(
       'Avalie e assine as fichas dos participantes sob sua instrução.',
     );
@@ -87,10 +101,10 @@ describe('HomePerfil quick access cards', () => {
     expect(cards.map((card) => card.title)).not.toContain('Avaliar / Assinar Fichas');
   });
 
-  it('esconde "Fichas de Treinamento de Voo para Avaliar" para um aluno puro (sem simuladores.evaluate)', () => {
+  it('mantem compatibilidade do perfil legado USUARIO como aluno para fichas próprias', () => {
     const cards = buildHomeAccessCards({
-      role: 'ALUNO',
-      can: (permission) => permission === 'self.ficha',
+      role: 'USUARIO',
+      can: canAll,
       funcionarioId: 10,
     });
 
