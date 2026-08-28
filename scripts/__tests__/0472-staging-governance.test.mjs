@@ -20,7 +20,7 @@ test('0472 is present in the staging apply allowlist (apply-approved-migrations.
 
 test('RELEASE_PREFLIGHT_SCOPE includes 0472 as the last code', () => {
   const script = read('scripts/staging/apply-approved-migrations.sh');
-  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0470,0472,0475"/);
+  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0470,0472,0475,0476"/);
 });
 
 test('0472 routes through the recovery-point runner, same as 0467-0470', () => {
@@ -40,7 +40,7 @@ test('0472 is present in the recovery-point allowlist and postcondition dispatch
 
 test('deploy-staging.yml ledger preflight scope includes 0472', () => {
   const workflow = read('.github/workflows/deploy-staging.yml');
-  assert.match(workflow, /--scope=0467,0468,0469,0470,0472,0475/);
+  assert.match(workflow, /--scope=0467,0468,0469,0470,0472,0475,0476/);
 });
 
 test('validate-0472-postconditions.sh exists, targets only staging, and performs zero writes', () => {
