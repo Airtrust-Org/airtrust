@@ -1,6 +1,7 @@
 import {
   READINESS_PROTOCOL,
   deriveReadinessAssessment,
+  normalizeReadinessTrials,
   summarizeReadinessTrials,
   type ReadinessTrial,
 } from './readiness';
@@ -59,6 +60,8 @@ export async function persistReadinessAssessment(
   if (!Number.isFinite(input.durationMs) || input.durationMs <= 0) throw new Error('invalid_duration');
   if (!Array.isArray(input.trials) || input.trials.length === 0) throw new Error('readiness_trials_required');
 
+  const normalizedTrials = normalizeReadinessTrials(input.trials, input.durationMs);
+
   const existing = await db
     .prepare(
       `SELECT id
@@ -78,7 +81,7 @@ export async function persistReadinessAssessment(
     input.funcionarioId,
     input.referenceDate,
   );
-  const summary = summarizeReadinessTrials(input.trials, input.durationMs);
+  const summary = summarizeReadinessTrials(normalizedTrials, input.durationMs);
   const assessment = deriveReadinessAssessment({
     kssScore: input.kssScore,
     sleepHours: input.sleepHours,
@@ -148,7 +151,7 @@ export async function persistReadinessAssessment(
       ),
   );
 
-  for (const trial of input.trials) {
+  for (const trial of normalizedTrials) {
     statements.push(
       db
         .prepare(
