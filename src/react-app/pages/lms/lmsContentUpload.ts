@@ -40,16 +40,67 @@ function shouldIgnoreArchivePath(path: string): boolean {
   return IGNORED_ARCHIVE_SUFFIXES.some((suffix) => lowerPath.endsWith(suffix));
 }
 
-function parseLaunchFile(manifestXml: string): string | null {
-  const resourceMatch = manifestXml.match(/<resource\b[^>]*\bhref\s*=\s*["']([^"']+)["']/i);
+/**
+ * Fallback regex para manifests que o DOMParser não consegue estruturar.
+ * Aceita prefixo de namespace opcional (ex.: `<ns0:resource>`, `<ns0:item>`).
+ */
+export function parseLaunchFileRegex(manifestXml: string): string | null {
+  const resourceMatch = manifestXml.match(/<(?:\w+:)?resource\b[^>]*\bhref\s*=\s*["']([^"']+)["']/i);
   if (resourceMatch?.[1]) return resourceMatch[1];
-  const itemMatch = manifestXml.match(/<item\b[^>]*\bidentifierref\s*=\s*["']([^"']+)["']/i);
+  const itemMatch = manifestXml.match(/<(?:\w+:)?item\b[^>]*\bidentifierref\s*=\s*["']([^"']+)["']/i);
   if (!itemMatch?.[1]) return null;
   const escaped = itemMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(
-    `<resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
+    `<(?:\w+:)?resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
     'i',
   ).exec(manifestXml)?.[1] ?? null;
+}
+
+/**
+ * Identifica o arquivo inicial (launch) de um pacote SCORM 1.2/2004 a partir do
+ * imsmanifest.xml. Usa DOMParser com matching por localName para funcionar com
+ * manifest XML namespaced (ex.: `<ns0:resource href="index.html">`), que o regex
+ * estrito `<resource ...>` não reconhecia (bug MEL V4 "Não foi possível
+ * identificar o arquivo inicial do pacote SCORM.").
+ *
+ * Regra: organização padrão → primeiro <item> → identifierref → <resource> com
+ * esse identifier → href relativo. Se DOMParser falhar, cai no regex com prefixo
+ * de namespace opcional.
+ */
+export function parseLaunchFile(manifestXml: string): string | null {
+  try {
+    const doc = new DOMParser().parseFromString(manifestXml, 'application/xml');
+    // DOMParser materializa erros de parsing como um elemento <parsererror>.
+    if (doc.getElementsByTagNameNS('*', 'parsererror').length > 0) {
+      return parseLaunchFileRegex(manifestXml);
+    }
+
+    // Recursos/itens em QUALQUER namespace (localName).
+    const resources = Array.from(doc.getElementsByTagNameNS('*', 'resource'));
+    if (resources.length === 0) return parseLaunchFileRegex(manifestXml);
+    const items = Array.from(doc.getElementsByTagNameNS('*', 'item'));
+
+    const defaultOrgId = doc.documentElement.getAttribute('default');
+    const orgs = Array.from(doc.getElementsByTagNameNS('*', 'organization'));
+    const targetOrg =
+      orgs.find((org) => org.getAttribute('identifier') === defaultOrgId) ?? orgs[0] ?? null;
+    const firstItem = targetOrg
+      ? Array.from(targetOrg.getElementsByTagNameNS('*', 'item'))[0]
+      : items[0];
+    const identifierRef = firstItem?.getAttribute('identifierref') ?? null;
+
+    let href: string | null = null;
+    if (identifierRef) {
+      const resource = resources.find((r) => r.getAttribute('identifier') === identifierRef);
+      href = resource?.getAttribute('href') ?? null;
+    }
+    if (!href) {
+      href = resources.find((r) => r.getAttribute('href'))?.getAttribute('href') ?? null;
+    }
+    return href ? (href.split(/[?#]/, 1)[0] ?? href) : null;
+  } catch {
+    return parseLaunchFileRegex(manifestXml);
+  }
 }
 
 function parseScormVersion(manifestXml: string): ScormVersao {
