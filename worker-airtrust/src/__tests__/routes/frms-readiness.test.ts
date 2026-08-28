@@ -29,7 +29,7 @@ vi.mock('../../lib/frms/readiness-persistence', () => ({
   persistReadinessAssessment: (...args: unknown[]) => persistReadinessAssessmentMock(...args),
 }));
 
-import frmsReadinessRoutes from '../../routes/frms-readiness';
+const { default: frmsReadinessRoutes } = await import('../../routes/frms-readiness');
 
 type MockStatement = {
   bind: (...args: unknown[]) => MockStatement;
@@ -87,11 +87,16 @@ const validTrials = Array.from({ length: 10 }, (_, index) => {
 describe('FRMS readiness route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    countReadinessBaselineSessionsMock.mockResolvedValue(0);
     persistReadinessAssessmentMock.mockResolvedValue({
       assessmentId: 'assessment-1',
       classification: 'baseline_building',
       baselineSessions: 0,
       baselineReady: false,
+      baselineMedianRtMs: null,
+      baselineLapseRate: null,
+      medianRtDeltaPct: null,
+      lapseRateDelta: null,
       warningSignals: [],
       criticalSignals: [],
     });
