@@ -69,9 +69,19 @@ function text(value: unknown): string | null {
 }
 
 function numberValue(value: unknown): number | null {
-  const normalized = text(value);
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  }
+
+  const normalized = text(value)?.replace(/\s+/g, '');
   if (!normalized) return null;
-  const parsed = Number(normalized.replace(/\./g, '').replace(',', '.'));
+
+  // ANAC datasets are Brazilian and commonly use comma as the decimal separator. When a comma is
+  // present, periods are treated as grouping separators. Otherwise, preserve a decimal point.
+  const machineValue = normalized.includes(',')
+    ? normalized.replace(/\./g, '').replace(',', '.')
+    : normalized;
+  const parsed = Number(machineValue);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
