@@ -29,6 +29,7 @@ import {
 } from '@/react-app/hooks/useFrms';
 import { clearApiCacheByPattern } from '@/react-app/hooks/useApi';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
 
 interface ConfigGroup {
   label: string;
@@ -440,6 +441,8 @@ export default function FrmsConfiguracoes() {
   return (
     <AppLayout>
       <div className="space-y-4">
+        <FrmsWorkspaceNav />
+
         <div className="flex flex-wrap items-center gap-4">
           <button
             onClick={() => navigate('/frms')}
@@ -463,7 +466,7 @@ export default function FrmsConfiguracoes() {
           </button>
         </div>
 
-        <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="py-2">
           <div className="mb-6 flex flex-wrap gap-2">
             {tabs.map((tab) => (
               <button
