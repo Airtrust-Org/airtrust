@@ -287,7 +287,9 @@ async function uploadScormZipPackage(params: {
       body: formData,
     },
   );
-  const candidate = await parseApiResponse<ScormQualityShape>(uploadResponse);
+  const candidate = await parseApiResponse<ScormQualityShape & { r2Prefix?: string; launchFile?: string }>(
+    uploadResponse,
+  );
   const packageId = candidate.packageId;
   if (!packageId) throw new Error('Quality Gate não retornou um identificador de pacote.');
 
@@ -296,6 +298,21 @@ async function uploadScormZipPackage(params: {
   if (candidate.status === 'REJECTED') {
     // Pacote ativo anterior segue inalterado.
     throw scormGateError('O pacote foi rejeitado no Quality Gate estático', candidate);
+  }
+
+  // O backend deduplica por SHA-256: reenviar o ZIP idêntico ao que já está
+  // ATIVO retorna o pacote existente com status ACTIVE. Ele já é o conteúdo
+  // vivo — conformance/activate rejeitariam (409) um pacote nesse estado.
+  if (candidate.status === 'ACTIVE') {
+    onProgress?.(100);
+    onStatus?.('Este pacote já é o conteúdo ativo do curso.');
+    return {
+      filesUploaded: prepared.files.length,
+      prefix: typeof candidate.r2Prefix === 'string' ? candidate.r2Prefix : null,
+      launchFile: typeof candidate.launchFile === 'string' ? candidate.launchFile : prepared.launchFile,
+      scormVersao: prepared.scormVersao,
+      tipoH5p: null,
+    };
   }
 
   onStatus?.('Executando validação do player...');
