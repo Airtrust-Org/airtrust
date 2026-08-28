@@ -25,6 +25,7 @@ import { resolveFadigaPostSavePath } from './frmsPostSaveNavigation';
 import OperationalVigilanceTest, {
   type OperationalVigilanceResult,
 } from './OperationalVigilanceTest';
+import RecoveryActivityCard from './RecoveryActivityCard';
 import { useReadinessBaseline, useReadinessToday, useSubmitReadiness } from '@/react-app/hooks/useOperationalReadiness';
 
 /* eslint-disable react-refresh/only-export-components */
@@ -718,6 +719,8 @@ export default function FrmsCheckinFadiga() {
                 )}
               </div>
             )}
+
+            <RecoveryActivityCard today={today} />
 
             <div className="space-y-3">
               <FormCard label="Bloco 1 - Sono" hint="Informe seu descanso mais recente.">
