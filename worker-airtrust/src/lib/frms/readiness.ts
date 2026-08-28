@@ -14,6 +14,7 @@ export const READINESS_PROTOCOL = {
   minimumTrials: 10,
   lapseThresholdMs: 500,
   falseStartThresholdMs: 100,
+  responseWindowMs: 30_000,
   minimumBaselineSessions: 5,
 } as const;
 
@@ -83,10 +84,20 @@ function quantile(sorted: number[], p: number): number | null {
 /**
  * Rebuild every outcome from monotonic timestamps. Client-provided outcome and
  * reactionTimeMs are treated as transport/debug data only, never as authoritative.
+ *
+ * PVT-B V2 has a protocol-specific no-response rule: a presented stimulus that
+ * remains unanswered for the 30 s response ceiling is a lapse with RT=30,000 ms.
+ * The historical v1 protocol keeps its original `missed` interpretation.
  */
-export function normalizeReadinessTrials(trials: ReadinessTrial[], durationMs: number): ReadinessTrial[] {
+export function normalizeReadinessTrials(
+  trials: ReadinessTrial[],
+  durationMs: number,
+  protocolVersion: ReadinessProtocolVersion = READINESS_PROTOCOL.version,
+): ReadinessTrial[] {
   const seenSequences = new Set<number>();
-  const maxTimestampMs = Math.round(durationMs) + 5_000;
+  const postWindowAllowanceMs =
+    protocolVersion === READINESS_PROTOCOL.version ? READINESS_PROTOCOL.responseWindowMs : 5_000;
+  const maxTimestampMs = Math.round(durationMs) + postWindowAllowanceMs;
 
   return trials.map((trial) => {
     if (!Number.isInteger(trial.sequence) || trial.sequence <= 0 || seenSequences.has(trial.sequence)) {
@@ -115,6 +126,13 @@ export function normalizeReadinessTrials(trials: ReadinessTrial[], durationMs: n
     }
 
     if (trial.responseAtMs == null) {
+      if (protocolVersion === READINESS_PROTOCOL.version) {
+        return {
+          ...trial,
+          reactionTimeMs: READINESS_PROTOCOL.responseWindowMs,
+          outcome: 'lapse',
+        };
+      }
       return {
         ...trial,
         reactionTimeMs: null,
