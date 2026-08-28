@@ -22,7 +22,7 @@ export interface OperationalLoadDetail {
   landings_evidence_quality?: 'OBSERVED' | 'CONFIRMED_ZERO' | 'INCOMPLETE';
   temperature_max_c: number | null;
   weather_evidence_quality: 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
-  data_quality: 'COMPLETE' | 'INCOMPLETE';
+  data_quality: 'COMPLETE' | 'INCOMPLETE' | 'SIGVOOS_UNAVAILABLE';
   landings_delta: number;
   temperature_delta: number;
   total_delta: number;
@@ -65,10 +65,16 @@ function ComponentBar({ label, value, color }: { label: string; value: number; c
 }
 
 function landingsEvidenceLine(operationalLoad: OperationalLoadDetail): string {
-  if (operationalLoad.landings_evidence_quality === 'INCOMPLETE') {
+  if (
+    operationalLoad.landings_evidence_quality === 'INCOMPLETE' ||
+    operationalLoad.data_quality === 'SIGVOOS_UNAVAILABLE'
+  ) {
     return '• pousos: SIGVOOS indisponível (sem penalidade; evidência incompleta)';
   }
-  if (operationalLoad.landings_evidence_quality === 'CONFIRMED_ZERO') {
+  if (
+    operationalLoad.landings_evidence_quality === 'CONFIRMED_ZERO' ||
+    operationalLoad.weather_evidence_quality === 'NOT_APPLICABLE'
+  ) {
     return '• 0 pousos: ausência de voo confirmada pelo SIGVOOS';
   }
   return `• ${operationalLoad.landings_count} ${
@@ -215,9 +221,11 @@ export default function FrmsEffectivenessPanel({
               </p>
               <p>{landingsEvidenceLine(operationalLoad)}</p>
               <p>{weatherEvidenceLine(operationalLoad)}</p>
-              {operationalLoad.data_quality === 'INCOMPLETE' && (
+              {operationalLoad.data_quality !== 'COMPLETE' && (
                 <p className="mt-0.5 font-medium text-amber-700">
-                  Evidência operacional incompleta — nenhuma condição ausente foi presumida.
+                  {operationalLoad.data_quality === 'SIGVOOS_UNAVAILABLE'
+                    ? 'SIGVOOS indisponível — carga de pousos não presumida.'
+                    : 'Evidência meteorológica incompleta — nenhuma temperatura foi presumida.'}
                 </p>
               )}
               <p className="mt-0.5 text-slate-400">
