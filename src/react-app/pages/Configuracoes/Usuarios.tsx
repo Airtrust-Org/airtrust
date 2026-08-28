@@ -275,8 +275,8 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       // Treat HTTP OK as success even if the response couldn't be parsed as JSON.
       showToast.success(
         (data && (data.message || data.data?.message)) ||
-          t('settings.users.success.inviteSent') ||
           'Convite enviado com sucesso.',
+
       );
       setShowModal(false);
       setEmail('');
@@ -383,7 +383,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       const acessos = (data.data?.acessos || []) as AcessoEmpresa[];
       setEditingUser(usuario);
       setEditEmpresasSelecionadas(acessos.map((a) => a.empresa_id));
-      setEditRole(normalizeRoleForUi(acessos[0]?.role || usuario.role || 'viewer'));
+      setEditPerfis(acessos[0]?.perfis?.length ? acessos[0].perfis : [normalizeRoleForUi(acessos[0]?.role || usuario.role || 'viewer')]);
       setEditModulosSelecionados(
         acessos[0]?.modulos_ativos?.length
           ? acessos[0].modulos_ativos
@@ -408,7 +408,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       const token = getAccessToken();
       const acessosPayload = editEmpresasSelecionadas.map((empresaIdValue) => ({
         empresaId: empresaIdValue,
-        role: editRole,
+        role: editPerfis,
         modulosAtivos: editModulosSelecionados,
       }));
 
@@ -425,7 +425,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       if (data.success) {
         setUsuarios((prev) =>
           prev.map((userItem) =>
-            userItem.id === editingUser.id ? { ...userItem, role: editRole } : userItem,
+            userItem.id === editingUser.id ? { ...userItem, role: editPerfis[0] || 'viewer' } : userItem,
           ),
         );
         showToast.success(t('settings.users.success.accessUpdated'));
