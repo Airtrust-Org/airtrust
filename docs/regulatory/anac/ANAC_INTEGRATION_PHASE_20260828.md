@@ -1,7 +1,7 @@
 # AirTrust — fase de integração ANAC / Operações de Voo / eDB
 
 **Data:** 2026-08-28  
-**Status:** preparação técnica; sem deploy; sem migração regulada; sem chamada a API privada da ANAC
+**Status:** implementação em andamento; sem deploy; sem transmissão regulada à ANAC
 
 ## 1. Direção
 
@@ -30,18 +30,25 @@ Essas peças continuam sendo a base. Nenhuma delas autoriza substituir o diário
 
 A Resolução ANAC nº 773/2025, vigente desde 01/01/2026, é a referência específica atual para Diário de Bordo. A Resolução nº 458/2017 continua relevante para uso de sistemas informatizados em substituição a registros obrigatórios em papel.
 
-O desenho deve continuar separando:
+O desenho separa:
 
 1. **fato operacional** — informação produzida pelo Controle de Voos/SIGVOOS;
 2. **rascunho regulatório** — projeção eDB ainda revisável e sem efeito oficial;
 3. **registro regulado** — somente depois de integridade, assinatura, versionamento, retenção e autorizações aplicáveis;
 4. **transmissão ANAC** — somente contra contrato oficial vigente e ambiente/credenciais autorizados.
 
-## 4. Primeira frente que pode avançar sem autorização especial
+## 4. ANAC Integration Layer — dados públicos
 
-A ANAC publica conjuntos de dados oficiais que podem ser consumidos sem credencial privilegiada. A primeira fundação adicionada nesta fase é o catálogo de fontes e a projeção minimizada do Registro Aeronáutico Brasileiro (RAB).
+A ANAC publica conjuntos oficiais que podem ser consumidos sem credencial privilegiada. O catálogo versionado desta fase inclui:
 
-### 4.1 RAB
+1. RAB;
+2. aeródromos públicos;
+3. aeródromos privados, helipontos e helidecks;
+4. organizações de manutenção RBAC 145.
+
+Política geral: `MINIMIZED_PROJECTION_ONLY`. A disponibilidade pública de um campo não significa que ele deve ser copiado para o AirTrust.
+
+## 5. RAB — sincronização automática
 
 Fonte oficial JSON:
 
@@ -51,122 +58,156 @@ Metadados oficiais:
 
 `https://www.anac.gov.br/acesso-a-informacao/dados-abertos/areas-de-atuacao/aeronaves/registro-aeronautico-brasileiro/5-registro-aeronautico-brasileiro`
 
-Periodicidade declarada pela ANAC: mensal.
+Periodicidade declarada pela ANAC: mensal. O AirTrust verifica diariamente porque o custo de uma verificação condicional é baixo e isso evita depender da data exata de publicação da Agência.
 
-Campos imediatamente úteis ao AirTrust incluem matrícula, número de série, categoria, tipo certificado, modelo, fabricante, classe, PMD, tipo ICAO, tripulação mínima, PAX máximo, assentos, ano de fabricação, validade CAV/CA e código de situação de aeronavegabilidade.
+### 5.1 Fluxo de atualização
 
-A projeção implementada nesta fase **não copia** proprietário, operador, CPF/CNPJ, endereço ou gravames, ainda que esses dados estejam presentes na fonte pública. O princípio é minimização: importar somente o que é necessário para cadastro/validação operacional da aeronave.
+O Worker reutiliza o cron diário já existente de `0 8 * * *` (UTC). Não foi criado um novo Cron Trigger.
 
-Uso futuro previsto:
+Fluxo:
 
-- preencher/validar cadastro de aeronave por matrícula;
-- alertar divergência entre cadastro AirTrust e RAB;
-- apoiar snapshot de aeronave do eDB;
-- sinalizar situação de aeronavegabilidade para revisão operacional;
-- nunca liberar ou bloquear voo exclusivamente pelo dado público sem regra operacional aprovada e registro da data/fonte.
+`ANAC -> conditional GET -> limite de tamanho -> SHA-256 -> JSON/contagem -> normalização -> recorte da frota AirTrust -> snapshot minimizado -> promoção`.
 
-### 4.2 Aeródromos, helipontos e helidecks
+Quando disponíveis, `ETag` e `Last-Modified` são armazenados e enviados como `If-None-Match` / `If-Modified-Since`.
 
-A ANAC publica bases de aeródromos públicos e privados em CSV/JSON. A frente seguinte deve normalizar essas bases para um catálogo único de locais operacionais e utilizá-lo em origem/destino do Controle de Voos.
+Resultados possíveis:
 
-Para operação offshore, a base privada é especialmente relevante porque inclui aeródromos privados, helipontos e helidecks.
+- `NOT_MODIFIED` — ANAC respondeu HTTP 304; nada é reprocessado;
+- `UNCHANGED` — resposta 200, mas SHA-256 idêntico ao snapshot ativo;
+- `PROMOTED` — conteúdo novo passou por todas as validações;
+- `FAILED` — qualquer falha mantém o snapshot anterior como versão ativa.
 
-### 4.3 Organizações de manutenção RBAC 145
+### 5.2 Proteção contra fonte ruim/truncada
 
-A ANAC publica lista oficial de organizações certificadas, com atualização semanal. A integração pode apoiar validação de organização, situação de certificado e, mais adiante, evidência de manutenção/RTS no ecossistema eDB.
+Uma nova versão não é promovida se:
 
-A primeira fonte JSON de organizações está catalogada, mas nenhum dado é persistido nesta fase.
+- não for JSON válido;
+- a raiz não tiver coleção reconhecível de registros;
+- vier com quantidade de registros implausivelmente pequena;
+- houver queda muito grande em relação à última versão aceita;
+- a taxa de linhas rejeitadas ultrapassar o limite de segurança;
+- o payload exceder o limite de memória configurado;
+- a gravação do snapshot/cache falhar.
 
-## 5. eDB — próximo endurecimento antes de qualquer promoção
+Ou seja: indisponibilidade ou erro de publicação da ANAC não substitui a última versão válida do AirTrust.
 
-A projeção eDB atual é útil como shadow mode, mas há três semânticas que devem ser confirmadas antes de qualquer uso regulado:
+### 5.3 Minimização e privacidade
 
-### 5.1 `starts` x `cycles`
+O arquivo completo do RAB é processado em memória para validação/hash e localização das aeronaves relevantes, mas não é persistido integralmente.
 
-O Controle de Voos possui `starts`. O campo eDB requer ciclos. O código atual projeta `starts` em `cycles`; essa equivalência deve permanecer tratada como hipótese até confirmação da definição operacional/técnica e da regra aplicável por aeronave.
+O AirTrust não guarda, por padrão:
 
-### 5.2 `tempo_ifr` x IFR real/simulado
+- CPF/CNPJ de proprietário/operador;
+- nomes e endereços de terceiros sem necessidade operacional;
+- gravames e textos livres não necessários.
 
-O Controle de Voos possui um campo agregado `tempo_ifr`; o contrato eDB separa IFR real e IFR simulado. Não deve existir promoção regulatória definitiva antes de separar ou comprovar a semântica da origem.
+Em R2 fica somente um snapshot minimizado, com provenance da fonte e os dados normalizados das aeronaves que já pertencem à frota cadastrada no AirTrust.
 
-### 5.3 `RDV.divergencias` x discrepância técnica
+### 5.4 Schema V2 0476
 
-Texto de divergência operacional no RDV não deve ser considerado automaticamente discrepância técnica regulada. O futuro fluxo precisa de identidade do registrante, classificação, ação de manutenção, diferimento quando aplicável e referência de retorno ao serviço.
+A sincronização adiciona somente tabelas novas:
 
-Esses itens são bloqueadores para promoção do shadow draft, não para continuar coletando evidência em staging.
+- `anac_public_sync_state` — estado corrente da fonte, hash ativo, ETag/Last-Modified, freshness e falhas;
+- `anac_public_sync_runs` — histórico append-only das execuções;
+- `anac_rab_aircraft_cache` — projeção RAB minimizada e tenant-scoped para aeronaves já cadastradas.
 
-## 6. API de Diário de Bordo da ANAC
+A tabela `aeronaves` não é sobrescrita pela sincronização.
 
-A infraestrutura pública da ANAC indica ambiente de homologação da API de Diário de Bordo e o Plano de Transformação Digital 2025–2026 registra entrega de integração do diário digital com a infraestrutura da Agência/CIV.
+### 5.5 Rollout
+
+O comportamento é fail-closed:
+
+- development/staging: sincronização habilitada por padrão depois da aplicação da 0476;
+- production: desabilitada por padrão;
+- produção só é ativada com `ANAC_PUBLIC_SYNC_ENABLED=true` em mudança de configuração revisada depois de evidência de staging.
+
+Critério mínimo de staging antes de produção:
+
+1. um `PROMOTED` válido;
+2. um segundo ciclo `NOT_MODIFIED` ou `UNCHANGED`;
+3. validação de isolamento por tenant;
+4. validação de snapshot minimizado em R2;
+5. teste de falha mantendo o snapshot anterior.
+
+## 6. Reconciliação AirTrust x RAB
+
+A comparação permanece somente leitura e retorna `canAutoApply: false`.
+
+Estados previstos para UI:
+
+- match;
+- valor AirTrust ausente;
+- valor ANAC ausente;
+- divergência para revisão humana;
+- matrícula não encontrada no RAB;
+- matrícula local inválida;
+- situação de aeronavegabilidade que exige atenção operacional.
+
+Nenhuma sincronização pública, por si só, autoriza alterar silenciosamente o cadastro do operador ou liberar/bloquear um voo.
+
+## 7. Aeródromos, helipontos, helidecks e RBAC 145
+
+Essas fontes já estão catalogadas, mas ainda não receberam um resolvedor automático frágil baseado em scraping de diretório.
+
+O mesmo motor de `sync_state -> validação -> hash -> promoção -> fallback` será reutilizado. Cada fonte só será ativada quando o AirTrust conseguir identificar de forma determinística o artefato oficial corrente.
+
+Para operação offshore, a base privada da ANAC é prioritária porque inclui helipontos e helidecks.
+
+## 8. eDB — endurecimento antes de qualquer promoção
+
+A projeção eDB atual é útil como shadow mode, mas três semânticas precisam de decisão explícita antes de uso regulado:
+
+1. `cv_voo_etapas.starts -> cycles`;
+2. `cv_voo_etapas.tempo_ifr -> IFR actual`, enquanto o contrato separa IFR real e simulado;
+3. `cv_rdv_operacional.divergencias -> technicalDiscrepancySummary` sem fluxo estruturado de manutenção/RTS.
+
+Esses pontos permanecem bloqueadores de promoção regulatória, não de testes shadow.
+
+## 9. API de Diário de Bordo da ANAC
 
 Ambiente publicado:
 
 `https://homologacao-api-diariodebordo.anac.gov.br/api/docs/index.html`
 
-O AirTrust não deve criar chamadas de produção nem cristalizar um payload presumido. Próximo gate externo:
+O Swagger público está sem contrato OpenAPI utilizável no momento. O AirTrust não deve adivinhar endpoint ou DTO.
 
-1. obter contrato OpenAPI/Swagger oficial vigente;
-2. obter instruções e credenciais de homologação;
-3. versionar o contrato no adapter `integrations/anac/edb`;
-4. implementar idempotência, recibo, retry seguro e reconciliação;
-5. testar somente no ambiente de homologação;
-6. ativar transmissão oficial apenas após autorização aplicável.
+Próximo gate externo:
 
-## 7. CHT/CMA
+1. credencial temporária de homologação;
+2. OpenAPI/Swagger vigente;
+3. guia atual da API DBE;
+4. regras atuais de vinculação de aeronave/operador e assinatura;
+5. implementação isolada em `integrations/anac/edb`;
+6. idempotência/outbox/recibo/reconciliação;
+7. teste somente em sandbox até autorização de cutover.
 
-Permanece uma frente administrativa separada. Não fazer scraping da consulta pública. Até existir mecanismo autorizado, o AirTrust pode registrar evidência de verificação assistida, mas não deve simular uma integração inexistente.
+## 10. CHT/CMA
 
-## 8. Arquitetura alvo
+Permanece frente administrativa separada. Não fazer scraping da consulta pública. Até existir mecanismo autorizado, o AirTrust pode registrar evidência de verificação assistida, mas não deve simular uma integração inexistente.
 
-### Camada operacional
+## 11. Sequência atual
 
-- `cv_voos`
-- `cv_voo_etapas`
-- `cv_voo_tripulantes`
-- RDV e conflitos de integração
-- SIGVOOS
+1. catálogo ANAC + normalizador RAB — implementado na branch;
+2. comparação read-only AirTrust x RAB — implementada na branch;
+3. Schema V2 0476 + sincronização RAB automática/fallback — implementados na branch, aguardando gates;
+4. aplicar 0476 somente em staging pelo fluxo governado;
+5. colher evidência de dois ciclos de sync;
+6. expor status RAB na tela de aeronaves/Controle de Voos;
+7. resolver artefatos oficiais de aeródromos/helidecks e RBAC 145;
+8. obter credencial/OpenAPI do eDB;
+9. adapter eDB sandbox;
+10. assinatura/imutabilidade/volumes/offline e pacote de conformidade;
+11. somente depois, submissão/cutover regulatório.
 
-### ANAC Integration Layer
+## 12. Não autorizações
 
-- `public-data` — RAB, aeródromos, RBAC 145 e outras bases abertas;
-- `edb` — futura API autenticada de Diário de Bordo;
-- `personnel` — futura integração autorizada CHT/CMA;
-- adapters versionados por contrato e com provenance explícita.
+Esta fase não autoriza por si só:
 
-### Camada regulada eDB
-
-- volumes;
-- entries imutáveis/versionadas;
-- assinatura PIC;
-- contrassinatura operador;
-- situação técnica/discrepâncias/RTS;
-- pacote offline/PED;
-- retenção e exportação de fiscalização;
-- outbox/reconciliação ANAC.
-
-Records Core experimental não deve ser promovido por esta frente até os gates próprios de integridade, concorrência, backup/restore e cutover estarem satisfeitos.
-
-## 9. Sequência de execução
-
-1. **RAB foundation** — catálogo oficial + normalizador minimizado + testes. **Iniciado nesta branch.**
-2. RAB ingestion/cache tenant-safe + comparação com cadastro de aeronaves, em PR separado.
-3. Catálogo ANAC de aeródromos/helipontos/helidecks + normalização.
-4. Enriquecimento de origem/destino do Controle de Voos.
-5. Corrigir/confirmar semânticas `starts/cycles`, IFR e discrepância técnica no shadow eDB.
-6. Fonte estruturada de manutenção/RTS para situação técnica pré-voo.
-7. Obter contrato e credenciais do sandbox da API eDB ANAC.
-8. Adapter ANAC eDB em homologação, sem efeito oficial.
-9. Assinatura/imutabilidade/volumes/offline e pacote de conformidade.
-10. Somente depois, submissão/cutover regulatório.
-
-## 10. Regra de segurança desta fase
-
-Nenhuma mudança desta etapa deve:
-
-- escrever registro eDB oficial;
-- substituir o diário em papel;
-- transmitir dados à ANAC sem credencial e autorização;
-- declarar homologação;
-- promover migration experimental de Records Core;
-- copiar dados pessoais de uma base pública sem necessidade operacional documentada;
-- transformar dado operacional em fato regulatório por equivalência presumida.
+- migration remota;
+- ativação da sincronização RAB em produção;
+- sobrescrita automática de `aeronaves`;
+- assinatura oficial de eDB;
+- substituição de diário aprovado;
+- transmissão eDB à ANAC;
+- scraping ou acesso não autorizado a CHT/CMA;
+- promoção do Records Core experimental.
