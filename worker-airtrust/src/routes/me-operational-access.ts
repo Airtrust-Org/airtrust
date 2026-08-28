@@ -5,7 +5,9 @@
  * that legitimately hold more than one operational role in the same tenant.
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
+import { SESSION_ROLE_COOKIE } from '../middleware/auth-session-aware';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
 import { resolveOperationalAccess } from '../services/operational-domain-access';
@@ -28,8 +30,18 @@ router.use('/*', async (c, next) => {
   c.header('Vary', 'Authorization');
 });
 
-function getUserId(c: Parameters<Parameters<typeof router.get>[1]>[0]): number {
+function getUserId(c: Context): number {
   return Number((c.get as (key: string) => unknown)('userId') || 0);
+}
+
+function setSessionRoleCookie(c: Context, role: string): void {
+  const isProduction = (c.env as Env).ENVIRONMENT === 'production';
+  const domain = isProduction ? '; Domain=.airtrust.online' : '';
+  const secure = isProduction ? '; Secure' : '';
+  c.header(
+    'Set-Cookie',
+    `${SESSION_ROLE_COOKIE}=${encodeURIComponent(role)}; Path=/; SameSite=Lax${domain}${secure}`,
+  );
 }
 
 router.get('/', async (c) => {
@@ -75,9 +87,10 @@ router.get('/session-profiles', async (c) => {
 
 /**
  * POST /api/me/operational-access/session-profile
- * Issues a new access token scoped to one validated profile. The existing
- * refresh token remains valid; the frontend reapplies the selected profile
- * after every refresh.
+ * Issues a new access token scoped to one validated profile and stores the
+ * selected role in a same-site session cookie. That cookie is independently
+ * revalidated on every request, so the selected profile survives access-token
+ * refresh without changing the canonical usuarios_empresas.role.
  */
 router.post('/session-profile', async (c) => {
   const db = c.env.DB;
@@ -156,6 +169,7 @@ router.post('/session-profile', async (c) => {
     ACCESS_TOKEN_TTL_SECONDS,
   );
 
+  setSessionRoleCookie(c, selectedRole);
   const roles = await resolveAvailableSessionRoles(db, userId, empresaId, selectedRole);
 
   return c.json({
