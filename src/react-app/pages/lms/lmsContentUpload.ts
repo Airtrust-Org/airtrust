@@ -40,16 +40,70 @@ function shouldIgnoreArchivePath(path: string): boolean {
   return IGNORED_ARCHIVE_SUFFIXES.some((suffix) => lowerPath.endsWith(suffix));
 }
 
-function parseLaunchFile(manifestXml: string): string | null {
-  const resourceMatch = manifestXml.match(/<resource\b[^>]*\bhref\s*=\s*["']([^"']+)["']/i);
+function normalizeHref(value: string | null | undefined): string | null {
+  const href = value?.trim();
+  return href ? href : null;
+}
+
+// SCORM manifests are XML and may carry any namespace prefix on their elements
+// (`<resource>`, `<ns0:resource>`, `<adlcp:resource>`, …). Prefer a real XML
+// parse and match elements by localName so the prefix is irrelevant; fall back
+// to a prefix-tolerant textual scan only when DOMParser is unavailable or the
+// document does not parse (e.g. some worker/test contexts).
+function parseLaunchFileViaDom(manifestXml: string): string | null {
+  if (typeof DOMParser === 'undefined') return null;
+  let doc: Document;
+  try {
+    doc = new DOMParser().parseFromString(manifestXml, 'text/xml');
+  } catch {
+    return null;
+  }
+  if (doc.getElementsByTagName('parsererror').length > 0) return null;
+  const root = doc.documentElement;
+  if (!root || root.localName.toLowerCase() !== 'manifest') return null;
+
+  const byLocalName = (name: string): Element[] =>
+    Array.from(root.getElementsByTagName('*')).filter((el) => el.localName.toLowerCase() === name);
+
+  const resources = byLocalName('resource');
+
+  // Preferred launch element: the resource referenced by the first content item.
+  const item = byLocalName('item').find((el) => el.getAttribute('identifierref'));
+  const ref = item?.getAttribute('identifierref');
+  if (ref) {
+    const target = resources.find((el) => el.getAttribute('identifier') === ref);
+    const href = normalizeHref(target?.getAttribute('href'));
+    if (href) return href;
+  }
+
+  // Simple packages omit organizations/items: take the first resource with an href.
+  for (const resource of resources) {
+    const href = normalizeHref(resource.getAttribute('href'));
+    if (href) return href;
+  }
+  return null;
+}
+
+function parseLaunchFileViaRegex(manifestXml: string): string | null {
+  const resourceMatch = manifestXml.match(
+    /<(?:[\w.-]+:)?resource\b[^>]*\bhref\s*=\s*["']([^"']+)["']/i,
+  );
   if (resourceMatch?.[1]) return resourceMatch[1];
-  const itemMatch = manifestXml.match(/<item\b[^>]*\bidentifierref\s*=\s*["']([^"']+)["']/i);
+  const itemMatch = manifestXml.match(
+    /<(?:[\w.-]+:)?item\b[^>]*\bidentifierref\s*=\s*["']([^"']+)["']/i,
+  );
   if (!itemMatch?.[1]) return null;
   const escaped = itemMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(
-    `<resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
-    'i',
-  ).exec(manifestXml)?.[1] ?? null;
+  return (
+    new RegExp(
+      `<(?:[\\w.-]+:)?resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
+      'i',
+    ).exec(manifestXml)?.[1] ?? null
+  );
+}
+
+export function parseLaunchFile(manifestXml: string): string | null {
+  return parseLaunchFileViaDom(manifestXml) ?? parseLaunchFileViaRegex(manifestXml);
 }
 
 function parseScormVersion(manifestXml: string): ScormVersao {
