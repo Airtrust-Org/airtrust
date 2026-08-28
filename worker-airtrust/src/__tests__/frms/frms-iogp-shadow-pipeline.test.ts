@@ -153,6 +153,45 @@ describe('FRMS IOGP shadow pipeline — end to end', () => {
     expect(result.snapshot.schemaVersion).toBe(1);
   });
 
+  it('uses the location-catalog timezone for REDEMET even when tenant fallback is null', async () => {
+    const client = mockRedemetClient([
+      {
+        id_localidade: 'SBME',
+        validade_inicial: '2026-04-02 10:00:00',
+        mens: 'METAR SBME 021000Z 00000KT 9999 SCT030 31/24 Q1012=',
+      },
+    ]);
+    const catalogueWithTimezone: FrmsLocationCatalogEntry[] = CATALOGUE.map((entry) =>
+      entry.code === 'SBME' ? { ...entry, timezoneIana: 'America/Sao_Paulo' } : entry,
+    );
+
+    const result = await runFrmsIogpShadowPipeline({
+      env: { ENVIRONMENT: 'staging', FRMS_IOGP_SHADOW_MODE_TENANTS: '6' },
+      tenantId: 6,
+      tripulanteId: 42,
+      jornadaId: 'j-timezone-regression',
+      dataOperacional: '2026-04-02',
+      naturezaDado: 'JORNADA_REALIZADA',
+      rawSigvoosLegs: [buildRawLeg('crewA')],
+      locationCatalogue: catalogueWithTimezone,
+      tenantOperationalTimezoneIana: null,
+      redemetClient: client,
+      complianceEvaluations: [{ status: 'COMPLIANT', actualMin: 100, resolved: null }],
+      regulatoryProfileReady: true,
+      regulatoryProfileCode: 'ANAC_BASIC',
+      regulatoryProfileReference: 'ref',
+      biologicalLevel: 'NORMAL',
+    });
+
+    if (!result.enabled) throw new Error('expected shadow pipeline to be enabled');
+    expect(client.fetchMetarRows).toHaveBeenCalledTimes(1);
+    const weather = [...result.weatherByLegId.values()][0];
+    expect(weather.departure.quality).not.toBe('UNAVAILABLE');
+    if (weather.departure.quality === 'UNAVAILABLE') throw new Error('unreachable');
+    expect(weather.departure.eventAtUtc).toBe('2026-04-02T10:06:00.000Z');
+    expect(weather.departure.temperatureC).toBe(31);
+  });
+
   it('never resolves an UNKNOWN compliance/regulatory state to automatic approval', async () => {
     const client = mockRedemetClient([]);
     const result = await runFrmsIogpShadowPipeline({
