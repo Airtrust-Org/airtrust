@@ -9,16 +9,60 @@ unrelated worktree changes intact; never reset, clean, stash or `git add .`.
 
 ### Authority
 
-- GitLab `origin/main` is the code authority; this repository is the Git
-  authority, not Google Drive caches.
-- Google Cloud Build (GCB) is the official CI. CircleCI is retired/legacy and
-  must not be used for current merge, release or deployment gates.
-- Cloudflare is the staging and production platform.
-- Before CI-dependent work, inspect the current GCB configuration in
-  `origin/main` and use its current official Cloud Build entrypoint. Do not
-  fall back to CircleCI when GCB fails; diagnose the GCB configuration.
+- GitHub `Airtrust-Org/airtrust` and its `main` branch are the canonical code,
+  branch, PR and merge authority.
+- GitHub Actions is the canonical workflow/check surface when healthy.
+- Google Cloud Build (GCB) is the official heavy-CI and governed backup
+  execution path. When GitHub Actions has an operational incident, use the
+  sanctioned GCB path without weakening required gates.
+- Cloudflare is the staging and production runtime platform.
+- GitLab is historical/legacy only. It is not a current code, merge, CI or
+  release authority.
+- CircleCI is retired and must not be used for current merge, release or
+  deployment gates.
+- Before CI-dependent work, inspect the current GitHub/GCB configuration in
+  canonical `main`; do not reconstruct pipeline state from an old worktree or
+  previous agent conversation.
 - Do not bypass branch protection, required gates, tenant isolation, RBAC,
   migration governance or production authorization.
+
+### Staging credentials and QA identities
+
+- GitHub Environment `staging` is the persistent source of truth for staging
+  secrets and synthetic QA login credentials. Worktrees, clones, shells and
+  agent conversations are never credential stores.
+- The canonical general-purpose staging QA login is
+  `qa-agent@staging.airtrust.invalid`. It is synthetic and staging-only.
+- Its durable password is `STAGING_SMOKE_PASSWORD` in GitHub Environment
+  `staging`. Existing workflows that consume `STAGING_SMOKE_EMAIL` must keep
+  that secret equal to the canonical login above.
+- Agents must never ask for a staging password merely because they changed
+  worktree or conversation. Diagnose the shared environment first.
+- Never write staging credentials to tracked files, `.env` files inside a
+  worktree, prompts, logs, artifacts or issue/PR bodies.
+- General authenticated staging smoke uses the canonical QA login and
+  `STAGING_SMOKE_PASSWORD` from Environment `staging`.
+- Examiner-training synthetic QA uses `QA_EXAMINER_ADMIN_EMAIL` and
+  `QA_EXAMINER_ADMIN_PASSWORD` from Environment `staging`. This identity is
+  intentionally separate because it belongs to the disposable synthetic QA
+  tenant and has different fixture/RBAC semantics.
+- Cloudflare/D1 staging credentials must likewise be consumed only from the
+  `staging` Environment by sanctioned workflows; never copy them into a local
+  worktree to make an agent test pass.
+- Before declaring credentials missing or invalid, run the sanctioned staging
+  identity readiness workflow and, for Cloudflare credentials, the Cloudflare
+  credential doctor. A failed readiness check is an infrastructure/config
+  blocker to fix centrally, not a reason to create a per-agent secret copy.
+- To provision/reseed/rotate the canonical general QA identity, use
+  `.github/workflows/provision-staging-standard-identity.yml`. The seed must
+  consume the central password; process-local/random fallback passwords are
+  forbidden because the next agent cannot recover them.
+- Authenticated tests that require a secret must run in a sanctioned GitHub
+  Actions/GCB job that reads the Environment secret. If an interactive browser
+  test needs the same coverage, add/extend a Playwright or equivalent staging
+  workflow rather than exposing the password to the agent.
+- See `docs/ops/STAGING_CREDENTIAL_CONTRACT.md` for the durable cross-agent
+  contract and recovery procedure.
 
 ### Default autonomy
 

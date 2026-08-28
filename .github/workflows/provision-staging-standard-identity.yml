@@ -1,0 +1,114 @@
+name: Provision Staging Standard Identity
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_IDENTITY to provision/rotate the canonical staging QA login'
+        required: true
+        type: string
+
+concurrency:
+  group: airtrust-staging-standard-identity
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+  STAGING_SMOKE_EMAIL: qa-agent@staging.airtrust.invalid
+  LEGACY_STAGING_SMOKE_EMAIL: smoke.staging.20260701@airtrust.invalid
+
+jobs:
+  staging-d1-identity-provision:
+    name: Staging D1 canonical QA identity provision
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CONFIRM_STAGING_D1: airtrust-db-staging-baseline-20260701
+    steps:
+      - name: Guard staging-only execution
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo 'MAIN_ONLY' >&2; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_STAGING_IDENTITY" ]] || { echo 'CONFIRMATION_REJECTED' >&2; exit 1; }
+          [[ "$STAGING_API_BASE_URL" == *staging* ]] || { echo 'STAGING_HOST_REQUIRED' >&2; exit 1; }
+          [[ "$STAGING_D1_NAME" == "airtrust-db-staging-baseline-20260701" ]] || { echo 'STAGING_D1_REJECTED' >&2; exit 1; }
+          [[ -n "$STAGING_SMOKE_PASSWORD" ]] || { echo 'STAGING_SMOKE_PASSWORD_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'STAGING_D1_CREDENTIALS_MISSING' >&2; exit 1; }
+          echo 'STAGING_IDENTITY_GUARD_PASS'
+
+      - name: Checkout canonical main
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate seed in dry-run mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/seed-staging-smoke-user.mjs
+
+      - name: Provision or rotate canonical staging QA user
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/seed-staging-smoke-user.mjs --apply --confirm-staging-baseline
+
+      - name: Validate real authenticated session
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging-doctor.mjs
+
+      - name: Retire exact legacy synthetic smoke login
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$STAGING_D1_NAME" --remote --json --command "UPDATE usuarios SET active = 0, deleted_at = COALESCE(deleted_at, datetime('now')), updated_at = datetime('now') WHERE lower(trim(email)) = 'smoke.staging.20260701@airtrust.invalid' AND lower(trim(email)) <> 'qa-agent@staging.airtrust.invalid';"
+
+      - name: Verify canonical identity and legacy retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/staging-standard-identity-postconditions.json"
+          npx wrangler d1 execute "$STAGING_D1_NAME" --remote --json --command "SELECT (SELECT COUNT(*) FROM usuarios WHERE lower(trim(email)) = 'qa-agent@staging.airtrust.invalid' AND active = 1 AND deleted_at IS NULL) AS canonical_active_count, (SELECT COUNT(*) FROM usuarios WHERE lower(trim(email)) = 'smoke.staging.20260701@airtrust.invalid' AND active = 1 AND deleted_at IS NULL) AS legacy_active_count;" > "$OUT"
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const raw = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/staging-standard-identity-postconditions.json', 'utf8'));
+          const row = Array.isArray(raw) ? raw[0]?.results?.[0] : raw?.results?.[0];
+          if (!row) throw new Error('POSTCONDITION_ROW_MISSING');
+          if (Number(row.canonical_active_count) !== 1) throw new Error(`CANONICAL_IDENTITY_COUNT_INVALID:${row.canonical_active_count}`);
+          if (Number(row.legacy_active_count) !== 0) throw new Error(`LEGACY_IDENTITY_STILL_ACTIVE:${row.legacy_active_count}`);
+          console.log('STAGING_STANDARD_IDENTITY_READY');
+          NODE
+
+      - name: Publish sanitized summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Staging standard identity'
+            echo ''
+            echo '- login: `qa-agent@staging.airtrust.invalid`'
+            echo '- password source: GitHub Environment `staging` / `STAGING_SMOKE_PASSWORD`'
+            echo '- target: staging only'
+            echo '- legacy synthetic login retirement: enforced'
+            echo '- cleartext password output: none'
+          } >> "$GITHUB_STEP_SUMMARY"

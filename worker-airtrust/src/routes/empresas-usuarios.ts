@@ -395,11 +395,16 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
       await vinculoStatement.run();
     }
     
-    // Insert profiles
+    // Atribuição administrativa explícita de perfis (autoridade — migration 0473).
+    // Falha aqui é erro real e deve propagar para o handler da rota; nunca
+    // silenciar, para o administrador não achar que a atribuição foi gravada.
     for (const p of normalizedPerfis) {
-      await db.prepare('INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id, empresa_id, perfil, ativo, created_at, updated_at) VALUES (?, ?, ?, 1, datetime("now"), datetime("now"))')
+      await db
+        .prepare(
+          'INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id, empresa_id, perfil, ativo, created_at, updated_at) VALUES (?, ?, ?, 1, datetime("now"), datetime("now"))',
+        )
         .bind(user.id, empresaId, perfilFromEmpresaRole(p))
-        .run().catch(() => {}); // catch in case table doesn't exist yet
+        .run();
     }
 
     vinculosCriados += 1;
@@ -584,12 +589,21 @@ app.get('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
         } catch {
           modulosAtivos = [];
         }
+        let perfis: string[] = [];
+        try {
+          perfis = JSON.parse(item.perfis || '[]') as string[];
+        } catch {
+          perfis = [];
+        }
         return {
           empresa_id: item.empresa_id,
           empresa_nome: item.empresa_nome,
-          perfis: (() => {
-            try { return JSON.parse(item.perfis || '[]'); } catch { return []; }
-          })(),
+          // `role` continua exposto por compatibilidade (maior perfil ativo);
+          // `perfis` é a lista explícita autoritativa (migration 0473).
+          role: normalizeEmpresaUserRole(
+            perfis.length > 0 ? pickHighestRole(...perfis) : item.role,
+          ),
+          perfis,
           is_primary: item.is_primary,
           modulos_ativos: modulosAtivos,
         };
@@ -679,10 +693,17 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
     )
     .run();
 
-  // clean up perfis
-  await db.prepare(tenantCtx.empresaCodigo === 'airtrust' ? 'DELETE FROM usuarios_empresas_perfis WHERE usuario_id = ?' : 'DELETE FROM usuarios_empresas_perfis WHERE usuario_id = ? AND empresa_id = ?')
+  // Substituição completa: remove as atribuições explícitas atuais antes de
+  // regravar o conjunto enviado pelo administrador. É assim que um perfil
+  // removido pelo admin deixa de existir na estrutura autoritativa.
+  await db
+    .prepare(
+      tenantCtx.empresaCodigo === 'airtrust'
+        ? 'DELETE FROM usuarios_empresas_perfis WHERE usuario_id = ?'
+        : 'DELETE FROM usuarios_empresas_perfis WHERE usuario_id = ? AND empresa_id = ?',
+    )
     .bind(...(tenantCtx.empresaCodigo === 'airtrust' ? [usuarioId] : [usuarioId, tenantCtx.empresaId]))
-    .run().catch(() => {});
+    .run();
 
   let isPrimarySet = false;
   for (const acesso of acessos) {
@@ -718,9 +739,12 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
     }
     
     for (const p of acesso.perfis) {
-      await db.prepare('INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id, empresa_id, perfil, ativo, created_at, updated_at) VALUES (?, ?, ?, 1, datetime("now"), datetime("now"))')
+      await db
+        .prepare(
+          'INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id, empresa_id, perfil, ativo, created_at, updated_at) VALUES (?, ?, ?, 1, datetime("now"), datetime("now"))',
+        )
         .bind(usuarioId, acesso.empresaId, perfilFromEmpresaRole(p))
-        .run().catch(() => {});
+        .run();
     }
   }
 
@@ -815,9 +839,12 @@ app.post('/:id/usuarios', requireTenantRole('admin'), async (c) => {
   }
 
   for (const p of normalizedPerfis) {
-    await db.prepare('INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id, empresa_id, perfil, ativo, created_at, updated_at) VALUES (?, ?, ?, 1, datetime("now"), datetime("now"))')
+    await db
+      .prepare(
+        'INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id, empresa_id, perfil, ativo, created_at, updated_at) VALUES (?, ?, ?, 1, datetime("now"), datetime("now"))',
+      )
       .bind(usuario_id, id, perfilFromEmpresaRole(p))
-      .run().catch(() => {});
+      .run();
   }
 
   await syncUsuarioPerfilFromAcessos(db, Number(usuario_id));
