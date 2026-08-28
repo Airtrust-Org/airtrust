@@ -81,6 +81,21 @@ describe('calcEffectiveness — Operational Load V1', () => {
     expect(loaded.componentes.carga_operacional).toBe(-0.04);
   });
 
+  it('carries SIGVOOS_UNAVAILABLE through the effectiveness breakdown without inventing landings', () => {
+    const load = computeOperationalLoadV1({
+      landingsCount: 0,
+      landingsEvidenceQuality: 'INCOMPLETE',
+      temperatureMaxC: 32,
+    });
+    const loaded = calcEffectiveness(makeFat(), L, jornada, load);
+
+    expect(load.data_quality).toBe('SIGVOOS_UNAVAILABLE');
+    expect(load.operational_load_landings_delta).toBe(0);
+    expect(loaded.operational_load?.data_quality).toBe('SIGVOOS_UNAVAILABLE');
+    expect(loaded.operational_load?.landings_count).toBe(0);
+    expect(loaded.operational_load?.temperature_delta).toBe(-1);
+  });
+
   it('respects the −6 point floor end to end', () => {
     const baseline = calcEffectiveness(makeFat(), L, jornada);
     const load = computeOperationalLoadV1({ landingsCount: 12, temperatureMaxC: 40 });
@@ -91,7 +106,6 @@ describe('calcEffectiveness — Operational Load V1', () => {
 
   it('applies through the legacy (fatorização-only) path too', () => {
     const load = computeOperationalLoadV1({ landingsCount: 5, temperatureMaxC: 34 });
-    // -3 (landings) + -1.5 (temp) = -4.5
     expect(load.operational_load_total_delta).toBe(-4.5);
     const legacyBaseline = calcEffectiveness(makeFat({ total_fatorizado_jornada: 0 }), L);
     const legacyLoaded = calcEffectiveness(makeFat({ total_fatorizado_jornada: 0 }), L, undefined, load);
