@@ -1,5 +1,32 @@
 import { normalizeAirtrustRole } from '../utils/role-resolution';
 
+/**
+ * Nome do cookie same-site que carrega o perfil ativo escolhido para a sessão.
+ * A escolha é sempre revalidada no backend a cada request; o cookie é apenas
+ * o transporte da preferência, nunca uma credencial de elevação.
+ */
+export const SESSION_ROLE_COOKIE = 'airtrust_session_role';
+
+/**
+ * Extrai o perfil de sessão selecionado a partir do header Cookie bruto.
+ * Retorna null quando não há seleção — nesse caso o middleware de auth deve
+ * usar a role canônica sem nenhuma consulta adicional.
+ */
+export function parseSessionRoleFromCookieHeader(
+  cookieHeader: string | null | undefined,
+): string | null {
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(
+    new RegExp(`(?:^|;\\s*)${SESSION_ROLE_COOKIE}=([^;]*)`),
+  );
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 export type SessionRole = 'ADMINISTRADOR' | 'GESTOR' | 'INSTRUTOR' | 'ALUNO' | 'USUARIO';
 
 const ROLE_ORDER: SessionRole[] = ['ADMINISTRADOR', 'GESTOR', 'INSTRUTOR', 'ALUNO', 'USUARIO'];

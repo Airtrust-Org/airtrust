@@ -7,11 +7,11 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
-import { SESSION_ROLE_COOKIE } from '../middleware/auth-session-aware';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
 import { resolveOperationalAccess } from '../services/operational-domain-access';
 import {
+  SESSION_ROLE_COOKIE,
   normalizeSessionRole,
   resolveAvailableSessionRoles,
   resolveRequestedSessionRole,
@@ -96,7 +96,9 @@ router.post('/session-profile', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const userId = getUserId(c);
-  const body = await c.req.json<{ role?: string }>().catch(() => ({}));
+  const body = await c.req
+    .json<{ role?: string }>()
+    .catch(() => ({}) as { role?: string });
   const requestedRole = String(body.role || '').trim();
 
   if (!requestedRole) {
