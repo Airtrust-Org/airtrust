@@ -76,6 +76,25 @@ describe('FRMS operational readiness', () => {
     expect(normalized[0]).toMatchObject({ reactionTimeMs: 700, outcome: 'lapse' });
   });
 
+  it('rejects a V2 stimulus created after the sampling window', () => {
+    expect(() =>
+      normalizeReadinessTrials(
+        [
+          {
+            sequence: 1,
+            scheduledAtMs: 180_050,
+            stimulusAtMs: 180_100,
+            responseAtMs: 180_300,
+            reactionTimeMs: 200,
+            outcome: 'response',
+          },
+        ],
+        180_000,
+        'airtrust-pvtb-v2',
+      ),
+    ).toThrow('invalid_trial_timing');
+  });
+
   it('rejects duplicate sequences and impossible response timing', () => {
     expect(() =>
       normalizeReadinessTrials([trial(1, 250, 'response'), trial(1, 300, 'response')], 180_000),
