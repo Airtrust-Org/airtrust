@@ -56,7 +56,10 @@ function finiteNumberOrNull(value) {
 }
 function resolveProbedScormLocation(authored, explicitLocation, domLocation) {
   var explicitMarker = parseScormLocationMarker(explicitLocation);
-  if (authored && explicitMarker && explicitMarker.current >= 1) {
+  // A full explicit fraction (current/total) authored by the package is
+  // authoritative: a generic DOM fraction must never replace it (e.g. package
+  // 47/47 vs a "121/135" string elsewhere on the page).
+  if (authored && explicitMarker && explicitMarker.current >= 1 && explicitMarker.total != null) {
     return { location: String(explicitLocation), persist: false, reason: 'explicit-package-location' };
   }
   var domMarker = parseScormLocationMarker(domLocation);
@@ -66,6 +69,14 @@ function resolveProbedScormLocation(authored, explicitLocation, domLocation) {
       persist: false,
       reason: 'no-dom-progress',
     };
+  }
+  // Bare-number authored location (no total) does not express a full position,
+  // so the DOM fraction is still the authoritative progress source. Only accept
+  // a fraction whose current matches the authored position: form numbers
+  // ("FORM-MNT-005/123") or regulatory refs ("operadores 121/135") must never
+  // hijack the real slide counter.
+  if (authored && explicitMarker && explicitMarker.current >= 1 && domMarker.total != null && domMarker.current !== explicitMarker.current) {
+    return { location: String(explicitLocation), persist: false, reason: 'dom-current-mismatch' };
   }
   var domLoc = domMarker.total == null
     ? String(domMarker.current)
@@ -117,6 +128,32 @@ export function buildScormProgressParsersScript(): string {
 
   function parseProgressFromHeader(doc) {
     if (!doc) return null;
+
+    // Pacotes AirTrust/RevLMS renderizam a posição no próprio contador
+    // (#counterText, #counter, #progressText), ex.: "54/69", "Slide 54/108",
+    // "Tela 54 de 69". Ler o contador do pacote é mais confiável do que varrer o
+    // body inteiro, onde números de formulário ("FORM-MNT-005/123") ou referências
+    // regulatórias ("operadores 121/135") poderiam ser lidos como progresso.
+    var counterNode = doc.querySelector('#counterText, #counter, #progressText, #lesson-counter, [data-slide-counter]');
+    var counterText = counterNode ? String(counterNode.textContent || '') : '';
+    var counterMatch = counterText.match(/(\\d+)\\s*(?:\\/|de|of)\\s*(\\d+)/i);
+    if (counterMatch) {
+      var counterCurrent = Number(counterMatch[1]);
+      var counterTotal = Number(counterMatch[2]);
+      if (
+        Number.isFinite(counterCurrent) &&
+        Number.isFinite(counterTotal) &&
+        counterTotal > 1 &&
+        counterCurrent >= 0 &&
+        counterCurrent <= counterTotal
+      ) {
+        return {
+          current: counterCurrent,
+          total: counterTotal,
+          pct: Math.max(0, Math.min(100, Math.round((counterCurrent / counterTotal) * 100))),
+        };
+      }
+    }
 
     var currentNode = doc.querySelector('#lesson-header-nav-page-number');
     var currentText = currentNode ? String(currentNode.textContent || '') : '';
