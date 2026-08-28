@@ -142,6 +142,29 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.getByText(/pessoa\(s\) sem pendência no recorte atual/i)).toBeInTheDocument();
   });
 
+  it('mostra os quatro sinais operacionais em cada linha da fila', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [
+          item({
+            checkin_status: 'AUSENTE',
+            fortnight_indicator: null,
+            estado_operacional: 'ATENCAO',
+          }),
+        ],
+      }),
+    );
+
+    renderDashboard();
+
+    const list = screen.getByLabelText('Sinais operacionais do dia');
+    const chips = within(list);
+    expect(chips.getByLabelText('Fadiga diária: Não realizada — crítico')).toBeInTheDocument();
+    expect(chips.getByLabelText('Compliance: Dados incompletos — sem dado')).toBeInTheDocument();
+    expect(chips.getByLabelText('Efetividade: 92,0% — normal')).toBeInTheDocument();
+    expect(chips.getByLabelText('Prontidão: Não avaliado — sem dado')).toBeInTheDocument();
+  });
+
   it('trata dado incompleto como confirmação, esconde efetividade não confiável e explica o que falta', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
       state({
@@ -164,7 +187,9 @@ describe('FrmsDashboard simplificado', () => {
 
     expect(screen.getAllByText('Confirmar').length).toBeGreaterThan(0);
     expect(screen.getByText('Jornada ainda não consolidada.')).toBeInTheDocument();
-    expect(screen.getByText('Efetividade não calculada')).toBeInTheDocument();
+    // Efetividade não confiável aparece como sinal cinza "Não calculada", nunca 0%.
+    expect(screen.getByLabelText('Efetividade: Não calculada — sem dado')).toBeInTheDocument();
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Max/i }));
     const drawer = within(screen.getByRole('dialog'));

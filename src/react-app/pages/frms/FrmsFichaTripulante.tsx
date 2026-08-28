@@ -34,6 +34,7 @@ import { formatFrmsDate, isTripulanteOperacional } from './frmsUtils';
 import { buildJornadaMensalPresentation } from './frmsJornadasMensaisPresentation';
 import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { FortnightConsolidatedPanel } from './components/FortnightOperationalIndicator';
+import { FrmsSignalGrid } from './components/FrmsOperationalSignals';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
 
@@ -507,6 +508,16 @@ export default function FrmsFichaTripulante() {
             </button>
           </div>
         </section>
+
+        {todayFortnightSnapshotItem ? (
+          <section className="rounded-2xl border border-slate-200/70 bg-white/80 px-5 py-4 shadow-sm backdrop-blur-sm">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Status operacional do dia</h2>
+            <FrmsSignalGrid
+              item={todayFortnightSnapshotItem}
+              className="mt-3 sm:grid-cols-4"
+            />
+          </section>
+        ) : null}
 
         <FortnightConsolidatedPanel
           indicator={fortnightIndicator}
