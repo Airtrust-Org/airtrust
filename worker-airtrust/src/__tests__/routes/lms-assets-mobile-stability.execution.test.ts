@@ -3,6 +3,10 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLaunchPage } from '../../routes/lms-assets';
+import {
+  buildScormLocationHelpersScript,
+  buildScormProgressParsersScript,
+} from '../../services/lms-scorm-wrapper-runtime';
 
 // Este pacote (worker-airtrust) compila sem lib "dom" de propósito (é um
 // Cloudflare Worker). Este teste roda em ambiente jsdom via vitest, mas
@@ -517,5 +521,104 @@ describe('Wrapper SCORM real (execução em jsdom) — tratamento de erros non-2
 
     const statusText = g.document.getElementById('status-text')?.textContent;
     expect(statusText).toBe('Não foi possível salvar o progresso.');
+  });
+});
+
+// ── Runtime string (produção): progresso a partir de bare lesson_location ─────
+// Os pacotes RevLMS de Manutenção (MCQ/MOM/MGM/SGSO/MEL/PT6) escrevem
+// `cmi.core.lesson_location` como número simples ("47"), sem total. O wrapper
+// precisa completar o total a partir do CONTADOR CONFIÁVEL do pacote
+// (`#counterText`/`#counter`/`#progressText`), e nunca de frações arbitrárias
+// no body ("FORM-MNT-005/123", "operadores 121/135"). Sem isso o progresso não
+// é persistido e a conclusão canônica é rejeitada (LMS_PERSISTED_PROGRESS_REQUIRED).
+describe('Runtime string (produção) — bare lesson_location + contador confiável', () => {
+  function evalLocationHelpers() {
+    const script = buildScormLocationHelpersScript();
+    const fn = new Function(
+      `${script}; return { parseScormLocationMarker, resolveProbedScormLocation };`,
+    );
+    return fn() as {
+      parseScormLocationMarker: (v: unknown) => { current: number; total: number | null } | null;
+      // O runtime de produção usa argumentos posicionais (authored, explicitLocation, domLocation).
+      resolveProbedScormLocation: (
+        authored: boolean,
+        explicitLocation: unknown,
+        domLocation: unknown,
+      ) => { location: string | null; persist: boolean; reason: string };
+    };
+  }
+
+  function evalProgressParsers() {
+    const script = buildScormProgressParsersScript();
+    const fn = new Function(
+      `${script}; return { parseProgressFromHeader, parseProgressFromDocument };`,
+    );
+    return fn() as {
+      parseProgressFromHeader: (doc: Document) => { current: number; total: number; pct: number } | null;
+      parseProgressFromDocument: (doc: Document) => { current: number; total: number; pct: number } | null;
+    };
+  }
+
+  function buildDoc(innerHtml: string): Document {
+    const doc = g.document.implementation.createHTMLDocument('pkg');
+    doc.body.innerHTML = innerHtml;
+    return doc;
+  }
+
+  it('A: explicit=47 + counter 47/47 + body com 121/135 -> progresso 47/47 (nunca 121/135)', () => {
+    const { resolveProbedScormLocation } = evalLocationHelpers();
+    const { parseProgressFromDocument } = evalProgressParsers();
+    const doc = buildDoc(`
+      <div id="counterText">47/47</div>
+      <div>Manutenção para operadores 121/135</div>
+    `);
+    const parsed = parseProgressFromDocument(doc);
+    expect(parsed).toEqual({ current: 47, total: 47, pct: 100 });
+    const decision = resolveProbedScormLocation(true, '47', '47/47');
+    expect(decision).toEqual({ location: '47/47', persist: true, reason: 'dom-fallback' });
+  });
+
+  it('B: explicit=69 + counter "Tela 69 de 69" + body com 005/123 -> progresso 69/69', () => {
+    const { resolveProbedScormLocation } = evalLocationHelpers();
+    const { parseProgressFromDocument } = evalProgressParsers();
+    const doc = buildDoc(`
+      <div id="progressText">Tela 69 de 69</div>
+      <div>FORM-MNT-005/123 Designação e lista de pessoal autorizado</div>
+    `);
+    const parsed = parseProgressFromDocument(doc);
+    expect(parsed).toEqual({ current: 69, total: 69, pct: 100 });
+    const decision = resolveProbedScormLocation(true, '69', '69/69');
+    expect(decision.location).toBe('69/69');
+    expect(decision.persist).toBe(true);
+  });
+
+  it('C: explicit=47 + counter incompatível 48/80 -> preserva explicit, não inventa total', () => {
+    const { resolveProbedScormLocation } = evalLocationHelpers();
+    const decision = resolveProbedScormLocation(true, '47', '48/80');
+    expect(decision).toEqual({ location: '47', persist: false, reason: 'dom-current-mismatch' });
+  });
+
+  it('D: explicit fraction válida 40/80 -> autoridade, DOM diferente não substitui', () => {
+    const { resolveProbedScormLocation } = evalLocationHelpers();
+    const decision = resolveProbedScormLocation(true, '40/80', '41/80');
+    expect(decision).toEqual({ location: '40/80', persist: false, reason: 'explicit-package-location' });
+  });
+
+  it('E: sem explicit location + contador válido -> usa contador', () => {
+    const { resolveProbedScormLocation } = evalLocationHelpers();
+    const decision = resolveProbedScormLocation(false, null, '47/47');
+    expect(decision).toEqual({ location: '47/47', persist: true, reason: 'dom-fallback' });
+  });
+
+  it('parseProgressFromDocument prefere o contador confiável antes de varrer o body', () => {
+    const { parseProgressFromDocument } = evalProgressParsers();
+    const doc = buildDoc(`
+      <div id="counter">26/47</div>
+      <div>Manutenção para operadores 121/135</div>
+      <div>FORM-MNT-005/123</div>
+    `);
+    const parsed = parseProgressFromDocument(doc);
+    // O contador (#counter) vence mesmo com frações maiores no body.
+    expect(parsed).toEqual({ current: 26, total: 47, pct: 55 });
   });
 });
