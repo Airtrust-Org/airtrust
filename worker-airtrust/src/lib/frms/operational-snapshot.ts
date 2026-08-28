@@ -1,4 +1,4 @@
-import type { Origem, LimitesMap } from './types';
+import type { Origem } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
 import { resolverFrmsConfig } from './frms-config';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
@@ -320,6 +320,91 @@ function includesAeronaveFilter(
   return aeronave.includes(aeronaveFilter);
 }
 
+/**
+ * Filtros de apresentação da resposta. NÃO devem ser aplicados antes do cálculo
+ * do Compliance quinzenal — apenas ao conjunto que volta para o cliente.
+ * `funcionario_id`, por ser tenant-safe, pode limitar também o contexto.
+ */
+function applyPresentationFilters(
+  items: FrmsOperationalSnapshotItem[],
+  filters: FrmsOperationalSnapshotFilters | undefined,
+): FrmsOperationalSnapshotItem[] {
+  const statusFilterSet =
+    filters?.status && filters.status.length > 0
+      ? new Set(filters.status.map((status) => status.trim().toUpperCase()).filter(Boolean))
+      : null;
+  const baseFilter = normalizeText(filters?.base)?.toUpperCase() ?? null;
+  const aeronaveFilter = normalizeText(filters?.aeronave)?.toUpperCase() ?? null;
+
+  return items.filter((item) => {
+    if (
+      typeof filters?.funcionario_id === 'number' &&
+      item.funcionario_id !== filters.funcionario_id
+    ) {
+      return false;
+    }
+
+    if (!includesStatusFilter(item, statusFilterSet)) return false;
+    if (!includesBaseFilter(item, baseFilter)) return false;
+    if (!includesAeronaveFilter(item, aeronaveFilter)) return false;
+
+    if (
+      filters?.include_inconsistencies === false &&
+      item.alertas.includes('DADO_INCONSISTENTE')
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function compareSnapshotItems(
+  a: FrmsOperationalSnapshotItem,
+  b: FrmsOperationalSnapshotItem,
+): number {
+  if (a.data_operacional !== b.data_operacional) {
+    return a.data_operacional < b.data_operacional ? -1 : 1;
+  }
+
+  const statusDiff = alertPriority(a.snapshot_status) - alertPriority(b.snapshot_status);
+  if (statusDiff !== 0) return statusDiff;
+
+  const nomeA = String(a.nome || '').toUpperCase();
+  const nomeB = String(b.nome || '').toUpperCase();
+  if (nomeA !== nomeB) return nomeA < nomeB ? -1 : 1;
+  return a.funcionario_id - b.funcionario_id;
+}
+
+function parseIsoDate(iso: string): Date {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(Date.UTC(year, (month || 1) - 1, day || 1));
+}
+
+function formatIsoDate(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const date = parseIsoDate(iso);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatIsoDate(date);
+}
+
+function minIso(a: string, b: string): string {
+  return a <= b ? a : b;
+}
+
+function maxIso(a: string, b: string): string {
+  return a >= b ? a : b;
+}
+
+/** Dias de contexto anteriores necessários para o rolling de 168h (7 dias, incluindo a âncora). */
+const ROLLING_168H_CONTEXT_LEAD_DAYS = 6;
+
 export function buildFrmsOperationalSnapshot(
   input: BuildOperationalSnapshotInput,
 ): FrmsOperationalSnapshotResult {
@@ -635,49 +720,7 @@ export function buildFrmsOperationalSnapshot(
     items.push(item);
   }
 
-  const statusFilterSet =
-    input.filters?.status && input.filters.status.length > 0
-      ? new Set(input.filters.status.map((status) => status.trim().toUpperCase()).filter(Boolean))
-      : null;
-
-  const baseFilter = normalizeText(input.filters?.base)?.toUpperCase() ?? null;
-  const aeronaveFilter = normalizeText(input.filters?.aeronave)?.toUpperCase() ?? null;
-
-  const filtered = items
-    .filter((item) => {
-      if (
-        typeof input.filters?.funcionario_id === 'number' &&
-        item.funcionario_id !== input.filters.funcionario_id
-      ) {
-        return false;
-      }
-
-      if (!includesStatusFilter(item, statusFilterSet)) return false;
-      if (!includesBaseFilter(item, baseFilter)) return false;
-      if (!includesAeronaveFilter(item, aeronaveFilter)) return false;
-
-      if (
-        input.filters?.include_inconsistencies === false &&
-        item.alertas.includes('DADO_INCONSISTENTE')
-      ) {
-        return false;
-      }
-
-      return true;
-    })
-    .sort((a, b) => {
-      if (a.data_operacional !== b.data_operacional) {
-        return a.data_operacional < b.data_operacional ? -1 : 1;
-      }
-
-      const statusDiff = alertPriority(a.snapshot_status) - alertPriority(b.snapshot_status);
-      if (statusDiff !== 0) return statusDiff;
-
-      const nomeA = String(a.nome || '').toUpperCase();
-      const nomeB = String(b.nome || '').toUpperCase();
-      if (nomeA !== nomeB) return nomeA < nomeB ? -1 : 1;
-      return a.funcionario_id - b.funcionario_id;
-    });
+  const filtered = applyPresentationFilters(items, input.filters).sort(compareSnapshotItems);
 
   return {
     items: filtered,
@@ -698,17 +741,25 @@ function buildPlaceholders(length: number): string {
   return Array.from({ length }, () => '?').join(', ');
 }
 
-export async function listFrmsOperationalSnapshot(
-  db: D1Database,
-  params: ListFrmsOperationalSnapshotParams,
-): Promise<FrmsOperationalSnapshotResult> {
-  const operationalContext = await resolveFrmsOperationalContext(db, {
-    empresaId: params.empresaId,
-    referenceAt: params.hoje ?? params.dataFim,
-  });
-  const limites = asOperationalLimitesMap(operationalContext.parameters);
-  const frmsConfig = resolverFrmsConfig(limites);
+interface OperationalSnapshotRows {
+  escalas: ScaleSnapshotRow[];
+  jornadas: JornadaSnapshotRow[];
+  checkins: CheckinSnapshotRow[];
+  effectiveness: EffectivenessSnapshotRow[];
+}
 
+/**
+ * Carrega escalas/jornadas/check-ins/fatorização para uma janela de datas.
+ * Todas as consultas continuam ancoradas em `empresa_id` (tenant isolation).
+ * A janela aqui é a janela INTERNA de cálculo — não necessariamente o intervalo
+ * pedido pelo cliente.
+ */
+async function loadOperationalSnapshotRows(
+  db: D1Database,
+  empresaId: number,
+  janelaInicio: string,
+  janelaFim: string,
+): Promise<OperationalSnapshotRows> {
   const [escalasResult, jornadasResult, checkinsResult, effectivenessResult] = await Promise.all([
     db
       .prepare(
@@ -746,14 +797,7 @@ export async function listFrmsOperationalSnapshot(
          SELECT data_operacional, funcionario_id, hora_apresentacao, hora_termino, aeronave_prefixo, aeronave_modelo
          FROM escala_crew`,
       )
-      .bind(
-        params.empresaId,
-        params.dataInicio,
-        params.dataFim,
-        params.empresaId,
-        params.dataInicio,
-        params.dataFim,
-      )
+      .bind(empresaId, janelaInicio, janelaFim, empresaId, janelaInicio, janelaFim)
       .all<ScaleSnapshotRow>(),
 
     db
@@ -789,7 +833,7 @@ export async function listFrmsOperationalSnapshot(
            AND j.data >= ?
            AND j.data <= ?`,
       )
-      .bind(params.empresaId, params.dataInicio, params.dataFim)
+      .bind(empresaId, janelaInicio, janelaFim)
       .all<JornadaSnapshotRow>(),
 
     db
@@ -812,7 +856,7 @@ export async function listFrmsOperationalSnapshot(
            AND ch.data_checkin >= ?
            AND ch.data_checkin <= ?`,
       )
-      .bind(params.empresaId, params.dataInicio, params.dataFim)
+      .bind(empresaId, janelaInicio, janelaFim)
       .all<CheckinSnapshotRow>(),
 
     db
@@ -849,41 +893,189 @@ export async function listFrmsOperationalSnapshot(
          FROM ranked
          WHERE rn = 1`,
       )
-      .bind(params.empresaId, params.dataInicio, params.dataFim)
+      .bind(empresaId, janelaInicio, janelaFim)
       .all<EffectivenessSnapshotRow>(),
   ]);
 
+  return {
+    escalas: escalasResult.results || [],
+    jornadas: jornadasResult.results || [],
+    checkins: checkinsResult.results || [],
+    effectiveness: effectivenessResult.results || [],
+  };
+}
+
+function collectCandidateIds(rows: OperationalSnapshotRows): number[] {
   const candidateIds = new Set<number>();
-  for (const row of escalasResult.results || []) candidateIds.add(asNumber(row.funcionario_id));
-  for (const row of jornadasResult.results || []) candidateIds.add(asNumber(row.funcionario_id));
-  for (const row of checkinsResult.results || []) candidateIds.add(asNumber(row.funcionario_id));
-  for (const row of effectivenessResult.results || []) candidateIds.add(asNumber(row.funcionario_id));
+  for (const row of rows.escalas) candidateIds.add(asNumber(row.funcionario_id));
+  for (const row of rows.jornadas) candidateIds.add(asNumber(row.funcionario_id));
+  for (const row of rows.checkins) candidateIds.add(asNumber(row.funcionario_id));
+  for (const row of rows.effectiveness) candidateIds.add(asNumber(row.funcionario_id));
+  return Array.from(candidateIds).filter((id) => id > 0);
+}
 
-  let funcionarios: FuncionarioSnapshotRow[] = [];
-  const ids = Array.from(candidateIds).filter((id) => id > 0);
+async function loadOperationalFuncionarios(
+  db: D1Database,
+  empresaId: number,
+  ids: number[],
+): Promise<FuncionarioSnapshotRow[]> {
+  if (ids.length === 0) return [];
+  const placeholders = buildPlaceholders(ids.length);
+  const result = await db
+    .prepare(
+      `SELECT
+         id,
+         nome,
+         guerra AS nome_guerra,
+         funcao,
+         cargo,
+         base,
+         aeronave
+       FROM funcionarios
+       WHERE deleted_at IS NULL
+         AND empresa_id = ?
+         AND id IN (${placeholders})`,
+    )
+    .bind(empresaId, ...ids)
+    .all<FuncionarioSnapshotRow>();
 
-  if (ids.length > 0) {
-    const placeholders = buildPlaceholders(ids.length);
-    const result = await db
-      .prepare(
-        `SELECT
-           id,
-           nome,
-           guerra AS nome_guerra,
-           funcao,
-           cargo,
-           base,
-           aeronave
-         FROM funcionarios
-         WHERE deleted_at IS NULL
-           AND empresa_id = ?
-           AND id IN (${placeholders})`,
-      )
-      .bind(params.empresaId, ...ids)
-      .all<FuncionarioSnapshotRow>();
+  return result.results || [];
+}
 
-    funcionarios = result.results || [];
+function anchorFromDiaTotal(
+  data: string,
+  dia: number | null | undefined,
+  total: number | null | undefined,
+): { periodoInicio: string; periodoFim: string } | null {
+  if (
+    dia == null ||
+    total == null ||
+    !Number.isFinite(dia) ||
+    !Number.isFinite(total) ||
+    dia <= 0 ||
+    total <= 0 ||
+    dia > total
+  ) {
+    return null;
   }
+  const periodoInicio = addDaysIso(data, -(dia - 1));
+  const periodoFim = addDaysIso(periodoInicio, total - 1);
+  return { periodoInicio, periodoFim };
+}
+
+export async function listFrmsOperationalSnapshot(
+  db: D1Database,
+  params: ListFrmsOperationalSnapshotParams,
+): Promise<FrmsOperationalSnapshotResult> {
+  const operationalContext = await resolveFrmsOperationalContext(db, {
+    empresaId: params.empresaId,
+    referenceAt: params.hoje ?? params.dataFim,
+  });
+  const limites = asOperationalLimitesMap(operationalContext.parameters);
+  const frmsConfig = resolverFrmsConfig(limites);
+
+  const requestedStart = params.dataInicio;
+  const requestedEnd = params.dataFim;
+
+  // `funcionario_id` já chega resolvido/tenant-safe pelas rotas (self scope força o
+  // próprio funcionário). Quando presente, também limita o contexto de cálculo.
+  const scopedFuncionarioId =
+    typeof params.filters?.funcionario_id === 'number' && params.filters.funcionario_id > 0
+      ? params.filters.funcionario_id
+      : null;
+
+  // ------------------------------------------------------------------------
+  // Fase A — carrega o intervalo solicitado pelo cliente e descobre as âncoras
+  // reais de período embarcado que contêm os dias pedidos.
+  // ------------------------------------------------------------------------
+  const requestedRows = await loadOperationalSnapshotRows(
+    db,
+    params.empresaId,
+    requestedStart,
+    requestedEnd,
+  );
+
+  const persistedAnchorByKey = new Map<string, { dia: number | null; total: number | null }>();
+  for (const row of requestedRows.effectiveness) {
+    persistedAnchorByKey.set(`${row.data_operacional}::${asNumber(row.funcionario_id)}`, {
+      dia: row.dia_periodo_embarcado == null ? null : Number(row.dia_periodo_embarcado),
+      total: row.total_dias_periodo == null ? null : Number(row.total_dias_periodo),
+    });
+  }
+
+  const requestedKeys = new Set<string>();
+  for (const row of requestedRows.escalas)
+    requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
+  for (const row of requestedRows.jornadas)
+    requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
+  for (const row of requestedRows.checkins)
+    requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
+  for (const row of requestedRows.effectiveness)
+    requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
+
+  // Âncoras resolvidas (dia/total) para os dias solicitados — reaproveitadas depois
+  // para não repetir a chamada a calcularDiaDoCiclo().
+  const resolvedAnchorByKey = new Map<string, { dia: number; total: number }>();
+  let minPeriodoInicio: string | null = null;
+  let maxPeriodoFim: string | null = null;
+
+  await Promise.all(
+    Array.from(requestedKeys).map(async (key) => {
+      const [data, funcRaw] = key.split('::');
+      const funcionarioId = Number(funcRaw);
+      if (scopedFuncionarioId != null && funcionarioId !== scopedFuncionarioId) return;
+
+      const persisted = persistedAnchorByKey.get(key);
+      let dia = persisted?.dia ?? null;
+      let total = persisted?.total ?? null;
+
+      if (anchorFromDiaTotal(data, dia, total) == null) {
+        const period = await calcularDiaDoCiclo(db, funcionarioId, data);
+        if (period) {
+          dia = period.dia;
+          total = period.total;
+        }
+      }
+
+      const anchor = anchorFromDiaTotal(data, dia, total);
+      if (!anchor) return; // sem período real resolvível → fica INCOMPLETO (fail-closed)
+
+      resolvedAnchorByKey.set(key, { dia: dia as number, total: total as number });
+      minPeriodoInicio =
+        minPeriodoInicio == null || anchor.periodoInicio < minPeriodoInicio
+          ? anchor.periodoInicio
+          : minPeriodoInicio;
+      maxPeriodoFim =
+        maxPeriodoFim == null || anchor.periodoFim > maxPeriodoFim
+          ? anchor.periodoFim
+          : maxPeriodoFim;
+    }),
+  );
+
+  // ------------------------------------------------------------------------
+  // Janela INTERNA de contexto: cobre todo o período embarcado que contém os
+  // dias solicitados + 6 dias anteriores para o rolling de 168h. Sem período
+  // real, mantém a janela solicitada (não fabrica contexto).
+  // ------------------------------------------------------------------------
+  const contextStart =
+    minPeriodoInicio != null
+      ? minIso(addDaysIso(minPeriodoInicio, -ROLLING_168H_CONTEXT_LEAD_DAYS), requestedStart)
+      : requestedStart;
+  const contextEnd = maxPeriodoFim != null ? maxIso(maxPeriodoFim, requestedEnd) : requestedEnd;
+
+  // ------------------------------------------------------------------------
+  // Fase B — carrega os dados do contexto (reaproveita a Fase A quando a janela
+  // não muda).
+  // ------------------------------------------------------------------------
+  const contextRows =
+    contextStart === requestedStart && contextEnd === requestedEnd
+      ? requestedRows
+      : await loadOperationalSnapshotRows(db, params.empresaId, contextStart, contextEnd);
+
+  const ids = collectCandidateIds(contextRows).filter(
+    (id) => scopedFuncionarioId == null || id === scopedFuncionarioId,
+  );
+  const funcionarios = await loadOperationalFuncionarios(db, params.empresaId, ids);
 
   const exclusionMetrics = funcionarios.reduce(
     (acc, funcionario) => {
@@ -918,23 +1110,27 @@ export async function listFrmsOperationalSnapshot(
     });
   }
 
+  // Snapshot montado sobre TODO o contexto. Só `funcionario_id` (tenant-safe) pode
+  // restringir aqui — os filtros de apresentação (status/base/aeronave/
+  // include_inconsistencies) são aplicados depois, na resposta, para não remover
+  // linhas históricas necessárias ao acumulado quinzenal.
   const snapshot = buildFrmsOperationalSnapshot({
     empresaId: params.empresaId,
     wakeFallbackLeadMinutes: frmsConfig.minutosAntesApresentacao,
     policy: params.policy,
     hoje: params.hoje,
     rows: {
-      escalas: escalasResult.results || [],
-      jornadas: jornadasResult.results || [],
-      checkins: checkinsResult.results || [],
-      effectiveness: effectivenessResult.results || [],
+      escalas: contextRows.escalas,
+      jornadas: contextRows.jornadas,
+      checkins: contextRows.checkins,
+      effectiveness: contextRows.effectiveness,
       funcionarios,
     },
-    filters: params.filters,
+    filters: scopedFuncionarioId != null ? { funcionario_id: scopedFuncionarioId } : undefined,
   });
 
   const effectivenessByKey = new Map<string, EffectivenessSnapshotRow>();
-  for (const row of effectivenessResult.results || []) {
+  for (const row of contextRows.effectiveness) {
     const key = `${row.data_operacional}::${Number(row.funcionario_id)}`;
     effectivenessByKey.set(key, row);
   }
@@ -943,7 +1139,7 @@ export async function listFrmsOperationalSnapshot(
     string,
     { dia_periodo_embarcado: number | null; total_dias_periodo: number | null }
   >();
-  for (const row of effectivenessResult.results || []) {
+  for (const row of contextRows.effectiveness) {
     const key = `${row.data_operacional}::${Number(row.funcionario_id)}`;
     derivedFortnightByKey.set(key, {
       dia_periodo_embarcado:
@@ -952,7 +1148,23 @@ export async function listFrmsOperationalSnapshot(
     });
   }
 
+  // Âncoras já resolvidas na Fase A (via calcularDiaDoCiclo) para os dias pedidos.
+  for (const [key, anchor] of resolvedAnchorByKey) {
+    if (derivedFortnightByKey.get(key)?.dia_periodo_embarcado == null) {
+      derivedFortnightByKey.set(key, {
+        dia_periodo_embarcado: anchor.dia,
+        total_dias_periodo: anchor.total,
+      });
+    }
+  }
+
+  // calcularDiaDoCiclo() só para os dias efetivamente solicitados que ainda não
+  // têm âncora; os demais dias do período são inferidos por jornadas vizinhas do
+  // mesmo tripulante dentro de buildFrmsFortnightIndicatorMap.
   const missingFortnightKeys = snapshot.items.filter((item) => {
+    if (item.data_operacional < requestedStart || item.data_operacional > requestedEnd) {
+      return false;
+    }
     const key = `${item.data_operacional}::${item.funcionario_id}`;
     return derivedFortnightByKey.get(key)?.dia_periodo_embarcado == null;
   });
@@ -1002,8 +1214,11 @@ export async function listFrmsOperationalSnapshot(
             : null),
       };
     }),
-    windowStart: params.dataInicio,
-    windowEnd: params.dataFim,
+    // Janela REAL de contexto — permite que o algoritmo quinzenal reconheça o
+    // período embarcado como totalmente coberto e produza fonte_periodo != INCOMPLETO
+    // quando os dados existem.
+    windowStart: contextStart,
+    windowEnd: contextEnd,
     today: params.hoje,
     policy: operationalContext.fortnightPolicy,
   });
@@ -1023,8 +1238,18 @@ export async function listFrmsOperationalSnapshot(
     };
   });
 
+  // Recorta de volta para o intervalo solicitado e só então aplica os filtros de
+  // apresentação — o Compliance já foi calculado com contexto completo.
+  const responseItems = applyPresentationFilters(
+    itemsWithFortnight.filter(
+      (item) =>
+        item.data_operacional >= requestedStart && item.data_operacional <= requestedEnd,
+    ),
+    params.filters,
+  ).sort(compareSnapshotItems);
+
   return {
-    items: itemsWithFortnight,
-    summary: buildSummary(itemsWithFortnight),
+    items: responseItems,
+    summary: buildSummary(responseItems),
   };
 }
