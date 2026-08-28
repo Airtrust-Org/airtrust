@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '@/react-app/lib/apiFetch';
-import { getAccessToken } from '@/react-app/config/api';
+import { httpClient } from '@/react-app/services/http-client';
 import type { VigilanceTrial } from '@/react-app/pages/frms/operationalReadiness';
 
 export type ReadinessBaseline = {
@@ -50,25 +49,47 @@ export type ReadinessToday = {
   created_at: string;
 };
 
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getAccessToken();
-  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-  const response = await apiFetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
-    ...init,
-  });
-  const json = (await response.json()) as { success: boolean; data?: T; error?: string; message?: string };
-  if (!response.ok || !json.success) {
-    throw new Error(json.message || json.error || `Erro HTTP ${response.status}`);
+type ReadinessEnvelope<T> = {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+};
+
+function unwrapReadinessResponse<T>(
+  response: Awaited<ReturnType<typeof httpClient.get<ReadinessEnvelope<T>>>>,
+): T {
+  if (!response.success) {
+    throw new Error(response.error || 'Falha ao comunicar com o serviço de prontidão operacional.');
   }
-  return json.data as T;
+  const payload = response.data;
+  if (!payload?.success) {
+    throw new Error(payload?.message || payload?.error || 'Resposta inválida do serviço de prontidão operacional.');
+  }
+  return payload.data as T;
+}
+
+async function getReadiness<T>(path: string): Promise<T> {
+  return unwrapReadinessResponse<T>(await httpClient.get<ReadinessEnvelope<T>>(path));
+}
+
+async function postReadiness<T>(path: string, input: unknown): Promise<T> {
+  const response = await httpClient.post<ReadinessEnvelope<T>>(path, input);
+  if (!response.success) {
+    throw new Error(response.error || 'Falha ao comunicar com o serviço de prontidão operacional.');
+  }
+  const payload = response.data;
+  if (!payload?.success) {
+    throw new Error(payload?.message || payload?.error || 'Resposta inválida do serviço de prontidão operacional.');
+  }
+  return payload.data as T;
 }
 
 export function useReadinessBaseline(referenceDate?: string) {
   return useQuery({
     queryKey: ['frms-readiness-baseline', referenceDate || null],
     queryFn: () =>
-      fetchJson<ReadinessBaseline>(
+      getReadiness<ReadinessBaseline>(
         referenceDate
           ? `/frms/readiness/baseline?date=${encodeURIComponent(referenceDate)}`
           : '/frms/readiness/baseline',
@@ -81,7 +102,7 @@ export function useReadinessToday(referenceDate: string) {
   return useQuery({
     queryKey: ['frms-readiness-today', referenceDate],
     queryFn: () =>
-      fetchJson<ReadinessToday | null>(
+      getReadiness<ReadinessToday | null>(
         `/frms/readiness/today?date=${encodeURIComponent(referenceDate)}`,
       ),
     staleTime: 2 * 60 * 1000,
@@ -92,10 +113,7 @@ export function useSubmitReadiness() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { reference_date: string; duration_ms: number; trials: VigilanceTrial[] }) =>
-      fetchJson<ReadinessSubmissionResult>('/frms/readiness', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
+      postReadiness<ReadinessSubmissionResult>('/frms/readiness', input),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['frms-readiness-baseline'] });
       queryClient.invalidateQueries({ queryKey: ['frms-readiness-today', variables.reference_date] });
