@@ -24,7 +24,11 @@ type Fixture = {
   active?: boolean;
   sessionRoleQueryThrows?: boolean;
   explicitProfiles?: { perfil: string; ativo: number }[];
+  /** Explicit rows keyed by empresa_id — proves per-tenant isolation of the authoritative table. */
+  explicitProfilesByEmpresa?: Record<number, { perfil: string; ativo: number }[]>;
   explicitQueryThrows?: boolean;
+  /** Non-"no such table" DB failure while reading the authoritative table. */
+  explicitQueryInfraError?: boolean;
 };
 
 function createDb(fx: Fixture) {
@@ -84,7 +88,14 @@ function createDb(fx: Fixture) {
         async all<T>() {
           if (sql.includes('FROM usuarios_empresas_perfis')) {
             if (fx.explicitQueryThrows) throw new Error('no such table: usuarios_empresas_perfis');
+            if (fx.explicitQueryInfraError) throw new Error('database disk image is malformed');
             if (fx.sessionRoleQueryThrows) throw new Error('simulated D1 outage reading explicit profiles');
+            if (fx.explicitProfilesByEmpresa) {
+              const empresaParam = Number(statement.params[1]);
+              return {
+                results: fx.explicitProfilesByEmpresa[empresaParam] ?? [],
+              } as unknown as T;
+            }
             return { results: fx.explicitProfiles ?? [] } as unknown as T;
           }
           return { results: [] } as unknown as T;
@@ -405,5 +416,173 @@ describe('optionalAuth() — perfil ativo de sessão nunca bloqueia', () => {
     const body = (await res.json()) as { userRole?: string };
     expect(res.status).toBe(200);
     expect(body.userRole).toBe('INSTRUTOR');
+  });
+});
+
+describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 0473)', () => {
+  const b = {
+    userId: 43,
+    empresaId: 6,
+    perfil: 'gestor',
+    membershipRole: 'manager',
+    funcionarioId: 77,
+    funcionarioEmpresaId: 6,
+  };
+
+  it('sem múltiplos perfis: um único perfil explícito → nenhuma seleção', async () => {
+    const db = createDb({ ...b, explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }] });
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR']);
+  });
+
+  it('INSTRUTOR + ALUNO explícitos (sem GESTOR) → exatamente essas duas opções', async () => {
+    const db = createDb({
+      ...b,
+      explicitProfiles: [
+        { perfil: 'INSTRUTOR', ativo: 1 },
+        { perfil: 'ALUNO', ativo: 1 },
+      ],
+    });
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['INSTRUTOR', 'ALUNO']);
+  });
+
+  it('GESTOR + INSTRUTOR + ALUNO explícitos → três opções na ordem canônica', async () => {
+    const db = createDb({
+      ...b,
+      instrutor: false,
+      aluno: false,
+      explicitProfiles: [
+        { perfil: 'ALUNO', ativo: 1 },
+        { perfil: 'GESTOR', ativo: 1 },
+        { perfil: 'INSTRUTOR', ativo: 1 },
+      ],
+    });
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual([
+      'GESTOR',
+      'INSTRUTOR',
+      'ALUNO',
+    ]);
+  });
+
+  it('remoção por EXCLUSÃO da linha: existindo outras linhas explícitas, o perfil removido não volta por inferência', async () => {
+    const db = createDb({
+      ...b,
+      instrutor: true, // vínculo legado ainda existe
+      aluno: true, // matrícula LMS ainda existe
+      explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }], // admin deixou só GESTOR
+    });
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR']);
+  });
+
+  it('tabela explícita presente vence 100% da inferência legada (instrutor/aluno ignorados)', async () => {
+    const db = createDb({
+      ...b,
+      instrutor: true,
+      aluno: true,
+      explicitProfiles: [
+        { perfil: 'GESTOR', ativo: 1 },
+        { perfil: 'INSTRUTOR', ativo: 0 },
+        { perfil: 'ALUNO', ativo: 0 },
+      ],
+    });
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR']);
+  });
+
+  it('isolamento por empresa_id: perfis explícitos da empresa B não vazam para a empresa A', async () => {
+    const db = createDb({
+      ...b,
+      empresaId: 6,
+      funcionarioEmpresaId: 6,
+      explicitProfilesByEmpresa: {
+        6: [{ perfil: 'GESTOR', ativo: 1 }],
+        99: [{ perfil: 'ADMINISTRADOR', ativo: 1 }, { perfil: 'INSTRUTOR', ativo: 1 }],
+      },
+    });
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR']);
+    expect(await resolveAvailableSessionRoles(db, 43, 99)).toEqual([
+      'ADMINISTRADOR',
+      'INSTRUTOR',
+    ]);
+  });
+
+  it('ausência da tabela (ambiente sem 0473) → inferência legada de bootstrap', async () => {
+    const db = createDb({
+      ...b,
+      explicitQueryThrows: true, // "no such table: usuarios_empresas_perfis"
+      instrutor: true,
+      aluno: true,
+    });
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual([
+      'GESTOR',
+      'INSTRUTOR',
+      'ALUNO',
+    ]);
+  });
+
+  it('falha de infraestrutura (não "no such table") ao ler a tabela explícita → propaga (fail-closed)', async () => {
+    const db = createDb({ ...b, explicitQueryInfraError: true });
+    await expect(resolveAvailableSessionRoles(db, 43, 6)).rejects.toThrow(
+      /disk image is malformed/,
+    );
+  });
+
+  it('auth(): falha de infra ao resolver perfis explícitos com cookie de seleção → 503 fail-closed', async () => {
+    const db = createDb({
+      ...b,
+      explicitQueryInfraError: true,
+    });
+    const { token } = await makeToken(43, 6, 'GESTOR');
+    const res = await buildApp(db, 'auth')({
+      headers: { Authorization: `Bearer ${token}`, ...withCookie('INSTRUTOR') },
+    });
+    const payload = (await res.json()) as { code?: string };
+    expect(res.status).toBe(503);
+    expect(payload.code).toBe('AUTH_SESSION_ROLE_CHECK_UNAVAILABLE');
+  });
+
+  it('auth(): cookie forjado pedindo perfil NÃO atribuído explicitamente → 401 SESSION_ROLE_INVALID (sem elevação)', async () => {
+    const db = createDb({
+      ...b,
+      perfil: 'student',
+      membershipRole: 'viewer',
+      explicitProfiles: [{ perfil: 'ALUNO', ativo: 1 }],
+    });
+    const { token } = await makeToken(43, 6, 'USUARIO');
+    const res = await buildApp(db, 'auth')({
+      headers: { Authorization: `Bearer ${token}`, ...withCookie('GESTOR') },
+    });
+    const payload = (await res.json()) as { code?: string };
+    expect(res.status).toBe(401);
+    expect(payload.code).toBe('SESSION_ROLE_INVALID');
+  });
+
+  it('auth(): seleciona perfil explicitamente atribuído → userRole efetivo = perfil escolhido, sem somar privilégios', async () => {
+    const db = createDb({
+      ...b,
+      explicitProfiles: [
+        { perfil: 'GESTOR', ativo: 1 },
+        { perfil: 'INSTRUTOR', ativo: 1 },
+        { perfil: 'ALUNO', ativo: 1 },
+      ],
+    });
+    const { token } = await makeToken(43, 6, 'GESTOR');
+
+    for (const escolhido of ['GESTOR', 'INSTRUTOR', 'ALUNO'] as const) {
+      const res = await buildApp(db, 'auth')({
+        headers: { Authorization: `Bearer ${token}`, ...withCookie(escolhido) },
+      });
+      const payload = (await res.json()) as { userRole?: string };
+      expect(res.status).toBe(200);
+      expect(payload.userRole).toBe(escolhido); // exatamente um perfil, nunca a união
+    }
+  });
+
+  it('usuário legado single-role sem linhas explícitas e sem vínculos → comportamento intacto', async () => {
+    const db = createDb({
+      userId: 8,
+      empresaId: 6,
+      perfil: 'viewer',
+      membershipRole: 'viewer',
+    });
+    expect(await resolveAvailableSessionRoles(db, 8, 6)).toEqual(['USUARIO']);
   });
 });
