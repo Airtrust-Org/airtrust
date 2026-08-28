@@ -22,10 +22,13 @@
  *   deduplicated by physical leg. There is NO extra night-landing penalty:
  *   night exposure is already captured by the circadian component and we do
  *   not want to double count it.
+ * - A valid SIGVOOS query returning zero physical legs is distinct from an
+ *   unavailable SIGVOOS source. Confirmed zero means no flight operational
+ *   exposure for this component; source failure never masquerades as zero.
  * - Temperature comes from observed METAR/SPECI evidence (REDEMET). When no
  *   observed temperature is available the thermal delta is 0 and the result
- *   is flagged `data_quality = 'INCOMPLETE'` — a missing METAR is never read
- *   as 0 °C or as a comfortable temperature.
+ *   is flagged incomplete. When SIGVOOS confirms no flight, flight thermal
+ *   exposure is NOT_APPLICABLE rather than inferred from unrelated weather.
  * - Recovery (`frms_recovery_*`) is a different dimension and is untouched;
  *   `effectiveness_delta_pct` there stays NULL.
  */
@@ -52,12 +55,15 @@ export const OPERATIONAL_LOAD_POLICY_V1 = {
   combinedFloorPoints: -6,
 } as const;
 
-export type WeatherEvidenceQuality = 'OBSERVED' | 'INCOMPLETE';
+export type LandingsEvidenceQuality = 'OBSERVED' | 'CONFIRMED_ZERO' | 'INCOMPLETE';
+export type WeatherEvidenceQuality = 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
 export type OperationalLoadDataQuality = 'COMPLETE' | 'INCOMPLETE';
 
 export interface OperationalLoadV1Input {
   /** Deduplicated SIGVOOS landings for the journey/day. */
   landingsCount: number;
+  /** Distinguishes a confirmed no-flight day from an unavailable SIGVOOS read. */
+  landingsEvidenceQuality?: LandingsEvidenceQuality;
   /**
    * Max observed METAR/SPECI temperature in °C associated with the operation,
    * or null when no observed weather evidence is available.
@@ -68,6 +74,7 @@ export interface OperationalLoadV1Input {
 export interface OperationalLoadV1Result {
   policy_version: typeof OPERATIONAL_LOAD_POLICY_V1.version;
   landings_count: number;
+  landings_evidence_quality: LandingsEvidenceQuality;
   temperature_max_c: number | null;
   weather_evidence_quality: WeatherEvidenceQuality;
   data_quality: OperationalLoadDataQuality;
@@ -101,31 +108,48 @@ export function temperatureDeltaPoints(temperatureMaxC: number | null): number {
 }
 
 /**
- * Pure V1 model. No I/O. `temperatureMaxC = null` keeps the thermal delta at 0
- * and marks the result INCOMPLETE — never invented.
+ * Pure V1 model. No I/O. Missing evidence never creates a penalty, but it is
+ * carried forward explicitly as INCOMPLETE rather than being mistaken for a
+ * measured zero. A confirmed zero-flight day makes flight thermal exposure
+ * NOT_APPLICABLE.
  */
 export function computeOperationalLoadV1(input: OperationalLoadV1Input): OperationalLoadV1Result {
   const landingsCount =
     Number.isFinite(input.landingsCount) && input.landingsCount > 0
       ? Math.floor(input.landingsCount)
       : 0;
+  const landingsEvidenceQuality: LandingsEvidenceQuality =
+    input.landingsEvidenceQuality ?? (landingsCount > 0 ? 'OBSERVED' : 'CONFIRMED_ZERO');
+  const confirmedNoFlight = landingsEvidenceQuality === 'CONFIRMED_ZERO';
   const hasObservedTemperature =
-    input.temperatureMaxC != null && Number.isFinite(input.temperatureMaxC);
+    !confirmedNoFlight && input.temperatureMaxC != null && Number.isFinite(input.temperatureMaxC);
   const temperatureMaxC = hasObservedTemperature ? round1(input.temperatureMaxC as number) : null;
 
-  const landingsDelta = landingsDeltaPoints(landingsCount);
+  const landingsDelta =
+    landingsEvidenceQuality === 'INCOMPLETE' ? 0 : landingsDeltaPoints(landingsCount);
   const temperatureDelta = hasObservedTemperature ? temperatureDeltaPoints(temperatureMaxC) : 0;
   const totalDelta = Math.max(
     OPERATIONAL_LOAD_POLICY_V1.combinedFloorPoints,
     round1(landingsDelta + temperatureDelta),
   );
+  const weatherEvidenceQuality: WeatherEvidenceQuality = confirmedNoFlight
+    ? 'NOT_APPLICABLE'
+    : hasObservedTemperature
+      ? 'OBSERVED'
+      : 'INCOMPLETE';
+  const dataQuality: OperationalLoadDataQuality =
+    landingsEvidenceQuality === 'INCOMPLETE' ||
+    (!confirmedNoFlight && weatherEvidenceQuality !== 'OBSERVED')
+      ? 'INCOMPLETE'
+      : 'COMPLETE';
 
   return {
     policy_version: OPERATIONAL_LOAD_POLICY_V1.version,
     landings_count: landingsCount,
+    landings_evidence_quality: landingsEvidenceQuality,
     temperature_max_c: temperatureMaxC,
-    weather_evidence_quality: hasObservedTemperature ? 'OBSERVED' : 'INCOMPLETE',
-    data_quality: hasObservedTemperature ? 'COMPLETE' : 'INCOMPLETE',
+    weather_evidence_quality: weatherEvidenceQuality,
+    data_quality: dataQuality,
     operational_load_landings_delta: landingsDelta,
     operational_load_temperature_delta: round1(temperatureDelta),
     operational_load_total_delta: totalDelta,
@@ -145,11 +169,17 @@ export function describeOperationalLoadV1(result: OperationalLoadV1Result): {
   const fmt = (points: number) => points.toFixed(1).replace('.', ',');
   const lines: string[] = [];
 
-  lines.push(
-    `${result.landings_count} ${result.landings_count === 1 ? 'pouso' : 'pousos'}: ${fmt(
-      result.operational_load_landings_delta,
-    )}`,
-  );
+  if (result.landings_evidence_quality === 'INCOMPLETE') {
+    lines.push('pousos: SIGVOOS indisponível (sem penalidade; evidência incompleta)');
+  } else if (result.landings_evidence_quality === 'CONFIRMED_ZERO') {
+    lines.push('0 pousos: ausência de voo confirmada pelo SIGVOOS');
+  } else {
+    lines.push(
+      `${result.landings_count} ${result.landings_count === 1 ? 'pouso' : 'pousos'}: ${fmt(
+        result.operational_load_landings_delta,
+      )}`,
+    );
+  }
 
   if (result.weather_evidence_quality === 'OBSERVED' && result.temperature_max_c != null) {
     lines.push(
@@ -157,8 +187,10 @@ export function describeOperationalLoadV1(result: OperationalLoadV1Result): {
         result.operational_load_temperature_delta,
       )}`,
     );
+  } else if (result.weather_evidence_quality === 'NOT_APPLICABLE') {
+    lines.push('temperatura: não aplicável à carga de voo (sem voo confirmado)');
   } else {
-    lines.push('temperatura: evidência meteorológica indisponível (0)');
+    lines.push('temperatura: evidência meteorológica indisponível (sem penalidade)');
   }
 
   return { title: `Carga operacional: ${fmt(result.operational_load_total_delta)}`, lines };
