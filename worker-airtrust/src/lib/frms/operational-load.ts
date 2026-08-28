@@ -57,7 +57,12 @@ export const OPERATIONAL_LOAD_POLICY_V1 = {
 
 export type LandingsEvidenceQuality = 'OBSERVED' | 'CONFIRMED_ZERO' | 'INCOMPLETE';
 export type WeatherEvidenceQuality = 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
-export type OperationalLoadDataQuality = 'COMPLETE' | 'INCOMPLETE';
+/**
+ * SIGVOOS_UNAVAILABLE is intentionally a distinct persisted state: it survives
+ * the calcEffectiveness breakdown even in legacy rows that do not yet expose a
+ * dedicated landing-evidence field.
+ */
+export type OperationalLoadDataQuality = 'COMPLETE' | 'INCOMPLETE' | 'SIGVOOS_UNAVAILABLE';
 
 export interface OperationalLoadV1Input {
   /** Deduplicated SIGVOOS landings for the journey/day. */
@@ -109,9 +114,8 @@ export function temperatureDeltaPoints(temperatureMaxC: number | null): number {
 
 /**
  * Pure V1 model. No I/O. Missing evidence never creates a penalty, but it is
- * carried forward explicitly as INCOMPLETE rather than being mistaken for a
- * measured zero. A confirmed zero-flight day makes flight thermal exposure
- * NOT_APPLICABLE.
+ * carried forward explicitly rather than being mistaken for a measured zero.
+ * A confirmed zero-flight day makes flight thermal exposure NOT_APPLICABLE.
  */
 export function computeOperationalLoadV1(input: OperationalLoadV1Input): OperationalLoadV1Result {
   const landingsCount =
@@ -138,10 +142,11 @@ export function computeOperationalLoadV1(input: OperationalLoadV1Input): Operati
       ? 'OBSERVED'
       : 'INCOMPLETE';
   const dataQuality: OperationalLoadDataQuality =
-    landingsEvidenceQuality === 'INCOMPLETE' ||
-    (!confirmedNoFlight && weatherEvidenceQuality !== 'OBSERVED')
-      ? 'INCOMPLETE'
-      : 'COMPLETE';
+    landingsEvidenceQuality === 'INCOMPLETE'
+      ? 'SIGVOOS_UNAVAILABLE'
+      : !confirmedNoFlight && weatherEvidenceQuality !== 'OBSERVED'
+        ? 'INCOMPLETE'
+        : 'COMPLETE';
 
   return {
     policy_version: OPERATIONAL_LOAD_POLICY_V1.version,
