@@ -88,6 +88,11 @@ function quantile(sorted: number[], p: number): number | null {
  * PVT-B V2 has a protocol-specific no-response rule: a presented stimulus that
  * remains unanswered for the 30 s response ceiling is a lapse with RT=30,000 ms.
  * The historical v1 protocol keeps its original `missed` interpretation.
+ *
+ * V2 also enforces the three-minute sampling boundary server-side: scheduled and
+ * stimulus timestamps must be inside the submitted sampling duration. Only the
+ * response to an already-presented stimulus may extend beyond that boundary, up
+ * to the 30-second response ceiling.
  */
 export function normalizeReadinessTrials(
   trials: ReadinessTrial[],
@@ -95,9 +100,10 @@ export function normalizeReadinessTrials(
   protocolVersion: ReadinessProtocolVersion = READINESS_PROTOCOL.version,
 ): ReadinessTrial[] {
   const seenSequences = new Set<number>();
-  const postWindowAllowanceMs =
-    protocolVersion === READINESS_PROTOCOL.version ? READINESS_PROTOCOL.responseWindowMs : 5_000;
-  const maxTimestampMs = Math.round(durationMs) + postWindowAllowanceMs;
+  const isV2 = protocolVersion === READINESS_PROTOCOL.version;
+  const samplingMaxMs = Math.round(durationMs);
+  const responseMaxMs = samplingMaxMs + (isV2 ? READINESS_PROTOCOL.responseWindowMs : 5_000);
+  const legacyStimulusMaxMs = responseMaxMs;
 
   return trials.map((trial) => {
     if (!Number.isInteger(trial.sequence) || trial.sequence <= 0 || seenSequences.has(trial.sequence)) {
@@ -105,13 +111,23 @@ export function normalizeReadinessTrials(
     }
     seenSequences.add(trial.sequence);
 
-    if (!Number.isFinite(trial.scheduledAtMs) || trial.scheduledAtMs < 0 || trial.scheduledAtMs > maxTimestampMs) {
+    const scheduledMaxMs = isV2 ? samplingMaxMs : legacyStimulusMaxMs;
+    if (
+      !Number.isFinite(trial.scheduledAtMs) ||
+      trial.scheduledAtMs < 0 ||
+      trial.scheduledAtMs > scheduledMaxMs
+    ) {
       throw new Error('invalid_trial_timing');
     }
 
     // A response while no stimulus is visible is encoded by the browser with stimulusAtMs = -1.
     if (trial.stimulusAtMs === -1) {
-      if (trial.responseAtMs == null || !Number.isFinite(trial.responseAtMs) || trial.responseAtMs < 0 || trial.responseAtMs > maxTimestampMs) {
+      if (
+        trial.responseAtMs == null ||
+        !Number.isFinite(trial.responseAtMs) ||
+        trial.responseAtMs < 0 ||
+        trial.responseAtMs > responseMaxMs
+      ) {
         throw new Error('invalid_trial_timing');
       }
       return {
@@ -121,12 +137,17 @@ export function normalizeReadinessTrials(
       };
     }
 
-    if (!Number.isFinite(trial.stimulusAtMs) || trial.stimulusAtMs < 0 || trial.stimulusAtMs > maxTimestampMs) {
+    const stimulusMaxMs = isV2 ? samplingMaxMs : legacyStimulusMaxMs;
+    if (
+      !Number.isFinite(trial.stimulusAtMs) ||
+      trial.stimulusAtMs < 0 ||
+      trial.stimulusAtMs > stimulusMaxMs
+    ) {
       throw new Error('invalid_trial_timing');
     }
 
     if (trial.responseAtMs == null) {
-      if (protocolVersion === READINESS_PROTOCOL.version) {
+      if (isV2) {
         return {
           ...trial,
           reactionTimeMs: READINESS_PROTOCOL.responseWindowMs,
@@ -140,11 +161,18 @@ export function normalizeReadinessTrials(
       };
     }
 
-    if (!Number.isFinite(trial.responseAtMs) || trial.responseAtMs < trial.stimulusAtMs || trial.responseAtMs > maxTimestampMs) {
+    if (
+      !Number.isFinite(trial.responseAtMs) ||
+      trial.responseAtMs < trial.stimulusAtMs ||
+      trial.responseAtMs > responseMaxMs
+    ) {
       throw new Error('invalid_trial_timing');
     }
 
     const reactionTimeMs = Math.round(trial.responseAtMs - trial.stimulusAtMs);
+    if (isV2 && reactionTimeMs > READINESS_PROTOCOL.responseWindowMs) {
+      throw new Error('invalid_trial_timing');
+    }
     const outcome: ReadinessTrialOutcome =
       reactionTimeMs < READINESS_PROTOCOL.falseStartThresholdMs
         ? 'false_start'
