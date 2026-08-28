@@ -1,10 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom';
+import { HeartPulse } from 'lucide-react';
 import FrmsSourcePolicyBanner from './FrmsSourcePolicyBanner';
 
 const ADMIN_PATHS = [
   '/frms/configuracoes',
   '/frms/sigvoos',
-  '/frms/checkin',
   '/frms/importacao/fira',
   '/frms/importacao/fira/historico',
   '/frms/escalas',
@@ -22,7 +22,6 @@ const ADMIN_GROUPS = [
   {
     label: 'Dados de entrada',
     links: [
-      { label: 'Check-in diário', to: '/frms/checkin' },
       { label: 'Importar FIRA', to: '/frms/importacao/fira' },
       { label: 'Histórico FIRA', to: '/frms/importacao/fira/historico' },
       { label: 'Escalas', to: '/frms/escalas' },
@@ -45,6 +44,13 @@ const primaryClass = (active: boolean) =>
       : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
   }`;
 
+const checkinClass = (active: boolean) =>
+  `inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/30 sm:ml-auto ${
+    active
+      ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+      : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200 dark:hover:bg-emerald-950/50'
+  }`;
+
 const secondaryClass = (active: boolean) =>
   `rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
     active
@@ -55,6 +61,7 @@ const secondaryClass = (active: boolean) =>
 export default function FrmsWorkspaceNav() {
   const location = useLocation();
   const adminActive = isAdminPath(location.pathname);
+  const checkinActive = location.pathname === '/frms/checkin' || location.pathname.startsWith('/frms/checkin/');
 
   return (
     <div className="space-y-2">
@@ -73,6 +80,10 @@ export default function FrmsWorkspaceNav() {
         </NavLink>
         <NavLink to="/frms/configuracoes" className={primaryClass(adminActive)}>
           Administração
+        </NavLink>
+        <NavLink to="/frms/checkin" className={checkinClass(checkinActive)}>
+          <HeartPulse className="h-4 w-4" />
+          Check-in de fadiga
         </NavLink>
       </nav>
 

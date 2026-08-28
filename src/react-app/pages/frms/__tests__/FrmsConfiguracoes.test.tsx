@@ -5,6 +5,10 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }));
 
+vi.mock('../components/FrmsWorkspaceNav', () => ({
+  default: () => null,
+}));
+
 describe('FrmsConfiguracoes parametros decorativos', () => {
   it('mantem chaves decorativas marcadas para evitar promessas de efeito inexistente', () => {
     const expected = [
