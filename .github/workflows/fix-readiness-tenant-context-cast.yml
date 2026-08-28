@@ -1,0 +1,29 @@
+name: Fix readiness tenant context typing
+
+on:
+  push:
+    branches:
+      - feat/frms-operational-readiness-pvt-20260827
+    paths:
+      - .github/workflows/fix-readiness-tenant-context-cast.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/frms-operational-readiness-pvt-20260827
+          fetch-depth: 0
+      - name: Remove forbidden context casts
+        run: python3 .github/scripts/fix_readiness_tenant_context_cast.py
+      - name: Commit patch
+        run: |
+          git config user.name "airtrust-readiness-integrator"
+          git config user.email "actions@users.noreply.github.com"
+          git add worker-airtrust/src/routes/frms-readiness.ts
+          git commit -m "fix(frms): use typed tenant context directly"
+          git push origin HEAD:feat/frms-operational-readiness-pvt-20260827
