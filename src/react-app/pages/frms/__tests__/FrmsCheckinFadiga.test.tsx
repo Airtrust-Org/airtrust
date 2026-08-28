@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsCheckinFadiga, {
@@ -17,6 +17,7 @@ import {
 } from '@/react-app/hooks/useFadigaCheckin';
 
 const mutateAsyncMock = vi.fn();
+const readinessMutateAsyncMock = vi.fn();
 const refetchMock = vi.fn();
 const navigateMock = vi.fn();
 const useFadigaHistoricoMock = vi.fn();
@@ -59,6 +60,47 @@ vi.mock('@/react-app/hooks/useFadigaCheckin', async () => {
     useFadigaPainel: (...args: unknown[]) => useFadigaPainelMock(...args),
   };
 });
+
+vi.mock('@/react-app/hooks/useOperationalReadiness', () => ({
+  useReadinessBaseline: () => ({ data: { sessions: 0, minimum_sessions: 5, ready: false } }),
+  useReadinessToday: () => ({ data: null }),
+  useSubmitReadiness: () => ({ mutateAsync: readinessMutateAsyncMock, isPending: false }),
+}));
+
+vi.mock('../OperationalVigilanceTest', () => ({
+  default: ({ onComplete }: { onComplete: (result: unknown) => void }) => {
+    useEffect(() => {
+      onComplete({
+        summary: {
+          protocolVersion: 'airtrust-vigilance-v1',
+          durationMs: 180000,
+          completedTrials: 1,
+          validResponses: 1,
+          medianReactionTimeMs: 280,
+          meanReactionTimeMs: 280,
+          p90ReactionTimeMs: 280,
+          reactionTimeStdDevMs: 0,
+          lapses: 0,
+          falseStarts: 0,
+          missed: 0,
+          responseSpeedPerSecond: 3.571,
+          trials: [],
+        },
+        trials: [
+          {
+            sequence: 1,
+            scheduledAtMs: 1000,
+            stimulusAtMs: 1100,
+            responseAtMs: 1380,
+            reactionTimeMs: 280,
+            outcome: 'response',
+          },
+        ],
+      });
+    }, [onComplete]);
+    return <div data-testid="mock-vigilance-test">Teste cognitivo simulado</div>;
+  },
+}));
 
 vi.mock('sonner', () => ({
   toast: {
@@ -227,6 +269,7 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
 describe('FrmsCheckinFadiga UI', () => {
   beforeEach(() => {
     mutateAsyncMock.mockReset();
+    readinessMutateAsyncMock.mockReset();
     refetchMock.mockReset();
     navigateMock.mockReset();
     useFadigaHistoricoMock.mockReset();
@@ -234,6 +277,14 @@ describe('FrmsCheckinFadiga UI', () => {
     usePermissionsMock.mockReset();
     submitPending = false;
     mutateAsyncMock.mockResolvedValue({ data: { requires_frat_review: 0 } });
+    readinessMutateAsyncMock.mockResolvedValue({
+      assessmentId: 'readiness-1',
+      classification: 'baseline_building',
+      baselineSessions: 0,
+      baselineReady: false,
+      warningSignals: [],
+      criticalSignals: [],
+    });
     refetchMock.mockResolvedValue(undefined);
     useFadigaHistoricoMock.mockReturnValue({ data: { data: [] }, isLoading: false });
     useFadigaPainelMock.mockReturnValue({
@@ -395,8 +446,12 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(readinessMutateAsyncMock).toHaveBeenCalledTimes(1));
 
     const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+    const readinessPayload = readinessMutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(readinessPayload.duration_ms).toBe(180000);
+    expect(readinessPayload.trials).toHaveLength(1);
 
     expect(payload.kss_score).toBe(3);
     expect(payload.horas_sono_24h).toBe(8);
