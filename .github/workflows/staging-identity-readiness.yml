@@ -1,0 +1,145 @@
+name: Staging Identity Readiness
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: staging-identity-readiness
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+
+jobs:
+  smoke-identity:
+    name: General Smoke Identity
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Authenticate general staging smoke identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {
+            assertAllowedStagingBaseUrl,
+            decodeJwtPayload,
+            extractAccessToken,
+            fetchJson,
+            login,
+          } from './scripts/smoke-auth-common.mjs';
+
+          const baseUrl = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL);
+          const email = String(process.env.STAGING_SMOKE_EMAIL || '').trim().toLowerCase();
+          const password = String(process.env.STAGING_SMOKE_PASSWORD || '');
+
+          if (!email || !password) {
+            console.error('RESULT=STAGING_SMOKE_IDENTITY_MISSING');
+            process.exit(1);
+          }
+
+          try {
+            const payload = await login(baseUrl, email, password);
+            const token = extractAccessToken(payload);
+            const claims = decodeJwtPayload(token);
+            if (!claims || String(claims.email || '').trim().toLowerCase() !== email) {
+              throw new Error('identity mismatch');
+            }
+            const me = await fetchJson(`${baseUrl}/api/auth/me`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (me.status !== 200) throw new Error('identity endpoint failed');
+            console.log('RESULT=STAGING_SMOKE_IDENTITY_READY');
+          } catch {
+            console.error('RESULT=STAGING_SMOKE_IDENTITY_AUTH_FAILED');
+            process.exit(1);
+          }
+          NODE
+
+  examiner-identity:
+    name: Examiner Synthetic QA Identity
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Authenticate examiner synthetic QA identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {
+            assertAllowedStagingBaseUrl,
+            decodeJwtPayload,
+            extractAccessToken,
+            fetchJson,
+            login,
+          } from './scripts/smoke-auth-common.mjs';
+
+          const baseUrl = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL);
+          const email = String(process.env.QA_EXAMINER_ADMIN_EMAIL || '').trim().toLowerCase();
+          const password = String(process.env.QA_EXAMINER_ADMIN_PASSWORD || '');
+
+          if (!email || !password) {
+            console.error('RESULT=QA_EXAMINER_IDENTITY_MISSING');
+            process.exit(1);
+          }
+
+          try {
+            const payload = await login(baseUrl, email, password);
+            const token = extractAccessToken(payload);
+            const claims = decodeJwtPayload(token);
+            if (!claims || String(claims.email || '').trim().toLowerCase() !== email) {
+              throw new Error('identity mismatch');
+            }
+            const me = await fetchJson(`${baseUrl}/api/auth/me`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (me.status !== 200) throw new Error('identity endpoint failed');
+            console.log('RESULT=QA_EXAMINER_IDENTITY_READY');
+          } catch {
+            console.error('RESULT=QA_EXAMINER_IDENTITY_AUTH_FAILED');
+            process.exit(1);
+          }
+          NODE
+
+  readiness:
+    name: Staging Application Identities Ready
+    needs: [smoke-identity, examiner-identity]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both persistent identities
+        env:
+          SMOKE_RESULT: ${{ needs.smoke-identity.result }}
+          EXAMINER_RESULT: ${{ needs.examiner-identity.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## Staging identity readiness'
+            echo ''
+            echo "- general smoke identity: $SMOKE_RESULT"
+            echo "- examiner synthetic QA identity: $EXAMINER_RESULT"
+            echo '- source: GitHub Environment `staging`'
+            echo '- secret values exposed: no'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ "$SMOKE_RESULT" == 'success' ]] || exit 1
+          [[ "$EXAMINER_RESULT" == 'success' ]] || exit 1
+          echo 'STAGING_APPLICATION_IDENTITIES_READY'
