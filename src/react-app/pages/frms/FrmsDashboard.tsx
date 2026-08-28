@@ -9,7 +9,6 @@ import {
   Database,
   RefreshCw,
   ShieldAlert,
-  UserRound,
   X,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
@@ -18,12 +17,12 @@ import {
   type FrmsOperationalSnapshotItem,
 } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
+import { FrmsSignalChips, FrmsSignalGrid } from './components/FrmsOperationalSignals';
 import {
   bucketPriority,
   classifyOperationalItem,
   isOperationallyRelevant,
   operationalConfidence,
-  trustedEffectiveness,
   type FrmsDecisionBucket,
 } from './frmsOperationalDecision';
 
@@ -135,7 +134,6 @@ function DetailDrawer({
 }) {
   const bucket = classifyOperationalItem(item);
   const confidence = operationalConfidence(item);
-  const effectiveness = trustedEffectiveness(item);
   const reasons = item.motivos_principais?.filter(Boolean) || [];
   const gaps = confidenceGaps(item);
   const date = item.data_operacional;
@@ -184,6 +182,11 @@ function DetailDrawer({
 
         <div className="space-y-5 p-5">
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Status operacional do dia</h3>
+            <FrmsSignalGrid item={item} className="mt-3" />
+          </section>
+
+          <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Por que exige atenção</h3>
             {reasons.length > 0 ? (
               <ul className="mt-3 space-y-2 text-sm text-slate-800 dark:text-slate-200">
@@ -219,23 +222,9 @@ function DetailDrawer({
               </p>
             </div>
             <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <UserRound className="h-4 w-4" /> Check-in
-              </div>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
-                {item.checkin_status === 'RECEBIDO' ? `KSS ${item.kss_score ?? '—'}` : item.checkin_status}
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
               <div className="text-xs font-semibold text-slate-500">Sono</div>
               <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
                 {item.horas_sono == null ? 'Não informado' : `${item.horas_sono.toFixed(1)} h`}
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-              <div className="text-xs font-semibold text-slate-500">Efetividade</div>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
-                {effectiveness == null ? 'Não calculada' : `${effectiveness.toFixed(1)}%`}
               </p>
             </div>
           </section>
@@ -440,7 +429,6 @@ export default function FrmsDashboard() {
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
               {queue.map(({ item, bucket }) => {
                 const confidence = operationalConfidence(item);
-                const effectiveness = trustedEffectiveness(item);
                 const reason = item.motivos_principais?.[0] ||
                   (bucket === 'NORMAL' ? 'Sem pendência operacional identificada.' : 'Revisão operacional necessária.');
 
@@ -449,13 +437,14 @@ export default function FrmsDashboard() {
                     key={`${item.tripulante_id}-${item.data_operacional}`}
                     type="button"
                     onClick={() => setSelected(item)}
-                    className="grid w-full gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/60 dark:focus:bg-slate-900/60 lg:grid-cols-[150px_minmax(180px,1fr)_minmax(260px,1.5fr)_170px_24px] lg:items-center"
+                    className="grid w-full gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/60 dark:focus:bg-slate-900/60 lg:grid-cols-[130px_minmax(150px,0.9fr)_minmax(260px,1.4fr)_minmax(220px,1.3fr)_160px_24px] lg:items-center"
                   >
                     <div><DecisionBadge bucket={bucket} /></div>
                     <div className="min-w-0">
                       <p className="truncate font-bold text-slate-950 dark:text-white">{displayName(item)}</p>
                       <p className="truncate text-xs text-slate-500">{[item.funcao, item.base, item.aeronave].filter(Boolean).join(' · ') || 'Função/base não informadas'}</p>
                     </div>
+                    <FrmsSignalChips item={item} />
                     <div className="min-w-0">
                       <p className="line-clamp-2 text-sm font-medium text-slate-700 dark:text-slate-200">{reason}</p>
                       <p className="mt-1 text-xs text-slate-500">{item.acao_recomendada_texto || 'Abrir o caso para decidir.'}</p>
@@ -463,7 +452,6 @@ export default function FrmsDashboard() {
                     <div className="text-xs text-slate-500">
                       <div>{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</div>
                       <div className="mt-1">Confiança {confidence.toLowerCase()}</div>
-                      <div className="mt-1">Efetividade {effectiveness == null ? 'não calculada' : `${effectiveness.toFixed(1)}%`}</div>
                     </div>
                     <ChevronRight className="hidden h-4 w-4 text-slate-400 lg:block" />
                   </button>
