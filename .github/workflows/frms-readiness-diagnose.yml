@@ -34,3 +34,17 @@ jobs:
         run: cd worker-airtrust && npx vitest run src/__tests__/frms/readiness-persistence.test.ts
       - name: readiness-route
         run: cd worker-airtrust && npx vitest run src/__tests__/routes/frms-readiness.test.ts
+      - name: full-worker-shard-json
+        id: shard
+        continue-on-error: true
+        run: cd worker-airtrust && npx vitest run --shard=1/2 --reporter=json --outputFile=worker-tests-1.json
+      - name: upload-worker-shard-report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frms-worker-tests-1-report
+          path: worker-airtrust/worker-tests-1.json
+          if-no-files-found: error
+      - name: assert-worker-shard
+        if: steps.shard.outcome != 'success'
+        run: exit 1
