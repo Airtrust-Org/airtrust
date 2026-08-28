@@ -1,14 +1,25 @@
 #!/usr/bin/env node
 /**
- * Creates a temporary Playwright storageState for the sanctioned synthetic
- * staging smoke account. It never uses a browser password form, production
- * credentials, SQL, or fabricated tokens.
+ * Creates a temporary Playwright storageState for the canonical, already
+ * provisioned staging QA identity.
+ *
+ * Canonical contract (see .github/workflows/provision-staging-standard-identity.yml):
+ *   - identity: qa-agent@staging.airtrust.invalid, provisioned/rotated by that
+ *     workflow; the legacy smoke.staging.20260701@airtrust.invalid login is
+ *     retired and MUST NOT be used here;
+ *   - password: STAGING_SMOKE_PASSWORD, supplied by the sanctioned environment
+ *     (GitHub Environment `staging`). This script never generates a random
+ *     password and never seeds the D1 database;
+ *   - Pages alias: https://staging.airtrust.pages.dev (the deploy-staging
+ *     official alias). The old https://airtrust-staging.pages.dev alias is
+ *     stale and MUST NOT be used here.
+ *
+ * It never uses a browser password form, production credentials, SQL, or
+ * fabricated tokens, and never prints the password or any token.
  */
-import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import {
   assert,
@@ -24,9 +35,18 @@ const require = createRequire(resolve(process.cwd(), 'package.json'));
 const { chromium, request } = require('playwright');
 
 const STAGING_API_URL = 'https://airtrust-api-staging.airtrust.workers.dev';
-const STAGING_PAGES_URL = 'https://airtrust-staging.pages.dev';
-const QA_EMAIL = 'smoke.staging.20260701@airtrust.invalid';
+const STAGING_PAGES_URL = 'https://staging.airtrust.pages.dev';
+const LEGACY_STAGING_PAGES_URL = 'https://airtrust-staging.pages.dev';
+const QA_EMAIL = 'qa-agent@staging.airtrust.invalid';
+const LEGACY_QA_EMAIL = 'smoke.staging.20260701@airtrust.invalid';
 const QA_EMPRESA_ID = 999002;
+
+// Guard against a regression that reintroduces the retired identity/alias.
+assert(QA_EMAIL !== LEGACY_QA_EMAIL, 'canonical QA identity must not equal the retired one');
+assert(
+  STAGING_PAGES_URL !== LEGACY_STAGING_PAGES_URL,
+  'canonical Pages alias must not equal the stale one',
+);
 
 function readOutputPath() {
   const args = process.argv.slice(2);
@@ -45,31 +65,24 @@ function readOutputPath() {
   return output;
 }
 
-function runSeed(password) {
-  const result = spawnSync(
-    process.execPath,
-    ['scripts/seed-staging-smoke-user.mjs', '--apply', '--confirm-staging-baseline'],
-    {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701',
-        STAGING_SMOKE_EMAIL: QA_EMAIL,
-        STAGING_SMOKE_PASSWORD: password,
-      },
-      encoding: 'utf8',
-    },
-  );
-  if (result.status !== 0) {
-    throw new Error('seed staging QA falhou');
+function readCentralPassword() {
+  const password = process.env.STAGING_SMOKE_PASSWORD;
+  if (typeof password !== 'string' || password.trim().length === 0) {
+    // Report only the absence — never the value.
+    throw new Error(
+      'STAGING_QA_CENTRAL_CREDENTIALS_REQUIRED: STAGING_SMOKE_PASSWORD ausente. ' +
+        'Provisione a identidade canônica pelo workflow ' +
+        'provision-staging-standard-identity.yml e rode este bootstrap no ambiente ' +
+        'sancionado (GitHub Environment `staging`), nunca no shell local sem credenciais.',
+    );
   }
+  return password;
 }
 
 async function main() {
   const output = readOutputPath();
   const apiBase = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL || STAGING_API_URL);
-  const password = randomBytes(36).toString('base64url');
-  runSeed(password);
+  const password = readCentralPassword();
 
   const api = await request.newContext({ baseURL: apiBase, extraHTTPHeaders: { Accept: 'application/json' } });
   try {
@@ -81,6 +94,10 @@ async function main() {
     const refreshToken = extractRefreshToken(loginPayload);
     const claims = decodeJwtPayload(accessToken);
     assert(String(claims?.email || '').toLowerCase() === QA_EMAIL, 'identidade QA divergente');
+    assert(
+      String(claims?.email || '').toLowerCase() !== LEGACY_QA_EMAIL,
+      'login retornou a identidade QA legada aposentada',
+    );
     assert(Number(claims?.empresa_id) === QA_EMPRESA_ID, 'tenant QA divergente');
     assert(['admin', 'administrador'].includes(String(claims?.role || '').toLowerCase()), 'RBAC QA sem administracao');
 
