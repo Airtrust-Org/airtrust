@@ -106,13 +106,14 @@ Expected result codes:
 - `STAGING_SMOKE_IDENTITY_READY`
 - `QA_EXAMINER_IDENTITY_READY`
 - `STAGING_SMOKE_IDENTITY_MISSING`
+- `STAGING_SMOKE_IDENTITY_NONCANONICAL`
 - `QA_EXAMINER_IDENTITY_MISSING`
 - `STAGING_SMOKE_IDENTITY_AUTH_FAILED`
 - `QA_EXAMINER_IDENTITY_AUTH_FAILED`
 
-A missing/invalid result is a central staging configuration problem. Fix the
-existing Environment secret value under the same canonical name and rerun the
-readiness check. Do not create a per-agent secret namespace.
+A missing/invalid/noncanonical result is a central staging configuration
+problem. Fix the existing Environment secret value under the same canonical
+name and rerun the readiness check. Do not create a per-agent secret namespace.
 
 ## 6. Provisioning and rotation
 
