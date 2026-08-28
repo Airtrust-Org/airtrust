@@ -23,8 +23,8 @@ env:
   LEGACY_STAGING_SMOKE_EMAIL: smoke.staging.20260701@airtrust.invalid
 
 jobs:
-  provision:
-    name: Provision canonical staging QA identity
+  staging-d1-identity-provision:
+    name: Staging D1 canonical QA identity provision
     runs-on: ubuntu-latest
     environment: staging
     env:
@@ -45,7 +45,6 @@ jobs:
           [[ "$STAGING_D1_NAME" == "airtrust-db-staging-baseline-20260701" ]] || { echo 'STAGING_D1_REJECTED' >&2; exit 1; }
           [[ -n "$STAGING_SMOKE_PASSWORD" ]] || { echo 'STAGING_SMOKE_PASSWORD_MISSING' >&2; exit 1; }
           [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'STAGING_D1_CREDENTIALS_MISSING' >&2; exit 1; }
-          echo "::add-mask::$STAGING_SMOKE_PASSWORD"
           echo 'STAGING_IDENTITY_GUARD_PASS'
 
       - name: Checkout canonical main
