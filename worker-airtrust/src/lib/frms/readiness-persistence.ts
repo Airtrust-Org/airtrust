@@ -48,7 +48,7 @@ export async function countReadinessBaselineSessions(
   db: D1Database,
   empresaId: number,
   funcionarioId: number,
-  excludeReferenceDate?: string,
+  beforeReferenceDate?: string,
 ): Promise<number> {
   const row = await db
     .prepare(
@@ -58,9 +58,9 @@ export async function countReadinessBaselineSessions(
           AND funcionario_id = ?
           AND deleted_at IS NULL
           AND response_trials > 0
-          AND (? IS NULL OR reference_date <> ?)`,
+          AND (? IS NULL OR reference_date < ?)`,
     )
-    .bind(empresaId, funcionarioId, excludeReferenceDate || null, excludeReferenceDate || null)
+    .bind(empresaId, funcionarioId, beforeReferenceDate || null, beforeReferenceDate || null)
     .first<{ total: number }>();
 
   return Number(row?.total || 0);
@@ -70,9 +70,9 @@ export async function getReadinessBaselineSnapshot(
   db: D1Database,
   empresaId: number,
   funcionarioId: number,
-  excludeReferenceDate?: string,
+  beforeReferenceDate?: string,
 ): Promise<ReadinessBaselineSnapshot> {
-  const sessions = await countReadinessBaselineSessions(db, empresaId, funcionarioId, excludeReferenceDate);
+  const sessions = await countReadinessBaselineSessions(db, empresaId, funcionarioId, beforeReferenceDate);
   const result = await db
     .prepare(
       `SELECT median_rt_ms, lapse_rate
@@ -81,15 +81,15 @@ export async function getReadinessBaselineSnapshot(
           AND funcionario_id = ?
           AND deleted_at IS NULL
           AND response_trials > 0
-          AND (? IS NULL OR reference_date <> ?)
+          AND (? IS NULL OR reference_date < ?)
         ORDER BY created_at DESC
         LIMIT ?`,
     )
     .bind(
       empresaId,
       funcionarioId,
-      excludeReferenceDate || null,
-      excludeReferenceDate || null,
+      beforeReferenceDate || null,
+      beforeReferenceDate || null,
       READINESS_PROTOCOL.minimumBaselineSessions,
     )
     .all<{ median_rt_ms: number | null; lapse_rate: number | null }>();

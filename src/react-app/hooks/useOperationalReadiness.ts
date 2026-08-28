@@ -14,6 +14,10 @@ export type ReadinessSubmissionResult = {
   classification: 'baseline_building' | 'preserved' | 'attention' | 'operational_review';
   baselineSessions: number;
   baselineReady: boolean;
+  baselineMedianRtMs: number | null;
+  baselineLapseRate: number | null;
+  medianRtDeltaPct: number | null;
+  lapseRateDelta: number | null;
   warningSignals: string[];
   criticalSignals: string[];
 };
@@ -26,6 +30,10 @@ export type ReadinessToday = {
   classification: ReadinessSubmissionResult['classification'];
   baseline_sessions: number;
   baseline_ready: number;
+  baseline_median_rt_ms: number | null;
+  baseline_lapse_rate: number | null;
+  median_rt_delta_pct: number | null;
+  lapse_rate_delta: number | null;
   duration_ms: number;
   valid_trials: number;
   lapse_count: number;

@@ -24,7 +24,7 @@ O Worker recalcula as métricas e a classificação a partir dos trials brutos; 
 
 ## Baseline e classificação V1
 
-O baseline individual usa avaliações anteriores válidas do próprio funcionário e do mesmo tenant. São necessárias 5 sessões anteriores antes de a comparação sair de `baseline_building`.
+O baseline individual usa avaliações anteriores válidas do próprio funcionário e do mesmo tenant. São necessárias 5 sessões anteriores antes de a comparação sair de `baseline_building`. O snapshot usa até as 5 sessões válidas mais recentes estritamente anteriores à data avaliada e registra mediana individual de tempo de reação, taxa de lapsos e os deltas atuais; esses deltas ficam observáveis/auditáveis, mas ainda não recebem peso adicional na classificação sem critério validado.
 
 Uma reavaliação no mesmo dia substitui logicamente a avaliação ativa daquele dia, preservando a anterior como histórico soft-deleted e sem contar o dia duas vezes no baseline.
 

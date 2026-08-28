@@ -90,15 +90,15 @@ router.get('/baseline', async (c) => {
     return c.json({ success: false, error: 'Funcionario nao encontrado para o usuario atual' }, 404);
   }
 
-  const excludeDate = c.req.query('date');
-  if (excludeDate && !/^\d{4}-\d{2}-\d{2}$/.test(excludeDate)) {
+  const beforeDate = c.req.query('date');
+  if (beforeDate && !/^\d{4}-\d{2}-\d{2}$/.test(beforeDate)) {
     return c.json({ success: false, error: 'invalid_reference_date' }, 400);
   }
   const sessions = await countReadinessBaselineSessions(
     c.env.DB,
     empresaId,
     funcionarioId,
-    excludeDate || undefined,
+    beforeDate || undefined,
   );
   return c.json({
     success: true,
@@ -125,7 +125,8 @@ router.get('/today', async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT
        id, reference_date, protocol_version, scoring_version, classification,
-       baseline_sessions, baseline_ready, duration_ms, valid_trials,
+       baseline_sessions, baseline_ready, baseline_median_rt_ms, baseline_lapse_rate,
+       median_rt_delta_pct, lapse_rate_delta, duration_ms, valid_trials,
        lapse_count, lapse_rate, false_start_count, missed_count,
        median_rt_ms, mean_rt_ms, p90_rt_ms, sd_rt_ms, response_speed,
        warning_signals_json, critical_signals_json, created_at
