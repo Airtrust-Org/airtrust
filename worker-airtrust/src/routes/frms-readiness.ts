@@ -198,6 +198,9 @@ router.post('/', async (c) => {
     return c.json({ success: true, data: result }, 201);
   } catch (error) {
     const code = error instanceof Error ? error.message : 'readiness_persistence_failed';
+    if (code === 'invalid_trial_sequence' || code === 'invalid_trial_timing') {
+      return c.json({ success: false, error: code }, 400);
+    }
     console.error('[frms-readiness] persistence failed', {
       empresaId,
       funcionarioId,
