@@ -1,24 +1,28 @@
 /**
- * Gate de ativação do FRMS IOGP shadow pipeline (SIGVOOS -> leg-context ->
- * operational-demand -> weather -> environmental-risk -> compliance-policy ->
- * frms-risk-orchestrator -> evaluation-contract -> iogp-decision-adapter).
+ * Gate de ativação do pipeline observacional FRMS IOGP
+ * (SIGVOOS -> operational-demand -> REDEMET -> environmental-risk -> snapshot).
  *
- * Modeled directly on `lib/edb/edb-shadow-pilot-flag.ts` — same fail-closed
- * shape, deliberately restrictive:
- * - somente o ambiente `staging` pode habilitar o recurso;
- * - variável ausente ou vazia mantém o recurso desativado;
+ * O pipeline é sempre não-canônico: ele persiste evidência separada e nunca
+ * altera fatorização, acumulo, bloqueio ou effectiveness. A ativação continua
+ * fail-closed e por tenant explícito.
+ *
+ * Staging:
+ * - `FRMS_IOGP_SHADOW_MODE_TENANTS`
+ *
+ * Produção (somente evidência observacional):
+ * - `FRMS_IOGP_PRODUCTION_EVIDENCE_TENANTS`
+ *
+ * Regras comuns:
+ * - variável ausente ou vazia mantém desativado;
  * - `all` nunca é aceito;
- * - somente IDs positivos explícitos e separados por vírgula são válidos;
- * - qualquer token inválido faz a configuração falhar fechada por completo.
- *
- * When disabled for a tenant, callers MUST NOT: query any of the new
- * frms_iogp_* / frms_regulatory_profiles / frms_location_catalog /
- * frms_jornada_avaliacoes tables, call REDEMET, or affect the canonical
- * operational decision in any way.
+ * - somente IDs positivos explícitos separados por vírgula são válidos;
+ * - qualquer token inválido faz toda a configuração falhar fechada;
+ * - development/test não habilitam por essas variáveis.
  */
 export interface FrmsIogpShadowFlagEnv {
   ENVIRONMENT?: string;
   FRMS_IOGP_SHADOW_MODE_TENANTS?: string;
+  FRMS_IOGP_PRODUCTION_EVIDENCE_TENANTS?: string;
 }
 
 function parseAllowedTenantIds(raw: string): number[] | null {
@@ -33,14 +37,23 @@ function parseAllowedTenantIds(raw: string): number[] | null {
   return [...new Set(parts.map((part) => Number(part)))];
 }
 
+function resolveAllowlist(env: FrmsIogpShadowFlagEnv): string {
+  if (env.ENVIRONMENT === 'staging') {
+    return (env.FRMS_IOGP_SHADOW_MODE_TENANTS ?? '').trim();
+  }
+  if (env.ENVIRONMENT === 'production') {
+    return (env.FRMS_IOGP_PRODUCTION_EVIDENCE_TENANTS ?? '').trim();
+  }
+  return '';
+}
+
 export function isFrmsIogpShadowModeEnabledForTenant(
   env: FrmsIogpShadowFlagEnv,
   tenantId: number,
 ): boolean {
-  if (env.ENVIRONMENT !== 'staging') return false;
   if (!Number.isInteger(tenantId) || tenantId <= 0) return false;
 
-  const raw = (env.FRMS_IOGP_SHADOW_MODE_TENANTS ?? '').trim();
+  const raw = resolveAllowlist(env);
   if (!raw || raw.toLowerCase() === 'all') return false;
 
   const allowedTenantIds = parseAllowedTenantIds(raw);

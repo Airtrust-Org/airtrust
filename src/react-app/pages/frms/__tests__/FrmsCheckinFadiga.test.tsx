@@ -67,6 +67,38 @@ vi.mock('@/react-app/hooks/useOperationalReadiness', () => ({
   useSubmitReadiness: () => ({ mutateAsync: readinessMutateAsyncMock, isPending: false }),
 }));
 
+const recoverySubmitMock = vi.fn();
+vi.mock('@/react-app/hooks/useFrmsRecovery', async () => {
+  const actual = await vi.importActual<typeof import('@/react-app/hooks/useFrmsRecovery')>(
+    '@/react-app/hooks/useFrmsRecovery',
+  );
+  return {
+    ...actual,
+    // Default: previous day had a detected flight, so the recovery card stays
+    // collapsed and does not ask for an activity classification.
+    useFrmsRecoveryContext: () => ({
+      data: {
+        reference_date: '2026-06-04',
+        schema_ready: true,
+        flight: {
+          detected: true,
+          sectorCount: 2,
+          landingCount: 2,
+          canonicalFlightMinutes: 210,
+          source: 'SIGVOOS',
+        },
+        requires_activity_classification: false,
+        activity: null,
+        assessment: null,
+        prompt_reason: 'FLIGHT_DETECTED',
+      },
+      isLoading: false,
+      isError: false,
+    }),
+    useSubmitFrmsRecoveryActivity: () => ({ mutateAsync: recoverySubmitMock, isPending: false }),
+  };
+});
+
 vi.mock('../OperationalVigilanceTest', () => ({
   default: ({ onComplete }: { onComplete: (result: unknown) => void }) => {
     const completedRef = useRef(false);
