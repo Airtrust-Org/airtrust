@@ -1,16 +1,23 @@
 /**
  * AirTrust FRMS IOGP — shadow pipeline caller.
  *
- * This is the SOLE integration point between the canonical FRMS engine and the
- * IOGP shadow pipeline. It is called from `reprocessarTripulanteCompleto` after
- * `recalcularPipeline` produces updated fatorizacao + acumulo for a jornada.
+ * This is the integration point between the canonical FRMS engine and the
+ * IOGP/REDEMET evidence pipeline. It is called from `reprocessarTripulanteCompleto`
+ * after a provisional canonical calculation produces fatorizacao + acumulo.
  *
- * Architecture invariant:
- *   canonical result (fatorizacao, acumulo, alertas, bloqueado)
- *           ↓  INALTERADO
- *   runFrmsIogpShadowForJornada()   ← this module (observer only)
+ * Same-run convergence invariant:
+ *   provisional canonical result
  *           ↓
- *   shadow evaluation (snapshot, decision)   → persisted to frms_jornada_avaliacoes
+ *   runFrmsIogpShadowForJornada()
+ *           ↓
+ *   SIGVOOS + location/timezone + historical REDEMET evidence
+ *           ↓
+ *   persist frms_jornada_avaliacoes
+ *           ↓
+ *   one FINAL canonical recalculation (no second shadow call)
+ *
+ * This controlled two-pass prevents newly collected observed temperature from
+ * being delayed until a later cron/reprocess run.
  *
  * Feature OFF contract:
  *   - isFrmsIogpShadowModeEnabledForTenant() → false → returns null immediately.
@@ -19,13 +26,13 @@
  *   - Zero changes to fatorizacao, acumulo, alertas, or bloqueado.
  *
  * Failure isolation:
- *   - Any error inside the shadow call is caught and logged.
- *   - The canonical pipeline result is NEVER affected by shadow failures.
- *   - Callers must use `.catch()` or wrap in try/catch (see db-service-jornadas.ts).
+ *   - Shadow/evidence failures are caught by the caller and never invalidate the
+ *     already persisted provisional canonical result.
+ *   - The final convergence recalculation is best-effort after evidence persistence.
  */
 
 import type { D1Database } from '@cloudflare/workers-types';
-import type { FrmsJornada } from './types';
+import { LIMITES_DEFAULT, type FrmsJornada } from './types';
 import {
   isFrmsIogpShadowModeEnabledForTenant,
   type FrmsIogpShadowFlagEnv,
@@ -33,9 +40,7 @@ import {
 import { runFrmsIogpShadowPipeline, type FrmsIogpShadowRawLeg } from './frms-iogp-shadow-pipeline';
 import { buildIogpComplianceEvaluations } from './frms-iogp-compliance-builder';
 import { mapEffectivenessNivelToBiologicalLevel } from './frms-iogp-biological-adapter';
-import {
-  persistFrmsJornadaAvaliacao,
-} from './frms-jornada-avaliacoes-repository';
+import { persistFrmsJornadaAvaliacao } from './frms-jornada-avaliacoes-repository';
 import { RedemetClient } from './redemet-weather';
 import type { FrmsLocationCatalogEntry } from './location-catalog';
 
@@ -241,20 +246,10 @@ async function resolveEmpresaId(
 }
 
 /**
- * Runs the IOGP shadow evaluation for a specific jornada after the canonical
- * pipeline has completed. NEVER modifies the canonical result.
- *
- * Returns null if:
- * - Feature flag is OFF for the tenant.
- * - empresaId cannot be resolved.
- * - No SIGVOOS legs are found for the jornada.
- * - Any internal error (caught + logged).
- *
- * @param db           - D1 database (canonical binding).
- * @param jornada      - The jornada just processed by recalcularPipeline.
- * @param canonical    - Canonical pipeline result (acumulo + fatorizacao).
- * @param env          - Wrangler env (for feature flags and REDEMET key).
- * @param hintEmpresaId - empresa_id from the calling context (cron scope), or null.
+ * Runs the IOGP evidence evaluation for a specific jornada after the provisional
+ * canonical pipeline has completed. If evidence is persisted, exactly one final
+ * canonical recalculation is performed so that newly observed REDEMET temperature
+ * is reflected in effectiveness during the same processing run.
  */
 export async function runFrmsIogpShadowForJornada(
   db: D1Database,
@@ -293,7 +288,6 @@ export async function runFrmsIogpShadowForJornada(
 
   if (cvRows.length === 0) {
     // No legs available: shadow pipeline would have nothing to evaluate.
-    // This is expected for jornadas without SIGVOOS leg data (manual, FIRA, etc.)
     return null;
   }
 
@@ -305,7 +299,7 @@ export async function runFrmsIogpShadowForJornada(
   // ── REDEMET client (null if not configured — shadow still runs, no weather) ─
   const redemetClient = buildRedemetClientFromEnv(env);
 
-  // ── Run shadow pipeline ───────────────────────────────────────────────────
+  // ── Run shadow/evidence pipeline ──────────────────────────────────────────
   const result = await runFrmsIogpShadowPipeline({
     env,
     tenantId: empresaId,
@@ -326,12 +320,21 @@ export async function runFrmsIogpShadowForJornada(
 
   if (!result.enabled) return null;
 
-  // ── Persist shadow snapshot ───────────────────────────────────────────────
-  await persistFrmsJornadaAvaliacao(
-    db,
-    empresaId,
-    result.snapshot,
-  );
+  // ── Persist evidence snapshot BEFORE the final effectiveness pass ──────────
+  await persistFrmsJornadaAvaliacao(db, empresaId, result.snapshot);
+
+  // Controlled two-pass convergence. Dynamic import avoids a static module cycle:
+  // db-service-jornadas imports this caller, while the final pass needs its
+  // recalcularPipeline. The second pass does NOT call the shadow pipeline again.
+  try {
+    const { recalcularPipeline } = await import('./db-service-jornadas');
+    await recalcularPipeline(db, jornada as FrmsJornada, LIMITES_DEFAULT);
+  } catch (error) {
+    console.warn('[FRMS] Final canonical convergence after REDEMET evidence failed', {
+      jornadaId: jornada.id,
+      error: error instanceof Error ? error.message : String(error ?? ''),
+    });
+  }
 
   return null;
 }

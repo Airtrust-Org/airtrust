@@ -1,13 +1,35 @@
+/**
+ * Active protocol: `airtrust-pvtb-v2` — AirTrust implementation of the published
+ * PVT-B paradigm (Basner, Mollicone & Dinges 2011; PsyToolkit PVT-B). The
+ * historical `airtrust-vigilance-v1` (blue-dot stimulus, 2–10 s ISI) is only kept
+ * for interpreting already-stored sessions. Individual baseline is computed per
+ * protocol version, so v1 sessions never contribute to a v2 baseline.
+ */
 export const READINESS_PROTOCOL = {
-  version: 'airtrust-vigilance-v1',
+  version: 'airtrust-pvtb-v2',
   scoringVersion: 'readiness-score-v1',
+  legacyVersions: ['airtrust-vigilance-v1'] as const,
   defaultDurationMs: 180_000,
   allowedDurationDriftMs: 15_000,
   minimumTrials: 10,
   lapseThresholdMs: 500,
   falseStartThresholdMs: 100,
+  responseWindowMs: 30_000,
   minimumBaselineSessions: 5,
 } as const;
+
+export const READINESS_PROTOCOL_VERSIONS = [
+  READINESS_PROTOCOL.version,
+  ...READINESS_PROTOCOL.legacyVersions,
+] as const;
+
+export type ReadinessProtocolVersion = (typeof READINESS_PROTOCOL_VERSIONS)[number];
+
+export function isReadinessProtocolVersion(value: unknown): value is ReadinessProtocolVersion {
+  return (
+    typeof value === 'string' && (READINESS_PROTOCOL_VERSIONS as readonly string[]).includes(value)
+  );
+}
 
 export type ReadinessTrialOutcome = 'response' | 'lapse' | 'false_start' | 'missed';
 
@@ -62,10 +84,26 @@ function quantile(sorted: number[], p: number): number | null {
 /**
  * Rebuild every outcome from monotonic timestamps. Client-provided outcome and
  * reactionTimeMs are treated as transport/debug data only, never as authoritative.
+ *
+ * PVT-B V2 has a protocol-specific no-response rule: a presented stimulus that
+ * remains unanswered for the 30 s response ceiling is a lapse with RT=30,000 ms.
+ * The historical v1 protocol keeps its original `missed` interpretation.
+ *
+ * V2 also enforces the three-minute sampling boundary server-side: scheduled and
+ * stimulus timestamps must be inside the submitted sampling duration. Only the
+ * response to an already-presented stimulus may extend beyond that boundary, up
+ * to the 30-second response ceiling.
  */
-export function normalizeReadinessTrials(trials: ReadinessTrial[], durationMs: number): ReadinessTrial[] {
+export function normalizeReadinessTrials(
+  trials: ReadinessTrial[],
+  durationMs: number,
+  protocolVersion: ReadinessProtocolVersion = READINESS_PROTOCOL.version,
+): ReadinessTrial[] {
   const seenSequences = new Set<number>();
-  const maxTimestampMs = Math.round(durationMs) + 5_000;
+  const isV2 = protocolVersion === READINESS_PROTOCOL.version;
+  const samplingMaxMs = Math.round(durationMs);
+  const responseMaxMs = samplingMaxMs + (isV2 ? READINESS_PROTOCOL.responseWindowMs : 5_000);
+  const legacyStimulusMaxMs = responseMaxMs;
 
   return trials.map((trial) => {
     if (!Number.isInteger(trial.sequence) || trial.sequence <= 0 || seenSequences.has(trial.sequence)) {
@@ -73,13 +111,23 @@ export function normalizeReadinessTrials(trials: ReadinessTrial[], durationMs: n
     }
     seenSequences.add(trial.sequence);
 
-    if (!Number.isFinite(trial.scheduledAtMs) || trial.scheduledAtMs < 0 || trial.scheduledAtMs > maxTimestampMs) {
+    const scheduledMaxMs = isV2 ? samplingMaxMs : legacyStimulusMaxMs;
+    if (
+      !Number.isFinite(trial.scheduledAtMs) ||
+      trial.scheduledAtMs < 0 ||
+      trial.scheduledAtMs > scheduledMaxMs
+    ) {
       throw new Error('invalid_trial_timing');
     }
 
     // A response while no stimulus is visible is encoded by the browser with stimulusAtMs = -1.
     if (trial.stimulusAtMs === -1) {
-      if (trial.responseAtMs == null || !Number.isFinite(trial.responseAtMs) || trial.responseAtMs < 0 || trial.responseAtMs > maxTimestampMs) {
+      if (
+        trial.responseAtMs == null ||
+        !Number.isFinite(trial.responseAtMs) ||
+        trial.responseAtMs < 0 ||
+        trial.responseAtMs > responseMaxMs
+      ) {
         throw new Error('invalid_trial_timing');
       }
       return {
@@ -89,11 +137,23 @@ export function normalizeReadinessTrials(trials: ReadinessTrial[], durationMs: n
       };
     }
 
-    if (!Number.isFinite(trial.stimulusAtMs) || trial.stimulusAtMs < 0 || trial.stimulusAtMs > maxTimestampMs) {
+    const stimulusMaxMs = isV2 ? samplingMaxMs : legacyStimulusMaxMs;
+    if (
+      !Number.isFinite(trial.stimulusAtMs) ||
+      trial.stimulusAtMs < 0 ||
+      trial.stimulusAtMs > stimulusMaxMs
+    ) {
       throw new Error('invalid_trial_timing');
     }
 
     if (trial.responseAtMs == null) {
+      if (isV2) {
+        return {
+          ...trial,
+          reactionTimeMs: READINESS_PROTOCOL.responseWindowMs,
+          outcome: 'lapse',
+        };
+      }
       return {
         ...trial,
         reactionTimeMs: null,
@@ -101,11 +161,18 @@ export function normalizeReadinessTrials(trials: ReadinessTrial[], durationMs: n
       };
     }
 
-    if (!Number.isFinite(trial.responseAtMs) || trial.responseAtMs < trial.stimulusAtMs || trial.responseAtMs > maxTimestampMs) {
+    if (
+      !Number.isFinite(trial.responseAtMs) ||
+      trial.responseAtMs < trial.stimulusAtMs ||
+      trial.responseAtMs > responseMaxMs
+    ) {
       throw new Error('invalid_trial_timing');
     }
 
     const reactionTimeMs = Math.round(trial.responseAtMs - trial.stimulusAtMs);
+    if (isV2 && reactionTimeMs > READINESS_PROTOCOL.responseWindowMs) {
+      throw new Error('invalid_trial_timing');
+    }
     const outcome: ReadinessTrialOutcome =
       reactionTimeMs < READINESS_PROTOCOL.falseStartThresholdMs
         ? 'false_start'

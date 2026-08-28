@@ -1,46 +1,216 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import OperationalVigilanceTest from '../OperationalVigilanceTest';
+import OperationalVigilanceTest, {
+  type OperationalVigilanceResult,
+} from '../OperationalVigilanceTest';
+import { PVTB_V2_PROTOCOL } from '../operationalReadiness';
 
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-describe('OperationalVigilanceTest', () => {
-  it('shows the PVT scientific context without implying NASA certification of the AirTrust implementation', () => {
-    render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
+/** Drives the component from `instructions` to the first visible stimulus. */
+function startAndReachStimulus() {
+  fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
+  // Math.random mocked to 0 -> ISI = feedbackHoldMs (1000). +1 animation frame.
+  act(() => {
+    vi.advanceTimersByTime(PVTB_V2_PROTOCOL.feedbackHoldMs + 20);
+  });
+}
 
-    expect(screen.getByRole('heading', { name: /vigilância psicomotora \(PVT\)/i })).toBeInTheDocument();
-    expect(screen.getByText(/NASA usa PVT\/PVT\+ em pesquisas de fadiga e desempenho/i)).toBeInTheDocument();
-    expect(screen.getByText(/implementação independente/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /NASA Fatigue Countermeasures Laboratory/i })).toHaveAttribute(
-      'href',
-      'https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/',
-    );
-    expect(screen.getByText(/tempo aparece em milissegundos/i)).toBeInTheDocument();
+describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
+  it('pins the PVT-B response window at 30 seconds', () => {
+    expect(PVTB_V2_PROTOCOL.responseWindowMs).toBe(30_000);
   });
 
-  it('shows the measured reaction time in milliseconds after a valid response without changing the trial schedule', () => {
+  it('uses the published PVT-B framing and does not claim to be the NASA PVT+ app', () => {
+    render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
+
+    expect(
+      screen.getByRole('heading', { name: /vigilância psicomotora \(PVT-B\)/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/caixa vermelha fica visível o tempo todo/i)).toBeInTheDocument();
+    expect(screen.getByText(/contador amarelo aparecer dentro/i)).toBeInTheDocument();
+    expect(screen.getByText(/Basner, Mollicone e Dinges \(2011\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/não é o aplicativo NASA PVT\+/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /PsyToolkit — PVT-B/i })).toHaveAttribute(
+      'href',
+      'https://www.psytoolkit.org/experiment-library/pvtb.html',
+    );
+    expect(screen.queryByText(/círculo azul/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps a red box visible while waiting and never renders a rounded-full stimulus', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
+
+    const box = screen.getByTestId('pvtb-box');
+    expect(box).toHaveAttribute('data-phase', 'waiting');
+    expect(box.className).toMatch(/bg-red-600/);
+    expect(box.className).toMatch(/border-red-700/);
+    expect(screen.queryByTestId('pvtb-counter')).not.toBeInTheDocument();
+    expect(box.querySelector('.rounded-full')).toBeNull();
+    expect(box.className).not.toMatch(/bg-blue-600/);
+  });
+
+  it('shows a yellow millisecond counter as the stimulus and no rounded-full element', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
+    startAndReachStimulus();
+
+    const box = screen.getByTestId('pvtb-box');
+    expect(box).toHaveAttribute('data-phase', 'stimulus');
+    const counter = screen.getByTestId('pvtb-counter');
+    expect(counter.className).toMatch(/text-yellow-300/);
+    expect(counter.className).not.toMatch(/rounded-full/);
+    expect(box.querySelector('.rounded-full')).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(Number(screen.getByTestId('pvtb-counter').textContent)).toBeGreaterThanOrEqual(150);
+  });
+
+  it('does not time out an unanswered stimulus after only 3 seconds', () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const onComplete = vi.fn();
-    render(<OperationalVigilanceTest durationMs={30_000} onComplete={onComplete} />);
+    render(<OperationalVigilanceTest durationMs={60_000} onComplete={onComplete} />);
+    startAndReachStimulus();
 
-    fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
     act(() => {
-      vi.advanceTimersByTime(2_020);
+      vi.advanceTimersByTime(3_100);
     });
 
-    const responseArea = screen.getByRole('button', { name: /responder ao estímulo agora/i });
+    expect(screen.getByTestId('pvtb-box')).toHaveAttribute('data-phase', 'stimulus');
+    expect(Number(screen.getByTestId('pvtb-counter').textContent)).toBeGreaterThanOrEqual(3_000);
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('keeps an in-window final stimulus alive past the nominal session boundary and records no-response as a 30 s lapse', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    let completed: OperationalVigilanceResult | null = null;
+    render(
+      <OperationalVigilanceTest
+        durationMs={2_000}
+        onComplete={(result) => {
+          completed = result;
+        }}
+      />,
+    );
+
+    startAndReachStimulus();
+    act(() => {
+      vi.advanceTimersByTime(1_100);
+    });
+
+    expect(screen.getByTestId('pvtb-box')).toHaveAttribute('data-phase', 'stimulus');
+    expect(completed).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(PVTB_V2_PROTOCOL.responseWindowMs);
+    });
+
+    expect(completed).not.toBeNull();
+    expect(completed!.summary.durationMs).toBe(2_000);
+    expect(completed!.summary.protocolVersion).toBe('airtrust-pvtb-v2');
+    expect(completed!.trials).toHaveLength(1);
+    expect(completed!.trials[0]).toMatchObject({
+      responseAtMs: null,
+      reactionTimeMs: 30_000,
+      outcome: 'lapse',
+    });
+    expect(completed!.summary.lapses).toBe(1);
+    expect(completed!.summary.missed).toBe(0);
+  });
+
+  it('measures reaction time from the monotonic clock, not the wall clock (Date.now)', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const perfNowSpy = vi.spyOn(performance, 'now');
+    vi.spyOn(Date, 'now').mockReturnValue(5_000_000_000_000);
+    let completed: OperationalVigilanceResult | null = null;
+    render(
+      <OperationalVigilanceTest
+        durationMs={30_000}
+        onComplete={(result) => {
+          completed = result;
+        }}
+      />,
+    );
+
+    startAndReachStimulus();
+    expect(screen.getByTestId('pvtb-box')).toHaveAttribute('data-phase', 'stimulus');
     act(() => {
       vi.advanceTimersByTime(250);
     });
-    fireEvent.pointerDown(responseArea);
+    fireEvent.pointerDown(screen.getByTestId('pvtb-box'));
 
-    expect(screen.getByText(/ms$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^2\d\d ms$/)).toBeInTheDocument();
     expect(screen.getByText(/tempo da última resposta/i)).toBeInTheDocument();
-    expect(onComplete).not.toHaveBeenCalled();
+    expect(perfNowSpy).toHaveBeenCalled();
+    expect(completed).toBeNull();
+  });
+
+  it('flags a tap before the counter as an anticipation (false start)', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    fireEvent.pointerDown(screen.getByTestId('pvtb-box'));
+
+    expect(screen.getByText('Antecipado')).toBeInTheDocument();
+  });
+
+  it('classifies a slow response (>= 500 ms) as a lapse without altering the raw time', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
+    startAndReachStimulus();
+
+    act(() => {
+      vi.advanceTimersByTime(620);
+    });
+    fireEvent.pointerDown(screen.getByTestId('pvtb-box'));
+
+    expect(screen.getByText(/6\d\d ms/)).toBeInTheDocument();
+    expect(screen.getByText(/resposta lenta/i)).toBeInTheDocument();
+  });
+
+  it('emits protocol_version airtrust-pvtb-v2 on completion', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    let completed: OperationalVigilanceResult | null = null;
+    render(
+      <OperationalVigilanceTest
+        durationMs={2_500}
+        onComplete={(result) => {
+          completed = result;
+        }}
+      />,
+    );
+
+    startAndReachStimulus();
+    act(() => {
+      vi.advanceTimersByTime(240);
+    });
+    fireEvent.pointerDown(screen.getByTestId('pvtb-box'));
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    expect(completed).not.toBeNull();
+    expect(completed!.summary.protocolVersion).toBe('airtrust-pvtb-v2');
   });
 
   it('invalidates an active test when the window loses focus and never emits partial data', () => {
@@ -54,6 +224,19 @@ describe('OperationalVigilanceTest', () => {
     expect(screen.getByText(/janela perdeu o foco/i)).toBeInTheDocument();
     expect(screen.getByText(/nenhum resultado parcial será usado/i)).toBeInTheDocument();
     expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('invalidates when the page is hidden mid-test', () => {
+    const onComplete = vi.fn();
+    render(<OperationalVigilanceTest durationMs={30_000} onComplete={onComplete} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    fireEvent(document, new Event('visibilitychange'));
+
+    expect(screen.getByText('Teste interrompido')).toBeInTheDocument();
+    expect(onComplete).not.toHaveBeenCalled();
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
   });
 
   it('allows a clean restart after invalidation', () => {

@@ -1,3 +1,5 @@
+export type VigilanceProtocolVersion = 'airtrust-vigilance-v1' | 'airtrust-pvtb-v2';
+
 export type VigilanceTrial = {
   sequence: number;
   scheduledAtMs: number;
@@ -8,7 +10,7 @@ export type VigilanceTrial = {
 };
 
 export type VigilanceSummary = {
-  protocolVersion: 'airtrust-vigilance-v1';
+  protocolVersion: VigilanceProtocolVersion;
   durationMs: number;
   completedTrials: number;
   validResponses: number;
@@ -23,7 +25,12 @@ export type VigilanceSummary = {
   trials: VigilanceTrial[];
 };
 
-export const VIGILANCE_PROTOCOL = {
+/**
+ * Historical protocol (2026-08). Reddish square with a blue-dot stimulus and a
+ * 2–10 s inter-stimulus interval. Kept only so previously stored sessions and
+ * their baseline stay interpretable — new sessions never use it.
+ */
+export const PVTB_V1_PROTOCOL = {
   version: 'airtrust-vigilance-v1' as const,
   defaultDurationMs: 3 * 60 * 1000,
   minInterStimulusMs: 2_000,
@@ -32,6 +39,52 @@ export const VIGILANCE_PROTOCOL = {
   falseStartThresholdMs: 100,
   responseWindowMs: 2_000,
 };
+
+/**
+ * Active protocol: `airtrust-pvtb-v2`. AirTrust implementation of the published
+ * PVT-B paradigm (Basner, Mollicone & Dinges, 2011, Acta Astronautica 69:949–959;
+ * PsyToolkit PVT-B, https://www.psytoolkit.org/experiment-library/pvtb.html):
+ *
+ * - ~3 min session;
+ * - a red box that stays visible the whole time;
+ * - while waiting: the red box is empty;
+ * - stimulus: a yellow millisecond counter appears inside the box and ticks up
+ *   about every 50 ms until the crew member responds;
+ * - respond as fast as possible;
+ * - lapse   = RT ≥ 500 ms;
+ * - false start / anticipation = RT < 100 ms (also any tap with no counter shown);
+ * - inter-stimulus interval (response → next stimulus): ~1 s of feedback hold
+ *   plus a random 0–3 s delay = 1–4 s total, matching the PsyToolkit PVT-B design;
+ * - an unanswered presented stimulus remains active for up to 30 s and is then
+ *   recorded as a 30,000 ms lapse rather than as a separate "missed" outcome.
+ *
+ * This is not the NASA PVT+ application; it is an independent implementation of
+ * the same published paradigm.
+ */
+export const PVTB_V2_PROTOCOL = {
+  version: 'airtrust-pvtb-v2' as const,
+  defaultDurationMs: 3 * 60 * 1000,
+  /** Feedback hold after a response before the box goes empty again. */
+  feedbackHoldMs: 1_000,
+  /** Random extra wait added after the feedback hold (PsyToolkit: 0–3 s). */
+  minPostFeedbackDelayMs: 0,
+  maxPostFeedbackDelayMs: 3_000,
+  /** Effective inter-stimulus interval bounds (feedback hold + random delay). */
+  minInterStimulusMs: 1_000,
+  maxInterStimulusMs: 4_000,
+  /** Yellow counter refresh cadence during the stimulus. */
+  counterTickMs: 50,
+  lapseThresholdMs: 500,
+  falseStartThresholdMs: 100,
+  /** Published PVT-B response ceiling; unanswered stimulus becomes a 30 s lapse. */
+  responseWindowMs: 30_000,
+};
+
+/**
+ * Backwards-compatible alias. Existing imports of `VIGILANCE_PROTOCOL` keep
+ * working, but they now resolve to the active PVT-B V2 protocol.
+ */
+export const VIGILANCE_PROTOCOL = PVTB_V2_PROTOCOL;
 
 function quantile(sorted: number[], p: number): number | null {
   if (sorted.length === 0) return null;
@@ -51,6 +104,7 @@ function round(value: number, digits = 1): number {
 export function summarizeVigilanceTrials(
   trials: VigilanceTrial[],
   durationMs: number,
+  protocolVersion: VigilanceProtocolVersion = PVTB_V2_PROTOCOL.version,
 ): VigilanceSummary {
   const valid = trials
     .filter((trial) => trial.outcome === 'response' || trial.outcome === 'lapse')
@@ -65,7 +119,7 @@ export function summarizeVigilanceTrials(
   const median = quantile(sorted, 0.5);
 
   return {
-    protocolVersion: VIGILANCE_PROTOCOL.version,
+    protocolVersion,
     durationMs: Math.max(0, Math.round(durationMs)),
     completedTrials: trials.length,
     validResponses: valid.length,

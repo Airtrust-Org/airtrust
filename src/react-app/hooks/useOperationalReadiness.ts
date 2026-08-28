@@ -133,8 +133,12 @@ export function useReadinessTeam(referenceDate: string) {
 export function useSubmitReadiness() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { reference_date: string; duration_ms: number; trials: VigilanceTrial[] }) =>
-      postReadiness<ReadinessSubmissionResult>('/frms/readiness', input),
+    mutationFn: (input: {
+      reference_date: string;
+      duration_ms: number;
+      trials: VigilanceTrial[];
+      protocol_version?: string;
+    }) => postReadiness<ReadinessSubmissionResult>('/frms/readiness', input),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['frms-readiness-baseline'] });
       queryClient.invalidateQueries({ queryKey: ['frms-readiness-today', variables.reference_date] });

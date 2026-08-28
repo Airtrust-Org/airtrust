@@ -33,17 +33,39 @@ describe('FRMS readiness baseline persistence', () => {
       }),
     } as unknown as D1Database;
 
-    const snapshot = await getReadinessBaselineSnapshot(db, 7, 70, '2026-08-27');
+    const snapshot = await getReadinessBaselineSnapshot(db, 7, 70, 'airtrust-pvtb-v2', '2026-08-27');
 
     expect(snapshot).toEqual({ sessions: 7, medianRtMs: 310, lapseRate: 0.1 });
     expect(queries).toHaveLength(2);
     for (const query of queries) {
       expect(query.sql).toContain('empresa_id = ?');
       expect(query.sql).toContain('funcionario_id = ?');
+      expect(query.sql).toContain('protocol_version = ?');
       expect(query.sql).toContain('response_trials > 0');
       expect(query.sql).toContain('reference_date < ?');
-      expect(query.binds.slice(0, 4)).toEqual([7, 70, '2026-08-27', '2026-08-27']);
+      expect(query.binds.slice(0, 5)).toEqual([7, 70, 'airtrust-pvtb-v2', '2026-08-27', '2026-08-27']);
     }
-    expect(queries[1].binds[4]).toBe(5);
+    expect(queries[1].binds[5]).toBe(5);
+  });
+
+  it('never mixes protocol versions in a baseline snapshot', async () => {
+    const seen: string[] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => {
+        void sql;
+        const statement = {
+          bind: (...values: unknown[]) => {
+            seen.push(String(values[2]));
+            return statement;
+          },
+          first: async () => ({ total: 3 }),
+          all: async () => ({ results: [] }),
+        };
+        return statement;
+      }),
+    } as unknown as D1Database;
+
+    await getReadinessBaselineSnapshot(db, 6, 42, 'airtrust-vigilance-v1', '2026-08-27');
+    expect(new Set(seen)).toEqual(new Set(['airtrust-vigilance-v1']));
   });
 });

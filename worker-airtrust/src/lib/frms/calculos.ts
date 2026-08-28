@@ -13,6 +13,7 @@ import type {
   FrmsStatus,
   LimitesMap,
 } from './types';
+import type { OperationalLoadV1Result } from './operational-load';
 import { FDP_STATUS, FOLGA_STATUS } from './types';
 import {
   calcularFatorRepouso,
@@ -367,9 +368,15 @@ export function calcEffectiveness(
     dia_periodo_embarcado?: number | null;
     total_dias_periodo?: number | null;
   },
+  /**
+   * Operational Load V1 (OPERATIONAL_POLICY_V1). When present, its total delta
+   * (points) is added to the effectiveness sum as a signed fraction. When
+   * absent, the result is byte-identical to the previous contract.
+   */
+  operationalLoad?: OperationalLoadV1Result | null,
 ): EffectivenessResult {
   // Mantém o contrato histórico para consumidores que fornecem apenas a fatorização.
-  if (!jornada) return calcEffectivenessLegado(fatorizacao, limites);
+  if (!jornada) return calcEffectivenessLegado(fatorizacao, limites, operationalLoad ?? null);
 
   const cfgSono = resolverFrmsConfig(limites);
   const apresentacaoMin = parseHhmm(jornada.hora_apresentacao);
@@ -420,6 +427,12 @@ export function calcEffectiveness(
     fatorProgressivo = max * ((diaPeriodo - 1) / (totalPeriodo - 1));
   }
 
+  // Carga Operacional V1 (OPERATIONAL_POLICY_V1): pontos → fração assinada.
+  // Recovery é outra dimensão e não entra aqui.
+  const cargaOperacionalFrac = operationalLoad
+    ? round4(operationalLoad.operational_load_total_delta / 100)
+    : 0;
+
   // Fórmula empresarial v2: soma somente grandezas adimensionais fracionárias
   // com sinal de penalidade. Razões diagnósticas e percentuais 0–100 ficam fora.
   const totalCalibrado = round4(
@@ -432,7 +445,8 @@ export function calcEffectiveness(
       clampPenalty(fatorizacao.fator_base_away_pct) +
       clampPenalty(fatorizacao.fator_aclimatacao_pct) +
       clampPenalty(fatorizacao.fator_hv_quantidade_pct) +
-      fatorProgressivo,
+      fatorProgressivo +
+      cargaOperacionalFrac,
   );
   const rawEffectiveness = 100 + totalCalibrado * 100;
   const effectiveness = Math.max(0, Math.min(100, rawEffectiveness));
@@ -467,17 +481,34 @@ export function calcEffectiveness(
       repouso: round4(fatorRepouso),
       hv: round4(fatorizacao.fator_hv_quantidade_pct),
       duracao: round4(fatorizacao.fator_duracao_pct),
+      carga_operacional: cargaOperacionalFrac,
     },
+    operational_load: operationalLoad
+      ? {
+          policy_version: operationalLoad.policy_version,
+          landings_count: operationalLoad.landings_count,
+          temperature_max_c: operationalLoad.temperature_max_c,
+          weather_evidence_quality: operationalLoad.weather_evidence_quality,
+          data_quality: operationalLoad.data_quality,
+          landings_delta: operationalLoad.operational_load_landings_delta,
+          temperature_delta: operationalLoad.operational_load_temperature_delta,
+          total_delta: operationalLoad.operational_load_total_delta,
+        }
+      : null,
   };
 }
 
 function calcEffectivenessLegado(
   fatorizacao: FatorizacaoResult,
   limites: LimitesMap,
+  operationalLoad: OperationalLoadV1Result | null = null,
 ): EffectivenessResult {
+  const cargaOperacionalFrac = operationalLoad
+    ? round4(operationalLoad.operational_load_total_delta / 100)
+    : 0;
   const effectiveness = Math.max(
     0,
-    Math.min(100, 100 + fatorizacao.total_fatorizado_jornada * 100),
+    Math.min(100, 100 + (fatorizacao.total_fatorizado_jornada + cargaOperacionalFrac) * 100),
   );
   return {
     effectiveness_pct: Math.round(effectiveness * 10) / 10,
@@ -508,7 +539,20 @@ function calcEffectivenessLegado(
       repouso: fatorizacao.fator_repouso_pct,
       hv: fatorizacao.fator_hv_quantidade_pct,
       duracao: fatorizacao.fator_duracao_pct,
+      carga_operacional: cargaOperacionalFrac,
     },
+    operational_load: operationalLoad
+      ? {
+          policy_version: operationalLoad.policy_version,
+          landings_count: operationalLoad.landings_count,
+          temperature_max_c: operationalLoad.temperature_max_c,
+          weather_evidence_quality: operationalLoad.weather_evidence_quality,
+          data_quality: operationalLoad.data_quality,
+          landings_delta: operationalLoad.operational_load_landings_delta,
+          temperature_delta: operationalLoad.operational_load_temperature_delta,
+          total_delta: operationalLoad.operational_load_total_delta,
+        }
+      : null,
   };
 }
 

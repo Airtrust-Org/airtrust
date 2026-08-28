@@ -12,14 +12,33 @@ interface EffectivenessComponentes {
   repouso: number;
   hv: number;
   duracao: number;
+  /** Operational Load V1 (OPERATIONAL_POLICY_V1), signed fraction. Optional for legacy rows. */
+  carga_operacional?: number;
+}
+
+export interface OperationalLoadDetail {
+  policy_version: string;
+  landings_count: number;
+  landings_evidence_quality?: 'OBSERVED' | 'CONFIRMED_ZERO' | 'INCOMPLETE';
+  temperature_max_c: number | null;
+  weather_evidence_quality: 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
+  data_quality: 'COMPLETE' | 'INCOMPLETE' | 'SIGVOOS_UNAVAILABLE';
+  landings_delta: number;
+  temperature_delta: number;
+  total_delta: number;
 }
 
 interface Props {
   effectiveness_pct: number;
   effectiveness_nivel?: string;
   componentes?: EffectivenessComponentes | null;
+  operationalLoad?: OperationalLoadDetail | null;
   config: Partial<Record<string, number>> | null;
   compact?: boolean;
+}
+
+function fmtPoints(points: number): string {
+  return points.toFixed(1).replace('.', ',');
 }
 
 // ── Component bar for decomposition ──
@@ -45,12 +64,46 @@ function ComponentBar({ label, value, color }: { label: string; value: number; c
   );
 }
 
+function landingsEvidenceLine(operationalLoad: OperationalLoadDetail): string {
+  if (
+    operationalLoad.landings_evidence_quality === 'INCOMPLETE' ||
+    operationalLoad.data_quality === 'SIGVOOS_UNAVAILABLE'
+  ) {
+    return '• pousos: SIGVOOS indisponível (sem penalidade; evidência incompleta)';
+  }
+  if (
+    operationalLoad.landings_evidence_quality === 'CONFIRMED_ZERO' ||
+    operationalLoad.weather_evidence_quality === 'NOT_APPLICABLE'
+  ) {
+    return '• 0 pousos: ausência de voo confirmada pelo SIGVOOS';
+  }
+  return `• ${operationalLoad.landings_count} ${
+    operationalLoad.landings_count === 1 ? 'pouso' : 'pousos'
+  }: ${fmtPoints(operationalLoad.landings_delta)}`;
+}
+
+function weatherEvidenceLine(operationalLoad: OperationalLoadDetail): string {
+  if (
+    operationalLoad.weather_evidence_quality === 'OBSERVED' &&
+    operationalLoad.temperature_max_c != null
+  ) {
+    return `• temperatura máxima ${Math.round(operationalLoad.temperature_max_c)} °C: ${fmtPoints(
+      operationalLoad.temperature_delta,
+    )}`;
+  }
+  if (operationalLoad.weather_evidence_quality === 'NOT_APPLICABLE') {
+    return '• temperatura: não aplicável à carga de voo (sem voo confirmado)';
+  }
+  return '• temperatura: evidência meteorológica indisponível (sem penalidade)';
+}
+
 // ── Main ──
 
 export default function FrmsEffectivenessPanel({
   effectiveness_pct,
   effectiveness_nivel,
   componentes,
+  operationalLoad,
   config,
   compact = false,
 }: Props) {
@@ -95,7 +148,11 @@ export default function FrmsEffectivenessPanel({
     repouso: 'Repouso',
     hv: 'Horas Voo',
     duracao: 'Duração',
+    carga_operacional: 'Carga Op.',
   };
+  const componentKeys = (Object.keys(componentLabels) as (keyof EffectivenessComponentes)[]).filter(
+    (key) => componentes != null && typeof componentes[key] === 'number',
+  );
 
   return (
     <div className="rounded-xl border border-slate-200/50 bg-white/80 backdrop-blur-sm p-4 shadow-md">
@@ -146,20 +203,36 @@ export default function FrmsEffectivenessPanel({
           <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">
             Decomposição
           </p>
-          {(Object.keys(componentLabels) as (keyof EffectivenessComponentes)[]).map((key) => (
-            <ComponentBar
-              key={key}
-              label={componentLabels[key]}
-              value={componentes[key]}
-              color={
-                componentes[key] < -0.05
-                  ? 'bg-red-400'
-                  : componentes[key] < 0
-                    ? 'bg-amber-400'
-                    : 'bg-emerald-400'
-              }
-            />
-          ))}
+          {componentKeys.map((key) => {
+            const value = componentes[key] as number;
+            return (
+              <ComponentBar
+                key={key}
+                label={componentLabels[key]}
+                value={value}
+                color={value < -0.05 ? 'bg-red-400' : value < 0 ? 'bg-amber-400' : 'bg-emerald-400'}
+              />
+            );
+          })}
+          {operationalLoad && (
+            <div className="mt-1 rounded-md bg-slate-50 px-2 py-1.5 text-[10px] leading-4 text-slate-500">
+              <p className="font-semibold text-slate-600">
+                Carga operacional: {fmtPoints(operationalLoad.total_delta)}
+              </p>
+              <p>{landingsEvidenceLine(operationalLoad)}</p>
+              <p>{weatherEvidenceLine(operationalLoad)}</p>
+              {operationalLoad.data_quality !== 'COMPLETE' && (
+                <p className="mt-0.5 font-medium text-amber-700">
+                  {operationalLoad.data_quality === 'SIGVOOS_UNAVAILABLE'
+                    ? 'SIGVOOS indisponível — carga de pousos não presumida.'
+                    : 'Evidência meteorológica incompleta — nenhuma temperatura foi presumida.'}
+                </p>
+              )}
+              <p className="mt-0.5 text-slate-400">
+                Coeficientes internos OPERATIONAL_POLICY_V1 — conservadores e sujeitos a calibração.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
