@@ -1,0 +1,36 @@
+name: FRMS readiness diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frms-readiness-diagnostic-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: npm --prefix worker-airtrust ci
+      - name: readiness-core
+        run: cd worker-airtrust && npx vitest run src/__tests__/frms/readiness.test.ts
+      - name: readiness-persistence
+        run: cd worker-airtrust && npx vitest run src/__tests__/frms/readiness-persistence.test.ts
+      - name: readiness-route
+        run: cd worker-airtrust && npx vitest run src/__tests__/routes/frms-readiness.test.ts
