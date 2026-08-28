@@ -56,6 +56,34 @@ describe('Operational Load V1 — temperature factor (observed METAR)', () => {
   });
 });
 
+describe('Operational Load V1 — evidence quality', () => {
+  it('marks a valid no-flight SIGVOOS result as confirmed zero and skips thermal exposure', () => {
+    const result = computeOperationalLoadV1({
+      landingsCount: 0,
+      landingsEvidenceQuality: 'CONFIRMED_ZERO',
+      temperatureMaxC: 40,
+    });
+    expect(result.landings_evidence_quality).toBe('CONFIRMED_ZERO');
+    expect(result.operational_load_landings_delta).toBe(0);
+    expect(result.temperature_max_c).toBeNull();
+    expect(result.operational_load_temperature_delta).toBe(0);
+    expect(result.weather_evidence_quality).toBe('NOT_APPLICABLE');
+    expect(result.data_quality).toBe('COMPLETE');
+  });
+
+  it('never treats SIGVOOS unavailable as confirmed zero or complete data', () => {
+    const result = computeOperationalLoadV1({
+      landingsCount: 0,
+      landingsEvidenceQuality: 'INCOMPLETE',
+      temperatureMaxC: 32,
+    });
+    expect(result.landings_evidence_quality).toBe('INCOMPLETE');
+    expect(result.operational_load_landings_delta).toBe(0);
+    expect(result.operational_load_temperature_delta).toBe(-1);
+    expect(result.data_quality).toBe('INCOMPLETE');
+  });
+});
+
 describe('Operational Load V1 — combined model', () => {
   it('sums landings and temperature deltas', () => {
     const result = computeOperationalLoadV1({ landingsCount: 4, temperatureMaxC: 32 });
@@ -111,5 +139,26 @@ describe('Operational Load V1 — explainability', () => {
     const described = describeOperationalLoadV1(result);
     expect(described.title).toBe('Carga operacional: 0,0');
     expect(described.lines[1]).toMatch(/evidência meteorológica indisponível/i);
+  });
+
+  it('explains unavailable SIGVOOS separately from a confirmed no-flight day', () => {
+    const unavailable = describeOperationalLoadV1(
+      computeOperationalLoadV1({
+        landingsCount: 0,
+        landingsEvidenceQuality: 'INCOMPLETE',
+        temperatureMaxC: null,
+      }),
+    );
+    expect(unavailable.lines[0]).toMatch(/SIGVOOS indisponível/i);
+
+    const noFlight = describeOperationalLoadV1(
+      computeOperationalLoadV1({
+        landingsCount: 0,
+        landingsEvidenceQuality: 'CONFIRMED_ZERO',
+        temperatureMaxC: null,
+      }),
+    );
+    expect(noFlight.lines[0]).toMatch(/ausência de voo confirmada/i);
+    expect(noFlight.lines[1]).toMatch(/não aplicável/i);
   });
 });
