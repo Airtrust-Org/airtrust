@@ -146,7 +146,7 @@ export async function persistReadinessAssessment(
     ? input.protocolVersion
     : READINESS_PROTOCOL.version;
 
-  const normalizedTrials = normalizeReadinessTrials(input.trials, input.durationMs);
+  const normalizedTrials = normalizeReadinessTrials(input.trials, input.durationMs, protocolVersion);
 
   const existing = await db
     .prepare(
