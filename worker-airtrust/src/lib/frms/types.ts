@@ -431,8 +431,9 @@ export interface EffectivenessResult {
   operational_load: {
     policy_version: string;
     landings_count: number;
+    landings_evidence_quality?: 'OBSERVED' | 'CONFIRMED_ZERO' | 'INCOMPLETE';
     temperature_max_c: number | null;
-    weather_evidence_quality: 'OBSERVED' | 'INCOMPLETE';
+    weather_evidence_quality: 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
     data_quality: 'COMPLETE' | 'INCOMPLETE';
     landings_delta: number;
     temperature_delta: number;
