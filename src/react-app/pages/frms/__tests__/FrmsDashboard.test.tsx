@@ -5,6 +5,7 @@ import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOpera
 import FrmsDashboard from '../FrmsDashboard';
 
 const useFrmsOperationalSnapshotMock = vi.fn();
+const useReadinessTeamMock = vi.fn();
 
 vi.mock('@/react-app/components/AppLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -12,6 +13,10 @@ vi.mock('@/react-app/components/AppLayout', () => ({
 
 vi.mock('@/react-app/hooks/useFrmsOperationalSnapshot', () => ({
   useFrmsOperationalSnapshot: (...args: unknown[]) => useFrmsOperationalSnapshotMock(...args),
+}));
+
+vi.mock('@/react-app/hooks/useOperationalReadiness', () => ({
+  useReadinessTeam: (...args: unknown[]) => useReadinessTeamMock(...args),
 }));
 
 function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperationalSnapshotItem {
@@ -96,6 +101,8 @@ describe('FrmsDashboard simplificado', () => {
   beforeEach(() => {
     useFrmsOperationalSnapshotMock.mockReset();
     useFrmsOperationalSnapshotMock.mockReturnValue(state());
+    useReadinessTeamMock.mockReset();
+    useReadinessTeamMock.mockReturnValue({ data: [] });
   });
 
   it('expõe apenas as três áreas primárias e remove a navegação antiga', () => {
