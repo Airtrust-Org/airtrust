@@ -228,6 +228,34 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
     expect(calls.some((c) => c.includes('/activate'))).toBe(false);
   });
 
+  it('dedup: re-uploading the already-ACTIVE identical ZIP resolves without conformance/activate', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({
+      candidate: {
+        packageId: 'pkg-active',
+        status: 'ACTIVE',
+        publishable: true,
+        launchFile: 'index.html',
+        r2Prefix: 'lms/scorm/6/44/_candidates/pkg-active/',
+        structural: { status: 'PASS', errors: [] },
+        completionManifest: { status: 'PASS', errors: [] },
+        diagnostics: { status: 'PASS', errors: [] },
+      },
+    });
+
+    const result = await uploadStructuredLmsPackage({
+      cursoId: 44,
+      tipoConteudo: 'scorm',
+      file: scormFile(fixture.zip),
+    });
+
+    expect(calls.some((c) => c.includes('/conformance'))).toBe(false);
+    expect(calls.some((c) => c.includes('/activate'))).toBe(false);
+    expect(result.prefix).toBe('lms/scorm/6/44/_candidates/pkg-active/');
+    expect(result.launchFile).toBe('index.html');
+  });
+
   it('rejects a SCORM package whose manifest has no resolvable launch file before any upload', async () => {
     const fixture = scormZip('<manifest><resources></resources></manifest>');
     extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
