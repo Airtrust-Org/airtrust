@@ -1,10 +1,12 @@
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import type { Env, Variables, JwtPayload } from '../types';
 import { extractBearerToken, verifyJWT } from '../utils/security';
 import { getUsuariosSchema, hasUsuariosEmpresasTable } from '../utils/db-schema';
 import { normalizeAirtrustRole } from '../utils/role-resolution';
 import { resolveRequestedSessionRole } from '../services/auth-session-roles';
 import { unauthorized, serviceUnavailable } from './error-handler';
+
+export const SESSION_ROLE_COOKIE = 'airtrust_session_role';
 
 function isDevAuthBypassEnabled(env: Env): boolean {
   return env.ENVIRONMENT === 'development' && env.ENABLE_DEV_AUTH_BYPASS === 'true';
@@ -15,6 +17,17 @@ function normalizeRuntimeRole(role: unknown): string {
   if (normalized === 'COMPLIANCE') return 'GESTOR';
   if (normalized === 'EDITOR') return 'USUARIO';
   return normalized;
+}
+
+function readSessionRoleCookie(c: Context): string | null {
+  const raw = c.req.header('Cookie') || '';
+  const match = raw.match(new RegExp(`(?:^|;\\s*)${SESSION_ROLE_COOKIE}=([^;]*)`));
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
 }
 
 async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
@@ -86,8 +99,9 @@ async function resolveRoleForAuthenticatedToken(
   db: D1Database,
   payload: JwtPayload,
   security: UserSecurityState,
+  preferredRole?: unknown,
 ): Promise<string | null> {
-  const requestedRole = normalizeRuntimeRole(payload.role ?? '');
+  const requestedRole = normalizeRuntimeRole(preferredRole ?? payload.role ?? '');
   if (!requestedRole || requestedRole === security.canonicalRole) {
     return security.canonicalRole;
   }
@@ -163,12 +177,18 @@ async function resolveDevBypassIdentity(db: D1Database): Promise<{
   }
 }
 
-async function verifyAccessPayload(c: Parameters<MiddlewareHandler<{ Bindings: Env }>>[0]) {
+async function verifyAccessPayload(c: Context<{ Bindings: Env; Variables: Variables }>) {
   const authHeader = c.req.header('Authorization');
-  if (!authHeader) return { error: unauthorized('Token de autenticação não fornecido', 'MISSING_TOKEN') };
+  if (!authHeader) {
+    return { error: unauthorized('Token de autenticação não fornecido', 'MISSING_TOKEN') };
+  }
 
   const token = extractBearerToken(authHeader);
-  if (!token) return { error: unauthorized('Formato de token inválido. Use: Bearer <token>', 'INVALID_FORMAT') };
+  if (!token) {
+    return {
+      error: unauthorized('Formato de token inválido. Use: Bearer <token>', 'INVALID_FORMAT'),
+    };
+  }
 
   const jwtSecret = c.env.JWT_SECRET;
   if (!jwtSecret) throw new Error('Configuração de autenticação inválida');
@@ -209,7 +229,7 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       return next();
     }
 
-    const verified = await verifyAccessPayload(c as never);
+    const verified = await verifyAccessPayload(c);
     if ('error' in verified && verified.error) return verified.error;
     const payload = verified.payload as JwtPayload;
 
@@ -255,7 +275,12 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
 
     let activeRole: string | null;
     try {
-      activeRole = await resolveRoleForAuthenticatedToken(c.env.DB, payload, security);
+      activeRole = await resolveRoleForAuthenticatedToken(
+        c.env.DB,
+        payload,
+        security,
+        readSessionRoleCookie(c),
+      );
     } catch (error) {
       console.error('[AUTH] Falha ao validar perfil ativo da sessão:', (error as Error).message);
       return serviceUnavailable(
@@ -343,7 +368,12 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
         return;
       }
 
-      const activeRole = await resolveRoleForAuthenticatedToken(c.env.DB, payload, security);
+      const activeRole = await resolveRoleForAuthenticatedToken(
+        c.env.DB,
+        payload,
+        security,
+        readSessionRoleCookie(c),
+      );
       if (!activeRole) {
         await next();
         return;
