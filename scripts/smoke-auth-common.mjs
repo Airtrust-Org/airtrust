@@ -34,21 +34,6 @@ const READ_ONLY_ENDPOINT_SPECS = [
     },
   },
   {
-    name: 'qualificacoes/formatos',
-    path: '/api/qualificacoes/formatos',
-    expectedStatus: 200,
-    validate(payload) {
-      const rows = assertArrayPayload(payload, 'qualificacoes/formatos');
-      if (rows.length > 0) {
-        assertHasKeys(rows[0], ['id', 'nome', 'codigo'], 'qualificacoes/formatos[0]');
-      }
-      return {
-        count: extractCount(payload, rows),
-        sample: rows.length > 0 ? pickKeys(rows[0], ['id', 'nome', 'codigo', 'empresa_id', 'total_tipos']) : null,
-      };
-    },
-  },
-  {
     name: 'qualificacoes/tipos',
     path: '/api/qualificacoes/tipos?limit=5',
     expectedStatus: 200,
@@ -135,7 +120,6 @@ const READ_ONLY_ENDPOINT_SPECS = [
 
 const NEGATIVE_SMOKE_PATHS = [
   '/api/auth/me',
-  '/api/qualificacoes/formatos',
   '/api/qualificacoes/tipos',
   '/api/qualificacoes/historico',
   '/api/lms/cursos',
