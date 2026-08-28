@@ -29,6 +29,7 @@ interface UsuariosProps {
 }
 
 interface AcessoEmpresa {
+  perfis?: string[];
   empresa_id: number;
   empresa_nome: string;
   role: string;
@@ -69,7 +70,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
   // Form states
   const [email, setEmail] = useState('');
   const [nome, setNome] = useState('');
-  const [role, setRole] = useState('viewer');
+  const [perfis, setPerfis] = useState<string[]>(['viewer']);
   const [empresasSelecionadas, setEmpresasSelecionadas] = useState<number[]>([]);
   const [modulosSelecionados, setModulosSelecionados] = useState<string[]>(
     MODULOS_DISPONIVEIS.map((m) => m.key),
@@ -79,7 +80,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
   // Edit user access
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<Usuario | null>(null);
-  const [editRole, setEditRole] = useState('viewer');
+  const [editPerfis, setEditPerfis] = useState<string[]>(['viewer']);
   const [editEmpresasSelecionadas, setEditEmpresasSelecionadas] = useState<number[]>([]);
   const [editModulosSelecionados, setEditModulosSelecionados] = useState<string[]>(
     MODULOS_DISPONIVEIS.map((m) => m.key),
@@ -243,7 +244,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
         },
         body: JSON.stringify({
           email,
-          role,
+          perfis,
           nome,
           empresaIds: empresasSelecionadas,
           modulosAtivos: modulosSelecionados,
@@ -281,7 +282,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       setShowModal(false);
       setEmail('');
       setNome('');
-      setRole('viewer');
+      setPerfis(['viewer']);
       setModulosSelecionados(MODULOS_DISPONIVEIS.map((m) => m.key));
       if (empresaSelecionadaId) setEmpresasSelecionadas([empresaSelecionadaId]);
       loadUsuarios();
@@ -383,7 +384,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       const acessos = (data.data?.acessos || []) as AcessoEmpresa[];
       setEditingUser(usuario);
       setEditEmpresasSelecionadas(acessos.map((a) => a.empresa_id));
-      setEditRole(normalizeRoleForUi(acessos[0]?.role || usuario.role || 'viewer'));
+      setEditPerfis(acessos[0]?.perfis?.length ? acessos[0].perfis : [normalizeRoleForUi(acessos[0]?.role || usuario.role || 'viewer')]);
       setEditModulosSelecionados(
         acessos[0]?.modulos_ativos?.length
           ? acessos[0].modulos_ativos
@@ -408,7 +409,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       const token = getAccessToken();
       const acessosPayload = editEmpresasSelecionadas.map((empresaIdValue) => ({
         empresaId: empresaIdValue,
-        role: editRole,
+        perfis: editPerfis,
         modulosAtivos: editModulosSelecionados,
       }));
 
@@ -425,7 +426,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       if (data.success) {
         setUsuarios((prev) =>
           prev.map((userItem) =>
-            userItem.id === editingUser.id ? { ...userItem, role: editRole } : userItem,
+            userItem.id === editingUser.id ? { ...userItem, role: editPerfis[0] || 'viewer' } : userItem,
           ),
         );
         showToast.success(t('settings.users.success.accessUpdated'));
@@ -644,18 +645,31 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   {t('settings.users.inviteModal.profile')}
                 </label>
-                <div className="relative">
-                  <Shield className="absolute left-3 top-2.5 text-slate-400" size={18} />
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full appearance-none rounded-xl border border-slate-300 bg-white py-2 pl-10 pr-4 text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="manager">{t('settings.users.roleOption.manager')}</option>
-                    <option value="instructor">{t('settings.users.roleOption.instructor')}</option>
-                    <option value="student">{t('settings.users.roleOption.student')}</option>
-                    <option value="viewer">{t('settings.users.roleOption.viewer')}</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  {[
+                    { value: 'manager', label: t('settings.users.roleOption.manager') },
+                    { value: 'instructor', label: t('settings.users.roleOption.instructor') },
+                    { value: 'student', label: t('settings.users.roleOption.student') },
+                    { value: 'viewer', label: t('settings.users.roleOption.viewer') },
+                  ].map((p) => (
+                    <label key={p.value} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={perfis.includes(p.value)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setPerfis([...perfis, p.value]);
+                          } else {
+                            if (perfis.length > 1) {
+                              setPerfis(perfis.filter((v) => v !== p.value));
+                            }
+                          }
+                        }}
+                        className="rounded border-slate-300 text-primary focus:ring-primary/30"
+                      />
+                      <span className="text-sm text-slate-700">{p.label}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -751,16 +765,32 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   {t('settings.users.editModal.profile')}
                 </label>
-                <select
-                  value={editRole}
-                  onChange={(e) => setEditRole(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="manager">{t('settings.users.roleOption.manager')}</option>
-                  <option value="instructor">{t('settings.users.roleOption.instructor')}</option>
-                  <option value="student">{t('settings.users.roleOption.student')}</option>
-                  <option value="viewer">{t('settings.users.roleOption.viewer')}</option>
-                </select>
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  {[
+                    { value: 'manager', label: t('settings.users.roleOption.manager') },
+                    { value: 'instructor', label: t('settings.users.roleOption.instructor') },
+                    { value: 'student', label: t('settings.users.roleOption.student') },
+                    { value: 'viewer', label: t('settings.users.roleOption.viewer') },
+                  ].map((p) => (
+                    <label key={p.value} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={editPerfis.includes(p.value)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditPerfis([...editPerfis, p.value]);
+                          } else {
+                            if (editPerfis.length > 1) {
+                              setEditPerfis(editPerfis.filter((v) => v !== p.value));
+                            }
+                          }
+                        }}
+                        className="rounded border-slate-300 text-primary focus:ring-primary/30"
+                      />
+                      <span className="text-sm text-slate-700">{p.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div>

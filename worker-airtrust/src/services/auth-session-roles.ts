@@ -46,21 +46,17 @@ async function hasActiveInstructorLink(
   db: D1Database,
   funcionarioId: number,
 ): Promise<boolean> {
-  try {
-    const row = await db
-      .prepare(
-        `SELECT 1 AS found
-           FROM instrutores_simulador
-          WHERE CAST(funcionario_id AS INTEGER) = ?
-            AND deleted_at IS NULL
-          LIMIT 1`,
-      )
-      .bind(funcionarioId)
-      .first<{ found: number }>();
-    return Boolean(row?.found);
-  } catch {
-    return false;
-  }
+  const row = await db
+    .prepare(
+      `SELECT 1 AS found
+         FROM instrutores_simulador
+        WHERE CAST(funcionario_id AS INTEGER) = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(funcionarioId)
+    .first<{ found: number }>();
+  return Boolean(row?.found);
 }
 
 async function hasLmsStudentLink(
@@ -68,22 +64,18 @@ async function hasLmsStudentLink(
   funcionarioId: number,
   empresaId: number,
 ): Promise<boolean> {
-  try {
-    const row = await db
-      .prepare(
-        `SELECT 1 AS found
-           FROM lms_matriculas
-          WHERE funcionario_id = ?
-            AND empresa_id = ?
-            AND deleted_at IS NULL
-          LIMIT 1`,
-      )
-      .bind(funcionarioId, empresaId)
-      .first<{ found: number }>();
-    return Boolean(row?.found);
-  } catch {
-    return false;
-  }
+  const row = await db
+    .prepare(
+      `SELECT 1 AS found
+         FROM lms_matriculas
+        WHERE funcionario_id = ?
+          AND empresa_id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(funcionarioId, empresaId)
+    .first<{ found: number }>();
+  return Boolean(row?.found);
 }
 
 /**
@@ -130,23 +122,64 @@ export async function resolveAvailableSessionRoles(
 
   if (!row) return [];
 
-  const roles = new Set<SessionRole>();
-  roles.add(normalizeSessionRole(row.empresa_role || row.perfil || fallbackRole));
-
-  const funcionarioId = Number(row.funcionario_id || 0);
-  const funcionarioEmpresaId = Number(row.funcionario_empresa_id || 0);
-  const funcionarioNoTenant =
-    Number.isFinite(funcionarioId) &&
-    funcionarioId > 0 &&
-    Number.isFinite(funcionarioEmpresaId) &&
-    funcionarioEmpresaId === empresaId;
-
-  if (funcionarioNoTenant) {
-    if (await hasActiveInstructorLink(db, funcionarioId)) {
-      roles.add('INSTRUTOR');
+  // Estrutura explícita de perfis (migration 0473). Quando ela existe, é a
+  // AUTORIDADE: um perfil removido pelo administrador não pode reaparecer por
+  // inferência das tabelas legadas.
+  let explicitProfiles: { perfil: string; ativo: number }[] = [];
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT perfil, ativo
+           FROM usuarios_empresas_perfis
+          WHERE usuario_id = ?
+            AND empresa_id = ?`,
+      )
+      .bind(userId, empresaId)
+      .all<{ perfil: string; ativo: number }>();
+    explicitProfiles = results || [];
+  } catch (err) {
+    // Único caso tolerado: a tabela ainda não existe (ambientes sem a
+    // migration 0473). Aí caímos para a inferência legada de bootstrap.
+    // Qualquer outra falha de banco ao resolver autorização é um erro de
+    // infraestrutura e precisa ser FAIL-CLOSED — propagamos para o
+    // middleware, que responde 503. Nunca tratamos como "usuário sem perfis".
+    const message = err instanceof Error ? err.message : String(err);
+    const tableMissing =
+      /no such table/i.test(message) && /usuarios_empresas_perfis/i.test(message);
+    if (!tableMissing) {
+      throw err;
     }
-    if (await hasLmsStudentLink(db, funcionarioId, empresaId)) {
-      roles.add('ALUNO');
+    explicitProfiles = [];
+  }
+
+  const roles = new Set<SessionRole>();
+
+  if (explicitProfiles.length > 0) {
+    // AUTHORITATIVE EXPLICIT PROFILES
+    for (const p of explicitProfiles) {
+      if (p.ativo === 1 && p.perfil) {
+        roles.add(normalizeSessionRole(p.perfil));
+      }
+    }
+  } else {
+    // LEGACY INFERENCE FALLBACK
+    roles.add(normalizeSessionRole(row.empresa_role || row.perfil || fallbackRole));
+
+    const funcionarioId = Number(row.funcionario_id || 0);
+    const funcionarioEmpresaId = Number(row.funcionario_empresa_id || 0);
+    const funcionarioNoTenant =
+      Number.isFinite(funcionarioId) &&
+      funcionarioId > 0 &&
+      Number.isFinite(funcionarioEmpresaId) &&
+      funcionarioEmpresaId === empresaId;
+
+    if (funcionarioNoTenant) {
+      if (await hasActiveInstructorLink(db, funcionarioId)) {
+        roles.add('INSTRUTOR');
+      }
+      if (await hasLmsStudentLink(db, funcionarioId, empresaId)) {
+        roles.add('ALUNO');
+      }
     }
   }
 
