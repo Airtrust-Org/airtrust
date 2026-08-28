@@ -20,6 +20,10 @@ function startAndReachStimulus() {
 }
 
 describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
+  it('pins the PVT-B response window at 30 seconds', () => {
+    expect(PVTB_V2_PROTOCOL.responseWindowMs).toBe(30_000);
+  });
+
   it('uses the published PVT-B framing and does not claim to be the NASA PVT+ app', () => {
     render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
 
@@ -34,7 +38,6 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
       'href',
       'https://www.psytoolkit.org/experiment-library/pvtb.html',
     );
-    // The retired blue-circle wording must be gone.
     expect(screen.queryByText(/círculo azul/i)).not.toBeInTheDocument();
   });
 
@@ -49,7 +52,6 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     expect(box).toHaveAttribute('data-phase', 'waiting');
     expect(box.className).toMatch(/bg-red-600/);
     expect(box.className).toMatch(/border-red-700/);
-    // No stimulus counter yet, and specifically nothing round anywhere in the box.
     expect(screen.queryByTestId('pvtb-counter')).not.toBeInTheDocument();
     expect(box.querySelector('.rounded-full')).toBeNull();
     expect(box.className).not.toMatch(/bg-blue-600/);
@@ -68,18 +70,70 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     expect(counter.className).not.toMatch(/rounded-full/);
     expect(box.querySelector('.rounded-full')).toBeNull();
 
-    // The counter ticks up while the stimulus is visible.
     act(() => {
       vi.advanceTimersByTime(200);
     });
     expect(Number(screen.getByTestId('pvtb-counter').textContent)).toBeGreaterThanOrEqual(150);
   });
 
+  it('does not time out an unanswered stimulus after only 3 seconds', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const onComplete = vi.fn();
+    render(<OperationalVigilanceTest durationMs={60_000} onComplete={onComplete} />);
+    startAndReachStimulus();
+
+    act(() => {
+      vi.advanceTimersByTime(3_100);
+    });
+
+    expect(screen.getByTestId('pvtb-box')).toHaveAttribute('data-phase', 'stimulus');
+    expect(Number(screen.getByTestId('pvtb-counter').textContent)).toBeGreaterThanOrEqual(3_000);
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('keeps an in-window final stimulus alive past the nominal session boundary and records no-response as a 30 s lapse', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    let completed: OperationalVigilanceResult | null = null;
+    render(
+      <OperationalVigilanceTest
+        durationMs={2_000}
+        onComplete={(result) => {
+          completed = result;
+        }}
+      />,
+    );
+
+    startAndReachStimulus();
+    act(() => {
+      vi.advanceTimersByTime(1_100);
+    });
+
+    expect(screen.getByTestId('pvtb-box')).toHaveAttribute('data-phase', 'stimulus');
+    expect(completed).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(PVTB_V2_PROTOCOL.responseWindowMs);
+    });
+
+    expect(completed).not.toBeNull();
+    expect(completed!.summary.durationMs).toBe(2_000);
+    expect(completed!.summary.protocolVersion).toBe('airtrust-pvtb-v2');
+    expect(completed!.trials).toHaveLength(1);
+    expect(completed!.trials[0]).toMatchObject({
+      responseAtMs: null,
+      reactionTimeMs: 30_000,
+      outcome: 'lapse',
+    });
+    expect(completed!.summary.lapses).toBe(1);
+    expect(completed!.summary.missed).toBe(0);
+  });
+
   it('measures reaction time from the monotonic clock, not the wall clock (Date.now)', () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const perfNowSpy = vi.spyOn(performance, 'now');
-    // A wildly-offset wall clock must not leak into the measured reaction time.
     vi.spyOn(Date, 'now').mockReturnValue(5_000_000_000_000);
     let completed: OperationalVigilanceResult | null = null;
     render(
@@ -98,7 +152,6 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     });
     fireEvent.pointerDown(screen.getByTestId('pvtb-box'));
 
-    // ~250 ms, i.e. derived from performance.now(), not the 5e12 wall clock.
     expect(screen.getByText(/^2\d\d ms$/)).toBeInTheDocument();
     expect(screen.getByText(/tempo da última resposta/i)).toBeInTheDocument();
     expect(perfNowSpy).toHaveBeenCalled();
@@ -111,7 +164,6 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
-    // Still in the waiting window, before the stimulus.
     act(() => {
       vi.advanceTimersByTime(300);
     });
@@ -153,7 +205,6 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
       vi.advanceTimersByTime(240);
     });
     fireEvent.pointerDown(screen.getByTestId('pvtb-box'));
-    // Run out the clock so the session finishes.
     act(() => {
       vi.advanceTimersByTime(5_000);
     });
