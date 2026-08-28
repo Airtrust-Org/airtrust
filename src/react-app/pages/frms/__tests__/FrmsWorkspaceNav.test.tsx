@@ -16,20 +16,22 @@ function renderNav(path: string) {
 }
 
 describe('FrmsWorkspaceNav', () => {
-  it('mantém somente Operação, Casos e Administração como áreas primárias', () => {
+  it('mantém as três áreas primárias e expõe o check-in de fadiga como ação direta', () => {
     renderNav('/frms');
 
     const nav = screen.getByRole('navigation', { name: 'Áreas FRMS' });
-    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual([
+    expect(within(nav).getAllByRole('link').map((link) => link.textContent?.trim())).toEqual([
       'Operação',
       'Casos',
       'Administração',
+      'Check-in de fadiga',
     ]);
+    expect(within(nav).getByRole('link', { name: /check-in de fadiga/i })).toHaveAttribute('href', '/frms/checkin');
     expect(screen.queryByRole('navigation', { name: 'Administração FRMS' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('sigvoos-health')).not.toBeInTheDocument();
   });
 
-  it('agrupa Administração e exibe a saúde SIGVOOS dentro do módulo', () => {
+  it('agrupa Administração e não duplica o check-in dentro dos dados de entrada', () => {
     renderNav('/frms/configuracoes');
 
     expect(screen.getByTestId('sigvoos-health')).toBeInTheDocument();
@@ -39,7 +41,16 @@ describe('FrmsWorkspaceNav', () => {
     expect(within(admin).getByText('Consulta')).toBeInTheDocument();
     expect(within(admin).getByRole('link', { name: 'Parâmetros' })).toHaveAttribute('href', '/frms/configuracoes');
     expect(within(admin).getByRole('link', { name: 'SIGVOOS' })).toHaveAttribute('href', '/frms/sigvoos');
-    expect(within(admin).getByRole('link', { name: 'Check-in diário' })).toHaveAttribute('href', '/frms/checkin');
+    expect(within(admin).queryByRole('link', { name: /check-in/i })).not.toBeInTheDocument();
     expect(within(admin).getByRole('link', { name: 'Relatórios' })).toHaveAttribute('href', '/frms/relatorios');
+  });
+
+  it('marca o check-in como ação ativa sem transformar a tela em Administração', () => {
+    renderNav('/frms/checkin');
+
+    const checkin = screen.getByRole('link', { name: /check-in de fadiga/i });
+    expect(checkin.className).toContain('bg-emerald-600');
+    expect(screen.queryByRole('navigation', { name: 'Administração FRMS' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sigvoos-health')).not.toBeInTheDocument();
   });
 });
