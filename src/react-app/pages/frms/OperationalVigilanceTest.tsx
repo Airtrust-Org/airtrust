@@ -120,9 +120,12 @@ export default function OperationalVigilanceTest({
     setCounterMs(0);
     const actualDuration =
       startedAtRef.current == null ? durationMs : performance.now() - startedAtRef.current;
+    // The sampling window remains the nominal PVT-B duration even when the last
+    // stimulus was already visible at the boundary and is allowed to resolve.
+    const measurementDuration = Math.min(durationMs, Math.round(actualDuration));
     const summary = summarizeVigilanceTrials(
       trialsRef.current,
-      Math.round(actualDuration),
+      measurementDuration,
       PVTB_V2_PROTOCOL.version,
     );
     setPhase('complete');
@@ -184,11 +187,14 @@ export default function OperationalVigilanceTest({
             ),
             stimulusAtMs: Math.round(currentStimulusAt - (startedAtRef.current ?? 0)),
             responseAtMs: null,
-            reactionTimeMs: null,
-            outcome: 'missed',
+            reactionTimeMs: PVTB_V2_PROTOCOL.responseWindowMs,
+            outcome: 'lapse',
           });
           stimulusAtRef.current = null;
-          showTrialFeedback({ outcome: 'missed', reactionTimeMs: null });
+          showTrialFeedback({
+            outcome: 'lapse',
+            reactionTimeMs: PVTB_V2_PROTOCOL.responseWindowMs,
+          });
           scheduleNext();
         }, PVTB_V2_PROTOCOL.responseWindowMs);
       });
@@ -287,8 +293,12 @@ export default function OperationalVigilanceTest({
     const tick = () => {
       if (startedAtRef.current == null || finishedRef.current) return;
       const nextElapsed = performance.now() - startedAtRef.current;
-      setElapsedMs(nextElapsed);
+      setElapsedMs(Math.min(nextElapsed, durationMs));
       if (nextElapsed >= durationMs) {
+        // Do not cut off a stimulus that was already presented inside the
+        // 3-minute sampling window. It may resolve by response or by the 30 s
+        // PVT-B lapse ceiling; no new stimulus is scheduled after the boundary.
+        if (phase === 'stimulus' && stimulusAtRef.current != null) return;
         finish();
         return;
       }
