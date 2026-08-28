@@ -9,6 +9,11 @@ import {
 
 type Phase = 'instructions' | 'waiting' | 'stimulus' | 'invalidated' | 'complete';
 
+type TrialFeedback = {
+  outcome: VigilanceTrial['outcome'];
+  reactionTimeMs: number | null;
+};
+
 export type OperationalVigilanceResult = {
   summary: VigilanceSummary;
   trials: VigilanceTrial[];
@@ -24,6 +29,36 @@ function randomDelay(min: number, max: number): number {
   return Math.round(min + Math.random() * (max - min));
 }
 
+function feedbackCopy(feedback: TrialFeedback): { value: string; helper: string; className: string } {
+  if (feedback.outcome === 'false_start') {
+    return {
+      value: 'Antecipado',
+      helper: 'Espere o estímulo aparecer.',
+      className: 'text-red-600',
+    };
+  }
+  if (feedback.outcome === 'missed') {
+    return {
+      value: 'Sem resposta',
+      helper: 'Mantenha a atenção no próximo estímulo.',
+      className: 'text-amber-700',
+    };
+  }
+  const reactionTimeMs = feedback.reactionTimeMs == null ? '—' : `${feedback.reactionTimeMs} ms`;
+  if (feedback.outcome === 'lapse') {
+    return {
+      value: reactionTimeMs,
+      helper: 'Resposta acima de 500 ms.',
+      className: 'text-amber-700',
+    };
+  }
+  return {
+    value: reactionTimeMs,
+    helper: 'Tempo da última resposta.',
+    className: 'text-blue-700',
+  };
+}
+
 export default function OperationalVigilanceTest({
   durationMs = VIGILANCE_PROTOCOL.defaultDurationMs,
   onComplete,
@@ -32,12 +67,14 @@ export default function OperationalVigilanceTest({
   const [phase, setPhase] = useState<Phase>('instructions');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [invalidReason, setInvalidReason] = useState<string | null>(null);
+  const [trialFeedback, setTrialFeedback] = useState<TrialFeedback | null>(null);
   const trialsRef = useRef<VigilanceTrial[]>([]);
   const startedAtRef = useRef<number | null>(null);
   const scheduledAtRef = useRef<number | null>(null);
   const stimulusAtRef = useRef<number | null>(null);
   const waitingTimerRef = useRef<number | null>(null);
   const responseTimerRef = useRef<number | null>(null);
+  const feedbackTimerRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const stimulusRafRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
@@ -45,18 +82,30 @@ export default function OperationalVigilanceTest({
   const cleanupTimers = useCallback(() => {
     if (waitingTimerRef.current != null) window.clearTimeout(waitingTimerRef.current);
     if (responseTimerRef.current != null) window.clearTimeout(responseTimerRef.current);
+    if (feedbackTimerRef.current != null) window.clearTimeout(feedbackTimerRef.current);
     if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
     if (stimulusRafRef.current != null) window.cancelAnimationFrame(stimulusRafRef.current);
     waitingTimerRef.current = null;
     responseTimerRef.current = null;
+    feedbackTimerRef.current = null;
     rafRef.current = null;
     stimulusRafRef.current = null;
+  }, []);
+
+  const showTrialFeedback = useCallback((feedback: TrialFeedback) => {
+    if (feedbackTimerRef.current != null) window.clearTimeout(feedbackTimerRef.current);
+    setTrialFeedback(feedback);
+    feedbackTimerRef.current = window.setTimeout(() => {
+      setTrialFeedback(null);
+      feedbackTimerRef.current = null;
+    }, 900);
   }, []);
 
   const finish = useCallback(() => {
     if (finishedRef.current) return;
     finishedRef.current = true;
     cleanupTimers();
+    setTrialFeedback(null);
     const actualDuration = startedAtRef.current == null ? durationMs : performance.now() - startedAtRef.current;
     const summary = summarizeVigilanceTrials(trialsRef.current, Math.round(actualDuration));
     setPhase('complete');
@@ -82,6 +131,11 @@ export default function OperationalVigilanceTest({
         return;
       }
       setPhase('stimulus');
+      setTrialFeedback(null);
+      if (feedbackTimerRef.current != null) {
+        window.clearTimeout(feedbackTimerRef.current);
+        feedbackTimerRef.current = null;
+      }
       stimulusRafRef.current = window.requestAnimationFrame(() => {
         stimulusRafRef.current = null;
         if (finishedRef.current || startedAtRef.current == null) return;
@@ -99,17 +153,19 @@ export default function OperationalVigilanceTest({
             outcome: 'missed',
           });
           stimulusAtRef.current = null;
+          showTrialFeedback({ outcome: 'missed', reactionTimeMs: null });
           scheduleNext();
         }, VIGILANCE_PROTOCOL.responseWindowMs);
       });
     }, delay);
-  }, [durationMs, finish]);
+  }, [durationMs, finish, showTrialFeedback]);
 
   const start = useCallback(() => {
     cleanupTimers();
     trialsRef.current = [];
     finishedRef.current = false;
     setInvalidReason(null);
+    setTrialFeedback(null);
     startedAtRef.current = performance.now();
     setElapsedMs(0);
     scheduleNext();
@@ -123,6 +179,7 @@ export default function OperationalVigilanceTest({
     startedAtRef.current = null;
     stimulusAtRef.current = null;
     scheduledAtRef.current = null;
+    setTrialFeedback(null);
     setInvalidReason(reason);
     setPhase('invalidated');
   }, [cleanupTimers]);
@@ -156,6 +213,7 @@ export default function OperationalVigilanceTest({
         outcome: 'false_start',
       });
       if (waitingTimerRef.current != null) window.clearTimeout(waitingTimerRef.current);
+      showTrialFeedback({ outcome: 'false_start', reactionTimeMs: 0 });
       scheduleNext();
       return;
     }
@@ -168,18 +226,20 @@ export default function OperationalVigilanceTest({
         : reactionTimeMs >= VIGILANCE_PROTOCOL.lapseThresholdMs
           ? 'lapse'
           : 'response';
+    const roundedReactionTimeMs = Math.round(reactionTimeMs);
 
     trialsRef.current.push({
       sequence: trialsRef.current.length + 1,
       scheduledAtMs: Math.round((scheduledAtRef.current ?? stimulusAtRef.current) - startedAtRef.current),
       stimulusAtMs: Math.round(stimulusAtRef.current - startedAtRef.current),
       responseAtMs: Math.round(now - startedAtRef.current),
-      reactionTimeMs: Math.round(reactionTimeMs),
+      reactionTimeMs: roundedReactionTimeMs,
       outcome,
     });
     stimulusAtRef.current = null;
+    showTrialFeedback({ outcome, reactionTimeMs: roundedReactionTimeMs });
     scheduleNext();
-  }, [phase, scheduleNext]);
+  }, [phase, scheduleNext, showTrialFeedback]);
 
   useEffect(() => {
     if (phase === 'instructions' || phase === 'complete' || startedAtRef.current == null) return;
@@ -203,20 +263,41 @@ export default function OperationalVigilanceTest({
 
   const progress = useMemo(() => Math.min(100, Math.round((elapsedMs / durationMs) * 100)), [durationMs, elapsedMs]);
   const secondsRemaining = Math.max(0, Math.ceil((durationMs - elapsedMs) / 1000));
+  const feedback = trialFeedback ? feedbackCopy(trialFeedback) : null;
 
   if (phase === 'instructions') {
     return (
       <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="vigilance-title">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Etapa objetiva</p>
-          <h2 id="vigilance-title" className="mt-1 text-xl font-semibold text-slate-900">Teste breve de vigilância</h2>
+          <h2 id="vigilance-title" className="mt-1 text-xl font-semibold text-slate-900">
+            Teste breve de vigilância psicomotora (PVT)
+          </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Toque ou clique apenas quando o círculo azul aparecer. Responda o mais rápido possível sem antecipar.
-            O resultado complementa o check-in de fadiga e não determina aptidão para voo de forma isolada.
+            Após cada resposta, o seu tempo aparece em milissegundos (ms). O resultado complementa o check-in de fadiga
+            e não determina aptidão para voo de forma isolada.
           </p>
         </div>
         <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
           Duração prevista: cerca de {Math.round(durationMs / 60_000)} minutos. Mantenha a tela ativa e evite conversar ou alternar de aplicativo durante o teste.
+        </div>
+        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs leading-5 text-slate-600">
+          <p className="font-semibold text-slate-800">Por que este teste?</p>
+          <p className="mt-1">
+            O Psychomotor Vigilance Task (PVT) é uma referência consolidada para medir atenção sustentada e efeitos da fadiga.
+            A NASA usa PVT/PVT+ em pesquisas de fadiga e desempenho, inclusive em contexto aeroespacial. Há também versão breve
+            de 3 minutos descrita por Basner, Mollicone e Dinges (2011). O protocolo AirTrust é uma implementação independente,
+            inspirada nessa metodologia, e não é o aplicativo NASA PVT+.
+          </p>
+          <a
+            href="https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+          >
+            Referência: NASA Fatigue Countermeasures Laboratory
+          </a>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button onClick={start}>Iniciar teste</Button>
@@ -277,11 +358,18 @@ export default function OperationalVigilanceTest({
       >
         {phase === 'stimulus' ? (
           <span className="h-24 w-24 rounded-full bg-blue-600 shadow-lg" aria-hidden="true" />
+        ) : feedback ? (
+          <span className="text-center" aria-live="polite">
+            <span className={`block text-4xl font-bold tabular-nums ${feedback.className}`}>{feedback.value}</span>
+            <span className="mt-2 block text-xs font-medium text-slate-500">{feedback.helper}</span>
+          </span>
         ) : (
           <span className="text-sm font-medium text-slate-400">Aguarde…</span>
         )}
       </button>
-      <p className="text-center text-xs text-slate-500">Não toque antes do estímulo aparecer.</p>
+      <p className="text-center text-xs text-slate-500">
+        O tempo é mostrado em milissegundos. Microsegundos não são exibidos porque sugeririam uma precisão que o navegador e a resposta humana não sustentam.
+      </p>
     </section>
   );
 }
