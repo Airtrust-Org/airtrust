@@ -1,8 +1,16 @@
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { FrmsSignalChips, FrmsSignalGrid } from '../components/FrmsOperationalSignals';
 import type { FrmsReadinessAdapter } from '../frmsOperationalSignals';
+
+const { readinessState } = vi.hoisted(() => ({
+  readinessState: { rows: [] as Array<Record<string, unknown>> },
+}));
+
+vi.mock('@/react-app/hooks/useOperationalReadiness', () => ({
+  useReadinessTeam: () => ({ data: readinessState.rows }),
+}));
 
 function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperationalSnapshotItem {
   return {
@@ -47,6 +55,10 @@ function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperati
   };
 }
 
+beforeEach(() => {
+  readinessState.rows = [];
+});
+
 describe('FrmsSignalChips', () => {
   it('renderiza os quatro sinais compactos com aria-label textual (não só cor)', () => {
     render(<FrmsSignalChips item={item()} />);
@@ -57,6 +69,28 @@ describe('FrmsSignalChips', () => {
     expect(chips.getByLabelText('Efetividade: 92,0% — normal')).toBeInTheDocument();
     expect(chips.getByLabelText('Prontidão: Não avaliado — sem dado')).toBeInTheDocument();
   });
+
+  it('usa automaticamente a prontidão persistida do mesmo tripulante e dia', () => {
+    readinessState.rows = [
+      {
+        funcionario_id: 10,
+        reference_date: '2026-08-27',
+        classification: 'operational_review',
+        baseline_sessions: 5,
+        baseline_ready: 1,
+        median_rt_delta_pct: 18,
+        lapse_rate_delta: 0.1,
+        warning_signals_json: '[]',
+        critical_signals_json: '["sleep_critical"]',
+        created_at: '2026-08-27 10:00:00',
+      },
+    ];
+
+    render(<FrmsSignalChips item={item()} />);
+    expect(
+      screen.getByLabelText('Prontidão: Revisão operacional — crítico'),
+    ).toBeInTheDocument();
+  });
 });
 
 describe('FrmsSignalGrid', () => {
@@ -66,11 +100,41 @@ describe('FrmsSignalGrid', () => {
     expect(within(grid).getAllByRole('listitem')).toHaveLength(4);
   });
 
-  it('usa a classificação autoritativa de prontidão quando o adapter fornece dado', () => {
-    const adapter: FrmsReadinessAdapter = () => 'operational_review';
-    render(<FrmsSignalGrid item={item()} readinessAdapter={adapter} />);
+  it('mostra o progresso quando o baseline de prontidão ainda está em formação', () => {
+    readinessState.rows = [
+      {
+        funcionario_id: 10,
+        reference_date: '2026-08-27',
+        classification: 'baseline_building',
+        baseline_sessions: 3,
+        baseline_ready: 0,
+        median_rt_delta_pct: null,
+        lapse_rate_delta: null,
+        warning_signals_json: '[]',
+        critical_signals_json: '[]',
+        created_at: '2026-08-27 10:00:00',
+      },
+    ];
+
+    render(<FrmsSignalGrid item={item()} />);
     expect(
-      screen.getByLabelText('Prontidão: Revisão operacional — crítico'),
+      screen.getByLabelText('Prontidão: Baseline em formação — sem dado'),
     ).toBeInTheDocument();
+    expect(screen.getByText('3 sessões válidas no baseline')).toBeInTheDocument();
+  });
+
+  it('permite override explícito do adapter sem alterar a classificação persistida', () => {
+    readinessState.rows = [
+      {
+        funcionario_id: 10,
+        reference_date: '2026-08-27',
+        classification: 'preserved',
+        baseline_sessions: 5,
+        baseline_ready: 1,
+      },
+    ];
+    const adapter: FrmsReadinessAdapter = () => 'attention';
+    render(<FrmsSignalGrid item={item()} readinessAdapter={adapter} />);
+    expect(screen.getByLabelText('Prontidão: Atenção — atenção')).toBeInTheDocument();
   });
 });
