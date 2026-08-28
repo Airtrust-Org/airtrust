@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsCheckinFadiga, {
@@ -69,7 +69,10 @@ vi.mock('@/react-app/hooks/useOperationalReadiness', () => ({
 
 vi.mock('../OperationalVigilanceTest', () => ({
   default: ({ onComplete }: { onComplete: (result: unknown) => void }) => {
+    const completedRef = useRef(false);
     useEffect(() => {
+      if (completedRef.current) return;
+      completedRef.current = true;
       onComplete({
         summary: {
           protocolVersion: 'airtrust-vigilance-v1',
