@@ -63,17 +63,25 @@ describe('FRMS operational readiness', () => {
     ).toThrow('invalid_trial_timing');
   });
 
-  it('summarizes raw vigilance trials without hiding lapses or missed stimuli', () => {
-    const summary = summarizeReadinessTrials(
+  it('summarizes normalized vigilance trials without hiding lapses or missed stimuli', () => {
+    const normalized = normalizeReadinessTrials(
       [
         trial(1, 250, 'response'),
         trial(2, 300, 'response'),
         trial(3, 600, 'lapse'),
         trial(4, null, 'missed'),
-        trial(5, 0, 'false_start'),
+        {
+          sequence: 5,
+          scheduledAtMs: 5000,
+          stimulusAtMs: -1,
+          responseAtMs: 5050,
+          reactionTimeMs: 999,
+          outcome: 'response',
+        },
       ],
       180_000,
     );
+    const summary = summarizeReadinessTrials(normalized, 180_000);
 
     expect(summary.durationMs).toBe(180_000);
     expect(summary.validTrials).toBe(4);
