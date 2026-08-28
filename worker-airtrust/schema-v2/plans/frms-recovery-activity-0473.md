@@ -12,12 +12,13 @@ Add tenant-scoped, additive persistence for classifying days with no SIGVOOS fli
 - `effectiveness_delta_pct` is constrained to NULL in V1.
 - A no-flight day is never automatically classified as rest.
 - Unknown activity remains explicitly UNKNOWN.
+- A crew report that a flight occurred but is absent from SIGVOOS is stored as `FLIGHT_NOT_IN_SOURCE`; it never becomes recovery evidence and must remain a source-quality discrepancy.
 - Numerical recovery credit is deferred until longitudinal calibration against sleep, KSS and readiness/PVT data.
 
 ## Data model
 1. `frms_recovery_activity_day`
    - one active classification per employee/day;
-   - differentiates off-duty, home/hotel standby, onsite standby, administrative/training, duty travel, mixed, other and unknown;
+   - differentiates off-duty, home/hotel standby, onsite standby, administrative/training, duty travel, mixed, other, reported SIGVOOS source gap and unknown;
    - records whether immediate callout was required and approximate duty interval.
 
 2. `frms_recovery_activity_segment`
@@ -32,6 +33,7 @@ Add tenant-scoped, additive persistence for classifying days with no SIGVOOS fli
 
 ## Runtime follow-up
 - The fatigue check-in should ask for the previous day's activity only when SIGVOOS has no flight hours for that employee/day.
+- The activity prompt must include `Houve voo, mas não aparece no sistema`; that answer maps to `FLIGHT_NOT_IN_SOURCE`, keeps recovery UNKNOWN and opens a data-quality discrepancy instead of granting recovery.
 - SIGVOOS remains canonical for flight time, sectors and landing counts.
 - REDEMET/METAR remains canonical weather evidence for configured aerodromes/stations.
 - Recovery V1 is evidence/observability only; promotion into the canonical effectiveness formula requires a separately governed model revision.
