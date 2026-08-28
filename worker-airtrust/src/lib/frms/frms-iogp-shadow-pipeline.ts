@@ -169,6 +169,11 @@ function buildClassifier(
  * per leg or per crew member. Helideck/platform codes without a REDEMET
  * station configured in the catalogue never fall back to an unrelated
  * aerodrome METAR — they resolve to UNAVAILABLE.
+ *
+ * Event timestamps use the timezone resolved for each departure/arrival
+ * location. The tenant timezone is only an explicit fallback from the
+ * location-catalog resolver; a null tenant fallback must not discard a valid
+ * per-location timezone.
  */
 async function resolveBatchedWeather(
   legs: FrmsIogpShadowRawLeg[],
@@ -196,7 +201,6 @@ async function resolveBatchedWeather(
     const arrivalResolved = resolveOperationalLocation(leg.arrivalIcao, catalogue, {
       tenantTimezoneIana: tenantOperationalTimezoneIana,
     });
-    const timezoneIana = tenantOperationalTimezoneIana;
 
     const departureStation =
       departureResolved.weatherSourceKind === 'REDEMET' ? departureResolved.redemetStationIcao : null;
@@ -204,12 +208,12 @@ async function resolveBatchedWeather(
       arrivalResolved.weatherSourceKind === 'REDEMET' ? arrivalResolved.redemetStationIcao : null;
 
     const departureEventUtc =
-      departureStation && leg.takeoffTime && timezoneIana
-        ? localDateTimeToUtcIso(leg.data, leg.takeoffTime, timezoneIana)
+      departureStation && leg.takeoffTime && departureResolved.timezoneIana
+        ? localDateTimeToUtcIso(leg.data, leg.takeoffTime, departureResolved.timezoneIana)
         : null;
     const arrivalEventUtc =
-      arrivalStation && leg.landingTime && timezoneIana
-        ? localDateTimeToUtcIso(leg.data, leg.landingTime, timezoneIana)
+      arrivalStation && leg.landingTime && arrivalResolved.timezoneIana
+        ? localDateTimeToUtcIso(leg.data, leg.landingTime, arrivalResolved.timezoneIana)
         : null;
 
     return { id, departureStation, departureEventUtc, arrivalStation, arrivalEventUtc };
