@@ -434,7 +434,7 @@ export interface EffectivenessResult {
     landings_evidence_quality?: 'OBSERVED' | 'CONFIRMED_ZERO' | 'INCOMPLETE';
     temperature_max_c: number | null;
     weather_evidence_quality: 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
-    data_quality: 'COMPLETE' | 'INCOMPLETE';
+    data_quality: 'COMPLETE' | 'INCOMPLETE' | 'SIGVOOS_UNAVAILABLE';
     landings_delta: number;
     temperature_delta: number;
     total_delta: number;
