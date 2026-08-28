@@ -6,6 +6,7 @@ export type RecoveryActivityType =
   | 'DUTY_TRAVEL'
   | 'MIXED'
   | 'OTHER'
+  | 'FLIGHT_NOT_IN_SOURCE'
   | 'UNKNOWN';
 
 export type RecoveryState = 'UNKNOWN' | 'LIMITED' | 'PARTIAL' | 'STRONG' | 'CONFIRMED';
@@ -59,6 +60,16 @@ export function deriveRecoveryEvidence(input: RecoveryEvidenceInput): RecoveryEv
   const sleepHours = finiteOrNull(input.sleepHours24h);
   const target = finiteOrNull(input.sleepTargetHours);
   const activityKnown = input.activityKnown !== false && input.activityType !== 'UNKNOWN';
+
+  if (input.activityType === 'FLIGHT_NOT_IN_SOURCE') {
+    return {
+      state: 'UNKNOWN',
+      confidence: 'LOW',
+      qualifyingRecoveryNight: false,
+      reasons: ['SIGVOOS_SOURCE_GAP_REPORTED'],
+      effectivenessDeltaPct: null,
+    };
+  }
 
   if (!activityKnown) {
     return {
