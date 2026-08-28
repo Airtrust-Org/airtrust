@@ -96,6 +96,9 @@ CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
 # Costa do Sol é o tenant canônico empresa_id=6. Remover/limpar esta variável
 # desativa todas as rotas e a capability no próximo deploy de configuração.
 EDB_SHADOW_PILOT_TENANTS = "6"
+# FRMS IOGP observacional em staging. Somente Costa do Sol (empresa_id=6).
+# O pipeline persiste evidência separada e nunca altera o effectiveness canônico.
+FRMS_IOGP_SHADOW_MODE_TENANTS = "6"
 # Feature flag: shared simulator sessions (paridade com produção; ausente
 # aqui fazia /api/capabilities retornar simulador_shared_sessions=false em
 # staging, escondendo o toggle "Sessão compartilhada" já implementado e
@@ -107,6 +110,7 @@ ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env staging
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env staging
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env staging
+# REDEMET_API_KEY deve ser configurado via secret para habilitar meteorologia observada.
 
 [[env.staging.r2_buckets]]
 binding = "BUCKET"
@@ -146,12 +150,17 @@ APP_BUILD_TIME = "managed-by-script"
 SIMULATOR_SHARED_SESSIONS_ENABLED = "true"
 # Feature flag: SIGVOOS shadow compare read-only (2026-06-30 controlled activation)
 CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
+# FRMS IOGP em produção: coleta SOMENTE evidência observacional separada
+# (pousos/setores SIGVOOS + REDEMET quando configurado), sem modificar score,
+# bloqueio, fatorização ou effectiveness. Allowlist explícita; `all` é inválido.
+FRMS_IOGP_PRODUCTION_EVIDENCE_TENANTS = "6"
 # One-off EAD incident executor. The endpoint remains fail-closed after its
 # single reviewed run; this non-secret flag only permits the official executor.
 ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env production
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env production
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env production
+# REDEMET_API_KEY deve ser configurado via secret para habilitar meteorologia observada.
 
 [[env.production.r2_buckets]]
 binding = "BUCKET"
