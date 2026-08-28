@@ -41,7 +41,11 @@ describe('resolveProbedScormLocation — DOM never overrides explicit SCORM loca
       explicitLocation: '47/47',
       domLocation: '47/47',
     });
-    expect(decision).toEqual({ location: '47/47', persist: false, reason: 'explicit-package-location' });
+    expect(decision).toEqual({
+      location: '47/47',
+      persist: false,
+      reason: 'explicit-package-location',
+    });
   });
 
   it('falls back to the DOM only when no location was ever authored', () => {
@@ -73,6 +77,80 @@ describe('resolveProbedScormLocation — DOM never overrides explicit SCORM loca
     });
     expect(decision.persist).toBe(true);
     expect(decision.location).toBe('3/40');
+  });
+
+  it('a bare-number authored location (no total) persists the matching DOM fraction', () => {
+    // Pacotes RevLMS (MCQ/MOM/MGM/SGSO/MEL/PT6) escrevem `lesson_location` como
+    // número simples ("54"), sem total. O contador do pacote ("Tela 54 de 69")
+    // fornece a fração autoritativa; sem isso o progresso nunca é persistido e a
+    // conclusão canônica é rejeitada (LMS_PERSISTED_PROGRESS_REQUIRED).
+    const decision = resolveProbedScormLocation({
+      authored: true,
+      explicitLocation: '54',
+      domLocation: '54/69',
+    });
+    expect(decision.persist).toBe(true);
+    expect(decision.location).toBe('54/69');
+    expect(decision.reason).toBe('dom-fallback');
+  });
+
+  it('a bare authored location is never replaced by a mismatched DOM fraction (form/ref number)', () => {
+    // "FORM-MNT-005/123" (formulário) ou "operadores 121/135" (referência) têm
+    // current divergente do authored; jamais devem virar o progresso persistido.
+    const decision = resolveProbedScormLocation({
+      authored: true,
+      explicitLocation: '54',
+      domLocation: '5/123',
+    });
+    expect(decision.persist).toBe(false);
+    expect(decision.location).toBe('54');
+    expect(decision.reason).toBe('dom-current-mismatch');
+  });
+
+  it('keeps a bare authored location when the DOM has no usable fraction', () => {
+    const decision = resolveProbedScormLocation({
+      authored: true,
+      explicitLocation: '30',
+      domLocation: 'bookmark-xyz',
+    });
+    expect(decision.persist).toBe(false);
+    expect(decision.location).toBe('30');
+    expect(decision.reason).toBe('no-dom-progress');
+  });
+
+  it('never combines a bare authored current with an incompatible counter total (47 vs 48/80)', () => {
+    // Contador confiável com current incompatível: preservar explicit e não
+    // inventar total (nunca "47/80").
+    const decision = resolveProbedScormLocation({
+      authored: true,
+      explicitLocation: '47',
+      domLocation: '48/80',
+    });
+    expect(decision.persist).toBe(false);
+    expect(decision.location).toBe('47');
+    expect(decision.reason).toBe('dom-current-mismatch');
+  });
+
+  it('keeps an already-valid explicit fraction even when the DOM differs (40/80 vs 41/80)', () => {
+    const decision = resolveProbedScormLocation({
+      authored: true,
+      explicitLocation: '40/80',
+      domLocation: '41/80',
+    });
+    expect(decision.persist).toBe(false);
+    expect(decision.location).toBe('40/80');
+    expect(decision.reason).toBe('explicit-package-location');
+  });
+
+  it('uses a valid counter when no explicit location was authored (case E)', () => {
+    const decision = resolveProbedScormLocation({
+      authored: false,
+      explicitLocation: null,
+      domLocation: '47/47',
+    });
+    expect(decision.persist).toBe(true);
+    expect(decision.location).toBe('47/47');
+    expect(decision.reason).toBe('dom-fallback');
   });
 });
 
@@ -122,7 +200,9 @@ describe('wrapper wiring', () => {
 
   it('explicitLocationAuthored is set from resume state / initial CMI and on accepted SetValue', () => {
     expect(SOURCE).toContain('var explicitLocationAuthored = (function() {');
-    expect(SOURCE).toMatch(/decision !== 'blocked' && parseScormLocationMarker\(String\(nextValue \|\| ''\)\)/);
+    expect(SOURCE).toMatch(
+      /decision !== 'blocked' && parseScormLocationMarker\(String\(nextValue \|\| ''\)\)/,
+    );
   });
 
   it('exposes an idempotent governed session-close handshake with a bounded timeout', () => {

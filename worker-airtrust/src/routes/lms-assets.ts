@@ -127,13 +127,11 @@ export function finiteNumberOrNull(value: unknown): number | null {
 }
 
 /**
- * DOM-progress authority rule for the SCORM wrapper's probeFrameProgress().
- *
- * When the package has authored an explicit, valid SCORM location, a generic
- * `x/y` fraction scraped from the frame DOM must NOT replace it — not even when
- * the DOM fraction carries a larger denominator (e.g. package `47/47` vs a
- * "121/135" string elsewhere on the page). The DOM probe is a fallback only for
- * packages that never author a location.
+ * DOM-progress authority: a full explicit fraction (current/total) authored by
+ * the package is authoritative (package 47/47 beats a "121/135" string on the
+ * page). A bare-number authored location (no total) accepts the DOM fraction
+ * only when its current matches the authored position — form numbers
+ * ("005/123") or regulatory refs ("121/135") never hijack the real counter.
  */
 export function resolveProbedScormLocation(params: {
   authored: boolean;
@@ -141,25 +139,17 @@ export function resolveProbedScormLocation(params: {
   domLocation: unknown;
 }): { location: string | null; persist: boolean; reason: string } {
   const explicitMarker = parseScormLocationMarker(params.explicitLocation);
-  if (params.authored && explicitMarker && explicitMarker.current >= 1) {
-    return {
-      location: String(params.explicitLocation),
-      persist: false,
-      reason: 'explicit-package-location',
-    };
+  if (params.authored && explicitMarker && explicitMarker.current >= 1 && explicitMarker.total != null) {
+    return { location: String(params.explicitLocation), persist: false, reason: 'explicit-package-location' };
   }
   const domMarker = parseScormLocationMarker(params.domLocation);
   if (!domMarker) {
-    return {
-      location: explicitMarker ? String(params.explicitLocation) : null,
-      persist: false,
-      reason: 'no-dom-progress',
-    };
+    return { location: explicitMarker ? String(params.explicitLocation) : null, persist: false, reason: 'no-dom-progress' };
   }
-  const domLocation =
-    domMarker.total == null
-      ? String(domMarker.current)
-      : String(domMarker.current) + '/' + String(domMarker.total);
+  if (params.authored && explicitMarker && explicitMarker.current >= 1 && domMarker.total != null && domMarker.current !== explicitMarker.current) {
+    return { location: String(params.explicitLocation), persist: false, reason: 'dom-current-mismatch' };
+  }
+  const domLocation = domMarker.total == null ? String(domMarker.current) : String(domMarker.current) + '/' + String(domMarker.total);
   return { location: domLocation, persist: true, reason: 'dom-fallback' };
 }
 
