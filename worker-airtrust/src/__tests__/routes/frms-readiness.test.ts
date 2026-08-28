@@ -71,6 +71,19 @@ const validTrial = {
   outcome: 'response',
 };
 
+const validTrials = Array.from({ length: 10 }, (_, index) => {
+  const sequence = index + 1;
+  const scheduledAtMs = sequence * 10_000;
+  const stimulusAtMs = scheduledAtMs + 100;
+  return {
+    ...validTrial,
+    sequence,
+    scheduledAtMs,
+    stimulusAtMs,
+    responseAtMs: stimulusAtMs + 280,
+  };
+});
+
 describe('FRMS readiness route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -90,7 +103,7 @@ describe('FRMS readiness route', () => {
       new Request('http://localhost/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 180000, trials: [validTrial] }),
+        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 180000, trials: validTrials }),
       }),
       { DB: db } as Env,
       {} as ExecutionContext,
@@ -112,7 +125,7 @@ describe('FRMS readiness route', () => {
         body: JSON.stringify({
           reference_date: '2026-08-27',
           duration_ms: 180000,
-          trials: [validTrial],
+          trials: validTrials,
           kss_score: 1,
           sleep_hours: 12,
         }),

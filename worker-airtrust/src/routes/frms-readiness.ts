@@ -26,8 +26,12 @@ const trialSchema = z.object({
 
 const submitSchema = z.object({
   reference_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  duration_ms: z.number().int().min(30_000).max(15 * 60_000),
-  trials: z.array(trialSchema).min(1).max(300),
+  duration_ms: z
+    .number()
+    .int()
+    .min(READINESS_PROTOCOL.defaultDurationMs - READINESS_PROTOCOL.allowedDurationDriftMs)
+    .max(READINESS_PROTOCOL.defaultDurationMs + READINESS_PROTOCOL.allowedDurationDriftMs),
+  trials: z.array(trialSchema).min(READINESS_PROTOCOL.minimumTrials).max(300),
 });
 
 async function resolveOwnFuncionarioId(c: ReadinessContext, empresaId: number): Promise<number | null> {

@@ -1,6 +1,9 @@
 export const READINESS_PROTOCOL = {
   version: 'airtrust-vigilance-v1',
   scoringVersion: 'readiness-score-v1',
+  defaultDurationMs: 180_000,
+  allowedDurationDriftMs: 15_000,
+  minimumTrials: 10,
   lapseThresholdMs: 500,
   falseStartThresholdMs: 100,
   minimumBaselineSessions: 5,
