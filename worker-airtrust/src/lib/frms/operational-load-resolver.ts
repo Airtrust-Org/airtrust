@@ -6,20 +6,27 @@
  *   leg are never double-counted;
  * - observed temperature: the max ambient METAR temperature already derived by
  *   the REDEMET/IOGP evidence pipeline and persisted per journey in
- *   `frms_jornada_avaliacoes.environmental_json`. When no observed weather
- *   evidence exists the value is null and Operational Load flags the result
- *   INCOMPLETE — a missing METAR is never read as 0 °C.
+ *   `frms_jornada_avaliacoes.environmental_json`.
  *
- * Both reads are tenant-scoped and fail closed: if the CV or evaluation tables
- * are absent (older environments) the resolver returns "no landings" / "no
- * temperature" instead of throwing.
+ * A valid SIGVOOS query returning zero rows is NOT the same thing as an
+ * unavailable query/schema. The distinction is propagated into the model so
+ * source failure can never masquerade as a confirmed no-flight day.
  */
 
-import { computeOperationalLoadV1, type OperationalLoadV1Result } from './operational-load';
+import {
+  computeOperationalLoadV1,
+  type LandingsEvidenceQuality,
+  type OperationalLoadV1Result,
+} from './operational-load';
+
+export type JornadaLandingsSource =
+  | 'SIGVOOS_OBSERVED'
+  | 'SIGVOOS_CONFIRMED_ZERO'
+  | 'SIGVOOS_UNAVAILABLE';
 
 export interface JornadaLandingsResult {
   landingsCount: number;
-  source: 'SIGVOOS' | 'NONE_FOUND';
+  source: JornadaLandingsSource;
 }
 
 export async function resolveJornadaLandings(
@@ -28,11 +35,15 @@ export async function resolveJornadaLandings(
   funcionarioId: number,
   dataYmd: string,
 ): Promise<JornadaLandingsResult> {
-  if (!Number.isInteger(empresaId) || empresaId <= 0) return { landingsCount: 0, source: 'NONE_FOUND' };
-  if (!Number.isInteger(funcionarioId) || funcionarioId <= 0) {
-    return { landingsCount: 0, source: 'NONE_FOUND' };
+  if (!Number.isInteger(empresaId) || empresaId <= 0) {
+    return { landingsCount: 0, source: 'SIGVOOS_UNAVAILABLE' };
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataYmd)) return { landingsCount: 0, source: 'NONE_FOUND' };
+  if (!Number.isInteger(funcionarioId) || funcionarioId <= 0) {
+    return { landingsCount: 0, source: 'SIGVOOS_UNAVAILABLE' };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataYmd)) {
+    return { landingsCount: 0, source: 'SIGVOOS_UNAVAILABLE' };
+  }
 
   try {
     const row = await db
@@ -57,15 +68,17 @@ export async function resolveJornadaLandings(
       .first<{ landings: number; legs: number }>();
 
     const legs = Number(row?.legs || 0);
-    if (legs === 0) return { landingsCount: 0, source: 'NONE_FOUND' };
+    if (legs === 0) {
+      return { landingsCount: 0, source: 'SIGVOOS_CONFIRMED_ZERO' };
+    }
     const landings = Number(row?.landings || 0);
     return {
       landingsCount: Number.isFinite(landings) && landings > 0 ? Math.round(landings) : 0,
-      source: 'SIGVOOS',
+      source: 'SIGVOOS_OBSERVED',
     };
   } catch {
-    // cv_voo_* tables may not exist in older environments.
-    return { landingsCount: 0, source: 'NONE_FOUND' };
+    // Older environments or an unavailable source must remain explicitly incomplete.
+    return { landingsCount: 0, source: 'SIGVOOS_UNAVAILABLE' };
   }
 }
 
@@ -108,26 +121,34 @@ export async function readPersistedObservedTemperatureMaxC(
   }
 }
 
+function mapLandingsEvidenceQuality(source: JornadaLandingsSource): LandingsEvidenceQuality {
+  if (source === 'SIGVOOS_OBSERVED') return 'OBSERVED';
+  if (source === 'SIGVOOS_CONFIRMED_ZERO') return 'CONFIRMED_ZERO';
+  return 'INCOMPLETE';
+}
+
 /**
  * Convenience: resolve landings + observed temperature and run the V1 model.
+ * Confirmed zero-flight days deliberately skip weather lookup: flight thermal
+ * exposure is not inferred when there was no flight operation.
  */
 export async function resolveOperationalLoadForJornada(
   db: D1Database,
   input: { empresaId: number; funcionarioId: number; dataYmd: string; jornadaId: string },
-): Promise<OperationalLoadV1Result & { landings_source: JornadaLandingsResult['source'] }> {
+): Promise<OperationalLoadV1Result & { landings_source: JornadaLandingsSource }> {
   const landings = await resolveJornadaLandings(
     db,
     input.empresaId,
     input.funcionarioId,
     input.dataYmd,
   );
-  const temperatureMaxC = await readPersistedObservedTemperatureMaxC(
-    db,
-    input.empresaId,
-    input.jornadaId,
-  );
+  const temperatureMaxC =
+    landings.source === 'SIGVOOS_CONFIRMED_ZERO'
+      ? null
+      : await readPersistedObservedTemperatureMaxC(db, input.empresaId, input.jornadaId);
   const result = computeOperationalLoadV1({
     landingsCount: landings.landingsCount,
+    landingsEvidenceQuality: mapLandingsEvidenceQuality(landings.source),
     temperatureMaxC,
   });
   return { ...result, landings_source: landings.source };
