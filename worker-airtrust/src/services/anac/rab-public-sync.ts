@@ -45,6 +45,7 @@ type FleetProjection = {
 export type AnacRabSyncErrorCode =
   | 'SOURCE_URL_NOT_OFFICIAL'
   | 'FETCH_TIMEOUT'
+  | 'FETCH_FAILED'
   | 'HTTP_ERROR'
   | 'PAYLOAD_TOO_LARGE'
   | 'INVALID_JSON'
@@ -91,7 +92,10 @@ function bytesToHex(bytes: ArrayBuffer): string {
 }
 
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  return bytesToHex(await crypto.subtle.digest('SHA-256', bytes));
+  // Some WebCrypto-compatible test runtimes transfer/detach the supplied buffer.
+  // Hash a copy so the original response bytes remain available for JSON parsing.
+  const digestInput = bytes.slice(0);
+  return bytesToHex(await crypto.subtle.digest('SHA-256', digestInput));
 }
 
 function parseRabRows(bytes: ArrayBuffer): Record<string, unknown>[] {
@@ -104,7 +108,8 @@ function parseRabRows(bytes: ArrayBuffer): Record<string, unknown>[] {
 
   if (Array.isArray(parsed)) {
     return parsed.filter(
-      (row): row is Record<string, unknown> => typeof row === 'object' && row !== null && !Array.isArray(row),
+      (row): row is Record<string, unknown> =>
+        typeof row === 'object' && row !== null && !Array.isArray(row),
     );
   }
 
@@ -416,7 +421,7 @@ async function recordUnchanged(
     id: string;
     startedAt: string;
     finishedAt: string;
-    state: SyncStateRow | null;
+    state: SyncStateRow;
     httpStatus: number;
     etag: string | null;
     lastModified: string | null;
@@ -451,9 +456,9 @@ async function recordUnchanged(
       etag: params.etag,
       lastModified: params.lastModified,
       hash: params.hash,
-      key: params.state?.active_snapshot_key ?? null,
+      key: params.state.active_snapshot_key,
       contentLength: params.contentLength,
-      recordCount: params.state?.last_record_count ?? null,
+      recordCount: params.state.last_record_count,
       rejectedCount: null,
       errorCode: null,
     }),
@@ -658,9 +663,9 @@ export async function syncAnacRabPublicData(
         redirect: 'follow',
         signal: controller.signal,
       });
-    } catch (error) {
+    } catch {
       if (controller.signal.aborted) throw new AnacRabSyncError('FETCH_TIMEOUT');
-      throw error;
+      throw new AnacRabSyncError('FETCH_FAILED');
     } finally {
       clearTimeout(timeout);
     }
@@ -781,8 +786,8 @@ export async function syncAnacRabPublicData(
         errorCode: code,
       });
     } catch {
-      // The original failure remains the authoritative signal. A secondary
-      // telemetry-write failure must not replace it or leak upstream payload data.
+      // The original failure remains authoritative. Telemetry failure must not
+      // replace it or leak upstream payload data.
     }
     if (error instanceof AnacRabSyncError) throw error;
     throw new AnacRabSyncError(code);
