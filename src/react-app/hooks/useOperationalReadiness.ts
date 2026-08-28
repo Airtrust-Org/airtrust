@@ -2,6 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
 import type { VigilanceTrial } from '@/react-app/pages/frms/operationalReadiness';
 
+export type ReadinessClassification =
+  | 'baseline_building'
+  | 'preserved'
+  | 'attention'
+  | 'operational_review';
+
 export type ReadinessBaseline = {
   sessions: number;
   minimum_sessions: number;
@@ -10,7 +16,7 @@ export type ReadinessBaseline = {
 
 export type ReadinessSubmissionResult = {
   assessmentId: string;
-  classification: 'baseline_building' | 'preserved' | 'attention' | 'operational_review';
+  classification: ReadinessClassification;
   baselineSessions: number;
   baselineReady: boolean;
   baselineMedianRtMs: number | null;
@@ -26,7 +32,7 @@ export type ReadinessToday = {
   reference_date: string;
   protocol_version: string;
   scoring_version: string;
-  classification: ReadinessSubmissionResult['classification'];
+  classification: ReadinessClassification;
   baseline_sessions: number;
   baseline_ready: number;
   baseline_median_rt_ms: number | null;
@@ -44,6 +50,19 @@ export type ReadinessToday = {
   p90_rt_ms: number | null;
   sd_rt_ms: number | null;
   response_speed: number | null;
+  warning_signals_json: string | null;
+  critical_signals_json: string | null;
+  created_at: string;
+};
+
+export type ReadinessTeamItem = {
+  funcionario_id: number;
+  reference_date: string;
+  classification: ReadinessClassification;
+  baseline_sessions: number;
+  baseline_ready: number;
+  median_rt_delta_pct: number | null;
+  lapse_rate_delta: number | null;
   warning_signals_json: string | null;
   critical_signals_json: string | null;
   created_at: string;
@@ -99,6 +118,18 @@ export function useReadinessToday(referenceDate: string) {
   });
 }
 
+export function useReadinessTeam(referenceDate: string) {
+  return useQuery({
+    queryKey: ['frms-readiness-team', referenceDate],
+    queryFn: () =>
+      getReadiness<ReadinessTeamItem[]>(
+        `/frms/readiness/team?date=${encodeURIComponent(referenceDate)}`,
+      ),
+    staleTime: 60 * 1000,
+    enabled: /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
+  });
+}
+
 export function useSubmitReadiness() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -107,6 +138,7 @@ export function useSubmitReadiness() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['frms-readiness-baseline'] });
       queryClient.invalidateQueries({ queryKey: ['frms-readiness-today', variables.reference_date] });
+      queryClient.invalidateQueries({ queryKey: ['frms-readiness-team', variables.reference_date] });
       queryClient.invalidateQueries({ queryKey: ['frms-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['fadiga-painel'] });
     },
