@@ -39,15 +39,18 @@ export default function OperationalVigilanceTest({
   const waitingTimerRef = useRef<number | null>(null);
   const responseTimerRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  const stimulusRafRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
 
   const cleanupTimers = useCallback(() => {
     if (waitingTimerRef.current != null) window.clearTimeout(waitingTimerRef.current);
     if (responseTimerRef.current != null) window.clearTimeout(responseTimerRef.current);
     if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
+    if (stimulusRafRef.current != null) window.cancelAnimationFrame(stimulusRafRef.current);
     waitingTimerRef.current = null;
     responseTimerRef.current = null;
     rafRef.current = null;
+    stimulusRafRef.current = null;
   }, []);
 
   const finish = useCallback(() => {
@@ -74,27 +77,31 @@ export default function OperationalVigilanceTest({
     scheduledAtRef.current = now + delay;
     waitingTimerRef.current = window.setTimeout(() => {
       if (finishedRef.current || startedAtRef.current == null) return;
-      const stimulusAt = performance.now();
-      if (stimulusAt - startedAtRef.current >= durationMs) {
+      if (performance.now() - startedAtRef.current >= durationMs) {
         finish();
         return;
       }
-      stimulusAtRef.current = stimulusAt;
       setPhase('stimulus');
-      responseTimerRef.current = window.setTimeout(() => {
-        const currentStimulusAt = stimulusAtRef.current;
-        if (currentStimulusAt == null) return;
-        trialsRef.current.push({
-          sequence: trialsRef.current.length + 1,
-          scheduledAtMs: Math.round((scheduledAtRef.current ?? currentStimulusAt) - (startedAtRef.current ?? 0)),
-          stimulusAtMs: Math.round(currentStimulusAt - (startedAtRef.current ?? 0)),
-          responseAtMs: null,
-          reactionTimeMs: null,
-          outcome: 'missed',
-        });
-        stimulusAtRef.current = null;
-        scheduleNext();
-      }, VIGILANCE_PROTOCOL.responseWindowMs);
+      stimulusRafRef.current = window.requestAnimationFrame(() => {
+        stimulusRafRef.current = null;
+        if (finishedRef.current || startedAtRef.current == null) return;
+        const stimulusAt = performance.now();
+        stimulusAtRef.current = stimulusAt;
+        responseTimerRef.current = window.setTimeout(() => {
+          const currentStimulusAt = stimulusAtRef.current;
+          if (currentStimulusAt == null) return;
+          trialsRef.current.push({
+            sequence: trialsRef.current.length + 1,
+            scheduledAtMs: Math.round((scheduledAtRef.current ?? currentStimulusAt) - (startedAtRef.current ?? 0)),
+            stimulusAtMs: Math.round(currentStimulusAt - (startedAtRef.current ?? 0)),
+            responseAtMs: null,
+            reactionTimeMs: null,
+            outcome: 'missed',
+          });
+          stimulusAtRef.current = null;
+          scheduleNext();
+        }, VIGILANCE_PROTOCOL.responseWindowMs);
+      });
     }, delay);
   }, [durationMs, finish]);
 
@@ -252,7 +259,15 @@ export default function OperationalVigilanceTest({
       </div>
       <button
         type="button"
-        onClick={respond}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          respond();
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          respond();
+        }}
         className={`flex min-h-72 w-full items-center justify-center rounded-2xl border-2 transition-colors focus:outline-none focus:ring-4 focus:ring-blue-200 ${
           phase === 'stimulus'
             ? 'border-blue-600 bg-blue-50'
