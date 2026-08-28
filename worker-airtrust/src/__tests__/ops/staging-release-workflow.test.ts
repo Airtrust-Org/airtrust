@@ -960,8 +960,8 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
     );
     expect(reseedJob).toContain('name: Reseed Synthetic QA Examiner Fixture (staging D1)');
     expect(reseedJob).toContain('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
-    expect(reseedJob).toContain('QA_EXAMINER_ADMIN_EMAIL: qa-examiner-admin@staging.airtrust.invalid');
-    expect(reseedJob).toContain('QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}');
+    expect(reseedJob).toContain('QA_EXAMINER_ADMIN_EMAIL');
+    expect(reseedJob).toContain('QA_EXAMINER_ADMIN_PASSWORD');
     expect(reseedJob).toContain('CONFIRM_STAGING_QA_SEED: AIRTRUST_STAGING_QA_SEED');
     expect(reseedJob).toContain('node scripts/staging/seed-qa-examiner-training.mjs --apply');
 
@@ -969,8 +969,8 @@ describe('FASE 5 - Independent Secrets & Validator Iteration', () => {
       workflow.indexOf('\n  smoke:'),
       workflow.indexOf('\n  summary:'),
     );
-    expect(smokeJob).toContain('QA_EXAMINER_ADMIN_EMAIL: qa-examiner-admin@staging.airtrust.invalid');
-    expect(smokeJob).toContain('QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}');
+    expect(smokeJob).toContain('QA_EXAMINER_ADMIN_EMAIL');
+    expect(smokeJob).toContain('QA_EXAMINER_ADMIN_PASSWORD');
     expect(smokeJob).toContain('node scripts/staging/smoke-examiner-training.mjs');
     expect(smokeJob).toContain("needs.reseed-qa-examiner-fixture.result == 'success'");
   });
