@@ -4,6 +4,7 @@ import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
+import { canSeeFrmsTeamScope } from '../lib/frms/access';
 import {
   countReadinessBaselineSessions,
   persistReadinessAssessment,
@@ -141,6 +142,57 @@ router.get('/today', async (c) => {
     .first<Record<string, unknown>>();
 
   return c.json({ success: true, data: row || null });
+});
+
+router.get('/team', async (c) => {
+  const empresaId = getEmpresaId(c);
+  const referenceDate = c.req.query('date') || new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(referenceDate)) {
+    return c.json({ success: false, error: 'invalid_reference_date' }, 400);
+  }
+
+  const hasTeamScope = canSeeFrmsTeamScope(c.get('userRole'));
+  let forcedFuncionarioId: number | undefined;
+  if (!hasTeamScope) {
+    const funcionarioId = await resolveOwnFuncionarioId(c, empresaId);
+    if (!funcionarioId) {
+      return c.json({ success: false, error: 'Funcionario nao encontrado para o usuario atual' }, 404);
+    }
+    forcedFuncionarioId = funcionarioId;
+  }
+
+  const fields = `
+    funcionario_id, reference_date, classification,
+    baseline_sessions, baseline_ready, median_rt_delta_pct, lapse_rate_delta,
+    warning_signals_json, critical_signals_json, created_at`;
+  const statement = forcedFuncionarioId
+    ? c.env.DB.prepare(
+        `SELECT ${fields}
+           FROM frms_readiness_assessment
+          WHERE empresa_id = ?
+            AND reference_date = ?
+            AND funcionario_id = ?
+            AND deleted_at IS NULL
+          ORDER BY funcionario_id ASC`,
+      ).bind(empresaId, referenceDate, forcedFuncionarioId)
+    : c.env.DB.prepare(
+        `SELECT ${fields}
+           FROM frms_readiness_assessment
+          WHERE empresa_id = ?
+            AND reference_date = ?
+            AND deleted_at IS NULL
+          ORDER BY funcionario_id ASC`,
+      ).bind(empresaId, referenceDate);
+
+  const result = await statement.all<Record<string, unknown>>();
+  return c.json({
+    success: true,
+    data: result.results || [],
+    meta: {
+      scope: hasTeamScope ? 'team' : 'self',
+      forced_funcionario_id: forcedFuncionarioId,
+    },
+  });
 });
 
 router.post('/', async (c) => {
