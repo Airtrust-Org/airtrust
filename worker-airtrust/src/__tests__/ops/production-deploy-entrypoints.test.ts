@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
-const readRepoFile = (path: string) => readFileSync(new URL(path, `file://${REPO_ROOT}/`), 'utf8');
+const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url) as any);
+const readRepoFile = (path: string) => readFileSync(new URL(path, `file://${REPO_ROOT}/`) as any, 'utf8');
 const BLOCK_SENTINEL = 'LOCAL_PRODUCTION_DEPLOY_DISABLED_USE_GITHUB_ACTIONS';
 
 const hardBlockedEntrypoints = [

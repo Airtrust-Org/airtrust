@@ -232,6 +232,7 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
   const {
     email,
     role = 'viewer',
+    perfis,
     nome,
     empresaIds,
     modulosAtivos,
@@ -239,6 +240,7 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
   } = (await c.req.json()) as {
     email: string;
     role?: string;
+    perfis?: string[];
     nome?: string;
     empresaIds?: number[];
     modulosAtivos?: string[];
@@ -249,7 +251,10 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
     throw new AppError('Email é obrigatório', 400);
   }
 
-  const normalizedRole = normalizeEmpresaUserRole(role);
+  const normalizedPerfis = Array.isArray(perfis) && perfis.length > 0
+    ? perfis.map(normalizeEmpresaUserRole)
+    : [normalizeEmpresaUserRole(role || 'viewer')];
+  const normalizedRole = pickHighestRole(...normalizedPerfis);
   const targetEmpresaIds = Array.from(
     new Set(
       (Array.isArray(empresaIds) && empresaIds.length > 0 ? empresaIds : [id])
@@ -388,6 +393,18 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
       await db.batch([vinculoStatement, ...setorStatements]);
     } else {
       await vinculoStatement.run();
+    }
+    
+    // Atribuição administrativa explícita de perfis (autoridade — migration 0473).
+    // Falha aqui é erro real e deve propagar para o handler da rota; nunca
+    // silenciar, para o administrador não achar que a atribuição foi gravada.
+    for (const p of normalizedPerfis) {
+      await db
+        .prepare(
+          'INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id, empresa_id, perfil, ativo, created_at, updated_at) VALUES (?, ?, ?, 1, datetime("now"), datetime("now"))',
+        )
+        .bind(user.id, empresaId, perfilFromEmpresaRole(p))
+        .run();
     }
 
     vinculosCriados += 1;
@@ -536,7 +553,8 @@ app.get('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
       `
       SELECT ue.empresa_id, ue.role, ue.is_primary,
               ${hasModulosAtivos ? "COALESCE(ue.modulos_ativos, '[]')" : "'[]'"} as modulos_ativos,
-             e.nome as empresa_nome
+             e.nome as empresa_nome,
+             (SELECT json_group_array(perfil) FROM usuarios_empresas_perfis WHERE usuario_id = ue.usuario_id AND empresa_id = ue.empresa_id AND ativo = 1) as perfis
       FROM usuarios_empresas ue
       INNER JOIN empresas e ON e.id = ue.empresa_id
       WHERE ue.usuario_id = ?
@@ -552,6 +570,7 @@ app.get('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
       is_primary: number;
       modulos_ativos: string;
       empresa_nome: string;
+      perfis?: string;
     }>();
 
   const resultados = (acessos.results || []).filter((item) => {
@@ -570,10 +589,21 @@ app.get('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
         } catch {
           modulosAtivos = [];
         }
+        let perfis: string[] = [];
+        try {
+          perfis = JSON.parse(item.perfis || '[]') as string[];
+        } catch {
+          perfis = [];
+        }
         return {
           empresa_id: item.empresa_id,
           empresa_nome: item.empresa_nome,
-          role: normalizeEmpresaUserRole(item.role),
+          // `role` continua exposto por compatibilidade (maior perfil ativo);
+          // `perfis` é a lista explícita autoritativa (migration 0473).
+          role: normalizeEmpresaUserRole(
+            perfis.length > 0 ? pickHighestRole(...perfis) : item.role,
+          ),
+          perfis,
           is_primary: item.is_primary,
           modulos_ativos: modulosAtivos,
         };
@@ -591,16 +621,22 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
   const tenantCtx = getTenantContext(c);
 
   const body = (await c.req.json()) as {
-    acessos?: Array<{ empresaId: number; role: string; modulosAtivos?: string[] }>;
+    acessos?: Array<{ empresaId: number; role?: string; perfis?: string[]; modulosAtivos?: string[] }>;
   };
 
   const acessos = Array.isArray(body.acessos)
     ? body.acessos
-        .map((item) => ({
-          empresaId: Number(item.empresaId),
-          role: normalizeEmpresaUserRole(item.role),
-          modulosAtivos: Array.isArray(item.modulosAtivos) ? item.modulosAtivos : [],
-        }))
+        .map((item) => {
+          const perfis = Array.isArray(item.perfis) && item.perfis.length > 0
+            ? item.perfis.map(p => normalizeEmpresaUserRole(p))
+            : [normalizeEmpresaUserRole(item.role || 'viewer')];
+          return {
+            empresaId: Number(item.empresaId),
+            role: pickHighestRole(...perfis),
+            perfis,
+            modulosAtivos: Array.isArray(item.modulosAtivos) ? item.modulosAtivos : [],
+          };
+        })
         .filter((item) => Number.isFinite(item.empresaId) && item.empresaId > 0)
     : [];
 
@@ -657,6 +693,18 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
     )
     .run();
 
+  // Substituição completa: remove as atribuições explícitas atuais antes de
+  // regravar o conjunto enviado pelo administrador. É assim que um perfil
+  // removido pelo admin deixa de existir na estrutura autoritativa.
+  await db
+    .prepare(
+      tenantCtx.empresaCodigo === 'airtrust'
+        ? 'DELETE FROM usuarios_empresas_perfis WHERE usuario_id = ?'
+        : 'DELETE FROM usuarios_empresas_perfis WHERE usuario_id = ? AND empresa_id = ?',
+    )
+    .bind(...(tenantCtx.empresaCodigo === 'airtrust' ? [usuarioId] : [usuarioId, tenantCtx.empresaId]))
+    .run();
+
   let isPrimarySet = false;
   for (const acesso of acessos) {
     const isPrimary = !isPrimarySet ? 1 : 0;
@@ -689,6 +737,15 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
         .bind(usuarioId, acesso.empresaId, acesso.role, isPrimary)
         .run();
     }
+    
+    for (const p of acesso.perfis) {
+      await db
+        .prepare(
+          'INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id, empresa_id, perfil, ativo, created_at, updated_at) VALUES (?, ?, ?, 1, datetime("now"), datetime("now"))',
+        )
+        .bind(usuarioId, acesso.empresaId, perfilFromEmpresaRole(p))
+        .run();
+    }
   }
 
   await syncUsuarioPerfilFromAcessos(db, usuarioId);
@@ -712,8 +769,11 @@ app.post('/:id/usuarios', requireTenantRole('admin'), async (c) => {
   }
 
   const body = await c.req.json();
-  const { usuario_id, role = 'viewer', setor_ids: setorIdsForAdd } = body;
-  const normalizedRole = normalizeEmpresaUserRole(role);
+  const { usuario_id, role = 'viewer', perfis, setor_ids: setorIdsForAdd } = body;
+  const normalizedPerfis = Array.isArray(perfis) && perfis.length > 0
+    ? perfis.map(p => normalizeEmpresaUserRole(p))
+    : [normalizeEmpresaUserRole(role)];
+  const normalizedRole = pickHighestRole(...normalizedPerfis);
 
   if (!usuario_id) {
     throw new AppError('usuario_id é obrigatório', 400);
@@ -776,6 +836,15 @@ app.post('/:id/usuarios', requireTenantRole('admin'), async (c) => {
     await db.batch([vinculoStatement, ...setorStatements]);
   } else {
     await vinculoStatement.run();
+  }
+
+  for (const p of normalizedPerfis) {
+    await db
+      .prepare(
+        'INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id, empresa_id, perfil, ativo, created_at, updated_at) VALUES (?, ?, ?, 1, datetime("now"), datetime("now"))',
+      )
+      .bind(usuario_id, id, perfilFromEmpresaRole(p))
+      .run();
   }
 
   await syncUsuarioPerfilFromAcessos(db, Number(usuario_id));
