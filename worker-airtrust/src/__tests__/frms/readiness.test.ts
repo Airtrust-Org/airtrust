@@ -19,7 +19,12 @@ function trial(sequence: number, reactionTimeMs: number | null, outcome: Readine
 }
 
 describe('FRMS operational readiness', () => {
-  it('rebuilds trial outcomes from timestamps instead of trusting client labels', () => {
+  it('pins the active PVT-B response ceiling at 30 seconds', () => {
+    expect(READINESS_PROTOCOL.version).toBe('airtrust-pvtb-v2');
+    expect(READINESS_PROTOCOL.responseWindowMs).toBe(30_000);
+  });
+
+  it('rebuilds V2 trial outcomes from timestamps and treats no-response as a 30 s lapse', () => {
     const normalized = normalizeReadinessTrials(
       [
         { ...trial(1, 620, 'response'), reactionTimeMs: 120, outcome: 'response' },
@@ -32,13 +37,43 @@ describe('FRMS operational readiness', () => {
           reactionTimeMs: 999,
           outcome: 'response',
         },
-        { ...trial(4, null, 'response'), reactionTimeMs: 250, outcome: 'response' },
+        { ...trial(4, null, 'missed'), reactionTimeMs: null, outcome: 'missed' },
       ],
       180_000,
+      'airtrust-pvtb-v2',
     );
 
-    expect(normalized.map((item) => item.outcome)).toEqual(['lapse', 'response', 'false_start', 'missed']);
-    expect(normalized.map((item) => item.reactionTimeMs)).toEqual([620, 280, 0, null]);
+    expect(normalized.map((item) => item.outcome)).toEqual(['lapse', 'response', 'false_start', 'lapse']);
+    expect(normalized.map((item) => item.reactionTimeMs)).toEqual([620, 280, 0, 30_000]);
+  });
+
+  it('preserves the historical v1 missed interpretation without mixing protocols', () => {
+    const normalized = normalizeReadinessTrials(
+      [{ ...trial(1, null, 'missed'), reactionTimeMs: null }],
+      180_000,
+      'airtrust-vigilance-v1',
+    );
+
+    expect(normalized[0]).toMatchObject({ outcome: 'missed', reactionTimeMs: null, responseAtMs: null });
+  });
+
+  it('accepts a V2 response after the nominal sampling boundary when the stimulus began in-window', () => {
+    const normalized = normalizeReadinessTrials(
+      [
+        {
+          sequence: 1,
+          scheduledAtMs: 179_000,
+          stimulusAtMs: 179_500,
+          responseAtMs: 180_200,
+          reactionTimeMs: 1,
+          outcome: 'response',
+        },
+      ],
+      180_000,
+      'airtrust-pvtb-v2',
+    );
+
+    expect(normalized[0]).toMatchObject({ reactionTimeMs: 700, outcome: 'lapse' });
   });
 
   it('rejects duplicate sequences and impossible response timing', () => {
@@ -63,7 +98,7 @@ describe('FRMS operational readiness', () => {
     ).toThrow('invalid_trial_timing');
   });
 
-  it('summarizes normalized vigilance trials without hiding lapses or missed stimuli', () => {
+  it('summarizes V2 no-response as a lapse without hiding it as missed', () => {
     const normalized = normalizeReadinessTrials(
       [
         trial(1, 250, 'response'),
@@ -80,19 +115,20 @@ describe('FRMS operational readiness', () => {
         },
       ],
       180_000,
+      'airtrust-pvtb-v2',
     );
     const summary = summarizeReadinessTrials(normalized, 180_000);
 
     expect(summary.durationMs).toBe(180_000);
     expect(summary.validTrials).toBe(4);
-    expect(summary.responseTrials).toBe(3);
-    expect(summary.lapseCount).toBe(1);
-    expect(summary.lapseRate).toBeCloseTo(0.25);
+    expect(summary.responseTrials).toBe(4);
+    expect(summary.lapseCount).toBe(2);
+    expect(summary.lapseRate).toBeCloseTo(0.5);
     expect(summary.falseStartCount).toBe(1);
-    expect(summary.missedCount).toBe(1);
-    expect(summary.medianRtMs).toBe(300);
-    expect(summary.meanRtMs).toBeCloseTo(383.333, 2);
-    expect(summary.p90RtMs).toBeCloseTo(540);
+    expect(summary.missedCount).toBe(0);
+    expect(summary.medianRtMs).toBe(450);
+    expect(summary.meanRtMs).toBeCloseTo(7787.5, 1);
+    expect(summary.p90RtMs).toBeCloseTo(21180);
   });
 
   it('keeps early sessions in baseline-building when no critical signal exists', () => {
