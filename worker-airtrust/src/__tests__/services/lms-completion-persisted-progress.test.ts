@@ -53,4 +53,60 @@ describe('persisted LMS progress evidence', () => {
       }),
     ).toBe(true);
   });
+
+  const withCmiJson = (cmi: unknown) =>
+    hasPersistedCompletionProgressEvidence({
+      matricula_progresso_pct: 0,
+      scorm_progress_id: 7,
+      cmi_json: typeof cmi === 'string' ? cmi : JSON.stringify(cmi),
+      xapi_count: 0,
+    });
+
+  describe('RevLMS airtrust-scorm12-state schema', () => {
+    it('accepts a coherent nested state (slideAtual/totalSlides/progresso)', () => {
+      expect(
+        withCmiJson({
+          'cmi.core.lesson_location': '46',
+          'airtrust-scorm12-state': { schema: 'airtrust-scorm12-state', slideAtual: 46, totalSlides: 47, progresso: 96 },
+        }),
+      ).toBe(true);
+    });
+
+    it('accepts the state when it is serialized inside cmi.suspend_data', () => {
+      expect(
+        withCmiJson({
+          'cmi.core.lesson_location': '46',
+          'cmi.suspend_data': JSON.stringify({ slideAtual: 46, totalSlides: 47, progresso: 96 }),
+        }),
+      ).toBe(true);
+    });
+
+    it('rejects a zeroed state (slideAtual=0, totalSlides=0)', () => {
+      expect(withCmiJson({ 'airtrust-scorm12-state': { slideAtual: 0, totalSlides: 0 } })).toBe(false);
+    });
+
+    it('rejects an absurd state where slideAtual exceeds totalSlides', () => {
+      expect(
+        withCmiJson({ 'airtrust-scorm12-state': { slideAtual: 999, totalSlides: 47, progresso: 96 } }),
+      ).toBe(false);
+    });
+
+    it('rejects a malformed state (NaN / negative / non-integer)', () => {
+      expect(withCmiJson({ 'airtrust-scorm12-state': { slideAtual: 'x', totalSlides: 47 } })).toBe(false);
+      expect(withCmiJson({ 'airtrust-scorm12-state': { slideAtual: -3, totalSlides: 47 } })).toBe(false);
+      expect(withCmiJson({ 'airtrust-scorm12-state': { slideAtual: 1.5, totalSlides: 47 } })).toBe(false);
+      expect(withCmiJson({ 'cmi.suspend_data': 'not-json-at-all' })).toBe(false);
+    });
+
+    it('does not treat a score of 100 with no navigation state as progress', () => {
+      expect(
+        withCmiJson({ 'cmi.core.score.raw': 100, 'cmi.core.lesson_status': 'passed' }),
+      ).toBe(false);
+    });
+
+    it('still accepts the canonical NN/NN location and score-free empty state', () => {
+      expect(withCmiJson({ 'cmi.location': '46/47' })).toBe(true);
+      expect(withCmiJson({})).toBe(false);
+    });
+  });
 });

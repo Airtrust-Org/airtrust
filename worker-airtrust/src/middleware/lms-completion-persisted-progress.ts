@@ -39,19 +39,88 @@ async function readJsonClone(c: Context<PersistedProgressContext>): Promise<Json
   }
 }
 
+function progressFromLocationString(location: string): number | null {
+  const match = location.match(/(\d+)\s*(?:\/|of)\s*(\d+)/i);
+  if (!match) return null;
+  const current = Number(match[1]);
+  const total = Number(match[2]);
+  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return null;
+  return Math.max(0, Math.min(100, (current / total) * 100));
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * RevLMS packages persist a resume snapshot under the `airtrust-scorm12-state`
+ * schema (nested inside `cmi.suspend_data` as a JSON string, or as a sibling key
+ * of the stored SCORM datamodel). It carries `slideAtual` / `totalSlides` and an
+ * optional pre-computed `progresso`. This is durable, package-authored evidence
+ * of real navigation — not a self-declared value from the terminal request — so
+ * the guard must recognise it. Acceptance stays fail-closed: the structure must
+ * be internally coherent (positive integer total, in-range current) before it
+ * counts. A bare `completed`/`passed` status or a score is never sufficient.
+ */
+function progressFromRevlmsState(container: Record<string, unknown>): number | null {
+  const candidates: unknown[] = [container['airtrust-scorm12-state'], container.state];
+
+  const suspendRaw =
+    container['cmi.suspend_data'] ?? container['cmi.core.suspend_data'] ?? container.suspend_data;
+  if (typeof suspendRaw === 'string' && suspendRaw.trim()) {
+    try {
+      candidates.push(JSON.parse(suspendRaw));
+    } catch {
+      /* opaque suspend_data: not RevLMS state */
+    }
+  } else if (suspendRaw && typeof suspendRaw === 'object') {
+    candidates.push(suspendRaw);
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+    const state = candidate as Record<string, unknown>;
+    if (state.schema !== undefined && state.schema !== 'airtrust-scorm12-state') continue;
+
+    const slideAtual = finiteNumberOrNull(state.slideAtual);
+    const totalSlides = finiteNumberOrNull(state.totalSlides);
+    if (
+      slideAtual === null ||
+      totalSlides === null ||
+      !Number.isInteger(slideAtual) ||
+      !Number.isInteger(totalSlides) ||
+      totalSlides <= 0 ||
+      slideAtual < 0 ||
+      slideAtual > totalSlides
+    ) {
+      continue;
+    }
+
+    const progresso = finiteNumberOrNull(state.progresso);
+    if (progresso !== null && (progresso < 0 || progresso > 100)) continue;
+
+    const derived = (slideAtual / totalSlides) * 100;
+    const resolved = progresso !== null ? Math.max(progresso, derived) : derived;
+    return Math.max(0, Math.min(100, resolved));
+  }
+
+  return null;
+}
+
 function progressFromCmiJson(value: string | null): number | null {
   if (!value?.trim()) return null;
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>;
+
     const location = String(
       parsed['cmi.location'] ?? parsed['cmi.core.lesson_location'] ?? parsed.lesson_location ?? '',
     );
-    const match = location.match(/(\d+)\s*(?:\/|of)\s*(\d+)/i);
-    if (!match) return null;
-    const current = Number(match[1]);
-    const total = Number(match[2]);
-    if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return null;
-    return Math.max(0, Math.min(100, (current / total) * 100));
+    const fromLocation = progressFromLocationString(location);
+    if (fromLocation !== null) return fromLocation;
+
+    return progressFromRevlmsState(parsed);
   } catch {
     return null;
   }
