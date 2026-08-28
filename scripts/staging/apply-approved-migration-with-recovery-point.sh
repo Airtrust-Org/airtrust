@@ -23,6 +23,7 @@ APPROVED_MIGRATIONS=(
   "0469_lms_completion_pendencias_snapshots.sql"
   "0470_certificado_validacao_hash_index.sql"
   "0472_frms_operational_readiness.sql"
+  "0475_usuarios_empresas_perfis_reconciliation.sql"
 )
 
 apply=false
@@ -130,6 +131,9 @@ validate_postconditions() {
       ;;
     0472_frms_operational_readiness.sql)
       bash scripts/staging/validate-0472-postconditions.sh --target="$db_name"
+      ;;
+    0475_usuarios_empresas_perfis_reconciliation.sql)
+      bash scripts/staging/validate-0475-postconditions.sh --target="$db_name"
       ;;
   esac
 }
