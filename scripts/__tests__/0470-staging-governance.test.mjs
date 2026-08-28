@@ -15,7 +15,7 @@ function read(relativePath) {
 test('0470 is present in the staging apply allowlist (apply-approved-migrations.sh)', () => {
   const script = read('scripts/staging/apply-approved-migrations.sh');
   assert.match(script, new RegExp(`APPROVED_MIGRATIONS=\\([^)]*"${MIGRATION_NAME}"[^)]*\\)`));
-  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0470"/);
+  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0470(,[0-9]+)*"/);
 });
 
 test('0470 routes through the recovery-point runner, same as 0467-0469', () => {
