@@ -47,6 +47,18 @@ There is **no separate night-landing penalty**: night exposure is already
 captured by the circadian component and adding a second deduction would double
 count it.
 
+The resolver preserves source quality instead of collapsing all zeroes together:
+
+- `SIGVOOS_OBSERVED` — query succeeded and physical legs are present;
+- `SIGVOOS_CONFIRMED_ZERO` — query succeeded and returned zero physical legs;
+- `SIGVOOS_UNAVAILABLE` — source/schema/query was unavailable or the input was not
+  valid enough for a trustworthy lookup.
+
+Those states map to `landings_evidence_quality = OBSERVED | CONFIRMED_ZERO |
+INCOMPLETE`. A source failure therefore never masquerades as a confirmed no-flight
+day. When SIGVOOS is unavailable, the landing delta is 0 because no burden is
+invented, but `data_quality` stays `INCOMPLETE`.
+
 ### Temperature — source: observed METAR / SPECI (REDEMET)
 
 Max **observed** ambient temperature associated with the operation, taken from
@@ -61,10 +73,16 @@ the REDEMET/IOGP evidence pipeline (`frms_jornada_avaliacoes.environmental_json`
 | 34 – 35.9 °C | −1.5 |
 | ≥ 36 °C | −2.0 |
 
-**Missing METAR is never treated as 0 °C or as comfortable.** When there is no
-observed temperature: `temperature_max_c = null`, thermal delta = 0,
+**Missing METAR is never treated as 0 °C or as comfortable.** When flight
+operation exists but no observed temperature is available:
+`temperature_max_c = null`, thermal delta = 0,
 `weather_evidence_quality = 'INCOMPLETE'`, `data_quality = 'INCOMPLETE'`. TAF is
 never used as observed weather for a retrospective analysis.
+
+When SIGVOOS **confirms zero flight**, flight thermal exposure is not inferred
+from an unrelated weather snapshot. Temperature is not applied,
+`weather_evidence_quality = 'NOT_APPLICABLE'`, and the operational-load delta is
+0 for the no-flight day.
 
 ### Combined
 
@@ -91,23 +109,32 @@ fourth argument is optional; when it is absent the result is byte-identical to
 the previous contract. `componentes.carga_operacional` and a full
 `operational_load` breakdown are added to `EffectivenessResult`.
 
-## Persistence
+## Persistence and same-run convergence
 
-`recalcularPipeline` resolves landings + observed temperature per journey and
-persists the breakdown:
+The processing order is deliberately controlled so freshly collected weather is
+used **in the same processing run**:
 
-- inside `effectiveness_componentes_json` (`operational_load` object), and
+1. provisional canonical recalculation;
+2. SIGVOOS legs + location/timezone resolution;
+3. historical REDEMET METAR/SPECI evidence collection;
+4. persist `frms_jornada_avaliacoes` evidence snapshot;
+5. one final canonical recalculation;
+6. persist the final effectiveness containing the new temperature contribution.
+
+The second canonical pass does **not** call the shadow/evidence pipeline again,
+so there is no REDEMET recursion or loop. If evidence collection or the final
+convergence pass fails, the already persisted provisional canonical result is
+preserved; unavailable evidence is reported as incomplete rather than fabricated.
+
+The final breakdown is persisted:
+
+- inside `effectiveness_componentes_json` (`operational_load` object), including
+  source/evidence quality; and
 - in dedicated `frms_fatorizacao_jornada` columns (migration **0476**):
   `operational_load_policy_version`, `operational_load_landings_count`,
   `operational_load_temperature_max_c`, `operational_load_weather_quality`,
   `operational_load_data_quality`, `operational_load_landings_delta`,
   `operational_load_temperature_delta`, `operational_load_total_delta`.
-
-Convergence: landings are available immediately from SIGVOOS. Observed
-temperature comes from the persisted IOGP evidence snapshot, so on the first
-recompute after a fresh SIGVOOS import it may lag by one pipeline cycle; the next
-recompute picks it up. A resolver failure never interrupts the canonical
-recompute (falls back to no operational load).
 
 ## Explainability
 
@@ -119,12 +146,28 @@ Carga operacional: -3,0
   • temperatura máxima 32 °C: -1,0
 ```
 
-or, without observed weather:
+With SIGVOOS available but weather missing:
 
 ```
 Carga operacional: -2,0
   • 4 pousos: -2,0
-  • temperatura: evidência meteorológica indisponível (0)
+  • temperatura: evidência meteorológica indisponível (sem penalidade)
+```
+
+With SIGVOOS unavailable:
+
+```
+Carga operacional: 0,0
+  • pousos: SIGVOOS indisponível (sem penalidade; evidência incompleta)
+  • temperatura: evidência meteorológica indisponível (sem penalidade)
+```
+
+With a confirmed no-flight day:
+
+```
+Carga operacional: 0,0
+  • 0 pousos: ausência de voo confirmada pelo SIGVOOS
+  • temperatura: não aplicável à carga de voo (sem voo confirmado)
 ```
 
 ## Not changed
