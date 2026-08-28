@@ -107,6 +107,7 @@ import { assetsRouter } from './routes/assets';
 // FRMS (Flight & Rest Management System)
 import frmsRoutes from './routes/frms';
 import frmsFadigaCheckinRoutes from './routes/frms-fadiga-checkin';
+import frmsReadinessRoutes from './routes/frms-readiness';
 import frmsOperationalSnapshotRoutes from './routes/frms-operational-snapshot';
 import frmsReadAckRoutes from './routes/frms-read-ack';
 import frmsOverrideRoutes from './routes/frms-override';
@@ -743,6 +744,8 @@ app.route('/api/frms', frmsRoutes);
 app.route('/api/frms', frmsFadigaAcumuladaRoutes);
 // FRMS — Check-in diário de fadiga + bridge FRAT
 app.route('/api/frms', frmsFadigaCheckinRoutes);
+// FRMS — Avaliação objetiva de prontidão / vigilância breve
+app.route('/api/frms/readiness', frmsReadinessRoutes);
 // FRMS — Snapshot operacional diário (read-only)
 app.route('/api/frms', frmsOperationalSnapshotRoutes);
 // FRMS — D1 read/ack operacional sem mitigação
