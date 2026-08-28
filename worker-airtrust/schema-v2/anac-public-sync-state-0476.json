@@ -1,0 +1,8 @@
+{
+  "changeId": "anac-public-sync-state-0476",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0476_anac_public_sync_state.sql",
+  "fileHash": "3f94957b8f72c46dabe3d25c2851a5737bb31b9969a4c2edbd0f3a3fd1c921e9",
+  "planPath": "worker-airtrust/schema-v2/plans/anac-public-sync-state-0476.md",
+  "planHash": "43fad4b23297a579bc71c671e9983c74dd3e426f9eab5b866946507a39d081f8"
+}
