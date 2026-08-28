@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
-const { persistReadinessAssessmentMock, countReadinessBaselineSessionsMock } = vi.hoisted(() => ({
+const { authState, persistReadinessAssessmentMock, countReadinessBaselineSessionsMock } = vi.hoisted(() => ({
+  authState: { role: 'tripulante' },
   persistReadinessAssessmentMock: vi.fn(),
   countReadinessBaselineSessionsMock: vi.fn(),
 }));
@@ -9,7 +10,7 @@ const { persistReadinessAssessmentMock, countReadinessBaselineSessionsMock } = v
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
     c.set('userId', 9);
-    c.set('userRole', 'tripulante');
+    c.set('userRole', authState.role);
     c.set('empresaId', 7);
     c.set('funcionarioId', 70);
     await next();
@@ -34,26 +35,39 @@ const { default: frmsReadinessRoutes } = await import('../../routes/frms-readine
 type MockStatement = {
   bind: (...args: unknown[]) => MockStatement;
   first: <T = unknown>() => Promise<T | null>;
+  all: <T = unknown>() => Promise<{ results: T[] }>;
 };
 
-function createDb(checkin: { id: string; kss_score: number; horas_sono: number } | null = null) {
+function createDb(
+  checkin: { id: string; kss_score: number; horas_sono: number } | null = null,
+  readinessRows: Array<Record<string, unknown>> = [],
+) {
   const statements: Array<{ sql: string; binds: unknown[] }> = [];
   const db = {
     prepare: vi.fn((sql: string): MockStatement => {
       const normalized = sql.replace(/\s+/g, ' ').trim();
       let binds: unknown[] = [];
+      const record = () => statements.push({ sql: normalized, binds });
       const stmt: MockStatement = {
         bind: (...args: unknown[]) => {
           binds = args;
           return stmt;
         },
         first: async <T = unknown>() => {
-          statements.push({ sql: normalized, binds });
+          record();
           if (normalized.includes('FROM funcionarios') && normalized.includes('WHERE id = ?')) {
             return { id: 70 } as T;
           }
           if (normalized.includes('FROM frms_fadiga_checkin')) return checkin as T | null;
+          if (normalized.includes('FROM frms_readiness_assessment')) return readinessRows[0] as T | null;
           throw new Error(`Unexpected read query: ${normalized}`);
+        },
+        all: async <T = unknown>() => {
+          record();
+          if (normalized.includes('FROM frms_readiness_assessment')) {
+            return { results: readinessRows as T[] };
+          }
+          throw new Error(`Unexpected list query: ${normalized}`);
         },
       };
       return stmt;
@@ -84,9 +98,23 @@ const validTrials = Array.from({ length: 10 }, (_, index) => {
   };
 });
 
+const readinessRow = {
+  funcionario_id: 70,
+  reference_date: '2026-08-27',
+  classification: 'operational_review',
+  baseline_sessions: 5,
+  baseline_ready: 1,
+  median_rt_delta_pct: 18,
+  lapse_rate_delta: 0.1,
+  warning_signals_json: '[]',
+  critical_signals_json: '["sleep_critical"]',
+  created_at: '2026-08-27 10:00:00',
+};
+
 describe('FRMS readiness route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.role = 'tripulante';
     countReadinessBaselineSessionsMock.mockResolvedValue(0);
     persistReadinessAssessmentMock.mockResolvedValue({
       assessmentId: 'assessment-1',
@@ -172,5 +200,57 @@ describe('FRMS readiness route', () => {
     expect(response.status).toBe(400);
     expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
     expect(statements.some((item) => item.sql.includes('FROM frms_fadiga_checkin'))).toBe(false);
+  });
+
+  it('returns the tenant-scoped readiness list to FRMS team roles', async () => {
+    authState.role = 'manager';
+    const { db, statements } = createDb(null, [readinessRow]);
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/team?date=2026-08-27'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: [readinessRow],
+      meta: { scope: 'team' },
+    });
+    const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_readiness_assessment'));
+    expect(readinessQuery?.binds).toEqual([7, '2026-08-27']);
+    expect(readinessQuery?.sql).toContain('WHERE empresa_id = ?');
+  });
+
+  it('forces non-team roles to their own readiness assessment', async () => {
+    const { db, statements } = createDb(null, [readinessRow]);
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/team?date=2026-08-27'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: [readinessRow],
+      meta: { scope: 'self', forced_funcionario_id: 70 },
+    });
+    const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_readiness_assessment'));
+    expect(readinessQuery?.binds).toEqual([7, '2026-08-27', 70]);
+    expect(readinessQuery?.sql).toContain('AND funcionario_id = ?');
+  });
+
+  it('rejects invalid team readiness dates before touching D1', async () => {
+    authState.role = 'manager';
+    const { db } = createDb(null, [readinessRow]);
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/team?date=28-08-2026'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    expect((db.prepare as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
   });
 });
