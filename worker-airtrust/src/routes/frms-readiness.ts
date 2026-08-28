@@ -10,9 +10,11 @@ import {
   persistReadinessAssessment,
 } from '../lib/frms/readiness-persistence';
 import { READINESS_PROTOCOL } from '../lib/frms/readiness';
+import recoveryRoutes, { refreshRecoveryAssessmentForActivityDate } from './frms-recovery';
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 router.use('*', auth());
+router.route('/recovery', recoveryRoutes);
 
 type ReadinessContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
 
@@ -34,6 +36,12 @@ const submitSchema = z.object({
     .max(READINESS_PROTOCOL.defaultDurationMs + READINESS_PROTOCOL.allowedDurationDriftMs),
   trials: z.array(trialSchema).min(READINESS_PROTOCOL.minimumTrials).max(300),
 });
+
+function previousDate(value: string): string {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
 
 async function resolveOwnFuncionarioId(c: ReadinessContext, empresaId: number): Promise<number | null> {
   const fromContext = Number(c.get('funcionarioId') || 0);
@@ -252,7 +260,14 @@ router.post('/', async (c) => {
       trials: parsed.data.trials,
     });
 
-    return c.json({ success: true, data: result }, 201);
+    const recovery = await refreshRecoveryAssessmentForActivityDate({
+      db: c.env.DB,
+      empresaId,
+      funcionarioId,
+      referenceDate: previousDate(parsed.data.reference_date),
+    });
+
+    return c.json({ success: true, data: { ...result, recovery_previous_day: recovery } }, 201);
   } catch (error) {
     const code = error instanceof Error ? error.message : 'readiness_persistence_failed';
     if (code === 'invalid_trial_sequence' || code === 'invalid_trial_timing') {
