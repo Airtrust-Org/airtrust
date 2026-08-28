@@ -1,0 +1,29 @@
+name: Harden vigilance render timing
+
+on:
+  push:
+    branches:
+      - feat/frms-operational-readiness-pvt-20260827
+    paths:
+      - .github/workflows/harden-vigilance-render-timing.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/frms-operational-readiness-pvt-20260827
+          fetch-depth: 0
+      - name: Harden rendered-stimulus timing
+        run: python3 .github/scripts/harden_vigilance_render_timing.py
+      - name: Commit patch
+        run: |
+          git config user.name "airtrust-readiness-integrator"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/react-app/pages/frms/OperationalVigilanceTest.tsx
+          git commit -m "fix(frms): measure vigilance from rendered stimulus"
+          git push origin HEAD:feat/frms-operational-readiness-pvt-20260827
