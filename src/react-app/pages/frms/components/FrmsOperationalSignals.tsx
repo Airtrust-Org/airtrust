@@ -9,6 +9,7 @@
  */
 import { AlertTriangle, CheckCircle2, CircleHelp, ShieldAlert } from 'lucide-react';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { useReadinessTeam } from '@/react-app/hooks/useOperationalReadiness';
 import {
   resolveOperationalSignals,
   type FrmsOperationalSignal,
@@ -51,11 +52,35 @@ function ariaLabel(signal: FrmsOperationalSignal): string {
   return `${signal.label}: ${signal.value} — ${TONE_TEXT[signal.tone]}`;
 }
 
+function useAuthoritativeReadinessAdapter(
+  item: FrmsOperationalSnapshotItem,
+  override?: FrmsReadinessAdapter,
+): FrmsReadinessAdapter {
+  const { data: readinessRows } = useReadinessTeam(item.data_operacional);
+  const readiness = readinessRows?.find(
+    (candidate) => Number(candidate.funcionario_id) === Number(item.funcionario_id),
+  );
+
+  if (override) return override;
+
+  return () => {
+    if (!readiness) return null;
+    return {
+      classification: readiness.classification,
+      detail:
+        readiness.classification === 'baseline_building'
+          ? `${readiness.baseline_sessions} sessões válidas no baseline`
+          : undefined,
+    };
+  };
+}
+
 export function useOperationalSignals(
   item: FrmsOperationalSnapshotItem,
   readinessAdapter?: FrmsReadinessAdapter,
 ): FrmsOperationalSignal[] {
-  return resolveOperationalSignals(item, { readinessAdapter });
+  const effectiveReadinessAdapter = useAuthoritativeReadinessAdapter(item, readinessAdapter);
+  return resolveOperationalSignals(item, { readinessAdapter: effectiveReadinessAdapter });
 }
 
 /**
@@ -71,7 +96,7 @@ export function FrmsSignalChips({
   readinessAdapter?: FrmsReadinessAdapter;
   className?: string;
 }) {
-  const signals = resolveOperationalSignals(item, { readinessAdapter });
+  const signals = useOperationalSignals(item, readinessAdapter);
 
   return (
     <ul
@@ -107,7 +132,7 @@ export function FrmsSignalGrid({
   readinessAdapter?: FrmsReadinessAdapter;
   className?: string;
 }) {
-  const signals = resolveOperationalSignals(item, { readinessAdapter });
+  const signals = useOperationalSignals(item, readinessAdapter);
 
   return (
     <ul
