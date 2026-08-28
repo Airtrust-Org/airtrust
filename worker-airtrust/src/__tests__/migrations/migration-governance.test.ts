@@ -102,7 +102,7 @@ describe('migration governance', () => {
     // Ratchet raised 2026-08-27: 0472_frms_operational_readiness.sql
     // extends the regular chain after 0471, while 9999 stays reserved
     // as the only high sentinel.
-    const expectedLatest = 472;
+    const expectedLatest = 473;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

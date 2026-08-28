@@ -23,6 +23,8 @@ type Fixture = {
   aluno?: boolean;
   active?: boolean;
   sessionRoleQueryThrows?: boolean;
+  explicitProfiles?: { perfil: string; ativo: number }[];
+  explicitQueryThrows?: boolean;
 };
 
 function createDb(fx: Fixture) {
@@ -80,7 +82,12 @@ function createDb(fx: Fixture) {
           return { success: true, meta: { changes: 0 } };
         },
         async all<T>() {
-          return { results: [] } as T;
+          if (sql.includes('FROM usuarios_empresas_perfis')) {
+            if (fx.explicitQueryThrows) throw new Error('no such table: usuarios_empresas_perfis');
+            if (fx.sessionRoleQueryThrows) throw new Error('simulated D1 outage reading explicit profiles');
+            return { results: fx.explicitProfiles ?? [] } as unknown as T;
+          }
+          return { results: [] } as unknown as T;
         },
       };
       return statement;
@@ -124,6 +131,44 @@ beforeEach(() => {
 });
 
 describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () => {
+
+  it('perfil removido explicitamente NÃO reaparece por inferência (ALUNO mantido inativo)', async () => {
+    const db = createDb({
+      userId: 10,
+      empresaId: 500,
+      perfil: 'gestor',
+      membershipRole: 'manager',
+      funcionarioId: 77,
+      funcionarioEmpresaId: 500,
+      instrutor: false,
+      aluno: true, // Legacy link exists!
+      explicitProfiles: [
+        { perfil: 'GESTOR', ativo: 1 },
+        { perfil: 'ALUNO', ativo: 0 } // Explicitly removed ALUNO!
+      ]
+    });
+    const roles = await resolveAvailableSessionRoles(db, 10, 500);
+    expect(roles).toEqual(['GESTOR']); // ALUNO should not appear
+  });
+
+  it('perfil adicionado explicitamente aparece mesmo sem legacy link', async () => {
+    const db = createDb({
+      userId: 10,
+      empresaId: 500,
+      perfil: 'student',
+      membershipRole: 'viewer',
+      funcionarioId: 77,
+      funcionarioEmpresaId: 500,
+      instrutor: false, // NO legacy link
+      explicitProfiles: [
+        { perfil: 'GESTOR', ativo: 1 },
+        { perfil: 'INSTRUTOR', ativo: 1 }
+      ]
+    });
+    const roles = await resolveAvailableSessionRoles(db, 10, 500);
+    expect(roles).toEqual(['GESTOR', 'INSTRUTOR']);
+  });
+
   const base = {
     userId: 10,
     empresaId: 500,
