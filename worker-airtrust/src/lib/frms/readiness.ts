@@ -56,6 +56,68 @@ function quantile(sorted: number[], p: number): number | null {
   return sorted[lower] * (1 - weight) + sorted[upper] * weight;
 }
 
+/**
+ * Rebuild every outcome from monotonic timestamps. Client-provided outcome and
+ * reactionTimeMs are treated as transport/debug data only, never as authoritative.
+ */
+export function normalizeReadinessTrials(trials: ReadinessTrial[], durationMs: number): ReadinessTrial[] {
+  const seenSequences = new Set<number>();
+  const maxTimestampMs = Math.round(durationMs) + 5_000;
+
+  return trials.map((trial) => {
+    if (!Number.isInteger(trial.sequence) || trial.sequence <= 0 || seenSequences.has(trial.sequence)) {
+      throw new Error('invalid_trial_sequence');
+    }
+    seenSequences.add(trial.sequence);
+
+    if (!Number.isFinite(trial.scheduledAtMs) || trial.scheduledAtMs < 0 || trial.scheduledAtMs > maxTimestampMs) {
+      throw new Error('invalid_trial_timing');
+    }
+
+    // A response while no stimulus is visible is encoded by the browser with stimulusAtMs = -1.
+    if (trial.stimulusAtMs === -1) {
+      if (trial.responseAtMs == null || !Number.isFinite(trial.responseAtMs) || trial.responseAtMs < 0 || trial.responseAtMs > maxTimestampMs) {
+        throw new Error('invalid_trial_timing');
+      }
+      return {
+        ...trial,
+        reactionTimeMs: 0,
+        outcome: 'false_start',
+      };
+    }
+
+    if (!Number.isFinite(trial.stimulusAtMs) || trial.stimulusAtMs < 0 || trial.stimulusAtMs > maxTimestampMs) {
+      throw new Error('invalid_trial_timing');
+    }
+
+    if (trial.responseAtMs == null) {
+      return {
+        ...trial,
+        reactionTimeMs: null,
+        outcome: 'missed',
+      };
+    }
+
+    if (!Number.isFinite(trial.responseAtMs) || trial.responseAtMs < trial.stimulusAtMs || trial.responseAtMs > maxTimestampMs) {
+      throw new Error('invalid_trial_timing');
+    }
+
+    const reactionTimeMs = Math.round(trial.responseAtMs - trial.stimulusAtMs);
+    const outcome: ReadinessTrialOutcome =
+      reactionTimeMs < READINESS_PROTOCOL.falseStartThresholdMs
+        ? 'false_start'
+        : reactionTimeMs >= READINESS_PROTOCOL.lapseThresholdMs
+          ? 'lapse'
+          : 'response';
+
+    return {
+      ...trial,
+      reactionTimeMs,
+      outcome,
+    };
+  });
+}
+
 export function summarizeReadinessTrials(trials: ReadinessTrial[], durationMs: number): ReadinessSummary {
   const reactionTimes = trials
     .filter((trial) => trial.outcome === 'response' || trial.outcome === 'lapse')
