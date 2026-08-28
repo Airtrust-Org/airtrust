@@ -276,8 +276,8 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       // Treat HTTP OK as success even if the response couldn't be parsed as JSON.
       showToast.success(
         (data && (data.message || data.data?.message)) ||
+          t('settings.users.success.inviteSent') ||
           'Convite enviado com sucesso.',
-
       );
       setShowModal(false);
       setEmail('');
@@ -409,7 +409,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       const token = getAccessToken();
       const acessosPayload = editEmpresasSelecionadas.map((empresaIdValue) => ({
         empresaId: empresaIdValue,
-        role: editPerfis,
+        perfis: editPerfis,
         modulosAtivos: editModulosSelecionados,
       }));
 

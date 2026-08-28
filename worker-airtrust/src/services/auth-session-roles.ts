@@ -122,27 +122,34 @@ export async function resolveAvailableSessionRoles(
 
   if (!row) return [];
 
-  // Query explicit profiles
+  // Estrutura explícita de perfis (migration 0473). Quando ela existe, é a
+  // AUTORIDADE: um perfil removido pelo administrador não pode reaparecer por
+  // inferência das tabelas legadas.
   let explicitProfiles: { perfil: string; ativo: number }[] = [];
   try {
     const { results } = await db
       .prepare(
-        `SELECT perfil, ativo 
-           FROM usuarios_empresas_perfis 
-          WHERE usuario_id = ? 
-            AND empresa_id = ?`
+        `SELECT perfil, ativo
+           FROM usuarios_empresas_perfis
+          WHERE usuario_id = ?
+            AND empresa_id = ?`,
       )
       .bind(userId, empresaId)
       .all<{ perfil: string; ativo: number }>();
     explicitProfiles = results || [];
-  } catch (err: any) {
-    // If the table doesn't exist (e.g. tests without migration), we allow fallback,
-    // otherwise this is a critical infra error and we must fail-closed.
-    if (err.message && err.message.includes('no such table')) {
-      explicitProfiles = [];
-    } else {
+  } catch (err) {
+    // Único caso tolerado: a tabela ainda não existe (ambientes sem a
+    // migration 0473). Aí caímos para a inferência legada de bootstrap.
+    // Qualquer outra falha de banco ao resolver autorização é um erro de
+    // infraestrutura e precisa ser FAIL-CLOSED — propagamos para o
+    // middleware, que responde 503. Nunca tratamos como "usuário sem perfis".
+    const message = err instanceof Error ? err.message : String(err);
+    const tableMissing =
+      /no such table/i.test(message) && /usuarios_empresas_perfis/i.test(message);
+    if (!tableMissing) {
       throw err;
     }
+    explicitProfiles = [];
   }
 
   const roles = new Set<SessionRole>();
