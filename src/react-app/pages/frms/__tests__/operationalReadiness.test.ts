@@ -7,7 +7,7 @@ import {
 import { assessThermalExposure } from '../thermalExposure';
 
 describe('operational readiness', () => {
-  it('summarizes vigilance trials without turning them into an automatic fit/unfit decision', () => {
+  it('summarizes vigilance trials with the same V1 metric definitions used by the Worker', () => {
     const trials: VigilanceTrial[] = [
       { sequence: 1, scheduledAtMs: 1000, stimulusAtMs: 1100, responseAtMs: 1350, reactionTimeMs: 250, outcome: 'response' },
       { sequence: 2, scheduledAtMs: 3000, stimulusAtMs: 3100, responseAtMs: 3650, reactionTimeMs: 550, outcome: 'lapse' },
@@ -18,6 +18,8 @@ describe('operational readiness', () => {
 
     expect(summary.validResponses).toBe(2);
     expect(summary.medianReactionTimeMs).toBe(400);
+    expect(summary.p90ReactionTimeMs).toBe(520);
+    expect(summary.responseSpeedPerSecond).toBe(2.5);
     expect(summary.lapses).toBe(1);
     expect(summary.missed).toBe(1);
 
@@ -29,6 +31,20 @@ describe('operational readiness', () => {
         baselineSessions: 2,
       }).classification,
     ).toBe('baseline_building');
+  });
+
+  it('does not let baseline-building hide strong subjective fatigue signals', () => {
+    const result = deriveReadinessAssessment({
+      kssScore: 8,
+      sleepHours24h: 4.5,
+      vigilance: null,
+      baselineSessions: 0,
+    });
+
+    expect(result.classification).toBe('operational_review');
+    expect(result.signals.map((signal) => signal.code)).toEqual(
+      expect.arrayContaining(['KSS_HIGH', 'SLEEP_LOW', 'BASELINE_BUILDING']),
+    );
   });
 
   it('requires operational review for strong self-reported fatigue signals after baseline is available', () => {
