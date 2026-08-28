@@ -1,0 +1,8 @@
+{
+  "changeId": "usuarios-empresas-perfis-reconciliation-0475",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0475_usuarios_empresas_perfis_reconciliation.sql",
+  "fileHash": "a1b979f8e09e326effe62e4374572df5ea5f7154503d87bcc0b980525cfb9230",
+  "planPath": "worker-airtrust/schema-v2/plans/usuarios-empresas-perfis-reconciliation-0475.md",
+  "planHash": "b049ec54ad878efd592b3d5aaf196dc57e61714890b81c794d781af59b558ecc"
+}
