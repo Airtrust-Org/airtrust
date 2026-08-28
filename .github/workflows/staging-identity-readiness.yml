@@ -13,6 +13,7 @@ permissions:
 env:
   NODE_VERSION: '24'
   STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  CANONICAL_STAGING_SMOKE_EMAIL: qa-agent@staging.airtrust.invalid
 
 jobs:
   smoke-identity:
@@ -43,9 +44,14 @@ jobs:
           const baseUrl = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL);
           const email = String(process.env.STAGING_SMOKE_EMAIL || '').trim().toLowerCase();
           const password = String(process.env.STAGING_SMOKE_PASSWORD || '');
+          const canonicalEmail = String(process.env.CANONICAL_STAGING_SMOKE_EMAIL || '').trim().toLowerCase();
 
           if (!email || !password) {
             console.error('RESULT=STAGING_SMOKE_IDENTITY_MISSING');
+            process.exit(1);
+          }
+          if (email !== canonicalEmail) {
+            console.error('RESULT=STAGING_SMOKE_IDENTITY_NONCANONICAL');
             process.exit(1);
           }
 
