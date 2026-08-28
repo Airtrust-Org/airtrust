@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { httpClient } from '@/react-app/services/http-client';
+import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
 import type { VigilanceTrial } from '@/react-app/pages/frms/operationalReadiness';
 
 export type ReadinessBaseline = {
@@ -56,9 +56,7 @@ type ReadinessEnvelope<T> = {
   message?: string;
 };
 
-function unwrapReadinessResponse<T>(
-  response: Awaited<ReturnType<typeof httpClient.get<ReadinessEnvelope<T>>>>,
-): T {
+function unwrapReadinessResponse<T>(response: ApiResponse<ReadinessEnvelope<T>>): T {
   if (!response.success) {
     throw new Error(response.error || 'Falha ao comunicar com o serviço de prontidão operacional.');
   }
@@ -74,15 +72,7 @@ async function getReadiness<T>(path: string): Promise<T> {
 }
 
 async function postReadiness<T>(path: string, input: unknown): Promise<T> {
-  const response = await httpClient.post<ReadinessEnvelope<T>>(path, input);
-  if (!response.success) {
-    throw new Error(response.error || 'Falha ao comunicar com o serviço de prontidão operacional.');
-  }
-  const payload = response.data;
-  if (!payload?.success) {
-    throw new Error(payload?.message || payload?.error || 'Resposta inválida do serviço de prontidão operacional.');
-  }
-  return payload.data as T;
+  return unwrapReadinessResponse<T>(await httpClient.post<ReadinessEnvelope<T>>(path, input));
 }
 
 export function useReadinessBaseline(referenceDate?: string) {
