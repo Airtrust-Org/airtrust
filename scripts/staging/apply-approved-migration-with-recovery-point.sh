@@ -22,6 +22,7 @@ APPROVED_MIGRATIONS=(
   "0468_sigvoos_shadow_leg_crew_v1.sql"
   "0469_lms_completion_pendencias_snapshots.sql"
   "0470_certificado_validacao_hash_index.sql"
+  "0472_frms_operational_readiness.sql"
 )
 
 apply=false
@@ -126,6 +127,9 @@ validate_postconditions() {
       ;;
     0470_certificado_validacao_hash_index.sql)
       bash scripts/staging/validate-0470-postconditions.sh --target="$db_name"
+      ;;
+    0472_frms_operational_readiness.sql)
+      bash scripts/staging/validate-0472-postconditions.sh --target="$db_name"
       ;;
   esac
 }
