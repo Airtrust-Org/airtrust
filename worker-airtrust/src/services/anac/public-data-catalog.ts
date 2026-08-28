@@ -92,12 +92,12 @@ export const ANAC_PUBLIC_DATA_SOURCES: Readonly<Record<AnacPublicDataSourceId, A
     label: 'Organizações de Manutenção — RBAC 145',
     authority: 'ANAC',
     classification: 'OFFICIAL_PUBLIC_DATA',
-    format: 'CSV_JSON_DIRECTORY',
+    format: 'JSON',
     metadataUrl:
-      'https://www.anac.gov.br/acesso-a-informacao/dados-abertos/areas-de-atuacao/organizacoes-de-manutencao/oficinas-de-manutencao',
+      'https://www.anac.gov.br/acesso-a-informacao/dados-abertos/areas-de-atuacao/organizacoes-de-manutencao/oficinas-de-manutencao/34-oficinas-de-manutencao',
     dataUrl:
-      'https://sistemas.anac.gov.br/dadosabertos/Organizacoes%20de%20Manutencao/',
-    expectedRefresh: 'SOURCE_DEFINED',
+      'https://sistemas.anac.gov.br/dadosabertos/Organiza%C3%A7%C3%B5es%20de%20Manuten%C3%A7%C3%A3o/Oficinas%20de%20Manuten%C3%A7%C3%A3o/OrganizacoesDeManutencao.json',
+    expectedRefresh: 'WEEKLY',
     containsPersonalData: false,
     ingestionPolicy: 'MINIMIZED_PROJECTION_ONLY',
     operationalUses: [
