@@ -24,7 +24,7 @@ is **not** the NASA PVT+ application and the UI states that explicitly.
 
 | Parameter | Value |
 |---|---|
-| Session duration | ~3 minutes (`180000 ms`) |
+| Session sampling duration | ~3 minutes (`180000 ms`) |
 | Fixed stimulus surface | a **red box**, visible the entire session |
 | Waiting state | red box, empty |
 | Stimulus | a **yellow millisecond counter** inside the box |
@@ -33,14 +33,42 @@ is **not** the NASA PVT+ application and the UI states that explicitly.
 | Inter-stimulus interval | ~1 s feedback hold + random 0–3 s = **1–4 s total** |
 | Lapse | reaction time ≥ 500 ms |
 | False start / anticipation | reaction time < 100 ms, or any tap with no counter shown |
-| Response window | counter climbs to 3000 ms; no response by then ⇒ `missed` |
+| Response window | up to **30000 ms** after a presented stimulus |
+| No response | recorded as a **lapse with RT = 30000 ms**, not as a separate `missed` event |
 | Timing source | `performance.now()` only — never `Date.now()` |
 | Focus / visibility loss | invalidates the attempt; no partial data is emitted |
 
-Feedback is display-only. It never mutates the raw trial time or the trial
-`outcome`. Reaction times are always reported in **milliseconds** — microseconds
-are deliberately not shown because the browser, display and human response do not
-support that precision.
+The three-minute value is the **stimulus sampling window**. No new trial is
+started after that boundary. If a stimulus was already visible when the boundary
+is reached, that trial is allowed to resolve normally: the crew member may respond,
+or the 30-second response ceiling may expire. The persisted session duration
+remains the nominal sampling duration, while the last trial retains its real
+reaction-time semantics. This prevents a stimulus shown at the end of the test
+from being silently discarded or reclassified only because the global clock
+crossed 180 seconds.
+
+Feedback is display-only. It never mutates the measured reaction time or the
+trial outcome. Reaction times are always reported in **milliseconds** —
+microseconds are deliberately not shown because the browser, display and human
+response do not support that precision.
+
+## Server-side normalization
+
+The Worker does not trust client-provided labels or reaction times. It rebuilds
+outcomes from monotonic timestamps and the submitted `protocol_version`.
+
+For `airtrust-pvtb-v2`:
+
+- a presented stimulus with `responseAtMs = null` normalizes to `lapse` with
+  `reactionTimeMs = 30000`;
+- a response after the nominal 180-second sampling boundary is accepted when the
+  stimulus itself was presented inside the sampling window, up to the 30-second
+  PVT-B response ceiling;
+- an anticipation remains a false start;
+- a response ≥500 ms remains a lapse.
+
+For historical `airtrust-vigilance-v1`, the old no-response interpretation is
+preserved. The two protocols are not mixed.
 
 ## Baseline isolation (v1 ⇄ v2)
 
@@ -65,7 +93,9 @@ Consequences:
 
 ## Not changed
 
-- Lapse (≥ 500 ms) and false-start (< 100 ms) thresholds are the same as v1.
+- Lapse (≥ 500 ms) and false-start (< 100 ms) thresholds remain the readiness
+  thresholds used by AirTrust.
 - The readiness scoring / classification rules (`deriveReadinessAssessment`) are
-  unchanged; only the stimulus paradigm and the ISI changed.
+  unchanged; the protocol revision changes the stimulus paradigm, interval, and
+  no-response handling.
 - The PVT result still never decides APTO/INAPTO on its own.
