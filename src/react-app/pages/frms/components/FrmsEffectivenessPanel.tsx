@@ -19,8 +19,9 @@ interface EffectivenessComponentes {
 export interface OperationalLoadDetail {
   policy_version: string;
   landings_count: number;
+  landings_evidence_quality?: 'OBSERVED' | 'CONFIRMED_ZERO' | 'INCOMPLETE';
   temperature_max_c: number | null;
-  weather_evidence_quality: 'OBSERVED' | 'INCOMPLETE';
+  weather_evidence_quality: 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
   data_quality: 'COMPLETE' | 'INCOMPLETE';
   landings_delta: number;
   temperature_delta: number;
@@ -61,6 +62,33 @@ function ComponentBar({ label, value, color }: { label: string; value: number; c
       </span>
     </div>
   );
+}
+
+function landingsEvidenceLine(operationalLoad: OperationalLoadDetail): string {
+  if (operationalLoad.landings_evidence_quality === 'INCOMPLETE') {
+    return '• pousos: SIGVOOS indisponível (sem penalidade; evidência incompleta)';
+  }
+  if (operationalLoad.landings_evidence_quality === 'CONFIRMED_ZERO') {
+    return '• 0 pousos: ausência de voo confirmada pelo SIGVOOS';
+  }
+  return `• ${operationalLoad.landings_count} ${
+    operationalLoad.landings_count === 1 ? 'pouso' : 'pousos'
+  }: ${fmtPoints(operationalLoad.landings_delta)}`;
+}
+
+function weatherEvidenceLine(operationalLoad: OperationalLoadDetail): string {
+  if (
+    operationalLoad.weather_evidence_quality === 'OBSERVED' &&
+    operationalLoad.temperature_max_c != null
+  ) {
+    return `• temperatura máxima ${Math.round(operationalLoad.temperature_max_c)} °C: ${fmtPoints(
+      operationalLoad.temperature_delta,
+    )}`;
+  }
+  if (operationalLoad.weather_evidence_quality === 'NOT_APPLICABLE') {
+    return '• temperatura: não aplicável à carga de voo (sem voo confirmado)';
+  }
+  return '• temperatura: evidência meteorológica indisponível (sem penalidade)';
 }
 
 // ── Main ──
@@ -180,25 +208,18 @@ export default function FrmsEffectivenessPanel({
               />
             );
           })}
-          {operationalLoad && operationalLoad.total_delta < 0 && (
+          {operationalLoad && (
             <div className="mt-1 rounded-md bg-slate-50 px-2 py-1.5 text-[10px] leading-4 text-slate-500">
               <p className="font-semibold text-slate-600">
                 Carga operacional: {fmtPoints(operationalLoad.total_delta)}
               </p>
-              <p>
-                • {operationalLoad.landings_count}{' '}
-                {operationalLoad.landings_count === 1 ? 'pouso' : 'pousos'}:{' '}
-                {fmtPoints(operationalLoad.landings_delta)}
-              </p>
-              <p>
-                •{' '}
-                {operationalLoad.weather_evidence_quality === 'OBSERVED' &&
-                operationalLoad.temperature_max_c != null
-                  ? `temperatura máxima ${Math.round(operationalLoad.temperature_max_c)} °C: ${fmtPoints(
-                      operationalLoad.temperature_delta,
-                    )}`
-                  : 'temperatura: evidência meteorológica indisponível (0)'}
-              </p>
+              <p>{landingsEvidenceLine(operationalLoad)}</p>
+              <p>{weatherEvidenceLine(operationalLoad)}</p>
+              {operationalLoad.data_quality === 'INCOMPLETE' && (
+                <p className="mt-0.5 font-medium text-amber-700">
+                  Evidência operacional incompleta — nenhuma condição ausente foi presumida.
+                </p>
+              )}
               <p className="mt-0.5 text-slate-400">
                 Coeficientes internos OPERATIONAL_POLICY_V1 — conservadores e sujeitos a calibração.
               </p>
