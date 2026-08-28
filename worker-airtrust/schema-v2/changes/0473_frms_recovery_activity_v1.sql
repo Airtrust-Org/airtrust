@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS frms_recovery_activity_day (
   no_flight_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (no_flight_confirmed IN (0,1)),
   activity_type TEXT NOT NULL CHECK (activity_type IN (
     'OFF_DUTY','STANDBY_HOME_HOTEL','STANDBY_ONSITE','ADMIN_TRAINING',
-    'DUTY_TRAVEL','MIXED','OTHER','UNKNOWN'
+    'DUTY_TRAVEL','MIXED','OTHER','FLIGHT_NOT_IN_SOURCE','UNKNOWN'
   )),
   standby_location TEXT CHECK (standby_location IS NULL OR standby_location IN (
     'HOME','HOTEL','BASE_AIRPORT','OTHER'
