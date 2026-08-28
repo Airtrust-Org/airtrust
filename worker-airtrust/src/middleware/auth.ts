@@ -15,6 +15,10 @@ import type { Env, Variables, JwtPayload } from '../types';
 import { extractBearerToken, verifyJWT } from '../utils/security';
 import { getUsuariosSchema, hasUsuariosEmpresasTable } from '../utils/db-schema';
 import { normalizeAirtrustRole } from '../utils/role-resolution';
+import {
+  parseSessionRoleFromCookieHeader,
+  resolveRequestedSessionRole,
+} from '../services/auth-session-roles';
 import { unauthorized, serviceUnavailable } from './error-handler';
 
 const USUARIOS_TABLE_SQL =
@@ -438,6 +442,39 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     c.set('userRole', security.role);
     c.set('funcionarioId', payload.funcionario_id ?? null);
 
+    // ============ PERFIL ATIVO DE SESSÃO (multi-perfil) ============
+    // A role canônica acima (usuarios_empresas.role) permanece a fonte de
+    // verdade administrativa e NÃO é sobrescrita no banco. Só quando existe
+    // uma seleção EXPLÍCITA de perfil na sessão é que consultamos o backend
+    // para validá-la contra vínculos reais do usuário neste tenant. Sem
+    // seleção, nenhuma consulta adicional é feita e a role canônica é usada.
+    const selectedSessionRole = parseSessionRoleFromCookieHeader(c.req.header('Cookie'));
+    if (selectedSessionRole) {
+      let activeRole: string | null;
+      try {
+        activeRole = await resolveRequestedSessionRole(
+          c.env.DB,
+          Number(payload.sub),
+          Number(payload.empresa_id ?? 0),
+          selectedSessionRole,
+          security.role,
+        );
+      } catch (e) {
+        console.error('[AUTH] Falha ao validar perfil ativo da sessão:', (e as Error).message);
+        return serviceUnavailable(
+          'Não foi possível validar o perfil ativo da sessão. Tente novamente.',
+          'AUTH_SESSION_ROLE_CHECK_UNAVAILABLE',
+        );
+      }
+      if (!activeRole) {
+        return unauthorized(
+          'O perfil selecionado não está disponível para este usuário nesta empresa.',
+          'SESSION_ROLE_INVALID',
+        );
+      }
+      c.set('userRole', activeRole);
+    }
+
     await next();
   };
   return handler as unknown as MiddlewareHandler<{ Bindings: Env }>;
@@ -512,6 +549,30 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
             c.set('userEmail', payload.email);
             c.set('userRole', effectiveRole);
             c.set('funcionarioId', payload.funcionario_id ?? null);
+
+            // Perfil ativo de sessão: mesma regra do auth() obrigatório, mas
+            // optionalAuth nunca bloqueia — se a seleção não puder ser
+            // validada, mantém-se a role canônica já resolvida acima.
+            const optSessionRole = parseSessionRoleFromCookieHeader(c.req.header('Cookie'));
+            if (optSessionRole) {
+              try {
+                const activeRole = await resolveRequestedSessionRole(
+                  c.env.DB,
+                  Number(payload.sub),
+                  Number(payload.empresa_id ?? 0),
+                  optSessionRole,
+                  effectiveRole,
+                );
+                if (activeRole) {
+                  c.set('userRole', activeRole);
+                }
+              } catch (e) {
+                console.warn(
+                  '[OPTIONAL_AUTH] Falha ao validar perfil ativo da sessão:',
+                  (e as Error).message,
+                );
+              }
+            }
           }
         } catch (e) {
           console.warn('[OPTIONAL_AUTH] Token inválido:', (e as Error).message);
