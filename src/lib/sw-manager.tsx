@@ -20,6 +20,8 @@ import {
 const FRONTEND_VERSION_STORAGE_KEY = 'airtrust-frontend-version';
 const LOGIN_CACHE_RECOVERY_SESSION_KEY = 'airtrust-login-cache-recovery-v4';
 const LOGIN_CACHE_RECOVERY_QUERY_PARAM = 'airtrust_login_recovered';
+const FRONTEND_VERSION_CHECK_INTERVAL_MS = 60 * 1000;
+const FRONTEND_UPDATE_TOAST_ID = 'airtrust-frontend-update-available';
 
 function shouldBypassCleanupForPath(pathname: string): boolean {
   return /^\/lms\/player\//.test(pathname);
@@ -176,8 +178,16 @@ export function useServiceWorkerUpdates(): void {
       }
     };
 
+    const checkVersionWhenActive = () => {
+      if (document.visibilityState === 'visible') {
+        void checkServedFrontendVersion();
+      }
+    };
+
     window.addEventListener('error', onWindowError);
     window.addEventListener('unhandledrejection', onUnhandledRejection);
+    window.addEventListener('focus', checkVersionWhenActive);
+    document.addEventListener('visibilitychange', checkVersionWhenActive);
     void cleanupLegacyServiceWorkers();
 
     const currentVersion = readServedFrontendVersionFromDocument();
@@ -185,17 +195,20 @@ export function useServiceWorkerUpdates(): void {
       sessionStorage.setItem(FRONTEND_VERSION_STORAGE_KEY, currentVersion);
     }
 
+    void checkServedFrontendVersion();
     const manifestCheckInterval = setInterval(
       () => {
-        checkServedFrontendVersion();
+        void checkServedFrontendVersion();
       },
-      60 * 60 * 1000,
+      FRONTEND_VERSION_CHECK_INTERVAL_MS,
     );
 
     return () => {
       clearInterval(manifestCheckInterval);
       window.removeEventListener('error', onWindowError);
       window.removeEventListener('unhandledrejection', onUnhandledRejection);
+      window.removeEventListener('focus', checkVersionWhenActive);
+      document.removeEventListener('visibilitychange', checkVersionWhenActive);
     };
   }, []);
 }
@@ -238,6 +251,7 @@ async function checkServedFrontendVersion(): Promise<void> {
     if (currentVersion && currentVersion !== newVersion) {
       console.log('[App] Versao servida mudou, reload necessario');
       showUpdateNotification();
+      return;
     }
 
     sessionStorage.setItem(FRONTEND_VERSION_STORAGE_KEY, newVersion);
@@ -247,8 +261,6 @@ async function checkServedFrontendVersion(): Promise<void> {
 }
 
 function showUpdateNotification(): void {
-  const toastId = `sw-update-${Date.now()}`;
-
   toast.custom(
     () => (
       <div className="flex flex-col gap-3 bg-white rounded-lg border border-gray-200 p-4 shadow-lg">
@@ -258,14 +270,14 @@ function showUpdateNotification(): void {
         </p>
         <div className="flex gap-2 justify-end">
           <button
-            onClick={() => toast.dismiss(toastId)}
+            onClick={() => toast.dismiss(FRONTEND_UPDATE_TOAST_ID)}
             className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 transition"
           >
             Depois
           </button>
           <button
             onClick={() => {
-              toast.dismiss(toastId);
+              toast.dismiss(FRONTEND_UPDATE_TOAST_ID);
               skipWaitingAndReload();
             }}
             className="px-3 py-1 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 font-medium transition"
@@ -276,6 +288,7 @@ function showUpdateNotification(): void {
       </div>
     ),
     {
+      id: FRONTEND_UPDATE_TOAST_ID,
       duration: Infinity,
       position: 'bottom-right',
     },
