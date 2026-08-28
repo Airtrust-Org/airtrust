@@ -18,7 +18,7 @@ test('0475 is in the staging apply allowlist (apply-approved-migrations.sh)', ()
 
 test('RELEASE_PREFLIGHT_SCOPE includes 0475 as the last code', () => {
   const script = read('scripts/staging/apply-approved-migrations.sh');
-  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0472,0475"/);
+  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0472,0475,0476"/);
 });
 
 test('0475 routes through the recovery-point runner (D1 Time Travel point captured)', () => {
@@ -39,12 +39,12 @@ test('0475 is in the recovery-point allowlist and postcondition dispatch', () =>
 test('staging-d1-schema-change.yml offers 0475 and validates it in the dispatch case', () => {
   const workflow = read('.github/workflows/staging-d1-schema-change.yml');
   assert.match(workflow, /- 0475_usuarios_empresas_perfis_reconciliation\.sql/);
-  assert.match(workflow, /\|0475_usuarios_empresas_perfis_reconciliation\.sql\) ;;/);
+  assert.match(workflow, /\|0475_usuarios_empresas_perfis_reconciliation\.sql/);
 });
 
 test('deploy-staging.yml ledger preflight scope includes 0475', () => {
   const workflow = read('.github/workflows/deploy-staging.yml');
-  assert.match(workflow, /--scope=0467,0468,0469,0470,0472,0475/);
+  assert.match(workflow, /--scope=0467,0468,0469,0470,0472,0475,0476/);
 });
 
 test('validate-0475-postconditions.sh targets only staging and performs zero writes', () => {
