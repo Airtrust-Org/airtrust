@@ -31,11 +31,16 @@ unrelated worktree changes intact; never reset, clean, stash or `git add .`.
 - GitHub Environment `staging` is the persistent source of truth for staging
   secrets and synthetic QA login credentials. Worktrees, clones, shells and
   agent conversations are never credential stores.
+- The canonical general-purpose staging QA login is
+  `qa-agent@staging.airtrust.invalid`. It is synthetic and staging-only.
+- Its durable password is `STAGING_SMOKE_PASSWORD` in GitHub Environment
+  `staging`. Existing workflows that consume `STAGING_SMOKE_EMAIL` must keep
+  that secret equal to the canonical login above.
 - Agents must never ask for a staging password merely because they changed
   worktree or conversation. Diagnose the shared environment first.
 - Never write staging credentials to tracked files, `.env` files inside a
   worktree, prompts, logs, artifacts or issue/PR bodies.
-- General authenticated staging smoke uses `STAGING_SMOKE_EMAIL` and
+- General authenticated staging smoke uses the canonical QA login and
   `STAGING_SMOKE_PASSWORD` from Environment `staging`.
 - Examiner-training synthetic QA uses `QA_EXAMINER_ADMIN_EMAIL` and
   `QA_EXAMINER_ADMIN_PASSWORD` from Environment `staging`. This identity is
@@ -48,6 +53,10 @@ unrelated worktree changes intact; never reset, clean, stash or `git add .`.
   identity readiness workflow and, for Cloudflare credentials, the Cloudflare
   credential doctor. A failed readiness check is an infrastructure/config
   blocker to fix centrally, not a reason to create a per-agent secret copy.
+- To provision/reseed/rotate the canonical general QA identity, use
+  `.github/workflows/provision-staging-standard-identity.yml`. The seed must
+  consume the central password; process-local/random fallback passwords are
+  forbidden because the next agent cannot recover them.
 - Authenticated tests that require a secret must run in a sanctioned GitHub
   Actions/GCB job that reads the Environment secret. If an interactive browser
   test needs the same coverage, add/extend a Playwright or equivalent staging
