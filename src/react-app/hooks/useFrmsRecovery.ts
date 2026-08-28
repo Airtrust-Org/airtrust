@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '@/react-app/lib/apiFetch';
-import { getAccessToken } from '@/react-app/config/api';
+import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
 
 export type RecoveryActivityType =
   | 'OFF_DUTY'
@@ -51,23 +50,39 @@ export interface RecoveryActivityInput {
   segments?: RecoveryActivitySegmentInput[];
 }
 
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getAccessToken();
-  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-  const response = await apiFetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
-    ...init,
-  });
-  const json = (await response.json()) as {
-    success: boolean;
-    data?: T;
-    error?: string;
-    message?: string;
-  };
-  if (!response.ok || !json.success) {
-    throw new Error(json.message || json.error || `Erro HTTP ${response.status}`);
+export interface RecoveryActivityResult {
+  activity: Record<string, unknown>;
+  assessment: Record<string, unknown>;
+  flight: RecoveryFlightSummary;
+  source_discrepancy: boolean;
+}
+
+type RecoveryEnvelope<T> = {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+};
+
+function unwrapRecoveryResponse<T>(response: ApiResponse<RecoveryEnvelope<T>>): T {
+  if (!response.success) {
+    throw new Error(response.error || 'Falha ao comunicar com o serviço de recuperação FRMS.');
   }
-  return json.data as T;
+  const payload = response.data;
+  if (!payload?.success) {
+    throw new Error(
+      payload?.message || payload?.error || 'Resposta inválida do serviço de recuperação FRMS.',
+    );
+  }
+  return payload.data as T;
+}
+
+async function getRecovery<T>(path: string): Promise<T> {
+  return unwrapRecoveryResponse<T>(await httpClient.get<RecoveryEnvelope<T>>(path));
+}
+
+async function postRecovery<T>(path: string, input: unknown): Promise<T> {
+  return unwrapRecoveryResponse<T>(await httpClient.post<RecoveryEnvelope<T>>(path, input));
 }
 
 export function previousOperationalDate(dateYmd?: string): string {
@@ -81,10 +96,11 @@ export function useFrmsRecoveryContext(referenceDate?: string) {
   return useQuery({
     queryKey: ['frms-recovery-context', date],
     queryFn: () =>
-      fetchJson<RecoveryContextData>(
+      getRecovery<RecoveryContextData>(
         `/frms/readiness/recovery/context?date=${encodeURIComponent(date)}`,
       ),
     staleTime: 60_000,
+    enabled: /^\d{4}-\d{2}-\d{2}$/.test(date),
   });
 }
 
@@ -92,17 +108,11 @@ export function useSubmitFrmsRecoveryActivity() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: RecoveryActivityInput) =>
-      fetchJson<{
-        activity: Record<string, unknown>;
-        assessment: Record<string, unknown>;
-        flight: RecoveryFlightSummary;
-        source_discrepancy: boolean;
-      }>('/frms/readiness/recovery/activity', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
+      postRecovery<RecoveryActivityResult>('/frms/readiness/recovery/activity', input),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['frms-recovery-context', variables.reference_date] });
+      queryClient.invalidateQueries({
+        queryKey: ['frms-recovery-context', variables.reference_date],
+      });
       queryClient.invalidateQueries({ queryKey: ['frms-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['frms-ficha'] });
       queryClient.invalidateQueries({ queryKey: ['fadiga-painel'] });

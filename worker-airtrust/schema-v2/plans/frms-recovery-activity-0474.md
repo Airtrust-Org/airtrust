@@ -1,7 +1,7 @@
 # FRMS Recovery Activity V1 — Schema V2 Plan
 
 ## Change
-`0473_frms_recovery_activity_v1.sql`
+`0474_frms_recovery_activity_v1.sql`
 
 ## Purpose
 Add tenant-scoped, additive persistence for classifying days with no SIGVOOS flight activity and for storing evidence of physiological recovery.

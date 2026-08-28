@@ -465,7 +465,11 @@ router.get('/context', async (c) => {
   try {
     activity = await c.env.DB
       .prepare(
-        `SELECT * FROM frms_recovery_activity_day
+        `SELECT id, empresa_id, funcionario_id, reference_date, no_flight_confirmed,
+                activity_type, standby_location, immediate_callout_required,
+                duty_start_time, duty_end_time, total_duty_minutes, source, confidence,
+                notes, created_by, created_at, updated_at, deleted_at
+           FROM frms_recovery_activity_day
           WHERE empresa_id = ? AND funcionario_id = ? AND reference_date = ? AND deleted_at IS NULL
           LIMIT 1`,
       )
@@ -473,7 +477,12 @@ router.get('/context', async (c) => {
       .first<Record<string, unknown>>();
     assessment = await c.env.DB
       .prepare(
-        `SELECT * FROM frms_recovery_assessment
+        `SELECT id, empresa_id, funcionario_id, reference_date, recovery_day_id, checkin_id,
+                readiness_assessment_id, model_version, recovery_state, recovery_confidence,
+                qualifying_recovery_night, consecutive_qualifying_nights, sleep_hours_24h,
+                sleep_target_hours, kss_score, readiness_classification, effectiveness_delta_pct,
+                reasons_json, created_at, updated_at, deleted_at
+           FROM frms_recovery_assessment
           WHERE empresa_id = ? AND funcionario_id = ? AND reference_date = ? AND deleted_at IS NULL
           LIMIT 1`,
       )

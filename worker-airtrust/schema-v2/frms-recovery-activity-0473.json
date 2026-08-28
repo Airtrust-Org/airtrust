@@ -1,8 +1,0 @@
-{
-  "changeId": "frms-recovery-activity-0473",
-  "baselineId": "production-d1-baseline-v2-20260714",
-  "filePath": "worker-airtrust/schema-v2/changes/0473_frms_recovery_activity_v1.sql",
-  "fileHash": "9cc4e049d5f208b2323707e58de35c42655e02e07ecbefa8b4354c1e530ce10c",
-  "planPath": "worker-airtrust/schema-v2/plans/frms-recovery-activity-0473.md",
-  "planHash": "93ecefeb6826bf351e2574be7f783e5262d354888b93d9eb4cfeade0f1008f67"
-}

@@ -1,4 +1,4 @@
--- 0473 — FRMS recovery activity / evidence V1
+-- 0474 — FRMS recovery activity / evidence V1
 --
 -- Additive persistence for classifying no-flight days and storing recovery
 -- evidence. This migration does NOT change the canonical effectiveness score.
