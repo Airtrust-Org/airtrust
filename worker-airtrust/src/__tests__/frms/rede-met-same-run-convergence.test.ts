@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../..');
+const ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 const read = (relativePath: string) => readFileSync(path.join(ROOT, relativePath), 'utf8');
 
 describe('FRMS REDEMET same-run convergence contract', () => {
