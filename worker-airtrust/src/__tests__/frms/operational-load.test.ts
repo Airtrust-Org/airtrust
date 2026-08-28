@@ -50,7 +50,6 @@ describe('Operational Load V1 — temperature factor (observed METAR)', () => {
     expect(result.operational_load_temperature_delta).toBe(0);
     expect(result.weather_evidence_quality).toBe('INCOMPLETE');
     expect(result.data_quality).toBe('INCOMPLETE');
-    // Landings still count.
     expect(result.operational_load_landings_delta).toBe(-2);
     expect(result.operational_load_total_delta).toBe(-2);
   });
@@ -80,7 +79,7 @@ describe('Operational Load V1 — evidence quality', () => {
     expect(result.landings_evidence_quality).toBe('INCOMPLETE');
     expect(result.operational_load_landings_delta).toBe(0);
     expect(result.operational_load_temperature_delta).toBe(-1);
-    expect(result.data_quality).toBe('INCOMPLETE');
+    expect(result.data_quality).toBe('SIGVOOS_UNAVAILABLE');
   });
 });
 
@@ -97,13 +96,11 @@ describe('Operational Load V1 — combined model', () => {
 
   it('clamps the combined delta to the -6 policy floor', () => {
     const result = computeOperationalLoadV1({ landingsCount: 9, temperatureMaxC: 41 });
-    // -4 (landings) + -2 (temp) = -6, already at the floor.
     expect(result.operational_load_total_delta).toBe(OPERATIONAL_LOAD_POLICY_V1.combinedFloorPoints);
     expect(result.operational_load_total_delta).toBe(-6);
   });
 
   it('never goes below the floor even if the raw sum would', () => {
-    // Construct a hypothetical worse-than-floor sum by pushing both to max.
     const raw =
       landingsDeltaPoints(20) + temperatureDeltaPoints(50) + temperatureDeltaPoints(50);
     expect(raw).toBeLessThan(-6);
@@ -112,7 +109,6 @@ describe('Operational Load V1 — combined model', () => {
   });
 
   it('does not add a separate night-landing penalty (no double counting)', () => {
-    // The model only sees a total landings count; day/night split is irrelevant.
     const allDay = computeOperationalLoadV1({ landingsCount: 5, temperatureMaxC: 28 });
     const allNight = computeOperationalLoadV1({ landingsCount: 5, temperatureMaxC: 28 });
     expect(allDay.operational_load_total_delta).toBe(allNight.operational_load_total_delta);
@@ -121,7 +117,6 @@ describe('Operational Load V1 — combined model', () => {
 
   it('rounds fractional temperature deltas to one decimal in the total', () => {
     const result = computeOperationalLoadV1({ landingsCount: 3, temperatureMaxC: 30.4 });
-    // -1 (3 landings) + -0.5 (30–31.9) = -1.5
     expect(result.operational_load_total_delta).toBe(-1.5);
   });
 });
