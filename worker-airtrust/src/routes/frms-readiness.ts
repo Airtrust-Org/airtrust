@@ -9,7 +9,11 @@ import {
   countReadinessBaselineSessions,
   persistReadinessAssessment,
 } from '../lib/frms/readiness-persistence';
-import { READINESS_PROTOCOL } from '../lib/frms/readiness';
+import {
+  READINESS_PROTOCOL,
+  READINESS_PROTOCOL_VERSIONS,
+  isReadinessProtocolVersion,
+} from '../lib/frms/readiness';
 import recoveryRoutes, { refreshRecoveryAssessmentForActivityDate } from './frms-recovery';
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -35,6 +39,7 @@ const submitSchema = z.object({
     .min(READINESS_PROTOCOL.defaultDurationMs - READINESS_PROTOCOL.allowedDurationDriftMs)
     .max(READINESS_PROTOCOL.defaultDurationMs + READINESS_PROTOCOL.allowedDurationDriftMs),
   trials: z.array(trialSchema).min(READINESS_PROTOCOL.minimumTrials).max(300),
+  protocol_version: z.enum(READINESS_PROTOCOL_VERSIONS).optional(),
 });
 
 function previousDate(value: string): string {
@@ -103,10 +108,15 @@ router.get('/baseline', async (c) => {
   if (beforeDate && !/^\d{4}-\d{2}-\d{2}$/.test(beforeDate)) {
     return c.json({ success: false, error: 'invalid_reference_date' }, 400);
   }
+  const protocolParam = c.req.query('protocol');
+  const protocolVersion = isReadinessProtocolVersion(protocolParam)
+    ? protocolParam
+    : READINESS_PROTOCOL.version;
   const sessions = await countReadinessBaselineSessions(
     c.env.DB,
     empresaId,
     funcionarioId,
+    protocolVersion,
     beforeDate || undefined,
   );
   return c.json({
@@ -115,6 +125,7 @@ router.get('/baseline', async (c) => {
       sessions,
       minimum_sessions: READINESS_PROTOCOL.minimumBaselineSessions,
       ready: sessions >= READINESS_PROTOCOL.minimumBaselineSessions,
+      protocol_version: protocolVersion,
     },
   });
 });
@@ -258,6 +269,7 @@ router.post('/', async (c) => {
       sleepHours: Number(checkin.horas_sono),
       durationMs: parsed.data.duration_ms,
       trials: parsed.data.trials,
+      protocolVersion: parsed.data.protocol_version,
     });
 
     const recovery = await refreshRecoveryAssessmentForActivityDate({

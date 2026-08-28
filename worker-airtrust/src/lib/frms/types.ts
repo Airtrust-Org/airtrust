@@ -420,5 +420,22 @@ export interface EffectivenessResult {
     repouso: number;
     hv: number;
     duracao: number;
+    /** Operational Load V1 contribution, as a signed fraction (−0.03 = −3 pts). */
+    carga_operacional: number;
   };
+  /**
+   * Operational Load V1 breakdown (points, not fractions). Present only when the
+   * caller supplied landings/temperature evidence; null keeps the historical
+   * contract for callers that only pass the fatorização.
+   */
+  operational_load: {
+    policy_version: string;
+    landings_count: number;
+    temperature_max_c: number | null;
+    weather_evidence_quality: 'OBSERVED' | 'INCOMPLETE';
+    data_quality: 'COMPLETE' | 'INCOMPLETE';
+    landings_delta: number;
+    temperature_delta: number;
+    total_delta: number;
+  } | null;
 }

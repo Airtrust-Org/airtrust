@@ -1,8 +1,10 @@
 import {
   READINESS_PROTOCOL,
   deriveReadinessAssessment,
+  isReadinessProtocolVersion,
   normalizeReadinessTrials,
   summarizeReadinessTrials,
+  type ReadinessProtocolVersion,
   type ReadinessTrial,
 } from './readiness';
 
@@ -16,6 +18,8 @@ export type PersistReadinessInput = {
   sleepHours: number;
   durationMs: number;
   trials: ReadinessTrial[];
+  /** Defaults to the active protocol. Baseline is isolated per protocol version. */
+  protocolVersion?: string;
 };
 
 export type ReadinessBaselineSnapshot = {
@@ -48,6 +52,7 @@ export async function countReadinessBaselineSessions(
   db: D1Database,
   empresaId: number,
   funcionarioId: number,
+  protocolVersion: string,
   beforeReferenceDate?: string,
 ): Promise<number> {
   const row = await db
@@ -56,11 +61,18 @@ export async function countReadinessBaselineSessions(
          FROM frms_readiness_assessment
         WHERE empresa_id = ?
           AND funcionario_id = ?
+          AND protocol_version = ?
           AND deleted_at IS NULL
           AND response_trials > 0
           AND (? IS NULL OR reference_date < ?)`,
     )
-    .bind(empresaId, funcionarioId, beforeReferenceDate || null, beforeReferenceDate || null)
+    .bind(
+      empresaId,
+      funcionarioId,
+      protocolVersion,
+      beforeReferenceDate || null,
+      beforeReferenceDate || null,
+    )
     .first<{ total: number }>();
 
   return Number(row?.total || 0);
@@ -70,15 +82,23 @@ export async function getReadinessBaselineSnapshot(
   db: D1Database,
   empresaId: number,
   funcionarioId: number,
+  protocolVersion: string,
   beforeReferenceDate?: string,
 ): Promise<ReadinessBaselineSnapshot> {
-  const sessions = await countReadinessBaselineSessions(db, empresaId, funcionarioId, beforeReferenceDate);
+  const sessions = await countReadinessBaselineSessions(
+    db,
+    empresaId,
+    funcionarioId,
+    protocolVersion,
+    beforeReferenceDate,
+  );
   const result = await db
     .prepare(
       `SELECT median_rt_ms, lapse_rate
          FROM frms_readiness_assessment
         WHERE empresa_id = ?
           AND funcionario_id = ?
+          AND protocol_version = ?
           AND deleted_at IS NULL
           AND response_trials > 0
           AND (? IS NULL OR reference_date < ?)
@@ -88,6 +108,7 @@ export async function getReadinessBaselineSnapshot(
     .bind(
       empresaId,
       funcionarioId,
+      protocolVersion,
       beforeReferenceDate || null,
       beforeReferenceDate || null,
       READINESS_PROTOCOL.minimumBaselineSessions,
@@ -121,6 +142,10 @@ export async function persistReadinessAssessment(
   if (!Number.isFinite(input.durationMs) || input.durationMs <= 0) throw new Error('invalid_duration');
   if (!Array.isArray(input.trials) || input.trials.length === 0) throw new Error('readiness_trials_required');
 
+  const protocolVersion: ReadinessProtocolVersion = isReadinessProtocolVersion(input.protocolVersion)
+    ? input.protocolVersion
+    : READINESS_PROTOCOL.version;
+
   const normalizedTrials = normalizeReadinessTrials(input.trials, input.durationMs);
 
   const existing = await db
@@ -140,6 +165,7 @@ export async function persistReadinessAssessment(
     db,
     input.empresaId,
     input.funcionarioId,
+    protocolVersion,
     input.referenceDate,
   );
   const summary = summarizeReadinessTrials(normalizedTrials, input.durationMs);
@@ -192,7 +218,7 @@ export async function persistReadinessAssessment(
         input.funcionarioId,
         input.checkinId,
         input.referenceDate,
-        READINESS_PROTOCOL.version,
+        protocolVersion,
         READINESS_PROTOCOL.scoringVersion,
         assessment.classification,
         assessment.baselineSessions,

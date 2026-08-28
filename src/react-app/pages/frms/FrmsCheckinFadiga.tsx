@@ -601,6 +601,7 @@ export default function FrmsCheckinFadiga() {
         reference_date: today,
         duration_ms: vigilanceResult.summary.durationMs,
         trials: vigilanceResult.trials,
+        protocol_version: vigilanceResult.summary.protocolVersion,
       });
 
       toast.success('Check-in de fadiga e teste de atenção registrados com sucesso');

@@ -1,0 +1,8 @@
+{
+  "changeId": "frms-pvtb-v2-operational-load-0476",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0476_frms_pvtb_v2_operational_load.sql",
+  "fileHash": "6c708bdf3309bbac9382ce549909e2d6488dcafb4067e33e67485f100c24fcd8",
+  "planPath": "worker-airtrust/schema-v2/plans/frms-pvtb-v2-operational-load-0476.md",
+  "planHash": "8d798411cb1d9d1043d17496d8f6ab2e0af7ede31ec1670eb85993cc164e4d9d"
+}

@@ -25,6 +25,7 @@ import {
   runFrmsIogpShadowForJornada,
   type FrmsIogpShadowCallerEnv,
 } from './frms-iogp-shadow-caller';
+import { resolveOperationalLoadForJornada } from './operational-load-resolver';
 // ────────────────────────────────────────────────────────
 // Período embarcado
 // ────────────────────────────────────────────────────────
@@ -269,17 +270,46 @@ export async function recalcularPipeline(
     diaDoCiclo: periodoEmbarcado?.dia ?? null,
   });
 
+  // 4a2. Carga Operacional V1 (OPERATIONAL_POLICY_V1): pousos SIGVOOS
+  // deduplicados por etapa + temperatura máxima observada (METAR/REDEMET) já
+  // derivada pelo pipeline de evidência. Sem evidência meteorológica a
+  // temperatura fica INCOMPLETE (nunca inventada). Falha aqui não pode
+  // interromper o recálculo canônico.
+  let operationalLoad = null as Awaited<
+    ReturnType<typeof resolveOperationalLoadForJornada>
+  > | null;
+  try {
+    const empresaIdParaCarga = await resolveTripulanteEmpresaId(db, jornada.tripulante_id);
+    operationalLoad = await resolveOperationalLoadForJornada(db, {
+      empresaId: empresaIdParaCarga,
+      funcionarioId: Number(jornada.tripulante_id),
+      dataYmd: jornada.data,
+      jornadaId: jornada.id,
+    });
+  } catch (error) {
+    console.warn('[FRMS] operational load resolve failed', {
+      jornadaId: jornada.id,
+      error: error instanceof Error ? error.message : String(error ?? ''),
+    });
+    operationalLoad = null;
+  }
+
   // 4b. Calcular índice estimado de effectiveness (proxy local)
-  const effectResult = calcEffectiveness(fatResult, limites, {
-    hora_apresentacao: jornada.hora_apresentacao,
-    hora_primeira_decolagem: jornada.hora_primeira_decolagem,
-    hora_ultimo_pouso: jornada.hora_ultimo_pouso,
-    hora_corte_motor: jornada.hora_corte_motor,
-    hora_termino: jornada.hora_termino,
-    hora_dormiu: jornada.hora_dormiu ?? null,
-    dia_periodo_embarcado: periodoEmbarcado?.dia ?? null,
-    total_dias_periodo: periodoEmbarcado?.total ?? null,
-  });
+  const effectResult = calcEffectiveness(
+    fatResult,
+    limites,
+    {
+      hora_apresentacao: jornada.hora_apresentacao,
+      hora_primeira_decolagem: jornada.hora_primeira_decolagem,
+      hora_ultimo_pouso: jornada.hora_ultimo_pouso,
+      hora_corte_motor: jornada.hora_corte_motor,
+      hora_termino: jornada.hora_termino,
+      hora_dormiu: jornada.hora_dormiu ?? null,
+      dia_periodo_embarcado: periodoEmbarcado?.dia ?? null,
+      total_dias_periodo: periodoEmbarcado?.total ?? null,
+    },
+    operationalLoad,
+  );
 
   const timestamp = now();
 
@@ -368,7 +398,10 @@ export async function recalcularPipeline(
       fatResult.total_fatorizado_hv,
       effectResult.effectiveness_pct,
       effectResult.nivel,
-      JSON.stringify(effectResult.componentes),
+      JSON.stringify({
+        ...effectResult.componentes,
+        operational_load: effectResult.operational_load,
+      }),
       effectResult.hora_despertar,
       effectResult.hora_inicio_sono,
       effectResult.duracao_sono_efetiva_min,
@@ -382,6 +415,43 @@ export async function recalcularPipeline(
       timestamp,
     )
     .run();
+
+  // Carga Operacional V1: colunas dedicadas (migration 0476). Best-effort para
+  // ambientes que ainda não aplicaram a migration — o JSON de componentes já
+  // carrega o mesmo detalhamento acima.
+  if (effectResult.operational_load) {
+    try {
+      const load = effectResult.operational_load;
+      await db
+        .prepare(
+          `UPDATE frms_fatorizacao_jornada
+              SET operational_load_policy_version = ?,
+                  operational_load_landings_count = ?,
+                  operational_load_temperature_max_c = ?,
+                  operational_load_weather_quality = ?,
+                  operational_load_data_quality = ?,
+                  operational_load_landings_delta = ?,
+                  operational_load_temperature_delta = ?,
+                  operational_load_total_delta = ?
+            WHERE id = ? AND deleted_at IS NULL`,
+        )
+        .bind(
+          load.policy_version,
+          load.landings_count,
+          load.temperature_max_c,
+          load.weather_evidence_quality,
+          load.data_quality,
+          load.landings_delta,
+          load.temperature_delta,
+          load.total_delta,
+          fatId,
+        )
+        .run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (!message.includes('no such column')) throw error;
+    }
+  }
 
   const fatorizacao: FatorizacaoRow = {
     id: fatId,

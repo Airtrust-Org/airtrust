@@ -1,6 +1,14 @@
+/**
+ * Active protocol: `airtrust-pvtb-v2` — AirTrust implementation of the published
+ * PVT-B paradigm (Basner, Mollicone & Dinges 2011; PsyToolkit PVT-B). The
+ * historical `airtrust-vigilance-v1` (blue-dot stimulus, 2–10 s ISI) is only kept
+ * for interpreting already-stored sessions. Individual baseline is computed per
+ * protocol version, so v1 sessions never contribute to a v2 baseline.
+ */
 export const READINESS_PROTOCOL = {
-  version: 'airtrust-vigilance-v1',
+  version: 'airtrust-pvtb-v2',
   scoringVersion: 'readiness-score-v1',
+  legacyVersions: ['airtrust-vigilance-v1'] as const,
   defaultDurationMs: 180_000,
   allowedDurationDriftMs: 15_000,
   minimumTrials: 10,
@@ -8,6 +16,19 @@ export const READINESS_PROTOCOL = {
   falseStartThresholdMs: 100,
   minimumBaselineSessions: 5,
 } as const;
+
+export const READINESS_PROTOCOL_VERSIONS = [
+  READINESS_PROTOCOL.version,
+  ...READINESS_PROTOCOL.legacyVersions,
+] as const;
+
+export type ReadinessProtocolVersion = (typeof READINESS_PROTOCOL_VERSIONS)[number];
+
+export function isReadinessProtocolVersion(value: unknown): value is ReadinessProtocolVersion {
+  return (
+    typeof value === 'string' && (READINESS_PROTOCOL_VERSIONS as readonly string[]).includes(value)
+  );
+}
 
 export type ReadinessTrialOutcome = 'response' | 'lapse' | 'false_start' | 'missed';
 

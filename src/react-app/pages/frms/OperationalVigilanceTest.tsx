@@ -4,7 +4,7 @@ import {
   summarizeVigilanceTrials,
   type VigilanceSummary,
   type VigilanceTrial,
-  VIGILANCE_PROTOCOL,
+  PVTB_V2_PROTOCOL,
 } from './operationalReadiness';
 
 type Phase = 'instructions' | 'waiting' | 'stimulus' | 'invalidated' | 'complete';
@@ -33,34 +33,34 @@ function feedbackCopy(feedback: TrialFeedback): { value: string; helper: string;
   if (feedback.outcome === 'false_start') {
     return {
       value: 'Antecipado',
-      helper: 'Espere o estímulo aparecer.',
-      className: 'text-red-600',
+      helper: 'Espere o contador amarelo aparecer.',
+      className: 'text-white',
     };
   }
   if (feedback.outcome === 'missed') {
     return {
       value: 'Sem resposta',
-      helper: 'Mantenha a atenção no próximo estímulo.',
-      className: 'text-amber-700',
+      helper: 'Mantenha a atenção na caixa vermelha.',
+      className: 'text-white',
     };
   }
   const reactionTimeMs = feedback.reactionTimeMs == null ? '—' : `${feedback.reactionTimeMs} ms`;
   if (feedback.outcome === 'lapse') {
     return {
       value: reactionTimeMs,
-      helper: 'Resposta acima de 500 ms.',
-      className: 'text-amber-700',
+      helper: 'Resposta lenta (≥ 500 ms).',
+      className: 'text-amber-200',
     };
   }
   return {
     value: reactionTimeMs,
     helper: 'Tempo da última resposta.',
-    className: 'text-blue-700',
+    className: 'text-white',
   };
 }
 
 export default function OperationalVigilanceTest({
-  durationMs = VIGILANCE_PROTOCOL.defaultDurationMs,
+  durationMs = PVTB_V2_PROTOCOL.defaultDurationMs,
   onComplete,
   onCancel,
 }: OperationalVigilanceTestProps) {
@@ -68,6 +68,8 @@ export default function OperationalVigilanceTest({
   const [elapsedMs, setElapsedMs] = useState(0);
   const [invalidReason, setInvalidReason] = useState<string | null>(null);
   const [trialFeedback, setTrialFeedback] = useState<TrialFeedback | null>(null);
+  // Yellow PVT-B counter: milliseconds since the current stimulus appeared.
+  const [counterMs, setCounterMs] = useState(0);
   const trialsRef = useRef<VigilanceTrial[]>([]);
   const startedAtRef = useRef<number | null>(null);
   const scheduledAtRef = useRef<number | null>(null);
@@ -75,9 +77,17 @@ export default function OperationalVigilanceTest({
   const waitingTimerRef = useRef<number | null>(null);
   const responseTimerRef = useRef<number | null>(null);
   const feedbackTimerRef = useRef<number | null>(null);
+  const counterTimerRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const stimulusRafRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
+
+  const stopCounter = useCallback(() => {
+    if (counterTimerRef.current != null) {
+      window.clearInterval(counterTimerRef.current);
+      counterTimerRef.current = null;
+    }
+  }, []);
 
   const cleanupTimers = useCallback(() => {
     if (waitingTimerRef.current != null) window.clearTimeout(waitingTimerRef.current);
@@ -85,12 +95,13 @@ export default function OperationalVigilanceTest({
     if (feedbackTimerRef.current != null) window.clearTimeout(feedbackTimerRef.current);
     if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
     if (stimulusRafRef.current != null) window.cancelAnimationFrame(stimulusRafRef.current);
+    stopCounter();
     waitingTimerRef.current = null;
     responseTimerRef.current = null;
     feedbackTimerRef.current = null;
     rafRef.current = null;
     stimulusRafRef.current = null;
-  }, []);
+  }, [stopCounter]);
 
   const showTrialFeedback = useCallback((feedback: TrialFeedback) => {
     if (feedbackTimerRef.current != null) window.clearTimeout(feedbackTimerRef.current);
@@ -98,7 +109,7 @@ export default function OperationalVigilanceTest({
     feedbackTimerRef.current = window.setTimeout(() => {
       setTrialFeedback(null);
       feedbackTimerRef.current = null;
-    }, 900);
+    }, PVTB_V2_PROTOCOL.feedbackHoldMs);
   }, []);
 
   const finish = useCallback(() => {
@@ -106,8 +117,14 @@ export default function OperationalVigilanceTest({
     finishedRef.current = true;
     cleanupTimers();
     setTrialFeedback(null);
-    const actualDuration = startedAtRef.current == null ? durationMs : performance.now() - startedAtRef.current;
-    const summary = summarizeVigilanceTrials(trialsRef.current, Math.round(actualDuration));
+    setCounterMs(0);
+    const actualDuration =
+      startedAtRef.current == null ? durationMs : performance.now() - startedAtRef.current;
+    const summary = summarizeVigilanceTrials(
+      trialsRef.current,
+      Math.round(actualDuration),
+      PVTB_V2_PROTOCOL.version,
+    );
     setPhase('complete');
     onComplete({ summary, trials: trialsRef.current.map((trial) => ({ ...trial })) });
   }, [cleanupTimers, durationMs, onComplete]);
@@ -121,8 +138,13 @@ export default function OperationalVigilanceTest({
     }
 
     setPhase('waiting');
+    setCounterMs(0);
+    stopCounter();
     stimulusAtRef.current = null;
-    const delay = randomDelay(VIGILANCE_PROTOCOL.minInterStimulusMs, VIGILANCE_PROTOCOL.maxInterStimulusMs);
+    // PVT-B inter-stimulus interval: ~1 s feedback hold + random 0–3 s delay.
+    const delay =
+      PVTB_V2_PROTOCOL.feedbackHoldMs +
+      randomDelay(PVTB_V2_PROTOCOL.minPostFeedbackDelayMs, PVTB_V2_PROTOCOL.maxPostFeedbackDelayMs);
     scheduledAtRef.current = now + delay;
     waitingTimerRef.current = window.setTimeout(() => {
       if (finishedRef.current || startedAtRef.current == null) return;
@@ -141,12 +163,25 @@ export default function OperationalVigilanceTest({
         if (finishedRef.current || startedAtRef.current == null) return;
         const stimulusAt = performance.now();
         stimulusAtRef.current = stimulusAt;
+        setCounterMs(0);
+        // Yellow counter ticks up ~every 50 ms; it is display only. The reaction
+        // time is always measured from performance.now() at the response.
+        counterTimerRef.current = window.setInterval(() => {
+          if (stimulusAtRef.current == null) {
+            stopCounter();
+            return;
+          }
+          setCounterMs(Math.round(performance.now() - stimulusAtRef.current));
+        }, PVTB_V2_PROTOCOL.counterTickMs);
         responseTimerRef.current = window.setTimeout(() => {
           const currentStimulusAt = stimulusAtRef.current;
           if (currentStimulusAt == null) return;
+          stopCounter();
           trialsRef.current.push({
             sequence: trialsRef.current.length + 1,
-            scheduledAtMs: Math.round((scheduledAtRef.current ?? currentStimulusAt) - (startedAtRef.current ?? 0)),
+            scheduledAtMs: Math.round(
+              (scheduledAtRef.current ?? currentStimulusAt) - (startedAtRef.current ?? 0),
+            ),
             stimulusAtMs: Math.round(currentStimulusAt - (startedAtRef.current ?? 0)),
             responseAtMs: null,
             reactionTimeMs: null,
@@ -155,10 +190,10 @@ export default function OperationalVigilanceTest({
           stimulusAtRef.current = null;
           showTrialFeedback({ outcome: 'missed', reactionTimeMs: null });
           scheduleNext();
-        }, VIGILANCE_PROTOCOL.responseWindowMs);
+        }, PVTB_V2_PROTOCOL.responseWindowMs);
       });
     }, delay);
-  }, [durationMs, finish, showTrialFeedback]);
+  }, [durationMs, finish, showTrialFeedback, stopCounter]);
 
   const start = useCallback(() => {
     cleanupTimers();
@@ -166,23 +201,28 @@ export default function OperationalVigilanceTest({
     finishedRef.current = false;
     setInvalidReason(null);
     setTrialFeedback(null);
+    setCounterMs(0);
     startedAtRef.current = performance.now();
     setElapsedMs(0);
     scheduleNext();
   }, [cleanupTimers, scheduleNext]);
 
-  const invalidate = useCallback((reason: string) => {
-    if (startedAtRef.current == null || finishedRef.current) return;
-    finishedRef.current = true;
-    cleanupTimers();
-    trialsRef.current = [];
-    startedAtRef.current = null;
-    stimulusAtRef.current = null;
-    scheduledAtRef.current = null;
-    setTrialFeedback(null);
-    setInvalidReason(reason);
-    setPhase('invalidated');
-  }, [cleanupTimers]);
+  const invalidate = useCallback(
+    (reason: string) => {
+      if (startedAtRef.current == null || finishedRef.current) return;
+      finishedRef.current = true;
+      cleanupTimers();
+      trialsRef.current = [];
+      startedAtRef.current = null;
+      stimulusAtRef.current = null;
+      scheduledAtRef.current = null;
+      setTrialFeedback(null);
+      setCounterMs(0);
+      setInvalidReason(reason);
+      setPhase('invalidated');
+    },
+    [cleanupTimers],
+  );
 
   useEffect(() => {
     const onVisibilityChange = () => {
@@ -219,11 +259,12 @@ export default function OperationalVigilanceTest({
     }
 
     if (responseTimerRef.current != null) window.clearTimeout(responseTimerRef.current);
+    stopCounter();
     const reactionTimeMs = now - stimulusAtRef.current;
     const outcome: VigilanceTrial['outcome'] =
-      reactionTimeMs < VIGILANCE_PROTOCOL.falseStartThresholdMs
+      reactionTimeMs < PVTB_V2_PROTOCOL.falseStartThresholdMs
         ? 'false_start'
-        : reactionTimeMs >= VIGILANCE_PROTOCOL.lapseThresholdMs
+        : reactionTimeMs >= PVTB_V2_PROTOCOL.lapseThresholdMs
           ? 'lapse'
           : 'response';
     const roundedReactionTimeMs = Math.round(reactionTimeMs);
@@ -239,7 +280,7 @@ export default function OperationalVigilanceTest({
     stimulusAtRef.current = null;
     showTrialFeedback({ outcome, reactionTimeMs: roundedReactionTimeMs });
     scheduleNext();
-  }, [phase, scheduleNext, showTrialFeedback]);
+  }, [phase, scheduleNext, showTrialFeedback, stopCounter]);
 
   useEffect(() => {
     if (phase === 'instructions' || phase === 'complete' || startedAtRef.current == null) return;
@@ -261,47 +302,61 @@ export default function OperationalVigilanceTest({
 
   useEffect(() => cleanupTimers, [cleanupTimers]);
 
-  const progress = useMemo(() => Math.min(100, Math.round((elapsedMs / durationMs) * 100)), [durationMs, elapsedMs]);
+  const progress = useMemo(
+    () => Math.min(100, Math.round((elapsedMs / durationMs) * 100)),
+    [durationMs, elapsedMs],
+  );
   const secondsRemaining = Math.max(0, Math.ceil((durationMs - elapsedMs) / 1000));
   const feedback = trialFeedback ? feedbackCopy(trialFeedback) : null;
 
   if (phase === 'instructions') {
     return (
-      <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="vigilance-title">
+      <section
+        className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        aria-labelledby="vigilance-title"
+      >
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Etapa objetiva</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Etapa objetiva</p>
           <h2 id="vigilance-title" className="mt-1 text-xl font-semibold text-slate-900">
-            Teste breve de vigilância psicomotora (PVT)
+            Teste breve de vigilância psicomotora (PVT-B)
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Toque ou clique apenas quando o círculo azul aparecer. Responda o mais rápido possível sem antecipar.
-            Após cada resposta, o seu tempo aparece em milissegundos (ms). O resultado complementa o check-in de fadiga
-            e não determina aptidão para voo de forma isolada.
+            Uma caixa vermelha fica visível o tempo todo. Quando um contador amarelo aparecer dentro
+            dela, toque ou clique o mais rápido possível — o contador mostra os milissegundos que
+            estão passando. Não responda antes do contador aparecer. O resultado complementa o
+            check-in de fadiga e não determina aptidão para voo de forma isolada.
           </p>
         </div>
         <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-          Duração prevista: cerca de {Math.round(durationMs / 60_000)} minutos. Mantenha a tela ativa e evite conversar ou alternar de aplicativo durante o teste.
+          Duração prevista: cerca de {Math.round(durationMs / 60_000)} minutos. Mantenha a tela ativa
+          e evite conversar ou alternar de aplicativo durante o teste.
         </div>
-        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs leading-5 text-slate-600">
-          <p className="font-semibold text-slate-800">Por que este teste?</p>
+        <div className="rounded-xl border border-red-100 bg-red-50/60 p-4 text-xs leading-5 text-slate-600">
+          <p className="font-semibold text-slate-800">Sobre este teste</p>
           <p className="mt-1">
-            O Psychomotor Vigilance Task (PVT) é uma referência consolidada para medir atenção sustentada e efeitos da fadiga.
-            A NASA usa PVT/PVT+ em pesquisas de fadiga e desempenho, inclusive em contexto aeroespacial. Há também versão breve
-            de 3 minutos descrita por Basner, Mollicone e Dinges (2011). O protocolo AirTrust é uma implementação independente,
-            inspirada nessa metodologia, e não é o aplicativo NASA PVT+.
+            O Psychomotor Vigilance Task (PVT) é uma referência consolidada para medir atenção
+            sustentada e os efeitos da fadiga. Esta é a versão breve de 3 minutos (PVT-B) descrita por
+            Basner, Mollicone e Dinges (2011), <em>Acta Astronautica</em> 69, 949–959, e reproduzida
+            na biblioteca do PsyToolkit. O AirTrust implementa o paradigma publicado de forma
+            independente — caixa vermelha fixa, contador amarelo como estímulo, intervalos de 1–4 s —
+            e não é o aplicativo NASA PVT+.
           </p>
           <a
-            href="https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/"
+            href="https://www.psytoolkit.org/experiment-library/pvtb.html"
             target="_blank"
             rel="noreferrer"
-            className="mt-2 inline-flex font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+            className="mt-2 inline-flex font-semibold text-red-700 underline decoration-red-300 underline-offset-2 hover:text-red-800"
           >
-            Referência: NASA Fatigue Countermeasures Laboratory
+            Referência: PsyToolkit — PVT-B
           </a>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button onClick={start}>Iniciar teste</Button>
-          {onCancel ? <Button variant="secondary" onClick={onCancel}>Cancelar</Button> : null}
+          {onCancel ? (
+            <Button variant="secondary" onClick={onCancel}>
+              Cancelar
+            </Button>
+          ) : null}
         </div>
       </section>
     );
@@ -312,8 +367,13 @@ export default function OperationalVigilanceTest({
       <section className="space-y-4 rounded-2xl border border-amber-300 bg-amber-50 p-5" role="alert">
         <div>
           <p className="font-semibold text-amber-900">Teste interrompido</p>
-          <p className="mt-1 text-sm text-amber-800">{invalidReason || 'O teste perdeu as condições necessárias de medição.'}</p>
-          <p className="mt-2 text-xs text-amber-700">Nenhum resultado parcial será usado. Reinicie quando puder manter esta tela ativa até o final.</p>
+          <p className="mt-1 text-sm text-amber-800">
+            {invalidReason || 'O teste perdeu as condições necessárias de medição.'}
+          </p>
+          <p className="mt-2 text-xs text-amber-700">
+            Nenhum resultado parcial será usado. Reinicie quando puder manter esta tela ativa até o
+            final.
+          </p>
         </div>
         <Button onClick={start}>Reiniciar teste</Button>
       </section>
@@ -324,7 +384,9 @@ export default function OperationalVigilanceTest({
     return (
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
         <p className="font-semibold text-emerald-900">Teste concluído</p>
-        <p className="mt-1 text-sm text-emerald-800">O resultado está pronto para ser enviado junto com o check-in desta jornada.</p>
+        <p className="mt-1 text-sm text-emerald-800">
+          O resultado está pronto para ser enviado junto com o check-in desta jornada.
+        </p>
       </section>
     );
   }
@@ -335,8 +397,11 @@ export default function OperationalVigilanceTest({
         <span>Teste em andamento</span>
         <span>{secondsRemaining}s restantes</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`Progresso ${progress}%`}>
-        <div className="h-full bg-blue-600 transition-[width]" style={{ width: `${progress}%` }} />
+      <div
+        className="h-2 overflow-hidden rounded-full bg-slate-100"
+        aria-label={`Progresso ${progress}%`}
+      >
+        <div className="h-full bg-red-600 transition-[width]" style={{ width: `${progress}%` }} />
       </div>
       <button
         type="button"
@@ -349,26 +414,38 @@ export default function OperationalVigilanceTest({
           event.preventDefault();
           respond();
         }}
-        className={`flex min-h-72 w-full items-center justify-center rounded-2xl border-2 transition-colors focus:outline-none focus:ring-4 focus:ring-blue-200 ${
+        data-testid="pvtb-box"
+        data-phase={phase}
+        className="flex min-h-72 w-full items-center justify-center rounded-2xl border-4 border-red-700 bg-red-600 transition-colors focus:outline-none focus:ring-4 focus:ring-red-200"
+        aria-label={
           phase === 'stimulus'
-            ? 'border-blue-600 bg-blue-50'
-            : 'border-slate-200 bg-slate-50'
-        }`}
-        aria-label={phase === 'stimulus' ? 'Responder ao estímulo agora' : 'Área do teste; aguarde o estímulo'}
+            ? 'Contador em andamento; responda agora'
+            : 'Caixa do teste; aguarde o contador amarelo'
+        }
       >
         {phase === 'stimulus' ? (
-          <span className="h-24 w-24 rounded-full bg-blue-600 shadow-lg" aria-hidden="true" />
+          <span
+            data-testid="pvtb-counter"
+            className="font-mono text-6xl font-bold tabular-nums text-yellow-300 drop-shadow"
+            aria-live="off"
+          >
+            {counterMs}
+          </span>
         ) : feedback ? (
-          <span className="text-center" aria-live="polite">
-            <span className={`block text-4xl font-bold tabular-nums ${feedback.className}`}>{feedback.value}</span>
-            <span className="mt-2 block text-xs font-medium text-slate-500">{feedback.helper}</span>
+          <span className="px-4 text-center" aria-live="polite">
+            <span className={`block text-4xl font-bold tabular-nums ${feedback.className}`}>
+              {feedback.value}
+            </span>
+            <span className="mt-2 block text-xs font-medium text-red-100">{feedback.helper}</span>
           </span>
         ) : (
-          <span className="text-sm font-medium text-slate-400">Aguarde…</span>
+          <span className="text-sm font-medium text-red-200/80">Aguarde o contador…</span>
         )}
       </button>
       <p className="text-center text-xs text-slate-500">
-        O tempo é mostrado em milissegundos. Microsegundos não são exibidos porque sugeririam uma precisão que o navegador e a resposta humana não sustentam.
+        Responda assim que o contador amarelo aparecer. O tempo é medido em milissegundos;
+        microssegundos não são exibidos porque sugeririam uma precisão que o navegador e a resposta
+        humana não sustentam.
       </p>
     </section>
   );

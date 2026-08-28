@@ -12,14 +12,32 @@ interface EffectivenessComponentes {
   repouso: number;
   hv: number;
   duracao: number;
+  /** Operational Load V1 (OPERATIONAL_POLICY_V1), signed fraction. Optional for legacy rows. */
+  carga_operacional?: number;
+}
+
+export interface OperationalLoadDetail {
+  policy_version: string;
+  landings_count: number;
+  temperature_max_c: number | null;
+  weather_evidence_quality: 'OBSERVED' | 'INCOMPLETE';
+  data_quality: 'COMPLETE' | 'INCOMPLETE';
+  landings_delta: number;
+  temperature_delta: number;
+  total_delta: number;
 }
 
 interface Props {
   effectiveness_pct: number;
   effectiveness_nivel?: string;
   componentes?: EffectivenessComponentes | null;
+  operationalLoad?: OperationalLoadDetail | null;
   config: Partial<Record<string, number>> | null;
   compact?: boolean;
+}
+
+function fmtPoints(points: number): string {
+  return points.toFixed(1).replace('.', ',');
 }
 
 // ── Component bar for decomposition ──
@@ -51,6 +69,7 @@ export default function FrmsEffectivenessPanel({
   effectiveness_pct,
   effectiveness_nivel,
   componentes,
+  operationalLoad,
   config,
   compact = false,
 }: Props) {
@@ -95,7 +114,11 @@ export default function FrmsEffectivenessPanel({
     repouso: 'Repouso',
     hv: 'Horas Voo',
     duracao: 'Duração',
+    carga_operacional: 'Carga Op.',
   };
+  const componentKeys = (Object.keys(componentLabels) as (keyof EffectivenessComponentes)[]).filter(
+    (key) => componentes != null && typeof componentes[key] === 'number',
+  );
 
   return (
     <div className="rounded-xl border border-slate-200/50 bg-white/80 backdrop-blur-sm p-4 shadow-md">
@@ -146,20 +169,41 @@ export default function FrmsEffectivenessPanel({
           <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">
             Decomposição
           </p>
-          {(Object.keys(componentLabels) as (keyof EffectivenessComponentes)[]).map((key) => (
-            <ComponentBar
-              key={key}
-              label={componentLabels[key]}
-              value={componentes[key]}
-              color={
-                componentes[key] < -0.05
-                  ? 'bg-red-400'
-                  : componentes[key] < 0
-                    ? 'bg-amber-400'
-                    : 'bg-emerald-400'
-              }
-            />
-          ))}
+          {componentKeys.map((key) => {
+            const value = componentes[key] as number;
+            return (
+              <ComponentBar
+                key={key}
+                label={componentLabels[key]}
+                value={value}
+                color={value < -0.05 ? 'bg-red-400' : value < 0 ? 'bg-amber-400' : 'bg-emerald-400'}
+              />
+            );
+          })}
+          {operationalLoad && operationalLoad.total_delta < 0 && (
+            <div className="mt-1 rounded-md bg-slate-50 px-2 py-1.5 text-[10px] leading-4 text-slate-500">
+              <p className="font-semibold text-slate-600">
+                Carga operacional: {fmtPoints(operationalLoad.total_delta)}
+              </p>
+              <p>
+                • {operationalLoad.landings_count}{' '}
+                {operationalLoad.landings_count === 1 ? 'pouso' : 'pousos'}:{' '}
+                {fmtPoints(operationalLoad.landings_delta)}
+              </p>
+              <p>
+                •{' '}
+                {operationalLoad.weather_evidence_quality === 'OBSERVED' &&
+                operationalLoad.temperature_max_c != null
+                  ? `temperatura máxima ${Math.round(operationalLoad.temperature_max_c)} °C: ${fmtPoints(
+                      operationalLoad.temperature_delta,
+                    )}`
+                  : 'temperatura: evidência meteorológica indisponível (0)'}
+              </p>
+              <p className="mt-0.5 text-slate-400">
+                Coeficientes internos OPERATIONAL_POLICY_V1 — conservadores e sujeitos a calibração.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
