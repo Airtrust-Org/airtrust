@@ -29,6 +29,7 @@ interface UsuariosProps {
 }
 
 interface AcessoEmpresa {
+  perfis?: string[];
   empresa_id: number;
   empresa_nome: string;
   role: string;
