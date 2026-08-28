@@ -1,6 +1,6 @@
 # FRMS — Operational Readiness / PVT v1
 
-Status: implementação incremental em branch de feature. Este documento registra decisões de segurança e evita que regras experimentais sejam confundidas com critérios aprovados de despacho.
+Status: implementação cognitiva integrada em branch de feature; validação final de CI ainda em andamento. Este documento registra decisões de segurança e evita que regras experimentais sejam confundidas com critérios aprovados de despacho.
 
 ## Objetivo
 
@@ -13,11 +13,42 @@ Protocolo inicial: `airtrust-vigilance-v1`.
 - duração padrão: 3 minutos;
 - intervalo pseudoaleatório entre estímulos: 2–10 s;
 - resposta antecipada: < 100 ms;
-- lapso: >= 500 ms;
+- lapso descritivo: >= 500 ms;
 - janela sem resposta: 2 s;
-- métricas persistíveis: mediana, média, p90, desvio-padrão, lapsos, respostas antecipadas, perdas, velocidade média de resposta e trials brutos.
+- métricas persistidas: mediana, média, p90, desvio-padrão, lapsos, respostas antecipadas, perdas, velocidade de resposta e trials brutos;
+- relógio monotônico no navegador via `performance.now()`;
+- nenhum acesso de rede é necessário durante a execução do teste;
+- troca de aba, ocultação da página ou perda de foco invalida a tentativa, descarta dados parciais e exige reinício.
 
-O baseline individual deve ser formado antes de qualquer comparação longitudinal. A classificação `baseline_building` não equivale a aprovação operacional.
+O Worker recalcula as métricas e a classificação a partir dos trials brutos; resumos ou sinais subjetivos enviados pelo navegador não são fonte de verdade. KSS e sono são obtidos do check-in diário já persistido para o mesmo funcionário, empresa e data.
+
+## Baseline e classificação V1
+
+O baseline individual usa avaliações anteriores válidas do próprio funcionário e do mesmo tenant. São necessárias 5 sessões anteriores antes de a comparação sair de `baseline_building`.
+
+Uma reavaliação no mesmo dia substitui logicamente a avaliação ativa daquele dia, preservando a anterior como histórico soft-deleted e sem contar o dia duas vezes no baseline.
+
+Classificações disponíveis:
+
+- `baseline_building` — histórico individual ainda insuficiente;
+- `preserved` — sem combinação de sinais que exija atenção segundo a versão atual;
+- `attention` — combinação de sinais de atenção com baseline já estabelecido;
+- `operational_review` — presença de sinal crítico subjetivo que requer revisão operacional.
+
+Guardrail importante: estar formando baseline nunca pode esconder sinal crítico já conhecido. KSS >= 8 ou sono < 5 h continua levando a `operational_review` mesmo nas primeiras sessões.
+
+Os limiares cognitivos V1 são sinais de workflow e não constituem critério médico ou decisão autônoma de aptidão. A regra e a versão de protocolo ficam armazenadas para permitir auditoria e recálculo futuro.
+
+## Persistência e isolamento
+
+A migration aditiva `0471_frms_operational_readiness.sql` cria:
+
+- `frms_readiness_assessment` — avaliação ativa/histórica por funcionário e data;
+- `frms_readiness_vigilance_trial` — trials brutos associados à avaliação.
+
+Todas as leituras e escritas de aplicação usam `empresa_id` do contexto autenticado. `funcionario_id`, `checkin_id` ou `assessment_id` recebidos do cliente nunca são suficientes, isoladamente, para localizar ou alterar dados.
+
+A migration foi apenas preparada e certificada no Schema V2. Este documento e a PR não autorizam aplicação remota, escrita D1 operacional ou deploy.
 
 ## Temperatura / METAR
 
@@ -63,19 +94,32 @@ A implementação inicial em `thermalExposure.ts` preserva exatamente essa separ
 ## Benchmark científico usado para desenho
 
 - ICAO: FRMS deve ser baseado em princípios científicos, conhecimento, experiência operacional e evidência orientada por dados; não há um “limite correto” universal para todos os contextos.
+- PVT/PVT-B: estudos publicados sustentam testes breves de aproximadamente 3 minutos como instrumentos sensíveis a degradação por perda de sono, com a ressalva de que versões breves não são intercambiáveis com PVT de 10 minutos em todas as condições.
+- FAA: testes psicomotores podem compor programas estruturados de monitoramento, mas exigem baseline/monitoramento e não devem ser tratados como determinação tática isolada de nível de fadiga.
 - Revisões de desempenho em calor: reduções podem ocorrer em atenção, memória, velocidade/precisão e tarefas perceptivo-motoras; resultados dependem de intensidade, duração, tipo de tarefa e carga térmica.
 - Revisões clássicas apontam início de degradação perceptivo-motora aproximadamente em 30–33 °C WBGT; esse valor não deve ser confundido com 30–33 °C de temperatura seca do METAR.
 
-## Próximas integrações de código
+## Estado das integrações
 
-1. integrar o componente de vigilância ao fluxo do check-in;
-2. persistir resumo + trials em entidade tenant-scoped específica;
-3. expor baseline individual e comparação longitudinal;
-4. criar provider server-side para REDEMET com segredo fora do frontend;
-5. associar METAR a origem/destino usando escala/voos da jornada;
-6. persistir provenance da observação meteorológica;
-7. incluir temperatura e desempenho na visão do tripulante e na coordenação sem diagnóstico médico;
-8. validar com testes de RBAC, tenant isolation, idempotência, indisponibilidade da REDEMET e dados meteorológicos ausentes.
+Já implementado nesta frente cognitiva:
+
+1. teste breve integrado ao fluxo do check-in diário;
+2. invalidação por perda de foco/visibilidade;
+3. persistência tenant-scoped do resumo e dos trials brutos;
+4. baseline individual e consulta do estado do dia;
+5. recálculo autoritativo no Worker usando KSS/sono do check-in persistido;
+6. reavaliação no mesmo dia sem inflar baseline;
+7. migration Schema V2 aditiva 0471 preparada, sem aplicação remota;
+8. testes unitários de métricas/classificação, interrupção do teste, fonte de verdade subjetiva e isolamento tenant no contrato da rota;
+9. suíte do check-in adaptada para validar a sequência de persistência subjetiva + objetiva.
+
+Continua deliberadamente separado para a frente térmica/operacional:
+
+1. provider server-side da REDEMET com segredo fora do frontend;
+2. associação de METAR a origem/destino usando escala/voos da jornada;
+3. persistência da provenance meteorológica;
+4. calibração validada de eventual influência térmica no score;
+5. tratamento de indisponibilidade da REDEMET e dados meteorológicos ausentes.
 
 ## Guardrails
 
@@ -84,4 +128,6 @@ A implementação inicial em `thermalExposure.ts` preserva exatamente essa separ
 - sem score silencioso quando faltar METAR;
 - sem decisão automática baseada apenas em PVT ou temperatura;
 - parâmetros de score precisam de versionamento e trilha de auditoria;
-- mudanças de limiar não podem reescrever retroativamente resultados históricos sem preservar a versão de regra usada.
+- mudanças de limiar não podem reescrever retroativamente resultados históricos sem preservar a versão de regra usada;
+- nenhum resultado parcial de teste invalidado é persistido;
+- o navegador não define a classificação autoritativa.
