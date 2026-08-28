@@ -84,7 +84,7 @@ async function resolveOwnFuncionarioId(c: ReadinessContext, empresaId: number): 
 }
 
 router.get('/baseline', async (c) => {
-  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+  const empresaId = getEmpresaId(c);
   const funcionarioId = await resolveOwnFuncionarioId(c, empresaId);
   if (!funcionarioId) {
     return c.json({ success: false, error: 'Funcionario nao encontrado para o usuario atual' }, 404);
@@ -111,7 +111,7 @@ router.get('/baseline', async (c) => {
 });
 
 router.get('/today', async (c) => {
-  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+  const empresaId = getEmpresaId(c);
   const funcionarioId = await resolveOwnFuncionarioId(c, empresaId);
   if (!funcionarioId) {
     return c.json({ success: false, error: 'Funcionario nao encontrado para o usuario atual' }, 404);
@@ -144,7 +144,7 @@ router.get('/today', async (c) => {
 });
 
 router.post('/', async (c) => {
-  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+  const empresaId = getEmpresaId(c);
   const funcionarioId = await resolveOwnFuncionarioId(c, empresaId);
   if (!funcionarioId) {
     return c.json({ success: false, error: 'Funcionario nao encontrado para o usuario atual' }, 404);
