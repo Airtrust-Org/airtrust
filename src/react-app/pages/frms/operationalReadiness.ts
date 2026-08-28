@@ -54,7 +54,9 @@ export const PVTB_V1_PROTOCOL = {
  * - lapse   = RT ≥ 500 ms;
  * - false start / anticipation = RT < 100 ms (also any tap with no counter shown);
  * - inter-stimulus interval (response → next stimulus): ~1 s of feedback hold
- *   plus a random 0–3 s delay = 1–4 s total, matching the PsyToolkit PVT-B design.
+ *   plus a random 0–3 s delay = 1–4 s total, matching the PsyToolkit PVT-B design;
+ * - an unanswered presented stimulus remains active for up to 30 s and is then
+ *   recorded as a 30,000 ms lapse rather than as a separate "missed" outcome.
  *
  * This is not the NASA PVT+ application; it is an independent implementation of
  * the same published paradigm.
@@ -74,8 +76,8 @@ export const PVTB_V2_PROTOCOL = {
   counterTickMs: 50,
   lapseThresholdMs: 500,
   falseStartThresholdMs: 100,
-  /** Counter keeps climbing up to this bound; no response by then = missed. */
-  responseWindowMs: 3_000,
+  /** Published PVT-B response ceiling; unanswered stimulus becomes a 30 s lapse. */
+  responseWindowMs: 30_000,
 };
 
 /**
