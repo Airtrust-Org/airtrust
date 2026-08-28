@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   READINESS_PROTOCOL,
   deriveReadinessAssessment,
+  normalizeReadinessTrials,
   summarizeReadinessTrials,
   type ReadinessTrial,
 } from '../../lib/frms/readiness';
@@ -18,6 +19,50 @@ function trial(sequence: number, reactionTimeMs: number | null, outcome: Readine
 }
 
 describe('FRMS operational readiness', () => {
+  it('rebuilds trial outcomes from timestamps instead of trusting client labels', () => {
+    const normalized = normalizeReadinessTrials(
+      [
+        { ...trial(1, 620, 'response'), reactionTimeMs: 120, outcome: 'response' },
+        { ...trial(2, 280, 'lapse'), reactionTimeMs: 900, outcome: 'lapse' },
+        {
+          sequence: 3,
+          scheduledAtMs: 3000,
+          stimulusAtMs: -1,
+          responseAtMs: 3050,
+          reactionTimeMs: 999,
+          outcome: 'response',
+        },
+        { ...trial(4, null, 'response'), reactionTimeMs: 250, outcome: 'response' },
+      ],
+      180_000,
+    );
+
+    expect(normalized.map((item) => item.outcome)).toEqual(['lapse', 'response', 'false_start', 'missed']);
+    expect(normalized.map((item) => item.reactionTimeMs)).toEqual([620, 280, 0, null]);
+  });
+
+  it('rejects duplicate sequences and impossible response timing', () => {
+    expect(() =>
+      normalizeReadinessTrials([trial(1, 250, 'response'), trial(1, 300, 'response')], 180_000),
+    ).toThrow('invalid_trial_sequence');
+
+    expect(() =>
+      normalizeReadinessTrials(
+        [
+          {
+            sequence: 1,
+            scheduledAtMs: 1000,
+            stimulusAtMs: 1500,
+            responseAtMs: 1400,
+            reactionTimeMs: 100,
+            outcome: 'response',
+          },
+        ],
+        180_000,
+      ),
+    ).toThrow('invalid_trial_timing');
+  });
+
   it('summarizes raw vigilance trials without hiding lapses or missed stimuli', () => {
     const summary = summarizeReadinessTrials(
       [
