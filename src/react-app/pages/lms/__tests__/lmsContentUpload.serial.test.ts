@@ -16,210 +16,265 @@ vi.mock('../lmsPackageValidator', async (importOriginal) => ({
 
 const fetchWithAuthMock = vi.mocked(fetchWithAuth);
 
-function response(data: unknown) {
+function response(data: unknown, status = 200) {
   return new Response(JSON.stringify({ success: true, data }), {
+    status,
     headers: { 'Content-Type': 'application/json' },
   });
 }
 
-function representativeScormZip() {
-  const padding = Array.from({ length: 2048 }, (_, index) => String.fromCharCode(33 + (index % 90))).join('');
+function scormZip(manifestXml?: string) {
   const files: Record<string, Uint8Array> = {
     'imsmanifest.xml': strToU8(
-      `<manifest><resources><resource identifier="course" href="index.html" /></resources></manifest>${padding}`,
-    ),
-    'index.html': strToU8(`<!doctype html><title>SCORM</title>${padding}`),
-  };
-
-  for (let index = 0; index < 96; index += 1) {
-    const media = new Uint8Array(128 * 1024);
-    for (let byte = 0; byte < media.length; byte += 1) {
-      media[byte] = (index * 31 + byte * 17) % 251;
-    }
-    files[`media/chapter-${Math.floor(index / 12)}/asset-${index}.webp`] = media;
-  }
-  return { entries: Object.entries(files).map(([path, bytes]) => ({ path, bytes })), zip: zipSync(files) };
-}
-
-function retryScormFixture() {
-  const files: Record<string, Uint8Array> = {
-    'imsmanifest.xml': strToU8(
-      '<manifest><resources><resource identifier="course" href="index.html" /></resources></manifest>',
+      manifestXml ??
+        '<manifest><organizations default="o"><organization identifier="o"><item identifierref="course" /></organization></organizations><resources><resource identifier="course" href="index.html" /></resources></manifest>',
     ),
     'index.html': strToU8('<!doctype html><title>SCORM</title>'),
-    'media/cap08/pcm_connectors.webp': new Uint8Array([1, 2, 3, 4]),
+    'media/asset-1.webp': new Uint8Array([1, 2, 3, 4]),
   };
   return { entries: Object.entries(files).map(([path, bytes]) => ({ path, bytes })), zip: zipSync(files) };
 }
 
-describe('uploadStructuredLmsPackage', () => {
+// MEL V4: namespaced <ns0:resource> — parseLaunchFile must still resolve index.html.
+function namespacedMelZip() {
+  const manifestXml =
+    '<ns0:manifest xmlns:ns0="http://www.imsproject.org/xsd/imscp_rootv1p1p2">' +
+    '<ns0:organizations default="ORG"><ns0:organization identifier="ORG">' +
+    '<ns0:item identifier="I1" identifierref="R1"><ns0:title>MEL</ns0:title></ns0:item>' +
+    '</ns0:organization></ns0:organizations>' +
+    '<ns0:resources><ns0:resource identifier="R1" type="webcontent" href="index.html">' +
+    '<ns0:file href="index.html" /></ns0:resource></ns0:resources></ns0:manifest>';
+  return scormZip(manifestXml);
+}
+
+function h5pZip() {
+  const files: Record<string, Uint8Array> = {
+    'h5p.json': strToU8('{"mainLibrary":"H5P.InteractiveVideo 1.0","title":"t"}'),
+    'content/content.json': strToU8('{"interactiveVideo":{}}'),
+    'content/videos/clip.mp4': new Uint8Array(8),
+  };
+  return { entries: Object.entries(files).map(([path, bytes]) => ({ path, bytes })), zip: zipSync(files) };
+}
+
+function scormFile(zip: Uint8Array, name = 'package.zip') {
+  // jsdom's File in this env has no arrayBuffer(); the upload code only needs
+  // name + arrayBuffer() and rebuilds the multipart Blob from the read bytes.
+  return { name, arrayBuffer: async () => new Uint8Array(zip).buffer } as unknown as File;
+}
+
+const CANDIDATE_VALIDATED = {
+  packageId: 'pkg-1',
+  status: 'VALIDATED',
+  publishable: false,
+  structural: { status: 'PASS', errors: [] },
+  completionManifest: { status: 'PASS', errors: [] },
+  diagnostics: { status: 'PASS', errors: [] },
+};
+
+describe('uploadStructuredLmsPackage — SCORM governed package-version flow', () => {
   beforeEach(() => {
     fetchWithAuthMock.mockReset();
     extractBrowserLmsPackageMock.mockReset();
   });
 
-  it('uploads a media-heavy SCORM package with at most two small Worker body streams active', async () => {
-    let activeFileUploads = 0;
-    let peakFileUploads = 0;
+  function wireScorm(overrides: {
+    candidate?: unknown;
+    candidateStatus?: number;
+    conformance?: unknown;
+    activate?: unknown;
+  }) {
+    const calls: string[] = [];
+    fetchWithAuthMock.mockImplementation(async (url) => {
+      const path = String(url);
+      calls.push(path);
+      if (path.includes('/content-upload/init')) {
+        throw new Error('content-upload/init must never be called for SCORM');
+      }
+      if (path.includes('/scorm-upload')) {
+        return response(overrides.candidate ?? CANDIDATE_VALIDATED, overrides.candidateStatus ?? 202);
+      }
+      if (path.includes('/conformance')) {
+        return response(overrides.conformance ?? { ...CANDIDATE_VALIDATED, publishable: true });
+      }
+      if (path.includes('/activate')) {
+        return response(
+          overrides.activate ?? {
+            packageId: 'pkg-1',
+            status: 'ACTIVE',
+            launchFile: 'index.html',
+            r2Prefix: 'lms/scorm/6/44/_candidates/pkg-1/',
+            scorm_versao: '1.2',
+          },
+        );
+      }
+      throw new Error(`Unexpected endpoint: ${path}`);
+    });
+    return calls;
+  }
+
+  it('A/B: SCORM never calls content-upload/init and does call scorm-upload', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({});
+
+    await uploadStructuredLmsPackage({ cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip) });
+
+    expect(calls.some((c) => c.includes('/content-upload/init'))).toBe(false);
+    expect(calls.some((c) => c.includes('/content-upload/file'))).toBe(false);
+    expect(calls.some((c) => c.includes('/scorm-upload'))).toBe(true);
+  });
+
+  it('C: a REJECTED candidate does not call conformance or activate', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({
+      candidate: {
+        packageId: 'pkg-x',
+        status: 'REJECTED',
+        publishable: false,
+        structural: { status: 'FAIL', errors: ['imsmanifest sem organização padrão'] },
+        completionManifest: { status: 'PASS', errors: [] },
+        diagnostics: { status: 'PASS', errors: [] },
+      },
+    });
+
+    await expect(
+      uploadStructuredLmsPackage({ cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip) }),
+    ).rejects.toThrow(/rejeitado no Quality Gate.*organização padrão/i);
+
+    expect(calls.some((c) => c.includes('/conformance'))).toBe(false);
+    expect(calls.some((c) => c.includes('/activate'))).toBe(false);
+  });
+
+  it('D: a static VALIDATED candidate proceeds to conformance', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({});
+
+    await uploadStructuredLmsPackage({ cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip) });
+
+    expect(calls.filter((c) => c.includes('/conformance'))).toHaveLength(1);
+  });
+
+  it('E: conformance publishable=false does not call activate and keeps the previous package', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({
+      conformance: {
+        ...CANDIDATE_VALIDATED,
+        publishable: false,
+        runtime: { status: 'FAIL', errors: ['player não emitiu cmi.core.lesson_status'] },
+      },
+    });
+
+    await expect(
+      uploadStructuredLmsPackage({ cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip) }),
+    ).rejects.toThrow(/conformidade do player.*lesson_status/i);
+
+    expect(calls.some((c) => c.includes('/activate'))).toBe(false);
+  });
+
+  it('F: publishable=true calls activate exactly once and returns the active prefix/launch', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({});
+
+    const result = await uploadStructuredLmsPackage({
+      cursoId: 44,
+      tipoConteudo: 'scorm',
+      file: scormFile(fixture.zip),
+    });
+
+    expect(calls.filter((c) => c.includes('/activate'))).toHaveLength(1);
+    expect(result.prefix).toBe('lms/scorm/6/44/_candidates/pkg-1/');
+    expect(result.launchFile).toBe('index.html');
+    expect(result.scormVersao).toBe('1.2');
+  });
+
+  it('H: namespaced MEL manifest resolves index.html and runs upload → conformance → activate', async () => {
+    const fixture = namespacedMelZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({});
+
+    const statuses: string[] = [];
+    const result = await uploadStructuredLmsPackage({
+      cursoId: 44,
+      tipoConteudo: 'scorm',
+      file: scormFile(fixture.zip, 'MNT_MEL_V4.zip'),
+      onStatus: (s) => statuses.push(s),
+    });
+
+    expect(calls.map((c) => c.split('?')[0])).toEqual([
+      '/api/lms/cursos/44/scorm-upload',
+      '/api/lms/cursos/44/scorm-package-versions/pkg-1/conformance',
+      '/api/lms/cursos/44/scorm-package-versions/pkg-1/activate',
+    ]);
+    expect(result.launchFile).toBe('index.html');
+    expect(statuses).toContain('Enviando ZIP...');
+    expect(statuses).toContain('Executando Quality Gate...');
+    expect(statuses).toContain('Executando validação do player...');
+    expect(statuses).toContain('Ativando nova versão...');
+    expect(statuses).toContain('Conteúdo substituído com sucesso.');
+  });
+
+  it('I: a failure during conformance leaves the previous package active (no activate call)', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({ conformance: { publishable: false, runtime: { status: 'ERROR', errors: ['timeout'] } } });
+
+    await expect(
+      uploadStructuredLmsPackage({ cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip) }),
+    ).rejects.toThrow(/conformidade/i);
+    expect(calls.some((c) => c.includes('/activate'))).toBe(false);
+  });
+
+  it('rejects a SCORM package whose manifest has no resolvable launch file before any upload', async () => {
+    const fixture = scormZip('<manifest><resources></resources></manifest>');
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({});
+
+    await expect(
+      uploadStructuredLmsPackage({ cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip) }),
+    ).rejects.toThrow(/arquivo inicial/i);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('uploadStructuredLmsPackage — H5P keeps the structured file-by-file flow', () => {
+  beforeEach(() => {
+    fetchWithAuthMock.mockReset();
+    extractBrowserLmsPackageMock.mockReset();
+  });
+
+  it('G: H5P still uses content-upload/init + /file + /complete', async () => {
+    const fixture = h5pZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls: string[] = [];
 
     fetchWithAuthMock.mockImplementation(async (url) => {
       const path = String(url);
-      if (path.endsWith('/content-upload/init')) {
-        return response({ upload_id: 'upload-1', status: 'uploading' });
+      calls.push(path.split('?')[0] ?? path);
+      if (path.includes('/scorm-upload') || path.includes('/scorm-package-versions')) {
+        throw new Error('SCORM package-version endpoints must not be used for H5P');
       }
-      if (path.includes('/content-upload/file?')) {
-        activeFileUploads += 1;
-        peakFileUploads = Math.max(peakFileUploads, activeFileUploads);
-        await Promise.resolve();
-        activeFileUploads -= 1;
-        return response({ path: 'stored', bytes: 1 });
-      }
+      if (path.endsWith('/content-upload/init')) return response({ upload_id: 'up-1', status: 'uploading' });
+      if (path.includes('/content-upload/file')) return response({ path: 'stored', bytes: 1 });
       if (path.endsWith('/content-upload/complete')) {
-        return response({ files_uploaded: 98, prefix: 'lms/scorm/6/32/' });
+        return response({ files_uploaded: fixture.entries.length, prefix: 'lms/h5p/6/70/', tipo_h5p: 'H5P.InteractiveVideo' });
       }
       throw new Error(`Unexpected endpoint: ${path}`);
     });
 
-    const fixture = representativeScormZip();
-    expect(fixture.zip.subarray(0, 4)).toEqual(new Uint8Array([0x50, 0x4b, 0x03, 0x04]));
-    expect(fixture.entries).toHaveLength(98);
-    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
-    const file = {
-      name: 'representative-scorm.zip',
-      arrayBuffer: async () => new Uint8Array(fixture.zip).buffer,
-    } as File;
-
     const result = await uploadStructuredLmsPackage({
-      cursoId: 32,
-      tipoConteudo: 'scorm',
-      file,
+      cursoId: 70,
+      tipoConteudo: 'h5p',
+      file: scormFile(fixture.zip, 'course.h5p'),
     });
 
-    expect(peakFileUploads).toBe(2);
-    expect(result.filesUploaded).toBe(98);
-    expect(fetchWithAuthMock).toHaveBeenCalledTimes(100);
-  }, 15_000);
-
-  it('keeps a file of at least 4 MB isolated from other uploads', async () => {
-    let activeFileUploads = 0;
-    let largeUploadOverlapped = false;
-    const large = new Uint8Array(4 * 1024 * 1024);
-    const fixture = retryScormFixture();
-    fixture.entries.push({ path: 'media/large.webm', bytes: large });
-
-    fetchWithAuthMock.mockImplementation(async (url) => {
-      const path = String(url);
-      if (path.endsWith('/content-upload/init')) return response({ upload_id: 'upload-large', status: 'uploading' });
-      if (path.includes('/content-upload/file?')) {
-        const isLarge = path.includes('large.webm');
-        activeFileUploads += 1;
-        if (isLarge && activeFileUploads > 1) largeUploadOverlapped = true;
-        await Promise.resolve();
-        activeFileUploads -= 1;
-        return response({ path: 'stored', bytes: 1 });
-      }
-      if (path.endsWith('/content-upload/complete')) return response({ files_uploaded: fixture.entries.length, prefix: 'lms/scorm/6/32/' });
-      throw new Error(`Unexpected endpoint: ${path}`);
-    });
-
-    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
-    const result = await uploadStructuredLmsPackage({
-      cursoId: 32,
-      tipoConteudo: 'scorm',
-      file: { name: 'mixed-size-scorm.zip', arrayBuffer: async () => fixture.zip.buffer } as File,
-    });
-
-    expect(largeUploadOverlapped).toBe(false);
+    expect(calls).toContain('/api/lms/cursos/70/content-upload/init');
+    expect(calls.some((c) => c.endsWith('/content-upload/file'))).toBe(true);
+    expect(calls).toContain('/api/lms/cursos/70/content-upload/complete');
     expect(result.filesUploaded).toBe(fixture.entries.length);
-  });
-
-  it('retries a transient network/CORS failure for the same versioned asset and still completes', async () => {
-    let targetAttempts = 0;
-    const statuses: string[] = [];
-
-    fetchWithAuthMock.mockImplementation(async (url) => {
-      const path = String(url);
-      if (path.endsWith('/content-upload/init')) {
-        return response({ upload_id: 'db7b6e553c535eb5e5f29063202161cfe3b59942', status: 'uploading' });
-      }
-      if (path.includes('/content-upload/file?')) {
-        if (path.includes('pcm_connectors.webp')) {
-          targetAttempts += 1;
-          if (targetAttempts === 1) throw new TypeError('Failed to fetch');
-        }
-        return response({ path: 'stored', bytes: 4 });
-      }
-      if (path.endsWith('/content-upload/complete')) {
-        return response({ files_uploaded: 3, prefix: 'lms/scorm/6/32/_versions/upload/' });
-      }
-      throw new Error(`Unexpected endpoint: ${path}`);
-    });
-
-    const fixture = retryScormFixture();
-    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
-    const file = {
-      name: 'aw139-manutencao.zip',
-      arrayBuffer: async () => new Uint8Array(fixture.zip).buffer,
-    } as File;
-
-    const result = await uploadStructuredLmsPackage({
-      cursoId: 32,
-      tipoConteudo: 'scorm',
-      file,
-      onStatus: (status) => statuses.push(status),
-    });
-
-    expect(targetAttempts).toBe(2);
-    expect(result.filesUploaded).toBe(3);
-    expect(statuses.some((status) => /Falha transitória.*pcm_connectors\.webp/i.test(status))).toBe(true);
-    expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).endsWith('/content-upload/complete'))).toBe(true);
-  });
-
-  it('resumes the same package without reuploading files already stored in the version prefix', async () => {
-    const fixture = retryScormFixture();
-    const [manifest, launch, target] = fixture.entries;
-    const uploadedPaths: string[] = [];
-    const statuses: string[] = [];
-
-    fetchWithAuthMock.mockImplementation(async (url) => {
-      const path = String(url);
-      if (path.endsWith('/content-upload/init')) {
-        return response({
-          upload_id: 'db7b6e553c535eb5e5f29063202161cfe3b59942',
-          status: 'uploading',
-          uploaded_files: [
-            { path: manifest!.path, size: manifest!.bytes.byteLength },
-            { path: launch!.path, size: launch!.bytes.byteLength },
-          ],
-        });
-      }
-      if (path.includes('/content-upload/file?')) {
-        const requestUrl = new URL(path, 'https://airtrust.online');
-        uploadedPaths.push(requestUrl.searchParams.get('path') ?? '');
-        return response({ path: target!.path, bytes: target!.bytes.byteLength });
-      }
-      if (path.endsWith('/content-upload/complete')) {
-        return response({ files_uploaded: 3, prefix: 'lms/scorm/6/32/_versions/upload/' });
-      }
-      throw new Error(`Unexpected endpoint: ${path}`);
-    });
-
-    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
-    const file = {
-      name: 'aw139-manutencao.zip',
-      arrayBuffer: async () => new Uint8Array(fixture.zip).buffer,
-    } as File;
-
-    const result = await uploadStructuredLmsPackage({
-      cursoId: 32,
-      tipoConteudo: 'scorm',
-      file,
-      onStatus: (status) => statuses.push(status),
-    });
-
-    expect(uploadedPaths).toEqual(['media/cap08/pcm_connectors.webp']);
-    expect(fetchWithAuthMock).toHaveBeenCalledTimes(3);
-    expect(result.filesUploaded).toBe(3);
-    expect(statuses.some((status) => /Retomando upload: 2 de 3 arquivos já enviados/i.test(status))).toBe(true);
+    expect(result.tipoH5p).toBe('H5P.InteractiveVideo');
   });
 });

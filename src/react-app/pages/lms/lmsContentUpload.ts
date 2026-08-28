@@ -14,6 +14,7 @@ type PreparedFile = {
 
 type PreparedPackage = {
   files: PreparedFile[];
+  packageBytes: Uint8Array;
   totalBytes: number;
   launchFile: string | null;
   scormVersao: ScormVersao;
@@ -51,7 +52,7 @@ export function parseLaunchFileRegex(manifestXml: string): string | null {
   if (!itemMatch?.[1]) return null;
   const escaped = itemMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(
-    `<(?:\w+:)?resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
+    `<(?:\\w+:)?resource\\b[^>]*\\bidentifier\\s*=\\s*["']${escaped}["'][^>]*\\bhref\\s*=\\s*["']([^"']+)["']`,
     'i',
   ).exec(manifestXml)?.[1] ?? null;
 }
@@ -200,7 +201,7 @@ async function preparePackageUpload(file: File, tipoConteudo: UploadTipoConteudo
     if (!launchFile || !files.some((entry) => entry.path.toLocaleLowerCase('en-US') === launchFile.toLocaleLowerCase('en-US'))) {
       throw new Error(`O arquivo inicial ${launchFile ?? launchRaw} não existe no pacote SCORM.`);
     }
-    return { files, totalBytes, launchFile, scormVersao: parseScormVersion(manifestXml), tipoH5p: null, packageHash };
+    return { files, packageBytes, totalBytes, launchFile, scormVersao: parseScormVersion(manifestXml), tipoH5p: null, packageHash };
   }
 
   const h5pMetadata = files.filter(
@@ -216,11 +217,123 @@ async function preparePackageUpload(file: File, tipoConteudo: UploadTipoConteudo
   }
   const tipoH5p = parseH5pType(strFromU8(h5pJson.bytes));
   if (!tipoH5p) throw new Error('h5p.json não informa mainLibrary válida.');
-  return { files, totalBytes, launchFile: null, scormVersao: null, tipoH5p, packageHash };
+  return { files, packageBytes, totalBytes, launchFile: null, scormVersao: null, tipoH5p, packageHash };
 }
 
 function buildIdempotencyKey(tipoConteudo: UploadTipoConteudo, packageHash: string) {
   return `${tipoConteudo}:${packageHash}`;
+}
+
+type ScormGateSection = { status?: string; errors?: string[] };
+type ScormQualityShape = {
+  packageId?: string;
+  status?: string;
+  publishable?: boolean;
+  structural?: ScormGateSection;
+  completionManifest?: ScormGateSection;
+  diagnostics?: ScormGateSection;
+  conformance?: ScormGateSection;
+  runtime?: { status?: string; errors?: string[] };
+};
+
+function collectGateErrors(quality: ScormQualityShape): string[] {
+  const sections: Array<ScormGateSection | undefined> = [
+    quality.structural,
+    quality.completionManifest,
+    quality.diagnostics,
+    quality.conformance,
+  ];
+  const errs = sections.flatMap((section) => section?.errors ?? []);
+  errs.push(...(quality.runtime?.errors ?? []));
+  return [...new Set(errs.filter((entry) => typeof entry === 'string' && entry.trim()))];
+}
+
+function scormGateError(prefix: string, quality: ScormQualityShape): Error {
+  const detail = collectGateErrors(quality).join('; ');
+  return new Error(detail ? `${prefix}: ${detail}` : prefix);
+}
+
+/**
+ * SCORM "Substituir conteúdo" — o único botão executa internamente o fluxo
+ * governado oficial de versão de pacote:
+ *   1. POST /scorm-upload            (ZIP inteiro; SHA-256 exato certificado no backend)
+ *   2. static Quality Gate embutido na resposta do passo 1
+ *   3. POST /scorm-package-versions/:packageId/conformance   (validação no player real)
+ *   4. POST /scorm-package-versions/:packageId/activate      (troca atômica do ponteiro do curso)
+ * Em qualquer falha de gate o pacote ATIVO anterior permanece intacto — nenhum
+ * dos passos acima toca o curso até o activate. O antigo content-upload/init
+ * arquivo-a-arquivo continua desativado para SCORM (não certifica o SHA do ZIP).
+ */
+async function uploadScormZipPackage(params: {
+  cursoId: number;
+  file: File;
+  prepared: PreparedPackage;
+  skipPurge?: boolean;
+  onProgress?: (pct: number) => void;
+  onStatus?: (status: string) => void;
+}) {
+  const { cursoId, file, prepared, skipPurge, onProgress, onStatus } = params;
+
+  onStatus?.('Enviando ZIP...');
+  onProgress?.(25);
+  const formData = new FormData();
+  const zipBlob = new Blob([prepared.packageBytes], { type: 'application/zip' });
+  formData.append('arquivo', zipBlob, file.name?.trim() || 'scorm-package.zip');
+  const uploadResponse = await fetchWithAuth(
+    `/api/lms/cursos/${cursoId}/scorm-upload${skipPurge ? '?skip_purge=true' : ''}`,
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': buildIdempotencyKey('scorm', prepared.packageHash) },
+      body: formData,
+    },
+  );
+  const candidate = await parseApiResponse<ScormQualityShape>(uploadResponse);
+  const packageId = candidate.packageId;
+  if (!packageId) throw new Error('Quality Gate não retornou um identificador de pacote.');
+
+  onStatus?.('Executando Quality Gate...');
+  onProgress?.(45);
+  if (candidate.status === 'REJECTED') {
+    // Pacote ativo anterior segue inalterado.
+    throw scormGateError('O pacote foi rejeitado no Quality Gate estático', candidate);
+  }
+
+  onStatus?.('Executando validação do player...');
+  onProgress?.(65);
+  const conformanceResponse = await fetchWithAuth(
+    `/api/lms/cursos/${cursoId}/scorm-package-versions/${packageId}/conformance`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+  );
+  const conformance = await parseApiResponse<ScormQualityShape>(conformanceResponse);
+  if (!conformance.publishable) {
+    // Pacote ativo anterior segue inalterado.
+    throw scormGateError('O pacote não passou na validação de conformidade do player', conformance);
+  }
+
+  onStatus?.('Ativando nova versão...');
+  onProgress?.(85);
+  const activateResponse = await fetchWithAuth(
+    `/api/lms/cursos/${cursoId}/scorm-package-versions/${packageId}/activate`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+  );
+  const activated = await parseApiResponse<{
+    r2Prefix?: string;
+    launchFile?: string;
+    scorm_versao?: string;
+  }>(activateResponse);
+
+  onProgress?.(100);
+  onStatus?.('Conteúdo substituído com sucesso.');
+  return {
+    filesUploaded: prepared.files.length,
+    prefix: typeof activated.r2Prefix === 'string' ? activated.r2Prefix : null,
+    launchFile:
+      typeof activated.launchFile === 'string' ? activated.launchFile : prepared.launchFile,
+    scormVersao: (typeof activated.scorm_versao === 'string'
+      ? activated.scorm_versao
+      : prepared.scormVersao) as ScormVersao,
+    tipoH5p: null,
+  };
 }
 
 export async function uploadStructuredLmsPackage(params: {
@@ -231,10 +344,18 @@ export async function uploadStructuredLmsPackage(params: {
   onProgress?: (pct: number) => void;
   onStatus?: (status: string) => void;
 }) {
-  const { cursoId, tipoConteudo, file, onProgress, onStatus } = params;
-  onStatus?.('Validando e extraindo pacote...');
+  const { cursoId, tipoConteudo, file, skipPurge, onProgress, onStatus } = params;
+  onStatus?.('Validando pacote...');
   onProgress?.(10);
   const prepared = await preparePackageUpload(file, tipoConteudo);
+
+  // SCORM: o backend desativou deliberadamente o protocolo arquivo-a-arquivo
+  // (content-upload/init) porque ele não certifica o SHA-256 exato do ZIP.
+  // Rotear pelo fluxo governado de versão de pacote. H5P mantém o protocolo atual.
+  if (tipoConteudo === 'scorm') {
+    return uploadScormZipPackage({ cursoId, file, prepared, skipPurge, onProgress, onStatus });
+  }
+
   const idempotencyKey = buildIdempotencyKey(tipoConteudo, prepared.packageHash);
 
   onStatus?.('Preparando uma nova versão do conteúdo...');
