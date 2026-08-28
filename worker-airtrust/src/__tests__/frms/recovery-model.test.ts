@@ -19,6 +19,24 @@ describe('deriveRecoveryEvidence', () => {
     });
   });
 
+  it('does not convert a reported SIGVOOS source gap into recovery', () => {
+    expect(
+      deriveRecoveryEvidence({
+        activityType: 'FLIGHT_NOT_IN_SOURCE',
+        sleepHours24h: 8.5,
+        sleepTargetHours: 8,
+        consecutiveQualifyingNights: 2,
+        readinessClassification: 'preserved',
+      }),
+    ).toMatchObject({
+      state: 'UNKNOWN',
+      confidence: 'LOW',
+      qualifyingRecoveryNight: false,
+      reasons: ['SIGVOOS_SOURCE_GAP_REPORTED'],
+      effectivenessDeltaPct: null,
+    });
+  });
+
   it('treats onsite standby as restricted even with adequate sleep', () => {
     expect(
       deriveRecoveryEvidence({
