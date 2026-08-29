@@ -10,11 +10,8 @@ export interface PersistEdbDraftRevisionParams {
   empresaId: number;
   diarioId: number;
   volumeId: string;
-  logicalRecordId: string;
   technicalAcknowledgementSignatureId: string;
-  revisionId?: string;
   record: EdbFlightRecord;
-  supersedesRevisionId?: string | null;
   createdBy?: number | null;
 }
 
@@ -27,6 +24,17 @@ export interface PersistedEdbRevision {
 
 function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function requireRecordIdentity(record: EdbFlightRecord): {
+  logicalRecordId: string;
+  revisionId: string;
+} {
+  const logicalRecordId = record.logicalRecordId?.trim();
+  const revisionId = record.revisionId?.trim();
+  if (!logicalRecordId) throw new Error('EDB_LOGICAL_RECORD_ID_REQUIRED');
+  if (!revisionId) throw new Error('EDB_REVISION_ID_REQUIRED');
+  return { logicalRecordId, revisionId };
 }
 
 export async function persistEdbDraftRevision(
@@ -42,8 +50,15 @@ export async function persistEdbDraftRevision(
   if (params.record.source.sourceStageId === null) {
     throw new Error('eDB revision requires an explicit source stage');
   }
+  const { logicalRecordId, revisionId } = requireRecordIdentity(params.record);
   if (params.record.correction.revision < 1) {
     throw new Error('eDB revision must be >= 1');
+  }
+  if (params.record.correction.revision === 1 && params.record.correction.supersedesRevisionId !== null) {
+    throw new Error('EDB_INITIAL_REVISION_CANNOT_SUPERSEDE');
+  }
+  if (params.record.correction.revision > 1 && !params.record.correction.supersedesRevisionId?.trim()) {
+    throw new Error('EDB_CORRECTION_SUPERSEDES_REVISION_REQUIRED');
   }
   if (!params.technicalAcknowledgementSignatureId.trim()) {
     throw new Error('eDB revision requires the preflight PIC technical acknowledgement signature');
@@ -73,7 +88,6 @@ export async function persistEdbDraftRevision(
     throw new Error('EDB_TECHNICAL_ACK_TARGET_MISMATCH');
   }
 
-  const revisionId = params.revisionId ?? newId('edbrev');
   const payload = canonicalJson(params.record);
   const canonicalPayloadSha256 = await sha256Hex(payload);
 
@@ -94,9 +108,9 @@ export async function persistEdbDraftRevision(
         params.empresaId,
         params.diarioId,
         params.volumeId,
-        params.logicalRecordId,
+        logicalRecordId,
         params.record.correction.revision,
-        params.supersedesRevisionId ?? null,
+        params.record.correction.supersedesRevisionId,
         params.record.correction.correctionReason,
         params.record.contractVersion,
         params.record.source.sourceFlightId,
@@ -122,7 +136,7 @@ export async function persistEdbDraftRevision(
 
   return {
     revisionId,
-    logicalRecordId: params.logicalRecordId,
+    logicalRecordId,
     revision: params.record.correction.revision,
     canonicalPayloadSha256,
   };
