@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../components/AppLayout', () => ({
@@ -30,23 +31,23 @@ vi.mock('@/react-app/i18n/useLanguage', () => ({
   useLanguage: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
-  return {
-    ...actual,
-    useSearchParams: () => [new URLSearchParams()],
-  };
-});
-
 vi.mock('../../utils/lazyWithRetry', () => ({
   lazyWithRetry: (_loader: unknown, key: string) => () => <div data-testid={key}>{key}</div>,
 }));
 
 import Configuracoes from '../Configuracoes';
 
+function renderConfiguracoes() {
+  return render(
+    <MemoryRouter initialEntries={['/configuracoes']}>
+      <Configuracoes />
+    </MemoryRouter>,
+  );
+}
+
 describe('Configuracoes information architecture', () => {
   it('opens organization settings instead of company administration by default', () => {
-    render(<Configuracoes />);
+    renderConfiguracoes();
 
     expect(screen.getByText('Configuração da organização')).toBeInTheDocument();
     expect(screen.getByText('Administração e manutenção')).toBeInTheDocument();
@@ -60,7 +61,7 @@ describe('Configuracoes information architecture', () => {
   });
 
   it('keeps administration available without making it the default context', () => {
-    render(<Configuracoes />);
+    renderConfiguracoes();
 
     fireEvent.click(screen.getByRole('tab', { name: 'settings.tab.companies' }));
 
@@ -73,7 +74,7 @@ describe('Configuracoes information architecture', () => {
   });
 
   it('uses the canonical header and keeps organization/admin groups distinct', () => {
-    render(<Configuracoes />);
+    renderConfiguracoes();
 
     expect(screen.getByRole('heading', { name: 'settings.page.title' })).toBeInTheDocument();
     expect(
