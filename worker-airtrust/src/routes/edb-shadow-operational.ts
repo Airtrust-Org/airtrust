@@ -13,6 +13,23 @@ function isManager(c: EdbContext): boolean {
   return checkPermission(c, 'manager');
 }
 
+/**
+ * The original capability/preview/assessment/review endpoints have their own
+ * access contracts and must not inherit the operational write/read RBAC added
+ * for the full eDB shadow workflow. In particular, capability must remain a
+ * lightweight 200 response even while the pilot is disabled, and disabled
+ * preview must fail closed with its existing 404 before any operational-domain
+ * lookup is attempted.
+ */
+function isLegacyShadowCompatibilityPath(path: string): boolean {
+  return (
+    path === '/api/edb/capability' ||
+    path.startsWith('/api/edb/shadow-preview/') ||
+    path.startsWith('/api/edb/shadow-assessment/') ||
+    path.startsWith('/api/edb/shadow-review/')
+  );
+}
+
 async function resolveActorEmployeeId(c: EdbContext): Promise<number> {
   const direct = Number(c.get('funcionarioId') || 0);
   if (Number.isInteger(direct) && direct > 0) return direct;
@@ -80,6 +97,11 @@ function managerRequired(): never {
 router.use('*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
   const method = c.req.method.toUpperCase();
+
+  if (isLegacyShadowCompatibilityPath(path)) {
+    await next();
+    return;
+  }
 
   const preflightAck = /^\/api\/edb\/voos\/(\d+)\/preflight\/ack$/.exec(path);
   if (method === 'POST' && preflightAck) {
