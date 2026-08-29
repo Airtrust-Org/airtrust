@@ -177,9 +177,9 @@ export default function Configuracoes() {
 
       <div className="mb-4 overflow-hidden rounded-lg border border-[var(--at-border)] bg-[var(--at-bg-surface)]">
         <div className="border-b border-[var(--at-border)] px-3 pt-3 sm:px-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--at-text-subtle)]">
+          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--at-text-subtle)]">
             Configuração da organização
-          </p>
+          </h2>
           <div className="flex overflow-x-auto" role="tablist" aria-label="Configuração da organização">
             <button
               type="button"
@@ -248,9 +248,9 @@ export default function Configuracoes() {
 
         {hasAdministration && (
           <div className="px-3 pt-3 sm:px-4">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--at-text-subtle)]">
+            <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--at-text-subtle)]">
               Administração e manutenção
-            </p>
+            </h2>
             <div className="flex overflow-x-auto" role="tablist" aria-label="Administração e manutenção">
               {canAccessCompanyManagement && (
                 <button
