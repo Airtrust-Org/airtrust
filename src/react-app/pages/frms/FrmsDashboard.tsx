@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import AppLayout from '@/react-app/components/AppLayout';
 import { useFrmsOperationalAccess } from '@/react-app/hooks/useFrmsOperationalAccess';
 import FrmsFlightDashboard from './FrmsFlightDashboard';
@@ -12,6 +13,7 @@ import FrmsMaintenanceCheckin from './FrmsMaintenanceCheckin';
  * (Mecânico/Inspetor) e comprova gestão de manutenção por domínio/setores.
  */
 export default function FrmsDashboard() {
+  const [searchParams] = useSearchParams();
   const access = useFrmsOperationalAccess();
 
   if (access.isLoading) {
@@ -45,8 +47,16 @@ export default function FrmsDashboard() {
   }
 
   const isMaintenanceWorker = access.data.frms_profile === 'maintenance';
+  const wantsOwnMaintenanceCheckin = searchParams.get('view') === 'checkin';
   const managesMaintenanceOnly =
     access.data.can_manage_maintenance && !access.data.domains.includes('OPERACOES');
+
+  // Um gestor que também é Mecânico/Inspetor pode alternar explicitamente
+  // para seu check-in pessoal. Um gestor sem cargo de manutenção nunca recebe
+  // esse formulário apenas por manipular a URL.
+  if (isMaintenanceWorker && wantsOwnMaintenanceCheckin) {
+    return <FrmsMaintenanceCheckin />;
+  }
 
   if (access.data.can_manage_maintenance && (isMaintenanceWorker || managesMaintenanceOnly)) {
     return <FrmsMaintenanceDashboard />;
