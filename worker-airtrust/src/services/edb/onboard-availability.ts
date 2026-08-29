@@ -2,7 +2,7 @@ import { onboardOperationWindowStart } from './diary-governance';
 
 export interface EdbVolumeRecordReference {
   volumeId: string;
-  recordId: string;
+  revisionId: string;
   revision: number;
   flightDate: string;
 }
@@ -42,8 +42,8 @@ function requireText(value: string, field: string): string {
 /**
  * Res. 773/2025 art. 7 §2 requires the volumes that comprise records from the
  * last 30 days of aircraft operation to be maintained on board, unless ANAC
- * establishes otherwise. If any record in a volume falls in the window, the
- * volume is selected as a whole.
+ * establishes otherwise. References identify immutable revisions; if any
+ * revision in a volume falls in the window, the volume is selected as a whole.
  */
 export function requiredEdbOnboardVolumeIds(
   references: readonly EdbVolumeRecordReference[],
@@ -55,7 +55,7 @@ export function requiredEdbOnboardVolumeIds(
 
   for (const reference of references) {
     const volumeId = requireText(reference.volumeId, 'volumeId');
-    requireText(reference.recordId, 'recordId');
+    requireText(reference.revisionId, 'revisionId');
     if (!Number.isInteger(reference.revision) || reference.revision < 1) {
       throw new Error('revision must be a positive integer');
     }
