@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { HeartPulse } from 'lucide-react';
+import { useFrmsOperationalAccess } from '@/react-app/hooks/useFrmsOperationalAccess';
 import FrmsSourcePolicyBanner from './FrmsSourcePolicyBanner';
 
 const ADMIN_PATHS = [
@@ -37,6 +38,11 @@ function isAdminPath(pathname: string): boolean {
   return ADMIN_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
+function isTenantAdminRole(role: string | null | undefined): boolean {
+  const normalized = String(role || '').trim().toUpperCase();
+  return normalized === 'ADMIN' || normalized === 'ADMINISTRADOR';
+}
+
 const primaryClass = (active: boolean) =>
   `rounded-lg px-4 py-2 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 ${
     active
@@ -64,10 +70,11 @@ interface FrmsWorkspaceNavProps {
 }
 
 export default function FrmsWorkspaceNav({
-  showOperationsArea = true,
-  showMaintenanceArea = false,
+  showOperationsArea,
+  showMaintenanceArea,
 }: FrmsWorkspaceNavProps = {}) {
   const location = useLocation();
+  const access = useFrmsOperationalAccess();
   const adminActive = isAdminPath(location.pathname);
   const checkinActive =
     location.pathname === '/frms/checkin' || location.pathname.startsWith('/frms/checkin/');
@@ -75,18 +82,26 @@ export default function FrmsWorkspaceNav({
   const operationsActive = location.pathname === '/frms' && area !== 'manutencao';
   const maintenanceActive = location.pathname === '/frms' && area === 'manutencao';
 
+  const canManageMaintenance = access.data?.can_manage_maintenance === true;
+  const isAdmin = isTenantAdminRole(access.data?.administrative_role);
+  const domains = access.data?.domains || [];
+  const canManageOperations =
+    isAdmin || domains.includes('OPERACOES') || domains.includes('FRMS') || !canManageMaintenance;
+  const shouldShowOperations = showOperationsArea ?? canManageOperations;
+  const shouldShowMaintenance = showMaintenanceArea ?? canManageMaintenance;
+
   return (
     <div className="space-y-2">
       <nav
         aria-label="Áreas FRMS"
         className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-950"
       >
-        {showOperationsArea ? (
+        {shouldShowOperations ? (
           <NavLink to="/frms?area=operacoes" className={primaryClass(operationsActive)}>
             Operações
           </NavLink>
         ) : null}
-        {showMaintenanceArea ? (
+        {shouldShowMaintenance ? (
           <NavLink to="/frms?area=manutencao" className={primaryClass(maintenanceActive)}>
             Manutenção
           </NavLink>
