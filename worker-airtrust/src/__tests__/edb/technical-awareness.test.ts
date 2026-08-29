@@ -41,6 +41,8 @@ async function signedSnapshot() {
   const signature: EdbSignatureProof = {
     signatureId: 'sig-tech-1',
     type: 'PIC_TECHNICAL_ACK',
+    targetType: 'TECHNICAL_SITUATION',
+    targetId: snapshot.snapshotId,
     signer: { employeeId: 10, fullName: 'Piloto em Comando', anacCode: '123456' },
     signedAt: '2026-08-28T09:30:00.000Z',
     canonicalPayloadHashSha256: snapshot.canonicalSnapshotSha256,
@@ -58,6 +60,7 @@ describe('eDB preflight technical awareness', () => {
   it('uses the signature id as the single stable acknowledgement identity', async () => {
     const { snapshot, acknowledgement } = await signedSnapshot();
     expect(acknowledgement.signature.signatureId).toBe('sig-tech-1');
+    expect(acknowledgement.signature.targetId).toBe(snapshot.snapshotId);
     expect('acknowledgementId' in acknowledgement).toBe(false);
 
     const binding = await verifyPicTechnicalAcknowledgementBinding({ snapshot, acknowledgement });
@@ -99,6 +102,34 @@ describe('eDB preflight technical awareness', () => {
     ).toBe(false);
   });
 
+  it('rejects a signature proof for a different immutable target', async () => {
+    const snapshot = await createTechnicalSituationSnapshot({
+      snapshotId: 'tech-2',
+      operatorCompanyId: 1,
+      sourceFlightId: 100,
+      aircraft,
+      maintenance,
+      capturedAt: '2026-08-28T09:00:00.000Z',
+    });
+
+    expect(() =>
+      bindPicTechnicalAcknowledgement({
+        snapshot,
+        signature: {
+          signatureId: 'sig-wrong-target',
+          type: 'PIC_TECHNICAL_ACK',
+          targetType: 'TECHNICAL_SITUATION',
+          targetId: 'tech-other',
+          signer: { employeeId: 10, fullName: 'Piloto em Comando', anacCode: '123456' },
+          signedAt: '2026-08-28T09:30:00.000Z',
+          canonicalPayloadHashSha256: snapshot.canonicalSnapshotSha256,
+          method: 'ASYMMETRIC_DIGITAL_SIGNATURE',
+          proofReference: 'proof/wrong-target',
+        },
+      }),
+    ).toThrow('EDB_TECHNICAL_ACK_TARGET_MISMATCH');
+  });
+
   it('rejects a signature proof for a different payload', async () => {
     const snapshot = await createTechnicalSituationSnapshot({
       snapshotId: 'tech-3',
@@ -115,6 +146,8 @@ describe('eDB preflight technical awareness', () => {
         signature: {
           signatureId: 'sig-bad',
           type: 'PIC_TECHNICAL_ACK',
+          targetType: 'TECHNICAL_SITUATION',
+          targetId: snapshot.snapshotId,
           signer: { employeeId: 10, fullName: 'Piloto em Comando', anacCode: '123456' },
           signedAt: '2026-08-28T09:30:00.000Z',
           canonicalPayloadHashSha256: 'f'.repeat(64),
