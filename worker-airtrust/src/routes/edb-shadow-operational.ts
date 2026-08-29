@@ -1,16 +1,18 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { AppEnv } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import { checkPermission, getEmpresaId } from '../middleware/tenant';
 import edbShadowRoutes from './edb-shadow';
 
 const router = new Hono<AppEnv>();
+type EdbContext = Context<AppEnv>;
 
-function isManager(c: Parameters<Parameters<typeof router.use>[1]>[0]): boolean {
+function isManager(c: EdbContext): boolean {
   return checkPermission(c, 'manager');
 }
 
-async function resolveActorEmployeeId(c: Parameters<Parameters<typeof router.use>[1]>[0]): Promise<number> {
+async function resolveActorEmployeeId(c: EdbContext): Promise<number> {
   const direct = Number(c.get('funcionarioId') || 0);
   if (Number.isInteger(direct) && direct > 0) return direct;
 
@@ -29,10 +31,7 @@ async function resolveActorEmployeeId(c: Parameters<Parameters<typeof router.use
   return employeeId;
 }
 
-async function assertFlightPic(
-  c: Parameters<Parameters<typeof router.use>[1]>[0],
-  vooId: number,
-): Promise<void> {
+async function assertFlightPic(c: EdbContext, vooId: number): Promise<void> {
   const empresaId = getEmpresaId(c);
   const funcionarioId = await resolveActorEmployeeId(c);
   const row = await c.env.DB
@@ -57,10 +56,7 @@ async function assertFlightPic(
   }
 }
 
-async function revisionFlightId(
-  c: Parameters<Parameters<typeof router.use>[1]>[0],
-  revisionId: string,
-): Promise<number> {
+async function revisionFlightId(c: EdbContext, revisionId: string): Promise<number> {
   const row = await c.env.DB
     .prepare(
       `SELECT voo_id
@@ -108,7 +104,9 @@ router.use('*', async (c, next) => {
   const finalSignature = /^\/api\/edb\/revisions\/([^/]+)\/signatures$/.exec(path);
   if (method === 'POST' && finalSignature) {
     const cloned = c.req.raw.clone();
-    const body = await cloned.json().catch(() => null) as { signature?: { type?: unknown } } | null;
+    const body = (await cloned.json().catch(() => null)) as {
+      signature?: { type?: unknown };
+    } | null;
     const type = body?.signature?.type;
     if (type === 'PIC_FLIGHT_RECORD') {
       await assertFlightPic(c, await revisionFlightId(c, decodeURIComponent(finalSignature[1])));
