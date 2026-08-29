@@ -74,7 +74,7 @@ describe('eDB persisted preflight evidence hydration', () => {
     expect(hydrated).toEqual(snapshot);
   });
 
-  it('rehydrates the PIC acknowledgement with the persisted row id as signature identity', async () => {
+  it('rehydrates the PIC acknowledgement with signature identity and exact technical target', async () => {
     const { situationRow, acknowledgementRow } = await rows();
     const snapshot = await hydrateEdbTechnicalSituationRow(situationRow);
     const acknowledgement = await hydrateEdbPicTechnicalAcknowledgementRow({
@@ -82,6 +82,8 @@ describe('eDB persisted preflight evidence hydration', () => {
       snapshot,
     });
     expect(acknowledgement.signature.signatureId).toBe('sig-tech-1');
+    expect(acknowledgement.signature.targetType).toBe('TECHNICAL_SITUATION');
+    expect(acknowledgement.signature.targetId).toBe('tech-1');
     expect(acknowledgement.technicalSituationId).toBe('tech-1');
   });
 
