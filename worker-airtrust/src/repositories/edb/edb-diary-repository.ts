@@ -531,7 +531,7 @@ export async function closePersistedEdbDiaryVolume(params: {
     .bind(
       closed.closingAct!.occurredAt,
       closedByEmployeeId,
-      canonicalJson({ act: closed.closingAct } satisfies StoredClosingActEnvelope),
+      canonicalJson({ act: closed.closingAct! } satisfies StoredClosingActEnvelope),
       retention,
       params.empresaId,
       closed.volumeId,

@@ -138,7 +138,9 @@ export function evaluateEdbLifecycleAction(
   }
 
   if (action === 'SUPERSEDE') {
-    if (!SIGNED_OR_LATER.has(record.status) || record.status === 'SUPERSEDED') {
+    // Terminal states (SUPERSEDED/CANCELLED) are already rejected by the guard at
+    // the top of this function, so only DRAFT/READY_FOR_PIC_SIGNATURE can reach here.
+    if (!SIGNED_OR_LATER.has(record.status)) {
       return decision(record, false, null, ['EDB_ONLY_SIGNED_RECORD_CAN_BE_SUPERSEDED']);
     }
     const reasons: string[] = [];

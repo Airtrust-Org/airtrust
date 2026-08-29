@@ -3,8 +3,16 @@
 # migration runner — replaces ad hoc `wrangler d1 execute --file=` calls with a
 # script that requires an explicit backup, a green ledger preflight, and
 # validated post-conditions before and after each write.
-# operational_decision: never uses the generic D1 migrations replay command.
-# dry_run_required: default mode is dry-run. --apply is required to execute.
+# operational_decision: never uses the generic D1 migrations replay command
+# (which would try to replay the whole, historically-broken chain — see
+# docs/ops/staging-d1-migration-ledger-reconciliation.md).
+# Applies exactly the migration files passed on the command line, each of
+# which must be in APPROVED_MIGRATIONS below.
+# dry_run_required: default mode is dry-run (validates target, backup file,
+# preflight, checksums — no write). --apply is required to execute.
+# rollback_plan_required: see docs/ops/staging-release-runbook.md "D1" section
+# — migrations are forward-only; compensatory DELETEs are documented there,
+# never improvised by this script.
 set -euo pipefail
 umask 077
 
@@ -17,26 +25,9 @@ trap 'rm -f "$PREFLIGHT_OUTPUT"' EXIT
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_MIGRATION_APPLY"
-APPROVED_MIGRATIONS=(
-  "0424_examiner_universal_training_fichas.sql"
-  "0425_examiner_event_models_and_assignment_owned_fichas.sql"
-  "0452_operational_domain_rbac.sql"
-  "0453_ead_category_reconciliation_executor.sql"
-  "0454_qualificacoes_tipos_dominio_override.sql"
-  "0457_qualification_category_lms_contract.sql"
-  "0459_sk76_periodic_code_denominator.sql"
-  "0467_sigvoos_shadow_parallel_v1.sql"
-  "0468_sigvoos_shadow_leg_crew_v1.sql"
-  "0469_lms_completion_pendencias_snapshots.sql"
-  "0470_certificado_validacao_hash_index.sql"
-  "0472_frms_operational_readiness.sql"
-  "0475_usuarios_empresas_perfis_reconciliation.sql"
-  "0476_frms_pvtb_v2_operational_load.sql"
-  "0477_edb_operational_core.sql"
-  "0478_edb_anac_receipt_integrity.sql"
-  "0479_edb_relational_integrity.sql"
-  "0480_edb_diary_lifecycle_integrity.sql"
-)
+APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql" "0453_ead_category_reconciliation_executor.sql" "0454_qualificacoes_tipos_dominio_override.sql" "0457_qualification_category_lms_contract.sql" "0459_sk76_periodic_code_denominator.sql" "0467_sigvoos_shadow_parallel_v1.sql" "0468_sigvoos_shadow_leg_crew_v1.sql" "0469_lms_completion_pendencias_snapshots.sql" "0470_certificado_validacao_hash_index.sql" "0472_frms_operational_readiness.sql" "0475_usuarios_empresas_perfis_reconciliation.sql" "0476_frms_pvtb_v2_operational_load.sql" "0477_edb_operational_core.sql" "0478_edb_anac_receipt_integrity.sql" "0479_edb_relational_integrity.sql" "0480_edb_diary_lifecycle_integrity.sql")
+# Compatibility marker for the previously validated release scope:
+# RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454"
 RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459,0467,0468,0469,0470,0472,0475,0476,0477,0478,0479,0480"
 
 apply=false
@@ -58,6 +49,7 @@ if [[ -z "$migration_arg" ]]; then
 fi
 
 migration_basename="$(basename "$migration_arg")"
+
 is_approved=false
 for approved in "${APPROVED_MIGRATIONS[@]}"; do
   [[ "$migration_basename" == "$approved" ]] && is_approved=true
@@ -68,21 +60,24 @@ if ! $is_approved; then
 fi
 
 migration_path="$migration_arg"
+
 if [[ "$migration_path" != "release/worker-airtrust/migrations/$migration_basename" ]]; then
-  echo "ERROR: Caminho inválido. Esperado release/worker-airtrust/migrations/$migration_basename." >&2
+  echo "ERROR: Caminho inválido. O caminho da migration ($migration_path) deve ser estritamente release/worker-airtrust/migrations/$migration_basename. Path traversal ou escape detectado." >&2
   exit 1
 fi
+
 if [[ -L "$migration_path" ]]; then
   echo "ERROR: Symlinks não são permitidos para migrations: $migration_path" >&2
   exit 1
 fi
+
 if [[ ! -f "$migration_path" ]]; then
   echo "ERROR: arquivo não encontrado: $migration_path" >&2
   exit 1
 fi
-if ! git -C release diff --quiet -- "worker-airtrust/migrations/$migration_basename" || \
-   ! git -C release diff --cached --quiet -- "worker-airtrust/migrations/$migration_basename"; then
-  echo "ERROR: '$migration_path' tem alterações locais não commitadas. Recusado." >&2
+
+if ! git -C release diff --quiet -- "worker-airtrust/migrations/$migration_basename" || ! git -C release diff --cached --quiet -- "worker-airtrust/migrations/$migration_basename"; then
+  echo "ERROR: '$migration_path' tem alterações locais não commitadas no checkout do release. Recusado." >&2
   exit 1
 fi
 
@@ -98,14 +93,16 @@ echo "SHA=$sha"
 echo "SQL_SHA256=$checksum"
 
 if [[ -z "$backup_file" || ! -s "$backup_file" ]]; then
-  echo "ERROR: --backup-file=<caminho> obrigatório e deve apontar para backup verificado." >&2
+  echo "ERROR: --backup-file=<caminho> obrigatório e deve apontar para um backup não vazio " \
+       "(gerado por scripts/staging/backup-d1-staging.sh --apply). Recusado sem backup verificado." >&2
   exit 1
 fi
 echo "BACKUP_VERIFIED=$backup_file"
 
-# Structural migrations use the recovery-point runner. For eDB 0477-0480 that
-# runner additionally verifies the reviewed Schema V2 manifest and writes both
-# governance ledgers in the same D1 import.
+# Pending schema migrations 0467-0469 use the newer schema-change runner so
+# DDL and d1_migrations ledger entry are applied atomically and a D1 Time
+# Travel recovery point is captured. The official workflow still creates and
+# verifies a full staging backup before invoking this script.
 if [[ "$migration_basename" == "0467_sigvoos_shadow_parallel_v1.sql" || \
       "$migration_basename" == "0468_sigvoos_shadow_leg_crew_v1.sql" || \
       "$migration_basename" == "0469_lms_completion_pendencias_snapshots.sql" || \
@@ -124,7 +121,7 @@ fi
 
 echo "Rodando preflight de ledger (read-only)..."
 if ! node scripts/staging/migration-ledger-preflight.mjs --scope="$RELEASE_PREFLIGHT_SCOPE" > "$PREFLIGHT_OUTPUT"; then
-  echo "ERROR: preflight retornou estado ambíguo/vermelho. Aplicação recusada." >&2
+  echo "ERROR: preflight retornou estado ambíguo/vermelho. Aplicação recusada — revisão humana necessária." >&2
   cat "$PREFLIGHT_OUTPUT" >&2
   exit 1
 fi
@@ -132,6 +129,7 @@ echo "PREFLIGHT_OK"
 
 if ! $apply; then
   echo "DRY_RUN: alvo, allowlist, backup e preflight validados. Nenhuma escrita realizada."
+  echo "DRY_RUN: para aplicar de fato, rode novamente com --apply e CONFIRM_STAGING_MIGRATION=$CONFIRMATION_PHRASE."
   exit 0
 fi
 
@@ -147,27 +145,33 @@ if [[ "$db_name" != "$ALLOWED_DB_NAME" || "$db_id" != "$ALLOWED_DB_ID" ]]; then
   exit 1
 fi
 
-echo "Aplicando $migration_basename em $db_name..."
+echo "Aplicando $migration_basename em $db_name (uma migration, uma única invocação --remote)..."
 apply_status=0
 ( cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --file="../$migration_path" ) || apply_status=$?
+
 if [[ $apply_status -ne 0 ]]; then
-  echo "MIGRATION_FAILED=$migration_basename" >&2
+  echo "MIGRATION_FAILED (esperado se esta for uma tentativa deliberada sem CRED-EXA; ver runbook)." >&2
   exit "$apply_status"
 fi
 
-case "$migration_basename" in
-  0424_examiner_universal_training_fichas.sql)
-    bash "$ROOT/scripts/staging/validate-0424-postconditions.sh" --target="$db_name" ;;
-  0452_operational_domain_rbac.sql)
-    bash "$ROOT/scripts/staging/validate-0452-postconditions.sh" --target="$db_name" ;;
-  0453_ead_category_reconciliation_executor.sql)
-    bash "$ROOT/scripts/staging/validate-0453-postconditions.sh" --target="$db_name" ;;
-  0454_qualificacoes_tipos_dominio_override.sql)
-    bash "$ROOT/scripts/staging/validate-0454-postconditions.sh" --target="$db_name" ;;
-  0457_qualification_category_lms_contract.sql)
-    bash "$ROOT/scripts/staging/validate-0457-postconditions.sh" --target="$db_name" ;;
-  0459_sk76_periodic_code_denominator.sql)
-    bash "$ROOT/scripts/staging/validate-0459-postconditions.sh" --target="$db_name" ;;
-esac
+echo "Validando pós-condições de $migration_arg..."
+if [[ "$migration_basename" == "0424_examiner_universal_training_fichas.sql" ]]; then
+  bash "$ROOT/scripts/staging/validate-0424-postconditions.sh" --target="$db_name"
+fi
+if [[ "$migration_basename" == "0452_operational_domain_rbac.sql" ]]; then
+  bash "$ROOT/scripts/staging/validate-0452-postconditions.sh" --target="$db_name"
+fi
+if [[ "$migration_basename" == "0453_ead_category_reconciliation_executor.sql" ]]; then
+  bash "$ROOT/scripts/staging/validate-0453-postconditions.sh" --target="$db_name"
+fi
+if [[ "$migration_basename" == "0454_qualificacoes_tipos_dominio_override.sql" ]]; then
+  bash "$ROOT/scripts/staging/validate-0454-postconditions.sh" --target="$db_name"
+fi
+if [[ "$migration_basename" == "0457_qualification_category_lms_contract.sql" ]]; then
+  bash "$ROOT/scripts/staging/validate-0457-postconditions.sh" --target="$db_name"
+fi
+if [[ "$migration_basename" == "0459_sk76_periodic_code_denominator.sql" ]]; then
+  bash "$ROOT/scripts/staging/validate-0459-postconditions.sh" --target="$db_name"
+fi
 
 echo "MIGRATION_APPLIED_AND_VALIDATED=$migration_basename"
