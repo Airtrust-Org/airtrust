@@ -398,3 +398,170 @@ BEFORE DELETE ON edb_auditoria_eventos
 BEGIN
   SELECT RAISE(ABORT, 'EDB_AUDIT_IMMUTABLE');
 END;
+
+-- Fail-closed relational guards for the immutable eDB evidence chain. These
+-- duplicate critical application checks so direct SQL cannot bypass ordering
+-- or cross-tenant/scope binding.
+CREATE TRIGGER IF NOT EXISTS trg_edb_ciencia_require_snapshot_binding
+BEFORE INSERT ON edb_ciencias_tecnicas_pic
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1
+    FROM edb_situacoes_tecnicas s
+    WHERE s.id = NEW.situacao_tecnica_id
+      AND s.empresa_id = NEW.empresa_id
+      AND s.voo_id = NEW.voo_id
+      AND s.canonical_snapshot_sha256 = NEW.canonical_snapshot_sha256
+      AND datetime(NEW.signed_at) >= datetime(s.captured_at)
+  ) THEN RAISE(ABORT, 'EDB_TECHNICAL_ACK_SNAPSHOT_BINDING_INVALID') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_edb_revisao_require_scope_and_chain
+BEFORE INSERT ON edb_registro_revisoes
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1
+    FROM edb_diarios d
+    WHERE d.id = NEW.diario_id
+      AND d.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'EDB_DIARY_SCOPE_MISMATCH') END;
+
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1
+    FROM edb_volumes v
+    WHERE v.id = NEW.volume_id
+      AND v.empresa_id = NEW.empresa_id
+      AND v.diario_id = NEW.diario_id
+  ) THEN RAISE(ABORT, 'EDB_VOLUME_SCOPE_MISMATCH') END;
+
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1
+    FROM edb_ciencias_tecnicas_pic c
+    WHERE c.id = NEW.ciencia_tecnica_pic_id
+      AND c.empresa_id = NEW.empresa_id
+      AND c.voo_id = NEW.voo_id
+  ) THEN RAISE(ABORT, 'EDB_TECHNICAL_ACK_SCOPE_MISMATCH') END;
+
+  SELECT CASE
+    WHEN NEW.revisao = 1 AND NEW.supersedes_revision_id IS NOT NULL
+      THEN RAISE(ABORT, 'EDB_INITIAL_REVISION_CANNOT_SUPERSEDE')
+    WHEN NEW.revisao > 1 AND NEW.supersedes_revision_id IS NULL
+      THEN RAISE(ABORT, 'EDB_CORRECTION_SUPERSEDES_REVISION_REQUIRED')
+  END;
+
+  SELECT CASE WHEN NEW.revisao > 1 AND NOT EXISTS (
+    SELECT 1
+    FROM edb_registro_revisoes previous
+    WHERE previous.id = NEW.supersedes_revision_id
+      AND previous.empresa_id = NEW.empresa_id
+      AND previous.logical_record_id = NEW.logical_record_id
+      AND previous.revisao = NEW.revisao - 1
+  ) THEN RAISE(ABORT, 'EDB_CORRECTION_CHAIN_INVALID') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_edb_assinatura_require_lifecycle
+BEFORE INSERT ON edb_assinaturas
+BEGIN
+  SELECT CASE
+    WHEN NEW.tipo = 'PIC_FLIGHT_RECORD' AND NOT EXISTS (
+      SELECT 1
+      FROM edb_registro_estado s
+      WHERE s.revision_id = NEW.revision_id
+        AND s.empresa_id = NEW.empresa_id
+        AND s.status = 'READY_FOR_PIC_SIGNATURE'
+    ) THEN RAISE(ABORT, 'EDB_PIC_SIGNATURE_STATE_INVALID')
+    WHEN NEW.tipo = 'OPERATOR_RECORD' AND NOT EXISTS (
+      SELECT 1
+      FROM edb_registro_estado s
+      WHERE s.revision_id = NEW.revision_id
+        AND s.empresa_id = NEW.empresa_id
+        AND s.status = 'PIC_SIGNED'
+    ) THEN RAISE(ABORT, 'EDB_OPERATOR_SIGNATURE_STATE_INVALID')
+  END;
+
+  SELECT CASE WHEN NEW.tipo = 'OPERATOR_RECORD' AND NOT EXISTS (
+    SELECT 1
+    FROM edb_assinaturas a
+    WHERE a.empresa_id = NEW.empresa_id
+      AND a.revision_id = NEW.revision_id
+      AND a.tipo = 'PIC_FLIGHT_RECORD'
+  ) THEN RAISE(ABORT, 'EDB_OPERATOR_SIGNATURE_REQUIRES_PIC') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_edb_estado_transition_guard
+BEFORE UPDATE OF status ON edb_registro_estado
+WHEN NEW.status <> OLD.status
+BEGIN
+  SELECT CASE WHEN NOT (
+    (OLD.status = 'DRAFT' AND NEW.status IN ('READY_FOR_PIC_SIGNATURE', 'CANCELLED')) OR
+    (OLD.status = 'READY_FOR_PIC_SIGNATURE' AND NEW.status IN ('PIC_SIGNED', 'CANCELLED')) OR
+    (OLD.status = 'PIC_SIGNED' AND NEW.status IN ('OPERATOR_SIGNED', 'SUPERSEDED')) OR
+    (OLD.status = 'OPERATOR_SIGNED' AND NEW.status IN ('ANAC_PENDING', 'SUPERSEDED')) OR
+    (OLD.status = 'ANAC_PENDING' AND NEW.status IN ('ANAC_SYNCED', 'SUPERSEDED')) OR
+    (OLD.status = 'ANAC_SYNCED' AND NEW.status = 'SUPERSEDED')
+  ) THEN RAISE(ABORT, 'EDB_STATE_TRANSITION_NOT_ALLOWED') END;
+
+  SELECT CASE WHEN NEW.versao <> OLD.versao + 1
+    THEN RAISE(ABORT, 'EDB_STATE_VERSION_INCREMENT_REQUIRED') END;
+
+  SELECT CASE WHEN NEW.status = 'PIC_SIGNED' AND NOT EXISTS (
+    SELECT 1 FROM edb_assinaturas a
+    WHERE a.empresa_id = NEW.empresa_id
+      AND a.revision_id = NEW.revision_id
+      AND a.tipo = 'PIC_FLIGHT_RECORD'
+  ) THEN RAISE(ABORT, 'EDB_PIC_SIGNATURE_REQUIRED_FOR_STATE') END;
+
+  SELECT CASE WHEN NEW.status = 'OPERATOR_SIGNED' AND NOT EXISTS (
+    SELECT 1 FROM edb_assinaturas a
+    WHERE a.empresa_id = NEW.empresa_id
+      AND a.revision_id = NEW.revision_id
+      AND a.tipo = 'OPERATOR_RECORD'
+  ) THEN RAISE(ABORT, 'EDB_OPERATOR_SIGNATURE_REQUIRED_FOR_STATE') END;
+
+  SELECT CASE WHEN NEW.status = 'ANAC_PENDING' AND NOT EXISTS (
+    SELECT 1 FROM edb_anac_outbox o
+    WHERE o.empresa_id = NEW.empresa_id
+      AND o.revision_id = NEW.revision_id
+  ) THEN RAISE(ABORT, 'EDB_ANAC_OUTBOX_REQUIRED_FOR_STATE') END;
+
+  SELECT CASE WHEN NEW.status = 'ANAC_SYNCED' AND NOT EXISTS (
+    SELECT 1
+    FROM edb_anac_outbox o
+    INNER JOIN edb_anac_recibos r
+      ON r.outbox_id = o.id AND r.empresa_id = o.empresa_id
+    WHERE o.empresa_id = NEW.empresa_id
+      AND o.revision_id = NEW.revision_id
+  ) THEN RAISE(ABORT, 'EDB_ANAC_RECEIPT_REQUIRED_FOR_STATE') END;
+
+  SELECT CASE WHEN NEW.status = 'SUPERSEDED' AND NOT EXISTS (
+    SELECT 1 FROM edb_registro_revisoes replacement
+    WHERE replacement.empresa_id = NEW.empresa_id
+      AND replacement.supersedes_revision_id = NEW.revision_id
+  ) THEN RAISE(ABORT, 'EDB_REPLACEMENT_REVISION_REQUIRED_FOR_SUPERSEDE') END;
+
+  SELECT CASE WHEN NEW.status = 'CANCELLED' AND EXISTS (
+    SELECT 1 FROM edb_assinaturas a
+    WHERE a.empresa_id = NEW.empresa_id
+      AND a.revision_id = NEW.revision_id
+  ) THEN RAISE(ABORT, 'EDB_SIGNED_REVISION_CANNOT_BE_CANCELLED') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_edb_anac_outbox_require_operator_signed
+BEFORE INSERT ON edb_anac_outbox
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1
+    FROM edb_registro_estado s
+    WHERE s.revision_id = NEW.revision_id
+      AND s.empresa_id = NEW.empresa_id
+      AND s.status = 'OPERATOR_SIGNED'
+  ) THEN RAISE(ABORT, 'EDB_ANAC_QUEUE_REQUIRES_OPERATOR_SIGNED') END;
+
+  SELECT CASE WHEN (
+    SELECT COUNT(DISTINCT a.tipo)
+    FROM edb_assinaturas a
+    WHERE a.empresa_id = NEW.empresa_id
+      AND a.revision_id = NEW.revision_id
+      AND a.tipo IN ('PIC_FLIGHT_RECORD', 'OPERATOR_RECORD')
+  ) <> 2 THEN RAISE(ABORT, 'EDB_ANAC_QUEUE_REQUIRES_FINAL_SIGNATURES') END;
+END;
