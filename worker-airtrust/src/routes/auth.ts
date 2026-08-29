@@ -26,11 +26,7 @@ import { enviarEmailAlert } from '../cron/notificacoes';
 import { isAdminRole, normalizeAirtrustRole } from '../utils/role-resolution';
 import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { isManagerPerfil } from '../services/setores-gestores';
-import {
-  cleanupExpiredRefreshTokens,
-  persistRefreshToken,
-  resolveAndRotateRefreshToken,
-} from '../services/auth-refresh-token';
+import { persistRefreshToken, resolveAndRotateRefreshToken } from '../services/auth-refresh-token';
 
 // Tipar variáveis adicionadas ao contexto pelo middleware auth()
 type AuthVars = {
@@ -1306,7 +1302,6 @@ authRoutes.post('/logout', async (c) => {
     const refreshToken = typeof body.refreshToken === 'string' ? body.refreshToken : null;
 
     const db = c.env.DB;
-    await cleanupExpiredRefreshTokens(db);
 
     const accessToken = extractBearerToken(c.req.header('Authorization'));
     const accessPayload =
@@ -1553,7 +1548,9 @@ authRoutes.get('/empresas', auth(), async (c) => {
       ? Number(empresaIdFromJwt)
       : (empresaIdFromJwt as number | undefined);
   const empresaIdAtual =
-    typeof empresaIdAtualFromJwt === 'number' && Number.isFinite(empresaIdAtualFromJwt) && empresaIdAtualFromJwt > 0
+    typeof empresaIdAtualFromJwt === 'number' &&
+    Number.isFinite(empresaIdAtualFromJwt) &&
+    empresaIdAtualFromJwt > 0
       ? empresaIdAtualFromJwt
       : await resolveUserEmpresaId(db, userId);
   const platformAccessState = await resolvePlatformAccessState(db, userId);

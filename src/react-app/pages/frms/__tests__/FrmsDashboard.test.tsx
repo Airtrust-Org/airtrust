@@ -25,7 +25,17 @@ vi.mock('@/react-app/hooks/useOperationalReadiness', () => ({
 
 vi.mock('@/react-app/hooks/useFrmsOperationalAccess', () => ({
   useFrmsOperationalAccess: (...args: unknown[]) => useFrmsOperationalAccessMock(...args),
-  useFrmsMaintenanceTeam: () => ({ data: null, isLoading: false, isFetching: false, refetch: vi.fn() }),
+  useFrmsMaintenanceTeam: () => ({
+    data: {
+      date: '2026-08-27',
+      items: [],
+      meta: { scope: 'maintenance', setor_ids: [11], access_source: 'frms_manager' },
+    },
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   useSubmitFrmsMaintenanceCheckin: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -99,6 +109,26 @@ function state(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function operationalAccess(overrides: Record<string, unknown> = {}) {
+  return {
+    data: {
+      administrative_role: 'GESTOR',
+      enabled: true,
+      domains: ['OPERACOES'],
+      setor_ids: [1],
+      actions: {},
+      frms_profile: 'flight',
+      employee: { id: 10, nome: 'Max Monteiro', cargo: 'Piloto', funcao: 'PIC', setor_id: 1 },
+      can_manage_maintenance: false,
+      maintenance_setor_ids: [],
+      ...overrides,
+    },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  };
+}
+
 function renderDashboard(initialEntry = '/frms') {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -114,33 +144,62 @@ describe('FrmsDashboard simplificado', () => {
     useReadinessTeamMock.mockReset();
     useReadinessTeamMock.mockReturnValue({ data: [] });
     useFrmsOperationalAccessMock.mockReset();
-    useFrmsOperationalAccessMock.mockReturnValue({
-      data: {
-        administrative_role: 'GESTOR',
-        enabled: true,
-        domains: ['OPERACOES'],
-        setor_ids: [1],
-        actions: {},
-        frms_profile: 'flight',
-        employee: { id: 10, nome: 'Max Monteiro', cargo: 'Piloto', funcao: 'PIC', setor_id: 1 },
-        can_manage_maintenance: false,
-        maintenance_setor_ids: [],
-      },
-      isLoading: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
+    useFrmsOperationalAccessMock.mockReturnValue(operationalAccess());
   });
 
-  it('expõe apenas as três áreas primárias e remove a navegação antiga', () => {
+  it('expõe as áreas primárias e remove a navegação antiga', () => {
     renderDashboard();
 
-    expect(screen.getByRole('link', { name: 'Operação' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Operações' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Casos' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Administração' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Manutenção' })).not.toBeInTheDocument();
     expect(screen.queryByText('Monitoramento')).not.toBeInTheDocument();
     expect(screen.queryByText('Análise & Evidências')).not.toBeInTheDocument();
     expect(screen.queryByText('Operação agora')).not.toBeInTheDocument();
+  });
+
+  it('gestor de fadiga enxerga Operações e Manutenção e abre o painel de manutenção', () => {
+    useFrmsOperationalAccessMock.mockReturnValue(
+      operationalAccess({
+        domains: ['FRMS'],
+        setor_ids: [50],
+        can_manage_maintenance: true,
+        maintenance_setor_ids: [11],
+      }),
+    );
+
+    renderDashboard('/frms?area=manutencao');
+
+    expect(screen.getByRole('link', { name: 'Operações' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manutenção' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Fadiga da Manutenção' })).toBeInTheDocument();
+    expect(screen.getByText(/gestão central de fadiga/i)).toBeInTheDocument();
+  });
+
+  it('administrador mantém acesso às duas áreas mesmo sem setor operacional próprio', () => {
+    useFrmsOperationalAccessMock.mockReturnValue(
+      operationalAccess({
+        administrative_role: 'ADMINISTRADOR',
+        domains: [],
+        setor_ids: [],
+        can_manage_maintenance: true,
+        maintenance_setor_ids: [11],
+      }),
+    );
+
+    renderDashboard('/frms');
+
+    expect(screen.getByRole('link', { name: 'Operações' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manutenção' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Operação' })).toBeInTheDocument();
+  });
+
+  it('não permite abrir manutenção por query string sem escopo de gestão', () => {
+    renderDashboard('/frms?area=manutencao');
+
+    expect(screen.getByRole('heading', { name: 'Operação' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Fadiga da Manutenção' })).not.toBeInTheDocument();
   });
 
   it('usa o dia operacional da URL no snapshot', () => {

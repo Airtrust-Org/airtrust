@@ -25,6 +25,10 @@ APPROVED_MIGRATIONS=(
   "0472_frms_operational_readiness.sql"
   "0475_usuarios_empresas_perfis_reconciliation.sql"
   "0476_frms_pvtb_v2_operational_load.sql"
+  "0477_edb_operational_core.sql"
+  "0478_edb_anac_receipt_integrity.sql"
+  "0479_edb_relational_integrity.sql"
+  "0480_edb_diary_lifecycle_integrity.sql"
 )
 
 apply=false
@@ -53,8 +57,16 @@ if ! $is_approved; then
   exit 1
 fi
 
+edb_manifest_name=""
+case "$migration_basename" in
+  0477_edb_operational_core.sql) edb_manifest_name="edb-operational-core-0477.json" ;;
+  0478_edb_anac_receipt_integrity.sql) edb_manifest_name="edb-anac-receipt-integrity-0478.json" ;;
+  0479_edb_relational_integrity.sql) edb_manifest_name="edb-relational-integrity-0479.json" ;;
+  0480_edb_diary_lifecycle_integrity.sql) edb_manifest_name="edb-diary-lifecycle-integrity-0480.json" ;;
+esac
+
 # The outer release preflight has already limited its decision to the explicit
-# release list.  This per-migration recovery runner must not reintroduce a
+# release list. This per-migration recovery runner must not reintroduce a
 # historical-ledger dependency while applying an individual approved file.
 RELEASE_PREFLIGHT_SCOPE="${migration_basename%%_*}"
 
@@ -139,26 +151,37 @@ validate_postconditions() {
     0476_frms_pvtb_v2_operational_load.sql)
       bash scripts/staging/validate-0476-postconditions.sh --target="$db_name"
       ;;
+    0477_edb_operational_core.sql|0478_edb_anac_receipt_integrity.sql|0479_edb_relational_integrity.sql|0480_edb_diary_lifecycle_integrity.sql)
+      bash scripts/staging/validate-edb-0477-0480-postconditions.sh \
+        --target="$db_name" --migration="$migration_basename"
+      ;;
   esac
 }
 
-read_ledger_count() {
-  local ledger_sql
-  ledger_sql="SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$migration_basename';"
+query_count() {
+  local sql="$1"
   (
     cd worker-airtrust
-    npx wrangler d1 execute "$db_name" --remote --json --command "$ledger_sql" > "$ledger_output"
+    npx wrangler d1 execute "$db_name" --remote --json --command "$sql" > "$ledger_output"
   )
   node - "$ledger_output" <<'NODE'
 const fs = require('node:fs');
 const file = process.argv[2];
-const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-const count = Number(parsed?.[0]?.results?.[0]?.count);
-if (!Number.isInteger(count) || count < 0) {
-  throw new Error('LEDGER_COUNT_INVALID');
-}
+const raw = fs.readFileSync(file, 'utf8');
+const start = raw.indexOf('[');
+const end = raw.lastIndexOf(']');
+const jsonText = (start !== -1 && end > start) ? raw.slice(start, end + 1) : raw;
+const parsed = JSON.parse(jsonText);
+const row = parsed?.[0]?.results?.[0];
+const val = row?.count ?? row?.COUNT ?? row?.total ?? row?.TOTAL ?? row?.['COUNT(*)'] ?? row?.['count(*)'] ?? (row ? Object.values(row)[0] : NaN);
+const count = Number(val);
+if (!Number.isInteger(count) || count < 0) throw new Error('LEDGER_COUNT_INVALID');
 process.stdout.write(String(count));
 NODE
+}
+
+read_ledger_count() {
+  query_count "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$migration_basename';"
 }
 
 echo "Executando preflight de ledger somente leitura..."
@@ -176,17 +199,87 @@ if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; the
 fi
 
 ledger_count="$(read_ledger_count)"
-if [[ "$ledger_count" == "1" ]]; then
-  validate_postconditions
-  echo "MIGRATION_ALREADY_APPLIED_AND_VALIDATED=$migration_basename"
-  echo "RECOVERY_TIMESTAMP_UTC=NOT_REQUIRED_ALREADY_APPLIED"
-  echo "RECOVERY_POINT_CAPTURED=false"
-  exit 0
+
+if [[ -n "$edb_manifest_name" ]]; then
+  manifest_path="release/worker-airtrust/schema-v2/$edb_manifest_name"
+  if [[ -L "$manifest_path" || ! -f "$manifest_path" ]]; then
+    echo "ERROR: manifest Schema V2 eDB ausente ou symlink recusado: $manifest_path" >&2
+    exit 1
+  fi
+
+  manifest_values="$(node - "$manifest_path" <<'NODE'
+const fs = require('node:fs');
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+for (const field of ['changeId', 'baselineId']) {
+  if (typeof manifest[field] !== 'string' || !/^[a-z0-9][a-z0-9._-]{2,127}$/.test(manifest[field])) {
+    throw new Error(`MANIFEST_${field.toUpperCase()}_INVALID`);
+  }
+}
+process.stdout.write(`${manifest.changeId}\n${manifest.baselineId}\n`);
+NODE
+)"
+  edb_change_id="$(printf '%s\n' "$manifest_values" | sed -n '1p')"
+  edb_baseline_id="$(printf '%s\n' "$manifest_values" | sed -n '2p')"
+
+  schema_count="$(query_count "SELECT COUNT(*) AS count FROM airtrust_schema_changes_v2 WHERE change_id = '$edb_change_id';")"
+  baseline_count="$(query_count "SELECT COUNT(*) AS count FROM airtrust_schema_baselines_v2 WHERE baseline_id = '$edb_baseline_id' AND status = 'ACTIVE';")"
+  if [[ "$baseline_count" != "1" ]]; then
+    echo "ERROR: baseline Schema V2 eDB deve existir uma única vez e estar ACTIVE: $edb_baseline_id" >&2
+    exit 1
+  fi
+  if [[ "$ledger_count" != "$schema_count" ]]; then
+    echo "ERROR: divergência de ledgers eDB: d1_migrations=$ledger_count schema_v2=$schema_count" >&2
+    exit 1
+  fi
+  if [[ "$ledger_count" == "1" ]]; then
+    validate_postconditions
+    echo "MIGRATION_ALREADY_APPLIED_AND_VALIDATED=$migration_basename"
+    echo "SCHEMA_V2_CHANGE_CONFIRMED=$edb_change_id"
+    echo "RECOVERY_TIMESTAMP_UTC=NOT_REQUIRED_ALREADY_APPLIED"
+    echo "RECOVERY_POINT_CAPTURED=false"
+    exit 0
+  fi
+  if [[ "$ledger_count" != "0" ]]; then
+    echo "ERROR: ledgers eDB devem conter exatamente 0 ou 1 entrada; encontrado=$ledger_count" >&2
+    exit 1
+  fi
+
+  bundle_result="$(node scripts/staging/build-edb-dual-ledger-apply.mjs \
+    release "$migration_basename" "$release_sha" "$combined_sql")"
+  node -e '
+    const result = JSON.parse(process.argv[1]);
+    if (result.migrationName !== process.argv[2]) throw new Error("EDB_BUNDLE_MIGRATION_MISMATCH");
+    if (result.releaseSha !== process.argv[3]) throw new Error("EDB_BUNDLE_RELEASE_SHA_MISMATCH");
+    if (!result.changeId || !result.baselineId || !result.fileHash || !result.planHash) {
+      throw new Error("EDB_BUNDLE_METADATA_INCOMPLETE");
+    }
+  ' "$bundle_result" "$migration_basename" "$release_sha"
+  echo "EDB_SCHEMA_V2_BUNDLE_VERIFIED=$edb_change_id"
+else
+  if [[ "$ledger_count" == "1" ]]; then
+    validate_postconditions
+    echo "MIGRATION_ALREADY_APPLIED_AND_VALIDATED=$migration_basename"
+    echo "RECOVERY_TIMESTAMP_UTC=NOT_REQUIRED_ALREADY_APPLIED"
+    echo "RECOVERY_POINT_CAPTURED=false"
+    exit 0
+  fi
+  if [[ "$ledger_count" != "0" ]]; then
+    echo "ERROR: ledger contém $ledger_count entradas para $migration_basename; esperado 0 ou 1." >&2
+    exit 1
+  fi
+
+  node --input-type=module - "$migration_path" "$migration_basename" "$combined_sql" <<'NODE'
+import { readFileSync, writeFileSync } from 'node:fs';
+import { buildLedgerAppliedSql } from './worker-airtrust/scripts/lib/migration-remote-apply.mjs';
+
+const [migrationPath, migrationName, outputPath] = process.argv.slice(2);
+const migrationSql = readFileSync(migrationPath, 'utf8');
+const combined = buildLedgerAppliedSql({ migrationSql, migrationName });
+writeFileSync(outputPath, combined, { encoding: 'utf8', mode: 0o600 });
+NODE
 fi
-if [[ "$ledger_count" != "0" ]]; then
-  echo "ERROR: ledger contém $ledger_count entradas para $migration_basename; esperado 0 ou 1." >&2
-  exit 1
-fi
+
+test -s "$combined_sql"
 
 if ! $apply; then
   echo "DRY_RUN=true"
@@ -196,18 +289,6 @@ if [[ "${CONFIRM_STAGING_SCHEMA_CHANGE:-}" != "$CONFIRMATION_PHRASE" ]]; then
   echo "ERROR: confirmação operacional ausente ou incorreta." >&2
   exit 1
 fi
-
-node --input-type=module - "$migration_path" "$migration_basename" "$combined_sql" <<'NODE'
-import { readFileSync, writeFileSync } from 'node:fs';
-import { buildLedgerAppliedSql } from './worker-airtrust/scripts/lib/migration-remote-apply.mjs';
-
-const [migrationPath, migrationName, outputPath] = process.argv.slice(2);
-const migrationSql = readFileSync(migrationPath, 'utf8');
-const combined = buildLedgerAppliedSql({ migrationSql, migrationName });
-writeFileSync(outputPath, combined, { encoding: 'utf8', mode: 0o600 });
-NODE
-
-test -s "$combined_sql"
 
 recovery_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Capturando ponto de recuperação D1 Time Travel..."
@@ -223,9 +304,7 @@ const fs = require('node:fs');
 const file = process.argv[2];
 const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
 const serialized = JSON.stringify(parsed);
-if (!/bookmark/i.test(serialized)) {
-  throw new Error('TIME_TRAVEL_BOOKMARK_NOT_CONFIRMED');
-}
+if (!/bookmark/i.test(serialized)) throw new Error('TIME_TRAVEL_BOOKMARK_NOT_CONFIRMED');
 NODE
 # The bookmark itself is deliberately never printed. The UTC timestamp is the
 # operator-facing rollback reference and can deterministically retrieve it.
@@ -248,6 +327,15 @@ if [[ "$ledger_count" != "1" ]]; then
   exit 1
 fi
 echo "LEDGER_ENTRY_CONFIRMED=$migration_basename"
+
+if [[ -n "$edb_manifest_name" ]]; then
+  schema_count="$(query_count "SELECT COUNT(*) AS count FROM airtrust_schema_changes_v2 WHERE change_id = '$edb_change_id';")"
+  if [[ "$schema_count" != "1" ]]; then
+    echo "ERROR: migration eDB executada sem entrada única no Schema V2 ($schema_count)." >&2
+    exit 1
+  fi
+  echo "SCHEMA_V2_CHANGE_CONFIRMED=$edb_change_id"
+fi
 
 validate_postconditions
 
