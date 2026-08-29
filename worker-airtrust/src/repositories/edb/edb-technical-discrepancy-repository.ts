@@ -11,7 +11,7 @@ import {
   type EdbTechnicalDiscrepancyCase,
 } from '../../services/edb/technical-discrepancy-workflow';
 
-interface StoredDiscrepancyRow {
+export interface EdbStoredDiscrepancyRow {
   id: string;
   empresa_id: number;
   revision_id: string;
@@ -23,7 +23,7 @@ interface StoredDiscrepancyRow {
   created_at: string;
 }
 
-interface StoredMaintenanceActionRow {
+export interface EdbStoredMaintenanceActionRow {
   id: string;
   empresa_id: number;
   discrepancia_id: string;
@@ -67,6 +67,12 @@ function parseEvidence(value: string | null): StoredMaintenanceEvidence {
     throw new Error('EDB_MAINTENANCE_EVIDENCE_INVALID');
   }
   const candidate = parsed as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(candidate, 'reference')) {
+    throw new Error('EDB_MAINTENANCE_EVIDENCE_REFERENCE_MISSING');
+  }
+  if (!Object.prototype.hasOwnProperty.call(candidate, 'actorAnacCode')) {
+    throw new Error('EDB_MAINTENANCE_EVIDENCE_ANAC_CODE_MISSING');
+  }
   if (candidate.reference !== null && typeof candidate.reference !== 'string') {
     throw new Error('EDB_MAINTENANCE_EVIDENCE_REFERENCE_INVALID');
   }
@@ -87,7 +93,7 @@ function parseEvidence(value: string | null): StoredMaintenanceEvidence {
   };
 }
 
-function personFromRow(row: StoredMaintenanceActionRow): EdbPersonIdentity {
+function personFromRow(row: EdbStoredMaintenanceActionRow): EdbPersonIdentity {
   const evidence = parseEvidence(row.evidencia_json);
   return {
     employeeId: row.executado_por_funcionario_id,
@@ -108,15 +114,88 @@ function evidenceForPerson(
   };
 }
 
+export function hydrateEdbTechnicalDiscrepancyCase(params: {
+  empresaId: number;
+  discrepancy: EdbStoredDiscrepancyRow;
+  actions: readonly EdbStoredMaintenanceActionRow[];
+}): EdbTechnicalDiscrepancyCase {
+  const { discrepancy: row } = params;
+  if (row.empresa_id !== params.empresaId) throw new Error('EDB_DISCREPANCY_SCOPE_MISMATCH');
+
+  let discrepancy = createTechnicalDiscrepancyCase({
+    discrepancyId: row.id,
+    revisionId: row.revision_id,
+    description: row.descricao,
+    detectedBy: {
+      employeeId: row.detectado_por_funcionario_id,
+      fullName: row.detectado_por_nome,
+      anacCode: row.detectado_por_codigo_anac,
+    },
+    detectedAt: parseTimestamp(row.detectado_em, 'EDB_DISCREPANCY_TIMESTAMP_INVALID'),
+    createdAt: parseTimestamp(row.created_at, 'EDB_DISCREPANCY_CREATED_AT_INVALID'),
+  });
+
+  for (const actionRow of params.actions) {
+    if (
+      actionRow.empresa_id !== params.empresaId ||
+      actionRow.discrepancia_id !== discrepancy.identity.discrepancyId
+    ) {
+      throw new Error('EDB_MAINTENANCE_ACTION_SCOPE_MISMATCH');
+    }
+    requireText(actionRow.id, 'EDB_MAINTENANCE_ACTION_ID_INVALID');
+    const evidence = parseEvidence(actionRow.evidencia_json);
+    const actor = personFromRow(actionRow);
+    const executedAt = parseTimestamp(
+      actionRow.executado_em,
+      'EDB_MAINTENANCE_ACTION_TIMESTAMP_INVALID',
+    );
+
+    if (actionRow.tipo === 'CORRECTIVE_ACTION') {
+      discrepancy = appendCorrectiveAction(discrepancy, {
+        actionId: actionRow.id,
+        description: actionRow.descricao,
+        performedBy: actor,
+        performedAt: executedAt,
+        reference: evidence.reference,
+      });
+      continue;
+    }
+
+    if (actionRow.tipo === 'DEFERRED_ACTION_AUTHORIZATION') {
+      discrepancy = appendDeferredActionAuthorization(discrepancy, {
+        actionId: actionRow.id,
+        reason: actionRow.descricao,
+        limitationOrControl: evidence.limitationOrControl ?? null,
+        authorizedBy: actor,
+        authorizedAt: executedAt,
+        reference: evidence.reference,
+      });
+      continue;
+    }
+
+    if (!actionRow.referencia_acao_id?.trim()) {
+      throw new Error('EDB_RTS_CORRECTIVE_ACTION_REFERENCE_INVALID');
+    }
+    discrepancy = appendReturnToServiceApproval(discrepancy, {
+      approvalId: actionRow.id,
+      correctiveActionId: actionRow.referencia_acao_id,
+      description: actionRow.descricao,
+      approvedBy: actor,
+      approvedAt: executedAt,
+      reference: evidence.reference,
+    });
+  }
+
+  return discrepancy;
+}
+
 async function assertRevisionScope(params: {
   db: D1Database;
   empresaId: number;
   revisionId: string;
 }): Promise<void> {
   const row = await params.db
-    .prepare(
-      `SELECT id FROM edb_registro_revisoes WHERE empresa_id = ? AND id = ? LIMIT 1`,
-    )
+    .prepare('SELECT id FROM edb_registro_revisoes WHERE empresa_id = ? AND id = ? LIMIT 1')
     .bind(params.empresaId, params.revisionId)
     .first<{ id: string }>();
   if (!row || row.id !== params.revisionId) {
@@ -192,24 +271,9 @@ export async function loadEdbTechnicalDiscrepancyCase(params: {
     `,
     )
     .bind(params.empresaId, discrepancyId)
-    .first<StoredDiscrepancyRow>();
+    .first<EdbStoredDiscrepancyRow>();
   if (!row) return null;
-  if (row.empresa_id !== params.empresaId || row.id !== discrepancyId) {
-    throw new Error('EDB_DISCREPANCY_SCOPE_MISMATCH');
-  }
-
-  let discrepancy = createTechnicalDiscrepancyCase({
-    discrepancyId: row.id,
-    revisionId: row.revision_id,
-    description: row.descricao,
-    detectedBy: {
-      employeeId: row.detectado_por_funcionario_id,
-      fullName: row.detectado_por_nome,
-      anacCode: row.detectado_por_codigo_anac,
-    },
-    detectedAt: parseTimestamp(row.detectado_em, 'EDB_DISCREPANCY_TIMESTAMP_INVALID'),
-    createdAt: parseTimestamp(row.created_at, 'EDB_DISCREPANCY_CREATED_AT_INVALID'),
-  });
+  if (row.id !== discrepancyId) throw new Error('EDB_DISCREPANCY_SCOPE_MISMATCH');
 
   const actions = await params.db
     .prepare(
@@ -223,56 +287,13 @@ export async function loadEdbTechnicalDiscrepancyCase(params: {
     `,
     )
     .bind(params.empresaId, discrepancyId)
-    .all<StoredMaintenanceActionRow>();
+    .all<EdbStoredMaintenanceActionRow>();
 
-  for (const actionRow of actions.results ?? []) {
-    if (actionRow.empresa_id !== params.empresaId || actionRow.discrepancia_id !== discrepancyId) {
-      throw new Error('EDB_MAINTENANCE_ACTION_SCOPE_MISMATCH');
-    }
-    const evidence = parseEvidence(actionRow.evidencia_json);
-    const actor = personFromRow(actionRow);
-    const executedAt = parseTimestamp(
-      actionRow.executado_em,
-      'EDB_MAINTENANCE_ACTION_TIMESTAMP_INVALID',
-    );
-
-    if (actionRow.tipo === 'CORRECTIVE_ACTION') {
-      discrepancy = appendCorrectiveAction(discrepancy, {
-        actionId: actionRow.id,
-        description: actionRow.descricao,
-        performedBy: actor,
-        performedAt: executedAt,
-        reference: evidence.reference,
-      });
-      continue;
-    }
-
-    if (actionRow.tipo === 'DEFERRED_ACTION_AUTHORIZATION') {
-      discrepancy = appendDeferredActionAuthorization(discrepancy, {
-        actionId: actionRow.id,
-        reason: actionRow.descricao,
-        limitationOrControl: evidence.limitationOrControl ?? null,
-        authorizedBy: actor,
-        authorizedAt: executedAt,
-        reference: evidence.reference,
-      });
-      continue;
-    }
-
-    if (!actionRow.referencia_acao_id?.trim()) {
-      throw new Error('EDB_RTS_CORRECTIVE_ACTION_REFERENCE_INVALID');
-    }
-    discrepancy = appendReturnToServiceApproval(discrepancy, {
-      approvalId: actionRow.id,
-      correctiveActionId: actionRow.referencia_acao_id,
-      description: actionRow.descricao,
-      approvedBy: actor,
-      approvedAt: executedAt,
-      reference: evidence.reference,
-    });
-  }
-
-  return discrepancy;
+  return hydrateEdbTechnicalDiscrepancyCase({
+    empresaId: params.empresaId,
+    discrepancy: row,
+    actions: actions.results ?? [],
+  });
 }
 
 async function requireDiscrepancy(params: {
@@ -294,7 +315,9 @@ export async function appendEdbCorrectiveAction(params: {
   const current = await requireDiscrepancy(params);
   const next = appendCorrectiveAction(current, params.action);
   const action = next.maintenanceActions.at(-1);
-  if (!action || action.kind !== 'CORRECTIVE_ACTION') throw new Error('EDB_CORRECTIVE_ACTION_NORMALIZATION_FAILED');
+  if (!action || action.kind !== 'CORRECTIVE_ACTION') {
+    throw new Error('EDB_CORRECTIVE_ACTION_NORMALIZATION_FAILED');
+  }
 
   await params.db
     .prepare(
