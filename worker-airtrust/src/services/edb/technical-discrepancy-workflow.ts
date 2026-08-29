@@ -9,7 +9,6 @@ export type EdbDiscrepancyStatus =
 export interface EdbDiscrepancyIdentity {
   discrepancyId: string;
   revisionId: string;
-  sourceStageId: number | null;
   description: string;
   detectedBy: EdbPersonIdentity;
   detectedAt: string;
@@ -52,6 +51,7 @@ export interface EdbReturnToServiceApproval {
  * Append-only domain representation for Res. 773/2025 art. 8.
  *
  * Flight discrepancies belong to one immutable final-record revision.
+ * The source stage is derived from that revision instead of duplicated here.
  * Maintenance actions are appended afterwards; they never rewrite the
  * discrepancy as if it had not existed on the signed revision.
  */
@@ -90,7 +90,6 @@ function assertNotBeforeDetection(
 export function createTechnicalDiscrepancyCase(params: {
   discrepancyId: string;
   revisionId: string;
-  sourceStageId?: number | null;
   description: string;
   detectedBy: EdbPersonIdentity;
   detectedAt: string;
@@ -106,7 +105,6 @@ export function createTechnicalDiscrepancyCase(params: {
     identity: {
       discrepancyId: required(params.discrepancyId, 'discrepancyId'),
       revisionId: required(params.revisionId, 'revisionId'),
-      sourceStageId: params.sourceStageId ?? null,
       description: required(params.description, 'description'),
       detectedBy: { ...params.detectedBy },
       detectedAt,
