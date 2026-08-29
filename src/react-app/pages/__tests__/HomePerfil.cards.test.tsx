@@ -33,17 +33,22 @@ import { buildHomeAccessCards } from '../HomePerfil';
 describe('HomePerfil quick access cards', () => {
   const canAll = () => true;
 
-  it('separa atalhos de manutencao da rotina de tripulacao', () => {
+  it('limita o aluno da manutenção a fadiga, Pasta 360 e troca de senha', () => {
     const cards = buildHomeAccessCards({
-      role: 'USUARIO',
+      role: 'ALUNO',
       can: canAll,
       homeProfile: 'STUDENT_MANUTENCAO',
       funcionarioId: 42,
     });
 
-    expect(cards.map((card) => card.title)).toContain('Minha Pasta 360');
-    expect(cards.map((card) => card.title)).not.toContain('Fadiga Diária');
+    expect(cards.map((card) => card.title)).toEqual([
+      'Fadiga Diária',
+      'Minha Pasta 360',
+      'Trocar Senha',
+    ]);
     expect(cards.map((card) => card.title)).not.toContain('Minha Escala');
+    expect(cards.map((card) => card.title)).not.toContain('Minhas Sessões de Simulador');
+    expect(cards.map((card) => card.title)).not.toContain('Minhas Fichas de Treinamento de Voo');
   });
 
   it('mantem rotina operacional para contexto de tripulacao', () => {

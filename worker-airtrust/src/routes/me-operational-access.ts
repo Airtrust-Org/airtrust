@@ -7,7 +7,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
-import { getEmpresaId } from '../middleware/tenant';
+import { getEmpresaId, normalizeTenantRole } from '../middleware/tenant';
 import type { Env } from '../types';
 import {
   resolveOperationalAccess,
@@ -73,8 +73,19 @@ type FrmsEmployeeIdentity = {
 type MaintenanceManagerScope = {
   allowed: boolean;
   setorIds: number[];
-  source: 'operational_rbac' | 'legacy_manager_assignment' | 'denied';
+  source:
+    | 'tenant_admin'
+    | 'frms_manager'
+    | 'operational_rbac'
+    | 'legacy_manager_assignment'
+    | 'denied';
 };
+
+export type MaintenanceManagementPolicy =
+  | 'tenant_admin'
+  | 'frms_manager'
+  | 'maintenance_sector_manager'
+  | 'denied';
 
 type MaintenanceCheckinInput = {
   reference_date?: string;
@@ -85,6 +96,16 @@ type MaintenanceCheckinInput = {
   fit_for_duty?: boolean;
   notes?: string;
 };
+
+export function resolveMaintenanceManagementPolicy(
+  userRole: unknown,
+  access: OperationalAccessResolution,
+): MaintenanceManagementPolicy {
+  if (normalizeTenantRole(userRole) === 'admin') return 'tenant_admin';
+  if (access.enabled && access.domains.includes('FRMS')) return 'frms_manager';
+  if (access.enabled && access.domains.includes('MANUTENCAO')) return 'maintenance_sector_manager';
+  return 'denied';
+}
 
 async function resolveOwnFrmsEmployee(
   db: D1Database,
@@ -156,6 +177,28 @@ async function filterMaintenanceSetorIds(
     .filter((id) => Number.isInteger(id) && id > 0);
 }
 
+async function listTenantMaintenanceSetorIds(
+  db: D1Database,
+  empresaId: number,
+): Promise<number[]> {
+  const rows = await db
+    .prepare(
+      `SELECT id
+         FROM setores
+        WHERE empresa_id = ?
+          AND ativo = 1
+          AND deleted_at IS NULL
+          AND UPPER(TRIM(COALESCE(dominio_codigo, ''))) = 'MANUTENCAO'
+        ORDER BY id`,
+    )
+    .bind(empresaId)
+    .all<{ id: number }>();
+
+  return (rows.results || [])
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+}
+
 async function resolveMaintenanceManagerScope(
   c: Context<{ Bindings: Env }>,
   access?: OperationalAccessResolution,
@@ -166,9 +209,22 @@ async function resolveMaintenanceManagerScope(
   const userRole = (c.get as (key: string) => unknown)('userRole');
   const resolvedAccess =
     access || (await resolveOperationalAccess({ db, empresaId, userId, userRole }));
+  const policy = resolveMaintenanceManagementPolicy(userRole, resolvedAccess);
+
+  // A gestão central de fadiga e o administrador precisam enxergar o recorte
+  // completo de manutenção do próprio tenant. O escopo continua tenant-bound
+  // e inclui somente setores ativos classificados como MANUTENCAO.
+  if (policy === 'tenant_admin' || policy === 'frms_manager') {
+    const setorIds = await listTenantMaintenanceSetorIds(db, empresaId);
+    return {
+      allowed: setorIds.length > 0,
+      setorIds,
+      source: setorIds.length > 0 ? policy : 'denied',
+    };
+  }
 
   if (resolvedAccess.enabled) {
-    if (!resolvedAccess.domains.includes('MANUTENCAO')) {
+    if (policy !== 'maintenance_sector_manager') {
       return { allowed: false, setorIds: [], source: 'denied' };
     }
     const setorIds = await filterMaintenanceSetorIds(db, empresaId, resolvedAccess.setorIds);
@@ -259,7 +315,7 @@ router.get('/frms-maintenance-team', async (c) => {
     return c.json(
       {
         success: false,
-        error: 'Acesso restrito à gestão de manutenção',
+        error: 'Acesso restrito à gestão de fadiga da manutenção',
         code: 'FRMS_MAINTENANCE_MANAGER_REQUIRED',
       },
       403,
