@@ -74,4 +74,6 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: npm --prefix worker-airtrust exec tsc -- --noEmit
+      - name: worker TypeScript check
+        working-directory: worker-airtrust
+        run: npx tsc --noEmit
