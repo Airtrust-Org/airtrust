@@ -8,7 +8,7 @@ export type EdbDiscrepancyStatus =
 
 export interface EdbDiscrepancyIdentity {
   discrepancyId: string;
-  edbRecordId: string;
+  revisionId: string;
   sourceStageId: number | null;
   description: string;
   detectedBy: EdbPersonIdentity;
@@ -50,9 +50,9 @@ export interface EdbReturnToServiceApproval {
 /**
  * Append-only domain representation for Res. 773/2025 art. 8.
  *
- * Flight discrepancies belong to the signed flight record. Maintenance actions
- * are appended afterwards; they must never rewrite the discrepancy as if it had
- * not existed on the original flight record.
+ * Flight discrepancies belong to one immutable final-record revision.
+ * Maintenance actions are appended afterwards; they never rewrite the
+ * discrepancy as if it had not existed on the signed revision.
  */
 export interface EdbTechnicalDiscrepancyCase {
   identity: EdbDiscrepancyIdentity;
@@ -78,7 +78,7 @@ function assertIsoTimestamp(value: string, field: string): string {
 
 export function createTechnicalDiscrepancyCase(params: {
   discrepancyId: string;
-  edbRecordId: string;
+  revisionId: string;
   sourceStageId?: number | null;
   description: string;
   detectedBy: EdbPersonIdentity;
@@ -89,7 +89,7 @@ export function createTechnicalDiscrepancyCase(params: {
   return {
     identity: {
       discrepancyId: required(params.discrepancyId, 'discrepancyId'),
-      edbRecordId: required(params.edbRecordId, 'edbRecordId'),
+      revisionId: required(params.revisionId, 'revisionId'),
       sourceStageId: params.sourceStageId ?? null,
       description: required(params.description, 'description'),
       detectedBy: { ...params.detectedBy },
