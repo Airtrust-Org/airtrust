@@ -18,10 +18,14 @@ import {
 } from '../../services/edb/canonicalization';
 import { projectRdvToEdbShadow } from '../../services/edb/rdv-shadow-projection';
 
+const REVISION_ID = 'edbrev-100-300-r1';
+
 function signature(type: EdbSignatureType, signedAt = '2026-08-28T12:00:00.000Z'): EdbSignatureProof {
   return {
     signatureId: `sig-${type}`,
     type,
+    targetType: type === 'PIC_TECHNICAL_ACK' ? 'TECHNICAL_SITUATION' : 'FINAL_RECORD_REVISION',
+    targetId: type === 'PIC_TECHNICAL_ACK' ? 'tech-1' : REVISION_ID,
     signer: {
       employeeId: 10,
       fullName: type === 'OPERATOR_RECORD' ? 'Operador Designado' : 'Piloto em Comando',
@@ -43,9 +47,10 @@ function completeRecord(): EdbFlightRecord {
     sourceRdvVersion: 3,
     sourceStageId: 300,
     capturedAt: '2026-08-28T10:00:00.000Z',
+    logicalRecordId: 'flight-100-stage-300',
+    revisionId: REVISION_ID,
   });
 
-  record.recordId = 'edb-100-300-r1';
   record.identity.aircraft = {
     aircraftId: 12,
     manufacturer: 'Leonardo',
@@ -160,7 +165,7 @@ describe('eDB regulatory foundation', () => {
     );
   });
 
-  it('canonicalizes JSON deterministically and hashes the signable payload', async () => {
+  it('canonicalizes JSON deterministically and hashes logical + immutable revision identity', async () => {
     expect(canonicalJson({ z: 1, nested: { b: 2, a: 1 }, a: 3 })).toBe(
       '{"a":3,"nested":{"a":1,"b":2},"z":1}',
     );
@@ -169,6 +174,9 @@ describe('eDB regulatory foundation', () => {
     const second = await hashSignableEdbPayload(record, 'PIC_FLIGHT_RECORD');
     expect(first).toMatch(/^[a-f0-9]{64}$/);
     expect(second).toBe(first);
+
+    record.revisionId = 'edbrev-100-300-r2';
+    expect(await hashSignableEdbPayload(record, 'PIC_FLIGHT_RECORD')).not.toBe(first);
   });
 
   it('keeps ambiguous RDV fields out of the regulatory record', () => {
