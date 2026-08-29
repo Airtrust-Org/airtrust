@@ -66,8 +66,6 @@ export async function persistRefreshToken(
     empresaId?: number;
   },
 ): Promise<void> {
-  await cleanupExpiredRefreshTokens(db);
-
   const hasEmpresaIdCol = await hasRefreshTokensEmpresaIdColumn(db);
 
   if (hasEmpresaIdCol && typeof payload.empresaId === 'number') {
