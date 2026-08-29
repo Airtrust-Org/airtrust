@@ -10,14 +10,17 @@ import {
   FolderOpen,
   Edit2,
   Trash2,
+  MoreHorizontal,
   Phone,
   Mail,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-// 🚀 LAZY LOADING: Modal carregado apenas quando necessário
 import { lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
 const ModalFuncionario = lazyWithRetry(() => import('./ModalFuncionario'), 'ModalFuncionario');
-import ConfigurarColunas from './ConfigurarColunas';
+import ConfigurarColunas, {
+  DEFAULT_COLUNAS as COLUNAS_PADRAO,
+  FUNCIONARIOS_COLUNAS_STORAGE_KEY,
+} from './ConfigurarColunas';
 import AdicionarFiltro from './AdicionarFiltro';
 import { SkeletonTable } from '@/react-app/components/UI/Skeleton';
 import { EmptyState } from '@/react-app/components/UI/EmptyState';
@@ -36,30 +39,8 @@ interface Coluna {
   ordem: number;
 }
 
-const COLUNAS_PADRAO: Coluna[] = [
-  { id: 'nome', label: 'Nome', visivel: true, ordem: 0 },
-  { id: 'guerra', label: 'Guerra', visivel: true, ordem: 1 },
-  { id: 'funcao', label: 'Função / Cargo', visivel: true, ordem: 2 },
-  { id: 'setor', label: 'Setor', visivel: true, ordem: 3 },
-  { id: 'aeronave', label: 'Equipamento', visivel: true, ordem: 4 },
-  { id: 'cpf', label: 'CPF', visivel: true, ordem: 5 },
-  { id: 'nascimento', label: 'Data Nasc.', visivel: true, ordem: 6 },
-  { id: 'licenca', label: 'Licença', visivel: true, ordem: 7 },
-  { id: 'codigo_anac', label: 'CANAC', visivel: true, ordem: 8 },
-  { id: 'status', label: 'Status', visivel: true, ordem: 9 },
-  { id: 'sispat', label: 'SISPAT', visivel: true, ordem: 10 },
-  { id: 'prestserv', label: 'PrestServ', visivel: true, ordem: 11 },
-  { id: 'matricula', label: 'Matrícula', visivel: true, ordem: 12 },
-  { id: 'email', label: 'E-mail', visivel: true, ordem: 13 },
-  { id: 'telefone', label: 'Telefone', visivel: true, ordem: 14 },
-  { id: 'admissao', label: 'Admissão', visivel: true, ordem: 15 },
-];
-
 const tableActionButtonClass =
-  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
-
-const tableActionDangerButtonClass =
-  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 shadow-sm transition hover:bg-rose-50';
+  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white';
 
 function normalizarColunasConfig(configSalva: Coluna[]): Coluna[] {
   const byId = new Map(configSalva.map((col) => [col.id, col]));
@@ -145,7 +126,7 @@ interface FuncionarioRow {
   email?: string;
   telefone?: string;
   admissao?: string;
-  [key: string]: unknown; // permite acesso dinâmico em colunas configuráveis
+  [key: string]: unknown;
 }
 
 function buildEmptyPaginationState(previous: {
@@ -169,8 +150,7 @@ function buildEmptyPaginationState(previous: {
 export function resolveFuncionarioRoleLabel(
   funcionario: Pick<FuncionarioRow, 'funcao' | 'cargo'> | null | undefined,
 ): string {
-  return String(funcionario?.funcao || funcionario?.cargo || '')
-    .trim();
+  return String(funcionario?.funcao || funcionario?.cargo || '').trim();
 }
 
 export function extractFuncionarioRoleOptions(
@@ -184,7 +164,6 @@ export function extractFuncionarioRoleOptions(
     ),
   ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
-// (import duplicado removido)
 
 export function ListaFuncionarios({
   termoBusca,
@@ -206,7 +185,6 @@ export function ListaFuncionarios({
   const [funcionarios, setFuncionarios] = useState<FuncionarioRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  // Removido estado interno de busca e controle de modal de colunas (controlado pelo parent)
   const [modalAdicionarFiltroAberto, setModalAdicionarFiltroAberto] = useState(false);
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<FuncionarioRow | null>(null);
   const [filtrosAtivos, setFiltrosAtivos] = useState<string[]>([]);
@@ -226,31 +204,28 @@ export function ListaFuncionarios({
 
   const [colunasConfig, setColunasConfig] = useState<Coluna[]>(COLUNAS_PADRAO);
 
-  // Carregar configuração de colunas do localStorage na inicialização
   useEffect(() => {
-    const saved = localStorage.getItem('funcionarios_colunas_config');
+    const saved = localStorage.getItem(FUNCIONARIOS_COLUNAS_STORAGE_KEY);
     if (saved) {
       try {
         const parsed: Coluna[] = JSON.parse(saved);
         const normalizada = normalizarColunasConfig(parsed);
         setColunasConfig(normalizada);
-        localStorage.setItem('funcionarios_colunas_config', JSON.stringify(normalizada));
+        localStorage.setItem(FUNCIONARIOS_COLUNAS_STORAGE_KEY, JSON.stringify(normalizada));
       } catch (err) {
         console.error('Erro ao carregar config de colunas:', err);
         setColunasConfig(COLUNAS_PADRAO);
       }
     } else {
-      localStorage.setItem('funcionarios_colunas_config', JSON.stringify(COLUNAS_PADRAO));
+      localStorage.setItem(FUNCIONARIOS_COLUNAS_STORAGE_KEY, JSON.stringify(COLUNAS_PADRAO));
     }
   }, []);
 
-  // Contador para forçar recarregamento após salvar/excluir
   const [refreshKey, setRefreshKey] = useState(0);
   const lastRequestRef = useRef<{ key: string; at: number }>({ key: '', at: 0 });
   const activeRequestIdRef = useRef(0);
   const debouncedTermoBusca = useDebounce(termoBusca, 400);
 
-  // Função reutilizada após exclusão / salvamento
   const recarregar = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
   }, []);
@@ -280,7 +255,6 @@ export function ListaFuncionarios({
     roleOptionsDiscoverCallbackRef.current = onRoleOptionsDiscover;
   }, [onRoleOptionsDiscover]);
 
-  // Resetar paginação para página 1 quando qualquer filtro mudar
   const prevFiltersKeyRef = useRef('');
   useEffect(() => {
     const key = [
@@ -297,10 +271,8 @@ export function ListaFuncionarios({
       setPagination((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }));
     }
     prevFiltersKeyRef.current = key;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedTermoBusca, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter, setorFilter]);
 
-  // Fetch principal - com ordenação server-side
   useEffect(() => {
     const abortController = new AbortController();
     const requestId = ++activeRequestIdRef.current;
@@ -339,7 +311,6 @@ export function ListaFuncionarios({
           search: debouncedTermoBusca || '',
         });
 
-        // Adicionar filtro de status
         if (statusFilter === 'ativos') {
           params.append('status', 'ativo');
         } else if (statusFilter === 'inativos') {
@@ -348,27 +319,12 @@ export function ListaFuncionarios({
           params.append('status', 'todos');
         }
 
-        // Adicionar filtro de função se existir
-        if (funcaoFilter) {
-          params.append('funcao', funcaoFilter);
-        }
-
-        // Adicionar filtro de aeronave se existir
-        if (aeronaveFilter) {
-          params.append('aeronave', aeronaveFilter);
-        }
-
-        // Adicionar filtro de quinzena se existir
-        if (quinzenaFilter) {
-          params.append('quinzena', quinzenaFilter);
-        }
-
-        // Adicionar filtro de setor(es) se existir
+        if (funcaoFilter) params.append('funcao', funcaoFilter);
+        if (aeronaveFilter) params.append('aeronave', aeronaveFilter);
+        if (quinzenaFilter) params.append('quinzena', quinzenaFilter);
         if (setorFilter && setorFilter.length > 0) {
           setorFilter.forEach((id) => params.append('setor_id', id));
         }
-
-        // Adicionar ordenação se existir
         if (sortConfig.column && sortConfig.direction) {
           params.append('orderBy', sortConfig.column);
           params.append('order', sortConfig.direction.toUpperCase());
@@ -390,30 +346,27 @@ export function ListaFuncionarios({
         });
 
         window.clearTimeout(timeoutId);
-
         if (requestId !== activeRequestIdRef.current) return;
 
         if (!response.ok) {
           if (response.status === 401) {
             setError('Não autorizado. Faça login novamente.');
           } else {
-            setError(`Falha na API (HTTP ${response.status})`);
+            setError('Não foi possível carregar os funcionários. Tente novamente.');
           }
           setFuncionarios([]);
           setPagination((prev) => buildEmptyPaginationState(prev));
           return;
         }
+
         const data = await response.json();
         if (requestId !== activeRequestIdRef.current) return;
 
         const lista = data.data || data.funcionarios || [];
         setFuncionarios(Array.isArray(lista) ? lista : []);
 
-        // Notificar setores únicos encontrados nos funcionários
         const setoresDiscoverCallback = setoresDiscoverCallbackRef.current;
-        if (setoresDiscoverCallback && Array.isArray(lista)) {
-          setoresDiscoverCallback(lista);
-        }
+        if (setoresDiscoverCallback && Array.isArray(lista)) setoresDiscoverCallback(lista);
 
         const roleOptionsDiscoverCallback = roleOptionsDiscoverCallbackRef.current;
         if (roleOptionsDiscoverCallback && Array.isArray(lista)) {
@@ -431,7 +384,6 @@ export function ListaFuncionarios({
               hasNext: Boolean(data.pagination.hasNext),
               hasPrev: Boolean(data.pagination.hasPrev),
             };
-
             if (
               prev.page === next.page &&
               prev.limit === next.limit &&
@@ -442,31 +394,16 @@ export function ListaFuncionarios({
             ) {
               return prev;
             }
-
             return next;
           });
         } else {
-          // Se API antiga sem meta de paginação
-          setPagination((prev) => {
-            const next = {
-              ...prev,
-              total: lista.length,
-              totalPages: 1,
-              hasNext: false,
-              hasPrev: false,
-            };
-
-            if (
-              prev.total === next.total &&
-              prev.totalPages === next.totalPages &&
-              prev.hasNext === next.hasNext &&
-              prev.hasPrev === next.hasPrev
-            ) {
-              return prev;
-            }
-
-            return next;
-          });
+          setPagination((prev) => ({
+            ...prev,
+            total: lista.length,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false,
+          }));
         }
       } catch (e) {
         if (didTimeout) {
@@ -477,28 +414,20 @@ export function ListaFuncionarios({
           }
           return;
         }
-
-        if ((e as Error)?.name === 'AbortError') {
-          return;
-        }
+        if ((e as Error)?.name === 'AbortError') return;
         console.error('[FUNCIONARIOS] Erro fetch:', e);
         if (requestId === activeRequestIdRef.current) {
-          setError('Erro de rede ao carregar funcionários');
+          setError('Erro de rede ao carregar funcionários. Tente novamente.');
           setFuncionarios([]);
           setPagination((prev) => buildEmptyPaginationState(prev));
         }
       } finally {
-        if (requestId === activeRequestIdRef.current) {
-          setLoading(false);
-        }
+        if (requestId === activeRequestIdRef.current) setLoading(false);
       }
     };
 
-    fetchData();
-
-    return () => {
-      abortController.abort();
-    };
+    void fetchData();
+    return () => abortController.abort();
   }, [
     pagination.page,
     pagination.limit,
@@ -520,23 +449,14 @@ export function ListaFuncionarios({
 
   const handleSort = (column: SortableColumn) => {
     let direction: SortDirection = 'asc';
-
     if (sortConfig.column === column) {
-      if (sortConfig.direction === 'asc') {
-        direction = 'desc';
-      } else if (sortConfig.direction === 'desc') {
-        direction = null;
-      }
+      if (sortConfig.direction === 'asc') direction = 'desc';
+      else if (sortConfig.direction === 'desc') direction = null;
     }
-
     setSortConfig({ column: direction ? column : null, direction });
   };
 
-  const funcionariosFiltradosEOrdenados = useMemo(() => {
-    // Ordenação e filtro já são feitos server-side via API
-    // Não precisa filtrar novamente aqui, apenas retornar os dados
-    return funcionarios;
-  }, [funcionarios]);
+  const funcionariosFiltradosEOrdenados = useMemo(() => funcionarios, [funcionarios]);
 
   const handleAdicionarFiltro = (filtroId: string) => {
     setFiltrosAtivos((prev) => [...prev, filtroId]);
@@ -544,18 +464,15 @@ export function ListaFuncionarios({
 
   const handleExcluir = useCallback(
     async (id: number, nome?: string) => {
-      if (excluindo === id) {
-        return;
-      }
+      if (excluindo === id) return;
 
       const confirmar = await confirmDialog(
-        `Tem certeza que deseja excluir "${nome}"?\n\nEsta ação não pode ser desfeita.`,
+        `Excluir o funcionário "${nome || 'selecionado'}"?\n\nEsta ação é permanente e não pode ser desfeita.`,
+        { title: 'Confirmar exclusão', confirmText: 'Excluir funcionário', cancelText: 'Cancelar' },
       );
-
       if (!confirmar) return;
 
-      setExcluindo(id); // Marcar como em processo
-
+      setExcluindo(id);
       try {
         const response = await fetch(`${API_BASE_URL}/funcionarios/${id}`, {
           method: 'DELETE',
@@ -567,51 +484,31 @@ export function ListaFuncionarios({
         });
 
         if (response.ok) {
-          const novaLista = funcionarios.filter((f) => f.id !== id);
-          setFuncionarios(novaLista);
-
+          setFuncionarios((current) => current.filter((f) => f.id !== id));
           setTimeout(() => {
             recarregar();
             setExcluindo(null);
           }, 1000);
-        } else {
-          const errorText = await response.text();
-          console.error('Erro do servidor:', errorText);
-
-          let errorMessage = 'Falha na operação';
-          try {
-            const error = JSON.parse(errorText);
-
-            // Tratamento especial para erro 403 (permissão negada)
-            if (response.status === 403) {
-              errorMessage =
-                error.error ||
-                'Você não tem permissão para deletar funcionários. Acesso restrito a administradores.';
-            } else {
-              errorMessage = error.error || error.message || errorMessage;
-            }
-          } catch {
-            // Se não conseguir fazer parse, usa o texto direto
-            if (response.status === 403) {
-              errorMessage = 'Permissão negada. Apenas administradores podem deletar funcionários.';
-            } else {
-              errorMessage = errorText || errorMessage;
-            }
-          }
-
-          toast.warning(`❌ ${errorMessage}`);
-          setExcluindo(null);
+          return;
         }
+
+        let errorMessage = 'Não foi possível excluir o funcionário.';
+        const errorData = await response.json().catch(() => null);
+        if (response.status === 403) {
+          errorMessage = 'Você não tem permissão para excluir funcionários.';
+        } else if (typeof errorData?.error === 'string') {
+          errorMessage = errorData.error;
+        }
+        toast.warning(errorMessage);
+        setExcluindo(null);
       } catch (error) {
         console.error('Erro ao excluir funcionário:', error);
-        toast.warning('Erro ao conectar com servidor');
+        toast.warning('Erro de rede ao excluir funcionário. Tente novamente.');
         setExcluindo(null);
       }
     },
-    [funcionarios, token, recarregar, excluindo],
+    [token, recarregar, excluindo],
   );
-
-  // Função de exportar CSV removida (não utilizada nesta integração de layout)
 
   const handleSalvarFuncionario = useCallback(
     async (dados: Partial<FuncionarioRow> & { id?: number }) => {
@@ -636,7 +533,6 @@ export function ListaFuncionarios({
           );
           onCloseModalNovoFuncionario?.();
           setFuncionarioSelecionado(null);
-          // Recarregar após salvar (delay para garantir DB commit + cache-bust)
           setTimeout(() => recarregar(), 200);
         } else {
           const errorData = await response.json().catch(() => ({}));
@@ -652,64 +548,51 @@ export function ListaFuncionarios({
     [token, recarregar, onCloseModalNovoFuncionario],
   );
 
-  // Callback ref para evitar loop quando parent recria função inline
   const statsCallbackRef = useRef(onStatsChange);
   useEffect(() => {
     statsCallbackRef.current = onStatsChange;
   }, [onStatsChange]);
   useEffect(() => {
     const cb = statsCallbackRef.current;
-    if (cb) {
-      // Usar total da paginação (não apenas da página atual)
-      const total = pagination.total;
-      // ✅ Usar campo 'status' do backend, não 'ativo'
-      const ativos = funcionarios.filter((f) => (f.status || '').toUpperCase() === 'ATIVO').length;
-      const inativos = funcionarios.filter(
-        (f) => (f.status || '').toUpperCase() !== 'ATIVO',
-      ).length;
-      const byModelo: Record<string, { cmd: number; cop: number }> = {};
-      for (const f of funcionarios) {
-        if ((f.status || '').toUpperCase() !== 'ATIVO') continue;
-        const modelo = (f.aeronave || '')
-          .trim()
-          .toUpperCase()
-          .replace(/[\s-]+/g, '');
-        const modeloKey = modelo.includes('AW139')
-          ? 'AW139'
-          : modelo.includes('SK76') || modelo.includes('S76')
-            ? 'SK76'
-            : modelo || 'Outros';
-        if (!byModelo[modeloKey]) byModelo[modeloKey] = { cmd: 0, cop: 0 };
-        const cargoOuFuncao = resolveFuncionarioRoleLabel(f).toLowerCase();
-        if (cargoOuFuncao.includes('comandante')) byModelo[modeloKey].cmd++;
-        else if (cargoOuFuncao.includes('copiloto'))
-          byModelo[modeloKey].cop++;
-      }
-      cb({ total, ativos, inativos, byModelo });
+    if (!cb) return;
+
+    const total = pagination.total;
+    const ativos = funcionarios.filter((f) => (f.status || '').toUpperCase() === 'ATIVO').length;
+    const inativos = funcionarios.filter((f) => (f.status || '').toUpperCase() !== 'ATIVO').length;
+    const byModelo: Record<string, { cmd: number; cop: number }> = {};
+    for (const f of funcionarios) {
+      if ((f.status || '').toUpperCase() !== 'ATIVO') continue;
+      const modelo = (f.aeronave || '').trim().toUpperCase().replace(/[\s-]+/g, '');
+      const modeloKey = modelo.includes('AW139')
+        ? 'AW139'
+        : modelo.includes('SK76') || modelo.includes('S76')
+          ? 'SK76'
+          : modelo || 'Outros';
+      if (!byModelo[modeloKey]) byModelo[modeloKey] = { cmd: 0, cop: 0 };
+      const cargoOuFuncao = resolveFuncionarioRoleLabel(f).toLowerCase();
+      if (cargoOuFuncao.includes('comandante')) byModelo[modeloKey].cmd++;
+      else if (cargoOuFuncao.includes('copiloto')) byModelo[modeloKey].cop++;
     }
+    cb({ total, ativos, inativos, byModelo });
   }, [pagination.total, funcionarios]);
 
   return (
     <div className="flex flex-col space-y-6">
-      {/* Tabela */}
       {loading ? (
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
           <SkeletonTable columns={colunasVisiveis.length + 1} rows={10} />
         </div>
       ) : (
         <>
           {error && (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
               {error}
             </div>
           )}
-          <div className="bg-white rounded-lg border border-slate-200 overflow-x-auto max-h-[600px]">
+          <div className="max-h-[600px] overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <table className="w-full min-w-max">
-              <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
+              <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
                 <tr>
-                  <th className="px-2 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider whitespace-nowrap w-32">
-                    Ações
-                  </th>
                   {colunasVisiveis.map((col) => {
                     const isSortable = [
                       'nome',
@@ -736,39 +619,38 @@ export function ListaFuncionarios({
                       <th
                         key={col.id}
                         onClick={() => isSortable && handleSort(col.id as SortableColumn)}
-                        className={`px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider whitespace-nowrap ${
-                          isSortable ? 'cursor-pointer hover:bg-slate-100 select-none' : ''
+                        className={`whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ${
+                          isSortable ? 'cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-800' : ''
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           <span>{col.label}</span>
                           {isSortable && (
                             <div className="flex flex-col">
-                              {direction === null && (
-                                <ArrowUpDown className="w-4 h-4 text-slate-400" />
-                              )}
-                              {direction === 'asc' && <ArrowUp className="w-4 h-4 text-blue-600" />}
-                              {direction === 'desc' && (
-                                <ArrowDown className="w-4 h-4 text-blue-600" />
-                              )}
+                              {direction === null && <ArrowUpDown className="h-4 w-4 text-slate-400" />}
+                              {direction === 'asc' && <ArrowUp className="h-4 w-4 text-blue-600" />}
+                              {direction === 'desc' && <ArrowDown className="h-4 w-4 text-blue-600" />}
                             </div>
                           )}
                         </div>
                       </th>
                     );
                   })}
+                  <th className="w-24 whitespace-nowrap px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Ações
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {funcionariosFiltradosEOrdenados.length === 0 ? (
                   <tr>
                     <td colSpan={colunasVisiveis.length + 1} className="py-8">
                       <EmptyState
                         icon={
                           termoBusca ? (
-                            <SearchX size={48} className="text-slate-300" />
+                            <SearchX size={48} className="text-slate-300 dark:text-slate-600" />
                           ) : (
-                            <Users size={48} className="text-slate-300" />
+                            <Users size={48} className="text-slate-300 dark:text-slate-600" />
                           )
                         }
                         title={termoBusca ? 'Nenhum resultado' : 'Nenhum funcionário cadastrado'}
@@ -782,54 +664,20 @@ export function ListaFuncionarios({
                   </tr>
                 ) : (
                   funcionariosFiltradosEOrdenados.map((func) => (
-                    <tr key={func.id} className="hover:bg-slate-50 transition">
-                      <td className="px-2 py-3 text-sm">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => openPasta360(func.id)}
-                            className={tableActionButtonClass}
-                            title="Pasta 360"
-                          >
-                            <FolderOpen className="w-4 h-4" />
-                          </button>
-
-                          <button
-                            onClick={async () => {
-                              setFuncionarioSelecionado(func);
-                            }}
-                            className={tableActionButtonClass}
-                            title="Editar"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-
-                          <button
-                            onClick={() => handleExcluir(func.id, func.nome)}
-                            disabled={excluindo === func.id}
-                            className={`${
-                              excluindo === func.id
-                                ? 'inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400'
-                                : tableActionDangerButtonClass
-                            }`}
-                            title={excluindo === func.id ? 'Excluindo...' : 'Excluir'}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+                    <tr key={func.id} className="transition hover:bg-slate-50 dark:hover:bg-slate-800/60">
                       {colunasVisiveis.map((col) => {
                         const rawVal = func[col.id] as unknown;
                         let valor = rawVal == null || rawVal === '' ? '-' : String(rawVal);
 
                         if (col.id === 'email' && func.email) {
                           return (
-                            <td key={col.id} className="px-4 py-3 text-sm whitespace-nowrap">
+                            <td key={col.id} className="whitespace-nowrap px-4 py-3 text-sm">
                               <a
                                 href={`mailto:${func.email}`}
-                                className="text-blue-600 hover:underline flex items-center gap-1"
-                                title={`Enviar email para ${func.email}`}
+                                className="flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+                                title="Enviar e-mail"
                               >
-                                <Mail className="w-3 h-3" />
+                                <Mail className="h-3 w-3" />
                                 {func.email}
                               </a>
                             </td>
@@ -840,33 +688,26 @@ export function ListaFuncionarios({
                           const telefoneNumerico = func.telefone.replace(/\D/g, '');
                           const whatsappLink = `https://wa.me/55${telefoneNumerico}`;
                           return (
-                            <td key={col.id} className="px-4 py-3 text-sm whitespace-nowrap">
+                            <td key={col.id} className="whitespace-nowrap px-4 py-3 text-sm">
                               <a
                                 href={whatsappLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-green-600 hover:underline flex items-center gap-1"
-                                title={`Enviar WhatsApp para ${func.telefone}`}
+                                className="flex items-center gap-1 text-green-700 hover:underline dark:text-green-400"
+                                title="Abrir contato no WhatsApp"
                               >
-                                <Phone className="w-3 h-3" />
+                                <Phone className="h-3 w-3" />
                                 {formatarTelefone(func.telefone)}
                               </a>
                             </td>
                           );
                         }
 
-                        if (col.id === 'cpf' && func.cpf) {
-                          valor = formatarCPF(func.cpf);
-                        }
-
-                        if (col.id === 'matricula' && func.matricula) {
-                          valor = formatarMatricula(func.matricula);
-                        }
-
+                        if (col.id === 'cpf' && func.cpf) valor = formatarCPF(func.cpf);
+                        if (col.id === 'matricula' && func.matricula) valor = formatarMatricula(func.matricula);
                         if (col.id === 'nascimento' && func.nascimento) {
                           valor = formatarDataExibicao(func.nascimento) || '-';
                         }
-
                         if (col.id === 'admissao' && func.admissao) {
                           valor = formatarDataExibicao(func.admissao) || '-';
                         }
@@ -878,14 +719,13 @@ export function ListaFuncionarios({
                           )
                             .toString()
                             .toUpperCase();
-                          const normalizedStatus =
-                            rawStatus === 'DESLIGADO' ? 'INATIVO' : rawStatus;
+                          const normalizedStatus = rawStatus === 'DESLIGADO' ? 'INATIVO' : rawStatus;
                           const statusColors: Record<string, string> = {
-                            ATIVO: 'bg-green-100 text-green-800',
-                            INATIVO: 'bg-slate-100 text-slate-800',
-                            FERIAS: 'bg-blue-100 text-blue-800',
-                            LICENCA: 'bg-yellow-100 text-yellow-800',
-                            AFASTADO: 'bg-orange-100 text-orange-800',
+                            ATIVO: 'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300',
+                            INATIVO: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
+                            FERIAS: 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
+                            LICENCA: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300',
+                            AFASTADO: 'bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300',
                           };
                           const statusLabel: Record<string, string> = {
                             ATIVO: 'Ativo',
@@ -894,34 +734,77 @@ export function ListaFuncionarios({
                             LICENCA: 'Licença',
                             AFASTADO: 'Afastado',
                           };
-                          const colorClass =
-                            statusColors[normalizedStatus] || 'bg-slate-100 text-slate-800';
+                          const colorClass = statusColors[normalizedStatus] || statusColors.INATIVO;
                           const label = statusLabel[normalizedStatus] || normalizedStatus || '-';
 
                           return (
-                            <td key={col.id} className="px-4 py-3 text-sm whitespace-nowrap">
-                              <span
-                                className={`px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}
-                              >
+                            <td key={col.id} className="whitespace-nowrap px-4 py-3 text-sm">
+                              <span className={`rounded-full px-2 py-1 text-xs font-medium ${colorClass}`}>
                                 {label}
                               </span>
                             </td>
                           );
                         }
 
-                        if (col.id === 'funcao') {
-                          valor = resolveFuncionarioRoleLabel(func) || '-';
-                        }
+                        if (col.id === 'funcao') valor = resolveFuncionarioRoleLabel(func) || '-';
 
                         return (
                           <td
                             key={col.id}
-                            className="px-4 py-3 text-sm text-slate-900 whitespace-nowrap"
+                            className="whitespace-nowrap px-4 py-3 text-sm text-slate-900 dark:text-slate-100"
                           >
                             {valor}
                           </td>
                         );
                       })}
+
+                      <td className="px-2 py-3 text-sm">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openPasta360(func.id)}
+                            className={tableActionButtonClass}
+                            aria-label={`Abrir perfil de ${func.nome || 'funcionário'}`}
+                            title="Abrir perfil"
+                          >
+                            <FolderOpen className="h-4 w-4" />
+                          </button>
+
+                          <details className="relative">
+                            <summary
+                              className={`${tableActionButtonClass} list-none cursor-pointer [&::-webkit-details-marker]:hidden`}
+                              aria-label={`Mais ações para ${func.nome || 'funcionário'}`}
+                              title="Mais ações"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </summary>
+                            <div className="absolute right-0 z-30 mt-1 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.currentTarget.closest('details')?.removeAttribute('open');
+                                  setFuncionarioSelecionado(func);
+                                }}
+                                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.currentTarget.closest('details')?.removeAttribute('open');
+                                  void handleExcluir(func.id, func.nome);
+                                }}
+                                disabled={excluindo === func.id}
+                                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                {excluindo === func.id ? 'Excluindo...' : 'Excluir'}
+                              </button>
+                            </div>
+                          </details>
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -929,7 +812,6 @@ export function ListaFuncionarios({
             </table>
           </div>
 
-          {/* Paginação */}
           <Pagination
             currentPage={pagination.page}
             totalPages={pagination.totalPages}
@@ -949,8 +831,6 @@ export function ListaFuncionarios({
           />
         </>
       )}
-
-      {/* Modais */}
 
       {(showModalNovoFuncionario || funcionarioSelecionado) && (
         <Suspense fallback={null}>

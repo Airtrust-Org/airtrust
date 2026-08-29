@@ -13,28 +13,30 @@ interface Props {
   onSalvar: (colunas: Coluna[]) => void;
 }
 
-const DEFAULT_COLUNAS: Coluna[] = [
-  { id: 'nome', label: 'Nome Completo', visivel: true, ordem: 0 },
-  { id: 'guerra', label: 'Nome Guerra', visivel: true, ordem: 1 },
-  { id: 'funcao', label: 'Função', visivel: true, ordem: 2 },
-  { id: 'aeronave', label: 'Equipamento', visivel: true, ordem: 3 },
-  { id: 'setor', label: 'Setor', visivel: false, ordem: 4 },
-  { id: 'cpf', label: 'CPF', visivel: true, ordem: 5 },
-  { id: 'nascimento', label: 'Data Nasc.', visivel: true, ordem: 6 },
-  { id: 'codigo_anac', label: 'Código ANAC', visivel: true, ordem: 7 },
-  { id: 'sispat', label: 'SISPAT', visivel: false, ordem: 8 },
-  { id: 'prestserv', label: 'PrestServ', visivel: false, ordem: 9 },
-  { id: 'matricula', label: 'Matrícula', visivel: true, ordem: 10 },
-  { id: 'admissao', label: 'Data Admissão', visivel: false, ordem: 11 },
-  { id: 'email', label: 'E-mail', visivel: true, ordem: 12 },
-  { id: 'telefone', label: 'Telefone', visivel: true, ordem: 13 },
-  { id: 'nivel_icao', label: 'Nível ICAO', visivel: false, ordem: 14 },
-  { id: 'validade_icao', label: 'Validade ICAO', visivel: false, ordem: 15 },
-  { id: 'cma', label: 'CMA', visivel: false, ordem: 16 },
-  { id: 'validade_cma', label: 'Validade CMA', visivel: false, ordem: 17 },
-  { id: 'aso', label: 'ASO', visivel: false, ordem: 18 },
-  { id: 'validade_aso', label: 'Validade ASO', visivel: false, ordem: 19 },
-  { id: 'status', label: 'Status', visivel: false, ordem: 20 },
+export const FUNCIONARIOS_COLUNAS_STORAGE_KEY = 'funcionarios_colunas_config_v2';
+
+/**
+ * A lista de funcionários é uma superfície operacional, não um cadastro completo.
+ * Dados pessoais e identificadores ficam ocultos por padrão e só aparecem quando
+ * o usuário decide explicitamente adicioná-los à visualização.
+ */
+export const DEFAULT_COLUNAS: Coluna[] = [
+  { id: 'nome', label: 'Nome', visivel: true, ordem: 0 },
+  { id: 'guerra', label: 'Nome de guerra', visivel: true, ordem: 1 },
+  { id: 'funcao', label: 'Função / Cargo', visivel: true, ordem: 2 },
+  { id: 'setor', label: 'Setor', visivel: true, ordem: 3 },
+  { id: 'aeronave', label: 'Equipamento', visivel: true, ordem: 4 },
+  { id: 'status', label: 'Status', visivel: true, ordem: 5 },
+  { id: 'licenca', label: 'Licença', visivel: false, ordem: 6 },
+  { id: 'codigo_anac', label: 'CANAC', visivel: false, ordem: 7 },
+  { id: 'matricula', label: 'Matrícula', visivel: false, ordem: 8 },
+  { id: 'cpf', label: 'CPF', visivel: false, ordem: 9 },
+  { id: 'nascimento', label: 'Data de nascimento', visivel: false, ordem: 10 },
+  { id: 'email', label: 'E-mail', visivel: false, ordem: 11 },
+  { id: 'telefone', label: 'Telefone', visivel: false, ordem: 12 },
+  { id: 'admissao', label: 'Admissão', visivel: false, ordem: 13 },
+  { id: 'sispat', label: 'SISPAT', visivel: false, ordem: 14 },
+  { id: 'prestserv', label: 'PrestServ', visivel: false, ordem: 15 },
 ];
 
 export default function ConfigurarColunas({ onClose, onSalvar }: Props) {
@@ -44,14 +46,13 @@ export default function ConfigurarColunas({ onClose, onSalvar }: Props) {
   const dragItem = useRef<number | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('funcionarios_colunas_config');
+    const saved = localStorage.getItem(FUNCIONARIOS_COLUNAS_STORAGE_KEY);
     if (saved) {
       try {
         const parsed: Coluna[] = JSON.parse(saved);
-        // Merge saved config with defaults (add new columns from DEFAULT if missing)
         const merged = DEFAULT_COLUNAS.map((def) => {
-          const saved = parsed.find((c) => c.id === def.id);
-          return saved ?? def;
+          const savedColumn = parsed.find((c) => c.id === def.id);
+          return savedColumn ?? def;
         }).sort((a, b) => a.ordem - b.ordem);
         setColunas(merged);
       } catch {
@@ -101,9 +102,9 @@ export default function ConfigurarColunas({ onClose, onSalvar }: Props) {
 
   const handleSalvar = () => {
     const colunasComOrdem = colunas.map((col, i) => ({ ...col, ordem: i }));
-    localStorage.setItem('funcionarios_colunas_config', JSON.stringify(colunasComOrdem));
+    localStorage.setItem(FUNCIONARIOS_COLUNAS_STORAGE_KEY, JSON.stringify(colunasComOrdem));
     onSalvar(colunasComOrdem);
-    if (onClose) onClose();
+    onClose?.();
   };
 
   const handleResetar = () => {
@@ -111,25 +112,27 @@ export default function ConfigurarColunas({ onClose, onSalvar }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-lg">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+        <div className="flex items-center justify-between border-b border-slate-200 p-6 dark:border-slate-700">
           <div>
-            <h2 className="text-xl font-bold">Configurar Colunas</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Arraste para reordenar • Clique no olho para mostrar/ocultar
+            <h2 className="text-xl font-bold">Configurar colunas</h2>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              Dados pessoais ficam ocultos por padrão. Arraste para reordenar e escolha apenas o que precisa visualizar.
             </p>
           </div>
           {onClose && (
-            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-              <X className="w-6 h-6" />
+            <button
+              onClick={onClose}
+              aria-label="Fechar configuração de colunas"
+              className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-100"
+            >
+              <X className="h-6 w-6" />
             </button>
           )}
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-1.5 max-h-96 overflow-y-auto">
+        <div className="max-h-96 space-y-1.5 overflow-y-auto p-6">
           {colunas.map((coluna, index) => (
             <div
               key={coluna.id}
@@ -139,44 +142,49 @@ export default function ConfigurarColunas({ onClose, onSalvar }: Props) {
               onDrop={() => handleDrop(index)}
               onDragEnd={handleDragEnd}
               onDragOver={(e) => e.preventDefault()}
-              className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 cursor-grab active:cursor-grabbing select-none ${
+              className={`flex cursor-grab select-none items-center gap-3 rounded-lg border p-3 transition-all duration-200 active:cursor-grabbing ${
                 draggedIndex === index
-                  ? 'bg-blue-50 border-blue-300 shadow-lg scale-105 opacity-90'
+                  ? 'scale-105 border-blue-300 bg-blue-50 opacity-90 shadow-lg dark:border-blue-700 dark:bg-blue-950/30'
                   : dragOverIndex === index
-                    ? 'bg-blue-50 border-blue-200'
-                    : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                    ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20'
+                    : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600 dark:hover:bg-slate-700'
               }`}
             >
-              <GripVertical className="w-5 h-5 text-gray-400 flex-shrink-0" />
-              <span className="flex-1 text-sm font-medium text-slate-700">{coluna.label}</span>
+              <GripVertical className="h-5 w-5 flex-shrink-0 text-slate-400" />
+              <span className="flex-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                {coluna.label}
+              </span>
               <button
+                type="button"
+                role="switch"
+                aria-checked={coluna.visivel}
                 onClick={() => toggleVisibilidade(coluna.id)}
+                aria-label={`${coluna.visivel ? 'Ocultar' : 'Mostrar'} coluna ${coluna.label}`}
                 title={coluna.visivel ? 'Ocultar coluna' : 'Mostrar coluna'}
-                className={`p-1.5 rounded-lg transition ${
+                className={`rounded-lg p-1.5 transition ${
                   coluna.visivel
-                    ? 'bg-primary/20 text-primary hover:bg-blue-200'
-                    : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
+                    ? 'bg-primary/20 text-primary hover:bg-blue-200 dark:hover:bg-blue-900/50'
+                    : 'bg-slate-200 text-slate-400 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600'
                 }`}
               >
-                {coluna.visivel ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                {coluna.visivel ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
               </button>
             </div>
           ))}
         </div>
 
-        {/* Footer */}
-        <div className="flex gap-3 p-6 border-t bg-gray-50">
+        <div className="flex gap-3 border-t border-slate-200 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-950/40">
           <button
             onClick={handleResetar}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition text-sm"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm transition hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800"
           >
-            Resetar
+            Restaurar padrão seguro
           </button>
           <button
             onClick={handleSalvar}
-            className="flex-1 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition font-medium text-sm"
+            className="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-white transition hover:bg-primary/90"
           >
-            Salvar Configuração
+            Salvar configuração
           </button>
         </div>
       </div>
