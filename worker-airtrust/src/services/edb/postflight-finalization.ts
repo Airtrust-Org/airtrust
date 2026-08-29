@@ -1,0 +1,142 @@
+import type { EdbFlightRecord } from './contracts';
+import { validateForPicFlightSignature } from './regulatory-validation';
+import {
+  technicalSituationMatches,
+  type EdbPicTechnicalAcknowledgement,
+  type EdbTechnicalSituationSnapshot,
+} from './technical-awareness';
+
+export interface FinalizedPostflightRecord {
+  record: EdbFlightRecord;
+  technicalSituationId: string;
+  technicalAcknowledgementId: string;
+}
+
+function cloneRecord(record: EdbFlightRecord): EdbFlightRecord {
+  return {
+    ...record,
+    identity: {
+      ...record.identity,
+      aircraft: {
+        ...record.identity.aircraft,
+        owners: record.identity.aircraft.owners ? [...record.identity.aircraft.owners] : null,
+        operators: record.identity.aircraft.operators ? [...record.identity.aircraft.operators] : null,
+      },
+    },
+    flight: {
+      ...record.flight,
+      times: { ...record.flight.times },
+      duration: { ...record.flight.duration },
+      occurrences: record.flight.occurrences ? [...record.flight.occurrences] : record.flight.occurrences,
+      technicalDiscrepancies: record.flight.technicalDiscrepancies
+        ? record.flight.technicalDiscrepancies.map((item) => ({
+            ...item,
+            detectedBy: { ...item.detectedBy },
+          }))
+        : record.flight.technicalDiscrepancies,
+      crew: record.flight.crew.map((member) => ({ ...member })),
+    },
+    maintenance: {
+      lastIntervention: { ...record.maintenance.lastIntervention },
+      nextIntervention: { ...record.maintenance.nextIntervention },
+    },
+    signatures: {
+      picTechnicalAcknowledgement: record.signatures.picTechnicalAcknowledgement
+        ? {
+            ...record.signatures.picTechnicalAcknowledgement,
+            signer: { ...record.signatures.picTechnicalAcknowledgement.signer },
+          }
+        : null,
+      picFlightRecord: record.signatures.picFlightRecord
+        ? { ...record.signatures.picFlightRecord, signer: { ...record.signatures.picFlightRecord.signer } }
+        : null,
+      operatorRecord: record.signatures.operatorRecord
+        ? { ...record.signatures.operatorRecord, signer: { ...record.signatures.operatorRecord.signer } }
+        : null,
+    },
+    correction: { ...record.correction },
+    source: { ...record.source },
+  };
+}
+
+function assertAcknowledgementBeforeFlight(record: EdbFlightRecord, acknowledgement: EdbPicTechnicalAcknowledgement): void {
+  const engineStartAt = record.flight.times.engineStartAt;
+  if (!engineStartAt) return;
+
+  const signedAt = Date.parse(acknowledgement.signature.signedAt);
+  const engineStart = Date.parse(engineStartAt);
+  if (Number.isFinite(signedAt) && Number.isFinite(engineStart) && signedAt > engineStart) {
+    throw new Error('EDB_TECHNICAL_ACK_NOT_BEFORE_FLIGHT');
+  }
+}
+
+/**
+ * Freezes the postflight regulatory record only after proving that the PIC
+ * acknowledged the exact aircraft/maintenance situation that existed before
+ * the flight. Postflight operational fields are intentionally excluded from
+ * the preflight hash, so completing times, landings, POB, cargo or occurrences
+ * does not invalidate a valid technical acknowledgement.
+ */
+export async function finalizePostflightEdbRecord(params: {
+  draftRecord: EdbFlightRecord;
+  technicalSituation: EdbTechnicalSituationSnapshot;
+  technicalAcknowledgement: EdbPicTechnicalAcknowledgement;
+}): Promise<FinalizedPostflightRecord> {
+  const { draftRecord, technicalSituation, technicalAcknowledgement } = params;
+  if (draftRecord.status !== 'DRAFT') throw new Error('EDB_POSTFLIGHT_FINALIZATION_REQUIRES_DRAFT');
+  if (draftRecord.source.sourceStageId === null) throw new Error('EDB_POSTFLIGHT_STAGE_REQUIRED');
+
+  if (
+    technicalAcknowledgement.technicalSituationId !== technicalSituation.snapshotId ||
+    technicalAcknowledgement.operatorCompanyId !== technicalSituation.operatorCompanyId ||
+    technicalAcknowledgement.sourceFlightId !== technicalSituation.sourceFlightId
+  ) {
+    throw new Error('EDB_TECHNICAL_ACK_SNAPSHOT_MISMATCH');
+  }
+  if (
+    technicalAcknowledgement.signature.canonicalPayloadHashSha256 !==
+    technicalSituation.canonicalSnapshotSha256
+  ) {
+    throw new Error('EDB_TECHNICAL_ACK_HASH_MISMATCH');
+  }
+
+  const situationStillMatches = await technicalSituationMatches({
+    snapshot: technicalSituation,
+    operatorCompanyId: draftRecord.identity.operatorCompanyId,
+    sourceFlightId: draftRecord.source.sourceFlightId,
+    aircraft: draftRecord.identity.aircraft,
+    maintenance: draftRecord.maintenance,
+  });
+  if (!situationStillMatches) throw new Error('EDB_TECHNICAL_SITUATION_CHANGED_AFTER_ACK');
+
+  assertAcknowledgementBeforeFlight(draftRecord, technicalAcknowledgement);
+
+  const record = cloneRecord(draftRecord);
+  record.identity.aircraft = {
+    ...technicalSituation.aircraft,
+    owners: technicalSituation.aircraft.owners ? [...technicalSituation.aircraft.owners] : null,
+    operators: technicalSituation.aircraft.operators ? [...technicalSituation.aircraft.operators] : null,
+  };
+  record.maintenance = {
+    lastIntervention: { ...technicalSituation.maintenance.lastIntervention },
+    nextIntervention: { ...technicalSituation.maintenance.nextIntervention },
+  };
+  record.signatures.picTechnicalAcknowledgement = {
+    ...technicalAcknowledgement.signature,
+    signer: { ...technicalAcknowledgement.signature.signer },
+  };
+
+  const validation = validateForPicFlightSignature(record);
+  const blockingCodes = validation.issues
+    .filter((issue) => issue.severity === 'BLOCKING')
+    .map((issue) => issue.code);
+  if (blockingCodes.length > 0) {
+    throw new Error(`EDB_POSTFLIGHT_NOT_READY:${blockingCodes.join(',')}`);
+  }
+
+  return {
+    record,
+    technicalSituationId: technicalSituation.snapshotId,
+    technicalAcknowledgementId: technicalAcknowledgement.acknowledgementId,
+  };
+}
