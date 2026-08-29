@@ -35,9 +35,11 @@ describe('ConfiguracoesCadastros', () => {
   it('uses canonical chrome and configuration content without report-like counters', () => {
     render(<ConfiguracoesCadastros />);
 
-    expect(screen.getByRole('heading', { name: 'Configurações' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Configurações de Simuladores' })).toBeInTheDocument();
     expect(
-      screen.getByText('Gerencie os cadastros que sustentam a operação de simuladores.'),
+      screen.getByText(
+        'Cadastros que definem como as sessões de treinamento são planejadas e avaliadas.',
+      ),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Cadastros operacionais' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Simuladores/ })).toBeInTheDocument();
