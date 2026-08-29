@@ -213,6 +213,159 @@ body {
   color: var(--at-info);
 }
 
+/*
+ * Legacy utility compatibility layer.
+ *
+ * Several mature screens still carry light-only Tailwind utilities such as
+ * `bg-white`, `text-slate-900` and `border-slate-200`. Until each screen is
+ * migrated to semantic primitives, translate only utilities that DO NOT have
+ * an explicit `dark:*` counterpart. This keeps intentionally authored dark
+ * variants authoritative and removes the white/low-contrast islands found in
+ * the system-wide audit without a risky big-bang component rewrite.
+ */
+.dark .bg-white:not([class*='dark:bg-']) {
+  background-color: var(--at-bg-surface);
+}
+
+.dark .bg-slate-50:not([class*='dark:bg-']),
+.dark .bg-gray-50:not([class*='dark:bg-']),
+.dark .bg-gray-100:not([class*='dark:bg-']) {
+  background-color: var(--at-bg-sunken);
+}
+
+.dark .bg-slate-100:not([class*='dark:bg-']) {
+  background-color: var(--at-hover);
+}
+
+.dark .text-slate-950:not([class*='dark:text-']),
+.dark .text-slate-900:not([class*='dark:text-']),
+.dark .text-slate-800:not([class*='dark:text-']),
+.dark .text-gray-900:not([class*='dark:text-']),
+.dark .text-gray-800:not([class*='dark:text-']) {
+  color: var(--at-text-primary);
+}
+
+.dark .text-slate-700:not([class*='dark:text-']),
+.dark .text-slate-600:not([class*='dark:text-']),
+.dark .text-gray-700:not([class*='dark:text-']),
+.dark .text-gray-600:not([class*='dark:text-']) {
+  color: var(--at-text-secondary);
+}
+
+.dark .text-slate-500:not([class*='dark:text-']),
+.dark .text-slate-400:not([class*='dark:text-']),
+.dark .text-gray-500:not([class*='dark:text-']),
+.dark .text-gray-400:not([class*='dark:text-']) {
+  color: var(--at-text-subtle);
+}
+
+.dark .border-slate-100:not([class*='dark:border-']),
+.dark .border-slate-200:not([class*='dark:border-']),
+.dark .border-gray-100:not([class*='dark:border-']),
+.dark .border-gray-200:not([class*='dark:border-']) {
+  border-color: var(--at-border);
+}
+
+.dark .border-slate-300:not([class*='dark:border-']),
+.dark .border-gray-300:not([class*='dark:border-']) {
+  border-color: var(--at-border-strong);
+}
+
+.dark .bg-green-50:not([class*='dark:bg-']) {
+  background-color: var(--at-success-soft);
+}
+
+.dark .text-green-700:not([class*='dark:text-']),
+.dark .text-green-800:not([class*='dark:text-']) {
+  color: var(--at-success);
+}
+
+.dark .border-green-200:not([class*='dark:border-']) {
+  border-color: color-mix(in srgb, var(--at-success) 42%, transparent);
+}
+
+.dark .bg-yellow-50:not([class*='dark:bg-']),
+.dark .bg-amber-50:not([class*='dark:bg-']) {
+  background-color: var(--at-attention-soft);
+}
+
+.dark .text-yellow-700:not([class*='dark:text-']),
+.dark .text-yellow-800:not([class*='dark:text-']),
+.dark .text-amber-700:not([class*='dark:text-']),
+.dark .text-amber-800:not([class*='dark:text-']) {
+  color: var(--at-attention);
+}
+
+.dark .border-yellow-200:not([class*='dark:border-']),
+.dark .border-amber-200:not([class*='dark:border-']) {
+  border-color: color-mix(in srgb, var(--at-attention) 42%, transparent);
+}
+
+.dark .bg-orange-50:not([class*='dark:bg-']) {
+  background-color: var(--at-risk-soft);
+}
+
+.dark .text-orange-700:not([class*='dark:text-']),
+.dark .text-orange-800:not([class*='dark:text-']) {
+  color: var(--at-risk);
+}
+
+.dark .border-orange-200:not([class*='dark:border-']) {
+  border-color: color-mix(in srgb, var(--at-risk) 42%, transparent);
+}
+
+.dark .bg-red-50:not([class*='dark:bg-']) {
+  background-color: var(--at-critical-soft);
+}
+
+.dark .text-red-700:not([class*='dark:text-']),
+.dark .text-red-800:not([class*='dark:text-']) {
+  color: var(--at-critical);
+}
+
+.dark .border-red-200:not([class*='dark:border-']) {
+  border-color: color-mix(in srgb, var(--at-critical) 42%, transparent);
+}
+
+.dark .bg-blue-50:not([class*='dark:bg-']) {
+  background-color: var(--at-info-soft);
+}
+
+.dark .text-blue-700:not([class*='dark:text-']),
+.dark .text-blue-800:not([class*='dark:text-']) {
+  color: var(--at-info);
+}
+
+.dark .border-blue-200:not([class*='dark:border-']) {
+  border-color: color-mix(in srgb, var(--at-info) 42%, transparent);
+}
+
+/* Tailwind gradients need their custom properties translated as well. */
+.dark .from-white:not([class*='dark:from-']) {
+  --tw-gradient-from: var(--at-bg-surface) var(--tw-gradient-from-position);
+  --tw-gradient-to: color-mix(in srgb, var(--at-bg-surface) 0%, transparent)
+    var(--tw-gradient-to-position);
+}
+
+.dark .to-white:not([class*='dark:to-']) {
+  --tw-gradient-to: var(--at-bg-surface) var(--tw-gradient-to-position);
+}
+
+.dark .from-slate-50:not([class*='dark:from-']) {
+  --tw-gradient-from: var(--at-bg-sunken) var(--tw-gradient-from-position);
+  --tw-gradient-to: color-mix(in srgb, var(--at-bg-sunken) 0%, transparent)
+    var(--tw-gradient-to-position);
+}
+
+/* Legacy controls without explicit dark variants inherit the semantic field. */
+.dark input.bg-white:not([class*='dark:bg-']),
+.dark select.bg-white:not([class*='dark:bg-']),
+.dark textarea.bg-white:not([class*='dark:bg-']) {
+  background-color: var(--at-bg-field);
+  border-color: var(--at-border-strong);
+  color: var(--at-text-primary);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
