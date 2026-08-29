@@ -193,7 +193,6 @@ describe('eDB technical discrepancy workflow', () => {
     const original = createTechnicalDiscrepancyCase({
       discrepancyId: 'disc-1',
       revisionId: 'edbrev-100-300-r1',
-      sourceStageId: 300,
       description: 'Vibracao anormal observada pela tripulacao',
       detectedBy: pic,
       detectedAt: '2026-08-28T10:50:00.000Z',
