@@ -18,6 +18,8 @@ function proof(type: EdbSignatureType, hash: string, signedAt: string): EdbSigna
   return {
     signatureId: `sig-${type}`,
     type,
+    targetType: type === 'PIC_TECHNICAL_ACK' ? 'TECHNICAL_SITUATION' : 'FINAL_RECORD_REVISION',
+    targetId: type === 'PIC_TECHNICAL_ACK' ? 'tech-1' : 'edb-1-r1',
     signer: {
       employeeId: 10,
       fullName: type === 'OPERATOR_RECORD' ? 'Operador Designado' : 'Piloto em Comando',
@@ -174,6 +176,22 @@ describe('eDB regulatory readiness', () => {
     expect(readiness.steps.find((step) => step.id === 'ANAC_SYNC')?.status).toBe('ACTION_REQUIRED');
     expect(readiness.readyForAnacQueue).toBe(true);
     expect(readiness.nextAction).toBe('ANAC_SYNC');
+  });
+
+  it('fails closed when a valid final signature is copied to another revision target', async () => {
+    const { record, evidence } = await operatorSignedRecord();
+    if (!record.signatures.picFlightRecord) throw new Error('fixture missing PIC signature');
+    record.signatures.picFlightRecord.targetId = 'edb-1-r2';
+
+    const readiness = await assessEdbRegulatoryReadiness(
+      record,
+      new Date('2026-08-28T12:01:00.000Z'),
+      evidence,
+    );
+    const picStep = readiness.steps.find((step) => step.id === 'PIC_FLIGHT_SIGNATURE');
+    expect(readiness.readyForAnacQueue).toBe(false);
+    expect(picStep?.status).toBe('ACTION_REQUIRED');
+    expect(picStep?.blockingCodes).toContain('EDB_PIC_FLIGHT_SIGNATURE_TARGET_MISMATCH');
   });
 
   it('fails closed when signed flight data changes after final signatures were stored', async () => {
