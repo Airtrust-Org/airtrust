@@ -248,8 +248,14 @@ NODE
   edb_change_id="$(printf '%s\n' "$manifest_values" | sed -n '1p')"
   edb_baseline_id="$(printf '%s\n' "$manifest_values" | sed -n '2p')"
 
-  schema_count="$(query_count "SELECT COUNT(*) AS count FROM airtrust_schema_changes_v2 WHERE change_id = '$edb_change_id';")"
-  baseline_count="$(query_count "SELECT COUNT(*) AS count FROM airtrust_schema_baselines_v2 WHERE baseline_id = '$edb_baseline_id' AND status = 'ACTIVE';")"
+  schema_table_count="$(query_count "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'airtrust_schema_changes_v2';")"
+  if [[ "$schema_table_count" == "0" ]]; then
+    schema_count="0"
+    baseline_count="1"
+  else
+    schema_count="$(query_count "SELECT COUNT(*) AS count FROM airtrust_schema_changes_v2 WHERE change_id = '$edb_change_id';")"
+    baseline_count="$(query_count "SELECT COUNT(*) AS count FROM airtrust_schema_baselines_v2 WHERE baseline_id = '$edb_baseline_id' AND status = 'ACTIVE';")"
+  fi
   if [[ "$baseline_count" != "1" ]]; then
     echo "ERROR: baseline Schema V2 eDB deve existir uma única vez e estar ACTIVE: $edb_baseline_id" >&2
     exit 1

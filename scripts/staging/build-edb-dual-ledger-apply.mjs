@@ -70,8 +70,10 @@ export function buildEdbDualLedgerApply({ releaseRoot, migrationName, releaseSha
       githubSha: releaseSha,
     });
     const reviewedBundle = readFileSync(reviewedOutput, 'utf8');
+    const bootstrapSqlPath = join(root, 'worker-airtrust', 'schema-v2', 'bootstrap', '0000_initialize_schema_ledger_v2.sql');
+    const bootstrapSql = readFileSync(bootstrapSqlPath, 'utf8');
     const dualLedgerBundle = buildLedgerAppliedSql({
-      migrationSql: reviewedBundle,
+      migrationSql: `${bootstrapSql}\n\n${reviewedBundle}`,
       migrationName,
     });
     writeFileSync(resolve(outputPath), dualLedgerBundle, { encoding: 'utf8', mode: 0o600 });
