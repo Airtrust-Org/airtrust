@@ -167,8 +167,14 @@ query_count() {
   node - "$ledger_output" <<'NODE'
 const fs = require('node:fs');
 const file = process.argv[2];
-const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-const count = Number(parsed?.[0]?.results?.[0]?.count);
+const raw = fs.readFileSync(file, 'utf8');
+const start = raw.indexOf('[');
+const end = raw.lastIndexOf(']');
+const jsonText = (start !== -1 && end > start) ? raw.slice(start, end + 1) : raw;
+const parsed = JSON.parse(jsonText);
+const row = parsed?.[0]?.results?.[0];
+const val = row?.count ?? row?.COUNT ?? row?.total ?? row?.TOTAL ?? row?.['COUNT(*)'] ?? row?.['count(*)'] ?? (row ? Object.values(row)[0] : NaN);
+const count = Number(val);
 if (!Number.isInteger(count) || count < 0) throw new Error('LEDGER_COUNT_INVALID');
 process.stdout.write(String(count));
 NODE
