@@ -6,6 +6,7 @@ import FrmsDashboard from '../FrmsDashboard';
 
 const useFrmsOperationalSnapshotMock = vi.fn();
 const useReadinessTeamMock = vi.fn();
+const useFrmsOperationalAccessMock = vi.fn();
 
 vi.mock('@/react-app/components/AppLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -17,6 +18,15 @@ vi.mock('@/react-app/hooks/useFrmsOperationalSnapshot', () => ({
 
 vi.mock('@/react-app/hooks/useOperationalReadiness', () => ({
   useReadinessTeam: (...args: unknown[]) => useReadinessTeamMock(...args),
+  useReadinessBaseline: () => ({ data: null }),
+  useReadinessToday: () => ({ data: null }),
+  useSubmitReadiness: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock('@/react-app/hooks/useFrmsOperationalAccess', () => ({
+  useFrmsOperationalAccess: (...args: unknown[]) => useFrmsOperationalAccessMock(...args),
+  useFrmsMaintenanceTeam: () => ({ data: null, isLoading: false, isFetching: false, refetch: vi.fn() }),
+  useSubmitFrmsMaintenanceCheckin: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperationalSnapshotItem {
@@ -103,6 +113,23 @@ describe('FrmsDashboard simplificado', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(state());
     useReadinessTeamMock.mockReset();
     useReadinessTeamMock.mockReturnValue({ data: [] });
+    useFrmsOperationalAccessMock.mockReset();
+    useFrmsOperationalAccessMock.mockReturnValue({
+      data: {
+        administrative_role: 'GESTOR',
+        enabled: true,
+        domains: ['OPERACOES'],
+        setor_ids: [1],
+        actions: {},
+        frms_profile: 'flight',
+        employee: { id: 10, nome: 'Max Monteiro', cargo: 'Piloto', funcao: 'PIC', setor_id: 1 },
+        can_manage_maintenance: false,
+        maintenance_setor_ids: [],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
   });
 
   it('expõe apenas as três áreas primárias e remove a navegação antiga', () => {
@@ -151,15 +178,7 @@ describe('FrmsDashboard simplificado', () => {
 
   it('mostra os quatro sinais operacionais em cada linha da fila', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
-      state({
-        data: [
-          item({
-            checkin_status: 'AUSENTE',
-            fortnight_indicator: null,
-            estado_operacional: 'ATENCAO',
-          }),
-        ],
-      }),
+      state({ data: [item({ checkin_status: 'AUSENTE', fortnight_indicator: null, estado_operacional: 'ATENCAO' })] }),
     );
 
     renderDashboard();
@@ -175,18 +194,11 @@ describe('FrmsDashboard simplificado', () => {
   it('trata dado incompleto como confirmação, esconde efetividade não confiável e explica o que falta', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
       state({
-        data: [
-          item({
-            snapshot_status: 'INCOMPLETO',
-            estado_operacional: 'NAO_AVALIADO',
-            fatorizacao_status: 'AUSENTE',
-            jornada_data_source: 'AUSENTE',
-            effectiveness_pct: 0,
-            alertas: ['JORNADA_SEM_FATORIZACAO'],
-            motivos_principais: ['Jornada ainda não consolidada.'],
-            acao_recomendada_texto: 'Confirmar a jornada antes do despacho.',
-          }),
-        ],
+        data: [item({
+          snapshot_status: 'INCOMPLETO', estado_operacional: 'NAO_AVALIADO', fatorizacao_status: 'AUSENTE',
+          jornada_data_source: 'AUSENTE', effectiveness_pct: 0, alertas: ['JORNADA_SEM_FATORIZACAO'],
+          motivos_principais: ['Jornada ainda não consolidada.'], acao_recomendada_texto: 'Confirmar a jornada antes do despacho.',
+        })],
       }),
     );
 
@@ -194,7 +206,6 @@ describe('FrmsDashboard simplificado', () => {
 
     expect(screen.getAllByText('Confirmar').length).toBeGreaterThan(0);
     expect(screen.getByText('Jornada ainda não consolidada.')).toBeInTheDocument();
-    // Efetividade não confiável aparece como sinal cinza "Não calculada", nunca 0%.
     expect(screen.getByLabelText('Efetividade: Não calculada — sem dado')).toBeInTheDocument();
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
 
@@ -207,19 +218,11 @@ describe('FrmsDashboard simplificado', () => {
   it('abre o detalhe no mesmo contexto e marca consultas externas como secundárias', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
       state({
-        data: [
-          item({
-            funcionario_id: 30,
-            tripulante_id: 30,
-            nome: 'Pessoa Crítica',
-            nome_guerra: null,
-            hora_apresentacao: '07:00',
-            snapshot_status: 'CRITICO',
-            estado_operacional: 'CRITICO_VIOLACAO',
-            motivos_principais: ['Limite operacional excedido.'],
-            acao_recomendada_texto: 'Não despachar até mitigação.',
-          }),
-        ],
+        data: [item({
+          funcionario_id: 30, tripulante_id: 30, nome: 'Pessoa Crítica', nome_guerra: null,
+          hora_apresentacao: '07:00', snapshot_status: 'CRITICO', estado_operacional: 'CRITICO_VIOLACAO',
+          motivos_principais: ['Limite operacional excedido.'], acao_recomendada_texto: 'Não despachar até mitigação.',
+        })],
       }),
     );
 
@@ -231,12 +234,10 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.getAllByText('Não despachar até mitigação.').length).toBeGreaterThan(0);
     expect(drawer.getByText(/Consultas secundárias — abrem outra tela/i)).toBeInTheDocument();
     expect(drawer.getByRole('link', { name: 'Abrir histórico (outra tela)' })).toHaveAttribute(
-      'href',
-      '/frms/tripulante/30?origem=operacao&data=2026-08-27',
+      'href', '/frms/tripulante/30?origem=operacao&data=2026-08-27',
     );
     expect(drawer.getByRole('link', { name: 'Abrir casos (outra tela)' })).toHaveAttribute(
-      'href',
-      '/frms/alertas?tripulante_id=30',
+      'href', '/frms/alertas?tripulante_id=30',
     );
     expect(drawer.queryByRole('link', { name: 'Abrir FRAT' })).not.toBeInTheDocument();
   });
