@@ -7,7 +7,7 @@ import FrmsCheckinFadiga, {
   mapKssToSubjectiveFatigue,
   normalizeWakeTimeInput,
   optionalBinaryResponseToPayload,
-} from '../FrmsCheckinFadiga';
+} from '../FrmsFlightCheckinFadiga';
 import { resolveFadigaPostSavePath } from '../frmsPostSaveNavigation';
 import {
   buildFadigaPainelRequestPath,
