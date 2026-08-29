@@ -14,7 +14,6 @@ export type EdbLifecycleAction =
   | 'CANCEL';
 
 export interface EdbLifecycleContext {
-  anacReceiptReference?: string | null;
   replacementRevisionId?: string | null;
   correctionReason?: string | null;
 }
@@ -135,10 +134,7 @@ export function evaluateEdbLifecycleAction(
 
   if (action === 'CONFIRM_ANAC_SYNCED') {
     if (record.status !== 'ANAC_PENDING') return invalidState(record, 'ANAC_PENDING');
-    if (!context.anacReceiptReference?.trim()) {
-      return decision(record, false, null, ['EDB_ANAC_RECEIPT_REFERENCE_REQUIRED']);
-    }
-    return decision(record, true, 'ANAC_SYNCED', []);
+    return decision(record, false, null, ['EDB_ANAC_ACCEPTANCE_ADAPTER_REQUIRED']);
   }
 
   if (action === 'SUPERSEDE') {
