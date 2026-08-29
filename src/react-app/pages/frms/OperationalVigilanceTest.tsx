@@ -40,7 +40,7 @@ function feedbackCopy(feedback: TrialFeedback): { value: string; helper: string;
   if (feedback.outcome === 'missed') {
     return {
       value: 'Sem resposta',
-      helper: 'Mantenha a atenção na caixa vermelha.',
+      helper: 'Mantenha a atenção no retângulo vermelho.',
       className: 'text-white',
     };
   }
@@ -331,35 +331,28 @@ export default function OperationalVigilanceTest({
             Teste breve de vigilância psicomotora (PVT-B)
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Uma caixa vermelha fica visível o tempo todo. Quando um contador amarelo aparecer dentro
-            dela, toque ou clique o mais rápido possível — o contador mostra os milissegundos que
-            estão passando. Não responda antes do contador aparecer. O resultado complementa o
-            check-in de fadiga e não determina aptidão para voo de forma isolada.
+            Um retângulo com borda vermelha fica visível sobre fundo preto. Quando um contador amarelo
+            aparecer dentro dele, toque ou clique o mais rápido possível — o contador mostra os
+            milissegundos que estão passando. Não responda antes do contador aparecer. O resultado
+            complementa o check-in de fadiga e não determina aptidão para voo de forma isolada.
           </p>
         </div>
         <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
           Duração prevista: cerca de {Math.round(durationMs / 60_000)} minutos. Mantenha a tela ativa
           e evite conversar ou alternar de aplicativo durante o teste.
         </div>
-        <div className="rounded-xl border border-red-100 bg-red-50/60 p-4 text-xs leading-5 text-slate-600">
-          <p className="font-semibold text-slate-800">Sobre este teste</p>
-          <p className="mt-1">
-            O Psychomotor Vigilance Task (PVT) é uma referência consolidada para medir atenção
-            sustentada e os efeitos da fadiga. Esta é a versão breve de 3 minutos (PVT-B) descrita por
-            Basner, Mollicone e Dinges (2011), <em>Acta Astronautica</em> 69, 949–959, e reproduzida
-            na biblioteca do PsyToolkit. O AirTrust implementa o paradigma publicado de forma
-            independente — caixa vermelha fixa, contador amarelo como estímulo, intervalos de 1–4 s —
-            e não é o aplicativo NASA PVT+.
-          </p>
+        <p className="text-xs leading-5 text-slate-500">
+          Referência científica: Psychomotor Vigilance Task (PVT) —{' '}
           <a
-            href="https://www.psytoolkit.org/experiment-library/pvtb.html"
+            href="https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/"
             target="_blank"
             rel="noreferrer"
-            className="mt-2 inline-flex font-semibold text-red-700 underline decoration-red-300 underline-offset-2 hover:text-red-800"
+            className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
           >
-            Referência: PsyToolkit — PVT-B
+            NASA Ames Fatigue Countermeasures Laboratory
           </a>
-        </div>
+          .
+        </p>
         <div className="flex flex-wrap gap-3">
           <Button onClick={start}>Iniciar teste</Button>
           {onCancel ? (
@@ -426,36 +419,37 @@ export default function OperationalVigilanceTest({
         }}
         data-testid="pvtb-box"
         data-phase={phase}
-        className="flex min-h-72 w-full items-center justify-center rounded-2xl border-4 border-red-700 bg-red-600 transition-colors focus:outline-none focus:ring-4 focus:ring-red-200"
+        className="flex min-h-72 w-full items-center justify-center rounded-xl border border-slate-800 bg-black p-6 transition-colors focus:outline-none focus:ring-4 focus:ring-red-200"
         aria-label={
           phase === 'stimulus'
             ? 'Contador em andamento; responda agora'
-            : 'Caixa do teste; aguarde o contador amarelo'
+            : 'Área do teste; aguarde o contador amarelo'
         }
       >
-        {phase === 'stimulus' ? (
-          <span
-            data-testid="pvtb-counter"
-            className="font-mono text-6xl font-bold tabular-nums text-yellow-300 drop-shadow"
-            aria-live="off"
-          >
-            {counterMs}
-          </span>
-        ) : feedback ? (
-          <span className="px-4 text-center" aria-live="polite">
-            <span className={`block text-4xl font-bold tabular-nums ${feedback.className}`}>
-              {feedback.value}
+        <span
+          data-testid="pvtb-stimulus-frame"
+          className="flex min-h-28 w-80 max-w-[80%] items-center justify-center border-4 border-red-600 bg-black px-4"
+        >
+          {phase === 'stimulus' ? (
+            <span
+              data-testid="pvtb-counter"
+              className="font-mono text-6xl font-bold tabular-nums text-yellow-300 drop-shadow"
+              aria-live="off"
+            >
+              {counterMs}
             </span>
-            <span className="mt-2 block text-xs font-medium text-red-100">{feedback.helper}</span>
-          </span>
-        ) : (
-          <span className="text-sm font-medium text-red-200/80">Aguarde o contador…</span>
-        )}
+          ) : feedback ? (
+            <span className="text-center" aria-live="polite">
+              <span className={`block text-4xl font-bold tabular-nums ${feedback.className}`}>
+                {feedback.value}
+              </span>
+              <span className="mt-2 block text-xs font-medium text-slate-300">{feedback.helper}</span>
+            </span>
+          ) : null}
+        </span>
       </button>
       <p className="text-center text-xs text-slate-500">
-        Responda assim que o contador amarelo aparecer. O tempo é medido em milissegundos;
-        microssegundos não são exibidos porque sugeririam uma precisão que o navegador e a resposta
-        humana não sustentam.
+        Responda assim que o contador amarelo aparecer. O tempo é medido em milissegundos.
       </p>
     </section>
   );
