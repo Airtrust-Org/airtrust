@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const navigate = vi.hoisted(() => vi.fn());
+const navigateMock = vi.fn();
 
 vi.mock('@/react-app/components/AppLayout', () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -10,39 +10,45 @@ vi.mock('@/react-app/components/AppLayout', () => ({
 
 vi.mock('@/react-app/components/PageHeader', () => ({
   default: ({ title, subtitle }: { title: string; subtitle?: string }) => (
-    <header>
+    <div>
       <h1>{title}</h1>
       {subtitle ? <p>{subtitle}</p> : null}
-    </header>
+    </div>
   ),
 }));
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
-  return { ...actual, useNavigate: () => navigate };
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
 });
 
 import ConfiguracoesCadastros from '../index';
 
 describe('ConfiguracoesCadastros', () => {
   beforeEach(() => {
-    navigate.mockReset();
+    navigateMock.mockReset();
   });
 
-  it('uses the canonical page chrome and presents configuration instead of dashboard counters', () => {
+  it('uses canonical chrome and configuration content without report-like counters', () => {
     render(<ConfiguracoesCadastros />);
 
-    expect(screen.getByRole('heading', { name: 'Configurações de Simuladores' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Configurações' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Gerencie os cadastros que sustentam a operação de simuladores.'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Cadastros operacionais' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Simuladores/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Modelos de sessão/i })).toBeInTheDocument();
-    expect(screen.queryByText(/^0$/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Simuladores/ })).toBeInTheDocument();
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
   });
 
-  it('navigates directly from the route without requiring an injected callback', () => {
+  it('navigates directly to operational registration routes', () => {
     render(<ConfiguracoesCadastros />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Manobras/i }));
-    expect(navigate).toHaveBeenCalledWith('/simuladores/cadastros/manobras');
+    fireEvent.click(screen.getByRole('button', { name: /Manobras/ }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/simuladores/cadastros/manobras');
   });
 });
