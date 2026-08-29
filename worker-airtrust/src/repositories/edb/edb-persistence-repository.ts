@@ -1,8 +1,14 @@
-import { canonicalJson, sha256Hex } from '../../services/edb/canonicalization';
-import type {
-  EdbFlightRecord,
-  EdbLifecycleStatus,
-  EdbSignatureProof,
+import {
+  canonicalJson,
+  hashSignableEdbPayload,
+  sha256Hex,
+} from '../../services/edb/canonicalization';
+import {
+  EDB_CONTRACT_VERSION,
+  type EdbFlightRecord,
+  type EdbLifecycleStatus,
+  type EdbSignatureMethod,
+  type EdbSignatureProof,
 } from '../../services/edb/contracts';
 import { assertEdbPicTechnicalAcknowledgementScope } from './edb-technical-awareness-repository';
 
@@ -22,6 +28,30 @@ export interface PersistedEdbRevision {
   canonicalPayloadSha256: string;
 }
 
+interface StoredEdbRevisionRow {
+  id: string;
+  empresa_id: number;
+  logical_record_id: string;
+  payload_json: string;
+  canonical_payload_sha256: string;
+  status: EdbLifecycleStatus;
+  state_version: number;
+}
+
+interface StoredFinalSignatureRow {
+  id: string;
+  empresa_id: number;
+  revision_id: string;
+  tipo: 'PIC_FLIGHT_RECORD' | 'OPERATOR_RECORD';
+  signer_funcionario_id: number | null;
+  signer_nome: string;
+  signer_codigo_anac: string | null;
+  signed_at: string;
+  canonical_payload_sha256: string;
+  metodo: string;
+  proof_reference: string;
+}
+
 function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
 }
@@ -35,6 +65,135 @@ function requireRecordIdentity(record: EdbFlightRecord): {
   if (!logicalRecordId) throw new Error('EDB_LOGICAL_RECORD_ID_REQUIRED');
   if (!revisionId) throw new Error('EDB_REVISION_ID_REQUIRED');
   return { logicalRecordId, revisionId };
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseSignatureMethod(value: string): EdbSignatureMethod {
+  if (
+    value !== 'ASYMMETRIC_DIGITAL_SIGNATURE' &&
+    value !== 'ELECTRONIC_SIGNATURE_WITH_CERTIFICATE'
+  ) {
+    throw new Error('EDB_STORED_SIGNATURE_METHOD_INVALID');
+  }
+  return value;
+}
+
+async function loadPersistedEdbRevision(params: {
+  db: D1Database;
+  empresaId: number;
+  revisionId: string;
+}): Promise<{ row: StoredEdbRevisionRow; record: EdbFlightRecord }> {
+  const row = await params.db
+    .prepare(
+      `
+      SELECT r.id, r.empresa_id, r.logical_record_id,
+             r.payload_json, r.canonical_payload_sha256,
+             s.status, s.versao AS state_version
+      FROM edb_registro_revisoes r
+      INNER JOIN edb_registro_estado s
+        ON s.revision_id = r.id AND s.empresa_id = r.empresa_id
+      WHERE r.empresa_id = ? AND r.id = ?
+      LIMIT 1
+    `,
+    )
+    .bind(params.empresaId, params.revisionId)
+    .first<StoredEdbRevisionRow>();
+
+  if (!row) throw new Error('EDB_REVISION_NOT_FOUND_OR_SCOPE_MISMATCH');
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.payload_json);
+  } catch {
+    throw new Error('EDB_REVISION_PAYLOAD_INVALID_JSON');
+  }
+  if (!isObject(parsed)) throw new Error('EDB_REVISION_PAYLOAD_INVALID');
+
+  const canonicalPayload = canonicalJson(parsed);
+  const recalculatedHash = await sha256Hex(canonicalPayload);
+  if (recalculatedHash !== row.canonical_payload_sha256) {
+    throw new Error('EDB_REVISION_PERSISTED_HASH_MISMATCH');
+  }
+
+  if (parsed.contractVersion !== EDB_CONTRACT_VERSION) {
+    throw new Error('EDB_REVISION_CONTRACT_VERSION_INVALID');
+  }
+  if (parsed.logicalRecordId !== row.logical_record_id || parsed.revisionId !== row.id) {
+    throw new Error('EDB_REVISION_IDENTITY_MISMATCH');
+  }
+  if (!isObject(parsed.identity) || parsed.identity.operatorCompanyId !== row.empresa_id) {
+    throw new Error('EDB_REVISION_TENANT_MISMATCH');
+  }
+  if (!isObject(parsed.signatures)) throw new Error('EDB_REVISION_SIGNATURES_INVALID');
+
+  return { row, record: parsed as unknown as EdbFlightRecord };
+}
+
+async function loadStoredFinalSignature(params: {
+  db: D1Database;
+  empresaId: number;
+  revisionId: string;
+  type: 'PIC_FLIGHT_RECORD' | 'OPERATOR_RECORD';
+}): Promise<EdbSignatureProof | null> {
+  const row = await params.db
+    .prepare(
+      `
+      SELECT id, empresa_id, revision_id, tipo,
+             signer_funcionario_id, signer_nome, signer_codigo_anac,
+             signed_at, canonical_payload_sha256, metodo, proof_reference
+      FROM edb_assinaturas
+      WHERE empresa_id = ? AND revision_id = ? AND tipo = ?
+      LIMIT 1
+    `,
+    )
+    .bind(params.empresaId, params.revisionId, params.type)
+    .first<StoredFinalSignatureRow>();
+
+  if (!row) return null;
+  if (row.empresa_id !== params.empresaId || row.revision_id !== params.revisionId || row.tipo !== params.type) {
+    throw new Error('EDB_STORED_SIGNATURE_SCOPE_MISMATCH');
+  }
+  if (!row.id.trim() || !row.signer_nome.trim() || !row.proof_reference.trim()) {
+    throw new Error('EDB_STORED_SIGNATURE_INVALID');
+  }
+
+  return {
+    signatureId: row.id,
+    type: row.tipo,
+    targetType: 'FINAL_RECORD_REVISION',
+    targetId: row.revision_id,
+    signer: {
+      employeeId: row.signer_funcionario_id,
+      fullName: row.signer_nome,
+      anacCode: row.signer_codigo_anac,
+    },
+    signedAt: row.signed_at,
+    canonicalPayloadHashSha256: row.canonical_payload_sha256,
+    method: parseSignatureMethod(row.metodo),
+    proofReference: row.proof_reference,
+  };
+}
+
+async function assertStoredPicSignatureIntegrity(params: {
+  db: D1Database;
+  empresaId: number;
+  revisionId: string;
+  record: EdbFlightRecord;
+}): Promise<EdbSignatureProof> {
+  const pic = await loadStoredFinalSignature({
+    ...params,
+    type: 'PIC_FLIGHT_RECORD',
+  });
+  if (!pic) throw new Error('EDB_PIC_FLIGHT_SIGNATURE_NOT_PERSISTED');
+
+  const expectedPicHash = await hashSignableEdbPayload(params.record, 'PIC_FLIGHT_RECORD');
+  if (pic.canonicalPayloadHashSha256 !== expectedPicHash) {
+    throw new Error('EDB_PIC_FLIGHT_SIGNATURE_PERSISTED_HASH_MISMATCH');
+  }
+  return pic;
 }
 
 export async function persistEdbDraftRevision(
@@ -169,6 +328,20 @@ export async function getEdbRevisionState(
     .first<EdbRevisionStateRow>();
 }
 
+const ALLOWED_PERSISTED_TRANSITIONS: ReadonlySet<string> = new Set([
+  'DRAFT>READY_FOR_PIC_SIGNATURE',
+  'READY_FOR_PIC_SIGNATURE>PIC_SIGNED',
+  'PIC_SIGNED>OPERATOR_SIGNED',
+  'OPERATOR_SIGNED>ANAC_PENDING',
+  'ANAC_PENDING>ANAC_SYNCED',
+  'PIC_SIGNED>SUPERSEDED',
+  'OPERATOR_SIGNED>SUPERSEDED',
+  'ANAC_PENDING>SUPERSEDED',
+  'ANAC_SYNCED>SUPERSEDED',
+  'DRAFT>CANCELLED',
+  'READY_FOR_PIC_SIGNATURE>CANCELLED',
+]);
+
 export async function transitionEdbRevisionState(params: {
   db: D1Database;
   empresaId: number;
@@ -178,6 +351,13 @@ export async function transitionEdbRevisionState(params: {
   expectedVersion: number;
   updatedBy?: number | null;
 }): Promise<void> {
+  if (!ALLOWED_PERSISTED_TRANSITIONS.has(`${params.expectedStatus}>${params.nextStatus}`)) {
+    throw new Error('EDB_STATE_TRANSITION_NOT_ALLOWED');
+  }
+  if (!Number.isInteger(params.expectedVersion) || params.expectedVersion < 1) {
+    throw new Error('EDB_STATE_VERSION_INVALID');
+  }
+
   const result = await params.db
     .prepare(
       `
@@ -222,6 +402,32 @@ export async function appendEdbSignature(params: {
     throw new Error('EDB_FINAL_SIGNATURE_TARGET_MISMATCH');
   }
 
+  const { row, record } = await loadPersistedEdbRevision({
+    db: params.db,
+    empresaId: params.empresaId,
+    revisionId: params.revisionId,
+  });
+  const expectedState =
+    params.signature.type === 'PIC_FLIGHT_RECORD' ? 'READY_FOR_PIC_SIGNATURE' : 'PIC_SIGNED';
+  if (row.status !== expectedState) {
+    throw new Error(`EDB_SIGNATURE_STATE_INVALID_EXPECTED_${expectedState}`);
+  }
+
+  if (params.signature.type === 'OPERATOR_RECORD') {
+    const storedPic = await assertStoredPicSignatureIntegrity({
+      db: params.db,
+      empresaId: params.empresaId,
+      revisionId: params.revisionId,
+      record,
+    });
+    record.signatures.picFlightRecord = storedPic;
+  }
+
+  const expectedHash = await hashSignableEdbPayload(record, params.signature.type);
+  if (params.signature.canonicalPayloadHashSha256 !== expectedHash) {
+    throw new Error('EDB_FINAL_SIGNATURE_HASH_MISMATCH');
+  }
+
   await params.db
     .prepare(
       `
@@ -253,6 +459,30 @@ export async function appendEdbSignature(params: {
     .run();
 }
 
+async function assertEdbReadyForAnacQueue(params: {
+  db: D1Database;
+  empresaId: number;
+  revisionId: string;
+}): Promise<void> {
+  const { row, record } = await loadPersistedEdbRevision(params);
+  if (row.status !== 'OPERATOR_SIGNED') {
+    throw new Error('EDB_ANAC_QUEUE_REQUIRES_OPERATOR_SIGNED');
+  }
+
+  const pic = await assertStoredPicSignatureIntegrity({ ...params, record });
+  record.signatures.picFlightRecord = pic;
+
+  const operator = await loadStoredFinalSignature({
+    ...params,
+    type: 'OPERATOR_RECORD',
+  });
+  if (!operator) throw new Error('EDB_OPERATOR_SIGNATURE_NOT_PERSISTED');
+  const expectedOperatorHash = await hashSignableEdbPayload(record, 'OPERATOR_RECORD');
+  if (operator.canonicalPayloadHashSha256 !== expectedOperatorHash) {
+    throw new Error('EDB_OPERATOR_SIGNATURE_PERSISTED_HASH_MISMATCH');
+  }
+}
+
 export async function queueEdbAnacTransmission(params: {
   db: D1Database;
   empresaId: number;
@@ -262,6 +492,10 @@ export async function queueEdbAnacTransmission(params: {
   payload?: unknown;
   outboxId?: string;
 }): Promise<string> {
+  await assertEdbReadyForAnacQueue(params);
+  if (!params.operationKind.trim()) throw new Error('EDB_ANAC_OPERATION_KIND_REQUIRED');
+  if (!params.idempotencyKey.trim()) throw new Error('EDB_ANAC_IDEMPOTENCY_KEY_REQUIRED');
+
   const outboxId = params.outboxId ?? newId('edbout');
   await params.db
     .prepare(
@@ -276,8 +510,8 @@ export async function queueEdbAnacTransmission(params: {
       outboxId,
       params.empresaId,
       params.revisionId,
-      params.operationKind,
-      params.idempotencyKey,
+      params.operationKind.trim(),
+      params.idempotencyKey.trim(),
       params.payload === undefined ? null : canonicalJson(params.payload),
     )
     .run();
