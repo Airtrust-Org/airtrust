@@ -21,7 +21,7 @@ const actor = {
 describe('eDB diary volume governance', () => {
   it('creates explicit opening and closing acts without inventing an ANAC API identifier', () => {
     const volume = openEdbDiaryVolume({
-      diaryId: 'diary-prabc',
+      diaryId: 1,
       volumeId: 'local-volume-001',
       aircraftRegistrationMarks: 'PR-ABC',
       sequence: 1,
@@ -30,6 +30,7 @@ describe('eDB diary volume governance', () => {
       observations: 'Abertura do volume operacional',
     });
 
+    expect(volume.diaryId).toBe(1);
     expect(volume.status).toBe('OPEN');
     expect(volume.openingAct.type).toBe('OPENING');
     expect(volume.closingAct).toBeNull();
@@ -46,7 +47,7 @@ describe('eDB diary volume governance', () => {
 
   it('prevents closing a volume before its opening act', () => {
     const volume = openEdbDiaryVolume({
-      diaryId: 'diary-prabc',
+      diaryId: 1,
       volumeId: 'local-volume-001',
       aircraftRegistrationMarks: 'PR-ABC',
       sequence: 1,
@@ -59,6 +60,19 @@ describe('eDB diary volume governance', () => {
         closedBy: actor,
       }),
     ).toThrow('cannot predate');
+  });
+
+  it('rejects a diary identity that cannot map to edb_diarios.id', () => {
+    expect(() =>
+      openEdbDiaryVolume({
+        diaryId: 0,
+        volumeId: 'local-volume-001',
+        aircraftRegistrationMarks: 'PR-ABC',
+        sequence: 1,
+        openedAt: '2026-08-10T00:00:00.000Z',
+        openedBy: actor,
+      }),
+    ).toThrow('diaryId must be a positive integer');
   });
 });
 
@@ -80,7 +94,7 @@ describe('eDB loss/corruption reconstitution governance', () => {
   it('requires police occurrence evidence before recording the ANAC notification', () => {
     const incident = createEdbInformationLossIncident({
       incidentId: 'incident-1',
-      diaryId: 'diary-prabc',
+      diaryId: 1,
       kind: 'CORRUPTION',
       detectedAt: '2026-08-28T15:00:00.000Z',
       description: 'Corrupcao parcial de registros detectada',
@@ -97,7 +111,7 @@ describe('eDB loss/corruption reconstitution governance', () => {
   it('tracks police report, ANAC notification and successful reconstitution without rewriting history', () => {
     const original = createEdbInformationLossIncident({
       incidentId: 'incident-2',
-      diaryId: 'diary-prabc',
+      diaryId: 1,
       kind: 'LOSS',
       detectedAt: '2026-08-28T15:00:00.000Z',
       description: 'Perda parcial de registros',
@@ -124,7 +138,7 @@ describe('eDB loss/corruption reconstitution governance', () => {
   it('requires the new opening observation to reference the police occurrence when reconstitution is impossible', () => {
     let incident = createEdbInformationLossIncident({
       incidentId: 'incident-3',
-      diaryId: 'diary-prabc',
+      diaryId: 1,
       kind: 'MISPLACEMENT',
       detectedAt: '2026-08-28T15:00:00.000Z',
       description: 'Extravio integral do volume',
