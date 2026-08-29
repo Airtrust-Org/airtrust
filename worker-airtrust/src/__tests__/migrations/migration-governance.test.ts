@@ -101,7 +101,7 @@ describe('migration governance', () => {
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
     // Ratchet raised 2026-08-28: 0477_edb_operational_core.sql extends the
     // regular chain after 0476 with an additive, disabled eDB persistence core
-    // and explicit regulatory companion tables for Controle de Voos. 9999
+    // and canonical regulatory semantics on existing flight/crew rows. 9999
     // stays reserved as the only high sentinel.
     const expectedLatest = 477;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
