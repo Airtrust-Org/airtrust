@@ -3,13 +3,14 @@ import {
   hashSignableEdbPayload,
   sha256Hex,
 } from '../../services/edb/canonicalization';
-import {
-  EDB_CONTRACT_VERSION,
-  type EdbFlightRecord,
-  type EdbLifecycleStatus,
-  type EdbSignatureMethod,
-  type EdbSignatureProof,
+import type {
+  EdbFlightRecord,
+  EdbLifecycleStatus,
+  EdbSignatureMethod,
+  EdbSignatureProof,
 } from '../../services/edb/contracts';
+import { isPersistedEdbFlightRecord } from '../../services/edb/persisted-record-validation';
+import { validateForPicFlightSignature } from '../../services/edb/regulatory-validation';
 import { assertEdbPicTechnicalAcknowledgementScope } from './edb-technical-awareness-repository';
 
 export interface PersistEdbDraftRevisionParams {
@@ -58,17 +59,6 @@ interface StoredAnacOutboxRow {
   revision_id: string;
 }
 
-const LIFECYCLE_STATUSES: ReadonlySet<string> = new Set([
-  'DRAFT',
-  'READY_FOR_PIC_SIGNATURE',
-  'PIC_SIGNED',
-  'OPERATOR_SIGNED',
-  'ANAC_PENDING',
-  'ANAC_SYNCED',
-  'SUPERSEDED',
-  'CANCELLED',
-]);
-
 function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
 }
@@ -94,158 +84,6 @@ function requireRecordIdentity(record: EdbFlightRecord): {
   if (!logicalRecordId) throw new Error('EDB_LOGICAL_RECORD_ID_REQUIRED');
   if (!revisionId) throw new Error('EDB_REVISION_ID_REQUIRED');
   return { logicalRecordId, revisionId };
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isNullableString(value: unknown): boolean {
-  return value === null || typeof value === 'string';
-}
-
-function isNullableNumber(value: unknown): boolean {
-  return value === null || (typeof value === 'number' && Number.isFinite(value));
-}
-
-function isStringArrayOrNull(value: unknown): boolean {
-  return value === null || (Array.isArray(value) && value.every((item) => typeof item === 'string'));
-}
-
-function isPerson(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    isNullableNumber(value.employeeId) &&
-    typeof value.fullName === 'string' &&
-    isNullableString(value.anacCode)
-  );
-}
-
-function isSignatureProofOrNull(value: unknown): boolean {
-  if (value === null) return true;
-  if (!isObject(value) || !isPerson(value.signer)) return false;
-  return (
-    typeof value.signatureId === 'string' &&
-    (value.type === 'PIC_TECHNICAL_ACK' || value.type === 'PIC_FLIGHT_RECORD' || value.type === 'OPERATOR_RECORD') &&
-    (value.targetType === undefined || value.targetType === 'TECHNICAL_SITUATION' || value.targetType === 'FINAL_RECORD_REVISION') &&
-    (value.targetId === undefined || typeof value.targetId === 'string') &&
-    typeof value.signedAt === 'string' &&
-    typeof value.canonicalPayloadHashSha256 === 'string' &&
-    (value.method === 'ASYMMETRIC_DIGITAL_SIGNATURE' || value.method === 'ELECTRONIC_SIGNATURE_WITH_CERTIFICATE') &&
-    typeof value.proofReference === 'string'
-  );
-}
-
-function isAircraft(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    isNullableNumber(value.aircraftId) &&
-    isNullableString(value.manufacturer) &&
-    isNullableString(value.model) &&
-    isNullableString(value.serialNumber) &&
-    isNullableString(value.registrationMarks) &&
-    isStringArrayOrNull(value.owners) &&
-    isStringArrayOrNull(value.operators)
-  );
-}
-
-function isCrewMember(value: unknown): boolean {
-  return (
-    isPerson(value) &&
-    isObject(value) &&
-    (value.operationalRole === 'PIC' ||
-      value.operationalRole === 'SIC' ||
-      value.operationalRole === 'COM' ||
-      value.operationalRole === 'MEC' ||
-      value.operationalRole === 'OTHER') &&
-    isNullableString(value.regulatoryFunctionCode)
-  );
-}
-
-function isTechnicalDiscrepancy(value: unknown): boolean {
-  return isObject(value) && typeof value.description === 'string' && isPerson(value.detectedBy);
-}
-
-function isEdbFlightRecord(value: unknown): value is EdbFlightRecord {
-  if (!isObject(value)) return false;
-  if (value.contractVersion !== EDB_CONTRACT_VERSION) return false;
-  if (!isNullableString(value.logicalRecordId) || !isNullableString(value.revisionId)) return false;
-  if (typeof value.status !== 'string' || !LIFECYCLE_STATUSES.has(value.status)) return false;
-
-  const identity = value.identity;
-  if (!isObject(identity) || typeof identity.operatorCompanyId !== 'number' || !Number.isFinite(identity.operatorCompanyId)) return false;
-  if (identity.operatorRegulation !== 'RBAC121' && identity.operatorRegulation !== 'RBAC135' && identity.operatorRegulation !== 'OTHER') return false;
-  if (!isAircraft(identity.aircraft)) return false;
-
-  const maintenance = value.maintenance;
-  if (!isObject(maintenance) || !isObject(maintenance.lastIntervention) || !isObject(maintenance.nextIntervention)) return false;
-  if (
-    !isNullableString(maintenance.lastIntervention.type) ||
-    !isNullableString(maintenance.lastIntervention.date) ||
-    !isNullableString(maintenance.lastIntervention.returnToServiceApprovedBy) ||
-    !isNullableString(maintenance.nextIntervention.type) ||
-    !isNullableNumber(maintenance.nextIntervention.dueAtAirframeHours)
-  ) return false;
-
-  const flight = value.flight;
-  if (!isObject(flight) || !isObject(flight.times) || !isObject(flight.duration)) return false;
-  if (
-    !isNullableString(flight.date) ||
-    !isNullableString(flight.origin) ||
-    !isNullableString(flight.destination) ||
-    !isNullableString(flight.times.engineStartAt) ||
-    !isNullableString(flight.times.takeoffAt) ||
-    !isNullableString(flight.times.landingAt) ||
-    !isNullableString(flight.times.engineShutdownAt) ||
-    !isNullableNumber(flight.landingsTotal) ||
-    !isNullableNumber(flight.cycles) ||
-    !isNullableNumber(flight.duration.dayMinutes) ||
-    !isNullableNumber(flight.duration.nightMinutes) ||
-    !isNullableNumber(flight.duration.totalMinutes) ||
-    !isNullableNumber(flight.duration.ifrActualMinutes) ||
-    !isNullableNumber(flight.duration.ifrSimulatedMinutes) ||
-    !isNullableNumber(flight.fuelBeforeEngineStart) ||
-    !isNullableNumber(flight.personsOnBoard) ||
-    !isNullableNumber(flight.cargoKg) ||
-    !isNullableString(flight.nature) ||
-    !isStringArrayOrNull(flight.occurrences) ||
-    !(flight.technicalDiscrepancies === null || (Array.isArray(flight.technicalDiscrepancies) && flight.technicalDiscrepancies.every(isTechnicalDiscrepancy))) ||
-    !Array.isArray(flight.crew) ||
-    !flight.crew.every(isCrewMember)
-  ) return false;
-
-  const signatures = value.signatures;
-  if (
-    !isObject(signatures) ||
-    !isSignatureProofOrNull(signatures.picTechnicalAcknowledgement) ||
-    !isSignatureProofOrNull(signatures.picFlightRecord) ||
-    !isSignatureProofOrNull(signatures.operatorRecord)
-  ) return false;
-
-  const correction = value.correction;
-  if (
-    !isObject(correction) ||
-    typeof correction.revision !== 'number' ||
-    !Number.isInteger(correction.revision) ||
-    correction.revision < 1 ||
-    !isNullableString(correction.supersedesRevisionId) ||
-    !isNullableString(correction.correctionReason)
-  ) return false;
-
-  const source = value.source;
-  if (
-    !isObject(source) ||
-    source.sourceSystem !== 'AIRTRUST' ||
-    source.sourceType !== 'CONTROLE_VOOS_RDV' ||
-    typeof source.sourceFlightId !== 'number' ||
-    !Number.isFinite(source.sourceFlightId) ||
-    !isNullableNumber(source.sourceRdvId) ||
-    !isNullableNumber(source.sourceRdvVersion) ||
-    !isNullableNumber(source.sourceStageId) ||
-    typeof source.capturedAt !== 'string'
-  ) return false;
-
-  return true;
 }
 
 function parseSignatureMethod(value: string): EdbSignatureMethod {
@@ -287,7 +125,7 @@ async function loadPersistedEdbRevision(params: {
   } catch {
     throw new Error('EDB_REVISION_PAYLOAD_INVALID_JSON');
   }
-  if (!isEdbFlightRecord(parsed)) throw new Error('EDB_REVISION_PAYLOAD_INVALID');
+  if (!isPersistedEdbFlightRecord(parsed)) throw new Error('EDB_REVISION_PAYLOAD_INVALID');
 
   const recalculatedHash = await sha256Hex(canonicalJson(parsed));
   if (recalculatedHash !== row.canonical_payload_sha256) {
@@ -492,9 +330,38 @@ export async function getEdbRevisionState(
     .first<EdbRevisionStateRow>();
 }
 
-const ALLOWED_PERSISTED_TRANSITIONS: ReadonlySet<string> = new Set([
-  'DRAFT>READY_FOR_PIC_SIGNATURE',
-  'ANAC_PENDING>ANAC_SYNCED',
+export async function markEdbRevisionReadyForPicSignature(params: {
+  db: D1Database;
+  empresaId: number;
+  revisionId: string;
+  updatedBy?: number | null;
+}): Promise<void> {
+  const { row, record } = await loadPersistedEdbRevision(params);
+  if (row.status !== 'DRAFT') throw new Error('EDB_READY_TRANSITION_REQUIRES_DRAFT');
+
+  const validation = validateForPicFlightSignature(record);
+  const blockingCodes = validation.issues
+    .filter((issue) => issue.severity === 'BLOCKING')
+    .map((issue) => issue.code);
+  if (blockingCodes.length > 0) {
+    throw new Error(`EDB_REVISION_NOT_READY:${blockingCodes.join(',')}`);
+  }
+
+  const result = await params.db
+    .prepare(
+      `
+      UPDATE edb_registro_estado
+      SET status = 'READY_FOR_PIC_SIGNATURE', versao = versao + 1,
+          updated_by = ?, updated_at = datetime('now')
+      WHERE empresa_id = ? AND revision_id = ? AND status = 'DRAFT' AND versao = ?
+    `,
+    )
+    .bind(params.updatedBy ?? null, params.empresaId, params.revisionId, row.state_version)
+    .run();
+  if ((result.meta.changes ?? 0) !== 1) throw new Error('EDB_STATE_CONFLICT');
+}
+
+const ALLOWED_ADMINISTRATIVE_TRANSITIONS: ReadonlySet<string> = new Set([
   'PIC_SIGNED>SUPERSEDED',
   'OPERATOR_SIGNED>SUPERSEDED',
   'ANAC_PENDING>SUPERSEDED',
@@ -512,7 +379,7 @@ export async function transitionEdbRevisionState(params: {
   expectedVersion: number;
   updatedBy?: number | null;
 }): Promise<void> {
-  if (!ALLOWED_PERSISTED_TRANSITIONS.has(`${params.expectedStatus}>${params.nextStatus}`)) {
+  if (!ALLOWED_ADMINISTRATIVE_TRANSITIONS.has(`${params.expectedStatus}>${params.nextStatus}`)) {
     throw new Error('EDB_STATE_TRANSITION_NOT_ALLOWED');
   }
   if (!Number.isInteger(params.expectedVersion) || params.expectedVersion < 1) {
