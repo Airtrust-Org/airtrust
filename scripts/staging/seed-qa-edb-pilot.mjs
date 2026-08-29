@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // source_reference: PR #110 eDB staging pilot tenant 6; docs/edb/STAGING_PILOT_QA.md
-// operational_decision: provision only a synthetic employee/user/membership needed to authenticate the tenant-6 shadow gate; never write flight/RDV/eDB domain records.
+// operational_decision: provision only synthetic staging fixtures needed to authenticate and exercise the tenant-6 shadow gate; never write flight/RDV/eDB domain records or reactivate a non-synthetic tenant.
 // dry_run_required: default invocation performs no D1 write; --apply plus AIRTRUST_STAGING_EDB_PILOT_IDENTITY is required.
-// rollback_plan_required: --apply --rollback soft-deletes/deactivates only qa-edb-pilot@staging.airtrust.invalid and QA-EDB-PILOT.
+// rollback_plan_required: --apply --rollback soft-deletes/deactivates only exact QA eDB fixtures, including the tenant only when its reserved synthetic code matches.
 
 // Synthetic, staging-only identity for the positive eDB shadow pilot check.
 // Never use a real Costa do Sol credential. Dry-run is the default; writes
@@ -19,6 +19,8 @@ const bcrypt = require('bcryptjs');
 
 const ALLOWED_D1_NAME = 'airtrust-db-staging-baseline-20260701';
 const PILOT_TENANT_ID = 6;
+const PILOT_TENANT_CODE = 'edb_pilot_smoke';
+const PILOT_TENANT_NAME = 'eDB Pilot Smoke Tenant';
 const CONFIRMATION = 'AIRTRUST_STAGING_EDB_PILOT_IDENTITY';
 const EMAIL = 'qa-edb-pilot@staging.airtrust.invalid';
 const EMPLOYEE_NAME = 'QA eDB Pilot';
@@ -67,6 +69,72 @@ function verifyTenant(dbName) {
     `SELECT COUNT(*) AS count FROM empresas WHERE id = ${PILOT_TENANT_ID} AND ativo = 1 AND deleted_at IS NULL;`,
   );
   if (Number(row?.count) !== 1) throw new Error('EDB_PILOT_TENANT_6_NOT_READY');
+}
+
+function ensurePilotTenant(dbName) {
+  const e = sqlString;
+  const state = queryOne(
+    dbName,
+    `SELECT
+      (SELECT COUNT(*) FROM empresas WHERE id = ${PILOT_TENANT_ID}) AS id_count,
+      (SELECT COUNT(*) FROM empresas WHERE codigo = ${e(PILOT_TENANT_CODE)}) AS code_count,
+      (SELECT COUNT(*) FROM empresas WHERE id = ${PILOT_TENANT_ID} AND codigo = ${e(PILOT_TENANT_CODE)}) AS exact_synthetic_count,
+      (SELECT COUNT(*) FROM empresas WHERE id = ${PILOT_TENANT_ID} AND ativo = 1 AND deleted_at IS NULL) AS active_id_count;`,
+  );
+  if (!state) throw new Error('EDB_PILOT_TENANT_STATE_MISSING');
+
+  const idCount = Number(state.id_count || 0);
+  const codeCount = Number(state.code_count || 0);
+  const exactSyntheticCount = Number(state.exact_synthetic_count || 0);
+  const activeIdCount = Number(state.active_id_count || 0);
+
+  if (idCount > 1 || codeCount > 1 || exactSyntheticCount > 1) {
+    throw new Error('EDB_PILOT_TENANT_STATE_AMBIGUOUS');
+  }
+
+  if (idCount === 1 && exactSyntheticCount === 0) {
+    if (activeIdCount === 1) {
+      console.log('EDB_PILOT_TENANT_EXISTING_ACTIVE id=6 synthetic=false');
+      return;
+    }
+    throw new Error('EDB_PILOT_TENANT_6_OCCUPIED_NON_SYNTHETIC_INACTIVE');
+  }
+
+  if (codeCount === 1 && exactSyntheticCount === 0) {
+    throw new Error('EDB_PILOT_SYNTHETIC_CODE_COLLISION');
+  }
+
+  if (exactSyntheticCount === 1) {
+    executeSqlFile(
+      dbName,
+      `UPDATE empresas
+       SET nome = ${e(PILOT_TENANT_NAME)}, razao_social = ${e(PILOT_TENANT_NAME)}, ativo = 1,
+           plano = 'basic', deleted_at = NULL, updated_at = datetime('now')
+       WHERE id = ${PILOT_TENANT_ID} AND codigo = ${e(PILOT_TENANT_CODE)};`,
+    );
+    verifyTenant(dbName);
+    console.log('EDB_PILOT_SYNTHETIC_TENANT_READY id=6 mode=reactivated');
+    return;
+  }
+
+  if (idCount !== 0 || codeCount !== 0) {
+    throw new Error('EDB_PILOT_TENANT_STATE_UNEXPECTED');
+  }
+
+  executeSqlFile(
+    dbName,
+    `INSERT INTO empresas (
+       id, nome, razao_social, ativo, created_at, updated_at, deleted_at,
+       codigo, plano, max_funcionarios, max_storage_mb
+     )
+     SELECT
+       ${PILOT_TENANT_ID}, ${e(PILOT_TENANT_NAME)}, ${e(PILOT_TENANT_NAME)}, 1,
+       datetime('now'), datetime('now'), NULL, ${e(PILOT_TENANT_CODE)}, 'basic', 25, 256
+     WHERE NOT EXISTS (SELECT 1 FROM empresas WHERE id = ${PILOT_TENANT_ID})
+       AND NOT EXISTS (SELECT 1 FROM empresas WHERE codigo = ${e(PILOT_TENANT_CODE)});`,
+  );
+  verifyTenant(dbName);
+  console.log('EDB_PILOT_SYNTHETIC_TENANT_READY id=6 mode=created');
 }
 
 function seedSql(passwordHash) {
@@ -138,6 +206,10 @@ WHERE lower(trim(email)) = lower(trim(${e(EMAIL)}));
 UPDATE funcionarios
 SET ativo = 0, status = 'INATIVO', deleted_at = COALESCE(deleted_at, datetime('now')), updated_at = datetime('now')
 WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID};
+
+UPDATE empresas
+SET ativo = 0, deleted_at = COALESCE(deleted_at, datetime('now')), updated_at = datetime('now')
+WHERE id = ${PILOT_TENANT_ID} AND codigo = ${e(PILOT_TENANT_CODE)};
 `;
 }
 
@@ -175,13 +247,14 @@ async function main() {
   if (process.env.CONFIRM_STAGING_EDB_PILOT_IDENTITY !== CONFIRMATION) {
     throw new Error(`CONFIRMATION_REQUIRED:${CONFIRMATION}`);
   }
-  verifyTenant(dbName);
 
   if (rollback) {
     executeSqlFile(dbName, rollbackSql());
     console.log('EDB_PILOT_IDENTITY_ROLLBACK_PASS');
     return;
   }
+
+  ensurePilotTenant(dbName);
   if (!password) throw new Error('QA_EDB_PILOT_PASSWORD_MISSING');
 
   const passwordHash = bcrypt.hashSync(password, bcrypt.genSaltSync(10));

@@ -123,9 +123,44 @@ jobs:
             echo '- tenant: `6` (pilot allowlist)'
             echo "- expected deployed eDB release: \`$EXPECTED_EDB_RELEASE_SHA\`"
             echo '- password source: GitHub Environment `staging` / `STAGING_SMOKE_PASSWORD`'
-            echo '- fixture writes: synthetic employee/user/membership only'
+            echo '- fixture writes: synthetic tenant only if id 6 is absent, plus synthetic employee/user/membership'
+            echo '- non-synthetic tenant id 6: never reactivated or overwritten'
             echo '- flight/aircraft/eDB operational writes: none'
+            echo '- synthetic fixture cleanup: enforced in final D1 job'
             echo '- production action: none'
             echo '- ANAC transmission: none'
             echo '- cleartext credential output: none'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  d1-cleanup-edb-pilot-fixture:
+    name: Staging D1 Cleanup eDB Pilot Fixture
+    needs: [guard, d1-provision-edb-pilot-identity, edb-staging-pilot-positive]
+    if: ${{ always() && needs.guard.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CONFIRM_STAGING_EDB_PILOT_IDENTITY: AIRTRUST_STAGING_EDB_PILOT_IDENTITY
+    steps:
+      - name: Require governed staging D1 credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo 'STAGING_D1_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install cleanup dependencies
+        run: npm ci && npm --prefix worker-airtrust ci
+
+      - name: Deactivate exact eDB pilot synthetic fixtures
+        run: node scripts/staging/seed-qa-edb-pilot.mjs --apply --rollback
