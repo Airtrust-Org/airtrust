@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { HeartPulse } from 'lucide-react';
 import { useFrmsOperationalAccess } from '@/react-app/hooks/useFrmsOperationalAccess';
+import { canManageFrmsOperations } from '../frmsDashboardRouting';
 import FrmsSourcePolicyBanner from './FrmsSourcePolicyBanner';
 
 const ADMIN_PATHS = [
@@ -36,11 +37,6 @@ const ADMIN_GROUPS = [
 
 function isAdminPath(pathname: string): boolean {
   return ADMIN_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
-}
-
-function isTenantAdminRole(role: string | null | undefined): boolean {
-  const normalized = String(role || '').trim().toUpperCase();
-  return normalized === 'ADMIN' || normalized === 'ADMINISTRADOR';
 }
 
 const primaryClass = (active: boolean) =>
@@ -83,10 +79,7 @@ export default function FrmsWorkspaceNav({
   const maintenanceActive = location.pathname === '/frms' && area === 'manutencao';
 
   const canManageMaintenance = access.data?.can_manage_maintenance === true;
-  const isAdmin = isTenantAdminRole(access.data?.administrative_role);
-  const domains = access.data?.domains || [];
-  const canManageOperations =
-    isAdmin || domains.includes('OPERACOES') || domains.includes('FRMS') || !canManageMaintenance;
+  const canManageOperations = access.data ? canManageFrmsOperations(access.data) : true;
   const shouldShowOperations = showOperationsArea ?? canManageOperations;
   const shouldShowMaintenance = showMaintenanceArea ?? canManageMaintenance;
 
