@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import type { AppEnv } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import { checkPermission, getEmpresaId } from '../middleware/tenant';
+import edbShadowRevisionRoutes from './edb-shadow-revisions';
 import edbShadowRoutes from './edb-shadow';
 
 const router = new Hono<AppEnv>();
@@ -125,6 +126,9 @@ router.use('*', async (c, next) => {
   await next();
 });
 
+// Safe revision builders are registered before the legacy shadow router so the
+// same public paths cannot fall through to arbitrary client-supplied flight JSON.
+router.route('/', edbShadowRevisionRoutes);
 router.route('/', edbShadowRoutes);
 
 export default router;
