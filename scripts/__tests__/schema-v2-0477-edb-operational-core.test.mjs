@@ -35,32 +35,38 @@ test('pins reviewed hashes for edb-operational-core-0477', () => {
   assert.equal(sha256(plan), manifest.planHash);
 });
 
-test('0477 only adds the explicit regulatory companion and eDB core objects', () => {
+test('0477 adds canonical semantics to source rows and an isolated eDB core', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   const change = executable(readFileSync(manifest.filePath, 'utf8'));
   const migration = executable(readFileSync(MIGRATION, 'utf8'));
 
-  for (const sql of [change, migration]) {
-    assert.match(sql, /CREATE TABLE IF NOT EXISTS cv_voo_etapas_regulatorio/i);
-    assert.match(sql, /CREATE TABLE IF NOT EXISTS cv_voo_tripulantes_regulatorio/i);
-    assert.match(sql, /CREATE TABLE IF NOT EXISTS edb_registro_revisoes/i);
-    assert.match(sql, /CREATE TABLE IF NOT EXISTS edb_registro_estado/i);
-    assert.match(sql, /CREATE TABLE IF NOT EXISTS edb_anac_outbox/i);
-    assert.match(sql, /CREATE TRIGGER IF NOT EXISTS trg_edb_revisoes_no_update/i);
-    assert.doesNotMatch(sql, /\bALTER\s+TABLE\b/i);
-    assert.doesNotMatch(sql, /\bDROP\s+(?:TABLE|COLUMN|INDEX)\b/i);
-    assert.doesNotMatch(sql, /\b(?:INSERT|REPLACE)\s+INTO\s+(?:cv_|edb_)/i);
+  for (const candidate of [change, migration]) {
+    assert.match(candidate, /ALTER TABLE cv_voo_etapas ADD COLUMN tempo_voo_diurno_minutos/i);
+    assert.match(candidate, /ALTER TABLE cv_voo_etapas ADD COLUMN tempo_ifr_real_minutos/i);
+    assert.match(candidate, /ALTER TABLE cv_voo_etapas ADD COLUMN tempo_ifr_nao_classificado_minutos/i);
+    assert.match(candidate, /ALTER TABLE cv_voo_tripulantes ADD COLUMN codigo_funcao_anac/i);
+    assert.match(candidate, /CREATE TABLE IF NOT EXISTS edb_registro_revisoes/i);
+    assert.match(candidate, /CREATE TABLE IF NOT EXISTS edb_registro_estado/i);
+    assert.match(candidate, /CREATE TABLE IF NOT EXISTS edb_anac_outbox/i);
+    assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_revisoes_no_update/i);
+    assert.doesNotMatch(candidate, /CREATE TABLE IF NOT EXISTS cv_voo_etapas_regulatorio/i);
+    assert.doesNotMatch(candidate, /CREATE TABLE IF NOT EXISTS cv_voo_tripulantes_regulatorio/i);
+    assert.doesNotMatch(candidate, /\bDROP\s+(?:TABLE|COLUMN|INDEX)\b/i);
+    assert.doesNotMatch(candidate, /\b(?:INSERT|REPLACE)\s+INTO\s+(?:cv_|edb_)/i);
+    assert.doesNotMatch(candidate, /UPDATE\s+cv_voo_etapas/i);
+    assert.doesNotMatch(candidate, /UPDATE\s+cv_voo_tripulantes/i);
   }
 });
 
-test('0477 leaves ambiguous legacy fields unmapped and introduces explicit names', () => {
-  const sql = readFileSync(MIGRATION, 'utf8');
+test('0477 introduces exact names without reclassifying legacy data', () => {
+  const migration = readFileSync(MIGRATION, 'utf8');
   for (const canonical of [
     'tempo_voo_diurno_minutos',
     'tempo_voo_noturno_minutos',
     'tempo_voo_total_minutos',
     'tempo_ifr_real_minutos',
     'tempo_ifr_simulado_minutos',
+    'tempo_ifr_nao_classificado_minutos',
     'pousos_total',
     'ciclos',
     'combustivel_antes_partida_motor',
@@ -68,17 +74,16 @@ test('0477 leaves ambiguous legacy fields unmapped and introduces explicit names
     'carga_regulatoria_kg',
     'codigo_funcao_anac',
   ]) {
-    assert.match(sql, new RegExp(`\\b${canonical}\\b`));
+    assert.match(migration, new RegExp(`\\b${canonical}\\b`));
   }
-  assert.doesNotMatch(sql, /ALTER TABLE cv_voo_etapas/i);
-  assert.doesNotMatch(sql, /UPDATE\s+cv_voo_etapas/i);
-  assert.doesNotMatch(sql, /UPDATE\s+cv_rdv_operacional/i);
+  assert.doesNotMatch(migration, /UPDATE\s+cv_voo_etapas/i);
+  assert.doesNotMatch(migration, /UPDATE\s+cv_rdv_operacional/i);
 });
 
 test('migration copy and Schema V2 change carry the same executable SQL', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
-  const normalize = (sql) =>
-    executable(sql)
+  const normalize = (value) =>
+    executable(value)
       .replace(/\s+/g, ' ')
       .trim();
 
@@ -102,6 +107,7 @@ test('official Schema V2 apply builder accepts 0477 and appends exactly one ledg
 
   assert.equal(result.changeId, 'edb-operational-core-0477');
   const applied = readFileSync(outputPath, 'utf8');
+  assert.match(applied, /ALTER TABLE cv_voo_etapas ADD COLUMN tempo_voo_diurno_minutos/);
   assert.match(applied, /CREATE TABLE IF NOT EXISTS edb_registro_revisoes/);
   const ledgerRows = applied.match(/INSERT INTO airtrust_schema_changes_v2/g) ?? [];
   assert.equal(ledgerRows.length, 1);

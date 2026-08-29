@@ -4,17 +4,22 @@ import type {
 } from '../../services/edb/operational-regulatory-source';
 
 const REGULATORY_STAGE_SELECT = `
-  id, empresa_id, voo_id, etapa_id,
+  id, empresa_id, voo_id, id AS etapa_id,
   tempo_voo_diurno_minutos, tempo_voo_noturno_minutos, tempo_voo_total_minutos,
   tempo_ifr_real_minutos, tempo_ifr_simulado_minutos,
   pousos_total, ciclos, combustivel_antes_partida_motor,
   pessoas_a_bordo_total, carga_regulatoria_kg, ocorrencias_json,
-  origem_dados, versao, preenchido_por, preenchido_em
+  semantica_regulatoria_origem AS origem_dados,
+  semantica_regulatoria_versao AS versao,
+  semantica_regulatoria_preenchido_por AS preenchido_por,
+  semantica_regulatoria_preenchido_em AS preenchido_em
 `;
 
 const REGULATORY_CREW_SELECT = `
-  id, empresa_id, voo_id, tripulante_voo_id, etapa_id, funcionario_id,
-  codigo_funcao_anac, origem_dados, validado_por, validado_em
+  id, empresa_id, voo_id, id AS tripulante_voo_id, etapa_id, funcionario_id,
+  codigo_funcao_anac, funcao_anac_origem AS origem_dados,
+  funcao_anac_validado_por AS validado_por,
+  funcao_anac_validado_em AS validado_em
 `;
 
 export async function listControleVoosRegulatoryStages(
@@ -26,11 +31,11 @@ export async function listControleVoosRegulatoryStages(
     .prepare(
       `
       SELECT ${REGULATORY_STAGE_SELECT}
-      FROM cv_voo_etapas_regulatorio
+      FROM cv_voo_etapas
       WHERE empresa_id = ?
         AND voo_id = ?
         AND deleted_at IS NULL
-      ORDER BY etapa_id ASC
+      ORDER BY numero_etapa ASC, id ASC
     `,
     )
     .bind(empresaId, vooId)
@@ -48,7 +53,7 @@ export async function listControleVoosRegulatoryCrew(
     .prepare(
       `
       SELECT ${REGULATORY_CREW_SELECT}
-      FROM cv_voo_tripulantes_regulatorio
+      FROM cv_voo_tripulantes
       WHERE empresa_id = ?
         AND voo_id = ?
         AND deleted_at IS NULL
@@ -70,9 +75,9 @@ export async function getControleVoosRegulatoryStage(
     .prepare(
       `
       SELECT ${REGULATORY_STAGE_SELECT}
-      FROM cv_voo_etapas_regulatorio
+      FROM cv_voo_etapas
       WHERE empresa_id = ?
-        AND etapa_id = ?
+        AND id = ?
         AND deleted_at IS NULL
       LIMIT 1
     `,

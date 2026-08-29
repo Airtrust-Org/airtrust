@@ -3,9 +3,8 @@ import type { EdbTechnicalDiscrepancy } from './contracts';
 export type EdbRegulatoryDataOrigin = 'MANUAL' | 'SIGVOOS' | 'IMPORTACAO' | 'SISTEMA';
 
 /**
- * One-to-one companion for a realized Controle de Voos stage.
- * Every field name describes the regulatory meaning explicitly; no legacy
- * operational alias is accepted here.
+ * Canonical regulatory semantics now live on the source `cv_voo_etapas` row.
+ * `etapa_id` is an alias of that row id when loaded by the repository.
  */
 export interface ControleVoosEtapaRegulatoriaRow {
   id: number;
@@ -23,7 +22,7 @@ export interface ControleVoosEtapaRegulatoriaRow {
   pessoas_a_bordo_total: number | null;
   carga_regulatoria_kg: number | null;
   ocorrencias_json: string | null;
-  origem_dados: EdbRegulatoryDataOrigin;
+  origem_dados: EdbRegulatoryDataOrigin | null;
   versao: number;
   preenchido_por: number | null;
   preenchido_em: string | null;
@@ -37,7 +36,7 @@ export interface ControleVoosTripulanteRegulatorioRow {
   etapa_id: number | null;
   funcionario_id: number;
   codigo_funcao_anac: string | null;
-  origem_dados: Exclude<EdbRegulatoryDataOrigin, 'SIGVOOS'>;
+  origem_dados: Exclude<EdbRegulatoryDataOrigin, 'SIGVOOS'> | null;
   validado_por: number | null;
   validado_em: string | null;
 }

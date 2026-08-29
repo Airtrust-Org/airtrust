@@ -2,7 +2,7 @@
   "changeId": "edb-operational-core-0477",
   "baselineId": "production-d1-baseline-v2-20260714",
   "filePath": "worker-airtrust/schema-v2/changes/0477_edb_operational_core.sql",
-  "fileHash": "acff166c823d964e2bb2a94f3e176e51b9cda387e3925a6e7bebf4fe767741f3",
+  "fileHash": "eab36332834e70e7726ec42516aa80243327c102df1bcf4be5658a695e93520c",
   "planPath": "worker-airtrust/schema-v2/plans/edb-operational-core-0477.md",
-  "planHash": "93de8a726e274e37d52fe53507b7f5f584a1669e6d9aa21d86d9aec128eaf94a"
+  "planHash": "01b212712d8838ab591a95701230b1361794687c22485bbc65df9a25c4b09682"
 }

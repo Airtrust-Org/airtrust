@@ -1,83 +1,34 @@
--- 0477 — Flight Operations / eDB explicit regulatory semantics + persistence core
+-- 0477 — Flight Operations / eDB canonical operational semantics + persistence core
 --
--- Additive foundation only. Existing Controle de Voos/RDV columns remain
--- untouched. Ambiguous legacy operational fields are not reinterpreted.
--- New one-to-one companion tables hold explicit regulatory semantics and the
--- eDB core stores immutable revisions, signatures, audit evidence and ANAC
--- transmission state behind an application feature flag.
+-- Additive, disabled foundation. Canonical regulatory semantics live directly
+-- on the existing Controle de Voos stage/crew rows; no parallel stage/crew
+-- companion table is created. Ambiguous legacy columns remain physically
+-- present for compatibility but are not regulatory aliases.
+--
+-- The eDB_* objects below store immutable signed snapshots, lifecycle evidence,
+-- audit history and future ANAC transmission state behind an application flag.
 
-CREATE TABLE IF NOT EXISTS cv_voo_etapas_regulatorio (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  empresa_id INTEGER NOT NULL,
-  voo_id INTEGER NOT NULL,
-  etapa_id INTEGER NOT NULL,
-  tempo_voo_diurno_minutos INTEGER,
-  tempo_voo_noturno_minutos INTEGER,
-  tempo_voo_total_minutos INTEGER,
-  tempo_ifr_real_minutos INTEGER,
-  tempo_ifr_simulado_minutos INTEGER,
-  pousos_total INTEGER,
-  ciclos INTEGER,
-  combustivel_antes_partida_motor REAL,
-  pessoas_a_bordo_total INTEGER,
-  carga_regulatoria_kg REAL,
-  ocorrencias_json TEXT,
-  origem_dados TEXT NOT NULL DEFAULT 'MANUAL'
-    CHECK (origem_dados IN ('MANUAL', 'SIGVOOS', 'IMPORTACAO', 'SISTEMA')),
-  versao INTEGER NOT NULL DEFAULT 1 CHECK (versao >= 1),
-  preenchido_por INTEGER,
-  preenchido_em TEXT,
-  created_by INTEGER,
-  updated_by INTEGER,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  deleted_at TEXT,
-  CHECK (tempo_voo_diurno_minutos IS NULL OR tempo_voo_diurno_minutos >= 0),
-  CHECK (tempo_voo_noturno_minutos IS NULL OR tempo_voo_noturno_minutos >= 0),
-  CHECK (tempo_voo_total_minutos IS NULL OR tempo_voo_total_minutos >= 0),
-  CHECK (tempo_ifr_real_minutos IS NULL OR tempo_ifr_real_minutos >= 0),
-  CHECK (tempo_ifr_simulado_minutos IS NULL OR tempo_ifr_simulado_minutos >= 0),
-  CHECK (pousos_total IS NULL OR pousos_total >= 0),
-  CHECK (ciclos IS NULL OR ciclos >= 0),
-  CHECK (combustivel_antes_partida_motor IS NULL OR combustivel_antes_partida_motor >= 0),
-  CHECK (pessoas_a_bordo_total IS NULL OR pessoas_a_bordo_total >= 0),
-  CHECK (carga_regulatoria_kg IS NULL OR carga_regulatoria_kg >= 0)
-);
+ALTER TABLE cv_voo_etapas ADD COLUMN tempo_voo_diurno_minutos INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN tempo_voo_noturno_minutos INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN tempo_voo_total_minutos INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN tempo_ifr_real_minutos INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN tempo_ifr_simulado_minutos INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN tempo_ifr_nao_classificado_minutos INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN pousos_total INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN ciclos INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN combustivel_antes_partida_motor REAL;
+ALTER TABLE cv_voo_etapas ADD COLUMN pessoas_a_bordo_total INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN carga_regulatoria_kg REAL;
+ALTER TABLE cv_voo_etapas ADD COLUMN ocorrencias_json TEXT;
+ALTER TABLE cv_voo_etapas ADD COLUMN semantica_regulatoria_origem TEXT;
+ALTER TABLE cv_voo_etapas ADD COLUMN semantica_regulatoria_versao INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE cv_voo_etapas ADD COLUMN semantica_regulatoria_preenchido_por INTEGER;
+ALTER TABLE cv_voo_etapas ADD COLUMN semantica_regulatoria_preenchido_em TEXT;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cv_etapa_regulatorio_active_unique
-  ON cv_voo_etapas_regulatorio (empresa_id, etapa_id)
-  WHERE deleted_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS idx_cv_etapa_regulatorio_voo
-  ON cv_voo_etapas_regulatorio (empresa_id, voo_id, etapa_id)
-  WHERE deleted_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS cv_voo_tripulantes_regulatorio (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  empresa_id INTEGER NOT NULL,
-  voo_id INTEGER NOT NULL,
-  tripulante_voo_id INTEGER NOT NULL,
-  etapa_id INTEGER,
-  funcionario_id INTEGER NOT NULL,
-  codigo_funcao_anac TEXT,
-  origem_dados TEXT NOT NULL DEFAULT 'MANUAL'
-    CHECK (origem_dados IN ('MANUAL', 'IMPORTACAO', 'SISTEMA')),
-  validado_por INTEGER,
-  validado_em TEXT,
-  created_by INTEGER,
-  updated_by INTEGER,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  deleted_at TEXT
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cv_trip_reg_active_unique
-  ON cv_voo_tripulantes_regulatorio (empresa_id, tripulante_voo_id, COALESCE(etapa_id, 0))
-  WHERE deleted_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS idx_cv_trip_reg_voo
-  ON cv_voo_tripulantes_regulatorio (empresa_id, voo_id, etapa_id)
-  WHERE deleted_at IS NULL;
+ALTER TABLE cv_voo_tripulantes ADD COLUMN codigo_funcao_anac TEXT;
+ALTER TABLE cv_voo_tripulantes ADD COLUMN funcao_anac_origem TEXT;
+ALTER TABLE cv_voo_tripulantes ADD COLUMN funcao_anac_validado_por INTEGER;
+ALTER TABLE cv_voo_tripulantes ADD COLUMN funcao_anac_validado_em TEXT;
 
 CREATE TABLE IF NOT EXISTS edb_diarios (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

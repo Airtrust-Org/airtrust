@@ -27,7 +27,7 @@ function validateWriteInput(params: {
   version: number;
 }): void {
   const synthetic: ControleVoosEtapaRegulatoriaRow = {
-    id: 0,
+    id: params.etapaId,
     empresa_id: params.empresaId,
     voo_id: params.vooId,
     etapa_id: params.etapaId,
@@ -57,8 +57,8 @@ function bindStageValues(input: RegulatoryStageWriteInput): unknown[] {
 }
 
 /**
- * Creates the explicit regulatory companion only if the source stage belongs to
- * the same tenant/flight and no active companion already exists.
+ * Initializes the canonical regulatory semantics on the existing source stage.
+ * There is intentionally no second stage row/table.
  */
 export async function createControleVoosRegulatoryStage(params: {
   db: D1Database;
@@ -79,46 +79,38 @@ export async function createControleVoosRegulatoryStage(params: {
   const result = await params.db
     .prepare(
       `
-      INSERT INTO cv_voo_etapas_regulatorio (
-        empresa_id, voo_id, etapa_id,
-        tempo_voo_diurno_minutos, tempo_voo_noturno_minutos, tempo_voo_total_minutos,
-        tempo_ifr_real_minutos, tempo_ifr_simulado_minutos,
-        pousos_total, ciclos, combustivel_antes_partida_motor,
-        pessoas_a_bordo_total, carga_regulatoria_kg, ocorrencias_json,
-        origem_dados, versao, preenchido_por, preenchido_em,
-        created_by, updated_by, created_at, updated_at
-      )
-      SELECT
-        ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, 1, ?, datetime('now'), ?, ?, datetime('now'), datetime('now')
-      FROM cv_voo_etapas etapa
-      WHERE etapa.id = ?
-        AND etapa.empresa_id = ?
-        AND etapa.voo_id = ?
-        AND etapa.deleted_at IS NULL
-        AND NOT EXISTS (
-          SELECT 1
-          FROM cv_voo_etapas_regulatorio existing
-          WHERE existing.empresa_id = ?
-            AND existing.etapa_id = ?
-            AND existing.deleted_at IS NULL
-        )
+      UPDATE cv_voo_etapas
+      SET tempo_voo_diurno_minutos = ?,
+          tempo_voo_noturno_minutos = ?,
+          tempo_voo_total_minutos = ?,
+          tempo_ifr_real_minutos = ?,
+          tempo_ifr_simulado_minutos = ?,
+          pousos_total = ?,
+          ciclos = ?,
+          combustivel_antes_partida_motor = ?,
+          pessoas_a_bordo_total = ?,
+          carga_regulatoria_kg = ?,
+          ocorrencias_json = ?,
+          semantica_regulatoria_origem = ?,
+          semantica_regulatoria_versao = 1,
+          semantica_regulatoria_preenchido_por = ?,
+          semantica_regulatoria_preenchido_em = datetime('now'),
+          updated_by = ?,
+          updated_at = datetime('now')
+      WHERE id = ?
+        AND empresa_id = ?
+        AND voo_id = ?
+        AND deleted_at IS NULL
+        AND semantica_regulatoria_preenchido_em IS NULL
     `,
     )
     .bind(
-      params.empresaId,
-      params.vooId,
-      params.etapaId,
       ...bindStageValues(params.input),
       params.actorId ?? null,
       params.actorId ?? null,
-      params.actorId ?? null,
       params.etapaId,
       params.empresaId,
       params.vooId,
-      params.empresaId,
-      params.etapaId,
     )
     .run();
 
@@ -128,9 +120,7 @@ export async function createControleVoosRegulatoryStage(params: {
 }
 
 /**
- * Replaces the full explicit regulatory companion using optimistic concurrency.
- * Partial updates are intentionally avoided so the caller always validates the
- * complete regulatory semantics as one unit.
+ * Replaces the complete canonical semantic set with optimistic concurrency.
  */
 export async function replaceControleVoosRegulatoryStage(params: {
   db: D1Database;
@@ -156,47 +146,38 @@ export async function replaceControleVoosRegulatoryStage(params: {
   const result = await params.db
     .prepare(
       `
-      UPDATE cv_voo_etapas_regulatorio
-      SET
-        tempo_voo_diurno_minutos = ?,
-        tempo_voo_noturno_minutos = ?,
-        tempo_voo_total_minutos = ?,
-        tempo_ifr_real_minutos = ?,
-        tempo_ifr_simulado_minutos = ?,
-        pousos_total = ?,
-        ciclos = ?,
-        combustivel_antes_partida_motor = ?,
-        pessoas_a_bordo_total = ?,
-        carga_regulatoria_kg = ?,
-        ocorrencias_json = ?,
-        origem_dados = ?,
-        versao = versao + 1,
-        preenchido_por = ?,
-        preenchido_em = datetime('now'),
-        updated_by = ?,
-        updated_at = datetime('now')
-      WHERE empresa_id = ?
+      UPDATE cv_voo_etapas
+      SET tempo_voo_diurno_minutos = ?,
+          tempo_voo_noturno_minutos = ?,
+          tempo_voo_total_minutos = ?,
+          tempo_ifr_real_minutos = ?,
+          tempo_ifr_simulado_minutos = ?,
+          pousos_total = ?,
+          ciclos = ?,
+          combustivel_antes_partida_motor = ?,
+          pessoas_a_bordo_total = ?,
+          carga_regulatoria_kg = ?,
+          ocorrencias_json = ?,
+          semantica_regulatoria_origem = ?,
+          semantica_regulatoria_versao = semantica_regulatoria_versao + 1,
+          semantica_regulatoria_preenchido_por = ?,
+          semantica_regulatoria_preenchido_em = datetime('now'),
+          updated_by = ?,
+          updated_at = datetime('now')
+      WHERE id = ?
+        AND empresa_id = ?
         AND voo_id = ?
-        AND etapa_id = ?
-        AND versao = ?
+        AND semantica_regulatoria_versao = ?
         AND deleted_at IS NULL
-        AND EXISTS (
-          SELECT 1
-          FROM cv_voo_etapas etapa
-          WHERE etapa.id = cv_voo_etapas_regulatorio.etapa_id
-            AND etapa.empresa_id = cv_voo_etapas_regulatorio.empresa_id
-            AND etapa.voo_id = cv_voo_etapas_regulatorio.voo_id
-            AND etapa.deleted_at IS NULL
-        )
     `,
     )
     .bind(
       ...bindStageValues(params.input),
       params.actorId ?? null,
       params.actorId ?? null,
+      params.etapaId,
       params.empresaId,
       params.vooId,
-      params.etapaId,
       params.expectedVersion,
     )
     .run();
