@@ -9,6 +9,8 @@ import {
 
 export interface FinalizedPostflightRecord {
   record: EdbFlightRecord;
+  logicalRecordId: string;
+  revisionId: string;
   technicalSituationId: string;
   technicalAcknowledgementSignatureId: string;
 }
@@ -74,9 +76,8 @@ function assertAcknowledgementBeforeFlight(record: EdbFlightRecord, acknowledgem
 /**
  * Freezes the postflight regulatory record only after proving that the PIC
  * acknowledged the exact aircraft/maintenance situation that existed before
- * the flight. Postflight operational fields are intentionally excluded from
- * the preflight hash, so completing times, landings, POB, cargo or occurrences
- * does not invalidate a valid technical acknowledgement.
+ * the flight. The logical/revision identity must already be assigned so the
+ * immutable revision can be hashed and signed without a later identifier swap.
  */
 export async function finalizePostflightEdbRecord(params: {
   draftRecord: EdbFlightRecord;
@@ -86,6 +87,10 @@ export async function finalizePostflightEdbRecord(params: {
   const { draftRecord, technicalSituation, technicalAcknowledgement } = params;
   if (draftRecord.status !== 'DRAFT') throw new Error('EDB_POSTFLIGHT_FINALIZATION_REQUIRES_DRAFT');
   if (draftRecord.source.sourceStageId === null) throw new Error('EDB_POSTFLIGHT_STAGE_REQUIRED');
+  const logicalRecordId = draftRecord.logicalRecordId?.trim();
+  const revisionId = draftRecord.revisionId?.trim();
+  if (!logicalRecordId) throw new Error('EDB_LOGICAL_RECORD_ID_REQUIRED');
+  if (!revisionId) throw new Error('EDB_REVISION_ID_REQUIRED');
 
   const acknowledgementBinding = await verifyPicTechnicalAcknowledgementBinding({
     snapshot: technicalSituation,
@@ -110,6 +115,8 @@ export async function finalizePostflightEdbRecord(params: {
   assertAcknowledgementBeforeFlight(draftRecord, technicalAcknowledgement);
 
   const record = cloneRecord(draftRecord);
+  record.logicalRecordId = logicalRecordId;
+  record.revisionId = revisionId;
   record.identity.aircraft = {
     ...technicalSituation.aircraft,
     owners: technicalSituation.aircraft.owners ? [...technicalSituation.aircraft.owners] : null,
@@ -134,6 +141,8 @@ export async function finalizePostflightEdbRecord(params: {
 
   return {
     record,
+    logicalRecordId,
+    revisionId,
     technicalSituationId: technicalSituation.snapshotId,
     technicalAcknowledgementSignatureId: technicalAcknowledgement.signature.signatureId,
   };
