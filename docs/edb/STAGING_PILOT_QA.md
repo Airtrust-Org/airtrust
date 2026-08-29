@@ -9,9 +9,9 @@ The positive eDB shadow gate must be exercised without borrowing any real Costa 
 - application profile: `GESTOR`
 - tenant role: `manager`
 - employee registration: `QA-EDB-PILOT`
-- password source: GitHub Environment `staging` secret `QA_EDB_PILOT_PASSWORD`
+- password source: GitHub Environment `staging` secret `STAGING_SMOKE_PASSWORD`
 
-The password value must never be stored in the repository, chat, PR, issue, artifact or local worktree.
+The synthetic account deliberately reuses the centrally governed staging QA password secret, following the same pattern used by the sanctioned maintenance QA identity. The password value must never be stored in the repository, chat, PR, issue, artifact or local worktree.
 
 ## Provisioning
 
