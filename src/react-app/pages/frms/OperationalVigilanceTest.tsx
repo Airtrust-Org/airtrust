@@ -449,9 +449,7 @@ export default function OperationalVigilanceTest({
         </span>
       </button>
       <p className="text-center text-xs text-slate-500">
-        Responda assim que o contador amarelo aparecer. O tempo é medido em milissegundos;
-        microssegundos não são exibidos porque sugeririam uma precisão que o navegador e a resposta
-        humana não sustentam.
+        Responda assim que o contador amarelo aparecer. O tempo é medido em milissegundos.
       </p>
     </section>
   );
