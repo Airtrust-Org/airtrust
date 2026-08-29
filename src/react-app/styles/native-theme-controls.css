@@ -1,0 +1,43 @@
+/*
+ * Native control theme bridge.
+ *
+ * Some screens still use browser-native select/date/month/time controls while
+ * others use custom components. Keep those native controls visually coherent
+ * until the component migration is complete.
+ */
+
+.airtrust-global-standard select,
+.airtrust-global-standard input[type='date'],
+.airtrust-global-standard input[type='month'],
+.airtrust-global-standard input[type='time'],
+.airtrust-global-standard input[type='datetime-local'] {
+  background-color: var(--theme-bg-surface);
+  border-color: var(--theme-border-muted);
+  color: var(--theme-text-primary);
+  color-scheme: light;
+}
+
+.dark .airtrust-global-standard select,
+.dark .airtrust-global-standard input[type='date'],
+.dark .airtrust-global-standard input[type='month'],
+.dark .airtrust-global-standard input[type='time'],
+.dark .airtrust-global-standard input[type='datetime-local'] {
+  background-color: var(--theme-bg-surface);
+  border-color: var(--theme-border-muted);
+  color: var(--theme-text-primary);
+  color-scheme: dark;
+}
+
+.dark .airtrust-global-standard select option {
+  background-color: var(--theme-bg-surface);
+  color: var(--theme-text-primary);
+}
+
+.airtrust-global-standard select:disabled,
+.airtrust-global-standard input[type='date']:disabled,
+.airtrust-global-standard input[type='month']:disabled,
+.airtrust-global-standard input[type='time']:disabled,
+.airtrust-global-standard input[type='datetime-local']:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

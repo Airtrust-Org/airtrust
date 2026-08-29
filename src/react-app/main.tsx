@@ -3,6 +3,8 @@ import App from '@/react-app/App';
 import { ErrorBoundary } from '@/react-app/components/common/ErrorBoundary';
 // Enable Tailwind + Design System styles across the app
 import '@/react-app/index.css';
+import '@/react-app/styles/native-theme-controls.css';
+import '@/react-app/styles/responsive-navigation.css';
 // Material Symbols font — local bundle (removes CDN dependency)
 import 'material-symbols/outlined.css';
 // Service Worker descomissionado: mantemos apenas limpeza de runtime legado
