@@ -25,6 +25,7 @@ export type EdbReconstitutionOutcome = 'PENDING' | 'RECONSTITUTED' | 'IMPOSSIBLE
 export interface EdbInformationLossIncident {
   incidentId: string;
   diaryId: number;
+  volumeId: string | null;
   kind: EdbInformationLossKind;
   detectedAt: string;
   description: string;
@@ -41,6 +42,11 @@ function requireText(value: string, field: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error(`${field} is required`);
   return normalized;
+}
+
+function optionalText(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return value.trim() || null;
 }
 
 function requirePositiveInteger(value: number, field: string): number {
@@ -163,6 +169,7 @@ export function onboardOperationWindowStart(asOfOperationDate: string): string {
 export function createEdbInformationLossIncident(params: {
   incidentId: string;
   diaryId: number;
+  volumeId?: string | null;
   kind: EdbInformationLossKind;
   detectedAt: string;
   description: string;
@@ -170,6 +177,7 @@ export function createEdbInformationLossIncident(params: {
   return {
     incidentId: requireText(params.incidentId, 'incidentId'),
     diaryId: requirePositiveInteger(params.diaryId, 'diaryId'),
+    volumeId: optionalText(params.volumeId),
     kind: params.kind,
     detectedAt: requireTimestamp(params.detectedAt, 'detectedAt'),
     description: requireText(params.description, 'description'),
