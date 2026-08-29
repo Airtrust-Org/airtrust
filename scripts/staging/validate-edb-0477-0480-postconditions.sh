@@ -122,7 +122,7 @@ fi
 
 if [[ "$migration" == 0478_* ]]; then
   for trigger in trg_edb_anac_outbox_identity_immutable trg_edb_anac_outbox_no_delete \
-    trg_edb_anac_recibo_require_outbox_scope trg_edb_anac_recibo_no_update trg_edb_anac_recibo_no_delete; do
+    trg_edb_anac_recibo_require_outbox_scope trg_edb_anac_recibos_no_update trg_edb_anac_recibos_no_delete; do
     assert_one "trigger:$trigger" \
       "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name='$trigger';"
   done
