@@ -1,16 +1,15 @@
-import { Navigate } from 'react-router-dom';
 import AppLayout from '@/react-app/components/AppLayout';
 import { useFrmsOperationalAccess } from '@/react-app/hooks/useFrmsOperationalAccess';
 import FrmsFlightDashboard from './FrmsFlightDashboard';
 import FrmsMaintenanceDashboard from './FrmsMaintenanceDashboard';
+import FrmsMaintenanceCheckin from './FrmsMaintenanceCheckin';
 
 /**
  * Entrada canônica do FRMS.
  *
- * A tela de coordenação de voo e a tela de gestão de manutenção são
+ * Coordenação de voo, gestão de manutenção e check-in de manutenção são
  * superfícies independentes. O backend decide o perfil individual por cargo
- * (Mecânico/Inspetor) e comprova a gestão de manutenção pelo escopo
- * operacional/setores; a UI apenas roteia a superfície correspondente.
+ * (Mecânico/Inspetor) e comprova gestão de manutenção por domínio/setores.
  */
 export default function FrmsDashboard() {
   const access = useFrmsOperationalAccess();
@@ -54,7 +53,7 @@ export default function FrmsDashboard() {
   }
 
   if (isMaintenanceWorker) {
-    return <Navigate to="/frms/checkin" replace />;
+    return <FrmsMaintenanceCheckin />;
   }
 
   return <FrmsFlightDashboard />;
