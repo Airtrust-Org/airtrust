@@ -37,6 +37,9 @@ export async function persistEdbDraftRevision(
   if (params.record.identity.operatorCompanyId !== params.empresaId) {
     throw new Error('eDB record tenant does not match persistence tenant');
   }
+  if (params.record.source.sourceStageId === null) {
+    throw new Error('eDB revision requires an explicit source stage');
+  }
   if (params.record.correction.revision < 1) {
     throw new Error('eDB revision must be >= 1');
   }
