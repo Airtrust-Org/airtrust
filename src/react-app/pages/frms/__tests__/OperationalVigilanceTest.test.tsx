@@ -24,24 +24,25 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     expect(PVTB_V2_PROTOCOL.responseWindowMs).toBe(30_000);
   });
 
-  it('uses the published PVT-B framing and does not claim to be the NASA PVT+ app', () => {
+  it('keeps the student-facing reference concise and points to NASA Ames', () => {
     render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
 
     expect(
       screen.getByRole('heading', { name: /vigilância psicomotora \(PVT-B\)/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/caixa vermelha fica visível o tempo todo/i)).toBeInTheDocument();
-    expect(screen.getByText(/contador amarelo aparecer dentro/i)).toBeInTheDocument();
-    expect(screen.getByText(/Basner, Mollicone e Dinges \(2011\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/não é o aplicativo NASA PVT\+/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /PsyToolkit — PVT-B/i })).toHaveAttribute(
+    expect(screen.getByText(/retângulo com borda vermelha fica visível sobre fundo preto/i)).toBeInTheDocument();
+    expect(screen.getByText(/contador amarelo/i)).toBeInTheDocument();
+    expect(screen.getByText(/referência científica: psychomotor vigilance task/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /NASA Ames Fatigue Countermeasures Laboratory/i })).toHaveAttribute(
       'href',
-      'https://www.psytoolkit.org/experiment-library/pvtb.html',
+      'https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/',
     );
+    expect(screen.queryByText(/PsyToolkit/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/NASA PVT\+/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/círculo azul/i)).not.toBeInTheDocument();
   });
 
-  it('keeps a red box visible while waiting and never renders a rounded-full stimulus', () => {
+  it('keeps a black response surface with an empty red rectangular frame while waiting', () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
     render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
@@ -49,26 +50,32 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
 
     const box = screen.getByTestId('pvtb-box');
+    const frame = screen.getByTestId('pvtb-stimulus-frame');
     expect(box).toHaveAttribute('data-phase', 'waiting');
-    expect(box.className).toMatch(/bg-red-600/);
-    expect(box.className).toMatch(/border-red-700/);
+    expect(box.className).toMatch(/bg-black/);
+    expect(frame.className).toMatch(/border-red-600/);
+    expect(frame.className).toMatch(/bg-black/);
+    expect(frame).toBeEmptyDOMElement();
     expect(screen.queryByTestId('pvtb-counter')).not.toBeInTheDocument();
-    expect(box.querySelector('.rounded-full')).toBeNull();
+    expect(frame.className).not.toMatch(/rounded-full/);
+    expect(box.className).not.toMatch(/bg-red-600/);
     expect(box.className).not.toMatch(/bg-blue-600/);
   });
 
-  it('shows a yellow millisecond counter as the stimulus and no rounded-full element', () => {
+  it('shows a yellow millisecond counter inside the red frame and no rounded-full stimulus', () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
     render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
     startAndReachStimulus();
 
     const box = screen.getByTestId('pvtb-box');
+    const frame = screen.getByTestId('pvtb-stimulus-frame');
     expect(box).toHaveAttribute('data-phase', 'stimulus');
+    expect(frame.className).toMatch(/border-red-600/);
     const counter = screen.getByTestId('pvtb-counter');
     expect(counter.className).toMatch(/text-yellow-300/);
     expect(counter.className).not.toMatch(/rounded-full/);
-    expect(box.querySelector('.rounded-full')).toBeNull();
+    expect(frame.querySelector('.rounded-full')).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(200);
