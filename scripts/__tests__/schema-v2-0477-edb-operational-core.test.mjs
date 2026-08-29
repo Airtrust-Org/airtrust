@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { buildReviewedSchemaApply } from '../schema-v2/build-reviewed-schema-apply.mjs';
 
@@ -22,6 +23,16 @@ function executable(sql) {
     .split('\n')
     .filter((line) => !line.trimStart().startsWith('--'))
     .join('\n');
+}
+
+function apply0477InMemory() {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE cv_voo_etapas (id INTEGER PRIMARY KEY);
+    CREATE TABLE cv_voo_tripulantes (id INTEGER PRIMARY KEY);
+  `);
+  db.exec(readFileSync(MIGRATION, 'utf8'));
+  return db;
 }
 
 test('pins reviewed hashes for edb-operational-core-0477', () => {
@@ -71,6 +82,76 @@ test('0477 adds canonical semantics, preflight awareness and isolated eDB persis
     assert.doesNotMatch(candidate, /UPDATE\s+cv_voo_etapas/i);
     assert.doesNotMatch(candidate, /UPDATE\s+cv_voo_tripulantes/i);
   }
+});
+
+test('0477 executes as valid SQLite and installs its integrity guards', () => {
+  const db = apply0477InMemory();
+  const triggerNames = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name")
+    .all()
+    .map((row) => row.name);
+
+  for (const required of [
+    'trg_edb_ciencia_require_snapshot_binding',
+    'trg_edb_revisao_require_scope_and_chain',
+    'trg_edb_assinatura_require_lifecycle',
+    'trg_edb_estado_transition_guard',
+    'trg_edb_anac_outbox_require_operator_signed',
+  ]) {
+    assert.ok(triggerNames.includes(required), `missing trigger ${required}`);
+  }
+
+  db.close();
+});
+
+test('0477 D1 guards fail closed on broken evidence/lifecycle ordering', () => {
+  const db = apply0477InMemory();
+
+  assert.throws(
+    () =>
+      db.exec(`
+        INSERT INTO edb_ciencias_tecnicas_pic (
+          id, empresa_id, situacao_tecnica_id, voo_id,
+          signer_nome, signed_at, canonical_snapshot_sha256,
+          metodo, proof_reference
+        ) VALUES (
+          'sig-tech-orphan', 1, 'missing-snapshot', 100,
+          'PIC Test', '2026-08-28T09:30:00Z', '${'a'.repeat(64)}',
+          'ASYMMETRIC_DIGITAL_SIGNATURE', 'proof/orphan'
+        );
+      `),
+    /EDB_TECHNICAL_ACK_SNAPSHOT_BINDING_INVALID/,
+  );
+
+  db.exec(`
+    INSERT INTO edb_registro_estado (revision_id, empresa_id, status, versao)
+    VALUES ('rev-state-test', 1, 'DRAFT', 1);
+  `);
+  assert.throws(
+    () =>
+      db.exec(`
+        UPDATE edb_registro_estado
+        SET status = 'ANAC_SYNCED', versao = 2
+        WHERE revision_id = 'rev-state-test' AND empresa_id = 1;
+      `),
+    /EDB_STATE_TRANSITION_NOT_ALLOWED/,
+  );
+
+  db.exec(`
+    INSERT INTO edb_registro_estado (revision_id, empresa_id, status, versao)
+    VALUES ('rev-anac-test', 1, 'OPERATOR_SIGNED', 1);
+  `);
+  assert.throws(
+    () =>
+      db.exec(`
+        INSERT INTO edb_anac_outbox (
+          id, empresa_id, revision_id, operation_kind, idempotency_key
+        ) VALUES ('outbox-orphan', 1, 'rev-anac-test', 'CREATE', 'idem-orphan');
+      `),
+    /EDB_ANAC_QUEUE_REQUIRES_FINAL_SIGNATURES/,
+  );
+
+  db.close();
 });
 
 test('0477 introduces exact names without reclassifying legacy data', () => {
