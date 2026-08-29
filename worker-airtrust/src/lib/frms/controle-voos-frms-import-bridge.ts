@@ -20,10 +20,14 @@ import {
   isControleVoosFrmsImportEnabledForEmpresa,
   type ControleVoosFrmsImportFlagEnv,
 } from './controle-voos-frms-import-flag';
-import {
-  runSigvoosImporterBatch,
-  type SigvoosImporterRunnerReport,
-} from '../../services/controle-voos/sigvoos-importer-runner';
+import { runSigvoosImporterBatch } from '../../services/controle-voos/sigvoos-importer-runner';
+
+/**
+ * The governed batch runner's exact signature. Kept as an alias so the default
+ * (`runSigvoosImporterBatch`) assigns without any cast and tests can inject a
+ * compatible stub.
+ */
+export type SigvoosImporterBatchRunner = typeof runSigvoosImporterBatch;
 
 export interface ControleVoosImportOutcome {
   status: 'DISABLED' | 'OK' | 'ERROR';
@@ -36,20 +40,6 @@ export interface ControleVoosImportOutcome {
   failedPayloads: number;
   errorMessage?: string;
 }
-
-type BatchRunner = (
-  db: D1Database,
-  empresaId: number,
-  payloads: ReadonlyArray<{
-    payload: unknown;
-    label?: string;
-    empresaId?: number;
-    sourceWindowStart?: string;
-    sourceWindowEnd?: string;
-    actorUserId?: number | null;
-  }>,
-  options?: { continueOnError?: boolean; sourceWindowStart?: string; sourceWindowEnd?: string },
-) => Promise<SigvoosImporterRunnerReport>;
 
 const disabledOutcome = (rawRecordsCount: number): ControleVoosImportOutcome => ({
   status: 'DISABLED',
@@ -71,10 +61,10 @@ export async function importControleVoosFromSigvoosRaw(params: {
   operadorId?: string | number | null;
   env: ControleVoosFrmsImportFlagEnv | undefined;
   /** Injectable for tests; defaults to the real governed batch runner. */
-  runner?: BatchRunner;
+  runner?: SigvoosImporterBatchRunner;
 }): Promise<ControleVoosImportOutcome> {
   const { db, empresaId, rawRecords, from, to, operadorId, env } = params;
-  const runner = params.runner ?? (runSigvoosImporterBatch as unknown as BatchRunner);
+  const runner: SigvoosImporterBatchRunner = params.runner ?? runSigvoosImporterBatch;
   const count = rawRecords.length;
 
   if (typeof empresaId !== 'number' || empresaId <= 0) return disabledOutcome(count);
@@ -91,7 +81,7 @@ export async function importControleVoosFromSigvoosRaw(params: {
       empresaId,
       [
         {
-          payload: rawRecords as unknown[],
+          payload: rawRecords,
           label: `sigvoos-frms-sync ${from}..${to}`,
           empresaId,
           sourceWindowStart: from,
