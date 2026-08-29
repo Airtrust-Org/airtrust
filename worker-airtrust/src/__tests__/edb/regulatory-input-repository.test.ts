@@ -23,6 +23,7 @@ function validInput(
     tempo_voo_total_minutos: 60,
     tempo_ifr_real_minutos: 10,
     tempo_ifr_simulado_minutos: 0,
+    tempo_ifr_nao_classificado_minutos: 0,
     pousos_total: 1,
     ciclos: 1,
     combustivel_antes_partida_motor: 900,
@@ -57,6 +58,18 @@ describe('versioned regulatory-stage writes', () => {
         input: validInput({ ocorrencias_json: '{"descricao":"legacy"}' }),
       }),
     ).rejects.toThrow('JSON array of strings');
+  });
+
+  it('rejects invalid unclassified IFR before D1', async () => {
+    await expect(
+      createControleVoosRegulatoryStage({
+        db: neverDb,
+        empresaId: 1,
+        vooId: 10,
+        etapaId: 20,
+        input: validInput({ tempo_ifr_nao_classificado_minutos: -1 }),
+      }),
+    ).rejects.toThrow('tempo_ifr_nao_classificado_minutos');
   });
 
   it('requires a positive optimistic version before replacing', async () => {
