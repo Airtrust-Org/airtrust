@@ -80,7 +80,7 @@ WHERE EXISTS (
 )
 AND NOT EXISTS (
   SELECT 1 FROM funcionarios
-  WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID} AND deleted_at IS NULL
+  WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID}
 );
 
 UPDATE funcionarios
