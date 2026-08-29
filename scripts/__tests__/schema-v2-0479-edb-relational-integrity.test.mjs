@@ -165,40 +165,54 @@ test('0479 rejects cross-tenant diary, discrepancy and maintenance bindings', ()
   db.close();
 });
 
-test('0479 materializes audit scope and enforces one diary hash chain', () => {
+test('0479 materializes audit scope/actor and enforces one diary hash chain', () => {
   const db = apply0479InMemory();
   const hash1 = 'a'.repeat(64);
   const hash2 = 'b'.repeat(64);
+  const actorJson = '{"anacCode":"123456","employeeId":10,"fullName":"PIC Test"}';
+
   assert.throws(
     () => db.exec(`INSERT INTO edb_auditoria_eventos (
-      id, empresa_id, diario_id, event_type, payload_json,
+      id, empresa_id, diario_id, event_type, actor_json, payload_json,
       previous_event_hash_sha256, event_hash_sha256, occurred_at,
       voo_id, situacao_tecnica_id
-    ) VALUES ('audit-bad-first', 10, 1, 'SOURCE_SNAPSHOT_CAPTURED', '{}',
+    ) VALUES ('audit-invalid-actor', 10, 1, 'SOURCE_SNAPSHOT_CAPTURED', '{bad', '{}',
+      NULL, '${hash1}', '2026-08-29T00:00:00Z', 100, 'tech-1');`),
+    /EDB_AUDIT_ACTOR_JSON_INVALID/,
+  );
+  assert.throws(
+    () => db.exec(`INSERT INTO edb_auditoria_eventos (
+      id, empresa_id, diario_id, event_type, actor_json, payload_json,
+      previous_event_hash_sha256, event_hash_sha256, occurred_at,
+      voo_id, situacao_tecnica_id
+    ) VALUES ('audit-bad-first', 10, 1, 'SOURCE_SNAPSHOT_CAPTURED', '${actorJson}', '{}',
       '${'f'.repeat(64)}', '${hash1}', '2026-08-29T00:00:00Z', 100, 'tech-1');`),
     /EDB_AUDIT_FIRST_EVENT_PREVIOUS_HASH_NOT_NULL/,
   );
   db.exec(`INSERT INTO edb_auditoria_eventos (
-    id, empresa_id, diario_id, event_type, payload_json,
+    id, empresa_id, diario_id, event_type, actor_json, payload_json,
     previous_event_hash_sha256, event_hash_sha256, occurred_at,
     voo_id, situacao_tecnica_id
-  ) VALUES ('audit-1', 10, 1, 'SOURCE_SNAPSHOT_CAPTURED', '{}',
+  ) VALUES ('audit-1', 10, 1, 'SOURCE_SNAPSHOT_CAPTURED', '${actorJson}', '{}',
     NULL, '${hash1}', '2026-08-29T00:00:00Z', 100, 'tech-1');`);
   assert.throws(
     () => db.exec(`INSERT INTO edb_auditoria_eventos (
-      id, empresa_id, diario_id, revision_id, event_type, payload_json,
+      id, empresa_id, diario_id, revision_id, event_type, actor_json, payload_json,
       previous_event_hash_sha256, event_hash_sha256, occurred_at, voo_id
-    ) VALUES ('audit-wrong-chain', 10, 1, 'rev-1', 'RECORD_CREATED', '{}',
+    ) VALUES ('audit-wrong-chain', 10, 1, 'rev-1', 'RECORD_CREATED', '${actorJson}', '{}',
       '${'c'.repeat(64)}', '${hash2}', '2026-08-29T01:00:00Z', 100);`),
     /EDB_AUDIT_PREVIOUS_HASH_MISMATCH/,
   );
   db.exec(`INSERT INTO edb_auditoria_eventos (
-    id, empresa_id, diario_id, revision_id, event_type, payload_json,
+    id, empresa_id, diario_id, revision_id, event_type, actor_json, payload_json,
     previous_event_hash_sha256, event_hash_sha256, occurred_at, voo_id
-  ) VALUES ('audit-2', 10, 1, 'rev-1', 'RECORD_CREATED', '{}',
+  ) VALUES ('audit-2', 10, 1, 'rev-1', 'RECORD_CREATED', '${actorJson}', '{}',
     '${hash1}', '${hash2}', '2026-08-29T01:00:00Z', 100);`);
-  const row = db.prepare(`SELECT voo_id, situacao_tecnica_id FROM edb_auditoria_eventos WHERE id = 'audit-1'`).get();
-  assert.deepEqual(row, { voo_id: 100, situacao_tecnica_id: 'tech-1' });
+
+  const row = db.prepare(`SELECT voo_id, situacao_tecnica_id, actor_json FROM edb_auditoria_eventos WHERE id = 'audit-1'`).get();
+  assert.equal(row.voo_id, 100);
+  assert.equal(row.situacao_tecnica_id, 'tech-1');
+  assert.equal(row.actor_json, actorJson);
   db.close();
 });
 
@@ -234,6 +248,7 @@ test('official Schema V2 apply builder accepts 0479 and appends exactly one ledg
   assert.equal(result.changeId, 'edb-relational-integrity-0479');
   const applied = readFileSync(outputPath, 'utf8');
   assert.match(applied, /ALTER TABLE edb_auditoria_eventos ADD COLUMN voo_id/);
+  assert.match(applied, /ALTER TABLE edb_auditoria_eventos ADD COLUMN actor_json/);
   assert.match(applied, /trg_edb_auditoria_require_scope_and_chain/);
   assert.equal((applied.match(/INSERT INTO airtrust_schema_changes_v2/g) ?? []).length, 1);
   assert.match(applied, /'edb-relational-integrity-0479'/);
