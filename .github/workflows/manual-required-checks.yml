@@ -31,6 +31,7 @@ jobs:
           node --test scripts/__tests__/guard-route-ownership.test.mjs
           node --test scripts/__tests__/schema-v2-0470-certificate-validation-hash.test.mjs
           node --test scripts/__tests__/schema-v2-0475-usuarios-empresas-perfis-reconciliation.test.mjs
+          node --test scripts/__tests__/schema-v2-0438-rdv-coordination-workflow.test.mjs
           node --test scripts/__tests__/assert-pages-build-version.test.mjs
           node --test scripts/__tests__/staging-qa-bootstrap-canonical-identity.test.mjs
           node --test worker-airtrust/scripts/__tests__/exceljs-sheet-rows.test.mjs
