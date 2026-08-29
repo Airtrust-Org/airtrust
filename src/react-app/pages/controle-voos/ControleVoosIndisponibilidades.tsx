@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom';
-import { AlertTriangle, Link as LinkIcon } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
@@ -58,12 +57,19 @@ export default function ControleVoosIndisponibilidades() {
                         {ind.voosImpactados.map((vooId) => {
                           const voo = getVooById(vooId);
                           return voo ? (
-                            <Link key={vooId} to={`/controle-voos/voos/${vooId}`} className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-100 dark:bg-red-950/20 dark:border-red-800 dark:text-red-300">
-                              <LinkIcon className="h-3 w-3" />{voo.prefixo}
-                            </Link>
+                            <span
+                              key={vooId}
+                              className="inline-flex items-center rounded bg-red-50 border border-red-100 px-2 py-0.5 text-xs text-red-700 dark:bg-red-950/20 dark:border-red-800 dark:text-red-300"
+                              title="Referência ilustrativa do preview — sem detalhe operacional"
+                            >
+                              {voo.prefixo}
+                            </span>
                           ) : null;
                         })}
                       </div>
+                      <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                        Referências ilustrativas do preview; não abrem registros operacionais.
+                      </p>
                     </div>
                   )}
                 </div>
