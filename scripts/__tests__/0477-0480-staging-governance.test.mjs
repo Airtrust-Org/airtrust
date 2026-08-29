@@ -65,8 +65,31 @@ test("validate-edb-0477-0480-postconditions.sh refuses a non-staging --target", 
   );
 });
 
+test("0480 postcondition trigger names are backed by the reviewed migration", () => {
+  const validator = read(VALIDATOR);
+  const migration = read("worker-airtrust/migrations/0480_edb_diary_lifecycle_integrity.sql");
+  const triggers = [
+    "trg_edb_diario_identity_immutable",
+    "trg_edb_diario_status_transition_guard",
+    "trg_edb_diario_no_delete",
+    "trg_edb_volume_status_transition_guard",
+    "trg_edb_volume_closure_shape_guard",
+    "trg_edb_volume_closed_evidence_immutable",
+    "trg_edb_volume_no_delete",
+    "trg_edb_incidente_progress_guard",
+    "trg_edb_incidente_status_transition_guard",
+    "trg_edb_incidente_no_delete",
+  ];
+
+  for (const trigger of triggers) {
+    assert.match(validator, new RegExp(`\\b${trigger}\\b`));
+    assert.match(migration, new RegExp(`CREATE TRIGGER IF NOT EXISTS ${trigger}\\b`));
+  }
+  assert.doesNotMatch(validator, /trg_edb_volume_closing_evidence_immutable/);
+  assert.doesNotMatch(validator, /trg_edb_incidente_evidence_write_once/);
+});
+
 test("migration-ledger-preflight.mjs discovers migrations in release/worker-airtrust/migrations", () => {
   const script = read("scripts/staging/migration-ledger-preflight.mjs");
   assert.match(script, /release.*worker-airtrust.*migrations/);
 });
-
