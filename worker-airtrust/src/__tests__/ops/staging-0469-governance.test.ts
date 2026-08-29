@@ -25,7 +25,7 @@ describe('staging migrations 0467-0469 governance', () => {
       expect(recoveryApplyScript).toContain(`"${migrationName}"`);
     }
     expect(legacyApplyScript).toContain(
-      'RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459,0467,0468,0469,0470,0472,0475,0476"',
+      'RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459,0467,0468,0469,0470,0472,0475,0476,0477,0478,0479,0480"',
     );
     expect(recoveryApplyScript).toContain(
       'RELEASE_PREFLIGHT_SCOPE="${migration_basename%%_*}"',
