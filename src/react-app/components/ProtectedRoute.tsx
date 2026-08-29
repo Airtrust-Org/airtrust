@@ -11,21 +11,13 @@ import {
   requiresRestrictedDevelopmentModuleAccess,
 } from '@/react-app/lib/module-access';
 
-// Modules whose visibility is additionally narrowed by operational domain
-// once a tenant's operational_domain_rbac_enabled flag is on — see
-// docs/rbac/gestor-operational-autonomy.md. MRO is a frontend prototype
-// (mocked data, no backend persistence — see src/react-app/pages/mro/) that
-// is nonetheless classified MANUTENCAO for this gate: a gestor without the
-// MANUTENCAO domain should not see it, even though nothing there writes
-// real operational data. This map stays intentionally tiny — extend it only
-// for modules with a real, decided domain classification, not speculatively.
 const DOMAIN_GATED_MODULES: Record<string, OperationalDomain> = {
   mro: 'MANUTENCAO',
 };
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: string[]; // Opcional: ['ADMIN', 'GESTOR']
+  requiredRole?: string[];
   requiredPermission?: string | string[];
 }
 
@@ -75,6 +67,49 @@ export function resolveImplicitRequiredRole(pathname: string): string[] | undefi
   return undefined;
 }
 
+function ProtectedRouteLoading({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--at-bg-app)] text-[var(--at-text-primary)]">
+      <div className="text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[var(--at-accent)] border-r-transparent" />
+        <p className="mt-3 text-sm text-[var(--at-text-secondary)]">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+function RouteStatusScreen({
+  title,
+  description,
+  backHref,
+  backLabel,
+  tone = 'critical',
+}: {
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  tone?: 'attention' | 'critical';
+}) {
+  const iconClass = tone === 'attention' ? 'text-[var(--at-attention)]' : 'text-[var(--at-critical)]';
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--at-bg-app)] p-4 text-[var(--at-text-primary)]">
+      <div className="w-full max-w-md rounded-xl border border-[var(--at-border)] bg-[var(--at-bg-surface)] p-5 text-center shadow-sm">
+        <Ban className={`mx-auto mb-4 h-14 w-14 ${iconClass}`} />
+        <h2 className="mb-2 text-xl font-semibold text-[var(--at-text-primary)]">{title}</h2>
+        <p className="mb-6 text-sm text-[var(--at-text-secondary)]">{description}</p>
+        <a
+          href={backHref}
+          className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[var(--at-accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--at-accent-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--at-focus)]"
+        >
+          {backLabel}
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export default function ProtectedRoute({
   children,
   requiredRole,
@@ -87,39 +122,7 @@ export default function ProtectedRoute({
   const { t } = useLanguage();
 
   if (isLoading) {
-    return (
-      <div
-        className="flex items-center justify-center min-h-screen bg-gray-100"
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#f3f4f6',
-        }}
-      >
-        <div style={{ textAlign: 'center' }}>
-          <div
-            className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary-600 border-r-transparent"
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              border: '4px solid #0052cc',
-              borderRightColor: 'transparent',
-              animation: 'spin 0.75s linear infinite',
-              display: 'inline-block',
-            }}
-          />
-          <p
-            className="mt-4 text-sm text-slate-600"
-            style={{ marginTop: 12, fontSize: 14, color: '#475569' }}
-          >
-            {t('protected.loading')}
-          </p>
-        </div>
-      </div>
-    );
+    return <ProtectedRouteLoading label={t('protected.loading')} />;
   }
 
   if (!isAuthenticated) {
@@ -135,42 +138,25 @@ export default function ProtectedRoute({
 
   if (moduleKey && !canAccessModule(moduleKey, empresaAtual?.modulos_ativos)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm max-w-md w-full text-center">
-          <Ban className="w-14 h-14 text-amber-500 mb-4 mx-auto" />
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">Modulo indisponivel</h2>
-          <p className="text-sm text-slate-600 mb-6">
-            Este modulo nao esta ativo para a empresa selecionada.
-          </p>
-          <a
-            href="/"
-            className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            Voltar ao dashboard
-          </a>
-        </div>
-      </div>
+      <RouteStatusScreen
+        title="Módulo indisponível"
+        description="Este módulo não está ativo para a empresa selecionada."
+        backHref="/"
+        backLabel="Voltar ao início"
+        tone="attention"
+      />
     );
   }
 
   const gatedDomain = moduleKey ? DOMAIN_GATED_MODULES[moduleKey] : undefined;
   if (gatedDomain && operationalAccess.enabled && !operationalAccess.hasDomain(gatedDomain)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm max-w-md w-full text-center">
-          <Ban className="w-14 h-14 text-red-500 mb-4 mx-auto" />
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">
-            {t('protected.denied.title')}
-          </h2>
-          <p className="text-sm text-slate-600 mb-6">{t('protected.denied.description')}</p>
-          <a
-            href="/"
-            className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            {t('protected.denied.backHome')}
-          </a>
-        </div>
-      </div>
+      <RouteStatusScreen
+        title={t('protected.denied.title')}
+        description={t('protected.denied.description')}
+        backHref="/"
+        backLabel={t('protected.denied.backHome')}
+      />
     );
   }
 
@@ -180,66 +166,38 @@ export default function ProtectedRoute({
     !canSeeDevelopmentModules(user)
   ) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm max-w-md w-full text-center">
-          <Ban className="w-14 h-14 text-red-500 mb-4 mx-auto" />
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">
-            {t('protected.denied.title')}
-          </h2>
-          <p className="text-sm text-slate-600 mb-6">{t('protected.denied.description')}</p>
-          <a
-            href="/funcionarios"
-            className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            {t('protected.denied.backHome')}
-          </a>
-        </div>
-      </div>
+      <RouteStatusScreen
+        title={t('protected.denied.title')}
+        description={t('protected.denied.description')}
+        backHref="/funcionarios"
+        backLabel={t('protected.denied.backHome')}
+      />
     );
   }
 
   if (requiredPermission && !can(requiredPermission)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm max-w-md w-full text-center">
-          <Ban className="w-14 h-14 text-red-500 mb-4 mx-auto" />
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">
-            {t('protected.denied.title')}
-          </h2>
-          <p className="text-sm text-slate-600 mb-6">{t('protected.denied.description')}</p>
-          <a
-            href="/"
-            className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            {t('protected.denied.backHome')}
-          </a>
-        </div>
-      </div>
+      <RouteStatusScreen
+        title={t('protected.denied.title')}
+        description={t('protected.denied.description')}
+        backHref="/"
+        backLabel={t('protected.denied.backHome')}
+      />
     );
   }
 
-  // Verificar role se especificado
   if (effectiveRequiredRole && effectiveRequiredRole.length > 0 && user) {
     const currentRole = normalizeRole(user.role);
     const acceptedRoles = effectiveRequiredRole.map((role) => normalizeRole(role));
 
     if (!acceptedRoles.includes(currentRole)) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm max-w-md w-full text-center">
-            <Ban className="w-14 h-14 text-red-500 mb-4 mx-auto" />
-            <h2 className="text-xl font-semibold text-slate-900 mb-2">
-              {t('protected.denied.title')}
-            </h2>
-            <p className="text-sm text-slate-600 mb-6">{t('protected.denied.description')}</p>
-            <a
-              href="/funcionarios"
-              className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              {t('protected.denied.backHome')}
-            </a>
-          </div>
-        </div>
+        <RouteStatusScreen
+          title={t('protected.denied.title')}
+          description={t('protected.denied.description')}
+          backHref="/funcionarios"
+          backLabel={t('protected.denied.backHome')}
+        />
       );
     }
   }
