@@ -23,6 +23,16 @@ test('eDB positive seed is synthetic, tenant-6 and staging-D1 only', () => {
   assert.doesNotMatch(seed, /airtrust-db-prod/);
 });
 
+test('eDB pilot QA employee is bound to an exact synthetic sector', () => {
+  const seed = read(SEED);
+  assert.match(seed, /PILOT_SECTOR_CODE = 'QA-EDB-PILOT'/);
+  assert.match(seed, /PILOT_SECTOR_DOMAIN = 'OPERACOES'/);
+  assert.match(seed, /INSERT INTO setores/);
+  assert.match(seed, /setor_id = \(\s*SELECT s\.id FROM setores s/s);
+  assert.match(seed, /UPDATE setores\s+SET ativo = 0/s);
+  assert.doesNotMatch(seed, /setor\s*=\s*'QA eDB',\s*setor_id\s*=\s*NULL/);
+});
+
 test('eDB positive smoke is read-only after authentication', () => {
   const smoke = read(SMOKE);
   assert.match(smoke, /EXPECTED_EDB_RELEASE_SHA/);
