@@ -15,7 +15,7 @@ The password value must never be stored in the repository, chat, PR, issue, arti
 
 ## Provisioning
 
-`script/staging` is not used directly by an interactive agent. The governed entrypoint is `.github/workflows/edb-staging-pilot-positive.yml`, dispatched from `main` with the explicit confirmation phrase `AIRTRUST_EDB_STAGING_PILOT_POSITIVE` and the exact eDB application release SHA already deployed to staging.
+`scripts/staging` is not used directly by an interactive agent. The governed entrypoint is `.github/workflows/edb-staging-pilot-positive.yml`, dispatched from `main` with the explicit confirmation phrase `AIRTRUST_EDB_STAGING_PILOT_POSITIVE` and the exact eDB application release SHA already deployed to staging.
 
 The workflow targets only `airtrust-db-staging-baseline-20260701`. The seed is idempotent and writes only the exact synthetic employee, user and tenant membership. It does not create or modify a flight, aircraft, RDV, diary, revision, signature, maintenance record or ANAC evidence.
 
