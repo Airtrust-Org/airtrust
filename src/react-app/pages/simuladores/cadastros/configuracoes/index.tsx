@@ -1,170 +1,106 @@
-/**
- * CONFIGURAÇÕES / CADASTROS
- *
- * Exibe cards para acessar os cadastros:
- * - Simuladores
- * - Manobras
- * - Categorias
- * - Tipos de Sessão
- * - Templates
- *
- * NOTA: Modelos de Aeronave estão no cadastro principal de aeronaves
- * NOTA: Instrutores são funcionários com flag is_instrutor=true
- */
+import AppLayout from '@/react-app/components/AppLayout';
+import PageHeader from '@/react-app/components/PageHeader';
+import {
+  Award,
+  Briefcase,
+  ChevronRight,
+  FileText,
+  List,
+  Plane,
+  type LucideIcon,
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-import { useState, useEffect } from 'react';
-import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
-import { StatCard} from '../../components/SimuladoresLayout';
-import { Settings, Plane, FileText, List, Briefcase, Award } from 'lucide-react';
+type ConfigItem = {
+  title: string;
+  description: string;
+  route: string;
+  icon: LucideIcon;
+};
 
-interface Props {
-  onNavigate?: (view: string) => void;
-}
+const CONFIG_ITEMS: ConfigItem[] = [
+  {
+    title: 'Simuladores',
+    description: 'Cadastre e gerencie os simuladores de voo disponíveis.',
+    route: '/simuladores/cadastros/simuladores',
+    icon: Plane,
+  },
+  {
+    title: 'Manobras',
+    description: 'Configure as manobras e exercícios usados nas avaliações.',
+    route: '/simuladores/cadastros/manobras',
+    icon: List,
+  },
+  {
+    title: 'Categorias',
+    description: 'Organize as categorias de manobras e avaliação.',
+    route: '/simuladores/cadastros/categorias',
+    icon: Briefcase,
+  },
+  {
+    title: 'Tipos de sessão',
+    description: 'Gerencie os tipos de sessão, como LPC, OPC e LOFT.',
+    route: '/simuladores/cadastros/tipos-sessao',
+    icon: FileText,
+  },
+  {
+    title: 'Modelos de sessão',
+    description: 'Configure os modelos usados na preparação das sessões.',
+    route: '/simuladores/cadastros/modelos-sessao',
+    icon: Award,
+  },
+];
 
-export default function ConfiguracoesCadastros({ onNavigate }: Props) {
-  const [erro, setErro] = useState<string | null>(null);
-  const [stats, setStats] = useState({
-    simuladores: 0,
-    manobras: 0,
-    categorias: 0,
-    tipos: 0,
-    templates: 0,
-  });
-
-  useEffect(() => {
-    carregarEstatisticas();
-  }, []);
-
-  const carregarEstatisticas = async () => {
-    try {
-      setErro(null);
-      const token = getAccessToken();
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      // Carregar contadores de todos os cadastros em paralelo
-      const [resSimuladores, resManobras, resCategorias, resTipos, resTemplates] =
-        await Promise.all([
-          fetch(`${API_BASE_URL}/simuladores`, { headers }),
-          fetch(`${API_BASE_URL}/simuladores/manobras`, { headers }),
-          fetch(`${API_BASE_URL}/simuladores/categorias`, { headers }),
-          fetch(`${API_BASE_URL}/simuladores/tipos-sessao`, { headers }),
-          fetch(`${API_BASE_URL}/simuladores/modelos-sessao`, { headers }),
-        ]);
-
-      if (resSimuladores.ok) {
-        const data = await resSimuladores.json();
-        if (data.success) {
-          setStats((prev) => ({ ...prev, simuladores: data.data?.length || 0 }));
-        }
-      }
-
-      if (resManobras.ok) {
-        const data = await resManobras.json();
-        if (data.success) {
-          setStats((prev) => ({ ...prev, manobras: data.data?.length || 0 }));
-        }
-      }
-
-      if (resCategorias.ok) {
-        const data = await resCategorias.json();
-        if (data.success) {
-          setStats((prev) => ({ ...prev, categorias: data.data?.length || 0 }));
-        }
-      }
-
-      if (resTipos.ok) {
-        const data = await resTipos.json();
-        if (data.success) {
-          setStats((prev) => ({ ...prev, tipos: data.data?.length || 0 }));
-        }
-      }
-
-      if (resTemplates.ok) {
-        const data = await resTemplates.json();
-        if (data.success) {
-          setStats((prev) => ({ ...prev, templates: data.data?.length || 0 }));
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao carregar estatísticas:', error);
-      setErro('Nao foi possivel carregar os contadores de cadastros.');
-    }
-  };
-
-  const cadastros = [
-    {
-      titulo: 'Simuladores',
-      descricao: 'Cadastre e gerencie os simuladores de voo disponíveis',
-      icon: <Plane className="w-6 h-6" />,
-      count: stats.simuladores,
-      view: 'simuladores',
-      variant: 'primary' as const,
-    },
-    {
-      titulo: 'Manobras',
-      descricao: 'Configure as manobras e exercícios a serem avaliados',
-      icon: <List className="w-6 h-6" />,
-      count: stats.manobras,
-      view: 'manobras',
-      variant: 'info' as const,
-    },
-    {
-      titulo: 'Categorias',
-      descricao: 'Organize as categorias de manobras e avaliação',
-      icon: <Briefcase className="w-6 h-6" />,
-      count: stats.categorias,
-      view: 'categorias',
-      variant: 'success' as const,
-    },
-    {
-      titulo: 'Tipos de Sessão',
-      descricao: 'Gerencie os tipos de sessão (LPC, OPC, LOFT, etc.)',
-      icon: <FileText className="w-6 h-6" />,
-      count: stats.tipos,
-      view: 'tipos',
-      variant: 'warning' as const,
-    },
-    {
-      titulo: 'Templates',
-      descricao: 'Configure templates de documentos e relatórios',
-      icon: <Award className="w-6 h-6" />,
-      count: stats.templates,
-      view: 'templates',
-      variant: 'primary' as const,
-    },
-  ];
+export default function ConfiguracoesCadastros() {
+  const navigate = useNavigate();
 
   return (
-    <div className="space-y-4">
-      {erro && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-medium">{erro}</p>
-              <p className="mt-1">Falha de API nao representa zero real nesta tela.</p>
-            </div>
-            <button
-              onClick={() => {
-                void carregarEstatisticas();
-              }}
-              className="shrink-0 rounded-md bg-amber-100 px-3 py-1.5 font-medium text-amber-900 hover:bg-amber-200"
-            >
-              Tentar novamente
-            </button>
-          </div>
+    <AppLayout>
+      <PageHeader
+        className="mb-5"
+        title="Configurações de Simuladores"
+        subtitle="Cadastros que definem como as sessões de treinamento são planejadas e avaliadas."
+      />
+
+      <section className="overflow-hidden rounded-lg border border-[var(--at-border)] bg-[var(--at-bg-surface)]">
+        <div className="border-b border-[var(--at-border)] px-4 py-3 sm:px-5">
+          <h2 className="text-sm font-semibold text-[var(--at-text-primary)]">Cadastros operacionais</h2>
+          <p className="mt-1 text-sm text-[var(--at-text-secondary)]">
+            Selecione o cadastro que deseja administrar. Os números operacionais ficam nos relatórios,
+            não nesta área de configuração.
+          </p>
         </div>
-      )}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {cadastros.map((cadastro) => (
-          <StatCard
-            key={cadastro.titulo}
-            title={cadastro.titulo}
-            value={cadastro.count}
-            icon={cadastro.icon}
-            variant={cadastro.variant}
-            onClick={() => onNavigate?.(cadastro.view)}
-          />
-        ))}
-      </div>
-    </div>
+
+        <div className="divide-y divide-[var(--at-border)]">
+          {CONFIG_ITEMS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.route}
+                type="button"
+                onClick={() => navigate(item.route)}
+                className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-[var(--at-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset sm:px-5"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--at-bg-muted)] text-[var(--at-text-secondary)]">
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-[var(--at-text-primary)]">
+                    {item.title}
+                  </span>
+                  <span className="mt-0.5 block text-sm text-[var(--at-text-secondary)]">
+                    {item.description}
+                  </span>
+                </span>
+                <ChevronRight
+                  className="h-4 w-4 shrink-0 text-[var(--at-text-subtle)]"
+                  aria-hidden="true"
+                />
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </AppLayout>
   );
 }
