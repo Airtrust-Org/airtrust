@@ -1,3 +1,7 @@
+// source_reference: reviewed eDB Schema V2 manifests 0477-0480 and canonical migration copies.
+// operational_decision: assert staging bundles contain both governance-ledger inserts without executing SQL.
+// dry_run_required: test-only builder invocation writes temporary local files; no D1/network writes occur.
+// rollback_plan_required: not applicable to this test because it never mutates a database.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
