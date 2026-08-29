@@ -42,6 +42,7 @@ export type EdbDiscrepancyMaintenanceAction =
 export interface EdbReturnToServiceApproval {
   approvalId: string;
   correctiveActionId: string;
+  description: string;
   approvedBy: EdbPersonIdentity;
   approvedAt: string;
   reference: string | null;
@@ -76,6 +77,16 @@ function assertIsoTimestamp(value: string, field: string): string {
   return normalized;
 }
 
+function assertNotBeforeDetection(
+  discrepancy: EdbTechnicalDiscrepancyCase,
+  timestamp: string,
+  field: string,
+): void {
+  if (Date.parse(timestamp) < Date.parse(discrepancy.identity.detectedAt)) {
+    throw new Error(`${field} cannot predate discrepancy detection`);
+  }
+}
+
 export function createTechnicalDiscrepancyCase(params: {
   discrepancyId: string;
   revisionId: string;
@@ -86,6 +97,11 @@ export function createTechnicalDiscrepancyCase(params: {
   createdAt: string;
 }): EdbTechnicalDiscrepancyCase {
   assertPerson(params.detectedBy, 'detectedBy');
+  const detectedAt = assertIsoTimestamp(params.detectedAt, 'detectedAt');
+  const createdAt = assertIsoTimestamp(params.createdAt, 'createdAt');
+  if (Date.parse(createdAt) < Date.parse(detectedAt)) {
+    throw new Error('createdAt cannot predate detectedAt');
+  }
   return {
     identity: {
       discrepancyId: required(params.discrepancyId, 'discrepancyId'),
@@ -93,8 +109,8 @@ export function createTechnicalDiscrepancyCase(params: {
       sourceStageId: params.sourceStageId ?? null,
       description: required(params.description, 'description'),
       detectedBy: { ...params.detectedBy },
-      detectedAt: assertIsoTimestamp(params.detectedAt, 'detectedAt'),
-      createdAt: assertIsoTimestamp(params.createdAt, 'createdAt'),
+      detectedAt,
+      createdAt,
     },
     maintenanceActions: [],
     returnToServiceApprovals: [],
@@ -106,12 +122,14 @@ export function appendCorrectiveAction(
   action: Omit<EdbCorrectiveAction, 'kind'>,
 ): EdbTechnicalDiscrepancyCase {
   assertPerson(action.performedBy, 'performedBy');
+  const performedAt = assertIsoTimestamp(action.performedAt, 'performedAt');
+  assertNotBeforeDetection(discrepancy, performedAt, 'performedAt');
   const normalized: EdbCorrectiveAction = {
     kind: 'CORRECTIVE_ACTION',
     actionId: required(action.actionId, 'actionId'),
     description: required(action.description, 'description'),
     performedBy: { ...action.performedBy },
-    performedAt: assertIsoTimestamp(action.performedAt, 'performedAt'),
+    performedAt,
     reference: action.reference?.trim() || null,
   };
 
@@ -132,13 +150,15 @@ export function appendDeferredActionAuthorization(
   action: Omit<EdbDeferredActionAuthorization, 'kind'>,
 ): EdbTechnicalDiscrepancyCase {
   assertPerson(action.authorizedBy, 'authorizedBy');
+  const authorizedAt = assertIsoTimestamp(action.authorizedAt, 'authorizedAt');
+  assertNotBeforeDetection(discrepancy, authorizedAt, 'authorizedAt');
   const normalized: EdbDeferredActionAuthorization = {
     kind: 'DEFERRED_ACTION_AUTHORIZATION',
     actionId: required(action.actionId, 'actionId'),
     reason: required(action.reason, 'reason'),
     limitationOrControl: action.limitationOrControl?.trim() || null,
     authorizedBy: { ...action.authorizedBy },
-    authorizedAt: assertIsoTimestamp(action.authorizedAt, 'authorizedAt'),
+    authorizedAt,
     reference: action.reference?.trim() || null,
   };
 
@@ -179,6 +199,7 @@ export function appendReturnToServiceApproval(
   const normalized: EdbReturnToServiceApproval = {
     approvalId: required(approval.approvalId, 'approvalId'),
     correctiveActionId: required(approval.correctiveActionId, 'correctiveActionId'),
+    description: required(approval.description, 'description'),
     approvedBy: { ...approval.approvedBy },
     approvedAt,
     reference: approval.reference?.trim() || null,
