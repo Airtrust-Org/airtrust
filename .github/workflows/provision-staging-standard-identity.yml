@@ -29,6 +29,8 @@ jobs:
     environment: staging
     env:
       STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CONFIRM_STAGING_D1: airtrust-db-staging-baseline-20260701
@@ -71,6 +73,14 @@ jobs:
           set -euo pipefail
           node scripts/seed-staging-smoke-user.mjs --apply --confirm-staging-baseline
 
+      - name: Reseed synthetic QA examiner fixture
+        shell: bash
+        env:
+          CONFIRM_STAGING_QA_SEED: AIRTRUST_STAGING_QA_SEED
+        run: |
+          set -euo pipefail
+          node scripts/staging/seed-qa-examiner-training.mjs --apply
+
       - name: Validate real authenticated session
         shell: bash
         run: |
@@ -107,7 +117,8 @@ jobs:
             echo '## Staging standard identity'
             echo ''
             echo '- login: `qa-agent@staging.airtrust.invalid`'
-            echo '- password source: GitHub Environment `staging` / `STAGING_SMOKE_PASSWORD`'
+            echo '- examiner login: `qa-examiner-admin@staging.airtrust.invalid`'
+            echo '- password source: GitHub Environment `staging` / `STAGING_SMOKE_PASSWORD` and `QA_EXAMINER_ADMIN_PASSWORD`'
             echo '- target: staging only'
             echo '- legacy synthetic login retirement: enforced'
             echo '- cleartext password output: none'
