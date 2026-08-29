@@ -1,3 +1,8 @@
+// source_reference: PR #110 eDB staging pilot QA fixture regression coverage.
+// operational_decision: static tests only; validate staging-only synthetic fixture contracts without executing D1 writes.
+// dry_run_required: this test file executes no operational SQL and performs no remote mutation.
+// rollback_plan_required: no runtime mutation originates here; governed fixture rollback remains in seed-qa-edb-pilot.mjs.
+
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
