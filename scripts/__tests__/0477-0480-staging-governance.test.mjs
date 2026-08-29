@@ -64,3 +64,9 @@ test("validate-edb-0477-0480-postconditions.sh refuses a non-staging --target", 
     execFileSync("bash", [path.join(ROOT, VALIDATOR), "--target=airtrust-db"], { stdio: "pipe" }),
   );
 });
+
+test("migration-ledger-preflight.mjs discovers migrations in release/worker-airtrust/migrations", () => {
+  const script = read("scripts/staging/migration-ledger-preflight.mjs");
+  assert.match(script, /release.*worker-airtrust.*migrations/);
+});
+
