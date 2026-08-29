@@ -4,7 +4,6 @@ export type EdbContractVersion = typeof EDB_CONTRACT_VERSION;
 
 export type EdbLifecycleStatus =
   | 'DRAFT'
-  | 'READY_FOR_PIC_TECHNICAL_ACK'
   | 'READY_FOR_PIC_SIGNATURE'
   | 'PIC_SIGNED'
   | 'OPERATOR_SIGNED'
@@ -127,6 +126,10 @@ export interface EdbSignatureProof {
 }
 
 export interface EdbSignatures {
+  /**
+   * Evidence imported from the independent preflight technical-awareness flow.
+   * It is not created as a lifecycle state of the final postflight record.
+   */
   picTechnicalAcknowledgement: EdbSignatureProof | null;
   picFlightRecord: EdbSignatureProof | null;
   operatorRecord: EdbSignatureProof | null;
