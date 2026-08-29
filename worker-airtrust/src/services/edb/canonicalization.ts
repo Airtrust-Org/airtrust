@@ -31,9 +31,9 @@ export function canonicalJson(value: unknown): string {
 }
 
 /**
- * Builds only postflight/final-record signature payloads. The preflight PIC
- * technical acknowledgement signs an independent technical-situation snapshot
- * and is canonicalized in technical-awareness.ts.
+ * Builds only postflight/final-record signature payloads. Both logical and
+ * immutable revision identities are inside the signed payload; the signature
+ * target must independently equal `revisionId`.
  */
 export function buildSignableEdbPayload(
   record: EdbFlightRecord,
@@ -41,7 +41,8 @@ export function buildSignableEdbPayload(
 ): unknown {
   const base = {
     contractVersion: record.contractVersion,
-    recordId: record.recordId,
+    logicalRecordId: record.logicalRecordId,
+    revisionId: record.revisionId,
     identity: record.identity,
     correction: record.correction,
     source: record.source,
