@@ -5,8 +5,9 @@
 -- companion table is created. Ambiguous legacy columns remain physically
 -- present for compatibility but are not regulatory aliases.
 --
--- The eDB_* objects below store immutable signed snapshots, lifecycle evidence,
--- audit history and future ANAC transmission state behind an application flag.
+-- The eDB_* objects below store immutable preflight technical awareness,
+-- immutable signed postflight snapshots, lifecycle evidence, audit history
+-- and future ANAC transmission state behind an application flag.
 
 ALTER TABLE cv_voo_etapas ADD COLUMN tempo_voo_diurno_minutos INTEGER;
 ALTER TABLE cv_voo_etapas ADD COLUMN tempo_voo_noturno_minutos INTEGER;
@@ -74,6 +75,50 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_edb_volume_aberto
   ON edb_volumes (empresa_id, diario_id)
   WHERE status = 'ABERTO';
 
+-- Preflight technical situation. Each row is immutable. If the aircraft or
+-- maintenance situation changes, a new snapshot is created and the old PIC
+-- acknowledgement cannot authorize the changed situation.
+CREATE TABLE IF NOT EXISTS edb_situacoes_tecnicas (
+  id TEXT PRIMARY KEY,
+  empresa_id INTEGER NOT NULL,
+  voo_id INTEGER NOT NULL,
+  aeronave_id INTEGER,
+  aircraft_json TEXT NOT NULL,
+  maintenance_json TEXT NOT NULL,
+  technical_content_sha256 TEXT NOT NULL,
+  canonical_snapshot_sha256 TEXT NOT NULL,
+  captured_at TEXT NOT NULL,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_edb_situacao_tecnica_voo
+  ON edb_situacoes_tecnicas (empresa_id, voo_id, captured_at);
+
+CREATE TABLE IF NOT EXISTS edb_ciencias_tecnicas_pic (
+  id TEXT PRIMARY KEY,
+  empresa_id INTEGER NOT NULL,
+  situacao_tecnica_id TEXT NOT NULL,
+  voo_id INTEGER NOT NULL,
+  signer_funcionario_id INTEGER,
+  signer_user_id INTEGER,
+  signer_nome TEXT NOT NULL,
+  signer_codigo_anac TEXT,
+  signed_at TEXT NOT NULL,
+  canonical_snapshot_sha256 TEXT NOT NULL,
+  metodo TEXT NOT NULL
+    CHECK (metodo IN ('ASYMMETRIC_DIGITAL_SIGNATURE', 'ELECTRONIC_SIGNATURE_WITH_CERTIFICATE')),
+  proof_reference TEXT NOT NULL,
+  auth_evidence_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_edb_ciencia_situacao
+  ON edb_ciencias_tecnicas_pic (empresa_id, situacao_tecnica_id);
+
+CREATE INDEX IF NOT EXISTS idx_edb_ciencia_voo
+  ON edb_ciencias_tecnicas_pic (empresa_id, voo_id, signed_at);
+
 CREATE TABLE IF NOT EXISTS edb_registro_revisoes (
   id TEXT PRIMARY KEY,
   empresa_id INTEGER NOT NULL,
@@ -88,6 +133,7 @@ CREATE TABLE IF NOT EXISTS edb_registro_revisoes (
   rdv_id INTEGER,
   rdv_versao INTEGER,
   etapa_id INTEGER NOT NULL,
+  ciencia_tecnica_pic_id TEXT NOT NULL,
   payload_json TEXT NOT NULL,
   canonical_payload_sha256 TEXT NOT NULL,
   captured_at TEXT NOT NULL,
@@ -104,13 +150,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_edb_revisao_source
 CREATE INDEX IF NOT EXISTS idx_edb_revisao_volume
   ON edb_registro_revisoes (empresa_id, volume_id, created_at);
 
+CREATE INDEX IF NOT EXISTS idx_edb_revisao_ciencia_tecnica
+  ON edb_registro_revisoes (empresa_id, ciencia_tecnica_pic_id);
+
 CREATE TABLE IF NOT EXISTS edb_registro_estado (
   revision_id TEXT PRIMARY KEY,
   empresa_id INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'DRAFT'
     CHECK (status IN (
       'DRAFT',
-      'READY_FOR_PIC_TECHNICAL_ACK',
       'READY_FOR_PIC_SIGNATURE',
       'PIC_SIGNED',
       'OPERATOR_SIGNED',
@@ -127,12 +175,14 @@ CREATE TABLE IF NOT EXISTS edb_registro_estado (
 CREATE INDEX IF NOT EXISTS idx_edb_estado_status
   ON edb_registro_estado (empresa_id, status, updated_at);
 
+-- Final-record signatures only. PIC technical awareness is preflight evidence
+-- and lives in edb_ciencias_tecnicas_pic instead of this postflight table.
 CREATE TABLE IF NOT EXISTS edb_assinaturas (
   id TEXT PRIMARY KEY,
   empresa_id INTEGER NOT NULL,
   revision_id TEXT NOT NULL,
   tipo TEXT NOT NULL
-    CHECK (tipo IN ('PIC_TECHNICAL_ACK', 'PIC_FLIGHT_RECORD', 'OPERATOR_RECORD')),
+    CHECK (tipo IN ('PIC_FLIGHT_RECORD', 'OPERATOR_RECORD')),
   signer_funcionario_id INTEGER,
   signer_user_id INTEGER,
   signer_nome TEXT NOT NULL,
@@ -263,9 +313,32 @@ CREATE TABLE IF NOT EXISTS edb_incidentes_integridade (
 CREATE INDEX IF NOT EXISTS idx_edb_incidente_diario
   ON edb_incidentes_integridade (empresa_id, diario_id, ocorrido_em);
 
--- Immutable evidence: revisions, signatures, discrepancy declarations,
--- maintenance actions and audit events are append-only. State progression lives
--- separately in edb_registro_estado.
+-- Immutable evidence. Final-record state progression lives separately in
+-- edb_registro_estado.
+CREATE TRIGGER IF NOT EXISTS trg_edb_situacoes_tecnicas_no_update
+BEFORE UPDATE ON edb_situacoes_tecnicas
+BEGIN
+  SELECT RAISE(ABORT, 'EDB_TECHNICAL_SITUATION_IMMUTABLE');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_edb_situacoes_tecnicas_no_delete
+BEFORE DELETE ON edb_situacoes_tecnicas
+BEGIN
+  SELECT RAISE(ABORT, 'EDB_TECHNICAL_SITUATION_IMMUTABLE');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_edb_ciencias_tecnicas_no_update
+BEFORE UPDATE ON edb_ciencias_tecnicas_pic
+BEGIN
+  SELECT RAISE(ABORT, 'EDB_TECHNICAL_ACK_IMMUTABLE');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_edb_ciencias_tecnicas_no_delete
+BEFORE DELETE ON edb_ciencias_tecnicas_pic
+BEGIN
+  SELECT RAISE(ABORT, 'EDB_TECHNICAL_ACK_IMMUTABLE');
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_edb_revisoes_no_update
 BEFORE UPDATE ON edb_registro_revisoes
 BEGIN

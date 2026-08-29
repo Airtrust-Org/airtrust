@@ -35,7 +35,7 @@ test('pins reviewed hashes for edb-operational-core-0477', () => {
   assert.equal(sha256(plan), manifest.planHash);
 });
 
-test('0477 adds canonical semantics to source rows and an isolated eDB core', () => {
+test('0477 adds canonical semantics, preflight awareness and isolated eDB persistence', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   const change = executable(readFileSync(manifest.filePath, 'utf8'));
   const migration = executable(readFileSync(MIGRATION, 'utf8'));
@@ -45,10 +45,16 @@ test('0477 adds canonical semantics to source rows and an isolated eDB core', ()
     assert.match(candidate, /ALTER TABLE cv_voo_etapas ADD COLUMN tempo_ifr_real_minutos/i);
     assert.match(candidate, /ALTER TABLE cv_voo_etapas ADD COLUMN tempo_ifr_nao_classificado_minutos/i);
     assert.match(candidate, /ALTER TABLE cv_voo_tripulantes ADD COLUMN codigo_funcao_anac/i);
+    assert.match(candidate, /CREATE TABLE IF NOT EXISTS edb_situacoes_tecnicas/i);
+    assert.match(candidate, /CREATE TABLE IF NOT EXISTS edb_ciencias_tecnicas_pic/i);
+    assert.match(candidate, /ciencia_tecnica_pic_id TEXT NOT NULL/i);
     assert.match(candidate, /CREATE TABLE IF NOT EXISTS edb_registro_revisoes/i);
     assert.match(candidate, /CREATE TABLE IF NOT EXISTS edb_registro_estado/i);
     assert.match(candidate, /CREATE TABLE IF NOT EXISTS edb_anac_outbox/i);
+    assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_situacoes_tecnicas_no_update/i);
+    assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_ciencias_tecnicas_no_update/i);
     assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_revisoes_no_update/i);
+    assert.doesNotMatch(candidate, /READY_FOR_PIC_TECHNICAL_ACK/i);
     assert.doesNotMatch(candidate, /CREATE TABLE IF NOT EXISTS cv_voo_etapas_regulatorio/i);
     assert.doesNotMatch(candidate, /CREATE TABLE IF NOT EXISTS cv_voo_tripulantes_regulatorio/i);
     assert.doesNotMatch(candidate, /\bDROP\s+(?:TABLE|COLUMN|INDEX)\b/i);
@@ -108,6 +114,7 @@ test('official Schema V2 apply builder accepts 0477 and appends exactly one ledg
   assert.equal(result.changeId, 'edb-operational-core-0477');
   const applied = readFileSync(outputPath, 'utf8');
   assert.match(applied, /ALTER TABLE cv_voo_etapas ADD COLUMN tempo_voo_diurno_minutos/);
+  assert.match(applied, /CREATE TABLE IF NOT EXISTS edb_situacoes_tecnicas/);
   assert.match(applied, /CREATE TABLE IF NOT EXISTS edb_registro_revisoes/);
   const ledgerRows = applied.match(/INSERT INTO airtrust_schema_changes_v2/g) ?? [];
   assert.equal(ledgerRows.length, 1);
