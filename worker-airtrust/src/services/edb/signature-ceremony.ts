@@ -2,6 +2,7 @@ import type {
   EdbPersonIdentity,
   EdbSignatureMethod,
   EdbSignatureProof,
+  EdbSignatureTargetType,
   EdbSignatureType,
 } from './contracts';
 
@@ -9,8 +10,6 @@ export type EdbSignerAuthenticationMethod =
   | 'UNIQUE_CREDENTIALS_PLUS_MFA'
   | 'DIGITAL_CERTIFICATE'
   | 'EXTERNAL_IDENTITY_PROVIDER';
-
-export type EdbSignatureTargetType = 'TECHNICAL_SITUATION' | 'FINAL_RECORD_REVISION';
 
 export interface EdbSignerAuthenticationEvidence {
   subjectId: string;
@@ -131,6 +130,8 @@ export function createEdbSignatureCeremony(params: {
 /**
  * Converts an external cryptographic result into the AirTrust signature-proof
  * contract only when it is bound to the same ceremony, signer and payload.
+ * The exact immutable target selected during the ceremony is retained in the
+ * final proof and must be checked again by persistence.
  */
 export function finalizeEdbSignatureCeremony(
   ceremony: EdbSignatureCeremony,
@@ -157,6 +158,8 @@ export function finalizeEdbSignatureCeremony(
   return {
     signatureId: `${ceremony.ceremonyId}:${ceremony.signatureType}`,
     type: ceremony.signatureType,
+    targetType: ceremony.targetType,
+    targetId: ceremony.targetId,
     signer: { ...ceremony.signer },
     signedAt,
     canonicalPayloadHashSha256: ceremony.payloadHashSha256,
