@@ -178,15 +178,13 @@ describe('eDB lifecycle isolation', () => {
     expect(decision.reasons).toContain('EDB_PIC_FLIGHT_SIGNATURE_TARGET_MISMATCH');
   });
 
-  it('does not mark ANAC sync complete without explicit external receipt evidence', () => {
+  it('does not equate receipt existence with ANAC acceptance/synchronization', () => {
     const record = completeRecord();
     record.status = 'ANAC_PENDING';
-    expect(evaluateEdbLifecycleAction(record, 'CONFIRM_ANAC_SYNCED').allowed).toBe(false);
-    expect(
-      evaluateEdbLifecycleAction(record, 'CONFIRM_ANAC_SYNCED', {
-        anacReceiptReference: 'anac/receipt/123',
-      }),
-    ).toMatchObject({ allowed: true, to: 'ANAC_SYNCED' });
+    const decision = evaluateEdbLifecycleAction(record, 'CONFIRM_ANAC_SYNCED');
+    expect(decision.allowed).toBe(false);
+    expect(decision.to).toBeNull();
+    expect(decision.reasons).toContain('EDB_ANAC_ACCEPTANCE_ADAPTER_REQUIRED');
   });
 });
 
