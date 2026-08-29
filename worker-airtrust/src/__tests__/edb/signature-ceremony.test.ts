@@ -31,12 +31,14 @@ function ceremony() {
   });
 }
 
+const duringCeremony = new Date('2026-08-28T12:03:00.000Z');
+
 describe('eDB signature ceremony', () => {
   it('records review, authentication and explicit signing intent before external signing', () => {
     const value = ceremony();
     expect(value.intentStatement).toContain('assino');
     expect(value.authentication.method).toBe('UNIQUE_CREDENTIALS_PLUS_MFA');
-    expect(isEdbSignatureCeremonyFresh(value, new Date('2026-08-28T12:03:00.000Z'))).toBe(true);
+    expect(isEdbSignatureCeremonyFresh(value, duringCeremony)).toBe(true);
   });
 
   it('accepts an external signature result only when bound to the same signer and payload', () => {
@@ -63,25 +65,33 @@ describe('eDB signature ceremony', () => {
   it('rejects signer substitution and payload substitution', () => {
     const value = ceremony();
     expect(() =>
-      finalizeEdbSignatureCeremony(value, {
-        ceremonyId: 'ceremony-1',
-        signerSubjectId: 'another-user',
-        payloadHashSha256: 'a'.repeat(64),
-        signedAt: '2026-08-28T12:02:00.000Z',
-        method: 'ASYMMETRIC_DIGITAL_SIGNATURE',
-        proofReference: 'proof-1',
-      }),
+      finalizeEdbSignatureCeremony(
+        value,
+        {
+          ceremonyId: 'ceremony-1',
+          signerSubjectId: 'another-user',
+          payloadHashSha256: 'a'.repeat(64),
+          signedAt: '2026-08-28T12:02:00.000Z',
+          method: 'ASYMMETRIC_DIGITAL_SIGNATURE',
+          proofReference: 'proof-1',
+        },
+        duringCeremony,
+      ),
     ).toThrow('signer mismatch');
 
     expect(() =>
-      finalizeEdbSignatureCeremony(value, {
-        ceremonyId: 'ceremony-1',
-        signerSubjectId: 'user-10',
-        payloadHashSha256: 'b'.repeat(64),
-        signedAt: '2026-08-28T12:02:00.000Z',
-        method: 'ASYMMETRIC_DIGITAL_SIGNATURE',
-        proofReference: 'proof-2',
-      }),
+      finalizeEdbSignatureCeremony(
+        value,
+        {
+          ceremonyId: 'ceremony-1',
+          signerSubjectId: 'user-10',
+          payloadHashSha256: 'b'.repeat(64),
+          signedAt: '2026-08-28T12:02:00.000Z',
+          method: 'ASYMMETRIC_DIGITAL_SIGNATURE',
+          proofReference: 'proof-2',
+        },
+        duringCeremony,
+      ),
     ).toThrow('payload hash mismatch');
   });
 
