@@ -32,7 +32,8 @@ vi.mock('../ModalFuncionario', () => ({
   default: () => null,
 }));
 
-vi.mock('../ConfigurarColunas', () => ({
+vi.mock('../ConfigurarColunas', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../ConfigurarColunas')>()),
   default: () => null,
 }));
 
@@ -113,7 +114,9 @@ describe('ListaFuncionarios pagination on fetch error', () => {
     rerender(<ListaFuncionarios {...baseProps} termoBusca="rodrigo" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Falha na API \(HTTP 403\)/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Não foi possível carregar os funcionários\. Tente novamente\./i),
+      ).toBeInTheDocument();
     });
 
     expect(findPaginationText('Página 1 de 1')).toBeInTheDocument();

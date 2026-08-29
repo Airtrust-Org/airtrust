@@ -122,7 +122,7 @@ fi
 
 if [[ "$migration" == 0478_* ]]; then
   for trigger in trg_edb_anac_outbox_identity_immutable trg_edb_anac_outbox_no_delete \
-    trg_edb_anac_recibo_require_outbox_scope trg_edb_anac_recibo_no_update trg_edb_anac_recibo_no_delete; do
+    trg_edb_anac_recibo_require_outbox_scope trg_edb_anac_recibos_no_update trg_edb_anac_recibos_no_delete; do
     assert_one "trigger:$trigger" \
       "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name='$trigger';"
   done
@@ -144,9 +144,9 @@ fi
 if [[ "$migration" == 0480_* ]]; then
   for trigger in trg_edb_diario_identity_immutable trg_edb_diario_status_transition_guard \
     trg_edb_diario_no_delete trg_edb_volume_status_transition_guard \
-    trg_edb_volume_closing_evidence_immutable trg_edb_volume_no_delete \
-    trg_edb_incidente_evidence_write_once trg_edb_incidente_status_transition_guard \
-    trg_edb_incidente_no_delete; do
+    trg_edb_volume_closure_shape_guard trg_edb_volume_closed_evidence_immutable \
+    trg_edb_volume_no_delete trg_edb_incidente_progress_guard \
+    trg_edb_incidente_status_transition_guard trg_edb_incidente_no_delete; do
     assert_one "trigger:$trigger" \
       "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name='$trigger';"
   done
