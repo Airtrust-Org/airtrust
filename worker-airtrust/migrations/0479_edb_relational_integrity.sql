@@ -5,6 +5,7 @@
 
 ALTER TABLE edb_auditoria_eventos ADD COLUMN voo_id INTEGER;
 ALTER TABLE edb_auditoria_eventos ADD COLUMN situacao_tecnica_id TEXT;
+ALTER TABLE edb_auditoria_eventos ADD COLUMN actor_json TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_edb_auditoria_voo
   ON edb_auditoria_eventos (empresa_id, voo_id, occurred_at);
@@ -130,6 +131,9 @@ BEGIN
 
   SELECT CASE WHEN datetime(NEW.occurred_at) IS NULL
     THEN RAISE(ABORT, 'EDB_AUDIT_TIMESTAMP_INVALID') END;
+
+  SELECT CASE WHEN NEW.actor_json IS NOT NULL AND json_valid(NEW.actor_json) <> 1
+    THEN RAISE(ABORT, 'EDB_AUDIT_ACTOR_JSON_INVALID') END;
 
   SELECT CASE WHEN length(NEW.event_hash_sha256) <> 64
     OR NEW.event_hash_sha256 GLOB '*[^0-9a-f]*'
