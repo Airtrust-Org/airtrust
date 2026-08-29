@@ -99,6 +99,11 @@ EDB_SHADOW_PILOT_TENANTS = "6"
 # FRMS IOGP observacional em staging. Somente Costa do Sol (empresa_id=6).
 # O pipeline persiste evidência separada e nunca altera o effectiveness canônico.
 FRMS_IOGP_SHADOW_MODE_TENANTS = "6"
+# Popular cv_voos/cv_voo_etapas/cv_voo_tripulantes a partir do MESMO payload SIGVOOS
+# que o sync FRMS já busca (via runSigvoosImporterBatch, idempotente, falha isolada).
+# É a fonte leg-level do Operational Load V1. Allowlist explícita; `all` só após canário.
+# Limpar a variável desativa (config change, sem deploy de código).
+CONTROLE_VOOS_FRMS_IMPORT_TENANTS = "6"
 # Feature flag: shared simulator sessions (paridade com produção; ausente
 # aqui fazia /api/capabilities retornar simulador_shared_sessions=false em
 # staging, escondendo o toggle "Sessão compartilhada" já implementado e
@@ -154,6 +159,11 @@ CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
 # (pousos/setores SIGVOOS + REDEMET quando configurado), sem modificar score,
 # bloqueio, fatorização ou effectiveness. Allowlist explícita; `all` é inválido.
 FRMS_IOGP_PRODUCTION_EVIDENCE_TENANTS = "6"
+# Ponte SIGVOOS → Controle de Voos em produção: popula cv_voos/cv_voo_etapas/
+# cv_voo_tripulantes a partir do MESMO payload que o sync FRMS já busca. Fonte
+# leg-level do Operational Load V1. Idempotente, falha isolada (não afeta o FRMS).
+# Allowlist explícita (empresa_id=6 Costa do Sol); `all` só após canário.
+CONTROLE_VOOS_FRMS_IMPORT_TENANTS = "6"
 # One-off EAD incident executor. The endpoint remains fail-closed after its
 # single reviewed run; this non-secret flag only permits the official executor.
 ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
