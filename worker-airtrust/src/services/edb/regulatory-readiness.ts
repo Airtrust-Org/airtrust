@@ -7,6 +7,12 @@ import {
   type EdbValidationIssue,
 } from './regulatory-validation';
 import { verifyEdbSignaturePayloadBinding } from './signature-integrity';
+import {
+  technicalSituationMatches,
+  verifyPicTechnicalAcknowledgementBinding,
+  type EdbPicTechnicalAcknowledgement,
+  type EdbTechnicalSituationSnapshot,
+} from './technical-awareness';
 
 export type EdbReadinessStepId =
   | 'TECHNICAL_SNAPSHOT'
@@ -38,6 +44,16 @@ export interface EdbRegulatoryReadiness {
   nextAction: EdbReadinessStepId | null;
 }
 
+export interface EdbReadinessPreflightEvidence {
+  technicalSituation: EdbTechnicalSituationSnapshot | null;
+  technicalAcknowledgement: EdbPicTechnicalAcknowledgement | null;
+}
+
+const NO_PREFLIGHT_EVIDENCE: EdbReadinessPreflightEvidence = {
+  technicalSituation: null,
+  technicalAcknowledgement: null,
+};
+
 function codes(issues: EdbValidationIssue[], severity: EdbValidationIssue['severity']): string[] {
   return issues.filter((issue) => issue.severity === severity).map((issue) => issue.code);
 }
@@ -47,20 +63,49 @@ function firstIncomplete(steps: EdbReadinessStep[]): EdbReadinessStepId | null {
 }
 
 /**
- * Read-only readiness model for future UI/operations use. This does not mutate
- * lifecycle status and does not imply ANAC acceptance or transmission.
+ * Read-only readiness model for future UI/operations use. Preflight evidence
+ * is supplied independently because PIC_TECHNICAL_ACK is not a final-record
+ * payload signature. This function does not mutate lifecycle state or imply
+ * ANAC acceptance/transmission.
  */
 export async function assessEdbRegulatoryReadiness(
   record: EdbFlightRecord,
   now = new Date(),
+  preflight: EdbReadinessPreflightEvidence = NO_PREFLIGHT_EVIDENCE,
 ): Promise<EdbRegulatoryReadiness> {
   const technicalValidation = validateForPicTechnicalAcknowledgement(record);
   const technicalBlocking = codes(technicalValidation.issues, 'BLOCKING');
   const technicalWarnings = codes(technicalValidation.issues, 'WARNING');
 
-  const technicalAckBinding = record.signatures.picTechnicalAcknowledgement
-    ? await verifyEdbSignaturePayloadBinding(record, 'PIC_TECHNICAL_ACK')
+  const technicalSituationMatchesRecord = preflight.technicalSituation
+    ? await technicalSituationMatches({
+        snapshot: preflight.technicalSituation,
+        operatorCompanyId: record.identity.operatorCompanyId,
+        sourceFlightId: record.source.sourceFlightId,
+        aircraft: record.identity.aircraft,
+        maintenance: record.maintenance,
+      })
+    : false;
+
+  const technicalAckBinding = preflight.technicalSituation
+    ? await verifyPicTechnicalAcknowledgementBinding({
+        snapshot: preflight.technicalSituation,
+        acknowledgement: preflight.technicalAcknowledgement,
+      })
     : null;
+
+  const technicalSnapshotComplete =
+    technicalBlocking.length === 0 &&
+    Boolean(preflight.technicalSituation) &&
+    technicalSituationMatchesRecord &&
+    technicalAckBinding?.snapshotIntegrity === true;
+
+  const technicalAckComplete =
+    technicalSnapshotComplete &&
+    technicalAckBinding?.matchesSnapshot === true &&
+    Boolean(record.signatures.picTechnicalAcknowledgement) &&
+    record.signatures.picTechnicalAcknowledgement?.canonicalPayloadHashSha256 ===
+      preflight.technicalAcknowledgement?.signature.canonicalPayloadHashSha256;
 
   const flightValidation = validateForPicFlightSignature(record);
   const flightBlocking = codes(flightValidation.issues, 'BLOCKING').filter(
@@ -88,30 +133,46 @@ export async function assessEdbRegulatoryReadiness(
     operatorBinding?.matchesPayload === true &&
     operatorBlocking.length === 0;
 
+  const technicalSnapshotCodes = technicalSnapshotComplete
+    ? []
+    : technicalBlocking.length > 0
+      ? technicalBlocking
+      : !preflight.technicalSituation
+        ? ['EDB_TECHNICAL_SNAPSHOT_REQUIRED']
+        : !technicalAckBinding?.snapshotIntegrity
+          ? ['EDB_TECHNICAL_SNAPSHOT_HASH_MISMATCH']
+          : !technicalSituationMatchesRecord
+            ? ['EDB_TECHNICAL_SITUATION_CHANGED']
+            : [];
+
+  const technicalAckCodes =
+    technicalSnapshotComplete && !technicalAckComplete
+      ? [
+          !preflight.technicalAcknowledgement
+            ? 'EDB_PIC_TECHNICAL_ACK_REQUIRED'
+            : !technicalAckBinding?.matchesSnapshot
+              ? 'EDB_PIC_TECHNICAL_ACK_SNAPSHOT_MISMATCH'
+              : 'EDB_PIC_TECHNICAL_ACK_NOT_EMBEDDED_IN_FINAL_RECORD',
+        ]
+      : [];
+
   const steps: EdbReadinessStep[] = [
     {
       id: 'TECHNICAL_SNAPSHOT',
-      status: technicalBlocking.length === 0 ? 'COMPLETE' : 'ACTION_REQUIRED',
-      blockingCodes: technicalBlocking,
+      status: technicalSnapshotComplete ? 'COMPLETE' : 'ACTION_REQUIRED',
+      blockingCodes: technicalSnapshotCodes,
       warningCodes: technicalWarnings,
       deadlineAt: null,
     },
     {
       id: 'PIC_TECHNICAL_ACK',
       status:
-        technicalBlocking.length > 0
+        !technicalSnapshotComplete
           ? 'BLOCKED'
-          : !record.signatures.picTechnicalAcknowledgement
-            ? 'ACTION_REQUIRED'
-            : technicalAckBinding?.matchesPayload
-              ? 'COMPLETE'
-              : 'ACTION_REQUIRED',
-      blockingCodes:
-        technicalBlocking.length > 0
-          ? technicalBlocking
-          : technicalAckBinding && !technicalAckBinding.matchesPayload
-            ? ['EDB_PIC_TECHNICAL_ACK_PAYLOAD_CHANGED']
-            : [],
+          : technicalAckComplete
+            ? 'COMPLETE'
+            : 'ACTION_REQUIRED',
+      blockingCodes: technicalAckCodes,
       warningCodes: [],
       deadlineAt: null,
     },
@@ -125,7 +186,7 @@ export async function assessEdbRegulatoryReadiness(
     {
       id: 'PIC_FLIGHT_SIGNATURE',
       status:
-        technicalBlocking.length > 0 || !record.signatures.picTechnicalAcknowledgement || flightBlocking.length > 0
+        !technicalAckComplete || flightBlocking.length > 0
           ? 'BLOCKED'
           : !record.signatures.picFlightRecord
             ? 'ACTION_REQUIRED'
@@ -163,7 +224,7 @@ export async function assessEdbRegulatoryReadiness(
           ? 'COMPLETE'
           : record.status === 'ANAC_PENDING'
             ? 'PENDING_EXTERNAL'
-            : record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete
+            : record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete && technicalAckComplete
               ? 'ACTION_REQUIRED'
               : 'BLOCKED',
       blockingCodes: [],
@@ -175,7 +236,8 @@ export async function assessEdbRegulatoryReadiness(
   return {
     recordId: record.recordId,
     lifecycleStatus: record.status,
-    readyForAnacQueue: record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete,
+    readyForAnacQueue:
+      record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete && technicalAckComplete,
     steps,
     nextAction: firstIncomplete(steps),
   };

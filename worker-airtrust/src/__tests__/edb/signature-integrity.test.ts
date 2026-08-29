@@ -43,16 +43,17 @@ function record() {
   value.flight.origin = 'SBJR';
   value.flight.destination = 'SSXX';
   value.flight.personsOnBoard = 8;
+  value.signatures.picTechnicalAcknowledgement = proof('PIC_TECHNICAL_ACK', 'a'.repeat(64));
   return value;
 }
 
-describe('eDB signature payload binding', () => {
-  it('matches a stored proof when the canonical payload is unchanged', async () => {
+describe('eDB final-record signature payload binding', () => {
+  it('matches a stored PIC flight proof when the final payload is unchanged', async () => {
     const value = record();
-    const hash = await hashSignableEdbPayload(value, 'PIC_TECHNICAL_ACK');
-    value.signatures.picTechnicalAcknowledgement = proof('PIC_TECHNICAL_ACK', hash);
+    const hash = await hashSignableEdbPayload(value, 'PIC_FLIGHT_RECORD');
+    value.signatures.picFlightRecord = proof('PIC_FLIGHT_RECORD', hash);
 
-    const result = await verifyEdbSignaturePayloadBinding(value, 'PIC_TECHNICAL_ACK');
+    const result = await verifyEdbSignaturePayloadBinding(value, 'PIC_FLIGHT_RECORD');
     expect(result).toMatchObject({
       present: true,
       matchesPayload: true,
@@ -61,33 +62,33 @@ describe('eDB signature payload binding', () => {
     });
   });
 
-  it('detects mutation of data covered by a signature', async () => {
+  it('detects mutation of final flight data covered by the PIC signature', async () => {
     const value = record();
-    const hash = await hashSignableEdbPayload(value, 'PIC_TECHNICAL_ACK');
-    value.signatures.picTechnicalAcknowledgement = proof('PIC_TECHNICAL_ACK', hash);
+    const hash = await hashSignableEdbPayload(value, 'PIC_FLIGHT_RECORD');
+    value.signatures.picFlightRecord = proof('PIC_FLIGHT_RECORD', hash);
 
-    value.maintenance.lastIntervention.type = 'Alteracao indevida apos assinatura';
-    const result = await verifyEdbSignaturePayloadBinding(value, 'PIC_TECHNICAL_ACK');
+    value.flight.personsOnBoard = 9;
+    const result = await verifyEdbSignaturePayloadBinding(value, 'PIC_FLIGHT_RECORD');
     expect(result.present).toBe(true);
     expect(result.matchesPayload).toBe(false);
     expect(result.expectedHashSha256).not.toBe(result.storedHashSha256);
   });
 
-  it('validates each stored signature against the payload layer it protects', async () => {
+  it('validates only postflight signatures; preflight integrity has its own verifier', async () => {
     const value = record();
-    const techHash = await hashSignableEdbPayload(value, 'PIC_TECHNICAL_ACK');
-    value.signatures.picTechnicalAcknowledgement = proof('PIC_TECHNICAL_ACK', techHash);
-
     const flightHash = await hashSignableEdbPayload(value, 'PIC_FLIGHT_RECORD');
     value.signatures.picFlightRecord = proof('PIC_FLIGHT_RECORD', flightHash);
 
+    const operatorHash = await hashSignableEdbPayload(value, 'OPERATOR_RECORD');
+    value.signatures.operatorRecord = proof('OPERATOR_RECORD', operatorHash);
+
     const results = await verifyAllStoredEdbSignatureBindings(value);
     expect(results).toHaveLength(2);
+    expect(results.map((item) => item.type)).toEqual(['PIC_FLIGHT_RECORD', 'OPERATOR_RECORD']);
     expect(results.every((item) => item.matchesPayload)).toBe(true);
 
     value.flight.personsOnBoard = 9;
     const afterMutation = await verifyAllStoredEdbSignatureBindings(value);
-    expect(afterMutation.find((item) => item.type === 'PIC_TECHNICAL_ACK')?.matchesPayload).toBe(true);
-    expect(afterMutation.find((item) => item.type === 'PIC_FLIGHT_RECORD')?.matchesPayload).toBe(false);
+    expect(afterMutation.every((item) => item.matchesPayload)).toBe(false);
   });
 });

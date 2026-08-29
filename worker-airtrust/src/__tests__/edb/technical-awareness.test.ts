@@ -4,6 +4,7 @@ import {
   bindPicTechnicalAcknowledgement,
   createTechnicalSituationSnapshot,
   technicalSituationMatches,
+  verifyPicTechnicalAcknowledgementBinding,
 } from '../../services/edb/technical-awareness';
 
 const aircraft: EdbAircraftIdentity = {
@@ -28,32 +29,43 @@ const maintenance: EdbMaintenanceSnapshot = {
   },
 };
 
+async function signedSnapshot() {
+  const snapshot = await createTechnicalSituationSnapshot({
+    snapshotId: 'tech-1',
+    operatorCompanyId: 1,
+    sourceFlightId: 100,
+    aircraft,
+    maintenance,
+    capturedAt: '2026-08-28T09:00:00.000Z',
+  });
+  const signature: EdbSignatureProof = {
+    signatureId: 'sig-tech-1',
+    type: 'PIC_TECHNICAL_ACK',
+    signer: { employeeId: 10, fullName: 'Piloto em Comando', anacCode: '123456' },
+    signedAt: '2026-08-28T09:30:00.000Z',
+    canonicalPayloadHashSha256: snapshot.canonicalSnapshotSha256,
+    method: 'ASYMMETRIC_DIGITAL_SIGNATURE',
+    proofReference: 'proof/tech-1',
+  };
+  const acknowledgement = bindPicTechnicalAcknowledgement({
+    acknowledgementId: 'ack-1',
+    snapshot,
+    signature,
+  });
+  return { snapshot, acknowledgement };
+}
+
 describe('eDB preflight technical awareness', () => {
   it('binds the PIC acknowledgement to the exact preflight snapshot hash', async () => {
-    const snapshot = await createTechnicalSituationSnapshot({
-      snapshotId: 'tech-1',
-      operatorCompanyId: 1,
-      sourceFlightId: 100,
-      aircraft,
-      maintenance,
-      capturedAt: '2026-08-28T09:00:00.000Z',
+    const { snapshot, acknowledgement } = await signedSnapshot();
+    const binding = await verifyPicTechnicalAcknowledgementBinding({ snapshot, acknowledgement });
+    expect(binding).toMatchObject({
+      present: true,
+      snapshotIntegrity: true,
+      matchesSnapshot: true,
+      storedHashSha256: snapshot.canonicalSnapshotSha256,
+      expectedHashSha256: snapshot.canonicalSnapshotSha256,
     });
-    const signature: EdbSignatureProof = {
-      signatureId: 'sig-tech-1',
-      type: 'PIC_TECHNICAL_ACK',
-      signer: { employeeId: 10, fullName: 'Piloto em Comando', anacCode: '123456' },
-      signedAt: '2026-08-28T09:30:00.000Z',
-      canonicalPayloadHashSha256: snapshot.canonicalSnapshotSha256,
-      method: 'ASYMMETRIC_DIGITAL_SIGNATURE',
-      proofReference: 'proof/tech-1',
-    };
-
-    const acknowledgement = bindPicTechnicalAcknowledgement({
-      acknowledgementId: 'ack-1',
-      snapshot,
-      signature,
-    });
-    expect(acknowledgement.technicalSituationId).toBe('tech-1');
 
     expect(
       await technicalSituationMatches({
@@ -66,16 +78,16 @@ describe('eDB preflight technical awareness', () => {
     ).toBe(true);
   });
 
-  it('invalidates the acknowledgement only when aircraft/maintenance content changes', async () => {
-    const snapshot = await createTechnicalSituationSnapshot({
-      snapshotId: 'tech-2',
-      operatorCompanyId: 1,
-      sourceFlightId: 100,
-      aircraft,
-      maintenance,
-      capturedAt: '2026-08-28T09:00:00.000Z',
-    });
+  it('invalidates the acknowledgement when the loaded snapshot itself is altered', async () => {
+    const { snapshot, acknowledgement } = await signedSnapshot();
+    snapshot.capturedAt = '2026-08-28T09:05:00.000Z';
+    const binding = await verifyPicTechnicalAcknowledgementBinding({ snapshot, acknowledgement });
+    expect(binding.snapshotIntegrity).toBe(false);
+    expect(binding.matchesSnapshot).toBe(false);
+  });
 
+  it('invalidates technical-situation matching when aircraft/maintenance content changes', async () => {
+    const { snapshot } = await signedSnapshot();
     const changedMaintenance: EdbMaintenanceSnapshot = {
       ...maintenance,
       nextIntervention: {

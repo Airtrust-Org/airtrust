@@ -24,6 +24,14 @@ export interface EdbPicTechnicalAcknowledgement {
   signature: EdbSignatureProof;
 }
 
+export interface EdbTechnicalAcknowledgementBindingResult {
+  present: boolean;
+  snapshotIntegrity: boolean;
+  matchesSnapshot: boolean;
+  storedHashSha256: string | null;
+  expectedHashSha256: string;
+}
+
 function requireText(value: string, field: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error(`${field} is required`);
@@ -74,6 +82,24 @@ export async function hashTechnicalSituationContent(params: {
   return sha256Hex(canonicalJson(buildTechnicalSituationContent(params)));
 }
 
+function buildSignableTechnicalSituationSnapshot(snapshot: Omit<EdbTechnicalSituationSnapshot, 'canonicalSnapshotSha256'>): unknown {
+  return {
+    snapshotId: snapshot.snapshotId,
+    operatorCompanyId: snapshot.operatorCompanyId,
+    sourceFlightId: snapshot.sourceFlightId,
+    aircraft: snapshot.aircraft,
+    maintenance: snapshot.maintenance,
+    capturedAt: snapshot.capturedAt,
+    technicalContentSha256: snapshot.technicalContentSha256,
+  };
+}
+
+export async function hashTechnicalSituationSnapshot(
+  snapshot: Omit<EdbTechnicalSituationSnapshot, 'canonicalSnapshotSha256'> | EdbTechnicalSituationSnapshot,
+): Promise<string> {
+  return sha256Hex(canonicalJson(buildSignableTechnicalSituationSnapshot(snapshot)));
+}
+
 export async function createTechnicalSituationSnapshot(params: {
   snapshotId: string;
   operatorCompanyId: number;
@@ -102,7 +128,7 @@ export async function createTechnicalSituationSnapshot(params: {
     capturedAt,
     technicalContentSha256,
   };
-  const canonicalSnapshotSha256 = await sha256Hex(canonicalJson(signableSnapshot));
+  const canonicalSnapshotSha256 = await hashTechnicalSituationSnapshot(signableSnapshot);
 
   return {
     ...signableSnapshot,
@@ -134,6 +160,53 @@ export function bindPicTechnicalAcknowledgement(params: {
       ...params.signature,
       signer: { ...params.signature.signer },
     },
+  };
+}
+
+/**
+ * Verifies a loaded preflight acknowledgement against a freshly recomputed
+ * canonical snapshot hash. This is the correct integrity path for
+ * PIC_TECHNICAL_ACK; the final-record signature verifier must not be used.
+ */
+export async function verifyPicTechnicalAcknowledgementBinding(params: {
+  snapshot: EdbTechnicalSituationSnapshot;
+  acknowledgement: EdbPicTechnicalAcknowledgement | null;
+}): Promise<EdbTechnicalAcknowledgementBindingResult> {
+  const expectedHashSha256 = await hashTechnicalSituationSnapshot(params.snapshot);
+  const snapshotIntegrity = expectedHashSha256 === params.snapshot.canonicalSnapshotSha256;
+  const acknowledgement = params.acknowledgement;
+
+  if (!acknowledgement) {
+    return {
+      present: false,
+      snapshotIntegrity,
+      matchesSnapshot: false,
+      storedHashSha256: null,
+      expectedHashSha256,
+    };
+  }
+
+  const signature = acknowledgement.signature;
+  const associationMatches =
+    acknowledgement.technicalSituationId === params.snapshot.snapshotId &&
+    acknowledgement.operatorCompanyId === params.snapshot.operatorCompanyId &&
+    acknowledgement.sourceFlightId === params.snapshot.sourceFlightId;
+  const timestampsValid =
+    Number.isFinite(Date.parse(signature.signedAt)) &&
+    Date.parse(signature.signedAt) >= Date.parse(params.snapshot.capturedAt);
+  const matchesSnapshot =
+    snapshotIntegrity &&
+    associationMatches &&
+    signature.type === 'PIC_TECHNICAL_ACK' &&
+    signature.canonicalPayloadHashSha256 === expectedHashSha256 &&
+    timestampsValid;
+
+  return {
+    present: true,
+    snapshotIntegrity,
+    matchesSnapshot,
+    storedHashSha256: signature.canonicalPayloadHashSha256,
+    expectedHashSha256,
   };
 }
 

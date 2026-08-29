@@ -3,6 +3,8 @@ import type { EdbFlightRecord, EdbSignatureType } from './contracts';
 type JsonScalar = string | number | boolean | null;
 type JsonValue = JsonScalar | JsonValue[] | { [key: string]: JsonValue };
 
+export type EdbFinalRecordSignatureType = Exclude<EdbSignatureType, 'PIC_TECHNICAL_ACK'>;
+
 function normalizeJson(value: unknown): JsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return value as JsonScalar;
@@ -28,7 +30,15 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(normalizeJson(value));
 }
 
-export function buildSignableEdbPayload(record: EdbFlightRecord, type: EdbSignatureType): unknown {
+/**
+ * Builds only postflight/final-record signature payloads. The preflight PIC
+ * technical acknowledgement signs an independent technical-situation snapshot
+ * and is canonicalized in technical-awareness.ts.
+ */
+export function buildSignableEdbPayload(
+  record: EdbFlightRecord,
+  type: EdbFinalRecordSignatureType,
+): unknown {
   const base = {
     contractVersion: record.contractVersion,
     recordId: record.recordId,
@@ -36,13 +46,6 @@ export function buildSignableEdbPayload(record: EdbFlightRecord, type: EdbSignat
     correction: record.correction,
     source: record.source,
   };
-
-  if (type === 'PIC_TECHNICAL_ACK') {
-    return {
-      ...base,
-      maintenance: record.maintenance,
-    };
-  }
 
   if (type === 'PIC_FLIGHT_RECORD') {
     return {
@@ -76,7 +79,7 @@ export async function sha256Hex(value: string): Promise<string> {
 
 export async function hashSignableEdbPayload(
   record: EdbFlightRecord,
-  type: EdbSignatureType,
+  type: EdbFinalRecordSignatureType,
 ): Promise<string> {
   return sha256Hex(canonicalJson(buildSignableEdbPayload(record, type)));
 }

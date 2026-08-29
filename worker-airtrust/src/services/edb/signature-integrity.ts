@@ -1,12 +1,11 @@
-import { hashSignableEdbPayload } from './canonicalization';
-import type {
-  EdbFlightRecord,
-  EdbSignatureProof,
-  EdbSignatureType,
-} from './contracts';
+import {
+  hashSignableEdbPayload,
+  type EdbFinalRecordSignatureType,
+} from './canonicalization';
+import type { EdbFlightRecord, EdbSignatureProof } from './contracts';
 
 export interface EdbSignatureBindingResult {
-  type: EdbSignatureType;
+  type: EdbFinalRecordSignatureType;
   present: boolean;
   matchesPayload: boolean;
   storedHashSha256: string | null;
@@ -15,22 +14,20 @@ export interface EdbSignatureBindingResult {
 
 export function getStoredEdbSignature(
   record: EdbFlightRecord,
-  type: EdbSignatureType,
+  type: EdbFinalRecordSignatureType,
 ): EdbSignatureProof | null {
-  if (type === 'PIC_TECHNICAL_ACK') return record.signatures.picTechnicalAcknowledgement;
   if (type === 'PIC_FLIGHT_RECORD') return record.signatures.picFlightRecord;
   return record.signatures.operatorRecord;
 }
 
 /**
- * Verifies only that the stored signature proof is bound to the current
- * canonical AirTrust payload. It does NOT verify a certificate chain or the
- * cryptographic signature itself; those controls belong to the accepted
- * signature provider/architecture required before regulatory production use.
+ * Verifies postflight/final-record signature payload binding only. Preflight
+ * PIC technical acknowledgement integrity is verified against the independent
+ * technical snapshot by verifyPicTechnicalAcknowledgementBinding().
  */
 export async function verifyEdbSignaturePayloadBinding(
   record: EdbFlightRecord,
-  type: EdbSignatureType,
+  type: EdbFinalRecordSignatureType,
 ): Promise<EdbSignatureBindingResult> {
   const proof = getStoredEdbSignature(record, type);
   if (!proof) {
@@ -56,11 +53,7 @@ export async function verifyEdbSignaturePayloadBinding(
 export async function verifyAllStoredEdbSignatureBindings(
   record: EdbFlightRecord,
 ): Promise<EdbSignatureBindingResult[]> {
-  const types: EdbSignatureType[] = [
-    'PIC_TECHNICAL_ACK',
-    'PIC_FLIGHT_RECORD',
-    'OPERATOR_RECORD',
-  ];
+  const types: EdbFinalRecordSignatureType[] = ['PIC_FLIGHT_RECORD', 'OPERATOR_RECORD'];
   const results: EdbSignatureBindingResult[] = [];
   for (const type of types) {
     const proof = getStoredEdbSignature(record, type);

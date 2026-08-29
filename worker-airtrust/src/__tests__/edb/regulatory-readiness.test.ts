@@ -7,6 +7,12 @@ import {
   type EdbSignatureType,
 } from '../../services/edb/contracts';
 import { assessEdbRegulatoryReadiness } from '../../services/edb/regulatory-readiness';
+import {
+  bindPicTechnicalAcknowledgement,
+  createTechnicalSituationSnapshot,
+  type EdbPicTechnicalAcknowledgement,
+  type EdbTechnicalSituationSnapshot,
+} from '../../services/edb/technical-awareness';
 
 function proof(type: EdbSignatureType, hash: string, signedAt: string): EdbSignatureProof {
   return {
@@ -32,7 +38,7 @@ function completeRecord(): EdbFlightRecord {
     sourceRdvId: 200,
     sourceRdvVersion: 1,
     sourceStageId: 300,
-    capturedAt: '2026-08-28T10:00:00.000Z',
+    capturedAt: '2026-08-28T11:00:00.000Z',
   });
   record.recordId = 'edb-1-r1';
   record.identity.aircraft = {
@@ -93,14 +99,37 @@ function completeRecord(): EdbFlightRecord {
   return record;
 }
 
-async function operatorSignedRecord(): Promise<EdbFlightRecord> {
+async function preflight(record: EdbFlightRecord): Promise<{
+  technicalSituation: EdbTechnicalSituationSnapshot;
+  technicalAcknowledgement: EdbPicTechnicalAcknowledgement;
+}> {
+  const technicalSituation = await createTechnicalSituationSnapshot({
+    snapshotId: 'tech-1',
+    operatorCompanyId: record.identity.operatorCompanyId,
+    sourceFlightId: record.source.sourceFlightId,
+    aircraft: record.identity.aircraft,
+    maintenance: record.maintenance,
+    capturedAt: '2026-08-28T09:00:00.000Z',
+  });
+  const technicalAcknowledgement = bindPicTechnicalAcknowledgement({
+    acknowledgementId: 'ack-1',
+    snapshot: technicalSituation,
+    signature: proof(
+      'PIC_TECHNICAL_ACK',
+      technicalSituation.canonicalSnapshotSha256,
+      '2026-08-28T09:55:00.000Z',
+    ),
+  });
+  record.signatures.picTechnicalAcknowledgement = {
+    ...technicalAcknowledgement.signature,
+    signer: { ...technicalAcknowledgement.signature.signer },
+  };
+  return { technicalSituation, technicalAcknowledgement };
+}
+
+async function operatorSignedRecord() {
   const record = completeRecord();
-  const technicalHash = await hashSignableEdbPayload(record, 'PIC_TECHNICAL_ACK');
-  record.signatures.picTechnicalAcknowledgement = proof(
-    'PIC_TECHNICAL_ACK',
-    technicalHash,
-    '2026-08-28T09:55:00.000Z',
-  );
+  const evidence = await preflight(record);
 
   const picHash = await hashSignableEdbPayload(record, 'PIC_FLIGHT_RECORD');
   record.signatures.picFlightRecord = proof(
@@ -116,7 +145,7 @@ async function operatorSignedRecord(): Promise<EdbFlightRecord> {
     '2026-08-28T12:00:00.000Z',
   );
   record.status = 'OPERATOR_SIGNED';
-  return record;
+  return { record, evidence };
 }
 
 describe('eDB regulatory readiness', () => {
@@ -133,21 +162,38 @@ describe('eDB regulatory readiness', () => {
     expect(readiness.steps.find((step) => step.id === 'PIC_TECHNICAL_ACK')?.status).toBe('BLOCKED');
   });
 
-  it('becomes ready for the future ANAC queue only after valid operator signature and lifecycle state', async () => {
-    const record = await operatorSignedRecord();
-    const readiness = await assessEdbRegulatoryReadiness(record, new Date('2026-08-28T12:01:00.000Z'));
+  it('becomes ready for the future ANAC queue only after valid independent preflight evidence and final signatures', async () => {
+    const { record, evidence } = await operatorSignedRecord();
+    const readiness = await assessEdbRegulatoryReadiness(
+      record,
+      new Date('2026-08-28T12:01:00.000Z'),
+      evidence,
+    );
+    expect(readiness.steps.find((step) => step.id === 'TECHNICAL_SNAPSHOT')?.status).toBe('COMPLETE');
+    expect(readiness.steps.find((step) => step.id === 'PIC_TECHNICAL_ACK')?.status).toBe('COMPLETE');
     expect(readiness.steps.find((step) => step.id === 'OPERATOR_SIGNATURE')?.status).toBe('COMPLETE');
     expect(readiness.steps.find((step) => step.id === 'ANAC_SYNC')?.status).toBe('ACTION_REQUIRED');
     expect(readiness.readyForAnacQueue).toBe(true);
     expect(readiness.nextAction).toBe('ANAC_SYNC');
   });
 
-  it('fails closed when signed flight data changes after the signatures were stored', async () => {
-    const record = await operatorSignedRecord();
+  it('fails closed when signed flight data changes after final signatures were stored', async () => {
+    const { record, evidence } = await operatorSignedRecord();
     record.flight.personsOnBoard = 9;
-    const readiness = await assessEdbRegulatoryReadiness(record, new Date('2026-08-28T12:01:00.000Z'));
+    const readiness = await assessEdbRegulatoryReadiness(
+      record,
+      new Date('2026-08-28T12:01:00.000Z'),
+      evidence,
+    );
     expect(readiness.readyForAnacQueue).toBe(false);
     expect(readiness.steps.find((step) => step.id === 'PIC_FLIGHT_SIGNATURE')?.status).toBe('ACTION_REQUIRED');
     expect(readiness.steps.find((step) => step.id === 'OPERATOR_SIGNATURE')?.status).toBe('ACTION_REQUIRED');
+  });
+
+  it('fails closed when preflight evidence is missing even if final signatures exist', async () => {
+    const { record } = await operatorSignedRecord();
+    const readiness = await assessEdbRegulatoryReadiness(record, new Date('2026-08-28T12:01:00.000Z'));
+    expect(readiness.readyForAnacQueue).toBe(false);
+    expect(readiness.nextAction).toBe('TECHNICAL_SNAPSHOT');
   });
 });

@@ -2,6 +2,7 @@ import type { EdbFlightRecord } from './contracts';
 import { validateForPicFlightSignature } from './regulatory-validation';
 import {
   technicalSituationMatches,
+  verifyPicTechnicalAcknowledgementBinding,
   type EdbPicTechnicalAcknowledgement,
   type EdbTechnicalSituationSnapshot,
 } from './technical-awareness';
@@ -86,17 +87,14 @@ export async function finalizePostflightEdbRecord(params: {
   if (draftRecord.status !== 'DRAFT') throw new Error('EDB_POSTFLIGHT_FINALIZATION_REQUIRES_DRAFT');
   if (draftRecord.source.sourceStageId === null) throw new Error('EDB_POSTFLIGHT_STAGE_REQUIRED');
 
-  if (
-    technicalAcknowledgement.technicalSituationId !== technicalSituation.snapshotId ||
-    technicalAcknowledgement.operatorCompanyId !== technicalSituation.operatorCompanyId ||
-    technicalAcknowledgement.sourceFlightId !== technicalSituation.sourceFlightId
-  ) {
-    throw new Error('EDB_TECHNICAL_ACK_SNAPSHOT_MISMATCH');
+  const acknowledgementBinding = await verifyPicTechnicalAcknowledgementBinding({
+    snapshot: technicalSituation,
+    acknowledgement: technicalAcknowledgement,
+  });
+  if (!acknowledgementBinding.snapshotIntegrity) {
+    throw new Error('EDB_TECHNICAL_SNAPSHOT_HASH_MISMATCH');
   }
-  if (
-    technicalAcknowledgement.signature.canonicalPayloadHashSha256 !==
-    technicalSituation.canonicalSnapshotSha256
-  ) {
+  if (!acknowledgementBinding.matchesSnapshot) {
     throw new Error('EDB_TECHNICAL_ACK_HASH_MISMATCH');
   }
 
