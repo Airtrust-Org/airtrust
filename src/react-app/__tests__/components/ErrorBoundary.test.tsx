@@ -24,9 +24,9 @@ describe('common ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText('Algo deu errado')).toBeInTheDocument();
-    expect(screen.queryByText(/sensitive-debug-detail/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/detalhes técnicos/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Algo deu errado')).toBeTruthy();
+    expect(screen.queryByText(/sensitive-debug-detail/i)).toBeNull();
+    expect(screen.queryByText(/detalhes técnicos/i)).toBeNull();
   });
 
   it('allows technical details when explicitly enabled for development', () => {
@@ -36,7 +36,7 @@ describe('common ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText(/detalhes técnicos/i)).toBeInTheDocument();
-    expect(screen.getByText(/sensitive-debug-detail/i)).toBeInTheDocument();
+    expect(screen.getByText(/detalhes técnicos/i)).toBeTruthy();
+    expect(screen.getByText(/sensitive-debug-detail/i)).toBeTruthy();
   });
 });
