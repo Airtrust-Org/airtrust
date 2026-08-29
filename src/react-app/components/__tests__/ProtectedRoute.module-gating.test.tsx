@@ -17,10 +17,6 @@ vi.mock('@/react-app/i18n/useLanguage', () => ({
   }),
 }));
 
-// This suite exercises module-based gating (empresas.modulos_ativos) and
-// the pre-existing dev-module email allowlist — unrelated to the newer
-// operational-domain RBAC gate, which stays disabled (legacy behavior) by
-// default here.
 vi.mock('@/react-app/hooks/useOperationalAccess', () => ({
   useOperationalAccess: () => ({
     enabled: false,
@@ -80,7 +76,7 @@ describe('ProtectedRoute module gating', () => {
 
     renderAt(pathname as string);
 
-    expect(screen.getByText('Modulo indisponivel')).toBeInTheDocument();
+    expect(screen.getByText('Módulo indisponível')).toBeInTheDocument();
     expect(screen.queryByText('conteudo liberado')).toBeNull();
   });
 
@@ -100,7 +96,7 @@ describe('ProtectedRoute module gating', () => {
 
     renderAt(pathname as string);
 
-    expect(screen.queryByText('Modulo indisponivel')).toBeNull();
+    expect(screen.queryByText('Módulo indisponível')).toBeNull();
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
   });
 
@@ -155,7 +151,7 @@ describe('ProtectedRoute module gating', () => {
 
     renderAt('/sgso');
 
-    expect(screen.queryByText('Modulo indisponivel')).toBeNull();
+    expect(screen.queryByText('Módulo indisponível')).toBeNull();
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
   });
 
