@@ -155,6 +155,9 @@ export default function ConfigurarColunas({ onClose, onSalvar }: Props) {
                 {coluna.label}
               </span>
               <button
+                type="button"
+                role="switch"
+                aria-checked={coluna.visivel}
                 onClick={() => toggleVisibilidade(coluna.id)}
                 aria-label={`${coluna.visivel ? 'Ocultar' : 'Mostrar'} coluna ${coluna.label}`}
                 title={coluna.visivel ? 'Ocultar coluna' : 'Mostrar coluna'}

@@ -32,7 +32,8 @@ vi.mock('../ModalFuncionario', () => ({
   default: () => null,
 }));
 
-vi.mock('../ConfigurarColunas', () => ({
+vi.mock('../ConfigurarColunas', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../ConfigurarColunas')>()),
   default: () => null,
 }));
 
