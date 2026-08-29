@@ -41,8 +41,13 @@ query_count() {
   node - "$out" <<'NODE'
 const fs = require('node:fs');
 const file = process.argv[2];
-const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-const total = Number(parsed?.[0]?.results?.[0]?.total);
+const raw = fs.readFileSync(file, 'utf8');
+const start = raw.indexOf('[');
+const end = raw.lastIndexOf(']');
+const jsonText = (start !== -1 && end > start) ? raw.slice(start, end + 1) : raw;
+const parsed = JSON.parse(jsonText);
+const row = parsed?.[0]?.results?.[0];
+const total = Number(row?.total ?? row?.count ?? row?.TOTAL ?? row?.COUNT ?? row?.['COUNT(*)'] ?? row?.['count(*)'] ?? (row ? Object.values(row)[0] : NaN));
 fs.rmSync(file, { force: true });
 if (!Number.isInteger(total) || total < 0) throw new Error('POSTCONDITION_COUNT_INVALID');
 process.stdout.write(String(total));
