@@ -21,6 +21,8 @@ export type EdbSignatureType =
   | 'PIC_FLIGHT_RECORD'
   | 'OPERATOR_RECORD';
 
+export type EdbSignatureTargetType = 'TECHNICAL_SITUATION' | 'FINAL_RECORD_REVISION';
+
 export type EdbSignatureMethod =
   | 'ASYMMETRIC_DIGITAL_SIGNATURE'
   | 'ELECTRONIC_SIGNATURE_WITH_CERTIFICATE';
@@ -117,6 +119,14 @@ export interface EdbFlightData {
 export interface EdbSignatureProof {
   signatureId: string;
   type: EdbSignatureType;
+  /**
+   * Exact immutable object selected during the signing ceremony. Ceremony-
+   * produced and persisted proofs must carry both fields. They remain optional
+   * temporarily so historical fixtures that predate target binding can still
+   * be migrated without pretending they are production-grade evidence.
+   */
+  targetType?: EdbSignatureTargetType;
+  targetId?: string;
   signer: EdbPersonIdentity;
   signedAt: string;
   canonicalPayloadHashSha256: string;
