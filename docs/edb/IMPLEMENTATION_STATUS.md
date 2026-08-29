@@ -9,12 +9,13 @@ Draft PR: #110
 Schema V2 changes — **defined, not applied**:
 
 - `0477_edb_operational_core.sql` — canonical operational semantics and core eDB persistence;
-- `0478_edb_anac_receipt_integrity.sql` — ANAC outbox/receipt integrity hardening only;
-- `0479_edb_relational_integrity.sql` — diary/volume, discrepancy/maintenance and audit-chain relational hardening.
+- `0478_edb_anac_receipt_integrity.sql` — ANAC outbox/receipt integrity hardening;
+- `0479_edb_relational_integrity.sql` — diary/volume, discrepancy/maintenance and audit relational hardening;
+- `0480_edb_diary_lifecycle_integrity.sql` — diary/volume/integrity-incident lifecycle and immutability hardening.
 
 ## Current architecture
 
-The eDB is built on top of the existing Flight Operations / Controle de Voos source instead of creating a second operational registry.
+The eDB uses the existing Flight Operations / Controle de Voos source instead of creating a parallel operational registry.
 
 Canonical regulatory semantics live directly on:
 
@@ -23,11 +24,9 @@ Canonical regulatory semantics live directly on:
 
 There is deliberately no `cv_voo_etapas_regulatorio` or `cv_voo_tripulantes_regulatorio` companion table.
 
-Signed/regulated evidence is separate because it must be immutable and auditable.
+Signed and regulated evidence is stored separately because it must be immutable, auditable and revision-bound.
 
 ## Preflight / postflight boundary
-
-The technical-awareness event and the final flight record are separate legal/operational moments.
 
 ### Before flight
 
@@ -35,53 +34,45 @@ The technical-awareness event and the final flight record are separate legal/ope
 2. capture the current maintenance/technical situation;
 3. freeze an immutable technical snapshot in `edb_situacoes_tecnicas`;
 4. calculate the canonical SHA-256 hash;
-5. obtain the PIC technical acknowledgement bound to that exact hash and snapshot ID;
-6. store the immutable acknowledgement in `edb_ciencias_tecnicas_pic`.
+5. obtain PIC technical acknowledgement bound to that snapshot ID/hash;
+6. persist immutable acknowledgement in `edb_ciencias_tecnicas_pic`.
 
-If aircraft identity or maintenance content changes, the previous acknowledgement no longer matches and a new snapshot/acknowledgement is required.
-
-Postflight operational fields are not part of this preflight hash.
+Aircraft or maintenance changes invalidate the match and require a new preflight snapshot/acknowledgement. Postflight operational fields are intentionally outside the preflight hash.
 
 ### After flight
 
 1. complete the stage with explicit regulatory semantics;
 2. validate crew, times, landings, cycles, IFR classification, fuel, POB, cargo, occurrences and discrepancies;
-3. verify that aircraft/maintenance still match the acknowledged preflight snapshot;
-4. freeze an immutable final eDB revision referencing `ciencia_tecnica_pic_id`;
+3. verify aircraft/maintenance still match the acknowledged preflight snapshot;
+4. freeze an immutable final revision referencing `ciencia_tecnica_pic_id`;
 5. obtain PIC flight-record signature;
 6. obtain operator/designated-person signature;
-7. queue ANAC transmission only when an official accepted interface is implemented.
+7. queue external transmission only after an official ANAC interface contract exists.
 
-The final-record lifecycle is:
+Final-record lifecycle:
 
 `DRAFT → READY_FOR_PIC_SIGNATURE → PIC_SIGNED → OPERATOR_SIGNED → ANAC_PENDING → ANAC_SYNCED`
 
-`SUPERSEDED` and `CANCELLED` are terminal governance states where applicable.
-
-The PIC technical acknowledgement is intentionally **not** a state of this postflight lifecycle.
+The PIC technical acknowledgement is not a state of the postflight lifecycle.
 
 The persistence layer keeps irreversible boundaries atomic:
 
-- inserting `PIC_FLIGHT_RECORD` and advancing to `PIC_SIGNED` happen in one D1 batch;
-- inserting `OPERATOR_RECORD` and advancing to `OPERATOR_SIGNED` happen in one D1 batch;
-- creating the ANAC outbox item and advancing to `ANAC_PENDING` happen in one D1 batch.
+- `PIC_FLIGHT_RECORD` insert + `PIC_SIGNED` in one D1 batch;
+- `OPERATOR_RECORD` insert + `OPERATOR_SIGNED` in one D1 batch;
+- ANAC outbox insert + `ANAC_PENDING` in one D1 batch.
 
-`ANAC_SYNCED` is deliberately not inferred from receipt existence. A future official ANAC acceptance adapter must define and validate the actual acceptance semantics before that state can be produced by application code.
+The generic state helper cannot produce those three states independently. `ANAC_SYNCED` is also fail-closed: receipt existence alone is not treated as regulatory acceptance; a future official acceptance adapter must define and validate that transition.
 
 ## Record and revision identity
-
-The contract deliberately distinguishes:
 
 - `logicalRecordId` — stable identity for the same flight/stage across corrections;
 - `revisionId` — immutable identity of one specific revision.
 
-Final-record signatures target the exact `revisionId`. The revision ID is also part of the canonical signed payload, so moving a valid proof to another revision fails both target binding and payload integrity verification.
-
-Corrections preserve `logicalRecordId`, create a new `revisionId`, and reference the prior revision through `supersedesRevisionId`.
+Final-record signatures target the exact `revisionId`. The revision ID is also part of the canonical signed payload. Corrections preserve `logicalRecordId`, create a new `revisionId`, reference the prior revision through `supersedesRevisionId`, preserve the historical preflight acknowledgement, and require new postflight signatures.
 
 ## Canonical stage semantics
 
-Migration 0477 adds these exact fields directly to `cv_voo_etapas`:
+0477 adds directly to `cv_voo_etapas`:
 
 - `tempo_voo_diurno_minutos`;
 - `tempo_voo_noturno_minutos`;
@@ -100,11 +91,9 @@ Migration 0477 adds these exact fields directly to `cv_voo_etapas`:
 
 `NULL` means unknown/not completed. `[]` means explicitly none for list JSON fields.
 
-`tempo_ifr_nao_classificado_minutos` preserves unresolved source evidence only. It never satisfies the requirements for IFR actual/simulated classification.
+`tempo_ifr_nao_classificado_minutos` preserves unresolved source evidence only and never satisfies IFR actual/simulated requirements.
 
 ## No-inference rules
-
-The eDB code does not silently promote similarly named legacy fields:
 
 - `starts` is not cycles;
 - `pax` is not POB;
@@ -112,12 +101,13 @@ The eDB code does not silently promote similarly named legacy fields:
 - `combustivel_inicio` is not automatically fuel before engine start;
 - unclassified `tempo_ifr` is not IFR actual or simulated;
 - total minus night is not automatically accepted as day flight time;
-- RDV `divergencias` is not automatically a maintenance technical discrepancy;
-- one flight-level occurrence is not automatically distributed to every stage.
+- RDV `divergencias` is not automatically a maintenance discrepancy;
+- one flight-level occurrence is not automatically distributed to every stage;
+- landing counters are never converted into cycles.
 
-Day/night landing counters may support an explicit landing total, but they are never converted into cycles.
+## Persistence implemented
 
-## Persistence implemented by 0477
+### 0477 core
 
 - `edb_diarios`;
 - `edb_volumes`;
@@ -133,65 +123,77 @@ Day/night landing counters may support an explicit landing total, but they are n
 - `edb_anac_recibos`;
 - `edb_incidentes_integridade`.
 
-Technical snapshots, PIC technical acknowledgements, final revisions, final signatures, discrepancy declarations, maintenance actions and audit events have append-only/immutable database protection.
+0477 protects immutable technical evidence, revision chains, signature ordering, lifecycle ordering and ANAC queue prerequisites.
 
-0477 also installs fail-closed relational/lifecycle guards so direct SQL cannot bypass technical-snapshot binding, revision correction chain, signature order, lifecycle order or ANAC queue prerequisites.
+### 0478 ANAC evidence hardening
 
-## ANAC persistence hardening in 0478
+0478 does not define an ANAC endpoint, payload, response meaning or acceptance rule. It only hardens internal evidence:
 
-0478 intentionally does **not** define an ANAC endpoint, payload contract, response meaning or acceptance rule. It only hardens internal evidence storage:
-
-- outbox identity, revision binding, operation kind, idempotency key and queued payload cannot be rewritten after enqueue;
-- delivery-state fields such as status/attempt counters remain mutable;
+- queued outbox identity/revision/operation/idempotency/payload cannot be rebound;
+- delivery-state fields remain mutable;
 - outbox history cannot be deleted;
-- a receipt must reference an existing outbox item in the same tenant;
-- receipt external ID, timestamp and HTTP-status shape receive basic structural validation;
-- receipts are append-only and cannot be updated or deleted.
+- receipt must reference a same-tenant outbox item;
+- receipt ID/timestamp/HTTP-status shape is structurally validated;
+- receipts are append-only.
 
-A receipt remains evidence of an external response. Its business/regulatory meaning will only be defined when the official ANAC interface contract is available.
+### 0479 relational/audit hardening
 
-## Relational/audit hardening in 0479
+- materializes `voo_id`, `situacao_tecnica_id` and `actor_json` on audit events so the complete hashed event can be rehydrated;
+- enforces volume → diary, discrepancy → revision, maintenance → discrepancy and incident → diary/volume tenant scope;
+- requires RTS to reference a prior corrective action on the same discrepancy and prevents duplicate RTS for that action;
+- enforces one previous-hash chain per diary and rejects stale/forked audit appends;
+- protects immutable volume opening and incident identity.
 
-0479 closes persistence boundaries that were intentionally left for a separate additive change after the 0477 core stabilized:
+The audit repository appends against the current diary hash and rehydrates/verifies the entire cryptographic chain from D1.
 
-- materializes `voo_id`, `situacao_tecnica_id` and `actor_json` on `edb_auditoria_eventos` so an audit event can be fully rehydrated and its hash recomputed;
-- enforces volume → diary tenant scope and prevents rebinding opening identity;
-- enforces discrepancy → immutable revision tenant scope;
-- enforces maintenance action → discrepancy tenant scope;
-- requires RTS approval to reference a prior corrective action on the same discrepancy and prevents duplicate RTS for that action;
-- enforces audit diary/revision/flight/technical-situation scope and one previous-hash chain per diary;
-- enforces integrity-incident diary/volume scope and prevents incident identity rebinding.
+The discrepancy repository creates only against a same-tenant revision and replays persisted deferred/corrective/RTS history through domain rules. Persisted scope, chronology, duplicate action IDs, evidence JSON and corrective-action → RTS binding therefore fail closed on readback as well as write.
 
-The audit repository now appends against the current diary-chain hash and rehydrates/verifies the full cryptographic chain from D1. If two writers race, the database trigger rejects the stale previous hash instead of forking the chain.
+The discrepancy does not duplicate `sourceStageId`; the stage is derived from the immutable revision.
 
-The technical-discrepancy repository now:
+### 0480 diary/lifecycle hardening
 
-- creates a discrepancy only after confirming its revision exists in the same tenant;
-- rehydrates the entire append-only discrepancy/maintenance/RTS history through the domain rules;
-- preserves explicit maintenance references, limitations and actor ANAC code in evidence JSON;
-- validates chronology, duplicate action IDs, corrective-action → RTS binding and persisted scope before exposing a case;
-- never duplicates `sourceStageId` in the discrepancy because the source stage is derived from its immutable revision.
+- diary tenant/aircraft/regulation identity is immutable;
+- diary status is one-way `ATIVO → ENCERRADO`;
+- diary rows cannot be deleted;
+- volume status is one-way `ABERTO → ENCERRADO`;
+- open volumes cannot carry closing evidence;
+- closing timestamp/actor/act are required and internally coherent;
+- once closed, a volume cannot be reopened or have its closing act rewritten;
+- volume rows cannot be deleted;
+- police and ANAC incident references are write-once;
+- incident reference timestamps and reconstitution evidence must be parseable;
+- incident status is one-way `OPEN → RECONSTITUTED|IMPOSSIBLE_TO_RECONSTITUTE`;
+- incident rows cannot be deleted;
+- legacy `CLOSED` remains in the original table check only for forward compatibility and is intentionally unreachable until a closure contract is explicitly modeled.
+
+The diary repository now persists and rehydrates:
+
+- active aircraft diary identity;
+- volume opening/closing acts with the aircraft registration snapshot and exact actor evidence;
+- optimistic volume and diary closure;
+- loss/misplacement/corruption incidents with optional `volumeId` scope;
+- police report, ANAC notification and reconstitution progression with optimistic concurrency.
 
 ## Other implemented foundations
 
 - versioned `edb.regulatory.v1` contract;
 - deterministic canonical JSON and SHA-256 hashing;
-- signature ceremony with explicit intent, authentication evidence, target identity and payload binding;
-- runtime validation when persisted eDB JSON is rehydrated;
-- signature-integrity checks against the immutable revision actually stored in D1;
-- discrepancy → corrective/deferred action → return-to-service workflow;
-- persisted hash-linked audit-chain repository;
+- explicit signature ceremony/authentication/target binding;
+- persisted-record runtime validation before signatures/queueing;
+- signature-integrity checks against the immutable stored revision;
+- discrepancy → deferred/corrective action → RTS workflow;
+- persisted cryptographic audit chain;
 - diary/volume opening and closing governance;
-- retention and onboard-availability policy for the required recent operating period;
-- integrity incident, loss/corruption and reconstitution governance;
-- idempotent ANAC outbox/receipt storage without guessing endpoints or payloads;
-- regulatory-readiness evaluation designed to support a future simple “what is missing for this flight?” UI.
+- retention and onboard-availability policy;
+- integrity loss/corruption/reconstitution governance;
+- idempotent ANAC outbox/receipt storage without guessed external semantics;
+- regulatory-readiness evaluation for a future simple “what is missing for this flight?” UI.
 
 ## Still intentionally disabled
 
 This branch does **not**:
 
-- apply migration 0477, 0478 or 0479 to staging or production;
+- apply 0477, 0478, 0479 or 0480 to staging or production;
 - expose a public eDB Worker route;
 - expose an eDB menu or frontend workflow;
 - enable a production feature flag;
@@ -200,16 +202,16 @@ This branch does **not**:
 - guess an ANAC DBE endpoint or payload contract;
 - claim ANAC authorization, acceptance or homologation.
 
-FRMS and LMS are not part of this branch's runtime scope.
+FRMS and LMS are outside this branch's runtime scope.
 
 ## Required activation gates
 
 1. PR #110 CI and Schema V2 governance green on the final branch head.
-2. Controlled integration against the then-current `main` without importing unrelated behavior into eDB changes.
-3. Governed staging apply of 0477 → 0478 → 0479, with recovery point and postconditions.
+2. Controlled integration against then-current `main` without importing unrelated behavior into eDB changes.
+3. Governed staging apply of `0477 → 0478 → 0479 → 0480`, with recovery point and postconditions.
 4. Tenant-scoped authenticated internal APIs for preflight snapshot/acknowledgement, regulatory-stage completion and readiness.
-5. Shadow UI inside Flight Operations showing only missing data and the next required action.
-6. Staging exercises covering preflight acknowledgement, postflight finalization, signatures, correction, discrepancy/maintenance/RTS, retention/onboard availability and recovery.
+5. Shadow UI inside Flight Operations showing only missing data and next required action.
+6. Staging exercises covering preflight acknowledgement, postflight finalization, signatures, correction, discrepancy/maintenance/RTS, diary/volume lifecycle, integrity incidents, retention/onboard availability and recovery.
 7. Current official ANAC DBE interface/homologation material and credentials before external transmission is implemented.
 8. Accepted security/signature architecture for the intended regulatory scope.
 9. Explicit approval before any production activation.
