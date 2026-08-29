@@ -1,7 +1,9 @@
 import { canonicalJson } from '../../services/edb/canonicalization';
-import type {
-  EdbPicTechnicalAcknowledgement,
-  EdbTechnicalSituationSnapshot,
+import {
+  hashTechnicalSituationContent,
+  hashTechnicalSituationSnapshot,
+  type EdbPicTechnicalAcknowledgement,
+  type EdbTechnicalSituationSnapshot,
 } from '../../services/edb/technical-awareness';
 
 export async function persistEdbTechnicalSituation(params: {
@@ -10,6 +12,21 @@ export async function persistEdbTechnicalSituation(params: {
   createdBy?: number | null;
 }): Promise<void> {
   const { snapshot } = params;
+  const expectedTechnicalHash = await hashTechnicalSituationContent({
+    operatorCompanyId: snapshot.operatorCompanyId,
+    sourceFlightId: snapshot.sourceFlightId,
+    aircraft: snapshot.aircraft,
+    maintenance: snapshot.maintenance,
+  });
+  if (expectedTechnicalHash !== snapshot.technicalContentSha256) {
+    throw new Error('EDB_TECHNICAL_CONTENT_HASH_MISMATCH');
+  }
+
+  const expectedSnapshotHash = await hashTechnicalSituationSnapshot(snapshot);
+  if (expectedSnapshotHash !== snapshot.canonicalSnapshotSha256) {
+    throw new Error('EDB_TECHNICAL_SNAPSHOT_HASH_MISMATCH');
+  }
+
   await params.db
     .prepare(
       `
@@ -36,6 +53,12 @@ export async function persistEdbTechnicalSituation(params: {
     .run();
 }
 
+interface StoredTechnicalSituationBindingRow {
+  id: string;
+  canonical_snapshot_sha256: string;
+  captured_at: string;
+}
+
 export async function appendEdbPicTechnicalAcknowledgement(params: {
   db: D1Database;
   acknowledgement: EdbPicTechnicalAcknowledgement;
@@ -46,6 +69,32 @@ export async function appendEdbPicTechnicalAcknowledgement(params: {
   const signature = acknowledgement.signature;
   if (signature.type !== 'PIC_TECHNICAL_ACK') {
     throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_TYPE_INVALID');
+  }
+
+  const situation = await params.db
+    .prepare(
+      `
+      SELECT id, canonical_snapshot_sha256, captured_at
+      FROM edb_situacoes_tecnicas
+      WHERE id = ? AND empresa_id = ? AND voo_id = ?
+      LIMIT 1
+    `,
+    )
+    .bind(
+      acknowledgement.technicalSituationId,
+      acknowledgement.operatorCompanyId,
+      acknowledgement.sourceFlightId,
+    )
+    .first<StoredTechnicalSituationBindingRow>();
+
+  if (!situation) {
+    throw new Error('EDB_TECHNICAL_SNAPSHOT_NOT_FOUND_OR_SCOPE_MISMATCH');
+  }
+  if (situation.canonical_snapshot_sha256 !== signature.canonicalPayloadHashSha256) {
+    throw new Error('EDB_TECHNICAL_ACK_HASH_MISMATCH');
+  }
+  if (Date.parse(signature.signedAt) < Date.parse(situation.captured_at)) {
+    throw new Error('EDB_TECHNICAL_ACK_PREDATES_SNAPSHOT');
   }
 
   await params.db
@@ -93,6 +142,15 @@ export interface EdbTechnicalSituationRow {
   created_at: string;
 }
 
+export interface EdbPicTechnicalAcknowledgementRow {
+  id: string;
+  empresa_id: number;
+  situacao_tecnica_id: string;
+  voo_id: number;
+  canonical_snapshot_sha256: string;
+  signed_at: string;
+}
+
 export async function getLatestEdbTechnicalSituation(params: {
   db: D1Database;
   empresaId: number;
@@ -113,4 +171,31 @@ export async function getLatestEdbTechnicalSituation(params: {
     )
     .bind(params.empresaId, params.vooId)
     .first<EdbTechnicalSituationRow>();
+}
+
+export async function assertEdbPicTechnicalAcknowledgementScope(params: {
+  db: D1Database;
+  empresaId: number;
+  vooId: number;
+  acknowledgementId: string;
+  expectedCanonicalSnapshotSha256: string;
+}): Promise<EdbPicTechnicalAcknowledgementRow> {
+  const row = await params.db
+    .prepare(
+      `
+      SELECT id, empresa_id, situacao_tecnica_id, voo_id,
+             canonical_snapshot_sha256, signed_at
+      FROM edb_ciencias_tecnicas_pic
+      WHERE id = ? AND empresa_id = ? AND voo_id = ?
+      LIMIT 1
+    `,
+    )
+    .bind(params.acknowledgementId, params.empresaId, params.vooId)
+    .first<EdbPicTechnicalAcknowledgementRow>();
+
+  if (!row) throw new Error('EDB_TECHNICAL_ACK_NOT_FOUND_OR_SCOPE_MISMATCH');
+  if (row.canonical_snapshot_sha256 !== params.expectedCanonicalSnapshotSha256) {
+    throw new Error('EDB_TECHNICAL_ACK_PERSISTED_HASH_MISMATCH');
+  }
+  return row;
 }

@@ -4,6 +4,7 @@ import type {
   EdbLifecycleStatus,
   EdbSignatureProof,
 } from '../../services/edb/contracts';
+import { assertEdbPicTechnicalAcknowledgementScope } from './edb-technical-awareness-repository';
 
 export interface PersistEdbDraftRevisionParams {
   empresaId: number;
@@ -47,9 +48,21 @@ export async function persistEdbDraftRevision(
   if (!params.technicalAcknowledgementId.trim()) {
     throw new Error('eDB revision requires the preflight PIC technical acknowledgement');
   }
-  if (!params.record.signatures.picTechnicalAcknowledgement) {
+  const technicalProof = params.record.signatures.picTechnicalAcknowledgement;
+  if (!technicalProof) {
     throw new Error('eDB revision payload requires the preflight PIC technical acknowledgement evidence');
   }
+  if (technicalProof.type !== 'PIC_TECHNICAL_ACK') {
+    throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_TYPE_INVALID');
+  }
+
+  await assertEdbPicTechnicalAcknowledgementScope({
+    db,
+    empresaId: params.empresaId,
+    vooId: params.record.source.sourceFlightId,
+    acknowledgementId: params.technicalAcknowledgementId,
+    expectedCanonicalSnapshotSha256: technicalProof.canonicalPayloadHashSha256,
+  });
 
   const revisionId = params.revisionId ?? newId('edbrev');
   const payload = canonicalJson(params.record);
