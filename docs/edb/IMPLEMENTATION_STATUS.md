@@ -6,94 +6,151 @@ Branch: `feat/edb-operational-core-0477`
 
 Draft PR: #110
 
-The original isolated foundation from #97 has been transplanted onto current `main` and extended with governed migration 0477, explicit regulatory flight semantics and append-only persistence. Runtime activation remains intentionally disabled.
+Migration/Schema V2 change: `0477_edb_operational_core.sql` — **defined, not applied**.
 
-## Implemented
+## Current architecture
 
-### Regulatory contract and validation
+The eDB is built on top of the existing Flight Operations / Controle de Voos source instead of creating a second operational registry.
 
-- versioned `edb.regulatory.v1` contract;
-- Resolução 773 flight-record fields represented explicitly;
-- technical-situation acknowledgement, PIC flight signature and operator signature kept as separate intents;
-- operator-signature deadline model for RBAC 121 / RBAC 135 / other;
-- deterministic canonical JSON + SHA-256 payload hashing;
-- signing-ceremony and signature-proof binding foundation;
-- lifecycle, correction/supersession, diary-volume, retention and 30-day onboard-availability policies;
-- discrepancy → maintenance action/deferred action → RTS workflow;
-- hash-linked audit-chain foundation;
-- loss/misplacement/corruption and reconstitution governance.
+Canonical regulatory semantics live directly on:
 
-### 0477 explicit regulatory semantics
+- `cv_voo_etapas` for stage/flight values;
+- `cv_voo_tripulantes` for the explicit ANAC function code.
 
-The preferred eDB path no longer depends on interpreting similarly named legacy fields. New one-to-one companion data uses explicit names:
+There is deliberately no `cv_voo_etapas_regulatorio` or `cv_voo_tripulantes_regulatorio` companion table.
+
+Signed/regulated evidence is separate because it must be immutable and auditable.
+
+## Preflight / postflight boundary
+
+The technical-awareness event and the final flight record are separate legal/operational moments.
+
+### Before flight
+
+1. identify the aircraft selected for the flight;
+2. capture the current maintenance/technical situation;
+3. freeze an immutable technical snapshot in `edb_situacoes_tecnicas`;
+4. calculate the canonical SHA-256 hash;
+5. obtain the PIC technical acknowledgement bound to that exact hash;
+6. store the immutable acknowledgement in `edb_ciencias_tecnicas_pic`.
+
+If aircraft identity or maintenance content changes, the previous acknowledgement no longer matches and a new snapshot/acknowledgement is required.
+
+Postflight operational fields are not part of this preflight hash.
+
+### After flight
+
+1. complete the stage with explicit regulatory semantics;
+2. validate crew, times, landings, cycles, IFR classification, fuel, POB, cargo, occurrences and discrepancies;
+3. verify that aircraft/maintenance still match the acknowledged preflight snapshot;
+4. freeze an immutable final eDB revision referencing `ciencia_tecnica_pic_id`;
+5. obtain PIC flight-record signature;
+6. obtain operator/designated-person signature;
+7. queue ANAC transmission only when an official accepted interface is implemented.
+
+The final-record lifecycle is:
+
+`DRAFT → READY_FOR_PIC_SIGNATURE → PIC_SIGNED → OPERATOR_SIGNED → ANAC_PENDING → ANAC_SYNCED`
+
+`SUPERSEDED` and `CANCELLED` are terminal governance states where applicable.
+
+The PIC technical acknowledgement is intentionally **not** a state of this postflight lifecycle.
+
+## Canonical stage semantics
+
+Migration 0477 adds these exact fields directly to `cv_voo_etapas`:
 
 - `tempo_voo_diurno_minutos`;
 - `tempo_voo_noturno_minutos`;
 - `tempo_voo_total_minutos`;
 - `tempo_ifr_real_minutos`;
 - `tempo_ifr_simulado_minutos`;
+- `tempo_ifr_nao_classificado_minutos`;
 - `pousos_total`;
 - `ciclos`;
 - `combustivel_antes_partida_motor`;
 - `pessoas_a_bordo_total`;
 - `carga_regulatoria_kg`;
-- `ocorrencias_json`;
-- `codigo_funcao_anac`.
+- `ocorrencias_json`.
 
-`NULL` remains “unknown/not completed”. JSON `[]` means explicitly none.
+`cv_voo_tripulantes` receives `codigo_funcao_anac` plus provenance/validation metadata.
 
-Legacy operational values are still visible to the shadow adapter but are not automatically promoted to regulatory values.
+`NULL` means unknown/not completed. `[]` means explicitly none for list JSON fields.
 
-### Persistence core
+`tempo_ifr_nao_classificado_minutos` preserves unresolved source evidence only. It never satisfies the requirements for IFR actual/simulated classification.
 
-Migration 0477 adds disabled/inert storage for:
+## No-inference rules
 
-- explicit stage and crew regulatory companions;
-- diary and volume identity;
-- immutable record revisions;
-- separate lifecycle state;
-- append-only signatures;
-- technical discrepancies;
-- maintenance actions / RTS;
-- append-only audit events;
-- ANAC outbox and external receipts;
-- integrity incidents and reconstitution evidence.
+The eDB code does not silently promote similarly named legacy fields:
 
-Record revisions, signatures, discrepancies, maintenance actions and audit events have database append-only protection. Corrections create new revisions rather than rewriting signed payloads.
+- `starts` is not cycles;
+- `pax` is not POB;
+- `payload` is not automatically regulatory cargo;
+- `combustivel_inicio` is not automatically fuel before engine start;
+- unclassified `tempo_ifr` is not IFR actual or simulated;
+- total minus night is not automatically accepted as day flight time;
+- RDV `divergencias` is not automatically a maintenance technical discrepancy;
+- one flight-level occurrence is not automatically distributed to every stage.
 
-### Code path
+Day/night landing counters may support an explicit landing total, but they are never converted into cycles.
 
-The current preferred internal flow is:
+## Persistence implemented by 0477
 
-1. read existing Controle de Voos/RDV structure;
-2. read explicit 0477 regulatory companion rows;
-3. validate exact semantics;
-4. overlay only explicit regulatory values;
-5. keep unresolved `NULL` values as readiness blockers;
-6. create a canonical immutable draft revision;
-7. progress lifecycle in the separate state table;
-8. append signature/audit evidence;
-9. queue ANAC transmission only after an official interface adapter exists.
+- `edb_diarios`;
+- `edb_volumes`;
+- `edb_situacoes_tecnicas`;
+- `edb_ciencias_tecnicas_pic`;
+- `edb_registro_revisoes`;
+- `edb_registro_estado`;
+- `edb_assinaturas` for final-record signatures only;
+- `edb_discrepancias_tecnicas`;
+- `edb_acoes_manutencao`;
+- `edb_auditoria_eventos`;
+- `edb_anac_outbox`;
+- `edb_anac_recibos`;
+- `edb_incidentes_integridade`.
 
-## Still intentionally disabled / not implemented
+Technical snapshots, PIC technical acknowledgements, final revisions, final signatures, discrepancy declarations, maintenance actions and audit events have append-only/immutable database protection.
 
-- no public eDB Worker route registered;
-- no frontend/menu exposed;
-- no production feature flag enabled;
-- migration 0477 not applied to staging or production;
-- no private-key/certificate secret storage;
-- no guessed ANAC DBE endpoint or payload contract;
-- no production claim of ANAC authorization/homologation.
+Corrections create a new revision. A correction preserves the historical preflight acknowledgement for the flight that actually occurred and requires new postflight signatures; it must never fabricate a new preflight acknowledgement after the event.
 
-## Required gates before activation
+## Other implemented foundations
 
-1. PR #110 fast/heavy CI and Schema V2 governance green.
-2. Governed 0477 staging apply with recovery point and postconditions.
-3. Authenticated tenant-scoped internal APIs for regulatory-stage completion and eDB readiness.
-4. Shadow Flight Operations UI showing only missing regulatory data / next action.
-5. Staging exercises for acknowledgement, signatures, correction, discrepancy/maintenance/RTS, 30-day availability and recovery.
-6. Current official ANAC DBE homologation contract/credentials before implementing external transmission.
-7. Security/signature architecture accepted for the intended Resolução 458 scope.
-8. Explicit approval before production activation.
+- versioned `edb.regulatory.v1` contract;
+- deterministic canonical JSON and SHA-256 hashing;
+- signature ceremony with explicit intent, authentication evidence and payload binding;
+- signature-integrity checks;
+- discrepancy → corrective/deferred action → return-to-service workflow;
+- hash-linked audit-chain model;
+- diary/volume opening and closing governance;
+- retention and onboard-availability policy for the required recent operating period;
+- integrity incident, loss/corruption and reconstitution governance;
+- idempotent ANAC outbox/receipt storage without guessing endpoints or payloads;
+- regulatory-readiness evaluation designed to support a future simple “what is missing for this flight?” UI.
 
-See `docs/edb/OPERATIONAL_CORE_0477.md` for the 0477 architecture and naming decisions.
+## Still intentionally disabled
+
+This branch does **not**:
+
+- apply migration 0477 to staging or production;
+- expose a public eDB Worker route;
+- expose an eDB menu or frontend workflow;
+- enable a production feature flag;
+- write real operational eDB data;
+- store private signing keys;
+- guess an ANAC DBE endpoint or payload contract;
+- claim ANAC authorization, acceptance or homologation.
+
+FRMS and LMS are not part of this branch's runtime scope.
+
+## Required activation gates
+
+1. PR #110 CI and Schema V2 governance green on the final branch head.
+2. Controlled rebase/integration against the then-current `main` without importing unrelated behavior into eDB changes.
+3. Governed 0477 staging apply with recovery point and postconditions.
+4. Tenant-scoped authenticated internal APIs for preflight snapshot/acknowledgement, regulatory-stage completion and readiness.
+5. Shadow UI inside Flight Operations showing only missing data and the next required action.
+6. Staging exercises covering preflight acknowledgement, postflight finalization, signatures, correction, discrepancy/maintenance/RTS, retention/onboard availability and recovery.
+7. Current official ANAC DBE interface/homologation material and credentials before external transmission is implemented.
+8. Accepted security/signature architecture for the intended regulatory scope.
+9. Explicit approval before any production activation.

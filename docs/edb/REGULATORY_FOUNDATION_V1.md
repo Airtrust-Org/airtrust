@@ -1,19 +1,17 @@
 # eDB Regulatory Foundation V1
 
-Status: **design/code foundation only — no runtime route, no migration, no deploy**.
+Status: **design + code + unapplied Schema V2 foundation; no production activation**.
 
-This document defines the first isolated foundation for a future AirTrust Electronic Journey Log / Diário de Bordo Digital (eDB/DBE). It deliberately does not alter the operational Controle de Voos/RDV flow while FRMS and LMS workstreams are being completed.
+This document defines the regulatory architecture for a future AirTrust Electronic Journey Log / Diário de Bordo Digital (eDB/DBE). It does not claim that the implementation is authorized, accepted or homologated by ANAC.
 
 ## 1. Regulatory baseline
 
-Primary current references used by this foundation:
+Primary references used by this foundation:
 
-- ANAC Resolução nº 773, de 25/06/2025, effective 01/01/2026 — Diário de Bordo.
-  - https://www.anac.gov.br/assuntos/legislacao/legislacao-1/resolucoes/2025/resolucao-773
+- ANAC Resolução nº 773, de 25/06/2025, effective 01/01/2026 — Diário de Bordo;
 - ANAC Resolução nº 458, de 20/12/2017, compiled text — computerized systems for mandatory records.
-  - https://www.anac.gov.br/assuntos/legislacao/legislacao-1/resolucoes/2017/resolucao-no-458-20-12-2017
 
-The system must not claim that a record is official, homologated, accepted or transmitted to ANAC merely because it conforms to this internal contract. Use of the digital means for mandatory records requires the applicable ANAC authorization/acceptance process.
+The software contract and audit controls are implementation foundations only. Regulatory use remains subject to the applicable ANAC acceptance/authorization/homologation process and the current external interface requirements.
 
 ## 2. Master-data decision
 
@@ -24,15 +22,13 @@ The operator/company remains the master of its operational registration in AirTr
 - crew;
 - operational flight data.
 
-**Automatic RAB synchronization is not a dependency of the eDB architecture.** The eDB takes the aircraft selected from the company-controlled master data and freezes the required identification in the regulatory snapshot.
+Automatic RAB synchronization is not a dependency of the eDB architecture. External official sources may later validate company data, but must not silently replace the operator-controlled master data.
 
-External official sources may later be offered as optional validation, but must not silently replace company master data.
+## 3. Regulatory information model
 
-## 3. Resolução 773 information model
+### Diary / aircraft identity
 
-The `edb.regulatory.v1` contract represents:
-
-### Diary/aircraft identification — art. 5
+The frozen regulatory identity supports:
 
 - manufacturer;
 - model;
@@ -41,13 +37,16 @@ The `edb.regulatory.v1` contract represents:
 - owner(s);
 - operator(s).
 
-### Per-flight record — art. 6
+### Per-flight record
+
+The `edb.regulatory.v1` contract represents:
 
 - crew;
 - date;
 - origin/destination;
 - engine start, takeoff, landing and engine shutdown;
-- total landings and cycles;
+- total landings;
+- cycles;
 - day, night and total flight time;
 - actual and simulated IFR time;
 - total fuel before engine start;
@@ -55,112 +54,144 @@ The `edb.regulatory.v1` contract represents:
 - cargo;
 - nature of flight;
 - occurrences;
-- technical discrepancies and person who detected them.
+- technical discrepancies and the person who detected them.
 
-`null` is intentionally different from zero or an empty list. For example:
+`null` is intentionally different from zero or an empty list.
 
-- `ifrActualMinutes = 0` means explicitly no actual IFR time;
-- `ifrActualMinutes = null` means not yet recorded/classified;
-- `technicalDiscrepancies = []` means explicitly none;
-- `technicalDiscrepancies = null` means the field has not yet been completed.
+Examples:
 
-### Technical situation before flight — art. 9
+- `ifrActualMinutes = 0`: explicitly no actual IFR time;
+- `ifrActualMinutes = null`: not yet recorded/classified;
+- `technicalDiscrepancies = []`: explicitly none;
+- `technicalDiscrepancies = null`: not yet completed.
 
-The contract includes a technical snapshot containing:
+## 4. Canonical operational semantics
 
+Because the module has no production eDB history yet, 0477 corrects ambiguous naming at the source instead of introducing a second operational dataset.
+
+Canonical fields live directly on `cv_voo_etapas`; `codigo_funcao_anac` lives directly on `cv_voo_tripulantes`.
+
+The legacy values below are not regulatory aliases:
+
+| Operational/source concept | Regulatory concept | Decision |
+|---|---|---|
+| `starts` | cycles | do not map |
+| `pax` | POB | do not map; POB includes crew/extras |
+| unclassified `tempo_ifr` | IFR actual/simulated | preserve as unclassified evidence only |
+| total minus night | day time | do not infer |
+| `combustivel_inicio` | fuel before engine start | do not map without exact semantic proof |
+| `payload` | cargo | do not map without exact semantic proof |
+| RDV `divergencias` | technical discrepancy | do not map |
+| one RDV occurrence across several stages | per-stage occurrence | do not distribute automatically |
+
+Landing totals and cycles are independent. Explicit landing counters never create regulatory cycles.
+
+## 5. Technical situation before flight
+
+The preflight technical-awareness flow is independent from the postflight final record.
+
+It freezes:
+
+- aircraft identity;
 - last maintenance intervention type/date/RTS approver;
 - next maintenance intervention type;
 - airframe hours planned for the next intervention;
-- separate PIC technical-awareness signature.
+- capture timestamp and source scope.
 
-### Signatures — arts. 7 and 10
+The snapshot is canonicalized and hashed with SHA-256. The PIC acknowledgement is bound to that exact snapshot hash and stored as immutable evidence.
 
-Three independent signature intents are modeled:
+If aircraft identity or maintenance content changes, the technical-content hash changes and a new acknowledgement is required before flight.
 
-1. `PIC_TECHNICAL_ACK` — before flight, for the technical-situation acknowledgement;
-2. `PIC_FLIGHT_RECORD` — end of flight/duty, for the flight record;
-3. `OPERATOR_RECORD` — operator/designated-person signature after PIC.
+Postflight operational data is deliberately excluded from this hash so legitimate completion of flight data does not invalidate the preflight event.
 
-Operator signature deadline rules are encoded as:
+## 6. Postflight finalization
 
-- RBAC 121: 2 days;
-- RBAC 135: 15 days;
-- other operators: 30 days.
+After flight, the finalizer requires:
 
-A late signature is still technically possible but is reported as a regulatory deadline warning; the system must not prevent remediation merely because the deadline has passed.
+- the preflight technical acknowledgement for the same company/flight/snapshot;
+- unchanged aircraft/maintenance content relative to the acknowledged snapshot;
+- acknowledgement before engine start when engine-start time is available;
+- complete regulatory flight data;
+- explicit source-stage provenance.
 
-## 4. Resolução 458 security direction
+Only then can an immutable final revision be persisted.
 
-The foundation prepares a deterministic canonical payload and SHA-256 hash for each signature intent. This is only one building block.
+Each final revision stores a reference to the preflight PIC technical acknowledgement used for the actual flight.
 
-Before a production regulatory signature is enabled, the implementation still needs the complete accepted cryptographic/signature architecture required for the authorized scope, including asymmetric cryptography, signature/certificate controls, auditability, secure archival, access control, backup/continuity and non-repudiation controls.
+## 7. Signature separation
 
-No private key may ever be stored inside an eDB record or audit payload.
+The architecture has three distinct intents:
 
-## 5. RDV → eDB shadow projection
+1. `PIC_TECHNICAL_ACK` — before flight, bound to the technical snapshot;
+2. `PIC_FLIGHT_RECORD` — after flight/end of record completion, bound to the final flight payload;
+3. `OPERATOR_RECORD` — after the PIC flight-record signature.
 
-The existing Controle de Voos/RDV remains operational and non-regulated. The shadow projector only copies fields whose semantics are sufficiently explicit and exposes gaps for everything else.
+The signature ceremony foundation requires content review, explicit intent, authentication evidence and exact payload-hash binding. Cryptographic proof references may be stored; private signing keys must not be stored in eDB records or audit payloads.
 
-### Safe/structural projection in V1
+Operator-signature deadline evaluation is modeled separately by regulation and produces warnings when remediation is late rather than making a late corrective action impossible.
 
-- flight/RDV source identifiers and version;
-- company/operator scope;
-- company-controlled aircraft snapshot supplied to the projector;
-- date and nature;
-- per-stage origin/destination;
-- per-stage engine start/takeoff/landing/shutdown timestamps;
-- total/night duration when already normalized with those exact semantics;
-- day/night landings summed to a total when both are explicitly available;
-- stage crew supplied with explicit identity/operational role;
-- a single-RDV occurrence only when there is exactly one stage.
+## 8. Final-record lifecycle
 
-### Explicitly NOT inferred
+The final revision lifecycle is:
 
-| Current operational concept | eDB field | V1 decision |
-|---|---|---|
-| `etapa.starts` | cycles | **Do not map** |
-| unclassified `tempo_ifr` | IFR actual/simulated | **Do not map** |
-| total - night | day time | **Do not infer** |
-| `combustivel_inicio` | fuel before engine start | **Do not map until semantics are confirmed** |
-| `pax` | POB | **Do not map** — POB includes crew/extras |
-| `payload` | cargo | **Do not map until semantics are confirmed** |
-| RDV `divergencias` | technical discrepancy | **Do not map** |
-| one RDV occurrence across several stages | per-flight occurrence | **Do not distribute automatically** |
+`DRAFT → READY_FOR_PIC_SIGNATURE → PIC_SIGNED → OPERATOR_SIGNED → ANAC_PENDING → ANAC_SYNCED`
 
-This fail-closed behavior is intentional. Missing regulatory data must be visible as a gap instead of being manufactured from a similar-looking operational field.
+The preflight PIC technical acknowledgement is not a final-record lifecycle state.
 
-## 6. Lifecycle direction
+A signed record is never silently rewritten. Correction creates a new revision referencing the prior one and carrying the correction reason. The historical preflight acknowledgement is retained; new postflight signatures are required for the corrected revision.
 
-The contract reserves the following states:
+## 9. Technical discrepancy / maintenance chain
 
-`DRAFT → READY_FOR_PIC_TECHNICAL_ACK → READY_FOR_PIC_SIGNATURE → PIC_SIGNED → OPERATOR_SIGNED → ANAC_PENDING → ANAC_SYNCED`
+The foundation models:
 
-Correction is append-only in the target design: a signed record is never rewritten as if the prior content had not existed. A correction creates a new revision referencing the superseded record and carrying a correction reason, with the complete historical/audit evidence retained.
+technical discrepancy
 
-Persistence/event semantics for this lifecycle are intentionally deferred to a later isolated slice because they require schema work.
+→ corrective action or authorized deferment
 
-## 7. Isolation from active workstreams
+→ return-to-service approval/evidence.
 
-This slice must remain safe to carry while other production work continues:
+Declarations and maintenance evidence are append-only so later action does not erase what was originally observed.
 
-- no D1 migration;
-- no Schema V2 change;
-- no Worker route registration;
-- no React route/menu;
-- no feature enabled in staging/production;
-- no edits to FRMS files;
-- no edits to LMS files;
-- no edits to current Controle de Voos runtime files.
+Operational `divergencias` are not automatically classified as maintenance discrepancies.
 
-Only new `services/edb`, tests and documentation are introduced.
+## 10. Diary, volume, retention and onboard availability
 
-## 8. Next implementation slices — only after current production priorities are clear
+The foundation supports one active diary per aircraft/operator scope, with controlled volume opening/closing and retention metadata.
 
-1. Add a read-only adapter from the actual Controle de Voos/RDV repository into the normalized shadow source.
-2. Add company-master aircraft completeness checks for the art. 5 fields — no RAB dependency.
-3. Decide where the missing art. 6 fields are collected in the UX, avoiding duplicate flight entry.
-4. Model technical discrepancies → maintenance action/deferred action → RTS.
-5. Add append-only persistence/schema behind a disabled feature flag.
-6. Implement the accepted cryptographic signature flow and audit evidence.
-7. Add ANAC DBE adapter only against the current official OpenAPI/technical contract supplied by ANAC; do not reconstruct the API from unofficial copies.
-8. Run shadow comparison and homologation before any claim of official digital Diário de Bordo.
+Availability logic is designed to identify the volumes necessary to cover the required recent operational period on board without pretending every historical volume must be carried physically/electronically at all times.
+
+Loss, misplacement or corruption can be recorded with notification/reconstitution evidence while preserving the audit history of the incident.
+
+## 11. Integrity and audit
+
+Implemented foundations include:
+
+- deterministic canonical JSON;
+- SHA-256 content hashes;
+- exact signature/hash binding;
+- append-only technical snapshots and acknowledgements;
+- immutable final revisions;
+- append-only final signatures;
+- hash-linked audit events;
+- append-only discrepancy/maintenance evidence;
+- optimistic concurrency for canonical source writes and lifecycle changes;
+- idempotent future ANAC outbox/receipt storage;
+- correction by superseding revision instead of overwrite.
+
+These controls support integrity/non-repudiation objectives but do not by themselves constitute ANAC approval of the complete electronic-signature architecture.
+
+## 12. ANAC transmission boundary
+
+No endpoint, payload, credential model or receipt contract is guessed.
+
+`edb_anac_outbox` and `edb_anac_recibos` provide an inert persistence pattern so an official adapter can later be implemented idempotently after the current ANAC interface/homologation material is available.
+
+Until that gate is satisfied, `ANAC_PENDING` / `ANAC_SYNCED` are architectural states only and no production transmission is enabled.
+
+## 13. Isolation and activation
+
+Migration 0477 is defined but unapplied. The branch has no public eDB Worker route, no eDB frontend/menu, no enabled production feature flag and no real eDB operational write path.
+
+FRMS/LMS runtime behavior is outside this branch's scope.
+
+Activation must be staged and explicit: CI → current-main integration → governed staging schema apply → authenticated APIs → shadow UI → staging exercises → regulatory/security acceptance → production approval.
