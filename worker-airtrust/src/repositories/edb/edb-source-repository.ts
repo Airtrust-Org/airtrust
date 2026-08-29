@@ -6,7 +6,7 @@ import type {
 const REGULATORY_STAGE_SELECT = `
   id, empresa_id, voo_id, id AS etapa_id,
   tempo_voo_diurno_minutos, tempo_voo_noturno_minutos, tempo_voo_total_minutos,
-  tempo_ifr_real_minutos, tempo_ifr_simulado_minutos,
+  tempo_ifr_real_minutos, tempo_ifr_simulado_minutos, tempo_ifr_nao_classificado_minutos,
   pousos_total, ciclos, combustivel_antes_partida_motor,
   pessoas_a_bordo_total, carga_regulatoria_kg, ocorrencias_json,
   semantica_regulatoria_origem AS origem_dados,

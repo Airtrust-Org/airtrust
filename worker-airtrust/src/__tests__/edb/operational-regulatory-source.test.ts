@@ -19,6 +19,7 @@ function row(
     tempo_voo_total_minutos: 60,
     tempo_ifr_real_minutos: 10,
     tempo_ifr_simulado_minutos: 5,
+    tempo_ifr_nao_classificado_minutos: 0,
     pousos_total: 1,
     ciclos: 1,
     combustivel_antes_partida_motor: 900,
@@ -63,9 +64,18 @@ describe('explicit Controle de Voos regulatory source', () => {
     ).toThrow('cannot exceed total flight time');
   });
 
-  it('maps only explicit regulatory fields into the eDB source object', () => {
+  it('rejects invalid unclassified IFR evidence without promoting it', () => {
+    expect(() =>
+      validateExplicitRegulatoryStage(row({ tempo_ifr_nao_classificado_minutos: -1 })),
+    ).toThrow('tempo_ifr_nao_classificado_minutos');
+  });
+
+  it('maps only explicit regulatory fields and preserves unclassified IFR as evidence', () => {
     const result = buildExplicitRegulatoryStageData({
-      row: row({ ocorrencias_json: '["Occurrence A"]' }),
+      row: row({
+        ocorrencias_json: '["Occurrence A"]',
+        tempo_ifr_nao_classificado_minutos: 7,
+      }),
       technicalDiscrepancies: [
         {
           description: 'Hydraulic leak indication',
@@ -84,6 +94,7 @@ describe('explicit Controle de Voos regulatory source', () => {
       totalMinutes: 60,
       ifrActualMinutes: 10,
       ifrSimulatedMinutes: 5,
+      ifrUnclassifiedMinutes: 7,
       landingsTotal: 1,
       cycles: 1,
       fuelBeforeEngineStart: 900,

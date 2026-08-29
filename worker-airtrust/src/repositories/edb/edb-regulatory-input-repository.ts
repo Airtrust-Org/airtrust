@@ -10,6 +10,7 @@ export interface RegulatoryStageWriteInput {
   tempo_voo_total_minutos: number | null;
   tempo_ifr_real_minutos: number | null;
   tempo_ifr_simulado_minutos: number | null;
+  tempo_ifr_nao_classificado_minutos: number | null;
   pousos_total: number | null;
   ciclos: number | null;
   combustivel_antes_partida_motor: number | null;
@@ -46,6 +47,7 @@ function bindStageValues(input: RegulatoryStageWriteInput): unknown[] {
     input.tempo_voo_total_minutos,
     input.tempo_ifr_real_minutos,
     input.tempo_ifr_simulado_minutos,
+    input.tempo_ifr_nao_classificado_minutos,
     input.pousos_total,
     input.ciclos,
     input.combustivel_antes_partida_motor,
@@ -85,6 +87,7 @@ export async function createControleVoosRegulatoryStage(params: {
           tempo_voo_total_minutos = ?,
           tempo_ifr_real_minutos = ?,
           tempo_ifr_simulado_minutos = ?,
+          tempo_ifr_nao_classificado_minutos = ?,
           pousos_total = ?,
           ciclos = ?,
           combustivel_antes_partida_motor = ?,
@@ -152,6 +155,7 @@ export async function replaceControleVoosRegulatoryStage(params: {
           tempo_voo_total_minutos = ?,
           tempo_ifr_real_minutos = ?,
           tempo_ifr_simulado_minutos = ?,
+          tempo_ifr_nao_classificado_minutos = ?,
           pousos_total = ?,
           ciclos = ?,
           combustivel_antes_partida_motor = ?,

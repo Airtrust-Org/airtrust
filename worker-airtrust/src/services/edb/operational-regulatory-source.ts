@@ -16,6 +16,8 @@ export interface ControleVoosEtapaRegulatoriaRow {
   tempo_voo_total_minutos: number | null;
   tempo_ifr_real_minutos: number | null;
   tempo_ifr_simulado_minutos: number | null;
+  /** Preserved source IFR that has not yet been classified as actual/simulated. */
+  tempo_ifr_nao_classificado_minutos: number | null;
   pousos_total: number | null;
   ciclos: number | null;
   combustivel_antes_partida_motor: number | null;
@@ -47,6 +49,8 @@ export interface EdbExplicitRegulatoryStageData {
   totalMinutes: number | null;
   ifrActualMinutes: number | null;
   ifrSimulatedMinutes: number | null;
+  /** Evidence only; it never satisfies actual/simulated IFR requirements. */
+  ifrUnclassifiedMinutes: number | null;
   landingsTotal: number | null;
   cycles: number | null;
   fuelBeforeEngineStart: number | null;
@@ -95,6 +99,7 @@ export function validateExplicitRegulatoryStage(
     ['tempo_voo_total_minutos', row.tempo_voo_total_minutos],
     ['tempo_ifr_real_minutos', row.tempo_ifr_real_minutos],
     ['tempo_ifr_simulado_minutos', row.tempo_ifr_simulado_minutos],
+    ['tempo_ifr_nao_classificado_minutos', row.tempo_ifr_nao_classificado_minutos],
     ['combustivel_antes_partida_motor', row.combustivel_antes_partida_motor],
     ['carga_regulatoria_kg', row.carga_regulatoria_kg],
   ] as const) {
@@ -144,6 +149,7 @@ export function buildExplicitRegulatoryStageData(params: {
     totalMinutes: params.row.tempo_voo_total_minutos,
     ifrActualMinutes: params.row.tempo_ifr_real_minutos,
     ifrSimulatedMinutes: params.row.tempo_ifr_simulado_minutos,
+    ifrUnclassifiedMinutes: params.row.tempo_ifr_nao_classificado_minutos,
     landingsTotal: params.row.pousos_total,
     cycles: params.row.ciclos,
     fuelBeforeEngineStart: params.row.combustivel_antes_partida_motor,
