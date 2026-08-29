@@ -38,7 +38,7 @@ function signature(type: EdbSignatureType, signer = pic): EdbSignatureProof {
     signatureId: `sig-${type}`,
     type,
     signer: { ...signer },
-    signedAt: '2026-08-28T12:00:00.000Z',
+    signedAt: '2026-08-28T09:30:00.000Z',
     canonicalPayloadHashSha256: 'a'.repeat(64),
     method: 'ASYMMETRIC_DIGITAL_SIGNATURE',
     proofReference: `proof/${type}`,
@@ -53,7 +53,7 @@ function completeRecord(): EdbFlightRecord {
     sourceRdvId: 200,
     sourceRdvVersion: 3,
     sourceStageId: 300,
-    capturedAt: '2026-08-28T10:00:00.000Z',
+    capturedAt: '2026-08-28T11:00:00.000Z',
   });
 
   record.recordId = 'edb-100-300-r1';
@@ -114,12 +114,8 @@ function completeRecord(): EdbFlightRecord {
 }
 
 describe('eDB lifecycle isolation', () => {
-  it('moves through pre-signature readiness only when regulatory prerequisites exist', () => {
+  it('starts the final-record lifecycle only after independent preflight awareness exists', () => {
     const record = completeRecord();
-    const technicalReady = evaluateEdbLifecycleAction(record, 'MARK_READY_FOR_PIC_TECHNICAL_ACK');
-    expect(technicalReady).toMatchObject({ allowed: true, to: 'READY_FOR_PIC_TECHNICAL_ACK' });
-
-    record.status = 'READY_FOR_PIC_TECHNICAL_ACK';
     const withoutAck = evaluateEdbLifecycleAction(record, 'MARK_READY_FOR_PIC_SIGNATURE');
     expect(withoutAck.allowed).toBe(false);
     expect(withoutAck.reasons).toContain('EDB_PIC_TECHNICAL_ACK_REQUIRED');
@@ -155,11 +151,11 @@ describe('eDB lifecycle isolation', () => {
       supersedesRecordId: 'edb-100-300-r1',
       correctionReason: 'Correcao de horario registrada apos assinatura',
     });
-    expect(correction.signatures).toEqual({
-      picTechnicalAcknowledgement: null,
-      picFlightRecord: null,
-      operatorRecord: null,
-    });
+    expect(correction.signatures.picTechnicalAcknowledgement).toEqual(
+      record.signatures.picTechnicalAcknowledgement,
+    );
+    expect(correction.signatures.picFlightRecord).toBeNull();
+    expect(correction.signatures.operatorRecord).toBeNull();
     expect(record.status).toBe('PIC_SIGNED');
     expect(record.signatures.picFlightRecord).not.toBeNull();
   });

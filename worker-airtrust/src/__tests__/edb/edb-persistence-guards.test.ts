@@ -23,6 +23,14 @@ function baseRecord() {
   });
 }
 
+const common = {
+  empresaId: 10,
+  diarioId: 1,
+  volumeId: 'volume-1',
+  logicalRecordId: 'flight-20-stage-40',
+  technicalAcknowledgementId: 'techack-1',
+};
+
 describe('eDB persistence guards', () => {
   it('fails closed before D1 when the record has no explicit source stage', async () => {
     const record = baseRecord();
@@ -30,10 +38,7 @@ describe('eDB persistence guards', () => {
 
     await expect(
       persistEdbDraftRevision(neverDb, {
-        empresaId: 10,
-        diarioId: 1,
-        volumeId: 'volume-1',
-        logicalRecordId: 'flight-20-stage-40',
+        ...common,
         record,
       }),
     ).rejects.toThrow('requires an explicit source stage');
@@ -44,10 +49,8 @@ describe('eDB persistence guards', () => {
 
     await expect(
       persistEdbDraftRevision(neverDb, {
+        ...common,
         empresaId: 11,
-        diarioId: 1,
-        volumeId: 'volume-1',
-        logicalRecordId: 'flight-20-stage-40',
         record,
       }),
     ).rejects.toThrow('tenant does not match');
@@ -59,12 +62,20 @@ describe('eDB persistence guards', () => {
 
     await expect(
       persistEdbDraftRevision(neverDb, {
-        empresaId: 10,
-        diarioId: 1,
-        volumeId: 'volume-1',
-        logicalRecordId: 'flight-20-stage-40',
+        ...common,
         record,
       }),
     ).rejects.toThrow('Only DRAFT');
+  });
+
+  it('requires the preflight acknowledgement evidence before touching D1', async () => {
+    const record = baseRecord();
+
+    await expect(
+      persistEdbDraftRevision(neverDb, {
+        ...common,
+        record,
+      }),
+    ).rejects.toThrow('payload requires the preflight PIC technical acknowledgement');
   });
 });
