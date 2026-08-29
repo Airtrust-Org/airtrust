@@ -16,9 +16,9 @@ describe('ConfigurarColunas', () => {
 
     render(<ConfigurarColunas onSalvar={onSalvar} onClose={onClose} />);
 
-    const cpfToggle = screen.getByRole('button', { name: 'Mostrar coluna CPF' });
+    const cpfToggle = screen.getByRole('switch', { name: 'Mostrar coluna CPF' });
     fireEvent.click(cpfToggle);
-    expect(screen.getByRole('button', { name: 'Ocultar coluna CPF' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Ocultar coluna CPF' })).toBeInTheDocument();
 
     const nomeRow = screen.getByText('Nome').closest('[draggable="true"]');
     const statusRow = screen.getByText('Status').closest('[draggable="true"]');
@@ -32,9 +32,9 @@ describe('ConfigurarColunas', () => {
     fireEvent.dragEnd(nomeRow!);
 
     fireEvent.click(screen.getByRole('button', { name: 'Restaurar padrão seguro' }));
-    expect(screen.getByRole('button', { name: 'Mostrar coluna CPF' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Mostrar coluna CPF' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar coluna CPF' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Mostrar coluna CPF' }));
     fireEvent.click(screen.getByRole('button', { name: 'Salvar configuração' }));
 
     expect(onSalvar).toHaveBeenCalledTimes(1);
@@ -57,9 +57,9 @@ describe('ConfigurarColunas', () => {
     render(<ConfigurarColunas onSalvar={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Ocultar coluna CPF' })).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Ocultar coluna CPF' })).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Mostrar coluna Nome antigo' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Mostrar coluna Nome antigo' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Fechar configuração de colunas' })).not.toBeInTheDocument();
   });
 
@@ -69,8 +69,8 @@ describe('ConfigurarColunas', () => {
     render(<ConfigurarColunas onSalvar={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Mostrar coluna CPF' })).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Mostrar coluna CPF' })).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Ocultar coluna Nome' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Ocultar coluna Nome' })).toBeInTheDocument();
   });
 });
