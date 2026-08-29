@@ -84,6 +84,8 @@ async function preflight(record: EdbFlightRecord, signedAt = '2026-08-28T09:30:0
   const signature: EdbSignatureProof = {
     signatureId: 'sig-tech-1',
     type: 'PIC_TECHNICAL_ACK',
+    targetType: 'TECHNICAL_SITUATION',
+    targetId: snapshot.snapshotId,
     signer: { employeeId: 10, fullName: 'Piloto em Comando', anacCode: '123456' },
     signedAt,
     canonicalPayloadHashSha256: snapshot.canonicalSnapshotSha256,
@@ -116,6 +118,7 @@ describe('eDB postflight finalization', () => {
     expect(finalized.record.flight.personsOnBoard).toBe(9);
     expect(finalized.record.flight.cycles).toBe(2);
     expect(finalized.record.signatures.picTechnicalAcknowledgement?.signatureId).toBe('sig-tech-1');
+    expect(finalized.record.signatures.picTechnicalAcknowledgement?.targetId).toBe('tech-1');
   });
 
   it('rejects finalization when the acknowledged maintenance situation changed', async () => {
