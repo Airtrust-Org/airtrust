@@ -19,7 +19,13 @@ const LARGE_FILE_LINE_CAPS = {
   // dependency-injection point in syncSigvoosForFrms so a staging-only QA
   // runner can inject a synthetic client at the exact external-client
   // boundary; production behavior is unchanged when deps is omitted).
-  'services/sigvoos-frms.ts': 2912,
+  // Cap raised 2026-08-29: counted 2937 (fix/sigvoos-cv-operational-load-bridge
+  // — after the FRMS import, the same fetched raw SIGVOOS payload is handed to
+  // the governed Controle de Voos importer so cv_voos/cv_voo_etapas/
+  // cv_voo_tripulantes — the leg-level source of Operational Load V1 — are
+  // populated in one canonical read. Heavy logic lives in
+  // lib/frms/controle-voos-frms-import-bridge.ts; the call site here is thin).
+  'services/sigvoos-frms.ts': 2937,
   // Upload/storage logic was extracted into testable modules. The compatibility
   // router retains the prior CRUD implementation and is frozen at the old cap.
   'routes/lms-cursos-legacy.ts': 3000,
