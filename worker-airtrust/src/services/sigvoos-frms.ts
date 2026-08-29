@@ -13,6 +13,10 @@ import {
   type SigvoosConfig as ClientSigvoosConfig,
 } from '../lib/sigvoos/client';
 import { extractSigvoosLegOperationalContext } from '../lib/sigvoos/leg-context';
+import {
+  importControleVoosFromSigvoosRaw,
+  type ControleVoosImportOutcome,
+} from '../lib/frms/controle-voos-frms-import-bridge';
 
 const SIGVOOS_PAGE_SIZE = 200;
 
@@ -259,6 +263,12 @@ export interface SigvoosSyncSummary {
     ignorados: number;
     erros: number;
   }>;
+  /**
+   * Controle de Voos import outcome for the same raw SIGVOOS payload. Only
+   * `status: 'OK' | 'ERROR'` when `CONTROLE_VOOS_FRMS_IMPORT_TENANTS` enables
+   * the tenant; a failure here never fails the FRMS sync.
+   */
+  controleVoosImport?: ControleVoosImportOutcome;
 }
 
 const SyncSchema = z.object({
@@ -2631,6 +2641,20 @@ export async function syncSigvoosForFrms(
       });
     }
 
+    // ── SIGVOOS raw payload → Controle de Voos (cv_voos / cv_voo_etapas /
+    // cv_voo_tripulantes), the leg-level source consumed by Operational Load V1.
+    // Same fetched `rawRecords`, no extra external call. Fully isolated: any
+    // failure is recorded and the FRMS sync still returns success.
+    const controleVoosImport = await importControleVoosFromSigvoosRaw({
+      db,
+      empresaId: resolvedEmpresaId,
+      rawRecords,
+      from: input.from,
+      to: input.to,
+      operadorId,
+      env: runtimeEnv as { CONTROLE_VOOS_FRMS_IMPORT_TENANTS?: string } | undefined,
+    });
+
     const summary: SigvoosSyncSummary = {
       periodo: { from: input.from, to: input.to },
       resetExecutado: clearExistingRequested,
@@ -2646,6 +2670,7 @@ export async function syncSigvoosForFrms(
       exemplosNormalizados: normalized.slice(0, 5),
       exemplosBrutos: rawRecords.slice(0, 3),
       importacoes,
+      controleVoosImport,
     };
 
     await persistSyncMetadata(db, resolvedEmpresaId, summary);
