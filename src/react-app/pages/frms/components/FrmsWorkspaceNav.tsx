@@ -58,10 +58,22 @@ const secondaryClass = (active: boolean) =>
       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
   }`;
 
-export default function FrmsWorkspaceNav() {
+interface FrmsWorkspaceNavProps {
+  showOperationsArea?: boolean;
+  showMaintenanceArea?: boolean;
+}
+
+export default function FrmsWorkspaceNav({
+  showOperationsArea = true,
+  showMaintenanceArea = false,
+}: FrmsWorkspaceNavProps = {}) {
   const location = useLocation();
   const adminActive = isAdminPath(location.pathname);
-  const checkinActive = location.pathname === '/frms/checkin' || location.pathname.startsWith('/frms/checkin/');
+  const checkinActive =
+    location.pathname === '/frms/checkin' || location.pathname.startsWith('/frms/checkin/');
+  const area = new URLSearchParams(location.search).get('area');
+  const operationsActive = location.pathname === '/frms' && area !== 'manutencao';
+  const maintenanceActive = location.pathname === '/frms' && area === 'manutencao';
 
   return (
     <div className="space-y-2">
@@ -69,9 +81,16 @@ export default function FrmsWorkspaceNav() {
         aria-label="Áreas FRMS"
         className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-950"
       >
-        <NavLink to="/frms" end className={primaryClass(location.pathname === '/frms')}>
-          Operação
-        </NavLink>
+        {showOperationsArea ? (
+          <NavLink to="/frms?area=operacoes" className={primaryClass(operationsActive)}>
+            Operações
+          </NavLink>
+        ) : null}
+        {showMaintenanceArea ? (
+          <NavLink to="/frms?area=manutencao" className={primaryClass(maintenanceActive)}>
+            Manutenção
+          </NavLink>
+        ) : null}
         <NavLink
           to="/frms/alertas"
           className={primaryClass(location.pathname.startsWith('/frms/alertas'))}
