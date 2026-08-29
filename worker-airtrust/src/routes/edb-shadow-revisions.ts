@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { AppEnv } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
 import {
@@ -10,18 +11,15 @@ import {
   loadCanonicalEdbFlightSource,
   parseEdbOperatorRegulation,
 } from '../services/edb/server-flight-record-source';
-import {
-  loadLatestEdbPreflightEvidence,
-} from '../repositories/edb/edb-technical-awareness-repository';
-import {
-  persistEdbDraftRevision,
-} from '../repositories/edb/edb-persistence-repository';
+import { loadLatestEdbPreflightEvidence } from '../repositories/edb/edb-technical-awareness-repository';
+import { persistEdbDraftRevision } from '../repositories/edb/edb-persistence-repository';
 import { loadVerifiedEdbRevisionView } from '../repositories/edb/edb-revision-view-repository';
 import { finalizePostflightEdbRecord } from '../services/edb/postflight-finalization';
 import { createCorrectionRevision } from '../services/edb/lifecycle';
 import { validateForPicFlightSignature } from '../services/edb/regulatory-validation';
 
 const router = new Hono<AppEnv>();
+type EdbContext = Context<AppEnv>;
 type JsonObject = Record<string, unknown>;
 
 function positiveInt(value: unknown, code: string): number {
@@ -55,7 +53,7 @@ function objectBody(value: unknown): JsonObject {
   return value as JsonObject;
 }
 
-async function actorIdentity(c: Parameters<Parameters<typeof router.post>[1]>[0]): Promise<EdbPersonIdentity> {
+async function actorIdentity(c: EdbContext): Promise<EdbPersonIdentity> {
   const empresaId = getEmpresaId(c);
   let funcionarioId = Number(c.get('funcionarioId') || 0);
   if (!Number.isInteger(funcionarioId) || funcionarioId <= 0) {
@@ -86,7 +84,7 @@ async function actorIdentity(c: Parameters<Parameters<typeof router.post>[1]>[0]
 }
 
 async function parseDiscrepancies(
-  c: Parameters<Parameters<typeof router.post>[1]>[0],
+  c: EdbContext,
   value: unknown,
 ): Promise<EdbTechnicalDiscrepancy[]> {
   if (value === undefined || value === null) return [];
@@ -104,7 +102,7 @@ async function parseDiscrepancies(
   });
 }
 
-function mapError(c: Parameters<Parameters<typeof router.post>[1]>[0], error: unknown) {
+function mapError(c: EdbContext, error: unknown) {
   const message = error instanceof Error ? error.message : '';
   const code = /EDB_[A-Z0-9_]+/.exec(message)?.[0] ?? 'EDB_SHADOW_REVISION_FAILED';
   const status = code.includes('NOT_FOUND') ? 404 : code.includes('CONFLICT') ? 409 : 400;
