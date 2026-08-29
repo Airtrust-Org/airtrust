@@ -12,19 +12,21 @@ Close remaining persistence-scope gaps in the disabled eDB foundation before any
 
 ## Change
 
-- materialize `voo_id` and `situacao_tecnica_id` on `edb_auditoria_eventos`;
+- materialize `voo_id`, `situacao_tecnica_id` and the canonical `actor_json` snapshot on `edb_auditoria_eventos`;
 - require volume → diary tenant scope;
 - prevent rebinding volume opening identity;
 - require discrepancy → immutable revision tenant scope;
 - require maintenance action → discrepancy tenant scope;
 - require RTS approval to reference a prior corrective action on the same discrepancy;
 - require audit events to bind to the correct diary/revision/flight/technical situation and previous diary-chain hash;
+- preserve the actor snapshot required to rehydrate and recompute historical audit-event hashes;
 - require integrity incidents to bind to the correct diary/volume and prevent identity rebinding.
 
 ## Postconditions
 
 - persisted domain IDs match the SQL schema types and scopes;
 - preflight audit events can be queried by flight/technical situation without parsing opaque JSON;
+- an audit event can be rehydrated with the same actor identity that participated in its canonical hash;
 - direct SQL cannot attach discrepancy, maintenance, audit or integrity history to another tenant/object;
 - audit-chain insertion fails closed when the previous hash does not match the latest diary event.
 
