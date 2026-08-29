@@ -9,7 +9,8 @@ Draft PR: #110
 Schema V2 changes — **defined, not applied**:
 
 - `0477_edb_operational_core.sql` — canonical operational semantics and core eDB persistence;
-- `0478_edb_anac_receipt_integrity.sql` — ANAC outbox/receipt integrity hardening only.
+- `0478_edb_anac_receipt_integrity.sql` — ANAC outbox/receipt integrity hardening only;
+- `0479_edb_relational_integrity.sql` — diary/volume, discrepancy/maintenance and audit-chain relational hardening.
 
 ## Current architecture
 
@@ -59,11 +60,13 @@ The final-record lifecycle is:
 
 The PIC technical acknowledgement is intentionally **not** a state of this postflight lifecycle.
 
-The persistence layer now keeps the irreversible boundaries atomic:
+The persistence layer keeps irreversible boundaries atomic:
 
 - inserting `PIC_FLIGHT_RECORD` and advancing to `PIC_SIGNED` happen in one D1 batch;
 - inserting `OPERATOR_RECORD` and advancing to `OPERATOR_SIGNED` happen in one D1 batch;
 - creating the ANAC outbox item and advancing to `ANAC_PENDING` happen in one D1 batch.
+
+`ANAC_SYNCED` is deliberately not inferred from receipt existence. A future official ANAC acceptance adapter must define and validate the actual acceptance semantics before that state can be produced by application code.
 
 ## Record and revision identity
 
@@ -132,7 +135,7 @@ Day/night landing counters may support an explicit landing total, but they are n
 
 Technical snapshots, PIC technical acknowledgements, final revisions, final signatures, discrepancy declarations, maintenance actions and audit events have append-only/immutable database protection.
 
-0477 also installs fail-closed relational/lifecycle guards so direct SQL cannot bypass the technical-snapshot binding, revision correction chain, signature order, lifecycle order or ANAC queue prerequisites.
+0477 also installs fail-closed relational/lifecycle guards so direct SQL cannot bypass technical-snapshot binding, revision correction chain, signature order, lifecycle order or ANAC queue prerequisites.
 
 ## ANAC persistence hardening in 0478
 
@@ -147,6 +150,28 @@ Technical snapshots, PIC technical acknowledgements, final revisions, final sign
 
 A receipt remains evidence of an external response. Its business/regulatory meaning will only be defined when the official ANAC interface contract is available.
 
+## Relational/audit hardening in 0479
+
+0479 closes persistence boundaries that were intentionally left for a separate additive change after the 0477 core stabilized:
+
+- materializes `voo_id`, `situacao_tecnica_id` and `actor_json` on `edb_auditoria_eventos` so an audit event can be fully rehydrated and its hash recomputed;
+- enforces volume → diary tenant scope and prevents rebinding opening identity;
+- enforces discrepancy → immutable revision tenant scope;
+- enforces maintenance action → discrepancy tenant scope;
+- requires RTS approval to reference a prior corrective action on the same discrepancy and prevents duplicate RTS for that action;
+- enforces audit diary/revision/flight/technical-situation scope and one previous-hash chain per diary;
+- enforces integrity-incident diary/volume scope and prevents incident identity rebinding.
+
+The audit repository now appends against the current diary-chain hash and rehydrates/verifies the full cryptographic chain from D1. If two writers race, the database trigger rejects the stale previous hash instead of forking the chain.
+
+The technical-discrepancy repository now:
+
+- creates a discrepancy only after confirming its revision exists in the same tenant;
+- rehydrates the entire append-only discrepancy/maintenance/RTS history through the domain rules;
+- preserves explicit maintenance references, limitations and actor ANAC code in evidence JSON;
+- validates chronology, duplicate action IDs, corrective-action → RTS binding and persisted scope before exposing a case;
+- never duplicates `sourceStageId` in the discrepancy because the source stage is derived from its immutable revision.
+
 ## Other implemented foundations
 
 - versioned `edb.regulatory.v1` contract;
@@ -155,7 +180,7 @@ A receipt remains evidence of an external response. Its business/regulatory mean
 - runtime validation when persisted eDB JSON is rehydrated;
 - signature-integrity checks against the immutable revision actually stored in D1;
 - discrepancy → corrective/deferred action → return-to-service workflow;
-- hash-linked audit-chain model;
+- persisted hash-linked audit-chain repository;
 - diary/volume opening and closing governance;
 - retention and onboard-availability policy for the required recent operating period;
 - integrity incident, loss/corruption and reconstitution governance;
@@ -166,7 +191,7 @@ A receipt remains evidence of an external response. Its business/regulatory mean
 
 This branch does **not**:
 
-- apply migration 0477 or 0478 to staging or production;
+- apply migration 0477, 0478 or 0479 to staging or production;
 - expose a public eDB Worker route;
 - expose an eDB menu or frontend workflow;
 - enable a production feature flag;
@@ -181,7 +206,7 @@ FRMS and LMS are not part of this branch's runtime scope.
 
 1. PR #110 CI and Schema V2 governance green on the final branch head.
 2. Controlled integration against the then-current `main` without importing unrelated behavior into eDB changes.
-3. Governed staging apply of 0477 followed by 0478, with recovery point and postconditions.
+3. Governed staging apply of 0477 → 0478 → 0479, with recovery point and postconditions.
 4. Tenant-scoped authenticated internal APIs for preflight snapshot/acknowledgement, regulatory-stage completion and readiness.
 5. Shadow UI inside Flight Operations showing only missing data and the next required action.
 6. Staging exercises covering preflight acknowledgement, postflight finalization, signatures, correction, discrepancy/maintenance/RTS, retention/onboard availability and recovery.
