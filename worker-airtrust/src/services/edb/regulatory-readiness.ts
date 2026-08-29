@@ -83,6 +83,11 @@ export async function assessEdbRegulatoryReadiness(
     ? operatorSignatureDeadlineAt(record.signatures.picFlightRecord, record.identity.operatorRegulation).toISOString()
     : null;
 
+  const operatorSignatureComplete =
+    Boolean(record.signatures.operatorRecord) &&
+    operatorBinding?.matchesPayload === true &&
+    operatorBlocking.length === 0;
+
   const steps: EdbReadinessStep[] = [
     {
       id: 'TECHNICAL_SNAPSHOT',
@@ -141,7 +146,7 @@ export async function assessEdbRegulatoryReadiness(
           ? 'BLOCKED'
           : !record.signatures.operatorRecord
             ? 'ACTION_REQUIRED'
-            : operatorBinding?.matchesPayload && operatorBlocking.length === 0
+            : operatorSignatureComplete
               ? 'COMPLETE'
               : 'ACTION_REQUIRED',
       blockingCodes:
@@ -158,7 +163,7 @@ export async function assessEdbRegulatoryReadiness(
           ? 'COMPLETE'
           : record.status === 'ANAC_PENDING'
             ? 'PENDING_EXTERNAL'
-            : record.signatures.operatorRecord && operatorBinding?.matchesPayload
+            : record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete
               ? 'ACTION_REQUIRED'
               : 'BLOCKED',
       blockingCodes: [],
@@ -170,10 +175,7 @@ export async function assessEdbRegulatoryReadiness(
   return {
     recordId: record.recordId,
     lifecycleStatus: record.status,
-    readyForAnacQueue:
-      steps.find((step) => step.id === 'OPERATOR_SIGNATURE')?.status === 'COMPLETE' &&
-      record.status !== 'ANAC_SYNCED' &&
-      record.status !== 'ANAC_PENDING',
+    readyForAnacQueue: record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete,
     steps,
     nextAction: firstIncomplete(steps),
   };
