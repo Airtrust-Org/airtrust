@@ -37,7 +37,8 @@ export interface EdbReadinessStep {
 }
 
 export interface EdbRegulatoryReadiness {
-  recordId: string | null;
+  logicalRecordId: string | null;
+  revisionId: string | null;
   lifecycleStatus: EdbFlightRecord['status'];
   readyForAnacQueue: boolean;
   steps: EdbReadinessStep[];
@@ -116,9 +117,11 @@ export async function assessEdbRegulatoryReadiness(
   const flightBlocking = codes(flightValidation.issues, 'BLOCKING').filter(
     (code) => code !== 'EDB_PIC_TECHNICAL_ACK_REQUIRED',
   );
+  if (!record.logicalRecordId?.trim()) flightBlocking.unshift('EDB_LOGICAL_RECORD_ID_REQUIRED');
+  if (!record.revisionId?.trim()) flightBlocking.unshift('EDB_REVISION_ID_REQUIRED');
   const flightWarnings = codes(flightValidation.issues, 'WARNING');
 
-  const finalRevisionTargetId = record.recordId ?? undefined;
+  const finalRevisionTargetId = record.revisionId ?? undefined;
   const picBinding = record.signatures.picFlightRecord
     ? await verifyEdbSignaturePayloadBinding(record, 'PIC_FLIGHT_RECORD', finalRevisionTargetId)
     : null;
@@ -135,6 +138,7 @@ export async function assessEdbRegulatoryReadiness(
     : null;
 
   const operatorSignatureComplete =
+    Boolean(record.revisionId?.trim()) &&
     Boolean(record.signatures.operatorRecord) &&
     operatorBinding?.matchesPayload === true &&
     operatorBlocking.length === 0;
@@ -260,7 +264,8 @@ export async function assessEdbRegulatoryReadiness(
   ];
 
   return {
-    recordId: record.recordId,
+    logicalRecordId: record.logicalRecordId,
+    revisionId: record.revisionId,
     lifecycleStatus: record.status,
     readyForAnacQueue:
       record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete && technicalAckComplete,
