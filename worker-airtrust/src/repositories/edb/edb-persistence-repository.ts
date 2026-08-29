@@ -58,14 +58,20 @@ export async function persistEdbDraftRevision(
   if (technicalProof.signatureId !== params.technicalAcknowledgementSignatureId) {
     throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_ID_MISMATCH');
   }
+  if (technicalProof.targetType !== 'TECHNICAL_SITUATION' || !technicalProof.targetId?.trim()) {
+    throw new Error('EDB_TECHNICAL_ACK_TARGET_REQUIRED');
+  }
 
-  await assertEdbPicTechnicalAcknowledgementScope({
+  const persistedTechnicalAcknowledgement = await assertEdbPicTechnicalAcknowledgementScope({
     db,
     empresaId: params.empresaId,
     vooId: params.record.source.sourceFlightId,
     signatureId: params.technicalAcknowledgementSignatureId,
     expectedCanonicalSnapshotSha256: technicalProof.canonicalPayloadHashSha256,
   });
+  if (persistedTechnicalAcknowledgement.situacao_tecnica_id !== technicalProof.targetId) {
+    throw new Error('EDB_TECHNICAL_ACK_TARGET_MISMATCH');
+  }
 
   const revisionId = params.revisionId ?? newId('edbrev');
   const payload = canonicalJson(params.record);
@@ -194,6 +200,12 @@ export async function appendEdbSignature(params: {
 }): Promise<void> {
   if (params.signature.type === 'PIC_TECHNICAL_ACK') {
     throw new Error('EDB_TECHNICAL_ACK_MUST_USE_PREFLIGHT_REPOSITORY');
+  }
+  if (
+    params.signature.targetType !== 'FINAL_RECORD_REVISION' ||
+    params.signature.targetId !== params.revisionId
+  ) {
+    throw new Error('EDB_FINAL_SIGNATURE_TARGET_MISMATCH');
   }
 
   await params.db
