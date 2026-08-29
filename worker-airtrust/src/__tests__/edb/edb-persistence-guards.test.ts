@@ -28,7 +28,7 @@ const common = {
   diarioId: 1,
   volumeId: 'volume-1',
   logicalRecordId: 'flight-20-stage-40',
-  technicalAcknowledgementId: 'techack-1',
+  technicalAcknowledgementSignatureId: 'sig-tech-1',
 };
 
 describe('eDB persistence guards', () => {
@@ -77,5 +77,25 @@ describe('eDB persistence guards', () => {
         record,
       }),
     ).rejects.toThrow('payload requires the preflight PIC technical acknowledgement');
+  });
+
+  it('rejects a mismatch between the requested acknowledgement signature and embedded proof before D1', async () => {
+    const record = baseRecord();
+    record.signatures.picTechnicalAcknowledgement = {
+      signatureId: 'sig-other',
+      type: 'PIC_TECHNICAL_ACK',
+      signer: { employeeId: 10, fullName: 'PIC Test', anacCode: '123456' },
+      signedAt: '2026-08-28T11:00:00Z',
+      canonicalPayloadHashSha256: 'a'.repeat(64),
+      method: 'ASYMMETRIC_DIGITAL_SIGNATURE',
+      proofReference: 'proof/other',
+    };
+
+    await expect(
+      persistEdbDraftRevision(neverDb, {
+        ...common,
+        record,
+      }),
+    ).rejects.toThrow('EDB_TECHNICAL_ACK_SIGNATURE_ID_MISMATCH');
   });
 });

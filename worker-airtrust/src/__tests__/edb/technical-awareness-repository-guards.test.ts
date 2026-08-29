@@ -54,7 +54,6 @@ async function evidence() {
   return {
     snapshot,
     acknowledgement: bindPicTechnicalAcknowledgement({
-      acknowledgementId: 'ack-1',
       snapshot,
       signature,
     }),

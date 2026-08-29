@@ -14,7 +14,8 @@ const signer = {
 function ceremony() {
   return createEdbSignatureCeremony({
     ceremonyId: 'ceremony-1',
-    recordId: 'edb-1-r1',
+    targetType: 'FINAL_RECORD_REVISION',
+    targetId: 'edb-1-r1',
     signatureType: 'PIC_FLIGHT_RECORD',
     signer,
     payloadHashSha256: 'a'.repeat(64),
@@ -36,9 +37,57 @@ const duringCeremony = new Date('2026-08-28T12:03:00.000Z');
 describe('eDB signature ceremony', () => {
   it('records review, authentication and explicit signing intent before external signing', () => {
     const value = ceremony();
+    expect(value.targetType).toBe('FINAL_RECORD_REVISION');
     expect(value.intentStatement).toContain('assino');
     expect(value.authentication.method).toBe('UNIQUE_CREDENTIALS_PLUS_MFA');
     expect(isEdbSignatureCeremonyFresh(value, duringCeremony)).toBe(true);
+  });
+
+  it('supports a preflight technical-situation target without inventing a final record id', () => {
+    const value = createEdbSignatureCeremony({
+      ceremonyId: 'ceremony-tech-1',
+      targetType: 'TECHNICAL_SITUATION',
+      targetId: 'tech-snapshot-1',
+      signatureType: 'PIC_TECHNICAL_ACK',
+      signer,
+      payloadHashSha256: 'b'.repeat(64),
+      intentStatement: 'Declaro ciência da situação técnica apresentada antes do voo.',
+      contentReviewedAt: '2026-08-28T09:00:00.000Z',
+      authentication: {
+        subjectId: 'user-10',
+        method: 'UNIQUE_CREDENTIALS_PLUS_MFA',
+        authenticatedAt: '2026-08-28T09:00:30.000Z',
+        evidenceReference: 'auth-event-tech-1',
+      },
+      createdAt: '2026-08-28T09:01:00.000Z',
+      expiresAt: '2026-08-28T09:06:00.000Z',
+    });
+
+    expect(value.targetId).toBe('tech-snapshot-1');
+    expect(value.signatureType).toBe('PIC_TECHNICAL_ACK');
+  });
+
+  it('rejects a signature intent bound to the wrong kind of target', () => {
+    expect(() =>
+      createEdbSignatureCeremony({
+        ceremonyId: 'bad-target',
+        targetType: 'FINAL_RECORD_REVISION',
+        targetId: 'edb-not-yet-created',
+        signatureType: 'PIC_TECHNICAL_ACK',
+        signer,
+        payloadHashSha256: 'c'.repeat(64),
+        intentStatement: 'Ciência técnica.',
+        contentReviewedAt: '2026-08-28T09:00:00.000Z',
+        authentication: {
+          subjectId: 'user-10',
+          method: 'UNIQUE_CREDENTIALS_PLUS_MFA',
+          authenticatedAt: '2026-08-28T09:00:30.000Z',
+          evidenceReference: 'auth-event-bad',
+        },
+        createdAt: '2026-08-28T09:01:00.000Z',
+        expiresAt: '2026-08-28T09:06:00.000Z',
+      }),
+    ).toThrow('must target a technical situation');
   });
 
   it('accepts an external signature result only when bound to the same signer and payload', () => {

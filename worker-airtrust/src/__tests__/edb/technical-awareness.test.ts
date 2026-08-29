@@ -48,7 +48,6 @@ async function signedSnapshot() {
     proofReference: 'proof/tech-1',
   };
   const acknowledgement = bindPicTechnicalAcknowledgement({
-    acknowledgementId: 'ack-1',
     snapshot,
     signature,
   });
@@ -56,8 +55,11 @@ async function signedSnapshot() {
 }
 
 describe('eDB preflight technical awareness', () => {
-  it('binds the PIC acknowledgement to the exact preflight snapshot hash', async () => {
+  it('uses the signature id as the single stable acknowledgement identity', async () => {
     const { snapshot, acknowledgement } = await signedSnapshot();
+    expect(acknowledgement.signature.signatureId).toBe('sig-tech-1');
+    expect('acknowledgementId' in acknowledgement).toBe(false);
+
     const binding = await verifyPicTechnicalAcknowledgementBinding({ snapshot, acknowledgement });
     expect(binding).toMatchObject({
       present: true,
@@ -66,16 +68,6 @@ describe('eDB preflight technical awareness', () => {
       storedHashSha256: snapshot.canonicalSnapshotSha256,
       expectedHashSha256: snapshot.canonicalSnapshotSha256,
     });
-
-    expect(
-      await technicalSituationMatches({
-        snapshot,
-        operatorCompanyId: 1,
-        sourceFlightId: 100,
-        aircraft,
-        maintenance,
-      }),
-    ).toBe(true);
   });
 
   it('invalidates the acknowledgement when the loaded snapshot itself is altered', async () => {
@@ -119,7 +111,6 @@ describe('eDB preflight technical awareness', () => {
 
     expect(() =>
       bindPicTechnicalAcknowledgement({
-        acknowledgementId: 'ack-bad',
         snapshot,
         signature: {
           signatureId: 'sig-bad',

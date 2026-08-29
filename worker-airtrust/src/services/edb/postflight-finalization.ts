@@ -10,7 +10,7 @@ import {
 export interface FinalizedPostflightRecord {
   record: EdbFlightRecord;
   technicalSituationId: string;
-  technicalAcknowledgementId: string;
+  technicalAcknowledgementSignatureId: string;
 }
 
 function cloneRecord(record: EdbFlightRecord): EdbFlightRecord {
@@ -135,6 +135,6 @@ export async function finalizePostflightEdbRecord(params: {
   return {
     record,
     technicalSituationId: technicalSituation.snapshotId,
-    technicalAcknowledgementId: technicalAcknowledgement.acknowledgementId,
+    technicalAcknowledgementSignatureId: technicalAcknowledgement.signature.signatureId,
   };
 }

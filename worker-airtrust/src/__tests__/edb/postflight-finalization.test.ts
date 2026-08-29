@@ -93,7 +93,6 @@ async function preflight(record: EdbFlightRecord, signedAt = '2026-08-28T09:30:0
   return {
     snapshot,
     acknowledgement: bindPicTechnicalAcknowledgement({
-      acknowledgementId: 'ack-1',
       snapshot,
       signature,
     }),
@@ -113,7 +112,7 @@ describe('eDB postflight finalization', () => {
       technicalAcknowledgement: acknowledgement,
     });
 
-    expect(finalized.technicalAcknowledgementId).toBe('ack-1');
+    expect(finalized.technicalAcknowledgementSignatureId).toBe('sig-tech-1');
     expect(finalized.record.flight.personsOnBoard).toBe(9);
     expect(finalized.record.flight.cycles).toBe(2);
     expect(finalized.record.signatures.picTechnicalAcknowledgement?.signatureId).toBe('sig-tech-1');

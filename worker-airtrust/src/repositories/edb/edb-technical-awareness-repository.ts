@@ -70,6 +70,7 @@ export async function appendEdbPicTechnicalAcknowledgement(params: {
   if (signature.type !== 'PIC_TECHNICAL_ACK') {
     throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_TYPE_INVALID');
   }
+  if (!signature.signatureId.trim()) throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_ID_REQUIRED');
 
   const situation = await params.db
     .prepare(
@@ -97,6 +98,7 @@ export async function appendEdbPicTechnicalAcknowledgement(params: {
     throw new Error('EDB_TECHNICAL_ACK_PREDATES_SNAPSHOT');
   }
 
+  // The acknowledgement row is the signature event; its id is the signature id.
   await params.db
     .prepare(
       `
@@ -109,7 +111,7 @@ export async function appendEdbPicTechnicalAcknowledgement(params: {
     `,
     )
     .bind(
-      acknowledgement.acknowledgementId,
+      signature.signatureId,
       acknowledgement.operatorCompanyId,
       acknowledgement.technicalSituationId,
       acknowledgement.sourceFlightId,
@@ -177,7 +179,7 @@ export async function assertEdbPicTechnicalAcknowledgementScope(params: {
   db: D1Database;
   empresaId: number;
   vooId: number;
-  acknowledgementId: string;
+  signatureId: string;
   expectedCanonicalSnapshotSha256: string;
 }): Promise<EdbPicTechnicalAcknowledgementRow> {
   const row = await params.db
@@ -190,7 +192,7 @@ export async function assertEdbPicTechnicalAcknowledgementScope(params: {
       LIMIT 1
     `,
     )
-    .bind(params.acknowledgementId, params.empresaId, params.vooId)
+    .bind(params.signatureId, params.empresaId, params.vooId)
     .first<EdbPicTechnicalAcknowledgementRow>();
 
   if (!row) throw new Error('EDB_TECHNICAL_ACK_NOT_FOUND_OR_SCOPE_MISMATCH');

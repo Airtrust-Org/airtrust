@@ -10,6 +10,8 @@ export type EdbSignerAuthenticationMethod =
   | 'DIGITAL_CERTIFICATE'
   | 'EXTERNAL_IDENTITY_PROVIDER';
 
+export type EdbSignatureTargetType = 'TECHNICAL_SITUATION' | 'FINAL_RECORD_REVISION';
+
 export interface EdbSignerAuthenticationEvidence {
   subjectId: string;
   method: EdbSignerAuthenticationMethod;
@@ -19,7 +21,8 @@ export interface EdbSignerAuthenticationEvidence {
 
 export interface EdbSignatureCeremony {
   ceremonyId: string;
-  recordId: string;
+  targetType: EdbSignatureTargetType;
+  targetId: string;
   signatureType: EdbSignatureType;
   signer: EdbPersonIdentity;
   payloadHashSha256: string;
@@ -57,14 +60,28 @@ function requireHash(value: string, field: string): string {
   return normalized;
 }
 
+function assertTargetMatchesSignatureType(
+  signatureType: EdbSignatureType,
+  targetType: EdbSignatureTargetType,
+): void {
+  if (signatureType === 'PIC_TECHNICAL_ACK' && targetType !== 'TECHNICAL_SITUATION') {
+    throw new Error('PIC_TECHNICAL_ACK must target a technical situation');
+  }
+  if (signatureType !== 'PIC_TECHNICAL_ACK' && targetType !== 'FINAL_RECORD_REVISION') {
+    throw new Error(`${signatureType} must target a final record revision`);
+  }
+}
+
 /**
  * Creates only the evidence package for a deliberate signing ceremony.
- * It does not create a legal signature by itself. Production acceptance still
- * depends on the cryptographic provider/process accepted for the eDB scope.
+ * Preflight acknowledgement targets a technical-situation snapshot; postflight
+ * signatures target the immutable final-record revision. The ceremony does not
+ * create a legal signature by itself.
  */
 export function createEdbSignatureCeremony(params: {
   ceremonyId: string;
-  recordId: string;
+  targetType: EdbSignatureTargetType;
+  targetId: string;
   signatureType: EdbSignatureType;
   signer: EdbPersonIdentity;
   payloadHashSha256: string;
@@ -78,6 +95,7 @@ export function createEdbSignatureCeremony(params: {
   const expiresAt = requireTimestamp(params.expiresAt, 'expiresAt');
   const contentReviewedAt = requireTimestamp(params.contentReviewedAt, 'contentReviewedAt');
   const authenticatedAt = requireTimestamp(params.authentication.authenticatedAt, 'authentication.authenticatedAt');
+  assertTargetMatchesSignatureType(params.signatureType, params.targetType);
 
   if (Date.parse(expiresAt) <= Date.parse(createdAt)) throw new Error('expiresAt must be after createdAt');
   if (Date.parse(contentReviewedAt) > Date.parse(createdAt)) {
@@ -89,7 +107,8 @@ export function createEdbSignatureCeremony(params: {
 
   return {
     ceremonyId: requireText(params.ceremonyId, 'ceremonyId'),
-    recordId: requireText(params.recordId, 'recordId'),
+    targetType: params.targetType,
+    targetId: requireText(params.targetId, 'targetId'),
     signatureType: params.signatureType,
     signer: {
       ...params.signer,

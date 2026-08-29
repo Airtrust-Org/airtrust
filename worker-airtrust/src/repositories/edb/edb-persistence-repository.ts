@@ -11,7 +11,7 @@ export interface PersistEdbDraftRevisionParams {
   diarioId: number;
   volumeId: string;
   logicalRecordId: string;
-  technicalAcknowledgementId: string;
+  technicalAcknowledgementSignatureId: string;
   revisionId?: string;
   record: EdbFlightRecord;
   supersedesRevisionId?: string | null;
@@ -45,8 +45,8 @@ export async function persistEdbDraftRevision(
   if (params.record.correction.revision < 1) {
     throw new Error('eDB revision must be >= 1');
   }
-  if (!params.technicalAcknowledgementId.trim()) {
-    throw new Error('eDB revision requires the preflight PIC technical acknowledgement');
+  if (!params.technicalAcknowledgementSignatureId.trim()) {
+    throw new Error('eDB revision requires the preflight PIC technical acknowledgement signature');
   }
   const technicalProof = params.record.signatures.picTechnicalAcknowledgement;
   if (!technicalProof) {
@@ -55,12 +55,15 @@ export async function persistEdbDraftRevision(
   if (technicalProof.type !== 'PIC_TECHNICAL_ACK') {
     throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_TYPE_INVALID');
   }
+  if (technicalProof.signatureId !== params.technicalAcknowledgementSignatureId) {
+    throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_ID_MISMATCH');
+  }
 
   await assertEdbPicTechnicalAcknowledgementScope({
     db,
     empresaId: params.empresaId,
     vooId: params.record.source.sourceFlightId,
-    acknowledgementId: params.technicalAcknowledgementId,
+    signatureId: params.technicalAcknowledgementSignatureId,
     expectedCanonicalSnapshotSha256: technicalProof.canonicalPayloadHashSha256,
   });
 
@@ -94,7 +97,7 @@ export async function persistEdbDraftRevision(
         params.record.source.sourceRdvId,
         params.record.source.sourceRdvVersion,
         params.record.source.sourceStageId,
-        params.technicalAcknowledgementId,
+        params.technicalAcknowledgementSignatureId,
         payload,
         canonicalPayloadSha256,
         params.record.source.capturedAt,

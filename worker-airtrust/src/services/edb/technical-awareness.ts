@@ -16,8 +16,11 @@ export interface EdbTechnicalSituationSnapshot {
   canonicalSnapshotSha256: string;
 }
 
+/**
+ * The acknowledgement is the signed event itself. Its stable identifier is
+ * `signature.signatureId`; there is deliberately no second acknowledgement id.
+ */
 export interface EdbPicTechnicalAcknowledgement {
-  acknowledgementId: string;
   technicalSituationId: string;
   operatorCompanyId: number;
   sourceFlightId: number;
@@ -137,13 +140,13 @@ export async function createTechnicalSituationSnapshot(params: {
 }
 
 export function bindPicTechnicalAcknowledgement(params: {
-  acknowledgementId: string;
   snapshot: EdbTechnicalSituationSnapshot;
   signature: EdbSignatureProof;
 }): EdbPicTechnicalAcknowledgement {
   if (params.signature.type !== 'PIC_TECHNICAL_ACK') {
     throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_TYPE_INVALID');
   }
+  requireText(params.signature.signatureId, 'signature.signatureId');
   if (params.signature.canonicalPayloadHashSha256 !== params.snapshot.canonicalSnapshotSha256) {
     throw new Error('EDB_TECHNICAL_ACK_HASH_MISMATCH');
   }
@@ -152,7 +155,6 @@ export function bindPicTechnicalAcknowledgement(params: {
   }
 
   return {
-    acknowledgementId: requireText(params.acknowledgementId, 'acknowledgementId'),
     technicalSituationId: params.snapshot.snapshotId,
     operatorCompanyId: params.snapshot.operatorCompanyId,
     sourceFlightId: params.snapshot.sourceFlightId,
@@ -197,6 +199,7 @@ export async function verifyPicTechnicalAcknowledgementBinding(params: {
   const matchesSnapshot =
     snapshotIntegrity &&
     associationMatches &&
+    Boolean(signature.signatureId.trim()) &&
     signature.type === 'PIC_TECHNICAL_ACK' &&
     signature.canonicalPayloadHashSha256 === expectedHashSha256 &&
     timestampsValid;

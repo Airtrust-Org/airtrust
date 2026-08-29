@@ -112,7 +112,6 @@ async function preflight(record: EdbFlightRecord): Promise<{
     capturedAt: '2026-08-28T09:00:00.000Z',
   });
   const technicalAcknowledgement = bindPicTechnicalAcknowledgement({
-    acknowledgementId: 'ack-1',
     snapshot: technicalSituation,
     signature: proof(
       'PIC_TECHNICAL_ACK',
