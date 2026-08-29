@@ -147,6 +147,12 @@ export function bindPicTechnicalAcknowledgement(params: {
     throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_TYPE_INVALID');
   }
   requireText(params.signature.signatureId, 'signature.signatureId');
+  if (
+    params.signature.targetType !== 'TECHNICAL_SITUATION' ||
+    params.signature.targetId !== params.snapshot.snapshotId
+  ) {
+    throw new Error('EDB_TECHNICAL_ACK_TARGET_MISMATCH');
+  }
   if (params.signature.canonicalPayloadHashSha256 !== params.snapshot.canonicalSnapshotSha256) {
     throw new Error('EDB_TECHNICAL_ACK_HASH_MISMATCH');
   }
@@ -193,12 +199,16 @@ export async function verifyPicTechnicalAcknowledgementBinding(params: {
     acknowledgement.technicalSituationId === params.snapshot.snapshotId &&
     acknowledgement.operatorCompanyId === params.snapshot.operatorCompanyId &&
     acknowledgement.sourceFlightId === params.snapshot.sourceFlightId;
+  const targetMatches =
+    signature.targetType === 'TECHNICAL_SITUATION' &&
+    signature.targetId === params.snapshot.snapshotId;
   const timestampsValid =
     Number.isFinite(Date.parse(signature.signedAt)) &&
     Date.parse(signature.signedAt) >= Date.parse(params.snapshot.capturedAt);
   const matchesSnapshot =
     snapshotIntegrity &&
     associationMatches &&
+    targetMatches &&
     Boolean(signature.signatureId.trim()) &&
     signature.type === 'PIC_TECHNICAL_ACK' &&
     signature.canonicalPayloadHashSha256 === expectedHashSha256 &&
