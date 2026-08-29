@@ -225,6 +225,7 @@ describe('eDB technical discrepancy workflow', () => {
     const released = appendReturnToServiceApproval(corrected, {
       approvalId: 'rts-1',
       correctiveActionId: 'maint-2',
+      description: 'Aprovacao para retorno ao servico registrada pelo responsavel',
       approvedBy: mechanic,
       approvedAt: '2026-08-29T09:15:00.000Z',
       reference: 'RTS-123',
@@ -232,6 +233,7 @@ describe('eDB technical discrepancy workflow', () => {
     expect(getTechnicalDiscrepancyStatus(released)).toBe('RETURN_TO_SERVICE_RECORDED');
     expect(isTechnicalDiscrepancyClosedForReturnToService(released)).toBe(true);
     expect(released.maintenanceActions).toHaveLength(2);
+    expect(released.returnToServiceApprovals[0].description).toContain('retorno ao servico');
   });
 
   it('rejects an RTS approval that does not reference a recorded corrective action', () => {
@@ -248,10 +250,32 @@ describe('eDB technical discrepancy workflow', () => {
       appendReturnToServiceApproval(discrepancy, {
         approvalId: 'rts-orphan',
         correctiveActionId: 'missing-action',
+        description: 'Tentativa de RTS sem acao corretiva',
         approvedBy: mechanic,
         approvedAt: '2026-08-28T12:00:00.000Z',
         reference: null,
       }),
     ).toThrow('existing corrective action');
+  });
+
+  it('rejects maintenance actions recorded before the discrepancy was detected', () => {
+    const discrepancy = createTechnicalDiscrepancyCase({
+      discrepancyId: 'disc-3',
+      revisionId: 'edbrev-100-300-r1',
+      description: 'Discrepancia cronologica',
+      detectedBy: pic,
+      detectedAt: '2026-08-28T10:50:00.000Z',
+      createdAt: '2026-08-28T11:00:00.000Z',
+    });
+
+    expect(() =>
+      appendCorrectiveAction(discrepancy, {
+        actionId: 'maint-before',
+        description: 'Acao impossivel',
+        performedBy: mechanic,
+        performedAt: '2026-08-28T10:40:00.000Z',
+        reference: null,
+      }),
+    ).toThrow('cannot predate discrepancy detection');
   });
 });
