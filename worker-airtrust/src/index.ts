@@ -706,8 +706,10 @@ app.route('/api/integracoes/sigvoos', sigvoosRouter);
 // bloquear a transicao planejado -> liberado_operacionalmente com 409
 // quando houver pendencia. Registrado por path exato, nao por prefixo.
 app.use('/api/controle-voos/voos/:id/status', controleVoosDispatchGateGuard());
-app.route('/api/controle-voos', controleVoosRoutes);
+// Rotas estáticas/específicas do workflow (incluindo /voos/meus) devem ser
+// montadas antes do CRUD genérico /voos/:id para evitar captura de "meus" como id.
 app.route('/api/controle-voos', controleVoosRdvWorkflowRoutes);
+app.route('/api/controle-voos', controleVoosRoutes);
 app.route('/api/controle-voos', controleVoosRdvEtapasRoutes);
 app.route('/api/controle-voos', controleVoosFrmsContractRoutes);
 app.route('/api/controle-voos', controleVoosFrmsDispatchGateRoutes);
