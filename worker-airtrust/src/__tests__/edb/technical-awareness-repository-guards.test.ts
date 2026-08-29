@@ -45,6 +45,8 @@ async function evidence() {
   const signature: EdbSignatureProof = {
     signatureId: 'sig-tech-1',
     type: 'PIC_TECHNICAL_ACK',
+    targetType: 'TECHNICAL_SITUATION',
+    targetId: snapshot.snapshotId,
     signer: { employeeId: 10, fullName: 'PIC Test', anacCode: '123456' },
     signedAt: '2026-08-28T09:30:00.000Z',
     canonicalPayloadHashSha256: snapshot.canonicalSnapshotSha256,
@@ -68,6 +70,18 @@ describe('eDB preflight persistence guards', () => {
     await expect(
       persistEdbTechnicalSituation({ db: neverDb, snapshot }),
     ).rejects.toThrow('EDB_TECHNICAL_CONTENT_HASH_MISMATCH');
+  });
+
+  it('rejects target substitution before looking up the technical snapshot', async () => {
+    const { acknowledgement } = await evidence();
+    acknowledgement.signature.targetId = 'tech-other';
+
+    await expect(
+      appendEdbPicTechnicalAcknowledgement({
+        db: neverDb,
+        acknowledgement,
+      }),
+    ).rejects.toThrow('EDB_TECHNICAL_ACK_TARGET_MISMATCH');
   });
 
   it('requires the referenced snapshot to exist in the same company/flight scope', async () => {
