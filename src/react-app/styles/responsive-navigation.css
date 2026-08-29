@@ -1,0 +1,22 @@
+/*
+ * Responsive navigation bridge.
+ *
+ * Module tab bars are progressively migrating to shared navigation primitives.
+ * Until that migration is complete, keep ARIA tablists usable on narrow screens
+ * instead of shrinking labels into each other.
+ */
+
+@media (max-width: 767px) {
+  .airtrust-global-standard [role='tablist'] {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .airtrust-global-standard [role='tablist'] > * {
+    flex-shrink: 0;
+  }
+}
