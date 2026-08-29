@@ -90,7 +90,7 @@ describe('eDB signature ceremony', () => {
     ).toThrow('must target a technical situation');
   });
 
-  it('accepts an external signature result only when bound to the same signer and payload', () => {
+  it('accepts an external signature result only when bound to the same signer, payload and immutable target', () => {
     const value = ceremony();
     const proof = finalizeEdbSignatureCeremony(
       value,
@@ -106,6 +106,8 @@ describe('eDB signature ceremony', () => {
     );
 
     expect(proof.type).toBe('PIC_FLIGHT_RECORD');
+    expect(proof.targetType).toBe('FINAL_RECORD_REVISION');
+    expect(proof.targetId).toBe('edb-1-r1');
     expect(proof.signer.fullName).toBe('Piloto em Comando');
     expect(proof.canonicalPayloadHashSha256).toBe('a'.repeat(64));
     expect(proof.proofReference).toBe('signature-provider/proof/123');
