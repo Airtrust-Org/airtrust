@@ -15,7 +15,7 @@ export type EdbLifecycleAction =
 
 export interface EdbLifecycleContext {
   anacReceiptReference?: string | null;
-  replacementRecordId?: string | null;
+  replacementRevisionId?: string | null;
   correctionReason?: string | null;
 }
 
@@ -55,6 +55,10 @@ function invalidState(record: EdbFlightRecord, expected: EdbLifecycleStatus): Ed
   return decision(record, false, null, [`EDB_INVALID_STATE_EXPECTED_${expected}`]);
 }
 
+function hasFinalRevisionIdentity(record: EdbFlightRecord): boolean {
+  return Boolean(record.logicalRecordId?.trim() && record.revisionId?.trim());
+}
+
 export function evaluateEdbLifecycleAction(
   record: EdbFlightRecord,
   action: EdbLifecycleAction,
@@ -66,6 +70,9 @@ export function evaluateEdbLifecycleAction(
 
   if (action === 'MARK_READY_FOR_PIC_SIGNATURE') {
     if (record.status !== 'DRAFT') return invalidState(record, 'DRAFT');
+    if (!hasFinalRevisionIdentity(record)) {
+      return decision(record, false, null, ['EDB_FINAL_REVISION_IDENTITY_REQUIRED']);
+    }
     if (!record.signatures.picTechnicalAcknowledgement) {
       return decision(record, false, null, ['EDB_PIC_TECHNICAL_ACK_REQUIRED']);
     }
@@ -84,6 +91,12 @@ export function evaluateEdbLifecycleAction(
     if (!record.signatures.picFlightRecord) {
       return decision(record, false, null, ['EDB_PIC_FLIGHT_SIGNATURE_REQUIRED']);
     }
+    if (
+      record.signatures.picFlightRecord.targetType !== 'FINAL_RECORD_REVISION' ||
+      record.signatures.picFlightRecord.targetId !== record.revisionId
+    ) {
+      return decision(record, false, null, ['EDB_PIC_FLIGHT_SIGNATURE_TARGET_MISMATCH']);
+    }
     const validation = validateForPicFlightSignature(record);
     const blocking = validation.issues.filter((issue) => issue.severity === 'BLOCKING');
     return decision(
@@ -98,6 +111,12 @@ export function evaluateEdbLifecycleAction(
     if (record.status !== 'PIC_SIGNED') return invalidState(record, 'PIC_SIGNED');
     if (!record.signatures.operatorRecord) {
       return decision(record, false, null, ['EDB_OPERATOR_SIGNATURE_REQUIRED']);
+    }
+    if (
+      record.signatures.operatorRecord.targetType !== 'FINAL_RECORD_REVISION' ||
+      record.signatures.operatorRecord.targetId !== record.revisionId
+    ) {
+      return decision(record, false, null, ['EDB_OPERATOR_SIGNATURE_TARGET_MISMATCH']);
     }
     const validation = validateForOperatorSignature(record);
     const blocking = validation.issues.filter((issue) => issue.severity === 'BLOCKING');
@@ -127,8 +146,8 @@ export function evaluateEdbLifecycleAction(
       return decision(record, false, null, ['EDB_ONLY_SIGNED_RECORD_CAN_BE_SUPERSEDED']);
     }
     const reasons: string[] = [];
-    if (!record.recordId?.trim()) reasons.push('EDB_RECORD_ID_REQUIRED');
-    if (!context.replacementRecordId?.trim()) reasons.push('EDB_REPLACEMENT_RECORD_ID_REQUIRED');
+    if (!record.revisionId?.trim()) reasons.push('EDB_REVISION_ID_REQUIRED');
+    if (!context.replacementRevisionId?.trim()) reasons.push('EDB_REPLACEMENT_REVISION_ID_REQUIRED');
     if (!context.correctionReason?.trim()) reasons.push('EDB_CORRECTION_REASON_REQUIRED');
     return decision(record, reasons.length === 0, reasons.length === 0 ? 'SUPERSEDED' : null, reasons);
   }
@@ -146,19 +165,22 @@ export function evaluateEdbLifecycleAction(
 
 export function createCorrectionRevision(params: {
   original: EdbFlightRecord;
-  newRecordId: string;
+  newRevisionId: string;
   correctionReason: string;
   capturedAt: string;
 }): EdbFlightRecord {
-  const { original, newRecordId, correctionReason, capturedAt } = params;
-  if (!original.recordId?.trim()) throw new Error('Original signed record must have recordId');
+  const { original, newRevisionId, correctionReason, capturedAt } = params;
+  if (!original.logicalRecordId?.trim()) throw new Error('Original signed record must have logicalRecordId');
+  if (!original.revisionId?.trim()) throw new Error('Original signed record must have revisionId');
   if (!isEdbContentLocked(original)) throw new Error('Correction revision is only required for signed/locked records');
-  if (!newRecordId.trim()) throw new Error('New correction recordId is required');
+  if (!newRevisionId.trim()) throw new Error('New correction revisionId is required');
+  if (newRevisionId === original.revisionId) throw new Error('Correction revisionId must differ from original revisionId');
   if (!correctionReason.trim()) throw new Error('Correction reason is required');
 
   return {
     ...original,
-    recordId: newRecordId,
+    logicalRecordId: original.logicalRecordId,
+    revisionId: newRevisionId,
     status: 'DRAFT',
     identity: {
       ...original.identity,
@@ -197,7 +219,7 @@ export function createCorrectionRevision(params: {
     },
     correction: {
       revision: original.correction.revision + 1,
-      supersedesRecordId: original.recordId,
+      supersedesRevisionId: original.revisionId,
       correctionReason: correctionReason.trim(),
     },
     source: {
