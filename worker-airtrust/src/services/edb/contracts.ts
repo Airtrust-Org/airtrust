@@ -157,17 +157,21 @@ export interface EdbSourceProvenance {
 
 export interface EdbCorrectionMetadata {
   revision: number;
-  supersedesRecordId: string | null;
+  supersedesRevisionId: string | null;
   correctionReason: string | null;
 }
 
 /**
- * Regulatory record contract only. Presence of this structure does not mean
- * that a record is ANAC-authorized, signed, transmitted or homologated.
+ * Regulatory record contract only. `logicalRecordId` identifies the same
+ * flight/stage across corrections; `revisionId` identifies exactly one
+ * immutable revision and is the target of final-record signatures.
+ * Presence of this structure does not mean that a record is ANAC-authorized,
+ * signed, transmitted or homologated.
  */
 export interface EdbFlightRecord {
   contractVersion: EdbContractVersion;
-  recordId: string | null;
+  logicalRecordId: string | null;
+  revisionId: string | null;
   status: EdbLifecycleStatus;
   identity: EdbDiaryIdentity;
   flight: EdbFlightData;
@@ -185,10 +189,13 @@ export function createEmptyEdbFlightRecord(params: {
   sourceRdvVersion?: number | null;
   sourceStageId?: number | null;
   capturedAt: string;
+  logicalRecordId?: string | null;
+  revisionId?: string | null;
 }): EdbFlightRecord {
   return {
     contractVersion: EDB_CONTRACT_VERSION,
-    recordId: null,
+    logicalRecordId: params.logicalRecordId ?? null,
+    revisionId: params.revisionId ?? null,
     status: 'DRAFT',
     identity: {
       operatorCompanyId: params.operatorCompanyId,
@@ -248,7 +255,7 @@ export function createEmptyEdbFlightRecord(params: {
     },
     correction: {
       revision: 1,
-      supersedesRecordId: null,
+      supersedesRevisionId: null,
       correctionReason: null,
     },
     source: {
