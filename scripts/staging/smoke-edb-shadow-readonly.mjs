@@ -47,8 +47,8 @@ async function main() {
     `/api/version sourceSha divergente do release esperado`,
   );
 
-  // eDB is authenticated. This GET must fail before tenant resolution and must
-  // never create domain data.
+  // eDB capability is authenticated. This GET must fail before tenant
+  // discovery for an anonymous request and must never create domain data.
   const anonymousCapability = await fetchJson(`${baseUrl}/api/edb/capability`);
   assert(
     anonymousCapability.status === 401,
@@ -71,27 +71,32 @@ async function main() {
 
   const headers = { Authorization: `Bearer ${token}` };
 
-  // The canonical QA tenant is deliberately outside EDB_SHADOW_PILOT_TENANTS.
-  // A live 404/EDB_SHADOW_DISABLED proves the deployed Worker is fail-closed
-  // for a valid authenticated tenant that is not allowlisted.
+  // Capability is deliberately a lightweight authenticated discovery endpoint.
+  // For a valid tenant outside EDB_SHADOW_PILOT_TENANTS it remains HTTP 200,
+  // but must advertise enabled=false and non-official/non-replacing semantics.
   const capability = await fetchJson(`${baseUrl}/api/edb/capability`, { headers });
-  assert(capability.status === 404, `tenant QA fora da allowlist deveria retornar 404; recebeu ${capability.status}`);
+  assert(capability.status === 200, `capability do tenant QA deveria retornar 200; recebeu ${capability.status}`);
+  assert(capability.json?.success === true, 'capability do tenant QA sem success=true');
+  assert(capability.json?.data?.enabled === false, 'capability do tenant QA deveria anunciar enabled=false');
   assert(
-    responseCode(capability.json) === 'EDB_SHADOW_DISABLED',
-    `tenant QA fora da allowlist nao retornou EDB_SHADOW_DISABLED`,
+    capability.json?.data?.classification === 'NON_OFFICIAL_SHADOW_PILOT_CAPABILITY',
+    'classification inesperada na capability eDB',
   );
+  assert(capability.json?.data?.officialLogbook === false, 'capability nao pode anunciar diario oficial');
+  assert(capability.json?.data?.replacesPaper === false, 'capability nao pode anunciar substituicao do papel');
 
-  // Use another GET route to prove the gate is router-wide and executes before
-  // flight lookup; voo 1 must therefore not be read or mutated for this tenant.
+  // Every non-capability eDB route is protected by the system-level pilot gate.
+  // This request therefore has to fail closed before the inner eDB router can
+  // read flight 1 (or touch any eDB domain table) for tenant 999002.
   const readiness = await fetchJson(`${baseUrl}/api/edb/voos/1/readiness`, { headers });
   assert(readiness.status === 404, `readiness fora da allowlist deveria retornar 404; recebeu ${readiness.status}`);
   assert(
-    responseCode(readiness.json) === 'EDB_SHADOW_DISABLED',
-    'readiness fora da allowlist nao retornou EDB_SHADOW_DISABLED',
+    responseCode(readiness.json) === 'EDB_SHADOW_PILOT_NOT_ENABLED',
+    `readiness fora da allowlist nao retornou EDB_SHADOW_PILOT_NOT_ENABLED`,
   );
 
   console.log(`EDB_STAGING_READONLY_SMOKE_PASS release=${expectedSha}`);
-  console.log('EDB_STAGING_FAIL_CLOSED_PASS anonymous=401 nonPilotTenant=404');
+  console.log('EDB_STAGING_FAIL_CLOSED_PASS anonymous=401 capabilityEnabled=false nonPilotTenant=404');
   console.log('EDB_STAGING_POSITIVE_TENANT_6_NOT_EXERCISED no synthetic tenant-6 credential is configured');
 }
 
