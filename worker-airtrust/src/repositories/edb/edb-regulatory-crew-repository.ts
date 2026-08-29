@@ -1,11 +1,42 @@
 export type RegulatoryCrewDataOrigin = 'MANUAL' | 'IMPORTACAO' | 'SISTEMA';
 
-export function normalizeAnacFunctionCode(value: string): string {
+/**
+ * Current onboard-function codes from Portaria 3.220/SPO/SAR art. 17, as
+ * amended by Portarias 14.096/SPO/2024 and 15.103/SPO/2024.
+ *
+ * This is intentionally independent from AirTrust operational roles. A caller
+ * must supply the regulatory function explicitly; PIC/SIC are never converted.
+ */
+export const CURRENT_ANAC_EDB_FUNCTION_CODES = [
+  'P1',
+  'P2',
+  'I1',
+  'I2',
+  'O1',
+  'O2',
+  'O3',
+  'V1',
+  'V2',
+  'V3',
+  'C',
+  'M',
+  'X',
+  'D',
+] as const;
+
+export type CurrentAnacEdbFunctionCode =
+  (typeof CURRENT_ANAC_EDB_FUNCTION_CODES)[number];
+
+const CURRENT_ANAC_EDB_FUNCTION_CODE_SET = new Set<string>(
+  CURRENT_ANAC_EDB_FUNCTION_CODES,
+);
+
+export function normalizeAnacFunctionCode(value: string): CurrentAnacEdbFunctionCode {
   const normalized = value.trim().toUpperCase();
-  if (!/^[A-Z][A-Z0-9]{0,7}$/.test(normalized)) {
+  if (!CURRENT_ANAC_EDB_FUNCTION_CODE_SET.has(normalized)) {
     throw new Error('EDB_INVALID_ANAC_FUNCTION_CODE');
   }
-  return normalized;
+  return normalized as CurrentAnacEdbFunctionCode;
 }
 
 /**
