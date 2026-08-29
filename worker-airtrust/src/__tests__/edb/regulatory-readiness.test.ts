@@ -14,12 +14,14 @@ import {
   type EdbTechnicalSituationSnapshot,
 } from '../../services/edb/technical-awareness';
 
+const REVISION_ID = 'edbrev-1-r1';
+
 function proof(type: EdbSignatureType, hash: string, signedAt: string): EdbSignatureProof {
   return {
     signatureId: `sig-${type}`,
     type,
     targetType: type === 'PIC_TECHNICAL_ACK' ? 'TECHNICAL_SITUATION' : 'FINAL_RECORD_REVISION',
-    targetId: type === 'PIC_TECHNICAL_ACK' ? 'tech-1' : 'edb-1-r1',
+    targetId: type === 'PIC_TECHNICAL_ACK' ? 'tech-1' : REVISION_ID,
     signer: {
       employeeId: 10,
       fullName: type === 'OPERATOR_RECORD' ? 'Operador Designado' : 'Piloto em Comando',
@@ -41,8 +43,9 @@ function completeRecord(): EdbFlightRecord {
     sourceRdvVersion: 1,
     sourceStageId: 300,
     capturedAt: '2026-08-28T11:00:00.000Z',
+    logicalRecordId: 'flight-100-stage-300',
+    revisionId: REVISION_ID,
   });
-  record.recordId = 'edb-1-r1';
   record.identity.aircraft = {
     aircraftId: 12,
     manufacturer: 'Leonardo',
@@ -170,6 +173,8 @@ describe('eDB regulatory readiness', () => {
       new Date('2026-08-28T12:01:00.000Z'),
       evidence,
     );
+    expect(readiness.logicalRecordId).toBe('flight-100-stage-300');
+    expect(readiness.revisionId).toBe(REVISION_ID);
     expect(readiness.steps.find((step) => step.id === 'TECHNICAL_SNAPSHOT')?.status).toBe('COMPLETE');
     expect(readiness.steps.find((step) => step.id === 'PIC_TECHNICAL_ACK')?.status).toBe('COMPLETE');
     expect(readiness.steps.find((step) => step.id === 'OPERATOR_SIGNATURE')?.status).toBe('COMPLETE');
@@ -178,10 +183,23 @@ describe('eDB regulatory readiness', () => {
     expect(readiness.nextAction).toBe('ANAC_SYNC');
   });
 
+  it('fails closed when immutable revision identity is missing', async () => {
+    const { record, evidence } = await operatorSignedRecord();
+    record.revisionId = null;
+    const readiness = await assessEdbRegulatoryReadiness(
+      record,
+      new Date('2026-08-28T12:01:00.000Z'),
+      evidence,
+    );
+    const flightStep = readiness.steps.find((step) => step.id === 'FLIGHT_RECORD');
+    expect(readiness.readyForAnacQueue).toBe(false);
+    expect(flightStep?.blockingCodes).toContain('EDB_REVISION_ID_REQUIRED');
+  });
+
   it('fails closed when a valid final signature is copied to another revision target', async () => {
     const { record, evidence } = await operatorSignedRecord();
     if (!record.signatures.picFlightRecord) throw new Error('fixture missing PIC signature');
-    record.signatures.picFlightRecord.targetId = 'edb-1-r2';
+    record.signatures.picFlightRecord.targetId = 'edbrev-1-r2';
 
     const readiness = await assessEdbRegulatoryReadiness(
       record,
