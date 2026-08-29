@@ -1,6 +1,6 @@
 # eDB / Flight Operations — Operational Core 0477
 
-Status: **implemented on integration branch; disabled; not deployed**.
+Status: **implemented on integration branch; staging-shadow gated; not deployed**.
 
 Branch: `feat/edb-operational-core-0477`
 
@@ -43,7 +43,7 @@ Provenance/version fields are stored with the canonical semantics so writes can 
 
 ## 2. Legacy fields are evidence, not aliases
 
-The current RDV/Controle de Voos runtime can still contain older fields. The eDB adapter exposes ambiguous values only as shadow evidence and does not promote them silently.
+The current RDV/Controle de Voos runtime can still contain older fields. The eDB adapter exposes ambiguous values only as evidence and does not promote them silently.
 
 Prohibited automatic equivalences include:
 
@@ -56,9 +56,7 @@ Prohibited automatic equivalences include:
 - RDV `divergencias` → maintenance discrepancy;
 - flight-level occurrence → every stage of a multi-stage RDV.
 
-`tempo_ifr_nao_classificado_minutos` exists specifically so unresolved IFR source evidence can be retained without pretending it satisfies actual/simulated IFR classification.
-
-Landing totals and cycles remain independent concepts. Explicit day/night landing counters can support `pousos_total`; they never generate `ciclos`.
+`tempo_ifr_nao_classificado_minutos` retains unresolved IFR evidence without pretending it satisfies actual/simulated IFR classification. Landing totals and cycles remain independent concepts.
 
 ## 3. Preflight technical awareness is independent
 
@@ -76,43 +74,42 @@ The PIC technical acknowledgement must exist before the flight and therefore can
 
 → immutable `edb_ciencias_tecnicas_pic`
 
-A change to aircraft identity or maintenance data produces a different technical-content hash. The previously signed acknowledgement must not authorize the changed situation.
-
-Times, landings, cycles, IFR split, fuel, POB, cargo, occurrences and other postflight operational values are excluded from this preflight hash.
+A change to aircraft identity or maintenance data produces a different technical-content hash. Times, landings, cycles, IFR split, fuel, POB, cargo and occurrences are intentionally outside the preflight hash.
 
 ## 4. Postflight final record
 
-After the flight, the eDB projector reads the existing operational structure plus the explicit canonical fields and validates exact semantics.
+After the flight, the server reconstructs the signable record from tenant-scoped canonical Controle de Voos data plus the persisted preflight evidence. The client cannot provide an arbitrary `flight` object to become regulated history.
 
 The finalizer:
 
 1. requires an explicit source stage;
-2. requires the preflight PIC technical acknowledgement;
+2. requires the historical preflight PIC technical acknowledgement;
 3. verifies acknowledgement ↔ snapshot ↔ company ↔ flight binding;
-4. verifies that current aircraft/maintenance still match the acknowledged snapshot;
-5. verifies the acknowledgement occurred before engine start when engine-start time is available;
-6. validates all required postflight regulatory data;
-7. freezes a final immutable revision that references `ciencia_tecnica_pic_id`.
+4. verifies current aircraft/maintenance against the acknowledged snapshot;
+5. verifies acknowledgement occurred before engine start when that time is available;
+6. reads the explicit stage values and crew/function data from canonical server sources;
+7. blocks unresolved/unclassified IFR and other missing regulatory semantics;
+8. freezes a final immutable revision referencing `ciencia_tecnica_pic_id`.
 
-The final-record lifecycle begins only then:
+The final-record lifecycle is:
 
 `DRAFT → READY_FOR_PIC_SIGNATURE → PIC_SIGNED → OPERATOR_SIGNED → ANAC_PENDING → ANAC_SYNCED`
 
-`ANAC_SYNCED` remains unavailable to generic application lifecycle code until a future official ANAC acceptance adapter defines and validates accepted response semantics.
+`ANAC_SYNCED` remains unavailable until a future official ANAC acceptance adapter defines and validates accepted response semantics.
 
 ## 5. Signatures
 
-Three signature intents exist in the contract, but storage follows the operational moment:
+Three signature intents exist:
 
 - `PIC_TECHNICAL_ACK`: preflight, stored in `edb_ciencias_tecnicas_pic`;
 - `PIC_FLIGHT_RECORD`: postflight, stored in `edb_assinaturas`;
 - `OPERATOR_RECORD`: after PIC flight signature, stored in `edb_assinaturas`.
 
-`edb_assinaturas` rejects preflight technical acknowledgements by design.
+The signature ceremony binds intent, reviewed content, authenticated identity, exact target identity and SHA-256 hash. It stores proof references/certificate evidence, never private keys.
 
-The generic signature ceremony binds explicit intent, reviewed content, authentication evidence, exact target identity and the SHA-256 hash. It stores only proof references/certificate evidence, never private keys.
+PIC signature + `PIC_SIGNED` and operator signature + `OPERATOR_SIGNED` are each persisted atomically in one D1 batch.
 
-PIC signature insertion + `PIC_SIGNED` and operator signature insertion + `OPERATOR_SIGNED` are each persisted atomically in one D1 batch.
+In the guarded shadow API, PIC acknowledgement/final signature also requires the authenticated employee to be actually assigned as PIC on the source flight. Operator signature is manager-only.
 
 ## 6. Correction model
 
@@ -125,10 +122,11 @@ A correction:
 - references the prior revision through `supersedesRevisionId`;
 - records a correction reason;
 - preserves the historical preflight technical acknowledgement that actually preceded the flight;
-- clears the prior postflight PIC/operator signatures;
-- requires new final-record signatures for the corrected revision.
+- rebuilds operational values from the current canonical source rather than client-supplied flight JSON;
+- clears prior postflight PIC/operator signatures;
+- requires new final-record signatures.
 
-A correction made after the event must never create a fictitious new “preflight” acknowledgement.
+A correction made after the event never creates a fictitious new preflight acknowledgement.
 
 ## 7. Persistent objects
 
@@ -148,22 +146,25 @@ A correction made after the event must never create a fictitious new “prefligh
 - `edb_anac_recibos`
 - `edb_incidentes_integridade`
 
-Immutable evidence receives database no-update/no-delete protection where applicable. Mutable lifecycle/outbox state is deliberately separated from immutable payload evidence.
+Immutable evidence receives no-update/no-delete protection where applicable. Mutable lifecycle/outbox state is deliberately separated from immutable payload evidence.
 
 ## 8. Current internal code path
 
-1. `controle-voos-source-adapter.ts` exposes current RDV data conservatively.
+1. `controle-voos-source-adapter.ts` exposes existing RDV evidence conservatively.
 2. `edb-source-repository.ts` reads canonical fields directly from source rows.
 3. `operational-regulatory-source.ts` validates explicit semantics and preserves unclassified IFR evidence.
-4. `regulatory-projection.ts` overlays only explicit canonical values.
+4. `server-flight-record-source.ts` reconstructs final flight/crew data from server-side canonical sources.
 5. `technical-awareness.ts` creates/verifies the preflight snapshot and acknowledgement binding.
 6. `edb-technical-awareness-repository.ts` persists and revalidates preflight evidence.
 7. `postflight-finalization.ts` enforces the preflight/postflight boundary.
-8. `edb-persistence-repository.ts` persists final revisions, signatures, lifecycle transitions and ANAC queue evidence.
-9. `edb-audit-repository.ts` persists/reconstructs the diary hash chain and verifies it cryptographically.
-10. `edb-technical-discrepancy-repository.ts` persists/replays discrepancy → deferred/corrective action → RTS history through domain validation.
-11. `edb-diary-repository.ts` persists/reconstructs diary volumes and integrity incidents with optimistic lifecycle updates.
-12. ANAC outbox remains inert until an official adapter exists.
+8. `edb-persistence-repository.ts` persists revisions, signatures, lifecycle transitions and ANAC queue evidence.
+9. `edb-revision-view-repository.ts` rehydrates immutable revision + current lifecycle/signatures and revalidates hashes.
+10. `edb-audit-repository.ts` persists/reconstructs and verifies the diary hash chain.
+11. `edb-technical-discrepancy-repository.ts` persists/replays discrepancy → maintenance action → RTS history.
+12. `edb-diary-repository.ts` persists/reconstructs diary volumes and integrity incidents.
+13. `/api/edb` exposes the guarded staging-shadow workflow under explicit tenant allowlist/RBAC.
+14. Controle de Voos flight detail exposes a minimal shadow “next action / missing data” card only when capability is enabled.
+15. ANAC outbox remains externally inert until an official adapter exists.
 
 ## 9. Additive hardening after 0477
 
@@ -181,8 +182,19 @@ Makes diary/volume/incident lifecycle monotonic and historical evidence non-dele
 
 ## 10. Activation posture
 
-Still disabled. This branch does not register a public eDB route, expose a frontend/menu, enable a feature flag, apply 0477–0480, store signing secrets, write real operational eDB data or transmit anything to ANAC.
+The code surface now exists, but activation remains fail-closed:
 
-The safe sequence remains:
+- `/api/edb` operational shadow requires `ENVIRONMENT=staging` and an explicit positive tenant ID in `EDB_SHADOW_PILOT_TENANTS`;
+- `all` is rejected and production cannot enable the gate;
+- no production eDB menu/feature flag is enabled;
+- 0477–0480 have not been applied to staging or production;
+- no real production eDB data is written;
+- no private signing key is stored;
+- no ANAC external endpoint/payload/acceptance contract is guessed;
+- no claim of ANAC authorization/homologation is made.
 
-CI → controlled integration with current main → governed staging apply `0477 → 0478 → 0479 → 0480` → internal APIs → shadow UI → staging validation → regulatory/security acceptance → explicit production approval.
+The governed staging runner for 0477–0480 verifies the Schema V2 manifest, proves migration/Schema V2 SQL copies are identical, captures a D1 Time Travel recovery point, writes both `airtrust_schema_changes_v2` and `d1_migrations` in the reviewed apply bundle, and fails closed on ledger divergence before migration-specific postconditions.
+
+The remaining safe sequence is:
+
+final CI → confirm current `main` → merge reviewed governance/code → official staging apply `0477 → 0478 → 0479 → 0480` → staging Worker/frontend shadow deploy → full staging exercises → official ANAC/security acceptance work → explicit production approval.
