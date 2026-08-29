@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
 
 export type FrmsWorkforceProfile = 'flight' | 'maintenance' | 'other';
@@ -57,6 +57,39 @@ export type FrmsMaintenanceTeam = {
   };
 };
 
+export type FrmsMaintenanceCheckinInput = {
+  reference_date: string;
+  wake_time: string;
+  sleep_hours_24h: number;
+  sleep_quality: number;
+  kss_score: number;
+  fit_for_duty: boolean;
+  notes?: string;
+};
+
+export type FrmsMaintenanceCheckinResult = {
+  checkin: {
+    id: string;
+    funcionario_id: number;
+    cargo: string | null;
+    reference_date: string;
+    wake_time: string;
+    sleep_hours_24h: number;
+    sleep_quality: number;
+    kss_score: number;
+    fit_for_duty: boolean;
+    score_fadiga: number;
+    nivel_fadiga: string;
+    status_operacional: string;
+    computed_risk_level: string;
+    requires_operational_review: number;
+    reasons: string[];
+    recommendation: string;
+    scoring_version: string;
+  };
+  readiness_required: boolean;
+};
+
 type EndpointEnvelope<T> = {
   success: boolean;
   data?: T;
@@ -80,6 +113,10 @@ async function getEndpoint<T>(path: string): Promise<T> {
   return unwrap<T>(await httpClient.get<EndpointEnvelope<T>>(path));
 }
 
+async function postEndpoint<T>(path: string, input: unknown): Promise<T> {
+  return unwrap<T>(await httpClient.post<EndpointEnvelope<T>>(path, input));
+}
+
 export function useFrmsOperationalAccess() {
   return useQuery({
     queryKey: ['frms-operational-access'],
@@ -97,5 +134,21 @@ export function useFrmsMaintenanceTeam(referenceDate: string, enabled = true) {
       ),
     enabled: enabled && /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
     staleTime: 60 * 1000,
+  });
+}
+
+export function useSubmitFrmsMaintenanceCheckin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: FrmsMaintenanceCheckinInput) =>
+      postEndpoint<FrmsMaintenanceCheckinResult>(
+        '/me/operational-access/frms-maintenance-checkin',
+        input,
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['frms-maintenance-team', variables.reference_date] });
+      queryClient.invalidateQueries({ queryKey: ['frms-readiness-today', variables.reference_date] });
+      queryClient.invalidateQueries({ queryKey: ['frms-readiness-baseline'] });
+    },
   });
 }
