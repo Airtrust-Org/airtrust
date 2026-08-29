@@ -77,6 +77,12 @@ export async function appendEdbPicTechnicalAcknowledgement(params: {
     throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_TYPE_INVALID');
   }
   if (!signature.signatureId.trim()) throw new Error('EDB_TECHNICAL_ACK_SIGNATURE_ID_REQUIRED');
+  if (
+    signature.targetType !== 'TECHNICAL_SITUATION' ||
+    signature.targetId !== acknowledgement.technicalSituationId
+  ) {
+    throw new Error('EDB_TECHNICAL_ACK_TARGET_MISMATCH');
+  }
 
   const situation = await params.db
     .prepare(
@@ -327,6 +333,8 @@ export async function hydrateEdbPicTechnicalAcknowledgementRow(params: {
     signature: {
       signatureId: row.id,
       type: 'PIC_TECHNICAL_ACK',
+      targetType: 'TECHNICAL_SITUATION',
+      targetId: row.situacao_tecnica_id,
       signer: {
         employeeId: row.signer_funcionario_id,
         fullName: row.signer_nome,
