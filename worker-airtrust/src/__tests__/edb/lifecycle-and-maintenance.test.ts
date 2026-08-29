@@ -37,6 +37,8 @@ function signature(type: EdbSignatureType, signer = pic): EdbSignatureProof {
   return {
     signatureId: `sig-${type}`,
     type,
+    targetType: type === 'PIC_TECHNICAL_ACK' ? 'TECHNICAL_SITUATION' : 'FINAL_RECORD_REVISION',
+    targetId: type === 'PIC_TECHNICAL_ACK' ? 'tech-1' : 'edbrev-100-300-r1',
     signer: { ...signer },
     signedAt: '2026-08-28T09:30:00.000Z',
     canonicalPayloadHashSha256: 'a'.repeat(64),
@@ -54,9 +56,10 @@ function completeRecord(): EdbFlightRecord {
     sourceRdvVersion: 3,
     sourceStageId: 300,
     capturedAt: '2026-08-28T11:00:00.000Z',
+    logicalRecordId: 'flight-100-stage-300',
+    revisionId: 'edbrev-100-300-r1',
   });
 
-  record.recordId = 'edb-100-300-r1';
   record.identity.aircraft = {
     aircraftId: 12,
     manufacturer: 'Leonardo',
@@ -139,16 +142,17 @@ describe('eDB lifecycle isolation', () => {
 
     const correction = createCorrectionRevision({
       original: record,
-      newRecordId: 'edb-100-300-r2',
+      newRevisionId: 'edbrev-100-300-r2',
       correctionReason: 'Correcao de horario registrada apos assinatura',
       capturedAt: '2026-08-28T13:00:00.000Z',
     });
 
     expect(correction.status).toBe('DRAFT');
-    expect(correction.recordId).toBe('edb-100-300-r2');
+    expect(correction.logicalRecordId).toBe('flight-100-stage-300');
+    expect(correction.revisionId).toBe('edbrev-100-300-r2');
     expect(correction.correction).toEqual({
       revision: 2,
-      supersedesRecordId: 'edb-100-300-r1',
+      supersedesRevisionId: 'edbrev-100-300-r1',
       correctionReason: 'Correcao de horario registrada apos assinatura',
     });
     expect(correction.signatures.picTechnicalAcknowledgement).toEqual(
@@ -158,6 +162,20 @@ describe('eDB lifecycle isolation', () => {
     expect(correction.signatures.operatorRecord).toBeNull();
     expect(record.status).toBe('PIC_SIGNED');
     expect(record.signatures.picFlightRecord).not.toBeNull();
+  });
+
+  it('rejects final signature confirmation when proof targets another revision', () => {
+    const record = completeRecord();
+    record.status = 'READY_FOR_PIC_SIGNATURE';
+    record.signatures.picTechnicalAcknowledgement = signature('PIC_TECHNICAL_ACK');
+    record.signatures.picFlightRecord = {
+      ...signature('PIC_FLIGHT_RECORD'),
+      targetId: 'edbrev-other',
+    };
+
+    const decision = evaluateEdbLifecycleAction(record, 'CONFIRM_PIC_SIGNED');
+    expect(decision.allowed).toBe(false);
+    expect(decision.reasons).toContain('EDB_PIC_FLIGHT_SIGNATURE_TARGET_MISMATCH');
   });
 
   it('does not mark ANAC sync complete without explicit external receipt evidence', () => {
@@ -176,7 +194,7 @@ describe('eDB technical discrepancy workflow', () => {
   it('keeps discrepancy history append-only through deferment, correction and RTS', () => {
     const original = createTechnicalDiscrepancyCase({
       discrepancyId: 'disc-1',
-      edbRecordId: 'edb-100-300-r1',
+      revisionId: 'edbrev-100-300-r1',
       sourceStageId: 300,
       description: 'Vibracao anormal observada pela tripulacao',
       detectedBy: pic,
@@ -221,7 +239,7 @@ describe('eDB technical discrepancy workflow', () => {
   it('rejects an RTS approval that does not reference a recorded corrective action', () => {
     const discrepancy = createTechnicalDiscrepancyCase({
       discrepancyId: 'disc-2',
-      edbRecordId: 'edb-100-300-r1',
+      revisionId: 'edbrev-100-300-r1',
       description: 'Discrepancia de teste',
       detectedBy: pic,
       detectedAt: '2026-08-28T10:50:00.000Z',
