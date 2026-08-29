@@ -14,6 +14,7 @@ import {
   edbShadowReviewInputSchema,
   EdbShadowReviewEvidenceError,
 } from '../services/edb/shadow-review-evidence';
+import edbShadowOperationalRoutes from './edb-shadow';
 
 const edbShadowPreview = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -132,5 +133,10 @@ edbShadowPreview.post(
     }
   },
 );
+
+// Full staging-shadow operational API. The nested router independently
+// enforces auth + tenant + staging allowlist and never enables external ANAC
+// transmission or production activation.
+edbShadowPreview.route('/', edbShadowOperationalRoutes);
 
 export default edbShadowPreview;
