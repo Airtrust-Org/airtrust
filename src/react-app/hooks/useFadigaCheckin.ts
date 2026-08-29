@@ -88,6 +88,7 @@ export interface FadigaAnalyticsResponse {
 }
 
 export interface FadigaPainelEquipeItem {
+  [key: string]: unknown;
   id: string;
   funcionario_id: number;
   funcionario_nome?: string;
