@@ -42,7 +42,7 @@ test('workflow is governed staging-only and cannot deploy infrastructure', () =>
   assert.match(workflow, /refs\/heads\/main/);
   assert.match(workflow, /environment:\s*staging/);
   assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/);
-  assert.match(workflow, /QA_EDB_PILOT_PASSWORD/);
+  assert.match(workflow, /QA_EDB_PILOT_PASSWORD:\s*\$\{\{ secrets\.STAGING_SMOKE_PASSWORD \}\}/);
   assert.match(workflow, /CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
   assert.doesNotMatch(workflow, /wrangler\s+deploy/);
   assert.doesNotMatch(workflow, /CLOUDFLARE_WORKER_API_TOKEN/);
