@@ -13,6 +13,10 @@ vi.mock('@/react-app/components/AppLayout', () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+vi.mock('../components/FrmsWorkspaceNav', () => ({
+  default: () => <nav aria-label="Áreas FRMS" />,
+}));
+
 vi.mock('@/react-app/hooks/useFrms', async () => {
   const actual = await vi.importActual<typeof import('@/react-app/hooks/useFrms')>('@/react-app/hooks/useFrms');
   return {

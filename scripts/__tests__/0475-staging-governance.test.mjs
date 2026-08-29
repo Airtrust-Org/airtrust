@@ -16,9 +16,9 @@ test('0475 is in the staging apply allowlist (apply-approved-migrations.sh)', ()
   assert.match(script, new RegExp(`APPROVED_MIGRATIONS=\\([^)]*"${MIGRATION_NAME}"[^)]*\\)`));
 });
 
-test('RELEASE_PREFLIGHT_SCOPE includes 0475 as the last code', () => {
+test('RELEASE_PREFLIGHT_SCOPE includes 0475 in scope', () => {
   const script = read('scripts/staging/apply-approved-migrations.sh');
-  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0472,0475,0476"/);
+  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0472,0475,0476,0477,0478,0479,0480"/);
 });
 
 test('0475 routes through the recovery-point runner (D1 Time Travel point captured)', () => {

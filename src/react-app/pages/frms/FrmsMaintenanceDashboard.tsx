@@ -7,6 +7,7 @@ import {
   useFrmsOperationalAccess,
   type FrmsMaintenanceTeamItem,
 } from '@/react-app/hooks/useFrmsOperationalAccess';
+import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
 import {
   classifyMaintenanceItem,
   maintenanceActionText,
@@ -75,6 +76,16 @@ function cargoLabel(item: FrmsMaintenanceTeamItem): string {
   return item.cargo?.trim() || item.funcao?.trim() || 'Cargo não informado';
 }
 
+function maintenanceScopeLabel(source: string | undefined): string {
+  if (source === 'tenant_admin') {
+    return 'Escopo: todos os setores de manutenção deste tenant';
+  }
+  if (source === 'frms_manager') {
+    return 'Escopo: manutenção sob a gestão central de fadiga';
+  }
+  return 'Escopo: setores de manutenção atribuídos ao gestor';
+}
+
 export default function FrmsMaintenanceDashboard() {
   const [date, setDate] = useState(localTodayIso());
   const access = useFrmsOperationalAccess();
@@ -114,9 +125,9 @@ export default function FrmsMaintenanceDashboard() {
             <div className="flex items-start gap-3">
               <ShieldAlert className="mt-0.5 h-5 w-5 flex-none" />
               <div>
-                <h1 className="font-bold">Acesso restrito à Gestão de Manutenção</h1>
+                <h1 className="font-bold">Acesso restrito à fadiga da manutenção</h1>
                 <p className="mt-1 text-sm">
-                  Esta tela é exclusiva de gestores com atribuição ativa em setor classificado como MANUTENCAO.
+                  Esta área é exclusiva da gestão de fadiga autorizada para manutenção e de administradores do tenant.
                 </p>
               </div>
             </div>
@@ -129,14 +140,16 @@ export default function FrmsMaintenanceDashboard() {
   return (
     <AppLayout>
       <div className="space-y-5">
+        <FrmsWorkspaceNav />
+
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
               <Wrench className="h-4 w-4" /> FRMS · Manutenção
             </div>
-            <h1 className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">Gestão de Manutenção</h1>
+            <h1 className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">Fadiga da Manutenção</h1>
             <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-              Fadiga e prontidão de Mecânicos e Inspetores sob sua gestão. Esta visão não mistura tripulação de voo nem dados de despacho.
+              Fadiga e prontidão de Mecânicos e Inspetores. Esta visão é separada da operação de voo e não mistura tripulação nem dados de despacho.
             </p>
           </div>
 
@@ -171,7 +184,7 @@ export default function FrmsMaintenanceDashboard() {
         </header>
 
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-900/60">
-          Escopo: somente setores de manutenção atribuídos ao gestor · Profissionais: cargo Mecânico/Inspetor · Fonte: check-in FRMS + PVT/Readiness
+          {maintenanceScopeLabel(team.data?.meta.access_source)} · Profissionais: cargo Mecânico/Inspetor · Fonte: check-in FRMS + PVT/Readiness
         </div>
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo de manutenção">
@@ -206,7 +219,7 @@ export default function FrmsMaintenanceDashboard() {
             <div className="p-10 text-center">
               <CheckCircle2 className="mx-auto h-8 w-8 text-slate-400" />
               <h3 className="mt-3 font-bold text-slate-900 dark:text-white">Nenhum Mecânico ou Inspetor no escopo</h3>
-              <p className="mt-1 text-sm text-slate-500">A tela respeita os setores de manutenção atribuídos ao gestor.</p>
+              <p className="mt-1 text-sm text-slate-500">Não há profissional de manutenção ativo no escopo autorizado.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
