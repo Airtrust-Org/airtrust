@@ -9,12 +9,14 @@ import { API_BASE_URL, ensureValidAccessToken } from '../../../config/api';
 
 type SimuladorLite = { id: number; nome: string };
 
-function exportCSV(filename: string, rows: Array<Record<string, unknown>>) {
-  if (!rows || rows.length === 0) return;
+function exportCSV<T extends object>(filename: string, rows: readonly T[]) {
+  if (rows.length === 0) return;
   const headers = Object.keys(rows[0]);
   const csv = [
     headers.join(';'),
-    ...rows.map((r) => headers.map((h) => String(r[h] ?? '')).join(';')),
+    ...rows.map((row) =>
+      headers.map((header) => String(Reflect.get(row, header) ?? '')).join(';'),
+    ),
   ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -256,11 +258,7 @@ export default function SimuladoresDashboard() {
                     type="button"
                     className="text-xs text-blue-600"
                     onClick={() =>
-                      uso &&
-                      exportCSV(
-                        `simuladores-uso-${Date.now()}.csv`,
-                        uso.por_simulador as unknown as Array<Record<string, unknown>>,
-                      )
+                      uso && exportCSV(`simuladores-uso-${Date.now()}.csv`, uso.por_simulador)
                     }
                   >
                     Exportar CSV
@@ -302,11 +300,7 @@ export default function SimuladoresDashboard() {
                     type="button"
                     className="text-xs text-blue-600"
                     onClick={() =>
-                      uso &&
-                      exportCSV(
-                        `simuladores-tipos-${Date.now()}.csv`,
-                        uso.por_tipo_sessao as unknown as Array<Record<string, unknown>>,
-                      )
+                      uso && exportCSV(`simuladores-tipos-${Date.now()}.csv`, uso.por_tipo_sessao)
                     }
                   >
                     Exportar CSV
@@ -361,12 +355,7 @@ export default function SimuladoresDashboard() {
                 <button
                   type="button"
                   className="text-xs text-blue-600"
-                  onClick={() =>
-                    exportCSV(
-                      `simuladores-tripulantes-${Date.now()}.csv`,
-                      trip as unknown as Array<Record<string, unknown>>,
-                    )
-                  }
+                  onClick={() => exportCSV(`simuladores-tripulantes-${Date.now()}.csv`, trip)}
                 >
                   Exportar CSV
                 </button>
@@ -417,10 +406,7 @@ export default function SimuladoresDashboard() {
                   type="button"
                   className="text-xs text-blue-600"
                   onClick={() =>
-                    exportCSV(
-                      `simuladores-desempenho-${Date.now()}.csv`,
-                      desempenho as unknown as Array<Record<string, unknown>>,
-                    )
+                    exportCSV(`simuladores-desempenho-${Date.now()}.csv`, desempenho)
                   }
                 >
                   Exportar CSV
