@@ -12,14 +12,30 @@
 // dry_run_required: this script has no side effects; it is safe to run at any time.
 // rollback_plan_required: not applicable — read-only.
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
-const MIGRATIONS_DIR = path.join(ROOT, 'worker-airtrust', 'migrations');
+
+function getMigrationsDirs() {
+  const dirs = [];
+  const custom = process.argv.find((a) => a.startsWith('--migrations-dir='));
+  if (custom) {
+    dirs.push(path.resolve(custom.slice('--migrations-dir='.length)));
+  }
+  const releaseMigrations = path.join(ROOT, 'release', 'worker-airtrust', 'migrations');
+  if (existsSync(releaseMigrations)) {
+    dirs.push(releaseMigrations);
+  }
+  const rootMigrations = path.join(ROOT, 'worker-airtrust', 'migrations');
+  if (existsSync(rootMigrations)) {
+    dirs.push(rootMigrations);
+  }
+  return [...new Set(dirs)];
+}
 
 const ALLOWED_STAGING_DB_NAME = 'airtrust-db-staging-baseline-20260701';
 const ALLOWED_STAGING_DB_ID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
@@ -82,10 +98,17 @@ function runWranglerJson(dbName, sql) {
   return parsed[0]?.results ?? [];
 }
 
-function listVersionedMigrations() {
-  return readdirSync(MIGRATIONS_DIR)
-    .filter((f) => /^\d+.*\.sql$/.test(f))
-    .sort();
+function listVersionedMigrations(dirs = getMigrationsDirs()) {
+  const fileMap = new Map();
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir)) {
+      if (/^\d+.*\.sql$/.test(f) && !fileMap.has(f)) {
+        fileMap.set(f, path.join(dir, f));
+      }
+    }
+  }
+  return fileMap;
 }
 
 function extractCreatedTables(sql) {
@@ -117,7 +140,8 @@ function classify({ registered, expectedTables, existingTables }) {
 }
 
 async function main() {
-  const files = listVersionedMigrations();
+  const migrationMap = listVersionedMigrations();
+  const files = [...migrationMap.keys()].sort();
   const scopeFiles = parseScopeArg(process.argv.slice(2), files);
   const dbName = process.env.STAGING_D1_NAME || ALLOWED_STAGING_DB_NAME;
   const dbId = process.env.STAGING_D1_ID || ALLOWED_STAGING_DB_ID;
@@ -135,7 +159,8 @@ async function main() {
   const report = [];
 
   for (const file of files) {
-    const sql = readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+    const fullPath = migrationMap.get(file);
+    const sql = readFileSync(fullPath, 'utf8');
     const expectedTables = extractCreatedTables(sql);
     const registered = ledgerNames.has(file);
     const state = classify({ registered, expectedTables, existingTables });
