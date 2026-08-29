@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// source_reference: PR #110 eDB staging pilot tenant 6; docs/edb/STAGING_PILOT_QA.md
+// operational_decision: provision only a synthetic employee/user/membership needed to authenticate the tenant-6 shadow gate; never write flight/RDV/eDB domain records.
+// dry_run_required: default invocation performs no D1 write; --apply plus AIRTRUST_STAGING_EDB_PILOT_IDENTITY is required.
+// rollback_plan_required: --apply --rollback soft-deletes/deactivates only qa-edb-pilot@staging.airtrust.invalid and QA-EDB-PILOT.
 
 // Synthetic, staging-only identity for the positive eDB shadow pilot check.
 // Never use a real Costa do Sol credential. Dry-run is the default; writes
