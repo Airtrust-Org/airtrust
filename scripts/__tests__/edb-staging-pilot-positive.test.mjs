@@ -1,3 +1,8 @@
+// source_reference: PR #110 eDB staging pilot QA fixture regression coverage.
+// operational_decision: static tests only; validate staging-only synthetic fixture contracts without executing D1 writes.
+// dry_run_required: this test file executes no operational SQL and performs no remote mutation.
+// rollback_plan_required: no runtime mutation originates here; governed fixture rollback remains in seed-qa-edb-pilot.mjs.
+
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -21,6 +26,16 @@ test('eDB positive seed is synthetic, tenant-6 and staging-D1 only', () => {
   assert.match(seed, /--rollback/);
   assert.doesNotMatch(seed, /airtrust-db-production/);
   assert.doesNotMatch(seed, /airtrust-db-prod/);
+});
+
+test('eDB pilot QA employee is bound to an exact synthetic sector', () => {
+  const seed = read(SEED);
+  assert.match(seed, /PILOT_SECTOR_CODE = 'QA-EDB-PILOT'/);
+  assert.match(seed, /PILOT_SECTOR_DOMAIN = 'OPERACOES'/);
+  assert.match(seed, /INSERT INTO setores/);
+  assert.match(seed, /setor_id = \(\s*SELECT s\.id FROM setores s/s);
+  assert.match(seed, /UPDATE setores\s+SET ativo = 0/s);
+  assert.doesNotMatch(seed, /setor\s*=\s*'QA eDB',\s*setor_id\s*=\s*NULL/);
 });
 
 test('eDB positive smoke is read-only after authentication', () => {

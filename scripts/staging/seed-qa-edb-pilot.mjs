@@ -2,7 +2,7 @@
 // source_reference: PR #110 eDB staging pilot tenant 6; docs/edb/STAGING_PILOT_QA.md
 // operational_decision: provision only synthetic staging fixtures needed to authenticate and exercise the tenant-6 shadow gate; never write flight/RDV/eDB domain records or reactivate a non-synthetic tenant.
 // dry_run_required: default invocation performs no D1 write; --apply plus AIRTRUST_STAGING_EDB_PILOT_IDENTITY is required.
-// rollback_plan_required: --apply --rollback soft-deletes/deactivates only exact QA eDB fixtures, including the tenant only when its reserved synthetic code matches.
+// rollback_plan_required: --apply --rollback soft-deletes/deactivates only exact QA eDB fixtures, including the synthetic sector and tenant only when their reserved identifiers match.
 
 // Synthetic, staging-only identity for the positive eDB shadow pilot check.
 // Never use a real Costa do Sol credential. Dry-run is the default; writes
@@ -21,6 +21,9 @@ const ALLOWED_D1_NAME = 'airtrust-db-staging-baseline-20260701';
 const PILOT_TENANT_ID = 6;
 const PILOT_TENANT_CODE = 'edb_pilot_smoke';
 const PILOT_TENANT_NAME = 'eDB Pilot Smoke Tenant';
+const PILOT_SECTOR_CODE = 'QA-EDB-PILOT';
+const PILOT_SECTOR_NAME = 'QA eDB Pilot';
+const PILOT_SECTOR_DOMAIN = 'OPERACOES';
 const CONFIRMATION = 'AIRTRUST_STAGING_EDB_PILOT_IDENTITY';
 const EMAIL = 'qa-edb-pilot@staging.airtrust.invalid';
 const EMPLOYEE_NAME = 'QA eDB Pilot';
@@ -140,24 +143,66 @@ function ensurePilotTenant(dbName) {
 function seedSql(passwordHash) {
   const e = sqlString;
   return `
+INSERT INTO setores (
+  codigo, nome, descricao, responsavel, ativo, created_at, updated_at, deleted_at, empresa_id, dominio_codigo
+)
+SELECT
+  ${e(PILOT_SECTOR_CODE)}, ${e(PILOT_SECTOR_NAME)},
+  'Fixture sintética de operações para QA eDB.', 'QA AirTrust', 1,
+  datetime('now'), datetime('now'), NULL, emp.id, ${e(PILOT_SECTOR_DOMAIN)}
+FROM empresas emp
+WHERE emp.id = ${PILOT_TENANT_ID}
+  AND emp.ativo = 1
+  AND emp.deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM setores s
+    WHERE s.codigo = ${e(PILOT_SECTOR_CODE)} AND s.empresa_id = emp.id AND s.deleted_at IS NULL
+  );
+
+UPDATE setores
+SET nome = ${e(PILOT_SECTOR_NAME)},
+    descricao = 'Fixture sintética de operações para QA eDB.',
+    responsavel = 'QA AirTrust',
+    ativo = 1,
+    dominio_codigo = ${e(PILOT_SECTOR_DOMAIN)},
+    deleted_at = NULL,
+    updated_at = datetime('now')
+WHERE codigo = ${e(PILOT_SECTOR_CODE)}
+  AND empresa_id = ${PILOT_TENANT_ID};
+
 INSERT INTO funcionarios (
   nome, matricula, cargo, funcao, setor, setor_id, status,
   is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at
 )
 SELECT
   ${e(EMPLOYEE_NAME)}, ${e(EMPLOYEE_REGISTRATION)}, 'Gestor QA eDB', 'Gestor QA eDB',
-  'QA eDB', NULL, 'ATIVO', 0, 0, 1, ${PILOT_TENANT_ID}, datetime('now'), datetime('now'), NULL
-WHERE EXISTS (
-  SELECT 1 FROM empresas WHERE id = ${PILOT_TENANT_ID} AND ativo = 1 AND deleted_at IS NULL
-)
-AND NOT EXISTS (
-  SELECT 1 FROM funcionarios
-  WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID}
-);
+  ${e(PILOT_SECTOR_NAME)}, s.id, 'ATIVO', 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL
+FROM empresas emp
+JOIN setores s
+  ON s.empresa_id = emp.id
+ AND s.codigo = ${e(PILOT_SECTOR_CODE)}
+ AND s.ativo = 1
+ AND s.deleted_at IS NULL
+WHERE emp.id = ${PILOT_TENANT_ID}
+  AND emp.ativo = 1
+  AND emp.deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM funcionarios
+    WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID}
+  );
 
 UPDATE funcionarios
 SET nome = ${e(EMPLOYEE_NAME)}, cargo = 'Gestor QA eDB', funcao = 'Gestor QA eDB',
-    setor = 'QA eDB', setor_id = NULL, status = 'ATIVO', is_instrutor = 0,
+    setor = ${e(PILOT_SECTOR_NAME)},
+    setor_id = (
+      SELECT s.id FROM setores s
+      WHERE s.empresa_id = ${PILOT_TENANT_ID}
+        AND s.codigo = ${e(PILOT_SECTOR_CODE)}
+        AND s.ativo = 1
+        AND s.deleted_at IS NULL
+      LIMIT 1
+    ),
+    status = 'ATIVO', is_instrutor = 0,
     is_examinador = 0, ativo = 1, deleted_at = NULL, updated_at = datetime('now')
 WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID};
 
@@ -207,6 +252,10 @@ UPDATE funcionarios
 SET ativo = 0, status = 'INATIVO', deleted_at = COALESCE(deleted_at, datetime('now')), updated_at = datetime('now')
 WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID};
 
+UPDATE setores
+SET ativo = 0, deleted_at = COALESCE(deleted_at, datetime('now')), updated_at = datetime('now')
+WHERE codigo = ${e(PILOT_SECTOR_CODE)} AND empresa_id = ${PILOT_TENANT_ID};
+
 UPDATE empresas
 SET ativo = 0, deleted_at = COALESCE(deleted_at, datetime('now')), updated_at = datetime('now')
 WHERE id = ${PILOT_TENANT_ID} AND codigo = ${e(PILOT_TENANT_CODE)};
@@ -218,11 +267,13 @@ function verifyPostconditions(dbName) {
   const row = queryOne(
     dbName,
     `SELECT
-      (SELECT COUNT(*) FROM funcionarios WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID} AND ativo = 1 AND deleted_at IS NULL) AS employee_count,
+      (SELECT COUNT(*) FROM empresas WHERE id = ${PILOT_TENANT_ID} AND ativo = 1 AND deleted_at IS NULL) AS tenant_count,
+      (SELECT COUNT(*) FROM setores WHERE codigo = ${e(PILOT_SECTOR_CODE)} AND empresa_id = ${PILOT_TENANT_ID} AND dominio_codigo = ${e(PILOT_SECTOR_DOMAIN)} AND ativo = 1 AND deleted_at IS NULL) AS sector_count,
+      (SELECT COUNT(*) FROM funcionarios f JOIN setores s ON s.id = f.setor_id AND s.empresa_id = f.empresa_id WHERE f.matricula = ${e(EMPLOYEE_REGISTRATION)} AND f.empresa_id = ${PILOT_TENANT_ID} AND s.codigo = ${e(PILOT_SECTOR_CODE)} AND f.ativo = 1 AND f.deleted_at IS NULL) AS employee_count,
       (SELECT COUNT(*) FROM usuarios u WHERE lower(trim(u.email)) = lower(trim(${e(EMAIL)})) AND u.active = 1 AND u.deleted_at IS NULL AND u.funcionario_id = (SELECT id FROM funcionarios WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID} AND deleted_at IS NULL LIMIT 1)) AS user_count,
       (SELECT COUNT(*) FROM usuarios u JOIN usuarios_empresas ue ON ue.usuario_id = u.id WHERE lower(trim(u.email)) = lower(trim(${e(EMAIL)})) AND ue.empresa_id = ${PILOT_TENANT_ID} AND lower(trim(ue.role)) = 'manager' AND ue.is_primary = 1) AS membership_count;`,
   );
-  for (const key of ['employee_count', 'user_count', 'membership_count']) {
+  for (const key of ['tenant_count', 'sector_count', 'employee_count', 'user_count', 'membership_count']) {
     if (Number(row?.[key]) !== 1) throw new Error(`EDB_PILOT_IDENTITY_POSTCONDITION_FAILED:${key}=${row?.[key]}`);
   }
 }
