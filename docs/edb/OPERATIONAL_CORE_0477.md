@@ -10,6 +10,8 @@ Branch: `feat/edb-operational-core-0477`
 
 The design has one operational source of truth and separate immutable regulatory evidence.
 
+Later additive changes 0478–0480 harden ANAC evidence, relational/audit bindings and diary/volume/incident lifecycle. None is applied to staging or production in PR #110.
+
 ## 1. One operational source
 
 Canonical flight semantics are added directly to the existing `cv_voo_etapas` rows. The ANAC crew-function code is added directly to `cv_voo_tripulantes`.
@@ -96,6 +98,8 @@ The final-record lifecycle begins only then:
 
 `DRAFT → READY_FOR_PIC_SIGNATURE → PIC_SIGNED → OPERATOR_SIGNED → ANAC_PENDING → ANAC_SYNCED`
 
+`ANAC_SYNCED` remains unavailable to generic application lifecycle code until a future official ANAC acceptance adapter defines and validates accepted response semantics.
+
 ## 5. Signatures
 
 Three signature intents exist in the contract, but storage follows the operational moment:
@@ -106,7 +110,9 @@ Three signature intents exist in the contract, but storage follows the operation
 
 `edb_assinaturas` rejects preflight technical acknowledgements by design.
 
-The generic signature ceremony binds explicit intent, reviewed content, authentication evidence and the exact SHA-256 hash. It stores only proof references/certificate evidence, never private keys.
+The generic signature ceremony binds explicit intent, reviewed content, authentication evidence, exact target identity and the SHA-256 hash. It stores only proof references/certificate evidence, never private keys.
+
+PIC signature insertion + `PIC_SIGNED` and operator signature insertion + `OPERATOR_SIGNED` are each persisted atomically in one D1 batch.
 
 ## 6. Correction model
 
@@ -114,8 +120,9 @@ Signed records are not overwritten.
 
 A correction:
 
-- creates a new immutable revision;
-- references the superseded revision/record;
+- preserves `logicalRecordId`;
+- creates a new `revisionId`;
+- references the prior revision through `supersedesRevisionId`;
 - records a correction reason;
 - preserves the historical preflight technical acknowledgement that actually preceded the flight;
 - clears the prior postflight PIC/operator signatures;
@@ -141,7 +148,7 @@ A correction made after the event must never create a fictitious new “prefligh
 - `edb_anac_recibos`
 - `edb_incidentes_integridade`
 
-Immutable evidence receives database no-update/no-delete protection where applicable. Mutable lifecycle/outbox state is deliberately kept separate from immutable payload evidence.
+Immutable evidence receives database no-update/no-delete protection where applicable. Mutable lifecycle/outbox state is deliberately separated from immutable payload evidence.
 
 ## 8. Current internal code path
 
@@ -150,15 +157,32 @@ Immutable evidence receives database no-update/no-delete protection where applic
 3. `operational-regulatory-source.ts` validates explicit semantics and preserves unclassified IFR evidence.
 4. `regulatory-projection.ts` overlays only explicit canonical values.
 5. `technical-awareness.ts` creates/verifies the preflight snapshot and acknowledgement binding.
-6. `postflight-finalization.ts` enforces the preflight/postflight boundary.
-7. `edb-persistence-repository.ts` persists immutable final revisions and final signatures.
-8. lifecycle, audit, discrepancy/maintenance, diary/volume and availability services govern the remaining record history.
-9. ANAC outbox remains inert until an official adapter exists.
+6. `edb-technical-awareness-repository.ts` persists and revalidates preflight evidence.
+7. `postflight-finalization.ts` enforces the preflight/postflight boundary.
+8. `edb-persistence-repository.ts` persists final revisions, signatures, lifecycle transitions and ANAC queue evidence.
+9. `edb-audit-repository.ts` persists/reconstructs the diary hash chain and verifies it cryptographically.
+10. `edb-technical-discrepancy-repository.ts` persists/replays discrepancy → deferred/corrective action → RTS history through domain validation.
+11. `edb-diary-repository.ts` persists/reconstructs diary volumes and integrity incidents with optimistic lifecycle updates.
+12. ANAC outbox remains inert until an official adapter exists.
 
-## 9. Activation posture
+## 9. Additive hardening after 0477
 
-Still disabled. This branch does not register a public eDB route, expose a frontend/menu, enable a feature flag, apply 0477, store signing secrets or transmit anything to ANAC.
+### 0478
+
+Hardens internal ANAC outbox/receipt evidence without defining an external endpoint, payload or acceptance meaning.
+
+### 0479
+
+Materializes audit `voo_id`, `situacao_tecnica_id` and `actor_json`; enforces volume/diary, discrepancy/revision, maintenance/discrepancy and incident/diary/volume scope; and prevents audit-chain forks.
+
+### 0480
+
+Makes diary/volume/incident lifecycle monotonic and historical evidence non-deletable: no diary/volume reopen, no closing-act rewrite, write-once incident references and no reverse reconstitution transition.
+
+## 10. Activation posture
+
+Still disabled. This branch does not register a public eDB route, expose a frontend/menu, enable a feature flag, apply 0477–0480, store signing secrets, write real operational eDB data or transmit anything to ANAC.
 
 The safe sequence remains:
 
-CI → controlled integration with current main → governed staging schema apply → internal APIs → shadow UI → staging validation → regulatory/security acceptance → explicit production approval.
+CI → controlled integration with current main → governed staging apply `0477 → 0478 → 0479 → 0480` → internal APIs → shadow UI → staging validation → regulatory/security acceptance → explicit production approval.
