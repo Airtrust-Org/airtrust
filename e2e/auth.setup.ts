@@ -28,10 +28,10 @@ setup('autenticar usuário', async ({ page }) => {
     );
   }
 
-  await page.goto('/login');
-  await page.waitForLoadState('networkidle');
+  await page.goto('/login', { waitUntil: 'domcontentloaded' });
 
   // Preenche login form (usando type selectors — mais robusto que getByLabel + i18n)
+  await page.locator('input[type="email"]').waitFor({ state: 'visible' });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
   // Alguns layouts não exibem "lembrar de mim"; só marca quando o controle existir.
@@ -39,7 +39,7 @@ setup('autenticar usuário', async ({ page }) => {
   if ((await rememberMe.count()) > 0) {
     await rememberMe.check();
   }
-  await page.getByRole('button', { name: /entrar/i }).click();
+  await page.getByRole('button', { name: /entrar|sign in/i }).click();
 
   // Aguarda redirecionamento pós-login (app navega para "/" após autenticação)
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30000 });
