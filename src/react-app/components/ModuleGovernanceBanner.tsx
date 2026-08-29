@@ -6,10 +6,7 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react';
-import type {
-  ModuleEvidenceLevel,
-  ModuleMaturityLevel,
-} from '@/react-app/lib/modules';
+import type { ModuleEvidenceLevel, ModuleMaturityLevel } from '@/react-app/lib/modules';
 import { cn } from '@/react-app/lib/utils';
 
 interface ModuleGovernanceBannerProps {
@@ -63,8 +60,7 @@ const BANNER_CONFIG: Record<ModuleMaturityLevel, BannerConfig> = {
       'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100',
     iconTone: 'text-emerald-600 dark:text-emerald-300',
     label: 'Registro regulado',
-    description:
-      'A substituição do papel exige autorização formal do POI por operador e escopo.',
+    description: 'A substituição do papel exige autorização formal do POI por operador e escopo.',
   },
   N4: {
     icon: CheckCircle2,
@@ -99,23 +95,25 @@ export default function ModuleGovernanceBanner({
   return (
     <div
       className={cn(
-        'mb-4 flex items-start gap-3 rounded-lg border px-4 py-3 text-sm',
+        'mb-4 flex min-w-0 flex-col gap-3 rounded-lg border px-4 py-3 text-sm sm:flex-row sm:items-start sm:gap-4',
         config.tone,
         className,
       )}
     >
-      <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', config.iconTone)} />
-      <div className="min-w-0 flex-1">
-        <p className="font-medium">
-          {resolvedTitle}: {config.label}.
-        </p>
-        <p className="mt-1 text-current/90">{description ?? config.description}</p>
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', config.iconTone)} />
+        <div className="min-w-0 flex-1">
+          <p className="font-medium leading-5">
+            {resolvedTitle}: {config.label}.
+          </p>
+          <p className="mt-1 leading-5 text-current/90">{description ?? config.description}</p>
+        </div>
       </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+      <div className="flex min-w-0 flex-wrap gap-2 pl-8 sm:w-auto sm:shrink-0 sm:justify-end sm:pl-0">
         {chips.map((chip) => (
           <span
             key={chip}
-            className="inline-flex items-center rounded-full border border-current/15 bg-white/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-current dark:bg-black/10"
+            className="inline-flex max-w-full items-center rounded-full border border-current/15 bg-white/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-current dark:bg-black/10"
           >
             {chip}
           </span>
