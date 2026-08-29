@@ -79,6 +79,7 @@ export default function FrmsMaintenanceDashboard() {
   const [date, setDate] = useState(localTodayIso());
   const access = useFrmsOperationalAccess();
   const canManage = access.data?.can_manage_maintenance === true;
+  const canOpenOwnMaintenanceCheckin = access.data?.frms_profile === 'maintenance';
   const team = useFrmsMaintenanceTeam(date, canManage);
   const items = team.data?.items || [];
 
@@ -140,12 +141,14 @@ export default function FrmsMaintenanceDashboard() {
           </div>
 
           <div className="flex flex-wrap items-end gap-2">
-            <Link
-              to="/frms/checkin"
-              className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-            >
-              Meu check-in
-            </Link>
+            {canOpenOwnMaintenanceCheckin ? (
+              <Link
+                to="/frms?view=checkin"
+                className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                Meu check-in
+              </Link>
+            ) : null}
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Data de referência
               <input
