@@ -10,13 +10,19 @@ const read = (file) => readFileSync(path.join(ROOT, file), 'utf8');
 const SCRIPT = 'scripts/staging/smoke-edb-shadow-readonly.mjs';
 const WORKFLOW = '.github/workflows/edb-staging-readonly-smoke.yml';
 
-test('eDB staging smoke verifies exact release provenance and fail-closed access', () => {
+test('eDB staging smoke verifies exact release provenance and fail-closed pilot access', () => {
   const script = read(SCRIPT);
   assert.match(script, /\/api\/version/);
   assert.match(script, /EXPECTED_EDB_RELEASE_SHA/);
   assert.match(script, /\/api\/edb\/capability/);
   assert.match(script, /MISSING_TOKEN/);
-  assert.match(script, /EDB_SHADOW_DISABLED/);
+  assert.match(script, /capability\.status === 200/);
+  assert.match(script, /capability\.json\?\.data\?\.enabled === false/);
+  assert.match(script, /NON_OFFICIAL_SHADOW_PILOT_CAPABILITY/);
+  assert.match(script, /officialLogbook === false/);
+  assert.match(script, /replacesPaper === false/);
+  assert.match(script, /EDB_SHADOW_PILOT_NOT_ENABLED/);
+  assert.match(script, /\/api\/edb\/voos\/1\/readiness/);
   assert.match(script, /CANONICAL_QA_TENANT = 999002/);
   assert.match(script, /EDB_PILOT_TENANT = 6/);
 });
