@@ -100,12 +100,17 @@ export async function assessEdbRegulatoryReadiness(
     technicalSituationMatchesRecord &&
     technicalAckBinding?.snapshotIntegrity === true;
 
+  const embeddedTechnicalAcknowledgement = record.signatures.picTechnicalAcknowledgement;
+  const preflightTechnicalAcknowledgement = preflight.technicalAcknowledgement?.signature;
   const technicalAckComplete =
     technicalSnapshotComplete &&
     technicalAckBinding?.matchesSnapshot === true &&
-    Boolean(record.signatures.picTechnicalAcknowledgement) &&
-    record.signatures.picTechnicalAcknowledgement?.canonicalPayloadHashSha256 ===
-      preflight.technicalAcknowledgement?.signature.canonicalPayloadHashSha256;
+    Boolean(embeddedTechnicalAcknowledgement) &&
+    embeddedTechnicalAcknowledgement?.signatureId === preflightTechnicalAcknowledgement?.signatureId &&
+    embeddedTechnicalAcknowledgement?.targetType === 'TECHNICAL_SITUATION' &&
+    embeddedTechnicalAcknowledgement?.targetId === preflight.technicalSituation?.snapshotId &&
+    embeddedTechnicalAcknowledgement?.canonicalPayloadHashSha256 ===
+      preflightTechnicalAcknowledgement?.canonicalPayloadHashSha256;
 
   const flightValidation = validateForPicFlightSignature(record);
   const flightBlocking = codes(flightValidation.issues, 'BLOCKING').filter(
@@ -113,15 +118,16 @@ export async function assessEdbRegulatoryReadiness(
   );
   const flightWarnings = codes(flightValidation.issues, 'WARNING');
 
+  const finalRevisionTargetId = record.recordId ?? undefined;
   const picBinding = record.signatures.picFlightRecord
-    ? await verifyEdbSignaturePayloadBinding(record, 'PIC_FLIGHT_RECORD')
+    ? await verifyEdbSignaturePayloadBinding(record, 'PIC_FLIGHT_RECORD', finalRevisionTargetId)
     : null;
 
   const operatorValidation = validateForOperatorSignature(record, now);
   const operatorBlocking = codes(operatorValidation.issues, 'BLOCKING');
   const operatorWarnings = codes(operatorValidation.issues, 'WARNING');
   const operatorBinding = record.signatures.operatorRecord
-    ? await verifyEdbSignaturePayloadBinding(record, 'OPERATOR_RECORD')
+    ? await verifyEdbSignaturePayloadBinding(record, 'OPERATOR_RECORD', finalRevisionTargetId)
     : null;
 
   const operatorDeadline = record.signatures.picFlightRecord
@@ -152,9 +158,35 @@ export async function assessEdbRegulatoryReadiness(
             ? 'EDB_PIC_TECHNICAL_ACK_REQUIRED'
             : !technicalAckBinding?.matchesSnapshot
               ? 'EDB_PIC_TECHNICAL_ACK_SNAPSHOT_MISMATCH'
-              : 'EDB_PIC_TECHNICAL_ACK_NOT_EMBEDDED_IN_FINAL_RECORD',
+              : !embeddedTechnicalAcknowledgement
+                ? 'EDB_PIC_TECHNICAL_ACK_NOT_EMBEDDED_IN_FINAL_RECORD'
+                : embeddedTechnicalAcknowledgement.signatureId !== preflightTechnicalAcknowledgement?.signatureId
+                  ? 'EDB_PIC_TECHNICAL_ACK_ID_MISMATCH'
+                  : embeddedTechnicalAcknowledgement.targetType !== 'TECHNICAL_SITUATION' ||
+                      embeddedTechnicalAcknowledgement.targetId !== preflight.technicalSituation?.snapshotId
+                    ? 'EDB_PIC_TECHNICAL_ACK_TARGET_MISMATCH'
+                    : 'EDB_PIC_TECHNICAL_ACK_HASH_MISMATCH',
         ]
       : [];
+
+  const picSignatureCodes =
+    picBinding && !picBinding.matchesPayload
+      ? [
+          !picBinding.targetMatches
+            ? 'EDB_PIC_FLIGHT_SIGNATURE_TARGET_MISMATCH'
+            : 'EDB_PIC_FLIGHT_SIGNATURE_PAYLOAD_CHANGED',
+        ]
+      : [];
+
+  const operatorSignatureCodes =
+    operatorBinding && !operatorBinding.matchesPayload
+      ? [
+          ...operatorBlocking,
+          !operatorBinding.targetMatches
+            ? 'EDB_OPERATOR_SIGNATURE_TARGET_MISMATCH'
+            : 'EDB_OPERATOR_SIGNATURE_PAYLOAD_CHANGED',
+        ]
+      : operatorBlocking;
 
   const steps: EdbReadinessStep[] = [
     {
@@ -193,10 +225,7 @@ export async function assessEdbRegulatoryReadiness(
             : picBinding?.matchesPayload
               ? 'COMPLETE'
               : 'ACTION_REQUIRED',
-      blockingCodes:
-        picBinding && !picBinding.matchesPayload
-          ? ['EDB_PIC_FLIGHT_SIGNATURE_PAYLOAD_CHANGED']
-          : [],
+      blockingCodes: picSignatureCodes,
       warningCodes: [],
       deadlineAt: null,
     },
@@ -210,10 +239,7 @@ export async function assessEdbRegulatoryReadiness(
             : operatorSignatureComplete
               ? 'COMPLETE'
               : 'ACTION_REQUIRED',
-      blockingCodes:
-        operatorBinding && !operatorBinding.matchesPayload
-          ? [...operatorBlocking, 'EDB_OPERATOR_SIGNATURE_PAYLOAD_CHANGED']
-          : operatorBlocking,
+      blockingCodes: operatorSignatureCodes,
       warningCodes: operatorWarnings,
       deadlineAt: operatorDeadline,
     },
