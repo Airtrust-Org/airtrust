@@ -5,29 +5,39 @@
 The first vigilance protocol (`airtrust-vigilance-v1`) used a reddish square with
 a **blue dot** stimulus and a 2–10 s inter-stimulus interval. The wording still
 told the crew member to "click when the blue circle appears". That mixed the
-PVT-B *duration* with the *classic PVT* interval and did not match the published
-PVT-B paradigm visually.
+PVT-B *duration* with the *classic PVT* interval and did not provide a visually
+recognisable PVT presentation.
 
-`airtrust-pvtb-v2` aligns the AirTrust implementation with the published
-**PVT-B** design:
+`airtrust-pvtb-v2` is an independent AirTrust implementation of the PVT paradigm.
+It uses the brief PVT-B timing/sampling approach and the familiar computer-PVT
+visual convention: a black response field, a fixed red rectangular outline, and
+a yellow millisecond counter as the stimulus.
 
+Scientific and operational references:
+
+- NASA Ames Research Center — Fatigue Countermeasures Laboratory / NASA PVT+:
+  <https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/>
 - Basner, M., Mollicone, D., & Dinges, D. F. (2011). *Validity and sensitivity
   of a brief psychomotor vigilance test (PVT-B)*. **Acta Astronautica**, 69(11–12),
   949–959.
-- PsyToolkit experiment library — PVT-B:
+- PsyToolkit experiment library — PVT-B (secondary reproducible implementation):
   <https://www.psytoolkit.org/experiment-library/pvtb.html>
 
-This is an **independent AirTrust implementation of the published paradigm**. It
-is **not** the NASA PVT+ application and the UI states that explicitly.
+NASA Ames maintains validated PVT implementations for operational research,
+including aviation. The AirTrust test is **not** the NASA PVT+ application and
+does not claim to reproduce that application's interface pixel-for-pixel. NASA
+is cited in the crew-facing UI only as a concise scientific/operational reference;
+the detailed methodological provenance remains in this technical documentation.
 
 ## Protocol (`PVTB_V2_PROTOCOL`)
 
 | Parameter | Value |
 |---|---|
 | Session sampling duration | ~3 minutes (`180000 ms`) |
-| Fixed stimulus surface | a **red box**, visible the entire session |
-| Waiting state | red box, empty |
-| Stimulus | a **yellow millisecond counter** inside the box |
+| Response surface | **black field**, active for pointer/keyboard response |
+| Fixed visual frame | **red rectangular outline**, visible throughout the session |
+| Waiting state | black field + empty red rectangle |
+| Stimulus | **yellow millisecond counter** inside the red rectangle |
 | Counter refresh | ~every 50 ms (`counterTickMs`) — display only |
 | Response | tap/click/space/enter as fast as possible |
 | Inter-stimulus interval | ~1 s feedback hold + random 0–3 s = **1–4 s total** |
@@ -37,6 +47,11 @@ is **not** the NASA PVT+ application and the UI states that explicitly.
 | No response | recorded as a **lapse with RT = 30000 ms**, not as a separate `missed` event |
 | Timing source | `performance.now()` only — never `Date.now()` |
 | Focus / visibility loss | invalidates the attempt; no partial data is emitted |
+
+The whole black response surface remains clickable/tappable so the measurement
+is not made unnecessarily dependent on pointing precisely at a small target.
+The red rectangle is the visual fixation/stimulus frame; it is not the only
+accepted response target.
 
 The three-minute value is the **stimulus sampling window**. No new trial is
 started after that boundary. If a stimulus was already visible when the boundary
@@ -96,6 +111,6 @@ Consequences:
 - Lapse (≥ 500 ms) and false-start (< 100 ms) thresholds remain the readiness
   thresholds used by AirTrust.
 - The readiness scoring / classification rules (`deriveReadinessAssessment`) are
-  unchanged; the protocol revision changes the stimulus paradigm, interval, and
-  no-response handling.
+  unchanged; the protocol revision changes the stimulus presentation, interval,
+  and no-response handling.
 - The PVT result still never decides APTO/INAPTO on its own.
