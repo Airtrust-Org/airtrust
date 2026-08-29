@@ -466,24 +466,37 @@ jobs:
 
       - name: Smoke Pages
         shell: bash
+        env:
+          APP_VERSION: ${{ needs.guard.outputs.app_version }}
         run: |
           set -euo pipefail
           login_body="$(mktemp)"
           sw_body="$(mktemp)"
 
-          login_status="$(curl -sS -L -o "$login_body" -w '%{http_code}' "$PAGES_LOGIN_URL")"
-          if [[ "$login_status" != "200" ]]; then
-            echo "Pages login returned $login_status." >&2
-            cat "$login_body" >&2
-            exit 1
-          fi
-
-          if grep -q 'build-version' "$login_body"; then
-            grep -Eo 'build-version[^>]*content="[^"]+"' "$login_body" | head -n1
-          else
-            echo "build-version meta tag not found in $PAGES_LOGIN_URL." >&2
-            exit 1
-          fi
+          # The Cloudflare Pages atomic deploy swaps the production deployment,
+          # but the custom-domain edge can lag a few minutes. Poll until the
+          # served build-version EQUALS APP_VERSION; fail if it never converges.
+          # A stale (or absent) build-version is a FAILED release, never green.
+          attempts=20
+          delay=15
+          for i in $(seq 1 "$attempts"); do
+            login_status="$(curl -sS -L -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+              -o "$login_body" -w '%{http_code}' "${PAGES_LOGIN_URL}?cachebust=$(date +%s)")"
+            if [[ "$login_status" != "200" ]]; then
+              echo "Pages login returned $login_status (attempt $i/$attempts)." >&2
+              if [[ "$i" -eq "$attempts" ]]; then cat "$login_body" >&2; exit 1; fi
+              sleep "$delay"; continue
+            fi
+            if node scripts/ci/assert-pages-build-version.mjs --expected "${APP_VERSION}" --html-file "$login_body"; then
+              break
+            fi
+            if [[ "$i" -eq "$attempts" ]]; then
+              echo "Custom-domain build-version never converged to ${APP_VERSION} after $((attempts * delay))s." >&2
+              exit 1
+            fi
+            echo "build-version not yet ${APP_VERSION} on ${PAGES_LOGIN_URL} (attempt $i/$attempts); retrying in ${delay}s." >&2
+            sleep "$delay"
+          done
 
           sw_status="$(curl -sS -o "$sw_body" -w '%{http_code}' "$PAGES_SW_URL" || true)"
           if [[ "$sw_status" == "200" ]]; then
