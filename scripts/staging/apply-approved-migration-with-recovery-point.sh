@@ -160,22 +160,49 @@ validate_postconditions() {
 
 query_count() {
   local sql="$1"
-  (
-    cd worker-airtrust
-    npx wrangler d1 execute "$db_name" --remote --json --command "$sql" > "$ledger_output"
-  )
-  node - "$ledger_output" <<'NODE'
-const fs = require('node:fs');
-const file = process.argv[2];
-const raw = fs.readFileSync(file, 'utf8');
-const start = raw.indexOf('[');
-const end = raw.lastIndexOf(']');
-const jsonText = (start !== -1 && end > start) ? raw.slice(start, end + 1) : raw;
-const parsed = JSON.parse(jsonText);
-const row = parsed?.[0]?.results?.[0];
+  node - "$db_name" "$sql" <<'NODE'
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+const [,, dbName, sql] = process.argv;
+const res = spawnSync(
+  'npx',
+  ['wrangler', 'd1', 'execute', dbName, '--remote', '--json', '--command', sql],
+  { cwd: path.join(process.cwd(), 'worker-airtrust'), encoding: 'utf8', env: process.env }
+);
+if (res.status !== 0) {
+  process.stderr.write(`wrangler failed with code ${res.status}\nstdout: ${res.stdout}\nstderr: ${res.stderr}\n`);
+  process.exit(1);
+}
+let parsed;
+try {
+  parsed = JSON.parse(res.stdout);
+} catch {
+  const start = res.stdout.indexOf('[');
+  const end = res.stdout.lastIndexOf(']');
+  if (start !== -1 && end > start) {
+    try {
+      parsed = JSON.parse(res.stdout.slice(start, end + 1));
+    } catch (e2) {
+      process.stderr.write(`JSON parse failed: ${e2.message}\nraw stdout: ${res.stdout}\n`);
+      process.exit(1);
+    }
+  } else {
+    process.stderr.write(`No JSON array found in stdout:\n${res.stdout}\n`);
+    process.exit(1);
+  }
+}
+const results = Array.isArray(parsed) ? parsed[0]?.results : parsed?.results;
+if (!Array.isArray(results) || results.length === 0) {
+  process.stderr.write(`No results array found in output:\n${JSON.stringify(parsed, null, 2)}\nraw stdout:\n${res.stdout}\n`);
+  process.exit(1);
+}
+const row = results[0];
 const val = row?.count ?? row?.COUNT ?? row?.total ?? row?.TOTAL ?? row?.['COUNT(*)'] ?? row?.['count(*)'] ?? (row ? Object.values(row)[0] : NaN);
 const count = Number(val);
-if (!Number.isInteger(count) || count < 0) throw new Error('LEDGER_COUNT_INVALID');
+if (!Number.isInteger(count) || count < 0) {
+  process.stderr.write(`Invalid count value (${val}) extracted from row ${JSON.stringify(row)} in output:\n${JSON.stringify(parsed, null, 2)}\n`);
+  process.exit(1);
+}
 process.stdout.write(String(count));
 NODE
 }
