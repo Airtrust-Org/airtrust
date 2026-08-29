@@ -15,8 +15,9 @@ function completeRecord(): EdbFlightRecord {
     sourceRdvVersion: 3,
     sourceStageId: 300,
     capturedAt: '2026-08-28T11:05:00.000Z',
+    logicalRecordId: 'flight-100-stage-300',
+    revisionId: 'edbrev-100-300-r1',
   });
-  record.recordId = 'edb-100-300-r1';
   record.identity.aircraft = {
     aircraftId: 12,
     manufacturer: 'Leonardo',
@@ -114,11 +115,27 @@ describe('eDB postflight finalization', () => {
       technicalAcknowledgement: acknowledgement,
     });
 
+    expect(finalized.logicalRecordId).toBe('flight-100-stage-300');
+    expect(finalized.revisionId).toBe('edbrev-100-300-r1');
     expect(finalized.technicalAcknowledgementSignatureId).toBe('sig-tech-1');
     expect(finalized.record.flight.personsOnBoard).toBe(9);
     expect(finalized.record.flight.cycles).toBe(2);
     expect(finalized.record.signatures.picTechnicalAcknowledgement?.signatureId).toBe('sig-tech-1');
     expect(finalized.record.signatures.picTechnicalAcknowledgement?.targetId).toBe('tech-1');
+  });
+
+  it('rejects finalization before an immutable revision identity is assigned', async () => {
+    const record = completeRecord();
+    record.revisionId = null;
+    const { snapshot, acknowledgement } = await preflight(record);
+
+    await expect(
+      finalizePostflightEdbRecord({
+        draftRecord: record,
+        technicalSituation: snapshot,
+        technicalAcknowledgement: acknowledgement,
+      }),
+    ).rejects.toThrow('EDB_REVISION_ID_REQUIRED');
   });
 
   it('rejects finalization when the acknowledged maintenance situation changed', async () => {
