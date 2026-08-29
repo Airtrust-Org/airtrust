@@ -4,27 +4,7 @@ import { useFrmsOperationalAccess } from '@/react-app/hooks/useFrmsOperationalAc
 import FrmsFlightDashboard from './FrmsFlightDashboard';
 import FrmsMaintenanceDashboard from './FrmsMaintenanceDashboard';
 import FrmsMaintenanceCheckin from './FrmsMaintenanceCheckin';
-
-export type FrmsManagementArea = 'operacoes' | 'manutencao';
-
-function isTenantAdminRole(role: string | null | undefined): boolean {
-  const normalized = String(role || '').trim().toUpperCase();
-  return normalized === 'ADMIN' || normalized === 'ADMINISTRADOR';
-}
-
-export function resolveFrmsManagementArea(params: {
-  requestedArea: string | null;
-  canManageOperations: boolean;
-  canManageMaintenance: boolean;
-}): FrmsManagementArea {
-  const { requestedArea, canManageOperations, canManageMaintenance } = params;
-
-  if (requestedArea === 'manutencao' && canManageMaintenance) return 'manutencao';
-  if (requestedArea === 'operacoes' && canManageOperations) return 'operacoes';
-  if (canManageOperations) return 'operacoes';
-  if (canManageMaintenance) return 'manutencao';
-  return 'operacoes';
-}
+import { canManageFrmsOperations, resolveFrmsManagementArea } from './frmsDashboardRouting';
 
 /**
  * Entrada canônica do FRMS.
@@ -70,12 +50,7 @@ export default function FrmsDashboard() {
   const isMaintenanceWorker = access.data.frms_profile === 'maintenance';
   const wantsOwnMaintenanceCheckin = searchParams.get('view') === 'checkin';
   const canManageMaintenance = access.data.can_manage_maintenance === true;
-  const isAdmin = isTenantAdminRole(access.data.administrative_role);
-  const canManageOperations =
-    isAdmin ||
-    access.data.domains.includes('OPERACOES') ||
-    access.data.domains.includes('FRMS') ||
-    !canManageMaintenance;
+  const canManageOperations = canManageFrmsOperations(access.data);
 
   // Um Mecânico/Inspetor sem função de gestão nunca recebe painel de equipe.
   if (isMaintenanceWorker && !canManageMaintenance) {
