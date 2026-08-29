@@ -32,19 +32,48 @@ esac
 
 query_count() {
   local sql="$1"
-  local out
-  out="$(mktemp -t edb-postcondition.XXXXXXXX.json)"
-  (
-    cd worker-airtrust
-    npx wrangler d1 execute "$target" --remote --json --command "$sql" > "$out"
-  )
-  node - "$out" <<'NODE'
-const fs = require('node:fs');
-const file = process.argv[2];
-const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-const total = Number(parsed?.[0]?.results?.[0]?.total);
-fs.rmSync(file, { force: true });
-if (!Number.isInteger(total) || total < 0) throw new Error('POSTCONDITION_COUNT_INVALID');
+  node - "$target" "$sql" <<'NODE'
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+const [,, dbName, sql] = process.argv;
+const res = spawnSync(
+  'npx',
+  ['wrangler', 'd1', 'execute', dbName, '--remote', '--json', '--command', sql],
+  { cwd: path.join(process.cwd(), 'worker-airtrust'), encoding: 'utf8', env: process.env }
+);
+if (res.status !== 0) {
+  process.stderr.write(`wrangler failed with code ${res.status}\nstdout: ${res.stdout}\nstderr: ${res.stderr}\n`);
+  process.exit(1);
+}
+let parsed;
+try {
+  parsed = JSON.parse(res.stdout);
+} catch {
+  const start = res.stdout.indexOf('[');
+  const end = res.stdout.lastIndexOf(']');
+  if (start !== -1 && end > start) {
+    try {
+      parsed = JSON.parse(res.stdout.slice(start, end + 1));
+    } catch (e2) {
+      process.stderr.write(`JSON parse failed: ${e2.message}\nraw stdout: ${res.stdout}\n`);
+      process.exit(1);
+    }
+  } else {
+    process.stderr.write(`No JSON array found in stdout:\n${res.stdout}\n`);
+    process.exit(1);
+  }
+}
+const results = Array.isArray(parsed) ? parsed[0]?.results : parsed?.results;
+if (!Array.isArray(results) || results.length === 0) {
+  process.stderr.write(`No results array found in output:\n${JSON.stringify(parsed, null, 2)}\nraw stdout:\n${res.stdout}\n`);
+  process.exit(1);
+}
+const row = results[0];
+const total = Number(row?.total ?? row?.count ?? row?.TOTAL ?? row?.COUNT ?? row?.['COUNT(*)'] ?? row?.['count(*)'] ?? (row ? Object.values(row)[0] : NaN));
+if (!Number.isInteger(total) || total < 0) {
+  process.stderr.write(`Invalid total value (${total}) extracted from row ${JSON.stringify(row)} in output:\n${JSON.stringify(parsed, null, 2)}\n`);
+  process.exit(1);
+}
 process.stdout.write(String(total));
 NODE
 }

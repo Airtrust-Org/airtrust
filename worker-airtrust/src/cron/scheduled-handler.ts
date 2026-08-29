@@ -24,6 +24,7 @@ import {
   type FrmsJornadaLegacyRow,
 } from '../lib/frms/controle-voos-shadow-comparator';
 import { isControleVoosShadowModeEnabledForEmpresa } from '../lib/frms/controle-voos-shadow-flag';
+import { cleanupExpiredRefreshTokens } from '../services/auth-refresh-token';
 
 function buildDailyNotificationId(parts: Array<string | number>) {
   return [...parts, new Date().toISOString().slice(0, 10)].join(':');
@@ -231,6 +232,7 @@ export async function runScheduledJobs(
 
   if (event.cron === '0 8 * * *') {
     ctx.waitUntil(alertasDiariosHandler(event, env));
+    ctx.waitUntil(cleanupExpiredRefreshTokens(env.DB));
   }
 
   if (event.cron === '*/10 * * * *') {

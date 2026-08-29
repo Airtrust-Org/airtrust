@@ -1,0 +1,225 @@
+/*
+ * AirTrust semantic theme contract.
+ *
+ * This layer is loaded after the historical design-system styles so new and
+ * migrated screens can share one meaning for canvas, surfaces, text, fields,
+ * interaction and operational severity without depending on raw palette names.
+ * Keep module-specific business colors out of this file.
+ */
+
+:root {
+  color-scheme: light;
+
+  --at-bg-app: #f4f6f8;
+  --at-bg-surface: #ffffff;
+  --at-bg-raised: #ffffff;
+  --at-bg-field: #f8fafc;
+  --at-bg-sunken: #eef2f6;
+
+  --at-border: #dbe2ea;
+  --at-border-strong: #c8d1dc;
+
+  --at-text-primary: #172033;
+  --at-text-secondary: #526078;
+  --at-text-subtle: #64748b;
+  --at-text-disabled: #94a3b8;
+
+  --at-hover: #eef2f6;
+  --at-selected: rgba(16, 183, 127, 0.11);
+  --at-focus: #0d9e6e;
+
+  /* Brand action color is stable across themes. */
+  --at-accent: #0d9e6e;
+  --at-accent-hover: #0b855e;
+  --at-accent-soft: #e7f7f1;
+
+  /* Operational semantics. Green is never an attention state. */
+  --at-success: #15803d;
+  --at-success-soft: #f0fdf4;
+  --at-attention: #b45309;
+  --at-attention-soft: #fffbeb;
+  --at-risk: #c2410c;
+  --at-risk-soft: #fff7ed;
+  --at-critical: #b91c1c;
+  --at-critical-soft: #fef2f2;
+  --at-info: #0369a1;
+  --at-info-soft: #f0f9ff;
+
+  --at-disabled-bg: #eef2f6;
+  --at-disabled-fg: #94a3b8;
+  --at-overlay: rgba(15, 23, 42, 0.46);
+
+  /* Compatibility aliases while pages migrate away from historical tokens. */
+  --theme-bg-base: var(--at-bg-app);
+  --theme-bg-surface: var(--at-bg-surface);
+  --theme-bg-elevated: var(--at-bg-sunken);
+  --theme-border: var(--at-border);
+  --theme-border-muted: var(--at-border-strong);
+  --theme-text-primary: var(--at-text-primary);
+  --theme-text-muted: var(--at-text-secondary);
+  --theme-text-subtle: var(--at-text-subtle);
+  --theme-accent: var(--at-accent);
+  --theme-accent-hover: var(--at-accent-hover);
+  --theme-accent-subtle: var(--at-selected);
+  --theme-danger: var(--at-critical);
+  --theme-warning: var(--at-attention);
+  --theme-success: var(--at-success);
+  --theme-info: var(--at-info);
+
+  --surface-base: var(--at-bg-surface);
+  --surface-raised: var(--at-bg-raised);
+  --surface-overlay: var(--at-bg-sunken);
+  --surface-sunken: var(--at-bg-app);
+  --border-subtle: var(--at-border);
+  --border-default: var(--at-border);
+  --border-strong: var(--at-border-strong);
+  --text-primary: var(--at-text-primary);
+  --text-secondary: var(--at-text-secondary);
+  --text-tertiary: var(--at-text-subtle);
+  --text-disabled: var(--at-text-disabled);
+  --brand-primary: var(--at-accent);
+  --brand-primary-hover: var(--at-accent-hover);
+  --brand-primary-light: var(--at-accent-soft);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --at-bg-app: #0b111b;
+  --at-bg-surface: #111827;
+  --at-bg-raised: #182235;
+  --at-bg-field: #0f172a;
+  --at-bg-sunken: #0d1522;
+
+  --at-border: #2b3748;
+  --at-border-strong: #3b4a60;
+
+  --at-text-primary: #f1f5f9;
+  --at-text-secondary: #c0cad8;
+  --at-text-subtle: #94a3b8;
+  --at-text-disabled: #64748b;
+
+  --at-hover: #1b2738;
+  --at-selected: rgba(16, 183, 127, 0.18);
+  --at-focus: #34d399;
+
+  --at-accent: #34d399;
+  --at-accent-hover: #6ee7b7;
+  --at-accent-soft: rgba(16, 185, 129, 0.14);
+
+  --at-success: #4ade80;
+  --at-success-soft: rgba(34, 197, 94, 0.13);
+  --at-attention: #fbbf24;
+  --at-attention-soft: rgba(245, 158, 11, 0.14);
+  --at-risk: #fb923c;
+  --at-risk-soft: rgba(249, 115, 22, 0.14);
+  --at-critical: #f87171;
+  --at-critical-soft: rgba(239, 68, 68, 0.14);
+  --at-info: #7dd3fc;
+  --at-info-soft: rgba(14, 165, 233, 0.14);
+
+  --at-disabled-bg: #1b2738;
+  --at-disabled-fg: #64748b;
+  --at-overlay: rgba(2, 6, 23, 0.72);
+}
+
+html,
+body,
+#root,
+.airtrust-global-standard {
+  background-color: var(--at-bg-app);
+  color: var(--at-text-primary);
+}
+
+body {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+/* Existing `.card` users become theme-aware without changing layout. */
+.card {
+  background-color: var(--at-bg-surface);
+  border-color: var(--at-border);
+  color: var(--at-text-primary);
+}
+
+/* Canonical primitives for incremental migration. */
+.at-surface {
+  background: var(--at-bg-surface);
+  border-color: var(--at-border);
+  color: var(--at-text-primary);
+}
+
+.at-surface-raised {
+  background: var(--at-bg-raised);
+  border-color: var(--at-border);
+  color: var(--at-text-primary);
+}
+
+.at-field {
+  background: var(--at-bg-field);
+  border-color: var(--at-border-strong);
+  color: var(--at-text-primary);
+}
+
+.at-field::placeholder {
+  color: var(--at-text-subtle);
+}
+
+.at-muted {
+  color: var(--at-text-secondary);
+}
+
+.at-subtle {
+  color: var(--at-text-subtle);
+}
+
+.at-interactive:hover {
+  background: var(--at-hover);
+}
+
+.at-selected {
+  background: var(--at-selected);
+}
+
+.at-focus:focus-visible {
+  outline: 2px solid var(--at-focus);
+  outline-offset: 2px;
+}
+
+.at-status-success {
+  background: var(--at-success-soft);
+  color: var(--at-success);
+}
+
+.at-status-attention {
+  background: var(--at-attention-soft);
+  color: var(--at-attention);
+}
+
+.at-status-risk {
+  background: var(--at-risk-soft);
+  color: var(--at-risk);
+}
+
+.at-status-critical {
+  background: var(--at-critical-soft);
+  color: var(--at-critical);
+}
+
+.at-status-info {
+  background: var(--at-info-soft);
+  color: var(--at-info);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

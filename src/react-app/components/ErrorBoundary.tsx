@@ -5,7 +5,7 @@
  * - Previne white screen of death
  * - UI elegante com fallback
  * - Log em Sentry (produção)
- * - Detalhes técnicos em desenvolvimento
+ * - Detalhes técnicos apenas em desenvolvimento ou quando explicitamente habilitados
  * - Keyboard navigation acessível
  */
 
@@ -101,21 +101,15 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // Log error para serviço de monitoring
     console.error('🚨 ErrorBoundary caught an error:', error, errorInfo);
 
-    // Callback customizado
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }
 
-    this.setState({
-      errorInfo,
-    });
-
+    this.setState({ errorInfo });
     void hardRecoverOnce(error);
 
-    // Enviar para serviço de tracking (Sentry, etc)
     if (typeof window !== 'undefined' && (window as any).Sentry) {
       (window as any).Sentry.captureException(error, {
         contexts: {
@@ -151,23 +145,25 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
-      // Usar fallback customizado se fornecido
       if (this.props.fallback) {
         return this.props.fallback;
       }
 
-      // Fallback padrão elegante
+      const showTechnicalDetails = this.props.showDetails ?? import.meta.env.DEV;
+
       return (
-        <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center p-4">
-          <Card className="max-w-lg w-full shadow-xl border-0">
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 p-4 text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-slate-100">
+          <Card className="w-full max-w-lg border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
             <CardHeader className="pb-3">
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-critical/10 rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-critical/10">
                   <AlertTriangle size={24} className="text-critical" />
                 </div>
                 <div className="flex-1">
-                  <CardTitle className="text-xl text-slate-900">Algo deu errado</CardTitle>
-                  <p className="text-sm text-slate-600 mt-1">
+                  <CardTitle className="text-xl text-slate-900 dark:text-slate-100">
+                    Algo deu errado
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                     Ocorreu um erro inesperado. A equipe foi notificada.
                   </p>
                 </div>
@@ -175,36 +171,32 @@ export class ErrorBoundary extends Component<Props, State> {
             </CardHeader>
 
             <CardContent className="space-y-4">
-              {/* Always allow inspecting error details (production too) */}
-              {this.state.error && (
+              {showTechnicalDetails && this.state.error && (
                 <details
                   className="group cursor-pointer"
                   role="region"
                   aria-label="Detalhes técnicos do erro"
-                  open={true}
                 >
-                  <summary className="select-none flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900 py-2 px-3 rounded-md hover:bg-slate-50">
-                    <span className="group-open:rotate-90 transition-transform inline-block">
-                      ▶
-                    </span>
-                    Detalhes técnicos
+                  <summary className="flex select-none items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100">
+                    <span className="inline-block transition-transform group-open:rotate-90">▶</span>
+                    Detalhes técnicos (desenvolvimento)
                   </summary>
-                  <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-md space-y-3">
+                  <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950">
                     <div>
-                      <p className="text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wide">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                         Mensagem do Erro
                       </p>
-                      <pre className="text-xs text-critical font-mono overflow-auto max-h-24 p-2 bg-white rounded border border-slate-200">
+                      <pre className="max-h-24 overflow-auto rounded border border-slate-200 bg-white p-2 font-mono text-xs text-critical dark:border-slate-700 dark:bg-slate-900">
                         {this.state.error.toString()}
                       </pre>
                     </div>
 
                     {this.state.errorInfo && (
                       <div>
-                        <p className="text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wide">
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                           Stack de Componentes
                         </p>
-                        <pre className="text-xs text-slate-700 font-mono overflow-auto max-h-32 p-2 bg-white rounded border border-slate-200 whitespace-pre-wrap break-words">
+                        <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded border border-slate-200 bg-white p-2 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                           {this.state.errorInfo.componentStack}
                         </pre>
                       </div>
@@ -213,15 +205,13 @@ export class ErrorBoundary extends Component<Props, State> {
                 </details>
               )}
 
-              {/* Dica útil */}
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <p className="text-sm text-blue-900">
-                  💡 <strong>Dica:</strong> Tente recarregar a página. Se o problema persistir,
-                  entre em contato com o suporte.
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/60 dark:bg-blue-950/30">
+                <p className="text-sm text-blue-900 dark:text-blue-100">
+                  <strong>Dica:</strong> tente recarregar a página. Se o problema persistir, entre em
+                  contato com o suporte.
                 </p>
               </div>
 
-              {/* Actions */}
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Button
                   onClick={this.handleRetry}
@@ -250,9 +240,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-/**
- * Hook para usar Error Boundary programaticamente
- */
 export function useErrorHandler() {
   const handleError = (error: Error) => {
     throw error;
