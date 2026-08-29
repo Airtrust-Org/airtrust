@@ -54,6 +54,15 @@ test('0477 adds canonical semantics, preflight awareness and isolated eDB persis
     assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_situacoes_tecnicas_no_update/i);
     assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_ciencias_tecnicas_no_update/i);
     assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_revisoes_no_update/i);
+    assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_ciencia_require_snapshot_binding/i);
+    assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_revisao_require_scope_and_chain/i);
+    assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_assinatura_require_lifecycle/i);
+    assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_estado_transition_guard/i);
+    assert.match(candidate, /CREATE TRIGGER IF NOT EXISTS trg_edb_anac_outbox_require_operator_signed/i);
+    assert.match(candidate, /EDB_TECHNICAL_ACK_SNAPSHOT_BINDING_INVALID/);
+    assert.match(candidate, /EDB_CORRECTION_CHAIN_INVALID/);
+    assert.match(candidate, /EDB_STATE_TRANSITION_NOT_ALLOWED/);
+    assert.match(candidate, /EDB_ANAC_QUEUE_REQUIRES_FINAL_SIGNATURES/);
     assert.doesNotMatch(candidate, /READY_FOR_PIC_TECHNICAL_ACK/i);
     assert.doesNotMatch(candidate, /CREATE TABLE IF NOT EXISTS cv_voo_etapas_regulatorio/i);
     assert.doesNotMatch(candidate, /CREATE TABLE IF NOT EXISTS cv_voo_tripulantes_regulatorio/i);
@@ -116,6 +125,8 @@ test('official Schema V2 apply builder accepts 0477 and appends exactly one ledg
   assert.match(applied, /ALTER TABLE cv_voo_etapas ADD COLUMN tempo_voo_diurno_minutos/);
   assert.match(applied, /CREATE TABLE IF NOT EXISTS edb_situacoes_tecnicas/);
   assert.match(applied, /CREATE TABLE IF NOT EXISTS edb_registro_revisoes/);
+  assert.match(applied, /CREATE TRIGGER IF NOT EXISTS trg_edb_estado_transition_guard/);
+  assert.match(applied, /CREATE TRIGGER IF NOT EXISTS trg_edb_anac_outbox_require_operator_signed/);
   const ledgerRows = applied.match(/INSERT INTO airtrust_schema_changes_v2/g) ?? [];
   assert.equal(ledgerRows.length, 1);
   assert.match(applied, /'edb-operational-core-0477'/);
