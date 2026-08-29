@@ -454,11 +454,11 @@ app.get('/stats', async (c: Context<AppEnv>) => {
         `
       SELECT 
         COUNT(*) as total,
-        SUM(CASE WHEN status_compliance = 'CONFORME' THEN 1 ELSE 0 END) as conformes,
-        SUM(CASE WHEN status_compliance = 'A_VENCER' THEN 1 ELSE 0 END) as a_vencer,
-        SUM(CASE WHEN status_compliance = 'VENCIDO' THEN 1 ELSE 0 END) as vencidos,
-        SUM(CASE WHEN status_compliance = 'PENDENTE' THEN 1 ELSE 0 END) as pendentes,
-        ROUND(AVG(percentual_conformidade), 2) as percentual_medio
+        COALESCE(SUM(CASE WHEN status_compliance = 'CONFORME' THEN 1 ELSE 0 END), 0) as conformes,
+        COALESCE(SUM(CASE WHEN status_compliance = 'A_VENCER' THEN 1 ELSE 0 END), 0) as a_vencer,
+        COALESCE(SUM(CASE WHEN status_compliance = 'VENCIDO' THEN 1 ELSE 0 END), 0) as vencidos,
+        COALESCE(SUM(CASE WHEN status_compliance = 'PENDENTE' THEN 1 ELSE 0 END), 0) as pendentes,
+        COALESCE(ROUND(AVG(percentual_conformidade), 2), 0) as percentual_medio
       FROM historico_compliance
       WHERE deleted_at IS NULL
         AND funcionario_id IN (
