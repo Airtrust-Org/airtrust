@@ -2,11 +2,9 @@ import type { EdbFlightRecord, EdbLifecycleStatus } from './contracts';
 import {
   validateForOperatorSignature,
   validateForPicFlightSignature,
-  validateForPicTechnicalAcknowledgement,
 } from './regulatory-validation';
 
 export type EdbLifecycleAction =
-  | 'MARK_READY_FOR_PIC_TECHNICAL_ACK'
   | 'MARK_READY_FOR_PIC_SIGNATURE'
   | 'CONFIRM_PIC_SIGNED'
   | 'CONFIRM_OPERATOR_SIGNED'
@@ -66,22 +64,8 @@ export function evaluateEdbLifecycleAction(
     return decision(record, false, null, ['EDB_TERMINAL_STATE']);
   }
 
-  if (action === 'MARK_READY_FOR_PIC_TECHNICAL_ACK') {
-    if (record.status !== 'DRAFT') return invalidState(record, 'DRAFT');
-    const validation = validateForPicTechnicalAcknowledgement(record);
-    const blocking = validation.issues.filter((issue) => issue.severity === 'BLOCKING');
-    return decision(
-      record,
-      blocking.length === 0,
-      blocking.length === 0 ? 'READY_FOR_PIC_TECHNICAL_ACK' : null,
-      blocking.map((issue) => issue.code),
-    );
-  }
-
   if (action === 'MARK_READY_FOR_PIC_SIGNATURE') {
-    if (record.status !== 'READY_FOR_PIC_TECHNICAL_ACK') {
-      return invalidState(record, 'READY_FOR_PIC_TECHNICAL_ACK');
-    }
+    if (record.status !== 'DRAFT') return invalidState(record, 'DRAFT');
     if (!record.signatures.picTechnicalAcknowledgement) {
       return decision(record, false, null, ['EDB_PIC_TECHNICAL_ACK_REQUIRED']);
     }
@@ -202,7 +186,12 @@ export function createCorrectionRevision(params: {
       nextIntervention: { ...original.maintenance.nextIntervention },
     },
     signatures: {
-      picTechnicalAcknowledgement: null,
+      picTechnicalAcknowledgement: original.signatures.picTechnicalAcknowledgement
+        ? {
+            ...original.signatures.picTechnicalAcknowledgement,
+            signer: { ...original.signatures.picTechnicalAcknowledgement.signer },
+          }
+        : null,
       picFlightRecord: null,
       operatorRecord: null,
     },

@@ -10,6 +10,7 @@ export interface PersistEdbDraftRevisionParams {
   diarioId: number;
   volumeId: string;
   logicalRecordId: string;
+  technicalAcknowledgementId: string;
   revisionId?: string;
   record: EdbFlightRecord;
   supersedesRevisionId?: string | null;
@@ -43,6 +44,12 @@ export async function persistEdbDraftRevision(
   if (params.record.correction.revision < 1) {
     throw new Error('eDB revision must be >= 1');
   }
+  if (!params.technicalAcknowledgementId.trim()) {
+    throw new Error('eDB revision requires the preflight PIC technical acknowledgement');
+  }
+  if (!params.record.signatures.picTechnicalAcknowledgement) {
+    throw new Error('eDB revision payload requires the preflight PIC technical acknowledgement evidence');
+  }
 
   const revisionId = params.revisionId ?? newId('edbrev');
   const payload = canonicalJson(params.record);
@@ -55,9 +62,9 @@ export async function persistEdbDraftRevision(
         INSERT INTO edb_registro_revisoes (
           id, empresa_id, diario_id, volume_id, logical_record_id, revisao,
           supersedes_revision_id, motivo_correcao, contract_version,
-          voo_id, rdv_id, rdv_versao, etapa_id,
+          voo_id, rdv_id, rdv_versao, etapa_id, ciencia_tecnica_pic_id,
           payload_json, canonical_payload_sha256, captured_at, created_by, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `,
       )
       .bind(
@@ -74,6 +81,7 @@ export async function persistEdbDraftRevision(
         params.record.source.sourceRdvId,
         params.record.source.sourceRdvVersion,
         params.record.source.sourceStageId,
+        params.technicalAcknowledgementId,
         payload,
         canonicalPayloadSha256,
         params.record.source.capturedAt,
@@ -168,6 +176,10 @@ export async function appendEdbSignature(params: {
   signerUserId?: number | null;
   authenticationEvidence?: unknown;
 }): Promise<void> {
+  if (params.signature.type === 'PIC_TECHNICAL_ACK') {
+    throw new Error('EDB_TECHNICAL_ACK_MUST_USE_PREFLIGHT_REPOSITORY');
+  }
+
   await params.db
     .prepare(
       `
