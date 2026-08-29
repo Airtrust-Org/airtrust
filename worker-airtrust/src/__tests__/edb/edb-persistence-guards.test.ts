@@ -23,6 +23,8 @@ function baseRecord() {
     sourceRdvVersion: 1,
     sourceStageId: 40,
     capturedAt: '2026-08-28T12:00:00Z',
+    logicalRecordId: 'flight-20-stage-40',
+    revisionId: 'edbrev-20-40-r1',
   });
 }
 
@@ -30,7 +32,6 @@ const common = {
   empresaId: 10,
   diarioId: 1,
   volumeId: 'volume-1',
-  logicalRecordId: 'flight-20-stage-40',
   technicalAcknowledgementSignatureId: 'sig-tech-1',
 };
 
@@ -69,6 +70,18 @@ describe('eDB persistence guards', () => {
         record,
       }),
     ).rejects.toThrow('Only DRAFT');
+  });
+
+  it('requires immutable logical/revision identity before touching D1', async () => {
+    const record = baseRecord();
+    record.revisionId = null;
+
+    await expect(
+      persistEdbDraftRevision(neverDb, {
+        ...common,
+        record,
+      }),
+    ).rejects.toThrow('EDB_REVISION_ID_REQUIRED');
   });
 
   it('requires the preflight acknowledgement evidence before touching D1', async () => {
