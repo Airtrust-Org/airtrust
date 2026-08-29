@@ -5,12 +5,33 @@ import FrmsFlightDashboard from './FrmsFlightDashboard';
 import FrmsMaintenanceDashboard from './FrmsMaintenanceDashboard';
 import FrmsMaintenanceCheckin from './FrmsMaintenanceCheckin';
 
+export type FrmsManagementArea = 'operacoes' | 'manutencao';
+
+function isTenantAdminRole(role: string | null | undefined): boolean {
+  const normalized = String(role || '').trim().toUpperCase();
+  return normalized === 'ADMIN' || normalized === 'ADMINISTRADOR';
+}
+
+export function resolveFrmsManagementArea(params: {
+  requestedArea: string | null;
+  canManageOperations: boolean;
+  canManageMaintenance: boolean;
+}): FrmsManagementArea {
+  const { requestedArea, canManageOperations, canManageMaintenance } = params;
+
+  if (requestedArea === 'manutencao' && canManageMaintenance) return 'manutencao';
+  if (requestedArea === 'operacoes' && canManageOperations) return 'operacoes';
+  if (canManageOperations) return 'operacoes';
+  if (canManageMaintenance) return 'manutencao';
+  return 'operacoes';
+}
+
 /**
  * Entrada canônica do FRMS.
  *
- * Coordenação de voo, gestão de manutenção e check-in de manutenção são
- * superfícies independentes. O backend decide o perfil individual por cargo
- * (Mecânico/Inspetor) e comprova gestão de manutenção por domínio/setores.
+ * O colaborador de manutenção recebe apenas o próprio check-in. Gestores de
+ * fadiga/FRMS, gestores de manutenção e administradores recebem as áreas de
+ * gestão que o backend comprovou, sem misturar equipe de voo com manutenção.
  */
 export default function FrmsDashboard() {
   const [searchParams] = useSearchParams();
@@ -48,22 +69,32 @@ export default function FrmsDashboard() {
 
   const isMaintenanceWorker = access.data.frms_profile === 'maintenance';
   const wantsOwnMaintenanceCheckin = searchParams.get('view') === 'checkin';
-  const managesMaintenanceOnly =
-    access.data.can_manage_maintenance && !access.data.domains.includes('OPERACOES');
+  const canManageMaintenance = access.data.can_manage_maintenance === true;
+  const isAdmin = isTenantAdminRole(access.data.administrative_role);
+  const canManageOperations =
+    isAdmin ||
+    access.data.domains.includes('OPERACOES') ||
+    access.data.domains.includes('FRMS') ||
+    !canManageMaintenance;
 
-  // Um gestor que também é Mecânico/Inspetor pode alternar explicitamente
-  // para seu check-in pessoal. Um gestor sem cargo de manutenção nunca recebe
-  // esse formulário apenas por manipular a URL.
+  // Um Mecânico/Inspetor sem função de gestão nunca recebe painel de equipe.
+  if (isMaintenanceWorker && !canManageMaintenance) {
+    return <FrmsMaintenanceCheckin />;
+  }
+
+  // Quem também gerencia pode abrir explicitamente seu check-in pessoal.
   if (isMaintenanceWorker && wantsOwnMaintenanceCheckin) {
     return <FrmsMaintenanceCheckin />;
   }
 
-  if (access.data.can_manage_maintenance && (isMaintenanceWorker || managesMaintenanceOnly)) {
-    return <FrmsMaintenanceDashboard />;
-  }
+  const area = resolveFrmsManagementArea({
+    requestedArea: searchParams.get('area'),
+    canManageOperations,
+    canManageMaintenance,
+  });
 
-  if (isMaintenanceWorker) {
-    return <FrmsMaintenanceCheckin />;
+  if (area === 'manutencao' && canManageMaintenance) {
+    return <FrmsMaintenanceDashboard />;
   }
 
   return <FrmsFlightDashboard />;
