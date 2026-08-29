@@ -10,7 +10,7 @@ export interface EdbVolumeBoundaryAct {
 }
 
 export interface EdbDiaryVolume {
-  diaryId: string;
+  diaryId: number;
   volumeId: string;
   aircraftRegistrationMarks: string;
   sequence: number;
@@ -24,7 +24,7 @@ export type EdbReconstitutionOutcome = 'PENDING' | 'RECONSTITUTED' | 'IMPOSSIBLE
 
 export interface EdbInformationLossIncident {
   incidentId: string;
-  diaryId: string;
+  diaryId: number;
   kind: EdbInformationLossKind;
   detectedAt: string;
   description: string;
@@ -43,6 +43,11 @@ function requireText(value: string, field: string): string {
   return normalized;
 }
 
+function requirePositiveInteger(value: number, field: string): number {
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${field} must be a positive integer`);
+  return value;
+}
+
 function requireTimestamp(value: string, field: string): string {
   const normalized = requireText(value, field);
   if (!Number.isFinite(Date.parse(normalized))) throw new Error(`${field} must be a valid timestamp`);
@@ -57,10 +62,11 @@ function clonePerson(person: EdbPersonIdentity, field: string): EdbPersonIdentit
 /**
  * Res. 773/2025 art. 2: the diary is a unique aircraft document, but its
  * information may be split into volumes delimited by opening/closing acts.
- * This contract intentionally does not invent ANAC API volume identifiers.
+ * The local diary identity is the persisted edb_diarios integer primary key;
+ * this contract intentionally does not invent an ANAC API diary identifier.
  */
 export function openEdbDiaryVolume(params: {
-  diaryId: string;
+  diaryId: number;
   volumeId: string;
   aircraftRegistrationMarks: string;
   sequence: number;
@@ -68,15 +74,11 @@ export function openEdbDiaryVolume(params: {
   openedBy: EdbPersonIdentity;
   observations?: string | null;
 }): EdbDiaryVolume {
-  if (!Number.isInteger(params.sequence) || params.sequence < 1) {
-    throw new Error('sequence must be a positive integer');
-  }
-
   return {
-    diaryId: requireText(params.diaryId, 'diaryId'),
+    diaryId: requirePositiveInteger(params.diaryId, 'diaryId'),
     volumeId: requireText(params.volumeId, 'volumeId'),
     aircraftRegistrationMarks: requireText(params.aircraftRegistrationMarks, 'aircraftRegistrationMarks'),
-    sequence: params.sequence,
+    sequence: requirePositiveInteger(params.sequence, 'sequence'),
     status: 'OPEN',
     openingAct: {
       type: 'OPENING',
@@ -96,6 +98,7 @@ export function closeEdbDiaryVolume(
     observations?: string | null;
   },
 ): EdbDiaryVolume {
+  requirePositiveInteger(volume.diaryId, 'volume.diaryId');
   if (volume.status !== 'OPEN' || volume.closingAct) throw new Error('Only an open diary volume can be closed');
   const closedAt = requireTimestamp(params.closedAt, 'closedAt');
   if (Date.parse(closedAt) < Date.parse(volume.openingAct.occurredAt)) {
@@ -142,22 +145,31 @@ export function minimumEdbRetentionUntil(deregistrationDate: string | null): str
 export function onboardOperationWindowStart(asOfOperationDate: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asOfOperationDate);
   if (!match) throw new Error('asOfOperationDate must use YYYY-MM-DD');
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  if (!Number.isFinite(date.getTime())) throw new Error('asOfOperationDate must be a valid calendar date');
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new Error('asOfOperationDate must be a valid calendar date');
+  }
   date.setUTCDate(date.getUTCDate() - 30);
   return date.toISOString().slice(0, 10);
 }
 
 export function createEdbInformationLossIncident(params: {
   incidentId: string;
-  diaryId: string;
+  diaryId: number;
   kind: EdbInformationLossKind;
   detectedAt: string;
   description: string;
 }): EdbInformationLossIncident {
   return {
     incidentId: requireText(params.incidentId, 'incidentId'),
-    diaryId: requireText(params.diaryId, 'diaryId'),
+    diaryId: requirePositiveInteger(params.diaryId, 'diaryId'),
     kind: params.kind,
     detectedAt: requireTimestamp(params.detectedAt, 'detectedAt'),
     description: requireText(params.description, 'description'),
@@ -176,6 +188,7 @@ export function recordPoliceOccurrence(
   incident: EdbInformationLossIncident,
   params: { reference: string; reportedAt: string },
 ): EdbInformationLossIncident {
+  requirePositiveInteger(incident.diaryId, 'incident.diaryId');
   if (incident.policeOccurrenceReference) throw new Error('Police occurrence already recorded');
   return {
     ...incident,
@@ -189,6 +202,7 @@ export function recordAnacInformationLossNotification(
   incident: EdbInformationLossIncident,
   params: { reference: string; notifiedAt: string },
 ): EdbInformationLossIncident {
+  requirePositiveInteger(incident.diaryId, 'incident.diaryId');
   if (!incident.policeOccurrenceReference) {
     throw new Error('ANAC notification requires the police occurrence reference');
   }
@@ -204,6 +218,7 @@ export function recordSuccessfulReconstitution(
   incident: EdbInformationLossIncident,
   completedAt: string,
 ): EdbInformationLossIncident {
+  requirePositiveInteger(incident.diaryId, 'incident.diaryId');
   if (incident.reconstitutionOutcome !== 'PENDING') throw new Error('Reconstitution outcome already recorded');
   return {
     ...incident,
@@ -217,6 +232,7 @@ export function recordImpossibleReconstitution(
   incident: EdbInformationLossIncident,
   params: { completedAt: string; newDiaryOpeningObservation: string },
 ): EdbInformationLossIncident {
+  requirePositiveInteger(incident.diaryId, 'incident.diaryId');
   if (!incident.policeOccurrenceReference) {
     throw new Error('Impossible reconstitution requires the police occurrence reference');
   }
