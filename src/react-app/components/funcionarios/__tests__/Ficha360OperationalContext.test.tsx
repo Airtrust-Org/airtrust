@@ -29,4 +29,22 @@ describe('Ficha360OperationalContext', () => {
     fireEvent.click(screen.getByRole('button', { name: /dados pessoais/i }));
     expect(onOpenPersonalProfile).toHaveBeenCalledTimes(1);
   });
+
+  it('renders an inactive status and safe placeholders when optional operational fields are absent', () => {
+    render(
+      <Ficha360OperationalContext
+        status="INATIVO"
+        funcao="Mecânico"
+        base={null}
+        aeronave={null}
+        licenca={null}
+        updatedAtLabel="-"
+        onOpenPersonalProfile={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('INATIVO')).toBeInTheDocument();
+    expect(screen.getByText('Mecânico')).toBeInTheDocument();
+    expect(screen.getAllByText('-')).toHaveLength(4);
+  });
 });
