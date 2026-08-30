@@ -69,7 +69,7 @@ function statusOperacionalLabel(value: unknown): string {
   return STATUS_OPERACIONAL_LABEL[key] || key;
 }
 
-type SonoOpcao = 'mais9' | 'h9' | 'h8' | 'h7' | 'h6' | 'h5' | 'h4' | 'menos4';
+type SonoOpcao = 'menos4' | 'h4' | 'h5' | 'h6' | 'h7' | 'h8';
 
 type EscalaSeveridade = 'melhor' | 'boa' | 'intermediaria' | 'atencao' | 'critica';
 
@@ -79,14 +79,12 @@ const SONO_OPCOES: {
   horas: number;
   severidade: EscalaSeveridade;
 }[] = [
-  { key: 'mais9', label: 'Mais de 9 horas', horas: 9.5, severidade: 'melhor' },
-  { key: 'h9', label: '9 horas', horas: 9, severidade: 'melhor' },
-  { key: 'h8', label: '8 horas', horas: 8, severidade: 'boa' },
-  { key: 'h7', label: '7 horas', horas: 7, severidade: 'intermediaria' },
-  { key: 'h6', label: '6 horas', horas: 6, severidade: 'atencao' },
-  { key: 'h5', label: '5 horas', horas: 5, severidade: 'critica' },
-  { key: 'h4', label: '4 horas', horas: 4, severidade: 'critica' },
   { key: 'menos4', label: 'Menos de 4 horas', horas: 3.5, severidade: 'critica' },
+  { key: 'h4', label: '4 a menos de 5 horas', horas: 4, severidade: 'critica' },
+  { key: 'h5', label: '5 a menos de 6 horas', horas: 5, severidade: 'critica' },
+  { key: 'h6', label: '6 a menos de 7 horas', horas: 6, severidade: 'atencao' },
+  { key: 'h7', label: '7 a menos de 8 horas', horas: 7, severidade: 'intermediaria' },
+  { key: 'h8', label: '8 horas ou mais', horas: 8, severidade: 'melhor' },
 ];
 
 const KSS_OPCOES = [
@@ -730,7 +728,7 @@ export default function FrmsFlightCheckinFadiga() {
                     <legend className="mb-2 text-sm font-medium text-slate-700">
                       Horas de sono nas últimas 24h
                     </legend>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
                       {SONO_OPCOES.map((op) => {
                         const selected = sonoOpcao === op.key;
                         return (
