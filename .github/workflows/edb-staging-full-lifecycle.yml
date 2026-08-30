@@ -145,6 +145,7 @@ jobs:
             echo '- eDB path: diary + volume + regulatory semantics + P1 + preflight snapshot/ack + revision/signatures + correction/signatures + discrepancy/deferred/corrective/RTS + audit + integrity incident/reconstitution + close volume/diary'
             echo '- final signed state: `OPERATOR_SIGNED`; no ANAC queue/transmission is invoked'
             echo '- mutable canonical fixture cleanup: mandatory and exact-marker scoped'
+            echo '- synthetic identity cleanup: runs after every attempted identity apply, including partial-failure/cancellation paths'
             echo '- immutable eDB evidence: retained inside the reserved synthetic tenant; no trigger bypass/deletion'
             echo '- production action: none'
             echo '- ANAC transmission: none'
@@ -155,5 +156,5 @@ jobs:
         run: node scripts/staging/seed-qa-edb-full-lifecycle.mjs --apply --rollback
 
       - name: Deactivate exact synthetic identity fixtures
-        if: ${{ always() && steps.identity_apply.outcome == 'success' }}
+        if: ${{ always() && steps.identity_apply.outcome != 'skipped' }}
         run: node scripts/staging/seed-qa-edb-pilot.mjs --apply --rollback

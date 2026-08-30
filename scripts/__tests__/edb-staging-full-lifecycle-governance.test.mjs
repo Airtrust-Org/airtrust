@@ -35,13 +35,20 @@ test('release provenance and strict synthetic tenant preflight happen before any
   assert.match(workflow, /EDB_STAGING_RELEASE_SHA_MISMATCH/);
 });
 
-test('cleanup is mandatory, exact-order and never bypasses immutable eDB evidence', () => {
+test('cleanup is mandatory, exact-order and covers partial identity-apply failures without bypassing immutable eDB evidence', () => {
   const workflow = read(WORKFLOW);
-  assert.match(workflow, /if: \$\{\{ always\(\) && steps\.identity_apply\.outcome == 'success' \}\}/);
   const canonicalRollback = workflow.indexOf('seed-qa-edb-full-lifecycle.mjs --apply --rollback');
   const identityRollback = workflow.indexOf('seed-qa-edb-pilot.mjs --apply --rollback');
   assert.ok(canonicalRollback >= 0, 'canonical fixture rollback missing');
   assert.ok(identityRollback > canonicalRollback, 'identity rollback must run after canonical fixture rollback');
+  assert.match(
+    workflow,
+    /Roll back exact mutable canonical fixture[\s\S]*?if: \$\{\{ always\(\) && steps\.identity_apply\.outcome == 'success' \}\}/,
+  );
+  assert.match(
+    workflow,
+    /Deactivate exact synthetic identity fixtures[\s\S]*?if: \$\{\{ always\(\) && steps\.identity_apply\.outcome != 'skipped' \}\}/,
+  );
 
   const seed = read(SEED);
   assert.match(seed, /softDeleteIfPresent/);
