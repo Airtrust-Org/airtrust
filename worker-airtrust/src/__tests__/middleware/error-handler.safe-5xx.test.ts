@@ -4,6 +4,15 @@ import { ApiError, errorHandler } from '../../middleware/error-handler';
 import { AppError } from '../../utils/errors';
 import type { Env } from '../../types';
 
+type ErrorPayload = {
+  success: boolean;
+  error: string;
+  code?: string;
+  requestId?: string;
+  stack?: string;
+  errorName?: string;
+};
+
 function buildApp(environment: string) {
   const app = new Hono<{ Bindings: Env }>();
   app.onError(errorHandler);
@@ -35,6 +44,10 @@ function buildApp(environment: string) {
     } as unknown as Env);
 }
 
+async function readErrorPayload(response: Response): Promise<ErrorPayload> {
+  return (await response.json()) as ErrorPayload;
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -43,7 +56,7 @@ describe('global error handler visible 5xx safety', () => {
   it('preserves useful 4xx business feedback', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await buildApp('production')('/business');
-    const payload = await response.json();
+    const payload = await readErrorPayload(response);
 
     expect(response.status).toBe(400);
     expect(payload).toMatchObject({
@@ -59,7 +72,7 @@ describe('global error handler visible 5xx safety', () => {
     async (environment) => {
       vi.spyOn(console, 'error').mockImplementation(() => undefined);
       const response = await buildApp(environment)('/api-500');
-      const payload = await response.json();
+      const payload = await readErrorPayload(response);
 
       expect(response.status).toBe(500);
       expect(payload).toMatchObject({
@@ -75,7 +88,7 @@ describe('global error handler visible 5xx safety', () => {
   it('hides AppError 503 detail in staging and keeps the operational code', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await buildApp('staging')('/app-503');
-    const payload = await response.json();
+    const payload = await readErrorPayload(response);
 
     expect(response.status).toBe(503);
     expect(payload).toMatchObject({
@@ -89,7 +102,7 @@ describe('global error handler visible 5xx safety', () => {
   it('does not expose an unexpected stack trace in staging', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await buildApp('staging')('/unexpected');
-    const payload = await response.json();
+    const payload = await readErrorPayload(response);
 
     expect(response.status).toBe(500);
     expect(payload).toMatchObject({
@@ -105,7 +118,7 @@ describe('global error handler visible 5xx safety', () => {
   it('keeps detailed unexpected errors available in local development only', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await buildApp('development')('/unexpected');
-    const payload = await response.json();
+    const payload = await readErrorPayload(response);
 
     expect(response.status).toBe(500);
     expect(payload.error).toContain('D1_ERROR');
