@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
-import { ShieldCheck, Save, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Save, RefreshCw, AlertTriangle } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { fetchWithAuth } from '@/react-app/config/api';
-import { parseErrorPayload, parseJsonResponse } from '@/react-app/lib/parseJsonResponse';
+import { parseJsonResponse } from '@/react-app/lib/parseJsonResponse';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
+import {
+  canEditAdminPermissions,
+  resolveConfiguredAdminPermission,
+  type AdminPermissionsLoadState,
+} from './adminPermissionsUiPolicy';
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -75,20 +81,33 @@ function isPermissoesResponse(
 // Página
 // ---------------------------------------------------------------------------
 export default function PermissoesPage() {
+  const { isAdmin } = usePermissions();
   const [permissoes, setPermissoes] = useState<Map<PermKey, boolean>>(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadState, setLoadState] = useState<AdminPermissionsLoadState>('loading');
   const [abaPerfil, setAbaPerfil] = useState<Perfil>('GESTOR');
+
+  // O Worker protege este endpoint com requireAdmin(). A UI segue exatamente
+  // o mesmo contrato para não oferecer uma superfície que o backend recusará.
+  const hasAccess = isAdmin;
+  const editingEnabled = canEditAdminPermissions(loadState);
 
   // ─── Carregar permissões do servidor ───────────────────────────────────
   const carregarPermissoes = useCallback(async () => {
+    if (!hasAccess) {
+      setPermissoes(new Map());
+      setLoadState('error');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setLoadState('loading');
     try {
       const res = await fetchWithAuth('/api/admin/perfis/permissoes');
-      if (!res.ok) {
-        const err = await parseErrorPayload(res);
-        throw new Error(err.error ?? `Erro ${res.status}`);
-      }
+      if (!res.ok) throw new Error('permissions-load-failed');
+
       const json = await parseJsonResponse(res, isPermissoesResponse);
       const map = new Map<PermKey, boolean>();
       for (const p of json.data ?? []) {
@@ -96,46 +115,44 @@ export default function PermissoesPage() {
         map.set(key, p.permitido === 1);
       }
       setPermissoes(map);
-    } catch (err) {
-      toast.error('Erro ao carregar permissões', {
-        description: err instanceof Error ? err.message : String(err),
-      });
+      setLoadState('ready');
+    } catch (error) {
+      console.error('[PermissoesPage] Falha ao carregar permissões', error);
+      setPermissoes(new Map());
+      setLoadState('error');
+      toast.error('Não foi possível carregar as permissões atuais.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [hasAccess]);
 
   useEffect(() => {
-    carregarPermissoes();
+    void carregarPermissoes();
   }, [carregarPermissoes]);
 
   // ─── Alternar permissão localmente ─────────────────────────────────────
   const toggle = (perfil: Perfil, modulo: Modulo, acao: Acao) => {
+    if (!editingEnabled) return;
     const key: PermKey = `${perfil}:${modulo}:${acao}`;
     setPermissoes((prev) => {
       const next = new Map(prev);
-      // Se não existe entrada, assume true como padrão (a maioria é permitida)
-      const atual = prev.has(key) ? prev.get(key)! : getDefault(perfil, modulo, acao);
-      next.set(key, !atual);
+      next.set(key, !resolveConfiguredAdminPermission(prev, key));
       return next;
     });
   };
 
-  // Padrões razoáveis quando não há configuração salva
-  function getDefault(perfil: Perfil, modulo: Modulo, acao: Acao): boolean {
-    if (perfil === 'GESTOR') return true; // Gestor: tudo liberado por padrão
-    if (acao === 'visualizar') return true; // Todos visualizam por padrão
-    if (perfil === 'ALUNO') return false; // Aluno não edita por padrão
-    return true; // Instrutor pode editar
-  }
-
   function getPermissao(perfil: Perfil, modulo: Modulo, acao: Acao): boolean {
     const key: PermKey = `${perfil}:${modulo}:${acao}`;
-    return permissoes.has(key) ? permissoes.get(key)! : getDefault(perfil, modulo, acao);
+    return resolveConfiguredAdminPermission(permissoes, key);
   }
 
   // ─── Salvar permissões ──────────────────────────────────────────────────
   const salvar = async () => {
+    if (!editingEnabled) {
+      toast.error('Recarregue as permissões antes de editar ou salvar.');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload: { perfil: Perfil; modulo: string; acao: string; permitido: boolean }[] = [];
@@ -158,20 +175,30 @@ export default function PermissoesPage() {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const err = await parseErrorPayload(res);
-        throw new Error(err.error ?? `Erro ${res.status}`);
-      }
+      if (!res.ok) throw new Error('permissions-save-failed');
 
       toast.success('Permissões salvas com sucesso');
-    } catch (err) {
-      toast.error('Erro ao salvar permissões', {
-        description: err instanceof Error ? err.message : String(err),
-      });
+    } catch (error) {
+      console.error('[PermissoesPage] Falha ao salvar permissões', error);
+      toast.error('Não foi possível salvar as permissões. Nenhuma configuração presumida foi aplicada.');
     } finally {
       setSaving(false);
     }
   };
+
+  if (!hasAccess) {
+    return (
+      <AppLayout>
+        <div className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center gap-4 px-4 text-center">
+          <AlertTriangle className="h-12 w-12 text-amber-500" />
+          <h1 className="text-xl font-semibold text-slate-900">Acesso restrito</h1>
+          <p className="text-sm text-slate-600">
+            Apenas administradores podem consultar ou alterar permissões por perfil.
+          </p>
+        </div>
+      </AppLayout>
+    );
+  }
 
   // ─── Render ────────────────────────────────────────────────────────────
   return (
@@ -192,7 +219,7 @@ export default function PermissoesPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={carregarPermissoes}
+              onClick={() => void carregarPermissoes()}
               disabled={loading}
               className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
             >
@@ -200,8 +227,8 @@ export default function PermissoesPage() {
               Recarregar
             </button>
             <button
-              onClick={salvar}
-              disabled={saving || loading}
+              onClick={() => void salvar()}
+              disabled={saving || loading || !editingEnabled}
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
             >
               <Save className="h-4 w-4" />
@@ -216,6 +243,13 @@ export default function PermissoesPage() {
           pode ser restrito. As configurações abaixo se aplicam apenas aos demais perfis.
         </div>
 
+        {loadState === 'error' && (
+          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            Não foi possível carregar a configuração atual. A edição permanece bloqueada para evitar
+            sobrescrever permissões com valores presumidos. Use “Recarregar” para tentar novamente.
+          </div>
+        )}
+
         {/* Abas por perfil */}
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
           {/* Tabs */}
@@ -223,6 +257,7 @@ export default function PermissoesPage() {
             {PERFIS.map((p) => (
               <button
                 key={p.value}
+                type="button"
                 onClick={() => setAbaPerfil(p.value)}
                 className={`flex-1 py-3 text-sm font-medium transition-colors ${
                   abaPerfil === p.value
@@ -268,6 +303,7 @@ export default function PermissoesPage() {
                         <td key={acao} className="text-center px-4 py-3.5">
                           <ToggleSwitch
                             checked={checked}
+                            disabled={!editingEnabled}
                             onChange={() => toggle(abaPerfil, mod.id, acao)}
                           />
                         </td>
@@ -297,14 +333,23 @@ export default function PermissoesPage() {
 // ---------------------------------------------------------------------------
 // Componente Toggle
 // ---------------------------------------------------------------------------
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+function ToggleSwitch({
+  checked,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onChange: () => void;
+}) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={onChange}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 ${
         checked ? 'bg-indigo-600' : 'bg-slate-200'
       }`}
     >

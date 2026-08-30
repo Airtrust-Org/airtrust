@@ -167,18 +167,15 @@ function EventPill({ event }: { event: IntegratedMonthlyEvent }) {
     event.type === 'TREINAMENTO_CONCLUIDO' ||
     event.status === 'CONCLUIDO' ||
     event.status === 'CONCLUIDA';
-
-  return (
-    <a
-      href={event.sourceRoute || '#'}
-      className={[
-        'group block rounded border px-1.5 py-1 text-[11px] leading-tight transition hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
-        isConcluded
-          ? 'border-slate-200 bg-slate-100 text-slate-400 line-through decoration-slate-300'
-          : SEVERITY_CLASS[event.severity],
-      ].join(' ')}
-      title={`${SOURCE_LABEL[event.source]} - ${event.title}${event.description ? `: ${event.description}` : ''}`}
-    >
+  const className = [
+    'group block rounded border px-1.5 py-1 text-[11px] leading-tight transition hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
+    isConcluded
+      ? 'border-slate-200 bg-slate-100 text-slate-400 line-through decoration-slate-300'
+      : SEVERITY_CLASS[event.severity],
+  ].join(' ');
+  const title = `${SOURCE_LABEL[event.source]} - ${event.title}${event.description ? `: ${event.description}` : ''}`;
+  const content = (
+    <>
       <span className="flex items-center justify-between gap-1">
         <span className="truncate font-medium">{event.title}</span>
         {event.sourceRoute ? <ExternalLink className="h-3 w-3 shrink-0 opacity-60" /> : null}
@@ -187,6 +184,20 @@ function EventPill({ event }: { event: IntegratedMonthlyEvent }) {
         {SOURCE_LABEL[event.source]}
         {isConcluded ? ' · Concluído' : ` · ${SEVERITY_LABEL[event.severity]}`}
       </span>
+    </>
+  );
+
+  if (!event.sourceRoute) {
+    return (
+      <div className={className} title={title}>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <a href={event.sourceRoute} className={className} title={title}>
+      {content}
     </a>
   );
 }
@@ -256,12 +267,6 @@ export default function VisaoMensalIntegradaPage() {
   }, [data?.employees, onlyBlocking, onlyConflicts, query, severity, source]);
 
   const visualSummary = useMemo(() => {
-    // Percorre os buckets de cada dia de cada tripulante para contar eventos
-    // com a semântica correta:
-    //   Compromissos = alocações operacionais + treinamentos/simuladores (commitments)
-    //   Avisos       = alertas (qualificações, FRMS, indisponibilidade) severidade WARNING
-    //   Conflitos    = eventos com severidade CONFLICT
-    //   Bloqueios    = eventos com severidade BLOCKING ou blocksAllocation
     let compromissos = 0;
     let avisos = 0;
     let conflitos = 0;
@@ -300,8 +305,6 @@ export default function VisaoMensalIntegradaPage() {
     refetch();
   };
 
-  // A5: revalida automaticamente quando dados relacionados mudam (mesma aba ou outra
-  // aba) e ao reativar a janela — sem depender de recarga manual. Sem polling.
   useEffect(() => {
     const unsubscribe = onDataChanged(
       () => refetch(),
@@ -369,20 +372,33 @@ export default function VisaoMensalIntegradaPage() {
           </div>
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {[
-            ['Tripulantes', visualSummary.employees],
-            ['Compromissos', visualSummary.events],
-            ['Avisos', visualSummary.warnings],
-            ['Conflitos', visualSummary.conflicts],
-            ['Bloqueios', visualSummary.blockingIssues],
-          ].map(([label, value]) => (
-            <div key={String(label)} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-sm font-medium text-slate-600">{label}</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-950">{value}</div>
-            </div>
-          ))}
-        </section>
+        {loading && !data ? (
+          <section
+            className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm"
+            aria-live="polite"
+          >
+            Carregando indicadores da visão mensal…
+          </section>
+        ) : data ? (
+          <section
+            className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"
+            aria-label="Resumo operacional da visão mensal"
+          >
+            {[
+              ['Tripulantes', visualSummary.employees],
+              ['Avisos', visualSummary.warnings],
+              ['Conflitos', visualSummary.conflicts],
+              ['Bloqueios', visualSummary.blockingIssues],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="flex items-baseline gap-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  {label}
+                </span>
+                <span className="text-lg font-semibold text-slate-950">{value}</span>
+              </div>
+            ))}
+          </section>
+        ) : null}
 
         {hasPartialData ? (
           <section
@@ -397,8 +413,8 @@ export default function VisaoMensalIntegradaPage() {
                   Dados parciais — uma ou mais fontes não responderam
                 </div>
                 <p className="mt-1 text-sm text-amber-800">
-                  Os totais abaixo podem estar incompletos. Ausência de eventos de uma fonte
-                  indisponível <strong>não significa</strong> ausência de compromissos.
+                  Os totais podem estar incompletos. Ausência de eventos de uma fonte indisponível{' '}
+                  <strong>não significa</strong> ausência de compromissos.
                 </p>
                 {partialSources.length > 0 ? (
                   <p className="mt-1 text-sm text-amber-800">
@@ -489,27 +505,30 @@ export default function VisaoMensalIntegradaPage() {
           </div>
         </section>
 
-        {data?.diagnostics?.partialSources?.length ? (
-          <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <div className="font-semibold">Resposta parcial</div>
-            <div className="mt-1">
-              Fontes parciais: {data.diagnostics.partialSources.join(', ')}.
-              {data.diagnostics.warnings?.length ? ` ${data.diagnostics.warnings.join(' | ')}` : null}
-            </div>
-          </section>
-        ) : null}
-
-        {error ? (
-          <section className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-            {error}
-          </section>
-        ) : null}
-
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          {loading ? (
-            <div className="p-8 text-sm text-slate-600">Carregando visão mensal integrada...</div>
+          {error && !data ? (
+            <div className="p-8" role="alert">
+              <p className="text-sm font-semibold text-red-700">
+                Não foi possível carregar a visão mensal integrada.
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Os indicadores não serão tratados como zero enquanto a consulta não for concluída.
+              </p>
+              <div className="mt-4">
+                <Button variant="secondary" onClick={handleRefresh}>
+                  <RefreshCw className="h-4 w-4" />
+                  Tentar novamente
+                </Button>
+              </div>
+            </div>
+          ) : loading ? (
+            <div className="p-8 text-sm text-slate-600" aria-live="polite">
+              Carregando visão mensal integrada…
+            </div>
           ) : filteredEmployees.length === 0 ? (
-            <div className="p-8 text-sm text-slate-600">Nenhum tripulante encontrado para os filtros atuais.</div>
+            <div className="p-8 text-sm text-slate-600">
+              Nenhum tripulante encontrado para os filtros atuais.
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <div className="min-w-max">
@@ -530,7 +549,10 @@ export default function VisaoMensalIntegradaPage() {
                 </div>
 
                 {filteredEmployees.map((employee) => (
-                  <div key={employee.employeeId} className="grid grid-cols-[260px_1fr] border-b border-slate-200 last:border-b-0">
+                  <div
+                    key={employee.employeeId}
+                    className="grid grid-cols-[260px_1fr] border-b border-slate-200 last:border-b-0"
+                  >
                     <div className="border-r border-slate-200 bg-slate-50 p-3">
                       <div className="font-semibold text-slate-950">{employee.employeeName}</div>
                       <div className="mt-1 text-xs text-slate-600">
@@ -564,8 +586,18 @@ export default function VisaoMensalIntegradaPage() {
                           ...bucket.commitments,
                           ...bucket.alerts,
                           ...bucket.conflicts,
-                        ].filter((event) => (!source || event.source === source) && (!severity || event.severity === severity));
-                        return <DayCell key={`${employee.employeeId}-${day}`} date={day} events={events} />;
+                        ].filter(
+                          (event) =>
+                            (!source || event.source === source) &&
+                            (!severity || event.severity === severity),
+                        );
+                        return (
+                          <DayCell
+                            key={`${employee.employeeId}-${day}`}
+                            date={day}
+                            events={events}
+                          />
+                        );
                       })}
                     </div>
                   </div>

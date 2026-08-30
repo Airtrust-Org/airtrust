@@ -8,6 +8,7 @@ import {
   type RecoveryActivityType,
 } from '@/react-app/hooks/useFrmsRecovery';
 import { toast } from 'sonner';
+import { safeRecoveryActivityErrorMessage } from './recoveryActivityUi';
 
 const OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: string }> = [
   {
@@ -140,7 +141,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
       }
       setEditing(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Erro ao registrar condição operacional.');
+      console.error('[RecoveryActivityCard] Falha ao registrar condição operacional', error);
+      toast.error(safeRecoveryActivityErrorMessage(error));
     }
   };
 

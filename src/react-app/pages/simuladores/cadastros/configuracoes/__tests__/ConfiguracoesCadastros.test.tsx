@@ -1,0 +1,56 @@
+import type { ReactNode } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const navigateMock = vi.fn();
+
+vi.mock('@/react-app/components/AppLayout', () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+vi.mock('@/react-app/components/PageHeader', () => ({
+  default: ({ title, subtitle }: { title: string; subtitle?: string }) => (
+    <div>
+      <h1>{title}</h1>
+      {subtitle ? <p>{subtitle}</p> : null}
+    </div>
+  ),
+}));
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
+import ConfiguracoesCadastros from '../index';
+
+describe('ConfiguracoesCadastros', () => {
+  beforeEach(() => {
+    navigateMock.mockReset();
+  });
+
+  it('uses canonical chrome and configuration content without report-like counters', () => {
+    render(<ConfiguracoesCadastros />);
+
+    expect(screen.getByRole('heading', { name: 'Configurações de Simuladores' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Cadastros que definem como as sessões de treinamento são planejadas e avaliadas.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Cadastros operacionais' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Simuladores/ })).toBeInTheDocument();
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+  });
+
+  it('navigates directly to operational registration routes', () => {
+    render(<ConfiguracoesCadastros />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Manobras/ }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/simuladores/cadastros/manobras');
+  });
+});

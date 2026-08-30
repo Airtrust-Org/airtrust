@@ -15,6 +15,7 @@
  */
 
 import { API_BASE_URL, getAccessToken, refreshAccessToken } from '../config/api';
+import { safeFrontendApiErrorMessage } from '../lib/api-contract';
 import { apiFetch } from '../lib/apiFetch';
 import { requestController } from '../utils/request-control';
 import { logger } from '../utils/logger';
@@ -32,6 +33,31 @@ export interface HttpClientOptions extends RequestInit {
   retry?: number;
   retryDelayMs?: number;
   skipRequestControl?: boolean;
+}
+
+export function safeHttpClientErrorMessage(
+  message: string | undefined,
+  status?: number | string,
+): string {
+  if (status === 'NETWORK_ERROR') {
+    return 'Falha de rede. Verifique sua conexão e tente novamente.';
+  }
+  if (status === 401) {
+    return safeFrontendApiErrorMessage(message, 'Sua sessão expirou. Entre novamente.');
+  }
+  if (status === 403) {
+    return safeFrontendApiErrorMessage(
+      message,
+      'Você não tem permissão para executar esta ação.',
+    );
+  }
+  if (typeof status === 'number' && status >= 500) {
+    return safeFrontendApiErrorMessage(
+      message,
+      'O servidor não conseguiu concluir a operação.',
+    );
+  }
+  return safeFrontendApiErrorMessage(message);
 }
 
 class HttpClient {
@@ -175,7 +201,10 @@ class HttpClient {
           responseData && typeof responseData === 'object'
             ? (responseData as { error?: string; message?: string })
             : {};
-        const errorMessage = responseObj.error || responseObj.message || response.statusText;
+        const errorMessage = safeHttpClientErrorMessage(
+          responseObj.error || responseObj.message || response.statusText,
+          response.status,
+        );
         return {
           success: false,
           error: errorMessage,
@@ -198,7 +227,7 @@ class HttpClient {
     logger.error('[HttpClient] All retries failed:', lastError);
     return {
       success: false,
-      error: lastError?.message || 'Network error',
+      error: safeHttpClientErrorMessage(lastError?.message, 'NETWORK_ERROR'),
       code: 'NETWORK_ERROR',
     };
   }

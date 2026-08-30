@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../../types';
+import { safeServerErrorResponseBoundary } from '../../middleware/safe-server-error-response';
 
 import tiposRouter from './tipos-canonical-boundary';
 import historicoRouter from './historico';
@@ -14,6 +15,11 @@ import atribuicaoRouter from './atribuicao';
 import formatosRouter from './formatos';
 
 const router = new Hono<{ Bindings: Env }>();
+
+// Defense-in-depth: some legacy qualification handlers catch exceptions and
+// build 5xx JSON responses themselves. Those responses bypass app.onError(), so
+// sanitize them here before they cross the HTTP boundary in staging/production.
+router.use('*', safeServerErrorResponseBoundary());
 
 const retiredLegacyAtomicPostPaths = new Set(['/', '/:id/renovar']);
 const retainedHistoricoRoutes = historicoRouter.routes.filter(

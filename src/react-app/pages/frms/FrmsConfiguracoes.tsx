@@ -30,6 +30,7 @@ import {
 import { clearApiCacheByPattern } from '@/react-app/hooks/useApi';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
+import { safeFrmsVisibleErrorMessage } from './frmsVisibleErrorPolicy';
 
 interface ConfigGroup {
   label: string;
@@ -332,8 +333,7 @@ export default function FrmsConfiguracoes() {
       setSaved(true);
       setTimeout(() => setSaved(false), 4000);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Erro ao salvar configurações';
-      setSaveError(msg);
+      setSaveError(safeFrmsVisibleErrorMessage('config-save', e));
       console.error('Erro ao salvar:', e);
     } finally {
       setSaving(false);
@@ -386,8 +386,7 @@ export default function FrmsConfiguracoes() {
       clearApiCacheByPattern('/frms');
       navigate('/frms');
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Erro ao reprocessar dados';
-      setSaveError(msg);
+      setSaveError(safeFrmsVisibleErrorMessage('config-reprocess', e));
       console.error('Erro ao reprocessar:', e);
     } finally {
       setReprocessing(false);
@@ -639,7 +638,8 @@ function NotificacoesTab() {
       setTimeout(() => setSaved(false), 3000);
       refetch();
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Erro ao salvar');
+      setSaveError(safeFrmsVisibleErrorMessage('notification-save', e));
+      console.error('Erro ao salvar notificações FRMS:', e);
     }
   };
 
