@@ -148,9 +148,9 @@ export default function InstallAppPage() {
       <div className="mx-auto w-full max-w-xl">
         <header className="text-center">
           <img
-            src="/airtrust-pwa-icon-20260830-192.png"
+            src="/airtrust-logo.svg?v=site-logo-20260830"
             alt="AirTrust"
-            className="mx-auto h-24 w-24 object-contain drop-shadow-lg"
+            className="mx-auto h-28 w-auto max-w-full object-contain"
           />
           <p className="mt-5 text-xs font-bold uppercase tracking-[0.22em] text-[#12356A]">
             AirTrust
