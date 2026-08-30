@@ -59,7 +59,7 @@ describe('AirTrust PWA installation', () => {
     expect(env.isStandalone).toBe(true);
   });
 
-  it('abre o app instalado na home correta para qualquer perfil com os ícones oficiais versionados', () => {
+  it('abre o app instalado na home correta para qualquer perfil com o logo online em assets novos', () => {
     expect(manifest.id).toBe('/');
     expect(manifest.start_url).toBe('/');
     expect(manifest.display).toBe('standalone');
@@ -67,27 +67,27 @@ describe('AirTrust PWA installation', () => {
     expect(manifest.icons).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          src: '/airtrust-pwa-icon-20260830-192.png',
+          src: '/airtrust-site-logo-20260830-192.png',
           sizes: '192x192',
           purpose: 'any',
         }),
         expect.objectContaining({
-          src: '/airtrust-pwa-icon-20260830-512.png',
+          src: '/airtrust-site-logo-20260830-512.png',
           sizes: '512x512',
           purpose: 'any',
         }),
         expect.objectContaining({
-          src: '/airtrust-apple-touch-icon-20260830.png',
+          src: '/airtrust-site-logo-apple-20260830.png',
           sizes: '180x180',
           purpose: 'any',
         }),
       ]),
     );
     expect(manifest.icons.some((icon) => icon.purpose?.includes('maskable'))).toBe(false);
-    expect(installPageSource).toContain('src="/airtrust-pwa-icon-20260830-192.png"');
+    expect(installPageSource).toContain('src="/airtrust-logo.svg?v=site-logo-20260830"');
     expect(installPageSource).not.toContain('src="/airtrust-icon.svg"');
     expect(indexHtmlSource).toContain(
-      'rel="apple-touch-icon" sizes="180x180" href="/airtrust-apple-touch-icon-20260830.png"',
+      'rel="apple-touch-icon" sizes="180x180" href="/airtrust-site-logo-apple-20260830.png"',
     );
   });
 
