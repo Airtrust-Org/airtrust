@@ -1,26 +1,30 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { controlledFetchMock } = vi.hoisted(() => ({
+  controlledFetchMock: vi.fn(),
+}));
+
+vi.mock('../../utils/request-control', () => ({
+  controlledFetch: (...args: unknown[]) => controlledFetchMock(...args),
+}));
+
 import ForgotPasswordPage from '../ForgotPasswordPage';
 import ResetPasswordPage from '../ResetPasswordPage';
 
-const originalFetch = globalThis.fetch;
-
 describe('password recovery public UI', () => {
   beforeEach(() => {
+    controlledFetchMock.mockReset();
     window.history.replaceState({}, '', '/');
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-    vi.restoreAllMocks();
-  });
-
   it('submits forgot-password without revealing whether the user exists', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }));
-    globalThis.fetch = fetchMock as typeof fetch;
+    controlledFetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
 
     render(<ForgotPasswordPage />);
     fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'usuario@example.com' } });
@@ -28,7 +32,7 @@ describe('password recovery public UI', () => {
 
     await waitFor(() => expect(screen.getByText('Confira seu e-mail')).toBeInTheDocument());
     expect(screen.getByText(/não confirmamos se o e-mail está cadastrado/i)).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(controlledFetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/auth/forgot-password'),
       expect.objectContaining({
         method: 'POST',
@@ -38,7 +42,7 @@ describe('password recovery public UI', () => {
   });
 
   it('shows a safe retry message when forgot-password is unavailable', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(new Response('', { status: 503 })) as typeof fetch;
+    controlledFetchMock.mockResolvedValue(new Response('', { status: 503 }));
 
     render(<ForgotPasswordPage />);
     fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'usuario@example.com' } });
@@ -52,7 +56,7 @@ describe('password recovery public UI', () => {
   });
 
   it('shows the same safe retry message when the forgot-password request rejects', async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('network down')) as typeof fetch;
+    controlledFetchMock.mockRejectedValue(new TypeError('network down'));
 
     render(<ForgotPasswordPage />);
     fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'usuario@example.com' } });
@@ -67,15 +71,12 @@ describe('password recovery public UI', () => {
   });
 
   it('does not call recovery when a programmatic submit has no email', () => {
-    const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock as typeof fetch;
-
     const { container } = render(<ForgotPasswordPage />);
     const form = container.querySelector('form');
     expect(form).not.toBeNull();
     fireEvent.submit(form!);
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(controlledFetchMock).not.toHaveBeenCalled();
   });
 
   it('fails closed when reset-password has no token', () => {
@@ -91,8 +92,6 @@ describe('password recovery public UI', () => {
 
   it('rejects a password shorter than eight characters before calling the API', () => {
     window.history.replaceState({}, '', '/reset-password?token=abc123');
-    const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock as typeof fetch;
 
     const { container } = render(<ResetPasswordPage />);
     const fields = screen.getAllByLabelText(/senha/i);
@@ -101,13 +100,11 @@ describe('password recovery public UI', () => {
     fireEvent.submit(container.querySelector('form')!);
 
     expect(screen.getByRole('alert')).toHaveTextContent('no mínimo 8 caracteres');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(controlledFetchMock).not.toHaveBeenCalled();
   });
 
   it('validates matching password locally before calling reset-password', () => {
     window.history.replaceState({}, '', '/reset-password?token=abc123');
-    const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock as typeof fetch;
 
     render(<ResetPasswordPage />);
     const fields = screen.getAllByLabelText(/senha/i);
@@ -116,16 +113,17 @@ describe('password recovery public UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('As senhas informadas não conferem');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(controlledFetchMock).not.toHaveBeenCalled();
   });
 
   it('submits token and password and returns the user to login after success', async () => {
     window.history.replaceState({}, '', '/reset-password?token=abc123');
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }));
-    globalThis.fetch = fetchMock as typeof fetch;
+    controlledFetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
 
     render(<ResetPasswordPage />);
     const fields = screen.getAllByLabelText(/senha/i);
@@ -135,7 +133,7 @@ describe('password recovery public UI', () => {
 
     await waitFor(() => expect(screen.getByText('Senha redefinida')).toBeInTheDocument());
     expect(screen.getByRole('link', { name: 'Ir para o login' })).toHaveAttribute('href', '/login');
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(controlledFetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/auth/reset-password'),
       expect.objectContaining({
         method: 'POST',
@@ -144,14 +142,14 @@ describe('password recovery public UI', () => {
     );
   });
 
-  it('does not expose backend reset details for an expired or invalid token', async () => {
-    window.history.replaceState({}, '', '/reset-password?token=expired');
-    globalThis.fetch = vi.fn().mockResolvedValue(
+  it.each([400, 401, 404])('treats HTTP %s as an invalid recovery link', async (status) => {
+    window.history.replaceState({}, '', '/reset-password?token=invalid');
+    controlledFetchMock.mockResolvedValue(
       new Response(JSON.stringify({ success: false, error: 'SQLSTATE internal detail' }), {
-        status: 401,
+        status,
         headers: { 'Content-Type': 'application/json' },
       }),
-    ) as typeof fetch;
+    );
 
     render(<ResetPasswordPage />);
     const fields = screen.getAllByLabelText(/senha/i);
@@ -163,50 +161,14 @@ describe('password recovery public UI', () => {
     expect(screen.queryByText(/SQLSTATE/i)).not.toBeInTheDocument();
   });
 
-  it('treats HTTP 400 as an invalid recovery link', async () => {
-    window.history.replaceState({}, '', '/reset-password?token=invalid');
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: false }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    ) as typeof fetch;
-
-    render(<ResetPasswordPage />);
-    const fields = screen.getAllByLabelText(/senha/i);
-    fireEvent.change(fields[0], { target: { value: 'senha1234' } });
-    fireEvent.change(fields[1], { target: { value: 'senha1234' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
-
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('link expirou'));
-  });
-
-  it('treats HTTP 404 as an invalid recovery link', async () => {
-    window.history.replaceState({}, '', '/reset-password?token=missing');
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: false }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    ) as typeof fetch;
-
-    render(<ResetPasswordPage />);
-    const fields = screen.getAllByLabelText(/senha/i);
-    fireEvent.change(fields[0], { target: { value: 'senha1234' } });
-    fireEvent.change(fields[1], { target: { value: 'senha1234' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
-
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('link expirou'));
-  });
-
   it('treats a successful HTTP response with success false as a reset failure', async () => {
     window.history.replaceState({}, '', '/reset-password?token=abc123');
-    globalThis.fetch = vi.fn().mockResolvedValue(
+    controlledFetchMock.mockResolvedValue(
       new Response(JSON.stringify({ success: false }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
-    ) as typeof fetch;
+    );
 
     render(<ResetPasswordPage />);
     const fields = screen.getAllByLabelText(/senha/i);
@@ -215,20 +177,18 @@ describe('password recovery public UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Não foi possível redefinir a senha agora',
-      ),
+      expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível redefinir a senha agora'),
     );
   });
 
   it('fails safely when a reset error response has malformed JSON', async () => {
     window.history.replaceState({}, '', '/reset-password?token=abc123');
-    globalThis.fetch = vi.fn().mockResolvedValue(
+    controlledFetchMock.mockResolvedValue(
       new Response('not-json', {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       }),
-    ) as typeof fetch;
+    );
 
     render(<ResetPasswordPage />);
     const fields = screen.getAllByLabelText(/senha/i);
@@ -237,20 +197,18 @@ describe('password recovery public UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Não foi possível redefinir a senha agora',
-      ),
+      expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível redefinir a senha agora'),
     );
   });
 
   it('uses a generic retry message for reset server failures', async () => {
     window.history.replaceState({}, '', '/reset-password?token=abc123');
-    globalThis.fetch = vi.fn().mockResolvedValue(
+    controlledFetchMock.mockResolvedValue(
       new Response(JSON.stringify({ success: false, error: 'internal stack detail' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       }),
-    ) as typeof fetch;
+    );
 
     render(<ResetPasswordPage />);
     const fields = screen.getAllByLabelText(/senha/i);
@@ -259,16 +217,14 @@ describe('password recovery public UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Não foi possível redefinir a senha agora',
-      ),
+      expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível redefinir a senha agora'),
     );
     expect(screen.queryByText(/internal stack detail/i)).not.toBeInTheDocument();
   });
 
   it('uses the same generic retry message when the reset request rejects', async () => {
     window.history.replaceState({}, '', '/reset-password?token=abc123');
-    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('network down')) as typeof fetch;
+    controlledFetchMock.mockRejectedValue(new TypeError('network down'));
 
     render(<ResetPasswordPage />);
     const fields = screen.getAllByLabelText(/senha/i);
@@ -277,9 +233,7 @@ describe('password recovery public UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Não foi possível redefinir a senha agora',
-      ),
+      expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível redefinir a senha agora'),
     );
     expect(screen.queryByText(/network down/i)).not.toBeInTheDocument();
   });
