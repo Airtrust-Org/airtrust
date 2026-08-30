@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// source_reference: PR #110 eDB isolated persisted lifecycle; worker-airtrust/migrations/0477-0480 and worker-airtrust/wrangler.dev.toml.
+// operational_decision: execute synthetic DML only against Wrangler local D1 with the tracked dummy database id to prove schema parity and immutability; never target remote staging/production or external ANAC services.
+// dry_run_required: this CI validator is itself an isolated validation run; all DML is confined to a fresh temporary --local --persist-to directory and Cloudflare credentials are removed before every Wrangler invocation.
+// rollback_plan_required: delete the temporary local D1 persistence directory in the finally block; no remote rollback exists or is needed because remote writes are structurally disallowed.
 
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
