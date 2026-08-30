@@ -51,8 +51,8 @@ jobs:
           fi
           echo 'EDB_PERSISTED_ISOLATION_GUARD_PASS'
 
-      - name: Install Worker dependencies
-        run: npm --prefix worker-airtrust ci
+      - name: Install canonical dependencies
+        run: npm ci && npm --prefix worker-airtrust ci
 
       - name: Run exact persisted lifecycle integration
         working-directory: worker-airtrust
